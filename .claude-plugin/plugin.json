@@ -52,6 +52,4 @@
     "./agents/marketing.md",
     "./agents/sales.md"
   ],
-  "hooks": "./hooks/hooks.json",
-  "mcpServers": "./.mcp.json"
 }
