@@ -1,0 +1,12 @@
+{
+  "session_id": "sess-abc123",
+  "transcript_path": "/Users/example/.claude/projects/guild/session.jsonl",
+  "cwd": "/Users/example/Projects/guild",
+  "permission_mode": "default",
+  "hook_event_name": "TaskCompleted",
+  "task_id": "task-999",
+  "task_subject": "Task with missing handoff receipt",
+  "task_description": "This task has no receipt file written",
+  "teammate_name": "architect",
+  "team_name": "guild-team"
+}

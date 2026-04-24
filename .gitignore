@@ -1,0 +1,9 @@
+# Node
+node_modules/
+*.log
+
+# Guild runtime state (project-local, never committed by Guild itself)
+.guild/
+
+# OS
+.DS_Store

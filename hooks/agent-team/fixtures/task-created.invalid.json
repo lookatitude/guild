@@ -1,0 +1,11 @@
+{
+  "session_id": "sess-abc123",
+  "transcript_path": "/Users/example/.claude/projects/guild/session.jsonl",
+  "cwd": "/Users/example/Projects/guild",
+  "permission_mode": "default",
+  "hook_event_name": "TaskCreated",
+  "task_id": "task-002",
+  "task_subject": "Orphan task — no owner",
+  "teammate_name": "",
+  "team_name": "guild-team"
+}
