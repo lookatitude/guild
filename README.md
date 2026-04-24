@@ -59,6 +59,21 @@ coordinate directly:
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 ```
 
+### Optional MCP servers
+
+`guild-memory` and `guild-telemetry` ship as stdio MCP servers under
+`mcp-servers/` but are **optional** — Guild works end-to-end without them.
+If you want them active, install their Node dependencies once per consuming
+repo:
+
+```bash
+(cd mcp-servers/guild-memory && npm install)
+(cd mcp-servers/guild-telemetry && npm install)
+```
+
+Use `guild-memory` when the wiki crosses ~200 pages (ripgrep gets slow);
+use `guild-telemetry` for structured trace queries over `.guild/runs/`.
+
 ## Quickstart
 
 ```text

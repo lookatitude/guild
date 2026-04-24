@@ -37,20 +37,23 @@ cat <<STATUS
 ┌─────────────────────────────────────────────────────────────────┐
 │  Guild ${GUILD_VERSION} — self-evolving specialist teams for Claude Code   │
 ├─────────────────────────────────────────────────────────────────┤
-│  Available commands                                             │
+│  Commands                                                       │
 │                                                                 │
 │    /guild              Full workflow: brainstorm → team →       │
 │                        plan → execute → review → reflect        │
-│    /guild:wiki         Manage the project knowledge wiki        │
 │    /guild:team         Compose or inspect the specialist team   │
-│                                                                 │
-│  Forthcoming (P6):                                              │
+│    /guild:wiki         Manage the project knowledge wiki        │
 │    /guild:evolve       Skill self-improvement pipeline          │
 │    /guild:rollback     Roll back a skill to a prior version     │
-│    /guild:audit        Surface plugin script hashes             │
 │    /guild:stats        Task + telemetry summary                 │
+│    /guild:audit        Security audit of plugin scripts         │
+│                                                                 │
+│  Optional MCP servers (run 'npm install' in each folder to use):│
+│    mcp-servers/guild-memory/      BM25 wiki search              │
+│    mcp-servers/guild-telemetry/   Trace query over .guild/runs/ │
 ├─────────────────────────────────────────────────────────────────┤
 │  Plan & architecture: guild-plan.md (start at §1 or §13.2)     │
+│  Docs: docs/architecture.md, docs/specialist-roster.md          │
 └─────────────────────────────────────────────────────────────────┘
 STATUS
 
