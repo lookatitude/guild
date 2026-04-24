@@ -21,7 +21,7 @@
   ],
   "PostToolUse": [
     {
-      "matcher": ".*",
+      "matcher": "Agent|Task|Write|Edit|Bash|Skill",
       "hooks": [
         {
           "type": "command",
