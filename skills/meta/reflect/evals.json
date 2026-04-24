@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Reflect on this run.",
+    "What did we learn from this task?",
+    "Run post-task reflection on run-XYZ.",
+    "Capture lessons from the specialist outputs.",
+    "Any skill gaps in this run?"
+  ],
+  "should_not_trigger": [
+    "Ingest this new source.",
+    "Capture this decision about Postgres.",
+    "Run wiki-lint.",
+    "Start a new brainstorm.",
+    "Verify we're done.",
+    "Promote this reflection to the wiki."
+  ]
+}
