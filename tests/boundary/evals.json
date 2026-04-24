@@ -1,0 +1,372 @@
+{
+  "tier": "boundary",
+  "description": "Cross-specialist boundary-collision evals per guild-plan.md §15.2 risk #1 (cross-group trigger collisions) and §12 (specialist creation boundary gates). Each case targets a plausible collision axis between two specialists; the expected_specialist is the correct owner per their frontmatter description's TRIGGER / DO NOT TRIGGER clauses. Null expected_specialist means the prompt is too generic to route to any single specialist and should fall through to /guild:team-compose.",
+  "cases": [
+    {
+      "id": "boundary-architect-vs-backend-1",
+      "prompt": "Design the API for our new billing service — what endpoints, payloads, and error shapes should we expose?",
+      "expected_specialist": "backend",
+      "rationale": "API contract (path/verb/payload/errors) is backend's lane; architect's 'design' is cross-component systems shape, not the REST surface."
+    },
+    {
+      "id": "boundary-architect-vs-backend-2",
+      "prompt": "Design the billing subsystem: which services own it, how does it talk to accounts, and where does the event bus fit?",
+      "expected_specialist": "architect",
+      "rationale": "Cross-component systems design with bounded contexts and integration seams is architect's lane, not the API contract backend owns."
+    },
+    {
+      "id": "boundary-architect-vs-backend-3",
+      "prompt": "Write the POST /invoices endpoint with idempotency keys and the 422 envelope.",
+      "expected_specialist": "backend",
+      "rationale": "Endpoint implementation with idempotency and error envelope is backend; architect does not write handler code."
+    },
+    {
+      "id": "boundary-architect-vs-backend-4",
+      "prompt": "Write an ADR for why we're splitting payments into its own service.",
+      "expected_specialist": "architect",
+      "rationale": "ADR authoring for architecturally significant decisions is architect; backend implements after the ADR."
+    },
+    {
+      "id": "boundary-backend-vs-devops-1",
+      "prompt": "Deploy the checkout service to staging with a canary rollout.",
+      "expected_specialist": "devops",
+      "rationale": "Deploy/canary/rollout are devops triggers; backend specifies runtime needs, devops wires the pipeline."
+    },
+    {
+      "id": "boundary-backend-vs-devops-2",
+      "prompt": "The checkout service needs a new POST /refunds endpoint wired to the refund handler.",
+      "expected_specialist": "backend",
+      "rationale": "Endpoint + handler wiring is backend's API/implementation lane, not a deploy task."
+    },
+    {
+      "id": "boundary-backend-vs-devops-3",
+      "prompt": "Set up the Terraform for the new Postgres RDS instance and the VPC security group.",
+      "expected_specialist": "devops",
+      "rationale": "IaC / Terraform is devops; backend consumes the DB but does not provision infrastructure."
+    },
+    {
+      "id": "boundary-backend-vs-devops-4",
+      "prompt": "Write the migration to add a nullable 'deleted_at' column on orders with a backfill plan.",
+      "expected_specialist": "backend",
+      "rationale": "Schema migration with expand-contract and backfill is backend; devops does not write DDL migrations."
+    },
+    {
+      "id": "boundary-backend-vs-qa-1",
+      "prompt": "Add tests for the new POST /refunds endpoint so the contract is pinned.",
+      "expected_specialist": "backend",
+      "rationale": "Pinning tests written alongside the endpoint (engineering-group TDD default) are backend's; qa owns suite strategy, not endpoint-level pinning tests the author writes TDD-first."
+    },
+    {
+      "id": "boundary-backend-vs-qa-2",
+      "prompt": "We keep seeing flaky tests on the refunds suite — figure out why and quarantine them.",
+      "expected_specialist": "qa",
+      "rationale": "Flaky-test investigation and quarantine is qa's explicit trigger; backend does not own suite-level flakiness work."
+    },
+    {
+      "id": "boundary-backend-vs-qa-3",
+      "prompt": "We need a property-based test strategy for the invoice calculator.",
+      "expected_specialist": "qa",
+      "rationale": "Property-based test strategy is qa's lane; backend writes pinning tests but qa owns property/fuzz/snapshot strategy."
+    },
+    {
+      "id": "boundary-backend-vs-qa-4",
+      "prompt": "What coverage target should we enforce for the billing package?",
+      "expected_specialist": "qa",
+      "rationale": "Coverage decisions and thresholds are qa; backend complies with the gate qa sets."
+    },
+    {
+      "id": "boundary-backend-vs-security-1",
+      "prompt": "Review this JWT auth endpoint for security issues.",
+      "expected_specialist": "security",
+      "rationale": "Auth-flow review and JWT review are explicit security triggers; backend writes auth code, security reviews it."
+    },
+    {
+      "id": "boundary-backend-vs-security-2",
+      "prompt": "Implement the JWT-verification middleware on the /admin routes.",
+      "expected_specialist": "backend",
+      "rationale": "Writing the auth-enforcing code itself is backend; security reviews but does not implement."
+    },
+    {
+      "id": "boundary-backend-vs-security-3",
+      "prompt": "Run a threat model on the new password-reset flow.",
+      "expected_specialist": "security",
+      "rationale": "Threat modeling is a core security trigger; backend implements the flow, security produces the threat model."
+    },
+    {
+      "id": "boundary-backend-vs-security-4",
+      "prompt": "Audit our dependencies for known CVEs and produce an SBOM.",
+      "expected_specialist": "security",
+      "rationale": "CVE audit + SBOM are explicit security triggers; backend does not run dependency audits."
+    },
+    {
+      "id": "boundary-devops-vs-qa-1",
+      "prompt": "Set up CI coverage gates for the monorepo.",
+      "expected_specialist": "qa",
+      "rationale": "Picking the coverage gate (what threshold, which metric) is qa's call; devops wires whatever qa decides. This prompt is about choosing the gate."
+    },
+    {
+      "id": "boundary-devops-vs-qa-2",
+      "prompt": "Wire the coverage check qa picked into the GitHub Actions pipeline so failing coverage blocks the merge.",
+      "expected_specialist": "devops",
+      "rationale": "Wiring a named gate into CI is devops; qa already decided the gate, this is pipeline plumbing."
+    },
+    {
+      "id": "boundary-devops-vs-qa-3",
+      "prompt": "We want to add fuzz tests to the release pipeline — what should we run and how often?",
+      "expected_specialist": "qa",
+      "rationale": "Fuzz-test strategy (what to run, cadence) is qa; devops implements the pipeline step afterward."
+    },
+    {
+      "id": "boundary-devops-vs-qa-4",
+      "prompt": "Add a blue/green deploy step to the production pipeline.",
+      "expected_specialist": "devops",
+      "rationale": "Blue/green rollout is an explicit devops trigger; qa has no role in deploy strategy."
+    },
+    {
+      "id": "boundary-mobile-vs-backend-1",
+      "prompt": "The iOS app's API client is timing out intermittently — fix the retry logic in the Swift networking layer.",
+      "expected_specialist": "mobile",
+      "rationale": "Swift networking-layer retry logic is iOS client code — mobile's lane. Backend owns the server; the client implementation is mobile."
+    },
+    {
+      "id": "boundary-mobile-vs-backend-2",
+      "prompt": "The /sync endpoint is returning 504s under load — investigate the server timeout and fix the queue consumer.",
+      "expected_specialist": "backend",
+      "rationale": "Server-side 504 + queue consumer is backend; the client's side is not implicated here."
+    },
+    {
+      "id": "boundary-mobile-vs-backend-3",
+      "prompt": "Improve cold-start time on Android — the app takes 4s to first frame.",
+      "expected_specialist": "mobile",
+      "rationale": "Cold-start is an explicit mobile trigger and is Android-platform-specific performance work."
+    },
+    {
+      "id": "boundary-mobile-vs-backend-4",
+      "prompt": "Design the REST contract the iOS app will call for offline sync.",
+      "expected_specialist": "backend",
+      "rationale": "REST contract design is backend; mobile consumes the contract, backend owns it."
+    },
+    {
+      "id": "boundary-copywriter-vs-marketing-1",
+      "prompt": "Write the launch copy for our new AI code-review feature — tagline, hero, three feature blurbs.",
+      "expected_specialist": "marketing",
+      "rationale": "A launch with tagline + hero + feature blurbs is a launch plan / GTM deliverable — marketing commissions; copywriter drafts once marketing sets positioning."
+    },
+    {
+      "id": "boundary-copywriter-vs-marketing-2",
+      "prompt": "Draft the body copy for our new pricing landing page, keeping the existing voice guide.",
+      "expected_specialist": "copywriter",
+      "rationale": "Landing-page body copy executed against an existing voice guide is copywriter's explicit lane."
+    },
+    {
+      "id": "boundary-copywriter-vs-marketing-3",
+      "prompt": "Nail down the positioning statement for our self-hosted tier before we write any copy.",
+      "expected_specialist": "marketing",
+      "rationale": "Positioning statement is marketing's core trigger; copywriter executes after positioning is set."
+    },
+    {
+      "id": "boundary-copywriter-vs-marketing-4",
+      "prompt": "Design an A/B test for three headline variants on the homepage hero.",
+      "expected_specialist": "marketing",
+      "rationale": "A/B copy variants program (design, hypothesis, measurement) is marketing; copywriter might draft the variants marketing specifies."
+    },
+    {
+      "id": "boundary-copywriter-vs-technical-writer-1",
+      "prompt": "Document the pricing page — explain what each tier includes and how billing works.",
+      "expected_specialist": "technical-writer",
+      "rationale": "Documenting what a tier includes and how billing works is functional user-facing documentation — technical-writer's user-manual lane."
+    },
+    {
+      "id": "boundary-copywriter-vs-technical-writer-2",
+      "prompt": "Rewrite the pricing page hero to be more persuasive — we want to convert more free users.",
+      "expected_specialist": "copywriter",
+      "rationale": "Persuasive landing-page copy aimed at conversion is copywriter; technical-writer handles factual/functional docs, not persuasion."
+    },
+    {
+      "id": "boundary-copywriter-vs-technical-writer-3",
+      "prompt": "Write the migration guide for users upgrading from v2 to v3 of our SDK.",
+      "expected_specialist": "technical-writer",
+      "rationale": "Migration guide is an explicit technical-writer trigger (how-to / walkthrough)."
+    },
+    {
+      "id": "boundary-copywriter-vs-technical-writer-4",
+      "prompt": "Draft the welcome email sequence for users who just upgraded to the Pro tier.",
+      "expected_specialist": "copywriter",
+      "rationale": "Welcome / lifecycle email sequence is an explicit copywriter trigger; technical-writer does not own marketing emails."
+    },
+    {
+      "id": "boundary-copywriter-vs-sales-1",
+      "prompt": "Write a follow-up email for prospects who took a demo last week but haven't replied.",
+      "expected_specialist": "sales",
+      "rationale": "Post-meeting follow-up cadence to prospects is sales' follow-up-sequence trigger; copywriter handles lifecycle for existing users, not prospect follow-up."
+    },
+    {
+      "id": "boundary-copywriter-vs-sales-2",
+      "prompt": "Write a lifecycle email nudging existing Pro users who haven't activated the new AI feature.",
+      "expected_specialist": "copywriter",
+      "rationale": "Lifecycle email to existing users is copywriter's explicit lane; sales owns cold prospecting and post-meeting follow-up."
+    },
+    {
+      "id": "boundary-copywriter-vs-sales-3",
+      "prompt": "Draft a cold outreach sequence targeting VPs of Engineering at 500-to-2000-person SaaS companies.",
+      "expected_specialist": "sales",
+      "rationale": "Cold outreach + prospecting sequence is sales' core trigger."
+    },
+    {
+      "id": "boundary-copywriter-vs-sales-4",
+      "prompt": "Write the welcome series for brand-new trial signups — five emails across two weeks.",
+      "expected_specialist": "copywriter",
+      "rationale": "Welcome series / lifecycle email sequence is an explicit copywriter trigger."
+    },
+    {
+      "id": "boundary-social-media-vs-copywriter-1",
+      "prompt": "Write an X thread announcing our new AI code-review feature, 8 tweets, punchy.",
+      "expected_specialist": "social-media",
+      "rationale": "X / Twitter thread is an explicit social-media trigger; copywriter does long-form, social-media does platform-native."
+    },
+    {
+      "id": "boundary-social-media-vs-copywriter-2",
+      "prompt": "Write a 1500-word blog post about why we built the AI code-review feature.",
+      "expected_specialist": "copywriter",
+      "rationale": "Long-form blog post is copywriter's explicit lane; social-media handles short-form platform-native content."
+    },
+    {
+      "id": "boundary-social-media-vs-copywriter-3",
+      "prompt": "Build the content calendar for next month across LinkedIn and X.",
+      "expected_specialist": "social-media",
+      "rationale": "Content calendar / posting schedule is an explicit social-media trigger."
+    },
+    {
+      "id": "boundary-social-media-vs-copywriter-4",
+      "prompt": "Repackage our latest blog post as a LinkedIn carousel with 10 slides.",
+      "expected_specialist": "social-media",
+      "rationale": "Carousel + repackaging blog-as-social is explicitly listed in social-media's triggers."
+    },
+    {
+      "id": "boundary-seo-vs-marketing-1",
+      "prompt": "Optimize our pricing landing page — improve the meta title, description, and on-page structure.",
+      "expected_specialist": "seo",
+      "rationale": "Meta title/description + on-page SEO are explicit seo triggers; marketing owns positioning, not meta-tag work."
+    },
+    {
+      "id": "boundary-seo-vs-marketing-2",
+      "prompt": "Rework how we position our pricing page against Competitor X — their free tier is stealing signups.",
+      "expected_specialist": "marketing",
+      "rationale": "Competitive positioning is marketing's core lane; SEO would not touch messaging strategy."
+    },
+    {
+      "id": "boundary-seo-vs-marketing-3",
+      "prompt": "Run keyword research around 'ai code review' and related intents for the next content push.",
+      "expected_specialist": "seo",
+      "rationale": "Keyword research + search intent are explicit seo triggers."
+    },
+    {
+      "id": "boundary-seo-vs-marketing-4",
+      "prompt": "Write the launch plan for our new self-hosted tier including channels, timeline, and KPIs.",
+      "expected_specialist": "marketing",
+      "rationale": "GTM / launch plan is marketing's explicit trigger; SEO is a tactic, not the plan."
+    },
+    {
+      "id": "boundary-marketing-vs-sales-1",
+      "prompt": "Email this list of 200 prospects individually about our launch — cold outreach, ask for a demo.",
+      "expected_specialist": "sales",
+      "rationale": "Cold outreach to a prospect list asking for a demo is sales' outbound motion; 'list of prospects' + 'ask for demo' = prospecting."
+    },
+    {
+      "id": "boundary-marketing-vs-sales-2",
+      "prompt": "Broadcast to our full newsletter audience announcing the new launch.",
+      "expected_specialist": "marketing",
+      "rationale": "Broadcast to existing audience about a launch is marketing's GTM lane, not outbound sales."
+    },
+    {
+      "id": "boundary-marketing-vs-sales-3",
+      "prompt": "Write a discovery script for qualifying mid-market prospects using MEDDIC.",
+      "expected_specialist": "sales",
+      "rationale": "Discovery script + MEDDIC + qualification are explicit sales triggers."
+    },
+    {
+      "id": "boundary-marketing-vs-sales-4",
+      "prompt": "Put together the campaign brief for Q3's enterprise launch campaign.",
+      "expected_specialist": "marketing",
+      "rationale": "Campaign brief is an explicit marketing trigger."
+    },
+    {
+      "id": "boundary-researcher-vs-architect-1",
+      "prompt": "Survey the options for our event bus — Kafka vs NATS vs Redpanda — produce a comparison table.",
+      "expected_specialist": "researcher",
+      "rationale": "'Survey the options' + comparison table = researcher's explicit lane; researcher supplies inputs, architect decides later."
+    },
+    {
+      "id": "boundary-researcher-vs-architect-2",
+      "prompt": "Pick between Kafka and NATS for our event bus and write an ADR for the decision.",
+      "expected_specialist": "architect",
+      "rationale": "Scoring options against criteria to pick one plus ADR authoring is architect; researcher produces the comparison but does not decide."
+    },
+    {
+      "id": "boundary-researcher-vs-architect-3",
+      "prompt": "Digest the last three months of papers on vector-database indexing approaches.",
+      "expected_specialist": "researcher",
+      "rationale": "Paper digest is an explicit researcher trigger."
+    },
+    {
+      "id": "boundary-security-vs-qa-1",
+      "prompt": "Run a dependency audit and flag anything with a known CVE above medium.",
+      "expected_specialist": "security",
+      "rationale": "Dependency / CVE audit is security's explicit trigger; qa does not own vuln scanning."
+    },
+    {
+      "id": "boundary-security-vs-qa-2",
+      "prompt": "Build a regression suite that catches the race condition that broke prod last month.",
+      "expected_specialist": "qa",
+      "rationale": "Regression-suite authoring is qa's lane; security does threat models, not suite construction."
+    },
+    {
+      "id": "boundary-security-vs-qa-3",
+      "prompt": "Scan the repo for leaked API keys and secrets that slipped into git history.",
+      "expected_specialist": "security",
+      "rationale": "Secrets scan / leaked credential is security's explicit trigger."
+    },
+    {
+      "id": "boundary-mobile-vs-devops-1",
+      "prompt": "Set up EAS build + TestFlight submission for the iOS app.",
+      "expected_specialist": "mobile",
+      "rationale": "EAS + TestFlight submission is explicitly mobile-owned (mobile owns EAS/Fastlane/Xcode Cloud per its description), not devops."
+    },
+    {
+      "id": "boundary-mobile-vs-devops-2",
+      "prompt": "Wire up the backend API's GitHub Actions deployment to the Kubernetes cluster.",
+      "expected_specialist": "devops",
+      "rationale": "Backend CI/CD + Kubernetes is devops' lane; mobile owns mobile-specific build pipelines only."
+    },
+    {
+      "id": "boundary-mobile-vs-devops-3",
+      "prompt": "Configure Fastlane lanes for our Android release, including Play Console metadata upload.",
+      "expected_specialist": "mobile",
+      "rationale": "Fastlane + Play Console is explicitly mobile's build/release territory."
+    },
+    {
+      "id": "boundary-null-1",
+      "prompt": "Run the tests.",
+      "expected_specialist": null,
+      "rationale": "Too generic — no specialist-specific trigger. Should fall through to /guild:team-compose or a tooling path, not route to any specialist."
+    },
+    {
+      "id": "boundary-null-2",
+      "prompt": "Help me with my project.",
+      "expected_specialist": null,
+      "rationale": "No domain signal; this is a /guild brainstorm entry point, not a specialist trigger."
+    },
+    {
+      "id": "boundary-null-3",
+      "prompt": "What should we work on next?",
+      "expected_specialist": null,
+      "rationale": "Open-ended planning question — belongs to /guild:team-compose / brainstorm, not any specialist."
+    },
+    {
+      "id": "boundary-null-4",
+      "prompt": "Fix the typo on line 14.",
+      "expected_specialist": null,
+      "rationale": "Trivial edit — no specialist should own a one-line typo fix; main session handles it directly."
+    }
+  ]
+}
