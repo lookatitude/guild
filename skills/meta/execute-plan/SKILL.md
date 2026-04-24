@@ -67,6 +67,8 @@ The receipt shape — task completed and scope, files changed, decisions made, a
 
 `guild:review` and `guild:verify-done` read these receipts instead of rehydrating full specialist conversations (§8.2), so receipt integrity is load-bearing for every downstream step. A missing or malformed receipt blocks review for that lane; do not advance to `## Stop condition` until every lane has a clean receipt or an explicit error record.
 
+**Assumption aggregation.** Before advancing to `## Stop condition`, aggregate every lane receipt's `assumptions:` list into `.guild/runs/<run-id>/assumptions.md` (one section per specialist, each assumption preserved verbatim). If no lane reported assumptions, still create the file as empty (header only) so `guild:verify-done` can distinguish "no assumptions" from "aggregation skipped". This is the single handoff `guild:verify-done` reads for its check #5.
+
 ## Stop condition
 
 Execution is complete when every lane in the plan has a non-error receipt under `.guild/runs/<run-id>/handoffs/`. Concretely:

@@ -16,7 +16,7 @@ Do not rehydrate full specialist conversations. The whole point of the §8.2 rec
 Three required inputs, all produced by upstream skills:
 
 1. `.guild/runs/<run-id>/handoffs/*.md` — one receipt per lane in the plan, written by each specialist during `guild:execute-plan`. Filename is `<specialist>-<task-id>.md`. Every receipt must contain the §8.2 fields (`changed_files`, `opens_for`, `assumptions`, `evidence`, `followups`).
-2. The spec — the source artifact the plan was derived from (typically `.guild/brainstorm/<slug>.md` or a user-provided spec path recorded in the plan frontmatter). Stage 1 compares receipts against this.
+2. The spec — the source artifact the plan was derived from, at `.guild/spec/<slug>.md` (written by `guild:brainstorm` per `guild-plan.md §7.1`) or a user-provided spec path recorded in the plan frontmatter. Stage 1 compares receipts against this.
 3. The plan — `.guild/plan/<slug>.md` with `approved: true`. The plan fixes each lane's `scope`, `owner`, `depends-on`, and autonomy policy; Stage 1 uses `scope` as the contract a lane's `changed_files` must satisfy.
 
 If any receipt is missing, malformed, or unreadable, halt and loop back to `guild:execute-plan` — review cannot synthesize a receipt that was never written.

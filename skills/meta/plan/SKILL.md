@@ -97,6 +97,6 @@ Guild's `plan` skill deliberately shadows `superpowers:writing-plans` and forks 
 
 ## Handoff
 
-Once the plan is written and **user-approved** (frontmatter `approved: true`), hand off to `guild:context-assemble`. That skill is responsible for building one minimum-viable-context bundle per specialist lane (`guild-plan.md §9`) before `guild:execute-plan` dispatches any subagents. Do not run context assembly yourself — `guild:context-assemble` is a separate skill with its own responsibilities.
+Once the plan is written and **user-approved** (frontmatter `approved: true`), hand off to `guild:execute-plan`. Execute-plan creates the `<run-id>`, then invokes `guild:context-assemble` once per specialist lane to build the minimum-viable-context bundle (`guild-plan.md §9`) before dispatching the specialist subagent. Do not run context assembly yourself — that's `guild:execute-plan`'s responsibility during per-lane dispatch.
 
 Handoff receipt should list: `plan_path`, `lane_count`, `parallel_eligible_count` (lanes with empty `depends-on:`), `backend` (mirrored from team.yaml), and `approved_at` timestamp.

@@ -14,8 +14,8 @@ Implements `guild-plan.md §8` (verify step) and the planning contract's success
 Three required inputs, all already on disk by the time this skill fires:
 
 1. `.guild/runs/<run-id>/review.md` — the per-lane pass/fail table from `guild:review`. If any lane is ✗, verify-done should never have been called; abort and return control to review.
-2. The spec's `success_criteria` — from the source spec (`.guild/brainstorm/<slug>.md` or user-provided spec) referenced by the plan frontmatter. `§8.1` requires these be verifiable; this skill is where they are verified.
-3. `.guild/runs/<run-id>/assumptions.md` — the assumption log accumulated across the run per `§8.1`. Every low-significance decision specialists made without asking lands here and must be surfaced to the user before close.
+2. The spec's `success_criteria` — from the source spec at `.guild/spec/<slug>.md` (written by `guild:brainstorm`) or a user-provided spec path referenced by the plan frontmatter. `§8.1` requires these be verifiable; this skill is where they are verified.
+3. `.guild/runs/<run-id>/assumptions.md` — the assumption log aggregated from per-lane receipts by `guild:execute-plan` (see its Receipt collection section). If specialists flagged no assumptions during the run, this file may be empty or absent — treat an empty/missing file as "no assumptions to review" and skip check #5's user-acknowledgement step. Only hard-fail the gate if the file exists with unresolved disputed entries.
 
 Secondary inputs (re-read for the scope check): `.guild/runs/<run-id>/handoffs/*.md` for the full set of `changed_files` across lanes, and the approved plan for each lane's declared `scope`.
 
