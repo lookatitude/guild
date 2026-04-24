@@ -1,6 +1,6 @@
 {
   "name": "guild",
-  "version": "1.0.0",
+  "version": "1.0.0-beta1",
   "description": "A team-of-specialists plugin for Claude Code: 13 domain specialists across engineering, content, and commercial groups, a brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
   "author": {
     "name": "Miguel Pinto"
