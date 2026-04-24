@@ -1,0 +1,42 @@
+{
+  "_comment_p5_hooks": [
+    "The following hooks are documented here for P5 wiring.",
+    "Un-comment and add the correct command when each lands:",
+    "",
+    "  SessionStart → hooks/bootstrap.sh",
+    "  UserPromptSubmit → hooks/check-skill-coverage.sh",
+    "  PostToolUse (matcher: Agent|Task|Write|Edit|Bash) → hooks/capture-telemetry.ts",
+    "  SubagentStop → hooks/capture-telemetry.ts",
+    "  Stop → hooks/maybe-reflect.ts"
+  ],
+  "TaskCreated": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "npx -y tsx hooks/agent-team/task-created.ts"
+        }
+      ]
+    }
+  ],
+  "TaskCompleted": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "npx -y tsx hooks/agent-team/task-completed.ts"
+        }
+      ]
+    }
+  ],
+  "TeammateIdle": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "npx -y tsx hooks/agent-team/teammate-idle.ts"
+        }
+      ]
+    }
+  ]
+}
