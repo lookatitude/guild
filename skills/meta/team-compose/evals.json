@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Propose a team for this spec.",
+    "Who should work on the pricing calculator feature?",
+    "Compose specialists — we have the spec ready.",
+    "Reshape the team for this task.",
+    "Which Guild specialists fit this work?"
+  ],
+  "should_not_trigger": [
+    "Start writing the code.",
+    "Create a brand-new specialist type called data-scientist.",
+    "Review the specialist outputs.",
+    "Run the tests.",
+    "Explain the plan to me."
+  ]
+}
