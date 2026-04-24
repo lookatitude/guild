@@ -1,0 +1,16 @@
+{
+  "session_id": "sess-abc123",
+  "transcript_path": "/Users/example/.claude/projects/guild/session.jsonl",
+  "cwd": "/Users/example/Projects/guild",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/Users/example/Projects/guild/src/auth.ts",
+    "content": "export function login() {}"
+  },
+  "tool_response": {
+    "success": true
+  },
+  "agent_name": "backend"
+}

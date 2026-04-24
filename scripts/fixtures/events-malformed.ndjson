@@ -1,0 +1,5 @@
+{"ts":"2026-04-24T10:00:00.000Z","event":"PostToolUse","tool":"Read","specialist":"backend-engineer","payload_digest":"aaa111","ok":true,"ms":120}
+this is not valid json {{{
+{"ts":"2026-04-24T10:00:02.000Z","event":"PostToolUse","tool":"Write","specialist":"backend-engineer","payload_digest":"bbb222","ok":true,"ms":80}
+[broken json without closing bracket
+{"ts":"2026-04-24T10:00:04.000Z","event":"SubagentStop","tool":"","specialist":"backend-engineer","payload_digest":"ccc333","ok":true,"ms":1500}
