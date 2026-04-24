@@ -8,6 +8,25 @@ from v1.0.0 onward.
 
 ## [Unreleased]
 
+### Added
+
+- **GitHub Pages workflow** — `.github/workflows/pages.yml` deploys the
+  landing page at `docs/landing-page/` to
+  `https://lookatitude.github.io/guild/` on every push to `main` that
+  touches `docs/landing-page/`, `docs/assets/`, or `docs/diagrams/`.
+  Landing-page asset refs flattened from `../assets/` / `../diagrams/`
+  to `assets/` / `diagrams/` so the deploy-time staging dir resolves
+  them correctly.
+- **Plugin homepage bumped** from `github.com/lookatitude/guild` to
+  `https://lookatitude.github.io/guild/` in `plugin.json`.
+- **Pre-flight test harness** at `guild-test-urlshortener/harness/run-tests.sh`
+  (separate workspace, symlinks `.claude/plugins/guild` → the Guild repo).
+  14 checks across 3 layers: plugin manifest resolution, hook-script smoke,
+  MCP-server JSON-RPC handshake. Full green on first run of v1.0.0-beta2.
+- **E2E test report** at `docs/phase-gates/E2E-TEST-REPORT.md` — what the
+  harness covers, what it doesn't (live `/guild` dispatch still requires
+  a user-initiated Claude Code session), how to reproduce.
+
 ## [1.0.0-beta2] — 2026-04-24
 
 ### Fixed
