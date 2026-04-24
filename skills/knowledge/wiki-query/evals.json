@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Search the wiki for Stripe pricing knowledge.",
+    "What do we have on our branding voice?",
+    "Find all standards about coding conventions.",
+    "Which decisions touched the pricing calculator product?",
+    "Show me recent competitor sources ingested in the last week."
+  ],
+  "should_not_trigger": [
+    "Ingest this new research paper.",
+    "Run wiki-lint.",
+    "Capture this decision about Postgres.",
+    "Grep the repo for 'TODO'.",
+    "Write a new wiki page from scratch."
+  ]
+}
