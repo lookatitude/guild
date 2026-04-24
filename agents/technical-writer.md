@@ -23,7 +23,7 @@ Content & communication group specialist (`guild-plan.md §6.2`). Owns functiona
 - `technical-writer-tutorial` (T5, **forward-declared — P3 scope**) — tutorials and how-to guides (Diátaxis distinction respected): learning-oriented tutorials vs. goal-oriented how-tos; prerequisites, steps, verification, troubleshooting.
 - `technical-writer-release-notes` (T5, **forward-declared — P3 scope**) — release notes and changelogs: Keep-a-Changelog categories (Added / Changed / Deprecated / Removed / Fixed / Security), migration guides, breaking-change callouts.
 
-Four of the five skills (`technical-writer-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:writing-skills` when a technical-writer invocation needs authoring methodology before those skills land.
+Four of the five skills (`technical-writer-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when a technical-writer invocation needs authoring methodology before those skills land.
 
 ## When to invoke
 

@@ -16,9 +16,9 @@ You own every file under `hooks/`: `hooks.json`, shell scripts (`bootstrap.sh`, 
 
 ## Superpowers skills to invoke
 
-- `superpowers:test-driven-development` — for every script, write a test that invokes the script with fixture NDJSON events and asserts on output before writing the script.
-- `superpowers:systematic-debugging` — hook failures are silent in Claude Code unless you log them; debug via structured traces under `.guild/runs/<run-id>/`.
-- `superpowers:verification-before-completion` — prove each hook fires by attaching a trace snippet in `evidence:`.
+- `guild:tdd` — for every script, write a test that invokes the script with fixture NDJSON events and asserts on output before writing the script.
+- `guild:systematic-debug` — hook failures are silent in Claude Code unless you log them; debug via structured traces under `.guild/runs/<run-id>/`.
+- `guild:verify-done` — prove each hook fires by attaching a trace snippet in `evidence:`.
 
 ## Handoff contract
 

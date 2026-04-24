@@ -1,6 +1,6 @@
 # Dev Team Agents Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use guild:execute-plan (recommended) or guild:execute-plan to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Create the 8-agent dev team (plus 3 shared reference docs) under `.claude/agents/` that will build the Guild plugin end-to-end, per `docs/superpowers/specs/2026-04-24-dev-team-agents-design.md`.
 
@@ -235,14 +235,14 @@ Dev agents dogfood the same superpowers methodology Guild Tier-4 REFERENCE'es (s
 
 | Agent | Required superpowers skills |
 |---|---|
-| plugin-architect | `superpowers:verification-before-completion`, `superpowers:requesting-code-review`, `superpowers:finishing-a-development-branch` |
-| skill-author | `superpowers:writing-skills` (mandatory per skill), `superpowers:test-driven-development`, `superpowers:verification-before-completion` |
-| specialist-agent-writer | `superpowers:writing-skills`, `superpowers:verification-before-completion` |
-| command-builder | `superpowers:test-driven-development`, `superpowers:verification-before-completion` |
-| hook-engineer | `superpowers:test-driven-development`, `superpowers:systematic-debugging`, `superpowers:verification-before-completion` |
-| tooling-engineer | `superpowers:test-driven-development`, `superpowers:systematic-debugging`, `superpowers:verification-before-completion` |
-| docs-writer | `superpowers:verification-before-completion` |
-| eval-engineer | `superpowers:test-driven-development`, `superpowers:verification-before-completion` |
+| plugin-architect | `guild:verify-done`, `guild:request-review`, `guild:finish-branch` |
+| skill-author | `guild:evolve-skill` (mandatory per skill), `guild:tdd`, `guild:verify-done` |
+| specialist-agent-writer | `guild:evolve-skill`, `guild:verify-done` |
+| command-builder | `guild:tdd`, `guild:verify-done` |
+| hook-engineer | `guild:tdd`, `guild:systematic-debug`, `guild:verify-done` |
+| tooling-engineer | `guild:tdd`, `guild:systematic-debug`, `guild:verify-done` |
+| docs-writer | `guild:verify-done` |
+| eval-engineer | `guild:tdd`, `guild:verify-done` |
 
 ## Invocation rule
 
@@ -263,7 +263,7 @@ Run:
 ```bash
 cd /Users/miguelp/Projects/guild
 test -f .claude/agents/_shared/superpowers-mapping.md && echo "exists"
-grep -c "superpowers:verification-before-completion" .claude/agents/_shared/superpowers-mapping.md
+grep -c "guild:verify-done" .claude/agents/_shared/superpowers-mapping.md
 ```
 
 Expected: `exists`, `8` (one per agent).
@@ -309,9 +309,9 @@ Read these before acting, in order:
 
 ## Superpowers skills to invoke
 
-- `superpowers:verification-before-completion` — before reporting a phase gate as passed, capture the actual command outputs.
-- `superpowers:requesting-code-review` — at each phase boundary, request a second-opinion review of the completed phase before tagging.
-- `superpowers:finishing-a-development-branch` — at final release, run the branch-finish checklist.
+- `guild:verify-done` — before reporting a phase gate as passed, capture the actual command outputs.
+- `guild:request-review` — at each phase boundary, request a second-opinion review of the completed phase before tagging.
+- `guild:finish-branch` — at final release, run the branch-finish checklist.
 
 ## Handoff contract
 
@@ -431,9 +431,9 @@ Context-dependent anchors:
 
 ## Superpowers skills to invoke
 
-- `superpowers:writing-skills` — **mandatory for every skill authored**. It's the authoring discipline itself.
-- `superpowers:test-driven-development` — the skill's eval cases are the test; write them first, then the skill body.
-- `superpowers:verification-before-completion` — close each skill by running its eval fixtures and capturing the output.
+- `guild:evolve-skill` — **mandatory for every skill authored**. It's the authoring discipline itself.
+- `guild:tdd` — the skill's eval cases are the test; write them first, then the skill body.
+- `guild:verify-done` — close each skill by running its eval fixtures and capturing the output.
 
 ## Handoff contract
 
@@ -529,8 +529,8 @@ You author the 13 shipping Guild specialist subagent files under `agents/` at th
 
 ## Superpowers skills to invoke
 
-- `superpowers:writing-skills` — the same authoring discipline applies to agent bodies as to skills (markdown + YAML frontmatter, crisp description, explicit triggers).
-- `superpowers:verification-before-completion` — close by running the invariant checker and citing its output.
+- `guild:evolve-skill` — the same authoring discipline applies to agent bodies as to skills (markdown + YAML frontmatter, crisp description, explicit triggers).
+- `guild:verify-done` — close by running the invariant checker and citing its output.
 
 ## Handoff contract
 
@@ -618,8 +618,8 @@ You own `commands/guild*.md` — every slash command Guild exposes. Each command
 
 ## Superpowers skills to invoke
 
-- `superpowers:test-driven-development` — write the command's usage examples (help + expected skill dispatched) before writing the command body.
-- `superpowers:verification-before-completion` — verify each command loads in Claude Code and its help text renders.
+- `guild:tdd` — write the command's usage examples (help + expected skill dispatched) before writing the command body.
+- `guild:verify-done` — verify each command loads in Claude Code and its help text renders.
 
 ## Handoff contract
 
@@ -707,9 +707,9 @@ You own every file under `hooks/`: `hooks.json`, shell scripts (`bootstrap.sh`, 
 
 ## Superpowers skills to invoke
 
-- `superpowers:test-driven-development` — for every script, write a test that invokes the script with fixture NDJSON events and asserts on output before writing the script.
-- `superpowers:systematic-debugging` — hook failures are silent in Claude Code unless you log them; debug via structured traces under `.guild/runs/<run-id>/`.
-- `superpowers:verification-before-completion` — prove each hook fires by attaching a trace snippet in `evidence:`.
+- `guild:tdd` — for every script, write a test that invokes the script with fixture NDJSON events and asserts on output before writing the script.
+- `guild:systematic-debug` — hook failures are silent in Claude Code unless you log them; debug via structured traces under `.guild/runs/<run-id>/`.
+- `guild:verify-done` — prove each hook fires by attaching a trace snippet in `evidence:`.
 
 ## Handoff contract
 
@@ -799,9 +799,9 @@ You own Guild's TypeScript/Node tooling outside the hook lifecycle: every file u
 
 ## Superpowers skills to invoke
 
-- `superpowers:test-driven-development` — for every script or MCP tool, write a test that fixes inputs and asserts on outputs before implementing.
-- `superpowers:systematic-debugging` — when evals regress or MCP servers misbehave, trace via structured logs under `.guild/runs/`.
-- `superpowers:verification-before-completion` — cite real CLI/test output for each script in `evidence:`.
+- `guild:tdd` — for every script or MCP tool, write a test that fixes inputs and asserts on outputs before implementing.
+- `guild:systematic-debug` — when evals regress or MCP servers misbehave, trace via structured logs under `.guild/runs/`.
+- `guild:verify-done` — cite real CLI/test output for each script in `evidence:`.
 
 ## Handoff contract
 
@@ -892,7 +892,7 @@ You own Guild's human-facing documentation: every file under `docs/` except `doc
 
 ## Superpowers skills to invoke
 
-- `superpowers:verification-before-completion` — every cross-reference resolves (files exist, headings match), every diagram reference points at a present SVG, every code snippet runs or is marked as illustrative.
+- `guild:verify-done` — every cross-reference resolves (files exist, headings match), every diagram reference points at a present SVG, every code snippet runs or is marked as illustrative.
 
 ## Handoff contract
 
@@ -983,8 +983,8 @@ You own cross-cutting tests under `tests/`: end-to-end regressions, trigger-accu
 
 ## Superpowers skills to invoke
 
-- `superpowers:test-driven-development` — the work *is* tests. Write them to fail first, then make them pass by filing bug reports to other agents (not by fixing things yourself).
-- `superpowers:verification-before-completion` — cite test run output (pass/fail counts, regression deltas) in `evidence:`.
+- `guild:tdd` — the work *is* tests. Write them to fail first, then make them pass by filing bug reports to other agents (not by fixing things yourself).
+- `guild:verify-done` — cite test run output (pass/fail counts, regression deltas) in `evidence:`.
 
 ## Handoff contract
 
@@ -1249,6 +1249,6 @@ Plan complete and saved to `docs/superpowers/plans/2026-04-24-dev-team-agents.md
 
 **1. Subagent-Driven (recommended)** — main session dispatches a fresh subagent per task, reviews between tasks, fast iteration.
 
-**2. Inline Execution** — execute tasks in this session using `superpowers:executing-plans`, batch execution with checkpoints for review.
+**2. Inline Execution** — execute tasks in this session using `guild:execute-plan`, batch execution with checkpoints for review.
 
 Which approach?

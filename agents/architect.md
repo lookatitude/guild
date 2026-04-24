@@ -21,7 +21,7 @@ Engineering group specialist (`guild-plan.md §6.1`). Owns architecture-level th
 - `architect-tradeoff-matrix` (T5, **forward-declared — P3 scope**) — structured option-comparison: criteria rows, option columns, weighted scoring, explicit non-goals.
 - `architect-adr-writer` (T5, **forward-declared — P3 scope**) — Architecture Decision Record format: context → decision → consequences → alternatives considered, with `significance` feeding `guild:decisions` (`guild-plan.md §10.3`).
 
-The three `architect-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:brainstorming` + `superpowers:writing-plans` when an architect invocation needs methodology before those skills land.
+The three `architect-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:brainstorm` + `guild:plan` when an architect invocation needs methodology before those skills land.
 
 ## When to invoke
 

@@ -23,7 +23,7 @@ Content & communication group specialist (`guild-plan.md §6.2`). Owns platform-
 - `social-media-engagement-templates` (T5, **forward-declared — P3 scope**) — reply templates, DM templates, comment-response patterns, community management voice; on-voice responses to common inbound patterns.
 - `social-media-content-calendar` (T5, **forward-declared — P3 scope**) — content calendars and posting schedules: cadence per platform, pillar/theme rotation, seasonal/launch beats, repurposing matrix from long-form source.
 
-Four of the five skills (`social-media-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:writing-skills` when a social-media invocation needs authoring methodology before those skills land.
+Four of the five skills (`social-media-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when a social-media invocation needs authoring methodology before those skills land.
 
 ## When to invoke
 

@@ -1,6 +1,6 @@
 ---
 name: guild-review
-description: Two-stage review of per-specialist handoff receipts (spec compliance first, then quality). Consumes compact receipts from `.guild/runs/<run-id>/handoffs/` — NOT full specialist conversations. Writes `.guild/runs/<run-id>/review.md` with per-lane pass/fail + blocker list. TRIGGER: "review the specialist outputs", "check if this matches the spec", "evaluate the handoffs". DO NOT TRIGGER for: reviewing a PR unrelated to Guild flow (use superpowers:code-reviewer), writing more code, re-planning, final verification (guild:verify-done).
+description: Two-stage review of per-specialist handoff receipts (spec compliance first, then quality). Consumes compact receipts from `.guild/runs/<run-id>/handoffs/` — NOT full specialist conversations. Writes `.guild/runs/<run-id>/review.md` with per-lane pass/fail + blocker list. TRIGGER: "review the specialist outputs", "check if this matches the spec", "evaluate the handoffs". DO NOT TRIGGER for: reviewing a PR unrelated to Guild flow (use guild:review), writing more code, re-planning, final verification (guild:verify-done).
 when_to_use: Sixth step of /guild lifecycle, after guild:execute-plan has collected all handoff receipts.
 type: meta
 ---

@@ -1,0 +1,19 @@
+{
+  "should_trigger": [
+    "This test passes locally but fails in CI — what's going on?",
+    "The redirect loop is intermittent — track it down.",
+    "We have a flaky test in the integration suite, find the polluter.",
+    "Production is throwing 500s on /admin/links every few hours — investigate.",
+    "Why is the SQLite write failing only on the migration runner?",
+    "The hash function returns duplicates under load — find root cause."
+  ],
+  "should_not_trigger": [
+    "Brainstorm the new mobile onboarding flow.",
+    "Write the spec for the rate-limiter feature.",
+    "Compose the team for the marketplace integration.",
+    "Add a CI badge to the README.",
+    "Document the public API in docs/api.md.",
+    "Write a landing-page hero copy block.",
+    "Open a PR with the current branch."
+  ]
+}

@@ -4,14 +4,14 @@ Dev agents dogfood the same superpowers methodology Guild Tier-4 REFERENCE'es (s
 
 | Agent | Required superpowers skills |
 |---|---|
-| plugin-architect | `superpowers:verification-before-completion`, `superpowers:requesting-code-review`, `superpowers:finishing-a-development-branch` |
-| skill-author | `superpowers:writing-skills` (mandatory per skill), `superpowers:test-driven-development`, `superpowers:verification-before-completion` |
-| specialist-agent-writer | `superpowers:writing-skills`, `superpowers:verification-before-completion` |
-| command-builder | `superpowers:test-driven-development`, `superpowers:verification-before-completion` |
-| hook-engineer | `superpowers:test-driven-development`, `superpowers:systematic-debugging`, `superpowers:verification-before-completion` |
-| tooling-engineer | `superpowers:test-driven-development`, `superpowers:systematic-debugging`, `superpowers:verification-before-completion` |
-| docs-writer | `superpowers:verification-before-completion` |
-| eval-engineer | `superpowers:test-driven-development`, `superpowers:verification-before-completion` |
+| plugin-architect | `guild:verify-done`, `guild:request-review`, `guild:finish-branch` |
+| skill-author | `guild:evolve-skill` (mandatory per skill), `guild:tdd`, `guild:verify-done` |
+| specialist-agent-writer | `guild:evolve-skill`, `guild:verify-done` |
+| command-builder | `guild:tdd`, `guild:verify-done` |
+| hook-engineer | `guild:tdd`, `guild:systematic-debug`, `guild:verify-done` |
+| tooling-engineer | `guild:tdd`, `guild:systematic-debug`, `guild:verify-done` |
+| docs-writer | `guild:verify-done` |
+| eval-engineer | `guild:tdd`, `guild:verify-done` |
 
 ## Invocation rule
 

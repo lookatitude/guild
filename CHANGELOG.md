@@ -15,6 +15,31 @@ from v1.0.0 onward.
 - **End-to-end demo story doc** at `docs/demo/E2E-DEMO-STORY.md` —
   source material for the landing-page demo section: brief, 3-layer
   harness, install-time fixes, 9-stage live run with full receipts.
+- **5 forked T4 fallback methodology skills** — `guild:tdd`,
+  `guild:systematic-debug`, `guild:worktrees`, `guild:request-review`,
+  `guild:finish-branch` under `skills/fallback/`. Each is forked
+  from the corresponding `superpowers:*` skill at v5.0.7 (MIT,
+  © 2025 Jesse Vincent), with attribution at
+  `skills/fallback/<name>/LICENSE-attribution.md` and adapted
+  cross-references that point at Guild's own meta + fallback skills.
+  Guild now ships self-contained — the superpowers plugin is no
+  longer a runtime dependency. Implements the original §5 forking
+  intent that v1.0.0-beta1 deferred.
+- **Self-audit report** at `docs/audit/2026-04-25.md` — first run
+  of the static-analysis checks documented in `commands/guild-audit.md`.
+  Verdict: PASS, zero blockers.
+
+### Changed
+
+- **§5 forking policy flipped** from REFERENCE to FORK in
+  `guild-plan.md`. Updated `docs/architecture.md` T4 description.
+- **Skill count** in README: was 67 (1 + 13 + 3 + 0 + 50), now
+  **72** (1 + 13 + 3 + **5** + 50).
+- **90 citation rewrites** across 21 files: every `superpowers:*`
+  reference (excluding upstream-attribution lines under
+  `skills/fallback/*/LICENSE-attribution.md` and SKILL.md frontmatter)
+  now points at the Guild equivalent — `guild:tdd`, `guild:plan`,
+  `guild:verify-done`, etc.
 
 ### Fixed
 
@@ -158,7 +183,8 @@ First public beta. Structurally complete across all 7 plan phases.
   (documented in README and bootstrap banner).
 - Windows support is untested; macOS + Linux expected to work.
 - `skills/fallback/` is intentionally empty per §5 REFERENCE policy
-  (Guild cites `superpowers:*` skills directly rather than forking).
+  in beta1 (Guild cited `superpowers:*` skills directly rather than
+  forking). Flipped to FORK in [Unreleased] — see entry above.
 
 ### Compatibility
 

@@ -20,7 +20,7 @@ You own Guild's human-facing documentation: every file under `docs/` except `doc
 
 ## Superpowers skills to invoke
 
-- `superpowers:verification-before-completion` — every cross-reference resolves (files exist, headings match), every diagram reference points at a present SVG, every code snippet runs or is marked as illustrative.
+- `guild:verify-done` — every cross-reference resolves (files exist, headings match), every diagram reference points at a present SVG, every code snippet runs or is marked as illustrative.
 
 ## Handoff contract
 

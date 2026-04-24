@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Get a second opinion on the migration before I merge.",
+    "Request a code review for the changes in src/routes/.",
+    "I want a fresh-context review of this PR's diff.",
+    "Have a reviewer check the bearer-token timing-safe compare for sanity.",
+    "Spin up a code-review subagent on the most recent commits."
+  ],
+  "should_not_trigger": [
+    "Review the architecture design doc for spec compliance.",
+    "Verify the spec against the product brief.",
+    "Brainstorm whether we even need this feature.",
+    "Compose the team for this spec.",
+    "Open a PR — no review needed.",
+    "Run the tests.",
+    "Edit the README install instructions."
+  ]
+}

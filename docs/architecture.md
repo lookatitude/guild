@@ -63,9 +63,12 @@ create-specialist · decisions · evolve-skill · execute-plan · plan · reflec
 review · rollback-skill · team-compose · verify-done. `using-guild` from the plan
 is not materialized as a separate skill — its role is served by `commands/guild.md`.
 
-**Fallback skills (T4):** the directory exists but is empty. Guild references
-`superpowers:*` skills directly (TDD, systematic-debugging, writing-plans, etc.)
-rather than forking them. See `guild-plan.md §5` forking policy.
+**Fallback skills shipped (T4, 5):** tdd · systematic-debug · worktrees ·
+request-review · finish-branch. Each is forked from the corresponding
+`superpowers:*` skill (v5.0.7, MIT) with attribution under
+`skills/fallback/<name>/LICENSE-attribution.md`. Guild ships self-contained —
+no runtime dependency on the superpowers plugin. See `guild-plan.md §5`
+forking policy.
 
 ## Lifecycle flow — the 7-step `/guild` pipeline
 

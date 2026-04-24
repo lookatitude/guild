@@ -23,7 +23,7 @@ Engineering group specialist (`guild-plan.md §6.1`). Owns the security review l
 - `security-auth-flow-review` (T5, **forward-declared — P3 scope**) — authn/authz flow review: OAuth/OIDC/SAML pitfalls, JWT validation, session fixation, CSRF, authorization-check placement, privilege-escalation hunting.
 - `security-secrets-scan` (T5, **forward-declared — P3 scope**) — secrets detection in code and git history: scanner configuration, false-positive tuning, rotation protocol, key-exposure incident response.
 
-The four `security-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:systematic-debugging` + `superpowers:verification-before-completion` when a security invocation needs methodology before those skills land.
+The four `security-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:systematic-debug` + `guild:verify-done` when a security invocation needs methodology before those skills land.
 
 ## When to invoke
 

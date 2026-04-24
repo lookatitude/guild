@@ -23,7 +23,7 @@ Commercial group specialist (`guild-plan.md §6.3`). Owns the outbound revenue-m
 - `sales-proposal-writer` (T5, **forward-declared — P3 scope**) — proposal authoring: executive summary, situation/complication/resolution structure, scope, pricing options, terms, success criteria, next steps. Proposal narrative is sales; technical appendices are commissioned from technical-writer; pricing math is sales' responsibility.
 - `sales-follow-up-sequence` (T5, **forward-declared — P3 scope**) — follow-up sequences and objection handling: per-objection response frameworks (price, timing, authority, competitor, status-quo), nudge cadence, breakup email, re-engagement triggers, stall-unblocking moves.
 
-Four of the five skills (`sales-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:writing-skills` when a sales invocation needs authoring methodology before those skills land.
+Four of the five skills (`sales-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when a sales invocation needs authoring methodology before those skills land.
 
 ## When to invoke
 

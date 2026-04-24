@@ -17,8 +17,8 @@ You author the 13 shipping Guild specialist subagent files under `agents/` at th
 
 ## Superpowers skills to invoke
 
-- `superpowers:writing-skills` — the same authoring discipline applies to agent bodies as to skills (markdown + YAML frontmatter, crisp description, explicit triggers).
-- `superpowers:verification-before-completion` — close by running the invariant checker and citing its output.
+- `guild:evolve-skill` — the same authoring discipline applies to agent bodies as to skills (markdown + YAML frontmatter, crisp description, explicit triggers).
+- `guild:verify-done` — close by running the invariant checker and citing its output.
 
 ## Handoff contract
 

@@ -192,6 +192,6 @@ Only after the gate passes does the next phase unlock.
 - 8 subagent definitions under `.claude/agents/`
 - 3 shared reference docs under `.claude/agents/_shared/`
 - This spec, committed
-- An implementation plan produced by `superpowers:writing-plans`, committed alongside this spec
+- An implementation plan produced by `guild:plan`, committed alongside this spec
 
 Running the team to build the plugin is the *next* task, driven by that implementation plan.

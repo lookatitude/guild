@@ -173,10 +173,10 @@ Project-local runtime state:
 | T1 — core | `guild:principles` — Karpathy 4 + evidence | NEW | every specialist, mandatory prelude |
 | T2 — meta | Workflow spine + context assembly + decision capture | mix NEW + FORK | orchestrator + auto-trigger |
 | T3 — knowledge | Wiki ops: ingest / query / lint | NEW | every specialist + coordinator |
-| T4 — methodology | REFERENCE superpowers + local fallback | REFERENCE | engineering specialists only |
+| T4 — methodology | Forked superpowers methodology (MIT, attribution preserved) | FORK | engineering specialists only |
 | T5 — specialists | Per-role expertise, grouped engineering / content / commercial | NEW | matching specialist only |
 
-Forking policy: REFERENCE superpowers' team-independent methodology (TDD, debugging, worktrees, code review, branch hygiene). FORK everything Guild's team model reshapes (brainstorm, plan, execute, verify, skill authoring).
+Forking policy: FORK every methodology skill into `skills/fallback/`. Guild ships self-contained — no runtime dependency on the superpowers plugin. Forked T4 skills (`guild:tdd`, `guild:systematic-debug`, `guild:worktrees`, `guild:request-review`, `guild:finish-branch`) carry MIT attribution to their upstream sources at `skills/fallback/<name>/LICENSE-attribution.md`. Guild also FORKS everything its team model reshapes (brainstorm, plan, execute, verify, skill authoring) into the meta tier.
 
 ---
 

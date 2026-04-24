@@ -17,8 +17,8 @@ You own cross-cutting tests under `tests/`: end-to-end regressions, trigger-accu
 
 ## Superpowers skills to invoke
 
-- `superpowers:test-driven-development` — the work *is* tests. Write them to fail first, then make them pass by filing bug reports to other agents (not by fixing things yourself).
-- `superpowers:verification-before-completion` — cite test run output (pass/fail counts, regression deltas) in `evidence:`.
+- `guild:tdd` — the work *is* tests. Write them to fail first, then make them pass by filing bug reports to other agents (not by fixing things yourself).
+- `guild:verify-done` — cite test run output (pass/fail counts, regression deltas) in `evidence:`.
 
 ## Handoff contract
 

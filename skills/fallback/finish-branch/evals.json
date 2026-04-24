@@ -1,0 +1,19 @@
+{
+  "should_trigger": [
+    "We're done — what next?",
+    "Wrap up this branch.",
+    "Merge this back to main.",
+    "Open a PR for this work.",
+    "Decide how to integrate these changes.",
+    "Tests pass and verify is green — finish the branch."
+  ],
+  "should_not_trigger": [
+    "Tests are failing — fix them.",
+    "Brainstorm the next feature.",
+    "Compose the team for the next spec.",
+    "Run the verify-done checklist.",
+    "Reflect on the run.",
+    "Investigate the flaky test before merging.",
+    "Edit the architect's design doc."
+  ]
+}

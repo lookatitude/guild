@@ -23,7 +23,7 @@ Content & communication group specialist (`guild-plan.md §6.2`). Owns persuasiv
 - `copywriter-email-sequences` (T5, **forward-declared — P3 scope**) — lifecycle and transactional email series: welcome / onboarding / activation / re-engagement flows; subject line, preview, body, single-CTA discipline.
 - `copywriter-voice-guide` (T5, **forward-declared — P3 scope**) — authoring a voice-and-tone document: voice axes, do/don't examples, tone-by-context matrix, adjacent-prose matching rule.
 
-Four of the five skills (`copywriter-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:writing-skills` when a copywriter invocation needs authoring methodology before those skills land.
+Four of the five skills (`copywriter-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when a copywriter invocation needs authoring methodology before those skills land.
 
 ## When to invoke
 

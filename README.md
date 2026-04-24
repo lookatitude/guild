@@ -19,9 +19,11 @@ gate.
   backend, devops, qa, mobile, security), content & communication (copywriter,
   technical-writer, social-media, seo), commercial (marketing, sales). One
   `agents/*.md` per specialist.
-- **67 skills** across five tiers — 1 core (`guild-principles`), 13 meta
+- **72 skills** across five tiers — 1 core (`guild-principles`), 13 meta
   (the workflow spine + decisions + reflect + evolve + create-specialist +
-  rollback + audit), 3 knowledge (wiki ingest / query / lint), 50 specialist
+  rollback + audit), 3 knowledge (wiki ingest / query / lint), **5 fallback**
+  (TDD, systematic-debug, worktrees, request-review, finish-branch — forked
+  from `superpowers:*` v5.0.7 under MIT, attribution preserved), 50 specialist
   skills (2–5 per role).
 - **7 slash commands** — `/guild`, `/guild:team`, `/guild:evolve`, `/guild:wiki`,
   `/guild:rollback`, `/guild:stats`, `/guild:audit`.

@@ -23,7 +23,7 @@ Content & communication group specialist (`guild-plan.md §6.2`, commercial-flav
 - `seo-technical-audit` (T5, **forward-declared — P3 scope**) — technical SEO audit: crawlability, indexation, robots.txt, sitemap.xml, canonicals, hreflang, Core Web Vitals diagnosis, structured-data validation (JSON-LD / schema.org), redirect chains, duplicate content.
 - `seo-internal-linking` (T5, **forward-declared — P3 scope**) — internal-linking strategy: topic cluster / pillar architecture, anchor-text planning, orphan-page detection, link-equity distribution, breadcrumb structure.
 
-Four of the five skills (`seo-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:writing-skills` when an seo invocation needs authoring methodology before those skills land.
+Four of the five skills (`seo-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when an seo invocation needs authoring methodology before those skills land.
 
 ## When to invoke
 

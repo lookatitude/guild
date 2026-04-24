@@ -1,6 +1,6 @@
 ---
 name: guild-verify-done
-description: Final gate before task close. Runs (1) tests the spec defined, (2) scope check — every changed file traces to a lane, (3) success-criteria match, (4) no open blocker `followups:`, (5) assumptions reviewed. Writes `.guild/runs/<run-id>/verify.md` — pass/fail + run summary. On pass, hands off to `guild:reflect` (lands P5). TRIGGER:  "is this done", "final check", "verify the task is complete", "run the done-gate". DO NOT TRIGGER for: verifying a single PR outside Guild flow (use superpowers:verification-before-completion), reviewing individual handoffs (guild:review), starting new work.
+description: Final gate before task close. Runs (1) tests the spec defined, (2) scope check — every changed file traces to a lane, (3) success-criteria match, (4) no open blocker `followups:`, (5) assumptions reviewed. Writes `.guild/runs/<run-id>/verify.md` — pass/fail + run summary. On pass, hands off to `guild:reflect` (lands P5). TRIGGER:  "is this done", "final check", "verify the task is complete", "run the done-gate". DO NOT TRIGGER for: verifying a single PR outside Guild flow (use guild:verify-done), reviewing individual handoffs (guild:review), starting new work.
 when_to_use: Seventh and final step of /guild lifecycle, after guild:review confirms all lanes passed.
 type: meta
 ---
@@ -45,9 +45,9 @@ It contains, in order:
 
 Keep it terse and grep-friendly; downstream (`guild:reflect`) reads this file, not the specialist transcripts.
 
-## Distinction from superpowers:verification-before-completion
+## Distinction from guild:verify-done
 
-`superpowers:verification-before-completion` is a single-PR / single-change discipline: before you claim a piece of work is done, run the verification command and show the output. It knows nothing about lanes, receipts, or assumption logs. `guild:verify-done` is the Guild-task analogue: it verifies a whole multi-lane run — several specialists' receipts, a spec's `success_criteria`, a scope union across lanes, and an assumption log accumulated over the run. Use the superpowers skill inside any single change; use this skill at the end of a full `/guild` lifecycle. Picking the wrong one either under-verifies (superpowers on a Guild run skips scope/assumption review) or over-verifies (this skill on a one-file PR demands artifacts that do not exist). This skill forks rather than references because it consumes Guild-specific artifacts that the superpowers skill has no concept of.
+`guild:verify-done` is a single-PR / single-change discipline: before you claim a piece of work is done, run the verification command and show the output. It knows nothing about lanes, receipts, or assumption logs. `guild:verify-done` is the Guild-task analogue: it verifies a whole multi-lane run — several specialists' receipts, a spec's `success_criteria`, a scope union across lanes, and an assumption log accumulated over the run. Use the superpowers skill inside any single change; use this skill at the end of a full `/guild` lifecycle. Picking the wrong one either under-verifies (superpowers on a Guild run skips scope/assumption review) or over-verifies (this skill on a one-file PR demands artifacts that do not exist). This skill forks rather than references because it consumes Guild-specific artifacts that the superpowers skill has no concept of.
 
 ## Handoff
 

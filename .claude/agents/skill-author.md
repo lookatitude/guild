@@ -22,9 +22,9 @@ Context-dependent anchors:
 
 ## Superpowers skills to invoke
 
-- `superpowers:writing-skills` — **mandatory for every skill authored**. It's the authoring discipline itself.
-- `superpowers:test-driven-development` — the skill's eval cases are the test; write them first, then the skill body.
-- `superpowers:verification-before-completion` — close each skill by running its eval fixtures and capturing the output.
+- `guild:evolve-skill` — **mandatory for every skill authored**. It's the authoring discipline itself.
+- `guild:tdd` — the skill's eval cases are the test; write them first, then the skill body.
+- `guild:verify-done` — close each skill by running its eval fixtures and capturing the output.
 
 ## Handoff contract
 

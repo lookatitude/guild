@@ -17,8 +17,8 @@ You own `commands/guild*.md` — every slash command Guild exposes. Each command
 
 ## Superpowers skills to invoke
 
-- `superpowers:test-driven-development` — write the command's usage examples (help + expected skill dispatched) before writing the command body.
-- `superpowers:verification-before-completion` — verify each command loads in Claude Code and its help text renders.
+- `guild:tdd` — write the command's usage examples (help + expected skill dispatched) before writing the command body.
+- `guild:verify-done` — verify each command loads in Claude Code and its help text renders.
 
 ## Handoff contract
 

@@ -23,7 +23,7 @@ Commercial group specialist (`guild-plan.md §6.3`). Owns the strategic layer th
 - `marketing-campaign-brief` (T5, **forward-declared — P3 scope**) — campaign-brief authoring for commissioning the rest of the roster: objective, hypothesis, target segment, core message, channels, assets required (by specialist), measurement plan, budget/timeline frame. The brief is the handoff artifact to copywriter, social-media, seo, sales.
 - `marketing-ab-copy-variants` (T5, **forward-declared — P3 scope**) — A/B copy-variant program design: variant hypothesis stack, sample-size and power calculation, primary vs. guardrail metrics, stop-rules, result readout with confidence intervals. Authors the variant *hypotheses* and *reading*; copywriter drafts the variant prose when volume requires it.
 
-Four of the five skills (`marketing-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:writing-skills` when a marketing invocation needs authoring methodology before those skills land.
+Four of the five skills (`marketing-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when a marketing invocation needs authoring methodology before those skills land.
 
 ## When to invoke
 

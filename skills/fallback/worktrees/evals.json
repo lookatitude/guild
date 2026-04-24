@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Set up an isolated workspace for the new auth refactor.",
+    "Use a worktree for this branch so I can keep my current changes.",
+    "Spin up a worktree before we start executing the plan.",
+    "Branch needs its own checkout — create a worktree.",
+    "Isolate this experiment from the main checkout."
+  ],
+  "should_not_trigger": [
+    "Run the tests on the current branch.",
+    "Commit the staged files.",
+    "Open a PR.",
+    "Brainstorm the new feature spec.",
+    "Push to origin.",
+    "Lint the changed files.",
+    "Generate a changelog entry."
+  ]
+}

@@ -23,7 +23,7 @@ Engineering group specialist (`guild-plan.md §6.1`). Owns the mobile client end
 - `mobile-react-native` (T5, **forward-declared — P3 scope**) — React Native / Expo patterns: bridge/Turbo-modules awareness, navigation (React Navigation/Expo Router), native-module boundaries, EAS build/submit, OTA updates.
 - `mobile-performance-tuning` (T5, **forward-declared — P3 scope**) — mobile performance craft: cold-start profiling, frame-rate/jank analysis, memory profiling, app-size audits, battery impact, platform-specific traces (Instruments, Android Profiler, Flipper).
 
-The four `mobile-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:test-driven-development` + `superpowers:systematic-debugging` when a mobile invocation needs methodology before those skills land.
+The four `mobile-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:tdd` + `guild:systematic-debug` when a mobile invocation needs methodology before those skills land.
 
 ## When to invoke
 

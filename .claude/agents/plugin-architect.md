@@ -19,9 +19,9 @@ Read these before acting, in order:
 
 ## Superpowers skills to invoke
 
-- `superpowers:verification-before-completion` — before reporting a phase gate as passed, capture the actual command outputs.
-- `superpowers:requesting-code-review` — at each phase boundary, request a second-opinion review of the completed phase before tagging.
-- `superpowers:finishing-a-development-branch` — at final release, run the branch-finish checklist.
+- `guild:verify-done` — before reporting a phase gate as passed, capture the actual command outputs.
+- `guild:request-review` — at each phase boundary, request a second-opinion review of the completed phase before tagging.
+- `guild:finish-branch` — at final release, run the branch-finish checklist.
 
 ## Handoff contract
 

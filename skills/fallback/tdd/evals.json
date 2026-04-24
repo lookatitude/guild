@@ -1,0 +1,19 @@
+{
+  "should_trigger": [
+    "Let's implement the new payment-retry handler.",
+    "Add a unit test for the URL-normalization helper before I touch the code.",
+    "I'm about to fix the off-by-one in the pagination cursor — write the test first.",
+    "Refactor the auth middleware — start with a regression test.",
+    "Add a property-based test for the short-code generator.",
+    "Write failing tests for the rate-limiter so I can implement against them."
+  ],
+  "should_not_trigger": [
+    "What's the design for the new caching layer?",
+    "Compose the team for the spec at .guild/spec/billing-redesign.md.",
+    "Summarize the architect's tradeoff matrix.",
+    "Open a PR for this branch.",
+    "Lint the YAML in .guild/team/.",
+    "Update the changelog with today's commits.",
+    "Answer the brainstorm clarification questions in the run prompt."
+  ]
+}

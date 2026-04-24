@@ -23,7 +23,7 @@ Engineering group specialist (`guild-plan.md §6.1`). Owns the test suite as a w
 - `qa-snapshot-tests` (T5, **forward-declared — P3 scope**) — snapshot and golden-file tests: when they're the right tool, how to keep them legible, snapshot-rot prevention, review discipline.
 - `qa-flaky-test-hunter` (T5, **forward-declared — P3 scope**) — systematic flakiness triage: reproduce → categorize (timing / order / IO / env / nondeterminism) → root-cause → fix-or-quarantine protocol.
 
-The four `qa-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:test-driven-development` + `superpowers:systematic-debugging` when a qa invocation needs methodology before those skills land.
+The four `qa-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:tdd` + `guild:systematic-debug` when a qa invocation needs methodology before those skills land.
 
 ## When to invoke
 

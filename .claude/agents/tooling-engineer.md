@@ -17,9 +17,9 @@ You own Guild's TypeScript/Node tooling outside the hook lifecycle: every file u
 
 ## Superpowers skills to invoke
 
-- `superpowers:test-driven-development` — for every script or MCP tool, write a test that fixes inputs and asserts on outputs before implementing.
-- `superpowers:systematic-debugging` — when evals regress or MCP servers misbehave, trace via structured logs under `.guild/runs/`.
-- `superpowers:verification-before-completion` — cite real CLI/test output for each script in `evidence:`.
+- `guild:tdd` — for every script or MCP tool, write a test that fixes inputs and asserts on outputs before implementing.
+- `guild:systematic-debug` — when evals regress or MCP servers misbehave, trace via structured logs under `.guild/runs/`.
+- `guild:verify-done` — cite real CLI/test output for each script in `evidence:`.
 
 ## Handoff contract
 

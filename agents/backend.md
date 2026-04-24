@@ -23,7 +23,7 @@ Engineering group specialist (`guild-plan.md §6.1`). Owns the implementation la
 - `backend-migration-writer` (T5, **forward-declared — P3 scope**) — forward/backward-compatible schema migrations: expand-contract pattern, backfill strategy, lock/timeout hazards, rollback plan.
 - `backend-service-integration` (T5, **forward-declared — P3 scope**) — external-service clients, queue consumers, worker jobs: timeouts, retries, idempotency keys, circuit breaking, dead-letter handling, contract tests.
 
-The four `backend-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:test-driven-development` + `superpowers:systematic-debugging` when a backend invocation needs methodology before those skills land.
+The four `backend-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:tdd` + `guild:systematic-debug` when a backend invocation needs methodology before those skills land.
 
 ## When to invoke
 

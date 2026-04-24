@@ -21,7 +21,7 @@ Engineering group specialist (`guild-plan.md §6.1`). Owns pre-decision investig
 - `researcher-paper-digest` (T5, **forward-declared — P3 scope**) — structured paper/article summaries: problem, method, results, limitations, applicability to current project, one-line takeaway.
 - `researcher-comparison-table` (T5, **forward-declared — P3 scope**) — apples-to-apples comparison tables: criteria rows, option columns, cell citations, explicit "not evaluated" marks, recommendation-free output (architect picks).
 
-The three `researcher-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `superpowers:brainstorming` when a researcher invocation needs methodology before those skills land.
+The three `researcher-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:brainstorm` when a researcher invocation needs methodology before those skills land.
 
 ## When to invoke
 
