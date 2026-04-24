@@ -32,9 +32,9 @@ Ten ordered steps. Each step's input and output is explicit so a later step can 
 
 5. **Grader evaluates.** Grader subagent reads `runs/{A,B}/` + `assertions.json` and emits a per-case pass/fail with rationale. Input: trajectories + assertions. Output: `.guild/evolve/<run-id>/grading.json`.
 
-6. **Benchmark + flip report.** Delegates to `scripts/flip-report.ts`. Computes `pass_rate`, `duration_ms`, `total_tokens`, mean ± stddev, and the delta between A and B. Classifies each case as P→P (stable pass), F→F (stable fail), P→F (**regression**), or F→P (**fix**). Input: `grading.json`. Output: `.guild/evolve/<run-id>/flip-report.json` + a human-readable `.md` summary.
+6. **Benchmark + flip report.** Delegates to `scripts/flip-report.ts`. Computes `pass_rate`, `duration_ms`, `total_tokens`, mean ± stddev, and the delta between A and B. Classifies each case as P→P (stable pass), F→F (stable fail), P→F (**regression**), or F→P (**fix**). Input: `grading.json`. Output: `.guild/evolve/<run-id>/flip-report.md` with structured YAML frontmatter (regressions, fixes, pass_rate, duration_ms, total_tokens deltas) that `guild:stats` and the promotion gate can parse.
 
-7. **Shadow mode.** Delegates to `scripts/shadow-mode.ts`. Runs the proposed skill (B) on historical tasks from `.guild/runs/*/` without changing live routing — records trigger accuracy against the historical context, boundary collisions with adjacent skills, token deltas, and output quality per `§11.2` step 7. Input: proposed skill + `.guild/runs/`. Output: `.guild/evolve/<run-id>/shadow-mode.json`.
+7. **Shadow mode.** Delegates to `scripts/shadow-mode.ts`. Runs the proposed skill (B) on historical tasks from `.guild/runs/*/` without changing live routing — records trigger accuracy against the historical context (using `UserPromptSubmit` events captured by `hooks/capture-telemetry.ts`), boundary collisions with adjacent skills, token deltas, and output quality per `§11.2` step 7. Input: proposed skill + `.guild/runs/`. Output: `.guild/evolve/<run-id>/shadow-report.md` with YAML frontmatter (total_prompts, agreements, divergences, divergence_rate).
 
 8. **Promotion gate.** Promote B if ANY of the three conditions holds:
    - **0 regressions AND ≥1 fix** (pure improvement).
@@ -52,7 +52,7 @@ Ten ordered steps. Each step's input and output is explicit so a later step can 
 Two directories, by convention:
 
 - `.guild/skill-versions/<skill>/v<N>/` — pre-edit snapshots, one per evolve run. Monotonically versioned per `§11.3`. Used by `guild:rollback-skill` to walk back the stack.
-- `.guild/evolve/<run-id>/` — per-run workspace. Contains `evals.json` (merged), `assertions.json`, `runs/{A,B}/`, `grading.json`, `flip-report.{json,md}`, `shadow-mode.json`, `gate.json`, and on rejection a full `archived/` subtree.
+- `.guild/evolve/<run-id>/` — per-run workspace. Contains `pipeline.md` (run plan), `evals.json` (merged), `assertions.json`, `runs/{A,B}/`, `grading.json`, `flip-report.md` (YAML frontmatter + human summary), `shadow-report.md` (YAML frontmatter + human summary), `gate.json`, and on rejection a full `archived/` subtree.
 
 ## Non-destructive rule
 

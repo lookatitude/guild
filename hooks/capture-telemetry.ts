@@ -2,19 +2,20 @@
 /**
  * hooks/capture-telemetry.ts
  *
- * Events:  PostToolUse | SubagentStop
+ * Events:  PostToolUse | SubagentStop | UserPromptSubmit
  * Purpose: Appends one NDJSON event line per invocation to
  *          .guild/runs/<run-id>/events.ndjson.
  *
  * Event schema:
  * {
  *   "ts":             "<ISO-8601>",
- *   "event":          "PostToolUse | SubagentStop",
- *   "tool":           "<tool name, empty for SubagentStop>",
+ *   "event":          "PostToolUse | SubagentStop | UserPromptSubmit",
+ *   "tool":           "<tool name, empty for SubagentStop/UserPromptSubmit>",
  *   "specialist":     "<agent name if applicable, empty for main session>",
  *   "payload_digest": "<short signature of inputs, not full payload>",
  *   "ok":             <bool>,
- *   "ms":             <duration ms if known, 0 otherwise>
+ *   "ms":             <duration ms if known, 0 otherwise>,
+ *   "prompt":         "<user prompt text, UserPromptSubmit only; omitted otherwise>"
  * }
  *
  * Run-id resolution (priority order):
@@ -57,6 +58,7 @@ interface HookPayload {
   agent_name?: string;
   stop_reason?: string;
   duration_ms?: number;
+  prompt?: string;
 }
 
 interface TelemetryEvent {
@@ -67,6 +69,7 @@ interface TelemetryEvent {
   payload_digest: string;
   ok: boolean;
   ms: number;
+  prompt?: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -123,9 +126,14 @@ async function main(): Promise<void> {
 
   // Build event
   const eventName = payload.hook_event_name ?? "PostToolUse";
-  const tool = eventName === "SubagentStop" ? "" : (payload.tool_name ?? "");
+  const tool =
+    eventName === "SubagentStop" || eventName === "UserPromptSubmit"
+      ? ""
+      : (payload.tool_name ?? "");
   const specialist = payload.agent_name ?? "";
-  const payloadDigest = digest(payload.tool_input ?? payload.stop_reason ?? "");
+  const payloadDigest = digest(
+    payload.tool_input ?? payload.stop_reason ?? payload.prompt ?? ""
+  );
   const ok = isOk(payload);
   const ms = typeof payload.duration_ms === "number" ? payload.duration_ms : 0;
 
@@ -138,6 +146,9 @@ async function main(): Promise<void> {
     ok,
     ms,
   };
+  if (eventName === "UserPromptSubmit" && typeof payload.prompt === "string") {
+    event.prompt = payload.prompt;
+  }
 
   // Write to .guild/runs/<run-id>/events.ndjson
   const runsDir = path.join(cwd, ".guild", "runs", runId);

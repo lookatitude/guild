@@ -67,11 +67,11 @@ If no slug is provided, pass `skill=` empty — the skill selects the most-overd
 **Expected outputs from the skill:**
 
 - `.guild/skill-versions/<skill>/v<n>/` — snapshot of the current skill before any edit.
-- `.guild/evolve/<skill>/<attempt-id>/grading.json` — eval assertion results.
-- `.guild/evolve/<skill>/<attempt-id>/flip-report.md` — benchmark + flip summary.
-- `.guild/evolve/<skill>/<attempt-id>/shadow-report.md` — shadow-mode accuracy + boundary collisions.
+- `.guild/evolve/<run-id>/grading.json` — eval assertion results.
+- `.guild/evolve/<run-id>/flip-report.md` — benchmark + flip summary.
+- `.guild/evolve/<run-id>/shadow-report.md` — shadow-mode accuracy + boundary collisions.
 - On promote: updated `skills/<skill>/` and `skills/<skill>/evals/evals.json`; version bumped.
-- On reject/defer: attempt archived under `.guild/evolve/<skill>/<attempt-id>/`.
+- On reject/defer: attempt archived under `.guild/evolve/<run-id>/`.
 
 ---
 
@@ -102,7 +102,7 @@ The skill emits a structured outcome line when done:
 Evolution outcome: PROMOTED | REJECTED | DEFERRED
 Skill: <slug>   Version: v<n> → v<n+1> (or unchanged)
 Reason: <one-line from flip report>
-Full report: .guild/evolve/<skill>/<attempt-id>/flip-report.md
+Full report: .guild/evolve/<run-id>/flip-report.md
 ```
 
 ---
@@ -120,8 +120,8 @@ Version:    v<n> → v<n+1>
 Fixes:      <F→P count>
 Regressions: 0
 Token delta: <±%>
-Full report: .guild/evolve/<skill>/<attempt-id>/flip-report.md
-Shadow:      .guild/evolve/<skill>/<attempt-id>/shadow-report.md
+Full report: .guild/evolve/<run-id>/flip-report.md
+Shadow:      .guild/evolve/<run-id>/shadow-report.md
 ```
 
 **Rejected / Deferred:**
@@ -132,7 +132,7 @@ Skill:       <slug>
 Regressions: <P→F count>
 Fixes:       <F→P count>
 Reason:      <summary from flip report>
-Attempt archived: .guild/evolve/<skill>/<attempt-id>/
+Attempt archived: .guild/evolve/<run-id>/
 ```
 
 If `--auto` rejected due to regressions, suggest running without `--auto` to review and

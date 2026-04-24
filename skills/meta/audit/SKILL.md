@@ -17,7 +17,7 @@ Audits every executable artifact that ships in the plugin:
 
 - `hooks/*.ts` and `hooks/*.sh` — SessionStart, UserPromptSubmit, PostToolUse, SubagentStop, Stop hooks per `§13.2`.
 - `hooks/agent-team/*.ts` — `TaskCreated`, `TaskCompleted`, `TeammateIdle` hooks per `§13.2`.
-- `scripts/*.ts` — tooling scripts (trace-summarize, flip-report, shadow-mode, description-optimizer, rollback-walker, and any others added in P6).
+- `scripts/*.ts` — tooling scripts (trace-summarize, evolve-loop, flip-report, shadow-mode, description-optimizer, rollback-walker, and any others added in P7+).
 - `mcp-servers/*` — optional MCP servers per `§13.3` (`guild-memory`, `guild-telemetry`), audited if present.
 
 Does **not** audit:
