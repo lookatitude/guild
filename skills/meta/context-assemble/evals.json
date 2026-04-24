@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Build the context bundle for backend.",
+    "Prepare the brief for copywriter.",
+    "What context does the architect need for this task?",
+    "Assemble the per-specialist context for the SEO lane.",
+    "Produce the task bundle for qa."
+  ],
+  "should_not_trigger": [
+    "Load all wiki pages.",
+    "Show me the full repo.",
+    "Compress this file.",
+    "Plan the lanes.",
+    "Run the tests."
+  ]
+}
