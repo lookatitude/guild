@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Is this task done?",
+    "Run the final check.",
+    "Verify the task is complete.",
+    "Run the done-gate on this run.",
+    "Are we ready to close this out?"
+  ],
+  "should_not_trigger": [
+    "Plan something new.",
+    "Compose a team.",
+    "Review the diff.",
+    "Run the tests only.",
+    "Start a brainstorm."
+  ]
+}
