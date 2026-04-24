@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Audit the Guild plugin scripts — I want SHA256 hashes and network flags.",
+    "What does hooks/maybe-reflect.ts do, and does it make any network calls?",
+    "Show me all network calls from the hooks.",
+    "Run /guild:audit before we install this new skill from an untrusted source.",
+    "List every hook script with its file hash and declared tool access."
+  ],
+  "should_not_trigger": [
+    "Run wiki-lint across the knowledge base.",
+    "Review the specialist outputs from this run.",
+    "Audit our customer's auth flow for vulnerabilities.",
+    "Roll back guild:context-assemble to v3.",
+    "Evolve guild:brainstorm with a tighter description.",
+    "Reflect on this run and record any proposals.",
+    "Capture a decision from the architect's handoff."
+  ]
+}

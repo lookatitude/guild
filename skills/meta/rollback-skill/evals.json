@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Roll back guild:brainstorm to the previous version.",
+    "Revert the last evolve of guild:context-assemble.",
+    "Undo yesterday's tune on guild:wiki-lint.",
+    "Walk guild:reflect back two steps — the promoted edit regressed on our last run.",
+    "Restore guild:plan to v3 from the skill-versions stack."
+  ],
+  "should_not_trigger": [
+    "Evolve guild:brainstorm with a tighter description.",
+    "Create a new specialist for mobile engineering.",
+    "Delete the guild:wiki-lint skill — we don't use it anymore.",
+    "Review the run we just finished.",
+    "Audit the Guild plugin scripts for network calls.",
+    "Ingest a new wiki source from docs/standards/api.md.",
+    "Compose a team for this spec."
+  ]
+}
