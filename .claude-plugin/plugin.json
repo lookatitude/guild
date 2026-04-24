@@ -1,0 +1,51 @@
+{
+  "name": "guild",
+  "version": "0.0.1",
+  "description": "A team-of-specialists plugin for Claude Code: 13 domain specialists across engineering, content, and commercial groups, a brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
+  "author": {
+    "name": "Miguel Pinto"
+  },
+  "license": "MIT",
+  "keywords": [
+    "agents",
+    "subagents",
+    "agent-team",
+    "skills",
+    "specialists",
+    "wiki",
+    "self-evolution"
+  ],
+  "skills": [
+    "./skills/core/",
+    "./skills/meta/",
+    "./skills/knowledge/",
+    "./skills/fallback/",
+    "./skills/specialists/"
+  ],
+  "commands": [
+    "./commands/guild.md",
+    "./commands/guild-team.md",
+    "./commands/guild-evolve.md",
+    "./commands/guild-wiki.md",
+    "./commands/guild-rollback.md",
+    "./commands/guild-stats.md",
+    "./commands/guild-audit.md"
+  ],
+  "agents": [
+    "./agents/architect.md",
+    "./agents/researcher.md",
+    "./agents/backend.md",
+    "./agents/devops.md",
+    "./agents/qa.md",
+    "./agents/mobile.md",
+    "./agents/security.md",
+    "./agents/copywriter.md",
+    "./agents/technical-writer.md",
+    "./agents/social-media.md",
+    "./agents/seo.md",
+    "./agents/marketing.md",
+    "./agents/sales.md"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
+}
