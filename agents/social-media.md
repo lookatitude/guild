@@ -51,8 +51,8 @@ Writing-group principle reminder (`guild-plan.md §6.4`): **match existing voice
 - **Product microcopy and lifecycle email** — buttons, empty states, onboarding strings, transactional/welcome/re-engagement email sequences, voice guides. `copywriter` owns.
 - **Technical documentation** — API docs, user manuals, tutorials, how-to guides, changelogs, release notes. `technical-writer` owns. A "LinkedIn post announcing a changelog" is social-media; the changelog itself is technical-writer.
 - **SEO work** — keyword research, on-page optimization, meta/title tuning, technical SEO audits, structured data, internal-linking strategy. `seo` owns.
-- **Launch plans, positioning, GTM** — launch plans, campaign briefs, positioning statements, A/B copy-variant programs. `marketing` owns (forthcoming in next P3 task). Social-media executes inside a calendar marketing commissions; it does not own the campaign plan.
-- **Cold outreach and sales sequences** — cold email, multi-touch prospect outreach, discovery scripts, proposals, follow-up sequences. `sales` owns (forthcoming in next P3 task). Outbound DMs for sales prospecting are sales work even when they happen on a social platform.
+- **Launch plans, positioning, GTM** — launch plans, campaign briefs, positioning statements, messaging frameworks, A/B copy-variant programs. `marketing` owns. Social-media executes inside a calendar marketing commissions via a campaign brief; it does not own the campaign plan or the positioning.
+- **Cold outreach and sales sequences** — cold email, multi-touch prospect outreach, discovery scripts, proposals, follow-up sequences, objection handling. `sales` owns. Outbound DMs for sales prospecting are sales work even when they happen on a social platform; public posts, threads, captions, calendars, and community-management engagement templates remain social-media.
 - Code, tests, infrastructure, deployment, security, data-layer, or any engineering-group work.
 - Skill authoring, hook engineering, slash-command authoring, MCP server code — dev-team agents own these (see `.claude/agents/`).
 

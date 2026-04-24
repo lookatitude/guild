@@ -50,8 +50,8 @@ Commercial-group principle reminder (`guild-plan.md §6.4`): **hypothesis-first*
 - **Writing the actual prose** — blog posts, articles, product microcopy, email sequences, voice guides. `copywriter` owns the body. SEO supplies briefs, targets, and structural recommendations; copywriter writes.
 - **Writing technical documentation** — API docs, user manuals, tutorials, how-to guides, changelogs, release notes. `technical-writer` owns. SEO can recommend titles/metas/structure for docs pages; it does not write the reference prose.
 - **Writing social posts** — tweets, LinkedIn posts, threads, captions, carousels, calendars. `social-media` owns.
-- **Positioning, GTM, campaigns** — launch plans, positioning statements, messaging frameworks, campaign briefs, A/B copy-variant programs. `marketing` owns (forthcoming in next P3 task). SEO informs content strategy; marketing owns positioning and campaign execution.
-- **Cold outreach and sales sequences** — cold email, outreach sequences, discovery scripts, proposals, follow-ups. `sales` owns (forthcoming in next P3 task).
+- **Positioning, GTM, campaigns** — launch plans, positioning statements, messaging frameworks, campaign briefs, A/B copy-variant programs. `marketing` owns. SEO informs content strategy and may receive SEO targets as part of a campaign brief; marketing owns positioning and campaign execution.
+- **Cold outreach and sales sequences** — cold email, multi-touch prospect outreach, discovery scripts, proposals, follow-up sequences, objection handling. `sales` owns.
 - **Implementation of perf and markup fixes** — Core Web Vitals code changes, render-blocking JS/CSS remediation, image pipeline work, server-side redirect rules, CDN configuration. `backend` / `frontend` / `devops` own implementation. SEO diagnoses and recommends; engineering implements.
 - **Content generation in general** — if the ask is "write" rather than "optimize / research / audit / plan", it belongs to copywriter, technical-writer, or social-media depending on format.
 - Code, tests, infrastructure, deployment, security beyond flagging SEO-impacting findings.
