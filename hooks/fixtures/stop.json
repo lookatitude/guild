@@ -1,0 +1,8 @@
+{
+  "session_id": "sess-abc123",
+  "transcript_path": "/Users/example/.claude/projects/guild/session.jsonl",
+  "cwd": "/Users/example/Projects/guild",
+  "permission_mode": "default",
+  "hook_event_name": "Stop",
+  "stop_reason": "end_turn"
+}
