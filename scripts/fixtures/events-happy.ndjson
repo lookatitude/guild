@@ -1,0 +1,20 @@
+{"ts":"2026-04-24T10:00:00.000Z","event":"PostToolUse","tool":"Read","specialist":"backend-engineer","payload_digest":"aaa111","ok":true,"ms":120}
+{"ts":"2026-04-24T10:00:02.000Z","event":"PostToolUse","tool":"Bash","specialist":"backend-engineer","payload_digest":"bbb222","ok":true,"ms":450}
+{"ts":"2026-04-24T10:00:05.000Z","event":"PostToolUse","tool":"Write","specialist":"backend-engineer","payload_digest":"ccc333","ok":true,"ms":80}
+{"ts":"2026-04-24T10:00:07.000Z","event":"PostToolUse","tool":"Edit","specialist":"backend-engineer","payload_digest":"ddd444","ok":true,"ms":65}
+{"ts":"2026-04-24T10:00:09.000Z","event":"PostToolUse","tool":"Read","specialist":"backend-engineer","payload_digest":"eee555","ok":true,"ms":95}
+{"ts":"2026-04-24T10:00:11.000Z","event":"PostToolUse","tool":"Bash","specialist":"backend-engineer","payload_digest":"fff666","ok":false,"ms":300}
+{"ts":"2026-04-24T10:00:14.000Z","event":"PostToolUse","tool":"Write","specialist":"backend-engineer","payload_digest":"ggg777","ok":true,"ms":70}
+{"ts":"2026-04-24T10:00:16.000Z","event":"SubagentStop","tool":"","specialist":"backend-engineer","payload_digest":"hhh888","ok":true,"ms":2200}
+{"ts":"2026-04-24T10:00:20.000Z","event":"PostToolUse","tool":"Read","specialist":"frontend-engineer","payload_digest":"iii999","ok":true,"ms":110}
+{"ts":"2026-04-24T10:00:22.000Z","event":"PostToolUse","tool":"Read","specialist":"frontend-engineer","payload_digest":"jjjaaa","ok":true,"ms":105}
+{"ts":"2026-04-24T10:00:24.000Z","event":"PostToolUse","tool":"Edit","specialist":"frontend-engineer","payload_digest":"kkkbbb","ok":true,"ms":88}
+{"ts":"2026-04-24T10:00:26.000Z","event":"PostToolUse","tool":"Edit","specialist":"frontend-engineer","payload_digest":"lllccc","ok":true,"ms":92}
+{"ts":"2026-04-24T10:00:28.000Z","event":"PostToolUse","tool":"Write","specialist":"frontend-engineer","payload_digest":"mmmddd","ok":true,"ms":75}
+{"ts":"2026-04-24T10:00:30.000Z","event":"PostToolUse","tool":"Bash","specialist":"frontend-engineer","payload_digest":"nnneee","ok":true,"ms":520}
+{"ts":"2026-04-24T10:00:33.000Z","event":"PostToolUse","tool":"Bash","specialist":"frontend-engineer","payload_digest":"ooo fff","ok":true,"ms":480}
+{"ts":"2026-04-24T10:00:36.000Z","event":"PostToolUse","tool":"Read","specialist":"frontend-engineer","payload_digest":"pppggg","ok":true,"ms":115}
+{"ts":"2026-04-24T10:00:38.000Z","event":"PostToolUse","tool":"Write","specialist":"frontend-engineer","payload_digest":"qqqhhh","ok":true,"ms":78}
+{"ts":"2026-04-24T10:00:40.000Z","event":"SubagentStop","tool":"","specialist":"frontend-engineer","payload_digest":"rrriii","ok":true,"ms":3100}
+{"ts":"2026-04-24T10:00:43.000Z","event":"PostToolUse","tool":"Read","specialist":"","payload_digest":"sssjjj","ok":true,"ms":130}
+{"ts":"2026-04-24T10:00:45.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"tttkkk","ok":true,"ms":200}

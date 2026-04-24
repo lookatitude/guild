@@ -161,12 +161,16 @@ function tryRealSummarizer(cwd: string, runId: string): boolean {
   const summarizerPath = path.join(cwd, "scripts", "trace-summarize.ts");
   if (!fs.existsSync(summarizerPath)) return false;
 
-  const result = spawnSync("npx", ["tsx", summarizerPath, runId], {
-    cwd,
-    encoding: "utf8",
-    timeout: 15000,
-    env: { ...process.env, GUILD_RUN_ID: runId },
-  });
+  const result = spawnSync(
+    "npx",
+    ["tsx", summarizerPath, "--run-id", runId, "--cwd", cwd],
+    {
+      cwd,
+      encoding: "utf8",
+      timeout: 15000,
+      env: { ...process.env },
+    }
+  );
 
   if (result.status !== 0) {
     process.stderr.write(
