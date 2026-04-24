@@ -78,11 +78,13 @@ function die(reason: string): never {
 }
 
 /**
- * Derive run ID from session_id.
- * Convention: "run-<session_id>" — consistent across all three handlers.
+ * Derive run ID. Honors GUILD_RUN_ID env var if set (agent-team launcher
+ * exports it per pane so hooks converge on the launcher's session manifest
+ * path). Falls back to "run-<session_id>" otherwise — consistent across all
+ * three agent-team handlers + capture-telemetry + maybe-reflect.
  */
 function deriveRunId(sessionId: string): string {
-  return `run-${sessionId}`;
+  return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
 }
 
 /**

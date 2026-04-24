@@ -125,10 +125,16 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // Resolve run context
+  // Resolve run context.
+  // Convention: run-id is `run-<session_id>` OR honored directly from GUILD_RUN_ID
+  // env var (which the agent-team launcher sets per pane so hooks inside the
+  // pane converge on the launcher's session manifest path). Fallback is
+  // `run-session-<date>` when neither is available.
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
-  const sessionId = payload.session_id ?? `session-${new Date().toISOString().slice(0, 10)}`;
-  const runId = process.env["GUILD_RUN_ID"] ?? sessionId;
+  const sessionId = payload.session_id;
+  const runId =
+    process.env["GUILD_RUN_ID"] ??
+    (sessionId ? `run-${sessionId}` : `run-session-${new Date().toISOString().slice(0, 10)}`);
 
   // Build event
   const eventName = payload.hook_event_name ?? "PostToolUse";

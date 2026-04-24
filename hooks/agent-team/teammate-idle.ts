@@ -72,7 +72,10 @@ interface NudgeContext {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function deriveRunId(sessionId: string): string {
-  return `run-${sessionId}`;
+  // GUILD_RUN_ID honored when the agent-team launcher sets it per pane; else
+  // fallback to "run-<session_id>". Same convention as task-completed.ts,
+  // capture-telemetry.ts, maybe-reflect.ts.
+  return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
 }
 
 /**
