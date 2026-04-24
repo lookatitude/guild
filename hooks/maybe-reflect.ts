@@ -195,10 +195,14 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // Resolve run context
+  // Resolve run context — same convention as hooks/capture-telemetry.ts:
+  // `run-<session_id>` by default; GUILD_RUN_ID env var wins when set
+  // (agent-team launcher exports it per pane for convergence).
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
-  const sessionId = payload.session_id ?? `session-${new Date().toISOString().slice(0, 10)}`;
-  const runId = process.env["GUILD_RUN_ID"] ?? sessionId;
+  const sessionId = payload.session_id;
+  const runId =
+    process.env["GUILD_RUN_ID"] ??
+    (sessionId ? `run-${sessionId}` : `run-session-${new Date().toISOString().slice(0, 10)}`);
 
   // Load telemetry events
   const eventsFile = path.join(cwd, ".guild", "runs", runId, "events.ndjson");

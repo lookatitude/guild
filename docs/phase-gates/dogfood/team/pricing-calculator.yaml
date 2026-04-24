@@ -1,94 +1,21 @@
-slug: pricing-calculator
-run_id: run-001
-composed_at: "2026-04-24T09:00:00Z"
-backend: subagent          # agent-team backend NOT activated; subagents are the default
-allow_larger: false        # team size within cap-6 rule
-
+spec: .guild/spec/pricing-calculator.md
+backend: subagent
+allow_larger: false
 specialists:
-  - id: arch-001
-    role: architect
-    backend: subagent
-    scope: >
-      Design the component tree for the pricing calculator (PricingCalculator,
-      TierSelector, SeatInput, PriceDisplay, CallToAction). Define the
-      TypeScript interfaces for PricingTier and PricingConfig. Specify the
-      pure utility function signature in lib/pricing.ts. Define the axe-core
-      acceptance test contract. Produce a short ADR for the "client component,
-      no SSR fetch" decision. Output: component spec doc + lib/pricing.ts
-      interface + ADR.
-    depends_on: []
-    autonomy_policy:
-      may_do_without_asking:
-        - Choose component file naming and directory layout within /components/pricing/.
-        - Select accessible HTML patterns for tier selection and seat input.
-      requires_confirmation:
-        - Any new npm dependency.
-        - Deviating from the 8 kB gzip budget.
-      forbidden:
-        - Writing implementation code (architect scopes only).
+  - name: architect
+    scope: "Design the component tree for the pricing calculator (PricingCalculator, TierSelector, SeatInput, PriceDisplay, CallToAction). Define TypeScript interfaces for PricingTier / PricingConfig. Specify the pure utility signature in lib/pricing.ts. Author an ADR for the 'client component, no SSR fetch' decision. Output: component spec + lib/pricing.ts interface + ADR."
+    depends-on: []
+    implied-by: "multi-component"
 
-  - id: fe-001
-    role: frontend-engineer
-    backend: subagent
-    scope: >
-      Implement the pricing calculator component tree per the architect's spec.
-      Wire up real-time price computation using lib/pricing.ts. Apply Tailwind
-      design tokens. Ensure the component is responsive (≥ 375 px). Add
-      PricingCalculator to the landing page below the existing tier table.
-      Run axe-core and confirm 0 critical violations. Run Lighthouse and confirm
-      LCP < 2.5 s and CLS < 0.1.
-    depends_on:
-      - arch-001   # needs component spec + lib interface
-    autonomy_policy:
-      may_do_without_asking:
-        - Choose Tailwind classes consistent with existing tokens.
-        - Add aria labels and roles for accessibility.
-      requires_confirmation:
-        - Adding any npm package > 5 kB gzip.
-        - Changing pricing values or tier names.
-      forbidden:
-        - Committing API keys or secrets.
-        - Modifying existing landing-page sections outside the pricing block.
+  - name: frontend-engineer
+    scope: "Implement the pricing calculator component tree per the architect's spec. Wire real-time price computation via lib/pricing.ts. Apply Tailwind tokens. Responsive ≥ 375 px. Add PricingCalculator to the landing page below the existing tier table. Axe-core 0 critical violations. Lighthouse LCP < 2.5 s, CLS < 0.1."
+    depends-on: [architect]
+    implied-by: "gap-fill"  # no frontend-engineer in the 13-specialist roster; flagged to guild:create-specialist
 
-  - id: copy-001
-    role: copywriter
-    backend: subagent
-    scope: >
-      Write tier headlines, descriptions (≤ 60 words each), the seat-count
-      helper text, the CTA labels for each tier, and the legal disclaimer
-      ("Prices shown are estimates and subject to change"). All copy must
-      follow the approved voice guide: confident, specific, no superlatives.
-      Output: copy deck in docs format referencing each component slot.
-    depends_on:
-      - arch-001   # needs tier structure before writing copy per slot
-    autonomy_policy:
-      may_do_without_asking:
-        - Apply voice guide conventions without restating every rule.
-        - Suggest synonyms for tier names if existing names have no trademark.
-      requires_confirmation:
-        - Any pricing figure or promise of savings.
-        - Changes to the CTA label that alter the conversion path intent.
-      forbidden:
-        - Publishing copy containing legally binding pricing commitments.
+  - name: copywriter
+    scope: "Tier headlines, descriptions (≤ 60 words each), seat-count helper text, per-tier CTA labels, and the legal disclaimer. Follows the approved voice guide: confident, specific, no superlatives. Output: copy deck referencing each component slot."
+    depends-on: [architect]
 
-  - id: seo-001
-    role: seo
-    backend: subagent
-    scope: >
-      Research 3–5 mid-funnel pricing keywords (e.g., "[product] pricing",
-      "[product] cost", "how much does [product] cost"). Update the page title
-      tag and meta description to include the primary keyword within character
-      limits. Author FAQ JSON-LD structured data answering the top 3 pricing
-      questions. Validate structured data is error-free. Output: keyword
-      rationale doc + updated title/meta copy + JSON-LD snippet.
-    depends_on:
-      - copy-001   # needs approved copy before SEO copy layer is applied
-    autonomy_policy:
-      may_do_without_asking:
-        - Recommend title/meta copy variants within length limits.
-        - Add FAQ schema if the page has none yet.
-      requires_confirmation:
-        - Adding a new schema type not already on the page.
-        - Removing existing rich-result markup.
-      forbidden:
-        - Stuffing keywords in a way that degrades readability.
+  - name: seo
+    scope: "Research 3–5 mid-funnel pricing keywords. Update page title + meta description with primary keyword within character limits. Author FAQ JSON-LD for the top 3 pricing questions. Validate structured data. Output: keyword rationale + updated title/meta copy + JSON-LD snippet."
+    depends-on: [copywriter]

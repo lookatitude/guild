@@ -195,18 +195,32 @@ function slugFromTeamPath(teamPath: string): string {
   return base.replace(/\.ya?ml$/i, "");
 }
 
-function buildPrompt(slug: string, specialist: Specialist | null): string {
+function buildPrompt(
+  slug: string,
+  runId: string,
+  specialist: Specialist | null
+): string {
   if (!specialist) {
     return (
-      `You are the Guild orchestrator for team \`${slug}\`. ` +
-      `The plan is at \`.guild/plan/${slug}.md\`. ` +
-      `Dispatch specialists when their dependencies clear.`
+      `You are the Guild orchestrator for team \`${slug}\`, run-id \`${runId}\`. ` +
+      `The spec is at \`.guild/spec/${slug}.md\`, the team at \`.guild/team/${slug}.yaml\`, ` +
+      `and the approved plan at \`.guild/plan/${slug}.md\`. ` +
+      `Per-specialist context bundles are under \`.guild/context/${runId}/<specialist>-<task-id>.md\` ` +
+      `(build them via guild:context-assemble before dispatch). ` +
+      `Teammate handoff receipts will land at \`.guild/runs/${runId}/handoffs/<specialist>-<task-id>.md\`. ` +
+      `Dispatch specialists via TaskCreated events when their plan dependencies clear, ` +
+      `then aggregate handoffs and invoke guild:review → guild:verify-done → guild:reflect.`
     );
   }
   return (
-    `You are the \`${specialist.name}\` teammate. ` +
-    `Your lane in the plan is scoped to \`${specialist.scope}\`. ` +
-    `Wait for a \`TaskCreated\` event, then proceed.`
+    `You are the \`${specialist.name}\` teammate for run-id \`${runId}\`. ` +
+    `Your lane scope: \`${specialist.scope}\`. ` +
+    `Read your context bundle at \`.guild/context/${runId}/${specialist.name}-<task-id>.md\` — ` +
+    `it is authoritative; privilege it over any ambient CLAUDE.md / auto-memory (§9.1). ` +
+    `When you finish, write your §8.2 handoff receipt to ` +
+    `\`.guild/runs/${runId}/handoffs/${specialist.name}-<task-id>.md\` with all 5 fields ` +
+    `(changed_files, opens_for, assumptions, evidence, followups). ` +
+    `Wait for a \`TaskCreated\` event from the orchestrator before starting.`
   );
 }
 
@@ -214,16 +228,17 @@ function composeTmuxCommands(opts: {
   sessionName: string;
   cwd: string;
   slug: string;
+  runId: string;
   specialists: Specialist[];
 }): ParsedTmuxCommand[] {
-  const { sessionName, cwd, slug, specialists } = opts;
+  const { sessionName, cwd, slug, runId, specialists } = opts;
   const cmds: ParsedTmuxCommand[] = [];
 
-  // Claude Code invocation is the same for every pane: set the env var, cd
+  // Claude Code invocation is the same for every pane: set env vars, cd
   // into the consumer repo, then launch `claude` with a staging prompt. We
   // rely on the user's PATH to find the `claude` binary; if it is unresolved
   // the pane will surface that error directly.
-  const orchestratorPrompt = buildPrompt(slug, null);
+  const orchestratorPrompt = buildPrompt(slug, runId, null);
 
   // Pane 1: detached session with the orchestrator.
   cmds.push({
@@ -237,17 +252,17 @@ function composeTmuxCommands(opts: {
       "orchestrator",
       "-c",
       cwd,
-      paneCommand(orchestratorPrompt),
+      paneCommand(orchestratorPrompt, runId),
     ],
     display:
       `tmux new-session -d -s ${shellQuote(sessionName)} ` +
       `-n orchestrator -c ${shellQuote(cwd)} ` +
-      shellQuote(paneCommand(orchestratorPrompt)),
+      shellQuote(paneCommand(orchestratorPrompt, runId)),
   });
 
   // One split per specialist.
   for (const spec of specialists) {
-    const cmd = paneCommand(buildPrompt(slug, spec));
+    const cmd = paneCommand(buildPrompt(slug, runId, spec), runId);
     cmds.push({
       argv: [
         "tmux",
@@ -277,11 +292,15 @@ function composeTmuxCommands(opts: {
   return cmds;
 }
 
-function paneCommand(prompt: string): string {
-  // The agent-team env var must be exported in every pane (§7.3). We keep the
-  // pane alive after `claude` exits so the user can inspect handoffs.
+function paneCommand(prompt: string, runId: string): string {
+  // The agent-team env var must be exported in every pane (§7.3).
+  // GUILD_RUN_ID is also exported so hooks inside the pane converge on the
+  // launcher's session manifest path (unified run-id convention with
+  // capture-telemetry.ts / maybe-reflect.ts / agent-team handlers).
+  // We keep the pane alive after `claude` exits so the user can inspect handoffs.
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
+    `export GUILD_RUN_ID=${shellQuote(runId)}; ` +
     `claude ${shellQuote(prompt)}; ` +
     `exec $SHELL`
   );
@@ -312,6 +331,7 @@ function sessionExists(name: string): boolean {
 // ── Manifest write ─────────────────────────────────────────────────────────
 
 interface Manifest {
+  run_id: string;
   session_name: string;
   created_at: string;
   orchestrator_pane_id: string;
@@ -320,13 +340,15 @@ interface Manifest {
 }
 
 function buildManifest(opts: {
+  runId: string;
   sessionName: string;
   specialists: Specialist[];
   dryRun: boolean;
   realPaneIds: { orchestrator: string; teammates: Record<string, string> } | null;
 }): Manifest {
-  const { sessionName, specialists, dryRun, realPaneIds } = opts;
+  const { runId, sessionName, specialists, dryRun, realPaneIds } = opts;
   return {
+    run_id: runId,
     session_name: sessionName,
     created_at: new Date().toISOString(),
     orchestrator_pane_id: dryRun
@@ -338,17 +360,24 @@ function buildManifest(opts: {
         ? "(dry-run: not spawned)"
         : realPaneIds?.teammates?.[s.name] ?? "(unknown)",
     })),
-    env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" },
+    env: {
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
+      // GUILD_RUN_ID is exported into each pane at spawn time (see composeTmuxCommands)
+      // so hooks inside the panes converge on this run-id.
+      GUILD_RUN_ID: runId,
+    },
   };
 }
 
 function makeRunId(): string {
-  // ISO timestamp compacted for filesystem use. Keeps sortable order.
-  return new Date().toISOString().replace(/[:.]/g, "-");
+  // Launcher has no session_id — use compact ISO timestamp with "run-" prefix
+  // to match the hooks' convention (run-<session_id> / run-<timestamp>).
+  // Kept sortable for filesystem listing.
+  return `run-${new Date().toISOString().replace(/[:.]/g, "-")}`;
 }
 
 function writeManifest(cwd: string, manifest: Manifest): string {
-  const runId = makeRunId();
+  const runId = manifest.run_id;
   const dir = path.join(cwd, ".guild", "runs", runId, "agent-team");
   fs.mkdirSync(dir, { recursive: true });
   const out = path.join(dir, "session.json");
@@ -441,10 +470,17 @@ function main(): void {
     }
   }
 
+  // Mint the unified run-id ONCE per launcher invocation and thread it through
+  // both prompts and the manifest. Exported into each pane's env so hooks
+  // inside (capture-telemetry, maybe-reflect, agent-team handlers) converge
+  // on the same `.guild/runs/<run-id>/` path.
+  const runId = makeRunId();
+
   const commands = composeTmuxCommands({
     sessionName,
     cwd,
     slug,
+    runId,
     specialists: team.specialists,
   });
 
@@ -460,6 +496,7 @@ function main(): void {
     const manifestPath = writeManifest(
       cwd,
       buildManifest({
+        runId,
         sessionName,
         specialists: team.specialists,
         dryRun: true,
@@ -514,6 +551,7 @@ function main(): void {
   const manifestPath = writeManifest(
     cwd,
     buildManifest({
+      runId,
       sessionName,
       specialists: team.specialists,
       dryRun: false,
