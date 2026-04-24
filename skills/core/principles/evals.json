@@ -1,0 +1,20 @@
+{
+  "should_trigger": [
+    "What are Guild's operating principles?",
+    "I'm starting a specialist — what's the prelude?",
+    "How should a copywriter adapt these principles?",
+    "Remind me of the Karpathy 4 plus Guild's evidence rule.",
+    "What's the prelude every specialist loads at task start?",
+    "How do the principles change for a marketing specialist vs a backend engineer?",
+    "Explain Guild's evidence-over-claims rule.",
+    "What does 'surgical changes' mean for a technical writer?"
+  ],
+  "should_not_trigger": [
+    "Fix the typo in line 12.",
+    "Push my branch.",
+    "What's the weather?",
+    "Run the test suite.",
+    "Rename this variable to `count`.",
+    "Summarize the attached PDF."
+  ]
+}

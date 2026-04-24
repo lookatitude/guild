@@ -1,0 +1,22 @@
+{
+  "should_trigger": [
+    "Let's plan a new landing page for the pricing page redesign.",
+    "Help me scope this feature request.",
+    "What are we actually building here?",
+    "/guild I want to add SSO but haven't thought it through yet.",
+    "Can you walk me through what this launch should look like before we start?",
+    "I have a vague idea for an onboarding email sequence — let's figure it out.",
+    "Start a new Guild task: rewrite the docs homepage.",
+    "We need to redesign the mobile checkout flow — where do we start?"
+  ],
+  "should_not_trigger": [
+    "Fix the typo on line 42.",
+    "Push my branch to origin.",
+    "Run the tests.",
+    "Dispatch the backend specialist to implement the API we already scoped.",
+    "Compose the team for the spec at .guild/spec/pricing-redesign.md.",
+    "Rename the variable `total` to `subtotal` in checkout.ts.",
+    "Summarize yesterday's standup notes.",
+    "What's the current CI status?"
+  ]
+}

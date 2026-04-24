@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Review the specialist outputs.",
+    "Check if this matches the spec.",
+    "Evaluate the handoffs.",
+    "Run the two-stage review on this task.",
+    "Did the team's work pass?"
+  ],
+  "should_not_trigger": [
+    "Write more code.",
+    "Run the tests.",
+    "Re-plan the work.",
+    "Start a new brainstorm.",
+    "Verify we're done."
+  ]
+}
