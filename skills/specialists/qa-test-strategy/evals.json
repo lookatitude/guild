@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "What tests do we need for the new refund flow?",
+    "Design the test strategy for the search feature.",
+    "Pick the test types for the notification pipeline.",
+    "Draft the coverage plan for the checkout redesign.",
+    "How should we test the async export endpoint?"
+  ],
+  "should_not_trigger": [
+    "Write property-based tests for the parser.",
+    "Author snapshot tests for the settings screen.",
+    "Diagnose why this integration test is flaky.",
+    "Implement the unit test for calculateTotal().",
+    "Set up the GitHub Actions job that runs the tests.",
+    "Review the product acceptance criteria for completeness."
+  ]
+}

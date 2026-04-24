@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "This checkout test is flaky — diagnose it.",
+    "Hunt down the flaky tests in the integration suite.",
+    "Why does test_order_expiry pass locally but fail on CI?",
+    "Quarantine the flaky tests in tests/payments/ with a fix plan.",
+    "Investigate the intermittent failures in the e2e suite."
+  ],
+  "should_not_trigger": [
+    "Pick which tests we need for the new feature.",
+    "Write property-based tests for the parser.",
+    "Author snapshot tests for the settings screen.",
+    "Fix the application bug that causes calculateTotal to be wrong.",
+    "Increase CI runner capacity for parallel jobs.",
+    "Add observability for request latency in production."
+  ]
+}

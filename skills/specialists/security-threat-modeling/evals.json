@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Threat-model the new document-sharing service.",
+    "Run a STRIDE analysis of the admin console.",
+    "Identify the attack surface of the new webhook receiver.",
+    "What are the security threats to the payment callback endpoint?",
+    "Map trust boundaries for the multi-tenant worker pool."
+  ],
+  "should_not_trigger": [
+    "Scan the npm dependencies for known CVEs.",
+    "Review the OAuth flow for token handling issues.",
+    "Scan the repo for leaked API keys.",
+    "Design the system architecture for the service.",
+    "Write the runbook for the security-incident response.",
+    "Check that the SOC2 compliance boxes are ticked."
+  ]
+}

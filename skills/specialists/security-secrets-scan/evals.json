@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Scan the repo for leaked secrets across history.",
+    "Check for exposed API keys in the mobile build artifacts.",
+    "Secret-scan the monorepo and set up a pre-commit hook.",
+    "Audit git history for credentials before we open-source.",
+    "Find leaked tokens in the Docker images we shipped."
+  ],
+  "should_not_trigger": [
+    "Audit npm dependencies for CVEs.",
+    "Run a STRIDE threat model on the service.",
+    "Review the OAuth token-rotation scheme.",
+    "Provision the KMS / Vault cluster the app will use.",
+    "Set up the overall CI/CD pipeline for the service.",
+    "Harden the Kubernetes node baseline for compliance."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the Android login screen in Kotlin with Compose.",
+    "Implement the Android Fragment for the checkout step.",
+    "Author the Kotlin ViewModel for the profile screen.",
+    "Build the Android feature for background sync.",
+    "Add the Android-side implementation of the deep-link handler."
+  ],
+  "should_not_trigger": [
+    "Write the SwiftUI screen for the same flow on iOS.",
+    "Author the React Native cross-platform component.",
+    "Profile the Android app's scroll performance.",
+    "Define the OpenAPI spec for the backend endpoints.",
+    "Produce Figma tokens for the new theme.",
+    "Configure the Google Play release pipeline."
+  ]
+}

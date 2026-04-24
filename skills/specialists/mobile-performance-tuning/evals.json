@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Profile the app's cold-start time on a Pixel 4a.",
+    "The scroll is janky on the feed screen — diagnose and fix.",
+    "Optimize memory on the gallery screen; it OOMs after 200 photos.",
+    "Run a mobile performance audit of the checkout flow.",
+    "Why is the app slow on low-end Android devices?"
+  ],
+  "should_not_trigger": [
+    "Write the new Swift UI for the feed screen.",
+    "Author the Kotlin code for the gallery grid.",
+    "Build the React Native version of the checkout.",
+    "Reduce the backend API response time for /feed.",
+    "Cut the CI build time for the iOS app.",
+    "Decide which test types the feed feature needs."
+  ]
+}

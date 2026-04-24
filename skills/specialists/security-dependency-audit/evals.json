@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Audit dependencies for CVEs in the checkout service.",
+    "Run a dependency security review of the mobile app.",
+    "Check package vulnerabilities in the Python backend.",
+    "License audit of our third-party libraries.",
+    "Run an SCA scan for the new microservice."
+  ],
+  "should_not_trigger": [
+    "Threat-model the new feature.",
+    "Review the session-cookie handling in the auth flow.",
+    "Scan the repo for accidentally committed secrets.",
+    "Pick which HTTP library we should adopt.",
+    "Upgrade the app to the new SDK for feature parity.",
+    "Set up runtime monitoring of outbound request risk."
+  ]
+}
