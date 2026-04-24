@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Ingest this Stripe API documentation page into the wiki.",
+    "Add this research paper to our sources.",
+    "Capture this customer interview transcript as a wiki page.",
+    "Promote this competitor comparison into the wiki.",
+    "Save this changelog as a source for later reference."
+  ],
+  "should_not_trigger": [
+    "Read the file README.md.",
+    "Search the wiki for Stripe pricing.",
+    "Run wiki-lint.",
+    "Capture this decision about choosing Postgres.",
+    "What's our branding policy?"
+  ]
+}
