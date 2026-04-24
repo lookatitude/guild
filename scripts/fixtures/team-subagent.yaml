@@ -1,0 +1,13 @@
+spec: .guild/spec/test-slug.md
+backend: subagent
+allow_larger: false
+specialists:
+  - name: architect
+    scope: "System boundaries and component split for the pricing service."
+    depends-on: []
+  - name: backend
+    scope: "REST contract and data layer for /pricing endpoints."
+    depends-on: [architect]
+  - name: qa
+    scope: "Property-based tests for quote calculator; regression suite hookup."
+    depends-on: [backend]
