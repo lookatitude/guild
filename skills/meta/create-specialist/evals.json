@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Create a new Guild specialist for data-science.",
+    "Add a new role — frontend-engineer.",
+    "Mint a dedicated UX-writer specialist.",
+    "Team-compose flagged a gap for ml-ops — auto-create the specialist.",
+    "Incubate a proposed specialist for accessibility auditing."
+  ],
+  "should_not_trigger": [
+    "Evolve guild:context-assemble.",
+    "Compose a team for this spec.",
+    "Run wiki-lint across the knowledge base.",
+    "Write a new skill from scratch for API contract linting.",
+    "Edit the existing architect agent's body.",
+    "Roll back the backend specialist to v2.",
+    "Review the run we just finished."
+  ]
+}

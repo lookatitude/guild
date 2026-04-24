@@ -1,0 +1,26 @@
+{
+  "current": [
+    {"case_id": "spec-write-01", "passed": true,  "ms": 1400, "tokens": 600},
+    {"case_id": "spec-write-02", "passed": true,  "ms": 1350, "tokens": 580},
+    {"case_id": "spec-write-03", "passed": false, "ms": 1300, "tokens": 550},
+    {"case_id": "spec-write-04", "passed": true,  "ms": 1420, "tokens": 620},
+    {"case_id": "spec-write-05", "passed": false, "ms": 1380, "tokens": 590},
+    {"case_id": "tool-write-01", "passed": true,  "ms": 980,  "tokens": 500},
+    {"case_id": "tool-write-02", "passed": false, "ms": 1020, "tokens": 520},
+    {"case_id": "tool-read-01",  "passed": true,  "ms": 890,  "tokens": 480},
+    {"case_id": "specialist-a-01", "passed": false, "ms": 1100, "tokens": 560},
+    {"case_id": "specialist-a-02", "passed": true,  "ms": 1050, "tokens": 540}
+  ],
+  "proposed": [
+    {"case_id": "spec-write-01", "passed": true,  "ms": 1350, "tokens": 520},
+    {"case_id": "spec-write-02", "passed": true,  "ms": 1300, "tokens": 505},
+    {"case_id": "spec-write-03", "passed": false, "ms": 1260, "tokens": 480},
+    {"case_id": "spec-write-04", "passed": true,  "ms": 1370, "tokens": 540},
+    {"case_id": "spec-write-05", "passed": false, "ms": 1340, "tokens": 515},
+    {"case_id": "tool-write-01", "passed": true,  "ms": 960,  "tokens": 435},
+    {"case_id": "tool-write-02", "passed": false, "ms": 1000, "tokens": 450},
+    {"case_id": "tool-read-01",  "passed": true,  "ms": 870,  "tokens": 420},
+    {"case_id": "specialist-a-01", "passed": false, "ms": 1080, "tokens": 490},
+    {"case_id": "specialist-a-02", "passed": true,  "ms": 1030, "tokens": 470}
+  ]
+}

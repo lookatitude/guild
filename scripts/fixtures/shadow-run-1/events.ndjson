@@ -1,0 +1,3 @@
+{"ts":"2026-04-01T09:00:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","payload_digest":"u001","ok":true,"ms":0,"prompt":"brainstorm new features for the admin panel"}
+{"ts":"2026-04-01T09:00:05.000Z","event":"PostToolUse","tool":"Read","specialist":"main","payload_digest":"r001","ok":true,"ms":120}
+{"ts":"2026-04-01T09:00:10.000Z","event":"SubagentStop","tool":"","specialist":"brainstorm","payload_digest":"s001","ok":true,"ms":4500}

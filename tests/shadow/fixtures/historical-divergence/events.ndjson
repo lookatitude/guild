@@ -1,0 +1,20 @@
+{"ts":"2026-04-02T09:00:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write a summary for the project spec"}
+{"ts":"2026-04-02T09:00:03.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":310}
+{"ts":"2026-04-02T09:01:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write the onboarding document draft"}
+{"ts":"2026-04-02T09:01:04.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":290}
+{"ts":"2026-04-02T09:02:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write release notes for version two"}
+{"ts":"2026-04-02T09:02:05.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":330}
+{"ts":"2026-04-02T09:03:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write changelog entry for this sprint"}
+{"ts":"2026-04-02T09:03:03.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":280}
+{"ts":"2026-04-02T09:04:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write a brief description of the new feature"}
+{"ts":"2026-04-02T09:04:06.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":305}
+{"ts":"2026-04-02T09:04:30.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write the architecture overview section"}
+{"ts":"2026-04-02T09:04:33.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":300}
+{"ts":"2026-04-02T09:04:50.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write a summary of the team meeting"}
+{"ts":"2026-04-02T09:04:53.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":295}
+{"ts":"2026-04-02T09:05:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"review the build output logs for errors"}
+{"ts":"2026-04-02T09:05:04.000Z","event":"PostToolUse","tool":"tool-read","specialist":"specialist-alpha","ok":true,"ms":270}
+{"ts":"2026-04-02T09:06:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"check status of the deployment pipeline"}
+{"ts":"2026-04-02T09:06:04.000Z","event":"PostToolUse","tool":"tool-read","specialist":"specialist-alpha","ok":true,"ms":260}
+{"ts":"2026-04-02T09:07:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"list all open issues from the last sprint"}
+{"ts":"2026-04-02T09:07:07.000Z","event":"SubagentStop","tool":"","specialist":"specialist-alpha","ok":true,"ms":5800}

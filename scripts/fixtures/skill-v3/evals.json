@@ -1,0 +1,11 @@
+{
+  "should_trigger": [
+    {"id": "b1", "prompt": "brainstorm feature ideas"},
+    {"id": "b2", "prompt": "ideate on naming"},
+    {"id": "b3", "prompt": "explore options for the launch"}
+  ],
+  "should_not_trigger": [
+    {"id": "b4", "prompt": "fix the bug"},
+    {"id": "b5", "prompt": "implement the login form"}
+  ]
+}

@@ -1,0 +1,20 @@
+{"ts":"2026-04-01T09:00:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write a summary for the project spec"}
+{"ts":"2026-04-01T09:00:03.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":310}
+{"ts":"2026-04-01T09:01:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write the onboarding document draft"}
+{"ts":"2026-04-01T09:01:04.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":290}
+{"ts":"2026-04-01T09:02:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write release notes for version two"}
+{"ts":"2026-04-01T09:02:05.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":330}
+{"ts":"2026-04-01T09:03:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write changelog entry for this sprint"}
+{"ts":"2026-04-01T09:03:03.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":280}
+{"ts":"2026-04-01T09:04:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write a brief description of the new feature"}
+{"ts":"2026-04-01T09:04:06.000Z","event":"SubagentStop","tool":"","specialist":"specialist-alpha","ok":true,"ms":5200}
+{"ts":"2026-04-01T09:05:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write the architecture overview section"}
+{"ts":"2026-04-01T09:05:04.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":305}
+{"ts":"2026-04-01T09:06:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write a summary of the team meeting"}
+{"ts":"2026-04-01T09:06:03.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":295}
+{"ts":"2026-04-01T09:07:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write the product roadmap outline"}
+{"ts":"2026-04-01T09:07:05.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":315}
+{"ts":"2026-04-01T09:08:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write a short bio for the new hire"}
+{"ts":"2026-04-01T09:08:04.000Z","event":"PostToolUse","tool":"tool-write","specialist":"specialist-alpha","ok":true,"ms":285}
+{"ts":"2026-04-01T09:09:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","ok":true,"ms":0,"prompt":"task-write the customer-facing release communication"}
+{"ts":"2026-04-01T09:09:07.000Z","event":"SubagentStop","tool":"","specialist":"specialist-alpha","ok":true,"ms":6100}
