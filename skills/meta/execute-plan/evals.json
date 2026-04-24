@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Execute the plan.",
+    "Run the specialist lanes.",
+    "Start the team's work.",
+    "Dispatch all the specialists on this plan.",
+    "Kick off execution."
+  ],
+  "should_not_trigger": [
+    "Explain the plan to me.",
+    "Review the results.",
+    "Write more tests.",
+    "Brainstorm a new feature.",
+    "Compose a different team."
+  ]
+}
