@@ -1,0 +1,26 @@
+{
+  "current": [
+    {"case_id": "pos-1", "passed": true, "ms": 1200, "tokens": 450},
+    {"case_id": "pos-2", "passed": true, "ms": 1100, "tokens": 410},
+    {"case_id": "pos-3", "passed": false, "ms": 980, "tokens": 520},
+    {"case_id": "pos-4", "passed": false, "ms": 1050, "tokens": 490},
+    {"case_id": "pos-5", "passed": false, "ms": 1300, "tokens": 510},
+    {"case_id": "neg-1", "passed": true, "ms": 900, "tokens": 300},
+    {"case_id": "neg-2", "passed": true, "ms": 850, "tokens": 280},
+    {"case_id": "neg-3", "passed": true, "ms": 910, "tokens": 320},
+    {"case_id": "neg-4", "passed": true, "ms": 875, "tokens": 295},
+    {"case_id": "neg-5", "passed": true, "ms": 880, "tokens": 310}
+  ],
+  "proposed": [
+    {"case_id": "pos-1", "passed": true, "ms": 1150, "tokens": 430},
+    {"case_id": "pos-2", "passed": false, "ms": 1250, "tokens": 460},
+    {"case_id": "pos-3", "passed": true, "ms": 1000, "tokens": 480},
+    {"case_id": "pos-4", "passed": true, "ms": 1020, "tokens": 470},
+    {"case_id": "pos-5", "passed": true, "ms": 1200, "tokens": 490},
+    {"case_id": "neg-1", "passed": true, "ms": 920, "tokens": 310},
+    {"case_id": "neg-2", "passed": false, "ms": 870, "tokens": 300},
+    {"case_id": "neg-3", "passed": true, "ms": 905, "tokens": 315},
+    {"case_id": "neg-4", "passed": true, "ms": 890, "tokens": 290},
+    {"case_id": "neg-5", "passed": true, "ms": 895, "tokens": 305}
+  ]
+}

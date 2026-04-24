@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    {"id": "pos-1", "prompt": "brainstorm feature ideas for our new analytics dashboard"},
+    {"id": "pos-2", "prompt": "let's brainstorm approaches to optimize the checkout flow"},
+    {"id": "pos-3", "prompt": "help me brainstorm naming options for this product"},
+    {"id": "pos-4", "prompt": "brainstorm possible architectural patterns for the new service"},
+    {"id": "pos-5", "prompt": "I need to brainstorm risks for the launch plan"}
+  ],
+  "should_not_trigger": [
+    {"id": "neg-1", "prompt": "implement the login form validation using React hooks"},
+    {"id": "neg-2", "prompt": "fix the failing unit test in auth.test.ts"},
+    {"id": "neg-3", "prompt": "deploy the staging environment with the latest build"},
+    {"id": "neg-4", "prompt": "review the pull request for the payments refactor"},
+    {"id": "neg-5", "prompt": "write documentation for the new API endpoint"}
+  ]
+}

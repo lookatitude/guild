@@ -1,0 +1,8 @@
+{
+  "should_trigger": [
+    {"id": "b1", "prompt": "brainstorm feature ideas"}
+  ],
+  "should_not_trigger": [
+    {"id": "b2", "prompt": "fix the bug"}
+  ]
+}
