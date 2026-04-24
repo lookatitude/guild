@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Review the auth flow for the new partner API.",
+    "Audit the OAuth implementation in the mobile app.",
+    "Security review of the login flow with Google SSO.",
+    "Check the session handling in the admin console.",
+    "Audit the token lifecycle of the refresh-rotation scheme."
+  ],
+  "should_not_trigger": [
+    "Implement the new OAuth client from scratch.",
+    "Run a full STRIDE threat model on the service.",
+    "Audit the npm dependencies for CVEs.",
+    "Scan the repo for committed secrets.",
+    "Redesign the sign-in screen UX for better conversion.",
+    "Write the SOC2 attestation section for auth."
+  ]
+}

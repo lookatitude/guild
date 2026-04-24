@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write a blog post about how we cut onboarding from 5 days to 1.",
+    "Draft a case study on the Acme rollout.",
+    "Write a 1200-word long-form piece on the future of async work.",
+    "Draft the thought-leadership article for the CEO's byline.",
+    "Write the long-form landing page copy for the new product."
+  ],
+  "should_not_trigger": [
+    "Write the button label for the empty inbox state.",
+    "Draft the welcome email sequence for new signups.",
+    "Write our brand voice guide.",
+    "Write the API reference for the /orders endpoint.",
+    "Draft a Twitter thread teasing the launch.",
+    "Run keyword research for the new category page."
+  ]
+}

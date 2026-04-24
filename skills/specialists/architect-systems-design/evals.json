@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Design the system for a multi-tenant webhook dispatcher.",
+    "Sketch the architecture of a real-time notification pipeline.",
+    "What are the main components we need for an event-sourced order service?",
+    "Propose a high-level design for the ingestion pipeline.",
+    "Draft a system diagram for the new search backend."
+  ],
+  "should_not_trigger": [
+    "Write an ADR for the decision we already made.",
+    "Score these two options on a tradeoff matrix.",
+    "Define the REST endpoints for the orders resource.",
+    "Write the Postgres schema for the users table.",
+    "Set up the GitHub Actions pipeline for deploy.",
+    "Threat-model the new auth flow."
+  ]
+}

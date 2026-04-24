@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Optimize the /pricing page for SEO against our target cluster.",
+    "Rewrite the title and meta description on /features/export.",
+    "Add schema markup to the blog post about webhook retries.",
+    "Run on-page optimization on /integrations/slack.",
+    "Audit the on-page SEO for the comparison page and give me a diff."
+  ],
+  "should_not_trigger": [
+    "Find new keyword opportunities for the integrations category.",
+    "Run a full technical crawl and Core Web Vitals audit.",
+    "Plan the internal-link graph across the docs hub.",
+    "Write the blog post targeting our new keyword.",
+    "A/B test the meta description for click-through rate.",
+    "Build the paid-search ad copy variants."
+  ]
+}

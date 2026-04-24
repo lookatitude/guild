@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the API reference docs for the /orders endpoints.",
+    "Turn this OpenAPI spec into a developer reference site page.",
+    "Document the error codes and retry semantics of the billing API.",
+    "Write the API docs for the new webhooks feature.",
+    "Document the GraphQL schema for the user profile type so partners can consume it."
+  ],
+  "should_not_trigger": [
+    "Design the API contract for the new orders resource.",
+    "Write a getting-started tutorial for the SDK.",
+    "Write the user manual for the admin dashboard.",
+    "Write release notes for version 2.4.0.",
+    "Draft a marketing blog post about the new API.",
+    "Write a cold outreach email to developers about the SDK."
+  ]
+}

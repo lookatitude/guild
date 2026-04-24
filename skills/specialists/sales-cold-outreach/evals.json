@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write a cold outreach sequence to VP Finance at mid-market SaaS companies.",
+    "Draft the cold email + LinkedIn cadence for the new enterprise ICP.",
+    "Build a 7-touch prospecting sequence for the new product launch.",
+    "Design outbound to CTOs at Series B startups hiring backend engineers.",
+    "Draft the LinkedIn connect + follow-up cadence for enterprise accounts."
+  ],
+  "should_not_trigger": [
+    "Write the onboarding email sequence for new signups.",
+    "Draft the post-discovery-call follow-up emails.",
+    "Write the proposal document for the Acme renewal.",
+    "Design the discovery-call framework and questions.",
+    "Plan the multi-channel launch for v2 across press and social.",
+    "Write the re-engagement drip for dormant trial users."
+  ]
+}

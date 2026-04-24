@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Compare these five vector databases side by side.",
+    "Give me a comparison table of the top OSS feature-flag options.",
+    "Side-by-side of Temporal vs Airflow vs Prefect vs Dagster.",
+    "Evaluate these three email-delivery vendors for us.",
+    "Benchmark these logging libraries on features and license."
+  ],
+  "should_not_trigger": [
+    "Score our two internal architecture options on a matrix.",
+    "Do a deep dive on the general state of workflow engines.",
+    "Summarize this one paper on DAG scheduling.",
+    "Write the ADR for our final choice.",
+    "Generate landing page copy comparing us to competitors.",
+    "Fix the CI pipeline."
+  ]
+}

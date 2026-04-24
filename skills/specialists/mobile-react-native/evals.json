@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the React Native screen for the rewards dashboard.",
+    "Build the Expo component for scanning QR codes.",
+    "Author the RN feature for offline mode.",
+    "Cross-platform mobile screen for the chat inbox.",
+    "Implement the settings screen in React Native for iOS and Android."
+  ],
+  "should_not_trigger": [
+    "Write the pure Swift implementation for iOS only.",
+    "Author the Kotlin Compose screen for Android only.",
+    "Profile the app's startup time on low-end devices.",
+    "Design the REST endpoints the RN app will call.",
+    "Produce the Figma spec for the new theme.",
+    "Set up EAS Build and the OTA update channel."
+  ]
+}

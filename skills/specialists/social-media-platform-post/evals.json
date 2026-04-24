@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write a tweet announcing the new integration.",
+    "Draft a LinkedIn post from the CEO about the launch.",
+    "Write an Instagram caption for the product photoshoot.",
+    "Draft a Threads post teasing the upcoming feature.",
+    "Write a Bluesky post that fits that community's tone."
+  ],
+  "should_not_trigger": [
+    "Write a 10-post Twitter thread explaining the architecture.",
+    "Draft reply templates for our community managers.",
+    "Plan the content calendar for the next month across platforms.",
+    "Write a blog post about the integration.",
+    "Draft the launch email to the list.",
+    "Write the meta title and description for the launch page."
+  ]
+}

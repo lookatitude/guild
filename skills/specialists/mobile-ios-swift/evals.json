@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the iOS login screen in Swift with SwiftUI.",
+    "Implement the UIKit view controller for the onboarding flow.",
+    "Author the Swift code for the in-app purchase handler.",
+    "Build the iOS feature for biometric unlock.",
+    "Add the iOS-side implementation of the notification center."
+  ],
+  "should_not_trigger": [
+    "Write the Kotlin Compose screen for the same flow.",
+    "Author the React Native component for cross-platform parity.",
+    "Profile the iOS app's cold-start time.",
+    "Define the REST endpoints the app calls.",
+    "Produce the Figma tokens for the new theme.",
+    "Set up the Xcode Cloud pipeline for the release build."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Run keyword research for the new integrations category.",
+    "Find target keywords for our pricing page and cluster them.",
+    "Build a content gap analysis against our current docs hub.",
+    "Identify search opportunities around the 'API observability' topic.",
+    "What keywords should we target for the new comparison pages?"
+  ],
+  "should_not_trigger": [
+    "Optimize the title and meta description on /pricing.",
+    "Run a technical audit for crawlability and Core Web Vitals.",
+    "Plan internal links between the new blog posts.",
+    "Write the blog post once we know the target keyword.",
+    "Draft the API reference for the new endpoints.",
+    "Build the paid-search keyword list for Google Ads."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the runbook for the HighErrorRate alert on checkout.",
+    "Draft on-call steps for the database failover outage.",
+    "Document how to respond to the queue-backlog alarm.",
+    "Create the playbook for a stuck Kafka consumer.",
+    "What should on-call do when the CDN origin returns 5xx?"
+  ],
+  "should_not_trigger": [
+    "Define the SLO and alert rule for error rate.",
+    "Write the deploy pipeline for the service.",
+    "Provision the replacement database in Terraform.",
+    "Threat-model the incident response process for a breach.",
+    "Diagnose why these integration tests flake.",
+    "Run an architectural retrospective on the redesign."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Design the discovery call framework for our AE team.",
+    "Build the discovery questions and qualification scoring rubric.",
+    "Write a MEDDIC-style qualification guide with disqualify criteria.",
+    "Draft the qualification + disqualify rules and next-step decision logic.",
+    "Set up the discovery script and stage gates for mid-market deals."
+  ],
+  "should_not_trigger": [
+    "Write the cold outreach sequence to book discovery calls.",
+    "Draft the follow-up email cadence after the discovery call.",
+    "Write the proposal document for a qualified Acme deal.",
+    "Create A/B copy variants for the homepage hero.",
+    "Plan the multi-channel launch for the new product.",
+    "Write the onboarding email sequence for new signups."
+  ]
+}

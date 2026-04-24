@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Add observability for the new payments service.",
+    "Wire metrics and alerts for the checkout API.",
+    "Set up the Grafana dashboard for the ingestion workers.",
+    "Define SLOs and alerts for the recommendation service.",
+    "Instrument the gateway with distributed tracing."
+  ],
+  "should_not_trigger": [
+    "Write the deploy pipeline for the service.",
+    "Provision the Prometheus stack itself in Terraform.",
+    "Draft the on-call runbook for high error rate.",
+    "Add logging calls inside the request handler.",
+    "Threat-model the new authentication flow.",
+    "Track which tests are flaky across CI runs."
+  ]
+}

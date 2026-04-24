@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write a 10-post Twitter thread explaining our architecture migration.",
+    "Draft a LinkedIn carousel on the top 5 onboarding mistakes.",
+    "Turn this blog post into a Threads chain.",
+    "Write a carousel walking through the case-study numbers.",
+    "Draft the thread for launch day that builds to the CTA."
+  ],
+  "should_not_trigger": [
+    "Write a single tweet announcing the feature.",
+    "Draft reply templates for community managers.",
+    "Plan the full content calendar for next quarter.",
+    "Write the long-form blog post the thread is based on.",
+    "Write the onboarding tutorial in our docs.",
+    "Draft the follow-up email sequence after a demo."
+  ]
+}

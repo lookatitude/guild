@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Run a technical SEO audit of the full site.",
+    "Audit our crawlability, robots.txt, and sitemap setup.",
+    "Check Core Web Vitals on mobile and assign owners to fixes.",
+    "Review canonicals, redirects, and indexation coverage in GSC.",
+    "Run a technical crawl and produce a severity-tagged findings report."
+  ],
+  "should_not_trigger": [
+    "Find new keywords we should target.",
+    "Optimize the title and meta on /pricing.",
+    "Plan the internal-link graph for the blog hub.",
+    "Write the blog post targeting our new keyword.",
+    "Run an accessibility (a11y) audit on the checkout flow.",
+    "Profile the backend response time of the search API."
+  ]
+}

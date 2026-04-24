@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the proposal for the Acme enterprise deal.",
+    "Draft the SOW / commercial proposal with scope, pricing, and terms.",
+    "Build the pricing + scope proposal for the renewal expansion.",
+    "Write the decision-criteria summary section inside the proposal.",
+    "Put together the commercial proposal for the mid-market deal closing this quarter."
+  ],
+  "should_not_trigger": [
+    "Write the cold outreach sequence to book a discovery call.",
+    "Design the discovery call framework and scoring rubric.",
+    "Draft the follow-up cadence after the proposal is sent.",
+    "Write the API reference documentation for the integration.",
+    "Plan the Q3 campaign brief across social and SEO.",
+    "Write the onboarding email sequence for new customers."
+  ]
+}

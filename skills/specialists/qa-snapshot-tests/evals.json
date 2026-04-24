@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Add snapshot tests for the rendered email templates.",
+    "Snapshot test the serialized invoice JSON.",
+    "Author Jest snapshots for the component tree.",
+    "Write golden-file tests for the code-generator output.",
+    "Set up inline snapshots for the formatter's small outputs."
+  ],
+  "should_not_trigger": [
+    "Decide which test types this feature needs overall.",
+    "Write property-based tests for the parser.",
+    "Diagnose why the snapshot test flakes on CI.",
+    "Capture a screenshot-diff regression for the login page.",
+    "Define the OpenAPI spec for the endpoint.",
+    "Write an end-to-end test that walks the checkout flow."
+  ]
+}

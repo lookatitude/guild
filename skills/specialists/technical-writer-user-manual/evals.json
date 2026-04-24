@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the user manual section for the admin console.",
+    "Document how to invite teammates and assign roles.",
+    "Write the help-center article on configuring SSO.",
+    "Create the product documentation for the billing and plans area.",
+    "Write the user guide for the import/export workflow."
+  ],
+  "should_not_trigger": [
+    "Write the API reference for the /users endpoint.",
+    "Write a getting-started tutorial for new developers.",
+    "Draft release notes for version 3.1.",
+    "Write a blog post announcing the new billing feature.",
+    "Write the tooltip text and button labels for the SSO page.",
+    "Design the landing page for the admin console."
+  ]
+}

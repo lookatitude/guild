@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write an ADR for choosing Postgres over MySQL.",
+    "Capture this decision as an ADR.",
+    "Document the decision to use gRPC between services.",
+    "Record this architecture choice so the next team can find it.",
+    "Draft an ADR for the message bus selection."
+  ],
+  "should_not_trigger": [
+    "Sketch the high-level system design.",
+    "Compare these three options on a tradeoff matrix.",
+    "Save this to the project wiki as a decision page.",
+    "Write the API contract for the orders endpoint.",
+    "Generate the DB migration file.",
+    "What are Guild's principles again?"
+  ]
+}

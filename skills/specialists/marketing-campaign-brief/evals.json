@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write a campaign brief for the Q3 mid-market push.",
+    "Brief the copywriter and social-media team on the webinar promo campaign.",
+    "Draft the creative brief commissioning assets for the 6-week trial-signups campaign.",
+    "Commission a campaign against our developer-productivity angle.",
+    "Set up the campaign brief with goals, channels, deadlines, and success criteria."
+  ],
+  "should_not_trigger": [
+    "Write our overall positioning statement and ICP.",
+    "Plan the multi-phase launch for the v2 release across channels.",
+    "Write the actual blog post and LinkedIn copy for the campaign.",
+    "Run keyword research for the campaign landing page.",
+    "Write A/B variants of the landing page headline.",
+    "Draft cold outreach to accounts in the target segment."
+  ]
+}

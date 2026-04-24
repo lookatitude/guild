@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Design the CI/CD pipeline for the new checkout service.",
+    "Set up the GitHub Actions workflow for build, test, and deploy.",
+    "Write the deploy pipeline that promotes artifacts from staging to prod.",
+    "Wire build-test-deploy with manual approval before production.",
+    "What stages should the pipeline have for this monorepo?"
+  ],
+  "should_not_trigger": [
+    "Write the Terraform for the EKS cluster the pipeline runs on.",
+    "Add Prometheus alerts for failed deploys.",
+    "Draft the on-call runbook for a failed rollout.",
+    "Scan the repo for leaked secrets.",
+    "Define the REST endpoints for the service.",
+    "Pick which test types we need for the feature."
+  ]
+}

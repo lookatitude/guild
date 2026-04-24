@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write property-based tests for the JSON canonicalizer.",
+    "Add Hypothesis tests to the price-calculation module.",
+    "fast-check properties for the URL parser.",
+    "Author proptest cases for the merkle-tree implementation.",
+    "What invariants should we test for the rate-limiter?"
+  ],
+  "should_not_trigger": [
+    "Decide whether this feature even needs property tests.",
+    "Write a snapshot test for the rendered invoice.",
+    "Hunt down why this test flakes on CI.",
+    "Write a standard unit test for the add() function.",
+    "Fuzz the API endpoints for security issues.",
+    "Benchmark how fast the parser runs on 10MB inputs."
+  ]
+}

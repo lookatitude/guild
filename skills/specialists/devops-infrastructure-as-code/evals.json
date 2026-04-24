@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write Terraform for the new RDS cluster and VPC.",
+    "Provision the infra for the staging Kubernetes cluster.",
+    "Author the CDK stack for the image-processing Lambda.",
+    "Pulumi program to set up the event bus and its DLQ.",
+    "Create the IaC module for the shared Route53 zone."
+  ],
+  "should_not_trigger": [
+    "Write the GitHub Actions workflow that deploys to that cluster.",
+    "Set up CloudWatch alarms on the database.",
+    "Draft the runbook for cluster upgrade.",
+    "Design the system architecture across these three services.",
+    "Write the migration for the users table.",
+    "Rotate the leaked AWS key and update policy."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Plan the launch for our v2 release across channels and phases.",
+    "Draft the GTM launch plan with pre-launch, launch day, and sustain.",
+    "Build the launch timeline, channel mix, and success metrics for the new pricing tier.",
+    "Coordinate the launch across email, blog, social, PR, and partner channels.",
+    "Set up pre-registered launch metrics before we ship next month."
+  ],
+  "should_not_trigger": [
+    "Write our positioning and ICP from scratch.",
+    "Write the blog post announcement itself.",
+    "Draft release notes for the engineering changelog.",
+    "Write A/B variants of the pricing CTA.",
+    "Create the cold outreach sequence for enterprise buyers.",
+    "Brief a single campaign to the copywriter and SEO teams."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Draft reply templates for our community managers on Twitter and LinkedIn.",
+    "Build a DM template library for handling feature requests.",
+    "Create engagement templates for the CX team to use on social.",
+    "Write canned replies for outage and complaint scenarios with escalation rules.",
+    "Draft a template library for press and partnership inquiries that come in via DM."
+  ],
+  "should_not_trigger": [
+    "Write a single tweet announcing the new feature.",
+    "Draft a 10-post Twitter thread on our migration.",
+    "Plan the content calendar for next month.",
+    "Write the support-ticket macro inside Zendesk.",
+    "Draft the cold outreach sequence to prospects.",
+    "Write the welcome email for new signups."
+  ]
+}
