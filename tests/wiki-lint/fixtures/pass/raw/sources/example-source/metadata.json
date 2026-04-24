@@ -1,0 +1,7 @@
+{
+  "slug": "example-source",
+  "original_file": "original.txt",
+  "url": "https://example.invalid/fixture",
+  "checksum": "sha256:fixture",
+  "captured_at": "2026-04-24T00:00:00Z"
+}
