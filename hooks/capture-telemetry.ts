@@ -28,12 +28,18 @@
  *   2. stdin payload cwd field
  *   3. process.cwd()
  *
- * Stdin:   JSON — Claude Code hook payload (PostToolUse or SubagentStop).
+ * Stdin:   JSON — Claude Code hook payload (PostToolUse / SubagentStop / UserPromptSubmit).
  * Stdout:  Silent — Claude Code may consume stdout.
  * Stderr:  Error messages on failure (telemetry failures must not block tool execution).
  * Exit:    Always 0 — telemetry failures must not block tool execution.
  *
  * Runner:  npx -y tsx hooks/capture-telemetry.ts
+ *
+ * Retention: events.ndjson is append-only and grows unbounded. Consuming repos
+ * should periodically archive/rotate `.guild/runs/<run-id>/events.ndjson` files
+ * (the P5 audit flags this for a future retention/rotation policy). For now,
+ * manual cleanup via `find .guild/runs -name events.ndjson -mtime +30` is a
+ * reasonable default.
  *
  * Manual smoke test:
  *   mkdir -p /tmp/guild-smoke/.guild/runs/test-run
