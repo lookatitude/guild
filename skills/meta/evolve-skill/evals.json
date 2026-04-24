@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Evolve guild:context-assemble.",
+    "Run the evolve loop on guild:brainstorm.",
+    "Re-tune brainstorm's description so it stops stealing triggers from team-compose.",
+    "Three reflections piled up for guild:reflect — run the automatic evolve trigger on it.",
+    "Promote this reflection-proposal into a skill edit for guild:plan."
+  ],
+  "should_not_trigger": [
+    "Create a new skill from scratch for API-contract linting.",
+    "Roll back guild:context-assemble to its previous version.",
+    "Review the run we just finished.",
+    "Compose a team for this spec.",
+    "Run wiki-lint across the knowledge base.",
+    "Mint a new Guild specialist for data-science.",
+    "Write a reflection on this run."
+  ]
+}
