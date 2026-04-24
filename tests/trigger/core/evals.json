@@ -1,0 +1,89 @@
+{
+  "tier": "core",
+  "cases": [
+    {
+      "id": "guild-principles-pos-1",
+      "prompt": "What are Guild's operating principles?",
+      "expected_skill": "guild-principles",
+      "rationale": "Direct request for the principles prelude — textbook positive."
+    },
+    {
+      "id": "guild-principles-pos-2",
+      "prompt": "I'm starting a specialist — what's the prelude?",
+      "expected_skill": "guild-principles",
+      "rationale": "Specialist startup triggers the mandatory principles load per plan §6."
+    },
+    {
+      "id": "guild-principles-pos-3",
+      "prompt": "How should a copywriter adapt these principles?",
+      "expected_skill": "guild-principles",
+      "rationale": "Cross-tier adaptation question — exactly what the skill explains."
+    },
+    {
+      "id": "guild-principles-pos-4",
+      "prompt": "Remind me of the Karpathy 4 plus Guild's evidence rule.",
+      "expected_skill": "guild-principles",
+      "rationale": "References the named rule set the principles skill owns."
+    },
+    {
+      "id": "guild-principles-pos-5",
+      "prompt": "What's the prelude every specialist loads at task start?",
+      "expected_skill": "guild-principles",
+      "rationale": "Asks about the prelude contract itself — core scope."
+    },
+    {
+      "id": "guild-principles-pos-6",
+      "prompt": "How do the principles change for a marketing specialist vs a backend engineer?",
+      "expected_skill": "guild-principles",
+      "rationale": "Comparative question about principle adaptation across tiers."
+    },
+    {
+      "id": "guild-principles-pos-7",
+      "prompt": "Explain Guild's evidence-over-claims rule.",
+      "expected_skill": "guild-principles",
+      "rationale": "Names a specific principle owned by the skill."
+    },
+    {
+      "id": "guild-principles-pos-8",
+      "prompt": "What does 'surgical changes' mean for a technical writer?",
+      "expected_skill": "guild-principles",
+      "rationale": "Asks how a principle translates to a non-engineering tier."
+    },
+    {
+      "id": "guild-principles-neg-1",
+      "prompt": "Fix the typo in line 12.",
+      "expected_skill": null,
+      "rationale": "Routine edit request — no principle discussion needed."
+    },
+    {
+      "id": "guild-principles-neg-2",
+      "prompt": "Push my branch.",
+      "expected_skill": null,
+      "rationale": "Git operation; unrelated to principles."
+    },
+    {
+      "id": "guild-principles-neg-3",
+      "prompt": "What's the weather?",
+      "expected_skill": null,
+      "rationale": "Off-topic — should not trigger any Guild skill."
+    },
+    {
+      "id": "guild-principles-neg-4",
+      "prompt": "Run the test suite.",
+      "expected_skill": null,
+      "rationale": "Tooling invocation; no prelude needed."
+    },
+    {
+      "id": "guild-principles-neg-5",
+      "prompt": "Rename this variable to `count`.",
+      "expected_skill": null,
+      "rationale": "Local edit; principles not invoked for trivial refactors."
+    },
+    {
+      "id": "guild-principles-neg-6",
+      "prompt": "Summarize the attached PDF.",
+      "expected_skill": null,
+      "rationale": "General summarization task; no Guild principle scope."
+    }
+  ]
+}
