@@ -2,14 +2,14 @@
   "mcpServers": {
     "guild-memory": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "tsx", "mcp-servers/guild-memory/src/index.ts"],
+      "command": "node",
+      "args": ["mcp-servers/guild-memory/dist/index.js"],
       "env": {}
     },
     "guild-telemetry": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "tsx", "mcp-servers/guild-telemetry/src/index.ts"],
+      "command": "node",
+      "args": ["mcp-servers/guild-telemetry/dist/index.js"],
       "env": {}
     }
   }
