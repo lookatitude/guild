@@ -1,0 +1,31 @@
+{
+  "name": "guild-telemetry",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Optional Guild MCP server: structured trace query over .guild/runs/ (per guild-plan.md §13.3).",
+  "type": "commonjs",
+  "scripts": {
+    "start": "npx tsx src/index.ts",
+    "test": "npx jest --no-coverage"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.5.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "transform": {
+      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": { "module": "commonjs" } }]
+    },
+    "testTimeout": 30000
+  }
+}
