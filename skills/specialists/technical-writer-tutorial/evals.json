@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write a getting-started tutorial for the Node SDK.",
+    "Create a quickstart guide that builds a hello-world integration.",
+    "Write a step-by-step walkthrough for shipping the first webhook.",
+    "Walk a new developer through deploying their first app on our platform.",
+    "Write a hands-on tutorial for setting up CI with our GitHub Action."
+  ],
+  "should_not_trigger": [
+    "Document every endpoint in the webhooks API.",
+    "Write the help-center article on managing webhook subscriptions.",
+    "Draft the release notes for the SDK 2.0.",
+    "Write a blog post about why webhooks beat polling.",
+    "Design the onboarding UX for new workspace owners.",
+    "Write cold outreach emails to developers."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the onboarding email sequence for new signups.",
+    "Draft the re-engagement drip for users inactive 30+ days.",
+    "Write the trial-ending email series (day 10, 13, 14).",
+    "Design the lifecycle flow for free-to-paid upgrade nudges.",
+    "Write the transactional email copy for password reset and receipt."
+  ],
+  "should_not_trigger": [
+    "Write a cold outbound sequence to CTOs at Series A startups.",
+    "Draft the follow-up emails after our discovery call.",
+    "Write a blog post about email marketing best practices.",
+    "Write the empty state and button copy for the inbox.",
+    "Plan the launch announcement and press outreach.",
+    "Write LinkedIn posts teasing the new feature."
+  ]
+}

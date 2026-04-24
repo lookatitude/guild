@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the empty state copy for the inbox when there are no messages.",
+    "Rewrite this error message: 'An error has occurred'.",
+    "Write the button label and confirmation dialog for deleting an account.",
+    "Draft tooltip copy for the new 'auto-archive' toggle.",
+    "Write the toast strings for success and failure of the export flow."
+  ],
+  "should_not_trigger": [
+    "Write a blog post about our new export feature.",
+    "Write the welcome email for new signups.",
+    "Document the /export API endpoint.",
+    "Draft a LinkedIn post announcing the feature.",
+    "Write the user manual page for the export tool.",
+    "Research keywords for the export landing page."
+  ]
+}

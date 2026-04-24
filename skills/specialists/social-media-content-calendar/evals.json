@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Build a content calendar for the next 6 weeks across LinkedIn, X, and Instagram.",
+    "Plan the social calendar for launch month with weekly themes.",
+    "Map out a 30-day editorial calendar for social.",
+    "Plan cross-platform content with explicit repurposing from blog to thread to carousel.",
+    "Draft the social editorial calendar and platform mix for Q3."
+  ],
+  "should_not_trigger": [
+    "Write today's tweet announcing the deploy.",
+    "Draft a LinkedIn carousel on onboarding tips.",
+    "Build reply templates for community managers.",
+    "Write the launch blog post.",
+    "Plan the full PR and campaign strategy for the launch.",
+    "Research keywords for the launch landing page."
+  ]
+}

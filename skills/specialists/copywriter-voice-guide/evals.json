@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write our brand voice guide.",
+    "Define the voice and tone for the product.",
+    "Create a voice doc that covers marketing, product, and support surfaces.",
+    "Refresh our tone guidelines — the old one is stale.",
+    "Document how we sound so new hires can match it."
+  ],
+  "should_not_trigger": [
+    "Write a blog post using our existing voice.",
+    "Write the onboarding email sequence.",
+    "Write the empty state microcopy for the inbox.",
+    "Write our positioning and category narrative.",
+    "Document our engineering style guide.",
+    "Research keywords for the homepage."
+  ]
+}

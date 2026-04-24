@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Plan our internal-link structure for the blog hub.",
+    "Find and fix orphan pages across the docs site.",
+    "Map the link graph between our pillar pages and their supporting clusters.",
+    "Recommend internal links to route equity to our priority /pricing and /compare pages.",
+    "Audit and redesign the internal-linking for the new integrations cluster."
+  ],
+  "should_not_trigger": [
+    "Build a backlink outreach list for the new guide.",
+    "Run keyword research for the integrations category.",
+    "Optimize the title and meta on /pricing.",
+    "Run a Core Web Vitals and crawlability audit.",
+    "Redesign the product app's information architecture.",
+    "Plan the editorial calendar for the blog."
+  ]
+}
