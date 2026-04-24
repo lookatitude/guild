@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Capture this as a decision: we chose Postgres over DynamoDB because of transactional needs.",
+    "Record an ADR for our pricing tier structure.",
+    "Log why we picked React over Vue for the admin dashboard.",
+    "Write up this architectural decision about event sourcing.",
+    "This is a significant choice — persist it as a decision."
+  ],
+  "should_not_trigger": [
+    "Ingest this Stripe documentation page.",
+    "Search the wiki for pricing decisions.",
+    "Just a quick clarifying question: is the field called user_id or userId?",
+    "Run wiki-lint.",
+    "Update the product page for the calculator."
+  ]
+}
