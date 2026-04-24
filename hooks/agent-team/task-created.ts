@@ -7,10 +7,15 @@
  *          Blocks creation (exit non-zero) if:
  *            1. No owner specialist assigned (teammate_name is empty/missing).
  *            2. Output contract missing (task_description is absent/empty).
- *            3. depends-on: references in the task_subject/description point
- *               to task IDs that don't exist in the run's plan file at
- *               .guild/plan/<slug>.md  (best-effort: if no plan file exists
- *               the deps check is skipped with a warning).
+ *            3. depends-on: references INLINED as free text in
+ *               task_subject/description ("depends-on: task-XXX") point
+ *               to task IDs that don't exist in any plan file under
+ *               .guild/plan/*.md. NOTE: this is a payload-text check only —
+ *               structured `depends-on:` edges authored inside plan-task
+ *               blocks are NOT cross-validated against the current task_id
+ *               (that richer check is a P5/P6 refinement that will require
+ *               plan-block parsing by task_id). Best-effort: if no plan
+ *               file exists, the deps check is skipped with a warning.
  *          Exits 0 (pass-through) when:
  *            - CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS is unset or not "1" (opt-in gate).
  *            - The task passes all three validations.

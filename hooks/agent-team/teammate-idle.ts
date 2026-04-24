@@ -8,13 +8,18 @@
  *          actionable nudge message to stdout (the orchestrator consumes it).
  *          NEVER exits non-zero — no exit-code gating.
  *
- * Staleness check:
- *   A teammate is considered stale if:
- *     - No handoff receipt exists at
- *         .guild/runs/<run-id>/handoffs/<teammate>-<task-id>.md
- *     - AND no in-progress log entry exists at
- *         .guild/runs/<run-id>/in-progress/<teammate>.log  (last modified
- *         within the last STALE_THRESHOLD_MS milliseconds)
+ * Staleness check (P4 — conservative variant):
+ *   A teammate is considered stale if ANY assigned task lacks a handoff
+ *   receipt at .guild/runs/<run-id>/handoffs/<teammate>-<task-id>.md.
+ *
+ *   This handler also computes an in-progress-log freshness signal at
+ *   .guild/runs/<run-id>/in-progress/<teammate>.log (STALE_THRESHOLD_MS
+ *   window) and includes it in the nudge payload for orchestrator context,
+ *   but does NOT currently gate the nudge on it — the stronger
+ *   "stale = no receipt AND no active log" rule is a deliberate P5 refinement
+ *   (needs telemetry to avoid false-positive nudges against fast-iterating
+ *   teammates). Today: nudge on any pending task; document activity context.
+ *
  *   If the plan file (.guild/plan/*.md) or run state directory don't exist,
  *   the nudge is still emitted — conservative default.
  *
