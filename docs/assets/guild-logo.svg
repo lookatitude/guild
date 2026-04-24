@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Guild logo</title>
+  <desc id="desc">A restrained shield crest with connected specialist nodes around a central memory mark.</desc>
+  <defs>
+    <linearGradient id="outer" x1="96" y1="42" x2="416" y2="470" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34261d"/>
+      <stop offset="1" stop-color="#0d0c0a"/>
+    </linearGradient>
+    <linearGradient id="inner" x1="138" y1="90" x2="372" y2="418" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2a2119"/>
+      <stop offset="1" stop-color="#17130f"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000814" flood-opacity="0.36"/>
+    </filter>
+  </defs>
+
+  <path d="M256 34 80 98v126c0 116 69 207 176 254 107-47 176-138 176-254V98L256 34Z" fill="url(#outer)" filter="url(#shadow)"/>
+  <path d="M256 68 116 120v103c0 92 52 164 140 206 88-42 140-114 140-206V120L256 68Z" fill="url(#inner)" stroke="#574637" stroke-width="10"/>
+
+  <g fill="none" stroke="#b9afa2" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" opacity="0.86">
+    <path d="M178 190h156"/>
+    <path d="M178 322h156"/>
+    <path d="M178 190l78 66-78 66"/>
+    <path d="M334 190l-78 66 78 66"/>
+  </g>
+
+  <g fill="#17130f" stroke="#d97757" stroke-width="12">
+    <circle cx="178" cy="190" r="24"/>
+    <circle cx="334" cy="190" r="24"/>
+    <circle cx="178" cy="322" r="24"/>
+    <circle cx="334" cy="322" r="24"/>
+  </g>
+
+  <circle cx="256" cy="256" r="38" fill="#221a14" stroke="#f0dfc7" stroke-width="12"/>
+  <path d="M234 256h44M256 234v44" stroke="#d97757" stroke-width="13" stroke-linecap="round"/>
+</svg>

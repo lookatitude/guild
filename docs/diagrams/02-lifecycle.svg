@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 720" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" role="img">
+  <title>Task lifecycle</title>
+  <desc>questions first; execution becomes autonomous only after the plan contract</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#8f725b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <radialGradient id="glow" cx="48%" cy="0%" r="95%">
+      <stop offset="0" stop-color="#d97757" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#1d1914" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#0d0c0a"/>
+    </radialGradient>
+    <pattern id="mesh" width="82" height="82" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r="1.6" fill="#8f725b" opacity="0.22"/>
+      <path d="M12 12L82 46M12 12L46 82" stroke="#8f725b" stroke-width="0.72" opacity="0.12"/>
+    </pattern>
+  </defs>
+  <rect x="22" y="22" width="956" height="676" rx="20" fill="#1d1914" stroke="#4a3b2f" stroke-width="1.2"/>
+  <circle cx="54" cy="50" r="6" fill="#d97757"/>
+  <circle cx="76" cy="50" r="6" fill="#e7b16f" opacity="0.72"/>
+  <circle cx="98" cy="50" r="6" fill="#aa8f7a" opacity="0.72"/>
+  <text x="54" y="88" font-size="26" font-weight="850" fill="#f4efe7">Task lifecycle</text>
+  <text x="54" y="114" font-size="14" font-weight="540" fill="#b9afa2">questions first; execution becomes autonomous only after the plan contract</text>
+  
+  <g>
+    <rect x="70" y="172" width="154" height="110" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="86" y1="172" x2="208" y2="172" stroke="#d97757" stroke-width="3" stroke-linecap="round"/>
+    <text x="88" y="203" font-size="13.5" font-weight="820" fill="#f4efe7">1. Brainstorm</text>
+    <text x="88" y="229" font-size="12.2" font-weight="520" fill="#b9afa2">goals</text>
+<text x="88" y="246" font-size="12.2" font-weight="520" fill="#b9afa2">constraints</text>
+<text x="88" y="263" font-size="12.2" font-weight="520" fill="#b9afa2">tests</text>
+  </g>
+<g>
+    <rect x="292" y="172" width="154" height="110" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="308" y1="172" x2="430" y2="172" stroke="#aa8f7a" stroke-width="3" stroke-linecap="round"/>
+    <text x="310" y="203" font-size="13.5" font-weight="820" fill="#f4efe7">2. Team compose</text>
+    <text x="310" y="229" font-size="12.2" font-weight="520" fill="#b9afa2">match domains</text>
+<text x="310" y="246" font-size="12.2" font-weight="520" fill="#b9afa2">resolve gaps</text>
+  </g>
+<g>
+    <rect x="514" y="172" width="154" height="110" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="530" y1="172" x2="652" y2="172" stroke="#d97757" stroke-width="3" stroke-linecap="round"/>
+    <text x="532" y="203" font-size="13.5" font-weight="820" fill="#f4efe7">3. Plan</text>
+    <text x="532" y="229" font-size="12.2" font-weight="520" fill="#b9afa2">lanes</text>
+<text x="532" y="246" font-size="12.2" font-weight="520" fill="#b9afa2">dependencies</text>
+<text x="532" y="263" font-size="12.2" font-weight="520" fill="#b9afa2">policy</text>
+  </g>
+<g>
+    <rect x="736" y="172" width="154" height="110" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="752" y1="172" x2="874" y2="172" stroke="#aa8f7a" stroke-width="3" stroke-linecap="round"/>
+    <text x="754" y="203" font-size="13.5" font-weight="820" fill="#f4efe7">4. Context</text>
+    <text x="754" y="229" font-size="12.2" font-weight="520" fill="#b9afa2">brief per</text>
+<text x="754" y="246" font-size="12.2" font-weight="520" fill="#b9afa2">specialist</text>
+  </g>
+  <g>
+    <rect x="70" y="370" width="154" height="110" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="86" y1="370" x2="208" y2="370" stroke="#e7b16f" stroke-width="3" stroke-linecap="round"/>
+    <text x="88" y="401" font-size="13.5" font-weight="820" fill="#f4efe7">5. Execute</text>
+    <text x="88" y="427" font-size="12.2" font-weight="520" fill="#b9afa2">approved</text>
+<text x="88" y="444" font-size="12.2" font-weight="520" fill="#b9afa2">backend</text>
+  </g>
+<g>
+    <rect x="292" y="370" width="154" height="110" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="308" y1="370" x2="430" y2="370" stroke="#aa8f7a" stroke-width="3" stroke-linecap="round"/>
+    <text x="310" y="401" font-size="13.5" font-weight="820" fill="#f4efe7">6. Review</text>
+    <text x="310" y="427" font-size="12.2" font-weight="520" fill="#b9afa2">quality</text>
+<text x="310" y="444" font-size="12.2" font-weight="520" fill="#b9afa2">receipts</text>
+  </g>
+<g>
+    <rect x="514" y="370" width="154" height="110" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="530" y1="370" x2="652" y2="370" stroke="#e7b16f" stroke-width="3" stroke-linecap="round"/>
+    <text x="532" y="401" font-size="13.5" font-weight="820" fill="#f4efe7">7. Verify</text>
+    <text x="532" y="427" font-size="12.2" font-weight="520" fill="#b9afa2">tests</text>
+<text x="532" y="444" font-size="12.2" font-weight="520" fill="#b9afa2">criteria</text>
+  </g>
+<g>
+    <rect x="736" y="370" width="154" height="110" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="752" y1="370" x2="874" y2="370" stroke="#aa8f7a" stroke-width="3" stroke-linecap="round"/>
+    <text x="754" y="401" font-size="13.5" font-weight="820" fill="#f4efe7">8. Reflect</text>
+    <text x="754" y="427" font-size="12.2" font-weight="520" fill="#b9afa2">memory</text>
+<text x="754" y="444" font-size="12.2" font-weight="520" fill="#b9afa2">proposals only</text>
+  </g>
+  <path d="M224 227 L292 227" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M446 227 L514 227" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M668 227 L736 227" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M813 282 C760 324 226 324 147 370" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M224 425 L292 425" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M446 425 L514 425" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M668 425 L736 425" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <g>
+    <rect x="74" y="590" width="852" height="76" rx="14" fill="#17130f" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="90" y1="590" x2="910" y2="590" stroke="#d97757" stroke-width="3" stroke-linecap="round"/>
+    <text x="92" y="621" font-size="16" font-weight="820" fill="#f4efe7">Control gates</text>
+    <text x="92" y="647" font-size="12.2" font-weight="520" fill="#b9afa2">unknowns become questions; approved facts become durable decisions</text>
+  </g>
+  
+</svg>

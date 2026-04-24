@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 730" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" role="img">
+  <title>Create specialist</title>
+  <desc>new roles incubate as proposals before joining team composition</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#8f725b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <radialGradient id="glow" cx="48%" cy="0%" r="95%">
+      <stop offset="0" stop-color="#d97757" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#1d1914" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#0d0c0a"/>
+    </radialGradient>
+    <pattern id="mesh" width="82" height="82" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r="1.6" fill="#8f725b" opacity="0.22"/>
+      <path d="M12 12L82 46M12 12L46 82" stroke="#8f725b" stroke-width="0.72" opacity="0.12"/>
+    </pattern>
+  </defs>
+  <rect x="22" y="22" width="956" height="686" rx="20" fill="#1d1914" stroke="#4a3b2f" stroke-width="1.2"/>
+  <circle cx="54" cy="50" r="6" fill="#d97757"/>
+  <circle cx="76" cy="50" r="6" fill="#e7b16f" opacity="0.72"/>
+  <circle cx="98" cy="50" r="6" fill="#aa8f7a" opacity="0.72"/>
+  <text x="54" y="88" font-size="26" font-weight="850" fill="#f4efe7">Create specialist</text>
+  <text x="54" y="114" font-size="14" font-weight="540" fill="#b9afa2">new roles incubate as proposals before joining team composition</text>
+  
+  <g>
+    <rect x="82" y="154" width="214" height="100" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="98" y1="154" x2="280" y2="154" stroke="#e7b16f" stroke-width="3" stroke-linecap="round"/>
+    <text x="100" y="185" font-size="14.5" font-weight="820" fill="#f4efe7">1. Gap detected</text>
+    <text x="100" y="211" font-size="12.2" font-weight="520" fill="#b9afa2">missing domain</text>
+  </g>
+  <g>
+    <rect x="380" y="154" width="214" height="100" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="396" y1="154" x2="578" y2="154" stroke="#d97757" stroke-width="3" stroke-linecap="round"/>
+    <text x="398" y="185" font-size="14.5" font-weight="820" fill="#f4efe7">2. Interview</text>
+    <text x="398" y="211" font-size="12.2" font-weight="520" fill="#b9afa2">role and triggers</text>
+  </g>
+  <g>
+    <rect x="678" y="154" width="214" height="100" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="694" y1="154" x2="876" y2="154" stroke="#aa8f7a" stroke-width="3" stroke-linecap="round"/>
+    <text x="696" y="185" font-size="14.5" font-weight="820" fill="#f4efe7">3. Draft role</text>
+    <text x="696" y="211" font-size="12.2" font-weight="520" fill="#b9afa2">proposal + skills</text>
+  </g>
+  <g>
+    <rect x="82" y="360" width="214" height="100" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="98" y1="360" x2="280" y2="360" stroke="#e7b16f" stroke-width="3" stroke-linecap="round"/>
+    <text x="100" y="391" font-size="14.5" font-weight="820" fill="#f4efe7">4. Boundary scan</text>
+    <text x="100" y="417" font-size="12.2" font-weight="520" fill="#b9afa2">overlap check</text>
+  </g>
+  <g>
+    <rect x="380" y="360" width="214" height="100" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="396" y1="360" x2="578" y2="360" stroke="#d97757" stroke-width="3" stroke-linecap="round"/>
+    <text x="398" y="391" font-size="14.5" font-weight="820" fill="#f4efe7">5. Shadow + evals</text>
+    <text x="398" y="417" font-size="12.2" font-weight="520" fill="#b9afa2">adjacent edits tested</text>
+  </g>
+  <g>
+    <rect x="678" y="360" width="214" height="100" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="694" y1="360" x2="876" y2="360" stroke="#aa8f7a" stroke-width="3" stroke-linecap="round"/>
+    <text x="696" y="391" font-size="14.5" font-weight="820" fill="#f4efe7">6. Register</text>
+    <text x="696" y="417" font-size="12.2" font-weight="520" fill="#b9afa2">join roster after gates</text>
+  </g>
+  <path d="M296 204 L380 204" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M594 204 L678 204" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M785 254 C785 308 190 304 190 360" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M296 410 L380 410" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M594 410 L678 410" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <g>
+    <rect x="270" y="604" width="460" height="74" rx="14" fill="#17130f" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="286" y1="604" x2="714" y2="604" stroke="#c76a7c" stroke-width="3" stroke-linecap="round"/>
+    <text x="288" y="635" font-size="16" font-weight="820" fill="#f4efe7">Failure path</text>
+    <text x="288" y="661" font-size="12.2" font-weight="520" fill="#b9afa2">failed gates return refinement; live team is unchanged</text>
+  </g>
+  <path d="M190 460 C260 540 330 568 380 604" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="7 7"/>
+  <path d="M487 460 L487 604" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="7 7"/>
+  <path d="M785 460 C724 540 660 568 620 604" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="7 7"/>
+  
+</svg>

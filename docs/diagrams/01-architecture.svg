@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 760" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" role="img">
+  <title>Guild architecture</title>
+  <desc>plugin layer, execution choices, specialist roster, and durable project state</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#8f725b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <radialGradient id="glow" cx="48%" cy="0%" r="95%">
+      <stop offset="0" stop-color="#d97757" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#1d1914" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#0d0c0a"/>
+    </radialGradient>
+    <pattern id="mesh" width="82" height="82" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r="1.6" fill="#8f725b" opacity="0.22"/>
+      <path d="M12 12L82 46M12 12L46 82" stroke="#8f725b" stroke-width="0.72" opacity="0.12"/>
+    </pattern>
+  </defs>
+  <rect x="22" y="22" width="956" height="716" rx="20" fill="#1d1914" stroke="#4a3b2f" stroke-width="1.2"/>
+  <circle cx="54" cy="50" r="6" fill="#d97757"/>
+  <circle cx="76" cy="50" r="6" fill="#e7b16f" opacity="0.72"/>
+  <circle cx="98" cy="50" r="6" fill="#aa8f7a" opacity="0.72"/>
+  <text x="54" y="88" font-size="26" font-weight="850" fill="#f4efe7">Guild architecture</text>
+  <text x="54" y="114" font-size="14" font-weight="540" fill="#b9afa2">plugin layer, execution choices, specialist roster, and durable project state</text>
+  
+  <g>
+    <rect x="74" y="168" width="852" height="136" rx="14" fill="#17130f" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="90" y1="168" x2="910" y2="168" stroke="#e7b16f" stroke-width="3" stroke-linecap="round"/>
+    <text x="92" y="199" font-size="16" font-weight="820" fill="#f4efe7">Claude Code plugin</text>
+    <text x="92" y="225" font-size="12.2" font-weight="520" fill="#b9afa2">installed files and command entry points</text>
+  </g>
+  <g>
+    <rect x="116" y="242" width="112" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="172" y="262" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">skills</text>
+  </g>
+<g>
+    <rect x="270" y="242" width="112" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="326" y="262" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">agents</text>
+  </g>
+<g>
+    <rect x="424" y="242" width="112" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="480" y="262" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">commands</text>
+  </g>
+<g>
+    <rect x="578" y="242" width="112" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="634" y="262" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">hooks</text>
+  </g>
+<g>
+    <rect x="732" y="242" width="112" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="788" y="262" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">.mcp.json</text>
+  </g>
+
+  <g>
+    <rect x="166" y="364" width="268" height="104" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="182" y1="364" x2="418" y2="364" stroke="#d97757" stroke-width="3" stroke-linecap="round"/>
+    <text x="184" y="395" font-size="16" font-weight="820" fill="#f4efe7">Subagent backend</text>
+    <text x="184" y="421" font-size="12.2" font-weight="520" fill="#b9afa2">isolated worktrees</text>
+<text x="184" y="438" font-size="12.2" font-weight="520" fill="#b9afa2">one lane per specialist</text>
+  </g>
+  <g>
+    <rect x="566" y="364" width="268" height="104" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="582" y1="364" x2="818" y2="364" stroke="#aa8f7a" stroke-width="3" stroke-linecap="round"/>
+    <text x="584" y="395" font-size="16" font-weight="820" fill="#f4efe7">Agent teams</text>
+    <text x="584" y="421" font-size="12.2" font-weight="520" fill="#b9afa2">optional coordination</text>
+<text x="584" y="438" font-size="12.2" font-weight="520" fill="#b9afa2">for tightly coupled work</text>
+  </g>
+  <path d="M500 304 C400 326 328 340 300 364" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M500 304 C600 326 672 340 700 364" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+
+  <g>
+    <rect x="76" y="540" width="386" height="190" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="92" y1="540" x2="446" y2="540" stroke="#e7b16f" stroke-width="3" stroke-linecap="round"/>
+    <text x="94" y="571" font-size="16" font-weight="820" fill="#f4efe7">Specialist roster</text>
+    <text x="94" y="597" font-size="12.2" font-weight="520" fill="#b9afa2">small team selected</text>
+<text x="94" y="614" font-size="12.2" font-weight="520" fill="#b9afa2">per approved spec</text>
+  </g>
+  <g>
+    <rect x="104" y="652" width="92" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="150" y="672" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">architect</text>
+  </g>
+  <g>
+    <rect x="216" y="652" width="92" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="262" y="672" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">backend</text>
+  </g>
+  <g>
+    <rect x="328" y="652" width="92" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="374" y="672" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">QA</text>
+  </g>
+  <g>
+    <rect x="104" y="692" width="92" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="150" y="712" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">docs</text>
+  </g>
+  <g>
+    <rect x="216" y="692" width="92" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="262" y="712" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">research</text>
+  </g>
+  <g>
+    <rect x="328" y="692" width="92" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="374" y="712" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">sales</text>
+  </g>
+
+  <g>
+    <rect x="538" y="540" width="386" height="190" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="554" y1="540" x2="908" y2="540" stroke="#d97757" stroke-width="3" stroke-linecap="round"/>
+    <text x="556" y="571" font-size="16" font-weight="820" fill="#f4efe7">.guild/ project state</text>
+    <text x="556" y="597" font-size="12.2" font-weight="520" fill="#b9afa2">plans, wiki, raw sources</text>
+<text x="556" y="614" font-size="12.2" font-weight="520" fill="#b9afa2">runs, context, evolution</text>
+  </g>
+  <g>
+    <rect x="584" y="652" width="106" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="637" y="672" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">wiki</text>
+  </g>
+  <g>
+    <rect x="718" y="652" width="106" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="771" y="672" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">raw</text>
+  </g>
+  <g>
+    <rect x="584" y="692" width="106" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="637" y="712" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">runs</text>
+  </g>
+  <g>
+    <rect x="718" y="692" width="106" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="771" y="712" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f4efe7">context</text>
+  </g>
+  <path d="M300 468 C284 500 284 520 269 540" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M700 468 C716 500 716 520 731 540" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  <path d="M462 635 L538 635" fill="none" stroke="#8f725b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" />
+  
+</svg>

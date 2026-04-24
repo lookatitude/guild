@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 750" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" role="img">
+  <title>Skill taxonomy</title>
+  <desc>core rules, workflow spine, knowledge layer, methods, and specialists</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#8f725b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <radialGradient id="glow" cx="48%" cy="0%" r="95%">
+      <stop offset="0" stop-color="#d97757" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#1d1914" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#0d0c0a"/>
+    </radialGradient>
+    <pattern id="mesh" width="82" height="82" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r="1.6" fill="#8f725b" opacity="0.22"/>
+      <path d="M12 12L82 46M12 12L46 82" stroke="#8f725b" stroke-width="0.72" opacity="0.12"/>
+    </pattern>
+  </defs>
+  <rect x="22" y="22" width="956" height="706" rx="20" fill="#1d1914" stroke="#4a3b2f" stroke-width="1.2"/>
+  <circle cx="54" cy="50" r="6" fill="#d97757"/>
+  <circle cx="76" cy="50" r="6" fill="#e7b16f" opacity="0.72"/>
+  <circle cx="98" cy="50" r="6" fill="#aa8f7a" opacity="0.72"/>
+  <text x="54" y="88" font-size="26" font-weight="850" fill="#f4efe7">Skill taxonomy</text>
+  <text x="54" y="114" font-size="14" font-weight="540" fill="#b9afa2">core rules, workflow spine, knowledge layer, methods, and specialists</text>
+  
+  <g>
+    <rect x="110" y="158" width="780" height="76" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="126" y1="158" x2="874" y2="158" stroke="#f0dfc7" stroke-width="3" stroke-linecap="round"/>
+    <text x="128" y="189" font-size="16" font-weight="820" fill="#f4efe7">T1 core</text>
+    <text x="128" y="215" font-size="12.2" font-weight="520" fill="#b9afa2">principles for every specialist</text>
+  </g>
+<g>
+    <rect x="110" y="258" width="780" height="76" rx="14" fill="#17130f" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="126" y1="258" x2="874" y2="258" stroke="#aa8f7a" stroke-width="3" stroke-linecap="round"/>
+    <text x="128" y="289" font-size="16" font-weight="820" fill="#f4efe7">T2 workflow spine</text>
+    <text x="128" y="315" font-size="12.2" font-weight="520" fill="#b9afa2">brainstorm, compose, plan, context, execute, verify</text>
+  </g>
+<g>
+    <rect x="110" y="358" width="780" height="76" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="126" y1="358" x2="874" y2="358" stroke="#d97757" stroke-width="3" stroke-linecap="round"/>
+    <text x="128" y="389" font-size="16" font-weight="820" fill="#f4efe7">T3 knowledge</text>
+    <text x="128" y="415" font-size="12.2" font-weight="520" fill="#b9afa2">wiki ingest, query, lint, decisions</text>
+  </g>
+<g>
+    <rect x="110" y="458" width="780" height="76" rx="14" fill="#17130f" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="126" y1="458" x2="874" y2="458" stroke="#e7b16f" stroke-width="3" stroke-linecap="round"/>
+    <text x="128" y="489" font-size="16" font-weight="820" fill="#f4efe7">T4 methodology</text>
+    <text x="128" y="515" font-size="12.2" font-weight="520" fill="#b9afa2">TDD, debugging, worktrees, finish branch</text>
+  </g>
+<g>
+    <rect x="110" y="558" width="780" height="126" rx="14" fill="#251d17" stroke="#4a3b2f" stroke-width="1.35"/>
+    <line x1="126" y1="558" x2="874" y2="558" stroke="#d97757" stroke-width="3" stroke-linecap="round"/>
+    <text x="128" y="589" font-size="16" font-weight="820" fill="#f4efe7">T5 specialists</text>
+    <text x="128" y="615" font-size="12.2" font-weight="520" fill="#b9afa2">domain playbooks loaded only when relevant</text>
+  </g>
+  <g>
+    <rect x="154" y="636" width="150" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="229" y="656" font-size="11.2" font-weight="760" text-anchor="middle" fill="#d97757">Engineering</text>
+  </g>
+  <g>
+    <rect x="330" y="636" width="150" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="405" y="656" font-size="11.2" font-weight="760" text-anchor="middle" fill="#e7b16f">Content</text>
+  </g>
+  <g>
+    <rect x="506" y="636" width="150" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="581" y="656" font-size="11.2" font-weight="760" text-anchor="middle" fill="#f0dfc7">Commercial</text>
+  </g>
+  <g>
+    <rect x="682" y="636" width="150" height="30" rx="8" fill="#2d231b" stroke="#4a3b2f" stroke-width="1.1"/>
+    <text x="757" y="656" font-size="11.2" font-weight="760" text-anchor="middle" fill="#b9afa2">Research + QA</text>
+  </g>
+  
+</svg>

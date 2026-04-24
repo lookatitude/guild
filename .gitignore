@@ -7,3 +7,6 @@ node_modules/
 
 # OS
 .DS_Store
+
+# Accidental root lockfile (scripts/, hooks/, mcp-servers/ have their own)
+/package-lock.json
