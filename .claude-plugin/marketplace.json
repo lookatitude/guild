@@ -1,0 +1,27 @@
+{
+  "name": "guild",
+  "owner": {
+    "name": "Miguel Pinto"
+  },
+  "plugins": [
+    {
+      "name": "guild",
+      "source": "./",
+      "description": "One Claude Code plugin. 13 specialists across engineering, content-and-communication, and commercial groups. Brainstorm asks the relevant questions up front, records an autonomy contract, proposes a team, and lets the user resolve gaps (auto-create / skip / substitute / from scratch). guild:context-assemble builds a tight 3-layer authoritative brief for each specialist; the default backend dispatches subagents through the Agent tool with worktree isolation, while experimental agent teams are opt-in for tasks that need teammate communication. Karpathy's four principles plus Guild's evidence rule are a mandatory pre-task skill. Every significant specialist question becomes a structured decision. .guild/raw/ keeps immutable source material; .guild/wiki/ organizes synthesized memory by lifetime (context -> standards -> products -> entities/concepts/decisions/sources). Post-task reflections queue skill-improvement proposals; /guild:evolve runs shadow mode, flip-gating, and versioned rollback before promotion.",
+      "version": "0.0.1",
+      "author": {
+        "name": "Miguel Pinto"
+      },
+      "license": "MIT",
+      "keywords": [
+        "agents",
+        "subagents",
+        "agent-team",
+        "skills",
+        "specialists",
+        "wiki",
+        "self-evolution"
+      ]
+    }
+  ]
+}
