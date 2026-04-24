@@ -43,6 +43,14 @@ The backend is not chosen by `guild:execute-plan`. It is chosen at `guild:team-c
 - **User approval is required for `agent-team`.** If `team.yaml` specifies `backend: agent-team`, confirm the user has explicitly approved the opt-in (the approval is recorded in `team.yaml` by `guild:team-compose`). If the environment variable `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is not set, refuse to dispatch and surface the blocker to the user rather than silently falling back to subagents — falling back would change the execution semantics out from under the plan.
 - **Subagent is the production default.** Unless `team.yaml` explicitly says `agent-team`, dispatch each lane via the Agent tool against `agents/<specialist>.md`.
 
+When `team.yaml` declares `backend: agent-team` and the opt-in is confirmed, invoke `scripts/agent-team-launcher.ts` to spawn the tmux session — one pane for the orchestrator plus one pane per specialist, with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` exported in each pane. The launcher is the canonical entry point for the agent-team backend; it writes a session manifest to `.guild/runs/<run-id>/agent-team/session.json` and refuses to spawn nested teams per §7.3. Run it once per execute-plan invocation:
+
+```
+scripts/agent-team-launcher.ts --team .guild/team/<slug>.yaml --cwd <repo-root>
+```
+
+Pass `--dry-run` first to preview the tmux commands without spawning the session; use `--session-name` when a name collision would otherwise block launch.
+
 ## Parallelism rules
 
 Read the DAG encoded by each lane's `depends-on:` and schedule dispatches accordingly, per `guild-plan.md §8`:

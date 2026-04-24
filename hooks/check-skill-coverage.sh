@@ -23,6 +23,10 @@
 
 set -uo pipefail
 
+# Clean up stale session locks (>7 days old) — prevents /tmp accretion
+# on long-running machines where /tmp isn't cleared automatically.
+find /tmp -maxdepth 1 -name 'guild-skill-nudge-*' -mtime +7 -delete 2>/dev/null || true
+
 # Read the prompt text from stdin payload (field: "prompt")
 PAYLOAD="$(cat)"
 PROMPT_TEXT=""

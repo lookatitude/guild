@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "guild-memory": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "tsx", "mcp-servers/guild-memory/src/index.ts"],
+      "env": {}
+    },
+    "guild-telemetry": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "tsx", "mcp-servers/guild-telemetry/src/index.ts"],
+      "env": {}
+    }
+  }
+}
