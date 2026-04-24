@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Run wiki-lint on the whole wiki.",
+    "Audit the wiki for contradictions.",
+    "Check wiki health — any orphans or stale pages?",
+    "Find all pages with missing frontmatter fields.",
+    "Which concepts are referenced but don't have their own page?"
+  ],
+  "should_not_trigger": [
+    "Ingest this new source.",
+    "Search the wiki for pricing.",
+    "Capture this decision about Postgres.",
+    "Edit the product page for the calculator.",
+    "Write a new concept page on event sourcing."
+  ]
+}
