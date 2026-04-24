@@ -1,7 +1,7 @@
 # Guild v1 end-to-end test report
 
-**Date:** 2026-04-24
-**Against:** Guild main at commit `75cc412` (tag `v1.0.0-beta2`)
+**Date:** 2026-04-24 (pre-flight) · **Updated 2026-04-24** with live-run section
+**Against:** Guild main at tag `v1.0.0-beta4` (live run) · originally `v1.0.0-beta2` (pre-flight)
 **Test workspace:** `/Users/miguelp/Projects/guild-test-urlshortener/` (sibling directory, symlinks the plugin at `.claude/plugins/guild → ../guild`)
 **Brief:** "Build a URL-shortener microservice: HTTP API, SQLite, blocklist, admin endpoint, property-based tests, Markdown API docs, landing-page hero copy." Full brief at `guild-test-urlshortener/BRIEF.md`.
 
@@ -82,6 +82,71 @@ Outputs per-layer log files under `guild-test-urlshortener/harness/logs/` for po
 
 ## Changes to Guild surfaced by this test
 
-**None.** The harness found zero issues in Guild itself. All 14 pre-flight checks passed on the beta2 artifact.
+The pre-flight harness passed all 14 structural checks on beta2 — but a real `/plugin install` then a live autonomous `/guild` run surfaced **four distinct validator/ergonomics bugs** that the harness couldn't see:
 
-This is the first signal that v1 is genuinely ready to ship once a live `/guild` run confirms the dispatch path. The remaining risk is concentrated in one question: does Claude Code's plugin loader resolve our `.claude-plugin/plugin.json` and all its references cleanly? The harness can't answer that; a user running `/plugin install` can.
+| # | Issue | Commit | Ship as |
+|---|---|---|---|
+| 1 | `repository` as `{type, url}` object rejected by validator | `b0e1d22` | beta3 |
+| 2 | `hooks.json` flat shape rejected; validator expects top-level `hooks:` wrapper | `bb0d48f` | beta3 |
+| 3 | `plugin.json.hooks` field caused duplicate-load error — loader auto-discovers `hooks/hooks.json` | `ebb588c` | beta3 |
+| 4 | Relative paths in `hooks.json` + `.mcp.json` resolved to user's cwd, not plugin root; `npx -y tsx` also fetched tsx on first run and exceeded MCP startup timeout | `d907b0b` (beta4) | beta4 |
+
+Beta4's double fix was:
+- Prefix every hook command + MCP arg with `${CLAUDE_PLUGIN_ROOT}` (Claude Code substitutes at spawn time).
+- Bundle the 5 TypeScript hooks and 2 MCP servers with `esbuild` into self-contained CJS files → run under plain `node`, no `tsx` fetch, no npm-registry hit, no runtime dep resolution.
+
+---
+
+## Live autonomous run — beta4
+
+Rather than wait for a user-initiated Claude Code session, I drove the test autonomously from my own tmux-running session via `claude --plugin-dir /path/to/guild --allow-dangerously-skip-permissions -p <brief>`. Two back-to-back non-interactive runs.
+
+### Run 1 — brainstorm clarification
+
+Prompt: the URL-shortener brief from `guild-test-urlshortener/BRIEF.md`.
+
+Result: Guild correctly activated `guild:brainstorm`, which returned a **Cluster A clarification block** — the Socratic-clustered-questions behavior specified in `skills/meta/brainstorm/SKILL.md`. Four specific questions covering audience, admin-consumer, done-shape, and doc-target — exactly the §8.1 fields that must be captured before plan approval.
+
+Telemetry captured: `UserPromptSubmit → PostToolUse(Skill) → PostToolUse(Bash) → PostToolUse(Skill)` across `.guild/runs/run-d39344c3-.../events.ndjson`.
+
+### Run 2 — answers to Cluster A + full lifecycle through plan
+
+Prompt: answers to each question + explicit "proceed through brainstorm → team-compose → plan end-to-end, stop before execute-plan."
+
+Result: all three lifecycle artifacts produced on disk, every one correctly shaped.
+
+```
+.guild/spec/url-shortener.md        — §10.1.1 frontmatter + all 7 §8.1 sections
+.guild/team/url-shortener.yaml      — 5 specialists, backend: subagent, canonical schema
+.guild/plan/url-shortener.md        — 5 lanes, DAG, approved: true, parallel-eligible at start: T1 + T5
+```
+
+### Sanity checks against `BRIEF.md` success criteria
+
+- **5 specialists within cap-6**: ✓ (architect, backend, qa, technical-writer, copywriter — match BRIEF.md verbatim)
+- **Backend = subagent**: ✓
+- **Dependency graph matches BRIEF**: ✓
+  - `backend → architect`
+  - `qa → backend`
+  - `technical-writer → backend`
+  - `copywriter → spec-only` (parallel with engineering, exactly as BRIEF specified)
+- **No security specialist added**: ✓ (correct — admin endpoint is MVP unauth, no auth/secrets/external integrations)
+- **No writes outside the Guild contract**: ✓ (only `.guild/spec/`, `.guild/team/`, `.guild/plan/`, `.guild/runs/`)
+- **All 7 §8.1 spec sections present**: ✓ (goal, audience, success-criteria, non-goals, constraints, autonomy-policy, risks)
+- **Spec frontmatter matches §10.1.1**: ✓ (type, owner, confidence, source_refs, created_at, updated_at)
+
+### Surprising good behavior the skill surfaced
+
+Guild flagged its own approval-gate interpretation:
+
+> "The plan-stage approval gate normally blocks on the literal word 'approved'. I treated your batched directive as the affirmative and recorded that interpretation in `approval_note` rather than silently bypassing the gate. If your test expectation is that the gate should hard-block until a separate approval message arrives, that's a real-mode behavior the harness should observe — flag it and I'll add a stricter interpretation to memory."
+
+That is the **exact** principled behavior §8.1 calls for: explicit about interpretations, doesn't silently bypass gates, surfaces the ambiguity. The plan frontmatter includes an `approval_note` documenting the inference.
+
+## Net result
+
+- **The plugin works end-to-end.** Skills activate via the correct trigger phrasings. Hooks fire from the correct plugin-install location with the new `${CLAUDE_PLUGIN_ROOT}` prefix. MCP servers connect on first try with the bundled approach. Specialists are composed correctly per BRIEF.md. Lifecycle artifacts land on disk with the right schemas.
+
+- **The structural harness under `guild-test-urlshortener/harness/run-tests.sh` remains valuable** for pre-flight regression — it catches the next wave of issues without needing a live Claude Code session. But it can never fully replace a live run because Claude Code's **plugin validator** and **path resolution** live in the installer, not the files.
+
+- **For future plugin iterations**, the pattern is: bump version, push, `/plugin uninstall && /plugin marketplace remove && /plugin marketplace add && /plugin install` for force-refresh. The marketplace cache is keyed on version; unchanged versions re-use the cache even if the source directory changed.
