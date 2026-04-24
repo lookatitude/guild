@@ -40,13 +40,14 @@ gate.
 ## Install
 
 ```bash
+/plugin marketplace add lookatitude/guild
 /plugin install guild@guild
 ```
 
 Local development:
 
 ```bash
-git clone https://github.com/miguelp/guild.git
+git clone https://github.com/lookatitude/guild.git
 cd guild
 /plugin marketplace add .
 /plugin install guild@guild --scope project
@@ -63,13 +64,8 @@ export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 
 `guild-memory` and `guild-telemetry` ship as stdio MCP servers under
 `mcp-servers/` but are **optional** — Guild works end-to-end without them.
-If you want them active, install their Node dependencies once per consuming
-repo:
-
-```bash
-(cd mcp-servers/guild-memory && npm install)
-(cd mcp-servers/guild-telemetry && npm install)
-```
+Both ship pre-bundled (`dist/index.js`), so they cold-start under plain
+`node` with no `npm install` step on first use.
 
 Use `guild-memory` when the wiki crosses ~200 pages (ripgrep gets slow);
 use `guild-telemetry` for structured trace queries over `.guild/runs/`.
