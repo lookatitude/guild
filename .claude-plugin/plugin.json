@@ -1,7 +1,16 @@
 {
   "name": "guild",
-  "version": "1.0.0-beta1",
+  "version": "1.0.0-beta2",
   "description": "A team-of-specialists plugin for Claude Code: 13 domain specialists across engineering, content, and commercial groups, a brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
+  "homepage": "https://github.com/lookatitude/guild",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lookatitude/guild.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lookatitude/guild/issues"
+  },
+  "icon": "./docs/assets/guild-logo.svg",
   "author": {
     "name": "Miguel Pinto"
   },
@@ -13,7 +22,9 @@
     "skills",
     "specialists",
     "wiki",
-    "self-evolution"
+    "self-evolution",
+    "tmux",
+    "mcp"
   ],
   "skills": [
     "./skills/core/",
