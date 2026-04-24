@@ -1,0 +1,27 @@
+{
+  "name": "guild-cross-cutting-tests",
+  "private": true,
+  "scripts": {
+    "test": "npx jest --no-coverage"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.5.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "transform": {
+      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": { "module": "commonjs" } }]
+    },
+    "testMatch": [
+      "**/evolve/harness.test.ts",
+      "**/shadow/harness.test.ts"
+    ],
+    "testTimeout": 60000
+  }
+}
