@@ -2,11 +2,13 @@
   "name": "guild-hooks",
   "private": true,
   "scripts": {
-    "test": "npx jest --testPathPattern=__tests__ --no-coverage"
+    "test": "npx jest --testPathPattern=__tests__ --no-coverage",
+    "build": "esbuild capture-telemetry.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/capture-telemetry.js && esbuild maybe-reflect.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/maybe-reflect.js && esbuild agent-team/task-created.ts --bundle --platform=node --target=node18 --format=cjs --outfile=agent-team/dist/task-created.js && esbuild agent-team/task-completed.ts --bundle --platform=node --target=node18 --format=cjs --outfile=agent-team/dist/task-completed.js && esbuild agent-team/teammate-idle.ts --bundle --platform=node --target=node18 --format=cjs --outfile=agent-team/dist/teammate-idle.js"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "^22.0.0",
+    "esbuild": "^0.28.0",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.3",
     "tsx": "^4.21.0",
@@ -16,7 +18,14 @@
     "preset": "ts-jest",
     "testEnvironment": "node",
     "transform": {
-      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": { "module": "commonjs" } }]
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "module": "commonjs"
+          }
+        }
+      ]
     },
     "testTimeout": 30000
   }

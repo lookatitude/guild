@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash hooks/bootstrap.sh"
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap.sh"
           }
         ]
       }
@@ -15,11 +15,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash hooks/check-skill-coverage.sh"
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/check-skill-coverage.sh"
           },
           {
             "type": "command",
-            "command": "npx -y tsx hooks/capture-telemetry.ts"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/capture-telemetry.js"
           }
         ]
       }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx -y tsx hooks/capture-telemetry.ts"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/capture-telemetry.js"
           }
         ]
       }
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx -y tsx hooks/capture-telemetry.ts"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/capture-telemetry.js"
           }
         ]
       }
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx -y tsx hooks/maybe-reflect.ts"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/maybe-reflect.js"
           }
         ]
       }
@@ -60,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx -y tsx hooks/agent-team/task-created.ts"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/agent-team/dist/task-created.js"
           }
         ]
       }
@@ -70,7 +70,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx -y tsx hooks/agent-team/task-completed.ts"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/agent-team/dist/task-completed.js"
           }
         ]
       }
@@ -80,7 +80,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx -y tsx hooks/agent-team/teammate-idle.ts"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/agent-team/dist/teammate-idle.js"
           }
         ]
       }

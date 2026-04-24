@@ -3,13 +3,17 @@
     "guild-memory": {
       "type": "stdio",
       "command": "node",
-      "args": ["mcp-servers/guild-memory/dist/index.js"],
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-memory/dist/index.js"
+      ],
       "env": {}
     },
     "guild-telemetry": {
       "type": "stdio",
       "command": "node",
-      "args": ["mcp-servers/guild-telemetry/dist/index.js"],
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-telemetry/dist/index.js"
+      ],
       "env": {}
     }
   }

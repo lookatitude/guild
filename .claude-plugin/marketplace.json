@@ -8,7 +8,7 @@
       "name": "guild",
       "source": "./",
       "description": "Self-evolving teams of specialist agents for Claude Code. 13 specialists across engineering, content, and commercial groups; a brainstorm-plan-execute-review-verify-reflect lifecycle; a categorized wiki with decision capture; and a self-evolution loop with shadow mode, flip-gating, and versioned rollback. Optional tmux agent-team backend + BM25 wiki search + trace query MCPs.",
-      "version": "1.0.0-beta3",
+      "version": "1.0.0-beta4",
       "homepage": "https://lookatitude.github.io/guild/",
       "repository": "https://github.com/lookatitude/guild",
       "icon": "./docs/assets/guild-logo.svg",
