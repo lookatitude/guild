@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write A/B variants for the homepage hero headline with a testable hypothesis.",
+    "Set up an A/B test on the pricing CTA copy with power math and guardrails.",
+    "Draft multivariate copy variants for the signup page above-the-fold.",
+    "Hypothesize and write variants for the trial-ending email subject test.",
+    "Design a copy test on the landing page headline with pre-registered metrics."
+  ],
+  "should_not_trigger": [
+    "Write the primary homepage hero copy (no test, just the page).",
+    "Revise the positioning statement based on recent customer interviews.",
+    "Plan the launch timeline for the v2 release.",
+    "Write the campaign brief for the Q3 push.",
+    "Draft a LinkedIn post announcing the new pricing.",
+    "Write the cold outreach sequence to mid-market ops leaders."
+  ]
+}

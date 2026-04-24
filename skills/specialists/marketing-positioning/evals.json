@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write our positioning statement for the new finance-ops product.",
+    "Sharpen the positioning — we keep getting compared to the wrong competitors.",
+    "Define the ICP, category, and unique value props before we brief the site redesign.",
+    "Draft a messaging house / positioning doc with a clear not-for list.",
+    "Reposition us against <competitor> — the current frame isn't landing."
+  ],
+  "should_not_trigger": [
+    "Write the homepage hero copy based on our existing positioning.",
+    "Plan the launch timeline and channel mix for the v2 release.",
+    "Do keyword research for the pricing page topic cluster.",
+    "Write a LinkedIn post teasing the new positioning.",
+    "Draft the cold outreach sequence to VP Finance buyers.",
+    "Write the A/B copy variants for the pricing CTA."
+  ]
+}

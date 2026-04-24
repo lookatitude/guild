@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the follow-up sequence after the discovery call with Acme.",
+    "Draft the post-proposal follow-up cadence for deals awaiting signature.",
+    "Build the nudge sequence for deals stalled 14+ days after demo.",
+    "Design the follow-up + break-up emails for unresponsive champions.",
+    "Set up the follow-up rules and disposition logic after the proposal is sent."
+  ],
+  "should_not_trigger": [
+    "Write the cold outreach sequence to brand-new enterprise prospects.",
+    "Draft the onboarding email sequence for new paying customers.",
+    "Write the discovery-call question framework and scoring.",
+    "Draft the proposal document with pricing and scope.",
+    "Plan the multi-channel launch for the v2 release.",
+    "Write the re-engagement drip for dormant trial users."
+  ]
+}
