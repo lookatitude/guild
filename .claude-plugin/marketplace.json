@@ -1,7 +1,8 @@
 {
   "name": "guild",
   "owner": {
-    "name": "Miguel Pinto"
+    "name": "Miguel Pinto",
+    "email": "guild@lookatitude.com"
   },
   "plugins": [
     {
@@ -13,7 +14,8 @@
       "repository": "https://github.com/lookatitude/guild",
       "icon": "./docs/assets/guild-logo.svg",
       "author": {
-        "name": "Miguel Pinto"
+        "name": "Miguel Pinto",
+        "email": "guild@lookatitude.com"
       },
       "license": "MIT",
       "keywords": [
