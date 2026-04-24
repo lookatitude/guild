@@ -7,8 +7,11 @@
     {
       "name": "guild",
       "source": "./",
-      "description": "One Claude Code plugin. 13 specialists across engineering, content-and-communication, and commercial groups. Brainstorm asks the relevant questions up front, records an autonomy contract, proposes a team, and lets the user resolve gaps (auto-create / skip / substitute / from scratch). guild:context-assemble builds a tight 3-layer authoritative brief for each specialist; the default backend dispatches subagents through the Agent tool with worktree isolation, while experimental agent teams are opt-in for tasks that need teammate communication. Karpathy's four principles plus Guild's evidence rule are a mandatory pre-task skill. Every significant specialist question becomes a structured decision. .guild/raw/ keeps immutable source material; .guild/wiki/ organizes synthesized memory by lifetime (context -> standards -> products -> entities/concepts/decisions/sources). Post-task reflections queue skill-improvement proposals; /guild:evolve runs shadow mode, flip-gating, and versioned rollback before promotion.",
-      "version": "0.0.1",
+      "description": "Self-evolving teams of specialist agents for Claude Code. 13 specialists across engineering, content, and commercial groups; a brainstorm-plan-execute-review-verify-reflect lifecycle; a categorized wiki with decision capture; and a self-evolution loop with shadow mode, flip-gating, and versioned rollback. Optional tmux agent-team backend + BM25 wiki search + trace query MCPs.",
+      "version": "1.0.0-beta2",
+      "homepage": "https://lookatitude.github.io/guild/",
+      "repository": "https://github.com/lookatitude/guild",
+      "icon": "./docs/assets/guild-logo.svg",
       "author": {
         "name": "Miguel Pinto"
       },
@@ -20,7 +23,9 @@
         "skills",
         "specialists",
         "wiki",
-        "self-evolution"
+        "self-evolution",
+        "tmux",
+        "mcp"
       ]
     }
   ]
