@@ -48,9 +48,9 @@ cat <<STATUS
 │    /guild:stats        Task + telemetry summary                 │
 │    /guild:audit        Security audit of plugin scripts         │
 │                                                                 │
-│  Optional MCP servers (run 'npm install' in each folder to use):│
-│    mcp-servers/guild-memory/      BM25 wiki search              │
-│    mcp-servers/guild-telemetry/   Trace query over .guild/runs/ │
+│  Optional MCP servers (pre-bundled; no install needed):         │
+│    guild-memory       BM25 wiki search                          │
+│    guild-telemetry    Trace query over .guild/runs/             │
 ├─────────────────────────────────────────────────────────────────┤
 │  Plan & architecture: guild-plan.md (start at §1 or §13.2)     │
 │  Docs: docs/architecture.md, docs/specialist-roster.md          │
