@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Design the API for the orders resource.",
+    "Define the endpoints for the new notifications service.",
+    "What should the request/response look like for the search API?",
+    "Draft the OpenAPI spec for the billing service.",
+    "Specify the GraphQL schema for the user profile type."
+  ],
+  "should_not_trigger": [
+    "Write the Postgres table for orders.",
+    "Generate the migration file for adding the email column.",
+    "Integrate with Stripe's webhook API.",
+    "Sketch the high-level architecture for the billing system.",
+    "Compare REST vs GraphQL on a tradeoff matrix.",
+    "Review the OAuth flow for security issues."
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Research how teams are using LLM agents in production.",
+    "Do a deep dive on vector database architectures.",
+    "What's the state of the art on continuous fine-tuning?",
+    "Give me a research brief on WebAssembly for server-side workloads.",
+    "Investigate the tradeoffs of CRDTs vs OT and summarize findings."
+  ],
+  "should_not_trigger": [
+    "Summarize this specific paper I just pasted.",
+    "Build a side-by-side comparison of these five vendors.",
+    "Write an ADR locking our vector DB choice.",
+    "Design the schema for our embeddings store.",
+    "Generate 20 SEO keywords for our landing page.",
+    "Fix the typo on line 42."
+  ]
+}

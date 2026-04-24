@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Compare these three architecture options for the job queue.",
+    "Pick between Kafka and SQS for our use case — give me a matrix.",
+    "Which is better: monolith or split service for the billing rewrite?",
+    "Score these approaches on cost, complexity, and ops burden.",
+    "Give me a tradeoff matrix for self-hosted vs managed Postgres."
+  ],
+  "should_not_trigger": [
+    "Design the new pipeline from scratch.",
+    "Write an ADR locking in the decision we already made.",
+    "Compare these five npm libraries for our needs.",
+    "Define the REST endpoints for the orders resource.",
+    "Run a threat model on the auth flow.",
+    "What's our coding style guide?"
+  ]
+}

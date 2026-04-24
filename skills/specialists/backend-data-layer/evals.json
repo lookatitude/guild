@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Design the schema for the orders and order_items tables.",
+    "What tables do we need for the new audit log?",
+    "Model the data for the subscription lifecycle.",
+    "Draft the DDL for the notifications store.",
+    "What indexes should we add for the dashboard queries?"
+  ],
+  "should_not_trigger": [
+    "Write the up/down migration for adding the status column.",
+    "Define the REST endpoints for orders.",
+    "Integrate with the Stripe API.",
+    "Compare Postgres vs DynamoDB for this workload.",
+    "Sketch the cross-service architecture.",
+    "Run the test suite."
+  ]
+}

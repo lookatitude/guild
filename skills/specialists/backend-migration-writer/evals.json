@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the migration for adding the status column to orders.",
+    "Generate the up/down for the new audit_log table.",
+    "Add a reversible migration to split the name column into first/last.",
+    "Write the backfill for the new tenant_id on existing rows.",
+    "How do we safely add this index on the hot events table?"
+  ],
+  "should_not_trigger": [
+    "Design the full schema for the new subscriptions domain.",
+    "Define the REST API for the orders endpoint.",
+    "Integrate with Stripe webhooks.",
+    "Deploy this migration via GitHub Actions.",
+    "Provision a new RDS instance.",
+    "What indexes should we design for these queries?"
+  ]
+}

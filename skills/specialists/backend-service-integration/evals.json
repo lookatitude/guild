@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Integrate with Stripe for payment intents.",
+    "Wire up the SendGrid client for transactional email.",
+    "Add the Twilio webhook handler with retries and observability.",
+    "Call the external partner API from our billing service.",
+    "How do we handle retries and timeouts when calling the fraud API?"
+  ],
+  "should_not_trigger": [
+    "Design our own REST API for orders.",
+    "Write the DB migration for storing webhook events.",
+    "Compare Stripe vs Adyen at the vendor level.",
+    "Sketch the high-level architecture for the payments domain.",
+    "Provision the secrets manager in Terraform.",
+    "Review the OAuth flow for vulnerabilities."
+  ]
+}
