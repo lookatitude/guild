@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Turn this spec into a plan.",
+    "Break the work down by specialist.",
+    "What does each role do on this spec?",
+    "Plan the lanes for this task.",
+    "We have a team — now plan the work."
+  ],
+  "should_not_trigger": [
+    "Write the code now.",
+    "Start a new brainstorm.",
+    "Review the diff.",
+    "Compose a team for this.",
+    "Run the tests."
+  ]
+}
