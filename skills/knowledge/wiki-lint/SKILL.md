@@ -81,16 +81,16 @@ This check is lossy by design — list candidates, not mandates. The user decide
 
 ### 7. Decision page shape — blocking
 
-Every page under `.guild/wiki/decisions/` must conform to the ADR-lite shape owned by `guild:decisions` per `§10.3`. Required frontmatter fields beyond `§10.1.1`:
+Every page under `.guild/wiki/decisions/` must carry BOTH the `§10.1.1` base frontmatter (checked by Check #1) AND the `§10.3` ADR-lite additions owned by `guild:decisions`. Required `§10.3` additions (beyond the Check #1 base fields):
 
 - `date` — ISO-8601 date.
 - `asker` — specialist slug who raised the question.
 - `task` — task identifier.
 - `category` — e.g. `architecture | copy | pricing | data-model`.
-- `supersedes` — slug or `null`.
-- `confidence` — already covered by `§10.1.1`.
 
-Required body sections: `## Context`, `## Options considered`, `## Decision`, `## Consequences`. A decision page missing any of these is a blocking finding — it either means `guild:wiki-ingest` wrote where `guild:decisions` should have (ownership boundary violation per `§10.1.1` and `§10.3`), or `guild:decisions` drifted from its own template. Report which.
+`supersedes` and `confidence` are already covered by `§10.1.1` base and must not be duplicated in the additions list.
+
+Required body sections: `## Context`, `## Options considered`, `## Decision`, `## Consequences`. A decision page missing any of these additions or body sections is a blocking finding — it either means `guild:wiki-ingest` wrote where `guild:decisions` should have (ownership boundary violation per `§10.1.1` and `§10.3`), or `guild:decisions` drifted from its own template. Report which.
 
 ### 8. Directory hygiene — nit
 

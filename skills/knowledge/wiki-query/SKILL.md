@@ -15,7 +15,7 @@ Read-only counterpart to `guild:wiki-ingest`. Every wiki page written by that sk
 
 - **query** (required) — free-text search string. Matched against page body and frontmatter. Empty query is allowed only when at least one filter is set.
 - **filters** (optional, any combination):
-  - `category` — one of `context | standards | products | entities | concepts | decisions | sources`. Restricts the walk to `.guild/wiki/<category>/`.
+  - `category` — one of `context | standard | product | entity | concept | decision | source` (matches the `type:` frontmatter enum from `§10.1.1` used by `guild:wiki-ingest` and `guild:decisions`). Internally mapped to the plural directory (`standard` → `standards/`, etc.). Reject plural forms with an error pointing the caller at the singular enum.
   - `owner` — specialist slug (e.g. `backend`, `copywriter`, `orchestrator`). Matches the `owner:` frontmatter field.
   - `confidence` — `low | medium | high`. Matches the `confidence:` frontmatter field exactly.
   - `updated_since` — ISO-8601 date. Returns pages whose `updated_at:` is on or after the given date.

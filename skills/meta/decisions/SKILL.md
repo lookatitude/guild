@@ -33,12 +33,21 @@ Write the file exactly in this shape (per `§10.3`):
 
 ```yaml
 ---
+# §10.1.1 base fields (required for every wiki page, including decisions)
+type: decision
+owner: <specialist-or-user>
+confidence: low | medium | high
+source_refs: []            # populate when citing external material
+created_at: <YYYY-MM-DD>
+updated_at: <YYYY-MM-DD>
+expires_at: null
+supersedes: null | <previous-slug>
+sensitivity: public | internal | confidential | secret
+# §10.3 ADR-lite additions (decision-page-specific)
 date: <YYYY-MM-DD>
 asker: <specialist-or-user>
 task: <task-id-or-slug>
 category: architecture | copy | pricing | data-model | voice | other
-supersedes: null | <previous-slug>
-confidence: low | medium | high
 ---
 # <slug>
 ## Context
@@ -51,6 +60,8 @@ confidence: low | medium | high
 ## Consequences
 ...
 ```
+
+The frontmatter is the **union** of the §10.1.1 base (which `guild:wiki-lint` enforces on every wiki page) and the §10.3 ADR-lite additions that make decisions distinct. `date` and `created_at` will usually match; `asker` and `owner` will usually match; keep both so the lint checks (which enforce §10.1.1 globally and §10.3 only on `decisions/`) stay decoupled.
 
 Notes:
 - `date` is today in ISO form.
