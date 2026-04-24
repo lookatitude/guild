@@ -40,7 +40,10 @@ See `.claude/agents/_shared/handoff-contract.md`. Never commit.
 - `hooks/check-skill-coverage.sh`
 - `hooks/capture-telemetry.ts`
 - `hooks/maybe-reflect.ts`
-- Agent-team hook handlers under `hooks/agent-team/` (create this dir when P4 starts)
+- Agent-team hook handlers (create `hooks/agent-team/` when P4 starts):
+  - `hooks/agent-team/task-created.ts`
+  - `hooks/agent-team/task-completed.ts`
+  - `hooks/agent-team/teammate-idle.ts`
 
 **Forbidden:**
 - `scripts/*` — `tooling-engineer` owns utility scripts that run outside the hook lifecycle.

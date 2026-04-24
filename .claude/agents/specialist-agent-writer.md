@@ -37,6 +37,7 @@ See `.claude/agents/_shared/handoff-contract.md`. Never commit — main session 
 **Owned:**
 - `agents/*.md` at the repo root — all 13 shipping specialists.
 - Proposed new specialist files under `agents/proposed/` (see §12 incubation rule).
+- `templates/agents/*` — specialist scaffolds per `guild-plan.md §4`.
 
 **Forbidden:**
 - `.claude/agents/*` — those are dev-team agents you're a sibling of; don't touch them.

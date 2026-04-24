@@ -47,6 +47,7 @@ See `.claude/agents/_shared/handoff-contract.md`. Every invocation ends with a `
 - `skills/fallback/*` (T4 — REFERENCE wrappers around superpowers)
 - `skills/specialists/*` (T5)
 - Per-skill `evals.json` files (live next to each skill, not under `tests/`).
+- `templates/skills/*` — skill scaffolds per `guild-plan.md §4`.
 
 **Forbidden:**
 - `agents/*` — `specialist-agent-writer` owns the 13 shipping specialists.

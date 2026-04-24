@@ -53,6 +53,8 @@ See `.claude/agents/_shared/handoff-contract.md`. Every invocation ends with a `
 - Any file under `scripts/` or `mcp-servers/` — `tooling-engineer` owns.
 - Any file under `docs/` except `docs/phase-gates/` — `docs-writer` owns.
 - Any file under `tests/` — `eval-engineer` owns.
+- `.mcp.json` at the repo root — `tooling-engineer` owns.
+- `templates/skills/*` — `skill-author` owns. `templates/agents/*` — `specialist-agent-writer` owns.
 - Any file under `.claude/agents/` — those are other dev agents; leave them alone.
 
 If you see an issue inside a forbidden scope, list it under `followups:` and stop.
