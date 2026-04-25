@@ -8,7 +8,10 @@ from v1.0.0 onward.
 
 ## [Unreleased]
 
-(no changes yet)
+### Changed
+
+- Clarified install docs: restart Claude Code after installing Guild so plugin
+  commands, skills, agents, hooks, and MCP servers hydrate in the next session.
 
 ## [1.0.1] — 2026-04-25
 

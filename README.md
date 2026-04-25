@@ -47,6 +47,9 @@ claude plugin marketplace update guild
 claude plugin install guild@guild
 ```
 
+Restart Claude Code after installation so commands, skills, agents, hooks, and
+MCP servers are loaded into the next session.
+
 Local development:
 
 ```bash
@@ -56,6 +59,8 @@ claude plugin marketplace add .
 claude plugin marketplace update guild
 claude plugin install guild@guild --scope project
 ```
+
+Restart Claude Code before running `/guild` from the project.
 
 The agent-team backend is experimental. Enable only when teammates need to
 coordinate directly:
