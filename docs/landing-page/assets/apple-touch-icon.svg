@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Guild">
+  <defs>
+    <linearGradient id="tile" x1="22" y1="14" x2="158" y2="166" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34261d"/>
+      <stop offset="0.55" stop-color="#1d1914"/>
+      <stop offset="1" stop-color="#0d0c0a"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="40" fill="url(#tile)"/>
+  <path d="M90 22 37 42v39c0 39 21 68 53 83 32-15 53-44 53-83V42L90 22Z" fill="#17130f" stroke="#574637" stroke-width="8"/>
+  <path d="M61 68h58M61 112h58M61 68l29 22-29 22M119 68 90 90l29 22" fill="none" stroke="#b9afa2" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#17130f" stroke="#d97757" stroke-width="7">
+    <circle cx="61" cy="68" r="11"/>
+    <circle cx="119" cy="68" r="11"/>
+    <circle cx="61" cy="112" r="11"/>
+    <circle cx="119" cy="112" r="11"/>
+  </g>
+  <circle cx="90" cy="90" r="18" fill="#221a14" stroke="#f0dfc7" stroke-width="7"/>
+  <path d="M79 90h22M90 79v22" stroke="#d97757" stroke-width="7" stroke-linecap="round"/>
+</svg>

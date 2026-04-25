@@ -8,6 +8,14 @@ from v1.0.0 onward.
 
 ## [Unreleased]
 
+(no changes yet)
+
+## [1.0.0] — 2026-04-25
+
+First stable v1 release. Drops the `-beta` suffix after four iterations
+(beta1 → beta4) of pre-flight fixes, install-validator round-trips, and a
+live autonomous end-to-end run.
+
 ### Added
 
 - **Project contact email** — `guild@lookatitude.com` recorded in
@@ -28,6 +36,14 @@ from v1.0.0 onward.
 - **Self-audit report** at `docs/audit/2026-04-25.md` — first run
   of the static-analysis checks documented in `commands/guild-audit.md`.
   Verdict: PASS, zero blockers.
+- **Landing-page social/SEO assets** — Open Graph + Twitter Card meta
+  tags, canonical URL, theme color, and a full favicon/manifest set
+  (`og-image.png`, `twitter-card.png`, `apple-touch-icon.png`,
+  `favicon.svg`, `favicon-32.png`, `favicon-64.png`, `site.webmanifest`,
+  source SVGs) under `docs/landing-page/assets/`.
+- **Marketplace listing copy** at `docs/plugin-marketplace-copy.md` —
+  plugin description + example use cases for the community-listing
+  submission.
 
 ### Changed
 
@@ -47,6 +63,7 @@ from v1.0.0 onward.
   now `lookatitude/guild`. Added the missing `/plugin marketplace add`
   prerequisite. Updated stale "MCP servers require `npm install`"
   copy — they ship pre-bundled in beta3+.
+- **Landing-page GitHub link** repointed `miguelp/guild` → `lookatitude/guild`.
 
 ## [1.0.0-beta4] — 2026-04-24
 
@@ -193,7 +210,8 @@ First public beta. Structurally complete across all 7 plan phases.
   and an available `tmux` binary.
 - MCP servers require Node 18+ and a one-time `npm install`.
 
-[Unreleased]: https://github.com/lookatitude/guild/compare/v1.0.0-beta4...HEAD
+[Unreleased]: https://github.com/lookatitude/guild/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/lookatitude/guild/compare/v1.0.0-beta4...v1.0.0
 [1.0.0-beta4]: https://github.com/lookatitude/guild/compare/v1.0.0-beta3...v1.0.0-beta4
 [1.0.0-beta3]: https://github.com/lookatitude/guild/compare/v1.0.0-beta2...v1.0.0-beta3
 [1.0.0-beta2]: https://github.com/lookatitude/guild/compare/v1.0.0-beta1...v1.0.0-beta2

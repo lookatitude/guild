@@ -1,0 +1,25 @@
+{
+  "name": "Guild for Claude Code",
+  "short_name": "Guild",
+  "description": "Self-evolving specialist agent teams for Claude Code.",
+  "icons": [
+    {
+      "src": "favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "favicon-64.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#17130f",
+  "background_color": "#0d0c0a",
+  "display": "standalone"
+}

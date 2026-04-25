@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="500" viewBox="0 0 1500 500" role="img" aria-labelledby="title desc">
+  <title id="title">Guild social header</title>
+  <desc id="desc">Guild branding for social profiles.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1500" y2="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0d0c0a"/>
+      <stop offset="0.42" stop-color="#1d1914"/>
+      <stop offset="1" stop-color="#34261d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="82%" cy="38%" r="46%">
+      <stop offset="0" stop-color="#d97757" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#d97757" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="logoBg" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34261d"/>
+      <stop offset="1" stop-color="#0d0c0a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1500" height="500" fill="url(#bg)"/>
+  <rect width="1500" height="500" fill="url(#glow)"/>
+  <g opacity="0.18" stroke="#e7b16f" stroke-width="2" fill="none">
+    <path d="M850 90c142 78 284 86 430 20"/>
+    <path d="M900 360c98-126 234-180 410-164"/>
+    <path d="M760 250l162-150 186 124"/>
+    <circle cx="850" cy="90" r="8" fill="#d97757"/>
+    <circle cx="922" cy="100" r="8" fill="#d97757"/>
+    <circle cx="1108" cy="224" r="8" fill="#d97757"/>
+    <circle cx="1310" cy="196" r="8" fill="#d97757"/>
+  </g>
+  <g transform="translate(92 134) scale(2.0625)">
+    <path d="M32 7 13 14v14c0 14 7.5 24 19 29 11.5-5 19-15 19-29V14L32 7Z" fill="url(#logoBg)" stroke="#574637" stroke-width="2"/>
+    <path d="M21 24h22M21 40h22M21 24l11 8-11 8M43 24l-11 8 11 8" fill="none" stroke="#b9afa2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="#17130f" stroke="#d97757" stroke-width="2.8">
+      <circle cx="21" cy="24" r="4.2"/>
+      <circle cx="43" cy="24" r="4.2"/>
+      <circle cx="21" cy="40" r="4.2"/>
+      <circle cx="43" cy="40" r="4.2"/>
+    </g>
+    <circle cx="32" cy="32" r="7" fill="#221a14" stroke="#f0dfc7" stroke-width="2.8"/>
+    <path d="M28 32h8M32 28v8" stroke="#d97757" stroke-width="2.8" stroke-linecap="round"/>
+  </g>
+  <text x="260" y="228" fill="#f4efe7" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="98" font-weight="850">Guild</text>
+  <text x="96" y="320" fill="#e7b16f" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="850" letter-spacing="4">CLAUDE CODE PLUGIN</text>
+  <text x="96" y="372" fill="#d8cec0" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="34" font-weight="620">Self-evolving specialist agent teams for serious software work.</text>
+</svg>
