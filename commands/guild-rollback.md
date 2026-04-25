@@ -1,6 +1,6 @@
 ---
 name: guild-rollback
-description: Revert a skill to a previous version by snapshotting the current state as vN+1 and restoring vN (or vN-n). Non-destructive — every rollback is itself a versioned artifact. Per guild-plan.md §13.1 and §11.3.
+description: "Revert a skill to a previous version by snapshotting the current state as vN+1 and restoring vN (or vN-n). Non-destructive — every rollback is itself a versioned artifact. Per guild-plan.md §13.1 and §11.3."
 argument-hint: "<skill> [n]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Skill
 ---

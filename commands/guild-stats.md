@@ -1,6 +1,6 @@
 ---
 name: guild-stats
-description: Show usage stats — task count, completion rate, flip counts, top-used skills, top-requested specialists, open reflection backlog, and audit drift summary. Pure read; never writes. Per guild-plan.md §13.1.
+description: "Show usage stats — task count, completion rate, flip counts, top-used skills, top-requested specialists, open reflection backlog, and audit drift summary. Pure read; never writes. Per guild-plan.md §13.1."
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Skill
 ---
 

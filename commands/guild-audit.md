@@ -1,6 +1,6 @@
 ---
 name: guild-audit
-description: Security audit of installed Guild scripts — SHA-256 hash every file, flag network/filesystem access patterns, and record results. Per guild-plan.md §13.1 and §15.1 #12.
+description: "Security audit of installed Guild scripts — SHA-256 hash every file, flag network/filesystem access patterns, and record results. Per guild-plan.md §13.1 and §15.1 #12."
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Skill
 ---
 

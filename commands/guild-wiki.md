@@ -1,6 +1,6 @@
 ---
 name: guild-wiki
-description: Wiki operations — ingest a source, query the wiki, or run lint. Per guild-plan.md §13.1. Dispatches to guild:wiki-ingest / guild:wiki-query / guild:wiki-lint.
+description: "Wiki operations — ingest a source, query the wiki, or run lint. Per guild-plan.md §13.1. Dispatches to guild:wiki-ingest / guild:wiki-query / guild:wiki-lint."
 argument-hint: "ingest <path> | query \"<text>\" | lint"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Skill
 ---

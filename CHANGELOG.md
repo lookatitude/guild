@@ -10,6 +10,28 @@ from v1.0.0 onward.
 
 (no changes yet)
 
+## [1.0.1] — 2026-04-25
+
+Patch release for the public install path after launch.
+
+### Changed
+
+- **Install instructions now use the Claude CLI form** on the landing page and
+  README: `claude plugin marketplace add lookatitude/guild`, followed by
+  `claude plugin marketplace update guild`, then
+  `claude plugin install guild@guild`.
+
+### Fixed
+
+- **Marketplace manifest validation.** Removed unsupported marketplace/plugin
+  metadata keys rejected by the Claude Code plugin schema and added the missing
+  marketplace description.
+- **Agent and command frontmatter parsing.** Quoted long YAML descriptions
+  across bundled agents and commands so Claude Code loads their metadata instead
+  of silently dropping malformed frontmatter.
+- **Install smoke test.** Verified a clean temporary install can add the Guild
+  marketplace, update it, and install `guild@guild` with project scope.
+
 ## [1.0.0] — 2026-04-25
 
 First stable v1 release. Drops the `-beta` suffix after four iterations
@@ -210,7 +232,8 @@ First public beta. Structurally complete across all 7 plan phases.
   and an available `tmux` binary.
 - MCP servers require Node 18+ and a one-time `npm install`.
 
-[Unreleased]: https://github.com/lookatitude/guild/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/lookatitude/guild/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/lookatitude/guild/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/lookatitude/guild/compare/v1.0.0-beta4...v1.0.0
 [1.0.0-beta4]: https://github.com/lookatitude/guild/compare/v1.0.0-beta3...v1.0.0-beta4
 [1.0.0-beta3]: https://github.com/lookatitude/guild/compare/v1.0.0-beta2...v1.0.0-beta3

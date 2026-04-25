@@ -42,8 +42,9 @@ gate.
 ## Install
 
 ```bash
-/plugin marketplace add lookatitude/guild
-/plugin install guild@guild
+claude plugin marketplace add lookatitude/guild
+claude plugin marketplace update guild
+claude plugin install guild@guild
 ```
 
 Local development:
@@ -51,8 +52,9 @@ Local development:
 ```bash
 git clone https://github.com/lookatitude/guild.git
 cd guild
-/plugin marketplace add .
-/plugin install guild@guild --scope project
+claude plugin marketplace add .
+claude plugin marketplace update guild
+claude plugin install guild@guild --scope project
 ```
 
 The agent-team backend is experimental. Enable only when teammates need to

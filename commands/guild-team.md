@@ -1,6 +1,6 @@
 ---
 name: guild-team
-description: Team operations — propose a new team, show the current team, or edit it. Per guild-plan.md §13.1. Dispatches to guild-team-compose skill. `edit --allow-larger` lifts the 6-specialist cap from §7.2.
+description: "Team operations — propose a new team, show the current team, or edit it. Per guild-plan.md §13.1. Dispatches to guild-team-compose skill. `edit --allow-larger` lifts the 6-specialist cap from §7.2."
 argument-hint: "propose | show | edit [--allow-larger]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Skill
 ---

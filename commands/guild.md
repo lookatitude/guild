@@ -1,6 +1,6 @@
 ---
 name: guild
-description: Top-level Guild entry. Runs the 7-step lifecycle: brainstorm → team-compose → plan → context-assemble → execute-plan → review → verify-done. Per guild-plan.md §13.1.
+description: "Top-level Guild entry. Runs the 7-step lifecycle: brainstorm → team-compose → plan → context-assemble → execute-plan → review → verify-done. Per guild-plan.md §13.1."
 argument-hint: "[brief]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill
 ---

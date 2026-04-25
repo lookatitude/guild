@@ -1,6 +1,6 @@
 ---
 name: guild-evolve
-description: Kick off skill evolution — runs the eval loop, shadow mode, and flip-gating promotion pipeline. Manual mode pauses at the promotion gate for user review; --auto runs unattended if the gate criteria are met without regressions. Per guild-plan.md §13.1.
+description: "Kick off skill evolution — runs the eval loop, shadow mode, and flip-gating promotion pipeline. Manual mode pauses at the promotion gate for user review; --auto runs unattended if the gate criteria are met without regressions. Per guild-plan.md §13.1."
 argument-hint: "[skill] [--auto]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Skill
 ---

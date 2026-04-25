@@ -1,5 +1,6 @@
 {
   "name": "guild",
+  "description": "Guild marketplace for Claude Code plugins focused on specialist agent teams, durable memory, and evidence-based evolution.",
   "owner": {
     "name": "Miguel Pinto",
     "email": "guild@lookatitude.com"
@@ -9,10 +10,9 @@
       "name": "guild",
       "source": "./",
       "description": "Self-evolving teams of specialist agents for Claude Code. 13 specialists across engineering, content, and commercial groups; a brainstorm-plan-execute-review-verify-reflect lifecycle; a categorized wiki with decision capture; and a self-evolution loop with shadow mode, flip-gating, and versioned rollback. Optional tmux agent-team backend + BM25 wiki search + trace query MCPs.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "homepage": "https://lookatitude.github.io/guild/",
       "repository": "https://github.com/lookatitude/guild",
-      "icon": "./docs/assets/guild-logo.svg",
       "author": {
         "name": "Miguel Pinto",
         "email": "guild@lookatitude.com"
