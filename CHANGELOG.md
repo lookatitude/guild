@@ -14,6 +14,8 @@ from v1.0.0 onward.
   commands, skills, agents, hooks, and MCP servers hydrate in the next session.
 - Expanded the GitHub Pages landing page into a static website with a
   documentation hub and a detailed URL-shortener end-to-end use case page.
+- Added a dependency-free Node static-site generator that keeps navigation
+  consistent and builds the command, agent, and skill reference from repo files.
 
 ## [1.0.1] — 2026-04-25
 
@@ -48,7 +50,7 @@ live autonomous end-to-end run.
 - **Project contact email** — `guild@lookatitude.com` recorded in
   `plugin.json.author` and `marketplace.json` (owner + plugin author).
 - **End-to-end demo story doc** at `docs/demo/E2E-DEMO-STORY.md` —
-  source material for the landing-page demo section: brief, 3-layer
+  source material for the website demo section: brief, 3-layer
   harness, install-time fixes, 9-stage live run with full receipts.
 - **5 forked T4 fallback methodology skills** — `guild:tdd`,
   `guild:systematic-debug`, `guild:worktrees`, `guild:request-review`,
@@ -67,7 +69,7 @@ live autonomous end-to-end run.
   tags, canonical URL, theme color, and a full favicon/manifest set
   (`og-image.png`, `twitter-card.png`, `apple-touch-icon.png`,
   `favicon.svg`, `favicon-32.png`, `favicon-64.png`, `site.webmanifest`,
-  source SVGs) under `docs/landing-page/assets/`.
+  source SVGs) under `docs/website/assets/`.
 - **Marketplace listing copy** at `docs/plugin-marketplace-copy.md` —
   plugin description + example use cases for the community-listing
   submission.
@@ -126,9 +128,9 @@ live autonomous end-to-end run.
 ### Added
 
 - **GitHub Pages workflow** — `.github/workflows/pages.yml` deploys the
-  landing page at `docs/landing-page/` to
+  website at `docs/website/` to
   `https://lookatitude.github.io/guild/` on every push to `main` that
-  touches `docs/landing-page/`, `docs/assets/`, or `docs/diagrams/`.
+  touches `docs/website/`, `docs/assets/`, or `docs/diagrams/`.
   Landing-page asset refs flattened from `../assets/` / `../diagrams/`
   to `assets/` / `diagrams/` so the deploy-time staging dir resolves
   them correctly.

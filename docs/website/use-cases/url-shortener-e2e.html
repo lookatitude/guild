@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A detailed Guild end-to-end use case: URL shortener microservice, approved plan, agent outputs, final result, verification output, and live run results.">
+    <meta name="theme-color" content="#17130f">
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://lookatitude.github.io/guild/use-cases/url-shortener-e2e.html">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://lookatitude.github.io/guild/use-cases/url-shortener-e2e.html">
+    <meta property="og:site_name" content="Guild">
+    <meta property="og:title" content="Guild Use Case: URL Shortener E2E Run">
+    <meta property="og:description" content="A detailed Guild end-to-end use case: URL shortener microservice, approved plan, agent outputs, final result, verification output, and live run results.">
+    <meta property="og:image" content="https://lookatitude.github.io/guild/assets/og-image.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Guild Use Case: URL Shortener E2E Run">
+    <meta name="twitter:description" content="A detailed Guild end-to-end use case: URL shortener microservice, approved plan, agent outputs, final result, verification output, and live run results.">
+    <meta name="twitter:image" content="https://lookatitude.github.io/guild/assets/twitter-card.png">
+    <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="../assets/favicon-32.png" type="image/png" sizes="32x32">
+    <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+    <link rel="manifest" href="../assets/site.webmanifest">
+    <title>Guild Use Case: URL Shortener E2E Run</title>
+    <link rel="stylesheet" href="../styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="nav-shell">
+        <a class="brand" href="../" aria-label="Guild home">
+          <img src="../assets/guild-logo.svg" alt="" width="38" height="38">
+          <span>Guild</span>
+        </a>
+        <nav aria-label="Primary navigation">
+          <a href="../">Home</a>
+          <a href="../docs/">Docs</a>
+          <a href="../reference/">Reference</a>
+          <a href="../use-cases/url-shortener-e2e.html" aria-current="page">Use case</a>
+          <a class="icon-link" href="https://github.com/lookatitude/guild" aria-label="GitHub repository"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.59 2 12.26c0 4.52 2.87 8.36 6.84 9.72.5.1.68-.22.68-.49v-1.9c-2.78.62-3.37-1.22-3.37-1.22-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.35 1.12 2.92.86.09-.67.35-1.12.64-1.38-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05A9.35 9.35 0 0 1 12 7c.85 0 1.71.12 2.51.34 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.8-4.57 5.05.36.32.68.94.68 1.9v2.79c0 .27.18.59.69.49A10.16 10.16 0 0 0 22 12.26C22 6.59 17.52 2 12 2Z"/></svg></a>
+        </nav>
+      </div>
+    </header>
+    <main>
+      <section class="page-hero case-hero">
+        <div class="section-shell">
+          <p class="eyebrow">Use case</p>
+          <h1>Guild builds and verifies a URL shortener</h1>
+          <p class="lede">A live v1.0.0-beta4 run took one non-trivial brief through Guild's lifecycle: planning, specialist dispatch, code, docs, tests, verification, telemetry, and reflection.</p>
+          <div class="hero-actions"><a class="button primary" href="#plan-vs-actual">Plan vs actual</a><a class="button secondary" href="../docs/">Read the docs</a></div>
+        </div>
+      </section>
+      <section class="doc-page">
+        <div class="doc-layout">
+          <aside class="content-nav" aria-label="Use case sections">
+            <a href="#brief">Brief</a><a href="#team">Team</a><a href="#plan-vs-actual">Plan vs actual</a><a href="#end-result">End result</a><a href="#results">Verification</a><a href="#reflection">Reflection</a>
+          </aside>
+          <div class="doc-content">
+            <section class="doc-section" id="brief"><p class="eyebrow">Scenario</p><h2>The user brief</h2><p>The test used a URL-shortener microservice brief because it forced engineering, QA, technical documentation, and conversion copy into one task without becoming a toy example.</p><pre><code>Build a URL-shortener microservice: HTTP API to shorten and resolve URLs,
+SQLite storage for the MVP with a migration path to Postgres, safety checks
+against malicious redirects, a compact admin endpoint that lists recent links,
+Jest + property-based tests for the hash function, Markdown API docs suitable
+for a README, and a short landing-page hero block with the product name and
+value prop.</code></pre><div class="callout"><strong>Tested version:</strong> Guild v1.0.0-beta4, against a sibling workspace named <code>guild-test-urlshortener</code>. This page is the public narrative distilled from the internal run notes.</div></section>
+            <section class="doc-section" id="team"><p class="eyebrow">Specialist DAG</p><h2>Five specialists, scoped by dependency</h2><div class="table-wrap"><table><thead><tr><th>Specialist</th><th>Planned ownership</th><th>Dependency</th></tr></thead><tbody><tr><td>architect</td><td>System design, hash strategy, schema, blocklist placement, admin separation, ADR.</td><td>None</td></tr><tr><td>backend</td><td>Express app, SQLite data layer, blocklist enforcement, admin endpoint.</td><td>architect</td></tr><tr><td>qa</td><td>Jest suite and property-based tests for the short-code hash.</td><td>backend</td></tr><tr><td>technical-writer</td><td>Markdown API docs and README walkthrough.</td><td>backend</td></tr><tr><td>copywriter</td><td>Landing-page hero name, value proposition, and CTA.</td><td>Spec only</td></tr></tbody></table></div><pre><code>architect  -> backend -> qa
+                      -> technical-writer
+copywriter -> spec-only, parallel with engineering</code></pre><p>Guild did not add security as a separate specialist because the MVP had no external integration, no secrets design, and only a simple bearer-token admin path.</p></section>
+            <section class="doc-section" id="plan-vs-actual"><p class="eyebrow">Execution trace</p><h2>Plan vs what the agents did</h2><div class="table-wrap"><table><thead><tr><th>Lane</th><th>Plan</th><th>What the agent did</th><th>Evidence</th></tr></thead><tbody><tr><td>architect</td><td>Design boundaries, schema, hash strategy, blocklist placement, admin separation, ADR.</td><td>Produced the design and ADR, including a short-code strategy and module boundary recommendation.</td><td>Design doc, ADR, architect handoff receipt.</td></tr><tr><td>backend</td><td>Implement Express API, better-sqlite3 storage, blocklist behavior, admin endpoint.</td><td>Built runtime routes, SQLite store, migration, blocklist checks, admin auth, and server entrypoint within the LOC cap.</td><td>Runtime files, migration, backend handoff receipt.</td></tr><tr><td>qa</td><td>Write Jest and property-based tests for hash behavior and route regressions.</td><td>Added property tests and integration tests covering shorten, resolve, blocklist, and admin behavior.</td><td>2 test files, 8/8 tests passing.</td></tr><tr><td>technical-writer</td><td>Write API docs suitable for README use.</td><td>Documented endpoints, curl examples, schemas, errors, setup, and admin token behavior.</td><td>README and docs/api.md.</td></tr><tr><td>copywriter</td><td>Write a compact landing-page hero block with product name and value prop.</td><td>Created the Shortlane hero, 17-word value prop, and CTA.</td><td>docs/landing-hero.md.</td></tr></tbody></table></div><p>The important part is not that every lane improvised nothing; it is that every deviation was captured in receipts and reviewed later. The architect/backend service-module mismatch became the reflection signal described below.</p></section>
+            <section class="doc-section" id="end-result"><p class="eyebrow">End result</p><h2>What existed after the run</h2><div class="artifact-grid"><article><h3>Project files</h3><p>Runtime, data layer, migrations, route handlers, tests, API docs, README, and landing hero copy.</p><pre><code>src/app.js
+src/data/sqlite.js
+src/routes/shorten.js
+src/routes/resolve.js
+src/routes/admin.js
+test/shortcode.property.test.js
+test/routes.integration.test.js
+docs/api.md
+docs/landing-hero.md</code></pre></article><article><h3>Guild artifacts</h3><p>Spec, team, plan, context bundles, specialist handoffs, assumptions, review, verify, reflection, and telemetry.</p><pre><code>.guild/context/&lt;run-id&gt;/*.md
+.guild/runs/&lt;run-id&gt;/handoffs/*.md
+.guild/runs/&lt;run-id&gt;/review.md
+.guild/runs/&lt;run-id&gt;/verify.md
+.guild/reflections/run-&lt;id&gt;.md
+.guild/runs/&lt;run-id&gt;/events.ndjson</code></pre></article></div></section>
+            <section class="doc-section" id="results"><p class="eyebrow">Verification</p><h2>Verification output</h2><div class="table-wrap"><table><thead><tr><th>Metric</th><th>Result</th></tr></thead><tbody><tr><td>Specialists dispatched</td><td>5 / 5</td></tr><tr><td>Handoff receipts produced</td><td>5 / 5</td></tr><tr><td>Review lanes passing both stages</td><td>5 / 5</td></tr><tr><td>Verify checks green</td><td>5 / 5</td></tr><tr><td><code>npm test</code></td><td>8 / 8 tests pass in 0.625s</td></tr><tr><td>Runtime LOC</td><td>193 / 500 cap</td></tr><tr><td>Guild artifacts on disk</td><td>20 under <code>.guild/</code></td></tr><tr><td>Telemetry events captured</td><td>93 in <code>events.ndjson</code></td></tr><tr><td>Context bundle total size</td><td>13.6 KB across 5 specialists</td></tr></tbody></table></div><h3>Test and curl evidence</h3><pre><code>PASS test/routes.integration.test.js
+PASS test/shortcode.property.test.js
+Test Suites: 2 passed, 2 total
+Tests:       8 passed, 8 total
+Time:        0.625 s
+
+POST /shorten          -> 201 {"code":"iV3wO0R", ...}
+GET /:code             -> 302
+GET /admin/links       -> 401
+GET /admin/links auth  -> 200</code></pre><p>Verify also checked blocklist behavior, SQLite migration presence, standard HTTP status codes, documentation coverage, and changed-file scope traceability.</p></section>
+            <section class="doc-section" id="reflection"><p class="eyebrow">Self-evolution signal</p><h2>The run produced a real improvement candidate</h2><p>Reflection found silent contract drift between the architect's design and the plan deliverables. The architect proposed a separate service module; the deliverables list did not reserve it. Backend resolved the ambiguity conservatively, but the mismatch was real.</p><div class="callout"><strong>Proposed improvement:</strong> have context assembly detect plan/design deliverable mismatches and flag them in the specialist bundle before execution.</div><p>Guild classified the finding as a <code>guild:plan</code> or context-assembly improvement candidate rather than blaming a specialist. It stayed in proposal form, below the promotion threshold, as the self-evolution gate requires.</p></section>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer class="site-footer">
+      <div class="nav-shell">
+        <span>Guild for Claude Code</span>
+        <a href="https://lookatitude.com">Created by Lookatitude</a>
+      </div>
+    </footer>
+  </body>
+</html>

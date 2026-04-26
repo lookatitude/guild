@@ -114,6 +114,8 @@ minimal interruption.
 
 - [Static site](https://lookatitude.github.io/guild/) — install page,
   operating docs, and the live URL-shortener end-to-end use case.
+  The site is generated with `node docs/website/build-site.mjs`,
+  including the command / agent / skill reference.
 - [docs/architecture.md](docs/architecture.md) — shipped plugin architecture,
   directory layout, 7-step lifecycle, hook inventory, backend options.
 - [docs/specialist-roster.md](docs/specialist-roster.md) — the 13 specialists,
