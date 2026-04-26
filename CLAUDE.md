@@ -1,6 +1,6 @@
 # Guild — repo orientation
 
-Guild is a Claude Code plugin that ships a team of 13 domain specialists plus a brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.
+Guild is a Claude Code plugin that ships a team of 14 domain specialists plus a brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.
 
 **Single source of truth: `guild-plan.md`.** Read it before making design decisions. Do not duplicate it here.
 
@@ -8,7 +8,7 @@ Guild is a Claude Code plugin that ships a team of 13 domain specialists plus a 
 
 - `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` — plugin + marketplace manifests.
 - `skills/{core,meta,knowledge,fallback,specialists}/` — 5-tier skill taxonomy (`guild-plan.md §5`).
-- `agents/*.md` — 13 shipping specialists (`guild-plan.md §6`). Built by the dev team; not yet populated.
+- `agents/*.md` — 14 shipping specialists (`guild-plan.md §6` + `frontend` graduated 2026-04-26 via §12). Built by the dev team; not yet populated.
 - `commands/*.md` — 7 slash commands (`guild-plan.md §13.1`).
 - `hooks/hooks.json` — native Claude Code hooks (`guild-plan.md §13.2`).
 - `scripts/`, `mcp-servers/` — evolve loop, telemetry, optional MCP servers (`guild-plan.md §13.3`).
