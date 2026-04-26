@@ -919,7 +919,7 @@ See `.claude/agents/_shared/handoff-contract.md`. Never commit.
 **Forbidden:**
 - `docs/phase-gates/` — plugin-architect's integration log.
 - `docs/superpowers/` — superpowers specs and plans; those are authored by the brainstorming/writing-plans flow, not by you.
-- `docs/diagrams/`, `docs/assets/`, `docs/landing-page/` — existing plugin assets, treat as read-only source material.
+- `docs/diagrams/`, `docs/assets/`, `docs/website/` — existing plugin assets, treat as read-only source material.
 - Everything outside `docs/` and `README.md`.
 ```
 

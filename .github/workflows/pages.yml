@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'docs/landing-page/**'
+      - 'docs/website/**'
       - 'docs/assets/**'
       - 'docs/diagrams/**'
       - '.github/workflows/pages.yml'
@@ -28,10 +28,12 @@ jobs:
       - name: Assemble static site
         run: |
           set -euo pipefail
+          node docs/website/build-site.mjs
           mkdir -p _site
-          cp -r docs/landing-page/* _site/
+          cp -r docs/website/* _site/
           cp -r docs/assets _site/
           cp -r docs/diagrams _site/
+          rm -f _site/build-site.mjs
           ls -la _site/
 
       - uses: actions/configure-pages@v5
