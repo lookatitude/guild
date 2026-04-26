@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Guild is a Claude Code plugin for self-evolving specialist agent teams, durable project memory, and autonomous execution.">
+    <meta name="description" content="Guild is a Claude Code plugin for self-evolving specialist agent teams, durable project memory, autonomous execution, and evidence-backed static documentation.">
     <meta name="theme-color" content="#17130f">
     <meta name="color-scheme" content="dark">
     <meta name="robots" content="index, follow">
@@ -13,7 +13,7 @@
     <meta property="og:url" content="https://lookatitude.github.io/guild/">
     <meta property="og:site_name" content="Guild">
     <meta property="og:title" content="Guild for Claude Code">
-    <meta property="og:description" content="Self-evolving specialist agent teams that plan carefully, execute autonomously, preserve project memory, and improve through evidence.">
+    <meta property="og:description" content="Self-evolving specialist agent teams that plan carefully, execute autonomously, preserve project memory, and improve through evidence. Includes docs and a live end-to-end use case.">
     <meta property="og:image" content="https://lookatitude.github.io/guild/assets/og-image.png">
     <meta property="og:image:secure_url" content="https://lookatitude.github.io/guild/assets/og-image.png">
     <meta property="og:image:type" content="image/png">
@@ -23,7 +23,7 @@
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Guild for Claude Code">
-    <meta name="twitter:description" content="Self-evolving specialist agent teams that plan carefully, execute autonomously, preserve project memory, and improve through evidence.">
+    <meta name="twitter:description" content="Self-evolving specialist agent teams that plan carefully, execute autonomously, preserve project memory, and improve through evidence. Includes docs and a live end-to-end use case.">
     <meta name="twitter:image" content="https://lookatitude.github.io/guild/assets/twitter-card.png">
     <meta name="twitter:image:alt" content="Guild for Claude Code, self-evolving specialist agent teams.">
 
@@ -44,6 +44,8 @@
         <nav aria-label="Primary navigation">
           <a href="#install">Start</a>
           <a href="#features">Features</a>
+          <a href="docs/">Docs</a>
+          <a href="use-cases/url-shortener-e2e.html">Use case</a>
           <a href="#how">How it works</a>
           <a class="icon-link" href="https://github.com/lookatitude/guild" aria-label="GitHub repository">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -66,7 +68,7 @@
             <p class="lede">Self-evolving specialist agent teams that plan carefully, execute autonomously, and preserve project memory over time.</p>
             <div class="hero-actions">
               <a class="button primary" href="#install">Get started</a>
-              <a class="button secondary" href="#how">See how it works</a>
+              <a class="button secondary" href="docs/">Read the docs</a>
             </div>
           </div>
           <aside class="command-card" aria-label="Guild quick command">
@@ -197,6 +199,33 @@ claude plugin install guild@guild --scope project
               <h3>Self-evolution</h3>
               <p>Skills and specialists evolve through reflections, shadow mode, flip reports, and versioned rollback.</p>
             </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="docs-band" id="docs">
+        <div class="section-shell">
+          <div class="section-heading">
+            <p class="eyebrow">Static website</p>
+            <h2>Documentation and proof, not just a splash page</h2>
+            <p>The public site now starts at the product story, then opens into the operating docs and the live end-to-end run that validated Guild v1.</p>
+          </div>
+          <div class="link-grid">
+            <a class="link-panel" href="docs/">
+              <span class="why-index">Docs</span>
+              <h3>Guild operating guide</h3>
+              <p>Install, commands, lifecycle, specialists, context assembly, wiki memory, evolution gates, and runtime state.</p>
+            </a>
+            <a class="link-panel" href="use-cases/url-shortener-e2e.html">
+              <span class="why-index">Use case</span>
+              <h3>URL shortener E2E run</h3>
+              <p>A detailed example with the original brief, specialist DAG, artifacts, test output, metrics, and reflection signal.</p>
+            </a>
+            <a class="link-panel" href="https://github.com/lookatitude/guild">
+              <span class="why-index">Repository</span>
+              <h3>Inspect the plugin source</h3>
+              <p>Commands, skills, specialist agents, hooks, scripts, manifests, and static-site files are available in the GitHub repo.</p>
+            </a>
           </div>
         </div>
       </section>

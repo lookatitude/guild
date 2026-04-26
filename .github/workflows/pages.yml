@@ -1,4 +1,4 @@
-name: Deploy landing page to GitHub Pages
+name: Deploy static site to GitHub Pages
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Assemble site
+      - name: Assemble static site
         run: |
           set -euo pipefail
           mkdir -p _site
