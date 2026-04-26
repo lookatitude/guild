@@ -126,7 +126,20 @@ Mode 2 runs the real `claude` CLI. Tokens cost real money; the operator's `~/.cl
 
    Track real costs from your Anthropic console (`run.json` does not record cost). If your benchmark run goes long enough to hit the 1h cap, you have paid for an hour of model wall-clock — that is the upper bound the spec's `T_budget` enforces.
 
-10. **Known issue — claude argv template.** Per the T2 backend follow-up (`.guild/runs/run-2026-04-26-benchmark-factory-p3/handoffs/T2-backend.md §Followups #1`), the default argv template `claude --print --prompt-file <path> --workdir <ws> --output-format stream-json` was rejected by the real `claude` binary during smoke (`error: unknown option '--prompt-file'`). Verify against your installed `claude` version with `--dry-run` and `claude --help`. The long-term fix is the planned `GUILD_BENCHMARK_ARGV_TEMPLATE` env override (or a `case.yaml` `runner_args:` field) so an operator can tune the flag set without code changes; until that ships, an operator whose `claude` rejects the default template can edit `runner.ts`'s `buildArgv()` locally.
+10. **Operator-tunable argv via `GUILD_BENCHMARK_ARGV_TEMPLATE`.** The default argv `claude --print --prompt-file <path> --workdir <ws> --output-format stream-json` may be rejected by some `claude` CLI builds (originally surfaced as the P3 T2 followup #1: `error: unknown option '--prompt-file'`). To override without editing source, set this env var to a JSON array of arguments. The runner substitutes `${PROMPT_FILE}` and `${WORKSPACE_DIR}` placeholders literally (no shell, no eval, no glob). The binary itself is element 0 (resolved from `GUILD_BENCHMARK_CLAUDE_BIN` or `$PATH`); the template covers args only. Examples:
+
+    ```bash
+    # Pass the prompt positionally instead of via --prompt-file:
+    export GUILD_BENCHMARK_ARGV_TEMPLATE='["--print", "--workdir", "${WORKSPACE_DIR}", "--prompt", "@${PROMPT_FILE}"]'
+
+    # Drop --output-format if your build doesn't recognise stream-json:
+    export GUILD_BENCHMARK_ARGV_TEMPLATE='["--print", "--prompt-file", "${PROMPT_FILE}", "--workdir", "${WORKSPACE_DIR}"]'
+
+    # Verify with --dry-run (does not spawn):
+    npm run benchmark -- run --case demo-url-shortener-build --dry-run
+    ```
+
+    `--dry-run` resolves and prints the resulting argv; review it before flipping `GUILD_BENCHMARK_LIVE=1`. M1 invariants still hold — runtime asserts argv is a string array with no NUL bytes; substitutions are purely literal. Invalid JSON or non-string elements fail loudly on the next `run` invocation.
 
 ### Loop walk-through (P4)
 
@@ -146,7 +159,15 @@ The learning loop drives a baseline → reflect → apply → candidate cycle th
    npm run benchmark -- loop --status --baseline-run-id <baseline-run-id>
    ```
 
-   `--status` is read-only. Output prints each proposal body byte-for-byte from the source `.md` (`plans/security-review-p4.md F1.1` mitigation M1) and a `WARNING:` banner when a proposal references a high-trust subtree like `hooks/`, `commands/`, `.claude/settings*.json`, `.mcp.json`, or `mcp-servers/` (`plans/security-review-p4.md F1.2` mitigation M3).
+   `--status` is read-only. Output prints each proposal body byte-for-byte from the source `.md` (`plans/security-review-p4.md F1.1` mitigation M1) and a `WARNING:` banner when a proposal references a high-trust subtree like `hooks/`, `commands/`, `.claude-plugin/`, `agents/`, `skills/`, `mcp-servers/`, or `scripts/` (`plans/security-review-p4.md F1.2` mitigation M3).
+
+   **`--diff` mode (P4-polish 2026-04-27).** When a proposal embeds a fenced ` ```diff ` or ` ```patch ` block, surface just the diff blocks for that proposal:
+
+   ```
+   npm run benchmark -- loop --status --baseline-run-id <baseline-run-id> --diff <proposal-id>
+   ```
+
+   For freeform proposals (no fenced diff/patch block), `--diff` prints a notice instructing the operator to review the full body via plain `--status`. Use `--diff` to scan-merge what an `apply` step would touch when the proposal author used a structured diff convention; fall back to `--status` (full mode) for narrative proposals.
 
 3. **Apply manually.** This step is operator-driven — the loop never writes plugin source (`plans/adr-005-learning-loop-orchestrator.md §Decision` commitment 5). Create a topic branch, edit the plugin source per the chosen proposal body (treating the proposal as if it were an untrusted PR — see `plans/06-learning-loop.md §Operator caveats R1`), and commit cleanly so `git rev-parse HEAD` advances. The manifest's `source_path` is **advisory only**; verify the full commit diff matches the proposal's intent.
 

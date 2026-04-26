@@ -69,8 +69,13 @@ import {
   ENV_TIMEOUT_MS,
   runBenchmark,
 } from "../src/runner.js";
-import { loopStart } from "../src/loop.js";
-import type { RunJson } from "../src/types.js";
+import {
+  loopStart,
+  loopStatus,
+  formatStatusReport,
+  manifestPathFor,
+} from "../src/loop.js";
+import type { LoopManifest, RunJson } from "../src/types.js";
 
 const spawnMock = spawn as unknown as MockedFunction<typeof spawn>;
 
@@ -455,23 +460,204 @@ describe("loop / Q4–Q5–Q19 — carry-forward acknowledgement (cross-walk)", 
 // ---- Q1 / Q2 / Q3 — `loop --status` body printing + WARNING (F1.1, F1.2) -
 
 describe("loop / Q1–Q3 — verbatim body + high-trust WARNING (F1.1, F1.2)", () => {
-  // The current `formatStatusReport` (loop.ts §832) prints `summary` (160
-  // chars) and `available_proposals (count)` but does NOT print the
-  // verbatim proposal body, nor does it grep for high-trust path strings
-  // and emit a WARNING line. These features are P4-required per the
-  // security review's acceptance criteria but are NOT YET implemented.
+  // P4-polish 2026-04-27: `formatStatusReport` now reads the verbatim
+  // proposal body from `runs/<id>/artifacts/.guild/reflections/<id>.md`
+  // and emits a `WARNING:` line when the body references any high-trust
+  // path prefix from `HIGH_TRUST_PATH_PREFIXES`. These tests pin both
+  // surfaces directly (no runner/spawn dependency — we synthesise the
+  // manifest + reflections dir on disk and invoke loopStatus +
+  // formatStatusReport).
   //
-  // qa T4 receipt routes a backend follow-up: extend formatStatusReport
-  // to (a) include the full proposal body for each available_proposals[]
-  // entry and (b) compute a high-trust path WARNING. Once shipped, the
-  // tests below should be promoted from `it.todo` to live assertions.
-  it.todo("Q1: `loop --status` output contains the verbatim proposal body for each entry");
-  it.todo(
-    "Q2: proposal body containing 'hooks/hooks.json' produces a `WARNING:` line",
-  );
-  it.todo(
-    "Q3: proposal body without high-trust path references produces no `WARNING:` line",
-  );
+  // The bodies below are deliberately short + recognisable so substring
+  // assertions are stable across formatStatusReport layout tweaks.
+
+  async function writeManifestAndProposals(
+    runsDir: string,
+    baselineRunId: string,
+    proposals: { id: string; sourcePath: string; summary: string; body: string }[],
+  ): Promise<void> {
+    const baselineDir = join(runsDir, baselineRunId);
+    const reflectionsDir = join(baselineDir, "artifacts", ".guild", "reflections");
+    await mkdir(reflectionsDir, { recursive: true });
+    for (const p of proposals) {
+      await writeFile(join(reflectionsDir, `${p.id}.md`), p.body, "utf8");
+    }
+    const manifest: LoopManifest = {
+      schema_version: 1,
+      baseline_run_id: baselineRunId,
+      case_slug: "synthetic-q1q2q3",
+      plugin_ref_before: "abc1234",
+      available_proposals: proposals.map((p) => ({
+        proposal_id: p.id,
+        source_path: p.sourcePath,
+        summary: p.summary,
+      })),
+      started_at: "2026-04-27T00:00:00.000Z",
+      state: "awaiting-apply",
+    };
+    await mkdir(baselineDir, { recursive: true });
+    await writeFile(
+      manifestPathFor(runsDir, baselineRunId),
+      JSON.stringify(manifest, null, 2) + "\n",
+      { encoding: "utf8", mode: 0o600 },
+    );
+  }
+
+  it("Q1: `loop --status` output contains the verbatim proposal body for each entry", async () => {
+    const baselineRunId = "q1-baseline";
+    const verbatimBody =
+      "# Tighten the timeout on context-assemble\n\n" +
+      "The context-assemble lane currently runs without a wall-clock cap. " +
+      "Recommend adding a 30s soft-timeout in `skills/meta/context-assemble/SKILL.md` " +
+      "with an escalation note for the operator.\n";
+    await writeManifestAndProposals(runsDir, baselineRunId, [
+      {
+        id: "tighten-context-timeout",
+        sourcePath: "skills/meta/context-assemble/SKILL.md",
+        summary: "Tighten the timeout on context-assemble",
+        body: verbatimBody,
+      },
+    ]);
+    const report = await loopStatus(
+      { baselineRunId },
+      { runsDir, casesDir },
+    );
+    const out = formatStatusReport(report);
+    // The full body MUST appear verbatim in the output. We split on
+    // newlines and check every line — the formatter indents body lines
+    // by 8 spaces inside the per-proposal block, so substring assertions
+    // are sufficient (we don't check exact line shape).
+    for (const line of verbatimBody.split(/\r?\n/)) {
+      if (line.length === 0) continue; // blank lines indistinguishable in indented output
+      expect(out).toContain(line);
+    }
+    // The framing markers also help operator scan for body boundaries.
+    expect(out).toMatch(/---- body \(verbatim, \d+ chars\) ----/);
+    expect(out).toContain("---- end body ----");
+  });
+
+  it("Q2: proposal body containing 'hooks/hooks.json' produces a `WARNING:` line", async () => {
+    const baselineRunId = "q2-baseline";
+    await writeManifestAndProposals(runsDir, baselineRunId, [
+      {
+        id: "hot-hook-edit",
+        sourcePath: "hooks/hooks.json",
+        summary: "Add a Stop hook for evolve-skill cleanup",
+        body:
+          "# Add a Stop hook\n\n" +
+          "Edit `hooks/hooks.json` to add a Stop entry that runs `scripts/cleanup-evolve.ts`.\n",
+      },
+    ]);
+    const report = await loopStatus(
+      { baselineRunId },
+      { runsDir, casesDir },
+    );
+    const out = formatStatusReport(report);
+    expect(out).toMatch(/WARNING: high-trust path\(s\) referenced/);
+    // The aggregate WARNING lists the matched prefix(es); both the
+    // top-level and per-proposal WARNINGs surface "hooks/" since the
+    // body and source_path both reference it.
+    expect(out).toContain("hooks/");
+    // Per-proposal WARNING is also present (proposal references multiple
+    // high-trust prefixes via the body's mention of `scripts/`).
+    expect(out).toMatch(/proposal references high-trust path\(s\)/);
+  });
+
+  it("Q3: proposal body without high-trust path references produces no `WARNING:` line", async () => {
+    const baselineRunId = "q3-baseline";
+    await writeManifestAndProposals(runsDir, baselineRunId, [
+      {
+        id: "rename-helper-fn",
+        sourcePath: "benchmark/src/helpers.ts",
+        summary: "Rename calcScore to computeScore for consistency",
+        body:
+          "# Rename helper\n\n" +
+          "The function name `calcScore` should become `computeScore` " +
+          "to match other modules. Mechanical refactor; no behaviour change.\n",
+      },
+    ]);
+    const report = await loopStatus(
+      { baselineRunId },
+      { runsDir, casesDir },
+    );
+    const out = formatStatusReport(report);
+    expect(out).not.toContain("WARNING:");
+    expect(out).not.toMatch(/high-trust path/);
+  });
+
+  it("Q1 (--diff mode): proposal with a fenced ```diff block surfaces it via --diff", async () => {
+    const baselineRunId = "q1-diff-baseline";
+    const proposalBody =
+      "# Patch the scorer\n\n" +
+      "Apply this diff to fix the off-by-one:\n\n" +
+      "```diff\n" +
+      "--- a/src/scorer.ts\n" +
+      "+++ b/src/scorer.ts\n" +
+      "@@ -10,1 +10,1 @@\n" +
+      "-  return total + 1;\n" +
+      "+  return total;\n" +
+      "```\n";
+    await writeManifestAndProposals(runsDir, baselineRunId, [
+      {
+        id: "scorer-off-by-one",
+        sourcePath: "benchmark/src/scorer.ts",
+        summary: "Patch the scorer",
+        body: proposalBody,
+      },
+    ]);
+    const report = await loopStatus(
+      { baselineRunId, diffProposalId: "scorer-off-by-one" },
+      { runsDir, casesDir },
+    );
+    expect(report.diff).toBeDefined();
+    expect(report.diff?.diffBlocks).toHaveLength(1);
+    expect(report.diff?.freeform).toBe(false);
+    expect(report.diff?.diffBlocks[0]).toContain("--- a/src/scorer.ts");
+    const out = formatStatusReport(report);
+    expect(out).toContain("---- diff block 1 of 1 ----");
+    expect(out).toContain("-  return total + 1;");
+  });
+
+  it("Q1 (--diff mode): proposal without fenced diff blocks emits the freeform notice", async () => {
+    const baselineRunId = "q1-freeform-baseline";
+    await writeManifestAndProposals(runsDir, baselineRunId, [
+      {
+        id: "discuss-arch",
+        sourcePath: "benchmark/plans/00-index.md",
+        summary: "Tighten the case YAML wording",
+        body:
+          "# Tighten case YAML wording\n\nThe case YAML's `prompt:` field " +
+          "should be reworded to mention --dry-run prominently.\n",
+      },
+    ]);
+    const report = await loopStatus(
+      { baselineRunId, diffProposalId: "discuss-arch" },
+      { runsDir, casesDir },
+    );
+    expect(report.diff?.freeform).toBe(true);
+    expect(report.diff?.diffBlocks).toHaveLength(0);
+    const out = formatStatusReport(report);
+    expect(out).toContain("This proposal is freeform");
+    expect(out).toContain("Review the body carefully");
+  });
+
+  it("Q1 (--diff mode): rejects a proposal_id not in the manifest", async () => {
+    const baselineRunId = "q1-bad-id-baseline";
+    await writeManifestAndProposals(runsDir, baselineRunId, [
+      {
+        id: "real-proposal",
+        sourcePath: "benchmark/src/scorer.ts",
+        summary: "Real proposal",
+        body: "# Real\n",
+      },
+    ]);
+    await expect(
+      loopStatus(
+        { baselineRunId, diffProposalId: "nonexistent-proposal" },
+        { runsDir, casesDir },
+      ),
+    ).rejects.toThrow(/not found in manifest's available_proposals/);
+  });
 });
 
 // ---- Q6 / Q7 — concurrency + atomic rename (F1.6) -----------------------

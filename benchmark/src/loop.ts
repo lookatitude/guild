@@ -351,7 +351,9 @@ export async function loopContinue(
 
 /**
  * `loop --status` — read-only manifest inspection. Prints state,
- * proposals, applied state, etc. No mutation, no spawning.
+ * proposals, applied state, verbatim proposal bodies, and high-trust
+ * path WARNINGs. When `opts.diffProposalId` is set, switches to diff
+ * mode for the named proposal. No mutation, no spawning.
  */
 export async function loopStatus(
   opts: LoopStatusOptions,
@@ -367,7 +369,57 @@ export async function loopStatus(
     );
   }
   const manifest = await readManifest(manifestPath);
-  return { manifestPath, manifest };
+
+  // M3 / F1.1 — re-read each proposal body from the artifact tree.
+  // Manifest stores only the summary + source_path (kept small +
+  // immutable); truth source for the body is the captured `.guild/`.
+  const reflectionsDir = join(
+    ctx.runsDir,
+    manifest.baseline_run_id,
+    REFLECTIONS_REL,
+  );
+  const proposals: ProposalReview[] = [];
+  for (const p of manifest.available_proposals) {
+    let body = "";
+    const safePath = safeJoinUnder(reflectionsDir, `${p.proposal_id}.md`);
+    if (safePath !== null) {
+      try {
+        body = await readFile(safePath, "utf8");
+      } catch {
+        // Proposal file missing — body stays "". The status report still
+        // surfaces the proposal_id + source_path; operator can investigate.
+      }
+    }
+    proposals.push({
+      proposal_id: p.proposal_id,
+      source_path: p.source_path,
+      body,
+      highTrustPaths: findHighTrustPaths(body),
+    });
+  }
+
+  // F1.1 (b) — when --diff requested, pull the named proposal's blocks.
+  let diff: LoopStatusDiffResult | undefined;
+  if (opts.diffProposalId !== undefined && opts.diffProposalId.length > 0) {
+    const review = proposals.find(
+      (r) => r.proposal_id === opts.diffProposalId,
+    );
+    if (review === undefined) {
+      throw new Error(
+        `loop --status --diff: proposal_id ${opts.diffProposalId} not found in manifest's available_proposals[] ` +
+          `(known: ${manifest.available_proposals.map((p) => p.proposal_id).join(", ") || "<none>"})`,
+      );
+    }
+    const blocks = extractDiffBlocks(review.body);
+    diff = {
+      proposal_id: review.proposal_id,
+      source_path: review.source_path,
+      diffBlocks: blocks,
+      freeform: blocks.length === 0,
+    };
+  }
+
+  return { manifestPath, manifest, proposals, diff };
 }
 
 // ---- Dry-run / status report shapes ----------------------------------
@@ -399,9 +451,80 @@ export interface LoopContinueDryRun {
 
 export type LoopDryRunReport = LoopStartDryRun | LoopContinueDryRun;
 
+/**
+ * Per-proposal review surface — body verbatim + high-trust path warnings
+ * computed at status time (M3 / F1.1, F1.2 acceptance).
+ */
+export interface ProposalReview {
+  proposal_id: string;
+  source_path: string;
+  body: string;                  // verbatim, no trim, no normalization
+  highTrustPaths: string[];      // sorted unique prefixes found in body
+}
+
+export interface LoopStatusDiffResult {
+  proposal_id: string;
+  source_path: string;
+  diffBlocks: string[];          // contents of fenced ```diff/```patch/``` blocks
+  freeform: boolean;             // true when no diff block found
+}
+
 export interface LoopStatusReport {
   manifestPath: string;
   manifest: LoopManifest;
+  /**
+   * One review entry per `manifest.available_proposals[]`. Body is
+   * re-read from disk at status time (the manifest does not store body
+   * to keep it small + immutable; truth source is the artifact tree).
+   */
+  proposals: ProposalReview[];
+  /**
+   * Set when `loop --status --diff <proposal-id>` was invoked. Otherwise
+   * undefined; `formatStatusReport` falls back to its full-report layout.
+   */
+  diff?: LoopStatusDiffResult;
+}
+
+/**
+ * High-trust path prefixes — directories whose modification carries
+ * disproportionate operator risk. A proposal body referencing any of
+ * these triggers a `WARNING:` line in `formatStatusReport` (F1.2 / M3).
+ *
+ * Order is alphabetical; the WARNING line lists matches in this order
+ * so output is deterministic across platforms.
+ */
+export const HIGH_TRUST_PATH_PREFIXES = [
+  ".claude-plugin/",
+  "agents/",
+  "commands/",
+  "hooks/",
+  "mcp-servers/",
+  "scripts/",
+  "skills/",
+];
+
+export function findHighTrustPaths(text: string): string[] {
+  const matches = new Set<string>();
+  for (const prefix of HIGH_TRUST_PATH_PREFIXES) {
+    if (text.includes(prefix)) matches.add(prefix);
+  }
+  return [...matches].sort();
+}
+
+/**
+ * Extract fenced code blocks tagged `diff` or `patch` (case-insensitive).
+ * Untagged ``` ``` blocks are NOT included — operators get a freeform
+ * notice instead so they review the full body. Returns an empty array
+ * if no tagged blocks are present.
+ */
+export function extractDiffBlocks(body: string): string[] {
+  const re = /```(?:diff|patch)\r?\n([\s\S]*?)\r?\n```/gi;
+  const blocks: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) {
+    blocks.push(m[1] ?? "");
+  }
+  return blocks;
 }
 
 // ---- Manifest IO -----------------------------------------------------
@@ -832,6 +955,35 @@ export function formatContinueDryRun(report: LoopContinueDryRun): string {
 export function formatStatusReport(report: LoopStatusReport): string {
   const m = report.manifest;
   const lines: string[] = [];
+
+  // Diff mode short-circuits the full report (operator asked for one
+  // proposal's diff blocks; full state inspection is not the goal).
+  if (report.diff !== undefined) {
+    const d = report.diff;
+    lines.push(
+      `benchmark loop --status --baseline-run-id ${m.baseline_run_id} --diff ${d.proposal_id}`,
+    );
+    lines.push(`  manifest_path : ${report.manifestPath}`);
+    lines.push(`  source_path   : ${d.source_path}`);
+    lines.push(`  diff_blocks   : ${d.diffBlocks.length}`);
+    lines.push("");
+    if (d.freeform) {
+      lines.push(
+        "This proposal is freeform — no machine-readable diff/patch block found.",
+      );
+      lines.push(
+        "Review the body carefully via `loop --status` (full mode) before applying.",
+      );
+    } else {
+      for (let i = 0; i < d.diffBlocks.length; i++) {
+        lines.push(`---- diff block ${i + 1} of ${d.diffBlocks.length} ----`);
+        lines.push(d.diffBlocks[i] ?? "");
+        lines.push("");
+      }
+    }
+    return lines.join("\n") + "\n";
+  }
+
   lines.push(`benchmark loop --status --baseline-run-id ${m.baseline_run_id}`);
   lines.push(`  manifest_path     : ${report.manifestPath}`);
   lines.push(`  state             : ${m.state}`);
@@ -839,11 +991,47 @@ export function formatStatusReport(report: LoopStatusReport): string {
   lines.push(`  plugin_ref_before : ${m.plugin_ref_before}`);
   lines.push(`  started_at        : ${m.started_at}`);
   lines.push(`  available_proposals (${m.available_proposals.length}):`);
+
+  // F1.2 / M3 — aggregate WARNING across all proposals' high-trust path
+  // matches. Single line at the top of the proposals block so operator
+  // sees the surface immediately, before reading bodies.
+  const aggregateHighTrust = new Set<string>();
+  for (const r of report.proposals) {
+    for (const h of r.highTrustPaths) aggregateHighTrust.add(h);
+  }
+  if (aggregateHighTrust.size > 0) {
+    const sorted = [...aggregateHighTrust].sort();
+    lines.push(
+      `  WARNING: high-trust path(s) referenced by one or more proposals: ${sorted.join(", ")}`,
+    );
+    lines.push(
+      `           review the verbatim body below; modifying these surfaces requires extra scrutiny.`,
+    );
+  }
+
+  // Per-proposal block — summary, source_path, per-proposal WARNING (if
+  // any), then VERBATIM body framed by "---- body ----" markers so the
+  // operator can grep for body boundaries.
   for (const p of m.available_proposals) {
     lines.push(`    - ${p.proposal_id}`);
     lines.push(`        source_path: ${p.source_path}`);
     lines.push(`        summary:     ${p.summary}`);
+    const review = report.proposals.find((r) => r.proposal_id === p.proposal_id);
+    if (review !== undefined && review.highTrustPaths.length > 0) {
+      lines.push(
+        `        WARNING:     proposal references high-trust path(s): ${review.highTrustPaths.join(", ")}`,
+      );
+    }
+    if (review !== undefined) {
+      lines.push(`        ---- body (verbatim, ${review.body.length} chars) ----`);
+      // Indent each body line by 8 spaces to keep the block scannable
+      // inside the tree-style output, but DO NOT alter content otherwise.
+      const bodyLines = review.body.split(/\r?\n/);
+      for (const bl of bodyLines) lines.push(`        ${bl}`);
+      lines.push(`        ---- end body ----`);
+    }
   }
+
   if (m.applied_proposal !== undefined) {
     lines.push(`  applied_proposal:`);
     lines.push(`    proposal_id      : ${m.applied_proposal.proposal_id}`);
@@ -858,6 +1046,9 @@ export function formatStatusReport(report: LoopStatusReport): string {
     const firstId = m.available_proposals[0]?.proposal_id ?? "<proposal-id>";
     lines.push(
       `  npm run benchmark -- loop --continue --baseline-run-id ${m.baseline_run_id} --apply ${firstId}`,
+    );
+    lines.push(
+      "  (or `loop --status --diff <proposal-id>` to inspect a proposal's fenced diff blocks)",
     );
   }
   return lines.join("\n") + "\n";

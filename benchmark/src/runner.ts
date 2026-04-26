@@ -108,6 +108,15 @@ export const KILL_GRACE_MS = 5_000;           // SIGTERM -> SIGKILL grace
 export const ENV_TIMEOUT_MS = "GUILD_BENCHMARK_TIMEOUT_MS";
 export const ENV_MODELS_JSON = "GUILD_BENCHMARK_MODELS_JSON";
 export const ENV_CLAUDE_BIN = "GUILD_BENCHMARK_CLAUDE_BIN";
+// P4-polish (2026-04-27) — operator-supplied argv template override.
+// JSON array of strings; each element gets `${PROMPT_FILE}` and
+// `${WORKSPACE_DIR}` placeholder substitution. Resolves the P3 known-issue
+// where the default `--print --prompt-file <path> ...` template was rejected
+// by certain `claude` CLI builds. The claudeBinary is always element 0 (from
+// ENV_CLAUDE_BIN or PATH lookup); template covers args only. M1 invariants
+// hold: parsed value must be string[], no NUL bytes, no shell metacharacter
+// passthrough — substitutions are literal string replacement.
+export const ENV_ARGV_TEMPLATE = "GUILD_BENCHMARK_ARGV_TEMPLATE";
 // P4 — operator-supplied SHA-256 hex hash for forensic correlation only.
 // Validated against AUTH_IDENTITY_HASH_RE before population (M9). Runner
 // MUST NOT inspect `claude` CLI auth state (M11) — env var is the sole
@@ -977,9 +986,41 @@ function buildArgv(input: {
 }): string[] {
   // Decision: use `--print` (non-interactive) + `--prompt-file <path>` +
   // `--workdir <path>` + `--output-format stream-json`. If the operator's
-  // claude CLI doesn't accept these flags, override via the
-  // GUILD_BENCHMARK_CLAUDE_BIN env var to point at a wrapper script.
-  // Documented in handoff `decisions:`.
+  // claude CLI doesn't accept these flags, override via:
+  //   - GUILD_BENCHMARK_ARGV_TEMPLATE — JSON array of args; this function
+  //     substitutes `${PROMPT_FILE}` and `${WORKSPACE_DIR}` placeholders.
+  //   - GUILD_BENCHMARK_CLAUDE_BIN — points the binary at a wrapper script.
+  // Documented in benchmark/README.md §10 and benchmark/plans/03-runner.md.
+  const tmplRaw = process.env[ENV_ARGV_TEMPLATE];
+  if (tmplRaw !== undefined && tmplRaw.length > 0) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(tmplRaw);
+    } catch (e) {
+      throw new Error(
+        `runner: ${ENV_ARGV_TEMPLATE} is not valid JSON: ${(e as Error).message}`,
+      );
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error(
+        `runner: ${ENV_ARGV_TEMPLATE} must be a JSON array of strings`,
+      );
+    }
+    const args: string[] = [];
+    for (const el of parsed) {
+      if (typeof el !== "string") {
+        throw new Error(
+          `runner: ${ENV_ARGV_TEMPLATE} must be a JSON array of strings (got ${typeof el})`,
+        );
+      }
+      // Literal string substitution — no shell, no eval, no glob.
+      const substituted = el
+        .replace(/\$\{PROMPT_FILE\}/g, input.promptPath)
+        .replace(/\$\{WORKSPACE_DIR\}/g, input.workspaceDir);
+      args.push(substituted);
+    }
+    return [input.claudeBinary, ...args];
+  }
   return [
     input.claudeBinary,
     "--print",

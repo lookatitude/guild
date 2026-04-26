@@ -261,6 +261,17 @@ async function commandLoop(args: ParsedArgs): Promise<never> {
       process.exit(2);
     }
     const opts: LoopStatusOptions = { baselineRunId };
+    // P4-polish: --diff <proposal-id> switches to diff mode (F1.1 (b)).
+    const diffFlag = args.flags.get("diff");
+    if (diffFlag !== undefined) {
+      if (diffFlag === "true" || diffFlag.length === 0) {
+        process.stderr.write(
+          "loop --status: --diff requires a proposal_id argument (e.g., --diff <proposal-id>)\n",
+        );
+        process.exit(2);
+      }
+      opts.diffProposalId = diffFlag;
+    }
     const report = await loopStatus(opts, ctx);
     process.stdout.write(formatStatusReport(report));
     process.exit(0);
@@ -326,8 +337,9 @@ function printUsage(): void {
       "                          (--dry-run prints the resolved plan; never spawns claude)",
       "  benchmark loop     --start    --case <slug> [--baseline-run-id <id>] [--dry-run]",
       "                     --continue --baseline-run-id <id> --apply <proposal-id> [--dry-run]",
-      "                     --status   --baseline-run-id <id>",
-      "                          (P4 learning loop; never auto-applies; --dry-run never spawns)",
+      "                     --status   --baseline-run-id <id> [--diff <proposal-id>]",
+      "                          (P4 learning loop; never auto-applies; --dry-run never spawns;",
+      "                           --diff extracts fenced diff/patch blocks from a proposal body)",
       "  benchmark export-website (deferred — JSON snapshot for the public website)",
       "",
     ].join("\n"),

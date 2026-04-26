@@ -301,6 +301,13 @@ export interface LoopContinueOptions {
 
 export interface LoopStatusOptions {
   baselineRunId: string;
+  /**
+   * P4-polish (2026-04-27) — when set, `loop --status` switches to diff
+   * mode for the named proposal. The status report carries a `diff`
+   * field containing the proposal's fenced diff/patch blocks, OR a
+   * freeform notice when no tagged blocks are present.
+   */
+  diffProposalId?: string;
 }
 
 // HTTP response shapes — server.ts (P2) serializes these; the React UI
