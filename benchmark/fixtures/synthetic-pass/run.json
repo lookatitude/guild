@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "run_id": "synthetic-pass-001",
+  "case_slug": "demo-url-shortener-build",
+  "plugin_ref": "abcdef1",
+  "model_ref": {
+    "architect": "claude-opus-4-7",
+    "backend": "claude-sonnet-4-6",
+    "qa": "claude-sonnet-4-6",
+    "technical-writer": "claude-haiku-4-5-20251001"
+  },
+  "started_at": "2026-04-26T05:30:00Z",
+  "completed_at": "2026-04-26T05:50:00Z",
+  "status": "pass",
+  "raw_command": "npm run benchmark -- run --case demo-url-shortener-build",
+  "wall_clock_ms": 1200000,
+  "wall_clock_budget_ms": 1500000
+}

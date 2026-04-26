@@ -1,0 +1,37 @@
+{
+  "runs": [
+    {
+      "run_id": "demo-url-shortener-build-abcdef1-h0001-1",
+      "case_slug": "demo-url-shortener-build",
+      "plugin_ref": "abcdef1",
+      "status": "pass",
+      "guild_score": 100,
+      "started_at": "2026-04-26T05:30:00Z"
+    },
+    {
+      "run_id": "demo-url-shortener-build-abcdef1-h0001-2",
+      "case_slug": "demo-url-shortener-build",
+      "plugin_ref": "abcdef1",
+      "status": "fail",
+      "guild_score": 34.25,
+      "started_at": "2026-04-26T05:30:00Z"
+    },
+    {
+      "run_id": "demo-url-shortener-build-newcommit-h0001-1",
+      "case_slug": "demo-url-shortener-build",
+      "plugin_ref": "abcdef1",
+      "status": "timeout",
+      "guild_score": 12.5,
+      "started_at": "2026-04-26T05:31:00Z"
+    },
+    {
+      "run_id": "sample-pass-001",
+      "case_slug": "demo-url-shortener-build",
+      "plugin_ref": "abcdef1",
+      "status": "errored",
+      "guild_score": 0,
+      "started_at": "2026-04-26T05:32:00Z"
+    }
+  ],
+  "total": 4
+}

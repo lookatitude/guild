@@ -1,0 +1,373 @@
+#!/usr/bin/env node
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { loadCase } from "./case-loader.js";
+import { importFixture, loadRunRecord } from "./artifact-importer.js";
+import { compareSets } from "./compare.js";
+import { persistScore, scoreRun } from "./scorer.js";
+import { serverDefaultsFromEnv, startServer } from "./server.js";
+import { formatDryRunReport, planRun, runBenchmark } from "./runner.js";
+import {
+  formatContinueDryRun,
+  formatStartDryRun,
+  formatStatusReport,
+  loopContinue,
+  loopStart,
+  loopStatus,
+} from "./loop.js";
+import type {
+  Case,
+  LoopContinueOptions,
+  LoopStartOptions,
+  LoopStatusOptions,
+  RunOptions,
+} from "./types.js";
+
+interface ParsedArgs {
+  command: string;
+  flags: Map<string, string>;
+  positional: string[];
+}
+
+const DEFAULT_RUNS_DIR = resolve(process.cwd(), "runs");
+
+function parseArgs(argv: string[]): ParsedArgs {
+  const command = argv[0] ?? "";
+  const flags = new Map<string, string>();
+  const positional: string[] = [];
+  for (let i = 1; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith("--")) {
+      const eq = a.indexOf("=");
+      if (eq !== -1) {
+        flags.set(a.slice(2, eq), a.slice(eq + 1));
+      } else {
+        const next = argv[i + 1];
+        if (next !== undefined && !next.startsWith("--")) {
+          flags.set(a.slice(2), next);
+          i += 1;
+        } else {
+          flags.set(a.slice(2), "true");
+        }
+      }
+    } else {
+      positional.push(a);
+    }
+  }
+  return { command, flags, positional };
+}
+
+async function commandScore(args: ParsedArgs): Promise<void> {
+  const runId = args.flags.get("run-id");
+  if (!runId) throw new Error("score: --run-id <id> is required");
+  const runsDir = resolve(args.flags.get("runs-dir") ?? DEFAULT_RUNS_DIR);
+  const fixture = args.flags.get("fixture");
+  const casePath = args.flags.get("case");
+
+  if (fixture) {
+    await importFixture({ fixturePath: fixture, runsDir, runId });
+  }
+
+  const runDir = resolve(runsDir, runId);
+  if (!existsSync(runDir)) {
+    throw new Error(
+      `Run directory not found: ${runDir}. Pass --fixture <path> to import one first.`,
+    );
+  }
+  const record = await loadRunRecord(runDir);
+  const caseFile = casePath ? await loadCase(casePath) : await resolveCaseForRun(record.run.case_slug);
+  const { score, metrics } = scoreRun(record, caseFile);
+  await persistScore(runDir, score, metrics);
+
+  process.stdout.write(
+    `score: wrote ${runDir}/score.json (status=${score.status} guild_score=${score.guild_score})\n`,
+  );
+}
+
+async function resolveCaseForRun(slug: string): Promise<Case> {
+  const candidates = [
+    resolve(process.cwd(), "cases", `${slug}.yaml`),
+    resolve(process.cwd(), "cases", `${slug}.yml`),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return loadCase(c);
+  }
+  throw new Error(
+    `Could not locate case YAML for slug "${slug}". Pass --case <path> explicitly.`,
+  );
+}
+
+async function commandCompare(args: ParsedArgs): Promise<void> {
+  const baseline = args.flags.get("baseline");
+  const candidate = args.flags.get("candidate");
+  if (!baseline) throw new Error("compare: --baseline <set> is required");
+  if (!candidate) throw new Error("compare: --candidate <set> is required");
+  const runsDir = resolve(args.flags.get("runs-dir") ?? DEFAULT_RUNS_DIR);
+  const outputPath = args.flags.get("output");
+  const result = await compareSets({
+    runsDir,
+    baseline,
+    candidate,
+    ...(outputPath ? { outputPath } : {}),
+  });
+  process.stdout.write(
+    `compare: wrote ${result.outputPath} (status=${result.comparison.status} guild_score_delta=${result.comparison.guild_score_delta.delta})\n`,
+  );
+}
+
+function commandDeferred(name: string, phase: string): never {
+  process.stderr.write(
+    `${name}: deferred to ${phase}. Not implemented in P1 (import-only mode).\n`,
+  );
+  process.exit(2);
+}
+
+// Live runner. argv: --case <slug> [--run-id <id>] [--dry-run] [--cleanup]
+//                  [--runs-dir <path>] [--cases-dir <path>]
+// Exit codes per architect §4.1 + §6.4: 0 pass, 1 fail, 124 timeout, 2 errored.
+async function commandRun(args: ParsedArgs): Promise<never> {
+  const caseSlug = args.flags.get("case");
+  if (!caseSlug || caseSlug === "true") {
+    process.stderr.write("run: --case <slug> is required\n");
+    process.exit(2);
+  }
+  const runsDir = resolve(args.flags.get("runs-dir") ?? DEFAULT_RUNS_DIR);
+  const casesDir = resolve(
+    args.flags.get("cases-dir") ?? resolve(process.cwd(), "cases"),
+  );
+  const runIdFlag = args.flags.get("run-id");
+  const dryRunFlag = args.flags.get("dry-run");
+  const cleanupFlag = args.flags.get("cleanup");
+
+  const opts: RunOptions = {
+    caseSlug,
+    ...(runIdFlag && runIdFlag !== "true" ? { runId: runIdFlag } : {}),
+    dryRun: dryRunFlag === "true" || dryRunFlag === "",
+    cleanup: cleanupFlag === "true" || cleanupFlag === "",
+  };
+
+  if (opts.dryRun === true) {
+    const plan = await planRun(opts, { runsDir, casesDir });
+    process.stdout.write(formatDryRunReport(plan));
+    process.exit(0);
+  }
+
+  const result = await runBenchmark(opts, { runsDir, casesDir });
+  process.stdout.write(
+    `run: ${result.run_id} status=${result.status} wall_clock_ms=${result.wall_clock_ms}\n`,
+  );
+  switch (result.status) {
+    case "pass":
+      process.exit(0);
+    case "fail":
+      process.exit(1);
+    case "timeout":
+      process.exit(124);
+    case "errored":
+    default:
+      process.exit(2);
+  }
+}
+
+// `benchmark loop` — P4 learning-loop orchestrator. Three modes,
+// mutually exclusive:
+//   --start    --case <slug> [--baseline-run-id <id>] [--dry-run]
+//   --continue --baseline-run-id <id> --apply <proposal-id> [--dry-run]
+//   --status   --baseline-run-id <id>
+//
+// Exit codes (architect §4.1 + §6.4): 0 ok, 1 fail, 124 timeout, 2 errored.
+// Dry-run flow per ADR-005 §Decision: never spawns claude, returns 0.
+async function commandLoop(args: ParsedArgs): Promise<never> {
+  const runsDir = resolve(args.flags.get("runs-dir") ?? DEFAULT_RUNS_DIR);
+  const casesDir = resolve(args.flags.get("cases-dir") ?? resolve(process.cwd(), "cases"));
+  const ctx = { runsDir, casesDir };
+
+  const isStart = args.flags.get("start") !== undefined;
+  const isContinue = args.flags.get("continue") !== undefined;
+  const isStatus = args.flags.get("status") !== undefined;
+  const modeCount = [isStart, isContinue, isStatus].filter(Boolean).length;
+  if (modeCount === 0) {
+    process.stderr.write("loop: one of --start, --continue, --status is required\n");
+    process.exit(2);
+  }
+  if (modeCount > 1) {
+    process.stderr.write("loop: --start, --continue, --status are mutually exclusive\n");
+    process.exit(2);
+  }
+
+  const dryRunFlag = args.flags.get("dry-run");
+  const dryRun = dryRunFlag === "true" || dryRunFlag === "";
+
+  try {
+    if (isStart) {
+      const caseSlug = args.flags.get("case");
+      if (!caseSlug || caseSlug === "true") {
+        process.stderr.write("loop --start: --case <slug> is required\n");
+        process.exit(2);
+      }
+      const baselineRunId = args.flags.get("baseline-run-id");
+      const opts: LoopStartOptions = {
+        caseSlug,
+        ...(baselineRunId && baselineRunId !== "true" ? { baselineRunId } : {}),
+        dryRun,
+      };
+      const result = await loopStart(opts, ctx);
+      if ("kind" in result && result.kind === "start") {
+        process.stdout.write(formatStartDryRun(result));
+        process.exit(0);
+      }
+      // Live result.
+      const live = result as { manifestPath: string; baselineRunId: string };
+      process.stdout.write(
+        `loop --start: baseline_run_id=${live.baselineRunId} manifest=${live.manifestPath}\n`,
+      );
+      process.exit(0);
+    }
+
+    if (isContinue) {
+      const baselineRunId = args.flags.get("baseline-run-id");
+      const proposalId = args.flags.get("apply");
+      if (!baselineRunId || baselineRunId === "true") {
+        process.stderr.write("loop --continue: --baseline-run-id <id> is required\n");
+        process.exit(2);
+      }
+      if (!proposalId || proposalId === "true") {
+        process.stderr.write("loop --continue: --apply <proposal-id> is required\n");
+        process.exit(2);
+      }
+      const opts: LoopContinueOptions = { baselineRunId, proposalId, dryRun };
+      const result = await loopContinue(opts, ctx);
+      if ("kind" in result && result.kind === "continue") {
+        process.stdout.write(formatContinueDryRun(result));
+        process.exit(0);
+      }
+      const live = result as {
+        manifestPath: string;
+        candidateRunId: string;
+        comparisonPath: string;
+        kept: boolean | null;
+      };
+      const keptStr = live.kept === null ? "n/a" : live.kept ? "true" : "false";
+      process.stdout.write(
+        `loop --continue: candidate_run_id=${live.candidateRunId} comparison=${live.comparisonPath} kept=${keptStr}\n`,
+      );
+      process.exit(0);
+    }
+
+    // --status
+    const baselineRunId = args.flags.get("baseline-run-id");
+    if (!baselineRunId || baselineRunId === "true") {
+      process.stderr.write("loop --status: --baseline-run-id <id> is required\n");
+      process.exit(2);
+    }
+    const opts: LoopStatusOptions = { baselineRunId };
+    const report = await loopStatus(opts, ctx);
+    process.stdout.write(formatStatusReport(report));
+    process.exit(0);
+  } catch (err) {
+    process.stderr.write(
+      `loop: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    process.exit(2);
+  }
+}
+
+async function commandServe(args: ParsedArgs): Promise<void> {
+  const runsDir = resolve(args.flags.get("runs-dir") ?? DEFAULT_RUNS_DIR);
+  const casesDir = resolve(args.flags.get("cases-dir") ?? resolve(process.cwd(), "cases"));
+  const uiDistFlag = args.flags.get("ui-dist") ?? resolve(process.cwd(), "ui", "dist");
+  const uiDistDir = existsSync(uiDistFlag) ? uiDistFlag : undefined;
+  const portFlag = args.flags.get("port");
+  const defaults = serverDefaultsFromEnv();
+  const port = portFlag ? Number.parseInt(portFlag, 10) : defaults.port;
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error(`serve: --port must be a valid TCP port (1-65535); got ${portFlag}`);
+  }
+  const handle = await startServer({
+    runsDir,
+    casesDir,
+    port,
+    hostname: defaults.hostname,
+    ...(uiDistDir ? { uiDistDir } : {}),
+  });
+  process.stdout.write(
+    [
+      `serve: listening on http://${handle.hostname}:${handle.port}`,
+      `  runs-dir: ${runsDir}`,
+      `  cases-dir: ${casesDir}`,
+      uiDistDir
+        ? `  ui-dist: ${uiDistDir} (production-mode static fallback enabled)`
+        : "  ui-dist: <not built> — non-/api paths return 404 (run `cd benchmark/ui && npm run build`)",
+      "",
+    ].join("\n"),
+  );
+  // Keep the process alive; SIGINT / SIGTERM close cleanly.
+  const shutdown = async (signal: string): Promise<void> => {
+    process.stdout.write(`\nserve: received ${signal}, closing...\n`);
+    await handle.close();
+    process.exit(0);
+  };
+  process.once("SIGINT", () => void shutdown("SIGINT"));
+  process.once("SIGTERM", () => void shutdown("SIGTERM"));
+}
+
+function printUsage(): void {
+  process.stdout.write(
+    [
+      "benchmark — Guild benchmark factory CLI",
+      "",
+      "Usage:",
+      "  benchmark score    --run-id <id> [--fixture <path>] [--case <path>] [--runs-dir <path>]",
+      "  benchmark compare  --baseline <set> --candidate <set> [--runs-dir <path>] [--output <path>]",
+      "  benchmark serve    [--port <n>] [--runs-dir <path>] [--cases-dir <path>] [--ui-dist <path>]",
+      "                          (binds 127.0.0.1; BENCHMARK_PORT env or --port; default 3055)",
+      "  benchmark run      --case <slug> [--run-id <id>] [--dry-run] [--cleanup]",
+      "                          [--runs-dir <path>] [--cases-dir <path>]",
+      "                          (--dry-run prints the resolved plan; never spawns claude)",
+      "  benchmark loop     --start    --case <slug> [--baseline-run-id <id>] [--dry-run]",
+      "                     --continue --baseline-run-id <id> --apply <proposal-id> [--dry-run]",
+      "                     --status   --baseline-run-id <id>",
+      "                          (P4 learning loop; never auto-applies; --dry-run never spawns)",
+      "  benchmark export-website (deferred — JSON snapshot for the public website)",
+      "",
+    ].join("\n"),
+  );
+}
+
+async function main(argv: string[]): Promise<void> {
+  const args = parseArgs(argv);
+  switch (args.command) {
+    case "score":
+      await commandScore(args);
+      return;
+    case "compare":
+      await commandCompare(args);
+      return;
+    case "serve":
+      await commandServe(args);
+      return;
+    case "run":
+      await commandRun(args);
+      return;
+    case "loop":
+      await commandLoop(args);
+      return;
+    case "export-website":
+      commandDeferred("export-website", "deferred (post-v1)");
+    case "":
+    case "--help":
+    case "-h":
+    case "help":
+      printUsage();
+      return;
+    default:
+      process.stderr.write(`Unknown command: ${args.command}\n\n`);
+      printUsage();
+      process.exit(1);
+  }
+}
+
+main(process.argv.slice(2)).catch((err) => {
+  process.stderr.write(`error: ${err instanceof Error ? err.message : String(err)}\n`);
+  process.exit(1);
+});

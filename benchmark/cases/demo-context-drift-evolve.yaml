@@ -1,0 +1,44 @@
+# Demo case 2 — diagnose context drift in a captured Guild run and propose an
+# evolve action. Spec: .guild/spec/benchmark-factory.md §"Two V1 Demos" Demo 2.
+# This case is the P4 learning-loop's primary target — baseline run, apply
+# guild:reflect proposal, candidate run, compare. The autoresearch keep/discard
+# signal lives in benchmark/runs/_compare/<baseline>__<candidate>.json.
+schema_version: 1
+id: demo-context-drift-evolve
+title: Diagnose context drift in a Guild run and produce an evolve proposal
+timeout_seconds: 1800
+repetitions: 1
+fixture: ../fixtures/synthetic-pass
+prompt: |
+  A previous Guild run captured under .guild/runs/<id>/ shows divergence between
+  the baseline and candidate score components. Your job:
+    1. Inspect the captured artifacts (events.ndjson, handoff receipts,
+       review.md, assumptions.md).
+    2. Diagnose the most likely root cause — context drift, stale wiki entry,
+       miscalibrated weights, or a specialist boundary collision.
+    3. Surface a guild:reflect proposal that targets the diagnosed root cause.
+    4. Validate the proposal via guild:evolve-skill (paired-eval shape; do not
+       flip live).
+
+  The proposal must explicitly name the change target (skill / agent /
+  description) and include a rollback plan. Capture everything under
+  .guild/runs/<id>/reflect.md.
+expected_specialists:
+  - architect
+  - backend
+  - qa
+  - researcher
+expected_stage_order:
+  - brainstorm
+  - team
+  - plan
+  - context
+  - execute
+  - review
+  - verify
+  - reflect
+acceptance_commands:
+  - test -f .guild/runs/last/reflect.md
+  - grep -q "proposed_change:" .guild/runs/last/reflect.md
+  - grep -q "rollback:" .guild/runs/last/reflect.md
+wall_clock_budget_ms: 1800000

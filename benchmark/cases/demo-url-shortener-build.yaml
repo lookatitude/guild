@@ -1,0 +1,48 @@
+# Demo case 1 — green-field build of a small service end-to-end.
+# Spec: .guild/spec/benchmark-factory.md §"Two V1 Demos" Demo 1.
+# Source artifacts produced by the runner (P3) live under
+# benchmark/runs/<run-id>/artifacts/.guild/. P1 scores against a synthetic
+# fixture pointed at by `fixture:`.
+schema_version: 1
+id: demo-url-shortener-build
+title: Build a URL shortener service end-to-end via the Guild lifecycle
+timeout_seconds: 1800
+repetitions: 1
+fixture: ../fixtures/synthetic-pass
+prompt: |
+  Build a URL shortener service from scratch. Use the full Guild lifecycle:
+  brainstorm → team-compose → plan → context-assemble → execute → review →
+  verify → reflect.
+
+  The service must:
+    - Expose POST /shorten (accepts {url}, returns {slug}).
+    - Expose GET /:slug (302-redirects to the original URL).
+    - Persist mappings to a local SQLite database.
+    - Ship with a vitest suite that covers ≥ 80% of src/ (line + branch).
+    - Be runnable with `cd workspace && npm install && npm test`.
+
+  Capture every stage, every dispatched specialist, every gate decision, and
+  every receipt under .guild/runs/<run-id>/. The benchmark factory will score
+  this run on outcome / delegation / gates / evidence / loop_response /
+  efficiency.
+expected_specialists:
+  - architect
+  - backend
+  - qa
+  - technical-writer
+expected_stage_order:
+  - brainstorm
+  - team
+  - plan
+  - context
+  - execute
+  - review
+  - verify
+  - reflect
+acceptance_commands:
+  - cd workspace && npm install
+  - cd workspace && npm run typecheck
+  - cd workspace && npm test
+  - test -f workspace/src/server.ts
+  - test -f workspace/src/db.ts
+wall_clock_budget_ms: 1500000

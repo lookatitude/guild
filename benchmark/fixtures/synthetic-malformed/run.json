@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "run_id": "synthetic-malformed-001",
+  "case_slug": "demo-url-shortener-build",
+  "plugin_ref": "abcdef1",
+  "model_ref": {
+    "architect": "claude-opus-4-7",
+    "backend": "claude-sonnet-4-6"
+  },
+  "started_at": "2026-04-26T05:30:00Z",
+  "completed_at": "2026-04-26T05:50:00Z",
+  "status": "errored"
+}

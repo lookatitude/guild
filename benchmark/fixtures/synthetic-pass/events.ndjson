@@ -1,0 +1,37 @@
+{"ts":"2026-04-26T05:30:00Z","type":"stage_started","stage":"brainstorm"}
+{"ts":"2026-04-26T05:31:00Z","type":"stage_completed","stage":"brainstorm","duration_ms":60000}
+{"ts":"2026-04-26T05:31:01Z","type":"gate_passed","gate":"brainstorm"}
+{"ts":"2026-04-26T05:31:02Z","type":"stage_started","stage":"team"}
+{"ts":"2026-04-26T05:32:00Z","type":"stage_completed","stage":"team","duration_ms":58000}
+{"ts":"2026-04-26T05:32:01Z","type":"gate_passed","gate":"team"}
+{"ts":"2026-04-26T05:32:02Z","type":"stage_started","stage":"plan"}
+{"ts":"2026-04-26T05:33:30Z","type":"stage_completed","stage":"plan","duration_ms":88000}
+{"ts":"2026-04-26T05:33:31Z","type":"gate_passed","gate":"plan"}
+{"ts":"2026-04-26T05:33:32Z","type":"stage_started","stage":"context"}
+{"ts":"2026-04-26T05:34:00Z","type":"stage_completed","stage":"context","duration_ms":28000}
+{"ts":"2026-04-26T05:34:01Z","type":"gate_passed","gate":"context"}
+{"ts":"2026-04-26T05:34:02Z","type":"stage_started","stage":"execute"}
+{"ts":"2026-04-26T05:34:03Z","type":"specialist_dispatched","specialist":"architect","task_id":"T1-architect"}
+{"ts":"2026-04-26T05:36:00Z","type":"specialist_completed","specialist":"architect","task_id":"T1-architect","status":"complete"}
+{"ts":"2026-04-26T05:36:01Z","type":"specialist_dispatched","specialist":"backend","task_id":"T2-backend"}
+{"ts":"2026-04-26T05:42:00Z","type":"specialist_completed","specialist":"backend","task_id":"T2-backend","status":"complete"}
+{"ts":"2026-04-26T05:42:01Z","type":"specialist_dispatched","specialist":"qa","task_id":"T3-qa"}
+{"ts":"2026-04-26T05:46:00Z","type":"specialist_completed","specialist":"qa","task_id":"T3-qa","status":"complete"}
+{"ts":"2026-04-26T05:46:01Z","type":"specialist_dispatched","specialist":"technical-writer","task_id":"T4-technical-writer"}
+{"ts":"2026-04-26T05:48:00Z","type":"specialist_completed","specialist":"technical-writer","task_id":"T4-technical-writer","status":"complete"}
+{"ts":"2026-04-26T05:48:01Z","type":"stage_completed","stage":"execute","duration_ms":839000}
+{"ts":"2026-04-26T05:48:02Z","type":"gate_passed","gate":"execute"}
+{"ts":"2026-04-26T05:48:03Z","type":"stage_started","stage":"review"}
+{"ts":"2026-04-26T05:48:30Z","type":"stage_completed","stage":"review","duration_ms":27000}
+{"ts":"2026-04-26T05:48:31Z","type":"gate_passed","gate":"review"}
+{"ts":"2026-04-26T05:48:32Z","type":"stage_started","stage":"verify"}
+{"ts":"2026-04-26T05:49:00Z","type":"stage_completed","stage":"verify","duration_ms":28000}
+{"ts":"2026-04-26T05:49:01Z","type":"gate_passed","gate":"verify"}
+{"ts":"2026-04-26T05:49:02Z","type":"stage_started","stage":"reflect"}
+{"ts":"2026-04-26T05:50:00Z","type":"stage_completed","stage":"reflect","duration_ms":58000}
+{"ts":"2026-04-26T05:50:01Z","type":"gate_passed","gate":"reflect"}
+{"ts":"2026-04-26T05:50:02Z","type":"acceptance_command","command":"cd workspace && npm install","exit_code":0}
+{"ts":"2026-04-26T05:50:03Z","type":"acceptance_command","command":"cd workspace && npm run typecheck","exit_code":0}
+{"ts":"2026-04-26T05:50:04Z","type":"acceptance_command","command":"cd workspace && npm test","exit_code":0}
+{"ts":"2026-04-26T05:50:05Z","type":"acceptance_command","command":"test -f workspace/src/server.ts","exit_code":0}
+{"ts":"2026-04-26T05:50:06Z","type":"acceptance_command","command":"test -f workspace/src/db.ts","exit_code":0}
