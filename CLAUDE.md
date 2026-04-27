@@ -56,3 +56,19 @@ Guild has a built-in self-evolution loop (`guild-plan.md §10`, `§11`). For Gui
 The wiki for the Guild repo lives at `.guild/wiki/` (start at `index.md`). Read it before making decisions that touch the same surface — prior choices are recorded with their rationale. Backfill landed 2026-04-27 covering nine v1.1 decisions, two standards, one recipe, and the v1.1 reflection.
 
 For cross-tree truths (operator preferences that survive *outside* this working directory), use auto-memory at `~/.claude/projects/.../memory/`. The wiki is repo-scoped; memory is operator-scoped.
+
+## Codex adversarial review — dev-only discipline
+
+When developing the Guild plugin via the `/guild` lifecycle, every gate that produces a load-bearing artifact runs an adversarial Codex review loop before the lifecycle advances:
+
+| Gate | When |
+|---|---|
+| **G-spec** | After `guild:brainstorm` writes `.guild/spec/<slug>.md`, before `guild:team-compose`. |
+| **G-plan** | After `guild:plan` writes `.guild/plan/<slug>.md`, before the user-approval gate. |
+| **G-lane** | After EACH lane's handoff receipt is written, before the next lane dispatches (or before `guild:review` for the final lane). |
+
+Mechanism: dispatch via `Agent({ subagent_type: "codex:rescue", ... })` with an adversarial prompt + the artifact + (rounds 2+) the prior Q&A trail. Loop until Codex emits `## SATISFIED` on a line by itself. Round cap **5**; on round 6, surface to user with 3 options (force-pass / extend-cap / rework). Trail under `.guild/runs/<run-id>/codex-review/<gate>.md`.
+
+If Codex is unavailable (`codex --version` fails or dispatch returns "not authenticated"), the gate prints `warn: codex-adversarial-review skipped — codex unavailable.` and proceeds. Don't hard-block on Codex outages.
+
+Full discipline at `.guild/wiki/standards/codex-adversarial-review.md`; decision rationale at `.guild/wiki/decisions/codex-adversarial-review-loop.md`. **Dev-only** — does NOT ship in the plugin distribution. Guild's lifecycle skills (`brainstorm`, `plan`, `execute-plan`) deliberately don't know about Codex; the discipline is layered at the orchestrator-instruction level (this section + the wiki standard) so consumers of Guild never acquire a Codex auth dependency.
