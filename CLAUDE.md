@@ -25,6 +25,18 @@ The plugin is built by 8 dev-team agents, each owning a scoped slice: `plugin-ar
 
 Runtime artifacts live under `.guild/` at the consuming repo's root (never committed by Guild itself). Layout in `guild-plan.md §4`. The Guild repo itself uses `.guild/` for its own self-build knowledge — gitignored, but durable across sessions.
 
+## Branch + PR discipline (mandatory)
+
+**No direct commits to `main` going forward.** Every change — fix-packs, polish rounds, single-line edits — lands through a feature/release branch and a pull request.
+
+Workflow:
+1. Branch from `main`: `git checkout -b release/<version>` or `feature/<short-slug>`.
+2. Commit + push the branch.
+3. Open a PR (`gh pr create`) targeting `main`.
+4. Merge via the PR (squash or merge per case).
+
+Rationale: PRs give an explicit review surface, attach CI/checks, document the change in the GitHub timeline, and keep `main` unilaterally mutable only via the PR mechanism. v1.1 was force-pushed back to revert a direct-to-main slip and re-routed through `release/v1.1.0` PR — the rule applies retroactively from that point. Codified in `.guild/wiki/standards/release-discipline.md` rule 6.
+
 ## Continuous knowledge — discipline
 
 Guild has a built-in self-evolution loop (`guild-plan.md §10`, `§11`). For Guild's own development, the discipline is:
