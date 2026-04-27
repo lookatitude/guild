@@ -1,0 +1,23 @@
+# Live operator smoke — minimal prompt, default argv, no wrapper.
+# Per `.guild/wiki/standards/live-smoke-checklist.md` this is the one
+# case every release tag must pass before pushing. Cost is single-digit
+# cents on haiku tier; wall clock should be under 10 seconds.
+#
+# expected_* are intentionally empty: the smoke is a "did claude
+# respond at all" gate, not a Guild-lifecycle assertion. Score will
+# come back partial=true with run_kind=raw_model — that is the v1.1
+# expected shape (see decisions/benchmark-runs-raw-claude-not-guild-lifecycle.md).
+schema_version: 1
+id: smoke-noop
+title: Live smoke — minimal prompt, default argv (no wrapper)
+timeout_seconds: 60
+repetitions: 1
+fixture: ../fixtures/synthetic-pass
+prompt: |
+  Reply with exactly: smoke-ok
+
+  Then exit. Do not call any tools.
+expected_specialists: []
+expected_stage_order: []
+acceptance_commands: []
+wall_clock_budget_ms: 60000

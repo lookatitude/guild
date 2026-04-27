@@ -10,3 +10,15 @@ node_modules/
 
 # Accidental root lockfile (scripts/, hooks/, mcp-servers/ have their own)
 /package-lock.json
+
+# Benchmark factory runtime artifacts (benchmark/ has its own package.json)
+benchmark/runs/
+benchmark/reports/internal/
+benchmark/node_modules/
+benchmark/coverage/
+benchmark/ui/node_modules/
+benchmark/ui/dist/
+benchmark/ui/coverage/
+
+# TypeScript incremental build cache
+*.tsbuildinfo

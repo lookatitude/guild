@@ -1,0 +1,122 @@
+{
+  "run": {
+    "schema_version": 1,
+    "run_id": "sample-pass-001",
+    "case_slug": "demo-url-shortener-build",
+    "plugin_ref": "abcdef1",
+    "model_ref": { "architect": "claude-opus-4-7" },
+    "started_at": "2026-04-26T05:30:00Z",
+    "completed_at": "2026-04-26T05:50:00Z",
+    "status": "pass",
+    "wall_clock_ms": 1200000,
+    "wall_clock_budget_ms": 1500000
+  },
+  "metrics": {
+    "schema_version": 1,
+    "run_id": "sample-pass-001",
+    "computed_at": "2026-04-26T05:51:00Z",
+    "wall_clock_ms": 1200000,
+    "wall_clock_budget_ms": 1500000,
+    "stages": [
+      {
+        "name": "brainstorm",
+        "status": "passed",
+        "started_at": "2026-04-26T05:30:00Z",
+        "completed_at": "2026-04-26T05:31:00Z",
+        "duration_ms": 60000
+      },
+      {
+        "name": "team",
+        "status": "passed",
+        "started_at": "2026-04-26T05:31:02Z",
+        "completed_at": "2026-04-26T05:32:00Z",
+        "duration_ms": 58000
+      }
+    ],
+    "dispatched_specialists": ["architect", "backend"],
+    "expected_specialists": ["architect", "backend", "qa"],
+    "acceptance_commands": [
+      { "command": "echo hi", "passed": true },
+      { "command": "echo bye", "passed": false }
+    ],
+    "expected_stage_order": [
+      "brainstorm",
+      "team",
+      "plan",
+      "context",
+      "execute",
+      "review",
+      "verify",
+      "reflect"
+    ],
+    "observed_stage_order": ["brainstorm", "team"],
+    "gate_outcomes": {
+      "brainstorm": "passed",
+      "team": "passed",
+      "plan": "skipped"
+    },
+    "retry_count": 0,
+    "tool_error_count": 0
+  },
+  "score": {
+    "schema_version": 1,
+    "run_id": "sample-pass-001",
+    "case_slug": "demo-url-shortener-build",
+    "plugin_ref": "abcdef1",
+    "model_ref": { "architect": "claude-opus-4-7" },
+    "status": "pass",
+    "scored_at": "2026-04-26T05:51:00Z",
+    "partial": false,
+    "missing_artifacts": [],
+    "run_kind": "guild_lifecycle",
+    "components": {
+      "outcome": {
+        "weight": 30,
+        "raw_subscore": 0,
+        "max_subscore": 100,
+        "weighted": 0,
+        "reason": "missing_artifact"
+      },
+      "delegation": {
+        "weight": 20,
+        "raw_subscore": 80,
+        "max_subscore": 100,
+        "weighted": 16
+      },
+      "gates": {
+        "weight": 20,
+        "raw_subscore": 75,
+        "max_subscore": 100,
+        "weighted": 15
+      },
+      "evidence": {
+        "weight": 15,
+        "raw_subscore": 90,
+        "max_subscore": 100,
+        "weighted": 13.5
+      },
+      "loop_response": {
+        "weight": 10,
+        "raw_subscore": 100,
+        "max_subscore": 100,
+        "weighted": 10
+      },
+      "efficiency": {
+        "weight": 5,
+        "raw_subscore": 60,
+        "max_subscore": 100,
+        "weighted": 3
+      }
+    },
+    "guild_score": 57.5
+  },
+  "events": [
+    { "ts": "2026-04-26T05:30:00Z", "type": "stage_started", "stage": "brainstorm" },
+    {
+      "ts": "2026-04-26T05:31:00Z",
+      "type": "stage_completed",
+      "stage": "brainstorm",
+      "duration_ms": 60000
+    }
+  ]
+}

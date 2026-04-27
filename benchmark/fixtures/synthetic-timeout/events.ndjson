@@ -1,0 +1,9 @@
+{"ts":"2026-04-26T05:30:00Z","type":"stage_started","stage":"brainstorm"}
+{"ts":"2026-04-26T05:31:00Z","type":"stage_completed","stage":"brainstorm","duration_ms":60000}
+{"ts":"2026-04-26T05:31:01Z","type":"gate_passed","gate":"brainstorm"}
+{"ts":"2026-04-26T05:31:02Z","type":"stage_started","stage":"team"}
+{"ts":"2026-04-26T05:32:00Z","type":"stage_completed","stage":"team","duration_ms":58000}
+{"ts":"2026-04-26T05:32:01Z","type":"gate_passed","gate":"team"}
+{"ts":"2026-04-26T05:32:02Z","type":"stage_started","stage":"plan"}
+{"ts":"2026-04-26T05:50:00Z","type":"specialist_dispatched","specialist":"architect","task_id":"T1-architect"}
+{"ts":"2026-04-26T06:30:00Z","type":"tool_error","tool":"timeout","exit_code":124}

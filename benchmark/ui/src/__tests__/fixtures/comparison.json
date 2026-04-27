@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "baseline": {
+    "set_id": "set-a",
+    "run_count": 2,
+    "pass_count": 1,
+    "fail_count": 1,
+    "timeout_count": 0,
+    "errored_count": 0,
+    "mean_guild_score": 67.13,
+    "canonical_model_ref": { "architect": "claude-opus-4-7" },
+    "canonical_plugin_ref": "abcdef1",
+    "runs": [
+      {
+        "run_id": "set-a-1",
+        "status": "pass",
+        "guild_score": 100,
+        "plugin_ref": "abcdef1",
+        "model_ref": { "architect": "claude-opus-4-7" }
+      },
+      {
+        "run_id": "set-a-2",
+        "status": "fail",
+        "guild_score": 34.25,
+        "plugin_ref": "abcdef1",
+        "model_ref": { "architect": "claude-opus-4-7" }
+      }
+    ]
+  },
+  "candidate": {
+    "set_id": "set-b",
+    "run_count": 1,
+    "pass_count": 1,
+    "fail_count": 0,
+    "timeout_count": 0,
+    "errored_count": 0,
+    "mean_guild_score": 100,
+    "canonical_model_ref": { "architect": "claude-opus-4-7" },
+    "canonical_plugin_ref": "abcdef1",
+    "runs": [
+      {
+        "run_id": "set-b-1",
+        "status": "pass",
+        "guild_score": 100,
+        "plugin_ref": "abcdef1",
+        "model_ref": { "architect": "claude-opus-4-7" }
+      }
+    ]
+  },
+  "status": "partial",
+  "excluded_runs": [
+    {
+      "run_id": "set-a-3",
+      "side": "baseline",
+      "reason": "model_ref drift"
+    }
+  ],
+  "per_component_delta": {
+    "outcome": { "baseline": 50, "candidate": 100, "delta": 50 },
+    "delegation": { "baseline": 70, "candidate": 80, "delta": 10 },
+    "gates": { "baseline": 90, "candidate": 95, "delta": 5 },
+    "evidence": { "baseline": 60, "candidate": 70, "delta": 10 },
+    "loop_response": { "baseline": 100, "candidate": 100, "delta": 0 },
+    "efficiency": { "baseline": 80, "candidate": 60, "delta": -20 }
+  },
+  "guild_score_delta": { "baseline": 67.13, "candidate": 100, "delta": 32.87 },
+  "generated_at": "2026-04-26T17:30:00Z"
+}

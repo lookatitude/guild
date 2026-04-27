@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "id": "demo-context-drift-evolve",
+      "title": "Diagnose context drift in a Guild run and produce an evolve proposal",
+      "expected_specialists": ["architect", "backend", "qa", "researcher"],
+      "expected_stage_order": [
+        "brainstorm",
+        "team",
+        "plan",
+        "context",
+        "execute",
+        "review",
+        "verify",
+        "reflect"
+      ]
+    },
+    {
+      "id": "demo-url-shortener-build",
+      "title": "Build a URL shortener service end-to-end via the Guild lifecycle",
+      "expected_specialists": ["architect", "backend", "qa", "technical-writer"],
+      "expected_stage_order": [
+        "brainstorm",
+        "team",
+        "plan",
+        "context",
+        "execute",
+        "review",
+        "verify",
+        "reflect"
+      ]
+    }
+  ]
+}
