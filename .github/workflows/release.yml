@@ -1,0 +1,106 @@
+name: Tag + GitHub Release on release/v*.* PR merge
+
+# Fires when a PR from a `release/v*` branch merges into `main`.
+# Creates an annotated tag at the merge commit and opens a GitHub Release
+# whose notes are the PR body verbatim.
+#
+# Why on `pull_request: closed` (with `merged == true`) rather than
+# `push: branches: [main]`: the PR event has the head ref + body
+# directly available via `${{ github.event.pull_request }}`, with no
+# need to parse merge-commit-message conventions. The push event
+# would require regex on the merge commit's message ("Merge pull
+# request #N from <owner>/release/vX.Y.Z") — fragile if a future
+# repo changes its merge commit format.
+#
+# Idempotent: the action checks whether the tag already exists before
+# pushing, so a re-run (e.g. after a workflow re-trigger) does not
+# fail. Manual operator-side tags (the v1.0/1.0.1 backfilled era)
+# are preserved unchanged.
+#
+# Codifies `.guild/wiki/standards/release-discipline.md` rule 7.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write   # required for tag push + release create
+
+jobs:
+  release:
+    if: |
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main at the merge commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+
+      - name: Derive version tag from branch name
+        id: ver
+        run: |
+          set -euo pipefail
+          # head.ref is e.g. "release/v1.4.0" → tag is "v1.4.0"
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          TAG="${BRANCH#release/}"
+          # Defensive shape check — only allow vX.Y.Z[-prerelease].
+          # Prerelease segment supports "-rc1", "-beta2", etc. so we
+          # don't paint ourselves into a corner if a future release
+          # cuts an RC.
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "release.yml refusing tag '$TAG' from branch '$BRANCH' — does not match v[major].[minor].[patch][-prerelease]" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if tag already exists (idempotent re-runs)
+        id: tag_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${{ github.repository }}/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists — skipping create. (Idempotent re-run.)"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create + push annotated tag at the merge commit
+        if: steps.tag_check.outputs.exists == 'false'
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$MERGE_SHA" -m "$PR_TITLE"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release with PR body as notes
+        if: steps.tag_check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          # Write the body to a temp file so multiline content survives
+          # without escape gymnastics. `gh release create` handles
+          # `--notes-file -` from stdin too, but a temp file makes the
+          # workflow easier to debug if the body has unusual chars.
+          BODY_FILE="$(mktemp)"
+          printf '%s' "$PR_BODY" > "$BODY_FILE"
+          gh release create "$TAG" \
+            --title "$PR_TITLE" \
+            --notes-file "$BODY_FILE" \
+            --latest
+          rm -f "$BODY_FILE"
