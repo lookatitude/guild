@@ -8,14 +8,223 @@ from v1.0.0 onward.
 
 ## [Unreleased]
 
+### Added
+
+- Release-tagging automation at `.github/workflows/release.yml`. When a
+  PR from a `release/v*` branch merges to `main`, the workflow creates
+  an annotated tag at the merge commit and opens a GitHub Release with
+  the PR body as release notes. Idempotent (skips if the tag already
+  exists), shape-checked (refuses tags that do not match
+  `vMAJOR.MINOR.PATCH[-prerelease]`).
+
 ### Changed
 
-- Clarified install docs: restart Claude Code after installing Guild so plugin
-  commands, skills, agents, hooks, and MCP servers hydrate in the next session.
-- Expanded the GitHub Pages landing page into a static website with a
-  documentation hub and a detailed URL-shortener end-to-end use case page.
-- Added a dependency-free Node static-site generator that keeps navigation
-  consistent and builds the command, agent, and skill reference from repo files.
+- `release-discipline.md` rule 7 added: every release ships an annotated
+  tag + GitHub Release. Pre-v1.4 releases backfilled retroactively
+  (v1.1.0 / v1.2.0 / v1.3.0 tags + releases created 2026-04-27).
+
+## [1.3.0] — 2026-04-27
+
+Closed 4 deferred items from `benchmark/FOLLOWUPS.md` + locked 3
+genuinely-deferred items behind ADRs with explicit re-entry triggers.
+F3 (manifest signing) withdrawn during brainstorm. Drove through the
+full Guild lifecycle (brainstorm → team-compose → plan →
+context-assemble → execute-plan → review → verify → reflect) with a
+4-specialist team.
+
+### Added
+
+- **F2 — `loop --rollback` action.** New `loopRollback()` in
+  `benchmark/src/loop.ts` with `--dry-run` (default) and `--confirm`
+  (live, shells out to `git revert <plugin_ref_after>`); M13 path
+  allowlist on `--candidate-id`; new `"rolled-back"` manifest state.
+  Refuses on non-`completed` state. 12 unit tests + 4 CLI tests +
+  1 fast-check property test (200 numRuns × 2 properties).
+- **F4 — `auth_identity_hash` URL filter on RunsListPage.**
+  `?auth=<7-char-prefix>` filters the visible row set client-side.
+  Display-only (no `<input>`); preserves the v1.1 forensic-only
+  contract. Backend confirmed end-to-end wire (artifact-importer +
+  server.ts LIST projection + types). 3 UI tests pinning filter-off /
+  filter-on-matching / filter-on-no-matches.
+- **F12 — hook-driven reflect for dev-team work (opt-in).**
+  `hooks/maybe-reflect.ts` widens to fire on `SubagentStop` under
+  three guards (all must hold): `GUILD_ENABLE_DEVTEAM_REFLECT=1`
+  operator opt-in (default off), session has accumulated ≥ 3
+  `SubagentStop` events, `.guild/spec/<slug>.md` exists. 6 jest tests
+  cover every guard combination.
+- **ADR-007 — RSS-cap-not-portable + 80%-WARN runtime helper.**
+  Accepts that no portable per-process hard RSS cap exists; recommends
+  runtime stderr WARN at 80% of operator-declared
+  `GUILD_BENCHMARK_MAX_RSS_KB` env var. Backend implemented per ADR-007
+  §Decision §1-§7: `installRssWarnSampler()` sampled at 1Hz, fired
+  once per run on first crossing, platform-normalised (macOS bytes
+  divided by 1024 → KB; Linux + Windows passthrough). 14 unit tests
+  pin the env contract, sampling cadence, line format, once-per-run
+  latch, platform branching. Re-entry trigger: cgroups becomes
+  portable / multi-platform sandbox primitive emerges /
+  OOM-induced data-loss incident reported.
+- **ADR-005 — Windows process-group signaling design.** Windows
+  analogue of ADR-004's POSIX `process.kill(-pid, SIG)`. Pins
+  `taskkill /PID <pid> /T /F`. **Design-only — not implemented.**
+  Re-entry trigger: a Windows operator surfaces / Windows CI lands /
+  a Windows grandchild-leak incident is reported.
+- **ADR-008 — interactive-claude-harness for v2.** Designs the
+  PTY-driven `claude` invocation (no `--print`, plugin pre-loaded)
+  past the `~30/100` ceiling on raw-model runs.
+  Coexists with ADR-006 behind `run_kind` (additive, not
+  supersession). **Design-only — not implemented in v1.3.**
+  Re-entry trigger: v2 release window opens / an operator case
+  requires `events.ndjson` / ≥ 2 operators surface the
+  partial-scoring complaint in one cycle.
+- Supersession callout in `benchmark/plans/p4-learning-loop-architecture.md §6.1`
+  referencing the new `loop --rollback` action.
+
+### Removed
+
+- **F8 — `export-website` deferred subcommand.** Spec is no public
+  site in v1; static site at `docs/website/` is hand-curated.
+  Removed `commandDeferred("export-website", ...)` from `cli.ts`,
+  the `export-website` row from help text, the
+  `package.json` script. `cli.test.ts` flipped from "deferred" to
+  exit 1 + "Unknown command".
+
+### Withdrawn
+
+- **F3 — manifest cryptographic signing.** User explicit instruction
+  during brainstorm: "do not do F3 manifest signing, remove it from
+  the plans." Removed from v1.3 scope. FOLLOWUPS.md F3 marked
+  WITHDRAWN with verbatim user instruction + re-entry condition
+  (multi-operator scenarios emerge).
+
+### Verified
+
+- 377 vitest passed / 2 skipped (was 343 v1.2 → +34).
+- 37 hooks jest passed (was 31 v1.2 → +6).
+- 60 UI vitest passed (was 57 v1.2 → +3).
+- Total **474 tests passing** (was 431 v1.2 → **+43 net**).
+- Both typechecks clean.
+- Live operator smoke (release-discipline rule 1):
+  `smoke-noop status=pass wall_clock_ms=5988`, claude replied
+  `smoke-ok` under v1.3 default argv (no wrapper).
+
+## [1.2.0] — 2026-04-27
+
+Closed 6 deferred items from v1.1's `benchmark/FOLLOWUPS.md`.
+
+### Added
+
+- **F1 — `loop --abort` action.** `loopAbort()` in
+  `benchmark/src/loop.ts` flips manifest state to `"aborted"`,
+  removes the lockfile. Refuses on terminal states (`completed` →
+  irreversible, `aborted` → idempotent error). Supports `--dry-run`.
+  7 unit tests + 3 CLI argv tests.
+- **F5 — Q6/Q7 concurrent-lock + atomic-rename integration tests.**
+  The two `it.todo` slots in `loop.security.test.ts` deferred since
+  P3 are now real integration tests (3 tests).
+  `writeManifestAtomic` newly exported for testing.
+- **F9 — cross-`run_kind` comparator warning.**
+  `Comparison.kind_mix` field counts raw_model vs guild_lifecycle
+  runs per side; CLI emits a WARNING line on cross-kind sets.
+  3 unit tests pin pure-kind / cross-kind / mixed-within-side.
+- **F13 — subprocess-race property test.**
+  `tests/runner.race.property.test.ts`: 6 tests pin the deadlock-free
+  contract that v1.1 Bug 2's `awaitStreamEndBounded()` satisfies.
+  Random commit timings × event kinds via fast-check.
+  `awaitStreamEndBounded` + `STREAM_END_TIMEOUT_MS` exported from
+  `runner.ts`.
+- **G1 — pre-push hook refusing direct push to main.**
+  `.githooks/pre-push` mechanically enforces the no-direct-commits-to-main
+  rule from v1.1. Bypass via `GUILD_ALLOW_PUSH_MAIN=1` (logs a loud
+  warning). One-time setup: `git config core.hooksPath .githooks`.
+
+### Removed
+
+- **F11 — deprecated `run_id` alias from 409 body.** Server emits
+  only `current_run_id` on 409 conflict; v1.1's deprecated `run_id`
+  alias removed. Test pins absence explicitly.
+
+### Verified
+
+- 343 → 374 benchmark vitest tests passed (+31 net for v1.2).
+- 31 → 37 hooks jest tests passed (+6 net for v1.2).
+- 57 → 60 UI vitest tests passed (+3 net for v1.2).
+- Both typechecks clean.
+- Live `smoke-noop status=pass wall_clock_ms=5456`.
+
+## [1.1.0] — 2026-04-27
+
+Live operator smoke against v1.0.1 surfaced 5 real bugs that the
+static audit + 357-test suite missed. v1.1 closes all of them, adds
+9 polish-round gaps, lands ADR-006 for the claude v2.x argv pivot,
+and turns on the continuous-knowledge discipline so cross-session
+continuity actually works.
+
+### Added
+
+- **`benchmark/cases/smoke-noop.yaml`** — minimal live-smoke case
+  checked into the repo (60s, haiku tier). Pre-tag smoke target.
+- **`benchmark/FOLLOWUPS.md`** — single ledger of 13 deferred items
+  with deferred-with-reason rationale + owner.
+- **`Score.run_kind: "raw_model" | "guild_lifecycle"`** annotation —
+  partial scoring on raw-`claude --print` runs is now interpretable.
+- **`auth_identity_hash` UI badge** on `RunDetailPage` — 7-char
+  prefix display when present (forensic-only contract).
+- **`Comparison.skipped_runs[]`** — comparator surfaces unscored
+  runs in the comparison artifact + CLI WARNING line.
+- **Guild self-evolution layer (off-tree, on-disk).** `.guild/wiki/`
+  populated with 9 ADR-lite decisions, 2 standards
+  (release-discipline, live-smoke-checklist), 1 recipe
+  (run-benchmark-live), 1 reflection (`.guild/reflections/v1.1-fix-pack.md`),
+  index.md + log.md. Two new auto-memory entries
+  (feedback_release_discipline, feedback_continuous_knowledge).
+- **`benchmark/plans/adr-006-runner-prompt-via-stdin.md`** — full
+  decision documenting the claude v2.x argv pivot, options scored,
+  P3 invariants preserved-via-new-mechanism, verification trail.
+- **CLAUDE.md "Continuous knowledge" section** — codifies the
+  three-trigger discipline (decision capture in real time, manual
+  reflection after major work, user-gated promotion).
+
+### Fixed
+
+- **Bug 1 — `GUILD_BENCHMARK_LIVE` was never read.** Doc-promised
+  cost-discipline gate was advisory only; runner now refuses to spawn
+  unless the env var is exactly `"1"`. Tests pin gate-unset (rejects),
+  gate-`"true"` (rejects — common operator mistake), gate-`"1"`
+  (passes), `--dry-run` bypass.
+- **Bug 2 — `spawnAndWait` deadlock on fast/empty stdio.**
+  `awaitStreamEndBounded()` returns immediately when stream is
+  already-ended; otherwise listens for `"end"`/`"close"`/`"error"`
+  with a 5s safety timeout. Applied at both await sites
+  (post-exit drain + redactor finally).
+- **Bug 3 — claude v2.x rejects `--output-format stream-json`
+  without `--verbose`.** Dropped from default; operators opt back in
+  via `GUILD_BENCHMARK_ARGV_TEMPLATE`.
+- **Bug 4 — `--model` never passed to spawned claude.**
+  `buildArgv()` reads `model_ref.default` and injects
+  `--model <name>` into the default argv. ARGV_TEMPLATE gains
+  `${MODEL}` placeholder.
+- **Bug 5 — claude v2.x rejects `--prompt-file` / `--workdir`
+  (ADR-006).** Default argv pivots to
+  `claude --print --add-dir <ws> [--model <name>]` with prompt piped
+  via stdin. P3 invariants preserved (prompt never in argv,
+  `shell: false`, ADR-003 fresh-fixture clone, ADR-004 process-group
+  signaling all unchanged). `stdio` becomes `["pipe", "pipe", "pipe"]`.
+- **README §10 stale prose** — updated to reflect v1.1 default
+  (`--add-dir`, prompt via stdin, `--model` injected).
+- **409 contract mismatch** — server returned `run_id`; UI read
+  `current_run_id`. v1.1 emits both (canonical `current_run_id` +
+  legacy `run_id` alias for one release; alias stripped in v1.2).
+- **Stale `_benchmark-prompt.txt` write** on every run — runner now
+  only writes the file when ARGV_TEMPLATE references `${PROMPT_FILE}`.
+- **CLAUDE.md "agents not yet populated" stale line** — updated to
+  reflect the 14 shipping specialists.
+
+### Changed
+
+- **No-direct-commits-to-main discipline.** v1.1 was originally
+  direct-pushed and force-pushed back to enforce the rule
+  retroactively. Codified in CLAUDE.md "Branch + PR discipline" and
+  `.guild/wiki/standards/release-discipline.md` rule 6.
 
 ## [1.0.1] — 2026-04-25
 
@@ -239,7 +448,10 @@ First public beta. Structurally complete across all 7 plan phases.
   and an available `tmux` binary.
 - MCP servers require Node 18+ and a one-time `npm install`.
 
-[Unreleased]: https://github.com/lookatitude/guild/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/lookatitude/guild/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/lookatitude/guild/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/lookatitude/guild/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/lookatitude/guild/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/lookatitude/guild/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/lookatitude/guild/compare/v1.0.0-beta4...v1.0.0
 [1.0.0-beta4]: https://github.com/lookatitude/guild/compare/v1.0.0-beta3...v1.0.0-beta4
