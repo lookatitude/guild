@@ -15,6 +15,8 @@ interface SeedOpts {
   plugin_ref?: string;
   model_ref?: Record<string, string>;
   outcome?: number;
+  // v1.2 — F9: pin run_kind for cross-kind comparator tests.
+  run_kind?: "raw_model" | "guild_lifecycle";
 }
 
 async function seedRun(
@@ -42,6 +44,7 @@ async function seedRun(
     scored_at: "2026-04-26T05:51:00Z",
     partial: false,
     missing_artifacts: [],
+    run_kind: opts.run_kind ?? "guild_lifecycle",
     components: {
       outcome: {
         weight: 30,
@@ -162,6 +165,55 @@ describe("compare / compareSets — happy path", () => {
       candidate: "set-b",
     });
     expect(comparison.skipped_runs).toEqual([]);
+  });
+
+  // v1.2 — F9: kind_mix counts raw_model vs guild_lifecycle runs per side
+  // so the CLI can warn on apples-to-oranges comparisons. Pure-kind runs
+  // produce zero/N counts; mixed runs produce non-zero/non-zero on the
+  // mixed side; cross-kind sets show divergent counts across sides.
+  it("counts run_kind per side in comparison.kind_mix (pure guild_lifecycle)", async () => {
+    await seedRun(runsDir, "set-a-1", { guild_score: 80, run_kind: "guild_lifecycle" });
+    await seedRun(runsDir, "set-b-1", { guild_score: 100, run_kind: "guild_lifecycle" });
+    const { comparison } = await compareSets({
+      runsDir,
+      baseline: "set-a",
+      candidate: "set-b",
+    });
+    expect(comparison.kind_mix).toEqual({
+      baseline_raw_model: 0,
+      baseline_guild_lifecycle: 1,
+      candidate_raw_model: 0,
+      candidate_guild_lifecycle: 1,
+    });
+  });
+
+  it("counts run_kind per side in comparison.kind_mix (cross-kind sets)", async () => {
+    await seedRun(runsDir, "set-a-1", { guild_score: 80, run_kind: "raw_model" });
+    await seedRun(runsDir, "set-b-1", { guild_score: 100, run_kind: "guild_lifecycle" });
+    const { comparison } = await compareSets({
+      runsDir,
+      baseline: "set-a",
+      candidate: "set-b",
+    });
+    expect(comparison.kind_mix.baseline_raw_model).toBe(1);
+    expect(comparison.kind_mix.baseline_guild_lifecycle).toBe(0);
+    expect(comparison.kind_mix.candidate_raw_model).toBe(0);
+    expect(comparison.kind_mix.candidate_guild_lifecycle).toBe(1);
+  });
+
+  it("counts run_kind per side in comparison.kind_mix (mixed within one side)", async () => {
+    await seedRun(runsDir, "set-a-1", { guild_score: 80, run_kind: "raw_model" });
+    await seedRun(runsDir, "set-a-2", { guild_score: 90, run_kind: "guild_lifecycle" });
+    await seedRun(runsDir, "set-b-1", { guild_score: 100, run_kind: "guild_lifecycle" });
+    const { comparison } = await compareSets({
+      runsDir,
+      baseline: "set-a",
+      candidate: "set-b",
+    });
+    expect(comparison.kind_mix.baseline_raw_model).toBe(1);
+    expect(comparison.kind_mix.baseline_guild_lifecycle).toBe(1);
+    expect(comparison.kind_mix.candidate_raw_model).toBe(0);
+    expect(comparison.kind_mix.candidate_guild_lifecycle).toBe(1);
   });
 });
 

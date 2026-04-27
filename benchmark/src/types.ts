@@ -253,6 +253,19 @@ export interface Comparison {
   // potentially under-counted; the CLI prints a warning when this list is
   // populated.
   skipped_runs: SkippedRun[];
+  // v1.2 — F9: when baseline + candidate run_kinds disagree (one set is
+  // raw_model, the other guild_lifecycle), the lifecycle-dependent
+  // components (outcome/delegation/gates) don't normalize and the delta
+  // table is misleading. Comparator emits this counter so callers can
+  // surface a clear warning. Counts are by side, raw_model vs lifecycle.
+  // 0/0/0/0 means no mismatch; any non-zero value pair across sides
+  // signals a cross-kind comparison.
+  kind_mix: {
+    baseline_raw_model: number;
+    baseline_guild_lifecycle: number;
+    candidate_raw_model: number;
+    candidate_guild_lifecycle: number;
+  };
   per_component_delta: Record<ComponentKey, ComponentDelta>;
   guild_score_delta: ComponentDelta;
   generated_at: string;
@@ -334,6 +347,24 @@ export interface LoopStatusOptions {
    * freeform notice when no tagged blocks are present.
    */
   diffProposalId?: string;
+}
+
+// v1.2 — F1: structured abort action. Flips manifest state to "aborted"
+// and removes the lockfile. Refuses if state is already "completed"
+// (irreversible by design). `dryRun` prints the proposed mutation
+// without writing.
+export interface LoopAbortOptions {
+  baselineRunId: string;
+  dryRun?: boolean;
+}
+
+// v1.2 — F1: shape returned by loopAbort for the dry-run reporter.
+export interface LoopAbortReport {
+  manifestPath: string;
+  manifestStateBefore: LoopManifestState;
+  manifestStateAfter: "aborted";
+  lockfilePath: string;
+  lockfileExisted: boolean;
 }
 
 // HTTP response shapes — server.ts (P2) serializes these; the React UI

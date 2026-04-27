@@ -35,6 +35,14 @@ Workflow:
 3. Open a PR (`gh pr create`) targeting `main`.
 4. Merge via the PR (squash or merge per case).
 
+**Mechanical enforcement.** A repo-checked-in `pre-push` hook at `.githooks/pre-push` refuses direct push to `main`. Wire it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Bypass for emergencies (force-push recovery from a slip): `GUILD_ALLOW_PUSH_MAIN=1 git push origin main` — logs a loud warning.
+
 Rationale: PRs give an explicit review surface, attach CI/checks, document the change in the GitHub timeline, and keep `main` unilaterally mutable only via the PR mechanism. v1.1 was force-pushed back to revert a direct-to-main slip and re-routed through `release/v1.1.0` PR — the rule applies retroactively from that point. Codified in `.guild/wiki/standards/release-discipline.md` rule 6.
 
 ## Continuous knowledge — discipline

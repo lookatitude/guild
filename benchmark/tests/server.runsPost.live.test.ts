@@ -226,12 +226,11 @@ describe("server / POST /api/runs (live, with mocked spawn)", () => {
     const conflictBody = (await conflicted.json()) as Record<string, unknown>;
     const acceptedBody = (await accepted.json()) as RunPostResponse;
 
-    // v1.1 — body shape unified: `current_run_id` is the canonical key the
-    // UI consumes (ui/src/lib/api.ts, TriggerPanelPage.tsx); `run_id` is
-    // kept as a deprecated alias for one release. Both must be present and
-    // identical.
+    // v1.2 — F11 closed: only `current_run_id` is present in the 409 body.
+    // The deprecated `run_id` alias from v1.1 is removed. Pin the absence
+    // explicitly so a regression flips the suite red.
     expect(typeof conflictBody.error).toBe("string");
-    expect(conflictBody.current_run_id).toBe(conflictBody.run_id);
+    expect(conflictBody.run_id).toBeUndefined();
     const conflictRunId = conflictBody.current_run_id as string;
     expect(conflictRunId).toBeTruthy();
     // The slot may have been claimed before planRun resolved, in which case

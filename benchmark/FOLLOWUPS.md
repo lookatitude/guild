@@ -1,24 +1,18 @@
 # Benchmark factory — followups
 
-Single ledger of items deferred out of v1.1 scope. Each entry: what /
-why deferred / who owns / where the original decision lives.
+Single ledger of items deferred out of v1.1/v1.2 scope. Each entry:
+what / why deferred / who owns / where the original decision lives.
 
-Updated 2026-04-27.
+Updated 2026-04-27 (v1.2).
 
-## Out of v1.1 — deferred with reason
+## Out of v1.2 — deferred with reason
 
-### F1. `loop --abort` action
+### F1. `loop --abort` action — CLOSED in v1.2
 
-**What.** `benchmark/plans/p4-learning-loop-architecture.md §4.3`
-reserves `state: "aborted"` on the manifest but does not implement a
-structured `loop --abort --baseline-run-id <id>` action. v1 workaround:
-operator `rm <manifest>` to abandon a baseline.
-
-**Why deferred.** No demand signal yet. Adding it now risks designing
-against a use case that doesn't exist.
-
-**Owner.** backend (when demand surfaces). Architect captures in a new
-ADR-007 if/when it ships.
+**Status.** Landed `loopAbort()` in `benchmark/src/loop.ts` + CLI
+dispatch in `cli.ts` + 7 unit tests + 3 CLI argv tests. Refuses on
+terminal states (`completed`, `aborted`); supports `--dry-run`; clears
+the lockfile when present. Mirrors continue/status arg validation.
 
 ### F2. `loop --rollback <candidate-id>` helper
 
@@ -61,18 +55,24 @@ no filter, no aggregation).
 hash" view → still followup if product wants it; flagged as scope
 expansion not bug fix.
 
-### F5. Q6 / Q7 loop security pins (concurrent-lock + atomic-rename)
+### F5. Q6 / Q7 loop security pins — CLOSED in v1.2
 
-**What.** `benchmark/tests/loop.security.test.ts` carries Q6 and Q7
-todos for concurrent-lock invariants and atomic-rename invariants. The
-unit tests cannot exercise these against a real filesystem with real
-process scheduling.
+**Status.** The two `it.todo` slots in
+`benchmark/tests/loop.security.test.ts` are replaced with real
+integration tests:
 
-**Why deferred.** These need an integration harness that spawns
-multiple `loop` processes against a shared manifest dir and checks
-ordering. qa T4 explicitly deferred to integration phase.
+- **Q6.** `pre-existing lockfile causes loopContinue to fail with
+  lock-contention error` — pre-seeds the lockfile (simulating
+  "another process is mid-continue"), invokes `loopContinue` against a
+  real git-init'd host root, asserts the documented "another invocation
+  is in flight" error fires.
+- **Q7.** Two tests pin the atomic-rename invariant: (a) success path
+  leaves no `.tmp` file and writes new content fully; (b) N concurrent
+  `writeManifestAtomic` calls against the same path produce a final
+  manifest that parses to ONE of the writer payloads in full, never
+  partial / never garbled.
 
-**Owner.** qa (integration harness, post-v1.1).
+`writeManifestAtomic` was newly exported from `loop.ts` for testing.
 
 ### F6. F3.4 hard RSS cap on subprocess
 
@@ -110,18 +110,12 @@ factory is a local operator tool; no public website in v1.
 
 **Owner.** product (if/when public benchmark site becomes scope).
 
-### F9. Cross-`run_kind` comparator warning
+### F9. Cross-`run_kind` comparator warning — CLOSED in v1.2
 
-**What.** v1.1 added `run_kind: "raw_model" | "guild_lifecycle"` on
-`score.json`. Comparing a `raw_model` run against a `guild_lifecycle`
-run produces noise (the lifecycle-dependent components don't
-normalize). Comparator does not currently warn on mixed-kind sets.
-
-**Why deferred.** v1 scope is partial-artifact handling, not run-kind
-disambiguation. The new field makes operators aware enough to avoid
-mixed comparisons; warning + auto-skip is v1.2 work.
-
-**Owner.** backend (small follow-up; ~30 lines).
+**Status.** Landed `Comparison.kind_mix` field counting raw_model vs
+guild_lifecycle runs per side. CLI prints a WARNING line when either
+side mixes kinds OR the two sides disagree on kind. 3 unit tests pin
+the counting (pure-kind, cross-kind, mixed-within-side).
 
 ### F10. `events.ndjson` from `claude --print` mode
 
@@ -136,17 +130,11 @@ programmatically. v2 feature.
 
 **Owner.** architect (v2 ADR), backend (implementation when scoped).
 
-### F11. Strip deprecated `run_id` field from 409 body
+### F11. Strip deprecated `run_id` field from 409 body — CLOSED in v1.2
 
-**What.** v1.1 unified the 409 contract: server returns
-`current_run_id` (the canonical key the UI consumes). The legacy
-`run_id` field is kept as a deprecated alias for one release so
-existing operator scripts don't break.
-
-**Why deferred.** Removing it now risks breaking unknown consumers.
-Plan: deprecate in v1.1 release notes; remove in v1.2.
-
-**Owner.** backend (one-line removal in v1.2).
+**Status.** Server emits only `current_run_id` on 409 conflict; the
+v1.1 deprecated `run_id` alias is gone. Test pins absence explicitly
+so a regression flips the suite red.
 
 ### F12. Hook-driven `guild:reflect` for dev-team work
 
@@ -162,19 +150,27 @@ Until manual invocation proves too easy to skip, status quo.
 
 **Owner.** hook-engineer (re-evaluate if reflections backlog grows).
 
-### F13. Auto-detect "latent" race conditions in mocks → real subprocess
+### F13. Subprocess-race property test — CLOSED in v1.2
 
-**What.** P3's qa-routed followup #2 ("stream-end-vs-exit deadlock
-on fast/empty subprocess output") was filed as "latent in production"
-and shipped that way. v1.1 proved it wasn't latent — every fast-fail
-live path triggered it.
+**Status.** Landed `tests/runner.race.property.test.ts`. Exports
+`awaitStreamEndBounded` + `STREAM_END_TIMEOUT_MS` from `runner.ts`.
+6 tests pin the deadlock-free contract: null stream, already-ended,
+already-destroyed, [property] random commit timings × event kinds,
+5s safety fallthrough on never-ending streams, [property] N concurrent
+awaits all settle when stream ends. The exact pattern that would have
+caught v1.1 Bug 2 pre-ship.
 
-**Why deferred.** A property-test pattern that schedules N subprocess
-exits with random stdio-drain timing would catch this class of bug,
-but designing it requires real subprocess plumbing. Not a v1.1 fix-
-pack item.
+## Closed in v1.2
 
-**Owner.** qa (post-v1.1 property-test design).
+For audit-trail continuity, items closed during the v1.2 release
+window:
+
+- ~~F1: `loop --abort` action~~ — closed (loopAbort + CLI dispatch + 10 tests).
+- ~~F5: Q6/Q7 concurrent-lock + atomic-rename~~ — closed (3 integration tests in loop.security.test.ts).
+- ~~F9: cross-run_kind comparator warning~~ — closed (Comparison.kind_mix + CLI WARNING + 3 tests).
+- ~~F11: strip deprecated `run_id` from 409 body~~ — closed.
+- ~~F13: subprocess-race property test~~ — closed (runner.race.property.test.ts, 6 tests).
+- ~~G1: pre-push hook refusing direct push to main~~ — closed (.githooks/pre-push, GUILD_ALLOW_PUSH_MAIN bypass).
 
 ## Closed in v1.1
 

@@ -32,6 +32,7 @@
 // reclassify the pins. We keep the pin slots here as TODOs so a future
 // re-run of this suite catches the regression once the surfaces ship.
 
+import { execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -70,10 +71,12 @@ import {
   runBenchmark,
 } from "../src/runner.js";
 import {
+  loopContinue,
   loopStart,
   loopStatus,
   formatStatusReport,
   manifestPathFor,
+  writeManifestAtomic,
 } from "../src/loop.js";
 import type { LoopManifest, RunJson } from "../src/types.js";
 
@@ -671,26 +674,192 @@ describe("loop / Q1–Q3 — verbatim body + high-trust WARNING (F1.1, F1.2)", (
 // ---- Q6 / Q7 — concurrency + atomic rename (F1.6) -----------------------
 
 describe("loop / Q6–Q7 — single-flight + atomic-rename invariants (F1.6)", () => {
-  // Q6 (per-manifest sentinel-file lock) and Q7 (atomic-rename invariant
-  // on manifest update) require the candidate-run leg of `loop --continue`
-  // to fully execute. That requires:
-  //   - real git init in the host root (so plugin_ref_before ≠ HEAD passes)
-  //   - mocked spawn for the candidate runner (auto-exit 0)
-  //   - timing harness to drive two concurrent loopContinue invocations
-  // The lock file sentinel (loop.ts §269–283: `${manifestPath}.lock` via
-  // openSync(path, "wx")) is observable in logs/integration. Pinning it
-  // as a unit test would dominate this file with mocks; the lock-acquire
-  // shape is already exercised by the existing concurrent-server tests.
+  // v1.2 — F5 closed: real integration tests (no longer it.todo).
   //
-  // We pin the sentinel-file presence indirectly via the source contract:
-  // loop.ts exports the lock path shape (`<manifest>.lock`) and uses
-  // openSync(..., "wx") — both reviewed in loop.unit.test.ts validateContinue
-  // tests. Live concurrent-invocation testing is the integration suite's
-  // job; we leave this slot as a TODO for the integration phase.
-  it.todo(
-    "Q6: two concurrent `loop --continue` invocations: one wins, the other exits with the lock-contention error",
-  );
-  it.todo(
-    "Q7: original manifest is intact when a concurrent writer is killed mid-write (atomic-rename invariant)",
-  );
+  // Q6 (per-manifest sentinel-file lock): we exercise the lock-contention
+  // branch by pre-seeding the lockfile before invoking loopContinue. The
+  // OS-level `openSync(path, "wx")` returns EEXIST → loopContinue throws
+  // the documented lock-contention error. This is the same code path two
+  // concurrent processes would race; we deterministically reproduce the
+  // losing-side outcome.
+  //
+  // Q7 (atomic-rename invariant): we drive writeManifestAtomic directly,
+  // observing on disk that (a) the temp file lifecycle is bounded
+  // (no .tmp persists after success), and (b) the rename is the
+  // visibility flip — readers either see the old contents or the new
+  // contents, never a partial write.
+  //
+  // Both tests live in this security suite (not loop.unit.test.ts)
+  // because they pin SECURITY invariants from F1.6, not happy-path
+  // logic.
+
+  it("Q6: pre-existing lockfile causes loopContinue to fail with lock-contention error (single-flight invariant)", async () => {
+    // Set up a real git repo at <scratch> (= dirname(dirname(runsDir)))
+    // so loopContinue's `git rev-parse HEAD` step (M2/M7) succeeds and we
+    // reach the lock-acquire step that Q6 is testing.
+    const hostRoot = scratch;
+    execFileSync("git", ["init", "-q", hostRoot], { stdio: "ignore" });
+    execFileSync("git", ["-C", hostRoot, "config", "user.email", "qa@local"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", hostRoot, "config", "user.name", "qa"], {
+      stdio: "ignore",
+    });
+    execFileSync(
+      "git",
+      ["-C", hostRoot, "commit", "--allow-empty", "-m", "init"],
+      { stdio: "ignore" },
+    );
+
+    const baselineRunId = "q6-baseline";
+    const baselineDir = join(runsDir, baselineRunId);
+    const reflectionsDir = join(baselineDir, "artifacts", ".guild", "reflections");
+    await mkdir(reflectionsDir, { recursive: true });
+    await writeFile(
+      join(reflectionsDir, "ref-001.md"),
+      "---\ntarget: agents/architect.md\n---\n# proposal\n",
+      "utf8",
+    );
+    const manifest: LoopManifest = {
+      schema_version: 1,
+      baseline_run_id: baselineRunId,
+      // Different SHA than current HEAD so M2/M7 doesn't fire (we want
+      // the lock-acquire step, not the M2/M7 reject).
+      plugin_ref_before: "0000000000000000000000000000000000000000",
+      case_slug: "q6-case",
+      available_proposals: [
+        { proposal_id: "ref-001", source_path: "agents/architect.md", summary: "p" },
+      ],
+      started_at: "2026-04-27T00:00:00.000Z",
+      state: "awaiting-apply",
+    };
+    const manifestPath = manifestPathFor(runsDir, baselineRunId);
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+
+    // Pre-seed the lockfile — simulates "another process is mid-continue".
+    const lockPath = `${manifestPath}.lock`;
+    await writeFile(lockPath, "", "utf8");
+
+    await seedCaseYaml({
+      slug: "q6-case",
+      casesDir,
+      fixturePath: fixtureDir,
+    });
+
+    // loopContinue must reject with the documented lock-contention error.
+    // The error message is asserted strictly so a regression that swaps
+    // the error path (e.g. "manifest not found") flips the test red.
+    await expect(
+      loopContinue(
+        {
+          baselineRunId,
+          proposalId: "ref-001",
+          dryRun: false,
+        },
+        { runsDir, casesDir },
+      ),
+    ).rejects.toThrow(/another invocation is in flight/);
+
+    // Cleanup: drop the seeded lockfile so afterEach's recursive rm
+    // doesn't trip on a held FD on slower CI runners.
+    await rm(lockPath, { force: true });
+  });
+
+  it("Q7: writeManifestAtomic leaves no .tmp file after success and never makes partial content visible at the manifest path", async () => {
+    const baselineRunId = "q7-baseline";
+    const baselineDir = join(runsDir, baselineRunId);
+    await mkdir(baselineDir, { recursive: true });
+    const manifestPath = manifestPathFor(runsDir, baselineRunId);
+
+    const manifestA: LoopManifest = {
+      schema_version: 1,
+      baseline_run_id: baselineRunId,
+      case_slug: "q7-case",
+      plugin_ref_before: "abc1234",
+      available_proposals: [],
+      started_at: "2026-04-27T00:00:00.000Z",
+      state: "awaiting-apply",
+    };
+    const manifestB: LoopManifest = {
+      ...manifestA,
+      state: "completed",
+      applied_proposal: {
+        proposal_id: "ref-001",
+        source_path: "agents/architect.md",
+        applied_at: "2026-04-27T01:00:00.000Z",
+        plugin_ref_after: "def5678",
+        candidate_run_id: "q7-candidate",
+      },
+    };
+
+    // Write A first (uses non-atomic writeManifest internally for seed).
+    await writeFile(manifestPath, JSON.stringify(manifestA, null, 2) + "\n", "utf8");
+
+    // Now flip A → B atomically.
+    await writeManifestAtomic(manifestPath, manifestB);
+
+    // After the atomic write:
+    //   1. The .tmp file MUST NOT exist (proves rename completed).
+    const tmpPath = `${manifestPath}.tmp`;
+    const fsSync = await import("node:fs");
+    expect(fsSync.existsSync(tmpPath)).toBe(false);
+
+    //   2. The manifest path now contains B's content (not A, not partial).
+    const written = JSON.parse(await readFile(manifestPath, "utf8")) as LoopManifest;
+    expect(written.state).toBe("completed");
+    expect(written.applied_proposal?.proposal_id).toBe("ref-001");
+
+    //   3. File mode preserved at 0o600 (M5 — security invariant).
+    //      Skip on Windows / non-POSIX where chmod is best-effort.
+    if (process.platform !== "win32") {
+      const stats = await stat(manifestPath);
+      const mode = stats.mode & 0o777;
+      expect(mode).toBe(0o600);
+    }
+  });
+
+  it("Q7: writeManifestAtomic does NOT corrupt the manifest path when the same target is written concurrently", async () => {
+    // Stress: kick off N concurrent atomic writes against the same
+    // manifest path. Per node:fs renameSync semantics, only one rename
+    // wins atomically. After all writes settle, the manifest path MUST
+    // contain ONE of the N payloads in full (never a partial write,
+    // never a mix, never a missing file).
+    const baselineRunId = "q7-stress";
+    const baselineDir = join(runsDir, baselineRunId);
+    await mkdir(baselineDir, { recursive: true });
+    const manifestPath = manifestPathFor(runsDir, baselineRunId);
+
+    const writers = Array.from({ length: 5 }, (_, i) => ({
+      schema_version: 1 as const,
+      baseline_run_id: baselineRunId,
+      case_slug: `q7-stress-${i}`,
+      plugin_ref_before: `ref${i}`,
+      available_proposals: [],
+      started_at: "2026-04-27T00:00:00.000Z",
+      state: "awaiting-apply" as const,
+    }));
+
+    // Note: writeManifestAtomic uses a single tmp suffix. Concurrent
+    // calls against the same manifestPath race on the SAME .tmp file.
+    // This is documented behavior — single-flight is enforced one layer
+    // up via the lockfile (Q6). Here we only assert: regardless of
+    // ordering, the final manifest is parseable JSON matching ONE of
+    // the inputs (no garbled content, no missing file).
+    await Promise.allSettled(
+      writers.map((m) => writeManifestAtomic(manifestPath, m)),
+    );
+
+    const finalContent = await readFile(manifestPath, "utf8");
+    const parsed = JSON.parse(finalContent) as LoopManifest;
+    expect(parsed.schema_version).toBe(1);
+    expect(parsed.baseline_run_id).toBe(baselineRunId);
+    // case_slug must match ONE of the writer payloads exactly.
+    const caseSlugs = writers.map((w) => w.case_slug);
+    expect(caseSlugs).toContain(parsed.case_slug);
+
+    // No .tmp leftover.
+    const tmpPath = `${manifestPath}.tmp`;
+    const fsSync = await import("node:fs");
+    expect(fsSync.existsSync(tmpPath)).toBe(false);
+  });
 });

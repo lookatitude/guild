@@ -43,6 +43,7 @@ import {
   formatContinueDryRun,
   formatStartDryRun,
   formatStatusReport,
+  loopAbort,
   loopContinue,
   loopStart,
   loopStatus,
@@ -885,5 +886,102 @@ describe("loop / loopStatus", () => {
     expect(out).toContain("candidate_run_id : synthetic-pass-002");
     // No "Next: apply a proposal" hint when state != awaiting-apply.
     expect(out).not.toContain("Next: apply a proposal");
+  });
+});
+
+// v1.2 — F1: loop --abort closes the deferred action that P4 reserved
+// state="aborted" for but never wired. Mirrors continue/status arg
+// validation; refuses on terminal states; cleans up the lockfile.
+describe("loop / loopAbort", () => {
+  const baselineRunId = "synthetic-pass-001";
+
+  it("rejects when --baseline-run-id is missing", async () => {
+    await expect(
+      loopAbort({ baselineRunId: "" }, { runsDir, casesDir }),
+    ).rejects.toThrow(/--baseline-run-id <id> is required/);
+  });
+
+  it("rejects when --baseline-run-id contains illegal characters (M13 allowlist)", async () => {
+    await expect(
+      loopAbort(
+        { baselineRunId: "../etc/passwd" },
+        { runsDir, casesDir },
+      ),
+    ).rejects.toThrow(/contains illegal characters/);
+  });
+
+  it("rejects when manifest is missing", async () => {
+    await expect(
+      loopAbort({ baselineRunId }, { runsDir, casesDir }),
+    ).rejects.toThrow(/manifest not found/);
+  });
+
+  it("flips manifest state to aborted on awaiting-apply manifest", async () => {
+    const m = defaultManifest({ baseline_run_id: baselineRunId });
+    const path = await seedManifest(runsDir, baselineRunId, m);
+    const report = await loopAbort({ baselineRunId }, { runsDir, casesDir });
+    expect(report.manifestStateBefore).toBe("awaiting-apply");
+    expect(report.manifestStateAfter).toBe("aborted");
+    expect(report.manifestPath).toBe(path);
+    // Verify on disk.
+    const after = JSON.parse(
+      await (await import("node:fs/promises")).readFile(path, "utf8"),
+    ) as LoopManifest;
+    expect(after.state).toBe("aborted");
+  });
+
+  it("refuses to abort a completed manifest", async () => {
+    const m = defaultManifest({
+      baseline_run_id: baselineRunId,
+      state: "completed",
+      applied_proposal: {
+        proposal_id: "ref-001",
+        source_path: "agents/architect.md",
+        applied_at: "2026-04-26T17:00:00Z",
+        plugin_ref_after: "def5678def5678def5678def5678def5678def56",
+        candidate_run_id: "synthetic-pass-002",
+      },
+    });
+    await seedManifest(runsDir, baselineRunId, m);
+    await expect(
+      loopAbort({ baselineRunId }, { runsDir, casesDir }),
+    ).rejects.toThrow(/cannot abort a completed loop/);
+  });
+
+  it("refuses to re-abort an already-aborted manifest (idempotent error)", async () => {
+    const m = defaultManifest({
+      baseline_run_id: baselineRunId,
+      state: "aborted",
+    });
+    await seedManifest(runsDir, baselineRunId, m);
+    await expect(
+      loopAbort({ baselineRunId }, { runsDir, casesDir }),
+    ).rejects.toThrow(/already "aborted"/);
+  });
+
+  it("removes a present lockfile when aborting", async () => {
+    const m = defaultManifest({ baseline_run_id: baselineRunId });
+    const manifestPath = await seedManifest(runsDir, baselineRunId, m);
+    const lockPath = `${manifestPath}.lock`;
+    const fs = await import("node:fs/promises");
+    await fs.writeFile(lockPath, "", "utf8");
+    const report = await loopAbort({ baselineRunId }, { runsDir, casesDir });
+    expect(report.lockfileExisted).toBe(true);
+    const fsSync = await import("node:fs");
+    expect(fsSync.existsSync(lockPath)).toBe(false);
+  });
+
+  it("--dry-run reports the proposed transition without mutating disk", async () => {
+    const m = defaultManifest({ baseline_run_id: baselineRunId });
+    const manifestPath = await seedManifest(runsDir, baselineRunId, m);
+    const report = await loopAbort(
+      { baselineRunId, dryRun: true },
+      { runsDir, casesDir },
+    );
+    expect(report.manifestStateAfter).toBe("aborted");
+    // Still awaiting-apply on disk.
+    const fs = await import("node:fs/promises");
+    const after = JSON.parse(await fs.readFile(manifestPath, "utf8")) as LoopManifest;
+    expect(after.state).toBe("awaiting-apply");
   });
 });

@@ -81,6 +81,8 @@ import { dirname, join, resolve, basename } from "node:path";
 import { compareSets } from "./compare.js";
 import { runBenchmark, planRun, safeJoinUnder } from "./runner.js";
 import type {
+  LoopAbortOptions,
+  LoopAbortReport,
   LoopContinueOptions,
   LoopManifest,
   LoopManifestProposal,
@@ -422,6 +424,97 @@ export async function loopStatus(
   return { manifestPath, manifest, proposals, diff };
 }
 
+/**
+ * `loop --abort` — flips the manifest state to "aborted" and removes the
+ * single-flight lockfile. Refuses if the manifest is already in
+ * "completed" state (irreversible) or already in "aborted" state
+ * (idempotent — the second call is a no-op error so the operator notices
+ * a script-level mistake).
+ *
+ * v1.2 — F1 closed. P4's manifest schema reserved state="aborted" but
+ * never wired the action; v1 workaround was `rm <manifest>`. Structured
+ * abort is symmetric with --continue (both transition awaiting-apply →
+ * terminal) and lets operators script the abandonment cleanly.
+ *
+ * No spawn, no compare, no candidate run. Pure state transition + lock
+ * cleanup.
+ */
+export async function loopAbort(
+  opts: LoopAbortOptions,
+  ctx: LoopContext,
+): Promise<LoopAbortReport> {
+  if (!opts.baselineRunId || typeof opts.baselineRunId !== "string") {
+    throw new Error("loop --abort: --baseline-run-id <id> is required");
+  }
+  // M13 — same allowlist as --continue's --apply value, applied to the
+  // baseline run id so a poisoned id can't escape the runs dir.
+  if (!PROPOSAL_ID_RE.test(opts.baselineRunId)) {
+    throw new Error(
+      `loop --abort: --baseline-run-id "${opts.baselineRunId}" contains illegal characters ` +
+        `(allowed: ${PROPOSAL_ID_RE.source})`,
+    );
+  }
+  const manifestPath = manifestPathFor(ctx.runsDir, opts.baselineRunId);
+  if (!existsSync(manifestPath)) {
+    throw new Error(
+      `loop --abort: manifest not found at ${manifestPath} ` +
+        `(nothing to abort — run \`loop --start\` first or fix the run-id)`,
+    );
+  }
+  const manifest = await readManifest(manifestPath);
+
+  // Refuse on terminal states. completed = irreversible; aborted =
+  // idempotent error so a script mistake is loud, not silent.
+  if (manifest.state === "completed") {
+    throw new Error(
+      `loop --abort: manifest state is "completed"; cannot abort a completed loop ` +
+        `(the candidate run already landed). Revert the host repo via \`git revert\` if needed.`,
+    );
+  }
+  if (manifest.state === "aborted") {
+    throw new Error(
+      `loop --abort: manifest state is already "aborted" at ${manifestPath} ` +
+        `(idempotent abort attempted — no-op).`,
+    );
+  }
+
+  const lockPath = `${manifestPath}.lock`;
+  const lockfileExisted = existsSync(lockPath);
+
+  if (opts.dryRun === true) {
+    return {
+      manifestPath,
+      manifestStateBefore: manifest.state,
+      manifestStateAfter: "aborted",
+      lockfilePath: lockPath,
+      lockfileExisted,
+    };
+  }
+
+  // Atomic rename so a concurrent reader never sees a half-flipped state.
+  const aborted: LoopManifest = { ...manifest, state: "aborted" };
+  await writeManifestAtomic(manifestPath, aborted);
+
+  // Drop the lockfile if present. Best-effort — if a concurrent --continue
+  // is mid-run, the lock will be re-acquired by that process and our
+  // unlink races with it. Tolerate ENOENT.
+  if (lockfileExisted) {
+    try {
+      await unlink(lockPath);
+    } catch {
+      /* race with concurrent --continue or already-removed; ignore */
+    }
+  }
+
+  return {
+    manifestPath,
+    manifestStateBefore: manifest.state,
+    manifestStateAfter: "aborted",
+    lockfilePath: lockPath,
+    lockfileExisted,
+  };
+}
+
 // ---- Dry-run / status report shapes ----------------------------------
 
 export interface LoopStartDryRun {
@@ -548,7 +641,10 @@ async function writeManifest(manifestPath: string, manifest: LoopManifest): Prom
   }
 }
 
-async function writeManifestAtomic(
+// v1.2 — F5: exported so the Q7 atomic-rename integration test can
+// exercise this primitive directly. The function is otherwise internal
+// to loop.ts; the export is for testing only.
+export async function writeManifestAtomic(
   manifestPath: string,
   manifest: LoopManifest,
 ): Promise<void> {

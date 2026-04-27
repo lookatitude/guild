@@ -11,12 +11,14 @@ import {
   formatContinueDryRun,
   formatStartDryRun,
   formatStatusReport,
+  loopAbort,
   loopContinue,
   loopStart,
   loopStatus,
 } from "./loop.js";
 import type {
   Case,
+  LoopAbortOptions,
   LoopContinueOptions,
   LoopStartOptions,
   LoopStatusOptions,
@@ -120,6 +122,25 @@ async function commandCompare(args: ParsedArgs): Promise<void> {
         `compare: WARNING — run \`benchmark score --run-id <id>\` on each before re-comparing for full coverage.\n`,
     );
   }
+  // v1.2 — F9: cross-run_kind sets produce misleading deltas because the
+  // lifecycle-dependent components (outcome/delegation/gates) score 0 on
+  // raw_model runs by design. If either side mixes kinds OR the two sides
+  // disagree on kind, surface a clear WARNING so the operator notices
+  // before reading the table.
+  const km = result.comparison.kind_mix;
+  const baselineMixed = km.baseline_raw_model > 0 && km.baseline_guild_lifecycle > 0;
+  const candidateMixed = km.candidate_raw_model > 0 && km.candidate_guild_lifecycle > 0;
+  const sidesDisagree =
+    (km.baseline_raw_model > 0 && km.candidate_guild_lifecycle > 0 && km.candidate_raw_model === 0) ||
+    (km.baseline_guild_lifecycle > 0 && km.candidate_raw_model > 0 && km.candidate_guild_lifecycle === 0);
+  if (baselineMixed || candidateMixed || sidesDisagree) {
+    process.stderr.write(
+      `compare: WARNING — cross-run_kind comparison detected ` +
+        `(baseline raw=${km.baseline_raw_model}/lifecycle=${km.baseline_guild_lifecycle}, ` +
+        `candidate raw=${km.candidate_raw_model}/lifecycle=${km.candidate_guild_lifecycle}).\n` +
+        `compare: WARNING — outcome/delegation/gates components are 0 on raw_model runs by design; deltas are not comparable across kinds.\n`,
+    );
+  }
 }
 
 function commandDeferred(name: string, phase: string): never {
@@ -176,11 +197,12 @@ async function commandRun(args: ParsedArgs): Promise<never> {
   }
 }
 
-// `benchmark loop` — P4 learning-loop orchestrator. Three modes,
+// `benchmark loop` — P4 learning-loop orchestrator. Four modes,
 // mutually exclusive:
 //   --start    --case <slug> [--baseline-run-id <id>] [--dry-run]
 //   --continue --baseline-run-id <id> --apply <proposal-id> [--dry-run]
 //   --status   --baseline-run-id <id>
+//   --abort    --baseline-run-id <id> [--dry-run]      (v1.2 — F1)
 //
 // Exit codes (architect §4.1 + §6.4): 0 ok, 1 fail, 124 timeout, 2 errored.
 // Dry-run flow per ADR-005 §Decision: never spawns claude, returns 0.
@@ -192,13 +214,14 @@ async function commandLoop(args: ParsedArgs): Promise<never> {
   const isStart = args.flags.get("start") !== undefined;
   const isContinue = args.flags.get("continue") !== undefined;
   const isStatus = args.flags.get("status") !== undefined;
-  const modeCount = [isStart, isContinue, isStatus].filter(Boolean).length;
+  const isAbort = args.flags.get("abort") !== undefined;
+  const modeCount = [isStart, isContinue, isStatus, isAbort].filter(Boolean).length;
   if (modeCount === 0) {
-    process.stderr.write("loop: one of --start, --continue, --status is required\n");
+    process.stderr.write("loop: one of --start, --continue, --status, --abort is required\n");
     process.exit(2);
   }
   if (modeCount > 1) {
-    process.stderr.write("loop: --start, --continue, --status are mutually exclusive\n");
+    process.stderr.write("loop: --start, --continue, --status, --abort are mutually exclusive\n");
     process.exit(2);
   }
 
@@ -257,6 +280,35 @@ async function commandLoop(args: ParsedArgs): Promise<never> {
       const keptStr = live.kept === null ? "n/a" : live.kept ? "true" : "false";
       process.stdout.write(
         `loop --continue: candidate_run_id=${live.candidateRunId} comparison=${live.comparisonPath} kept=${keptStr}\n`,
+      );
+      process.exit(0);
+    }
+
+    if (isAbort) {
+      // v1.2 — F1: structured abort. Refuses on completed/aborted state;
+      // mutates only the manifest state field + drops the lockfile.
+      const baselineRunId = args.flags.get("baseline-run-id");
+      if (!baselineRunId || baselineRunId === "true") {
+        process.stderr.write("loop --abort: --baseline-run-id <id> is required\n");
+        process.exit(2);
+      }
+      const opts: LoopAbortOptions = { baselineRunId, dryRun };
+      const report = await loopAbort(opts, ctx);
+      if (dryRun) {
+        process.stdout.write(
+          `loop --abort --dry-run\n` +
+            `  manifest_path        : ${report.manifestPath}\n` +
+            `  manifest_state_before: ${report.manifestStateBefore}\n` +
+            `  manifest_state_after : ${report.manifestStateAfter}\n` +
+            `  lockfile_path        : ${report.lockfilePath}\n` +
+            `  lockfile_existed     : ${report.lockfileExisted}\n`,
+        );
+        process.exit(0);
+      }
+      process.stdout.write(
+        `loop --abort: baseline_run_id=${baselineRunId} state=aborted` +
+          (report.lockfileExisted ? " (lockfile cleared)" : "") +
+          "\n",
       );
       process.exit(0);
     }
@@ -345,6 +397,7 @@ function printUsage(): void {
       "  benchmark loop     --start    --case <slug> [--baseline-run-id <id>] [--dry-run]",
       "                     --continue --baseline-run-id <id> --apply <proposal-id> [--dry-run]",
       "                     --status   --baseline-run-id <id> [--diff <proposal-id>]",
+      "                     --abort    --baseline-run-id <id> [--dry-run]",
       "                          (P4 learning loop; never auto-applies; --dry-run never spawns;",
       "                           --diff extracts fenced diff/patch blocks from a proposal body)",
       "  benchmark export-website (deferred — JSON snapshot for the public website)",
