@@ -7,6 +7,12 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",
+    // v1.1 — opt in to the runner's GUILD_BENCHMARK_LIVE gate at the test
+    // layer. Tests still mock `node:child_process.spawn`, so this does not
+    // spawn real `claude`; it just satisfies the runner's pre-spawn gate
+    // the same way an operator would. Tests that exercise the gate's
+    // negative path delete the env var inside their own beforeEach.
+    setupFiles: ["./tests/_setup.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary", "html"],

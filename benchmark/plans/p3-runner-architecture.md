@@ -56,11 +56,21 @@ candidates were considered and rejected:
 > signaling.** The `detached: false` line below is **superseded** by
 > `detached: true`; signal escalation in §2.6 then targets the process
 > group via `process.kill(-child.pid, SIG)` instead of the bare child
-> PID. All other options (`cwd`, `env`, `stdio`, `shell: false`,
+> PID. All other options (`cwd`, `env`, `shell: false`,
 > `windowsHide`) are unchanged. See
 > `benchmark/plans/adr-004-runner-process-group-signaling.md` for the
 > full decision and code shape; backend implements per ADR-004, not the
 > historical `detached: false` line preserved below for audit-trail
+> continuity.
+>
+> **Further superseded by ADR-006 (v1.1, 2026-04-27)** — the
+> `stdio: ["ignore", "pipe", "pipe"]` line is **superseded** by
+> `stdio: ["pipe", "pipe", "pipe"]`. The new stdin pipe is the
+> prompt-delivery channel; see ADR-006 for why this preserves §2.3's
+> "prompt never in argv" invariant via a different mechanism. All
+> other §2.2 options not touched by ADR-004 or ADR-006 remain
+> unchanged. Backend implements per ADR-006; the historical
+> `["ignore", "pipe", "pipe"]` line below is preserved for audit-trail
 > continuity.
 
 ```text
@@ -99,6 +109,16 @@ child_process.spawn(
   decision, scoring, and code shape backend implements.
 
 ### 2.3 Argv shape (backend confirms)
+
+> **Superseded in part by ADR-006 (v1.1, 2026-04-27).** The default
+> argv now reads `claude --print --add-dir <ws> [--model <name>]` with
+> the prompt piped via stdin (not `--prompt-file`). `--add-dir`
+> replaces `--workdir`. `--output-format stream-json` is no longer in
+> the default — operators opt back in via
+> `GUILD_BENCHMARK_ARGV_TEMPLATE` per README §10. The invariants below
+> remain load-bearing; ADR-006 preserves them via a stdin pipe instead
+> of a temp-file path. See `adr-006-runner-prompt-via-stdin.md` for the
+> decision.
 
 The exact `claude` argv is backend's call in T2 — it depends on which
 `claude` CLI flags expose the data the importer needs. Architect commits
@@ -143,6 +163,13 @@ unrelated tool tokens (`GITHUB_TOKEN`, `OPENAI_API_KEY`, …) are dropped.
 This list is forward-referenced in the security review for hardening.
 
 ### 2.5 Stdio capture
+
+> **Amended by ADR-006 (v1.1, 2026-04-27).** The stdin slot becomes
+> active under v1.1 — runner-side writable, used to deliver the prompt
+> bytes; closed after the prompt is written. stdin is **not** captured
+> (only operator-supplied prompt content goes through it, and that
+> content is already on disk in the case YAML). stdout + stderr capture
+> is unchanged.
 
 Both pipes are tee'd to disk in real time:
 

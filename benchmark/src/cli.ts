@@ -113,6 +113,13 @@ async function commandCompare(args: ParsedArgs): Promise<void> {
   process.stdout.write(
     `compare: wrote ${result.outputPath} (status=${result.comparison.status} guild_score_delta=${result.comparison.guild_score_delta.delta})\n`,
   );
+  if (result.comparison.skipped_runs.length > 0) {
+    const ids = result.comparison.skipped_runs.map((s) => s.run_id).join(", ");
+    process.stderr.write(
+      `compare: WARNING — ${result.comparison.skipped_runs.length} run(s) skipped (no score.json): ${ids}\n` +
+        `compare: WARNING — run \`benchmark score --run-id <id>\` on each before re-comparing for full coverage.\n`,
+    );
+  }
 }
 
 function commandDeferred(name: string, phase: string): never {

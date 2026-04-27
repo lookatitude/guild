@@ -10,6 +10,7 @@ import type {
   ReflectionApplied,
   RunJson,
   Score,
+  SkippedRun,
   TrialSetSummary,
 } from "./types.js";
 import { COMPONENT_KEYS, SCHEMA_VERSION } from "./types.js";
@@ -61,10 +62,29 @@ interface SetRun {
   run_id: string;
 }
 
+interface CollectResult {
+  runs: SetRun[];
+  skipped: string[];
+}
+
 export async function compareSets(opts: CompareOpts): Promise<CompareResult> {
   const runsDir = resolve(opts.runsDir);
-  const baselineRuns = await collectRunsForSet(runsDir, opts.baseline);
-  const candidateRuns = await collectRunsForSet(runsDir, opts.candidate);
+  const baselineCollect = await collectRunsForSet(runsDir, opts.baseline);
+  const candidateCollect = await collectRunsForSet(runsDir, opts.candidate);
+  const baselineRuns = baselineCollect.runs;
+  const candidateRuns = candidateCollect.runs;
+  const skippedRuns: SkippedRun[] = [
+    ...baselineCollect.skipped.map((id) => ({
+      run_id: id,
+      side: "baseline" as const,
+      reason: "no_score_json" as const,
+    })),
+    ...candidateCollect.skipped.map((id) => ({
+      run_id: id,
+      side: "candidate" as const,
+      reason: "no_score_json" as const,
+    })),
+  ];
 
   const baseline = summariseSet(opts.baseline, baselineRuns);
   const candidate = summariseSet(opts.candidate, candidateRuns);
@@ -104,6 +124,7 @@ export async function compareSets(opts: CompareOpts): Promise<CompareResult> {
     candidate,
     status,
     excluded_runs: excluded,
+    skipped_runs: skippedRuns,
     per_component_delta,
     guild_score_delta,
     generated_at: new Date().toISOString(),
@@ -196,10 +217,11 @@ function maybeAnnotateReflection(
   };
 }
 
-async function collectRunsForSet(runsDir: string, setId: string): Promise<SetRun[]> {
-  if (!existsSync(runsDir)) return [];
+async function collectRunsForSet(runsDir: string, setId: string): Promise<CollectResult> {
+  if (!existsSync(runsDir)) return { runs: [], skipped: [] };
   const entries = await readdir(runsDir, { withFileTypes: true });
   const matches: SetRun[] = [];
+  const skipped: string[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     if (entry.name === "_compare") continue;
@@ -211,16 +233,18 @@ async function collectRunsForSet(runsDir: string, setId: string): Promise<SetRun
     const scorePath = join(runDir, "score.json");
     if (!existsSync(runPath)) continue;
     if (!existsSync(scorePath)) {
-      // P1 follow-up #2: surface skipped runs so an operator notices a set
-      // member that never got scored. qa pins the regex in T4.
+      // v1.1 — track skipped runs in the comparison artifact (Comparison.skipped_runs)
+      // in addition to the existing stderr line. Callers can now distinguish
+      // "no skipped runs" from "we silently dropped some."
       process.stderr.write(`compare: skipping ${entry.name} — no score.json\n`);
+      skipped.push(entry.name);
       continue;
     }
     const run = JSON.parse(await readFile(runPath, "utf8")) as RunJson;
     const score = JSON.parse(await readFile(scorePath, "utf8")) as Score;
     matches.push({ run, score, run_id: entry.name });
   }
-  return matches;
+  return { runs: matches, skipped };
 }
 
 function summariseSet(setId: string, runs: SetRun[]): TrialSetSummary {

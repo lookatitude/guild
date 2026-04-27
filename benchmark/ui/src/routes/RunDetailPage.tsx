@@ -104,6 +104,20 @@ export default function RunDetailPage() {
               <dd>
                 <code>{data.events.length}</code>
               </dd>
+              {data.run.auth_identity_hash ? (
+                <>
+                  <dt>Auth identity</dt>
+                  <dd>
+                    <code
+                      title={data.run.auth_identity_hash}
+                      data-testid="auth-identity-hash-badge"
+                      className="muted"
+                    >
+                      {data.run.auth_identity_hash.slice(0, 7)}…
+                    </code>
+                  </dd>
+                </>
+              ) : null}
             </dl>
           </section>
         </>

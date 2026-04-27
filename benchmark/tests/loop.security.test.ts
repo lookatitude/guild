@@ -80,14 +80,22 @@ import type { LoopManifest, RunJson } from "../src/types.js";
 const spawnMock = spawn as unknown as MockedFunction<typeof spawn>;
 
 // ---- FakeChild — same minimal stand-in used by runner.security.test.ts ----
+// v1.1 / ADR-006 — `stdin` writable stand-in. Runner pipes prompt content
+// to child.stdin at spawn time; FakeChild captures writes silently.
 class FakeChild extends EventEmitter {
   pid: number | undefined;
   exitCode: number | null = null;
   stdout: Readable | null = null;
   stderr: Readable | null = null;
+  stdin: { write: (chunk: string) => void; end: () => void; on: (ev: string, fn: () => void) => void };
   constructor(pid = 12345) {
     super();
     this.pid = pid;
+    this.stdin = {
+      write: (): void => {},
+      end: (): void => {},
+      on: (): void => {},
+    };
   }
   simulateExit(code: number, signal: NodeJS.Signals | null = null): void {
     setImmediate(() => {

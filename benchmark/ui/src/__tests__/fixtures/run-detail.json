@@ -68,6 +68,7 @@
     "scored_at": "2026-04-26T05:51:00Z",
     "partial": false,
     "missing_artifacts": [],
+    "run_kind": "guild_lifecycle",
     "components": {
       "outcome": {
         "weight": 30,

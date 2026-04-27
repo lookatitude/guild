@@ -108,6 +108,15 @@ export const KILL_GRACE_MS = 5_000;           // SIGTERM -> SIGKILL grace
 export const ENV_TIMEOUT_MS = "GUILD_BENCHMARK_TIMEOUT_MS";
 export const ENV_MODELS_JSON = "GUILD_BENCHMARK_MODELS_JSON";
 export const ENV_CLAUDE_BIN = "GUILD_BENCHMARK_CLAUDE_BIN";
+// v1.1 (2026-04-27) — operator opt-in env var for live execution.
+// When set to exactly "1", runner spawns the real `claude` subprocess.
+// Any other value (including unset) refuses to spawn and surfaces a
+// clear error. The cost-discipline gate documented across the spec /
+// plans / README. Closes the v1 audit finding that flagged this gate
+// as documented-but-never-implemented; tests pin both the unset and
+// the "1" path.
+export const ENV_LIVE = "GUILD_BENCHMARK_LIVE";
+
 // P4-polish (2026-04-27) — operator-supplied argv template override.
 // JSON array of strings; each element gets `${PROMPT_FILE}` and
 // `${WORKSPACE_DIR}` placeholder substitution. Resolves the P3 known-issue
@@ -191,7 +200,8 @@ export interface ResolvedRunPlan {
   workspaceDir: string;    // <runDir>/_workspace/
   artifactsRoot: string;   // <runDir>/artifacts/
   guildArtifactsDir: string; // <artifactsRoot>/.guild/
-  promptPath: string;      // <workspaceDir>/_benchmark-prompt.txt
+  promptPath: string;      // <workspaceDir>/_benchmark-prompt.txt (kept for ARGV_TEMPLATE ${PROMPT_FILE} substitution)
+  promptContent: string;   // v1.1/ADR-006 — written to child.stdin at spawn time
   stdoutLogPath: string;   // <artifactsRoot>/_subprocess.stdout.log
   stderrLogPath: string;   // <artifactsRoot>/_subprocess.stderr.log
   eventsPath: string;      // <runDir>/events.ndjson
@@ -265,13 +275,20 @@ export async function planRun(
   // Fixture path: case.fixture is relative to the case YAML's dir.
   const fixturePath = resolve(dirname(casePath), caseFile.fixture);
 
-  // Build argv. Prompt is passed via file (M5/F1.5).
+  // Build argv. v1.1/ADR-006 — prompt arrives via stdin (`pipe`d at
+  // spawn time), not via `--prompt-file`. Default argv uses claude v2.x
+  // shape (`--print --add-dir <ws>`); operators with non-default claude
+  // builds can override via GUILD_BENCHMARK_ARGV_TEMPLATE.
+  // M5/F1.5 invariant ("prompt never appears in `ps` listings") is
+  // preserved by stdin piping (no positional argv).
   const argv = buildArgv({
     claudeBinary,
     promptPath,
     workspaceDir,
+    modelRef,
   });
   assertArgvShape(argv); // M1
+  const promptContent = caseFile.prompt;
 
   return {
     caseSlug: opts.caseSlug,
@@ -282,6 +299,7 @@ export async function planRun(
     artifactsRoot,
     guildArtifactsDir,
     promptPath,
+    promptContent,
     stdoutLogPath,
     stderrLogPath,
     eventsPath,
@@ -330,6 +348,21 @@ export async function runBenchmark(
     };
   }
 
+  // v1.1 — operator opt-in gate. The cost-discipline contract (README
+  // §"Operator runbook (P3 live runs)" + spec §Constraints) requires
+  // GUILD_BENCHMARK_LIVE=1 before any real claude spawn. Closes the
+  // v1 audit finding that the gate was documented but never enforced.
+  // --dry-run already returned above; a missing/unset env here means
+  // the operator hasn't opted in and we refuse cleanly.
+  const liveOptIn = process.env[ENV_LIVE];
+  if (liveOptIn !== "1") {
+    throw new Error(
+      `runner: live execution refused — set ${ENV_LIVE}=1 in your environment to opt in. ` +
+        `Run with --dry-run to verify the resolved plan first (default-safe; never spawns). ` +
+        `(See benchmark/README.md §"Operator runbook" for the full pre-flight.)`,
+    );
+  }
+
   // Refuse to clobber an existing run dir — runIds must be unique.
   if (existsSync(plan.runDir)) {
     throw new Error(
@@ -359,8 +392,19 @@ export async function runBenchmark(
     );
   }
 
-  // M5 / F1.5 — prompt to a file, never positional argv.
-  await writeFile(plan.promptPath, plan.caseFile.prompt, { encoding: "utf8" });
+  // M5 / F1.5 — prompt-bytes-on-disk discipline.
+  //
+  // v1.1 / ADR-006: the default argv pipes the prompt via stdin and never
+  // reads `_benchmark-prompt.txt`. Only write the file when the operator's
+  // ARGV_TEMPLATE explicitly references `${PROMPT_FILE}` (legacy templates
+  // and forks that pin a `--prompt-file`-flavoured CLI). When the file is
+  // not referenced, skipping the write keeps the workspace clean and avoids
+  // shipping the prompt to disk by default — bonus security alignment with
+  // M5/F1.5 ("prompt never in process listings or unnecessary disk").
+  const argvTemplate = process.env[ENV_ARGV_TEMPLATE] ?? "";
+  if (argvTemplate.includes("${PROMPT_FILE}")) {
+    await writeFile(plan.promptPath, plan.caseFile.prompt, { encoding: "utf8" });
+  }
 
   const events: ToolErrorEvent[] = [];
   const startedAtMs = Date.now();
@@ -521,10 +565,17 @@ async function spawnAndWait(
     stdoutRedactor.pipe(stdoutStream);
     stderrRedactor.pipe(stderrStream);
 
+    // v1.1 / ADR-006 — stdin is now a writable pipe so the runner can
+    // stream the prompt to claude without putting it in argv. Real
+    // `claude` v2.x has `--print` reading from stdin by default
+    // (--input-format text); piping is M5/F1.5-equivalent (prompt never
+    // appears in `ps` listings) AND v2.x-compatible (no `--prompt-file`
+    // flag needed). See ADR-006 + p3-runner-architecture.md §2.5
+    // amendment for the supersession trail.
     const spawnOpts: SpawnOptions = {
       cwd: plan.workspaceDir,
       env: plan.envForChild,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       shell: false,            // M2 (F1.1)
       detached: true,          // M10 (F3.1) — ADR-004
       windowsHide: true,
@@ -535,6 +586,23 @@ async function spawnAndWait(
     // Pipe child stdio through the redactor.
     if (child.stdout) child.stdout.pipe(stdoutRedactor);
     if (child.stderr) child.stderr.pipe(stderrRedactor);
+
+    // v1.1 / ADR-006 — write the prompt to stdin and close it. Errors
+    // (EPIPE if the child exited before we finish writing) are swallowed
+    // — the spawn-side path handles non-zero exit via its normal
+    // status-mapping; we don't want stdin write to mask a useful error.
+    if (child.stdin) {
+      child.stdin.on("error", () => {
+        // EPIPE / closed stdin during prompt write — let spawnAndWait
+        // observe the child's exit and map status accordingly.
+      });
+      try {
+        child.stdin.write(plan.promptContent);
+        child.stdin.end();
+      } catch {
+        /* same — let exit code drive status */
+      }
+    }
 
     const childRef = child;
 
@@ -593,9 +661,20 @@ async function spawnAndWait(
 
     // Drain stdio (M12) — wait for the child's pipes to flush into the
     // redactor before closing the on-disk streams.
+    //
+    // v1.1 fix (2026-04-27) — race between `once(child, "exit")` and
+    // `once(stdout, "end")`: when the subprocess exits very quickly with
+    // little or no output, "end" can fire BEFORE the listener is
+    // attached, leaving `once()` to wait forever. Symptoms: runBenchmark
+    // hangs indefinitely on fast-fail subprocesses (e.g., real claude
+    // rejecting an argv mismatch). Fix: skip the await when the stream
+    // is already ended, and bound the wait by a short timeout so a
+    // hung pipe never deadlocks the parent. Surfaces in the v1 live
+    // operator smoke; closes P3 qa-routed followup #2 ("stream-end-vs-
+    // exit deadlock on fast/empty subprocess output").
     await Promise.all([
-      child.stdout ? once(child.stdout, "end").catch(() => {}) : Promise.resolve(),
-      child.stderr ? once(child.stderr, "end").catch(() => {}) : Promise.resolve(),
+      awaitStreamEndBounded(child.stdout),
+      awaitStreamEndBounded(child.stderr),
     ]);
 
     // M13 — resource usage snapshot of the parent (inclusive of waited-on
@@ -617,14 +696,20 @@ async function spawnAndWait(
     for (const off of parentDeathHandlersInstalled) {
       try { off(); } catch { /* ignore */ }
     }
-    // Drain Transform → file streams in the right order.
+    // Drain Transform → file streams. v1.1 (2026-04-27): same already-
+    // ended-aware helper as the post-exit drain — when piped from a
+    // child stream that already emitted "end", the Transform's "end"
+    // has typically also fired by the time we reach this finally,
+    // and `once(redactor, "end")` would deadlock. Empirically observed
+    // in the v1 live operator smoke; closes the same root cause as
+    // the post-exit drain fix.
     if (stdoutRedactor) {
       stdoutRedactor.end();
-      try { await once(stdoutRedactor, "end"); } catch { /* ignore */ }
+      await awaitStreamEndBounded(stdoutRedactor);
     }
     if (stderrRedactor) {
       stderrRedactor.end();
-      try { await once(stderrRedactor, "end"); } catch { /* ignore */ }
+      await awaitStreamEndBounded(stderrRedactor);
     }
     if (stdoutStream) await closeStreamSafely(stdoutStream);
     if (stderrStream) await closeStreamSafely(stderrStream);
@@ -643,6 +728,48 @@ async function closeStreamSafely(s: WriteStream): Promise<void> {
   await new Promise<void>((res) => {
     s.once("close", () => res());
     s.end();
+  });
+}
+
+// v1.1 — defensive helper for awaiting child stdio drain after exit.
+// Returns immediately when the stream is null OR has already emitted
+// "end" (readableEnded === true) OR has been destroyed. Otherwise
+// waits for "end" with a bounded timeout so a hung pipe never deadlocks
+// the parent. Closes the v1 audit's stream-end-vs-exit race finding.
+const STREAM_END_TIMEOUT_MS = 5_000;
+
+function awaitStreamEndBounded(stream: NodeJS.ReadableStream | null): Promise<void> {
+  if (stream === null) return Promise.resolve();
+  // Already-ended stream: nothing to wait for.
+  const r = stream as NodeJS.ReadableStream & { readableEnded?: boolean; destroyed?: boolean };
+  if (r.readableEnded === true || r.destroyed === true) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const settle = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const onEnd = (): void => settle();
+    const onClose = (): void => settle();
+    const onError = (): void => settle();
+    const timer = setTimeout(settle, STREAM_END_TIMEOUT_MS);
+    // No .unref() — we MUST wake up to drain the redactor pipeline even
+    // if every other handle has closed; otherwise Node can exit silently
+    // with the parent CLI never reaching its post-spawn finalize block.
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      stream.off("end", onEnd);
+      stream.off("close", onClose);
+      stream.off("error", onError);
+    };
+    stream.on("end", onEnd);
+    stream.on("close", onClose);
+    stream.on("error", onError);
+    // Re-check after listener attach; the event may have fired between
+    // the early-return check above and this point.
+    if (r.readableEnded === true || r.destroyed === true) settle();
   });
 }
 
@@ -983,14 +1110,38 @@ function buildArgv(input: {
   claudeBinary: string;
   promptPath: string;
   workspaceDir: string;
+  modelRef: Record<string, string>;
 }): string[] {
-  // Decision: use `--print` (non-interactive) + `--prompt-file <path>` +
-  // `--workdir <path>` + `--output-format stream-json`. If the operator's
-  // claude CLI doesn't accept these flags, override via:
+  // v1.1 / ADR-006 — default argv targets real `claude` v2.x:
+  //   claude --print --add-dir <workspace> [--model <name>]
+  // The prompt is piped via stdin at spawn time (see spawnAndWait), NOT
+  // passed as `--prompt-file <path>` (claude v2.x has no such flag) and
+  // NOT positional (preserves M5/F1.5: prompt never visible in `ps`).
+  //
+  // Why `--add-dir <ws>` instead of `--workdir <ws>` (claude v1 shape):
+  //   - claude v2.x has no `--workdir` flag.
+  //   - The runner already sets the spawn `cwd: workspaceDir`, so claude
+  //     starts in the workspace.
+  //   - `--add-dir` adds the workspace to claude's tool-access allow-list
+  //     so file-edit tools can operate there. Without it, claude would
+  //     refuse to write inside the cloned fixture.
+  //
+  // Why no `--output-format`:
+  //   - Default text format works without `--verbose`. The runner tees
+  //     stdout to a log file regardless of format, so we don't need
+  //     stream-json.
+  //   - Operators wanting structured output can opt into stream-json via
+  //     GUILD_BENCHMARK_ARGV_TEMPLATE (must include `--verbose`).
+  //
+  // Override paths:
   //   - GUILD_BENCHMARK_ARGV_TEMPLATE — JSON array of args; this function
-  //     substitutes `${PROMPT_FILE}` and `${WORKSPACE_DIR}` placeholders.
+  //     substitutes `${PROMPT_FILE}`, `${WORKSPACE_DIR}`, and `${MODEL}`
+  //     placeholders. `${PROMPT_FILE}` is still useful if an operator
+  //     points GUILD_BENCHMARK_CLAUDE_BIN at a wrapper that prefers
+  //     file-based input.
   //   - GUILD_BENCHMARK_CLAUDE_BIN — points the binary at a wrapper script.
   // Documented in benchmark/README.md §10 and benchmark/plans/03-runner.md.
+  const defaultModel = input.modelRef?.default ?? "";
   const tmplRaw = process.env[ENV_ARGV_TEMPLATE];
   if (tmplRaw !== undefined && tmplRaw.length > 0) {
     let parsed: unknown;
@@ -1016,21 +1167,23 @@ function buildArgv(input: {
       // Literal string substitution — no shell, no eval, no glob.
       const substituted = el
         .replace(/\$\{PROMPT_FILE\}/g, input.promptPath)
-        .replace(/\$\{WORKSPACE_DIR\}/g, input.workspaceDir);
+        .replace(/\$\{WORKSPACE_DIR\}/g, input.workspaceDir)
+        .replace(/\$\{MODEL\}/g, defaultModel);
       args.push(substituted);
     }
     return [input.claudeBinary, ...args];
   }
-  return [
+  // Default — claude v2.x shape; prompt via stdin.
+  const argv = [
     input.claudeBinary,
     "--print",
-    "--prompt-file",
-    input.promptPath,
-    "--workdir",
+    "--add-dir",
     input.workspaceDir,
-    "--output-format",
-    "stream-json",
   ];
+  if (defaultModel.length > 0) {
+    argv.push("--model", defaultModel);
+  }
+  return argv;
 }
 
 // ---- M9 timeout resolution -------------------------------------------

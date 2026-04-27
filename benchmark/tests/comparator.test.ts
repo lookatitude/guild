@@ -119,6 +119,50 @@ describe("compare / compareSets — happy path", () => {
     // the baseline set; comparator treats them as one trial set.
     expect(comparison.baseline.run_count).toBe(2);
   });
+
+  // v1.1 — surface unscored runs in the comparison artifact (not just
+  // stderr). Callers can now distinguish "no skipped runs" from "we
+  // silently dropped some."
+  it("surfaces unscored runs in comparison.skipped_runs", async () => {
+    await seedRun(runsDir, "set-a-1", { guild_score: 80 });
+    await seedRun(runsDir, "set-b-1", { guild_score: 100 });
+    // Seed a run.json without a score.json — this is the "unscored" case.
+    const unscoredId = "set-a-2";
+    const dir = join(runsDir, unscoredId);
+    await mkdir(dir, { recursive: true });
+    const unscoredRun: RunJson = {
+      schema_version: 1,
+      run_id: unscoredId,
+      case_slug: "demo",
+      plugin_ref: "abc1234",
+      model_ref: { architect: "claude-opus-4-7" },
+      started_at: "2026-04-26T05:30:00Z",
+      completed_at: "2026-04-26T05:50:00Z",
+      status: "pass",
+    };
+    await writeFile(join(dir, "run.json"), JSON.stringify(unscoredRun, null, 2));
+
+    const { comparison } = await compareSets({
+      runsDir,
+      baseline: "set-a",
+      candidate: "set-b",
+    });
+    expect(comparison.skipped_runs).toEqual([
+      { run_id: unscoredId, side: "baseline", reason: "no_score_json" },
+    ]);
+    expect(comparison.baseline.run_count).toBe(1);
+  });
+
+  it("emits empty skipped_runs when every matched run has score.json", async () => {
+    await seedRun(runsDir, "set-a-1", { guild_score: 80 });
+    await seedRun(runsDir, "set-b-1", { guild_score: 100 });
+    const { comparison } = await compareSets({
+      runsDir,
+      baseline: "set-a",
+      candidate: "set-b",
+    });
+    expect(comparison.skipped_runs).toEqual([]);
+  });
 });
 
 describe("compare / R2 model-ref filter", () => {

@@ -200,9 +200,15 @@ export function createApp(opts: ServerOpts): Hono {
     // before any `await` — otherwise two near-simultaneous POSTs both pass
     // the null check, both await planRun, and both mutate activeRun.
     if (activeRun) {
+      // v1.1 — body uses `current_run_id` (the in-flight run); UI consumes
+      // this key (ui/src/lib/api.ts, TriggerPanelPage.tsx). The legacy
+      // `run_id` field is kept for one release as a deprecated alias so
+      // any existing scripts don't break; new consumers should read
+      // `current_run_id`. Track removal in benchmark/FOLLOWUPS.md.
       return c.json(
         {
           error: "another run is already in flight",
+          current_run_id: activeRun.run_id,
           run_id: activeRun.run_id,
           started_at: activeRun.started_at,
         },

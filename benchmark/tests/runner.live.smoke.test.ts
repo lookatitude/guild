@@ -3,7 +3,18 @@
 // Gated smoke test that actually shells out to the real `claude` CLI under
 // the runner's spawn. By default this test is SKIPPED — the rest of the qa
 // suite NEVER touches the live binary, never makes network calls, and runs
-// in <30s on CI. To opt in, set GUILD_BENCHMARK_LIVE=1 in the environment.
+// in <30s on CI. To opt in, set BOTH `GUILD_BENCHMARK_LIVE=1` (the runner's
+// production opt-in gate) AND `GUILD_BENCHMARK_LIVE_SMOKE=1` (the test
+// suite's explicit opt-in) in the environment.
+//
+// Why two env vars (v1.1):
+//   The runner now enforces GUILD_BENCHMARK_LIVE=1 in production, and the
+//   test suite's global setup (`tests/_setup.ts`) sets it for every run so
+//   mocked-spawn unit tests can reach `runBenchmark` past the gate. If THIS
+//   smoke test only checked GUILD_BENCHMARK_LIVE=1 it would fire on every
+//   `npm test` invocation — burning real tokens. The second gate
+//   (LIVE_SMOKE) is what an operator EXPLICITLY adds when they want this
+//   one test to invoke real claude.
 //
 // Why this test exists:
 //   The mocked-spawn integration tests (server.runsPost.live.test.ts +
@@ -13,7 +24,7 @@
 //   This smoke test closes that gap when an operator opts in locally.
 //
 // Skip semantics:
-//   - GUILD_BENCHMARK_LIVE !== "1" → entire suite is `it.skipIf(...)` skipped.
+//   - GUILD_BENCHMARK_LIVE_SMOKE !== "1" → entire suite is `it.skipIf(...)` skipped.
 //   - claude binary not on PATH → tests still skip (we do NOT install it).
 //
 // What we do NOT assert:
@@ -31,8 +42,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runBenchmark } from "../src/runner.js";
 import type { RunJson } from "../src/types.js";
 
-// Single env-var gate: omit or set anything other than "1" to skip.
-const LIVE_GATE = process.env.GUILD_BENCHMARK_LIVE === "1";
+// Two env-var gate: BOTH must be exactly "1" for the smoke to run.
+// LIVE matches the production runner gate (set globally by tests/_setup.ts);
+// LIVE_SMOKE is the operator-explicit opt-in for this one test only.
+const LIVE_GATE =
+  process.env.GUILD_BENCHMARK_LIVE === "1" &&
+  process.env.GUILD_BENCHMARK_LIVE_SMOKE === "1";
 
 // Resolve a `claude` binary off PATH; if not found we still skip so a
 // developer who forgets to install claude doesn't get a confusing failure.

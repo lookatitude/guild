@@ -93,9 +93,26 @@ class FakeChild extends EventEmitter {
   // streamed bytes since we're asserting the spawn-call shape itself.
   stdout: Readable | null = null;
   stderr: Readable | null = null;
+  // v1.1 / ADR-006 — stdin is a writable stand-in. The runner pipes the
+  // prompt content here at spawn time; we capture writes for tests that
+  // assert prompt-via-stdin behavior. Methods are minimal because the
+  // runner only calls .write(), .end(), and .on("error"). Errors emitted
+  // here are caught by runner.ts via the `child.stdin.on("error", ...)`
+  // EPIPE-tolerant handler.
+  stdin: { write: (chunk: string) => void; end: () => void; on: (ev: string, fn: () => void) => void; written: string[]; ended: boolean };
   constructor(pid = 12345) {
     super();
     this.pid = pid;
+    const written: string[] = [];
+    this.stdin = {
+      written,
+      ended: false,
+      write: (chunk: string): void => {
+        written.push(chunk);
+      },
+      end: function (): void { this.ended = true; },
+      on: (): void => { /* error handler installed by runner; never fires in tests */ },
+    };
   }
 
   simulateExit(code: number, signal: NodeJS.Signals | null = null): void {
@@ -222,8 +239,11 @@ describe("runner / Q1+Q2 spawn invariants — shell:false + argv shape", () => {
     const [, , opts] = spawnMock.mock.calls[0]!;
     // ADR-004 — detached MUST be true so `process.kill(-pid, …)` targets the group.
     expect(opts).toMatchObject({ detached: true });
-    // stdio is the locked triple per architect §2.2.
-    expect(opts.stdio).toEqual(["ignore", "pipe", "pipe"]);
+    // stdio shape — v1.1 / ADR-006 flipped stdin from "ignore" to "pipe"
+    // so the runner can write the prompt to claude's stdin (claude v2.x
+    // reads stdin by default with `-p`). stdout/stderr stay as pipes
+    // for redactor-tee'd capture (M14).
+    expect(opts.stdio).toEqual(["pipe", "pipe", "pipe"]);
   });
 
   it("Q2 (M1): argv passed to spawn is a string[] with no NUL bytes and no shell metachars in the binary", async () => {
@@ -353,12 +373,54 @@ describe("runner / Q4 — absolute claude path + prompt path, not prompt content
 
     const [bin, args] = spawnMock.mock.calls[0]!;
     expect(bin).toBe(fakeClaude); // absolute (M4)
-    // No argv element contains the 4KB prompt content (M5/F1.5).
+    // M5/F1.5 invariant — no argv element contains the prompt content.
+    // v1.1/ADR-006 supersedes the prompt-via-file approach: prompt is
+    // now piped to child.stdin at spawn time. Either path satisfies
+    // M5/F1.5 (prompt never visible in `ps`); the test assertion shifts
+    // from "argv contains --prompt-file" to "argv does NOT contain the
+    // prompt content" — same security property, decoupled from impl.
     for (const a of args!) {
       expect((a as string).includes("PROMPT-SENTINEL-")).toBe(false);
     }
-    // Instead, --prompt-file <abs path> appears.
-    expect(args).toContain("--prompt-file");
+    // v1.1 default uses `--add-dir <workspace>`; --prompt-file is
+    // available via GUILD_BENCHMARK_ARGV_TEMPLATE for operators with a
+    // wrapper that prefers file-based input.
+    expect(args).toContain("--add-dir");
+  });
+
+  it("v1.1 / ADR-006: prompt content is piped to child.stdin (not in argv)", async () => {
+    const sentinelPrompt = "STDIN-SENTINEL-" + "y".repeat(2048);
+    const yaml = [
+      `schema_version: 1`,
+      `id: q4-stdin`,
+      `title: "stdin pipe"`,
+      `timeout_seconds: 30`,
+      `repetitions: 1`,
+      `fixture: "${fixtureDir}"`,
+      `prompt: "${sentinelPrompt}"`,
+      `expected_specialists: [architect]`,
+      `expected_stage_order: [brainstorm]`,
+      `acceptance_commands: []`,
+      ``,
+    ].join("\n");
+    await writeFile(join(casesDir, "q4-stdin.yaml"), yaml, "utf8");
+
+    const child = new FakeChild();
+    autoExitOnSpawn(child, 0);
+
+    await runBenchmark({ caseSlug: "q4-stdin" }, { runsDir, casesDir });
+
+    // Runner wrote the prompt content to child.stdin verbatim.
+    const written = child.stdin.written.join("");
+    expect(written).toContain("STDIN-SENTINEL-");
+    expect(written.length).toBeGreaterThan(2048);
+
+    // No argv element contains the prompt — the M5/F1.5 invariant
+    // (prompt never appears in `ps` listings) holds via the stdin path.
+    const [, args] = spawnMock.mock.calls[0]!;
+    for (const a of args!) {
+      expect((a as string).includes("STDIN-SENTINEL-")).toBe(false);
+    }
   });
 });
 

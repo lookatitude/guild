@@ -91,6 +91,17 @@ export function scoreRun(
       components.loop_response.weighted +
       components.efficiency.weighted,
   );
+  // v1.1 — annotate run_kind. When events.ndjson is missing AND the run
+  // produced any captured output (i.e. `claude --print` ran but did not
+  // emit lifecycle events), this is a raw-model run; the scorer faithfully
+  // records 0/100 on the lifecycle-dependent components. When events.ndjson
+  // is present, this is a Guild lifecycle run. See
+  // .guild/wiki/decisions/benchmark-runs-raw-claude-not-guild-lifecycle.md.
+  const runKind: "raw_model" | "guild_lifecycle" =
+    record.missing_artifacts.includes("events.ndjson")
+      ? "raw_model"
+      : "guild_lifecycle";
+
   const score: Score = {
     schema_version: SCHEMA_VERSION,
     run_id: record.run.run_id,
@@ -101,6 +112,7 @@ export function scoreRun(
     scored_at: new Date().toISOString(),
     partial: record.partial,
     missing_artifacts: record.missing_artifacts,
+    run_kind: runKind,
     components,
     guild_score,
   };

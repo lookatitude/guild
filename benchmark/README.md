@@ -86,7 +86,7 @@ Mode 2 runs the real `claude` CLI. Tokens cost real money; the operator's `~/.cl
 
    Tiers: `claude-haiku-4-5-20251001` (cheapest), `claude-sonnet-4-6` (balanced), `claude-opus-4-7` (highest fidelity, slowest, most expensive). Re-run `--dry-run` after changing the model to confirm the new `model_ref`.
 
-4. **Set the live opt-in.** Mode 2 will not actually spawn `claude` unless `GUILD_BENCHMARK_LIVE=1` is set in your environment. This is the default-safe gate — CI never burns tokens, and accidental invocations land on `--dry-run` semantics.
+4. **Set the live opt-in.** Mode 2 will not actually spawn `claude` unless `GUILD_BENCHMARK_LIVE=1` is set in your environment. This is the default-safe gate — CI never burns tokens, and accidental invocations land on a clear "live execution refused" error. (v1.1 enforcement note: prior to v1.1 this gate was documented but not implemented — closed in commit `<ff>`.)
 
    ```
    export GUILD_BENCHMARK_LIVE=1
@@ -126,18 +126,21 @@ Mode 2 runs the real `claude` CLI. Tokens cost real money; the operator's `~/.cl
 
    Track real costs from your Anthropic console (`run.json` does not record cost). If your benchmark run goes long enough to hit the 1h cap, you have paid for an hour of model wall-clock — that is the upper bound the spec's `T_budget` enforces.
 
-10. **Operator-tunable argv via `GUILD_BENCHMARK_ARGV_TEMPLATE`.** The default argv `claude --print --prompt-file <path> --workdir <ws> --output-format stream-json` may be rejected by some `claude` CLI builds (originally surfaced as the P3 T2 followup #1: `error: unknown option '--prompt-file'`). To override without editing source, set this env var to a JSON array of arguments. The runner substitutes `${PROMPT_FILE}` and `${WORKSPACE_DIR}` placeholders literally (no shell, no eval, no glob). The binary itself is element 0 (resolved from `GUILD_BENCHMARK_CLAUDE_BIN` or `$PATH`); the template covers args only. Examples:
+10. **Operator-tunable argv via `GUILD_BENCHMARK_ARGV_TEMPLATE`.** The v1.1 default argv is `claude --print --add-dir <ws> [--model <name>]` with the prompt **piped via stdin** (per `plans/adr-006-runner-prompt-via-stdin.md`). v1.1 dropped `--output-format stream-json` from the default because real `claude` v2.x rejects it without `--verbose`; v1.1 also threads `model_ref.default` into the default argv as `--model <name>`. To override without editing source, set this env var to a JSON array of arguments. The runner substitutes `${PROMPT_FILE}`, `${WORKSPACE_DIR}`, and `${MODEL}` placeholders literally (no shell, no eval, no glob). The binary itself is element 0 (resolved from `GUILD_BENCHMARK_CLAUDE_BIN` or `$PATH`); the template covers args only. Examples:
 
     ```bash
-    # Pass the prompt positionally instead of via --prompt-file:
-    export GUILD_BENCHMARK_ARGV_TEMPLATE='["--print", "--workdir", "${WORKSPACE_DIR}", "--prompt", "@${PROMPT_FILE}"]'
+    # Opt into structured output (claude v2.x requires --verbose alongside):
+    export GUILD_BENCHMARK_ARGV_TEMPLATE='["--print", "--verbose", "--output-format", "stream-json", "--add-dir", "${WORKSPACE_DIR}", "--model", "${MODEL}"]'
 
-    # Drop --output-format if your build doesn't recognise stream-json:
-    export GUILD_BENCHMARK_ARGV_TEMPLATE='["--print", "--prompt-file", "${PROMPT_FILE}", "--workdir", "${WORKSPACE_DIR}"]'
+    # Legacy template for forks that still accept --prompt-file/--workdir:
+    # (the runner writes _benchmark-prompt.txt only when ${PROMPT_FILE} is referenced)
+    export GUILD_BENCHMARK_ARGV_TEMPLATE='["--print", "--prompt-file", "${PROMPT_FILE}", "--workdir", "${WORKSPACE_DIR}", "--model", "${MODEL}"]'
 
     # Verify with --dry-run (does not spawn):
     npm run benchmark -- run --case demo-url-shortener-build --dry-run
     ```
+
+    **${PROMPT_FILE} is opt-in.** Under the v1.1 default the runner does not write a prompt file at all (the prompt goes via stdin). When ARGV_TEMPLATE references `${PROMPT_FILE}`, the runner writes `_benchmark-prompt.txt` under the workspace and substitutes its absolute path.
 
     `--dry-run` resolves and prints the resulting argv; review it before flipping `GUILD_BENCHMARK_LIVE=1`. M1 invariants still hold — runtime asserts argv is a string array with no NUL bytes; substitutions are purely literal. Invalid JSON or non-string elements fail loudly on the next `run` invocation.
 

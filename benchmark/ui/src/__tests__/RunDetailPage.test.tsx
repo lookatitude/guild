@@ -57,6 +57,46 @@ describe("RunDetailPage — surface", () => {
     expect(screen.getByRole("heading", { name: "Run metadata" })).toBeInTheDocument();
   });
 
+  // v1.1 — auth_identity_hash badge surface. The field is forensic-only
+  // (architect default, security-review-p4 R8) — show 7-char prefix with
+  // the full hash in the title attribute. Absent field = no badge.
+  it("renders an auth_identity_hash badge when the field is present", async () => {
+    const fixtureWithHash = {
+      ...runDetailFixture,
+      run: {
+        ...runDetailFixture.run,
+        auth_identity_hash:
+          "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      },
+    };
+    handle = installMockFetch({
+      override: (url) =>
+        url.includes("/api/runs/sample-pass-001")
+          ? new Response(JSON.stringify(fixtureWithHash), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            })
+          : undefined,
+    });
+    mount();
+    const badge = await screen.findByTestId("auth-identity-hash-badge");
+    expect(badge).toHaveTextContent("a1b2c3d…");
+    expect(badge.getAttribute("title")).toBe(
+      "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    );
+  });
+
+  it("does not render the auth_identity_hash badge when the field is absent", async () => {
+    handle = installMockFetch();
+    mount();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Run metadata" }),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("auth-identity-hash-badge")).toBeNull();
+  });
+
   it("surfaces an error state when the detail fetch fails", async () => {
     handle = installMockFetch({
       override: (url) =>

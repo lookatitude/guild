@@ -23,7 +23,9 @@ import { join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_T_BUDGET_MS,
+  ENV_ARGV_TEMPLATE,
   ENV_CLAUDE_BIN,
+  ENV_LIVE,
   ENV_MODELS_JSON,
   ENV_TIMEOUT_MS,
   KILL_GRACE_MS,
@@ -446,17 +448,29 @@ describe("runner / planRun + formatDryRunReport — pure plan resolution", () =>
       expect(typeof el).toBe("string");
       expect(el.indexOf("\0")).toBe(-1);
     }
-    // First element is the resolved binary; subsequent elements include
-    // `--print` + `--prompt-file <file>` + `--workdir <dir>`.
+    // v1.1 / ADR-006 — default argv targets real `claude` v2.x:
+    //   claude --print --add-dir <workspace> [--model <name>]
+    // Prompt is piped via stdin (NOT --prompt-file, which v2.x rejects).
+    // `--workdir` was claude v1; v2.x uses `--add-dir` for tool-access
+    // allow-list. `--output-format stream-json` also dropped (would
+    // require --verbose on v2.x and the runner doesn't parse the stream).
     expect(plan.argv[0]).toBe(fakeClaude);
     expect(plan.argv).toContain("--print");
-    expect(plan.argv).toContain("--prompt-file");
-    expect(plan.argv).toContain("--workdir");
-    expect(plan.argv).toContain("--output-format");
-    expect(plan.argv).toContain("stream-json");
-    // Prompt path appears after --prompt-file.
-    const promptIdx = plan.argv.indexOf("--prompt-file");
-    expect(plan.argv[promptIdx + 1]).toBe(plan.promptPath);
+    expect(plan.argv).toContain("--add-dir");
+    expect(plan.argv).not.toContain("--prompt-file");
+    expect(plan.argv).not.toContain("--workdir");
+    expect(plan.argv).not.toContain("--output-format");
+    expect(plan.argv).not.toContain("stream-json");
+    // --add-dir is followed by the workspace path.
+    const addDirIdx = plan.argv.indexOf("--add-dir");
+    expect(plan.argv[addDirIdx + 1]).toBe(plan.workspaceDir);
+    // promptPath is preserved on the plan (used by ARGV_TEMPLATE
+    // ${PROMPT_FILE} substitution + post-run forensics) but NOT in argv.
+    expect(typeof plan.promptPath).toBe("string");
+    expect(plan.promptPath.length).toBeGreaterThan(0);
+    // promptContent is the literal prompt string piped to child.stdin.
+    expect(typeof plan.promptContent).toBe("string");
+    expect(plan.promptContent).toBe(plan.caseFile.prompt);
   });
 
   it("respects ENV_MODELS_JSON for modelRef when no override is supplied", async () => {
@@ -662,5 +676,231 @@ describe("runner / runBenchmark dry-run path", () => {
       .then(() => true)
       .catch(() => false);
     expect(stat).toBe(false);
+  });
+});
+
+// ---- v1.1 fix-pack: ENV_LIVE gate, --model passthrough, ${MODEL} sub ----
+
+describe("runner / v1.1 — GUILD_BENCHMARK_LIVE opt-in gate", () => {
+  // Tests in this block override the global setup's LIVE=1 default to
+  // exercise the gate. Restore before leaving the block.
+  let savedLive: string | undefined;
+  beforeEach(() => {
+    savedLive = process.env[ENV_LIVE];
+  });
+  afterEach(() => {
+    if (savedLive === undefined) delete process.env[ENV_LIVE];
+    else process.env[ENV_LIVE] = savedLive;
+  });
+
+  it("refuses spawn with a clear error when GUILD_BENCHMARK_LIVE is unset", async () => {
+    delete process.env[ENV_LIVE];
+    await seedCaseYaml({
+      casesDir,
+      slug: "v11-no-opt-in",
+      fixturePath: fixtureDir,
+    });
+    await expect(
+      runBenchmark({ caseSlug: "v11-no-opt-in" }, { runsDir, casesDir }),
+    ).rejects.toThrow(/live execution refused — set GUILD_BENCHMARK_LIVE=1/);
+  });
+
+  it("refuses spawn when GUILD_BENCHMARK_LIVE is set to anything other than '1'", async () => {
+    process.env[ENV_LIVE] = "true"; // common operator mistake
+    await seedCaseYaml({
+      casesDir,
+      slug: "v11-true-not-one",
+      fixturePath: fixtureDir,
+    });
+    await expect(
+      runBenchmark({ caseSlug: "v11-true-not-one" }, { runsDir, casesDir }),
+    ).rejects.toThrow(/live execution refused/);
+  });
+
+  it("--dry-run bypasses the gate (operator's pre-flight verification path)", async () => {
+    delete process.env[ENV_LIVE];
+    await seedCaseYaml({
+      casesDir,
+      slug: "v11-dry-run-bypass",
+      fixturePath: fixtureDir,
+    });
+    // Dry-run returns a RunnerResult shape with status: "errored" and
+    // partial: true (it's a plan, not a real run); the assertion is that
+    // the gate did NOT throw.
+    const result = await runBenchmark(
+      { caseSlug: "v11-dry-run-bypass", dryRun: true },
+      { runsDir, casesDir },
+    );
+    expect(result.status).toBe("errored");
+    expect(result.partial).toBe(true);
+  });
+});
+
+describe("runner / v1.1 — model_ref.default → --model in default argv", () => {
+  it("default argv injects --model when model_ref.default is set", async () => {
+    process.env[ENV_MODELS_JSON] = JSON.stringify({
+      default: "claude-haiku-4-5-20251001",
+    });
+    await seedCaseYaml({
+      casesDir,
+      slug: "v11-model-haiku",
+      fixturePath: fixtureDir,
+    });
+    const plan = await planRun(
+      { caseSlug: "v11-model-haiku" },
+      { runsDir, casesDir },
+    );
+    expect(plan.argv).toContain("--model");
+    const modelIdx = plan.argv.indexOf("--model");
+    expect(plan.argv[modelIdx + 1]).toBe("claude-haiku-4-5-20251001");
+  });
+
+  it("default argv omits --model when model_ref has no `default` key", async () => {
+    // Clear the env var so resolveModelRef falls back to its default
+    // ({default: claude-opus-4-7} per existing behaviour).
+    delete process.env[ENV_MODELS_JSON];
+    await seedCaseYaml({
+      casesDir,
+      slug: "v11-default-opus",
+      fixturePath: fixtureDir,
+    });
+    const plan = await planRun(
+      { caseSlug: "v11-default-opus" },
+      { runsDir, casesDir },
+    );
+    // The fallback default IS {default: ...}, so --model is present even
+    // without an explicit override. Verify it appears.
+    expect(plan.argv).toContain("--model");
+  });
+
+  it("opts.modelsOverride wins over GUILD_BENCHMARK_MODELS_JSON", async () => {
+    process.env[ENV_MODELS_JSON] = JSON.stringify({
+      default: "claude-haiku-4-5-20251001",
+    });
+    await seedCaseYaml({
+      casesDir,
+      slug: "v11-explicit-override",
+      fixturePath: fixtureDir,
+    });
+    const plan = await planRun(
+      {
+        caseSlug: "v11-explicit-override",
+        modelsOverride: { default: "claude-sonnet-4-6" },
+      },
+      { runsDir, casesDir },
+    );
+    const modelIdx = plan.argv.indexOf("--model");
+    expect(plan.argv[modelIdx + 1]).toBe("claude-sonnet-4-6");
+  });
+});
+
+describe("runner / v1.1 — GUILD_BENCHMARK_ARGV_TEMPLATE ${MODEL} substitution", () => {
+  let savedTmpl: string | undefined;
+  beforeEach(() => {
+    savedTmpl = process.env[ENV_ARGV_TEMPLATE];
+  });
+  afterEach(() => {
+    if (savedTmpl === undefined) delete process.env[ENV_ARGV_TEMPLATE];
+    else process.env[ENV_ARGV_TEMPLATE] = savedTmpl;
+  });
+
+  it("substitutes ${MODEL} from model_ref.default", async () => {
+    process.env[ENV_MODELS_JSON] = JSON.stringify({
+      default: "claude-sonnet-4-6",
+    });
+    process.env[ENV_ARGV_TEMPLATE] = JSON.stringify([
+      "--print",
+      "--model",
+      "${MODEL}",
+      "--add-dir",
+      "${WORKSPACE_DIR}",
+    ]);
+    await seedCaseYaml({
+      casesDir,
+      slug: "v11-tmpl-model-sub",
+      fixturePath: fixtureDir,
+    });
+    const plan = await planRun(
+      { caseSlug: "v11-tmpl-model-sub" },
+      { runsDir, casesDir },
+    );
+    expect(plan.argv).toContain("--model");
+    const modelIdx = plan.argv.indexOf("--model");
+    expect(plan.argv[modelIdx + 1]).toBe("claude-sonnet-4-6");
+    // Default flags should be GONE — template replaces, not augments.
+    expect(plan.argv).not.toContain("--prompt-file");
+    expect(plan.argv).not.toContain("--workdir");
+    // ${WORKSPACE_DIR} was substituted to the resolved workspace path.
+    const addDirIdx = plan.argv.indexOf("--add-dir");
+    expect(plan.argv[addDirIdx + 1]).toBe(plan.workspaceDir);
+  });
+
+  it("substitutes empty string when model_ref.default is missing", async () => {
+    // resolveModelRef falls back to {default: claude-opus-4-7} when
+    // GUILD_BENCHMARK_MODELS_JSON is unset, so to test the empty-string
+    // path we explicitly override with a model_ref that has no `default`.
+    process.env[ENV_MODELS_JSON] = JSON.stringify({
+      architect: "claude-opus-4-7",
+    });
+    process.env[ENV_ARGV_TEMPLATE] = JSON.stringify([
+      "--print",
+      "--model",
+      "${MODEL}",
+    ]);
+    await seedCaseYaml({
+      casesDir,
+      slug: "v11-tmpl-no-default-model",
+      fixturePath: fixtureDir,
+    });
+    const plan = await planRun(
+      { caseSlug: "v11-tmpl-no-default-model" },
+      { runsDir, casesDir },
+    );
+    // ${MODEL} substituted to empty string — so argv has "--model" then "".
+    const modelIdx = plan.argv.indexOf("--model");
+    expect(plan.argv[modelIdx + 1]).toBe("");
+  });
+});
+
+describe("runner / v1.1 — default argv drops --output-format stream-json", () => {
+  // Closes the v1 audit finding: real `claude` v2.x rejects
+  // `--output-format stream-json` without `--verbose`. Default no longer
+  // sets the output format; the runner tees stdout regardless of format.
+  it("default argv does not include --output-format or stream-json", async () => {
+    await seedCaseYaml({
+      casesDir,
+      slug: "v11-no-output-format",
+      fixturePath: fixtureDir,
+    });
+    const plan = await planRun(
+      { caseSlug: "v11-no-output-format" },
+      { runsDir, casesDir },
+    );
+    expect(plan.argv).not.toContain("--output-format");
+    expect(plan.argv).not.toContain("stream-json");
+  });
+
+  it("operator can opt back into stream-json via GUILD_BENCHMARK_ARGV_TEMPLATE (with --verbose)", async () => {
+    process.env[ENV_ARGV_TEMPLATE] = JSON.stringify([
+      "--print",
+      "--verbose",
+      "--output-format",
+      "stream-json",
+      "--add-dir",
+      "${WORKSPACE_DIR}",
+    ]);
+    await seedCaseYaml({
+      casesDir,
+      slug: "v11-tmpl-stream-json",
+      fixturePath: fixtureDir,
+    });
+    const plan = await planRun(
+      { caseSlug: "v11-tmpl-stream-json" },
+      { runsDir, casesDir },
+    );
+    expect(plan.argv).toContain("--verbose");
+    expect(plan.argv).toContain("--output-format");
+    expect(plan.argv).toContain("stream-json");
+    delete process.env[ENV_ARGV_TEMPLATE];
   });
 });

@@ -52,6 +52,12 @@ class FakeChild extends EventEmitter {
   exitCode: number | null = null;
   stdout = null;
   stderr = null;
+  // v1.1 / ADR-006 — stdin writable stand-in.
+  stdin = {
+    write: (): void => {},
+    end: (): void => {},
+    on: (): void => {},
+  };
   constructor(pid: number) {
     super();
     this.pid = pid;
@@ -220,14 +226,13 @@ describe("server / POST /api/runs (live, with mocked spawn)", () => {
     const conflictBody = (await conflicted.json()) as Record<string, unknown>;
     const acceptedBody = (await accepted.json()) as RunPostResponse;
 
-    // The 409 body shape today is `{ error, run_id, started_at }` per
-    // server.ts. The frontend reads `current_run_id` (TriggerPanelPage.tsx)
-    // → contract mismatch flagged as a backend follow-up. We accept either
-    // key here so a backend rename doesn't silently flip the test green.
+    // v1.1 — body shape unified: `current_run_id` is the canonical key the
+    // UI consumes (ui/src/lib/api.ts, TriggerPanelPage.tsx); `run_id` is
+    // kept as a deprecated alias for one release. Both must be present and
+    // identical.
     expect(typeof conflictBody.error).toBe("string");
-    const conflictRunId =
-      (conflictBody.run_id as string | undefined) ??
-      (conflictBody.current_run_id as string | undefined);
+    expect(conflictBody.current_run_id).toBe(conflictBody.run_id);
+    const conflictRunId = conflictBody.current_run_id as string;
     expect(conflictRunId).toBeTruthy();
     // The slot may have been claimed before planRun resolved, in which case
     // the conflict body identifies the placeholder ("<resolving>"). After

@@ -157,6 +157,12 @@ export const COMPONENT_KEYS: ComponentKey[] = [
   "efficiency",
 ];
 
+// v1.1 — distinguishes runs that exercise the Guild lifecycle (events.ndjson
+// present) from runs that just record raw `claude --print` model behavior
+// (no events; outcome/delegation/gates components score 0). See
+// .guild/wiki/decisions/benchmark-runs-raw-claude-not-guild-lifecycle.md.
+export type RunKind = "guild_lifecycle" | "raw_model";
+
 export interface Score {
   schema_version: number;
   run_id: string;
@@ -167,6 +173,10 @@ export interface Score {
   scored_at: string;
   partial: boolean;
   missing_artifacts: string[];
+  // v1.1 — explicit annotation of what kind of run was scored. When
+  // `events.ndjson` is missing, partial scoring is *expected and correct*;
+  // `run_kind: "raw_model"` makes that interpretable rather than mysterious.
+  run_kind: RunKind;
   components: ScoreComponents;
   guild_score: number;
 }
@@ -221,12 +231,28 @@ export interface ExcludedRun {
   reason: string;
 }
 
+// v1.1 — runs the comparator scanned but couldn't include because the
+// run directory existed but had no `score.json`. Previously the comparator
+// only stderr-logged these; v1.1 surfaces them in the comparison artifact
+// so callers can tell silence ("no skipped runs") from an empty
+// `no_comparable_runs` ("we skipped them all silently").
+export interface SkippedRun {
+  run_id: string;
+  side: "baseline" | "candidate";
+  reason: "no_score_json";
+}
+
 export interface Comparison {
   schema_version: number;
   baseline: TrialSetSummary;
   candidate: TrialSetSummary;
   status: "ok" | "no_comparable_runs" | "partial";
   excluded_runs: ExcludedRun[];
+  // v1.1 — populated when run dirs exist but score.json is missing. When
+  // this list is non-empty, callers should treat the comparison as
+  // potentially under-counted; the CLI prints a warning when this list is
+  // populated.
+  skipped_runs: SkippedRun[];
   per_component_delta: Record<ComponentKey, ComponentDelta>;
   guild_score_delta: ComponentDelta;
   generated_at: string;
