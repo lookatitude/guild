@@ -69,7 +69,7 @@ describe("cli / loop — argv parsing + exit-code map", () => {
     const r = runCli(["loop"]);
     expect(r.status).toBe(2);
     expect(r.stderr).toContain(
-      "loop: one of --start, --continue, --status, --abort is required",
+      "loop: one of --start, --continue, --status, --abort, --rollback is required",
     );
   });
 
@@ -263,5 +263,70 @@ describe("cli / loop — argv parsing + exit-code map", () => {
     ]);
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("mutually exclusive");
+  });
+
+  // v1.3 — F2: loop --rollback CLI argv parsing. Behavior is tested in
+  // tests/loop.unit.test.ts; here we only pin mode-dispatch + mutual
+  // exclusion + arg validation exit codes.
+  it("`loop --rollback` rejects missing --baseline-run-id (exit 2)", () => {
+    const r = runCli([
+      "loop",
+      "--rollback",
+      "--candidate-id",
+      "ref-001",
+      "--runs-dir",
+      runsDir,
+      "--cases-dir",
+      casesDir,
+    ]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("--baseline-run-id <id> is required");
+  });
+
+  it("`loop --rollback` rejects missing --candidate-id (exit 2)", () => {
+    const r = runCli([
+      "loop",
+      "--rollback",
+      "--baseline-run-id",
+      "synthetic-pass-001",
+      "--runs-dir",
+      runsDir,
+      "--cases-dir",
+      casesDir,
+    ]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("--candidate-id <id> is required");
+  });
+
+  it("`loop --start --rollback` rejects mutually exclusive modes (exit 2)", () => {
+    const r = runCli([
+      "loop",
+      "--start",
+      "--rollback",
+      "--runs-dir",
+      runsDir,
+      "--cases-dir",
+      casesDir,
+    ]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("mutually exclusive");
+  });
+
+  it("`loop --rollback --candidate-id <bad-id>` rejects M13 path-traversal (exit 2)", () => {
+    const r = runCli([
+      "loop",
+      "--rollback",
+      "--baseline-run-id",
+      "synthetic-pass-001",
+      "--candidate-id",
+      "../etc/passwd",
+      "--runs-dir",
+      runsDir,
+      "--cases-dir",
+      casesDir,
+    ]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("not a valid proposal_id");
+    expect(r.stderr).toContain("M13");
   });
 });

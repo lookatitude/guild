@@ -16,6 +16,11 @@ export interface SeedOpts {
   withMetrics?: boolean;
   withScore?: boolean;
   withEvents?: boolean;
+  // v1.3 — F4: optional sha256-hex hash recorded in run.json (M9). When
+  // set, lets server tests pin that GET /api/runs forwards the field
+  // end-to-end. Undefined → field is omitted from run.json (matching
+  // runner's behaviour when the env var is absent / invalid).
+  auth_identity_hash?: string;
 }
 
 export async function seedRun(
@@ -37,6 +42,9 @@ export async function seedRun(
     status: opts.status ?? "pass",
     wall_clock_ms: 1200000,
     wall_clock_budget_ms: 1500000,
+    ...(opts.auth_identity_hash !== undefined
+      ? { auth_identity_hash: opts.auth_identity_hash }
+      : {}),
   };
   await writeFile(join(dir, "run.json"), JSON.stringify(run, null, 2));
 

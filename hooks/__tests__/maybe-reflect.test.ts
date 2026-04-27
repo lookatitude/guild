@@ -182,3 +182,136 @@ describe("maybe-reflect.ts — heuristic gate", () => {
     });
   });
 });
+
+// v1.3 — F12: maybe-reflect.ts widened to fire on dev-team SubagentStop
+// when all three guards hold:
+//   1. GUILD_ENABLE_DEVTEAM_REFLECT === "1"   (operator opt-in; default off)
+//   2. ≥ 3 SubagentStop dispatches in events.ndjson   (threshold filter)
+//   3. .guild/spec/<slug>.md exists                  (something to reflect against)
+//
+// Tests cover the three branches: gate-off, gate-on-below-threshold,
+// gate-on-met-threshold-with-spec.
+describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
+  let tmpDir: string;
+  const subagentPayload = fs
+    .readFileSync(path.join(FIXTURES, "subagent-stop.json"), "utf8")
+    .toString();
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-reflect-devteam-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // Helper — build N specialist dispatch events for the threshold check.
+  function nDispatchEvents(n: number): string[] {
+    const out: string[] = [];
+    for (let i = 0; i < n; i++) {
+      out.push(
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          event: "SubagentStop",
+          tool: "",
+          specialist: `agent-${i}`,
+          payload_digest: `dig-${i}`,
+          ok: true,
+          ms: 1000,
+        }),
+      );
+    }
+    return out;
+  }
+
+  // Helper — seed a spec file at .guild/spec/<slug>.md.
+  function seedSpec(cwd: string, slug: string): void {
+    const specDir = path.join(cwd, ".guild", "spec");
+    fs.mkdirSync(specDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(specDir, `${slug}.md`),
+      "# spec\n\ncontent\n",
+      "utf8",
+    );
+  }
+
+  it("gate OFF — env var unset → no reflect marker even with 3 dispatches + spec", () => {
+    makeRunDir(tmpDir, "test-run", nDispatchEvents(3));
+    seedSpec(tmpDir, "demo");
+    const { exitCode, stdout, stderr } = runScript(subagentPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+      // Explicitly clear the env var so we exercise the default-off path.
+      GUILD_ENABLE_DEVTEAM_REFLECT: "",
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout.trim()).toBe("");
+    expect(stderr).toMatch(/GUILD_ENABLE_DEVTEAM_REFLECT/);
+  });
+
+  it("gate ON, below threshold — 2 dispatches → no reflect marker", () => {
+    makeRunDir(tmpDir, "test-run", nDispatchEvents(2));
+    seedSpec(tmpDir, "demo");
+    const { exitCode, stdout, stderr } = runScript(subagentPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+      GUILD_ENABLE_DEVTEAM_REFLECT: "1",
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout.trim()).toBe("");
+    expect(stderr).toMatch(/dispatch count 2 < 3/);
+  });
+
+  it("gate ON, met threshold, with spec — 3 dispatches + spec → reflect marker fires", () => {
+    makeRunDir(tmpDir, "test-run", nDispatchEvents(3));
+    seedSpec(tmpDir, "demo");
+    const { exitCode, stdout } = runScript(subagentPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+      GUILD_ENABLE_DEVTEAM_REFLECT: "1",
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout).toMatch(/GUILD_REFLECT/);
+    expect(stdout).toMatch(/test-run/);
+  });
+
+  it("gate ON, met threshold, slug-explicit lookup honors GUILD_SPEC_SLUG", () => {
+    makeRunDir(tmpDir, "test-run", nDispatchEvents(3));
+    seedSpec(tmpDir, "v1.3.0-deferred-cleanup");
+    const { exitCode, stdout } = runScript(subagentPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+      GUILD_ENABLE_DEVTEAM_REFLECT: "1",
+      GUILD_SPEC_SLUG: "v1.3.0-deferred-cleanup",
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout).toMatch(/GUILD_REFLECT/);
+  });
+
+  it("gate ON, met threshold, GUILD_SPEC_SLUG points at missing spec → no reflect", () => {
+    makeRunDir(tmpDir, "test-run", nDispatchEvents(3));
+    seedSpec(tmpDir, "actual-spec");
+    const { exitCode, stdout, stderr } = runScript(subagentPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+      GUILD_ENABLE_DEVTEAM_REFLECT: "1",
+      GUILD_SPEC_SLUG: "nonexistent-spec",
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout.trim()).toBe("");
+    expect(stderr).toMatch(/spec not found/);
+  });
+
+  it("gate ON, met threshold, no spec dir at all → no reflect", () => {
+    makeRunDir(tmpDir, "test-run", nDispatchEvents(3));
+    // No seedSpec call — .guild/spec/ does not exist.
+    const { exitCode, stdout, stderr } = runScript(subagentPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+      GUILD_ENABLE_DEVTEAM_REFLECT: "1",
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout.trim()).toBe("");
+    expect(stderr).toMatch(/spec dir not found/);
+  });
+});

@@ -492,6 +492,23 @@ pins the architectural interface so security has a concrete target.
 
 ### 6.1 Reflection-apply file-write surface
 
+> **Superseded in part by v1.3 (2026-04-27) — `loop --rollback` action lands.**
+> The "Rollback semantics" forward-reference in this section's threat-model
+> bullet (operator reverts the commit by hand; security may require a
+> `loop --rollback <candidate-id>` helper later) is **closed** by v1.3:
+> `loopRollback()` lands in `benchmark/src/loop.ts` with CLI dispatch in
+> `cli.ts`, refusing on non-`completed` manifest states, supporting
+> `--dry-run` (default) and `--confirm` (live, shells out to `git revert`
+> behind the M13 path-allowlist for IDs). The new manifest state
+> `"rolled-back"` is durable. Architect's earlier "if so, ADR captures the
+> addition" hedge is closed by the v1.3 plan + backend's T2 implementation;
+> see `benchmark/FOLLOWUPS.md §F2` (closure), `.guild/spec/v1.3.0-deferred-cleanup.md
+> §Success-criteria §1`, and `.guild/plan/v1.3.0-deferred-cleanup.md
+> §T2-backend` for the contract. The §6.1 prose below is preserved verbatim
+> for audit-trail continuity; the rollback-semantics bullet's "Currently:
+> the operator reverts the commit and re-runs the loop" line is the v1.x
+> fallback for operators who choose not to use `loop --rollback`.
+
 When the operator runs the apply step (between `--start` and
 `--continue`), they hand-edit plugin source per the chosen proposal.
 The loop is **not** the writer — but the proposal body *is* operator-

@@ -357,6 +357,14 @@ async function listRunRows(
       status: run.status,
       guild_score: score.guild_score,
       started_at: run.started_at,
+      // v1.3 — F4: forward auth_identity_hash on the LIST endpoint so the
+      // frontend's filter UI can read it without round-tripping to the
+      // detail endpoint. Field is only present when the source run.json
+      // recorded one (M9: ^[a-f0-9]{64}$ shape; absent or invalid →
+      // omitted at runner time).
+      ...(run.auth_identity_hash !== undefined
+        ? { auth_identity_hash: run.auth_identity_hash }
+        : {}),
     });
   }
   rows.sort((a, b) =>

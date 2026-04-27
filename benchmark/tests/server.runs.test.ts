@@ -102,4 +102,31 @@ describe("server / GET /api/runs", () => {
     const body = (await res.json()) as RunsListResponse;
     expect(body.runs.map((r) => r.run_id)).toEqual(["scored-001"]);
   });
+
+  // v1.3 — F4: pin that the LIST endpoint forwards auth_identity_hash
+  // when the source run.json carries it. Frontend filter UI reads from
+  // /api/runs (not /api/runs/:id), so this is the load-bearing surface
+  // for the badge/filter to work without an extra round-trip.
+  it("forwards auth_identity_hash on rows whose run.json has the field (F4)", async () => {
+    const realHash = "a".repeat(64); // matches AUTH_IDENTITY_HASH_RE shape
+    await seedRun(runsDir, "with-hash-001", {
+      case_slug: "alpha",
+      auth_identity_hash: realHash,
+    });
+    await seedRun(runsDir, "without-hash-001", { case_slug: "alpha" });
+
+    const app = createApp({ runsDir, casesDir, port: 0 });
+    const res = await app.fetch(req("/api/runs"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as RunsListResponse;
+    expect(body.total).toBe(2);
+    const withHash = body.runs.find((r) => r.run_id === "with-hash-001");
+    const withoutHash = body.runs.find((r) => r.run_id === "without-hash-001");
+    expect(withHash).toBeDefined();
+    expect(withHash?.auth_identity_hash).toBe(realHash);
+    // Field is omitted (not undefined inside JSON) when source run.json
+    // lacked it — frontend can branch on `field in row`.
+    expect(withoutHash).toBeDefined();
+    expect(withoutHash?.auth_identity_hash).toBeUndefined();
+  });
 });

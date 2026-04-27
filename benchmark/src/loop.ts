@@ -87,6 +87,8 @@ import type {
   LoopManifest,
   LoopManifestProposal,
   LoopManifestState,
+  LoopRollbackOptions,
+  LoopRollbackReport,
   LoopStartOptions,
   LoopStatusOptions,
 } from "./types.js";
@@ -95,10 +97,12 @@ import type {
 // shell-metacharacters; max 128 chars per security F2.1.
 export const PROPOSAL_ID_RE = /^[a-zA-Z0-9._-]{1,128}$/;
 // State enum used for strict membership checks (M6, F2.5).
+// v1.3 — F2: "rolled-back" added as the terminal state for loopRollback().
 const VALID_STATES: ReadonlySet<LoopManifestState> = new Set([
   "awaiting-apply",
   "completed",
   "aborted",
+  "rolled-back",
 ]);
 
 const MANIFEST_FILENAME = "loop-manifest.json";
@@ -512,6 +516,167 @@ export async function loopAbort(
     manifestStateAfter: "aborted",
     lockfilePath: lockPath,
     lockfileExisted,
+  };
+}
+
+/**
+ * `loop --rollback` — flips a "completed" manifest to "rolled-back" after
+ * `git revert <plugin_ref_after>` succeeds. Refuses on any other state
+ * (you can only rollback a completed application). Default `--dry-run`
+ * prints what would happen; `--confirm` shells out to git revert.
+ *
+ * v1.3 — F2 closed. P4's manifest schema reserved no rollback action;
+ * v1.x workaround was a manual `git revert <plugin_ref_after>`. The
+ * `loop --rollback` action is symmetric with --abort (both transition a
+ * non-awaiting-apply manifest into a terminal state) and lets operators
+ * script the un-application cleanly. `p4-learning-loop-architecture.md
+ * §6.1` carries the supersession callout.
+ *
+ * Architecture (per ADR/spec):
+ *   - Refuses if state ≠ "completed" (only completed apps can be rolled back).
+ *   - M13: --candidate-id validated against PROPOSAL_ID_RE before disk read.
+ *   - --dry-run (default): print state transition + git revert shellout.
+ *   - --confirm (live): execFileSync git revert; flip state; writeManifestAtomic.
+ *   - Refuses live without --confirm (defense against accidental invocation).
+ *   - Drops <manifest>.lock if present, mirroring loopAbort.
+ */
+export async function loopRollback(
+  opts: LoopRollbackOptions,
+  ctx: LoopContext,
+): Promise<LoopRollbackReport> {
+  if (!opts.baselineRunId || typeof opts.baselineRunId !== "string") {
+    throw new Error("loop --rollback: --baseline-run-id <id> is required");
+  }
+  if (!opts.candidateId || typeof opts.candidateId !== "string") {
+    throw new Error("loop --rollback: --candidate-id <id> is required");
+  }
+  // M13 — same allowlist as --apply / --abort. Defends against
+  // attacker-supplied path-traversal or shell-metacharacter ids that
+  // could escape the runs dir or escape the git revert argv.
+  if (!PROPOSAL_ID_RE.test(opts.baselineRunId)) {
+    throw new Error(
+      `loop --rollback: --baseline-run-id "${opts.baselineRunId}" contains illegal characters ` +
+        `(allowed: ${PROPOSAL_ID_RE.source})`,
+    );
+  }
+  if (!PROPOSAL_ID_RE.test(opts.candidateId)) {
+    throw new Error(
+      `loop --rollback: --candidate-id "${opts.candidateId}" is not a valid proposal_id ` +
+        `(must match ${PROPOSAL_ID_RE.source}; M13 / security F2.1)`,
+    );
+  }
+  // Default-safe: live mode requires --confirm. --dry-run is the default.
+  const isDryRun = opts.dryRun !== false && opts.confirm !== true;
+  if (!isDryRun && opts.confirm !== true) {
+    throw new Error(
+      `loop --rollback: live mode requires --confirm (refusing to git revert without explicit operator opt-in)`,
+    );
+  }
+
+  const manifestPath = manifestPathFor(ctx.runsDir, opts.baselineRunId);
+  if (!existsSync(manifestPath)) {
+    throw new Error(
+      `loop --rollback: manifest not found at ${manifestPath} ` +
+        `(nothing to rollback — fix the run-id or run \`loop --start\` first)`,
+    );
+  }
+  const manifest = await readManifest(manifestPath);
+
+  // Refuse on non-completed states. Only a completed apply can be rolled back.
+  if (manifest.state !== "completed") {
+    throw new Error(
+      `loop --rollback: manifest state is "${manifest.state}"; expected "completed" ` +
+        `(you can only rollback a completed application)`,
+    );
+  }
+  // Cross-check: the operator-supplied --candidate-id must match the manifest's
+  // applied_proposal.proposal_id. Catches typos and replay attempts.
+  const appliedId = manifest.applied_proposal?.proposal_id;
+  if (appliedId !== undefined && appliedId !== opts.candidateId) {
+    throw new Error(
+      `loop --rollback: --candidate-id "${opts.candidateId}" does not match manifest's ` +
+        `applied_proposal.proposal_id "${appliedId}"`,
+    );
+  }
+  const pluginRefAfter = manifest.applied_proposal?.plugin_ref_after ?? "";
+  if (pluginRefAfter.length === 0) {
+    throw new Error(
+      `loop --rollback: manifest.applied_proposal.plugin_ref_after is missing; cannot determine git revert target`,
+    );
+  }
+
+  // Resolve host repo root the same way validateContinue does — so the
+  // dry-run output mentions the SAME path that the live shellout would
+  // chdir into. dirname(dirname(runsDir)) is the host repo root.
+  const candidatePlanRoot = dirname(resolve(ctx.runsDir));
+  const hostRepoRoot = dirname(candidatePlanRoot);
+
+  const lockPath = `${manifestPath}.lock`;
+  const lockfileExisted = existsSync(lockPath);
+
+  if (isDryRun) {
+    return {
+      manifestPath,
+      manifestStateBefore: manifest.state,
+      manifestStateAfter: "rolled-back",
+      candidateId: opts.candidateId,
+      pluginRefAfter,
+      hostRepoRoot,
+      lockfilePath: lockPath,
+      lockfileExisted,
+      confirmed: false,
+    };
+  }
+
+  // Live mode: shell out to `git revert --no-edit <plugin_ref_after>`.
+  // M13 — pluginRefAfter has already been read from the manifest (which
+  // itself has been parsed against schema invariants); we DO NOT pass any
+  // operator-supplied free-form string into argv. The manifest's
+  // plugin_ref_after is git-rev-parse output (40-char SHA), validated by
+  // schema discipline at write time.
+  try {
+    execFileSync(
+      "git",
+      ["-C", hostRepoRoot, "revert", "--no-edit", pluginRefAfter],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 30_000,
+      },
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `loop --rollback: git revert failed for ${pluginRefAfter} in ${hostRepoRoot}: ${message} ` +
+        `(manifest state unchanged; resolve the conflict manually or run \`git revert --abort\` and retry)`,
+    );
+  }
+
+  // Atomic state flip — same pattern as loopAbort. Writes via M14
+  // tmp+rename so concurrent readers never see a half-flipped state.
+  const rolled: LoopManifest = { ...manifest, state: "rolled-back" };
+  await writeManifestAtomic(manifestPath, rolled);
+
+  // Drop lockfile if any single-flight --continue lock survived. Mirror
+  // loopAbort's tolerance: ENOENT swallowed.
+  if (lockfileExisted) {
+    try {
+      await unlink(lockPath);
+    } catch {
+      /* race with concurrent --continue or already-removed; ignore */
+    }
+  }
+
+  return {
+    manifestPath,
+    manifestStateBefore: manifest.state,
+    manifestStateAfter: "rolled-back",
+    candidateId: opts.candidateId,
+    pluginRefAfter,
+    hostRepoRoot,
+    lockfilePath: lockPath,
+    lockfileExisted,
+    confirmed: true,
   };
 }
 

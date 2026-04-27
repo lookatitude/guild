@@ -26,20 +26,27 @@ understood and zero-novel-surface.
 **Owner.** backend + security (rollback-via-tooling adds an attack
 surface security would need to threat-model).
 
-### F3. Manifest cryptographic signing / hash-of-artifacts
+### F3. Manifest cryptographic signing — WITHDRAWN
 
-**What.** `p4-learning-loop-architecture.md §4.3 + §6.2` and
-`security-review-p4.md` forward-reference signing for tamper detection.
-Not implemented in v1.
+**Status (v1.3, 2026-04-27).** User explicitly withdrew this from
+v1.3 plans. Verbatim: "do not do F3 manifest signing, remove it from
+the plans."
 
-**Why deferred.** Security review concluded v1 is OK without signing
-because the manifest lives under `~/.guild/runs/` (operator-owned) and
-the proposed apply path already gates on operator review. Signing
-becomes important in a hosted/multi-operator scenario; v1 is
-single-operator.
+**Rationale.** Manifest signing was forward-referenced in
+`p4-learning-loop-architecture.md §4.3 + §6.2` and
+`security-review-p4.md` for hosted/multi-operator scenarios. The
+benchmark factory remains single-operator in v1.x; the manifest lives
+under operator-owned `~/.guild/runs/`, and the apply path already
+gates on operator review. Adding signing now would expand surface
+area without addressing a real-current threat.
 
-**Owner.** security T6 (re-evaluate when multi-operator scenarios
-emerge).
+**Re-entry condition.** If/when the benchmark factory becomes hosted
+or multi-operator, re-open with a fresh threat model — do not
+resurrect this entry as-is. The withdrawn flag is durable until that
+trigger fires; until then, the item stays out of the plans.
+
+**Owner.** security T6 (only when multi-operator scenarios become
+real).
 
 ### F4. `auth_identity_hash` UI surfacing
 
