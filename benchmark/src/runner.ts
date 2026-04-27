@@ -736,9 +736,18 @@ async function closeStreamSafely(s: WriteStream): Promise<void> {
 // "end" (readableEnded === true) OR has been destroyed. Otherwise
 // waits for "end" with a bounded timeout so a hung pipe never deadlocks
 // the parent. Closes the v1 audit's stream-end-vs-exit race finding.
-const STREAM_END_TIMEOUT_MS = 5_000;
+// v1.2 — F13: exported for the subprocess-race property test in
+// tests/runner.race.property.test.ts. The test pins the deadlock-free
+// contract that this helper satisfies (the v1.1 Bug 2 fix).
+export const STREAM_END_TIMEOUT_MS = 5_000;
 
-function awaitStreamEndBounded(stream: NodeJS.ReadableStream | null): Promise<void> {
+// v1.2 — F13: exported alongside STREAM_END_TIMEOUT_MS so the property
+// test can exercise this primitive against random stream-lifecycle
+// timings. Behaviour contract: returns immediately when stream is null
+// OR `readableEnded === true` OR `destroyed === true`; otherwise listens
+// for "end" / "close" / "error"; falls through after STREAM_END_TIMEOUT_MS
+// regardless. Always resolves (never rejects). Never deadlocks.
+export function awaitStreamEndBounded(stream: NodeJS.ReadableStream | null): Promise<void> {
   if (stream === null) return Promise.resolve();
   // Already-ended stream: nothing to wait for.
   const r = stream as NodeJS.ReadableStream & { readableEnded?: boolean; destroyed?: boolean };

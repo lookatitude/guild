@@ -69,7 +69,7 @@ describe("cli / loop — argv parsing + exit-code map", () => {
     const r = runCli(["loop"]);
     expect(r.status).toBe(2);
     expect(r.stderr).toContain(
-      "loop: one of --start, --continue, --status is required",
+      "loop: one of --start, --continue, --status, --abort is required",
     );
   });
 
@@ -218,5 +218,50 @@ describe("cli / loop — argv parsing + exit-code map", () => {
     ]);
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("manifest not found");
+  });
+
+  // v1.2 — F1: loop --abort CLI argv parsing. Behavior is tested in
+  // tests/loop.unit.test.ts; here we only pin mode-dispatch and exit
+  // codes.
+  it("`loop --abort` rejects missing --baseline-run-id (exit 2)", () => {
+    const r = runCli([
+      "loop",
+      "--abort",
+      "--runs-dir",
+      runsDir,
+      "--cases-dir",
+      casesDir,
+    ]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("--baseline-run-id <id> is required");
+  });
+
+  it("`loop --abort --baseline-run-id <id>` exits 2 when manifest is missing", () => {
+    const r = runCli([
+      "loop",
+      "--abort",
+      "--baseline-run-id",
+      "nonexistent-run-id",
+      "--runs-dir",
+      runsDir,
+      "--cases-dir",
+      casesDir,
+    ]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("manifest not found");
+  });
+
+  it("`loop --start --abort` rejects mutually exclusive modes (exit 2)", () => {
+    const r = runCli([
+      "loop",
+      "--start",
+      "--abort",
+      "--runs-dir",
+      runsDir,
+      "--cases-dir",
+      casesDir,
+    ]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("mutually exclusive");
   });
 });

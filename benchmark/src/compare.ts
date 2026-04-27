@@ -118,6 +118,17 @@ export async function compareSets(opts: CompareOpts): Promise<CompareResult> {
     delta: round2(candidate.mean_guild_score - baseline.mean_guild_score),
   };
 
+  // v1.2 — F9: count run_kind on each side so callers can detect mixed-
+  // kind comparisons (a raw_model run alongside a guild_lifecycle run
+  // makes the lifecycle-dependent components misleading; the delta table
+  // looks scary but the comparison is apples-to-oranges).
+  const kindMix = {
+    baseline_raw_model: countByKind(baselineRuns, "raw_model"),
+    baseline_guild_lifecycle: countByKind(baselineRuns, "guild_lifecycle"),
+    candidate_raw_model: countByKind(candidateRuns, "raw_model"),
+    candidate_guild_lifecycle: countByKind(candidateRuns, "guild_lifecycle"),
+  };
+
   const comparison: Comparison = {
     schema_version: SCHEMA_VERSION,
     baseline,
@@ -125,6 +136,7 @@ export async function compareSets(opts: CompareOpts): Promise<CompareResult> {
     status,
     excluded_runs: excluded,
     skipped_runs: skippedRuns,
+    kind_mix: kindMix,
     per_component_delta,
     guild_score_delta,
     generated_at: new Date().toISOString(),
@@ -215,6 +227,18 @@ function maybeAnnotateReflection(
       worst_component: worstKey,
     },
   };
+}
+
+// v1.2 — F9 helper. Counts how many runs in a set carry a given run_kind.
+// Older score.json files (written before v1.1's run_kind field landed) lack
+// the field; treat absent as guild_lifecycle so backfilled comparisons
+// don't trigger a false-positive cross-kind warning. New runs always set
+// the field, so this is a one-release backward-compat layer.
+function countByKind(
+  runs: SetRun[],
+  kind: "raw_model" | "guild_lifecycle",
+): number {
+  return runs.filter((r) => (r.score.run_kind ?? "guild_lifecycle") === kind).length;
 }
 
 async function collectRunsForSet(runsDir: string, setId: string): Promise<CollectResult> {

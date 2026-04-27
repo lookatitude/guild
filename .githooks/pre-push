@@ -1,0 +1,41 @@
+#!/bin/sh
+# pre-push — refuse direct push to main
+#
+# Codifies the rule from .guild/wiki/decisions/no-direct-commits-to-main.md
+# and CLAUDE.md "Branch + PR discipline": every change goes through a
+# branch + PR. Direct push to main is a workflow violation.
+#
+# Bypass for emergencies (release tag, force-push to recover from a slip):
+#   GUILD_ALLOW_PUSH_MAIN=1 git push origin main
+# When the bypass is set, the hook prints a loud reminder so the operator
+# knows they're in the escape hatch.
+#
+# Setup:
+#   git config core.hooksPath .githooks
+# CI / fresh clones: re-run the setup line. The hook is checked into the
+# repo; the config pointer is per-clone.
+
+remote="$1"
+url="$2"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/master)
+      if [ "${GUILD_ALLOW_PUSH_MAIN:-}" = "1" ]; then
+        printf "\033[33m[pre-push]\033[0m WARN — bypassing main-protection (GUILD_ALLOW_PUSH_MAIN=1) to push %s\n" "$remote_ref" >&2
+        continue
+      fi
+      printf "\033[31m[pre-push]\033[0m REFUSED — direct push to %s is a workflow violation\n" "$remote_ref" >&2
+      printf "  Branch + PR is mandatory. See .guild/wiki/standards/release-discipline.md rule 6.\n" >&2
+      printf "  Recover:\n" >&2
+      printf "    git checkout -b release/<version>   # or feature/<slug>\n" >&2
+      printf "    git push -u origin <branch>\n" >&2
+      printf "    gh pr create --base main\n" >&2
+      printf "  Bypass (emergency only):\n" >&2
+      printf "    GUILD_ALLOW_PUSH_MAIN=1 git push origin main\n" >&2
+      exit 1
+      ;;
+  esac
+done
+
+exit 0
