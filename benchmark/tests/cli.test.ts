@@ -79,10 +79,14 @@ describe("cli / deferred subcommands", () => {
     expect(r.stderr).toMatch(/--port must be a valid TCP port/);
   });
 
-  it("`export-website` exits 2 with deferred message", () => {
+  it("`export-website` exits 1 with unknown-subcommand error (v1.3 F8 — removed)", () => {
+    // v1.3 — F8: spec says no public site in v1; the static site at
+    // docs/website/ is hand-curated. The previous deferred-stub exits
+    // were misleading (the subcommand is gone, not deferred). Now flips
+    // to the unknown-subcommand path so operators get the correct signal.
     const r = runCli(["export-website"]);
-    expect(r.status).toBe(2);
-    expect(r.stderr).toContain("deferred");
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("Unknown command");
   });
 });
 

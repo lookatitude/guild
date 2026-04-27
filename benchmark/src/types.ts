@@ -282,7 +282,17 @@ export interface Comparison {
 // implements; frontend (T3) renders `reflection_applied` on ComparePage;
 // qa (T4) pins the manifest validation tests.
 
-export type LoopManifestState = "awaiting-apply" | "completed" | "aborted";
+// v1.3 — F2: structured rollback flips a "completed" manifest to
+// "rolled-back" after `git revert <plugin_ref_after>` succeeds. The
+// state is terminal (no further transitions allowed) and is the audit
+// trail for an operator who decided post-comparison that a kept proposal
+// should not have been kept. ADR-007 supersession callout in
+// `p4-learning-loop-architecture.md §6.1` references this name.
+export type LoopManifestState =
+  | "awaiting-apply"
+  | "completed"
+  | "aborted"
+  | "rolled-back";
 
 export interface LoopManifestProposal {
   proposal_id: string;     // basename of the reflection .md file (no extension)
@@ -367,6 +377,36 @@ export interface LoopAbortReport {
   lockfileExisted: boolean;
 }
 
+// v1.3 — F2: structured rollback action. Refuses unless manifest state
+// is "completed" (you can only rollback a completed application).
+// `--dry-run` (default) prints the would-be `git revert` shellout +
+// state transition without mutating; `--confirm` (live) runs
+// `git revert --no-edit <plugin_ref_after>` and flips state to
+// "rolled-back". The candidate-id is validated against PROPOSAL_ID_RE
+// (M13 allowlist) before any disk read.
+export interface LoopRollbackOptions {
+  baselineRunId: string;
+  candidateId: string;
+  dryRun?: boolean;
+  confirm?: boolean;
+}
+
+// v1.3 — F2: shape returned by loopRollback. Mirrors LoopAbortReport's
+// before/after state pattern; adds the git-revert target SHA the live
+// path would shell out against, and the `confirmed` flag distinguishing
+// dry-run from live invocations.
+export interface LoopRollbackReport {
+  manifestPath: string;
+  manifestStateBefore: LoopManifestState;
+  manifestStateAfter: "rolled-back";
+  candidateId: string;
+  pluginRefAfter: string;
+  hostRepoRoot: string;
+  lockfilePath: string;
+  lockfileExisted: boolean;
+  confirmed: boolean;
+}
+
 // HTTP response shapes — server.ts (P2) serializes these; the React UI
 // imports them directly. See p2-ui-architecture.md §2.1 for which page
 // component consumes which shape.
@@ -378,6 +418,11 @@ export interface RunsListRow {
   status: RunStatus;
   guild_score: number;
   started_at: string;
+  // v1.3 — F4: surfaced on the LIST endpoint (in addition to detail) so
+  // the frontend's filter UI can group/filter by the operator-supplied
+  // auth identity. Optional: omitted on rows whose source `run.json` did
+  // not record one (M9: env var absent or invalid sha256-hex shape).
+  auth_identity_hash?: string;
 }
 
 export interface RunsListResponse {

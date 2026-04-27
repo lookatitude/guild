@@ -13,6 +13,7 @@ import {
   formatStatusReport,
   loopAbort,
   loopContinue,
+  loopRollback,
   loopStart,
   loopStatus,
 } from "./loop.js";
@@ -20,6 +21,7 @@ import type {
   Case,
   LoopAbortOptions,
   LoopContinueOptions,
+  LoopRollbackOptions,
   LoopStartOptions,
   LoopStatusOptions,
   RunOptions,
@@ -143,13 +145,6 @@ async function commandCompare(args: ParsedArgs): Promise<void> {
   }
 }
 
-function commandDeferred(name: string, phase: string): never {
-  process.stderr.write(
-    `${name}: deferred to ${phase}. Not implemented in P1 (import-only mode).\n`,
-  );
-  process.exit(2);
-}
-
 // Live runner. argv: --case <slug> [--run-id <id>] [--dry-run] [--cleanup]
 //                  [--runs-dir <path>] [--cases-dir <path>]
 // Exit codes per architect §4.1 + §6.4: 0 pass, 1 fail, 124 timeout, 2 errored.
@@ -197,12 +192,13 @@ async function commandRun(args: ParsedArgs): Promise<never> {
   }
 }
 
-// `benchmark loop` — P4 learning-loop orchestrator. Four modes,
+// `benchmark loop` — P4 learning-loop orchestrator. Five modes,
 // mutually exclusive:
 //   --start    --case <slug> [--baseline-run-id <id>] [--dry-run]
 //   --continue --baseline-run-id <id> --apply <proposal-id> [--dry-run]
 //   --status   --baseline-run-id <id>
 //   --abort    --baseline-run-id <id> [--dry-run]      (v1.2 — F1)
+//   --rollback --baseline-run-id <id> --candidate-id <id> [--dry-run | --confirm]   (v1.3 — F2)
 //
 // Exit codes (architect §4.1 + §6.4): 0 ok, 1 fail, 124 timeout, 2 errored.
 // Dry-run flow per ADR-005 §Decision: never spawns claude, returns 0.
@@ -215,13 +211,18 @@ async function commandLoop(args: ParsedArgs): Promise<never> {
   const isContinue = args.flags.get("continue") !== undefined;
   const isStatus = args.flags.get("status") !== undefined;
   const isAbort = args.flags.get("abort") !== undefined;
-  const modeCount = [isStart, isContinue, isStatus, isAbort].filter(Boolean).length;
+  const isRollback = args.flags.get("rollback") !== undefined;
+  const modeCount = [isStart, isContinue, isStatus, isAbort, isRollback].filter(Boolean).length;
   if (modeCount === 0) {
-    process.stderr.write("loop: one of --start, --continue, --status, --abort is required\n");
+    process.stderr.write(
+      "loop: one of --start, --continue, --status, --abort, --rollback is required\n",
+    );
     process.exit(2);
   }
   if (modeCount > 1) {
-    process.stderr.write("loop: --start, --continue, --status, --abort are mutually exclusive\n");
+    process.stderr.write(
+      "loop: --start, --continue, --status, --abort, --rollback are mutually exclusive\n",
+    );
     process.exit(2);
   }
 
@@ -313,6 +314,57 @@ async function commandLoop(args: ParsedArgs): Promise<never> {
       process.exit(0);
     }
 
+    if (isRollback) {
+      // v1.3 — F2: structured rollback. Refuses unless state="completed";
+      // shells out to `git revert --no-edit <plugin_ref_after>` under
+      // --confirm and flips state to "rolled-back". Default --dry-run.
+      const baselineRunId = args.flags.get("baseline-run-id");
+      const candidateId = args.flags.get("candidate-id");
+      if (!baselineRunId || baselineRunId === "true") {
+        process.stderr.write("loop --rollback: --baseline-run-id <id> is required\n");
+        process.exit(2);
+      }
+      if (!candidateId || candidateId === "true") {
+        process.stderr.write("loop --rollback: --candidate-id <id> is required\n");
+        process.exit(2);
+      }
+      const confirmFlag = args.flags.get("confirm");
+      const confirm = confirmFlag === "true" || confirmFlag === "";
+      // Mutual exclusion: --confirm forces live; otherwise default --dry-run.
+      const rollbackDryRun = confirm ? false : true;
+      const opts: LoopRollbackOptions = {
+        baselineRunId,
+        candidateId,
+        dryRun: rollbackDryRun,
+        confirm,
+      };
+      const report = await loopRollback(opts, ctx);
+      if (rollbackDryRun) {
+        process.stdout.write(
+          `loop --rollback --dry-run\n` +
+            `  manifest_path        : ${report.manifestPath}\n` +
+            `  manifest_state_before: ${report.manifestStateBefore}\n` +
+            `  manifest_state_after : ${report.manifestStateAfter}\n` +
+            `  candidate_id         : ${report.candidateId}\n` +
+            `  plugin_ref_after     : ${report.pluginRefAfter}\n` +
+            `  host_repo_root       : ${report.hostRepoRoot}\n` +
+            `  would_run            : git -C ${report.hostRepoRoot} revert --no-edit ${report.pluginRefAfter}\n` +
+            `  lockfile_path        : ${report.lockfilePath}\n` +
+            `  lockfile_existed     : ${report.lockfileExisted}\n` +
+            `\n` +
+            `(dry-run: no git command run; manifest unchanged. Pass --confirm to apply.)\n`,
+        );
+        process.exit(0);
+      }
+      process.stdout.write(
+        `loop --rollback: baseline_run_id=${baselineRunId} state=rolled-back ` +
+          `candidate_id=${candidateId} reverted=${report.pluginRefAfter}` +
+          (report.lockfileExisted ? " (lockfile cleared)" : "") +
+          "\n",
+      );
+      process.exit(0);
+    }
+
     // --status
     const baselineRunId = args.flags.get("baseline-run-id");
     if (!baselineRunId || baselineRunId === "true") {
@@ -398,9 +450,10 @@ function printUsage(): void {
       "                     --continue --baseline-run-id <id> --apply <proposal-id> [--dry-run]",
       "                     --status   --baseline-run-id <id> [--diff <proposal-id>]",
       "                     --abort    --baseline-run-id <id> [--dry-run]",
+      "                     --rollback --baseline-run-id <id> --candidate-id <id> [--dry-run | --confirm]",
       "                          (P4 learning loop; never auto-applies; --dry-run never spawns;",
-      "                           --diff extracts fenced diff/patch blocks from a proposal body)",
-      "  benchmark export-website (deferred — JSON snapshot for the public website)",
+      "                           --diff extracts fenced diff/patch blocks from a proposal body;",
+      "                           --rollback flips a completed manifest to rolled-back via `git revert`)",
       "",
     ].join("\n"),
   );
@@ -424,8 +477,6 @@ async function main(argv: string[]): Promise<void> {
     case "loop":
       await commandLoop(args);
       return;
-    case "export-website":
-      commandDeferred("export-website", "deferred (post-v1)");
     case "":
     case "--help":
     case "-h":

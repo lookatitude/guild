@@ -134,6 +134,18 @@ export const ENV_ARGV_TEMPLATE = "GUILD_BENCHMARK_ARGV_TEMPLATE";
 export const ENV_AUTH_HINT = "GUILD_BENCHMARK_AUTH_HINT";
 export const AUTH_IDENTITY_HASH_RE = /^[a-f0-9]{64}$/;
 
+// v1.3 — ADR-007: operator-declared per-run RSS ceiling in **kilobytes**.
+// When set to a positive integer, the runner samples
+// `process.resourceUsage().maxRSS` once per second; on first crossing of
+// 0.80 * cap, emits a single stderr `warn:` line. Once warned, sampling
+// stops (D6 — quiet by design). Unset / non-positive → no sampling.
+// Platform note: macOS reports maxRSS in bytes, Linux/Windows in KB;
+// installRssWarnSampler() normalises bytes → KB on darwin so the
+// comparison is unit-clean across platforms.
+export const ENV_BENCHMARK_MAX_RSS_KB = "GUILD_BENCHMARK_MAX_RSS_KB";
+export const RSS_WARN_THRESHOLD_RATIO = 0.80;
+export const RSS_WARN_SAMPLE_INTERVAL_MS = 1000;
+
 // M3 (F1.3) — default-deny env allowlist for the subprocess.
 // Keys forwarded verbatim if present in process.env. Anything not on this
 // list (and not matched by ENV_PREFIX_ALLOW) is dropped, including
@@ -410,6 +422,12 @@ export async function runBenchmark(
   const startedAtMs = Date.now();
   let result: SpawnResult;
 
+  // v1.3 — ADR-007: install the RSS-WARN sampler before spawning, stop
+  // it after capture. The sampler is a no-op when GUILD_BENCHMARK_MAX_RSS_KB
+  // is unset (zero-overhead default per D4). The stop fn is invoked in
+  // a finally so a thrown spawn error never leaks the interval.
+  const stopRssWarn = maybeInstallRssWarnFromEnv();
+
   try {
     result = await spawnAndWait(plan, events);
   } catch (err) {
@@ -423,6 +441,12 @@ export async function runBenchmark(
       spawnError: err instanceof Error ? err.message : String(err),
       resourceUsage: null,
     };
+  } finally {
+    // ADR-007 §2 — clear the sampler in the same logical block where the
+    // SIGTERM/SIGKILL timers are cleared (those are inside spawnAndWait's
+    // finally; the RSS sampler lives at the runBenchmark level because it
+    // tracks parent-process resource usage, not the child's).
+    stopRssWarn();
   }
 
   const completedAtMs = Date.now();
@@ -1193,6 +1217,134 @@ function buildArgv(input: {
     argv.push("--model", defaultModel);
   }
   return argv;
+}
+
+// ---- ADR-007 RSS-WARN sampler (v1.3) ---------------------------------
+
+// v1.3 — ADR-007: parameterised options bag so tests can inject a
+// fake clock + fake maxRSS sampler without monkey-patching globals.
+// Production callers leave both undefined; only test code passes them.
+export interface InstallRssWarnSamplerOptions {
+  /**
+   * Override for `process.resourceUsage().maxRSS`. Useful for tests that
+   * want to simulate a climbing RSS without leaning on the host machine's
+   * actual memory. Production code leaves this undefined and the function
+   * reads `process.resourceUsage().maxRSS` directly.
+   */
+  sampleMaxRss?: () => number;
+  /**
+   * Override for `process.platform` so tests can verify the bytes-vs-KB
+   * normalisation on each OS. Production code leaves this undefined.
+   */
+  platform?: NodeJS.Platform;
+  /**
+   * Override for the writer that emits the warn line. Defaults to
+   * `process.stderr.write`. Tests inject a capture function and assert
+   * the line shape directly.
+   */
+  writeWarn?: (line: string) => void;
+}
+
+/**
+ * Install a 1Hz sampler that emits one stderr `warn:` line the first
+ * time `process.resourceUsage().maxRSS` crosses 80% of `maxKb`. Returns
+ * a `stop()` function the caller MUST invoke in their cleanup path.
+ *
+ * Per ADR-007 §Decision §1–§7:
+ *   §1  Env var contract — caller (runBenchmark) reads
+ *       GUILD_BENCHMARK_MAX_RSS_KB and only installs the sampler when the
+ *       env var parses to a positive integer.
+ *   §2  Sampling cadence — `setInterval(check, 1000)`; the interval is
+ *       cleared from the same `finally` that clears SIGTERM/SIGKILL timers.
+ *   §3  Platform normalisation — macOS `maxRSS` is bytes (POSIX getrusage
+ *       wrapper inconsistency); Linux/Windows are KB. Divide by 1024 on
+ *       darwin so the comparison against `maxKb` (KB) is unit-clean.
+ *   §4  WARN line format — fixed prefix `warn: rss approaching declared
+ *       cap — observed <kb> KB >= 80% of GUILD_BENCHMARK_MAX_RSS_KB=<cap>`.
+ *   §5  Once per run — boolean `warned` guard. Once true, no further
+ *       emission and the interval clears itself.
+ *   §6  Parent-process granularity caveat — the sampled value is the
+ *       parent runner's `maxRSS` (POSIX inclusive of waited-on children).
+ *   §7  Tested via the §Decision §7 unit-test list (positive crossing,
+ *       negative env-unset, platform branching).
+ */
+export function installRssWarnSampler(
+  maxKb: number,
+  opts: InstallRssWarnSamplerOptions = {},
+): () => void {
+  const sample =
+    opts.sampleMaxRss ?? (() => process.resourceUsage().maxRSS);
+  const platform = opts.platform ?? process.platform;
+  const writeWarn =
+    opts.writeWarn ?? ((line: string) => process.stderr.write(line));
+
+  let warned = false;
+  let interval: NodeJS.Timeout | null = null;
+
+  // ADR-007 §1 — refuse non-positive caps. Caller (runBenchmark) already
+  // gates on Number.isFinite + > 0; this is defence in depth.
+  if (!Number.isFinite(maxKb) || maxKb <= 0) {
+    return (): void => {
+      /* no-op; nothing to clear */
+    };
+  }
+
+  const threshold = RSS_WARN_THRESHOLD_RATIO * maxKb;
+
+  const check = (): void => {
+    if (warned) return;
+    const raw = sample();
+    // ADR-007 §3 — macOS `maxRSS` is bytes; Linux/Windows KB. Normalise.
+    const kb = platform === "darwin" ? Math.floor(raw / 1024) : raw;
+    if (kb >= threshold) {
+      // ADR-007 §4 — fixed line shape. Plain `warn:` prefix; no JSON.
+      writeWarn(
+        `warn: rss approaching declared cap — observed ${kb} KB >= 80% of ${ENV_BENCHMARK_MAX_RSS_KB}=${maxKb}\n`,
+      );
+      // ADR-007 §5 — once per run; clear self.
+      warned = true;
+      if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    }
+  };
+
+  interval = setInterval(check, RSS_WARN_SAMPLE_INTERVAL_MS);
+  // .unref() so the interval never prevents process exit on its own; the
+  // caller's stop() handles deterministic cleanup.
+  if (typeof interval.unref === "function") interval.unref();
+
+  return (): void => {
+    if (interval !== null) {
+      clearInterval(interval);
+      interval = null;
+    }
+  };
+}
+
+/**
+ * Read `GUILD_BENCHMARK_MAX_RSS_KB` and install the sampler only when the
+ * env var parses to a positive integer. Returns a stop fn the caller
+ * MUST call from their `finally` block. When the env var is unset or
+ * non-positive, returns a no-op stop fn (zero overhead — D4 commitment).
+ */
+export function maybeInstallRssWarnFromEnv(
+  opts: InstallRssWarnSamplerOptions = {},
+): () => void {
+  const raw = process.env[ENV_BENCHMARK_MAX_RSS_KB];
+  if (raw === undefined || raw.length === 0) {
+    return (): void => {
+      /* no-op — D4 zero overhead by default */
+    };
+  }
+  const cap = Number.parseInt(raw, 10);
+  if (!Number.isFinite(cap) || cap <= 0) {
+    return (): void => {
+      /* no-op — invalid cap treated as unset per ADR-007 §1 */
+    };
+  }
+  return installRssWarnSampler(cap, opts);
 }
 
 // ---- M9 timeout resolution -------------------------------------------

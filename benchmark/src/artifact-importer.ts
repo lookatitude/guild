@@ -21,6 +21,12 @@ const runJsonSchema = z.object({
   raw_command: z.string().optional(),
   wall_clock_ms: z.number().int().nonnegative().optional(),
   wall_clock_budget_ms: z.number().int().positive().optional(),
+  // P4 — operator-supplied SHA-256 hex hash. Optional. M9 enforces the
+  // ^[a-f0-9]{64}$ shape at runner write time; the schema here only
+  // pins string-shape so legacy / partial fixtures still validate.
+  // v1.3 — F4: pinned in schema so parseRunJson preserves the field
+  // through to GET /api/runs (zod's default `.strip` previously dropped it).
+  auth_identity_hash: z.string().optional(),
 });
 
 const eventSchema = z.discriminatedUnion("type", [

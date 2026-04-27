@@ -14,7 +14,6 @@
     "compare": "tsx src/cli.ts compare",
     "run": "tsx src/cli.ts run",
     "serve": "tsx src/cli.ts serve",
-    "export-website": "tsx src/cli.ts export-website",
     "test": "vitest run"
   },
   "dependencies": {

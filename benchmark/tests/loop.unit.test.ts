@@ -45,6 +45,7 @@ import {
   formatStatusReport,
   loopAbort,
   loopContinue,
+  loopRollback,
   loopStart,
   loopStatus,
   manifestPathFor,
@@ -55,6 +56,7 @@ import {
 import type {
   LoopContinueOptions,
   LoopManifest,
+  LoopRollbackOptions,
   LoopStartOptions,
 } from "../src/types.js";
 import { ENV_CLAUDE_BIN } from "../src/runner.js";
@@ -983,5 +985,261 @@ describe("loop / loopAbort", () => {
     const fs = await import("node:fs/promises");
     const after = JSON.parse(await fs.readFile(manifestPath, "utf8")) as LoopManifest;
     expect(after.state).toBe("awaiting-apply");
+  });
+});
+
+// v1.3 — F2: loop --rollback closes the manual-revert workaround. Refuses
+// unless state="completed"; under --confirm shells out to
+// `git revert --no-edit <plugin_ref_after>` and flips state to
+// "rolled-back". The architect's §6.1 supersession callout cites this
+// surface; ADR/security carry the M13 allowlist + git-shellout discipline.
+describe("loop / loopRollback", () => {
+  const baselineRunId = "synthetic-pass-001";
+  const candidateId = "ref-001";
+  const pluginRefAfter = "def5678def5678def5678def5678def5678def56";
+
+  function completedManifest(overrides: Partial<LoopManifest> = {}): LoopManifest {
+    return defaultManifest({
+      baseline_run_id: baselineRunId,
+      state: "completed",
+      applied_proposal: {
+        proposal_id: candidateId,
+        source_path: "agents/architect.md",
+        applied_at: "2026-04-26T17:00:00Z",
+        plugin_ref_after: pluginRefAfter,
+        candidate_run_id: "synthetic-pass-002",
+      },
+      ...overrides,
+    });
+  }
+
+  // Initialise <scratch> as a real git repo so the live --confirm tests
+  // have something for `git revert` to operate on. Most tests don't need
+  // it (dry-run + rejection paths), but the live happy-path does.
+  async function gitInitScratchWithCommit(): Promise<string> {
+    execFileSync("git", ["init", "-q", scratch], { stdio: "ignore" });
+    execFileSync("git", ["-C", scratch, "config", "user.email", "qa@local"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", scratch, "config", "user.name", "qa"], {
+      stdio: "ignore",
+    });
+    // Initial commit so HEAD exists.
+    execFileSync(
+      "git",
+      ["-C", scratch, "commit", "--allow-empty", "-m", "init"],
+      { stdio: "ignore" },
+    );
+    // Create a real commit we can revert.
+    const fs = await import("node:fs/promises");
+    await fs.writeFile(join(scratch, "demo.txt"), "demo\n", "utf8");
+    execFileSync("git", ["-C", scratch, "add", "demo.txt"], {
+      stdio: "ignore",
+    });
+    execFileSync(
+      "git",
+      ["-C", scratch, "commit", "-m", "add demo"],
+      { stdio: "ignore" },
+    );
+    const out = execFileSync(
+      "git",
+      ["-C", scratch, "rev-parse", "HEAD"],
+      { encoding: "utf8" },
+    );
+    return out.trim();
+  }
+
+  it("rejects when --baseline-run-id is missing", async () => {
+    const opts = { candidateId } as unknown as LoopRollbackOptions;
+    await expect(loopRollback(opts, { runsDir, casesDir })).rejects.toThrow(
+      /--baseline-run-id <id> is required/,
+    );
+  });
+
+  it("rejects when --candidate-id is missing", async () => {
+    const opts = { baselineRunId } as unknown as LoopRollbackOptions;
+    await expect(loopRollback(opts, { runsDir, casesDir })).rejects.toThrow(
+      /--candidate-id <id> is required/,
+    );
+  });
+
+  it("M13 — rejects --candidate-id that fails PROPOSAL_ID_RE before any disk read", async () => {
+    const opts: LoopRollbackOptions = {
+      baselineRunId,
+      candidateId: "../etc/passwd",
+    };
+    await expect(loopRollback(opts, { runsDir, casesDir })).rejects.toThrow(
+      /not a valid proposal_id.*M13/,
+    );
+  });
+
+  it("rejects when manifest does not exist on disk", async () => {
+    const opts: LoopRollbackOptions = { baselineRunId, candidateId };
+    await expect(loopRollback(opts, { runsDir, casesDir })).rejects.toThrow(
+      /manifest not found/,
+    );
+  });
+
+  it("rejects when manifest state is awaiting-apply (not completed)", async () => {
+    await seedManifest(
+      runsDir,
+      baselineRunId,
+      defaultManifest({ baseline_run_id: baselineRunId }),
+    );
+    const opts: LoopRollbackOptions = { baselineRunId, candidateId };
+    await expect(loopRollback(opts, { runsDir, casesDir })).rejects.toThrow(
+      /state is "awaiting-apply"; expected "completed"/,
+    );
+  });
+
+  it("rejects when manifest state is aborted", async () => {
+    await seedManifest(
+      runsDir,
+      baselineRunId,
+      defaultManifest({ baseline_run_id: baselineRunId, state: "aborted" }),
+    );
+    const opts: LoopRollbackOptions = { baselineRunId, candidateId };
+    await expect(loopRollback(opts, { runsDir, casesDir })).rejects.toThrow(
+      /state is "aborted"; expected "completed"/,
+    );
+  });
+
+  it("--dry-run (default) prints state transition + git revert shellout without mutating disk", async () => {
+    const m = completedManifest();
+    const manifestPath = await seedManifest(runsDir, baselineRunId, m);
+    const report = await loopRollback(
+      { baselineRunId, candidateId, dryRun: true },
+      { runsDir, casesDir },
+    );
+    expect(report.manifestStateBefore).toBe("completed");
+    expect(report.manifestStateAfter).toBe("rolled-back");
+    expect(report.candidateId).toBe(candidateId);
+    expect(report.pluginRefAfter).toBe(pluginRefAfter);
+    expect(report.confirmed).toBe(false);
+    expect(report.manifestPath).toBe(manifestPath);
+    // Still completed on disk.
+    const fs = await import("node:fs/promises");
+    const after = JSON.parse(await fs.readFile(manifestPath, "utf8")) as LoopManifest;
+    expect(after.state).toBe("completed");
+  });
+
+  it("dry-run is the default when neither --dry-run nor --confirm is set", async () => {
+    const m = completedManifest();
+    const manifestPath = await seedManifest(runsDir, baselineRunId, m);
+    // Plain options — no dryRun, no confirm.
+    const report = await loopRollback(
+      { baselineRunId, candidateId },
+      { runsDir, casesDir },
+    );
+    expect(report.confirmed).toBe(false);
+    // Disk untouched.
+    const fs = await import("node:fs/promises");
+    const after = JSON.parse(await fs.readFile(manifestPath, "utf8")) as LoopManifest;
+    expect(after.state).toBe("completed");
+  });
+
+  it("--confirm flips state to rolled-back and shells out to git revert", async () => {
+    const realPluginRef = await gitInitScratchWithCommit();
+    const m = completedManifest({
+      applied_proposal: {
+        proposal_id: candidateId,
+        source_path: "agents/architect.md",
+        applied_at: "2026-04-26T17:00:00Z",
+        plugin_ref_after: realPluginRef,
+        candidate_run_id: "synthetic-pass-002",
+      },
+    });
+    const manifestPath = await seedManifest(runsDir, baselineRunId, m);
+    const report = await loopRollback(
+      { baselineRunId, candidateId, confirm: true },
+      { runsDir, casesDir },
+    );
+    expect(report.manifestStateAfter).toBe("rolled-back");
+    expect(report.confirmed).toBe(true);
+    expect(report.pluginRefAfter).toBe(realPluginRef);
+    // Manifest flipped on disk.
+    const fs = await import("node:fs/promises");
+    const after = JSON.parse(await fs.readFile(manifestPath, "utf8")) as LoopManifest;
+    expect(after.state).toBe("rolled-back");
+    // git log shows the revert commit.
+    const log = execFileSync(
+      "git",
+      ["-C", scratch, "log", "--oneline", "-n", "5"],
+      { encoding: "utf8" },
+    );
+    expect(log).toMatch(/Revert/i);
+  });
+
+  it("rejects when git revert exits non-zero (no such commit) — manifest unchanged", async () => {
+    // Init scratch as a git repo BUT use a SHA that doesn't exist; git
+    // revert will fail. Verify the manifest stays in "completed".
+    execFileSync("git", ["init", "-q", scratch], { stdio: "ignore" });
+    execFileSync("git", ["-C", scratch, "config", "user.email", "qa@local"], {
+      stdio: "ignore",
+    });
+    execFileSync("git", ["-C", scratch, "config", "user.name", "qa"], {
+      stdio: "ignore",
+    });
+    execFileSync(
+      "git",
+      ["-C", scratch, "commit", "--allow-empty", "-m", "init"],
+      { stdio: "ignore" },
+    );
+    const m = completedManifest({
+      applied_proposal: {
+        proposal_id: candidateId,
+        source_path: "agents/architect.md",
+        applied_at: "2026-04-26T17:00:00Z",
+        // Real-shape SHA but not a real commit in this repo.
+        plugin_ref_after: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        candidate_run_id: "synthetic-pass-002",
+      },
+    });
+    const manifestPath = await seedManifest(runsDir, baselineRunId, m);
+    await expect(
+      loopRollback(
+        { baselineRunId, candidateId, confirm: true },
+        { runsDir, casesDir },
+      ),
+    ).rejects.toThrow(/git revert failed/);
+    // Manifest still completed.
+    const fs = await import("node:fs/promises");
+    const after = JSON.parse(await fs.readFile(manifestPath, "utf8")) as LoopManifest;
+    expect(after.state).toBe("completed");
+  });
+
+  it("rejects when --candidate-id mismatches manifest.applied_proposal.proposal_id", async () => {
+    const m = completedManifest();
+    await seedManifest(runsDir, baselineRunId, m);
+    await expect(
+      loopRollback(
+        { baselineRunId, candidateId: "ref-002-mismatch", dryRun: true },
+        { runsDir, casesDir },
+      ),
+    ).rejects.toThrow(/does not match manifest's applied_proposal\.proposal_id/);
+  });
+
+  it("removes a present lockfile when rolling back live", async () => {
+    const realPluginRef = await gitInitScratchWithCommit();
+    const m = completedManifest({
+      applied_proposal: {
+        proposal_id: candidateId,
+        source_path: "agents/architect.md",
+        applied_at: "2026-04-26T17:00:00Z",
+        plugin_ref_after: realPluginRef,
+        candidate_run_id: "synthetic-pass-002",
+      },
+    });
+    const manifestPath = await seedManifest(runsDir, baselineRunId, m);
+    const lockPath = `${manifestPath}.lock`;
+    const fs = await import("node:fs/promises");
+    await fs.writeFile(lockPath, "", "utf8");
+    const report = await loopRollback(
+      { baselineRunId, candidateId, confirm: true },
+      { runsDir, casesDir },
+    );
+    expect(report.lockfileExisted).toBe(true);
+    const fsSync = await import("node:fs");
+    expect(fsSync.existsSync(lockPath)).toBe(false);
   });
 });

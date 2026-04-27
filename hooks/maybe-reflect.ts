@@ -2,16 +2,38 @@
 /**
  * hooks/maybe-reflect.ts
  *
- * Event:   Stop
+ * Events:  Stop  |  SubagentStop                   (v1.3 — F12 widened)
  * Purpose: Fires guild:reflect ONLY if the §13.2 heuristic gate is satisfied.
  *
- * Heuristic gate (§13.2, §15.2):
+ * Stop branch (the original /guild lifecycle path):
  *   ✓  ≥ 1 specialist dispatched  → SubagentStop with non-empty specialist field
  *   ✓  ≥ 1 file edited            → PostToolUse with tool "Write" or "Edit"
  *   ✓  No error event             → all events have ok: true
  *
+ * SubagentStop branch (v1.3 — F12 widened — dev-team work):
+ *   ✓  process.env.GUILD_ENABLE_DEVTEAM_REFLECT === "1"   (operator opt-in; default off)
+ *   ✓  ≥ 3 SubagentStop dispatches accumulated in the run's events.ndjson
+ *       (counted from the existing capture-telemetry.ts log — no new state file)
+ *   ✓  .guild/spec/<slug>.md exists for the active task
+ *       (slug from GUILD_SPEC_SLUG env var; falls back to "any spec exists")
+ *
  * If gate fails → no-op (silent, exit 0). Prevents spurious reflections on
- * non-task sessions (§15.2 risk: "Stop hook fires on non-task sessions").
+ * non-task sessions (§15.2 risk: "Stop hook fires on non-task sessions") and
+ * trivial dev-team work that doesn't deserve a reflection.
+ *
+ * Design note (F12 dispatch counter):
+ * ---------------------------------------------------------------------
+ * The ≥ 3 dispatch threshold reads from the existing events.ndjson rather
+ * than introducing a new state file (e.g., `.guild/runs/<id>/agent-team/
+ * counter.json`). Reasoning:
+ *   - capture-telemetry.ts already appends one event per SubagentStop
+ *     with the agent's name in `specialist` (see hooks/capture-telemetry.ts).
+ *   - A separate counter file would be a second write surface (more code,
+ *     two-source-of-truth coherence problem, extra cleanup).
+ *   - Counting from events.ndjson is O(events) per gate evaluation but
+ *     events lists are bounded by the run length, and gate evaluation
+ *     happens at most once per SubagentStop, so the cost is fine.
+ * ---------------------------------------------------------------------
  *
  * If gate passes:
  *   1. Attempt to run scripts/trace-summarize.ts (tooling-engineer ships in P5 Task 3).
@@ -31,7 +53,7 @@
  *   2. stdin payload cwd field
  *   3. process.cwd()
  *
- * Stdin:   JSON — Claude Code Stop hook payload.
+ * Stdin:   JSON — Claude Code Stop or SubagentStop hook payload.
  * Stdout:  Either empty (gate failed) or "GUILD_REFLECT run_id=<id>" (gate passed).
  * Stderr:  Diagnostic messages only.
  * Exit:    Always 0.
@@ -111,6 +133,69 @@ function gateCheck(events: TelemetryEvent[]): boolean {
   const hasError = events.some((e) => e.ok === false);
 
   return hasSpecialist && hasFileEdit && !hasError;
+}
+
+/**
+ * v1.3 — F12: dev-team SubagentStop gate. Fires only when ALL three
+ * guards hold; default-off via the env var.
+ *
+ *   1. process.env.GUILD_ENABLE_DEVTEAM_REFLECT === "1"  (operator opt-in)
+ *   2. ≥ 3 SubagentStop dispatches in events.ndjson      (threshold filter)
+ *   3. .guild/spec/<slug>.md exists                      (something to reflect against)
+ *
+ * Slug resolution: GUILD_SPEC_SLUG env var first; if unset, falls back to
+ * "any *.md exists under .guild/spec/" (the orchestrator may not always
+ * export the slug per dispatch). Returns true only when a spec is locatable.
+ */
+function devteamSubagentGateCheck(
+  events: TelemetryEvent[],
+  cwd: string,
+): { passed: boolean; reason: string } {
+  // Guard 1 — operator opt-in. Default off.
+  if (process.env["GUILD_ENABLE_DEVTEAM_REFLECT"] !== "1") {
+    return { passed: false, reason: "GUILD_ENABLE_DEVTEAM_REFLECT != 1" };
+  }
+  // Guard 2 — dispatch threshold. Count SubagentStop events with a
+  // non-empty specialist field; trivial work (< 3 dispatches) doesn't
+  // warrant a reflection.
+  const dispatchCount = events.filter(
+    (e) =>
+      e.event === "SubagentStop" &&
+      typeof e.specialist === "string" &&
+      e.specialist.trim().length > 0,
+  ).length;
+  if (dispatchCount < 3) {
+    return {
+      passed: false,
+      reason: `dispatch count ${dispatchCount} < 3`,
+    };
+  }
+  // Guard 3 — spec lookup. Reflections are only meaningful when there's
+  // a written spec to reflect against. GUILD_SPEC_SLUG wins; otherwise
+  // "any spec.md exists" is the conservative fallback.
+  const specDir = path.join(cwd, ".guild", "spec");
+  const slug = process.env["GUILD_SPEC_SLUG"];
+  if (slug && slug.trim().length > 0) {
+    const specPath = path.join(specDir, `${slug}.md`);
+    if (!fs.existsSync(specPath)) {
+      return { passed: false, reason: `spec not found: ${specPath}` };
+    }
+  } else {
+    if (!fs.existsSync(specDir)) {
+      return { passed: false, reason: `spec dir not found: ${specDir}` };
+    }
+    let anySpec = false;
+    try {
+      const entries = fs.readdirSync(specDir);
+      anySpec = entries.some((name) => name.endsWith(".md"));
+    } catch {
+      anySpec = false;
+    }
+    if (!anySpec) {
+      return { passed: false, reason: `no *.md spec under ${specDir}` };
+    }
+  }
+  return { passed: true, reason: "all guards met" };
 }
 
 /**
@@ -208,13 +293,29 @@ async function main(): Promise<void> {
   const eventsFile = path.join(cwd, ".guild", "runs", runId, "events.ndjson");
   const events = loadEvents(eventsFile);
 
-  // Heuristic gate check
-  if (!gateCheck(events)) {
-    // Gate failed — no-op, no stdout, exit 0
-    process.stderr.write(
-      `[maybe-reflect] gate failed for run ${runId} — skipping reflection.\n`
-    );
-    process.exit(0);
+  // v1.3 — F12: branch on hook_event_name. SubagentStop gets the dev-team
+  // gate (opt-in env var + dispatch threshold + spec presence); Stop gets
+  // the original heuristic gate (specialist + edit + no error).
+  const hookEvent = payload.hook_event_name ?? "Stop";
+
+  if (hookEvent === "SubagentStop") {
+    const result = devteamSubagentGateCheck(events, cwd);
+    if (!result.passed) {
+      process.stderr.write(
+        `[maybe-reflect] dev-team gate failed for run ${runId}: ${result.reason} — skipping reflection.\n`,
+      );
+      process.exit(0);
+    }
+    // Dev-team gate passed — fall through to summary + reflect marker.
+  } else {
+    // Stop event — apply the original heuristic gate.
+    if (!gateCheck(events)) {
+      // Gate failed — no-op, no stdout, exit 0
+      process.stderr.write(
+        `[maybe-reflect] gate failed for run ${runId} — skipping reflection.\n`,
+      );
+      process.exit(0);
+    }
   }
 
   // Gate passed — produce summary, then tell orchestrator to reflect
