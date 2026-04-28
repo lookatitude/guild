@@ -1,0 +1,79 @@
+# v1.4.0 F-7 — synthetic adversarial-loops case.
+#
+# Per `benchmark/plans/adr-009-v1.4-adversarial-loops-and-plugin-restructure.md`
+# §"F-7 harness design", this case exists to exercise the v1.4 loop
+# mechanics end-to-end:
+#   - forced-fail injection at L3-implement (qa lane fails its first
+#     terminating handoff so the loop drives ≥ 1 round);
+#   - cap-hit at the plan layer with a small `--loop-cap` (typically 2)
+#     to verify escalation copy + AskUserQuestion payload + JSONL
+#     `escalation` event emit;
+#   - auto-approve mode flag toggles to verify gate-substitution.
+#
+# This file is the CASE definition consumed by `benchmark/src/runner.ts`.
+# The harness orchestration (which lane fails, when cap fires, how
+# auto-approve is set per-trial) is T5-qa's responsibility per the T3d
+# scope contract — the case YAML is the input contract, not the harness.
+#
+# The "task" is the source-side change T3d shipped in this same lane:
+# add `model_family?: string` to `Score` + wire scorer to derive it
+# from `model_ref.default`. A run against this case exercises the full
+# Guild lifecycle (brainstorm → ... → verify) producing a `Score` whose
+# `model_family` is one of haiku|sonnet|opus when the model_ref carries
+# a recognised tier.
+
+schema_version: 1
+# id must match /^[a-z0-9][a-z0-9-]*[a-z0-9]$/ (kebab-case; no dots).
+# v14 = v1.4 with the dot removed.
+id: v14-synthetic-model-family
+title: "v1.4 F-7 — synthetic adversarial-loops harness (model_family field)"
+timeout_seconds: 300
+repetitions: 1
+fixture: ../fixtures/synthetic-pass
+
+# The prompt mirrors the SHIPPED task: an architect-spec'd change to
+# the scorer. Specialists are expected to dispatch architect (designs
+# the field), backend (wires the type + scorer), and qa (pins the
+# field shape). The harness's forced-fail injection lives in
+# T5-qa — qa's first terminating handoff intentionally omits the
+# `model_family` field so loop-implement drives ≥ 1 round.
+prompt: |
+  Add a `model_family` derived field to the `Score` interface in
+  `benchmark/src/types.ts`. The field is OPTIONAL (`model_family?: string`)
+  and is populated by the scorer from `run.json`'s `model_ref.default`
+  string. Mapping rules (case-insensitive substring match):
+    - "haiku"  in model_ref.default → "haiku"
+    - "sonnet" in model_ref.default → "sonnet"
+    - "opus"   in model_ref.default → "opus"
+    - none of the above             → field is absent
+
+  Pin the change with a vitest case in `benchmark/tests/scorer.test.ts`.
+
+# The expected_specialists list is what the team-compose stage SHOULD
+# produce. The delegation scoring in `scorer.ts` measures the symmetric
+# difference against the dispatched set.
+expected_specialists:
+  - architect
+  - backend
+  - qa
+
+# Stage order matches the standard Guild lifecycle.
+expected_stage_order:
+  - brainstorm
+  - team-compose
+  - plan
+  - context
+  - execute
+  - review
+  - verify
+
+# Acceptance commands run against the candidate plugin's working tree.
+# `npm test` (vitest) must pass with the new test green; typecheck
+# verifies the type-level shape change holds.
+acceptance_commands:
+  - "cd benchmark && npm run typecheck"
+  - "cd benchmark && npm test -- --run scorer"
+
+# Wall-clock budget tuned for the loop machinery — first round, optional
+# 1-2 retries, then convergence.
+wall_clock_budget_ms: 300000

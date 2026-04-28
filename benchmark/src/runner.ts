@@ -175,11 +175,17 @@ const ENV_HARD_DROP = /(_PASSWORD|_SECRET)$/;
 // M14 (F4.2) — token-shape redaction patterns. Applied as a streaming
 // Transform to stdout/stderr so the on-disk bytes are only the redacted
 // form. Order matters (most specific first).
-const REDACTION_PATTERNS: { re: RegExp; shape: string }[] = [
+//
+// Exported for v1.4's redact-log drift test (`benchmark/src/redact-log.ts`
+// must mirror this list verbatim; the drift test imports this exported
+// constant and asserts one-to-one equality with `TOKEN_SHAPE_PATTERNS`).
+export const REDACTION_PATTERNS: { re: RegExp; shape: string }[] = [
   { re: /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g, shape: "bearer" },
   { re: /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g, shape: "bearer" },
   { re: /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g, shape: "anthropic-key" },
   { re: /\bghp_[A-Za-z0-9]{36}\b/g, shape: "github-pat" },
+  { re: /\bgh[suor]_[A-Za-z0-9]{36}\b/g, shape: "github-token" },
+  { re: /\bgithub_pat_[A-Za-z0-9_]{82}\b/g, shape: "github-fine-pat" },
   { re: /\bxox[bp]-[A-Za-z0-9-]{10,}/g, shape: "slack-token" },
   { re: /\bAKIA[0-9A-Z]{16}\b/g, shape: "aws-access-key" },
   {

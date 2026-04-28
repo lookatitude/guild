@@ -3,7 +3,117 @@
 Single ledger of items deferred out of v1.1/v1.2 scope. Each entry:
 what / why deferred / who owns / where the original decision lives.
 
-Updated 2026-04-27 (v1.2).
+Updated 2026-04-27 (v1.2 + v1.4-SEC).
+
+## Out of v1.4 — security defense-in-depth (filed by T6, 2026-04-27)
+
+Filed by T6-security during the `release/v1.4.0` adversarial-loops
+run (`run-2026-04-27-v1.4.0-adversarial-loops`). Each item is
+**non-blocking** — none gate the v1.4.0 release. Originals at
+`benchmark/plans/v1.4-security-review.md` §"Findings — non-blocking".
+
+### FOLLOWUPS-v14-SEC-1. Validate `GUILD_RUN_ID` env against an allowlist at handler entry
+
+**What.** `hooks/pre-tool-use.ts:97`, `hooks/pre-compact.ts:68`,
+`hooks/post-tool-use.ts:87` accept `GUILD_RUN_ID` as a path component
+without validation. A poisoned env var (e.g., `../../../tmp/x`)
+escapes `.guild/runs/`. Validate with `/^[A-Za-z0-9._-]+$/` at
+handler entry; refuse + warn-stderr on mismatch.
+
+**Why deferred.** Trust boundary: env-write requires already being
+inside the operator's process. Defense-in-depth, not a vulnerability.
+
+**Owner.** devops (hook hardening) + security (re-review).
+**Re-entry trigger.** v1.5 hooks-hardening sweep, OR a real-world
+poisoning incident.
+
+### FOLLOWUPS-v14-SEC-2. Apply `redactField` inside `appendSidecarPre`
+
+**What.** `benchmark/src/log-jsonl.ts:780-801` writes the sidecar
+with `command_redacted` UNREDACTED until `consumeSidecarPre`
+retrieves it and `appendEvent` redacts at write. Window: tool-call
+duration or ≤ 5 min orphan-sweep. Close by calling `redactField` on
+the entry's free-text fields before write.
+
+**Why deferred.** Bounded transient — the sidecar is internal,
+auto-flushed, and the eventual audit log IS redacted. Cost of fix
+is small; punted to next backend round.
+
+**Owner.** backend.
+**Re-entry trigger.** v1.5 logger-hardening pass.
+
+### FOLLOWUPS-v14-SEC-3. Bound sidecar size with cap + warn
+
+**What.** `appendSidecarPre` is unbounded; `consumeSidecarPre` and
+`sweepOrphanedSidecarFull` walk the whole file each fire (O(N) per
+PostToolUse). Bound at 5 MB → warn → truncate oldest entries.
+
+**Why deferred.** Steady-state self-cleans via 5-min sweep. Burst
+windows are linear but operator-side. Not a release blocker.
+
+**Owner.** backend.
+**Re-entry trigger.** Real-world burst observed, OR v1.5 perf pass.
+
+### FOLLOWUPS-v14-SEC-4. Architect-pin `PreCompact.payload` semantics
+
+**What.** `hooks/pre-compact.ts:57-65, 96` excerpt-stringifies
+`payload.payload` into `payload_excerpt_redacted`. Pattern-based
+redaction is weak against natural-language model output. Pin the
+contract: `payload.payload` is opaque-empty by default; any model-
+side content goes through an explicit annotated channel with
+stronger guarantees.
+
+**Why deferred.** Observed Claude-Code wiring sets `payload`
+undefined; the field is currently empty in practice. Architect-side
+contract decision — proper home is ADR-009 amendment.
+
+**Owner.** architect (pin) + backend (enforce).
+**Re-entry trigger.** Claude-Code roadmap change that populates
+`PreCompact.payload`, OR v1.5 hook-contract review.
+
+### FOLLOWUPS-v14-SEC-5. Emit `assumption_logged` on negative-latency clock skew
+
+**What.** `benchmark/src/log-jsonl.ts:933-935` clamps
+`Math.max(0, tsPostMs - tsPreMs)`. Negative deltas (NTP misconfig
+or skew) are masked as `latency_ms: 0`, indistinguishable from
+"instant tool". Emit a parallel `assumption_logged` event with
+`reason: "clock_skew_detected"` when the raw delta is negative.
+
+**Why deferred.** Observability concern, not security. The clamp
+itself is correct.
+
+**Owner.** backend.
+**Re-entry trigger.** v1.5 audit-channel completeness pass.
+
+### FOLLOWUPS-v14-SEC-6. Sanitise `lane_id` / `context` interpolation in question text
+
+**What.** `benchmark/src/v1.4-gate-prompt.ts:210-225`
+interpolates `lane_id` and `args.context` raw into the question
+text. UX-confusion only (cannot spoof a choice — `parseFallbackChoice`
+strict-matches the 3 labels), but consistent with the rest of the
+codebase to sanitise inputs at the boundary.
+
+**Why deferred.** No choice-spoof primitive. Lane IDs in plan
+blocks already enforce a documented allowlist; the interpolation
+sites just need a defensive `.replace(/[^A-Za-z0-9._-]/g, '?')`.
+
+**Owner.** backend.
+**Re-entry trigger.** v1.5 gate-prompt hardening.
+
+### FOLLOWUPS-v14-SEC-7. Redact raw value in `ConfigError.message`
+
+**What.** `benchmark/src/v1.4-config.ts:90-92, 211-213, 254-256`
+echo the raw flag value back in the error message
+(`--loops value 'foo' is invalid`). If an operator pastes a secret
+as the flag value (`--loops=$(cat /tmp/key)`), stderr (which can
+land in `events.ndjson`) carries the secret.
+
+**Why deferred.** Operator-side error path; very small real-world
+risk. Defense-in-depth — pass the raw value through `redactField`
+before interpolation.
+
+**Owner.** backend.
+**Re-entry trigger.** v1.5 config hardening pass.
 
 ## Out of v1.2 — deferred with reason
 

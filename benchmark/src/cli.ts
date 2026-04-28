@@ -17,6 +17,18 @@ import {
   loopStart,
   loopStatus,
 } from "./loop.js";
+// v1.4.0 — global flag plumbing for adversarial-loops control surface.
+// Parsing only at this layer (T3a-backend-config); the dispatcher consumers
+// (T3b/T3c) read the resolved values via `resolveV14Config`.
+import {
+  ConfigError,
+  parseAutoApprove,
+  parseLoopCap,
+  parseLoops,
+  parseStatusline,
+  resolveV14Config,
+  type V14Config,
+} from "./v1.4-config.js";
 import type {
   Case,
   LoopAbortOptions,
@@ -35,25 +47,72 @@ interface ParsedArgs {
 
 const DEFAULT_RUNS_DIR = resolve(process.cwd(), "runs");
 
+/**
+ * Flags that NEVER take a value — bare presence is the boolean-true
+ * signal. Without this whitelist, `--statusline help` would parse as
+ * `flags.statusline = "help"` and consume the subcommand. Keep this
+ * list small and explicit; v1.4 added `--statusline` as the only
+ * boolean global flag.
+ *
+ * Subcommand-local boolean flags (e.g. `--dry-run`, `--cleanup`,
+ * `--confirm`, mode flags `--start` / `--continue` / etc.) also never
+ * take a value; including them here makes `<subcommand> --dry-run
+ * --case foo` parse correctly even when the user omits the `=`.
+ */
+const BOOLEAN_FLAGS = new Set<string>([
+  // v1.4 globals
+  "statusline",
+  // Subcommand mode flags
+  "start",
+  "continue",
+  "status",
+  "abort",
+  "rollback",
+  // Common boolean flags
+  "dry-run",
+  "cleanup",
+  "confirm",
+  "help",
+]);
+
 function parseArgs(argv: string[]): ParsedArgs {
-  const command = argv[0] ?? "";
+  // v1.4.0 — global flags (`--loops`, `--loop-cap`, `--auto-approve`,
+  // `--statusline`) may appear BEFORE the subcommand. The subcommand
+  // is the first non-flag argv entry; everything else (flags + later
+  // positionals) accumulates. v1.3 callers that pass
+  // `<subcommand> --flag` continue to work unchanged because the
+  // first non-flag arg is still the subcommand.
+  //
+  // Known boolean flags (BOOLEAN_FLAGS) NEVER consume the next argv
+  // entry — bare `--flag` is always boolean-true; `--flag=value` is
+  // also accepted (value goes through the parser's normal path).
+  let command = "";
   const flags = new Map<string, string>();
   const positional: string[] = [];
-  for (let i = 1; i < argv.length; i++) {
+  for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith("--")) {
       const eq = a.indexOf("=");
       if (eq !== -1) {
         flags.set(a.slice(2, eq), a.slice(eq + 1));
       } else {
+        const flagName = a.slice(2);
+        // Boolean flags are bare; do not consume the next argv entry.
+        if (BOOLEAN_FLAGS.has(flagName)) {
+          flags.set(flagName, "true");
+          continue;
+        }
         const next = argv[i + 1];
         if (next !== undefined && !next.startsWith("--")) {
-          flags.set(a.slice(2), next);
+          flags.set(flagName, next);
           i += 1;
         } else {
-          flags.set(a.slice(2), "true");
+          flags.set(flagName, "true");
         }
       }
+    } else if (command === "") {
+      // First non-flag arg is the subcommand (preserves v1.3 behaviour).
+      command = a;
     } else {
       positional.push(a);
     }
@@ -459,8 +518,99 @@ function printUsage(): void {
   );
 }
 
+/**
+ * v1.4.0 — validate the new global flags before subcommand dispatch.
+ *
+ * Behaviour (architect contract):
+ *   - `--loops` / `--loop-cap` / `--auto-approve` are global; they apply
+ *     to every subcommand.
+ *   - Invalid value → write the architect's exact stderr line + exit 2.
+ *   - Valid flags pre-empt env mirrors (CLI-overrides-env via the
+ *     resolver in v1.4-config.ts).
+ *   - The fully-resolved config is returned so subcommand handlers /
+ *     T3b/T3c consumers can read it. v1.3 callers that pass none of
+ *     these flags continue to work unchanged.
+ *
+ * The flags are NOT removed from `args.flags` after validation — that
+ * keeps existing per-subcommand `args.flags.get(...)` behaviour stable.
+ */
+function validateV14Flags(args: ParsedArgs): V14Config {
+  // Validate eagerly so the error message points at the offending flag
+  // (the resolver would still throw, but cli-level validation gives us
+  // the cleanest "exit 2 with exact stderr" spec compliance).
+  const loopsRaw = args.flags.get("loops");
+  const loopCapRaw = args.flags.get("loop-cap");
+  const autoApproveRaw = args.flags.get("auto-approve");
+  // `--statusline` (v1.4 audit doc §"--statusline (default off) gates the
+  // status-line script"). Bare `--statusline` with no value is "true"
+  // per parseArgs convention; explicit `--statusline=0|1|""` takes the
+  // value path.
+  const statuslineRaw = args.flags.get("statusline");
+  try {
+    if (loopsRaw !== undefined && loopsRaw !== "true") {
+      parseLoops(loopsRaw);
+    } else if (loopsRaw === "true") {
+      // Bare `--loops` with no value is an invalid value (empty/`true`).
+      parseLoops("true");
+    }
+    if (loopCapRaw !== undefined && loopCapRaw !== "true") {
+      parseLoopCap(loopCapRaw);
+    } else if (loopCapRaw === "true") {
+      parseLoopCap("");
+    }
+    if (autoApproveRaw !== undefined && autoApproveRaw !== "true") {
+      parseAutoApprove(autoApproveRaw);
+    } else if (autoApproveRaw === "true") {
+      parseAutoApprove("");
+    }
+    // Statusline: bare `--statusline` (`raw === "true"`) is opt-in and
+    // valid. Explicit `--statusline=foo` (raw is the value) goes through
+    // the parser; the parser accepts only "" / "0" / "1".
+    if (statuslineRaw !== undefined && statuslineRaw !== "true") {
+      parseStatusline(statuslineRaw);
+    }
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      process.stderr.write(`${err.message}\n`);
+      process.exit(2);
+    }
+    throw err;
+  }
+  // Resolve the full v1.4 config for downstream consumers (T3b/T3c).
+  // Env-only vars (GUILD_LOG_RETENTION) are validated here too — invalid
+  // env still exits 2. `--statusline` is now CLI-overridable so its
+  // resolver also takes the CLI value.
+  try {
+    return resolveV14Config(
+      {
+        ...(loopsRaw !== undefined && loopsRaw !== "true" ? { loops: loopsRaw } : {}),
+        ...(loopCapRaw !== undefined && loopCapRaw !== "true"
+          ? { loopCap: loopCapRaw }
+          : {}),
+        ...(autoApproveRaw !== undefined && autoApproveRaw !== "true"
+          ? { autoApprove: autoApproveRaw }
+          : {}),
+        ...(statuslineRaw !== undefined ? { statusline: statuslineRaw } : {}),
+      },
+      process.env,
+    );
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      process.stderr.write(`${err.message}\n`);
+      process.exit(2);
+    }
+    throw err;
+  }
+}
+
 async function main(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
+  // v1.4.0 — global flag validation. Returns the fully-resolved config so
+  // future T3b/T3c dispatcher code can consume it. v1.3 paths that pass
+  // none of the new flags see a fully-default config and proceed unchanged.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _v14 = validateV14Flags(args);
+  void _v14;
   switch (args.command) {
     case "score":
       await commandScore(args);

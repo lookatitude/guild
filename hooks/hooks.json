@@ -24,13 +24,38 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/pre-tool-use.js"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
-        "matcher": "Agent|Task|Write|Edit|Bash|Skill",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/capture-telemetry.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/post-tool-use.js"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/pre-compact.js"
           }
         ]
       }

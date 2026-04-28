@@ -118,11 +118,10 @@ describe("runner / live smoke (gated by GUILD_BENCHMARK_LIVE=1)", () => {
       // true if claudeBin is null), but TS doesn't know — narrow with !.
       process.env.GUILD_BENCHMARK_CLAUDE_BIN = claudeBin!;
       try {
-        const result = await runBenchmark({
-          caseSlug: "smoke-live",
-          runsDir,
-          casesDir,
-        });
+        const result = await runBenchmark(
+          { caseSlug: "smoke-live" },
+          { runsDir, casesDir },
+        );
         // 1) RunStatus is one of the documented values.
         expect([
           "pass",
@@ -132,10 +131,10 @@ describe("runner / live smoke (gated by GUILD_BENCHMARK_LIVE=1)", () => {
         ]).toContain(result.status);
 
         // 2) run.json was written and parses with the expected shape.
-        const runDir = join(runsDir, result.runId);
+        const runDir = join(runsDir, result.run_id);
         const runJsonText = await readFile(join(runDir, "run.json"), "utf8");
         const runJson = JSON.parse(runJsonText) as RunJson;
-        expect(runJson.run_id).toBe(result.runId);
+        expect(runJson.run_id).toBe(result.run_id);
         expect(runJson.case_slug).toBe("smoke-live");
         expect(runJson.status).toBe(result.status);
         expect(runJson.started_at).toBeTruthy();

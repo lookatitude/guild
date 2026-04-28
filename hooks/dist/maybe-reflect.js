@@ -59,6 +59,43 @@ function gateCheck(events) {
   const hasError = events.some((e) => e.ok === false);
   return hasSpecialist && hasFileEdit && !hasError;
 }
+function devteamSubagentGateCheck(events, cwd) {
+  if (process.env["GUILD_ENABLE_DEVTEAM_REFLECT"] !== "1") {
+    return { passed: false, reason: "GUILD_ENABLE_DEVTEAM_REFLECT != 1" };
+  }
+  const dispatchCount = events.filter(
+    (e) => e.event === "SubagentStop" && typeof e.specialist === "string" && e.specialist.trim().length > 0
+  ).length;
+  if (dispatchCount < 3) {
+    return {
+      passed: false,
+      reason: `dispatch count ${dispatchCount} < 3`
+    };
+  }
+  const specDir = path.join(cwd, ".guild", "spec");
+  const slug = process.env["GUILD_SPEC_SLUG"];
+  if (slug && slug.trim().length > 0) {
+    const specPath = path.join(specDir, `${slug}.md`);
+    if (!fs.existsSync(specPath)) {
+      return { passed: false, reason: `spec not found: ${specPath}` };
+    }
+  } else {
+    if (!fs.existsSync(specDir)) {
+      return { passed: false, reason: `spec dir not found: ${specDir}` };
+    }
+    let anySpec = false;
+    try {
+      const entries = fs.readdirSync(specDir);
+      anySpec = entries.some((name) => name.endsWith(".md"));
+    } catch {
+      anySpec = false;
+    }
+    if (!anySpec) {
+      return { passed: false, reason: `no *.md spec under ${specDir}` };
+    }
+  }
+  return { passed: true, reason: "all guards met" };
+}
 function writeStubSummary(runDir, runId, events) {
   const specialists = [
     ...new Set(events.map((e) => e.specialist).filter(Boolean))
@@ -128,12 +165,24 @@ async function main() {
   const runId = process.env["GUILD_RUN_ID"] ?? (sessionId ? `run-${sessionId}` : `run-session-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`);
   const eventsFile = path.join(cwd, ".guild", "runs", runId, "events.ndjson");
   const events = loadEvents(eventsFile);
-  if (!gateCheck(events)) {
-    process.stderr.write(
-      `[maybe-reflect] gate failed for run ${runId} \u2014 skipping reflection.
+  const hookEvent = payload.hook_event_name ?? "Stop";
+  if (hookEvent === "SubagentStop") {
+    const result = devteamSubagentGateCheck(events, cwd);
+    if (!result.passed) {
+      process.stderr.write(
+        `[maybe-reflect] dev-team gate failed for run ${runId}: ${result.reason} \u2014 skipping reflection.
 `
-    );
-    process.exit(0);
+      );
+      process.exit(0);
+    }
+  } else {
+    if (!gateCheck(events)) {
+      process.stderr.write(
+        `[maybe-reflect] gate failed for run ${runId} \u2014 skipping reflection.
+`
+      );
+      process.exit(0);
+    }
   }
   const runDir = path.join(cwd, ".guild", "runs", runId);
   const usedRealSummarizer = tryRealSummarizer(cwd, runId);
