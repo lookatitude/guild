@@ -116,7 +116,38 @@ export function scoreRun(
     components,
     guild_score,
   };
+  // v1.4 F-7 — derive model_family from model_ref.default. Absent when
+  // the field is missing or doesn't match any known Anthropic tier.
+  // Pinned by `scorer.test.ts > model_family derivation`.
+  const family = deriveModelFamily(record.run.model_ref);
+  if (family !== undefined) {
+    score.model_family = family;
+  }
   return { score, metrics };
+}
+
+/**
+ * Derive the Anthropic model family from a `model_ref.default` string.
+ * Case-insensitive substring match against the three known tiers:
+ *   - "haiku"  → "haiku"
+ *   - "sonnet" → "sonnet"
+ *   - "opus"   → "opus"
+ * Returns `undefined` when no match (caller omits the field).
+ *
+ * Match order is the order tested — substring overlap is impossible
+ * between the three literals, so order is cosmetic.
+ */
+export function deriveModelFamily(
+  modelRef: Record<string, string> | undefined,
+): string | undefined {
+  if (!modelRef) return undefined;
+  const def = modelRef["default"];
+  if (typeof def !== "string" || def.length === 0) return undefined;
+  const norm = def.toLowerCase();
+  if (norm.includes("haiku")) return "haiku";
+  if (norm.includes("sonnet")) return "sonnet";
+  if (norm.includes("opus")) return "opus";
+  return undefined;
 }
 
 export async function persistScore(

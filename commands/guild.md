@@ -1,8 +1,8 @@
 ---
 name: guild
-description: "Top-level Guild entry. Runs the 7-step lifecycle: brainstorm → team-compose → plan → context-assemble → execute-plan → review → verify-done. Per guild-plan.md §13.1."
-argument-hint: "[brief]"
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill
+description: "Top-level Guild entry. Runs the 7-step lifecycle: brainstorm → team-compose → plan → context-assemble → execute-plan → review → verify-done. With --loops=<none|spec|plan|implementation|all> (or comma-list, e.g. --loops=plan,implementation), runs internal adversarial loops between specialists per ADR-009. Per guild-plan.md §13.1."
+argument-hint: "[brief] [--loops=none|spec|plan|implementation|all|<csv>] [--loop-cap=N] [--auto-approve=none|spec-and-plan|implementation|all]"
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
 
 # /guild — Top-level task entry point

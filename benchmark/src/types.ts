@@ -179,6 +179,12 @@ export interface Score {
   run_kind: RunKind;
   components: ScoreComponents;
   guild_score: number;
+  // v1.4 — F-7: derived field flagging the Anthropic model family
+  // (haiku/sonnet/opus) for cross-tier benchmark aggregation. Computed
+  // by the scorer from `model_ref.default` (case-insensitive substring
+  // match). Absent when the model_ref carries no recognised tier.
+  // Pinned by `scorer.test.ts > model_family derivation`.
+  model_family?: string;
 }
 
 export interface MetricsJson {

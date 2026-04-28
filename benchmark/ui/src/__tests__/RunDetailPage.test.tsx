@@ -97,6 +97,43 @@ describe("RunDetailPage — surface", () => {
     expect(screen.queryByTestId("auth-identity-hash-badge")).toBeNull();
   });
 
+  // v1.4 — F-7: model_family chip surface. Derived by the scorer from
+  // `model_ref.default` and emitted on `score.model_family` (haiku/sonnet/
+  // opus/unknown). Absent on pre-v1.4 runs whose score.json predates the
+  // field — that path renders no chip (backwards compatible).
+  it("renders a model_family chip when the field is present on the score", async () => {
+    const fixtureWithFamily = {
+      ...runDetailFixture,
+      score: {
+        ...runDetailFixture.score,
+        model_family: "sonnet",
+      },
+    };
+    handle = installMockFetch({
+      override: (url) =>
+        url.includes("/api/runs/sample-pass-001")
+          ? new Response(JSON.stringify(fixtureWithFamily), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            })
+          : undefined,
+    });
+    mount();
+    const chip = await screen.findByTestId("model-family-chip");
+    expect(chip).toHaveTextContent("sonnet");
+  });
+
+  it("does not render the model_family chip when the field is absent", async () => {
+    handle = installMockFetch();
+    mount();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Run metadata" }),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("model-family-chip")).toBeNull();
+  });
+
   it("surfaces an error state when the detail fetch fails", async () => {
     handle = installMockFetch({
       override: (url) =>

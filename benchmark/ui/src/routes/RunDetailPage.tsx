@@ -118,6 +118,19 @@ export default function RunDetailPage() {
                   </dd>
                 </>
               ) : null}
+              {data.score.model_family ? (
+                <>
+                  <dt>Model family</dt>
+                  <dd>
+                    <code
+                      data-testid="model-family-chip"
+                      className="muted"
+                    >
+                      {data.score.model_family}
+                    </code>
+                  </dd>
+                </>
+              ) : null}
             </dl>
           </section>
         </>

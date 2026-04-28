@@ -119,6 +119,42 @@ async function waitForRunJson(runId: string, capMs: number): Promise<boolean> {
   return false;
 }
 
+// T9-flake-fix: `waitForRunJson` returns when the runner has WRITTEN run.json,
+// but `runBenchmark` resolves a few microtasks LATER and only then does the
+// `.finally` block on the POST handler clear `activeRun`. Tests that POST
+// twice in sequence (the "slot clears after run completes" assertion) can
+// therefore race the slot-clear and observe a 409 even though the system
+// is functioning correctly.
+//
+// Poll-via-probe oracle: POST a body whose `case_slug` is shape-valid but
+// has NO matching YAML on disk. Server flow:
+//   - shape parse passes (slot not yet checked)
+//   - if `activeRun` is held → 409 (oracle: still busy)
+//   - else: claims slot, awaits planRun, catch-block sets `activeRun = null`
+//     SYNCHRONOUSLY then returns 400 (oracle: idle, AND the slot is now
+//     guaranteed-null when control returns to the test thread)
+// Any non-409 response means the slot is clear by the time the await resolves.
+async function waitForSlotClear(
+  app: ReturnType<typeof createApp>,
+  capMs: number,
+): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < capMs) {
+    const probe = await app.fetch(
+      req("/api/runs", {
+        method: "POST",
+        body: JSON.stringify({ case_slug: "t9-slot-clear-probe" }),
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    // Drain the body so the response is fully consumed before the next probe.
+    await probe.text();
+    if (probe.status !== 409) return true;
+    await new Promise((res) => setTimeout(res, 25));
+  }
+  return false;
+}
+
 // Install a spawn mock that returns FakeChild with a deferred clean exit.
 function mockCleanSpawn(): { child: FakeChild } {
   const child = new FakeChild(nextPid++);
@@ -261,6 +297,11 @@ describe("server / POST /api/runs (live, with mocked spawn)", () => {
     // runner 2 — otherwise the second POST could race the slot-clear and
     // return 409 even though the system is functioning correctly.
     expect(await waitForRunJson(body1.run_id, 3000)).toBe(true);
+    // T9-flake-fix: run.json is written INSIDE runBenchmark; activeRun is
+    // cleared a few microtasks later in the post-handler `.finally`. Poll
+    // for slot-clear via the missing-case probe so r2 doesn't race the
+    // self-clear and observe a stale 409.
+    expect(await waitForSlotClear(app, 3000)).toBe(true);
 
     // Re-arm the spawn mock for the second runner (mockImplementation
     // resets on each call; we want every spawn to schedule a clean exit).

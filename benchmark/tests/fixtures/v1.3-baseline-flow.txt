@@ -1,0 +1,48 @@
+# v1.3-baseline-flow — golden projection for the SC8 regression guard.
+#
+# This fixture is a DETERMINISTIC PROJECTION of the v1.3-baseline behaviour,
+# NOT a byte-exact log capture. Orchestrator dispatch is non-deterministic
+# (specialist message bodies, timestamps, run-ids) so byte-exact diffing
+# would be flaky-by-construction.
+#
+# What we pin:
+#   1. Event-type counts (the "what events surfaced" projection).
+#   2. The terminal loop status.
+#   3. The resolved configuration (loops/cap/auto-approve).
+#
+# What we DELIBERATELY DO NOT pin:
+#   - Free-text bodies (specialist response text).
+#   - Timestamps.
+#   - Run-ids (each run has a different one).
+#   - Memory addresses, line counts, MIME boundaries, etc.
+#
+# The v1.3 baseline is "no v1.4 flags set". This means:
+#   - GUILD_LOOPS unset / --loops not passed → defaults to `none`.
+#   - GUILD_LOOP_CAP unset / --loop-cap not passed → defaults to 16 (but
+#     with loops=none, the cap is unused).
+#   - GUILD_AUTO_APPROVE unset / --auto-approve not passed → defaults to `none`.
+#
+# Under loops=none, `loops_applicable: "none"` → `activeLayersFor("none")
+# returns []` → the loop driver produces ZERO `loop_round_start`/_end
+# events, ZERO `escalation` events, ZERO `assumption_logged` events.
+# Loop status is "satisfied" (no layers ran; nothing to fail).
+#
+# This is the v1.3 contract: "no loops" means no loop machinery fires.
+# Any v1.4 change that produces non-zero loop events under default flags
+# is a regression against SC8.
+#
+# Format below: one assertion per line in `key=value` form. The test
+# parses and checks each.
+
+projection_version=1
+loops_resolved=none
+auto_approve_resolved=none
+event_count_total=0
+event_count_loop_round_start=0
+event_count_loop_round_end=0
+event_count_escalation=0
+event_count_assumption_logged=0
+loop_status=satisfied
+restart_count=0
+layers_run_count=0
+auto_approved_all=false
