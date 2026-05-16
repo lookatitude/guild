@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Guild v2 phase entrypoints</title>
+  <desc id="desc">Shows how a user can start at init, ideation, planning, development, quality, or operations and how missing prerequisites route backward.</desc>
+  <style>
+    .box{fill:#eef4ff;stroke:#315e93;stroke-width:2;rx:8}.gate{fill:#fff7e8;stroke:#9a6a17;stroke-width:2;rx:8}.out{fill:#effaf2;stroke:#277545;stroke-width:2;rx:8}.txt{font:15px Arial,sans-serif;fill:#1f2937}.small{font:12px Arial,sans-serif;fill:#374151}.head{font:bold 17px Arial,sans-serif}.arrow{stroke:#374151;stroke-width:2;fill:none;marker-end:url(#arrow)}
+  </style>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill="#374151"/></marker></defs>
+  <rect width="1280" height="720" fill="#f7f8fb"/>
+  <rect class="box" x="60" y="55" width="200" height="80"/><text class="head" x="105" y="88">User starts</text><text class="small" x="94" y="112">at any phase</text>
+  <rect class="gate" x="350" y="55" width="230" height="80"/><text class="head" x="396" y="88">Prerequisite check</text><text class="small" x="382" y="112">artifact + memory exists?</text>
+  <path class="arrow" d="M260 95 H350"/>
+
+  <rect class="out" x="90" y="240" width="170" height="72"/><text class="head" x="138" y="268">Init</text><text class="small" x="116" y="290">wiki/raw context</text>
+  <rect class="out" x="310" y="240" width="170" height="72"/><text class="head" x="356" y="268">Ideation</text><text class="small" x="338" y="290">idea spec</text>
+  <rect class="out" x="530" y="240" width="170" height="72"/><text class="head" x="572" y="268">Planning</text><text class="small" x="558" y="290">PRD/tasks</text>
+  <rect class="out" x="750" y="240" width="170" height="72"/><text class="head" x="786" y="268">Develop</text><text class="small" x="784" y="290">built tasks</text>
+  <rect class="out" x="970" y="240" width="170" height="72"/><text class="head" x="1018" y="268">Quality</text><text class="small" x="1002" y="290">E2E report</text>
+  <rect class="out" x="750" y="430" width="170" height="72"/><text class="head" x="790" y="458">Operations</text><text class="small" x="784" y="480">release/ops record</text>
+  <path class="arrow" d="M465 135 C380 200 230 225 175 240"/><path class="arrow" d="M465 135 C445 195 410 220 395 240"/><path class="arrow" d="M465 135 C530 195 595 220 615 240"/><path class="arrow" d="M580 95 C720 145 800 200 835 240"/><path class="arrow" d="M580 95 C900 145 1015 200 1055 240"/><path class="arrow" d="M580 115 C760 260 820 380 835 430"/>
+
+  <path class="arrow" d="M1055 312 C1025 370 925 405 890 430"/><path class="arrow" d="M835 430 C740 370 690 330 615 312"/><path class="arrow" d="M835 240 C720 210 675 165 580 105"/>
+  <text class="txt" x="90" y="610">If a required artifact is missing, route backward to the phase that produces it. Development never starts from vague tasks without validation criteria and done conditions.</text>
+</svg>

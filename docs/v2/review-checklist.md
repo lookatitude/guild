@@ -9,6 +9,16 @@ Use this checklist before treating v2 architecture documentation or implementati
 | Research, architecture, and design decisions reflected from ideation to detail | `architecture.md`, `lifecycle.md`, `edge-cases.md` |
 | Group of agents/subagents explores concept decisions and research subjects | `team-composition.md`, `lifecycle.md` phase teams, L1/L2/L3/L4 challengers |
 | Architecture from high level to each loop detail | `architecture.md`, `lifecycle.md`, `adversarial-review.md` |
+| Multiple phase entrypoints exist | `phase-entrypoints.md`, `lifecycle.md` |
+| Init sets up wiki and gathers product knowledge | `phase-entrypoints.md`, `knowledge-and-advisory.md`, `lifecycle.md` |
+| Ideation is interactive and produces an idea spec | `lifecycle.md`, `phase-entrypoints.md` |
+| Planning creates PRD, actions/features, tasks, validation criteria, and done conditions | `lifecycle.md`, `phase-entrypoints.md` |
+| Development is autonomous after task approval and includes testing, security, and architecture review | `lifecycle.md`, `team-composition.md` |
+| Optional quality phase designs/runs E2E tests from goals and development output | `lifecycle.md`, `phase-entrypoints.md` |
+| Start from any phase in existing project | `phase-entrypoints.md`, `lifecycle.md` |
+| Advisory memory agents support every producer/reviewer | `knowledge-and-advisory.md`, `team-composition.md`, `tools-and-mcp.md` |
+| Cross-model adversarial reviewer selection | `adversarial-review.md` |
+| Phase-level adversarial gates exist for all phases | `adversarial-review.md`, `lifecycle.md` |
 | Comprehensive SVG diagrams and flowcharts | `diagrams/*.svg` |
 | Process to create new skills | `agent-and-skill-factory.md` |
 | Process to create new agents with personas | `agent-and-skill-factory.md` |
@@ -25,9 +35,11 @@ Use this checklist before treating v2 architecture documentation or implementati
 ## Design Completeness Checks
 
 - Every lifecycle phase has inputs, outputs, owner team, and failure handling.
-- The team artifact is unambiguous: one phase-scoped `.guild/team/<slug>.yaml` with phase entries, not hidden later reselection.
+- The team artifact is unambiguous: each phase composes and records its own team, not hidden reuse of a prior phase team.
 - Every adversarial loop has producer, challenger, sentinel, cap behavior, and artifact path.
 - Every team decision records backend, scope, skills, tools, MCP servers, and dependencies.
+- Every producer/reviewer has an advisory memory pattern or an explicit reason it is unavailable.
+- Development has security and architecture review signoff for every phase, including explicit not-applicable rationale when there are no findings.
 - Every new-agent path includes extraction signals, proposed path, boundary scan, eval gates, shadow mode, and registration.
 - Every tool escalation path routes through autonomy policy and user approval when needed.
 - Every runtime artifact path is under `.guild/`.

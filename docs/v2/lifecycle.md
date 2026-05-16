@@ -1,291 +1,231 @@
 # v2 Lifecycle
 
-The v2 lifecycle is a deterministic artifact pipeline with optional adversarial loops. Each phase has an owner team, input artifact, output artifact, user gate, and challenger gate.
+The v2 lifecycle is a set of phase entrypoints, not one mandatory linear command. A user can start from loose ideas in a brand-new project, from an existing codebase with prior product knowledge, from an already-written idea spec, from an approved PRD, or from development output that needs quality validation.
 
 ![Lifecycle and gates](diagrams/02-lifecycle-gates.svg)
 
-## Phase 0 - Config and Run Setup
+Every phase repeats the same control pattern:
 
-Owner team: orchestrator plus tooling support.
+1. Resolve phase input and run id.
+2. Assemble phase memory from `.guild/wiki`, `.guild/raw`, prior phase artifacts, and current repository state.
+3. Compose a phase-specific team plus advisory agents.
+4. Run the producer work loop.
+5. Run phase-level adversarial review with cross-model preference.
+6. Resolve findings by revising the artifact or recording an explicit assumption.
+7. Write a phase artifact and handoff receipt.
+
+## Phase Entrypoints
+
+| Phase | Start when | Primary artifact | Interaction level |
+|---|---|---|---|
+| Init | New repo, existing product onboarding, or knowledge refresh. | `.guild/wiki/**`, `.guild/init/<slug>.md` | Interactive for new products; mostly autonomous for existing repos. |
+| Ideation | User has loose ideas, goals, alternatives, or a product direction to explore. | `.guild/spec/<idea-slug>.md` | Highly interactive. |
+| Planning | User has an idea spec and wants a PRD/action plan. | `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` | Interactive at approval gates, otherwise structured. |
+| Development | User has approved tasks and wants implementation. | `.guild/runs/<run-id>/handoffs/*.md`, changed product artifacts | Autonomous as much as the autonomy contract allows. |
+| Quality | Optional after development, when E2E or release validation is needed. | `.guild/quality/<run-id>.md`, test reports | Mostly autonomous, with release/blocker gates. |
+| Operations | Existing production product needs release, monitoring, incident, rollback, or maintenance work. | `.guild/ops/<run-id>.md` | Autonomous for approved runbooks; interactive for risky changes. |
+
+See [phase-entrypoints.md](phase-entrypoints.md) for the full contract.
+
+## Init Phase
+
+Goal: create or refresh the product knowledge base.
 
 Inputs:
 
-- CLI flags: `--loops`, `--loop-cap`, `--auto-approve`, `--codex-review`, `--codex-cap`
-- `.guild/config.yml`
+- Existing repository, docs, tickets, customer notes, product artifacts, or an empty project.
+- Optional user brief describing product, market, constraints, and goals.
 
 Process:
 
-1. Resolve config through `scripts/read-guild-config.ts`.
-2. Generate a run id through `scripts/new-run-id.ts`.
-3. Write `.guild/runs/current-run-id`.
-4. Initialize run-scoped logs and counters: legacy `.guild/runs/<run-id>/events.ndjson` plus v1.4 `.guild/runs/<run-id>/logs/v1.4-events.jsonl`.
-
-Failure handling:
-
-- If no run id can be written, stop. Hooks would otherwise mix multiple runs.
-- Telemetry is scoped per `/guild` invocation, not per Claude session.
-
-## Phase 1 - Brainstorm and Spec
-
-Owner team: `architect` plus `researcher` when L1 is enabled.
-
-Inputs:
-
-- User brief
-- Existing `.guild/wiki/context`, relevant decisions, and non-goals
+1. Determine whether the product already exists.
+2. If it exists, gather and classify repo/docs/product knowledge into `.guild/raw` and `.guild/wiki`.
+3. If it is new, ask high-level questions about product type, users, value proposition, constraints, non-goals, and success horizon.
+4. Create foundational wiki pages: context, goals, non-goals, standards, products, entities, concepts, sources, and initial decisions.
+5. Run G-init adversarial review to challenge missing context, stale facts, and unsupported assumptions.
 
 Outputs:
 
-- `.guild/spec/<slug>.md`
-- Optional `.guild/runs/<run-id>/loops/loop-clarify-summary.md`
+- `.guild/init/<slug>.md`
+- `.guild/wiki/index.md`
+- foundational `.guild/wiki/**` pages
+- `.guild/raw/sources/**` for copied source material
 
-What happens:
+Done criteria:
 
-1. The brainstorm skill captures goal, user-visible outcome, success criteria, non-goals, constraints, autonomy policy, risks, and assumptions.
-2. If `--loops=spec` or `--loops=all`, L1 runs before the spec is written.
-3. L1 is architect as producer and researcher as challenger.
-4. Researcher terminates only with a clean `## NO MORE QUESTIONS` sentinel.
-5. Cap-hit or malformed termination escalates to `force-pass`, `extend-cap`, or `rework`.
-6. If `--codex-review` is active, G-spec reviews the spec before team composition.
+- The wiki has enough context for an ideation or planning team to operate without relying on hidden chat history.
+- Known unknowns are listed explicitly.
+- External or repo-derived facts have source refs.
 
-## Phase 2 - Team Compose
+## Ideation Phase
 
-Owner team: orchestrator plus `architect`; `researcher` joins for unknown-domain tasks.
-
-Inputs:
-
-- `.guild/spec/<slug>.md`
-- `agents/*.md`
-- specialist skill inventory
-
-Outputs:
-
-- `.guild/team/<slug>.yaml`
-
-What happens:
-
-1. Match spec domains against the 14 current specialists.
-2. Classify each domain as covered or gap.
-3. Present gaps with four user choices: auto-create, skip, substitute, or compose from scratch.
-4. Add implied specialists from hard rules.
-5. Select backend: `agent-team` if approved and available, otherwise `subagent`.
-6. Write one phase-scoped team artifact with entries for each main phase and execution lane, including phase-required skills and MCP requirements.
-
-The team file is the contract for planning and execution. Later phases read their phase entry from this artifact; they do not silently reselect the team unless the user explicitly edits the team file.
-
-## Phase 3 - Plan
-
-Owner team: `architect` as planner, `security` as challenger when L2 is enabled.
+Goal: turn a loose idea into an idea spec.
 
 Inputs:
 
-- `.guild/spec/<slug>.md`
-- `.guild/team/<slug>.yaml`
+- User idea or question.
+- Init-phase big picture from `.guild/wiki/context`, goals, non-goals, product pages, and decisions.
+
+Process:
+
+1. Run an interactive brainstorm with the user.
+2. Ask clarifying questions, research relevant unknowns, debate alternatives, and compare tradeoffs.
+3. Use advisory agents to retrieve relevant project memory and prior research for each producer agent.
+4. Run G-ideation adversarial review on the idea, assumptions, target user, risks, and success criteria.
+5. Iterate until the reviewer has no further findings or the user explicitly accepts assumptions.
 
 Outputs:
 
+- `.guild/spec/<idea-slug>.md`
+- optional `.guild/research/<idea-slug>.md`
+- decision captures for medium/high-significance choices
+
+Done criteria:
+
+- The idea spec states goal, audience, problem, proposed solution, alternatives rejected, constraints, risks, success criteria, and open assumptions.
+- The spec is grounded in init knowledge and cites any new research.
+
+## Planning Phase
+
+Goal: convert the idea spec into a PRD and executable task plan.
+
+Inputs:
+
+- `.guild/spec/<idea-slug>.md`
+- relevant wiki pages and decisions
+
+Process:
+
+1. Compose a planning team that may contain architect, product/technical writer, researcher, security, QA, and domain specialists; developers are included only when implementation detail is needed.
+2. Produce a PRD-style artifact: problem, users, requirements, non-goals, user journeys, system constraints, edge cases, rollout, risks, and metrics.
+3. Break the PRD into features/actions.
+4. Break every feature/action into tasks.
+5. Give every task validation criteria, done conditions, evidence requirements, dependencies, owner role, and autonomy policy.
+6. Run G-planning adversarial review against edge cases, missing requirements, vague done criteria, security/privacy gaps, and untestable claims.
+
+Outputs:
+
+- `.guild/prd/<slug>.md`
 - `.guild/plan/<slug>.md`
+- `.guild/team/<slug>.yaml` with phase and lane entries
 
-What happens:
+Done criteria:
 
-1. Convert each specialist into a lane with task id, scope, inputs, outputs, dependencies, loop applicability, and evidence requirements.
-2. Encode autonomy policy: allowed unattended actions, required confirmations, and forbidden actions.
-3. If `--loops=plan` or `--loops=all`, L2 runs after plan draft and before approval.
-4. L2 is architect as plan writer and security as plan-defect challenger.
-5. Security may only raise plan defects: security gaps, autonomy gaps, scope overlap, contract drift, and untestable success criteria.
-6. If `--codex-review` is active, G-plan reviews the plan before user approval.
-7. User approval flips the plan to `approved: true`.
+- Every task can be picked up by a development team without asking what "done" means.
+- Every feature maps back to idea-spec success criteria.
+- Risks, edge cases, and approval gates are explicit.
 
-User gates before autonomous execution:
+## Development Phase
 
-- Gate 1: approve or revise the spec.
-- Gate 2: approve or revise the team.
-- Gate 3: approve or revise the plan and autonomy contract.
-
-## Phase 4 - Context Assembly
-
-Owner team: orchestrator with `guild:context-assemble`.
+Goal: autonomously implement approved tasks.
 
 Inputs:
 
-- Approved `.guild/plan/<slug>.md`
+- approved `.guild/plan/<slug>.md`
 - `.guild/team/<slug>.yaml`
-- role-relevant `.guild/wiki` pages
-
-Outputs:
-
-- `.guild/context/<run-id>/<specialist>-<task-id>.md`
-
-What happens:
-
-1. Build universal context: principles, project overview, goals.
-2. Build role context: standards and entities relevant to the specialist.
-3. Build task context: lane scope, named artifacts, upstream contracts, relevant decisions, tools, and MCP requirements.
-4. Target roughly 3k tokens and cap at 6k.
-5. Summarize lower-weighted references if over cap.
-
-No specialist may dispatch without a bundle.
-
-## Phase 5 - Execute Plan
-
-Owner team: lane specialists plus orchestrator.
-
-Inputs:
-
-- Approved plan
-- team YAML
 - context bundles
 
+Process:
+
+1. Compose the development team from the task graph; include only needed implementers plus QA, security, architect, or devops reviewers as required.
+2. Build context bundles per task from the plan, wiki, codebase, and advisory memory.
+3. Dispatch tasks through subagents or tmux agent-team.
+4. Run implementation loops for each task:
+   - owner builds;
+   - tester challenges logic and edge cases;
+   - QA challenges evidence and regression coverage;
+   - security reviews every development phase, either with findings or explicit `not_applicable` signoff and rationale;
+   - architect/tech lead reviews every development phase, either with findings or explicit `not_applicable` signoff and rationale.
+5. Write a handoff receipt for each task.
+
 Outputs:
 
-- `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`
+- changed files or product artifacts
+- `.guild/runs/<run-id>/handoffs/<task>.md`
 - `.guild/runs/<run-id>/assumptions.md`
-- optional `.guild/runs/<run-id>/agent-team/session.json`
+- test, review, and telemetry evidence
 
-What happens:
+Done criteria:
 
-1. Schedule lanes by dependency graph, not file order.
-2. Dispatch independent lanes in parallel.
-3. Run `architect` first when it is a dependency.
-4. Hold `qa` until backend/devops receipts exist.
-5. Run content and commercial lanes in parallel when they only depend on the spec.
-6. If backend is `subagent`, dispatch isolated Agent-tool calls.
-7. If backend is `agent-team`, launch one tmux session with one pane per specialist through the launcher.
-8. Each lane writes a receipt with scope, changed files, artifacts, decisions, assumptions, evidence, risks, and follow-ups.
+- Every task done condition is met or explicitly blocked.
+- Evidence exists for every validation criterion.
+- Security and architecture review findings are resolved or accepted by an explicit gate.
 
-### Implementation Loops
+## Quality Phase
 
-If `--loops=implementation` or `--loops=all`, the lane's `loops_applicable` value selects nested loops:
-
-| Value | L3 dev-tester | L4 owner-QA | Security review |
-|---|---:|---:|---:|
-| `none` | No | No | No |
-| `l3-only` | Yes | No | No |
-| `l4-only` | No | Yes | No |
-| `both` | Yes | Yes | No |
-| `full` | Yes | Yes | Yes |
-
-L3:
-
-- Producer: lane owner.
-- Challenger: property-based testing capability.
-- Goal: catch logical and edge-case defects before broader QA.
-
-L4:
-
-- Producer: lane owner.
-- Challenger: QA.
-- Goal: confirm test strategy, regression coverage, and evidence quality.
-
-Security review:
-
-- Producer: lane owner.
-- Challenger: security.
-- Goal: detect high-severity unaddressed security issues.
-- Restart: any finding with `severity: high` and `addressed_by_owner: false` restarts that lane from L3.
-- Restart cap: 3 per lane per task.
-
-All implementation loops use the clean `## NO MORE QUESTIONS` sentinel and the same cap escalation options.
-
-## Phase 6 - Review
-
-Owner team: `qa` plus relevant specialist reviewer; `security` joins when security-sensitive work exists.
+Goal: optionally validate the developed output against product goals with E2E or release-level tests.
 
 Inputs:
 
-- Handoff receipts
-- Spec
-- Plan
-- Assumptions
+- development receipts
+- PRD and plan validation criteria
+- product goals and user journeys
+
+Process:
+
+1. Compose a quality team: QA, frontend/mobile/backend as needed, devops for environments, security for sensitive flows, and an advisory memory agent for product expectations.
+2. Design E2E tests from user journeys and goals.
+3. Run tests, screenshots, accessibility checks, performance checks, integration checks, or release smoke tests as applicable.
+4. Run G-quality adversarial review against test coverage and release risk.
+5. Produce a pass/fail quality report.
 
 Outputs:
 
-- `.guild/runs/<run-id>/review.md`
+- `.guild/quality/<run-id>.md`
+- E2E artifacts, screenshots, logs, or metrics
+- release/blocker decision
 
-What happens:
+Done criteria:
 
-1. Stage 1 checks conformance to spec and plan.
-2. Stage 2 checks quality: evidence, scope discipline, missing tests, risk handling, and artifact completeness.
-3. Review consumes receipts instead of expanding every specialist conversation.
-4. Findings route either to lane rework or verify-done with explicit residual risk.
+- E2E coverage maps to user journeys and goals.
+- Blockers are either fixed or explicitly accepted.
+- Release readiness is stated with evidence.
 
-## Phase 7 - Verify Done
+## Operations Phase
 
-Owner team: orchestrator plus `qa`.
+Goal: carry the product into production and ongoing operations.
 
 Inputs:
 
-- Review report
-- Receipts
-- Success criteria from spec
-- Test outputs and evidence
+- release candidate, deployed product, incident, maintenance request, or monitoring objective
+- runbooks, SLOs, known risks, and prior production decisions
+
+Process:
+
+1. Compose an operations team: devops, backend/frontend/mobile as needed, security, QA, and advisory memory.
+2. Run release, monitoring, incident, rollback, migration, or maintenance workflows according to approved autonomy policy.
+3. Capture production decisions, incidents, and learnings into `.guild/wiki`.
+4. Run G-operations adversarial review on blast radius, rollback, observability, customer impact, and security.
 
 Outputs:
 
-- `.guild/runs/<run-id>/verify.md`
+- `.guild/ops/<run-id>.md`
+- runbook updates
+- incident/release records
+- wiki decision/source updates
 
-What happens:
+Done criteria:
 
-1. Map every success criterion to evidence.
-2. Confirm changed files trace to planned lanes.
-3. Confirm assumptions are accepted or explicitly noted.
-4. Confirm tests, screenshots, metrics, citations, or review notes are present.
-5. Mark pass/fail. Failures return to the relevant earlier phase.
+- Operational action has evidence, rollback notes, and owner.
+- Production knowledge is captured for future recall.
 
-## Phase 8 - Reflect and Evolve Queue
+## Review Loops
 
-Owner team: orchestrator plus optional `researcher`, `architect`, or role owners.
+Each phase has review loops, but the producer and challenger change with the phase goal:
 
-Inputs:
+| Phase | Producer | Challenger | Typical focus |
+|---|---|---|---|
+| Init | researcher/technical-writer | G-init adversarial reviewer | Missing or unsupported knowledge. |
+| Ideation | architect/researcher/product writer | G-ideation adversarial reviewer | Weak idea, bad assumptions, missing alternatives. |
+| Planning | architect/technical-writer | G-planning reviewer plus QA/security | PRD gaps, edge cases, vague validation. |
+| Development | task owner | tester/QA/security/architect | Defects, regressions, architecture drift. |
+| Quality | QA | G-quality reviewer/domain owner | E2E coverage and release risk. |
+| Operations | devops/domain owner | G-operations reviewer/security | Blast radius, rollback, monitoring gaps. |
 
-- Verified run summary
-- Review and verify reports
-- Telemetry and loop logs
-
-Outputs:
-
-- `.guild/reflections/<slug>.md`
-- candidate wiki updates
-- candidate skill or specialist improvements
-
-What happens:
-
-1. Reflection proposes improvements, not live changes.
-2. Medium/high-significance decisions can be promoted through `guild:decisions` or `guild:wiki-ingest`.
-3. Repeated skill-improvement proposals queue `guild:evolve-skill`.
-4. Repeated missing-specialist evidence queues `guild:create-specialist`.
-
-## Diagnose Path
-
-`/guild:diagnose` is a sidecar command rather than a normal lifecycle phase. It inspects recent run telemetry and traces, writes `.guild/diagnose/<timestamp>-<slug>.md`, optionally runs `guild:codex-review` at G-diagnose, and requires explicit user approval before applying fixes. Use it when the system itself misbehaves or a run needs self-fix analysis.
+Cross-model adversarial selection is defined in [adversarial-review.md](adversarial-review.md).
 
 ## Resumption
 
-When `/guild` resumes a run, it checks artifacts in order and starts at the first missing or incomplete phase:
-
-1. missing spec -> brainstorm;
-2. missing team -> team compose;
-3. missing or unapproved plan -> plan;
-4. missing context directory -> context assemble;
-5. missing handoffs or assumptions -> execute;
-6. missing review -> review;
-7. missing verify -> verify;
-8. verify present -> summarize completion.
+Every phase can resume from its artifact directory. The orchestrator checks for the phase artifact, team file, context bundles, receipts, review trail, and done report. It restarts only the first missing or invalid step unless the user explicitly asks to redo an earlier step.
 
 Forced restart of a completed or partially completed phase requires explicit user confirmation because it can invalidate downstream artifacts.
-
-## Gate Matrix
-
-| Gate | Trigger | Challenger | Pass signal | Failure route |
-|---|---|---|---|---|
-| L1 | Before spec write | Researcher | `## NO MORE QUESTIONS` | Assumptions, cap extension, or brainstorm rework |
-| G-spec | After spec | Codex adversary | `## SATISFIED` | Spec rework or force-pass |
-| L2 | After plan draft | Security | `## NO MORE QUESTIONS` | Plan rework or force-pass |
-| G-plan | Before plan approval | Codex adversary | `## SATISFIED` | Plan rework or force-pass |
-| L3 | Per implementation lane | Tester | `## NO MORE QUESTIONS` | Lane rework or force-pass |
-| L4 | Per implementation lane | QA | `## NO MORE QUESTIONS` | Lane rework or force-pass |
-| Security review | Per sensitive lane | Security | No high unaddressed findings | Lane restart or user escalation |
-| G-lane | After lane receipt | Codex adversary | `## SATISFIED` | Lane rework or force-pass |
-| G-diagnose | After diagnosis report | Codex adversary | `## SATISFIED` | Diagnosis rework or force-pass |
-| Review | After execution | QA/reviewer | No blocking findings | Rework |
-| Verify | After review | Orchestrator/QA | Criteria-evidence map complete | Rework |

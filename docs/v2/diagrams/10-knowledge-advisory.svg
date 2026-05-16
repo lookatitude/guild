@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Guild knowledge and advisory agents</title>
+  <desc id="desc">Shows how wiki, raw sources, memory search, advisory agents, producers, and reviewers work together.</desc>
+  <style>
+    .box{fill:#eef4ff;stroke:#315e93;stroke-width:2;rx:8}.state{fill:#effaf2;stroke:#277545;stroke-width:2;rx:8}.gate{fill:#fff7e8;stroke:#9a6a17;stroke-width:2;rx:8}.txt{font:15px Arial,sans-serif;fill:#1f2937}.small{font:12px Arial,sans-serif;fill:#374151}.head{font:bold 17px Arial,sans-serif}.arrow{stroke:#374151;stroke-width:2;fill:none;marker-end:url(#arrow)}
+  </style>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill="#374151"/></marker></defs>
+  <rect width="1280" height="720" fill="#f7f8fb"/>
+  <rect class="state" x="70" y="90" width="220" height="92"/><text class="head" x="128" y="124">.guild/raw</text><text class="small" x="102" y="148">copied sources, checksums,</text><text class="small" x="130" y="168">research inputs</text>
+  <rect class="state" x="70" y="260" width="220" height="92"/><text class="head" x="128" y="294">.guild/wiki</text><text class="small" x="100" y="318">context, standards, products,</text><text class="small" x="112" y="338">decisions, sources</text>
+  <rect class="box" x="390" y="175" width="220" height="92"/><text class="head" x="430" y="210">Memory retrieval</text><text class="small" x="425" y="234">rg/filesystem or guild-memory</text>
+  <path class="arrow" d="M290 136 C335 150 360 185 390 205"/><path class="arrow" d="M290 306 C335 292 360 255 390 235"/>
+
+  <rect class="gate" x="700" y="92" width="220" height="92"/><text class="head" x="748" y="126">Advisory agent</text><text class="small" x="735" y="150">read-only advice</text><text class="small" x="735" y="170">source refs + warnings</text>
+  <rect class="box" x="700" y="300" width="220" height="92"/><text class="head" x="755" y="334">Producer</text><text class="small" x="735" y="358">phase artifact or task output</text>
+  <rect class="gate" x="1010" y="195" width="220" height="92"/><text class="head" x="1065" y="229">Reviewer</text><text class="small" x="1048" y="253">cross-model or clean context</text>
+  <path class="arrow" d="M610 220 C655 190 680 160 700 138"/><path class="arrow" d="M810 184 V300"/><path class="arrow" d="M920 346 C975 315 1000 275 1010 242"/><path class="arrow" d="M610 235 C655 270 675 315 700 346"/><path class="arrow" d="M920 138 C975 165 1010 190 1045 210"/>
+
+  <rect class="state" x="390" y="500" width="250" height="92"/><text class="head" x="455" y="534">Learning path</text><text class="small" x="425" y="558">runs/reflections -> decisions</text><text class="small" x="455" y="578">-> wiki ingest</text>
+  <path class="arrow" d="M810 392 C760 475 665 515 640 546"/><path class="arrow" d="M515 500 C420 420 320 350 290 325"/>
+  <text class="txt" x="95" y="655">Advisors help agents recall facts and get unstuck. They do not own implementation, final sign-off, or unsourced memory promotion.</text>
+</svg>

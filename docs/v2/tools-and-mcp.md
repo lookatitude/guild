@@ -11,7 +11,7 @@ Tool and MCP access is a capability decision made during team composition and re
 | Read, Grep, Glob | Most lanes | Lane needs repo inspection. |
 | Write, Edit | Implementation lanes | Plan names writable artifacts. |
 | Bash | Tooling, tests, build, lint, scripts | Command is needed for evidence or generation. |
-| Agent | Orchestrator | Dispatching specialists or adversarial reviewers. |
+| Agent | Orchestrator | Dispatching specialists, advisory agents, or adversarial reviewers. |
 | Browser | Frontend/UI QA | Local UI behavior or screenshots need verification. |
 | Network research | Researcher or explicit lane | External current facts are required and approved. |
 | AskUserQuestion | Orchestrator and loop drivers | User gate, cap escalation, or ambiguity resolution. |
@@ -30,16 +30,21 @@ Guild works without MCP servers. MCP is added when structured access is material
 
 Optional MCPs are wired through `.mcp.json` and should point at built dist entrypoints. Guild must still work end-to-end when those servers are absent.
 
-## Attaching Tools to Lanes
+## Attaching Tools to Phase Teams
 
 The team file records the intended tools:
 
 ```yaml
+phase: development
 specialists:
   - name: frontend
     scope: "Implement dashboard state view and responsive interactions."
     tools: [Read, Grep, Glob, Edit, Bash, Browser]
     mcp_servers: []
+    advisory:
+      - name: frontend-memory-advisor
+        tools: [Read, Grep, Glob]
+        mcp_servers: [guild-memory]
   - name: researcher
     scope: "Compare current vendor APIs and summarize constraints."
     tools: [Read, Grep, Glob, Bash]
@@ -47,7 +52,7 @@ specialists:
     network: "requires explicit orchestrator approval"
 ```
 
-The context bundle repeats this list so subagent and agent-team backends see the same expectations.
+The context bundle repeats this list so subagent and agent-team backends see the same expectations. Advisory agents receive read-only memory/search tools by default.
 
 ## Subagent vs Agent-Team Loading
 
@@ -73,6 +78,16 @@ Agent-team mode:
 5. Continue with receipt evidence showing what changed.
 
 Do not silently grant new network, destructive filesystem, or external-service access inside a lane.
+
+## Advisory Agent Access
+
+Advisory agents attach to both producers and reviewers. They default to:
+
+- read-only filesystem search;
+- `.guild/wiki` and `.guild/raw` access;
+- `guild-memory` MCP when available;
+- no write tools unless assigned an explicit ingest task;
+- no external network unless the phase explicitly authorizes research.
 
 ## Security Notes
 

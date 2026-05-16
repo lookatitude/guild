@@ -17,7 +17,7 @@
   <text class="head" x="60" y="214">Plugin Runtime Surface</text>
   <rect class="box" x="80" y="238" width="180" height="60"/><text class="txt" x="117" y="264">Commands</text><text class="small" x="105" y="286">commands/*.md</text>
   <rect class="box" x="310" y="238" width="220" height="60"/><text class="txt" x="366" y="264">Meta skills</text><text class="small" x="338" y="286">skills/meta/*</text>
-  <rect class="box" x="580" y="238" width="210" height="60"/><text class="txt" x="622" y="264">Specialists</text><text class="small" x="622" y="286">agents/*.md</text>
+  <rect class="box" x="580" y="238" width="210" height="60"/><text class="txt" x="622" y="264">Specialists</text><text class="small" x="602" y="286">agents + advisory agents</text>
   <rect class="box" x="840" y="238" width="220" height="60"/><text class="txt" x="894" y="264">Hooks/scripts</text><text class="small" x="880" y="286">hooks + scripts</text>
   <path class="arrow" d="M545 130 V238"/>
   <path class="arrow" d="M260 268 H310"/><path class="arrow" d="M530 268 H580"/><path class="arrow" d="M790 268 H840"/>
@@ -32,7 +32,7 @@
 
   <rect class="band" x="40" y="570" width="1120" height="145" rx="10"/>
   <text class="head" x="60" y="604">Knowledge, Review, and Evolution</text>
-  <rect class="state" x="90" y="628" width="210" height="52"/><text class="txt" x="134" y="660">.guild/wiki</text>
+  <rect class="state" x="90" y="628" width="210" height="52"/><text class="txt" x="116" y="660">.guild/wiki + raw</text>
   <rect class="warn" x="355" y="628" width="210" height="52"/><text class="txt" x="403" y="660">Codex gates</text>
   <rect class="state" x="620" y="628" width="210" height="52"/><text class="txt" x="652" y="660">Review / verify</text>
   <rect class="state" x="885" y="628" width="210" height="52"/><text class="txt" x="928" y="660">Evolution loop</text>

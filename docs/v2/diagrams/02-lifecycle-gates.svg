@@ -1,37 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="620" viewBox="0 0 1400 620" role="img" aria-labelledby="title desc">
-  <title id="title">Guild v2 lifecycle and gates</title>
-  <desc id="desc">Flowchart from config to reflection, with adversarial loop and Codex gates.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="760" viewBox="0 0 1500 760" role="img" aria-labelledby="title desc">
+  <title id="title">Guild v2 phase lifecycle and gates</title>
+  <desc id="desc">Phase-entrypoint flow from init through ideation, planning, development, optional quality, and operations, with memory, advisory agents, and adversarial review at every phase.</desc>
   <style>
-    .phase{fill:#eef4ff;stroke:#355f96;stroke-width:2;rx:8}.gate{fill:#fff2df;stroke:#9a5a00;stroke-width:2;rx:8}.out{fill:#effaf2;stroke:#287449;stroke-width:2;rx:8}.txt{font:15px Arial,sans-serif;fill:#1f2937}.small{font:12px Arial,sans-serif;fill:#374151}.head{font:bold 16px Arial,sans-serif}.arrow{stroke:#374151;stroke-width:2;fill:none;marker-end:url(#arrow)}
+    .phase{fill:#eef4ff;stroke:#315e93;stroke-width:2;rx:8}.gate{fill:#fff7e8;stroke:#9a6a17;stroke-width:2;rx:8}.state{fill:#effaf2;stroke:#277545;stroke-width:2;rx:8}.txt{font:15px Arial,sans-serif;fill:#1f2937}.small{font:12px Arial,sans-serif;fill:#374151}.head{font:bold 16px Arial,sans-serif;fill:#111827}.arrow{stroke:#374151;stroke-width:2;fill:none;marker-end:url(#arrow)}
   </style>
   <defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill="#374151"/></marker></defs>
-  <rect width="1400" height="620" fill="#f7f8fb"/>
-  <rect class="phase" x="40" y="70" width="145" height="70"/><text class="head" x="72" y="100">P0 Config</text><text class="small" x="60" y="122">run id + flags</text>
-  <rect class="phase" x="230" y="70" width="145" height="70"/><text class="head" x="260" y="100">P1 Spec</text><text class="small" x="250" y="122">brainstorm</text>
-  <rect class="phase" x="420" y="70" width="145" height="70"/><text class="head" x="443" y="100">P2 Team</text><text class="small" x="448" y="122">compose</text>
-  <rect class="phase" x="610" y="70" width="145" height="70"/><text class="head" x="638" y="100">P3 Plan</text><text class="small" x="633" y="122">lane DAG</text>
-  <rect class="phase" x="800" y="70" width="145" height="70"/><text class="head" x="823" y="100">P4 Context</text><text class="small" x="827" y="122">bundles</text>
-  <rect class="phase" x="990" y="70" width="145" height="70"/><text class="head" x="1014" y="100">P5 Execute</text><text class="small" x="1026" y="122">receipts</text>
-  <rect class="phase" x="1180" y="70" width="145" height="70"/><text class="head" x="1204" y="100">P6/P7 QA</text><text class="small" x="1208" y="122">review verify</text>
-  <rect class="phase" x="1180" y="290" width="145" height="70"/><text class="head" x="1208" y="320">P8 Reflect</text><text class="small" x="1200" y="342">evolve queue</text>
-  <path class="arrow" d="M185 105 H230"/><path class="arrow" d="M375 105 H420"/><path class="arrow" d="M565 105 H610"/><path class="arrow" d="M755 105 H800"/><path class="arrow" d="M945 105 H990"/><path class="arrow" d="M1135 105 H1180"/>
+  <rect width="1500" height="760" fill="#f7f8fb"/>
+  <text class="head" x="55" y="42">Each phase can be the entrypoint</text>
+  <rect class="phase" x="55" y="75" width="160" height="72"/><text class="head" x="116" y="104">Init</text><text class="small" x="82" y="126">wiki + product context</text>
+  <rect class="phase" x="265" y="75" width="160" height="72"/><text class="head" x="314" y="104">Ideation</text><text class="small" x="296" y="126">questions + debate</text>
+  <rect class="phase" x="475" y="75" width="160" height="72"/><text class="head" x="516" y="104">Planning</text><text class="small" x="503" y="126">PRD + task plan</text>
+  <rect class="phase" x="685" y="75" width="175" height="72"/><text class="head" x="724" y="104">Development</text><text class="small" x="716" y="126">autonomous tasks</text>
+  <rect class="phase" x="910" y="75" width="160" height="72"/><text class="head" x="955" y="104">Quality</text><text class="small" x="942" y="126">optional E2E</text>
+  <rect class="phase" x="1120" y="75" width="170" height="72"/><text class="head" x="1164" y="104">Operations</text><text class="small" x="1150" y="126">release/runbooks</text>
+  <path class="arrow" d="M215 111 H265"/><path class="arrow" d="M425 111 H475"/><path class="arrow" d="M635 111 H685"/><path class="arrow" d="M860 111 H910"/><path class="arrow" d="M1070 111 H1120"/>
 
-  <rect class="gate" x="230" y="200" width="145" height="55"/><text class="head" x="276" y="222">L1</text><text class="small" x="252" y="240">researcher asks</text>
-  <rect class="gate" x="420" y="200" width="145" height="55"/><text class="head" x="455" y="222">G-spec</text><text class="small" x="454" y="240">Codex</text>
-  <rect class="gate" x="610" y="200" width="145" height="55"/><text class="head" x="657" y="222">L2</text><text class="small" x="638" y="240">security asks</text>
-  <rect class="gate" x="800" y="200" width="145" height="55"/><text class="head" x="831" y="222">G-plan</text><text class="small" x="834" y="240">Codex</text>
-  <rect class="gate" x="990" y="200" width="145" height="55"/><text class="head" x="1013" y="222">L3/L4/Sec</text><text class="small" x="1015" y="240">lane loops</text>
-  <rect class="gate" x="1180" y="200" width="145" height="55"/><text class="head" x="1211" y="222">G-lane</text><text class="small" x="1214" y="240">Codex</text>
-  <path class="arrow" d="M302 140 V200"/><path class="arrow" d="M492 140 V200"/><path class="arrow" d="M682 140 V200"/><path class="arrow" d="M872 140 V200"/><path class="arrow" d="M1062 140 V200"/><path class="arrow" d="M1252 140 V200"/>
+  <text class="head" x="55" y="220">Repeated phase control pattern</text>
+  <rect class="state" x="75" y="250" width="180" height="70"/><text class="head" x="116" y="278">Memory</text><text class="small" x="100" y="300">wiki/raw/repo/prior artifacts</text>
+  <rect class="state" x="315" y="250" width="180" height="70"/><text class="head" x="356" y="278">Team</text><text class="small" x="342" y="300">phase-specific roles</text>
+  <rect class="state" x="555" y="250" width="190" height="70"/><text class="head" x="594" y="278">Advisors</text><text class="small" x="585" y="300">read-only memory help</text>
+  <rect class="state" x="805" y="250" width="180" height="70"/><text class="head" x="858" y="278">Produce</text><text class="small" x="838" y="300">artifact or task output</text>
+  <rect class="gate" x="1045" y="250" width="200" height="70"/><text class="head" x="1077" y="278">Adversarial</text><text class="small" x="1075" y="300">cross-model preferred</text>
+  <rect class="state" x="1305" y="250" width="150" height="70"/><text class="head" x="1340" y="278">Handoff</text><text class="small" x="1330" y="300">done evidence</text>
+  <path class="arrow" d="M255 285 H315"/><path class="arrow" d="M495 285 H555"/><path class="arrow" d="M745 285 H805"/><path class="arrow" d="M985 285 H1045"/><path class="arrow" d="M1245 285 H1305"/>
 
-  <rect class="out" x="90" y="335" width="170" height="62"/><text class="head" x="122" y="360">Artifacts</text><text class="small" x="112" y="380">spec team plan</text>
-  <rect class="out" x="330" y="335" width="190" height="62"/><text class="head" x="368" y="360">Bundles</text><text class="small" x="356" y="380">.guild/context</text>
-  <rect class="out" x="590" y="335" width="190" height="62"/><text class="head" x="628" y="360">Receipts</text><text class="small" x="620" y="380">handoffs + logs</text>
-  <rect class="out" x="850" y="335" width="190" height="62"/><text class="head" x="892" y="360">Reports</text><text class="small" x="883" y="380">review verify</text>
-  <rect class="out" x="1110" y="395" width="190" height="62"/><text class="head" x="1154" y="420">Reflect</text><text class="small" x="1134" y="440">wiki/evolve queue</text>
-  <path class="arrow" d="M1252 140 V290"/><path class="arrow" d="M1252 360 V395"/><path class="arrow" d="M260 366 H330"/><path class="arrow" d="M520 366 H590"/><path class="arrow" d="M780 366 H850"/><path class="arrow" d="M1040 366 H1110"/>
+  <text class="head" x="55" y="400">Primary outputs</text>
+  <rect class="state" x="55" y="430" width="180" height="70"/><text class="head" x="93" y="458">Init report</text><text class="small" x="86" y="480">.guild/wiki + raw</text>
+  <rect class="state" x="275" y="430" width="180" height="70"/><text class="head" x="322" y="458">Idea spec</text><text class="small" x="305" y="480">.guild/spec</text>
+  <rect class="state" x="495" y="430" width="200" height="70"/><text class="head" x="548" y="458">PRD/tasks</text><text class="small" x="530" y="480">.guild/prd + plan</text>
+  <rect class="state" x="735" y="430" width="210" height="70"/><text class="head" x="790" y="458">Built tasks</text><text class="small" x="765" y="480">receipts + code/artifacts</text>
+  <rect class="state" x="985" y="430" width="180" height="70"/><text class="head" x="1022" y="458">Quality report</text><text class="small" x="1025" y="480">.guild/quality</text>
+  <rect class="state" x="1205" y="430" width="190" height="70"/><text class="head" x="1250" y="458">Ops record</text><text class="small" x="1238" y="480">.guild/ops + runbooks</text>
+  <path class="arrow" d="M135 147 V430"/><path class="arrow" d="M345 147 V430"/><path class="arrow" d="M555 147 V430"/><path class="arrow" d="M772 147 V430"/><path class="arrow" d="M990 147 V430"/><path class="arrow" d="M1205 147 V430"/>
 
-  <text class="txt" x="90" y="475">Termination sentinels: internal loops use "## NO MORE QUESTIONS"; Codex gates use "## SATISFIED".</text>
-  <text class="txt" x="90" y="505">Cap escalation: force-pass, extend-cap, or rework. Security review can restart a lane from L3 up to restart cap 3.</text>
-  <text class="txt" x="90" y="535">Sidecar: /guild:diagnose writes a diagnosis report and can run G-diagnose before user-approved fixes.</text>
+  <text class="txt" x="70" y="610">Interaction model: init and ideation are deliberately interactive; planning is interactive at approval gates; development, quality, and operations are autonomous inside the approved contract.</text>
+  <text class="txt" x="70" y="642">Review model: every phase loops until findings are resolved, explicitly assumed, force-passed by the user, or routed back to an earlier phase.</text>
 </svg>

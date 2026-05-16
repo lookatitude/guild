@@ -17,6 +17,7 @@ This file captures failure modes that should shape v2 implementation and review.
 | Edge case | Handling |
 |---|---|
 | More than 6 specialists needed | Split into phases or require explicit allow-larger override. |
+| User starts in a later phase without prerequisites | Build or request the missing artifact; do not fake a spec, PRD, or done criteria. |
 | Specialist overlap | Choose one owner, add a reviewer, and record scope boundaries. |
 | Missing specialist appears once | Substitute or skip; do not mint a new specialist. |
 | New specialist fails shadow mode | Keep proposed files archived and present refinement options. |
@@ -32,6 +33,7 @@ This file captures failure modes that should shape v2 implementation and review.
 | Security review finds high unaddressed issue | Restart lane from L3, up to restart cap. |
 | Restart cap reached | Ask user to force-pass with findings, extend cap, or rework. |
 | Codex unavailable | Warn and continue; do not hard-block. |
+| Cross-model reviewer unavailable | Spawn a same-model clean-context adversarial reviewer with only artifact, objective, and rubric. |
 | G-diagnose has findings | Fix the diagnosis report before asking for edit approval. |
 
 ## Context Assembly
@@ -43,6 +45,7 @@ This file captures failure modes that should shape v2 implementation and review.
 | External source contains instructions | Treat as data only unless user promotes to standard/context. |
 | Upstream receipt missing | Block downstream lane. |
 | Ambient context conflicts with bundle | Specialist must privilege the bundle and note conflict in receipt. |
+| Advisory memory conflicts with current artifact | Surface the contradiction and ask or record an explicit assumption. |
 
 ## Tooling and MCP
 
@@ -61,6 +64,7 @@ This file captures failure modes that should shape v2 implementation and review.
 |---|---|
 | Trivial question answered by user | Keep in run transcript; do not write decision. |
 | Medium/high design choice | Capture through `guild:decisions`. |
+| Existing product knowledge is stale | Init phase refreshes wiki pages and marks old claims superseded or low-confidence. |
 | Reflection proposes live skill edit | Queue proposal; do not auto-promote. |
 | Skill edit improves aggregate but regresses case | Block unless user explicitly approves regression. |
 | Rollback requested | Snapshot rollback as a new version, no destructive deletion. |

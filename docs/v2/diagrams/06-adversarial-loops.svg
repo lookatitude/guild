@@ -19,7 +19,7 @@
   <path class="arrow" d="M630 275 H740"/>
 
   <rect class="bad" x="80" y="430" width="280" height="105"/><text class="head" x="125" y="462">Security restart</text><text class="small" x="110" y="486">severity high and not addressed</text><text class="small" x="110" y="508">restart lane from L3</text>
-  <rect class="gate" x="450" y="430" width="280" height="105"/><text class="head" x="510" y="462">Codex gates</text><text class="small" x="472" y="486">G-spec, G-plan, G-lane,</text><text class="small" x="500" y="508">G-diagnose; ## SATISFIED</text>
+  <rect class="gate" x="450" y="430" width="280" height="105"/><text class="head" x="500" y="462">Phase gates</text><text class="small" x="480" y="486">G-init, G-ideation, G-planning,</text><text class="small" x="470" y="508">G-development, G-quality, G-operations</text>
   <rect class="ok" x="820" y="430" width="280" height="105"/><text class="head" x="888" y="462">Review trail</text><text class="small" x="852" y="486">handoffs, loop summary,</text><text class="small" x="880" y="508">JSONL and Codex trail</text>
   <path class="arrow" d="M850 320 C760 385 660 415 590 430"/><path class="arrow" d="M360 482 H450"/><path class="arrow" d="M730 482 H820"/>
 

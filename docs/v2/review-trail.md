@@ -1,24 +1,29 @@
 # v2 Review Trail
 
-## First Adversarial Pass
+## Prior Review
 
-Reviewer found three issues:
+The first documentation pass created the `docs/v2` package and received a clean review for the earlier single-lifecycle architecture. That review is now historical because the architecture was revised to a phase-entrypoint model.
 
-- The phase-team artifact was ambiguous: `team-composition.md` implied a new team per phase, while `lifecycle.md` said later phases do not reselect the team.
-- The Guild self-build `agent-team` default was weakened by a peer-coordination condition.
-- The lifecycle diagram did not fully show P8 reflection or the `/guild:diagnose` sidecar.
+## Phase-Entrypoint Review Pass
+
+Reviewer found:
+
+- The universal `output_artifact: .guild/<phase>/<slug>.md` contract contradicted phase-specific outputs.
+- Phase-level adversarial gates were underspecified for init, ideation, quality, and operations.
+- Advisory memory support used inconsistent `may` versus mandatory language.
+- Development security and architecture review were described as conditional rather than requiring explicit signoff.
+- The prior clean sign-off text had become stale after the architecture changed.
 
 Resolution:
 
-- `team-composition.md` now defines one phase-scoped `.guild/team/<slug>.yaml` with entries for every main phase that needs specialists.
-- `lifecycle.md` now says later phases read their phase entry from that artifact and do not silently reselect teams.
-- `team-composition.md` and `edge-cases.md` now preserve the self-build default: use `agent-team` whenever tmux preflight conditions hold.
-- `02-lifecycle-gates.svg` now includes P8 reflection and the diagnose sidecar.
-- `06-adversarial-loops.svg` now includes G-diagnose.
+- `phase-entrypoints.md` now lists primary outputs per phase.
+- `adversarial-review.md` now defines `G-init`, `G-ideation`, `G-planning`, `G-development`, `G-quality`, `G-operations`, and `G-diagnose`, with old `G-spec/G-plan/G-lane` names treated as compatibility mappings.
+- `architecture.md`, `knowledge-and-advisory.md`, `team-composition.md`, and `tools-and-mcp.md` now require advisory agents for producers and reviewers when memory exists.
+- `phase-entrypoints.md` and `lifecycle.md` now require development security and architecture review signoff for every development phase, including `not_applicable` rationale when appropriate.
 
-## Second Adversarial Pass
+## Current Status
 
-Result:
+Final adversarial pass result:
 
 ```text
 No blocking or advisory findings remain.

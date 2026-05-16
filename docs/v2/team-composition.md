@@ -1,6 +1,6 @@
 # Team Composition
 
-Guild v2 composes a phase-scoped team plan during team composition. The artifact is one `.guild/team/<slug>.yaml` with entries for every main phase that needs specialists, not silent reselection later in the run. Each phase team is as small as possible, includes hard-rule specialists, and records exact scope, tools, skills, MCP access, backend, and dependencies.
+Guild v2 composes a new team at every phase entrypoint. The team is saved in a phase-scoped `.guild/team/<phase-slug>.yaml`; if the run started earlier, later phase teams may be appended to a shared phase plan, but no phase silently reuses the prior team. Each phase team is as small as possible, includes hard-rule specialists, attaches advisory memory agents, and records exact scope, tools, skills, MCP access, backend, and dependencies.
 
 ![Phase-specific team composition](diagrams/03-team-composition.svg)
 
@@ -31,7 +31,7 @@ Every phase entry should carry:
 
 ```yaml
 phases:
-  plan:
+  planning:
     backend: agent-team
     backend_reason: "self-build default: tmux available, not inside tmux, env set"
     specialists:
@@ -49,6 +49,10 @@ phases:
         mcp_servers: []
         depends-on: []
         loop_role: producer
+        advisory:
+          - name: architect-memory-advisor
+            sources: [context, standards, products, decisions]
+            mode: read-only
 ```
 
 The actual skill names should match the installed skill directories. The key rule is that team composition must say which capabilities each phase and lane needs instead of relying on ambient routing.
@@ -57,15 +61,12 @@ The actual skill names should match the installed skill directories. The key rul
 
 | Phase | Default team | Why |
 |---|---|---|
-| Brainstorm/spec | `architect`, optional `researcher` | Architect structures scope; researcher challenges unknowns and evidence. |
-| Team compose | Orchestrator, `architect`, optional `researcher` | Map domains, gaps, dependencies, and backend. |
-| Plan | `architect`, `security` when L2 or sensitive work | Architect writes lane plan; security challenges plan defects and autonomy gaps. |
-| Context assemble | Orchestrator only | Mechanical bundle assembly with deterministic inputs. |
-| Execute | Specialists selected by spec | Each lane gets only the role needed for its deliverable. |
-| Implementation loops | lane owner, tester/QA/security as selected | Challengers depend on `loops_applicable`. |
-| Review | `qa`, relevant peer, `security` for sensitive work | Review requires evidence and domain challenge. |
-| Verify | Orchestrator, `qa` | Final success-criteria mapping and scope audit. |
-| Reflect/evolve | Orchestrator, role owner, `architect`, `qa` | Improvements need ownership, design sense, and eval coverage. |
+| Init | `researcher`, `technical-writer`, optional `architect`, advisory memory | Gather, classify, and document product knowledge. |
+| Ideation | `architect`, `researcher`, optional product/content/domain specialists, advisory memory | Interactive brainstorm, questions, research, debate, idea spec. |
+| Planning | `architect` or tech lead, `technical-writer`, `qa`, `security` when needed, advisory memory | PRD, features/actions, tasks, validation criteria, done conditions. |
+| Development | task owners selected by plan, `qa`, `security`, `architect`/tech lead when boundaries change, advisory memory | Autonomous implementation, tests, security and architecture review. |
+| Quality | `qa`, relevant implementers, `devops`, `security` when needed, advisory memory | E2E, smoke, accessibility, performance, release validation. |
+| Operations | `devops`, relevant implementers, `security`, `qa`, advisory memory | Release, monitoring, incident, rollback, maintenance, runbooks. |
 
 ## Backend Selection
 
@@ -121,10 +122,13 @@ Tools and MCP servers are selected per phase and lane:
 - Grant network or browser access only when the spec requires external verification or UI testing.
 - Grant MCP servers only when the lane needs structured access that plain filesystem tools cannot provide.
 - Record MCP requirements in team and context artifacts because agent-team teammate frontmatter may not load the same way as subagent definitions.
+- Attach at least one advisory memory agent to every producer/reviewer role unless the phase has no durable memory yet.
 
 ## Advisory Defaults
 
 - When in doubt between two specialists, choose the narrower owner and add a reviewer rather than giving both broad write scope.
 - When tool access is uncertain, give read-only access first and escalate through the orchestrator.
 - When a phase has many unknowns, use a researcher in brainstorm instead of expanding the execution team.
+- In planning, prefer architect/tech lead and QA over implementation specialists unless task details require implementation expertise.
+- In development, maximize autonomy inside the approved task contract and route missing done criteria back to planning.
 - When a missing role appears only once, substitute or skip; do not mint a specialist from a single task.
