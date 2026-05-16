@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="620" viewBox="0 0 1400 620" role="img" aria-labelledby="title desc">
+  <title id="title">Guild v2 lifecycle and gates</title>
+  <desc id="desc">Flowchart from config to reflection, with adversarial loop and Codex gates.</desc>
+  <style>
+    .phase{fill:#eef4ff;stroke:#355f96;stroke-width:2;rx:8}.gate{fill:#fff2df;stroke:#9a5a00;stroke-width:2;rx:8}.out{fill:#effaf2;stroke:#287449;stroke-width:2;rx:8}.txt{font:15px Arial,sans-serif;fill:#1f2937}.small{font:12px Arial,sans-serif;fill:#374151}.head{font:bold 16px Arial,sans-serif}.arrow{stroke:#374151;stroke-width:2;fill:none;marker-end:url(#arrow)}
+  </style>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill="#374151"/></marker></defs>
+  <rect width="1400" height="620" fill="#f7f8fb"/>
+  <rect class="phase" x="40" y="70" width="145" height="70"/><text class="head" x="72" y="100">P0 Config</text><text class="small" x="60" y="122">run id + flags</text>
+  <rect class="phase" x="230" y="70" width="145" height="70"/><text class="head" x="260" y="100">P1 Spec</text><text class="small" x="250" y="122">brainstorm</text>
+  <rect class="phase" x="420" y="70" width="145" height="70"/><text class="head" x="443" y="100">P2 Team</text><text class="small" x="448" y="122">compose</text>
+  <rect class="phase" x="610" y="70" width="145" height="70"/><text class="head" x="638" y="100">P3 Plan</text><text class="small" x="633" y="122">lane DAG</text>
+  <rect class="phase" x="800" y="70" width="145" height="70"/><text class="head" x="823" y="100">P4 Context</text><text class="small" x="827" y="122">bundles</text>
+  <rect class="phase" x="990" y="70" width="145" height="70"/><text class="head" x="1014" y="100">P5 Execute</text><text class="small" x="1026" y="122">receipts</text>
+  <rect class="phase" x="1180" y="70" width="145" height="70"/><text class="head" x="1204" y="100">P6/P7 QA</text><text class="small" x="1208" y="122">review verify</text>
+  <rect class="phase" x="1180" y="290" width="145" height="70"/><text class="head" x="1208" y="320">P8 Reflect</text><text class="small" x="1200" y="342">evolve queue</text>
+  <path class="arrow" d="M185 105 H230"/><path class="arrow" d="M375 105 H420"/><path class="arrow" d="M565 105 H610"/><path class="arrow" d="M755 105 H800"/><path class="arrow" d="M945 105 H990"/><path class="arrow" d="M1135 105 H1180"/>
+
+  <rect class="gate" x="230" y="200" width="145" height="55"/><text class="head" x="276" y="222">L1</text><text class="small" x="252" y="240">researcher asks</text>
+  <rect class="gate" x="420" y="200" width="145" height="55"/><text class="head" x="455" y="222">G-spec</text><text class="small" x="454" y="240">Codex</text>
+  <rect class="gate" x="610" y="200" width="145" height="55"/><text class="head" x="657" y="222">L2</text><text class="small" x="638" y="240">security asks</text>
+  <rect class="gate" x="800" y="200" width="145" height="55"/><text class="head" x="831" y="222">G-plan</text><text class="small" x="834" y="240">Codex</text>
+  <rect class="gate" x="990" y="200" width="145" height="55"/><text class="head" x="1013" y="222">L3/L4/Sec</text><text class="small" x="1015" y="240">lane loops</text>
+  <rect class="gate" x="1180" y="200" width="145" height="55"/><text class="head" x="1211" y="222">G-lane</text><text class="small" x="1214" y="240">Codex</text>
+  <path class="arrow" d="M302 140 V200"/><path class="arrow" d="M492 140 V200"/><path class="arrow" d="M682 140 V200"/><path class="arrow" d="M872 140 V200"/><path class="arrow" d="M1062 140 V200"/><path class="arrow" d="M1252 140 V200"/>
+
+  <rect class="out" x="90" y="335" width="170" height="62"/><text class="head" x="122" y="360">Artifacts</text><text class="small" x="112" y="380">spec team plan</text>
+  <rect class="out" x="330" y="335" width="190" height="62"/><text class="head" x="368" y="360">Bundles</text><text class="small" x="356" y="380">.guild/context</text>
+  <rect class="out" x="590" y="335" width="190" height="62"/><text class="head" x="628" y="360">Receipts</text><text class="small" x="620" y="380">handoffs + logs</text>
+  <rect class="out" x="850" y="335" width="190" height="62"/><text class="head" x="892" y="360">Reports</text><text class="small" x="883" y="380">review verify</text>
+  <rect class="out" x="1110" y="395" width="190" height="62"/><text class="head" x="1154" y="420">Reflect</text><text class="small" x="1134" y="440">wiki/evolve queue</text>
+  <path class="arrow" d="M1252 140 V290"/><path class="arrow" d="M1252 360 V395"/><path class="arrow" d="M260 366 H330"/><path class="arrow" d="M520 366 H590"/><path class="arrow" d="M780 366 H850"/><path class="arrow" d="M1040 366 H1110"/>
+
+  <text class="txt" x="90" y="475">Termination sentinels: internal loops use "## NO MORE QUESTIONS"; Codex gates use "## SATISFIED".</text>
+  <text class="txt" x="90" y="505">Cap escalation: force-pass, extend-cap, or rework. Security review can restart a lane from L3 up to restart cap 3.</text>
+  <text class="txt" x="90" y="535">Sidecar: /guild:diagnose writes a diagnosis report and can run G-diagnose before user-approved fixes.</text>
+</svg>
