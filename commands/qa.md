@@ -1,0 +1,69 @@
+---
+name: guild qa
+description: "Quality — full guild:quality skill [v2]: auto-selects E2E/smoke/a11y/perf/integration from CodebaseMap + plan signals (selection matrix surfaced before execution as [proceed] / [edit-selection] / [explain-signals], overridable, never silent — there is no --classes= flag), executes discovered harnesses under the run sandbox + budgets; qa-test-strategy producer vs security+architect G-quality challenger; opt-in phase, never auto-entered"
+argument-hint: "[run-id]"
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
+---
+
+# /guild qa — phase: Quality `[v2]`
+
+The **Quality** phase entrypoint — the full `guild:quality` skill `[v2]`
+(promoted from the v1 gap-report-only `verify-done` extension). It
+auto-selects the E2E/smoke/a11y/perf/integration class matrix from
+`CodebaseMap` + plan signals (the matrix is **surfaced before execution as
+`[proceed] / [edit-selection] / [explain-signals]`, overridable, never
+silent — there is no `--classes=` flag**) and executes the discovered
+harnesses under the run sandbox + budgets. Producer `qa-test-strategy` vs
+`security+architect` G-quality challenger. **Opt-in phase — never
+auto-entered, never silently skipped** (`command-surface.md §6` edge-label
+caveat).
+
+Promotion behaviour is canonical in `architecture/command-surface.md §3.1`
+(Quality `[v2]` row) — bound by pointer, not re-spelled. Verb↔phase edge:
+`§6` (D-14: `/guild qa` → Quality). Phase concept binding:
+`lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
+
+## Contract binding (by pointer — never re-spelled)
+
+Before producer work begins, this phase **resolves the frozen
+`guild.phase_entry.v1` contract** — bound by pointer through
+`docs/knowledge/implementation/contract-map.md §A` row 6 →
+`architecture/target-architecture.md §"phase_entry contract"`. The Quality
+result is the frozen `guild.quality.v1` contract — bound by pointer to
+`contract-map.md §A` row 7 → `target-architecture.md §588–637`. Quality
+budgets are consumed by pointer from `defaults.quality.budget`
+(`command-surface.md §4.4`, `P1-config-001`) — not re-spelled.
+
+## Usage
+
+```
+/guild qa
+/guild qa run-2026-05-18-ab12
+```
+
+All six global flags + `--dry-run` apply (`command-surface.md §4`, by
+pointer).
+
+## Args & local flags
+
+- Args: `[run-id]`
+- Local flags: — (no `--classes=` flag; selection is surfaced + overridable)
+
+## Gates (default)
+
+- Release / blocker gate **I** (a BLOCK→release override is **not** a soft
+  gate — it stays human-gated even under `--auto-approve=all`;
+  `MIGRATION.md §6`, by pointer)
+- G-quality review **A**
+
+## Output artifact
+
+`.guild/runs/<run-id>/quality/<run-id>.md` (frozen `guild.quality.v1`;
+evidence under `quality/evidence/`).
+
+## Dispatch
+
+Resolve `guild.phase_entry.v1` (pointer above), surface the selection matrix
+(`[proceed] / [edit-selection] / [explain-signals]`), then drive the full
+`guild:quality` `[v2]` skill. Thin phase entrypoint — phase logic and
+`.guild/` writes live in the `guild:quality` skill set.

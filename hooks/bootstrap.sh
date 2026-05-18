@@ -19,6 +19,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PLUGIN_JSON="${PLUGIN_ROOT}/.claude-plugin/plugin.json"
 
+# ── Failure guard: validate CLAUDE_PLUGIN_ROOT ────────────────────────────
+# If CLAUDE_PLUGIN_ROOT is set but invalid, reset it to our resolved path so
+# downstream hooks that export ${CLAUDE_PLUGIN_ROOT} don't silently fail.
+if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" ]] && [[ ! -d "${CLAUDE_PLUGIN_ROOT}" ]]; then
+  echo "[Guild] warn: CLAUDE_PLUGIN_ROOT (${CLAUDE_PLUGIN_ROOT}) is not a directory; resetting to resolved plugin root." >&2
+  export CLAUDE_PLUGIN_ROOT="${PLUGIN_ROOT}"
+elif [[ -z "${CLAUDE_PLUGIN_ROOT:-}" ]]; then
+  export CLAUDE_PLUGIN_ROOT="${PLUGIN_ROOT}"
+fi
+
+# If plugin.json is missing the install is broken — emit a diagnostic and
+# print a minimal banner so the session doesn't appear blank.
+if [[ ! -f "${PLUGIN_JSON}" ]]; then
+  cat <<BROKEN
+[Guild] ERROR: plugin.json not found at ${PLUGIN_JSON}
+  The Guild plugin directory may be wrong or incomplete.
+  Fix: check ~/.claude/settings.json enabledPlugins path and re-open Claude Code.
+  Plugin root resolved to: ${PLUGIN_ROOT}
+BROKEN
+  exit 0
+fi
+
 # ── Read Guild version from plugin.json ────────────────────────────────────
 GUILD_VERSION="(unknown)"
 if command -v python3 &>/dev/null && [[ -f "${PLUGIN_JSON}" ]]; then
@@ -37,16 +59,15 @@ cat <<STATUS
 ┌─────────────────────────────────────────────────────────────────┐
 │  Guild ${GUILD_VERSION} — self-evolving specialist teams for Claude Code   │
 ├─────────────────────────────────────────────────────────────────┤
-│  Commands                                                       │
+│  Commands (daily tier — full surface via /guild status)         │
 │                                                                 │
-│    /guild              Full workflow: brainstorm → team →       │
-│                        plan → execute → review → reflect        │
-│    /guild:team         Compose or inspect the specialist team   │
-│    /guild:wiki         Manage the project knowledge wiki        │
-│    /guild:evolve       Skill self-improvement pipeline          │
-│    /guild:rollback     Roll back a skill to a prior version     │
-│    /guild:stats        Task + telemetry summary                 │
-│    /guild:audit        Security audit of plugin scripts         │
+│    /guild [brief]      run from the right phase, auto-detected  │
+│    /guild status       where am I, what's next, resume hint     │
+│    /guild wiki <ingest|query|lint>   project knowledge          │
+│                                                                 │
+│  First run on a new repo → /guild proposes /guild init          │
+│  Guild v2 dropped the ':' namespace — every command is now      │
+│  /guild <subcommand>  (full v1→v2 map: MIGRATION.md).           │
 │                                                                 │
 │  Optional MCP servers (pre-bundled; no install needed):         │
 │    guild-memory       BM25 wiki search                          │

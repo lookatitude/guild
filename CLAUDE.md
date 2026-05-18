@@ -9,7 +9,7 @@ Guild is a Claude Code plugin that ships a team of 14 domain specialists plus a 
 - `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` — plugin + marketplace manifests.
 - `skills/{core,meta,knowledge,fallback,specialists}/` — 5-tier skill taxonomy (`guild-plan.md §5`).
 - `agents/*.md` — 14 shipping specialists (`guild-plan.md §6` + `frontend` graduated 2026-04-26 via §12). Populated and authored.
-- `commands/*.md` — 7 slash commands (`guild-plan.md §13.1`).
+- `commands/*.md` — the v2 command surface: 3 daily (/guild [brief], /guild status, /guild wiki) · 6 phase (init ideate plan build qa ops) · helpers (status resume) · maintenance (fix evolve rollback stats audit) · initiative (opt-in). Canonical: architecture/command-surface.md §2; v1→v2: MIGRATION.md.
 - `hooks/hooks.json` — native Claude Code hooks (`guild-plan.md §13.2`).
 - `scripts/`, `mcp-servers/` — evolve loop, telemetry, optional MCP servers (`guild-plan.md §13.3`).
 - `tests/` — skill evals and wiki-lint fixtures.
@@ -69,9 +69,9 @@ The pre-flight env-var gate `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (checked by
 
 Full rationale + options scored: `.guild/wiki/decisions/agent-team-default-when-tmux-available.md`. Subsumes the v1.0 task-scoped approval at `.guild/wiki/decisions/agent-team-via-tmux.md`.
 
-## Codex adversarial review — dev-only discipline
+## Codex adversarial review
 
-When developing the Guild plugin via the `/guild` lifecycle, every gate that produces a load-bearing artifact runs an adversarial Codex review loop before the lifecycle advances:
+Codex adversarial review runs at three gates — G-spec, G-plan, and G-lane — via the `guild:codex-review` meta-skill (`skills/meta/codex-review/SKILL.md`). It is available to all plugin users via `--review=cross` on `/guild`, or persistently via `.guild/config.yml` key `codex_review: true`.
 
 | Gate | When |
 |---|---|
@@ -79,8 +79,10 @@ When developing the Guild plugin via the `/guild` lifecycle, every gate that pro
 | **G-plan** | After `guild:plan` writes `.guild/plan/<slug>.md`, before the user-approval gate. |
 | **G-lane** | After EACH lane's handoff receipt is written, before the next lane dispatches (or before `guild:review` for the final lane). |
 
-Mechanism: dispatch via `Agent({ subagent_type: "codex:codex-rescue", ... })` with an adversarial prompt + the artifact + (rounds 2+) the prior Q&A trail. Loop until Codex emits `## SATISFIED` on a line by itself. Round cap **5**; on round 6, surface to user with 3 options (force-pass / extend-cap / rework). Trail under `.guild/runs/<run-id>/codex-review/<gate>.md`.
+Mechanism: dispatch via `Agent({ subagent_type: "codex:codex-rescue", ... })` with an adversarial prompt + the artifact + (rounds 2+) the prior Q&A trail. Loop until Codex emits `## SATISFIED` on a line by itself. Round cap **5** (configurable via `--codex-cap=N` or `.guild/config.yml` key `codex_cap`); on round 6, surface to user with 3 options (force-pass / extend-cap / rework). Trail under `.guild/runs/<run-id>/codex-review/<gate>.md`.
 
-If Codex is unavailable (`codex --version` fails or dispatch returns "not authenticated"), the gate prints `warn: codex-adversarial-review skipped — codex unavailable.` and proceeds. Don't hard-block on Codex outages.
+If Codex is unavailable (`codex --version` fails or dispatch returns "not authenticated"), the gate emits `warn: codex-review skipped — codex plugin not installed` and proceeds. Don't hard-block on Codex outages.
 
-Full discipline at `.guild/wiki/standards/codex-adversarial-review.md`; decision rationale at `.guild/wiki/decisions/codex-adversarial-review-loop.md`. **Dev-only** — does NOT ship in the plugin distribution. Guild's lifecycle skills (`brainstorm`, `plan`, `execute-plan`) deliberately don't know about Codex; the discipline is layered at the orchestrator-instruction level (this section + the wiki standard) so consumers of Guild never acquire a Codex auth dependency.
+**As Guild's own dev discipline:** For self-build sessions (developing the Guild plugin itself via the `/guild` lifecycle), `--review=cross` is implicitly always-on — treat every G-spec/G-plan/G-lane gate as if `codex_review: true` is set, regardless of CLI flags or config. This is the dev discipline documented previously as "dev-only"; the implementation is now the same `guild:codex-review` skill.
+
+Full discipline at `.guild/wiki/standards/codex-adversarial-review.md`; decision rationale at `.guild/wiki/decisions/codex-adversarial-review-loop.md`.

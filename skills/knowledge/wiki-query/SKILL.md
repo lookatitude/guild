@@ -1,7 +1,7 @@
 ---
 name: guild-wiki-query
 description: Searches .guild/wiki/ by category, tag, freshness, confidence, or full-text. Under ~200 pages uses ripgrep/filesystem via Grep/Glob tools. Above that scale, delegates to guild-memory MCP (optional P6). Resolves source_refs back to .guild/raw/sources/<slug>/ when users ask "where does this come from". TRIGGER for "search the wiki for X", "what do we have on Y", "find standards about Z", "which decisions touched the pricing calculator", "show me recent sources on competitors". DO NOT TRIGGER for: ingesting a new source (guild:wiki-ingest), running lint (guild:wiki-lint), capturing a decision (guild:decisions), or searching the repo source code (use Grep directly).
-when_to_use: Any specialist needs wiki knowledge. Invoked inside guild:context-assemble during role-dependent layer builds, and directly by the user via /guild:wiki query.
+when_to_use: Any specialist needs wiki knowledge. Invoked inside guild:context-assemble during role-dependent layer builds, and directly by the user via /guild wiki query.
 type: knowledge
 ---
 
@@ -129,7 +129,7 @@ This skill is read-only. It must not modify `.guild/wiki/`, `.guild/raw/`, `inde
 Return results to the caller:
 
 - If invoked by `guild:context-assemble`, return the ranked list so context assembly can pack role-dependent layers.
-- If invoked by the user directly via `/guild:wiki query`, render the list in a readable format (paths + one-line summaries + resolved source URLs).
+- If invoked by the user directly via `/guild wiki query`, render the list in a readable format (paths + one-line summaries + resolved source URLs).
 
 The handoff receipt must include:
 

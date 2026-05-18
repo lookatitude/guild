@@ -85,6 +85,19 @@ Per `guild-plan.md §15.2` ("user fatigue from Socratic brainstorm"), if the use
 
 Red flag: do **not** auto-fill missing fields from training-data priors. A missing field is either answered by the user in the consolidated follow-up, or recorded as an explicit assumption — never silently synthesized.
 
+## Codex adversarial review (when `codex_review: true`)
+
+If the run context has `codex_review: true` (set via `--review=cross` flag or `.guild/config.yml`), invoke `guild:codex-review` after writing the spec and **before** asking the user for approval:
+
+```
+Skill: guild-codex-review
+args: gate=G-spec artifact_path=.guild/spec/<slug>.md run_id=<run-id>
+```
+
+If `guild:codex-review` returns `status: "rework"`, loop back to the spec revision flow with Codex's findings as context. If `status: "satisfied"`, `"skipped"`, or `"force_passed"`, proceed to the user-approval question normally.
+
+The Codex gate runs between spec write and user-approval. It does not replace user approval — both must complete before handoff to `guild:team-compose`.
+
 ## Handoff
 
 Once the spec is written **and the user has explicitly approved it** (not just "looks fine" — the word "approved" or an equivalent affirmative), invoke `guild:team-compose` with the spec path as its argument. Do not continue into team composition on your own; `guild:team-compose` is a separate skill with its own responsibilities (`guild-plan.md §7`).

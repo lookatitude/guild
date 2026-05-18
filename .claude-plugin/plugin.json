@@ -1,7 +1,7 @@
 {
   "name": "guild",
-  "version": "1.0.1",
-  "description": "A team-of-specialists plugin for Claude Code: 14 domain specialists across engineering, content, and commercial groups, a brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
+  "version": "2.0.0",
+  "description": "A team-of-specialists plugin for Claude Code: 14 domain specialists across engineering, content, and commercial groups, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
   "homepage": "https://lookatitude.github.io/guild/",
   "repository": "https://github.com/lookatitude/guild",
   "author": {
@@ -29,12 +29,27 @@
   ],
   "commands": [
     "./commands/guild.md",
-    "./commands/guild-team.md",
-    "./commands/guild-evolve.md",
+    "./commands/init.md",
+    "./commands/ideate.md",
+    "./commands/plan.md",
+    "./commands/build.md",
+    "./commands/qa.md",
+    "./commands/ops.md",
+    "./commands/status.md",
+    "./commands/resume.md",
+    "./commands/wiki.md",
+    "./commands/fix.md",
+    "./commands/initiative.md",
+    "./commands/evolve.md",
+    "./commands/rollback.md",
+    "./commands/stats.md",
+    "./commands/audit.md",
     "./commands/guild-wiki.md",
+    "./commands/guild-evolve.md",
     "./commands/guild-rollback.md",
     "./commands/guild-stats.md",
-    "./commands/guild-audit.md"
+    "./commands/guild-audit.md",
+    "./commands/guild-diagnose.md"
   ],
   "agents": [
     "./agents/architect.md",

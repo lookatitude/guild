@@ -1,3 +1,21 @@
+> ⚠️ FROZEN v1 RECORD — SUPERSEDED. This document is the **frozen v1
+> development plan**, retained as a read-only historical record. It is
+> **not** a v2 definitional doc and is **not** edited further beyond this
+> banner.
+>
+> supersedes-context: this file is superseded by the Guild v2 doc set:
+>   • lifecycle  → docs/knowledge/lifecycle/lifecycle-overview.md
+>                  (the single lifecycle truth — "one state machine, six
+>                   phase entrypoints, three lenses")
+>   • commands   → docs/knowledge/architecture/command-surface.md
+>                  (the authoritative v2 command surface; supersedes §13.1)
+>   • v1→v2 map  → MIGRATION.md  (the command/flag/config migration guide)
+>
+> Precedence: where this frozen v1 plan and the v2 spec disagree, **the v2
+> spec plus the more-specific checked-in artifacts win**
+> (command-surface.md §"What this supersedes"). §13.1's command table and
+> §8's 7-step linear spine are historical; the v2 surface is canonical.
+
 # Guild — a Claude Code plugin for self-evolving expert teams
 
 **Status:** Development plan v0.4 · supersedes v0.1–v0.3

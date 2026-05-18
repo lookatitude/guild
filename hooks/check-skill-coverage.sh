@@ -27,37 +27,33 @@ set -uo pipefail
 # on long-running machines where /tmp isn't cleared automatically.
 find /tmp -maxdepth 1 -name 'guild-skill-nudge-*' -mtime +7 -delete 2>/dev/null || true
 
-# Read the prompt text from stdin payload (field: "prompt")
-PAYLOAD="$(cat)"
+# Read stdin into a temp file so python3 can parse it safely without any
+# shell interpolation. This avoids the fragile ${PAYLOAD//\'/\'\\\'\'} substitution
+# that breaks on JSON payloads containing single quotes, backslashes, or newlines.
+PAYLOAD_FILE="$(mktemp /tmp/guild-nudge-payload.XXXXXX)"
+cat > "${PAYLOAD_FILE}"
+trap 'rm -f "${PAYLOAD_FILE}"' EXIT
+
 PROMPT_TEXT=""
-if command -v python3 &>/dev/null; then
-  PROMPT_TEXT="$(python3 -c "
-import json, sys
-try:
-  d = json.loads('''${PAYLOAD//\'/\'\\\'\'}''')
-  print(d.get('prompt', ''))
-except Exception:
-  print('')
-" 2>/dev/null || echo "")"
-else
-  # Fallback: treat raw stdin as text
-  PROMPT_TEXT="${PAYLOAD}"
-fi
-
-# Lower-case for case-insensitive matching
-PROMPT_LOWER="$(echo "${PROMPT_TEXT}" | tr '[:upper:]' '[:lower:]')"
-
-# ── Session-level nudge lock ───────────────────────────────────────────────
 SESSION_ID=""
 if command -v python3 &>/dev/null; then
-  SESSION_ID="$(python3 -c "
+  IFS=$'\t' read -r PROMPT_TEXT SESSION_ID < <(python3 - "${PAYLOAD_FILE}" <<'PYEOF'
 import json, sys
 try:
-  d = json.loads('''${PAYLOAD//\'/\'\\\'\'}''')
-  print(d.get('session_id', ''))
+    with open(sys.argv[1], "r", encoding="utf-8", errors="replace") as f:
+        d = json.load(f)
+    prompt = d.get("prompt", "") or ""
+    session = d.get("session_id", "") or ""
+    # Output as two tab-separated values on one line for bash read.
+    # Spaces must stay inside the prompt field.
+    print(prompt.replace("\n", " ").replace("\t", " ") + "\t" + session)
 except Exception:
-  print('')
-" 2>/dev/null || echo "")"
+    print("\t")
+PYEOF
+) 2>/dev/null || true
+else
+  # python3 unavailable: treat raw file as prompt text (best effort)
+  PROMPT_TEXT="$(cat "${PAYLOAD_FILE}")"
 fi
 
 LOCK_FILE="/tmp/guild-skill-nudge-${SESSION_ID:-unknown}"
@@ -66,6 +62,9 @@ LOCK_FILE="/tmp/guild-skill-nudge-${SESSION_ID:-unknown}"
 if [[ -f "${LOCK_FILE}" ]]; then
   exit 0
 fi
+
+# Lower-case for case-insensitive matching
+PROMPT_LOWER="$(echo "${PROMPT_TEXT}" | tr '[:upper:]' '[:lower:]')"
 
 # ── Keyword → gap mapping ─────────────────────────────────────────────────
 # Only flag domains with NO current specialist.
@@ -90,7 +89,7 @@ fi
 # ── Emit nudge (once per session) ─────────────────────────────────────────
 if [[ -n "${NUDGE_DOMAIN}" ]]; then
   touch "${LOCK_FILE}" 2>/dev/null || true
-  echo "[Guild] No specialist covers \"${NUDGE_DOMAIN}\" yet. The closest available specialists are Architect and Backend. Use /guild to compose a team — or propose a new specialist via /guild:team."
+  echo "[Guild] No specialist covers \"${NUDGE_DOMAIN}\" yet. The closest available specialists are Architect and Backend. Use /guild to compose a team — or propose a new specialist via /guild plan (team is composed as a plan sub-step)."
 fi
 
 exit 0

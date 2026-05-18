@@ -23,14 +23,14 @@ Four ordered steps, lifted from `guild-plan.md §7.1`:
    - **A · auto-create** — invoke `guild:create-specialist` to mint the missing role before proceeding. Adjacent-specialist boundary updates are proposed as part of that flow (`guild-plan.md §12`).
    - **B · skip gap** — proceed with existing specialists only; the missing coverage is flagged in the final task report.
    - **C · substitute** — reassign the gap to an existing specialist with an explicit scope override recorded in `team.yaml`.
-   - **D · compose from scratch** — discard the proposal entirely and hand-pick the team via `/guild:team edit`.
+   - **D · compose from scratch** — discard the proposal entirely and hand-pick the team via `/guild plan`.
 4. **Write** `.guild/team/<slug>.yaml` with the resolved team, each entry carrying per-specialist scope, cross-specialist dependencies, and the chosen execution backend.
 
 ## Hard rules
 
 From `guild-plan.md §7.2`. These are non-negotiable; if a user request conflicts, raise it before writing `team.yaml`.
 
-- **Cap at 6 specialists** per task. The only override is an explicit `/guild:team edit --allow-larger` from the user — context fragmentation destroys coherence above six.
+- **Cap at 6 specialists** per task. The only override is an explicit `/guild plan --team-size=N` from the user — context fragmentation destroys coherence above six.
 - **Recommended default: 3–4 specialists.** Six is the ceiling, not the norm. Only widen the team when the task has genuinely independent lanes that benefit from parallel specialists.
 - **Architect is implied** on any multi-component build. If the spec touches two or more components (e.g. frontend + backend, service + infra), add architect whether the user named it or not.
 - **Security is implied** on anything touching auth, secrets management, or external integrations (third-party APIs, webhooks, OAuth, payment providers, etc.).

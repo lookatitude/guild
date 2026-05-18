@@ -1,13 +1,13 @@
 ---
 name: guild-wiki-lint
 description: Audits .guild/wiki/ for contradictions between pages, stale claims (expires_at passed), missing §10.1.1 frontmatter fields, orphan pages (not linked from index.md), concepts referenced ≥3x without a page, missing source_refs resolution to .guild/raw/sources/<slug>/, and decision pages not in ADR-lite shape. Produces .guild/wiki/lint-<timestamp>.md. NEVER auto-edits — findings are for the user to act on. TRIGGER for "run wiki-lint", "audit the wiki for contradictions", "check wiki health", "find orphan pages", "any stale wiki pages", "which wiki pages have broken source_refs". DO NOT TRIGGER for: ingesting a new source (guild:wiki-ingest), searching or querying wiki content (guild:wiki-query), capturing a Q&A decision (guild:decisions), or editing a specific wiki page directly.
-when_to_use: Weekly schedule per `guild-plan.md §10.6`, after any batch of 5+ ingests in a session, or on explicit `/guild:wiki lint` invocation.
+when_to_use: Weekly schedule per `guild-plan.md §10.6`, after any batch of 5+ ingests in a session, or on explicit `/guild wiki lint` invocation.
 type: knowledge
 ---
 
 # guild:wiki-lint
 
-Implements `guild-plan.md §10` (knowledge layer), `§10.1` (categorized wiki structure), `§10.1.1` (required page frontmatter), `§10.3` (decision capture ADR-lite shape), `§10.5` (contradiction policy — `confidence` frontmatter and "newer wins unless older has `confidence: high`"), `§10.5.1` (memory write path — lint audits AFTER `guild:wiki-ingest` and `guild:decisions` have written), and `§10.6` (lint cadence — weekly, after batches of 5+ ingests, or explicit `/guild:wiki lint`; produces a health report; never auto-edits).
+Implements `guild-plan.md §10` (knowledge layer), `§10.1` (categorized wiki structure), `§10.1.1` (required page frontmatter), `§10.3` (decision capture ADR-lite shape), `§10.5` (contradiction policy — `confidence` frontmatter and "newer wins unless older has `confidence: high`"), `§10.5.1` (memory write path — lint audits AFTER `guild:wiki-ingest` and `guild:decisions` have written), and `§10.6` (lint cadence — weekly, after batches of 5+ ingests, or explicit `/guild wiki lint`; produces a health report; never auto-edits).
 
 Read-only auditor. Complements `guild:wiki-ingest` (write path) and `guild:wiki-query` (read path) by checking that both contracts are upheld across the whole wiki tree. Finds structural drift; never repairs it.
 
@@ -159,7 +159,7 @@ Per `guild-plan.md §10.6`, this skill runs on three triggers:
 
 1. **Weekly schedule** — orchestrator (or a host-side scheduler / hook) kicks lint on a cadence. The `§10.6` default is weekly.
 2. **Batch threshold** — after any sequence of 5+ ingests in a single session. `guild:wiki-ingest` is expected to surface this in its handoff `followups:` once the session counter crosses 5; the main session then dispatches lint.
-3. **Explicit invocation** — the user runs `/guild:wiki lint` or otherwise asks for a wiki audit.
+3. **Explicit invocation** — the user runs `/guild wiki lint` or otherwise asks for a wiki audit.
 
 Do not self-trigger between runs. Lint is idempotent: running it twice in a row produces two reports and changes nothing else.
 

@@ -15,31 +15,36 @@ gate.
 
 ## What v1 ships
 
-- **13 specialists** across three groups — engineering (architect, researcher,
-  backend, devops, qa, mobile, security), content & communication (copywriter,
+- **14 specialists** across three groups — engineering (architect, researcher,
+  backend, frontend, devops, qa, mobile, security), content & communication (copywriter,
   technical-writer, social-media, seo), commercial (marketing, sales). One
   `agents/*.md` per specialist.
-- **72 skills** across five tiers — 1 core (`guild-principles`), 13 meta
+- **77 skills** across five tiers — 1 core (`guild-principles`), 18 meta
   (the workflow spine + decisions + reflect + evolve + create-specialist +
-  rollback + audit), 3 knowledge (wiki ingest / query / lint), **5 fallback**
+  rollback + audit + diagnose + v1.4 loop/review helpers), 3 knowledge (wiki ingest / query / lint), **5 fallback**
   (TDD, systematic-debug, worktrees, request-review, finish-branch — forked
-  from `superpowers:*` v5.0.7 under MIT, attribution preserved), 50 specialist
-  skills (2–5 per role).
-- **7 slash commands** — `/guild`, `/guild:team`, `/guild:evolve`, `/guild:wiki`,
-  `/guild:rollback`, `/guild:stats`, `/guild:audit`.
-- **8 hook events wired** — `SessionStart`, `UserPromptSubmit`, `PostToolUse`,
-  `SubagentStop`, `Stop`, `TaskCreated`, `TaskCompleted`, `TeammateIdle`.
-- **6 tooling scripts** — `scripts/evolve-loop.ts`, `flip-report.ts`,
-  `shadow-mode.ts`, `description-optimizer.ts`, `rollback-walker.ts`,
-  `trace-summarize.ts` — plus `scripts/agent-team-launcher.ts` for the
-  opt-in tmux backend.
+  from `superpowers:*` v5.0.7 under MIT, attribution preserved), and 50 authored
+  specialist skills.
+- **The v2 command surface** — `/guild [brief]` plus the phase verbs
+  `/guild init|ideate|plan|build|qa|ops`, helpers `/guild status|resume`,
+  nouns `/guild wiki|initiative`, and maintenance
+  `/guild evolve|rollback|stats|audit|fix`. The `:` namespace is gone — every
+  command is `/guild <subcommand>` (v1→v2: MIGRATION.md).
+- **10 hook events wired** — `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
+  `PostToolUse`, `PreCompact`, `SubagentStop`, `Stop`, `TaskCreated`,
+  `TaskCompleted`, `TeammateIdle`.
+- **Tooling scripts** — evolution, rollback, telemetry summary, audit-log
+  summary, Codex review-trail validation, and the opt-in tmux agent-team
+  launcher live under `scripts/`.
 - **2 optional MCP servers** — `mcp-servers/guild-memory/` (BM25 over the wiki
   once it crosses ~200 pages) and `mcp-servers/guild-telemetry/` (structured
   trace query). Both stdio-only, no network. Guild runs without them.
 - **agent-team tmux launcher** — opt-in peer-to-peer backend. Subagents via the
   Agent tool remain the default.
 
-## Install
+## Getting Started
+
+### Install
 
 ```bash
 claude plugin marketplace add lookatitude/guild
@@ -60,14 +65,79 @@ claude plugin marketplace update guild
 claude plugin install guild@guild --scope project
 ```
 
-Restart Claude Code before running `/guild` from the project.
+Restart Claude Code before running `/guild` from the project. Claude Code loads
+plugin commands, agents, skills, hooks, and optional MCP entries at session
+startup; a newly installed or edited plugin is not fully visible until the next
+session.
 
-The agent-team backend is experimental. Enable only when teammates need to
+### First run
+
+Run `/guild` with a brief, or run it with no arguments and let the brainstorm
+skill prompt for the task:
+
+```text
+/guild "Build a Stripe subscription flow, add tests, update the docs, draft a launch email."
+/guild
+```
+
+The first visible sign that the plugin loaded is the SessionStart bootstrap card:
+it lists the Guild version, slash commands, optional MCP servers, and doc entry
+points. The card is informational only. The lifecycle starts when you invoke
+`/guild`.
+
+The first `/guild` run writes durable state under `.guild/`: spec, team, plan,
+context bundles, run handoffs, review, verification, telemetry, and reflections.
+You confirm after brainstorm, team-compose, and plan; the later phases run from
+the approved plan with minimal interruption.
+
+To verify hooks and audit logs are firing after restart:
+
+1. Start a fresh Claude Code session in a project where Guild is installed.
+2. Confirm the bootstrap card appears.
+3. Run a small `/guild "..."` task, or use any workflow that dispatches tools.
+4. Check for `.guild/runs/<run-id>/events.ndjson`.
+5. For v1.4 audit logging, check `.guild/runs/<run-id>/logs/v1.4-events.jsonl`
+   for `hook_event` and, after tool use, `tool_call` rows.
+
+Older Claude Code hosts may skip newer hook events such as `PreToolUse` and
+`PreCompact`; the handlers are designed to fall through without breaking the
+session. If the bootstrap card appears but no `.guild/runs/` files are written,
+run `/guild audit` and inspect `hooks/hooks.json` in the installed plugin.
+If a Guild run failed or telemetry looks inconsistent, run `/guild fix`
+with the run id or a short symptom; it reads recent `.guild/runs` evidence,
+writes a diagnosis/fix plan, and asks before applying any edits.
+
+### Environment variables
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | unset | Set to `1` to allow Guild's experimental tmux agent-team backend. Subagents via `Agent` remain the default. |
+| `GUILD_LOOP_CAP` | `16` when loops are active | Per-lane cap for opt-in adversarial loops. Must be a positive integer in `[1, 256]`; CLI `--loop-cap` overrides it. |
+| `GUILD_ENABLE_DEVTEAM_REFLECT` | unset/off | Developer-team reflection gate for `hooks/maybe-reflect.ts`. Set to `1` only when working on Guild's own dev-team reflection workflow. |
+| `GUILD_BENCHMARK_LIVE` | unset/off | Benchmark runner safety gate. Set to `1` only after a dry run when you intentionally want the benchmark factory to spawn the real `claude` CLI. |
+
+The agent-team backend is experimental. Enable it only when teammates need to
 coordinate directly:
 
 ```bash
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 ```
+
+Benchmark live runs are also opt-in:
+
+```bash
+cd benchmark
+npm run benchmark -- run --case demo-url-shortener-build --dry-run
+GUILD_BENCHMARK_LIVE=1 npm run benchmark -- run --case demo-url-shortener-build
+```
+
+Current benchmark import boundary: the importer scores `run.json`,
+`events.ndjson`, and captured `artifacts/.guild/`. When v1.3 `events.ndjson` is
+absent, it can import v1.4 hook audit logs from
+`logs/v1.4-events.jsonl` or captured
+`artifacts/.guild/runs/<run-id>/logs/v1.4-events.jsonl` and map the supported
+phase, gate, specialist, tool-error, and escalation events into benchmark
+metrics.
 
 ### Optional MCP servers
 
@@ -98,17 +168,30 @@ The session will:
 You confirm after brainstorm, team-compose, and plan. Post-plan runs with
 minimal interruption.
 
+If you register a new specialist with `guild:create-specialist`, restart or
+reload the plugin before expecting `/guild plan` (team is composed as a plan sub-step) or future `/guild` runs to
+route to it. Claude Code snapshots plugin agent and skill manifests at session
+startup.
+
+Codex adversarial review is a Guild development discipline, not a default
+consumer `/guild` loop. Review trails live under
+`.guild/runs/<run-id>/codex-review/*.md` and can be checked with
+`npx tsx scripts/verify-codex-review-trail.ts <codex-review-dir>`. The validator
+currently requires each file's frontmatter to include `final_status: satisfied` or
+`final_status: skipped-codex-unavailable`.
+
 ## Commands
 
 | Command | Purpose |
 |---|---|
 | `/guild [brief]` | Full 7-step lifecycle: brainstorm → team-compose → plan → context-assemble → execute → review → verify |
-| `/guild:team [propose\|show\|edit]` | Manage the current team; `edit --allow-larger` lifts the 6-specialist cap |
-| `/guild:evolve [skill] [--auto]` | Run a skill through the evolve pipeline (paired evals → flip report → shadow mode → promotion gate) |
-| `/guild:wiki [ingest <path>\|query "..."\|lint]` | Wiki operations over `.guild/raw/` and `.guild/wiki/` |
-| `/guild:rollback <skill> [n]` | Walk a skill back `n` versions from `.guild/skill-versions/` |
-| `/guild:stats` | Usage, success rates, flip counts, top-used skills, top-requested specialists |
-| `/guild:audit` | Security audit of installed scripts, hooks, permissions |
+| `/guild plan` | Planning phase — team is composed as a plan sub-step; `--team-size=N` lifts the 6-specialist cap; inspect via `/guild status`, edit via the `[edit]` response at the plan/team gate |
+| `/guild evolve [<id>] [--auto] [--to-template=vN]` | Run a skill through the evolve pipeline (paired evals → flip report → shadow mode → promotion gate) |
+| `/guild wiki <ingest <path>\|query "..."\|lint>` | Wiki operations over `.guild/raw/` and `.guild/wiki/` |
+| `/guild rollback <skill> [n]` | Walk a skill back `n` versions from `.guild/skill-versions/` |
+| `/guild stats` | Usage, success rates, flip counts, top-used skills, top-requested specialists |
+| `/guild audit` | Security audit of installed scripts, hooks, permissions |
+| `/guild fix [run-id \| "symptom"] [--review=cross]` | Diagnose Guild runtime failures from telemetry and propose a gated self-fix plan |
 
 ## Documentation
 
@@ -118,7 +201,7 @@ minimal interruption.
   including the command / agent / skill reference.
 - [docs/architecture.md](docs/architecture.md) — shipped plugin architecture,
   directory layout, 7-step lifecycle, hook inventory, backend options.
-- [docs/specialist-roster.md](docs/specialist-roster.md) — the 13 specialists,
+- [docs/specialist-roster.md](docs/specialist-roster.md) — the 14 specialists,
   their triggers, DO NOT TRIGGER boundaries, and owned skills.
 - [docs/context-assembly.md](docs/context-assembly.md) — three-layer context
   contract, role mapping, ambient-context caveat.
@@ -134,7 +217,7 @@ minimal interruption.
 ![Guild plugin architecture](docs/diagrams/01-architecture.svg)
 
 Four layers: the orchestrator session, the installed plugin (skills, agents,
-commands, hooks, scripts, MCPs), 13 specialist subagents in worktree isolation,
+commands, hooks, scripts, MCPs), 14 specialist subagents in worktree isolation,
 and project-local state under `.guild/`.
 
 ## Lifecycle

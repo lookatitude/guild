@@ -132,6 +132,6 @@ read your diff aloud and ask whether each change would survive
 
 See [SECURITY.md](SECURITY.md) for the trust model and the process
 for reporting security-relevant issues. Short version: use
-`/guild:audit` before installing a Guild fork; don't open PRs that
+`/guild audit` before installing a Guild fork; don't open PRs that
 add network access to meta-skills or non-researcher specialists
 without an explicit `§15.1 #12` discussion.

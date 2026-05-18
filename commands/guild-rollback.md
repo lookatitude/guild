@@ -1,99 +1,25 @@
 ---
 name: guild-rollback
-description: "Revert a skill to a previous version by snapshotting the current state as vN+1 and restoring vN (or vN-n). Non-destructive — every rollback is itself a versioned artifact. Per guild-plan.md §13.1 and §11.3."
-argument-hint: "<skill> [n]"
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Skill
+description: "REMOVED in Guild v2 — print-only redirect stub. Prints the v1→v2 redirect and exits non-zero, runs nothing. Sunset: deleted at v2.1.0 (MIGRATION.md §5)."
 ---
 
-# /guild:rollback — Skill version rollback
+# /guild:rollback — removed (print-only redirect stub)
 
-This command is the user-facing entry point for Guild's skill version rollback (guild-plan.md §13.1 and §11.3).
-It is a thin dispatcher: all snapshotting, version stack management, and file restoration logic
-live in the `guild-rollback-skill` skill. No writes to `.guild/` or `skills/` are made by this command directly.
+This v1 command name was removed in Guild v2. This file is a **print-only
+redirect stub** (`command-clean-slate.md #6`, `MIGRATION.md §2.2`): it
+**PRINTS the redirect below verbatim, EXITS NON-ZERO, and runs nothing** —
+documentation, not a behavioral shim. It does not silently re-route, does
+not advance, does not grant autonomy. Sunset: this stub exists exactly
+v2.0.x and is deleted at v2.1.0 (`MIGRATION.md §5`).
 
----
-
-## Usage
-
-```
-/guild:rollback <skill>       ← roll back one version (vN → vN-1)
-/guild:rollback <skill> <n>   ← roll back n versions (vN → vN-n)
-```
-
-`<skill>` is the skill slug (e.g., `guild-brainstorm`, `guild-team-compose`).
-`<n>` is an optional step count (positive integer). Defaults to `1` when omitted.
-
-**Dispatch pattern:**
-
-Parse `$ARGUMENTS`. The first word is the skill slug; the optional second word is the step count.
-Then invoke:
+Print exactly the following block, then stop. Invoke no skill, write no
+file, take no other action. Exit non-zero.
 
 ```
-Skill: guild-rollback-skill
-args: skill=<slug> steps=<n>
-```
+/guild:rollback was removed in Guild v2.
 
-Pass `steps=1` when no step count is provided.
+  v2 equivalent:  /guild rollback <skill> [n]
 
----
-
-## Examples
-
-```
-# Roll back guild-brainstorm one version (most recent rollback)
-/guild:rollback guild-brainstorm
-
-# Roll back guild-brainstorm two versions
-/guild:rollback guild-brainstorm 2
-
-# Roll back guild-team-compose to its version before the last three promotions
-/guild:rollback guild-team-compose 3
-```
-
----
-
-## Non-destructive note
-
-Per guild-plan.md §11.3: **rollbacks create new versions, never delete old ones.**
-
-The sequence is always:
-
-1. Snapshot the current skill body → `.guild/skill-versions/<skill>/v<N+1>/` — the rollback itself is archived.
-2. Copy `.guild/skill-versions/<skill>/v<N-n>/` → `skills/<skill>/` — restoring the target version.
-3. Increment the live version counter to `v<N+1>`.
-
-This means:
-
-- No version is ever destroyed. The full history is always traversable under `.guild/skill-versions/<skill>/`.
-- Rolling back and then running `/guild:evolve` again starts a new forward branch from the restored baseline.
-- You can re-apply a rejected evolution attempt if a later task proves it was correct: just roll forward by running `/guild:evolve` again.
-
-If `<n>` would reach or exceed version `v1` (the original install snapshot), the skill reports the
-safe maximum and asks for confirmation before proceeding past `v1`.
-
----
-
-## Output
-
-After the skill returns, surface the result:
-
-**Success:**
-
-```
-/guild:rollback — OK
-Skill:    <slug>
-Restored: v<N-n>  (was v<N>)
-Snapshot: .guild/skill-versions/<skill>/v<N+1>/
-Active:   skills/<skill>/
-```
-
-**Error (version out of range):**
-
-```
-/guild:rollback — STOPPED
-Skill: <slug>
-Current version: v<N>
-Requested steps: <n>  (would reach v<N-n> = v0 or below)
-Oldest available: v1
-Re-run with steps ≤ <N-1> to proceed.
+Guild v2 dropped the `:` namespace — every command is now /guild <subcommand>.
+Full mapping: MIGRATION.md  (repo root or plugin docs/).
 ```

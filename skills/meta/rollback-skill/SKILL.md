@@ -1,7 +1,7 @@
 ---
 name: guild-rollback-skill
 description: Rolls back a skill to a previous version from .guild/skill-versions/<skill>/v<N>/. The rollback ITSELF is a snapshot — non-destructive, appends a new vN+1 with "source: rollback-from-vX" metadata. Can walk the stack (rollback N steps at once, default 1). Re-runs the restored version's eval suite after rollback to confirm the older content still passes its own evals against the current repo — flags drift if not. TRIGGER for "roll back guild:<skill> to v3", "revert the last evolve of <skill>", "undo yesterday's tune on brainstorm", "walk guild:<skill> back two steps", "restore guild:<skill> to v<N>". DO NOT TRIGGER for: evolving a skill forward (guild:evolve-skill owns), creating a new specialist (guild:create-specialist), deleting a skill (never supported — rollback-only, no destroy path), auditing scripts (guild:audit), or reviewing a run (guild:review).
-when_to_use: Explicit /guild:rollback <skill> [n] command — rolls back n steps (default 1). Also fires when a recently-promoted edit shows regressions post-promote and the user asks to revert.
+when_to_use: Explicit /guild rollback <skill> [n] command — rolls back n steps (default 1). Also fires when a recently-promoted edit shows regressions post-promote and the user asks to revert.
 type: meta
 ---
 
@@ -16,7 +16,7 @@ This skill is the counterpart to `guild:evolve-skill`: evolve writes forward vN+
 Two fields:
 
 1. **Skill slug** — target skill to revert, e.g. `guild:brainstorm` or `guild:context-assemble`. Must resolve to an existing `skills/<tier>/<slug>/SKILL.md` path AND an existing `.guild/skill-versions/<skill>/` history. If no history exists (the skill has never been evolved), stop — there is nothing to roll back to.
-2. **Steps-back count `n`** — optional integer, default `1`. Walks `n` versions back from the current live skill. If `n` would walk past v1, stop and surface the available depth so the user can re-issue with a valid count. An explicit `/guild:rollback <skill> v<N>` form pins to a specific version instead of walking n steps.
+2. **Steps-back count `n`** — optional integer, default `1`. Walks `n` versions back from the current live skill. If `n` would walk past v1, stop and surface the available depth so the user can re-issue with a valid count. An explicit `/guild rollback <skill> v<N>` form pins to a specific version instead of walking n steps.
 
 ## Walk the stack
 
