@@ -165,7 +165,7 @@ npx tsx scripts/emit-loop-event.ts \
 Use `--terminated satisfied` on the final round when `## SATISFIED` is emitted
 or the user force-passes. Use `--terminated false` for non-final rounds. The
 `codex_review_round` event type is defined in
-`benchmark/plans/v1.4-jsonl-schema.md §12`; do not append these rows directly.
+`guild-benchmark/plans/v1.4-jsonl-schema.md §12`; do not append these rows directly.
 
 ## Config resolution
 

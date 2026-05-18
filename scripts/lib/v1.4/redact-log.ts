@@ -1,8 +1,8 @@
 // v1.4.0 adversarial-loops — JSONL log redaction.
 //
 // Implements the 5-pattern redaction policy from
-// `benchmark/plans/v1.4-jsonl-schema.md` §"Redaction policy". Distinct
-// from the argv-only redaction in `benchmark/src/runner.ts §178-189`
+// `guild-benchmark/plans/v1.4-jsonl-schema.md` §"Redaction policy". Distinct
+// from the argv-only redaction in `guild-benchmark/src/runner.ts §178-189`
 // (which is scoped to subprocess argv): this module redacts free-text
 // fields written into JSONL events (`command_redacted`,
 // `result_excerpt_redacted`, `payload_excerpt_redacted`,
@@ -50,7 +50,7 @@ export const FIELD_SIZE_CAP_BYTES = 4 * 1024; // 4 KiB
 
 // ──────────────────────────────────────────────────────────────────────────
 // Group 1 — token-shape regex. REUSED literal regex set from
-// `benchmark/src/runner.ts §178-189`. The runner keeps that array
+// `guild-benchmark/src/runner.ts §178-189`. The runner keeps that array
 // private; we replicate the literals here. A unit test in
 // `redact-log.test.ts` pins the source strings against the runner's
 // list so any drift surfaces immediately.

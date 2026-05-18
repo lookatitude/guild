@@ -1,7 +1,7 @@
 // v1.4.0 adversarial-loops — JSONL log writer.
 //
 // Implements the binding contract from
-// `benchmark/plans/v1.4-jsonl-schema.md` + the architect's stable-lockfile
+// `guild-benchmark/plans/v1.4-jsonl-schema.md` + the architect's stable-lockfile
 // race-control design (ADR-009 §Decision §4).
 //
 // Outputs:
@@ -12,7 +12,7 @@
 //   sidecar:         <runDir>/logs/tool-call-pre.jsonl  (PreToolUse pairing)
 //
 // The lockfile coordinates with the counter-store (T3a) — both modules
-// share the SAME shared-lock helper (`benchmark/src/v1.4-lock.ts`). Per
+// share the SAME shared-lock helper (`guild-benchmark/src/v1.4-lock.ts`). Per
 // architect §Decision §4: stable lockfile is created at run-init
 // (zero-byte; permanent inode; never deleted, renamed, or truncated).
 //
@@ -1061,7 +1061,7 @@ export function buildOrphanedToolCall(
 /**
  * Build the `tool_call` event for the **POST-without-PRE** path —
  * distinct from the **PRE-without-POST** orphan-sweep path above. Per
- * `benchmark/plans/v1.4-claude-plugin-surface-audit.md` lines 133-135:
+ * `guild-benchmark/plans/v1.4-claude-plugin-surface-audit.md` lines 133-135:
  *
  *   "If not found: emit a tool_call event with command_redacted absent
  *    (treat as observability gap; status=\"ok\"; result and latency

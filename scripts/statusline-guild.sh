@@ -4,7 +4,7 @@
 # Outputs a single-line status string for the operator's status-line
 # integration: `phase | round | cap | loops-mode | restart-count`.
 #
-# Per architect's audit (`benchmark/plans/v1.4-claude-plugin-surface-audit.md`
+# Per architect's audit (`guild-benchmark/plans/v1.4-claude-plugin-surface-audit.md`
 # §"Status-line integration"), this script is opt-in via either:
 #   - `--statusline` CLI flag passed through Guild's runner, or
 #   - `GUILD_STATUSLINE=1` env var.

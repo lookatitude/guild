@@ -7,7 +7,7 @@ type: meta
 
 # guild:loop-implement
 
-Implements `.guild/spec/v1.4.0-adversarial-loops.md` SC3 (F-3) and the binding contract at `benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 3 — `guild:loop-implement`".
+Implements `.guild/spec/v1.4.0-adversarial-loops.md` SC3 (F-3) and the binding contract at `guild-benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 3 — `guild:loop-implement`".
 
 This skill **layers atop** `guild:execute-plan` per lane; it does not replace it. The lane's owning specialist (backend / frontend / mobile / devops / qa / etc.) is the **writer**; the challenger varies per layer.
 
@@ -45,7 +45,7 @@ Layer-set per value:
 | 4 | `both` | yes | yes | no |
 | 5 | `full` | yes | yes | yes |
 
-The five values appear in this fixed order in `LOOPS_APPLICABLE_VALUES` (`benchmark/src/loop-applicable.ts`).
+The five values appear in this fixed order in `LOOPS_APPLICABLE_VALUES` (`guild-benchmark/src/loop-applicable.ts`).
 
 ### Default per lane type (when `loops_applicable` is unset)
 
@@ -66,7 +66,7 @@ A security-owned implementation lane cannot also run security-review against its
 3. **Security-owned lane sets `loops_applicable: none` WITHOUT** the marker → reject exit 2 with literal error `security-owned lane <lane_id> sets loops_applicable=none without the T6 exemption marker`.
 4. **Security-owned lane sets `l3-only`, `l4-only`, `both`, or `full`** → ACCEPT (normal path; security-review must be routed to a different specialist via plan-level override when `loops_applicable: full`).
 
-`validatePlanLane(...)` in `benchmark/src/loop-applicable.ts` implements all 4 cases; qa pins each case in `loop-implement.test.ts`.
+`validatePlanLane(...)` in `guild-benchmark/src/loop-applicable.ts` implements all 4 cases; qa pins each case in `loop-implement.test.ts`.
 
 ## Input shape
 
@@ -171,7 +171,7 @@ The older draft used a `BLOCKING:` literal marker; that is NOT what the parser d
 ### On restart fire
 
 1. **Move prior receipts.** L3 + L4 + security-review receipts for this lane move to `.guild/runs/<run-id>/handoffs/superseded/<lane_id>-restart-<N>/` (where `<N>` is the post-increment restart counter, starting at 1).
-2. **Cross-reference.** Each prior receipt gains a frontmatter field `superseded_by: <new-receipt-path>` (relative path). The `superseded_by` cross-reference is the audit trail; future `summary.md` regen reads both old and new chains. `injectSupersededBy(...)` in `benchmark/src/loop-implement-restart.ts` is the pure transform.
+2. **Cross-reference.** Each prior receipt gains a frontmatter field `superseded_by: <new-receipt-path>` (relative path). The `superseded_by` cross-reference is the audit trail; future `summary.md` regen reads both old and new chains. `injectSupersededBy(...)` in `guild-benchmark/src/loop-implement-restart.ts` is the pure transform.
 3. **Reset L3/L4/security counters for this lane.** Per spec §"Cap reset boundaries", a security restart resets L3/L4/security counters to 0 for this lane. This does NOT affect other lanes' counters (per-lane isolation). Use `resetLaneCounters(runDir, run_id, laneId)` from `counter-store.ts`; T3a's contract preserves the `restart:<lane>` counter across this call.
 4. **Increment restart counter.** `counters.json` key `restart:<lane>` incremented by 1. **Restart cap = 3** per lane per task — the 4th restart triggers escalation.
 5. **New context bundle.** The restarted lane's input bundle includes the security findings verbatim, plus pointers to the superseded receipts.
@@ -277,7 +277,7 @@ At every site the orchestrator dispatches `AskUserQuestion` with `header: "Loop 
 - **`extend-cap`** — "Extend the cap by N rounds (you'll be asked for N)."
 - **`rework`** — "Abort the current loop; return control to the producing skill with the unresolved questions."
 
-`buildEscalationPayload(...)` in `benchmark/src/loop-escalation.ts` builds the payload.
+`buildEscalationPayload(...)` in `guild-benchmark/src/loop-escalation.ts` builds the payload.
 
 ## Backwards-compat fallback
 
@@ -292,7 +292,7 @@ Tests pin both branches at every escalation site.
 
 ## JSONL events emitted
 
-Per `benchmark/plans/v1.4-jsonl-schema.md`:
+Per `guild-benchmark/plans/v1.4-jsonl-schema.md`:
 
 - `loop_round_start` — per round per layer per lane.
 - `loop_round_end` — per round per layer per lane.

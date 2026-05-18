@@ -7,7 +7,7 @@
  * Output is deterministic given the same input set.
  *
  * Implements the binding contract from
- * `benchmark/plans/v1.4-jsonl-schema.md` §"Post-rotation summary regen
+ * `guild-benchmark/plans/v1.4-jsonl-schema.md` §"Post-rotation summary regen
  * contract":
  *   1. Reader takes the lockfile (handled by `snapshotLiveLog`).
  *   2. Ordering: archives in <N> ascending, then live log; within each

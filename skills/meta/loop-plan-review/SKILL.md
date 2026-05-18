@@ -7,7 +7,7 @@ type: meta
 
 # guild:loop-plan-review
 
-Implements `.guild/spec/v1.4.0-adversarial-loops.md` SC2 (F-2) and the binding contract at `benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 2 — `guild:loop-plan-review`".
+Implements `.guild/spec/v1.4.0-adversarial-loops.md` SC2 (F-2) and the binding contract at `guild-benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 2 — `guild:loop-plan-review`".
 
 This skill **wraps** `guild:plan`; it does not replace it. The loop runs AFTER `guild:plan` writes the plan and BEFORE Gate 3 (user-approval). Security's job is to surface plan-defect questions — security holes, scope creep, autonomy-policy gaps, contract drift, untestable success criteria — NOT general code-style suggestions.
 
@@ -133,7 +133,7 @@ The orchestrator dispatches `AskUserQuestion` with `header: "Loop escalation"`, 
 - **`extend-cap`** — "Extend the cap by N rounds (you'll be asked for N)."
 - **`rework`** — "Abort the current loop; return control to the producing skill with the unresolved questions."
 
-Helper functions in `benchmark/src/loop-escalation.ts` build the payload (`buildEscalationPayload`, `buildExtendCapPayload`).
+Helper functions in `guild-benchmark/src/loop-escalation.ts` build the payload (`buildEscalationPayload`, `buildExtendCapPayload`).
 
 ## Backwards-compat fallback
 
@@ -152,7 +152,7 @@ Restart semantics are NOT applicable to L2 — restart is L3/L4/security-only (s
 
 ## JSONL events emitted
 
-Per `benchmark/plans/v1.4-jsonl-schema.md`:
+Per `guild-benchmark/plans/v1.4-jsonl-schema.md`:
 
 - `loop_round_start` — per round; `lane_id: "phase:plan"`, `loop_layer: "L2"`.
 - `loop_round_end` — per round.

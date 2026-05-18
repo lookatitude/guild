@@ -7,7 +7,7 @@ type: meta
 
 # guild:loop-clarify
 
-Implements `.guild/spec/v1.4.0-adversarial-loops.md` SC1 (F-1) and the binding contract at `benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 1 — `guild:loop-clarify`".
+Implements `.guild/spec/v1.4.0-adversarial-loops.md` SC1 (F-1) and the binding contract at `guild-benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 1 — `guild:loop-clarify`".
 
 This skill **wraps** `guild:brainstorm`; it does not replace it. The loop runs BEFORE `guild:brainstorm` writes the spec. Researcher fact-checking runs alongside the architect's scope proposal so blocking unknowns are surfaced and explicitly converted to assumptions before the spec is committed.
 
@@ -116,7 +116,7 @@ The orchestrator dispatches `AskUserQuestion` with `header: "Loop escalation"`, 
 - **`extend-cap`** — "Extend the cap by N rounds (you'll be asked for N)."
 - **`rework`** — "Abort the current loop; return control to the producing skill with the unresolved questions."
 
-Helper functions in `benchmark/src/loop-escalation.ts` build the payload (`buildEscalationPayload`, `buildExtendCapPayload`).
+Helper functions in `guild-benchmark/src/loop-escalation.ts` build the payload (`buildEscalationPayload`, `buildExtendCapPayload`).
 
 ## Backwards-compat fallback
 
@@ -127,7 +127,7 @@ When the host runtime does NOT support `AskUserQuestion` (older Claude Code; non
 3. Trim + lowercase; match against the three labels (`force-pass` / `extend-cap` / `rework`); reject anything else with a re-prompt.
 4. Log the choice to `escalation.user_choice` identically to the AskUserQuestion path.
 
-`formatFallbackPrompt(...)` and `parseFallbackChoice(...)` in `benchmark/src/loop-escalation.ts` provide the prompt + parser.
+`formatFallbackPrompt(...)` and `parseFallbackChoice(...)` in `guild-benchmark/src/loop-escalation.ts` provide the prompt + parser.
 
 ## Per-lane counter
 
@@ -137,7 +137,7 @@ Restart semantics are NOT applicable to L1 — restart is L3/L4/security-only (s
 
 ## JSONL events emitted
 
-Per `benchmark/plans/v1.4-jsonl-schema.md` §5/§6/§11:
+Per `guild-benchmark/plans/v1.4-jsonl-schema.md` §5/§6/§11:
 
 - `loop_round_start` — per round; `lane_id: "phase:brainstorm"`, `loop_layer: "L1"`.
 - `loop_round_end` — per round; same `lane_id`/`loop_layer`/`round_number` pair.

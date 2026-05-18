@@ -1,7 +1,7 @@
 // v1.4.0 adversarial-loops — JSONL schema validator.
 //
-// Validates events emitted by `benchmark/src/log-jsonl.ts` against the
-// binding schema doc `benchmark/plans/v1.4-jsonl-schema.md` (12 event
+// Validates events emitted by `guild-benchmark/src/log-jsonl.ts` against the
+// binding schema doc `guild-benchmark/plans/v1.4-jsonl-schema.md` (12 event
 // types, schema_version: 1).
 //
 // Usage:
@@ -20,7 +20,7 @@
 import { readFileSync, existsSync } from "node:fs";
 
 // ──────────────────────────────────────────────────────────────────────────
-// Closed enums — copied verbatim from `benchmark/plans/v1.4-jsonl-schema.md`.
+// Closed enums — copied verbatim from `guild-benchmark/plans/v1.4-jsonl-schema.md`.
 // Each enum is the binding contract; expanding requires a schema bump.
 // ──────────────────────────────────────────────────────────────────────────
 
