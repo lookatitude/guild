@@ -36,11 +36,11 @@ module.exports = __toCommonJS(pre_tool_use_exports);
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 
-// ../../benchmark/src/log-jsonl.ts
+// lib/v1.4/log-jsonl.ts
 var import_node_fs2 = require("node:fs");
 var import_node_path2 = require("node:path");
 
-// ../../benchmark/src/redact-log.ts
+// lib/v1.4/redact-log.ts
 var TOKEN_REDACTED = "[REDACTED_TOKEN]";
 var PATH_REDACTED = "[REDACTED]";
 var KV_REDACTED = "[REDACTED]";
@@ -136,7 +136,7 @@ function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
   return out;
 }
 
-// ../../benchmark/src/v1.4-lock.ts
+// lib/v1.4/v1.4-lock.ts
 var import_node_fs = require("node:fs");
 var import_node_path = require("node:path");
 function stableLockPath(runDir) {
@@ -202,7 +202,7 @@ function withStableLock(runDir, fn, opts = {}) {
   }
 }
 
-// ../../benchmark/src/log-jsonl.ts
+// lib/v1.4/log-jsonl.ts
 function sidecarPath(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "tool-call-pre.jsonl");
 }

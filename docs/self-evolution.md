@@ -3,7 +3,7 @@
 Implements `guild-plan.md §11` (+ §12 for specialist creation).
 
 Guild evolves skills and specialists through a single pipeline with two entry
-triggers: automatic reflection accumulation, and explicit `/guild:evolve`. The
+triggers: automatic reflection accumulation, and explicit `/guild evolve`. The
 pipeline combines the skill-creator eval loop, AgentDevel-style flip-centered
 promotion gating, and versioned rollback.
 
@@ -14,7 +14,7 @@ promotion gating, and versioned rollback.
 files proposed edits under `.guild/reflections/<skill>/`. When ≥ 3 proposed
 edits accumulate for a single skill, the orchestrator queues it for evolve.
 
-**Explicit — `/guild:evolve [skill] [--auto]`.** The user triggers evolution for
+**Explicit — `/guild evolve [skill] [--auto]`.** The user triggers evolution for
 a specific skill on demand. `--auto` runs unattended through the gate. See
 `commands/guild-evolve.md`.
 
@@ -69,7 +69,7 @@ is bumped. On reject: the attempt is archived and no live state changes.
 Every skill edit is a versioned artifact under
 `.guild/skill-versions/<skill>/v<n>/`. Nothing is destructive:
 
-- `/guild:rollback <skill> [n]` walks back the stack. See
+- `/guild rollback <skill> [n]` walks back the stack. See
   `commands/guild-rollback.md`.
 - `scripts/rollback-walker.ts` enumerates versions and, with `--steps <n>`,
   emits a `proposed_rollback` YAML action. **Never mutates skill-versions** — it
@@ -124,7 +124,7 @@ referenced by team-compose's "auto-create" gap-handling option. The flow:
 Failure at any gate stops the process and returns refinement options.
 
 After a successful register step, restart or reload Claude Code before relying
-on the new specialist in `/guild:team` or future `/guild` runs. Claude Code
+on the new specialist in `/guild plan` or future `/guild` runs. Claude Code
 loads plugin agent and skill manifests at session startup; the files are live on
 disk immediately, but current sessions may not route to the new specialist until
 the plugin is loaded again.

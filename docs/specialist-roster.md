@@ -154,7 +154,7 @@ evidence = data citation (search volume, A/B result, benchmark).
 From `guild-plan.md §7.2`:
 
 - **Recommended default: 3–4 specialists.** Hard cap of 6. Context fragmentation
-  kills coherence above that. `/guild:team edit --allow-larger` lifts the cap.
+  kills coherence above that. `/guild plan --team-size=N` lifts the cap.
 - **Implied specialists:** architect on any multi-component build; security on
   anything touching auth, secrets, or external integrations; qa whenever backend
   is present.

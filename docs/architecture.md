@@ -101,18 +101,20 @@ Parallelism rules (per `guild-plan.md §8`):
 
 ## Command surface
 
-Guild registers 8 slash commands:
+Guild registers a tiered command surface. v2 removed the colon namespace
+(`/guild:x` → `/guild x`); the canonical, authoritative list lives in
+`docs/knowledge/architecture/command-surface.md`. Core commands:
 
 | Command | Delegates to | Purpose |
 |---|---|---|
-| `/guild` | lifecycle meta-skills | Full brainstorm to verify lifecycle. |
-| `/guild:team` | `guild-team-compose` | Compose, inspect, or edit a specialist team. |
-| `/guild:evolve` | `guild-evolve-skill` | Run the skill evolution pipeline. |
-| `/guild:wiki` | wiki skills | Ingest, query, or lint project memory. |
-| `/guild:rollback` | `guild-rollback-skill` | Restore a prior skill version. |
-| `/guild:stats` | telemetry readers | Summarize run, reflection, and audit stats. |
-| `/guild:audit` | `guild-audit` | Static security audit of plugin scripts. |
-| `/guild:diagnose` | `guild-diagnose` | Diagnose failed Guild runs and produce a gated self-fix plan. |
+| `/guild [brief]` | lifecycle meta-skills | Full ideate→verify lifecycle, phase auto-detected. |
+| `/guild plan` | `guild:team-compose` + `guild:plan` | Compose the specialist team and lane plan (team is a plan sub-step). |
+| `/guild evolve` | `guild:evolve-skill` | Run the skill evolution pipeline. |
+| `/guild wiki` | wiki skills | Ingest, query, or lint project memory. |
+| `/guild rollback` | `guild:rollback-skill` | Restore a prior skill version. |
+| `/guild stats` | telemetry readers | Summarize run, reflection, and audit stats. |
+| `/guild audit` | `guild:audit` | Static security audit of plugin scripts. |
+| `/guild fix` | `guild:diagnose` | Diagnose failed Guild runs and produce a gated self-fix plan. |
 
 ## Backend options
 

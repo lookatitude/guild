@@ -49,7 +49,7 @@ import {
   type EscalationEvent,
   type AssumptionLoggedEvent,
   type CodexReviewRoundEvent,
-} from "../benchmark/src/log-jsonl.js";
+} from "./lib/v1.4/log-jsonl.js";
 import { validateEvent } from "./v1.4-log-validator.js";
 
 // ──────────────────────────────────────────────────────────────────────────

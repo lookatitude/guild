@@ -38,7 +38,7 @@ import {
   type ToolCallEvent,
   TOOL_CALL_TOOL_VALUES,
   type ToolCallTool,
-} from "../benchmark/src/log-jsonl.js";
+} from "./lib/v1.4/log-jsonl.js";
 
 interface PostToolUsePayload {
   session_id?: string;

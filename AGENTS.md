@@ -1,23 +1,23 @@
 # Guild — repo orientation
 
-Guild is a Codex plugin that ships a team of 14 domain specialists plus a brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.
+Guild is a Claude Code plugin that ships a team of 14 domain specialists plus a brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.
 
 **Single source of truth: `guild-plan.md`.** Read it before making design decisions. Do not duplicate it here.
 
 ## Where things live
 
-- `.Codex-plugin/plugin.json`, `.Codex-plugin/marketplace.json` — plugin + marketplace manifests.
+- `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` — plugin + marketplace manifests.
 - `skills/{core,meta,knowledge,fallback,specialists}/` — 5-tier skill taxonomy (`guild-plan.md §5`).
 - `agents/*.md` — 14 shipping specialists (`guild-plan.md §6` + `frontend` graduated 2026-04-26 via §12). Populated and authored.
-- `commands/*.md` — 7 slash commands (`guild-plan.md §13.1`).
-- `hooks/hooks.json` — native Codex hooks (`guild-plan.md §13.2`).
+- `commands/*.md` — the v2 command surface: 3 daily (/guild [brief], /guild status, /guild wiki) · 6 phase (init ideate plan build qa ops) · helpers (status resume) · maintenance (fix evolve rollback stats audit) · initiative (opt-in). Canonical: architecture/command-surface.md §2; v1→v2: MIGRATION.md.
+- `hooks/hooks.json` — native Claude Code hooks (`guild-plan.md §13.2`).
 - `scripts/`, `mcp-servers/` — evolve loop, telemetry, optional MCP servers (`guild-plan.md §13.3`).
 - `tests/` — skill evals and wiki-lint fixtures.
 - `templates/{skills,agents}/` — authoring scaffolds.
 - `docs/phase-gates/` — phase-by-phase integration logs.
 - `benchmark/` — sibling autoresearch-pattern benchmark factory; v1.1 ships 2026-04-27.
 
-## Dev team (`.Codex/agents/`)
+## Dev team (`.claude/agents/`)
 
 The plugin is built by 8 dev-team agents, each owning a scoped slice: `plugin-architect`, `skill-author`, `specialist-agent-writer`, `command-builder`, `hook-engineer`, `tooling-engineer`, `docs-writer`, `eval-engineer`. Dispatch through the main session; agents never commit themselves.
 
@@ -55,7 +55,7 @@ Guild has a built-in self-evolution loop (`guild-plan.md §10`, `§11`). For Gui
 
 The wiki for the Guild repo lives at `.guild/wiki/` (start at `index.md`). Read it before making decisions that touch the same surface — prior choices are recorded with their rationale. Backfill landed 2026-04-27 covering nine v1.1 decisions, two standards, one recipe, and the v1.1 reflection.
 
-For cross-tree truths (operator preferences that survive *outside* this working directory), use auto-memory at `~/.Codex/projects/.../memory/`. The wiki is repo-scoped; memory is operator-scoped.
+For cross-tree truths (operator preferences that survive *outside* this working directory), use auto-memory at `~/.claude/projects/.../memory/`. The wiki is repo-scoped; memory is operator-scoped.
 
 ## Backend default — agent-team when tmux is available
 
@@ -71,7 +71,7 @@ Full rationale + options scored: `.guild/wiki/decisions/agent-team-default-when-
 
 ## Codex adversarial review
 
-Codex adversarial review runs at three gates — G-spec, G-plan, and G-lane — via the `guild:codex-review` meta-skill (`skills/meta/codex-review/SKILL.md`). It is available to all plugin users via `--codex-review` on `/guild`, or persistently via `.guild/config.yml` key `codex_review: true`.
+Codex adversarial review runs at three gates — G-spec, G-plan, and G-lane — via the `guild:codex-review` meta-skill (`skills/meta/codex-review/SKILL.md`). It is available to all plugin users via `--review=cross` on `/guild`, or persistently via `.guild/config.yml` key `codex_review: true`.
 
 | Gate | When |
 |---|---|
@@ -83,6 +83,6 @@ Mechanism: dispatch via `Agent({ subagent_type: "codex:codex-rescue", ... })` wi
 
 If Codex is unavailable (`codex --version` fails or dispatch returns "not authenticated"), the gate emits `warn: codex-review skipped — codex plugin not installed` and proceeds. Don't hard-block on Codex outages.
 
-**As Guild's own dev discipline:** For self-build sessions (developing the Guild plugin itself via the `/guild` lifecycle), `--codex-review` is implicitly always-on — treat every G-spec/G-plan/G-lane gate as if `codex_review: true` is set, regardless of CLI flags or config. This is the dev discipline documented previously as "dev-only"; the implementation is now the same `guild:codex-review` skill.
+**As Guild's own dev discipline:** For self-build sessions (developing the Guild plugin itself via the `/guild` lifecycle), `--review=cross` is implicitly always-on — treat every G-spec/G-plan/G-lane gate as if `codex_review: true` is set, regardless of CLI flags or config. This is the dev discipline documented previously as "dev-only"; the implementation is now the same `guild:codex-review` skill.
 
 Full discipline at `.guild/wiki/standards/codex-adversarial-review.md`; decision rationale at `.guild/wiki/decisions/codex-adversarial-review-loop.md`.

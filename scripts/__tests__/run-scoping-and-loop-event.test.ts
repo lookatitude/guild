@@ -6,6 +6,13 @@ import * as path from "path";
 const NEW_RUN_ID = path.resolve(__dirname, "../new-run-id.ts");
 const EMIT_LOOP_EVENT = path.resolve(__dirname, "../emit-loop-event.ts");
 
+// Suppress Node-internal/tsx-loader warnings (e.g. DEP0205
+// `module.register()` deprecation on newer Node) so the stderr
+// assertions reflect ONLY the spawned script's own output. The scripts
+// under test write to stderr exclusively on error; they are silent on
+// success.
+const SPAWN_ENV = { ...process.env, NODE_NO_WARNINGS: "1" };
+
 describe("run scoping and loop event helpers", () => {
   let tmpDir: string;
 
@@ -21,6 +28,7 @@ describe("run scoping and loop event helpers", () => {
     const result = spawnSync("npx", ["tsx", NEW_RUN_ID, "--cwd", tmpDir], {
       encoding: "utf8",
       timeout: 15000,
+      env: SPAWN_ENV,
     });
 
     expect(result.status).toBe(0);
@@ -64,7 +72,7 @@ describe("run scoping and loop event helpers", () => {
         "--cap",
         "16",
       ],
-      { encoding: "utf8", timeout: 15000 },
+      { encoding: "utf8", timeout: 15000, env: SPAWN_ENV },
     );
     expect(start.status).toBe(0);
     expect(start.stderr).toBe("");
@@ -89,7 +97,7 @@ describe("run scoping and loop event helpers", () => {
         "--terminator",
         "security",
       ],
-      { encoding: "utf8", timeout: 15000 },
+      { encoding: "utf8", timeout: 15000, env: SPAWN_ENV },
     );
     expect(end.status).toBe(0);
     expect(end.stderr).toBe("");

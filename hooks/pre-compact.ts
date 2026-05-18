@@ -30,7 +30,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { appendEvent, type HookEvent } from "../benchmark/src/log-jsonl.js";
+import { appendEvent, type HookEvent } from "./lib/v1.4/log-jsonl.js";
 
 interface PreCompactPayload {
   session_id?: string;
