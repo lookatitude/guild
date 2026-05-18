@@ -1,6 +1,6 @@
 ---
 name: guild init
-description: "Init — onboard an existing repo or scaffold new-product knowledge; builds wiki + (brownfield) knowledge-graph index"
+description: "Init — onboard an existing repo or scaffold new-product knowledge; builds wiki + (brownfield) cheap-scan CodebaseMap + architecture-map stub (deep knowledge-graph is lazy + gated, not built at Init)"
 argument-hint: "[--deep-scan] [--new]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
@@ -9,7 +9,11 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestio
 
 The **Init** phase entrypoint. Onboards an existing repo or scaffolds
 new-product knowledge: builds the wiki and, for a brownfield repo, the
-derived knowledge-graph index.
+**cheap scan tier only** — the derived `CodebaseMap` plus a
+confidence-tagged `architecture-map.md` stub. That pair is Init-DONE. The
+deep semantic `KnowledgeGraph` + onboarding tour are **lazy and
+ask-before-deep-scan gated** (built later by `guild:understand-engine` when a
+plan needs P2/P3), **not** produced at Init.
 
 Canonical surface: `architecture/command-surface.md §3.1` (Init row) and the
 verb↔phase edge in `§6` (D-14: `/guild init` → Init). Phase concept binding:
@@ -53,9 +57,11 @@ pointer).
 
 ## Output artifact
 
-`.guild/init/<slug>.md`, `.guild/wiki/**`, `.guild/raw/**`, and (brownfield)
-`.guild/indexes/codebase-map.json`, `knowledge-graph.json`,
-`wiki/concepts/architecture-map.md`.
+`.guild/init/<slug>.md`, `.guild/wiki/**`, `.guild/raw/**`, and (brownfield,
+cheap scan tier = Init-DONE) `.guild/indexes/codebase-map.json` +
+confidence-tagged `wiki/concepts/architecture-map.md` stub.
+`knowledge-graph.json` + `onboarding-tour.md` are **deferred** — lazy, gated,
+produced by `guild:understand-engine`, never at Init.
 
 ## Dispatch
 

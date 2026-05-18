@@ -17,7 +17,7 @@ Per `guild-plan.md §9.1`: a specialist's authoritative task brief is the *union
 |---|---|---|
 | **Universal** | `guild:principles` + `wiki/context/project-overview.md` + `wiki/context/goals.md` | ~400 tokens |
 | **Role-dependent** | `wiki/standards/*.md` matching the role (per §9.2 mapping) + 2–4 most-relevant entity pages from `wiki/entities/` matching the task domain | ~800–1500 tokens |
-| **Task-dependent** | The specialist's lane block from `.guild/plan/<slug>.md` + named refs (concepts, decisions, products the spec/plan names) + upstream contracts pulled from each `depends-on:` task's completed output + active decisions from `wiki/decisions/` touching the task domain | ~800–1500 tokens |
+| **Task-dependent** | The specialist's lane block from `.guild/plan/<slug>.md` + named refs (concepts, decisions, products the spec/plan names) + upstream contracts pulled from each `depends-on:` task's completed output + active decisions from `wiki/decisions/` touching the task domain + (when a brownfield graph exists) a bounded KnowledgeGraph retrieval sub-source — see `## Graph retrieval` | ~800–1500 tokens |
 
 Total target: ~3k tokens. Hard cap: 6k (enforced in `## Size budget`).
 
@@ -61,6 +61,33 @@ If a bundle exceeds the cap, summarize the lowest-weighted layer — in practice
 5. Universal layer is never summarized — it is the smallest and most load-bearing.
 
 Record the final token estimate in the bundle's frontmatter so `guild:review` and eval harnesses can audit drift over time.
+
+## Graph retrieval
+
+When a brownfield `KnowledgeGraph` index exists
+(`.guild/indexes/knowledge-graph.json`, `guild.knowledge_graph.v1` — bound by
+pointer: `docs/knowledge/implementation/contract-map.md §A` row 12; built by
+`guild:understand-engine`), the **task-dependent** layer MAY include a
+bounded graph sub-source. Rules are fixed by
+`docs/knowledge/architecture/codebase-understanding.md §"Relationship to the
+wiki and guild-memory"` (cited, never re-spelled here):
+
+- **Grep-first, never dump the graph.** Retrieve via the shipped helper
+  `npx tsx plugin/scripts/understand/kg-query.ts --cwd <repo-root>
+  --q "<task terms>" [--type file,function,…] --json` (deterministic token
+  scoring, hard-capped output). Never read the whole graph file into the
+  bundle.
+- **Graph sub-cap = 1200 tokens**, inside (not on top of) the task-dependent
+  budget. The **6k-token hard cap is unchanged**.
+- **`source_priority: [wiki, knowledge_graph, codebase_map]`.** On overflow,
+  drop the **lowest-weight graph nodes first — before** any wiki/role
+  content is trimmed. Graph content is the first thing to go, never the last.
+- **Contradiction rule.** If a graph node contradicts a wiki page, **prefer
+  the wiki** unless the graph node has `confidence: high` **and** a direct
+  `source_ref`. Record every such contradiction as a `followups:` entry for
+  `guild:wiki-lint` (same channel as the ambient-conflict caveat below).
+- Skip silently when no graph index exists (greenfield, or the deep tier was
+  never built) — never fabricate or stub graph content.
 
 ## Ambient context caveat
 

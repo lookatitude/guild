@@ -79,6 +79,34 @@ Parallelism rules from `guild-plan.md §8`:
 
 The DAG expressed in `depends-on:` is what `guild:execute-plan` reads to schedule parallel dispatches — authoring the edges wrong here leads to either serialized work that could have parallelized or dispatches that start before their inputs exist.
 
+## Plan-impact (DiffUnderstanding — brownfield, plug point P2)
+
+When a brownfield `KnowledgeGraph` index exists
+(`.guild/indexes/knowledge-graph.json`), run the **P2 plan-impact** producer
+before finalizing lanes (`docs/knowledge/architecture/codebase-understanding.md
+§"Where it sits"` plug point P2):
+
+```
+npx tsx plugin/scripts/understand/diff-understanding.ts --cwd <repo-root> \
+  --base <merge-base-with-integration-branch> [--head HEAD] [--run-id <id>]
+```
+
+This writes `.guild/runs/<run-id>/diff-understanding.json`
+(`guild.diff_understanding.v1` — bound by pointer:
+`docs/knowledge/implementation/contract-map.md §A` row 13; never re-spell the
+schema). Consume it to sharpen the plan, not to replace judgement:
+
+- `affected_layers` / `affected_nodes` → which specialist lanes the change
+  actually touches; scope each lane to its blast radius.
+- `blast_radius.risk` (`low|medium|high`) → fold into the lane's
+  `autonomy-policy` (high risk ⇒ tighten "requires confirmation").
+- `untraced_files` → changed files no graph node explains; call these out as
+  scope-gap risks in the relevant lane's `scope` so `guild:verify-done`'s
+  scope-check (P3) can reconcile them.
+
+If no graph index exists (greenfield, or deep tier never built), skip silently
+— do not block planning and do not fabricate a diff.
+
 ## Codex adversarial review (when `codex_review: true`)
 
 If the run context has `codex_review: true`, invoke `guild:codex-review` after writing the plan with `approved: false` and **before** presenting the plan to the user for approval:
