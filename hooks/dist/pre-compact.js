@@ -33,14 +33,15 @@ __export(pre_compact_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_compact_exports);
+var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 
-// ../benchmark/src/log-jsonl.ts
+// ../../benchmark/src/log-jsonl.ts
 var import_node_fs2 = require("node:fs");
 var import_node_path2 = require("node:path");
 var import_node_zlib = require("node:zlib");
 
-// ../benchmark/src/redact-log.ts
+// ../../benchmark/src/redact-log.ts
 var TOKEN_REDACTED = "[REDACTED_TOKEN]";
 var PATH_REDACTED = "[REDACTED]";
 var KV_REDACTED = "[REDACTED]";
@@ -52,6 +53,8 @@ var TOKEN_SHAPE_PATTERNS = [
   /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
   /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
   /\bghp_[A-Za-z0-9]{36}\b/g,
+  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
+  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
   /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
   /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
@@ -134,7 +137,7 @@ function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
   return out;
 }
 
-// ../benchmark/src/v1.4-lock.ts
+// ../../benchmark/src/v1.4-lock.ts
 var import_node_fs = require("node:fs");
 var import_node_path = require("node:path");
 function stableLockPath(runDir) {
@@ -200,7 +203,7 @@ function withStableLock(runDir, fn, opts = {}) {
   }
 }
 
-// ../benchmark/src/log-jsonl.ts
+// ../../benchmark/src/log-jsonl.ts
 function liveLogPath(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "v1.4-events.jsonl");
 }
@@ -211,10 +214,36 @@ function archivePath(runDir, n) {
   return (0, import_node_path2.join)(archiveDir(runDir), `v1.4-events.${n}.jsonl.gz`);
 }
 function laneFallbackPath(runDir, laneId) {
+  assertSafeLaneId(laneId);
   return (0, import_node_path2.join)(runDir, "logs", `lane-${laneId}-events.jsonl`);
+}
+var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+function isSafeRunId(id) {
+  return RUN_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function isSafeLaneId(id) {
+  return LANE_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function assertSafeRunId(id) {
+  if (!isSafeRunId(id)) {
+    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id)}`);
+  }
+}
+function assertSafeLaneId(id) {
+  if (!isSafeLaneId(id)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id)}`);
+  }
+}
+function validateEventIds(event) {
+  assertSafeRunId(event.run_id);
+  if ("lane_id" in event && event.lane_id !== void 0) {
+    assertSafeLaneId(event.lane_id);
+  }
 }
 var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 function appendEvent(runDir, event, opts = {}) {
+  validateEventIds(event);
   const cap = opts.fieldCap;
   const redacted = redactEventFields(event, cap);
   const line = JSON.stringify(redacted) + "\n";
@@ -292,6 +321,7 @@ function rotateLocked(runDir) {
     `log-jsonl: failed to recreate live log at ${live} with O_EXCL after 5 retries`
   );
 }
+var SIDECAR_MAX_BYTES = 1024 * 1024;
 
 // pre-compact.ts
 async function readStdin() {
@@ -311,14 +341,21 @@ function payloadExcerpt(payload) {
     return "";
   }
 }
-async function main() {
-  const runId = process.env["GUILD_RUN_ID"];
-  if (typeof runId !== "string" || runId.length === 0) {
-    process.stderr.write(
-      "warn: [pre-compact] GUILD_RUN_ID unset \u2014 falling through (no log emit).\n"
-    );
-    return;
+function readCurrentRunId(cwd) {
+  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+  try {
+    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    return value.length > 0 ? value : void 0;
+  } catch {
+    return void 0;
   }
+}
+function resolveRunId(cwd) {
+  const envRunId = process.env["GUILD_RUN_ID"];
+  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
+  return readCurrentRunId(cwd);
+}
+async function main() {
   const raw = await readStdin();
   let payload = {};
   try {
@@ -329,6 +366,13 @@ async function main() {
     process.stderr.write("warn: [pre-compact] invalid JSON on stdin; emitting bare event.\n");
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0) {
+    process.stderr.write(
+      "warn: [pre-compact] GUILD_RUN_ID unset and current-run-id missing \u2014 falling through (no log emit).\n"
+    );
+    return;
+  }
   const runDir = process.env["GUILD_RUN_DIR"] ?? path.join(cwd, ".guild", "runs", runId);
   const event = {
     ts: (/* @__PURE__ */ new Date()).toISOString(),

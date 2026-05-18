@@ -9,19 +9,25 @@
  * Event schema:
  * {
  *   "ts":             "<ISO-8601>",
- *   "event":          "PostToolUse | SubagentStop | UserPromptSubmit",
+ *   "event":          "PostToolUse | SubagentStop | UserPromptSubmit | loop_round_start | loop_round_end | codex_review_round",
  *   "tool":           "<tool name, empty for SubagentStop/UserPromptSubmit>",
  *   "specialist":     "<agent name if applicable, empty for main session>",
  *   "payload_digest": "<short signature of inputs, not full payload>",
  *   "ok":             <bool>,
  *   "ms":             <duration ms if known, 0 otherwise>,
- *   "prompt":         "<user prompt text, UserPromptSubmit only; omitted otherwise>"
+ *   "model":          "<model name if provided in payload, omitted otherwise>",
+ *   "prompt":         "<user prompt text, UserPromptSubmit only; omitted otherwise>",
+ *   "loop_layer":     "<L1|L2|L3|L4|security-review — loop events only>",
+ *   "loop_round":     <1-indexed round number — loop events only>,
+ *   "loop_gate":      "<G-spec|G-plan|G-diagnose|G-lane:<lane-id> — codex_review_round only>",
+ *   "loop_terminated":<bool — loop_round_end/codex_review_round only>
  * }
  *
  * Run-id resolution (priority order):
  *   1. GUILD_RUN_ID env var (set by tests or orchestrator)
- *   2. stdin payload session_id field
- *   3. fallback: "session-<date>"
+ *   2. .guild/runs/current-run-id sentinel file (written by scripts/new-run-id.ts)
+ *   3. stdin payload session_id field
+ *   4. fallback: "run-session-<date>"
  *
  * Working directory resolution (priority order):
  *   1. GUILD_CWD env var (set by tests)
@@ -65,6 +71,12 @@ interface HookPayload {
   stop_reason?: string;
   duration_ms?: number;
   prompt?: string;
+  model?: string;
+  // loop_round fields — emitted by loop skill scripts via emit-loop-event.ts
+  loop_layer?: string;
+  loop_round?: number;
+  loop_gate?: string;
+  loop_terminated?: boolean;
 }
 
 interface TelemetryEvent {
@@ -75,7 +87,13 @@ interface TelemetryEvent {
   payload_digest: string;
   ok: boolean;
   ms: number;
+  model?: string;
   prompt?: string;
+  // loop_round_start / loop_round_end extra fields
+  loop_layer?: string;
+  loop_round?: number;
+  loop_gate?: string;
+  loop_terminated?: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -111,6 +129,26 @@ async function readStdin(): Promise<string> {
   });
 }
 
+function readCurrentRunId(cwd: string): string | undefined {
+  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+  try {
+    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    return value.length > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveRunId(cwd: string, payload: HookPayload): string {
+  const envRunId = process.env["GUILD_RUN_ID"];
+  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
+  const currentRunId = readCurrentRunId(cwd);
+  if (currentRunId !== undefined) return currentRunId;
+  return payload.session_id
+    ? `run-${payload.session_id}`
+    : `run-session-${new Date().toISOString().slice(0, 10)}`;
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -126,15 +164,11 @@ async function main(): Promise<void> {
   }
 
   // Resolve run context.
-  // Convention: run-id is `run-<session_id>` OR honored directly from GUILD_RUN_ID
-  // env var (which the agent-team launcher sets per pane so hooks inside the
-  // pane converge on the launcher's session manifest path). Fallback is
-  // `run-session-<date>` when neither is available.
+  // Priority order: GUILD_RUN_ID env → current-run-id sentinel → run-<session_id> → date fallback.
+  // The sentinel file is written by scripts/new-run-id.ts at the start of each /guild invocation,
+  // allowing multiple /guild runs within one Claude session to produce distinct run directories.
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
-  const sessionId = payload.session_id;
-  const runId =
-    process.env["GUILD_RUN_ID"] ??
-    (sessionId ? `run-${sessionId}` : `run-session-${new Date().toISOString().slice(0, 10)}`);
+  const runId = resolveRunId(cwd, payload);
 
   // Build event
   const eventName = payload.hook_event_name ?? "PostToolUse";
@@ -158,8 +192,18 @@ async function main(): Promise<void> {
     ok,
     ms,
   };
+  if (typeof payload.model === "string" && payload.model.length > 0) {
+    event.model = payload.model;
+  }
   if (eventName === "UserPromptSubmit" && typeof payload.prompt === "string") {
     event.prompt = payload.prompt;
+  }
+  // loop_round_start / loop_round_end extra fields
+  if (eventName === "loop_round_start" || eventName === "loop_round_end") {
+    if (typeof payload.loop_layer === "string") event.loop_layer = payload.loop_layer;
+    if (typeof payload.loop_round === "number") event.loop_round = payload.loop_round;
+    if (typeof payload.loop_gate === "string") event.loop_gate = payload.loop_gate;
+    if (typeof payload.loop_terminated === "boolean") event.loop_terminated = payload.loop_terminated;
   }
 
   // Write to .guild/runs/<run-id>/events.ndjson

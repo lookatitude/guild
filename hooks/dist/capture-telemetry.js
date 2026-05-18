@@ -48,6 +48,22 @@ async function readStdin() {
     process.stdin.on("error", () => resolve(""));
   });
 }
+function readCurrentRunId(cwd) {
+  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+  try {
+    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    return value.length > 0 ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function resolveRunId(cwd, payload) {
+  const envRunId = process.env["GUILD_RUN_ID"];
+  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
+  const currentRunId = readCurrentRunId(cwd);
+  if (currentRunId !== void 0) return currentRunId;
+  return payload.session_id ? `run-${payload.session_id}` : `run-session-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`;
+}
 async function main() {
   const raw = await readStdin();
   let payload = {};
@@ -58,8 +74,7 @@ async function main() {
     process.exit(0);
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
-  const sessionId = payload.session_id;
-  const runId = process.env["GUILD_RUN_ID"] ?? (sessionId ? `run-${sessionId}` : `run-session-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`);
+  const runId = resolveRunId(cwd, payload);
   const eventName = payload.hook_event_name ?? "PostToolUse";
   const tool = eventName === "SubagentStop" || eventName === "UserPromptSubmit" ? "" : payload.tool_name ?? "";
   const specialist = payload.agent_name ?? "";
@@ -77,8 +92,17 @@ async function main() {
     ok,
     ms
   };
+  if (typeof payload.model === "string" && payload.model.length > 0) {
+    event.model = payload.model;
+  }
   if (eventName === "UserPromptSubmit" && typeof payload.prompt === "string") {
     event.prompt = payload.prompt;
+  }
+  if (eventName === "loop_round_start" || eventName === "loop_round_end") {
+    if (typeof payload.loop_layer === "string") event.loop_layer = payload.loop_layer;
+    if (typeof payload.loop_round === "number") event.loop_round = payload.loop_round;
+    if (typeof payload.loop_gate === "string") event.loop_gate = payload.loop_gate;
+    if (typeof payload.loop_terminated === "boolean") event.loop_terminated = payload.loop_terminated;
   }
   const runsDir = path.join(cwd, ".guild", "runs", runId);
   const eventsFile = path.join(runsDir, "events.ndjson");

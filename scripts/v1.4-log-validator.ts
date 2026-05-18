@@ -321,10 +321,10 @@ function validateCodexReviewRound(o: Record<string, unknown>, errs: string[]): v
     errs.push(`gate: expected string`);
   } else {
     const g = o.gate;
-    const ok = g === "G-spec" || g === "G-plan" || G_LANE_RE.test(g);
+    const ok = g === "G-spec" || g === "G-plan" || g === "G-diagnose" || G_LANE_RE.test(g);
     if (!ok)
       errs.push(
-        `gate: expected "G-spec" | "G-plan" | "G-lane:<lane-id>", got ${JSON.stringify(g)}`,
+        `gate: expected "G-spec" | "G-plan" | "G-diagnose" | "G-lane:<lane-id>", got ${JSON.stringify(g)}`,
       );
   }
   if (!isPosInt(o.round_number) || (o.round_number as number) > 5)

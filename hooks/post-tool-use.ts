@@ -23,6 +23,7 @@
  * Exit:    Always 0 — telemetry must not block.
  */
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 import {
@@ -30,6 +31,8 @@ import {
   buildToolCallFromPair,
   buildToolCallFromPostOnly,
   consumeSidecarPre,
+  isSafeLaneId,
+  isSafeRunId,
   sweepOrphanedSidecarFull,
   type SidecarMatchKey,
   type ToolCallEvent,
@@ -83,15 +86,23 @@ function resultExcerpt(payload: PostToolUsePayload): string {
   }
 }
 
-export async function main(): Promise<void> {
-  const runId = process.env["GUILD_RUN_ID"];
-  if (typeof runId !== "string" || runId.length === 0) {
-    process.stderr.write(
-      "warn: [post-tool-use] GUILD_RUN_ID unset — falling through (no tool_call emit).\n",
-    );
-    return;
+function readCurrentRunId(cwd: string): string | undefined {
+  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+  try {
+    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    return value.length > 0 ? value : undefined;
+  } catch {
+    return undefined;
   }
+}
 
+function resolveRunId(cwd: string): string | undefined {
+  const envRunId = process.env["GUILD_RUN_ID"];
+  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
+  return readCurrentRunId(cwd);
+}
+
+export async function main(): Promise<void> {
   const raw = await readStdin();
   let payload: PostToolUsePayload = {};
   try {
@@ -103,10 +114,33 @@ export async function main(): Promise<void> {
 
   const toolName = payload.tool_name ?? "";
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0) {
+    process.stderr.write(
+      "warn: [post-tool-use] GUILD_RUN_ID unset and current-run-id missing — falling through (no tool_call emit).\n",
+    );
+    return;
+  }
+  if (!isSafeRunId(runId)) {
+    process.stderr.write(
+      "warn: [post-tool-use] invalid GUILD_RUN_ID/current-run-id — falling through (no tool_call emit).\n",
+    );
+    return;
+  }
+
   const runDir =
     process.env["GUILD_RUN_DIR"] ??
     path.join(cwd, ".guild", "runs", runId);
-  const laneId = process.env["GUILD_LANE_ID"];
+  const rawLaneId = process.env["GUILD_LANE_ID"];
+  const laneId =
+    typeof rawLaneId === "string" && rawLaneId.length > 0 && isSafeLaneId(rawLaneId)
+      ? rawLaneId
+      : undefined;
+  if (typeof rawLaneId === "string" && rawLaneId.length > 0 && laneId === undefined) {
+    process.stderr.write(
+      "warn: [post-tool-use] invalid GUILD_LANE_ID — omitting lane_id.\n",
+    );
+  }
   const tsPost = new Date().toISOString();
 
   // Always run the orphan sweep first — flushes stale Pre entries from
@@ -146,7 +180,7 @@ export async function main(): Promise<void> {
     tool: toolName,
     post_ts: tsPost,
   };
-  if (typeof laneId === "string" && laneId.length > 0) {
+  if (laneId !== undefined) {
     matchKey.lane_id = laneId;
   }
 
@@ -166,9 +200,7 @@ export async function main(): Promise<void> {
         run_id: runId,
         tool: toolName,
         result_excerpt_redacted: resultExcerpt(payload),
-        ...(typeof laneId === "string" && laneId.length > 0
-          ? { lane_id: laneId }
-          : {}),
+        ...(laneId !== undefined ? { lane_id: laneId } : {}),
         ...(typeof payload.duration_ms === "number"
           ? { latency_ms_override: payload.duration_ms }
           : {}),

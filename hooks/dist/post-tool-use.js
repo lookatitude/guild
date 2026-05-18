@@ -33,14 +33,15 @@ __export(post_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(post_tool_use_exports);
+var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 
-// ../benchmark/src/log-jsonl.ts
+// ../../benchmark/src/log-jsonl.ts
 var import_node_fs2 = require("node:fs");
 var import_node_path2 = require("node:path");
 var import_node_zlib = require("node:zlib");
 
-// ../benchmark/src/redact-log.ts
+// ../../benchmark/src/redact-log.ts
 var TOKEN_REDACTED = "[REDACTED_TOKEN]";
 var PATH_REDACTED = "[REDACTED]";
 var KV_REDACTED = "[REDACTED]";
@@ -52,6 +53,8 @@ var TOKEN_SHAPE_PATTERNS = [
   /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
   /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
   /\bghp_[A-Za-z0-9]{36}\b/g,
+  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
+  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
   /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
   /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
@@ -134,7 +137,7 @@ function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
   return out;
 }
 
-// ../benchmark/src/v1.4-lock.ts
+// ../../benchmark/src/v1.4-lock.ts
 var import_node_fs = require("node:fs");
 var import_node_path = require("node:path");
 function stableLockPath(runDir) {
@@ -200,7 +203,7 @@ function withStableLock(runDir, fn, opts = {}) {
   }
 }
 
-// ../benchmark/src/log-jsonl.ts
+// ../../benchmark/src/log-jsonl.ts
 function liveLogPath(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "v1.4-events.jsonl");
 }
@@ -214,6 +217,7 @@ function sidecarPath(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "tool-call-pre.jsonl");
 }
 function laneFallbackPath(runDir, laneId) {
+  assertSafeLaneId(laneId);
   return (0, import_node_path2.join)(runDir, "logs", `lane-${laneId}-events.jsonl`);
 }
 var TOOL_CALL_TOOL_VALUES = [
@@ -235,8 +239,33 @@ var TOOL_CALL_TOOL_VALUES = [
   "BashOutput",
   "KillShell"
 ];
+var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+function isSafeRunId(id) {
+  return RUN_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function isSafeLaneId(id) {
+  return LANE_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function assertSafeRunId(id) {
+  if (!isSafeRunId(id)) {
+    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id)}`);
+  }
+}
+function assertSafeLaneId(id) {
+  if (!isSafeLaneId(id)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id)}`);
+  }
+}
+function validateEventIds(event) {
+  assertSafeRunId(event.run_id);
+  if ("lane_id" in event && event.lane_id !== void 0) {
+    assertSafeLaneId(event.lane_id);
+  }
+}
 var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 function appendEvent(runDir, event, opts = {}) {
+  validateEventIds(event);
   const cap = opts.fieldCap;
   const redacted = redactEventFields(event, cap);
   const line = JSON.stringify(redacted) + "\n";
@@ -314,6 +343,7 @@ function rotateLocked(runDir) {
     `log-jsonl: failed to recreate live log at ${live} with O_EXCL after 5 retries`
   );
 }
+var SIDECAR_MAX_BYTES = 1024 * 1024;
 function sidecarKeyMatches(entry, key) {
   if (entry.run_id !== key.run_id) return false;
   if (entry.tool !== key.tool) return false;
@@ -508,14 +538,21 @@ function resultExcerpt(payload) {
     return "";
   }
 }
-async function main() {
-  const runId = process.env["GUILD_RUN_ID"];
-  if (typeof runId !== "string" || runId.length === 0) {
-    process.stderr.write(
-      "warn: [post-tool-use] GUILD_RUN_ID unset \u2014 falling through (no tool_call emit).\n"
-    );
-    return;
+function readCurrentRunId(cwd) {
+  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+  try {
+    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    return value.length > 0 ? value : void 0;
+  } catch {
+    return void 0;
   }
+}
+function resolveRunId(cwd) {
+  const envRunId = process.env["GUILD_RUN_ID"];
+  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
+  return readCurrentRunId(cwd);
+}
+async function main() {
   const raw = await readStdin();
   let payload = {};
   try {
@@ -526,8 +563,27 @@ async function main() {
   }
   const toolName = payload.tool_name ?? "";
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0) {
+    process.stderr.write(
+      "warn: [post-tool-use] GUILD_RUN_ID unset and current-run-id missing \u2014 falling through (no tool_call emit).\n"
+    );
+    return;
+  }
+  if (!isSafeRunId(runId)) {
+    process.stderr.write(
+      "warn: [post-tool-use] invalid GUILD_RUN_ID/current-run-id \u2014 falling through (no tool_call emit).\n"
+    );
+    return;
+  }
   const runDir = process.env["GUILD_RUN_DIR"] ?? path.join(cwd, ".guild", "runs", runId);
-  const laneId = process.env["GUILD_LANE_ID"];
+  const rawLaneId = process.env["GUILD_LANE_ID"];
+  const laneId = typeof rawLaneId === "string" && rawLaneId.length > 0 && isSafeLaneId(rawLaneId) ? rawLaneId : void 0;
+  if (typeof rawLaneId === "string" && rawLaneId.length > 0 && laneId === void 0) {
+    process.stderr.write(
+      "warn: [post-tool-use] invalid GUILD_LANE_ID \u2014 omitting lane_id.\n"
+    );
+  }
   const tsPost = (/* @__PURE__ */ new Date()).toISOString();
   try {
     const sweep = sweepOrphanedSidecarFull(runDir);
@@ -555,7 +611,7 @@ async function main() {
     tool: toolName,
     post_ts: tsPost
   };
-  if (typeof laneId === "string" && laneId.length > 0) {
+  if (laneId !== void 0) {
     matchKey.lane_id = laneId;
   }
   let event;
@@ -567,7 +623,7 @@ async function main() {
         run_id: runId,
         tool: toolName,
         result_excerpt_redacted: resultExcerpt(payload),
-        ...typeof laneId === "string" && laneId.length > 0 ? { lane_id: laneId } : {},
+        ...laneId !== void 0 ? { lane_id: laneId } : {},
         ...typeof payload.duration_ms === "number" ? { latency_ms_override: payload.duration_ms } : {}
       });
     } else {

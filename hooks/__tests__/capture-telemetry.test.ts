@@ -172,6 +172,176 @@ describe("capture-telemetry.ts", () => {
     });
   });
 
+  describe("sentinel-based run scoping", () => {
+    it("uses GUILD_RUN_ID env over sentinel", () => {
+      // Write sentinel with a different run-id
+      const sentinelDir = path.join(tmpDir, ".guild", "runs");
+      fs.mkdirSync(sentinelDir, { recursive: true });
+      fs.writeFileSync(path.join(sentinelDir, "current-run-id"), "sentinel-run", "utf8");
+
+      runScript(readFixture("post-tool-use.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "test-run", // env wins
+      });
+      // Events should be under test-run, not sentinel-run
+      expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", "test-run", "events.ndjson"))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", "sentinel-run", "events.ndjson"))).toBe(false);
+    });
+
+    it("uses sentinel file when GUILD_RUN_ID is empty", () => {
+      const sentinelDir = path.join(tmpDir, ".guild", "runs");
+      fs.mkdirSync(sentinelDir, { recursive: true });
+      fs.writeFileSync(path.join(sentinelDir, "current-run-id"), "from-sentinel", "utf8");
+
+      // Pass GUILD_RUN_ID="" to bypass env priority — sentinel should be used
+      const result = runScript(readFixture("post-tool-use.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "", // empty overrides the default "test-run"
+      });
+      expect(result.exitCode).toBe(0);
+      const sentinelEventsFile = path.join(tmpDir, ".guild", "runs", "from-sentinel", "events.ndjson");
+      expect(fs.existsSync(sentinelEventsFile)).toBe(true);
+      const lines = fs.readFileSync(sentinelEventsFile, "utf8").trim().split("\n").filter(Boolean);
+      expect(lines.length).toBe(1);
+      expect(JSON.parse(lines[0]).event).toBe("PostToolUse");
+    });
+
+    it("falls back to session_id when sentinel is absent and GUILD_RUN_ID is empty", () => {
+      // No sentinel, GUILD_RUN_ID="" — payload session_id should be used
+      runScript(readFixture("post-tool-use.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "", // empty — bypasses env priority
+        // no sentinel file written
+      });
+      // post-tool-use.json has session_id: "sess-abc123"
+      const sessionEventsFile = path.join(tmpDir, ".guild", "runs", "run-sess-abc123", "events.ndjson");
+      expect(fs.existsSync(sessionEventsFile)).toBe(true);
+    });
+  });
+
+  describe("run scoping", () => {
+    it("uses .guild/runs/current-run-id when GUILD_RUN_ID is unset", () => {
+      const scopedRunId = "run-sentinel-123";
+      const runsRoot = path.join(tmpDir, ".guild", "runs");
+      fs.mkdirSync(runsRoot, { recursive: true });
+      fs.writeFileSync(path.join(runsRoot, "current-run-id"), scopedRunId, "utf8");
+
+      runScript(readFixture("post-tool-use.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "",
+      });
+
+      const scopedEvents = path.join(runsRoot, scopedRunId, "events.ndjson");
+      expect(fs.existsSync(scopedEvents)).toBe(true);
+      expect(fs.existsSync(eventsFile)).toBe(false);
+    });
+
+    it("uses a new sentinel value for a later /guild invocation in the same session", () => {
+      const runsRoot = path.join(tmpDir, ".guild", "runs");
+      fs.mkdirSync(runsRoot, { recursive: true });
+      const sentinel = path.join(runsRoot, "current-run-id");
+
+      fs.writeFileSync(sentinel, "run-first", "utf8");
+      runScript(readFixture("post-tool-use.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "",
+      });
+
+      fs.writeFileSync(sentinel, "run-second", "utf8");
+      runScript(readFixture("subagent-stop.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "",
+      });
+
+      expect(fs.existsSync(path.join(runsRoot, "run-first", "events.ndjson"))).toBe(true);
+      expect(fs.existsSync(path.join(runsRoot, "run-second", "events.ndjson"))).toBe(true);
+      const firstLines = fs.readFileSync(path.join(runsRoot, "run-first", "events.ndjson"), "utf8").trim().split("\n");
+      const secondLines = fs.readFileSync(path.join(runsRoot, "run-second", "events.ndjson"), "utf8").trim().split("\n");
+      expect(firstLines.length).toBe(1);
+      expect(secondLines.length).toBe(1);
+    });
+  });
+
+  describe("model field", () => {
+    it("records model field when present in payload", () => {
+      runScript(readFixture("post-tool-use.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "test-run",
+      });
+      // post-tool-use.json does not include model; field should be absent
+      const lines = fs.readFileSync(eventsFile, "utf8").trim().split("\n").filter(Boolean);
+      const event = JSON.parse(lines[0]);
+      expect(event.model).toBeUndefined();
+    });
+
+    it("records model field from loop_round_start fixture", () => {
+      runScript(readFixture("loop-round-start.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "test-run",
+      });
+      const lines = fs.readFileSync(eventsFile, "utf8").trim().split("\n").filter(Boolean);
+      const event = JSON.parse(lines[0]);
+      expect(event.model).toBe("claude-sonnet-4-6");
+    });
+  });
+
+  describe("loop_round events", () => {
+    it("emits loop_round_start with loop_layer and loop_round fields", () => {
+      runScript(readFixture("loop-round-start.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "test-run",
+      });
+      const lines = fs.readFileSync(eventsFile, "utf8").trim().split("\n").filter(Boolean);
+      expect(lines.length).toBe(1);
+      const event = JSON.parse(lines[0]);
+      expect(event.event).toBe("loop_round_start");
+      expect(event.loop_layer).toBe("L1");
+      expect(event.loop_round).toBe(1);
+      expect(event.loop_gate).toBe("G-spec");
+      expect(event.loop_terminated).toBeUndefined();
+    });
+
+    it("emits loop_round_end with loop_terminated=false for non-final round", () => {
+      runScript(readFixture("loop-round-end.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "test-run",
+      });
+      const lines = fs.readFileSync(eventsFile, "utf8").trim().split("\n").filter(Boolean);
+      const event = JSON.parse(lines[0]);
+      expect(event.event).toBe("loop_round_end");
+      expect(event.loop_terminated).toBe(false);
+      expect(event.loop_layer).toBe("L1");
+    });
+
+    it("emits loop_round_end with loop_terminated=true when sentinel fires", () => {
+      runScript(readFixture("loop-round-end-satisfied.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "test-run",
+      });
+      const lines = fs.readFileSync(eventsFile, "utf8").trim().split("\n").filter(Boolean);
+      const event = JSON.parse(lines[0]);
+      expect(event.event).toBe("loop_round_end");
+      expect(event.loop_terminated).toBe(true);
+      expect(event.loop_round).toBe(3);
+      expect(event.loop_gate).toBe("G-plan");
+    });
+
+    it("loop_round_start and loop_round_end accumulate in sequence", () => {
+      runScript(readFixture("loop-round-start.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "test-run",
+      });
+      runScript(readFixture("loop-round-end.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "test-run",
+      });
+      const lines = fs.readFileSync(eventsFile, "utf8").trim().split("\n").filter(Boolean);
+      expect(lines.length).toBe(2);
+      expect(JSON.parse(lines[0]).event).toBe("loop_round_start");
+      expect(JSON.parse(lines[1]).event).toBe("loop_round_end");
+    });
+  });
+
   describe("error resilience", () => {
     it("exits 0 even when given invalid JSON", () => {
       const { exitCode } = runScript("not valid json at all", {

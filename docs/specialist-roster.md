@@ -1,12 +1,12 @@
 # Specialist Roster
 
-Implements `guild-plan.md §6`. 13 shipping specialists across 3 groups, 50 T5 skills.
+Implements `guild-plan.md §6`. 14 shipping specialists across 3 groups, 50 T5 skills (plus 4 forward-declared `frontend-*` skills pending authoring).
 
 Every specialist inherits `guild-principles` (T1) as a mandatory first load: the
 Karpathy 4 plus Guild's evidence rule. Per-specialist T5 skills live under
 `skills/specialists/<specialist>-<slug>/`.
 
-## Engineering group (7 specialists · 26 skills)
+## Engineering group (8 specialists · 26 authored T5 skills)
 
 ### architect — `agents/architect.md`
 
@@ -67,6 +67,18 @@ Karpathy 4 plus Guild's evidence rule. Per-specialist T5 skills live under
   compliance copy (copywriter / technical-writer).
 - **Skills:** `security-threat-modeling`, `security-dependency-audit`,
   `security-auth-flow-review`, `security-secrets-scan`.
+
+### frontend — `agents/frontend.md`
+
+- **Triggers:** React, Vue, Svelte, Solid, Vite config, Tailwind, a11y/accessibility,
+  Lighthouse, Core Web Vitals, component authoring, state management, client-side
+  routing, code splitting, frontend bundle size, design-system implementation.
+- **DO NOT trigger for:** cross-system architecture (architect), API contracts / data
+  layer (backend), test strategy and suite shape (qa), iOS/Android/RN (mobile),
+  CI/CD and infra (devops), UI microcopy (copywriter), SEO technical audits (seo).
+- **Skills:** `frontend-react`, `frontend-state-management`, `frontend-bundler-config`,
+  `frontend-a11y` — all forward-declared; main session substitutes `guild:tdd` +
+  `guild:systematic-debug` until the T5 skill files are authored.
 
 Engineering-group principles: TDD-first, surgical diffs, evidence = passing tests
 plus diff trace.

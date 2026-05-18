@@ -79,6 +79,19 @@ Parallelism rules from `guild-plan.md §8`:
 
 The DAG expressed in `depends-on:` is what `guild:execute-plan` reads to schedule parallel dispatches — authoring the edges wrong here leads to either serialized work that could have parallelized or dispatches that start before their inputs exist.
 
+## Codex adversarial review (when `codex_review: true`)
+
+If the run context has `codex_review: true`, invoke `guild:codex-review` after writing the plan with `approved: false` and **before** presenting the plan to the user for approval:
+
+```
+Skill: guild-codex-review
+args: gate=G-plan artifact_path=.guild/plan/<slug>.md run_id=<run-id>
+```
+
+If `guild:codex-review` returns `status: "rework"`, revise the plan using Codex's findings before re-presenting to the user. If `status: "satisfied"`, `"skipped"`, or `"force_passed"`, proceed to the user-approval gate normally.
+
+The Codex gate runs between plan write and user-approval. It does not replace user approval.
+
 ## Approval gate
 
 The plan is **not** handed off to `guild:context-assemble` or `guild:execute-plan` until the user has explicitly approved it. The approval gate is non-negotiable:

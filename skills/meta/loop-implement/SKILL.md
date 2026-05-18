@@ -230,11 +230,27 @@ For each lane the orchestrator dispatches with `loops_applicable ≠ "none"`:
 2. **Per layer, in order:**
    - For each round (1..cap):
      - Increment `<layer>:<lane_id>` counter (or `security:<lane_id>` for security-review).
-     - Emit `loop_round_start` JSONL event with `lane_id: <lane_id>`, `loop_layer: <layer>`, `round_number`, `cap`.
+     - Emit `loop_round_start` event via `scripts/emit-loop-event.ts`:
+       ```bash
+       npx tsx scripts/emit-loop-event.ts \
+         --event loop_round_start --layer <L3|L4|security-review> \
+         --lane <lane-id> --round <N> --cap <cap> \
+         [--run-id <run-id>] [--cwd <repo-root>]
+       ```
      - Dispatch the lane owner with the prior round's challenger output (or the initial deliverable for round 1).
      - Dispatch the layer's challenger (`qa-property-based-tests` / `qa` / `security`).
      - Inspect the challenger's body with `detectSentinel(...)`.
-     - Emit `loop_round_end` JSONL event.
+     - Emit `loop_round_end` event via `scripts/emit-loop-event.ts`:
+       ```bash
+       npx tsx scripts/emit-loop-event.ts \
+         --event loop_round_end --layer <L3|L4|security-review> \
+         --lane <lane-id> --round <N> \
+         --terminated <satisfied|malformed_termination|cap_hit|escalation|error> \
+         --terminator <challenger-specialist> \
+         [--run-id <run-id>] [--cwd <repo-root>]
+       ```
+       Use `satisfied` only when the sentinel was clean; use the corresponding
+       enum for cap-hit, malformed-termination, escalation, or runtime error.
      - Decide: clean → exit layer; malformed → record (escalate on 2 consecutive); no-sentinel + round < cap → continue; cap exhausted → escalate cap-hit.
 
 3. **After security-review layer completes cleanly:**

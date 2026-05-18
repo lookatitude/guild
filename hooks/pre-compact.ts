@@ -27,6 +27,7 @@
  *   3. process.cwd() + .guild/runs/<run-id>
  */
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { appendEvent, type HookEvent } from "../benchmark/src/log-jsonl.js";
@@ -64,15 +65,23 @@ function payloadExcerpt(payload: unknown): string {
   }
 }
 
-export async function main(): Promise<void> {
-  const runId = process.env["GUILD_RUN_ID"];
-  if (typeof runId !== "string" || runId.length === 0) {
-    process.stderr.write(
-      "warn: [pre-compact] GUILD_RUN_ID unset — falling through (no log emit).\n",
-    );
-    return;
+function readCurrentRunId(cwd: string): string | undefined {
+  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+  try {
+    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    return value.length > 0 ? value : undefined;
+  } catch {
+    return undefined;
   }
+}
 
+function resolveRunId(cwd: string): string | undefined {
+  const envRunId = process.env["GUILD_RUN_ID"];
+  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
+  return readCurrentRunId(cwd);
+}
+
+export async function main(): Promise<void> {
   const raw = await readStdin();
   let payload: PreCompactPayload = {};
   try {
@@ -84,6 +93,14 @@ export async function main(): Promise<void> {
   }
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0) {
+    process.stderr.write(
+      "warn: [pre-compact] GUILD_RUN_ID unset and current-run-id missing — falling through (no log emit).\n",
+    );
+    return;
+  }
+
   const runDir =
     process.env["GUILD_RUN_DIR"] ??
     path.join(cwd, ".guild", "runs", runId);

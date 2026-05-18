@@ -123,6 +123,12 @@ referenced by team-compose's "auto-create" gap-handling option. The flow:
 
 Failure at any gate stops the process and returns refinement options.
 
+After a successful register step, restart or reload Claude Code before relying
+on the new specialist in `/guild:team` or future `/guild` runs. Claude Code
+loads plugin agent and skill manifests at session startup; the files are live on
+disk immediately, but current sessions may not route to the new specialist until
+the plugin is loaded again.
+
 ## See also
 
 - `guild-plan.md §11` — full evolution pipeline + risks.

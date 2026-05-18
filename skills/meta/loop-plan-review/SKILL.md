@@ -80,11 +80,27 @@ The keyword set `/concern|issue|gap|missing|undefined/i` is REMOVED (round-2 reg
 
 2. **Per round, in order:**
    a. Increment `L2` counter via `incrementCounter(runDir, run_id, "L2")`.
-   b. Emit `loop_round_start` JSONL event with `lane_id: "phase:plan"`, `loop_layer: "L2"`.
+   b. Emit `loop_round_start` event via `scripts/emit-loop-event.ts`:
+      ```bash
+      npx tsx scripts/emit-loop-event.ts \
+        --event loop_round_start --layer L2 --lane phase:plan \
+        --round <N> --cap <cap> \
+        [--run-id <run-id>] [--cwd <repo-root>]
+      ```
    c. Dispatch architect (round 1: original plan; round N: revised plan with "dismissed because X" rationales for any dismissals).
    d. Dispatch security with the architect's plan + spec as round-input. Security MUST raise plan-defect questions only.
    e. Inspect security's body with the sentinel detector.
-   f. Emit `loop_round_end` JSONL event.
+   f. Emit `loop_round_end` event via `scripts/emit-loop-event.ts`:
+      ```bash
+      npx tsx scripts/emit-loop-event.ts \
+        --event loop_round_end --layer L2 --lane phase:plan \
+        --round <N> --terminated <satisfied|malformed_termination|cap_hit|escalation|error> \
+        --terminator security \
+        [--run-id <run-id>] [--cwd <repo-root>]
+      ```
+      Use `satisfied` only when security emitted `## NO MORE QUESTIONS`
+      cleanly; use the corresponding enum for cap-hit, malformed-termination,
+      escalation, or runtime error.
 
 3. **Decide.**
    - `clean` → return `status: "satisfied"`, `next: "gate-3-plan-approval"`. Reset `L2` counter.

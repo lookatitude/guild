@@ -11,7 +11,7 @@ specialist agents. The shipped architecture has four layers:
   through the Agent tool or, opt-in, the experimental agent-team backend.
 - **Plugin** — installed content in this repo: `skills/`, `agents/`, `commands/`,
   `hooks/`, `scripts/`, `mcp-servers/`, `.mcp.json`, `.claude-plugin/plugin.json`.
-- **Specialists** — 13 subagents defined in `agents/*.md` with `isolation: worktree`,
+- **Specialists** — 14 subagents defined in `agents/*.md` with `isolation: worktree`,
   each instructed to treat its context bundle as authoritative.
 - **Project-local state** — `.guild/` at the consuming repo root. Every mutable
   artifact lives here: raw sources, wiki, telemetry, reflections, evolve workspaces,
@@ -31,15 +31,15 @@ guild/
 ├── README.md
 ├── guild-plan.md                        # single source of truth
 │
-├── skills/                              # 67 skills across 5 tiers
+├── skills/                              # 77 skills across 5 tiers
 │   ├── core/principles/                 # T1 · 1 skill
-│   ├── meta/                            # T2 · 13 skills (see below)
+│   ├── meta/                            # T2 · 18 skills (see below)
 │   ├── knowledge/                       # T3 · 3 skills: wiki-ingest, wiki-query, wiki-lint
 │   ├── fallback/                        # T4 · empty; superpowers is referenced directly
-│   └── specialists/                     # T5 · 50 skills across 13 roles
+│   └── specialists/                     # T5 · 50 authored specialist skills
 │
-├── agents/                              # 13 specialist definitions (.md)
-├── commands/                            # 7 slash commands (.md)
+├── agents/                              # 14 specialist definitions (.md)
+├── commands/                            # 8 slash commands (.md)
 ├── hooks/                               # hooks.json + handlers
 │   ├── hooks.json
 │   ├── bootstrap.sh
@@ -58,10 +58,12 @@ guild/
     └── phase-gates/                     # P0–P6 closed gates
 ```
 
-**Meta skills shipped (T2, 13):** audit · brainstorm · context-assemble ·
-create-specialist · decisions · evolve-skill · execute-plan · plan · reflect ·
-review · rollback-skill · team-compose · verify-done. `using-guild` from the plan
-is not materialized as a separate skill — its role is served by `commands/guild.md`.
+**Meta skills shipped (T2, 18):** audit · brainstorm · codex-review ·
+context-assemble · create-specialist · decisions · diagnose · evolve-skill ·
+execute-plan · loop-clarify · loop-implement · loop-plan-review · plan ·
+reflect · review · rollback-skill · team-compose · verify-done. `using-guild`
+from the plan is not materialized as a separate skill — its role is served by
+`commands/guild.md`.
 
 **Fallback skills shipped (T4, 5):** tdd · systematic-debug · worktrees ·
 request-review · finish-branch. Each is forked from the corresponding
@@ -97,6 +99,21 @@ Parallelism rules (per `guild-plan.md §8`):
 - Content and commercial specialists run in parallel with engineering when they
   only need the spec.
 
+## Command surface
+
+Guild registers 8 slash commands:
+
+| Command | Delegates to | Purpose |
+|---|---|---|
+| `/guild` | lifecycle meta-skills | Full brainstorm to verify lifecycle. |
+| `/guild:team` | `guild-team-compose` | Compose, inspect, or edit a specialist team. |
+| `/guild:evolve` | `guild-evolve-skill` | Run the skill evolution pipeline. |
+| `/guild:wiki` | wiki skills | Ingest, query, or lint project memory. |
+| `/guild:rollback` | `guild-rollback-skill` | Restore a prior skill version. |
+| `/guild:stats` | telemetry readers | Summarize run, reflection, and audit stats. |
+| `/guild:audit` | `guild-audit` | Static security audit of plugin scripts. |
+| `/guild:diagnose` | `guild-diagnose` | Diagnose failed Guild runs and produce a gated self-fix plan. |
+
 ## Backend options
 
 Two execution backends, configured per-task in `.guild/team/<slug>.yaml`:
@@ -110,7 +127,7 @@ The launcher is invoked only when `team.yaml` declares `backend: agent-team`.
 Hooks `task-created`, `task-completed`, and `teammate-idle` govern ownership,
 handoff receipts, and nudges in that mode.
 
-## Hooks inventory (8 events wired)
+## Hooks inventory (10 events wired)
 
 From `hooks/hooks.json`:
 
@@ -118,19 +135,49 @@ From `hooks/hooks.json`:
 |---|---|---|
 | `SessionStart` | `hooks/bootstrap.sh` | Inject short Guild status + command list. |
 | `UserPromptSubmit` | `hooks/check-skill-coverage.sh` + `hooks/capture-telemetry.ts` | Nudge missing-skill coverage; log NDJSON event. |
-| `PostToolUse` (matcher `Agent\|Task\|Write\|Edit\|Bash\|Skill`) | `hooks/capture-telemetry.ts` | Append events to `.guild/runs/<run-id>/events.ndjson`. |
+| `PreToolUse` (matcher `*`) | `hooks/pre-tool-use.ts` | Append pre-tool sidecar data for v1.4 audit logging. |
+| `PostToolUse` (matcher `*`) | `hooks/capture-telemetry.ts` + `hooks/post-tool-use.ts` | Append v1.3 telemetry to `.guild/runs/<run-id>/events.ndjson` and v1.4 tool-call audit events to `.guild/runs/<run-id>/logs/v1.4-events.jsonl`. |
+| `PreCompact` | `hooks/pre-compact.ts` | Append context-preservation audit events when the host dispatches `PreCompact`. |
 | `SubagentStop` | `hooks/capture-telemetry.ts` | Flush specialist-level telemetry. |
 | `Stop` | `hooks/maybe-reflect.ts` | Heuristic gate (≥1 specialist dispatched + ≥1 edit + no error) → `guild-reflect`. |
 | `TaskCreated` | `hooks/agent-team/task-created.ts` | Validate ownership, deps, output contract before tasks join the agent-team queue. |
 | `TaskCompleted` | `hooks/agent-team/task-completed.ts` | Block completion if handoff receipt is missing changed-files / evidence / assumptions / risks. |
 | `TeammateIdle` | `hooks/agent-team/teammate-idle.ts` | Nudge idle teammates who still own open tasks. |
 
+`PreToolUse` and `PreCompact` are newer Claude Code hook surfaces. Older hosts
+may never dispatch them; the handlers exit cleanly on missing or malformed input
+and the run continues with fewer audit-log rows.
+
 Tests live under `hooks/__tests__/` and `hooks/agent-team/__tests__/`.
 
-## Scripts (7 tooling scripts)
+## Codex adversarial review trail
 
-Under `scripts/` — all tsx, Node-stdlib-only, filesystem-and-stdio-only. See
-`scripts/README.md` for the shared CLI contract. Plan anchors noted:
+Codex adversarial review is a Guild development standard, separate from the
+consumer-facing internal `/guild --loops=*` adversarial loops. When the standard
+is used for plugin-development gates, the durable trail belongs at:
+
+```
+.guild/runs/<run-id>/codex-review/*.md
+```
+
+Each markdown file is one flat review artifact for a gate or lane and must start
+with YAML frontmatter. The current validator pins the completion standard:
+`final_status:` must be either `satisfied` or `skipped-codex-unavailable`.
+
+Verify a trail with:
+
+```
+npx tsx scripts/verify-codex-review-trail.ts .guild/runs/<run-id>/codex-review
+```
+
+The validator exists and is tested. Producing those review files is still a
+workflow responsibility of the active plugin-development run; consumer `/guild`
+runs do not create Codex review trails by default.
+
+## Scripts
+
+Under `scripts/` — mostly tsx, Node-stdlib-only, filesystem-and-stdio-only. See
+`scripts/README.md` for the shared CLI contract. Core operator-facing scripts:
 
 | Script | Plan anchor | Role |
 |---|---|---|
@@ -141,6 +188,7 @@ Under `scripts/` — all tsx, Node-stdlib-only, filesystem-and-stdio-only. See
 | `scripts/rollback-walker.ts` | §11.3 | Enumerates `.guild/skill-versions/<slug>/v*/`; emits version table. Read-only. |
 | `scripts/trace-summarize.ts` | P5 | Summarizes `.guild/runs/<run-id>/events.ndjson` for reflection. |
 | `scripts/agent-team-launcher.ts` | §7.3 | tmux launcher for the opt-in agent-team backend. |
+| `scripts/verify-codex-review-trail.ts` | v1.4 SC11 | Validates `.guild/runs/<run-id>/codex-review/*.md` final statuses. |
 
 ## MCP servers (optional, bundled)
 
@@ -155,7 +203,7 @@ Both are optional. Guild runs end-to-end without them.
 
 ## See also
 
-- `specialist-roster.md` — the 13 specialists and their skills.
+- `specialist-roster.md` — the 14 specialists and their skills.
 - `context-assembly.md` — the three-layer context contract.
 - `wiki-pattern.md` — the knowledge layer.
 - `self-evolution.md` — the evolve + rollback pipeline.

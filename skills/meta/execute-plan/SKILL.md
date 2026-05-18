@@ -63,6 +63,21 @@ Read the DAG encoded by each lane's `depends-on:` and schedule dispatches accord
 
 The schedule is a function of the DAG, not of authoring order. Lanes with empty `depends-on:` are eligible at run-start; every other lane becomes eligible the moment every task-id it lists has a completed receipt.
 
+## Codex adversarial review per lane (when `codex_review: true`)
+
+If the run context has `codex_review: true`, invoke `guild:codex-review` after each lane's receipt is confirmed and before the next lane dispatches (or before `guild:review` for the final lane):
+
+```
+Skill: guild-codex-review
+args: gate=G-lane:<task-id> artifact_path=.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md run_id=<run-id>
+```
+
+Substitute `<task-id>` with the lane's task-id (e.g., `T2-backend`). Run per-lane in series after the lane's receipt is confirmed.
+
+If `guild:codex-review` returns `status: "rework"` for a lane, that lane must re-execute — do not advance to the next lane or to `guild:review`. Clear the lane's handoff receipt and re-dispatch the specialist with Codex's findings as additional context in the specialist's task brief. The re-execution counts against the restart cap in `counters.json` key `restart:<lane>` (shared with the L3/L4 restart cap).
+
+If `status: "satisfied"`, `"skipped"`, or `"force_passed"`, advance to the next lane normally.
+
 ## Receipt collection
 
 Per `guild-plan.md §8.2`, every specialist writes its receipt to:

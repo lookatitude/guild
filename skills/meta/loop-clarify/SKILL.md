@@ -77,11 +77,25 @@ The keyword set `/concern|issue|gap|missing|undefined/i` was REMOVED after Codex
 
 2. **Per round, in order:**
    a. Increment `L1` counter via `incrementCounter(runDir, run_id, "L1")`.
-   b. Emit `loop_round_start` JSONL event with `lane_id: "phase:brainstorm"`, `loop_layer: "L1"`, `round_number`, `cap`.
+   b. Emit `loop_round_start` event via `scripts/emit-loop-event.ts`:
+      ```bash
+      npx tsx scripts/emit-loop-event.ts \
+        --event loop_round_start --layer L1 --lane phase:brainstorm \
+        --round <N> --cap <cap> \
+        [--run-id <run-id>] [--cwd <repo-root>]
+      ```
    c. Dispatch architect (round 1: brief; round N: revised brief incorporating round N-1 researcher questions).
    d. Dispatch researcher with the architect's output as the round-input.
    e. Inspect researcher's body with the sentinel detector.
-   f. Emit `loop_round_end` JSONL event with `terminated` ∈ `{"satisfied", "malformed_termination", "error"}` and `terminator: "researcher"`.
+   f. Emit `loop_round_end` event via `scripts/emit-loop-event.ts`:
+      ```bash
+      npx tsx scripts/emit-loop-event.ts \
+        --event loop_round_end --layer L1 --lane phase:brainstorm \
+        --round <N> --terminated <satisfied|malformed_termination|cap_hit|escalation|error> \
+        --terminator researcher \
+        [--run-id <run-id>] [--cwd <repo-root>]
+      ```
+      Use `satisfied` when the sentinel was clean (researcher emitted `## NO MORE QUESTIONS` with a clean post-sentinel region). Use `malformed_termination`, `cap_hit`, `escalation`, or `error` for the corresponding non-final outcomes.
 
 3. **Decide.**
    - `clean` (sentinel + clean post-sentinel) → return `status: "satisfied"`, `next: "guild:brainstorm"`. Reset `L1` counter on the next read.

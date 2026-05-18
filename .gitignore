@@ -4,6 +4,8 @@ node_modules/
 
 # Guild runtime state (project-local, never committed by Guild itself)
 .guild/
+!benchmark/fixtures/**/.guild/
+!benchmark/fixtures/**/.guild/**
 
 # OS
 .DS_Store

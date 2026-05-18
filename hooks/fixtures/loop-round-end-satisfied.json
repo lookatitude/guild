@@ -1,0 +1,11 @@
+{
+  "session_id": "sess-abc123",
+  "cwd": "/Users/example/Projects/guild",
+  "hook_event_name": "loop_round_end",
+  "agent_name": "researcher",
+  "loop_layer": "L2",
+  "loop_round": 3,
+  "loop_gate": "G-plan",
+  "loop_terminated": true,
+  "model": "claude-sonnet-4-6"
+}
