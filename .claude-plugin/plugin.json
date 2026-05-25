@@ -39,6 +39,7 @@
     "./commands/resume.md",
     "./commands/wiki.md",
     "./commands/fix.md",
+    "./commands/config.md",
     "./commands/initiative.md",
     "./commands/evolve.md",
     "./commands/rollback.md",

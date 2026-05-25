@@ -59,9 +59,14 @@ For cross-tree truths (operator preferences that survive *outside* this working 
 
 ## Backend default — agent-team when tmux is available
 
-When composing a team for any `/guild` lifecycle run, default `team.yaml`'s `backend:` field to `agent-team` IFF (a) `which tmux` succeeds AND (b) the orchestrator is NOT already inside a tmux session (`$TMUX` env var unset). Fall back to `backend: subagent` on tmux-less machines (CI, fresh installs) OR when already-inside-tmux (the launcher refuses recursion per §7.3).
+When composing a team for any `/guild` lifecycle run, default `team.yaml`'s `backend:` field to `agent-team` whenever `which tmux` succeeds — **whether or not** the orchestrator is already inside a tmux session. Fall back to `backend: subagent` only on tmux-less machines (CI, fresh installs), where `guild:execute-plan` dispatches specialists via the Agent tool and no tmux is required.
 
-When the operator wants agent-team but the orchestrator is currently inside tmux, the path forward is: exit the tmux session, re-run `/guild` from a plain shell, the launcher then spawns a fresh tmux session with one pane per specialist.
+The launcher (`scripts/agent-team-launcher.ts`) picks its tmux strategy from `$TMUX`:
+
+- **`$TMUX` unset** (plain shell): creates a fresh **detached session** with one pane per specialist, then attaches your terminal to it.
+- **`$TMUX` set** (already inside tmux): spawns the team **in the current session** as a new window (`tmux new-window -n guild-<slug>`), builds one pane per specialist by splitting that window, then `select-window`s it so the panes are immediately visible. It never splits or disturbs your currently-active pane and never kills an existing pane/window. The earlier "exit tmux and re-run from a plain shell" workaround is retired — the in-session window is the path now.
+
+The one-team-per-session rule (§7.3) is preserved in both modes: a team-window collision (in-session, window already named `guild-<slug>`) or a session-name collision (new-session) makes the launcher refuse to clobber and print how to switch to or kill the existing team.
 
 This satisfies the §7.3 user-approval requirement for the agent-team backend — the user's instruction (2026-04-27) explicitly approves agent-team as the durable default for all future Guild work on this operator's machine, not just one task.
 
@@ -71,7 +76,7 @@ Full rationale + options scored: `.guild/wiki/decisions/agent-team-default-when-
 
 ## Codex adversarial review
 
-Codex adversarial review runs at three gates — G-spec, G-plan, and G-lane — via the `guild:codex-review` meta-skill (`skills/meta/codex-review/SKILL.md`). It is available to all plugin users via `--review=cross` on `/guild`, or persistently via `.guild/config.yml` key `codex_review: true`.
+Codex adversarial review runs at three gates — G-spec, G-plan, and G-lane — via the `guild:codex-review` meta-skill (`skills/meta/codex-review/SKILL.md`). It is available to all plugin users via `--review=cross` on `/guild`, or persistently via `.guild/settings.json` (`review: cross`).
 
 | Gate | When |
 |---|---|
@@ -79,7 +84,7 @@ Codex adversarial review runs at three gates — G-spec, G-plan, and G-lane — 
 | **G-plan** | After `guild:plan` writes `.guild/plan/<slug>.md`, before the user-approval gate. |
 | **G-lane** | After EACH lane's handoff receipt is written, before the next lane dispatches (or before `guild:review` for the final lane). |
 
-Mechanism: dispatch via `Agent({ subagent_type: "codex:codex-rescue", ... })` with an adversarial prompt + the artifact + (rounds 2+) the prior Q&A trail. Loop until Codex emits `## SATISFIED` on a line by itself. Round cap **5** (configurable via `--codex-cap=N` or `.guild/config.yml` key `codex_cap`); on round 6, surface to user with 3 options (force-pass / extend-cap / rework). Trail under `.guild/runs/<run-id>/codex-review/<gate>.md`.
+Mechanism: dispatch via `Agent({ subagent_type: "codex:codex-rescue", ... })` with an adversarial prompt + the artifact + (rounds 2+) the prior Q&A trail. Loop until Codex emits `## SATISFIED` on a line by itself. Round cap **5** (configurable via `--codex-cap=N` or `.guild/settings.json` key `codex_cap`); on round 6, surface to user with 3 options (force-pass / extend-cap / rework). Trail under `.guild/runs/<run-id>/codex-review/<gate>.md`.
 
 If Codex is unavailable (`codex --version` fails or dispatch returns "not authenticated"), the gate emits `warn: codex-review skipped — codex plugin not installed` and proceeds. Don't hard-block on Codex outages.
 

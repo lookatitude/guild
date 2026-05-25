@@ -71,7 +71,7 @@ Full rationale + options scored: `.guild/wiki/decisions/agent-team-default-when-
 
 ## Codex adversarial review
 
-Codex adversarial review runs at three gates — G-spec, G-plan, and G-lane — via the `guild:codex-review` meta-skill (`skills/meta/codex-review/SKILL.md`). It is available to all plugin users via `--review=cross` on `/guild`, or persistently via `.guild/config.yml` key `codex_review: true`.
+Codex adversarial review runs at three gates — G-spec, G-plan, and G-lane — via the `guild:codex-review` meta-skill (`skills/meta/codex-review/SKILL.md`). It is available to all plugin users via `--review=cross` on `/guild`, or persistently via `.guild/settings.json` (`review: cross`).
 
 | Gate | When |
 |---|---|
@@ -79,7 +79,7 @@ Codex adversarial review runs at three gates — G-spec, G-plan, and G-lane — 
 | **G-plan** | After `guild:plan` writes `.guild/plan/<slug>.md`, before the user-approval gate. |
 | **G-lane** | After EACH lane's handoff receipt is written, before the next lane dispatches (or before `guild:review` for the final lane). |
 
-Mechanism: dispatch via `Agent({ subagent_type: "codex:codex-rescue", ... })` with an adversarial prompt + the artifact + (rounds 2+) the prior Q&A trail. Loop until Codex emits `## SATISFIED` on a line by itself. Round cap **5** (configurable via `--codex-cap=N` or `.guild/config.yml` key `codex_cap`); on round 6, surface to user with 3 options (force-pass / extend-cap / rework). Trail under `.guild/runs/<run-id>/codex-review/<gate>.md`.
+Mechanism: dispatch via `Agent({ subagent_type: "codex:codex-rescue", ... })` with an adversarial prompt + the artifact + (rounds 2+) the prior Q&A trail. Loop until Codex emits `## SATISFIED` on a line by itself. Round cap **5** (configurable via `--codex-cap=N` or `.guild/settings.json` key `codex_cap`); on round 6, surface to user with 3 options (force-pass / extend-cap / rework). Trail under `.guild/runs/<run-id>/codex-review/<gate>.md`.
 
 If Codex is unavailable (`codex --version` fails or dispatch returns "not authenticated"), the gate emits `warn: codex-review skipped — codex plugin not installed` and proceeds. Don't hard-block on Codex outages.
 

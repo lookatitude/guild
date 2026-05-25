@@ -57,11 +57,29 @@ pointer).
 
 ## Output artifact
 
-`.guild/init/<slug>.md`, `.guild/wiki/**`, `.guild/raw/**`, and (brownfield,
-cheap scan tier = Init-DONE) `.guild/indexes/codebase-map.json` +
-confidence-tagged `wiki/concepts/architecture-map.md` stub.
-`knowledge-graph.json` + `onboarding-tour.md` are **deferred** — lazy, gated,
-produced by `guild:understand-engine`, never at Init.
+`.guild/init/<slug>.md`, `.guild/wiki/**`, `.guild/raw/**`,
+`.guild/settings.json` (the project config surface, scaffolded
+fully-documented if absent — see below), and (brownfield, cheap scan tier =
+Init-DONE) `.guild/indexes/codebase-map.json` + confidence-tagged
+`wiki/concepts/architecture-map.md` stub. `knowledge-graph.json` +
+`onboarding-tour.md` are **deferred** — lazy, gated, produced by
+`guild:understand-engine`, never at Init.
+
+### Config scaffold (`.guild/settings.json`)
+
+As part of bootstrap, Init scaffolds the project config surface
+`.guild/settings.json` **if it does not already exist** (idempotent — never
+clobber operator config):
+
+```bash
+test -f .guild/settings.json || npx tsx scripts/read-guild-config.ts --scaffold > .guild/settings.json
+```
+
+It is written with every option = its default + a self-documenting `_help`
+block. CLI flags always override it (precedence ladder
+`command-surface.md §4.3/§4.4`). Re-generate or inspect any time with
+`/guild config init|show|validate`. If a legacy `.guild/config.yml` is
+present, its values are read via the back-compat shim until migrated.
 
 ## Dispatch
 

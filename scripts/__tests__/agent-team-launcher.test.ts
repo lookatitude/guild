@@ -1,13 +1,16 @@
 /**
  * scripts/__tests__/agent-team-launcher.test.ts
  *
- * TDD: written before scripts/agent-team-launcher.ts implementation.
  * Spawns the script via tsx with a temp consumer-repo layout, verifies:
  *  - --dry-run with agent-team yaml → writes session.json + prints tmux commands
  *    and does NOT invoke tmux (dry-run is always safe).
  *  - --dry-run with subagent yaml → exit 1 with clear error.
  *  - Missing --team arg → exit 1.
- *  - Nested tmux ($TMUX set) → exit 1 (one team per session per §7.3).
+ *  - In-session ($TMUX set) → in-session mode: new-window + split-window
+ *    targeting that window + select-window (NOT new-session, NOT exit 1).
+ *  - In-session one-team-per-session guard → exit 1 when a team window of the
+ *    same name already exists (verified with a mocked tmux on PATH).
+ *  - $TMUX unset → new-session + attach (unchanged legacy behavior).
  *  - Existing tmux session collision → exit 1 (refuse to clobber).
  */
 import { spawnSync } from "child_process";
@@ -63,6 +66,32 @@ function findSessionJson(cwd: string): string | null {
     if (fs.existsSync(candidate)) return candidate;
   }
   return null;
+}
+
+// Writes a stub `tmux` executable into a temp bin dir and returns that dir so
+// callers can prepend it to PATH. This lets the in-session collision guard be
+// exercised deterministically without spawning real tmux: `-V` reports a
+// version (tmux "available"), `list-windows` reports a window list, and every
+// other subcommand is a successful no-op.
+function makeFakeTmuxBin(tmpDir: string, existingWindows: string[]): string {
+  const binDir = path.join(tmpDir, "fakebin");
+  fs.mkdirSync(binDir, { recursive: true });
+  const tmuxPath = path.join(binDir, "tmux");
+  const windowList = existingWindows.join("\\n");
+  fs.writeFileSync(
+    tmuxPath,
+    [
+      "#!/bin/sh",
+      'case "$1" in',
+      '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
+      `  list-windows) printf '${windowList}\\n'; exit 0;;`,
+      "  *) exit 0;;",
+      "esac",
+      "",
+    ].join("\n"),
+    { mode: 0o755 }
+  );
+  return binDir;
 }
 
 describe("agent-team-launcher.ts", () => {
@@ -203,25 +232,108 @@ describe("agent-team-launcher.ts", () => {
   });
 
   // ─────────────────────────────────────────────────────────────
-  // Nested tmux ($TMUX set)
+  // In-session ($TMUX set) → spawn a visible team window, not refuse
   // ─────────────────────────────────────────────────────────────
-  describe("nested tmux (TMUX env set)", () => {
-    it("exits 1 and refuses to spawn a nested team", () => {
+  describe("in-session (TMUX env set)", () => {
+    it("does NOT refuse — exits 0 instead of the old exit-1", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      const { exitCode, stderr } = runScript(
-        [
-          "--team",
-          teamPath,
-          "--session-name",
-          "guild-nested-001",
-          "--cwd",
-          tmpDir,
-          "--dry-run",
-        ],
+      const { exitCode } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { TMUX: "/tmp/tmux-1000/default,12345,0" }
       );
+      expect(exitCode).toBe(0);
+    });
+
+    it("emits new-window + split-window targeting that window + select-window", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { TMUX: "/tmp/tmux-1000/default,12345,0" }
+      );
+      // Window name defaults to guild-<slug> (no timestamp) in in-session mode.
+      expect(stdout).toMatch(/tmux\s+new-window\s+-n\s+guild-test-slug/);
+      expect(stdout).toMatch(/tmux\s+split-window\s+-t\s+guild-test-slug/);
+      expect(stdout).toMatch(/tmux\s+select-window\s+-t\s+guild-test-slug/);
+    });
+
+    it("does NOT create a new session and does NOT attach in-session", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { TMUX: "/tmp/tmux-1000/default,12345,0" }
+      );
+      expect(stdout).not.toMatch(/tmux\s+new-session/);
+      expect(stdout).not.toMatch(/tmux\s+attach-session/);
+    });
+
+    it("records mode=in-session + window_name in the manifest", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"], {
+        TMUX: "/tmp/tmux-1000/default,12345,0",
+      });
+      const sessionJson = findSessionJson(tmpDir)!;
+      const manifest = JSON.parse(fs.readFileSync(sessionJson, "utf8"));
+      expect(manifest.mode).toBe("in-session");
+      expect(manifest.window_name).toBe("guild-test-slug");
+    });
+
+    // One-team-per-session guard: a real (non-dry-run) launch must refuse to
+    // clobber an existing team window of the same name. Verified with a mocked
+    // tmux on PATH so no real tmux server is spawned.
+    it("refuses when a team window of the same name already exists", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const fakeBin = makeFakeTmuxBin(tmpDir, ["other-window", "guild-test-slug"]);
+      const { exitCode, stderr } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir],
+        {
+          TMUX: "/tmp/tmux-1000/default,12345,0",
+          PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+        }
+      );
       expect(exitCode).toBe(1);
-      expect(stderr).toMatch(/tmux|nested|one team/i);
+      expect(stderr).toMatch(/already exists|one team|clobber/i);
+      // Message must tell the operator how to switch to / remove the window.
+      expect(stderr).toMatch(/select-window|kill-window/);
+    });
+
+    it("proceeds when no team window of that name exists (mocked tmux)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      // Fake tmux reports only unrelated windows → guard must NOT fire. The
+      // no-op stub makes every spawn succeed, so the launcher reaches exit 0.
+      const fakeBin = makeFakeTmuxBin(tmpDir, ["other-window"]);
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir],
+        {
+          TMUX: "/tmp/tmux-1000/default,12345,0",
+          PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+        }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/team window "guild-test-slug" created/);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // $TMUX unset → unchanged new-session + attach behavior
+  // ─────────────────────────────────────────────────────────────
+  describe("no tmux session (TMUX unset)", () => {
+    it("uses new-session and ends by attaching (dry-run, legacy behavior)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode, stdout } = runScript([
+        "--team",
+        teamPath,
+        "--session-name",
+        "guild-legacy-001",
+        "--cwd",
+        tmpDir,
+        "--dry-run",
+      ]);
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/tmux\s+new-session/);
+      expect(stdout).toMatch(/tmux\s+attach-session\s+-t\s+guild-legacy-001/);
+      // new-session mode must NOT use the in-session window commands.
+      expect(stdout).not.toMatch(/tmux\s+new-window/);
+      expect(stdout).not.toMatch(/tmux\s+select-window/);
     });
   });
 

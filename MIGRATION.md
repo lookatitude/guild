@@ -139,7 +139,17 @@ still works. The only behavioral change a user sees on first run is the
 
 ---
 
-## 3. Config migration (`.guild/config.yml`)
+## 3. Config migration (`.guild/settings.json`)
+
+> **v2 config surface: `.guild/settings.json` (JSON) replaces `.guild/config.yml` (YAML).**
+> It is the single config file and holds every option (Tier-1 keys + the
+> closed-key `defaults:` block). Scaffold it fully-documented with
+> `/guild config init`; inspect the resolved config with `/guild config show`;
+> check it with `/guild config validate`. A **back-compat shim** in
+> `read-guild-config.ts` still reads an existing `.guild/config.yml` (mapping
+> the v1 keys below) and **warns once**; the moment `settings.json` exists it
+> is authoritative and `config.yml` is ignored. The key mapping and precedence
+> ladder are unchanged — only the file + format changed (YAML → JSON).
 
 ### 3.1 Key mapping
 
@@ -210,8 +220,10 @@ What a v1 user needs to know for migration:
 - **Absent `defaults:` ⇒ byte-identical to today.** It is purely additive;
   zero-config behavior is unchanged. There is **nothing to migrate** — you
   only add it if you want project-wide defaults.
-- **It is not a new file.** It lives inside the existing
-  `.guild/config.yml`. No new config file is introduced.
+- **It lives in `.guild/settings.json`** (the single v2 config file, which
+  replaces `.guild/config.yml`). Generate it with `/guild config init`; the
+  `defaults:` block is one section of it. An existing `config.yml` is read via
+  the back-compat shim until you migrate.
 - **Precedence:** a CLI flag still wins, then the `--rigor` profile, then
   your `defaults:` block, then the built-in default. Each folded key is
   printed in the pre-first-gate profile line, so a default is never silent.

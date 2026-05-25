@@ -39,6 +39,10 @@ first, never auto-skipped.
 # Output format
 
 `.guild/init/<slug>.md` (the Init record), `.guild/wiki/**`, `.guild/raw/**`,
+`.guild/settings.json` (the project config surface — scaffolded
+fully-documented **if absent**, idempotent, via
+`npx tsx scripts/read-guild-config.ts --scaffold > .guild/settings.json`;
+never clobbered; regenerate/inspect with `/guild config init|show|validate`),
 and — brownfield, **cheap scan tier only** — `.guild/indexes/codebase-map.json`
 plus a **confidence-tagged** `wiki/concepts/architecture-map.md` **stub**.
 That pair **is Init-DONE**. The deep semantic `knowledge-graph.json` +

@@ -172,7 +172,7 @@ or the user force-passes. Use `--terminated false` for non-final rounds. The
 `codex_cap` resolves in this order (first wins):
 
 1. `--codex-cap=N` CLI flag
-2. `.guild/config.yml` key `codex_cap`
+2. `.guild/settings.json` key `codex_cap`
 3. Default: `5`
 
 Maximum: `10`. Values above 10 are clamped to 10 with a warning.

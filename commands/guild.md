@@ -76,12 +76,12 @@ depth per §4.3), `--auto-approve[=spec,plan,build,all]` (opt-in autonomy;
 destructive/network/spend STILL ask even with `all`), `--review=local|cross|off`,
 `--host=claude|codex|auto`, `--initiative=<id>|new`, plus universal
 `--dry-run`. Resolution precedence: **CLI flag > `--rigor` profile >
-`.guild/config.yml` `defaults:` > built-in default**
+`.guild/settings.json` `defaults:` > built-in default**
 (`command-surface.md §4.3`/§4.4).
 
 **Deleted tuning flags (v1 → v2).** `--loops`, `--loop-cap`, `--codex-cap`
 are **removed from the CLI** — folded into `--rigor` profiles and still
-power-user-configurable in `.guild/config.yml` (`loops:`/`loop_cap:`/
+power-user-configurable in `.guild/settings.json` (`loops:`/`loop_cap:`/
 `codex_cap:` keys). `--codex-review` is **replaced** by `--review=cross`.
 A user never types `--loops` again — they type one of three `--rigor`
 words. The full v1→v2 flag map is `MIGRATION.md §3`; the closed-key

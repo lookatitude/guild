@@ -2,12 +2,22 @@
 /**
  * scripts/agent-team-launcher.ts
  *
- * Launches Claude Code's experimental agent-team backend in a tmux session:
- * one pane per specialist listed in .guild/team/<slug>.yaml. The orchestrator
- * (main Claude Code) runs in the first pane; each specialist runs in its own
- * pane with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 exported, per
- * guild-plan.md §7.3 (agent-team backend is opt-in, requires the env var, one
- * team per session, no nested teams).
+ * Launches Claude Code's experimental agent-team backend in tmux: one pane per
+ * specialist listed in .guild/team/<slug>.yaml. The orchestrator (main Claude
+ * Code) runs in the first pane; each specialist runs in its own pane with
+ * CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 exported, per guild-plan.md §7.3
+ * (agent-team backend is opt-in, requires the env var, one team per session).
+ *
+ * Two launch modes, selected automatically by whether we are already inside a
+ * tmux session ($TMUX env var):
+ *   - new-session  ($TMUX unset): create a detached session, build the panes,
+ *                  then attach the terminal to it.
+ *   - in-session   ($TMUX set):   create a NEW WINDOW in the CURRENT session and
+ *                  build the panes inside that window, then select it so the
+ *                  team is visible. The operator's currently-active pane is
+ *                  never split, and no existing pane/window is ever killed.
+ * Both modes share the per-pane command/env construction (paneCommand) and the
+ * specialist-splitting loop (composeTmuxCommands) so they cannot drift.
  *
  * Called by guild:execute-plan when team.yaml declares backend: agent-team.
  *
@@ -22,14 +32,15 @@
  *
  * Exit codes:
  *   0  Success.
- *   1  Precondition failure (missing args, wrong backend, nested tmux, tmux
- *      missing, session name collision).
- *   2  tmux command failure while creating the real session.
+ *   1  Precondition failure (missing args, wrong backend, tmux missing,
+ *      session-name collision, or — in-session — team-window collision).
+ *   2  tmux command failure while creating the real session/window.
  *
  * Invariants:
  *   - Never writes to .guild/wiki/ (forbidden per tooling-engineer scope).
- *   - Never runs agent-team mode recursively (refuses when $TMUX is set;
- *     the plan mandates one team per session).
+ *   - One team per session: when $TMUX is set we spawn the team in a NEW window
+ *     of the current session (never a nested session) and refuse to clobber an
+ *     existing team window of the same name.
  *   - Only auto-runs when team.yaml explicitly declares backend: agent-team.
  *   - All writes stay under <cwd>/.guild/runs/<run-id>/agent-team/.
  *   - --dry-run is always safe: it prints tmux commands + writes session.json
@@ -224,57 +235,72 @@ function buildPrompt(
   );
 }
 
+type LaunchMode = "new-session" | "in-session";
+
 function composeTmuxCommands(opts: {
-  sessionName: string;
+  mode: LaunchMode;
+  // In new-session mode this is the tmux session name; in in-session mode it is
+  // the name of the new window created inside the current session. Either way
+  // it is the `-t` target every subsequent split/layout/select command points
+  // at, so the two paths share the specialist-splitting loop below.
+  targetName: string;
   cwd: string;
   slug: string;
   runId: string;
   specialists: Specialist[];
 }): ParsedTmuxCommand[] {
-  const { sessionName, cwd, slug, runId, specialists } = opts;
+  const { mode, targetName, cwd, slug, runId, specialists } = opts;
   const cmds: ParsedTmuxCommand[] = [];
 
   // Claude Code invocation is the same for every pane: set env vars, cd
   // into the consumer repo, then launch `claude` with a staging prompt. We
   // rely on the user's PATH to find the `claude` binary; if it is unresolved
   // the pane will surface that error directly.
-  const orchestratorPrompt = buildPrompt(slug, runId, null);
+  const orchestratorCmd = paneCommand(buildPrompt(slug, runId, null), runId);
 
-  // Pane 1: detached session with the orchestrator.
-  cmds.push({
-    argv: [
-      "tmux",
-      "new-session",
-      "-d",
-      "-s",
-      sessionName,
-      "-n",
-      "orchestrator",
-      "-c",
-      cwd,
-      paneCommand(orchestratorPrompt, runId),
-    ],
-    display:
-      `tmux new-session -d -s ${shellQuote(sessionName)} ` +
-      `-n orchestrator -c ${shellQuote(cwd)} ` +
-      shellQuote(paneCommand(orchestratorPrompt, runId)),
-  });
-
-  // One split per specialist.
-  for (const spec of specialists) {
-    const cmd = paneCommand(buildPrompt(slug, runId, spec), runId);
+  if (mode === "new-session") {
+    // Pane 1: detached session with the orchestrator.
     cmds.push({
       argv: [
         "tmux",
-        "split-window",
-        "-t",
-        sessionName,
+        "new-session",
+        "-d",
+        "-s",
+        targetName,
+        "-n",
+        "orchestrator",
         "-c",
         cwd,
-        cmd,
+        orchestratorCmd,
       ],
       display:
-        `tmux split-window -t ${shellQuote(sessionName)} ` +
+        `tmux new-session -d -s ${shellQuote(targetName)} ` +
+        `-n orchestrator -c ${shellQuote(cwd)} ` +
+        shellQuote(orchestratorCmd),
+    });
+  } else {
+    // in-session: create the orchestrator in a NEW WINDOW of the CURRENT
+    // session. This does NOT touch the operator's currently-active pane — it
+    // adds a sibling window we will populate and then select. The window name
+    // (targetName) doubles as the `-t` target for the splits below.
+    cmds.push({
+      argv: ["tmux", "new-window", "-n", targetName, "-c", cwd, orchestratorCmd],
+      display:
+        `tmux new-window -n ${shellQuote(targetName)} ` +
+        `-c ${shellQuote(cwd)} ${shellQuote(orchestratorCmd)}`,
+    });
+  }
+
+  // One split per specialist. `-t targetName` resolves to the active pane of
+  // the target session (new-session) or window (in-session); after each split
+  // the new pane becomes active, so the next split chains off it. Shared by
+  // both modes so the pane/env construction cannot drift.
+  for (const spec of specialists) {
+    const cmd = paneCommand(buildPrompt(slug, runId, spec), runId);
+    cmds.push({
+      argv: ["tmux", "split-window", "-t", targetName, "-c", cwd, cmd],
+      display:
+        `tmux split-window -t ${shellQuote(targetName)} ` +
         `-c ${shellQuote(cwd)} ${shellQuote(cmd)}`,
     });
     cmds.push({
@@ -283,11 +309,20 @@ function composeTmuxCommands(opts: {
     });
   }
 
-  // Even out pane sizes and select orchestrator pane last.
+  // Even out pane sizes.
   cmds.push({
-    argv: ["tmux", "select-layout", "-t", sessionName, "tiled"],
-    display: `tmux select-layout -t ${shellQuote(sessionName)} tiled`,
+    argv: ["tmux", "select-layout", "-t", targetName, "tiled"],
+    display: `tmux select-layout -t ${shellQuote(targetName)} tiled`,
   });
+
+  // in-session: make the team window visible. We do NOT attach (we are already
+  // attached to this session) — selecting the window is what surfaces the panes.
+  if (mode === "in-session") {
+    cmds.push({
+      argv: ["tmux", "select-window", "-t", targetName],
+      display: `tmux select-window -t ${shellQuote(targetName)}`,
+    });
+  }
 
   return cmds;
 }
@@ -328,11 +363,44 @@ function sessionExists(name: string): boolean {
   return r.status === 0;
 }
 
+// tmux has no `has-window`, so list the current session's windows by name and
+// check for an exact match. Used by the in-session one-team-per-session guard:
+// if a team window of this name already exists we refuse to clobber it (mirror
+// of the new-session sessionExists() collision guard, applied to the window).
+function windowExists(name: string): boolean {
+  const r = spawnSync("tmux", ["list-windows", "-F", "#{window_name}"], {
+    encoding: "utf8",
+  });
+  if (r.status !== 0) return false;
+  return r.stdout
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .includes(name);
+}
+
+// Best-effort resolution of the name of the current ($TMUX) session, for the
+// manifest only. Returns null if tmux can't tell us (e.g. dry-run).
+function currentSessionName(): string | null {
+  const r = spawnSync(
+    "tmux",
+    ["display-message", "-p", "#{session_name}"],
+    { encoding: "utf8" }
+  );
+  if (r.status !== 0) return null;
+  const name = r.stdout.trim();
+  return name || null;
+}
+
 // ── Manifest write ─────────────────────────────────────────────────────────
 
 interface Manifest {
   run_id: string;
+  mode: LaunchMode;
   session_name: string;
+  // Non-null only in in-session mode: the window we created in the current
+  // session. Null in new-session mode (the whole session is ours).
+  window_name: string | null;
   created_at: string;
   orchestrator_pane_id: string;
   teammate_panes: Array<{ specialist: string; pane_id: string }>;
@@ -341,15 +409,21 @@ interface Manifest {
 
 function buildManifest(opts: {
   runId: string;
+  mode: LaunchMode;
+  // Session name (new-session) or the resolved current session (in-session).
   sessionName: string;
+  // Window name — only set in in-session mode.
+  windowName: string | null;
   specialists: Specialist[];
   dryRun: boolean;
   realPaneIds: { orchestrator: string; teammates: Record<string, string> } | null;
 }): Manifest {
-  const { runId, sessionName, specialists, dryRun, realPaneIds } = opts;
+  const { runId, mode, sessionName, windowName, specialists, dryRun, realPaneIds } = opts;
   return {
     run_id: runId,
+    mode,
     session_name: sessionName,
+    window_name: windowName,
     created_at: new Date().toISOString(),
     orchestrator_pane_id: dryRun
       ? "(dry-run: not spawned)"
@@ -397,18 +471,11 @@ function main(): void {
     process.exit(1);
   }
 
-  // Nested-tmux guard: §7.3 forbids one team per session. If we are already
-  // inside a tmux session, refuse to spawn another team — it would violate
-  // "no nested teams."
-  if (process.env["TMUX"]) {
-    process.stderr.write(
-      "[agent-team-launcher] ERROR: already inside a tmux session " +
-        "($TMUX is set). Agent-team mode allows only one team per session " +
-        "and forbids nested teams (guild-plan.md §7.3). Exit this tmux " +
-        "session, then re-run from a plain shell.\n"
-    );
-    process.exit(1);
-  }
+  // Launch-mode selection (guild-plan.md §7.3, one team per session). If we are
+  // already inside a tmux session ($TMUX set), DO NOT refuse — instead spawn the
+  // team in a NEW WINDOW of the current session (in-session mode) so the panes
+  // are visible. Outside tmux we create + attach a fresh detached session.
+  const mode: LaunchMode = process.env["TMUX"] ? "in-session" : "new-session";
 
   if (!fs.existsSync(args.team)) {
     process.stderr.write(
@@ -445,25 +512,48 @@ function main(): void {
   }
 
   const slug = slugFromTeamPath(args.team);
-  const sessionName =
+  // The `-t` target name. In new-session mode it is the session name and carries
+  // a timestamp so back-to-back runs never self-collide. In in-session mode it
+  // is the window name: deterministic (no timestamp) so the one-team-per-session
+  // guard below actually fires when the same team is re-launched in a session.
+  const targetName =
     args.sessionName ??
-    `guild-${slug}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    (mode === "in-session"
+      ? `guild-${slug}`
+      : `guild-${slug}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
   const cwd = path.resolve(args.cwd);
 
-  // For real (non-dry-run) launches: tmux must be installed and the target
-  // session name must not already exist (refuse to clobber).
+  // For real (non-dry-run) launches: tmux must be installed, and the target must
+  // not already exist (refuse to clobber). Which collision we check depends on
+  // the mode: a session name (new-session) or a team window in the current
+  // session (in-session). dry-run skips this — it never invokes tmux.
   if (!args.dryRun) {
     if (!tmuxAvailable()) {
       process.stderr.write(
         "[agent-team-launcher] ERROR: `tmux` is not installed or not on PATH.\n" +
           "  Install tmux (macOS: `brew install tmux`; Debian/Ubuntu: `apt install tmux`),\n" +
-          "  then re-run.\n"
+          "  then re-run. (Without tmux, use backend: subagent — guild:execute-plan\n" +
+          "  dispatches specialists via the Agent tool, no tmux required.)\n"
       );
       process.exit(1);
     }
-    if (sessionExists(sessionName)) {
+    if (mode === "in-session") {
+      // One-team-per-session guard (§7.3): refuse to clobber an existing team
+      // window of the same name in the current session.
+      if (windowExists(targetName)) {
+        process.stderr.write(
+          `[agent-team-launcher] ERROR: a Guild team window "${targetName}" already exists ` +
+            `in the current tmux session.\n` +
+            `  Refusing to clobber it (one team per session, guild-plan.md §7.3).\n` +
+            `  Switch to it:  tmux select-window -t ${shellQuote(targetName)}\n` +
+            `  Or remove it:  tmux kill-window -t ${shellQuote(targetName)}\n` +
+            `  Then re-run, or pass --session-name <unique-name> for a differently-named window.\n`
+        );
+        process.exit(1);
+      }
+    } else if (sessionExists(targetName)) {
       process.stderr.write(
-        `[agent-team-launcher] ERROR: tmux session "${sessionName}" already exists.\n` +
+        `[agent-team-launcher] ERROR: tmux session "${targetName}" already exists.\n` +
           `  Refusing to clobber. Re-run with --session-name <unique-name>.\n`
       );
       process.exit(1);
@@ -477,7 +567,8 @@ function main(): void {
   const runId = makeRunId();
 
   const commands = composeTmuxCommands({
-    sessionName,
+    mode,
+    targetName,
     cwd,
     slug,
     runId,
@@ -489,15 +580,21 @@ function main(): void {
       "[agent-team-launcher] dry-run — would execute the following tmux commands:\n"
     );
     for (const c of commands) process.stdout.write(`  ${c.display}\n`);
-    process.stdout.write(
-      `  tmux attach-session -t ${shellQuote(sessionName)}\n`
-    );
+    // new-session mode finishes by attaching the terminal; in-session mode does
+    // NOT attach (the select-window above already surfaced the team window).
+    if (mode === "new-session") {
+      process.stdout.write(
+        `  tmux attach-session -t ${shellQuote(targetName)}\n`
+      );
+    }
 
     const manifestPath = writeManifest(
       cwd,
       buildManifest({
         runId,
-        sessionName,
+        mode,
+        sessionName: mode === "in-session" ? "(dry-run: current tmux session)" : targetName,
+        windowName: mode === "in-session" ? targetName : null,
         specialists: team.specialists,
         dryRun: true,
         realPaneIds: null,
@@ -517,23 +614,38 @@ function main(): void {
         `[agent-team-launcher] tmux command failed: ${c.display}\n` +
           `  stderr: ${r.stderr}\n`
       );
-      // Best-effort teardown of the partially-created session.
-      spawnSync("tmux", ["kill-session", "-t", sessionName]);
+      // Best-effort teardown of the partially-created target. In in-session mode
+      // we must ONLY kill the window we created — never the operator's session.
+      if (mode === "in-session") {
+        spawnSync("tmux", ["kill-window", "-t", targetName]);
+      } else {
+        spawnSync("tmux", ["kill-session", "-t", targetName]);
+      }
       process.exit(2);
     }
   }
 
-  // Collect real pane IDs. `tmux list-panes -t <session> -F "#{pane_index} #{pane_id} #{pane_title}"`
+  // Collect real pane IDs. In new-session mode we scan all panes (-a) and map by
+  // title; in in-session mode we scope to the team window so we don't pick up
+  // panes from the operator's other windows.
   const panesR = spawnSync(
     "tmux",
-    [
-      "list-panes",
-      "-t",
-      sessionName,
-      "-a",
-      "-F",
-      "#{pane_index}\t#{pane_id}\t#{pane_title}",
-    ],
+    mode === "in-session"
+      ? [
+          "list-panes",
+          "-t",
+          targetName,
+          "-F",
+          "#{pane_index}\t#{pane_id}\t#{pane_title}",
+        ]
+      : [
+          "list-panes",
+          "-t",
+          targetName,
+          "-a",
+          "-F",
+          "#{pane_index}\t#{pane_id}\t#{pane_title}",
+        ],
     { encoding: "utf8" }
   );
   const orchestratorId = "";
@@ -552,18 +664,35 @@ function main(): void {
     cwd,
     buildManifest({
       runId,
-      sessionName,
+      mode,
+      sessionName:
+        mode === "in-session"
+          ? currentSessionName() ?? "(current tmux session)"
+          : targetName,
+      windowName: mode === "in-session" ? targetName : null,
       specialists: team.specialists,
       dryRun: false,
       realPaneIds: { orchestrator: orchestratorId, teammates },
     })
   );
+
+  if (mode === "in-session") {
+    // Already attached to this session — selecting the window (done above) is
+    // what surfaces the team. Do NOT attach; just tell the operator where it is.
+    process.stdout.write(
+      `[agent-team-launcher] team window "${targetName}" created in the current session; ` +
+        `manifest → ${manifestPath}\n` +
+        `  Switch to it any time with: tmux select-window -t ${shellQuote(targetName)}\n`
+    );
+    process.exit(0);
+  }
+
   process.stdout.write(
-    `[agent-team-launcher] session ${sessionName} created; manifest → ${manifestPath}\n`
+    `[agent-team-launcher] session ${targetName} created; manifest → ${manifestPath}\n`
   );
 
   // Attach user's terminal to the new session.
-  const attach = spawnSync("tmux", ["attach-session", "-t", sessionName], {
+  const attach = spawnSync("tmux", ["attach-session", "-t", targetName], {
     stdio: "inherit",
   });
   process.exit(attach.status ?? 0);

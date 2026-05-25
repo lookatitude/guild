@@ -87,7 +87,7 @@ Red flag: do **not** auto-fill missing fields from training-data priors. A missi
 
 ## Codex adversarial review (when `codex_review: true`)
 
-If the run context has `codex_review: true` (set via `--review=cross` flag or `.guild/config.yml`), invoke `guild:codex-review` after writing the spec and **before** asking the user for approval:
+If the run context has `review: cross` (set via `--review=cross` flag or `.guild/settings.json`), invoke `guild:codex-review` after writing the spec and **before** asking the user for approval:
 
 ```
 Skill: guild-codex-review
