@@ -1,3 +1,7 @@
+// CANONICAL: Guild telemetry recorder — v2 fields (F-3 / ADR v2-observability §F-3).
+// Single source of truth; scripts import this copy via ../hooks/lib/v1.4/.
+// Do not re-vendor.
+
 /**
  * hooks/lib/trace-v2.ts
  *

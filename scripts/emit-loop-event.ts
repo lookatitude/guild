@@ -50,7 +50,7 @@ import {
   type LoopLayer,
   type LoopRoundEndEvent,
   type LoopRoundStartEvent,
-} from "./lib/v1.4/log-jsonl.js";
+} from "../hooks/lib/v1.4/log-jsonl.js";
 
 const VALID_EVENTS = new Set(["loop_round_start", "loop_round_end", "codex_review_round"]);
 const VALID_LAYERS = new Set(["L1", "L2", "L3", "L4", "security-review"]);

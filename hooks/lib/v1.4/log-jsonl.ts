@@ -1,3 +1,7 @@
+// CANONICAL: Guild telemetry recorder (F-3 / ADR v2-observability §F-3).
+// Single source of truth; scripts import this copy via ../hooks/lib/v1.4/.
+// Do not re-vendor.
+//
 // v1.4.0 adversarial-loops — JSONL log writer.
 //
 // Implements the binding contract from
