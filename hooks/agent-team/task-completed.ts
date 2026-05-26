@@ -13,7 +13,17 @@
  *      `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` exists and
  *      has the §8.2 required sections (changed_files, opens_for, assumptions,
  *      evidence, followups).
- *   4. Signals §task§agent dismiss (no idle): on a clean pass the agent
+ *   4. Persists the run-state checkpoint (`guild.run_state.v1`, ADR-RE-1) at
+ *      `.guild/runs/<run-id>/run-state.json`: after the lane terminates it
+ *      upserts `lanes[task-id]` with the terminal status (done / failed),
+ *      depends_on (best-effort from the payload), the receipt pointer, and the
+ *      resolved tier. Atomic temp-then-rename under the per-run `.lock`
+ *      discipline (see hooks/lib/run-state.ts — contract bound by pointer). The
+ *      `in_progress` transition is DISPATCH-owned (the agent-team launcher, via
+ *      `markLaneInProgress`); there is no "TaskStarted" hook event. The
+ *      checkpoint is a rebuildable speed-cache (never the system of record), so
+ *      a write failure here is non-fatal — the receipt remains authoritative.
+ *   5. Signals §task§agent dismiss (no idle): on a clean pass the agent
  *      terminates — no idle agents persist (ADR §6 D3).
  *
  * Stdin:   JSON — Claude Code TaskCompleted hook payload:
@@ -44,6 +54,13 @@ import * as path from "path";
 import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
 import { validateHandoffV2, HandoffV2 } from "../lib/handoff-v2.js";
+import {
+  upsertLane,
+  LaneStatus,
+  LaneTier,
+  LanePatch,
+  RunStateInit,
+} from "../lib/run-state.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -168,6 +185,86 @@ function persistLearnings(
   process.stderr.write(`[task-completed] learnings persisted to ${outPath}\n`);
 }
 
+/**
+ * Best-effort extraction of inlined `depends-on: <id>` references from the
+ * payload text (mirrors task-created.ts). Used to mirror the plan lane's gating
+ * edges into the run-state checkpoint when no launcher-seeded value exists.
+ */
+function extractDependsOn(text: string): string[] {
+  const matches = text.matchAll(/depends[\s-]on:\s*([^\s,;]+)/gi);
+  return Array.from(matches, (m) => m[1].trim());
+}
+
+/**
+ * Map the terminal `guild.handoff.v2` status onto a `guild.run_state.v1` lane
+ * status. A clean `done` is `done`; any other terminal disposition (`blocked`,
+ * `escalate`) or a legacy receipt with no envelope is recorded conservatively.
+ */
+function laneStatusFor(envelopeStatus: HandoffV2["status"] | null): LaneStatus {
+  if (envelopeStatus === null) return "done"; // legacy receipt passed validation
+  return envelopeStatus === "done" ? "done" : "failed";
+}
+
+/**
+ * Derive the top-level run identity for a fresh checkpoint. Existing top-level
+ * fields are preserved by upsertLane; these defaults only apply on first write.
+ * Honors launcher-exported env (GUILD_PLAN_SLUG / GUILD_PROGRAM_ID /
+ * GUILD_WAVE_INDEX) when present.
+ */
+function deriveRunStateInit(runId: string): RunStateInit {
+  const planSlug = process.env["GUILD_PLAN_SLUG"];
+  const programId = process.env["GUILD_PROGRAM_ID"];
+  const waveRaw = process.env["GUILD_WAVE_INDEX"];
+  const waveIndex = waveRaw !== undefined ? Number.parseInt(waveRaw, 10) : NaN;
+  return {
+    runId,
+    planSlug: planSlug && planSlug.trim() !== "" ? planSlug : undefined,
+    programId: programId && programId.trim() !== "" ? programId : null,
+    waveIndex: Number.isFinite(waveIndex) ? waveIndex : undefined,
+  };
+}
+
+/**
+ * Persist the terminal lane state into run-state.json (ADR-RE-1). NON-FATAL:
+ * the checkpoint is a rebuildable cache, never the system of record — a write
+ * failure is logged and swallowed so it never blocks a clean completion.
+ */
+function persistRunState(
+  runDir: string,
+  runId: string,
+  specialist: string,
+  taskId: string,
+  status: LaneStatus,
+  tier: LaneTier | undefined,
+  dependsOn: string[]
+): void {
+  try {
+    const patch: LanePatch = {
+      status,
+      receipt_ref: path.join("handoffs", `${specialist}-${taskId}.md`),
+    };
+    if (tier !== undefined) patch.tier = tier;
+    // Only set depends_on when we actually found edges; otherwise preserve any
+    // launcher-seeded value (upsertLane keeps the prior array on undefined).
+    if (dependsOn.length > 0) patch.depends_on = dependsOn;
+
+    upsertLane(runDir, deriveRunStateInit(runId), taskId, patch);
+    process.stderr.write(
+      `[task-completed] run-state checkpoint updated: lane "${taskId}" → ${status} ` +
+        `(${runStatePathHint(runDir)}).\n`
+    );
+  } catch (err) {
+    process.stderr.write(
+      `[task-completed] WARN: run-state checkpoint write failed (non-fatal, ` +
+        `rebuildable cache): ${err instanceof Error ? err.message : String(err)}\n`
+    );
+  }
+}
+
+function runStatePathHint(runDir: string): string {
+  return path.join(runDir, "run-state.json");
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -199,6 +296,7 @@ async function main(): Promise<void> {
 
   const guildRoot = resolveGuildRoot(cwd);
   const runId = deriveRunId(sessionId);
+  const runDir = path.join(guildRoot, ".guild", "runs", runId);
   const rPath = receiptPath(guildRoot, runId, specialist, taskId);
 
   // ── Check receipt exists ───────────────────────────────────────────────────
@@ -224,6 +322,8 @@ async function main(): Promise<void> {
 
   // ── Validate guild.handoff.v2 envelope if present ─────────────────────────
   const rawEnvelope = extractHandoffEnvelope(content);
+  let envelopeStatus: HandoffV2["status"] | null = null;
+  let laneTier: LaneTier | undefined;
   if (rawEnvelope !== null) {
     const { valid, errors } = validateHandoffV2(rawEnvelope);
     if (!valid) {
@@ -235,6 +335,8 @@ async function main(): Promise<void> {
     }
     // Extract learnings into run record (§6 D3 Extract phase)
     const envelope = rawEnvelope as HandoffV2;
+    envelopeStatus = envelope.status;
+    laneTier = envelope.tier;
     const lPath = learningsPath(guildRoot, runId, specialist, taskId);
     persistLearnings(envelope, lPath, specialist, taskId);
 
@@ -248,6 +350,12 @@ async function main(): Promise<void> {
         `validation skipped (envelope optional for legacy receipts).\n`
     );
   }
+
+  // ── Persist run-state checkpoint (ADR-RE-1) — lane has terminated ─────────
+  // Non-fatal: run-state is a rebuildable cache, the receipt is authoritative.
+  const laneStatus = laneStatusFor(envelopeStatus);
+  const dependsOn = extractDependsOn(`${payload.task_subject ?? ""} ${payload.task_description ?? ""}`);
+  persistRunState(runDir, runId, specialist, taskId, laneStatus, laneTier, dependsOn);
 
   // §task§agent dismiss: agent terminates cleanly here (no idle, D3 §6).
   process.stderr.write(

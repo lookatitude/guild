@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Run a cross-family adversarial review on the spec.",
+    "review=cross is set — broker the review for this lane.",
+    "Pick a different host to critique this plan before approval.",
+    "Engage the review broker at the G-plan gate.",
+    "Cross-host review the diagnosis report — Claude wrote it, have Codex critique it."
+  ],
+  "should_not_trigger": [
+    "Run a local same-host review — review is local for this run.",
+    "Kick off the L1 brainstorm clarify loop on this brief.",
+    "Run the internal dev↔tester implement loop for the backend lane.",
+    "Review the specialist handoff receipts for spec compliance.",
+    "Evolve the guild:plan skill's description.",
+    "Skip review — review is off for this run."
+  ]
+}

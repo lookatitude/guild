@@ -109,4 +109,112 @@ describe("teammate-idle.ts", () => {
       expect(stdout).toMatch(/handoff|receipt|task|complete/i);
     });
   });
+
+  describe("structured heartbeat liveness (ADR-RE-3)", () => {
+    function writeHeartbeat(runId: string, teammate: string, record: object): void {
+      const hbDir = path.join(tmpDir, ".guild", "runs", runId, "in-progress");
+      fs.mkdirSync(hbDir, { recursive: true });
+      fs.writeFileSync(path.join(hbDir, `${teammate}.json`), JSON.stringify(record));
+    }
+
+    function writeLegacyLog(runId: string, teammate: string, mtimeMs: number): void {
+      const dir = path.join(tmpDir, ".guild", "runs", runId, "in-progress");
+      fs.mkdirSync(dir, { recursive: true });
+      const p = path.join(dir, `${teammate}.log`);
+      fs.writeFileSync(p, "working...\n");
+      const t = mtimeMs / 1000;
+      fs.utimesSync(p, t, t);
+    }
+
+    it("reports a FRESH heartbeat with the phase in the nudge", () => {
+      writeHeartbeat("run-sess-hb", "backend", {
+        timestamp: new Date().toISOString(),
+        step: "implementing-run-state",
+        pct_complete: 60,
+      });
+      const { stdout, stderr } = runScript(
+        {
+          session_id: "sess-hb",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(stdout).toMatch(/heartbeat FRESH/i);
+      expect(stdout).toMatch(/implementing-run-state/);
+      expect(stderr).toMatch(/liveness=heartbeat\/fresh/i);
+    });
+
+    it("flags a STALE heartbeat older than the timeout", () => {
+      const twentyMinAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+      writeHeartbeat("run-sess-stale", "backend", { timestamp: twentyMinAgo, step: "stuck" });
+      const { stdout } = runScript(
+        {
+          session_id: "sess-stale",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(stdout).toMatch(/heartbeat STALE/i);
+    });
+
+    it("falls back to the legacy .log mtime when no JSON heartbeat exists", () => {
+      writeLegacyLog("run-sess-legacy", "backend", Date.now() - 60 * 1000);
+      const { stdout, stderr } = runScript(
+        {
+          session_id: "sess-legacy",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(stdout).toMatch(/legacy log mtime/i);
+      expect(stderr).toMatch(/liveness=mtime/i);
+    });
+
+    it("honors defaults.heartbeat_timeout_ms from settings.json (short timeout → stale)", () => {
+      const guildDir = path.join(tmpDir, ".guild");
+      fs.mkdirSync(guildDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(guildDir, "settings.json"),
+        JSON.stringify({ defaults: { heartbeat_timeout_ms: 1000 } })
+      );
+      // 5s-old heartbeat is stale under a 1s timeout.
+      writeHeartbeat("run-sess-cfg", "backend", {
+        timestamp: new Date(Date.now() - 5000).toISOString(),
+      });
+      const { stdout } = runScript(
+        {
+          session_id: "sess-cfg",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(stdout).toMatch(/heartbeat STALE/i);
+    });
+
+    it("reports 'no heartbeat' when neither signal is present", () => {
+      const { stdout } = runScript(
+        {
+          session_id: "sess-none",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(stdout).toMatch(/no heartbeat/i);
+    });
+  });
 });

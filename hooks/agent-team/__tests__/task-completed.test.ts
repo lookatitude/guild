@@ -308,4 +308,129 @@ describe("task-completed.ts", () => {
       expect(stderr).toMatch(/escalate_reason/i);
     });
   });
+
+  describe("run-state checkpoint (ADR-RE-1)", () => {
+    function runStateFor(runId: string): string {
+      return path.join(tmpDir, ".guild", "runs", runId, "run-state.json");
+    }
+
+    it("writes run-state.json marking the lane done after a clean envelope completion", () => {
+      const runId = "run-sess-abc123";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      createReceipt(runDir, "backend", "task-001", FULL_RECEIPT_FIELDS, VALID_ENVELOPE);
+
+      const { exitCode, stderr } = runScript(
+        {
+          session_id: "sess-abc123",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-001",
+          task_subject: "Implement auth endpoints",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(exitCode).toBe(0);
+      expect(stderr).toMatch(/run-state checkpoint updated/i);
+
+      const statePath = runStateFor(runId);
+      expect(fs.existsSync(statePath)).toBe(true);
+      const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+      expect(state.schema_version).toBe("guild.run_state.v1");
+      expect(state.run_id).toBe(runId);
+      expect(state.lanes["task-001"].status).toBe("done");
+      expect(state.lanes["task-001"].tier).toBe("mid");
+      expect(state.lanes["task-001"].receipt_ref).toBe("handoffs/backend-task-001.md");
+    });
+
+    it("marks the lane done for a legacy receipt with no envelope", () => {
+      const runId = "run-sess-legacy";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      createReceipt(runDir, "qa", "task-002", FULL_RECEIPT_FIELDS);
+
+      const { exitCode } = runScript(
+        {
+          session_id: "sess-legacy",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-002",
+          teammate_name: "qa",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(exitCode).toBe(0);
+
+      const state = JSON.parse(fs.readFileSync(runStateFor(runId), "utf8"));
+      expect(state.lanes["task-002"].status).toBe("done");
+      expect(state.lanes["task-002"].receipt_ref).toBe("handoffs/qa-task-002.md");
+    });
+
+    it("records lane status 'failed' when the envelope status is blocked", () => {
+      const runId = "run-sess-blocked";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      createReceipt(runDir, "backend", "task-003", FULL_RECEIPT_FIELDS, {
+        ...VALID_ENVELOPE,
+        status: "blocked",
+      });
+
+      const { exitCode } = runScript(
+        {
+          session_id: "sess-blocked",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-003",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(exitCode).toBe(0);
+
+      const state = JSON.parse(fs.readFileSync(runStateFor(runId), "utf8"));
+      expect(state.lanes["task-003"].status).toBe("failed");
+    });
+
+    it("captures inlined depends-on references into the lane", () => {
+      const runId = "run-sess-deps";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      createReceipt(runDir, "backend", "task-004", FULL_RECEIPT_FIELDS, VALID_ENVELOPE);
+
+      const { exitCode } = runScript(
+        {
+          session_id: "sess-deps",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-004",
+          task_subject: "Build endpoints",
+          task_description: "Implements the API. depends-on: task-000",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(exitCode).toBe(0);
+
+      const state = JSON.parse(fs.readFileSync(runStateFor(runId), "utf8"));
+      expect(state.lanes["task-004"].depends_on).toContain("task-000");
+    });
+
+    it("does NOT write run-state when the completion is blocked (missing receipt)", () => {
+      const runId = "run-sess-noreceipt";
+      const { exitCode } = runScript(
+        {
+          session_id: "sess-noreceipt",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-005",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(exitCode).not.toBe(0);
+      expect(fs.existsSync(runStateFor(runId))).toBe(false);
+    });
+  });
 });

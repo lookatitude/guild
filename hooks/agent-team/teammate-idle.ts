@@ -8,18 +8,27 @@
  *          actionable nudge message to stdout (the orchestrator consumes it).
  *          NEVER exits non-zero — no exit-code gating.
  *
- * Staleness check (P4 — conservative variant):
- *   A teammate is considered stale if ANY assigned task lacks a handoff
- *   receipt at .guild/runs/<run-id>/handoffs/<teammate>-<task-id>.md.
+ * Liveness check (ADR-RE-3 — structured heartbeat; replaces the mtime heuristic):
+ *   A teammate is considered to have pending work if ANY assigned task lacks a
+ *   handoff receipt at .guild/runs/<run-id>/handoffs/<teammate>-<task-id>.md.
  *
- *   This handler also computes an in-progress-log freshness signal at
- *   .guild/runs/<run-id>/in-progress/<teammate>.log (STALE_THRESHOLD_MS
- *   window) and includes it in the nudge payload for orchestrator context,
- *   but does NOT currently gate the nudge on it — the stronger
- *   "stale = no receipt AND no active log" rule is a deliberate P5 refinement
- *   (needs telemetry to avoid false-positive nudges against fast-iterating
- *   teammates). Today: nudge on any pending task; document activity context.
+ *   Liveness ("is the agent still making progress?") is now read from a
+ *   STRUCTURED heartbeat at .guild/runs/<run-id>/in-progress/<teammate>.json
+ *   ({ timestamp, step, pct_complete, last_action }) — see hooks/lib/heartbeat.ts
+ *   (decision bound by pointer). The verdict is `age(timestamp) < timeout`,
+ *   where the timeout is the configurable `defaults.heartbeat_timeout_ms`
+ *   (default 600000 = 10 min, preserving the prior threshold). BACKWARD-COMPAT:
+ *   when the JSON record is absent, fall back to the legacy <teammate>.log
+ *   mtime (no hard cutover).
  *
+ *   SCOPE BOUNDARY: this heartbeat is LIVENESS/stall detection only. It is NOT
+ *   the deferred O-3 "anomalously short output" quality-escalation heuristic
+ *   (cost-aware-tiering-and-lean-context.md O-3 → DEFER) — distinct signal,
+ *   left deferred. Nothing here inspects output length or quality.
+ *
+ *   The nudge surfaces the heartbeat phase + staleness for orchestrator
+ *   context but (P5 refinement, still deferred) does NOT yet gate the nudge on
+ *   liveness — today: nudge on any pending task; report the liveness verdict.
  *   If the plan file (.guild/plan/*.md) or run state directory don't exist,
  *   the nudge is still emitted — conservative default.
  *
@@ -44,11 +53,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
-
-// ── Constants ──────────────────────────────────────────────────────────────
-
-/** 10 minutes — in-progress log older than this is considered stale */
-const STALE_THRESHOLD_MS = 10 * 60 * 1000;
+import { assessLiveness, readHeartbeatTimeoutMs, Liveness } from "../lib/heartbeat.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -65,7 +70,8 @@ interface NudgeContext {
   teamName: string;
   runId: string;
   hasReceipt: boolean;
-  hasActiveLog: boolean;
+  /** Structured liveness verdict (ADR-RE-3): heartbeat → mtime fallback. */
+  liveness: Liveness;
   pendingTaskIds: string[];
   runDir: string;
 }
@@ -121,32 +127,46 @@ function findAssignedTaskIds(cwd: string, teammate: string): string[] {
 }
 
 /**
- * Check if the in-progress log for a teammate is recent (active).
+ * Render the structured liveness verdict (ADR-RE-3) as a one-line context
+ * string for the nudge. Surfaces the heartbeat phase + age, or the mtime
+ * fallback, or "no heartbeat".
  */
-function hasActiveProgressLog(runDir: string, teammate: string): boolean {
-  const logPath = path.join(runDir, "in-progress", `${teammate}.log`);
-  if (!fs.existsSync(logPath)) return false;
-  const stat = fs.statSync(logPath);
-  return Date.now() - stat.mtimeMs < STALE_THRESHOLD_MS;
+function renderLiveness(liveness: Liveness): string {
+  if (liveness.source === "none") {
+    return `liveness: no heartbeat or progress log found (cannot confirm activity)`;
+  }
+  const ageSec = liveness.ageMs !== null ? Math.round(liveness.ageMs / 1000) : "?";
+  const freshness = liveness.fresh ? "FRESH (active)" : "STALE (possible stall)";
+  if (liveness.source === "heartbeat") {
+    const phase = liveness.step ? ` phase="${liveness.step}"` : "";
+    const pct = liveness.pctComplete !== undefined ? ` ${liveness.pctComplete}%` : "";
+    return `liveness: heartbeat ${freshness}, last progress ${ageSec}s ago${phase}${pct}`;
+  }
+  return `liveness: legacy log mtime ${freshness}, last touched ${ageSec}s ago (no structured heartbeat)`;
 }
 
 /**
- * Compose a clear, actionable nudge message for the orchestrator.
+ * Compose a clear, actionable nudge message for the orchestrator. Includes the
+ * structured-heartbeat liveness verdict so the orchestrator can distinguish a
+ * fast-iterating agent from a genuine stall.
  */
 function composeNudge(ctx: NudgeContext): string {
   const timestamp = new Date().toISOString();
+  const livenessLine = renderLiveness(ctx.liveness);
 
   if (ctx.pendingTaskIds.length > 0) {
     return (
       `[TeammateIdle ${timestamp}] ` +
       `Teammate "${ctx.teammate}" (team: "${ctx.teamName}") is idle but has ` +
       `${ctx.pendingTaskIds.length} incomplete task(s): [${ctx.pendingTaskIds.join(", ")}].\n` +
+      `${livenessLine}\n` +
       `Action required: ${ctx.teammate} should either\n` +
       `  1. Write a handoff receipt at ` +
       `${ctx.runDir}/handoffs/${ctx.teammate}-<task-id>.md with sections: ` +
       `changed_files, opens_for, assumptions, evidence, followups — then mark the task complete.\n` +
-      `  2. Or, if still working, update the in-progress log at ` +
-      `${ctx.runDir}/in-progress/${ctx.teammate}.log to signal activity.\n`
+      `  2. Or, if still working, update the structured heartbeat at ` +
+      `${ctx.runDir}/in-progress/${ctx.teammate}.json ` +
+      `({ timestamp, step, pct_complete, last_action }) to signal progress.\n`
     );
   }
 
@@ -154,10 +174,13 @@ function composeNudge(ctx: NudgeContext): string {
   return (
     `[TeammateIdle ${timestamp}] ` +
     `Teammate "${ctx.teammate}" (team: "${ctx.teamName}") is idle.\n` +
+    `${livenessLine}\n` +
     `If you have an active task, please write a handoff receipt or update your ` +
-    `in-progress log to signal activity. Receipt path: ` +
+    `structured heartbeat to signal progress. Receipt path: ` +
     `${ctx.runDir}/handoffs/${ctx.teammate}-<task-id>.md\n` +
-    `Required sections: changed_files, opens_for, assumptions, evidence, followups.\n` +
+    `Heartbeat path: ${ctx.runDir}/in-progress/${ctx.teammate}.json ` +
+    `({ timestamp, step, pct_complete, last_action }).\n` +
+    `Required receipt sections: changed_files, opens_for, assumptions, evidence, followups.\n` +
     `If all tasks are complete, no action is needed.\n`
   );
 }
@@ -201,12 +224,16 @@ async function main(): Promise<void> {
   const assignedIds = findAssignedTaskIds(cwd, teammate);
   const pendingTaskIds = assignedIds.filter((id) => !completedIds.has(id));
   const hasReceipt = completedIds.size > 0;
-  const hasActiveLog = hasActiveProgressLog(runDir, teammate);
+
+  // Liveness via the structured heartbeat (ADR-RE-3), mtime fallback baked in.
+  const timeoutMs = readHeartbeatTimeoutMs(cwd);
+  const liveness = assessLiveness(runDir, teammate, timeoutMs);
 
   process.stderr.write(
     `[teammate-idle] INFO: teammate="${teammate}" assigned=[${assignedIds.join(",")}] ` +
       `completed=[${[...completedIds].join(",")}] pending=[${pendingTaskIds.join(",")}] ` +
-      `activeLog=${hasActiveLog}\n`
+      `liveness=${liveness.source}/${liveness.fresh ? "fresh" : "stale"} ` +
+      `ageMs=${liveness.ageMs ?? "n/a"} timeoutMs=${timeoutMs}\n`
   );
 
   const ctx: NudgeContext = {
@@ -214,7 +241,7 @@ async function main(): Promise<void> {
     teamName,
     runId,
     hasReceipt,
-    hasActiveLog,
+    liveness,
     pendingTaskIds,
     runDir,
   };
