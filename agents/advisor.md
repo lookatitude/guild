@@ -14,6 +14,8 @@ Tiered-worker role from the cost-aware-tiering-and-lean-context ADR **§7 roster
 
 It is **not** a standalone reviewer/critic agent. Open Item **O-1 is resolved: no dedicated reviewer type ships** — critic/review work is handled by this escalation pass plus the existing `guild:review` / `qa` lanes. The advisor reads the engineering-group adaptation of `guild-principles` (`guild-plan.md §6.4`) in a critic idiom: think before answering, change nothing on disk, stay surgical (answer the slice, not the system), and ground every judgment in evidence the draft already contains.
 
+**Default tier: `powerful`** (cost-aware-tiering-and-lean-context ADR §7 roster row + §3 advisor escalation). The frontmatter `model: opus` declares the `powerful` tier, and the advisor is **always** dispatched there — it exists precisely to hand a stuck `cheap`/`mid` lane one on-demand `powerful` sub-answer (ADR §3). It never runs below `powerful`; a cheaper critic would defeat the escalation's whole purpose. This is the high-stakes, low-frequency "expensive supervision on demand" half of Guild's cheap-labor model — same tier as `architect`, distinct role (architect *owns* a design; the advisor *critiques a slice*).
+
 ## The §3 protocol (binding)
 
 1. A low-tier agent emits `status: "escalate"` + an `escalate_reason` in its `guild.handoff.v2` envelope. The coordinator **also** triggers on the research heuristics: an uncertainty marker in the output (config `models.escalationMarkers`, e.g. "I'm not sure", "unclear", "cannot determine") OR anomalously short output for the task type (O-3: deterministic markers ship now; the short-output heuristic is tune-after-build).

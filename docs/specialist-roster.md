@@ -190,8 +190,52 @@ Notes:
   `doc-writer` file ships — it would collide with the `technical-writer` lane.
   The §7 role is reconciled there (cheap for mechanical edits, mid for synthesis),
   keeping the roster minimal.
-- The remaining 12 shipping specialists keep `model: opus` until a future tiering
-  pass annotates them; this lane retiered only the §7 roster rows.
+- **All 14 shipping specialists are now tiered** — every agent file carries an
+  explicit `model:` plus a `**Default tier:**` note, not just the §7 roster rows.
+  `architect` and `security` are `powerful` (`opus`); every other engineering /
+  content / commercial specialist defaults to `mid` (`sonnet`), with `researcher`
+  and `technical-writer` running a `cheap` sub-pass for pure read/summarize and
+  mechanical-edit work. The complete map is below.
+
+### Complete default-tier map (all 16 dispatchable roles)
+
+Every role the orchestrator can dispatch, with its default tier and frontmatter
+`model:`. The auto-scorer (ADR §2) may drop a routine single-item lane below the
+default to `cheap`, or escalate one sub-question to the `powerful` `advisor`
+(ADR §3) — neither changes the agent's printed default.
+
+| Role | Group | Default tier | `model:` |
+|---|---|---|---|
+| `architect` | engineering | `powerful` | `opus` |
+| `security` | engineering | `powerful` | `opus` |
+| `advisor` | tiered-worker (NEW) | `powerful` | `opus` |
+| `researcher` | engineering | `cheap`→`mid` | `sonnet` |
+| `backend` | engineering | `mid` | `sonnet` |
+| `frontend` | engineering | `mid` | `sonnet` |
+| `mobile` | engineering | `mid` | `sonnet` |
+| `devops` | engineering | `mid` | `sonnet` |
+| `qa` | engineering | `mid` | `sonnet` |
+| `developer` | tiered-worker (NEW) | `mid` | `sonnet` |
+| `copywriter` | content & comms | `mid` | `sonnet` |
+| `technical-writer` (`doc-writer`) | content & comms | `cheap`→`mid` | `sonnet` |
+| `social-media` | content & comms | `mid` | `sonnet` |
+| `seo` | content & comms | `mid` | `sonnet` |
+| `marketing` | commercial | `mid` | `sonnet` |
+| `sales` | commercial | `mid` | `sonnet` |
+
+14 shipping specialists + the 2 NEW tiered-worker roles (`advisor`, `developer`)
+= 16. `powerful` is reserved for the three high-stakes / low-frequency roles
+(`architect`, `security`, `advisor`); no implementer or content/commercial role
+defaults to `powerful`.
+
+**No agent defaults to `cheap`.** The `cheap` tier (haiku) is still live and
+reachable two ways: (a) the auto-scorer drops a score-0 lane — a pure file read,
+summarize, classify, tag, or a single mechanical doc/microcopy edit — to `cheap`
+regardless of the owning agent's default; (b) `researcher` and `technical-writer`
+(both `cheap`→`mid`) run their read/summarize and mechanical-edit sub-passes at
+`cheap` before synthesizing at `mid`. The default-biases-cheap rule (ADR §10,
+zero-config) keeps a routine run trending cheap even though no agent's `model:`
+is `haiku`.
 
 ## Team composition rules
 

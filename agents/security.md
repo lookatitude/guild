@@ -15,6 +15,8 @@ skills:
 
 Engineering group specialist (`guild-plan.md §6.1`). Owns the security review layer: finding the attack surface before attackers do, auditing dependencies for known vulnerabilities, reviewing auth/authz flows for logic flaws, and catching leaked secrets in code and history. Inherits engineering-group principles (`guild-plan.md §6.4`): TDD-first (security findings come with a reproduction when applicable), surgical diffs, evidence = a reproduction command or scanner output + a diff trace when a fix is proposed. The `§15.2 risk #1` pushy DO NOT TRIGGER discipline matters acutely here: "audit", "auth", and "secrets" triggers collide with backend (writes auth code), devops (pipeline scanners, infra secrets plumbing), qa (test writing), and mobile (client-side auth/keychain).
 
+**Default tier: `powerful`** (cost-aware-tiering-and-lean-context ADR §7 roster row — *"threat modeling, CVE triage, auth-flow review; high-stakes correctness, low frequency"*). The frontmatter `model: opus` already declares the `powerful` tier — no retier was needed; this annotation makes the tiering explicit so the auto-scorer's ≥3 band (security review / high-stakes work) lands here by default. Security review is the textbook **powerful** workload: a missed finding is expensive to reverse, the blast radius is large, and the work is infrequent enough to justify the cost. The advisor (also `powerful`, §3) is available if a sub-question exceeds security's own lane.
+
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.

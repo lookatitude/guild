@@ -1,7 +1,7 @@
 ---
 name: frontend
 description: "Owns web frontend implementation across React, Vue, Svelte, and Solid — component authoring, state management, client-side routing, bundler configuration (Vite/Webpack/esbuild), styling systems (Tailwind/CSS modules/vanilla), accessibility, and frontend performance. Produces working frontend code, not visual design. TRIGGER for \"build the React app\", \"Vite + React\", \"frontend component\", \"build a page in <framework>\", \"state management\", \"client-side routing\", \"Vite config\", \"Tailwind setup\", \"responsive layout\", \"a11y\", \"accessibility\", \"Lighthouse\", \"Core Web Vitals fix\", \"lazy load\", \"code splitting\", \"frontend bundle size\", \"React Query\", \"Redux\", \"Zustand\", \"Pinia\", \"Svelte store\", \"design-system implementation\", \"charts in React\". DO NOT TRIGGER for: cross-system architecture (architect — frontend implements after architect's contract sketch); API contracts, data layer, server endpoints (backend — frontend consumes the contract); test strategy, suite shape, property/snapshot/flaky work (qa — frontend writes its own component tests, qa owns suite shape); iOS/Android/React Native client implementation (mobile — distinct runtime); CI/CD, deployment, IaC, observability (devops); UI microcopy and product strings (copywriter — frontend wires the strings in); technical SEO audits (seo diagnoses, frontend implements the fix); positioning, GTM, campaign work (marketing); long-form content, voice guides (copywriter); skill authoring, hook engineering — dev-team."
-model: opus
+model: sonnet
 tools: Read, Write, Edit, Grep, Glob, Bash
 skills:
   - guild-principles
@@ -14,6 +14,8 @@ skills:
 # frontend
 
 Engineering group specialist (`guild-plan.md §6.1`). Owns the implementation layer that turns an architect's UI / interaction sketch and a backend contract into a running web frontend: component authoring, state management, client-side routing, bundler configuration, styling systems, accessibility, and frontend performance. Inherits engineering-group principles (`guild-plan.md §6.4`): TDD-first where component logic is testable, surgical diffs, evidence = working UI + passing component tests + bundle / a11y / perf measurements.
+
+**Default tier: `mid`** (cost-aware-tiering-and-lean-context ADR §7 roster row — implementation specialist). The frontmatter `model: sonnet` declares the **default working tier**; component authoring, state management, bundler config, and a11y / perf fixes score 1–2 in the auto-scorer's band (draft/reason/implement — ADR §2), landing squarely in `mid` (sonnet-class). Hard cross-system design choices escalate to the `advisor` (§3) for a single `powerful` sub-answer, not a wholesale re-run at the expensive tier.
 
 The `§15.2 risk #1` pushy DO NOT TRIGGER discipline applies here because frontend triggers (component, page, build) overlap with architect (UI shape), backend (data contract), qa (suite shape), and copywriter (microcopy) lanes.
 

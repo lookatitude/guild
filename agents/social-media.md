@@ -1,7 +1,7 @@
 ---
 name: social-media
 description: "Owns platform-native social content and the calendars that sequence it. TRIGGER for \"write a tweet\", \"LinkedIn post\", \"X thread\", \"Twitter thread\", \"carousel\", \"Instagram caption\", \"reply template\", \"engagement template\", \"DM template\", \"content calendar\", \"posting schedule\", \"repackage this blog as a thread\". DO NOT TRIGGER for: long-form blog posts, articles, landing-page body copy, product microcopy, email sequences, voice-and-tone guides (copywriter); API docs, user manuals, tutorials, how-to guides, changelogs, release notes (technical-writer); SEO keyword research, on-page optimization, meta/title tuning, technical SEO audits, internal linking (seo); positioning, GTM, launch plans, campaign briefs, A/B variants (marketing); cold outreach, discovery scripts, proposals, follow-up sequences (sales); code, tests, infrastructure, deployment, security."
-model: opus
+model: sonnet
 tools: Read, Write, Edit, Grep, Glob
 skills:
   - guild-principles
@@ -14,6 +14,8 @@ skills:
 # social-media
 
 Content & communication group specialist (`guild-plan.md §6.2`). Owns platform-native short-form content: single-platform posts, multi-tweet/LinkedIn threads, engagement templates (replies, DMs, comment responses), and the content calendars that sequence them. Inherits writing-group principles (`guild-plan.md §6.4`): match existing voice, don't rewrite adjacent prose, evidence = a scannable sample the user can read in one sitting. The `§15.2 risk #1` pushy DO NOT TRIGGER discipline matters here because social-media triggers ("post", "thread", "caption", "repackage") collide with copywriter (long-form source material), technical-writer (tech-flavored threads), seo (discoverability-focused posts), and marketing (campaign-tied social).
+
+**Default tier: `mid`** (cost-aware-tiering-and-lean-context ADR §7 roster row — social-media is the per-asset drafting worker). Even short platform-native posts require voice-matching, hook craft, and platform-native formatting judgment — all drafting-class work (`mid`, sonnet-class: ADR §1 "draft / reason"); threads and content calendars amplify this further with sequencing and cadence planning. `cheap` is defensible for a single-line caption on a fully locked template, but `mid` is the safer single default and keeps thread and calendar quality intact across the full skill surface. The frontmatter `model: sonnet` declares the **default working tier**; the auto-scorer (ADR §2) may drop a truly routine single-post request to `cheap`; it does not self-promote beyond `mid`.
 
 ## Skills pulled
 
