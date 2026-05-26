@@ -372,6 +372,27 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
       expect(status).toBe(0); // deprecated but not rejected
       expect(out).toMatch(/VALID/);
     });
+
+    // ── defect guard: scaffold must not emit the deprecated key so a fresh
+    //    settings.json never self-triggers the DEPRECATED warning on every read.
+    test("--scaffold output does NOT contain defaults.agent_team (fresh scaffold must be warn-free)", () => {
+      const { status, out } = run(["--scaffold"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      // The deprecated key must be absent from the scaffold — top-level agent_mode replaces it.
+      expect(j.defaults.agent_team).toBeUndefined();
+    });
+
+    // ── back-compat read path is still active: an EXISTING config with agent_team
+    //    must still warn once on stderr (covered by the tests above that write
+    //    settings.json with defaults.agent_team — kept here as an explicit sanity pin).
+    test("reading a settings.json that contains defaults.agent_team still emits DEPRECATED warning", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { agent_team: "auto" } });
+      const { status, err } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      expect(err).toMatch(/defaults\.agent_team.*DEPRECATED|DEPRECATED.*agent_team/i);
+    });
   });
 
   // ── workspace.mode (guild.workspace.v1) ─────────────────────────────────────

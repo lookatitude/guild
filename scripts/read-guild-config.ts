@@ -391,7 +391,14 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
 }
 
 function scaffold(): string {
-  return JSON.stringify({ ...DEFAULTS, _help: HELP }, null, 2) + "\n";
+  // Omit the deprecated `defaults.agent_team` key from the scaffolded output.
+  // The top-level `agent_mode: "auto"` already replaces it (D5). A freshly-
+  // scaffolded settings.json must not contain a deprecated key — otherwise
+  // every subsequent `loadFileConfig` call would fire the WARN on its own output.
+  // Back-compat reading (warn-once + migrate auto→auto / on→team / off→subagent)
+  // is preserved in loadFileConfig for EXISTING configs that still carry the key.
+  const { agent_team: _omitDeprecated, ...scaffoldDefaults } = DEFAULTS.defaults;
+  return JSON.stringify({ ...DEFAULTS, defaults: scaffoldDefaults, _help: HELP }, null, 2) + "\n";
 }
 
 // ── --rigor profile expansion (command-surface.md §4.3 — the anti-soup mechanism).
