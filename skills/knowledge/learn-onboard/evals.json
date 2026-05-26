@@ -13,6 +13,7 @@
     "Analyze the diff blast radius.",
     "Explain how the auth module works.",
     "Query the graph for the auth module.",
+    "Set models.cacheTTL.leaf to 5m in settings.json.",
     "Launch the interactive dashboard."
   ]
 }

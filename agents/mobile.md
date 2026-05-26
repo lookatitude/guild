@@ -59,4 +59,6 @@ Implied-specialist rule (`guild-plan.md §7.2`): when mobile is on the team and 
 - Content, marketing copy, app-store listing *prose* (`copywriter`), app-store SEO keyword research (`seo`), launch campaigns (`marketing`) — writing and commercial groups own those. Mobile ships the build; the listing copy is someone else's lane.
 - Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under the repo's dev-team `tests/` directory — dev-team agents own these (see `.claude/agents/`).
 
+**Boundary vs the generic `developer` (cost-aware-tiering-and-lean-context ADR §7):** any iOS / Android / React Native / Expo client work is **mobile's**, even when phrased generically ("build the screen", "implement this flow"). The generic `developer` (mid-tier) takes only domain-*less* residual lanes and hands off mobile work here. Mobile does not defer its domain to `developer`.
+
 If mobile work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md`) — main session routes the followup to the right specialist.

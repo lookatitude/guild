@@ -4,7 +4,8 @@
     "Analyse this codebase deeply and reverse-spec it.",
     "Run learn graph — we need P2 plan-impact.",
     "Refresh the knowledge graph, it looks stale.",
-    "Derive the domain and layer map from the codebase."
+    "Derive the domain and layer map from the codebase.",
+    "Run the powerful-tier cross-document graph-schema validation — edge count is over the threshold."
   ],
   "should_not_trigger": [
     "Build the cheap-scan codebase map for Init.",
@@ -12,6 +13,7 @@
     "Analyze the diff's blast radius for this plan.",
     "Explain how the payment retry module works.",
     "Query the graph for the auth nodes.",
+    "Just adjust the models.recallScoreThreshold in settings.json.",
     "Launch the interactive web dashboard."
   ]
 }

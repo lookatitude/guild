@@ -61,6 +61,32 @@ graph nodes/layers, not printing hunks.
    not consume it here — `guild:plan` (P2) and `guild:verify-done` (P3) own
    their consumption.
 
+# Cost tiering
+
+The deterministic **script half** (`diff-understanding.ts`, the diff→node
+mapping) is **LLM-free** and unchanged. This skill's LLM half — confirming the
+`affected_layers` reading and characterising blast radius — is bounded
+single-document judgment over the script's output, so it runs at **`mid`** (per
+the shared per-stage table owned by `guild:learn-map` `§"Cost tiering"`; tier
+vocabulary, map, and `models.*` keys bound by pointer to
+`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md` §1/§8/§10 —
+never re-spelled). **`powerful` is invoked ONLY** when the `mid` half flags
+`escalate` in its typed `guild.handoff.v2` output — e.g. an anomalously large
+`untraced_files` set that needs a cross-document re-validation of the graph
+(ADR §3/§8) — getting one `powerful` sub-answer for that question only, never a
+wholesale re-run.
+
+**Recall-before-read (ADR §4).** The blast-radius reading is grounded **only in
+the graph + the script's mapping** — this skill does not re-read source, which
+is the recall-before-read discipline directly: pull exactly the affected nodes,
+not the whole project. The `models.recallScoreThreshold` gate governs any
+incidental wiki recall for context; the script half is unaffected.
+
+**One-pass three-store update (candidates only).** This skill writes one
+per-run artifact (`diff-understanding.json`); it does **not** mutate memory,
+wiki, or KG — those one-pass writes belong to `guild:learn-graph`. It
+self-promotes nothing.
+
 # Evidence requirements
 
 Every affected-node claim traces to a graph node carrying `source_refs` +
@@ -95,5 +121,10 @@ scope. **No interactive web dashboard** (the v2 exclusion;
   later treats it as a scope-creep signal.
 - Knowledge graph absent → escalation to build it first, no fabricated diff.
 - Empty diff (`base == head`) → reported, no artifact written.
+- Normal diff → blast-radius reading runs at `mid`, grounded in the graph + the
+  script mapping, no `powerful` call.
+- Anomalously large `untraced_files` set → the `mid` half flags `escalate` for
+  one `powerful` cross-document re-validation sub-answer, then continues (ADR
+  §3/§8).
 - Request to visualise the diff as a web dashboard → refused, deferral doc
   cited.

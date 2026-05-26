@@ -57,4 +57,6 @@ Implied-specialist rule (`guild-plan.md §7.2`): qa is auto-included whenever ba
 - Content, marketing copy, API *documentation prose*, SEO — writing and commercial groups own those. Backend may supply a contract reference; `technical-writer` turns it into user-facing docs.
 - Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — dev-team agents own these (see `.claude/agents/`).
 
+**Boundary vs the generic `developer` (cost-aware-tiering-and-lean-context ADR §7):** any API / data-layer / migration / integration / queue / worker work is **backend's**, even when a lane is phrased generically ("build this", "implement that"). The generic `developer` (mid-tier) takes only domain-*less* residual lanes; if a developer lane turns out to be backend work, it hands off here. Backend does not defer its domain to `developer`.
+
 If backend work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md`) — main session routes the followup to the right specialist.

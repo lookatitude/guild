@@ -11,6 +11,7 @@
     "Create a brand-new specialist type called data-scientist.",
     "Review the specialist outputs.",
     "Run the tests.",
-    "Explain the plan to me."
+    "Explain the plan to me.",
+    "Edit the models.tiers map in settings.json."
   ]
 }

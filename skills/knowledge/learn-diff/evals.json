@@ -12,6 +12,7 @@
     "Narrate the onboarding tour.",
     "Explain how the rate-limiter module works.",
     "Just show me git diff HEAD~1.",
+    "Set models.thresholds.powerful in settings.json.",
     "Launch the interactive dashboard."
   ]
 }

@@ -466,4 +466,295 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
       expect(out).toMatch(/VALID/);
     });
   });
+
+  // ── models: block (cost-aware-tiering-and-lean-context ADR §10, VC-10) ──────
+  describe("models: block (ADR §10 — cost-aware tiering config)", () => {
+    // ── scaffold ──────────────────────────────────────────────────────────────
+
+    test("--scaffold includes models block with all required keys + _help entries", () => {
+      const { status, out } = run(["--scaffold"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models).toBeDefined();
+      expect(j.models.enabled).toBe(true);
+      expect(j.models.tiers).toBeDefined();
+      expect(j.models.tiers.cheap).toBeDefined();
+      expect(j.models.tiers.mid).toBeDefined();
+      expect(j.models.tiers.powerful).toBeDefined();
+      expect(j.models.scoreWeights).toBeDefined();
+      expect(j.models.thresholds).toEqual({ mid: 1, powerful: 3 });
+      expect(j.models.advisorRounds).toBe(2);
+      expect(Array.isArray(j.models.escalationMarkers)).toBe(true);
+      expect(j.models.recallBeforeRead).toBe(true);
+      expect(j.models.recallScoreThreshold).toBe(0.4);
+      expect(j.models.structuredOutputRequired).toBe(true);
+      expect(j.models.cacheTTL).toEqual({ coordinator: "1h", leaf: "5m" });
+      expect(j.models.importanceGate).toBe(3);
+      // _help entries
+      expect(j._help["models.enabled"]).toBeDefined();
+      expect(j._help["models.tiers"]).toBeDefined();
+      expect(j._help["models.scoreWeights"]).toBeDefined();
+      expect(j._help["models.thresholds"]).toBeDefined();
+      expect(j._help["models.advisorRounds"]).toBeDefined();
+      expect(j._help["models.escalationMarkers"]).toBeDefined();
+      expect(j._help["models.recallBeforeRead"]).toBeDefined();
+      expect(j._help["models.recallScoreThreshold"]).toBeDefined();
+      expect(j._help["models.structuredOutputRequired"]).toBeDefined();
+      expect(j._help["models.cacheTTL.coordinator"]).toBeDefined();
+      expect(j._help["models.cacheTTL.leaf"]).toBeDefined();
+      expect(j._help["models.importanceGate"]).toBeDefined();
+    });
+
+    test("--scaffold default tier map is cheap=haiku, mid=sonnet, powerful=opus (ADR §1)", () => {
+      const { out } = run(["--scaffold"]);
+      const j = JSON.parse(out);
+      expect(j.models.tiers.cheap.claude).toBe("haiku");
+      expect(j.models.tiers.mid.claude).toBe("sonnet");
+      expect(j.models.tiers.powerful.claude).toBe("opus");
+      // codex and gemini are null (no third host yet)
+      expect(j.models.tiers.cheap.codex).toBeNull();
+      expect(j.models.tiers.cheap.gemini).toBeNull();
+      expect(j.models.tiers.mid.codex).toBeNull();
+      expect(j.models.tiers.powerful.codex).toBeNull();
+    });
+
+    test("--scaffold _precedence includes model-tier ladder", () => {
+      const { out } = run(["--scaffold"]);
+      const j = JSON.parse(out);
+      expect(j._help._precedence).toMatch(/model-tier|--model-tier/i);
+    });
+
+    // ── zero-config behavior ──────────────────────────────────────────────────
+
+    test("no settings.json → models defaults present (zero-config behavior preserved)", () => {
+      const dir = repo();
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models).toBeDefined();
+      expect(j.models.enabled).toBe(true);
+      expect(j.models.tiers.cheap.claude).toBe("haiku");
+      expect(j.models.advisorRounds).toBe(2);
+      expect(j.models.recallScoreThreshold).toBe(0.4);
+    });
+
+    // ── settings.json overrides ───────────────────────────────────────────────
+
+    test("settings.json models.enabled: false is read and resolved", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { enabled: false } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.enabled).toBe(false);
+      // Tier defaults still present (deep-merge)
+      expect(j.models.tiers.cheap.claude).toBe("haiku");
+    });
+
+    test("settings.json partial models.tiers override merges over defaults", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { tiers: { cheap: { claude: "sonnet", codex: null, gemini: null } } } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.tiers.cheap.claude).toBe("sonnet"); // overridden
+      expect(j.models.tiers.mid.claude).toBe("sonnet");   // default still present
+      expect(j.models.tiers.powerful.claude).toBe("opus"); // default still present
+    });
+
+    test("settings.json models.advisorRounds: 4 is read and resolved", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { advisorRounds: 4 } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.advisorRounds).toBe(4);
+    });
+
+    test("settings.json models.recallScoreThreshold: 0.7 is read and resolved", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { recallScoreThreshold: 0.7 } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.recallScoreThreshold).toBe(0.7);
+    });
+
+    test("settings.json models.thresholds partial override merges over defaults", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { thresholds: { mid: 2, powerful: 4 } } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.thresholds.mid).toBe(2);
+      expect(j.models.thresholds.powerful).toBe(4);
+    });
+
+    test("settings.json models.importanceGate: 2 is read and resolved", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { importanceGate: 2 } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.importanceGate).toBe(2);
+    });
+
+    test("settings.json models.cacheTTL partial override merges over defaults", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { cacheTTL: { coordinator: "5m", leaf: "off" } } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.cacheTTL.coordinator).toBe("5m");
+      expect(j.models.cacheTTL.leaf).toBe("off");
+    });
+
+    test("settings.json models.escalationMarkers: custom array is read and resolved", () => {
+      const dir = repo();
+      const markers = ["not certain", "need more info"];
+      writeSettings(dir, { models: { escalationMarkers: markers } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.escalationMarkers).toEqual(markers);
+    });
+
+    test("settings.json models.recallBeforeRead: false is read and resolved", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { recallBeforeRead: false } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.recallBeforeRead).toBe(false);
+    });
+
+    test("settings.json models.structuredOutputRequired: false is read and resolved", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { structuredOutputRequired: false } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.structuredOutputRequired).toBe(false);
+    });
+
+    // ── --validate closed-key rejection ──────────────────────────────────────
+
+    test("--validate rejects unknown models.* key (closed key set)", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { bogusField: true } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/unknown models key "bogusField"/);
+    });
+
+    test("--validate rejects unknown models.cacheTTL.* key", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { cacheTTL: { coordinator: "1h", leaf: "5m", extra: "on" } } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/unknown models\.cacheTTL key "extra"/);
+    });
+
+    test("--validate rejects invalid models.cacheTTL.coordinator value", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { cacheTTL: { coordinator: "10m", leaf: "5m" } } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/models\.cacheTTL\.coordinator.*invalid|invalid.*models\.cacheTTL/i);
+    });
+
+    test("--validate rejects models.importanceGate out of 1–5 range", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { importanceGate: 7 } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/models\.importanceGate/);
+    });
+
+    test("--validate rejects models.advisorRounds < 1", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { advisorRounds: 0 } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/models\.advisorRounds/);
+    });
+
+    test("--validate rejects models.recallScoreThreshold out of 0–1", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { recallScoreThreshold: 1.5 } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/models\.recallScoreThreshold/);
+    });
+
+    test("--validate rejects unknown models.thresholds key", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { thresholds: { mid: 1, powerful: 3, extreme: 5 } } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/unknown models\.thresholds key "extreme"/);
+    });
+
+    test("--validate passes a clean models block", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        models: {
+          enabled: true,
+          advisorRounds: 3,
+          recallScoreThreshold: 0.5,
+          importanceGate: 2,
+          recallBeforeRead: true,
+          structuredOutputRequired: true,
+          cacheTTL: { coordinator: "1h", leaf: "5m" },
+        },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+
+    // ── --model-tier CLI escape hatch ─────────────────────────────────────────
+
+    test("--model-tier=cheap is surfaced in _model_tier_override", () => {
+      const dir = repo();
+      const { status, out } = run(["--cwd", dir, "--model-tier=cheap"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j._model_tier_override).toBeDefined();
+      expect(j._model_tier_override.tier).toBe("cheap");
+      expect(j._model_tier_override.source).toMatch(/--model-tier/);
+    });
+
+    test("--model-tier=mid is surfaced in _model_tier_override", () => {
+      const dir = repo();
+      const { status, out } = run(["--cwd", dir, "--model-tier=mid"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j._model_tier_override.tier).toBe("mid");
+    });
+
+    test("--model-tier=powerful is surfaced in _model_tier_override", () => {
+      const dir = repo();
+      const { status, out } = run(["--cwd", dir, "--model-tier=powerful"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j._model_tier_override.tier).toBe("powerful");
+    });
+
+    test("--model-tier=bogus is silently ignored (no _model_tier_override)", () => {
+      const dir = repo();
+      const { status, out } = run(["--cwd", dir, "--model-tier=bogus"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j._model_tier_override).toBeUndefined();
+    });
+
+    test("no --model-tier flag → no _model_tier_override in output", () => {
+      const dir = repo();
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j._model_tier_override).toBeUndefined();
+    });
+  });
 });

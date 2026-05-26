@@ -1,6 +1,6 @@
 ---
 name: guild-context-assemble
-description: Assembles per-specialist 3-layer context bundle: Universal (~400 tokens — guild:principles + project-overview + goals) + Role-dependent (~800–1500 — standards + 2–4 entity pages matching role) + Task-dependent (~800–1500 — lane from plan + named refs + upstream contracts + active decisions). Target ~3k tokens, hard cap 6k. TRIGGER: "build the context bundle for <specialist>", "prepare the brief for <role>", "what context does the architect need", "assemble context for backend". DO NOT TRIGGER for: loading all wiki pages, showing the full repo, compressing a single file.
+description: Assembles per-specialist 3-layer context bundle: Universal (~400 tokens — guild:principles + project-overview + goals) + Role-dependent (~800–1500 — standards + 2–4 entity pages matching role) + Task-dependent (~800–1500 — lane from plan + named refs + upstream contracts + active decisions). Target ~3k tokens, hard cap 6k. Owns the recall-before-read pull (agent recalls the task against the wiki/KG and skips the full file read above the recall-score threshold) and the lean-lead context discipline (last-N guild.handoff.v2 envelopes + rolling summary; compaction not summarization for technical artifacts). TRIGGER: "build the context bundle for <specialist>", "prepare the brief for <role>", "what context does the architect need", "assemble context for backend", "recall before reading the file", "keep the lead context lean". DO NOT TRIGGER for: loading all wiki pages, showing the full repo, compressing a single file.
 when_to_use: Fourth step of Guild lifecycle, invoked per-specialist by guild:execute-plan before dispatching each lane.
 type: meta
 ---
@@ -94,6 +94,28 @@ wiki and guild-memory"` (cited, never re-spelled here):
   source sub-guild — instead of reading the (often empty) root wiki alone. See
   `guild:wiki-query`'s `## Federated fan-out` section; no sub-guild knowledge is
   copied into the bundle, and the 6k hard cap is unchanged.
+
+## Recall-before-read (per-agent context-pull)
+
+Implements the cost-aware-tiering ADR (`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §4`). Each agent assembles its **own** task-scoped context by querying the knowledge base for **exactly its task** — not a broadcast of the whole project. This is a pull discipline layered onto the three-layer rule above; the **~3k target / 6k hard cap is unchanged** (`## Size budget` — bound by pointer, never re-spelled).
+
+The **recall-before-read rule** (`cost-techniques.md §3`, surfaced in ADR §4): before an agent reads a file, recall the task description against the wiki via `guild-memory` BM25 (+ bounded `kg-query` for relationship-heavy queries, default 2 hops). Then:
+
+- If recall returns ≥1 chunk with **score ≥ `models.recallScoreThreshold`** (default `0.4`, closed-key — ADR §10, bound by pointer), the agent receives the chunk(s) + the specific file references and **skips the full file read**.
+- **Full reads are permitted only** when recall returns 0 hits OR the task requires source-of-truth verification (e.g. `guild:verify-done`).
+- The rule is gated by `models.recallBeforeRead` (default `true`); when `false`, fall back to the prior full-read assembly.
+- `models.importanceGate` (default `3`) sets the min wiki importance for routine recall.
+
+Recall content lands in the **task-dependent** layer and is subject to the same overflow trimming as `## Size budget` and `## Graph retrieval` (`source_priority: [wiki, knowledge_graph, codebase_map]` — graph nodes drop first). Recall never expands the bundle past the 6k hard cap; on overflow the lowest-weight recall chunks are trimmed alongside the graph sub-source before any role/lane content.
+
+## Lead context (lean lead — compaction, not summarization)
+
+Implements ADR §4 (SC-3). The coordinator stays lean by **dispatching by pointer** and consuming only compact `guild.handoff.v2` envelopes (canonical body at ADR §5, bound by pointer — distinct from the frozen `guild.handoff_receipt.v1`), **never** full specialist transcripts (which remain in `.guild/runs/` for audit and never enter lead context). The lead holds:
+
+- **Last-N envelopes in full** (default last-N = 5) + a **rolling summary** of older work.
+- **Recompute at a capacity threshold** (~70% of context capacity; `cost-techniques.md §4`).
+
+**Compaction vs summarization (load-bearing distinction).** For **technical artifacts** — file paths, error codes, identifiers, contracts — use **compaction (verbatim pruning), not summarization**: verbatim accuracy, zero hallucination, reversible. **Summarization (paraphrase) is reserved for narrative / reasoning history** where paraphrase is safe. Never paraphrase a file path, a `task-id`, or a contract field into prose — that loses the pointer the next lane needs.
 
 ## Ambient context caveat
 

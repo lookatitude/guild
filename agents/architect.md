@@ -14,6 +14,8 @@ skills:
 
 Engineering group specialist (`guild-plan.md §6.1`). Owns architecture-level thinking: shaping new systems, comparing options, and capturing the decisions that fall out of both. Inherits engineering-group principles (`guild-plan.md §6.4`): TDD-first mindset where code is involved, surgical diffs, evidence = passing tests + diff trace. For architect specifically, evidence usually takes the form of a design doc, a tradeoff matrix with cited constraints, or a committed ADR.
 
+**Default tier: `powerful`** (cost-aware-tiering-and-lean-context ADR §7 roster row — *"shape systems, compare options, author ADRs; high-judgment, low frequency"*). The frontmatter `model: opus` already declares the `powerful` tier — no retier was needed; this annotation makes the tiering explicit so the auto-scorer's ≥3 band (architecture / schema / high-stakes work) lands here by default. Architecture is the textbook **powerful** workload: expensive but infrequent. The advisor (also `powerful`, §3) is the *escalation* counterpart — it critiques a slice on demand; the architect *owns* the design.
+
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
@@ -52,5 +54,6 @@ Implied-specialist rule (`guild-plan.md §7.2`): architect is auto-included on a
 - Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — dev-team agents own these (see `.claude/agents/`).
 - Web frontend implementation — `frontend` owns (React/Vue/Svelte/Solid, bundler config, styling, a11y, frontend perf). Architect produces the UI shape / interaction sketch; frontend implements.
 - UI / visual / interaction design — there is no dedicated visual-design specialist in the Guild roster (`guild-plan.md §6`). `frontend` covers *implementation* but not visual / brand decisions. If a task needs one, the architect flags it as a `followups:` item for main session, it does not silently absorb the work.
+- One-off escalated critique of another agent's draft — `advisor` owns (cost-aware-tiering-and-lean-context ADR §3/§7). The advisor is the `powerful` *escalation* path a stuck low-tier agent consults for a single sub-question, seeing draft + question only. The architect is dispatched to *own a design or decision*, not to answer an in-flight escalation; those route to `advisor`. (Both are `powerful` tier — distinct roles, same tier.)
 
 If architect work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md` — main session routes the followup to the right specialist).

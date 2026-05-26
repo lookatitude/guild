@@ -7,7 +7,8 @@
     "Give me the cheap-scan CodebaseMap and architecture stub.",
     "Check children first — is this root a workspace of sub-repos?",
     "Register the sub-guilds in this monorepo-of-repos and write the manifest.",
-    "Learn map this umbrella repo; don't scan the whole tree as one blob."
+    "Learn map this umbrella repo; don't scan the whole tree as one blob.",
+    "Cheap-scan this repo for Init — keep it on the cheap tier, no powerful calls."
   ],
   "should_not_trigger": [
     "Build the deep knowledge graph for this repo.",
@@ -16,6 +17,7 @@
     "Explain how the auth middleware works.",
     "Ingest this Stripe API doc into the wiki.",
     "Launch the interactive web dashboard for the graph.",
+    "Run the powerful-tier cross-document graph-schema validation pass.",
     "This is a plain single repo with only a docs folder — just plan the feature."
   ]
 }

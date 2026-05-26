@@ -4,7 +4,9 @@
     "Prepare the brief for copywriter.",
     "What context does the architect need for this task?",
     "Assemble the per-specialist context for the SEO lane.",
-    "Produce the task bundle for qa."
+    "Produce the task bundle for qa.",
+    "Recall the task against the wiki before reading the file.",
+    "Keep the lead context lean — don't absorb the full transcript."
   ],
   "should_not_trigger": [
     "Load all wiki pages.",

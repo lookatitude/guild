@@ -107,6 +107,52 @@ An explicit `agent_mode` value other than `auto` **pins** the backend, subject t
 
 This satisfies the §7.3 user-approval requirement for the agent-team backend — the operator's instruction (2026-04-27) approves agent-team as the durable default whenever tmux is present on this machine, now expressed as the `auto` ladder above. Full rationale + options scored: `.guild/wiki/decisions/agent-team-default-when-tmux-available.md` (subsumed by D5); subsumes the v1.0 task-scoped approval at `.guild/wiki/decisions/agent-team-via-tmux.md`.
 
+## Model tiering + §task§agent lifecycle
+
+> **Canonical ADR: `docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md`**
+> (§1 tier ladder · §2 auto-score · §3 advisor · §4 lean lead + recall · §5
+> handoff schema · §6 lifecycle · §8 learn tiering · §10 config keys). This
+> section is an orientation note; all normative detail lives in that ADR.
+
+**Tier ladder (host-agnostic).** Three stable tiers: `cheap` (haiku) for
+read/summarize/classify; `mid` (sonnet, default task-agent tier) for
+draft/reason/plan/extract; `powerful` (opus) for architecture, security
+review, graph schema. The tier→model map is host-agnostic in
+`settings.json` (`models.tiers`) so Codex/Gemini adapters slot in later as
+config + an adapter. This is **orthogonal to the D5 `agent_mode` dispatch
+ladder** — tiering picks the model, D5 picks the backend; they compose and
+never conflict.
+
+**Auto-score.** The orchestrator scores each lane from deterministic
+signals (work-type verb, blast-radius, security sensitivity, prior
+escalation), maps the score to a tier, and prints the score + resolved
+tier. Precedence: `--model-tier=cheap|mid|powerful` CLI flag > per-lane
+plan override (`model_tier:`) > `settings.json models:` block > built-in
+default.
+
+**Advisor escalation.** A low-tier agent emitting `status: "escalate"` in
+its `guild.handoff.v2` envelope gets one `powerful` advisor answer for
+that sub-question (the advisor sees draft + question only, never raw file
+context), then continues — no wholesale re-run. Advisor consults are
+capped per lane (`models.advisorRounds`, default `2`).
+
+**§task§agent lifecycle (ephemeral, one-per-task).** Spawn a new agent for
+each task at its resolved tier with task-scoped context pulled from the
+knowledge base (recall-before-read; 6k hard cap unchanged) → work →
+extract learnings into `guild.handoff.v2` → terminate. No agent is shared
+across tasks; no agent is left idle. The lead accumulates only compact
+`guild.handoff.v2` envelopes, not full transcripts.
+
+**`guild.handoff.v2` envelope.** The lightweight in-flight dispatch return
+schema (`schema_version: guild.handoff.v2`). It is a **new self-versioned
+sibling** of the frozen `guild.handoff_receipt.v1` (the review/verify
+receipt — unchanged). On completion the handoff envelope composes into the
+frozen receipt; the two do not compete.
+
+**Zero-config stable.** An absent `models:` block ⇒ current v2 behavior
+except cheaper `learn-*` (the built-in tier-map biases cheap). Scaffold
+and inspect the block with `/guild:config init` / `/guild:config show`.
+
 ## Codex adversarial review
 
 Codex adversarial review runs at three gates — G-spec, G-plan, and G-lane — via the `guild:codex-review` meta-skill (`skills/meta/codex-review/SKILL.md`). It is available to all plugin users via `--review=cross` on `/guild`, or persistently via `.guild/settings.json` (`review: cross`).

@@ -100,6 +100,48 @@ Invariants (file-in-exactly-one-layer, monotone `flow_step`, ID
 `<type>:<relpath>[:<name>]`, `implemented_by` not aliased) are enforced by the
 scripts and re-checked here.
 
+# Cost tiering
+
+The deterministic **script halves stay LLM-free** (unchanged). Only the LLM
+semantic halves carry a tier. The tier vocabulary, host→model map, auto-score,
+precedence ladder, and `models.*` config keys are **bound by pointer** to
+`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md` (§1 ladder,
+§8 learn tiering, §10 config) and to the shared per-stage table owned by
+`guild:learn-map` (`§"Cost tiering"`) — never re-spelled here. Stage→tier for
+this skill's deep halves:
+
+| Stage (LLM half) | Tier | Why (ADR §8, cited) |
+|---|---|---|
+| 2 Analyze — semantic node/edge typing | `mid` | single-doc/cross-file extraction (Sonnet-class) |
+| 5 Domain — name/narrate domains & flows | `mid` | relationship synthesis, high volume |
+| 3 Assemble-review — G-init salvage/critique | `powerful` | high-stakes graph repair (advisor/critic pass) |
+| 4 Architecture — layer renaming (no re-partition) | `mid` | naming over a fixed partition |
+| 7 Reverse-spec — synthesise from the graph | `mid`→`powerful` | `mid` default; `powerful` on schema-level claims |
+
+**`powerful` is invoked ONLY** when the stage-2 edge-candidate count exceeds the
+configurable threshold (the cross-document graph-schema/topology check) OR a
+`mid` stage flags `escalate` in its typed `guild.handoff.v2` output (ADR
+§3/§5/§8). A `mid` stage that hits something above its tier escalates for **one
+`powerful` sub-answer for that sub-question only** — it is not re-run wholesale
+(ADR §3 advisor pattern).
+
+**Recall-before-read (ADR §4).** Before the LLM half of any stage reads source,
+query the knowledge base first (`guild-memory` BM25 over `.guild/wiki/` +
+`kg-query` over `knowledge-links.json`) for that stage's task. If recall returns
+≥1 chunk scoring **≥ `models.recallScoreThreshold`** (default `0.4`; pointer to
+ADR §10), use the recalled chunk(s) + file references and **skip the full
+read** — reinforcing the existing *"trust the script, do not re-read source"*
+rule. The script halves are unaffected.
+
+**One-pass three-store update (candidates only — SC-2).** A deep learn run
+updates **memory + wiki + KG in one pass**: the memory note(s), the
+`wiki/concepts/*` page candidate(s) (stage 5), and the KG nodes/edges +
+`knowledge-links.json` recall projection (stages 2–5) are written together, each
+claim carrying `source_refs`. All three are **candidates only** — no
+auto-promotion (promotion stays with `guild:wiki-ingest` / `guild:decisions`,
+ADR §8 non-goal). The reverse-spec (stage 7) is part of the same pass, every
+claim with `source_refs` + `confidence`.
+
 # Evidence requirements
 
 Every graph node / spec claim is traceable to a scanned file via `source_refs`
@@ -144,4 +186,12 @@ scaffold one from this skill.
   written, user surfaced.
 - Staleness classifier returns ARCHITECTURE on a refactor → re-run only the
   affected stages on an explicit refresh trigger.
+- Edge-candidate count exceeds the threshold → the `powerful` cross-document
+  graph-schema/topology validation pass runs; below the threshold it stays on
+  `mid` and no `powerful` call is made (ADR §8).
+- A `mid` stage flags `escalate` → one `powerful` advisor sub-answer for that
+  sub-question only, then the `mid` stage continues — no wholesale re-run.
+- Deep run completes → memory note + wiki concept candidate + KG nodes/edges +
+  `knowledge-links.json` written in one pass, each with `source_refs`, none
+  auto-promoted (SC-2).
 - Request to scaffold a web dashboard → refused, deferral doc cited.

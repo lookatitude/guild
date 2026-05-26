@@ -60,4 +60,6 @@ Implied-specialist rule (`guild-plan.md §7.2`): qa is auto-included whenever fr
 - Technical SEO audits — `seo` owns. Frontend implements the fixes seo diagnoses; frontend does not author the audit itself.
 - Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — dev-team agents own these (see `.claude/agents/`).
 
+**Boundary vs the generic `developer` (cost-aware-tiering-and-lean-context ADR §7):** any web-frontend work (components, state, routing, bundler, styling, a11y, frontend perf) is **frontend's**, even when phrased generically ("build the page", "implement this view"). The generic `developer` (mid-tier) takes only domain-*less* residual lanes and hands off frontend work here. Frontend does not defer its domain to `developer`.
+
 If frontend work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md`) — main session routes the followup to the right specialist.

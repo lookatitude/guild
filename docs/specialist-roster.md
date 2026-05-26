@@ -6,6 +6,13 @@ Every specialist inherits `guild-principles` (T1) as a mandatory first load: the
 Karpathy 4 plus Guild's evidence rule. Per-specialist T5 skills live under
 `skills/specialists/<specialist>-<slug>/`.
 
+**Model tiers (cost-aware-tiering-and-lean-context ADR §1/§7).** Each agent's
+frontmatter `model:` declares a **default tier** from the host-agnostic ladder
+`cheap (haiku) | mid (sonnet) | powerful (opus)`. The auto-scorer (ADR §2) picks
+the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
+**escalation to the `advisor`** (ADR §3), never a self-promotion. See the
+**Tiered-worker roster** section below.
+
 ## Engineering group (8 specialists · 26 authored T5 skills)
 
 ### architect — `agents/architect.md`
@@ -148,6 +155,43 @@ outcome, data citation).
 
 Commercial-group principles: hypothesis-first, success = measurable outcome,
 evidence = data citation (search volume, A/B result, benchmark).
+
+## Tiered-worker roster (cost-aware-tiering-and-lean-context ADR §7)
+
+A thin **tiered-worker** layer **augments** the 14 shipping specialists and the
+dev-team agents (it does not replace either). Each role carries a **default
+tier**. Per the ADR's reconciliation rule, where an equivalent already ships, the
+existing specialist is **retiered** rather than duplicated; only genuinely-new
+types get a new file. Open Item **O-1 is resolved: no standalone reviewer type
+ships** — review/critic work folds into the `advisor` escalation pass plus the
+existing `guild:review` / `qa` lanes.
+
+| Role | Default tier | `model:` | Placement | One-line scope |
+|---|---|---|---|---|
+| `researcher` (per-topic) | `cheap`→`mid` | `sonnet` | **retiered** `agents/researcher.md` | Gather + digest sources for one topic; read/summarize cheap, synthesize mid. Pre-decision only — does not decide. |
+| `architect` | `powerful` | `opus` | **annotated** `agents/architect.md` (already powerful) | Shape systems, compare options, author ADRs (high-judgment, low frequency). |
+| `advisor` | `powerful` | `opus` | **NEW** `agents/advisor.md` | Answer one escalated sub-question seeing draft + question only (§3); never raw context. |
+| `developer` | `mid` | `sonnet` | **NEW** `agents/developer.md` | Implement a domain-*less* task lane (draft/reason/build); escalates to advisor when above tier. |
+| `doc-writer` | `cheap`→`mid` | `sonnet` | **retiered** `agents/technical-writer.md` (role reconciled) | Write/update docs from a settled decision; cheap for mechanical edits, mid for synthesis. |
+
+Notes:
+
+- **`developer` vs domain implementers.** `developer` is the *generic* mid-tier
+  worker for lanes with no domain home. Any API/data-layer work is `backend`'s,
+  any web UI is `frontend`'s, any iOS/Android/RN is `mobile`'s — even when a lane
+  is phrased generically ("build this", "implement that"). Each domain agent's
+  boundary block now states this reciprocally so the `developer` trigger does not
+  poach (adjacent-boundary scan, SC-9).
+- **`advisor` vs `architect`.** Both are `powerful`, distinct roles: `architect`
+  is dispatched to *own a design/decision*; `advisor` answers a single in-flight
+  *escalation* on a draft. The architect boundary block now defers escalated
+  one-off critique to `advisor`.
+- **`doc-writer` reconciled onto `technical-writer`.** No separate generic
+  `doc-writer` file ships — it would collide with the `technical-writer` lane.
+  The §7 role is reconciled there (cheap for mechanical edits, mid for synthesis),
+  keeping the roster minimal.
+- The remaining 12 shipping specialists keep `model: opus` until a future tiering
+  pass annotates them; this lane retiered only the §7 roster rows.
 
 ## Team composition rules
 

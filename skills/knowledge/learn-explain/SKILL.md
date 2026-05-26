@@ -64,6 +64,39 @@ source.
    (in/out) → key behaviours, each with a `source_ref`.
 4. Surface it. Emit a wiki concept candidate only if the user asks.
 
+# Cost tiering
+
+This skill is graph-grounded synthesis of one named target, so its LLM half runs
+at **`mid`** (per the shared per-stage table owned by `guild:learn-map`
+`§"Cost tiering"`; tier vocabulary, host→model map, and `models.*` keys bound by
+pointer to
+`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md` §1/§8/§10 —
+never re-spelled). A bounded targeted read of just the named target's file(s)
+(step 2) is the **`cheap`** I/O half. **`powerful` is invoked ONLY** when the
+`mid` synthesis flags `escalate` in its typed `guild.handoff.v2` output — e.g. a
+cross-cutting architectural question the single target cannot answer — getting
+one `powerful` sub-answer for that question only, never a wholesale re-run
+(ADR §3/§8).
+
+**Recall-before-read (ADR §4) — the load-bearing case here.** This skill is the
+clearest expression of recall-before-read: it **resolves the target against the
+knowledge base first** (the built graph; `guild-memory` BM25 + `kg-query` over
+`knowledge-links.json`) and explains **from the node(s) and their edges** — it
+does **not** re-read source. A full file read is reached for **only** when
+recall misses (the graph is absent or does not cover the target) AND the
+ask-before-deep-scan gate is passed, and even then it is a **bounded targeted
+read** of just that target's file(s), never a full deep scan, with claims
+recorded at reduced `confidence`. The `models.recallScoreThreshold` (default
+`0.4`; pointer to ADR §10) is the gate that decides whether the graph/wiki
+chunk suffices or the targeted read is needed.
+
+**One-pass three-store update (candidates only — SC-2).** This skill is
+read-only over the codebase. The only write is an **optional** `wiki/concepts/*`
+page **candidate** on explicit user request — a single-store candidate, never
+auto-promoted (promotion stays with `guild:wiki-ingest` / `guild:decisions`,
+ADR §8 non-goal). It does not write memory or KG; the full three-store one-pass
+update belongs to `guild:learn-graph`.
+
 # Evidence requirements
 
 Every claim cites a graph node's `source_refs` (`path#Lx-Ly`) + `confidence`,
@@ -100,5 +133,9 @@ dashboard** (the v2 exclusion;
 - Deep-scan refused and graph absent → explain only what's supported, gap
   recorded, no silent full scan.
 - Ambiguous symbol name → asks for disambiguation, no guessed explanation.
+- Graph covers the target with a chunk scoring ≥ `models.recallScoreThreshold`
+  → explained from recall at `mid`, the full file read is skipped (ADR §4).
+- `mid` synthesis flags `escalate` on a cross-cutting question → one `powerful`
+  sub-answer for that question only, then continues — no wholesale re-run.
 - User asks "save this as a wiki page" → concept candidate emitted to
   `.guild/wiki/concepts/` (not self-promoted).

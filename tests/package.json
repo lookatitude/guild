@@ -21,7 +21,8 @@
     "testMatch": [
       "**/evolve/harness.test.ts",
       "**/shadow/harness.test.ts",
-      "**/workspace/*.test.ts"
+      "**/workspace/*.test.ts",
+      "**/integration/*.test.ts"
     ],
     "testTimeout": 60000
   }

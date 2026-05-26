@@ -109,6 +109,55 @@ reflection trigger asks — never silently rebuild mid-task. Staleness
 (`generated_from_commit ≠ HEAD`) surfaces as a wiki-lint / reflection freshness
 signal.
 
+# Cost tiering (canonical for the learn-* family)
+
+The deterministic **script halves stay LLM-free** (no model call — unchanged).
+Only the **LLM semantic halves** carry a tier; this skill owns the canonical
+per-stage tier table that the rest of the family references (other `learn-*`
+skills bind back to it, never re-spell it). The tier vocabulary, the host→model
+map, the auto-score rubric, the precedence ladder, and every `models.*` config
+key are **bound by pointer** to
+`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md` (§1 tier
+ladder, §2 auto-score, §8 learn tiering, §10 config keys) — this skill never
+re-spells the tier→model map or the config schema (SC-1).
+
+| Learn stage (LLM half) | Tier | Why (cited) |
+|---|---|---|
+| file read / scan (stage 1 LLM) | `cheap` | pure I/O, low ambiguity (ADR §8 `cost-techniques.md §5` Haiku-class) |
+| chunk + per-file summarize | `cheap` | template-guided summarization (ADR §8) |
+| categorize + tag / taxonomy (stage 2 stub) | `mid` | single-doc classification (ADR §8 Sonnet-class) |
+| cross-file/topic relationship extraction | `mid` | moderate judgment, high volume (ADR §8) |
+| graph edge validation + schema/topology | `powerful` | high-stakes, low frequency (ADR §8 Opus-class) |
+
+**`powerful` is invoked ONLY** when an edge-candidate count exceeds the
+configurable threshold OR a `mid` stage flags `escalate` in its typed
+`guild.handoff.v2` output (ADR §3/§5/§8). For the cheap-scan tier this skill
+produces (stage 1 + the architecture-map stub), **every LLM half is `cheap`**
+and **zero `powerful` calls** are made — a plain `/guild:init` cheap-scan never
+escalates (SC-1, VC-1). The deep stages that can reach `mid`/`powerful` live in
+`guild:learn-graph`; this skill hands off before them.
+
+**Recall-before-read (ADR §4).** Before reading a file for the project
+description or any summarize step, query the knowledge base first
+(`guild-memory` BM25 over `.guild/wiki/` + `kg-query` over
+`knowledge-links.json`) for that task. If recall returns ≥1 chunk scoring **≥
+the `models.recallScoreThreshold`** (default `0.4`; bound by pointer to ADR
+§10 — not re-spelled), use the recalled chunk(s) + the specific file references
+and **skip the full file read**. A full read is permitted only when recall
+returns zero hits OR a source-of-truth verification is required. The cheap scan
+itself remains a deterministic `scan.ts` pass; recall-before-read governs the
+LLM summarize half, never the script half.
+
+**One-pass three-store update (candidates only — SC-2).** When the deep pipeline
+runs, a learn run updates **memory + wiki + KG in one pass**: a memory note, the
+wiki concept-page candidate(s), and the KG nodes/edges are written together,
+each claim carrying `source_refs`. All three are **candidates only** — no
+auto-promotion (promotion stays with `guild:wiki-ingest` / `guild:decisions`,
+per ADR §8 non-goal). For this skill's cheap tier the one-pass write is the
+`codebase-map.json` + the confidence-tagged `architecture-map.md` **candidate**
+stub (the deep KG/recall-projection halves of the pass belong to
+`guild:learn-graph`).
+
 # Evidence requirements
 
 Every map entry traces to a scanned path; the architecture-map stub is
@@ -152,6 +201,11 @@ scaffold any web/Vite/React dashboard from this family.
 - Init brownfield, no `.guild/` → stage 1 runs, `codebase-map.json` +
   confidence-tagged `architecture-map.md` stub produced, Init-DONE emitted;
   `knowledge-graph.json` / tour **absent** (correct — they are lazy).
+- Cheap-scan tier → every LLM half runs at `cheap`; **zero `powerful` calls**
+  (SC-1); the deterministic `scan.ts` half spends no LLM tokens.
+- Recall returns a wiki chunk scoring ≥ `models.recallScoreThreshold` for the
+  summarize task → the chunk + file refs are used, the full file read is
+  skipped (ADR §4).
 - `/guild:learn map` on a repo with no prior index → cheap scan runs, map
   written, no deep graph built.
 - Pre-existing conflicting `.guild/indexes/` → stop and ask, no silent

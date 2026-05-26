@@ -68,6 +68,48 @@ interface WorkspaceBlock {
   mode: "auto" | "on" | "off";
 }
 
+// ── Host-agnostic model tier map (ADR §1, §10 — cost-aware-tiering-and-lean-context).
+// tiers: cheap|mid|powerful → {claude,codex,gemini}. codex/gemini are null now (no third host).
+// Defaults preserve zero-config behavior (cheaper learn, same routing otherwise).
+interface TierHostMap {
+  claude: string | null;
+  codex: string | null;
+  gemini: string | null;
+}
+interface TiersBlock {
+  cheap: TierHostMap;
+  mid: TierHostMap;
+  powerful: TierHostMap;
+}
+interface CacheTTLBlock {
+  coordinator: "1h" | "5m" | "off";
+  leaf: "1h" | "5m" | "off";
+}
+interface ModelsBlock {
+  /** Master toggle for cost-tiering. Default true. */
+  enabled: boolean;
+  /** Host-agnostic tier→model map (ADR §1). null host slot = no model for that tier on that host. */
+  tiers: TiersBlock;
+  /** Auto-score signal weights (ADR §2, tunable; ship fixed). Keys: workType, blastRadius, dependsOn, security, priorEscalation. */
+  scoreWeights: Record<string, number>;
+  /** Score-band cutoffs (ADR §2). Default {mid:1, powerful:3}. */
+  thresholds: { mid: number; powerful: number };
+  /** Advisor consults per lane cap (ADR §3). Default 2. */
+  advisorRounds: number;
+  /** Uncertainty phrases that trigger advisor escalation (ADR §3). */
+  escalationMarkers: string[];
+  /** Enforce recall-before-read discipline (ADR §4). Default true. */
+  recallBeforeRead: boolean;
+  /** Min BM25 recall score to skip a full file read (ADR §4). Default 0.4. */
+  recallScoreThreshold: number;
+  /** Reject non-guild.handoff.v2 returns from agents (ADR §5). Default true. */
+  structuredOutputRequired: boolean;
+  /** Prompt cache TTL hints (ADR §9). */
+  cacheTTL: CacheTTLBlock;
+  /** Min wiki importance level (1–5) for routine recall (ADR §6). Default 3. */
+  importanceGate: number;
+}
+
 interface GuildSettings {
   rigor: "quick" | "standard" | "deep";
   auto_approve: string[]; // [] | [spec,plan,build] | [all]
@@ -79,12 +121,25 @@ interface GuildSettings {
   agent_mode: "team" | "agent" | "subagent" | "auto";
   /** Workspace federation mode (guild.workspace.v1). Depth is hard-fixed at 1 — no max_depth. */
   workspace: WorkspaceBlock;
+  /** Host-agnostic model tier map + cost-tiering config (ADR cost-aware-tiering-and-lean-context §1/§10). */
+  models: ModelsBlock;
   // power-user overrides
   loops: string | null;
   loop_cap: number;
   codex_cap: number;
   defaults: DefaultsBlock;
 }
+
+// Default escalation marker phrases (ADR §3, research defaults).
+const DEFAULT_ESCALATION_MARKERS: string[] = [
+  "I'm not sure",
+  "unclear",
+  "cannot determine",
+  "I don't know",
+  "ambiguous",
+  "uncertain",
+  "not enough information",
+];
 
 const DEFAULTS: GuildSettings = {
   rigor: "standard",
@@ -95,6 +150,29 @@ const DEFAULTS: GuildSettings = {
   index: "auto",
   agent_mode: "auto",
   workspace: { mode: "auto" },
+  models: {
+    enabled: true,
+    tiers: {
+      cheap:    { claude: "haiku",  codex: null, gemini: null },
+      mid:      { claude: "sonnet", codex: null, gemini: null },
+      powerful: { claude: "opus",   codex: null, gemini: null },
+    },
+    scoreWeights: {
+      workType:         0,  // base; read/summarize=0, draft/extract=+1, architect/review/schema=+2
+      blastRadius:      1,  // per-point contribution when blast-radius/file-count is large
+      dependsOn:        1,  // upstream depends-on contract present
+      security:         1,  // security/correctness sensitivity flag
+      priorEscalation:  1,  // prior-attempt escalation on this lane (sticky for the run)
+    },
+    thresholds: { mid: 1, powerful: 3 },
+    advisorRounds: 2,
+    escalationMarkers: DEFAULT_ESCALATION_MARKERS,
+    recallBeforeRead: true,
+    recallScoreThreshold: 0.4,
+    structuredOutputRequired: true,
+    cacheTTL: { coordinator: "1h", leaf: "5m" },
+    importanceGate: 3,
+  },
   loops: null,
   loop_cap: 16,
   codex_cap: 5,
@@ -149,7 +227,39 @@ const HELP: Record<string, string> = {
   "defaults.quality.budget.per_class_minutes": "int > 0 — per-check-class wall-clock cap",
   "defaults.quality.budget.total_minutes": "int > 0 — whole-phase wall-clock cap",
   "defaults.reporting": "standard | quiet | verbose — default task/progress reporting",
-  _precedence: "CLI flag > --rigor profile > settings.json > built-in default",
+  // ── models: block (cost-aware-tiering-and-lean-context ADR §10)
+  "models.enabled":
+    "bool (default true) — master toggle for cost-tiering. false = all lanes run at mid (current v2 behavior).",
+  "models.tiers":
+    "{cheap|mid|powerful: {claude,codex,gemini}} — host-agnostic tier→model map (ADR §1). " +
+    "null host slot = no model for that tier on that host (fall through to host mapping). " +
+    "Defaults: cheap=haiku, mid=sonnet, powerful=opus. codex/gemini are null (no third host yet).",
+  "models.scoreWeights":
+    "object (signal→int) — auto-score rubric weights (ADR §2). " +
+    "Signals: workType, blastRadius, dependsOn, security, priorEscalation. Ship fixed; tunable per-repo.",
+  "models.thresholds":
+    "{mid:int, powerful:int} — score-band cutoffs (ADR §2). Default {mid:1, powerful:3}. " +
+    "score<mid→cheap; mid≤score<powerful→mid; score≥powerful→powerful.",
+  "models.advisorRounds":
+    "int > 0 (default 2) — max advisor consults per lane before recording inconclusive (ADR §3).",
+  "models.escalationMarkers":
+    "string[] — uncertainty phrases that trigger advisor escalation (ADR §3). " +
+    "Defaults: [\"I'm not sure\", \"unclear\", \"cannot determine\", ...].",
+  "models.recallBeforeRead":
+    "bool (default true) — enforce recall-before-read: query wiki before opening a file (ADR §4).",
+  "models.recallScoreThreshold":
+    "float 0–1 (default 0.4) — min BM25 recall score to skip a full file read (ADR §4).",
+  "models.structuredOutputRequired":
+    "bool (default true) — reject non-guild.handoff.v2 agent returns (ADR §5).",
+  "models.cacheTTL.coordinator":
+    "\"1h\" | \"5m\" | \"off\" (default \"1h\") — coordinator prompt-cache TTL hint (ADR §9).",
+  "models.cacheTTL.leaf":
+    "\"1h\" | \"5m\" | \"off\" (default \"5m\") — leaf-agent prompt-cache TTL hint (ADR §9).",
+  "models.importanceGate":
+    "int 1–5 (default 3) — min wiki importance level for routine recall (ADR §6).",
+  _precedence:
+    "CLI flag > --rigor profile > settings.json > built-in default. " +
+    "For model tier: --model-tier=cheap|mid|powerful > per-lane plan override > models.tiers/thresholds > built-in.",
   _docs: "Canonical schema: architecture/command-surface.md §4.4. Regenerate with: /guild config init",
 };
 
@@ -159,11 +269,22 @@ const VALID_REVIEW = new Set(["local", "cross", "off"]);
 const VALID_HOST = new Set(["claude", "codex", "auto"]);
 const VALID_PHASES = new Set(["spec", "plan", "build", "all"]);
 const VALID_AGENT_MODE = new Set(["team", "agent", "subagent", "auto"]);
+const VALID_MODEL_TIER = new Set(["cheap", "mid", "powerful"]);
+const VALID_CACHE_TTL = new Set(["1h", "5m", "off"]);
+
+// Closed-key set for models.* top-level fields (ADR §10).
+const VALID_MODELS_KEYS = new Set([
+  "enabled", "tiers", "scoreWeights", "thresholds", "advisorRounds",
+  "escalationMarkers", "recallBeforeRead", "recallScoreThreshold",
+  "structuredOutputRequired", "cacheTTL", "importanceGate",
+]);
 
 interface ParsedArgs {
   cwd?: string;
   mode: "resolve" | "scaffold" | "validate";
   selfBuild: boolean;
+  /** --model-tier CLI escape hatch (ADR §2, O-2). Top of the tier precedence ladder. */
+  modelTier?: "cheap" | "mid" | "powerful";
   flags: Partial<GuildSettings>;
 }
 
@@ -180,6 +301,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   let cwd: string | undefined;
   let mode: ParsedArgs["mode"] = "resolve";
   let selfBuild = false;
+  let modelTier: ParsedArgs["modelTier"];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -205,6 +327,10 @@ function parseArgs(argv: string[]): ParsedArgs {
     } else if (arg.startsWith("--agent-mode=")) {
       const v = arg.slice("--agent-mode=".length);
       if (VALID_AGENT_MODE.has(v)) flags.agent_mode = v as GuildSettings["agent_mode"];
+    } else if (arg.startsWith("--model-tier=")) {
+      const v = arg.slice("--model-tier=".length);
+      if (VALID_MODEL_TIER.has(v)) modelTier = v as ParsedArgs["modelTier"];
+      // invalid values silently ignored (consistent with --agent-mode handling)
     } else if (arg.startsWith("--loops=")) {
       flags.loops = arg.slice("--loops=".length);
     } else if (arg.startsWith("--loop-cap=")) {
@@ -215,7 +341,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       if (!isNaN(n)) flags.codex_cap = Math.min(10, Math.max(1, n));
     }
   }
-  return { cwd, mode, selfBuild, flags };
+  return { cwd, mode, selfBuild, modelTier, flags };
 }
 
 // ── config.yml back-compat shim (flat v1 keys → v2 shape). MIGRATION.md §3.
@@ -261,6 +387,62 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+/** Closed-key validation of the `models:` block. Returns reject messages. (ADR §10) */
+function validateModels(m: Record<string, unknown>): string[] {
+  const rejects: string[] = [];
+  for (const k of Object.keys(m)) {
+    if (!VALID_MODELS_KEYS.has(k)) {
+      rejects.push(`unknown models key "${k}" (closed key set — check spelling against ADR §10)`);
+    }
+  }
+  // thresholds sub-keys
+  if (isPlainObject(m["thresholds"])) {
+    const t = m["thresholds"] as Record<string, unknown>;
+    for (const tk of Object.keys(t)) {
+      if (tk !== "mid" && tk !== "powerful") {
+        rejects.push(`unknown models.thresholds key "${tk}" — only mid and powerful are valid`);
+      }
+    }
+  }
+  // cacheTTL sub-keys
+  if (isPlainObject(m["cacheTTL"])) {
+    const ttl = m["cacheTTL"] as Record<string, unknown>;
+    for (const ck of Object.keys(ttl)) {
+      if (ck !== "coordinator" && ck !== "leaf") {
+        rejects.push(`unknown models.cacheTTL key "${ck}" — only coordinator and leaf are valid`);
+      }
+    }
+    if (ttl["coordinator"] !== undefined && !VALID_CACHE_TTL.has(ttl["coordinator"] as string)) {
+      rejects.push(`models.cacheTTL.coordinator "${ttl["coordinator"]}" is invalid — valid: 1h|5m|off`);
+    }
+    if (ttl["leaf"] !== undefined && !VALID_CACHE_TTL.has(ttl["leaf"] as string)) {
+      rejects.push(`models.cacheTTL.leaf "${ttl["leaf"]}" is invalid — valid: 1h|5m|off`);
+    }
+  }
+  // importanceGate range 1–5
+  if (m["importanceGate"] !== undefined) {
+    const ig = m["importanceGate"];
+    if (typeof ig !== "number" || ig < 1 || ig > 5 || !Number.isInteger(ig)) {
+      rejects.push(`models.importanceGate must be an integer 1–5 (got ${JSON.stringify(ig)})`);
+    }
+  }
+  // advisorRounds > 0
+  if (m["advisorRounds"] !== undefined) {
+    const ar = m["advisorRounds"];
+    if (typeof ar !== "number" || ar < 1 || !Number.isInteger(ar)) {
+      rejects.push(`models.advisorRounds must be an integer > 0 (got ${JSON.stringify(ar)})`);
+    }
+  }
+  // recallScoreThreshold 0–1
+  if (m["recallScoreThreshold"] !== undefined) {
+    const rs = m["recallScoreThreshold"];
+    if (typeof rs !== "number" || rs < 0 || rs > 1) {
+      rejects.push(`models.recallScoreThreshold must be a float 0–1 (got ${JSON.stringify(rs)})`);
+    }
+  }
+  return rejects;
+}
+
 /** Closed-key validation of the `defaults:` block. Returns reject messages. */
 function validateDefaults(d: Record<string, unknown>, selfBuild: boolean): string[] {
   const rejects: string[] = [];
@@ -304,7 +486,7 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     const rejects: string[] = [];
     const TIER1 = new Set([
       "rigor", "auto_approve", "review", "host", "initiative_default",
-      "index", "agent_mode", "workspace", "loops", "loop_cap", "codex_cap", "defaults",
+      "index", "agent_mode", "workspace", "models", "loops", "loop_cap", "codex_cap", "defaults",
     ]);
     for (const k of Object.keys(parsed)) {
       if (k.startsWith("_")) continue; // _help / _docs annotations
@@ -341,6 +523,50 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
           );
         }
       }
+    }
+    // models: block — host-agnostic tier map + cost-tiering config (ADR §10).
+    // Deep-merge over DEFAULTS.models so partial overrides work; closed-key reject unknown fields.
+    if (isPlainObject(parsed["models"])) {
+      const rawModels = parsed["models"] as Record<string, unknown>;
+      rejects.push(...validateModels(rawModels));
+      // Deep-merge tiers, scoreWeights, thresholds, cacheTTL sub-objects.
+      const mergedModels: ModelsBlock = { ...DEFAULTS.models };
+      if (typeof rawModels["enabled"] === "boolean") mergedModels.enabled = rawModels["enabled"];
+      if (isPlainObject(rawModels["tiers"])) {
+        const rt = rawModels["tiers"] as Record<string, unknown>;
+        mergedModels.tiers = { ...DEFAULTS.models.tiers } as TiersBlock;
+        for (const tier of ["cheap", "mid", "powerful"] as const) {
+          if (isPlainObject(rt[tier])) {
+            mergedModels.tiers[tier] = { ...DEFAULTS.models.tiers[tier], ...(rt[tier] as Partial<TierHostMap>) };
+          }
+        }
+      }
+      if (isPlainObject(rawModels["scoreWeights"])) {
+        mergedModels.scoreWeights = { ...DEFAULTS.models.scoreWeights, ...(rawModels["scoreWeights"] as Record<string, number>) };
+      }
+      if (isPlainObject(rawModels["thresholds"])) {
+        mergedModels.thresholds = { ...DEFAULTS.models.thresholds, ...(rawModels["thresholds"] as Partial<ModelsBlock["thresholds"]>) };
+      }
+      if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1) {
+        mergedModels.advisorRounds = Math.floor(rawModels["advisorRounds"]);
+      }
+      if (Array.isArray(rawModels["escalationMarkers"])) {
+        mergedModels.escalationMarkers = rawModels["escalationMarkers"] as string[];
+      }
+      if (typeof rawModels["recallBeforeRead"] === "boolean") mergedModels.recallBeforeRead = rawModels["recallBeforeRead"];
+      if (typeof rawModels["recallScoreThreshold"] === "number") mergedModels.recallScoreThreshold = rawModels["recallScoreThreshold"];
+      if (typeof rawModels["structuredOutputRequired"] === "boolean") mergedModels.structuredOutputRequired = rawModels["structuredOutputRequired"];
+      if (isPlainObject(rawModels["cacheTTL"])) {
+        const rttl = rawModels["cacheTTL"] as Record<string, unknown>;
+        const newTTL: CacheTTLBlock = { ...DEFAULTS.models.cacheTTL };
+        if (VALID_CACHE_TTL.has(rttl["coordinator"] as string)) newTTL.coordinator = rttl["coordinator"] as CacheTTLBlock["coordinator"];
+        if (VALID_CACHE_TTL.has(rttl["leaf"] as string)) newTTL.leaf = rttl["leaf"] as CacheTTLBlock["leaf"];
+        mergedModels.cacheTTL = newTTL;
+      }
+      if (typeof rawModels["importanceGate"] === "number" && rawModels["importanceGate"] >= 1 && rawModels["importanceGate"] <= 5) {
+        mergedModels.importanceGate = Math.floor(rawModels["importanceGate"]);
+      }
+      out.models = mergedModels;
     }
     if (typeof parsed["loops"] === "string" || parsed["loops"] === null) out.loops = parsed["loops"] as string | null;
     if (typeof parsed["loop_cap"] === "number") out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
@@ -433,7 +659,7 @@ function crossHostAvailable(): boolean {
 }
 
 function main(): void {
-  const { cwd: cwdFlag, mode, selfBuild, flags } = parseArgs(process.argv.slice(2));
+  const { cwd: cwdFlag, mode, selfBuild, modelTier, flags } = parseArgs(process.argv.slice(2));
   const cwd = cwdFlag ?? process.env["GUILD_CWD"] ?? process.cwd();
 
   if (mode === "scaffold") {
@@ -465,6 +691,8 @@ function main(): void {
     defaults: { ...DEFAULTS.defaults, ...(fileConfig.defaults ?? {}) },
     // workspace is a nested object — deep-merge so partial overrides work
     workspace: { ...DEFAULTS.workspace, ...(fileConfig.workspace ?? {}), ...(flags.workspace ?? {}) },
+    // models is a nested object — deep-merge so partial overrides work (ADR §10)
+    models: { ...DEFAULTS.models, ...(fileConfig.models ?? {}), ...(flags.models ?? {}) },
   };
 
   // Which rigor-expandable keys did the user set EXPLICITLY (CLI flag OR present in
@@ -545,7 +773,17 @@ function main(): void {
     rigorExpanded["note"] = fallbackNote;
   }
 
-  process.stdout.write(JSON.stringify({ ...resolved, _rigor_expanded: rigorExpanded }, null, 2) + "\n");
+  // Surface --model-tier CLI escape hatch in output (ADR §2, O-2). Top of tier precedence ladder.
+  const output: Record<string, unknown> = { ...resolved, _rigor_expanded: rigorExpanded };
+  if (modelTier !== undefined) {
+    output["_model_tier_override"] = {
+      tier: modelTier,
+      source: "--model-tier CLI flag",
+      note: "Top of tier precedence ladder: --model-tier > per-lane override > models.thresholds > built-in",
+    };
+  }
+
+  process.stdout.write(JSON.stringify(output, null, 2) + "\n");
 }
 
 main();

@@ -4,13 +4,16 @@
     "Run the specialist lanes.",
     "Start the team's work.",
     "Dispatch all the specialists on this plan.",
-    "Kick off execution."
+    "Kick off execution.",
+    "Dispatch each lane at its lowest viable tier.",
+    "This lane is stuck — escalate the sub-question to the advisor."
   ],
   "should_not_trigger": [
     "Explain the plan to me.",
     "Review the results.",
     "Write more tests.",
     "Brainstorm a new feature.",
-    "Compose a different team."
+    "Compose a different team.",
+    "Edit the models.tiers map in settings.json."
   ]
 }

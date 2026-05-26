@@ -3,18 +3,18 @@
  * hooks/agent-team/task-completed.ts
  *
  * Event:   TaskCompleted
- * Purpose: Blocks task completion (exit non-zero) unless the specialist has
- *          written a handoff receipt at:
- *            .guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md
- *          The receipt must contain ALL five §8.2 required sections:
- *            - changed_files
- *            - opens_for
- *            - assumptions
- *            - evidence
- *            - followups
- *          Exits 0 when:
- *            - CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS is unset or not "1" (opt-in gate).
- *            - The receipt exists and has all required fields.
+ * Purpose:
+ *   1. Validates a `guild.handoff.v2` envelope in the agent's handoff receipt,
+ *      extracting `learnings[]` into the run record under
+ *      `.guild/runs/<run-id>/learnings/<specialist>-<task-id>.json`.
+ *   2. Rejects (exit non-zero) if the envelope is invalid or fails the
+ *      lint/bloat check (SC-7 / VC-7).
+ *   3. For backwards compatibility, also checks that the markdown receipt at
+ *      `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` exists and
+ *      has the §8.2 required sections (changed_files, opens_for, assumptions,
+ *      evidence, followups).
+ *   4. Signals §task§agent dismiss (no idle): on a clean pass the agent
+ *      terminates — no idle agents persist (ADR §6 D3).
  *
  * Stdin:   JSON — Claude Code TaskCompleted hook payload:
  *   {
@@ -31,11 +31,11 @@
  * Stdout:  Silent (Claude Code may consume stdout).
  * Stderr:  Human-readable reason if blocking.
  *
- * Run ID derivation: "run-<session_id>" — kept simple so task-created,
- * task-completed, and teammate-idle all agree on the path.
+ * Run ID derivation: GUILD_RUN_ID env var (set by launcher) OR "run-<session_id>".
  *
  * Manual usage:
- *   echo '{"hook_event_name":"TaskCompleted","task_id":"task-001","session_id":"sess-abc123","cwd":"/path/to/project","teammate_name":"backend","team_name":"guild"}' \
+ *   echo '{"hook_event_name":"TaskCompleted","task_id":"task-001","session_id":"sess-abc123",
+ *          "cwd":"/path/to/project","teammate_name":"backend","team_name":"guild"}' \
  *     | CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 npx tsx hooks/agent-team/task-completed.ts
  */
 
@@ -43,6 +43,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
+import { validateHandoffV2, HandoffV2 } from "../lib/handoff-v2.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -60,7 +61,7 @@ interface TaskCompletedPayload {
 // ── Constants ──────────────────────────────────────────────────────────────
 
 /**
- * §8.2 required fields that every handoff receipt must contain.
+ * §8.2 required fields that every handoff receipt markdown must contain.
  * Keys must appear as markdown headings or YAML-style labels.
  */
 const REQUIRED_FIELDS: ReadonlyArray<string> = [
@@ -81,34 +82,90 @@ function die(reason: string): never {
 /**
  * Derive run ID. Honors GUILD_RUN_ID env var if set (agent-team launcher
  * exports it per pane so hooks converge on the launcher's session manifest
- * path). Falls back to "run-<session_id>" otherwise — consistent across all
- * three agent-team handlers + capture-telemetry + maybe-reflect.
+ * path). Falls back to "run-<session_id>" otherwise.
  */
 function deriveRunId(sessionId: string): string {
   return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
 }
 
 /**
- * Locate the handoff receipt for specialist+task in the run directory.
- * Path: <cwd>/.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md
+ * Locate the handoff receipt markdown for specialist+task in the run directory.
+ * Path: <guild-root>/.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md
  */
-function receiptPath(cwd: string, runId: string, specialist: string, taskId: string): string {
-  return path.join(resolveGuildRoot(cwd), ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
+function receiptPath(guildRoot: string, runId: string, specialist: string, taskId: string): string {
+  return path.join(guildRoot, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
 }
 
 /**
- * Check whether the receipt markdown contains all required sections.
- * Accepts either markdown heading form (## changed_files) or
- * label form (changed_files:) — case-insensitive.
+ * Locate the learnings output path for the run record.
+ * Path: <guild-root>/.guild/runs/<run-id>/learnings/<specialist>-<task-id>.json
+ */
+function learningsPath(
+  guildRoot: string,
+  runId: string,
+  specialist: string,
+  taskId: string
+): string {
+  return path.join(guildRoot, ".guild", "runs", runId, "learnings", `${specialist}-${taskId}.json`);
+}
+
+/**
+ * Check whether a markdown receipt contains all required §8.2 sections.
+ * Accepts markdown heading form (## changed_files) or label form (changed_files:).
  */
 function missingFields(content: string): string[] {
   return REQUIRED_FIELDS.filter((field) => {
-    const pattern = new RegExp(
-      `(?:^##?\\s+${field}\\b|^${field}\\s*:)`,
-      "im"
-    );
+    const pattern = new RegExp(`(?:^##?\\s+${field}\\b|^${field}\\s*:)`, "im");
     return !pattern.test(content);
   });
+}
+
+/**
+ * Extract `guild.handoff.v2` envelope from a markdown receipt if present.
+ * Looks for a fenced JSON block tagged with `guild.handoff.v2`.
+ *
+ * ```guild.handoff.v2
+ * { ... }
+ * ```
+ *
+ * Returns the parsed value or null if no such block is found.
+ */
+function extractHandoffEnvelope(content: string): unknown | null {
+  const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/;
+  const match = pattern.exec(content);
+  if (!match || !match[1]) return null;
+  try {
+    return JSON.parse(match[1].trim());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write learnings from a valid `guild.handoff.v2` envelope into the run record.
+ * Silently skips if no learnings are present.
+ */
+function persistLearnings(
+  envelope: HandoffV2,
+  outPath: string,
+  specialist: string,
+  taskId: string
+): void {
+  if (!envelope.learnings || envelope.learnings.length === 0) return;
+
+  const record = {
+    schema_version: "guild.learnings.v1",
+    task_id: taskId,
+    specialist,
+    tier: envelope.tier,
+    timestamp: new Date().toISOString(),
+    learnings: envelope.learnings,
+  };
+
+  const dir = path.dirname(outPath);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(outPath, JSON.stringify(record, null, 2) + "\n", "utf8");
+  process.stderr.write(`[task-completed] learnings persisted to ${outPath}\n`);
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
@@ -140,8 +197,9 @@ async function main(): Promise<void> {
   const specialist = (payload.teammate_name ?? "").trim() || "unknown";
   const cwd = payload.cwd ?? process.cwd();
 
+  const guildRoot = resolveGuildRoot(cwd);
   const runId = deriveRunId(sessionId);
-  const rPath = receiptPath(cwd, runId, specialist, taskId);
+  const rPath = receiptPath(guildRoot, runId, specialist, taskId);
 
   // ── Check receipt exists ───────────────────────────────────────────────────
   if (!fs.existsSync(rPath)) {
@@ -152,8 +210,9 @@ async function main(): Promise<void> {
     );
   }
 
-  // ── Check all required fields are present ─────────────────────────────────
   const content = fs.readFileSync(rPath, "utf8");
+
+  // ── Check §8.2 required markdown fields ───────────────────────────────────
   const missing = missingFields(content);
   if (missing.length > 0) {
     die(
@@ -163,8 +222,36 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── Validate guild.handoff.v2 envelope if present ─────────────────────────
+  const rawEnvelope = extractHandoffEnvelope(content);
+  if (rawEnvelope !== null) {
+    const { valid, errors } = validateHandoffV2(rawEnvelope);
+    if (!valid) {
+      die(
+        `Task "${taskId}" receipt at "${rPath}" contains an invalid guild.handoff.v2 envelope.\n` +
+          `Validation errors (SC-7 lint):\n` +
+          errors.map((e) => `  - ${e}`).join("\n")
+      );
+    }
+    // Extract learnings into run record (§6 D3 Extract phase)
+    const envelope = rawEnvelope as HandoffV2;
+    const lPath = learningsPath(guildRoot, runId, specialist, taskId);
+    persistLearnings(envelope, lPath, specialist, taskId);
+
+    process.stderr.write(
+      `[task-completed] OK: task "${taskId}" envelope validated (tier: ${envelope.tier}, ` +
+        `status: ${envelope.status}).\n`
+    );
+  } else {
+    process.stderr.write(
+      `[task-completed] NOTE: no guild.handoff.v2 envelope found in receipt — ` +
+        `validation skipped (envelope optional for legacy receipts).\n`
+    );
+  }
+
+  // §task§agent dismiss: agent terminates cleanly here (no idle, D3 §6).
   process.stderr.write(
-    `[task-completed] OK: task "${taskId}" receipt verified at "${rPath}".\n`
+    `[task-completed] OK: task "${taskId}" receipt verified at "${rPath}". Agent dismissed.\n`
   );
   process.exit(0);
 }

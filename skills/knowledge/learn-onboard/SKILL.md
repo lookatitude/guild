@@ -69,6 +69,32 @@ with zero data loss). Step order mirrors the skeleton exactly.
 5. Write `.guild/indexes/onboarding-tour.md`. Stop. Surface the path.
 6. If — and only if — the user explicitly asks, copy to `docs/ONBOARDING.md`.
 
+# Cost tiering
+
+The deterministic **script half** (`build-tour.ts`, which fixes BFS step order)
+is **LLM-free** and unchanged. This skill's LLM half is **tour narration +
+`languageLesson`** — single-document synthesis grounded in the already-built
+graph, so it runs at **`mid`** (per the shared per-stage table owned by
+`guild:learn-map` `§"Cost tiering"`; tier vocabulary, map, and `models.*` keys
+bound by pointer to
+`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md` §1/§8/§10 —
+never re-spelled). Narration never needs `powerful`: it adds no schema-level or
+cross-document graph claim. If a step cannot be narrated from the graph alone it
+**escalates** (§"Escalation rules") rather than reaching for a powerful re-read.
+
+**Recall-before-read (ADR §4).** Narration is grounded **only in the graph**
+(nodes, edges, layers, `domain`/`component` labels) — this skill already never
+re-reads source, which is the recall-before-read discipline at its strongest: it
+pulls exactly the graph context for the step, not the whole project. No file
+read happens here, so the `models.recallScoreThreshold` gate has nothing to
+override.
+
+**One-pass three-store update (candidates only).** This skill writes one derived
+artifact (`onboarding-tour.md`, plus the optional `docs/ONBOARDING.md` on
+explicit request); it does **not** mutate memory, wiki, or KG (those are written
+in `guild:learn-graph`'s one-pass run). It is read-over-the-graph + narrate, and
+self-promotes nothing.
+
 # Evidence requirements
 
 Every narrated claim traces to a graph node/edge already carrying `source_refs`
@@ -107,4 +133,6 @@ UI.
 - User asks "also write ONBOARDING.md" → `docs/ONBOARDING.md` copied; without
   that request the artifact stays under `.guild/indexes/`.
 - Empty `tour[]` → escalation, no fabricated tour.
+- Narration runs at `mid`, grounded only in the graph; no `powerful` call and no
+  raw source re-read (recall-before-read at its strongest — ADR §4).
 - Request to render the tour as a web dashboard → refused, deferral doc cited.

@@ -292,6 +292,27 @@ removal here is deliberate so v2.1.0 is not itself a surprise.
 
 ---
 
+## 5a. Additive v2.x additions (no breaking change)
+
+### `models:` config block + `--model-tier` flag (cost-aware tiering)
+
+Added in the `cost-aware-tiering-and-lean-context` initiative. Both are
+**purely additive**; zero-config repos are unchanged (the built-in tier-map
+biases cheap; absent `models:` block ⇒ current v2 behavior except cheaper
+`learn-*`).
+
+| Surface | What changed | Migration action |
+|---|---|---|
+| `settings.json` | New optional top-level closed-key `models:` block (master toggle, tier→model map, auto-score weights/thresholds, advisor rounds, escalation markers, recall settings, structured-output flag, cache TTL hints, importance gate). Unknown keys still rejected at Session Intake. | None required. Add the block to tune tiering; absent block ⇒ zero-config stable. Scaffold with `/guild:config init`. |
+| CLI | New flag `--model-tier=cheap\|mid\|powerful` pins the tier for a run (top of precedence ladder). | None required. Use the flag when you want to override the auto-scored tier for a single run. |
+
+**Precedence ladder (normative):** `--model-tier` CLI flag > per-lane plan
+override (`model_tier:`) > `settings.json models:` block > built-in default.
+
+Full specification: `docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §10`
+(config keys) and §1–§6 (tier ladder, auto-score, advisor escalation, lean
+lead, `guild.handoff.v2` schema, §task§agent lifecycle).
+
 ## 6. New in v2 (not a migration, but you'll want these)
 
 - **Phase entrypoints + surfaced smart detection** — start at any phase;

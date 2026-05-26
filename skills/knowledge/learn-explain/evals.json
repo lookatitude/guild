@@ -12,6 +12,7 @@
     "Narrate the onboarding tour.",
     "Analyze the diff's blast radius.",
     "Search the whole graph for every auth-related node.",
+    "Set models.recallScoreThreshold to 0.4 in settings.json.",
     "Launch the interactive dashboard."
   ]
 }
