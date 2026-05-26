@@ -33,8 +33,34 @@ __export(pre_compact_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_compact_exports);
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
+function resolveGuildRoot(startCwd) {
+  let current = path.resolve(startCwd);
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) {
+      return current;
+    }
+    const guildDir = path.join(current, ".guild");
+    if (fs.existsSync(guildDir)) {
+      try {
+        if (fs.statSync(guildDir).isDirectory()) {
+          return current;
+        }
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return path.resolve(startCwd);
+    }
+    current = parent;
+  }
+}
 
 // lib/v1.4/log-jsonl.ts
 var import_node_fs2 = require("node:fs");
@@ -147,11 +173,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path2 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path2), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path2)) return;
+  const path3 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path3), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path3)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path2, "wx");
+    const fd = (0, import_node_fs.openSync)(path3, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -249,9 +275,9 @@ function appendEvent(runDir, event, opts = {}) {
   const line = JSON.stringify(redacted) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId = opts.laneId ?? "global";
-    const path2 = laneFallbackPath(runDir, laneId);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path2), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path2, "a");
+    const path3 = laneFallbackPath(runDir, laneId);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path3), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path3, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -325,11 +351,11 @@ var SIDECAR_MAX_BYTES = 1024 * 1024;
 
 // pre-compact.ts
 async function readStdin() {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve(""));
+    process.stdin.on("end", () => resolve2(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve2(""));
   });
 }
 function payloadExcerpt(payload) {
@@ -341,19 +367,19 @@ function payloadExcerpt(payload) {
     return "";
   }
 }
-function readCurrentRunId(cwd) {
-  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+function readCurrentRunId(guildRoot) {
+  const sentinelPath = path2.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
-    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs2.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
   }
 }
-function resolveRunId(cwd) {
+function resolveRunId(guildRoot) {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(cwd);
+  return readCurrentRunId(guildRoot);
 }
 async function main() {
   const raw = await readStdin();
@@ -366,14 +392,15 @@ async function main() {
     process.stderr.write("warn: [pre-compact] invalid JSON on stdin; emitting bare event.\n");
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
-  const runId = resolveRunId(cwd);
+  const guildRoot = resolveGuildRoot(cwd);
+  const runId = resolveRunId(guildRoot);
   if (typeof runId !== "string" || runId.length === 0) {
     process.stderr.write(
       "warn: [pre-compact] GUILD_RUN_ID unset and current-run-id missing \u2014 falling through (no log emit).\n"
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path.join(cwd, ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path2.join(guildRoot, ".guild", "runs", runId);
   const event = {
     ts: (/* @__PURE__ */ new Date()).toISOString(),
     event: "hook_event",

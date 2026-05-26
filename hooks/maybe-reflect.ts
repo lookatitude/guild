@@ -65,6 +65,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { spawnSync } from "child_process";
 
+import { resolveGuildRoot } from "./lib/guild-root.js";
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface HookPayload {
@@ -173,7 +175,7 @@ function devteamSubagentGateCheck(
   // Guard 3 — spec lookup. Reflections are only meaningful when there's
   // a written spec to reflect against. GUILD_SPEC_SLUG wins; otherwise
   // "any spec.md exists" is the conservative fallback.
-  const specDir = path.join(cwd, ".guild", "spec");
+  const specDir = path.join(resolveGuildRoot(cwd), ".guild", "spec");
   const slug = process.env["GUILD_SPEC_SLUG"];
   if (slug && slug.trim().length > 0) {
     const specPath = path.join(specDir, `${slug}.md`);
@@ -284,13 +286,16 @@ async function main(): Promise<void> {
   // `run-<session_id>` by default; GUILD_RUN_ID env var wins when set
   // (agent-team launcher exports it per pane for convergence).
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  // Walk up from cwd to find the repo root — ensures .guild/ always lands at
+  // the nearest .git / .guild ancestor, never in a subdirectory.
+  const guildRoot = resolveGuildRoot(cwd);
   const sessionId = payload.session_id;
   const runId =
     process.env["GUILD_RUN_ID"] ??
     (sessionId ? `run-${sessionId}` : `run-session-${new Date().toISOString().slice(0, 10)}`);
 
-  // Load telemetry events
-  const eventsFile = path.join(cwd, ".guild", "runs", runId, "events.ndjson");
+  // Load telemetry events — always read from the resolved root
+  const eventsFile = path.join(guildRoot, ".guild", "runs", runId, "events.ndjson");
   const events = loadEvents(eventsFile);
 
   // v1.3 — F12: branch on hook_event_name. SubagentStop gets the dev-team
@@ -299,7 +304,7 @@ async function main(): Promise<void> {
   const hookEvent = payload.hook_event_name ?? "Stop";
 
   if (hookEvent === "SubagentStop") {
-    const result = devteamSubagentGateCheck(events, cwd);
+    const result = devteamSubagentGateCheck(events, guildRoot);
     if (!result.passed) {
       process.stderr.write(
         `[maybe-reflect] dev-team gate failed for run ${runId}: ${result.reason} — skipping reflection.\n`,
@@ -319,7 +324,7 @@ async function main(): Promise<void> {
   }
 
   // Gate passed — produce summary, then tell orchestrator to reflect
-  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const runDir = path.join(guildRoot, ".guild", "runs", runId);
 
   const usedRealSummarizer = tryRealSummarizer(cwd, runId);
   if (!usedRealSummarizer) {

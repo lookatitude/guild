@@ -41,6 +41,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { resolveGuildRoot } from "./lib/guild-root.js";
 
 import {
   appendSidecarPre,
@@ -99,7 +100,7 @@ function isKnownTool(name: string | undefined): name is ToolCallTool {
 }
 
 function readCurrentRunId(cwd: string): string | undefined {
-  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+  const sentinelPath = path.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
     const value = fs.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : undefined;
@@ -293,7 +294,7 @@ export async function main(): Promise<void> {
 
   const runDir =
     process.env["GUILD_RUN_DIR"] ??
-    path.join(cwd, ".guild", "runs", runId);
+    path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const laneId = process.env["GUILD_LANE_ID"];
 
   const entry: SidecarPreEntry = {

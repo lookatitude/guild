@@ -26,6 +26,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { resolveGuildRoot } from "./lib/guild-root.js";
 import {
   appendEvent,
   buildToolCallFromPair,
@@ -86,8 +87,8 @@ function resultExcerpt(payload: PostToolUsePayload): string {
   }
 }
 
-function readCurrentRunId(cwd: string): string | undefined {
-  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+function readCurrentRunId(guildRoot: string): string | undefined {
+  const sentinelPath = path.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
     const value = fs.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : undefined;
@@ -96,10 +97,10 @@ function readCurrentRunId(cwd: string): string | undefined {
   }
 }
 
-function resolveRunId(cwd: string): string | undefined {
+function resolveRunId(guildRoot: string): string | undefined {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(cwd);
+  return readCurrentRunId(guildRoot);
 }
 
 export async function main(): Promise<void> {
@@ -114,7 +115,10 @@ export async function main(): Promise<void> {
 
   const toolName = payload.tool_name ?? "";
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
-  const runId = resolveRunId(cwd);
+  // Walk up from cwd to find the repo root — ensures .guild/ always lands at
+  // the nearest .git / .guild ancestor, never in a subdirectory.
+  const guildRoot = resolveGuildRoot(cwd);
+  const runId = resolveRunId(guildRoot);
   if (typeof runId !== "string" || runId.length === 0) {
     process.stderr.write(
       "warn: [post-tool-use] GUILD_RUN_ID unset and current-run-id missing — falling through (no tool_call emit).\n",
@@ -130,7 +134,7 @@ export async function main(): Promise<void> {
 
   const runDir =
     process.env["GUILD_RUN_DIR"] ??
-    path.join(cwd, ".guild", "runs", runId);
+    path.join(guildRoot, ".guild", "runs", runId);
   const rawLaneId = process.env["GUILD_LANE_ID"];
   const laneId =
     typeof rawLaneId === "string" && rawLaneId.length > 0 && isSafeLaneId(rawLaneId)

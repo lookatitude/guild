@@ -23,13 +23,15 @@
  *
  * runDir resolution:
  *   1. process.env.GUILD_RUN_DIR
- *   2. process.env.GUILD_CWD + .guild/runs/<run-id>
- *   3. process.cwd() + .guild/runs/<run-id>
+ *   2. resolveGuildRoot(GUILD_CWD | payload.cwd | process.cwd()) + .guild/runs/<run-id>
+ *      resolveGuildRoot walks UP from the starting cwd to the nearest .git / .guild
+ *      ancestor so .guild/ always lands at the repo root, never in a subdirectory.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { resolveGuildRoot } from "./lib/guild-root.js";
 import { appendEvent, type HookEvent } from "./lib/v1.4/log-jsonl.js";
 
 interface PreCompactPayload {
@@ -65,8 +67,8 @@ function payloadExcerpt(payload: unknown): string {
   }
 }
 
-function readCurrentRunId(cwd: string): string | undefined {
-  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+function readCurrentRunId(guildRoot: string): string | undefined {
+  const sentinelPath = path.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
     const value = fs.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : undefined;
@@ -75,10 +77,10 @@ function readCurrentRunId(cwd: string): string | undefined {
   }
 }
 
-function resolveRunId(cwd: string): string | undefined {
+function resolveRunId(guildRoot: string): string | undefined {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(cwd);
+  return readCurrentRunId(guildRoot);
 }
 
 export async function main(): Promise<void> {
@@ -93,7 +95,10 @@ export async function main(): Promise<void> {
   }
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
-  const runId = resolveRunId(cwd);
+  // Walk up from cwd to find the repo root — ensures .guild/ always lands at
+  // the nearest .git / .guild ancestor, never in a subdirectory.
+  const guildRoot = resolveGuildRoot(cwd);
+  const runId = resolveRunId(guildRoot);
   if (typeof runId !== "string" || runId.length === 0) {
     process.stderr.write(
       "warn: [pre-compact] GUILD_RUN_ID unset and current-run-id missing — falling through (no log emit).\n",
@@ -103,7 +108,7 @@ export async function main(): Promise<void> {
 
   const runDir =
     process.env["GUILD_RUN_DIR"] ??
-    path.join(cwd, ".guild", "runs", runId);
+    path.join(guildRoot, ".guild", "runs", runId);
 
   const event: HookEvent = {
     ts: new Date().toISOString(),

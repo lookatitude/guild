@@ -33,8 +33,34 @@ __export(post_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(post_tool_use_exports);
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
+function resolveGuildRoot(startCwd) {
+  let current = path.resolve(startCwd);
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) {
+      return current;
+    }
+    const guildDir = path.join(current, ".guild");
+    if (fs.existsSync(guildDir)) {
+      try {
+        if (fs.statSync(guildDir).isDirectory()) {
+          return current;
+        }
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return path.resolve(startCwd);
+    }
+    current = parent;
+  }
+}
 
 // lib/v1.4/log-jsonl.ts
 var import_node_fs2 = require("node:fs");
@@ -147,11 +173,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path2 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path2), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path2)) return;
+  const path3 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path3), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path3)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path2, "wx");
+    const fd = (0, import_node_fs.openSync)(path3, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -271,9 +297,9 @@ function appendEvent(runDir, event, opts = {}) {
   const line = JSON.stringify(redacted) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId = opts.laneId ?? "global";
-    const path2 = laneFallbackPath(runDir, laneId);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path2), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path2, "a");
+    const path3 = laneFallbackPath(runDir, laneId);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path3), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path3, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -358,8 +384,8 @@ function sidecarKeyMatches(entry, key) {
   return true;
 }
 function consumeSidecarPre(runDir, matchOrCallId) {
-  const path2 = sidecarPath(runDir);
-  if (!(0, import_node_fs2.existsSync)(path2)) return null;
+  const path3 = sidecarPath(runDir);
+  if (!(0, import_node_fs2.existsSync)(path3)) return null;
   const apply = (text) => {
     const lines = text.split("\n");
     const parsedLines = [];
@@ -400,15 +426,15 @@ function consumeSidecarPre(runDir, matchOrCallId) {
     return { match, rest };
   };
   if (process.platform === "win32") {
-    const text = (0, import_node_fs2.readFileSync)(path2, "utf8");
+    const text = (0, import_node_fs2.readFileSync)(path3, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs2.writeFileSync)(path2, rest);
+    (0, import_node_fs2.writeFileSync)(path3, rest);
     return match;
   }
   return withStableLock(runDir, () => {
-    const text = (0, import_node_fs2.readFileSync)(path2, "utf8");
+    const text = (0, import_node_fs2.readFileSync)(path3, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs2.writeFileSync)(path2, rest);
+    (0, import_node_fs2.writeFileSync)(path3, rest);
     return match;
   });
 }
@@ -464,8 +490,8 @@ function buildToolCallFromPostOnly(opts) {
   return out;
 }
 function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 * 1e3) {
-  const path2 = sidecarPath(runDir);
-  if (!(0, import_node_fs2.existsSync)(path2)) return { orphans: [], events: [] };
+  const path3 = sidecarPath(runDir);
+  if (!(0, import_node_fs2.existsSync)(path3)) return { orphans: [], events: [] };
   const apply = (text) => {
     const lines = text.split("\n");
     const orphans2 = [];
@@ -489,15 +515,15 @@ function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 
   };
   let orphans;
   if (process.platform === "win32") {
-    const text = (0, import_node_fs2.readFileSync)(path2, "utf8");
+    const text = (0, import_node_fs2.readFileSync)(path3, "utf8");
     const out = apply(text);
-    (0, import_node_fs2.writeFileSync)(path2, out.rest);
+    (0, import_node_fs2.writeFileSync)(path3, out.rest);
     orphans = out.orphans;
   } else {
     orphans = withStableLock(runDir, () => {
-      const text = (0, import_node_fs2.readFileSync)(path2, "utf8");
+      const text = (0, import_node_fs2.readFileSync)(path3, "utf8");
       const out = apply(text);
-      (0, import_node_fs2.writeFileSync)(path2, out.rest);
+      (0, import_node_fs2.writeFileSync)(path3, out.rest);
       return out.orphans;
     });
   }
@@ -507,11 +533,11 @@ function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 
 
 // post-tool-use.ts
 async function readStdin() {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve(""));
+    process.stdin.on("end", () => resolve2(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve2(""));
   });
 }
 function isKnownTool(name) {
@@ -538,19 +564,19 @@ function resultExcerpt(payload) {
     return "";
   }
 }
-function readCurrentRunId(cwd) {
-  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+function readCurrentRunId(guildRoot) {
+  const sentinelPath = path2.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
-    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs2.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
   }
 }
-function resolveRunId(cwd) {
+function resolveRunId(guildRoot) {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(cwd);
+  return readCurrentRunId(guildRoot);
 }
 async function main() {
   const raw = await readStdin();
@@ -563,7 +589,8 @@ async function main() {
   }
   const toolName = payload.tool_name ?? "";
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
-  const runId = resolveRunId(cwd);
+  const guildRoot = resolveGuildRoot(cwd);
+  const runId = resolveRunId(guildRoot);
   if (typeof runId !== "string" || runId.length === 0) {
     process.stderr.write(
       "warn: [post-tool-use] GUILD_RUN_ID unset and current-run-id missing \u2014 falling through (no tool_call emit).\n"
@@ -576,7 +603,7 @@ async function main() {
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path.join(cwd, ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path2.join(guildRoot, ".guild", "runs", runId);
   const rawLaneId = process.env["GUILD_LANE_ID"];
   const laneId = typeof rawLaneId === "string" && rawLaneId.length > 0 && isSafeLaneId(rawLaneId) ? rawLaneId : void 0;
   if (typeof rawLaneId === "string" && rawLaneId.length > 0 && laneId === void 0) {

@@ -23,20 +23,48 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // maybe-reflect.ts
-var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var fs2 = __toESM(require("fs"));
+var path2 = __toESM(require("path"));
 var import_child_process = require("child_process");
+
+// lib/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startCwd) {
+  let current = path.resolve(startCwd);
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) {
+      return current;
+    }
+    const guildDir = path.join(current, ".guild");
+    if (fs.existsSync(guildDir)) {
+      try {
+        if (fs.statSync(guildDir).isDirectory()) {
+          return current;
+        }
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return path.resolve(startCwd);
+    }
+    current = parent;
+  }
+}
+
+// maybe-reflect.ts
 async function readStdin() {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve(""));
+    process.stdin.on("end", () => resolve2(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve2(""));
   });
 }
 function loadEvents(eventsFile) {
-  if (!fs.existsSync(eventsFile)) return [];
-  const content = fs.readFileSync(eventsFile, "utf8");
+  if (!fs2.existsSync(eventsFile)) return [];
+  const content = fs2.readFileSync(eventsFile, "utf8");
   const events = [];
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
@@ -72,20 +100,20 @@ function devteamSubagentGateCheck(events, cwd) {
       reason: `dispatch count ${dispatchCount} < 3`
     };
   }
-  const specDir = path.join(cwd, ".guild", "spec");
+  const specDir = path2.join(resolveGuildRoot(cwd), ".guild", "spec");
   const slug = process.env["GUILD_SPEC_SLUG"];
   if (slug && slug.trim().length > 0) {
-    const specPath = path.join(specDir, `${slug}.md`);
-    if (!fs.existsSync(specPath)) {
+    const specPath = path2.join(specDir, `${slug}.md`);
+    if (!fs2.existsSync(specPath)) {
       return { passed: false, reason: `spec not found: ${specPath}` };
     }
   } else {
-    if (!fs.existsSync(specDir)) {
+    if (!fs2.existsSync(specDir)) {
       return { passed: false, reason: `spec dir not found: ${specDir}` };
     }
     let anySpec = false;
     try {
-      const entries = fs.readdirSync(specDir);
+      const entries = fs2.readdirSync(specDir);
       anySpec = entries.some((name) => name.endsWith(".md"));
     } catch {
       anySpec = false;
@@ -124,14 +152,14 @@ function writeStubSummary(runDir, runId, events) {
     "",
     "<!-- fallback summary from maybe-reflect.ts \u2014 scripts/trace-summarize.ts was unavailable at this cwd. Install/restore scripts/trace-summarize.ts for the richer summary that guild:reflect prefers. -->"
   ];
-  const summaryPath = path.join(runDir, "summary.md");
-  fs.writeFileSync(summaryPath, lines.join("\n") + "\n", "utf8");
+  const summaryPath = path2.join(runDir, "summary.md");
+  fs2.writeFileSync(summaryPath, lines.join("\n") + "\n", "utf8");
   process.stderr.write(`[maybe-reflect] wrote fallback summary to ${summaryPath}
 `);
 }
 function tryRealSummarizer(cwd, runId) {
-  const summarizerPath = path.join(cwd, "scripts", "trace-summarize.ts");
-  if (!fs.existsSync(summarizerPath)) return false;
+  const summarizerPath = path2.join(cwd, "scripts", "trace-summarize.ts");
+  if (!fs2.existsSync(summarizerPath)) return false;
   const result = (0, import_child_process.spawnSync)(
     "npx",
     ["tsx", summarizerPath, "--run-id", runId, "--cwd", cwd],
@@ -161,13 +189,14 @@ async function main() {
     process.exit(0);
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  const guildRoot = resolveGuildRoot(cwd);
   const sessionId = payload.session_id;
   const runId = process.env["GUILD_RUN_ID"] ?? (sessionId ? `run-${sessionId}` : `run-session-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`);
-  const eventsFile = path.join(cwd, ".guild", "runs", runId, "events.ndjson");
+  const eventsFile = path2.join(guildRoot, ".guild", "runs", runId, "events.ndjson");
   const events = loadEvents(eventsFile);
   const hookEvent = payload.hook_event_name ?? "Stop";
   if (hookEvent === "SubagentStop") {
-    const result = devteamSubagentGateCheck(events, cwd);
+    const result = devteamSubagentGateCheck(events, guildRoot);
     if (!result.passed) {
       process.stderr.write(
         `[maybe-reflect] dev-team gate failed for run ${runId}: ${result.reason} \u2014 skipping reflection.
@@ -184,7 +213,7 @@ async function main() {
       process.exit(0);
     }
   }
-  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const runDir = path2.join(guildRoot, ".guild", "runs", runId);
   const usedRealSummarizer = tryRealSummarizer(cwd, runId);
   if (!usedRealSummarizer) {
     writeStubSummary(runDir, runId, events);

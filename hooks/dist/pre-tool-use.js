@@ -33,8 +33,34 @@ __export(pre_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_tool_use_exports);
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
+function resolveGuildRoot(startCwd) {
+  let current = path.resolve(startCwd);
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) {
+      return current;
+    }
+    const guildDir = path.join(current, ".guild");
+    if (fs.existsSync(guildDir)) {
+      try {
+        if (fs.statSync(guildDir).isDirectory()) {
+          return current;
+        }
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return path.resolve(startCwd);
+    }
+    current = parent;
+  }
+}
 
 // lib/v1.4/log-jsonl.ts
 var import_node_fs2 = require("node:fs");
@@ -146,11 +172,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path2 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path2), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path2)) return;
+  const path3 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path3), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path3)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path2, "wx");
+    const fd = (0, import_node_fs.openSync)(path3, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -247,14 +273,14 @@ var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 var SIDECAR_MAX_BYTES = 1024 * 1024;
 function appendSidecarPre(runDir, entry, opts = {}) {
   validateSidecarEntry(entry);
-  const path2 = sidecarPath(runDir);
-  (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path2), { recursive: true });
+  const path3 = sidecarPath(runDir);
+  (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path3), { recursive: true });
   const redacted = redactEventFields(entry, opts.fieldCap);
   const line = JSON.stringify(redacted) + "\n";
   const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES;
   const appendCapped = () => {
-    const existing = (0, import_node_fs2.existsSync)(path2) ? (0, import_node_fs2.readFileSync)(path2, "utf8") : "";
-    (0, import_node_fs2.writeFileSync)(path2, capSidecarText(existing, line, maxBytes));
+    const existing = (0, import_node_fs2.existsSync)(path3) ? (0, import_node_fs2.readFileSync)(path3, "utf8") : "";
+    (0, import_node_fs2.writeFileSync)(path3, capSidecarText(existing, line, maxBytes));
   };
   if (process.platform === "win32") {
     appendCapped();
@@ -293,11 +319,11 @@ function capSidecarText(existing, incomingLine, maxBytes) {
 
 // pre-tool-use.ts
 async function readStdin() {
-  return new Promise((resolve2) => {
+  return new Promise((resolve3) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve2(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve2(""));
+    process.stdin.on("end", () => resolve3(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve3(""));
   });
 }
 function renderCommand(toolName, toolInput) {
@@ -314,9 +340,9 @@ function isKnownTool(name) {
   return TOOL_CALL_TOOL_VALUES.includes(name);
 }
 function readCurrentRunId(cwd) {
-  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+  const sentinelPath = path2.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
-    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs2.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -342,7 +368,7 @@ function hasGuildSignature(content) {
   return false;
 }
 function isInsideGuildDir(absPath) {
-  return path.resolve(absPath).split(path.sep).includes(".guild");
+  return path2.resolve(absPath).split(path2.sep).includes(".guild");
 }
 function runBoundaryGuard(payload, cwd) {
   const tool = payload.tool_name;
@@ -366,7 +392,7 @@ ${e.new_string}`;
     }
   }
   if (!hasGuildSignature(content)) return false;
-  const abs = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
+  const abs = path2.isAbsolute(filePath) ? filePath : path2.resolve(cwd, filePath);
   if (isInsideGuildDir(abs)) return false;
   const decision = {
     hookSpecificOutput: {
@@ -410,7 +436,7 @@ async function main() {
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path.join(cwd, ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path2.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const laneId = process.env["GUILD_LANE_ID"];
   const entry = {
     run_id: runId,
@@ -426,7 +452,7 @@ async function main() {
     );
   }
   try {
-    fs.mkdirSync(path.join(runDir, "logs"), { recursive: true });
+    fs2.mkdirSync(path2.join(runDir, "logs"), { recursive: true });
     appendSidecarPre(runDir, entry);
   } catch (err) {
     process.stderr.write(

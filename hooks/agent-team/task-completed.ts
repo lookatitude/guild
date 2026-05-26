@@ -42,6 +42,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
+import { resolveGuildRoot } from "../lib/guild-root.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ function deriveRunId(sessionId: string): string {
  * Path: <cwd>/.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md
  */
 function receiptPath(cwd: string, runId: string, specialist: string, taskId: string): string {
-  return path.join(cwd, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
+  return path.join(resolveGuildRoot(cwd), ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
 }
 
 /**

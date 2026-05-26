@@ -57,6 +57,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
+import { resolveGuildRoot } from "./lib/guild-root.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ async function readStdin(): Promise<string> {
 }
 
 function readCurrentRunId(cwd: string): string | undefined {
-  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+  const sentinelPath = path.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
     const value = fs.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : undefined;
@@ -207,7 +208,7 @@ async function main(): Promise<void> {
   }
 
   // Write to .guild/runs/<run-id>/events.ndjson
-  const runsDir = path.join(cwd, ".guild", "runs", runId);
+  const runsDir = path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const eventsFile = path.join(runsDir, "events.ndjson");
 
   try {

@@ -43,6 +43,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
+import { resolveGuildRoot } from "../lib/guild-root.js";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -97,7 +98,7 @@ function findCompletedTaskIds(runDir: string, teammate: string): Set<string> {
  * Find task IDs assigned to this teammate in any plan file.
  */
 function findAssignedTaskIds(cwd: string, teammate: string): string[] {
-  const planDir = path.join(cwd, ".guild", "plan");
+  const planDir = path.join(resolveGuildRoot(cwd), ".guild", "plan");
   if (!fs.existsSync(planDir)) return [];
   const files = fs.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   const ids: string[] = [];
@@ -193,7 +194,7 @@ async function main(): Promise<void> {
   const cwd = payload.cwd ?? process.cwd();
 
   const runId = deriveRunId(sessionId);
-  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const runDir = path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
 
   // Gather context
   const completedIds = findCompletedTaskIds(runDir, teammate);

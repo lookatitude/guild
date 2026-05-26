@@ -23,28 +23,56 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // agent-team/teammate-idle.ts
-var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var fs2 = __toESM(require("fs"));
+var path2 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
+
+// lib/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startCwd) {
+  let current = path.resolve(startCwd);
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) {
+      return current;
+    }
+    const guildDir = path.join(current, ".guild");
+    if (fs.existsSync(guildDir)) {
+      try {
+        if (fs.statSync(guildDir).isDirectory()) {
+          return current;
+        }
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return path.resolve(startCwd);
+    }
+    current = parent;
+  }
+}
+
+// agent-team/teammate-idle.ts
 var STALE_THRESHOLD_MS = 10 * 60 * 1e3;
 function deriveRunId(sessionId) {
   return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
 }
 function findCompletedTaskIds(runDir, teammate) {
-  const handoffsDir = path.join(runDir, "handoffs");
-  if (!fs.existsSync(handoffsDir)) return /* @__PURE__ */ new Set();
+  const handoffsDir = path2.join(runDir, "handoffs");
+  if (!fs2.existsSync(handoffsDir)) return /* @__PURE__ */ new Set();
   const prefix = `${teammate}-`;
   return new Set(
-    fs.readdirSync(handoffsDir).filter((f) => f.startsWith(prefix) && f.endsWith(".md")).map((f) => f.slice(prefix.length, -".md".length))
+    fs2.readdirSync(handoffsDir).filter((f) => f.startsWith(prefix) && f.endsWith(".md")).map((f) => f.slice(prefix.length, -".md".length))
   );
 }
 function findAssignedTaskIds(cwd, teammate) {
-  const planDir = path.join(cwd, ".guild", "plan");
-  if (!fs.existsSync(planDir)) return [];
-  const files = fs.readdirSync(planDir).filter((f) => f.endsWith(".md"));
+  const planDir = path2.join(resolveGuildRoot(cwd), ".guild", "plan");
+  if (!fs2.existsSync(planDir)) return [];
+  const files = fs2.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   const ids = [];
   for (const file of files) {
-    const content = fs.readFileSync(path.join(planDir, file), "utf8");
+    const content = fs2.readFileSync(path2.join(planDir, file), "utf8");
     const blocks = content.split(/\n(?=[-*#]|\w)/);
     for (const block of blocks) {
       const isAssigned = new RegExp(`(?:owner|assigned|teammate):\\s*${teammate}\\b`, "i").test(block);
@@ -57,9 +85,9 @@ function findAssignedTaskIds(cwd, teammate) {
   return ids;
 }
 function hasActiveProgressLog(runDir, teammate) {
-  const logPath = path.join(runDir, "in-progress", `${teammate}.log`);
-  if (!fs.existsSync(logPath)) return false;
-  const stat = fs.statSync(logPath);
+  const logPath = path2.join(runDir, "in-progress", `${teammate}.log`);
+  if (!fs2.existsSync(logPath)) return false;
+  const stat = fs2.statSync(logPath);
   return Date.now() - stat.mtimeMs < STALE_THRESHOLD_MS;
 }
 function composeNudge(ctx) {
@@ -101,7 +129,7 @@ async function main() {
   const teamName = (payload.team_name ?? "").trim() || "unknown";
   const cwd = payload.cwd ?? process.cwd();
   const runId = deriveRunId(sessionId);
-  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const runDir = path2.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const completedIds = findCompletedTaskIds(runDir, teammate);
   const assignedIds = findAssignedTaskIds(cwd, teammate);
   const pendingTaskIds = assignedIds.filter((id) => !completedIds.has(id));

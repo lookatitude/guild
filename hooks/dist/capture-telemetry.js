@@ -23,9 +23,37 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // capture-telemetry.ts
-var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var fs2 = __toESM(require("fs"));
+var path2 = __toESM(require("path"));
 var crypto = __toESM(require("crypto"));
+
+// lib/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startCwd) {
+  let current = path.resolve(startCwd);
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) {
+      return current;
+    }
+    const guildDir = path.join(current, ".guild");
+    if (fs.existsSync(guildDir)) {
+      try {
+        if (fs.statSync(guildDir).isDirectory()) {
+          return current;
+        }
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return path.resolve(startCwd);
+    }
+    current = parent;
+  }
+}
+
+// capture-telemetry.ts
 function digest(value) {
   const str = typeof value === "string" ? value : JSON.stringify(value ?? "");
   return crypto.createHash("sha256").update(str).digest("hex").slice(0, 12);
@@ -41,17 +69,17 @@ function isOk(payload) {
   return true;
 }
 async function readStdin() {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve(""));
+    process.stdin.on("end", () => resolve2(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve2(""));
   });
 }
 function readCurrentRunId(cwd) {
-  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+  const sentinelPath = path2.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
-    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs2.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -104,11 +132,11 @@ async function main() {
     if (typeof payload.loop_gate === "string") event.loop_gate = payload.loop_gate;
     if (typeof payload.loop_terminated === "boolean") event.loop_terminated = payload.loop_terminated;
   }
-  const runsDir = path.join(cwd, ".guild", "runs", runId);
-  const eventsFile = path.join(runsDir, "events.ndjson");
+  const runsDir = path2.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const eventsFile = path2.join(runsDir, "events.ndjson");
   try {
-    fs.mkdirSync(runsDir, { recursive: true });
-    fs.appendFileSync(eventsFile, JSON.stringify(event) + "\n", "utf8");
+    fs2.mkdirSync(runsDir, { recursive: true });
+    fs2.appendFileSync(eventsFile, JSON.stringify(event) + "\n", "utf8");
   } catch (err) {
     process.stderr.write(
       `[capture-telemetry] ERROR: failed to write event: ${err instanceof Error ? err.message : String(err)}

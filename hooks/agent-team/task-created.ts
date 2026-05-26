@@ -43,6 +43,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
+import { resolveGuildRoot } from "../lib/guild-root.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -77,7 +78,7 @@ function extractDependsOn(text: string): string[] {
 /** Return all task IDs found in a plan markdown file (lines like "- task-001:" or "id: task-001") */
 function loadPlanTaskIds(cwd: string): Set<string> | null {
   // Look for any .guild/plan/*.md
-  const planDir = path.join(cwd, ".guild", "plan");
+  const planDir = path.join(resolveGuildRoot(cwd), ".guild", "plan");
   if (!fs.existsSync(planDir)) return null;
   const files = fs.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   if (files.length === 0) return null;
@@ -156,7 +157,7 @@ async function main(): Promise<void> {
     if (planIds === null) {
       warn(
         `Task "${taskId}" has depends-on references [${deps.join(", ")}] ` +
-          `but no plan file found at ${path.join(cwd, ".guild/plan/")}. Skipping dependency check.`
+          `but no plan file found at ${path.join(resolveGuildRoot(cwd), ".guild/plan/")}. Skipping dependency check.`
       );
     } else {
       const missing = deps.filter((d) => !planIds.has(d.toLowerCase()));

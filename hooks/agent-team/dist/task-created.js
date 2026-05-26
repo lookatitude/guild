@@ -23,9 +23,37 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // agent-team/task-created.ts
-var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var fs2 = __toESM(require("fs"));
+var path2 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
+
+// lib/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startCwd) {
+  let current = path.resolve(startCwd);
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) {
+      return current;
+    }
+    const guildDir = path.join(current, ".guild");
+    if (fs.existsSync(guildDir)) {
+      try {
+        if (fs.statSync(guildDir).isDirectory()) {
+          return current;
+        }
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return path.resolve(startCwd);
+    }
+    current = parent;
+  }
+}
+
+// agent-team/task-created.ts
 function die(reason) {
   process.stderr.write(`[task-created] BLOCKED: ${reason}
 `);
@@ -40,13 +68,13 @@ function extractDependsOn(text) {
   return Array.from(matches, (m) => m[1].trim());
 }
 function loadPlanTaskIds(cwd) {
-  const planDir = path.join(cwd, ".guild", "plan");
-  if (!fs.existsSync(planDir)) return null;
-  const files = fs.readdirSync(planDir).filter((f) => f.endsWith(".md"));
+  const planDir = path2.join(resolveGuildRoot(cwd), ".guild", "plan");
+  if (!fs2.existsSync(planDir)) return null;
+  const files = fs2.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   if (files.length === 0) return null;
   const ids = /* @__PURE__ */ new Set();
   for (const file of files) {
-    const content = fs.readFileSync(path.join(planDir, file), "utf8");
+    const content = fs2.readFileSync(path2.join(planDir, file), "utf8");
     const patterns = [
       /\bid:\s*(task-[\w-]+)/gi,
       /^\s*[-*]\s*(task-[\w-]+):/gim,
@@ -99,7 +127,7 @@ async function main() {
     const planIds = loadPlanTaskIds(cwd);
     if (planIds === null) {
       warn(
-        `Task "${taskId}" has depends-on references [${deps.join(", ")}] but no plan file found at ${path.join(cwd, ".guild/plan/")}. Skipping dependency check.`
+        `Task "${taskId}" has depends-on references [${deps.join(", ")}] but no plan file found at ${path2.join(resolveGuildRoot(cwd), ".guild/plan/")}. Skipping dependency check.`
       );
     } else {
       const missing = deps.filter((d) => !planIds.has(d.toLowerCase()));

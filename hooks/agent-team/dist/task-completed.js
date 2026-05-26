@@ -23,9 +23,37 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // agent-team/task-completed.ts
-var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var fs2 = __toESM(require("fs"));
+var path2 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
+
+// lib/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startCwd) {
+  let current = path.resolve(startCwd);
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) {
+      return current;
+    }
+    const guildDir = path.join(current, ".guild");
+    if (fs.existsSync(guildDir)) {
+      try {
+        if (fs.statSync(guildDir).isDirectory()) {
+          return current;
+        }
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return path.resolve(startCwd);
+    }
+    current = parent;
+  }
+}
+
+// agent-team/task-completed.ts
 var REQUIRED_FIELDS = [
   "changed_files",
   "opens_for",
@@ -42,7 +70,7 @@ function deriveRunId(sessionId) {
   return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
 }
 function receiptPath(cwd, runId, specialist, taskId) {
-  return path.join(cwd, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
+  return path2.join(resolveGuildRoot(cwd), ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
 }
 function missingFields(content) {
   return REQUIRED_FIELDS.filter((field) => {
@@ -76,13 +104,13 @@ async function main() {
   const cwd = payload.cwd ?? process.cwd();
   const runId = deriveRunId(sessionId);
   const rPath = receiptPath(cwd, runId, specialist, taskId);
-  if (!fs.existsSync(rPath)) {
+  if (!fs2.existsSync(rPath)) {
     die(
       `Task "${taskId}" (specialist: "${specialist}") has no handoff receipt. Expected at: ${rPath}
 Write the receipt with sections: ${REQUIRED_FIELDS.join(", ")} before marking complete.`
     );
   }
-  const content = fs.readFileSync(rPath, "utf8");
+  const content = fs2.readFileSync(rPath, "utf8");
   const missing = missingFields(content);
   if (missing.length > 0) {
     die(
