@@ -1,18 +1,18 @@
 ---
-name: guild build
+name: build
 description: "Development — context-assemble + dispatch lanes (subagent default; agent-team opt-in)"
 argument-hint: "[lane-id]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
 
-# /guild build — phase: Development
+# /guild:build — phase: Development
 
 The **Development** phase entrypoint. Assembles per-specialist context and
 dispatches lanes (subagent backend default; agent-team opt-in). An optional
 positional `[lane-id]` re-runs a single lane.
 
 Canonical surface: `architecture/command-surface.md §3.1` (Development row)
-and the verb↔phase edge in `§6` (D-14: `/guild build` → Development). Phase
+and the verb↔phase edge in `§6` (D-14: `/guild:build` → Development). Phase
 concept binding: `lifecycle/phase-entrypoints.md` ·
 `lifecycle/lifecycle-overview.md`.
 
@@ -30,8 +30,8 @@ at plan approval; **no new gate**).
 ## Usage
 
 ```
-/guild build
-/guild build lane-backend-001
+/guild:build
+/guild:build lane-backend-001
 ```
 
 All six global flags + `--dry-run` apply (`command-surface.md §4`, by

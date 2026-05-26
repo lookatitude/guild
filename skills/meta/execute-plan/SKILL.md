@@ -1,69 +1,43 @@
 ---
 name: guild-execute-plan
 description: For each specialist lane in the plan: invoke `guild:context-assemble` to build the bundle, then dispatch the specialist via Agent tool (subagent backend, default) or agent-team teammate spawn (opt-in). Parallelize lanes when `depends-on:` allows. Collect per-lane handoff receipts at `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`. TRIGGER: "execute the plan", "run the lanes", "start specialist work", "dispatch the team". DO NOT TRIGGER for: explaining the plan (guild:plan owns that), reviewing results (guild:review), writing more tests.
-when_to_use: Fifth step of /guild lifecycle, after plan approved and per-specialist context bundles staged.
+when_to_use: Fifth step of Guild lifecycle, after plan approved and per-specialist context bundles staged.
 type: meta
 ---
 
 # guild:execute-plan
 
-Implements `guild-plan.md §8` (task lifecycle — execute step). Runs after `guild:plan` has produced an approved `.guild/plan/<slug>.md` and before `guild:review`. Dispatches every specialist lane in the plan, per the DAG encoded by the lanes' `depends-on:` edges, and gathers one handoff receipt per lane into a single run directory that `guild:review` will consume verbatim.
+Implements `guild-plan.md §8` (task lifecycle — execute step). Runs after `guild:plan` has produced an approved `.guild/plan/<slug>.md` and before `guild:review`. Dispatches every specialist lane per the DAG encoded by the lanes' `depends-on:` edges, and gathers one handoff receipt per lane into a single run directory `guild:review` consumes verbatim.
 
 ## Input
 
-Two files, both required, plus a fresh run directory:
+Three things, all required:
 
-1. `.guild/plan/<slug>.md` — the approved per-specialist lane plan from `guild:plan`. Must have frontmatter `approved: true`. If approval is missing, refuse to dispatch and loop back to `guild:plan`'s approval gate.
-2. `.guild/team/<slug>.yaml` — the resolved team from `guild:team-compose`. Authoritative for the execution backend (`subagent` vs `agent-team`) and for per-specialist agent definition paths.
-3. `.guild/runs/<run-id>/` — a new run directory created at execute-start. `<run-id>` is a timestamp or run slug owned by this skill; every context bundle, handoff receipt, and assumption log for this execution is rooted under it.
+1. `.guild/plan/<slug>.md` — the approved per-specialist lane plan. Must have frontmatter `approved: true`; if approval is missing, refuse to dispatch and loop back to `guild:plan`'s approval gate.
+2. `.guild/team/<slug>.yaml` — the resolved team from `guild:team-compose`. Authoritative for the execution backend (`subagent` vs `agent-team`) and per-specialist agent-definition paths.
+3. `.guild/runs/<run-id>/` — a new run directory created at execute-start. `<run-id>` is a timestamp or run slug owned by this skill; every context bundle, handoff receipt, and assumption log roots under it.
 
 Do not re-derive lanes from chat or from the spec. The plan is the single source of truth for what gets dispatched.
 
 ## Per-lane flow
 
-For each lane, the flow is three strict phases. A lane does not advance to the next phase until the previous one has produced its artifact:
+Three strict phases per lane. A lane does not advance until the previous phase has produced its artifact:
 
-1. **Context bundle.** Invoke `guild:context-assemble` for the lane. It writes `.guild/context/<run-id>/<specialist>-<task-id>.md` per `guild-plan.md §9.3`. Read back the bundle's handoff receipt to confirm `bundle_path`, `token_estimate`, and `layers_included`. A missing bundle blocks the corresponding dispatch — do not paper over with chat context.
-2. **Dispatch.** Invoke the specialist using the backend selected in `team.yaml` (see `## Backend choice`). Pass the bundle path as the primary task brief. The specialist's `agents/<name>.md` supplies skills and autonomy policy when running as a subagent; when running as an agent-team teammate, name the bundle and any required skill playbooks explicitly in the teammate prompt per `guild-plan.md §9.3`.
-3. **Receipt.** Confirm the specialist wrote its handoff receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` per `guild-plan.md §8.2`. If the receipt is missing or malformed (no `evidence:` field, no `files changed`), treat the lane as errored — record the failure in the run log and do not mark the lane complete.
+1. **Context bundle.** Invoke `guild:context-assemble` for the lane; it writes `.guild/context/<run-id>/<specialist>-<task-id>.md` per §9.3. Read back the bundle's handoff receipt to confirm `bundle_path`, `token_estimate`, `layers_included`. A missing bundle blocks the dispatch — do not paper over with chat context.
+2. **Dispatch.** Invoke the specialist using the backend selected in `team.yaml`, passing the bundle path as the primary task brief. Routing rules and backend mechanics: see `dispatch.md`.
+3. **Receipt.** Confirm the specialist wrote its handoff receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` per §8.2. A missing or malformed receipt (no `evidence:` field, no `files changed`) → treat the lane as errored, record the failure in the run log, and do not mark it complete.
 
-Lanes do not skip phases. A specialist that dispatches without a bundle violates the context contract (§9); a specialist that completes without a receipt violates the handoff contract (§8.2). Either condition blocks `guild:review`.
+A specialist dispatched without a bundle violates the context contract (§9); one that completes without a receipt violates the handoff contract (§8.2). Either condition blocks `guild:review`.
 
-## Backend choice
+## Backend + routing (summary)
 
-Per `guild-plan.md §7.3`, Guild supports two execution backends:
+The backend is **not** chosen here — it is chosen at `guild:team-compose` time and mirrored into `team.yaml`. This skill reads and honors that choice. Three invariants you enforce at dispatch — full detail (backend table, launcher invocation, self-build routing table, parallelism rules) in `dispatch.md`:
 
-| Backend | Default? | Use when | Tradeoff |
-|---|---:|---|---|
-| **Subagents via Agent tool** | Yes | Work is self-contained; results only need to return to the orchestrator. | Lower token cost, simpler cleanup, fewer coordination failures. |
-| **Agent teams** | Opt-in | Teammates need to share findings, challenge each other, coordinate dependencies, or run competing hypotheses. | Experimental; requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; higher token cost; one team per session; no nested teams. |
+- **Subagent is the production default.** Unless `team.yaml` explicitly says `agent-team`, dispatch each lane via the Agent tool with **`subagent_type` set to the lane's specialist agent name** (`backend`, `qa`, `devops`, `architect`, …) — **never `general-purpose`**, which discards the named agent's persona, scoped skills, tool permissions, and TRIGGER/DO-NOT-TRIGGER boundaries (a defect). `subagent_type` is the lane's `owner_role`, resolved against `team.yaml`'s agent-definition paths.
+- **Self-build uses the dev-team, not the product specialists.** When the target repo IS the Guild plugin itself, `team.yaml` is composed from the dev-team agents under `.claude/agents/`, routed by changed path (full roster + path table in `dispatch.md`; see also `CLAUDE.md §"Dev team"`). The 14 `guild:` product specialists build *user* products; they are NOT the self-build team.
+- **`agent-team` needs explicit user approval + `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.** If either is missing, refuse and surface the blocker — never silently fall back to subagents (that would change execution semantics out from under the plan).
 
-The backend is not chosen by `guild:execute-plan`. It is chosen at `guild:team-compose` time and mirrored into `team.yaml`. This skill reads that choice and honors it. Two hard constraints:
-
-- **User approval is required for `agent-team`.** If `team.yaml` specifies `backend: agent-team`, confirm the user has explicitly approved the opt-in (the approval is recorded in `team.yaml` by `guild:team-compose`). If the environment variable `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is not set, refuse to dispatch and surface the blocker to the user rather than silently falling back to subagents — falling back would change the execution semantics out from under the plan.
-- **Subagent is the production default.** Unless `team.yaml` explicitly says `agent-team`, dispatch each lane via the Agent tool with **`subagent_type` set to the lane's specialist agent name** (e.g. `subagent_type: backend`, `qa`, `devops`, `architect`) — NOT `general-purpose`. The named agent (`agents/<name>.md` or, for self-build, `.claude/agents/<name>.md`) supplies the lane's persona, scoped skills, tool permissions, and TRIGGER/DO-NOT-TRIGGER boundaries; dispatching `general-purpose` discards all of that and is a defect. The `subagent_type` is the lane's `owner_role` from the plan, resolved against `team.yaml`'s agent-definition paths.
-
-- **Self-build uses the dev-team, not the product specialists.** When the target repo IS the Guild plugin itself (self-build), `team.yaml` is composed from the **dev-team agents under `.claude/agents/`** — `plugin-architect, skill-author, specialist-agent-writer, command-builder, hook-engineer, tooling-engineer, docs-writer, eval-engineer` — each owning a plugin path-slice (see `CLAUDE.md §"Dev team"`). Route by changed path: `scripts/` → `tooling-engineer`; `hooks/` → `hook-engineer`; `commands/` → `command-builder`; `skills/` → `skill-author`; `agents/*.md` → `specialist-agent-writer`; `tests/` → `eval-engineer`; `docs/` + `CLAUDE.md` → `docs-writer`; manifests/ADRs/phase-gates → `plugin-architect`. The 14 `guild:` product specialists build *user* products; they are NOT the self-build team.
-
-When `team.yaml` declares `backend: agent-team` and the opt-in is confirmed, invoke `scripts/agent-team-launcher.ts` to spawn the tmux session — one pane for the orchestrator plus one pane per specialist, with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` exported in each pane. The launcher is the canonical entry point for the agent-team backend; it writes a session manifest to `.guild/runs/<run-id>/agent-team/session.json` and refuses to spawn nested teams per §7.3. Run it once per execute-plan invocation:
-
-```
-scripts/agent-team-launcher.ts --team .guild/team/<slug>.yaml --cwd <repo-root>
-```
-
-Pass `--dry-run` first to preview the tmux commands without spawning the session; use `--session-name` when a name collision would otherwise block launch.
-
-## Parallelism rules
-
-Read the DAG encoded by each lane's `depends-on:` and schedule dispatches accordingly, per `guild-plan.md §8`:
-
-- **Architect first when present.** If a lane is owned by `architect`, it is typically a common dependency — most downstream lanes list its `task-id` in `depends-on`. Dispatch architect before any lane that depends on it, and hold the dependents until architect's receipt is written.
-- **Backend → QA.** QA's integration work depends on backend deliverables. Never dispatch QA before backend's receipt is present.
-- **DevOps → QA.** Staging hookup must precede QA's regression run.
-- **Content and commercial in parallel with engineering** when the lane only depends on the spec. A copywriter lane with `depends-on: []` dispatches at run-start alongside architect; it does not wait for engineering.
-- **Worktree isolation.** When dispatching two or more lanes in parallel, run each in its own git worktree so file edits cannot collide. The specialist's subagent is responsible for worktree entry/exit; `guild:execute-plan` only needs to confirm the worktree was distinct before marking a lane dispatched. Serial lanes may share the main worktree.
-
-The schedule is a function of the DAG, not of authoring order. Lanes with empty `depends-on:` are eligible at run-start; every other lane becomes eligible the moment every task-id it lists has a completed receipt.
+Parallelism follows the DAG, not authoring order; scheduling rules and worktree isolation live in `dispatch.md`.
 
 ## Codex adversarial review per lane (when `codex_review: true`)
 
@@ -74,33 +48,21 @@ Skill: guild-codex-review
 args: gate=G-lane:<task-id> artifact_path=.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md run_id=<run-id>
 ```
 
-Substitute `<task-id>` with the lane's task-id (e.g., `T2-backend`). Run per-lane in series after the lane's receipt is confirmed.
-
-If `guild:codex-review` returns `status: "rework"` for a lane, that lane must re-execute — do not advance to the next lane or to `guild:review`. Clear the lane's handoff receipt and re-dispatch the specialist with Codex's findings as additional context in the specialist's task brief. The re-execution counts against the restart cap in `counters.json` key `restart:<lane>` (shared with the L3/L4 restart cap).
-
-If `status: "satisfied"`, `"skipped"`, or `"force_passed"`, advance to the next lane normally.
+Substitute `<task-id>` with the lane's task-id (e.g. `T2-backend`); run per-lane in series after the receipt is confirmed. On `status: "rework"`, the lane re-executes — clear its receipt and re-dispatch the specialist with Codex's findings as added context; the re-run counts against `counters.json` key `restart:<lane>` (shared with the L3/L4 cap). On `"satisfied"`, `"skipped"`, or `"force_passed"`, advance normally.
 
 ## Receipt collection
 
-Per `guild-plan.md §8.2`, every specialist writes its receipt to:
+This skill does not author receipts — it confirms each exists at `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`, is readable, and carries the §8.2 fields (scope, files changed, decisions, assumptions, evidence, risks, follow-ups). `guild:review` and `guild:verify-done` read these receipts instead of rehydrating full conversations (§8.2), so receipt integrity is load-bearing.
 
-```
-.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md
-```
-
-The receipt shape — task completed and scope, files changed, decisions made, assumptions used, evidence, open risks and follow-ups — is fixed by §8.2. `guild:execute-plan` does not author receipts; it only confirms each one exists, is readable, and contains the required fields. After every lane completes, the `.guild/runs/<run-id>/handoffs/` directory should contain exactly one receipt file per lane in the plan.
-
-`guild:review` and `guild:verify-done` read these receipts instead of rehydrating full specialist conversations (§8.2), so receipt integrity is load-bearing for every downstream step. A missing or malformed receipt blocks review for that lane; do not advance to `## Stop condition` until every lane has a clean receipt or an explicit error record.
-
-**Assumption aggregation.** Before advancing to `## Stop condition`, aggregate every lane receipt's `assumptions:` list into `.guild/runs/<run-id>/assumptions.md` (one section per specialist, each assumption preserved verbatim). If no lane reported assumptions, still create the file as empty (header only) so `guild:verify-done` can distinguish "no assumptions" from "aggregation skipped". This is the single handoff `guild:verify-done` reads for its check #5.
+**Assumption aggregation.** Before the stop condition, aggregate every receipt's `assumptions:` list into `.guild/runs/<run-id>/assumptions.md` (one section per specialist, verbatim). If no lane reported assumptions, still create the file empty (header only) so `guild:verify-done` can tell "no assumptions" from "aggregation skipped" — it is the single handoff verify-done reads for its check #5.
 
 ## Stop condition
 
-Execution is complete when every lane in the plan has a non-error receipt under `.guild/runs/<run-id>/handoffs/`. Concretely:
+Execution is complete when every lane has a non-error receipt under `handoffs/`:
 
-- Lane count under `handoffs/` equals lane count in the plan.
-- Every receipt has a populated `evidence:` field (per §8.2 — never "looks good").
-- No receipt is tagged as blocked or errored without a matching error record in the run log.
+- receipt count equals lane count in the plan;
+- every receipt has a populated `evidence:` field (§8.2 — never "looks good");
+- no receipt is blocked/errored without a matching error record in the run log.
 
 If any lane errored, halt and surface the failure to the user rather than forwarding to `guild:review` — review cannot compensate for a missing receipt. If every lane is clean, hand off to `guild:review`.
 

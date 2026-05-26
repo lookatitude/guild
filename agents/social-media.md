@@ -18,12 +18,12 @@ Content & communication group specialist (`guild-plan.md §6.2`). Owns platform-
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `social-media-platform-post` (T5, **forward-declared — P3 scope**) — single-post authoring per platform (X/Twitter, LinkedIn, Instagram, TikTok captions, Bluesky, Mastodon): character limits, hook patterns, hashtag discipline, platform-native formatting.
-- `social-media-thread` (T5, **forward-declared — P3 scope**) — multi-part threads and carousels: hook tweet / hook slide, payoff pacing, per-slot cognitive load, closer with CTA; blog-to-thread repackaging.
-- `social-media-engagement-templates` (T5, **forward-declared — P3 scope**) — reply templates, DM templates, comment-response patterns, community management voice; on-voice responses to common inbound patterns.
-- `social-media-content-calendar` (T5, **forward-declared — P3 scope**) — content calendars and posting schedules: cadence per platform, pillar/theme rotation, seasonal/launch beats, repurposing matrix from long-form source.
+- `social-media-platform-post` (T5, exists) — single-post authoring per platform (X/Twitter, LinkedIn, Instagram, TikTok captions, Bluesky, Mastodon): character limits, hook patterns, hashtag discipline, platform-native formatting.
+- `social-media-thread` (T5, exists) — multi-part threads and carousels: hook tweet / hook slide, payoff pacing, per-slot cognitive load, closer with CTA; blog-to-thread repackaging.
+- `social-media-engagement-templates` (T5, exists) — reply templates, DM templates, comment-response patterns, community management voice; on-voice responses to common inbound patterns.
+- `social-media-content-calendar` (T5, exists) — content calendars and posting schedules: cadence per platform, pillar/theme rotation, seasonal/launch beats, repurposing matrix from long-form source.
 
-Four of the five skills (`social-media-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when a social-media invocation needs authoring methodology before those skills land.
+All four `social-media-*` T5 skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the social-media context bundle.
 
 ## When to invoke
 

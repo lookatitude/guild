@@ -1,11 +1,11 @@
 ---
-name: guild resume
+name: resume
 description: "Orchestrator — continue the active run from the next pending gate. --restart clears run state and re-runs from Init/Ideation (confirm-before-clear)."
 argument-hint: "[--no-index] [--restart]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion
 ---
 
-# /guild resume — lifecycle helper
+# /guild:resume — lifecycle helper
 
 Continues the active run from the next pending gate. **No phase** — acts on
 the active run.

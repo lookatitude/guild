@@ -18,12 +18,12 @@ Engineering group specialist (`guild-plan.md §6.1`). Owns the mobile client end
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `mobile-ios-swift` (T5, **forward-declared — P3 scope**) — iOS implementation patterns: Swift/SwiftUI idioms, UIKit interop, lifecycle, navigation, state management, platform conventions.
-- `mobile-android-kotlin` (T5, **forward-declared — P3 scope**) — Android implementation patterns: Kotlin coroutines, Jetpack Compose, lifecycle-aware components, navigation, Material conventions.
-- `mobile-react-native` (T5, **forward-declared — P3 scope**) — React Native / Expo patterns: bridge/Turbo-modules awareness, navigation (React Navigation/Expo Router), native-module boundaries, EAS build/submit, OTA updates.
-- `mobile-performance-tuning` (T5, **forward-declared — P3 scope**) — mobile performance craft: cold-start profiling, frame-rate/jank analysis, memory profiling, app-size audits, battery impact, platform-specific traces (Instruments, Android Profiler, Flipper).
+- `mobile-ios-swift` (T5, exists) — iOS implementation patterns: Swift/SwiftUI idioms, UIKit interop, lifecycle, navigation, state management, platform conventions.
+- `mobile-android-kotlin` (T5, exists) — Android implementation patterns: Kotlin coroutines, Jetpack Compose, lifecycle-aware components, navigation, Material conventions.
+- `mobile-react-native` (T5, exists) — React Native / Expo patterns: bridge/Turbo-modules awareness, navigation (React Navigation/Expo Router), native-module boundaries, EAS build/submit, OTA updates.
+- `mobile-performance-tuning` (T5, exists) — mobile performance craft: cold-start profiling, frame-rate/jank analysis, memory profiling, app-size audits, battery impact, platform-specific traces (Instruments, Android Profiler, Flipper).
 
-The four `mobile-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:tdd` + `guild:systematic-debug` when a mobile invocation needs methodology before those skills land.
+All four `mobile-*` T5 skills are authored and live under `skills/specialists/`; `guild:context-assemble` loads the relevant ones into the mobile context bundle. `guild:tdd` + `guild:systematic-debug` remain available as complementary methodology.
 
 ## When to invoke
 

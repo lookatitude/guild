@@ -9,7 +9,7 @@ Guild is a Claude Code plugin that ships a team of 14 domain specialists plus a 
 - `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` — plugin + marketplace manifests.
 - `skills/{core,meta,knowledge,fallback,specialists}/` — 5-tier skill taxonomy (`guild-plan.md §5`).
 - `agents/*.md` — 14 shipping specialists (`guild-plan.md §6` + `frontend` graduated 2026-04-26 via §12). Populated and authored.
-- `commands/*.md` — the v2 command surface: 3 daily (/guild [brief], /guild status, /guild wiki) · 6 phase (init ideate plan build qa ops) · helpers (status resume) · maintenance (fix evolve rollback stats audit) · initiative (opt-in). Canonical: architecture/command-surface.md §2; v1→v2: MIGRATION.md.
+- `commands/*.md` — the v2 **flat-token** command surface (`/guild:<verb>`; the `:` plugin namespace stays — Claude Code requires it — v2 only drops the redundant `guild-` command prefix; sub-verbs are positional ARGUMENTS, never separate files or namespaces; filenames are the source of truth — D1): bare `/guild:guild [brief]` · 6 phase (init ideate plan build qa ops) · `learn` (NEW — owns understand-everything, D3) · `status` `resume` `wiki` `config` `initiative` · maintenance (fix evolve rollback stats audit) · the 6 v1→v2 sunset redirect stubs. **Skills are model-invoked, never `/`-typed** (D2): the command is `/guild:<token>`, the skill is `guild:<token>` — distinct surfaces that share a stem (`plan`/`init`/`audit` collisions are intentional). Canonical: architecture/command-surface.md §2; flat-token + de-listing + dispatch ladder: `docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md`; v1→v2: MIGRATION.md.
 - `hooks/hooks.json` — native Claude Code hooks (`guild-plan.md §13.2`).
 - `scripts/`, `mcp-servers/` — evolve loop, telemetry, optional MCP servers (`guild-plan.md §13.3`).
 - `tests/` — skill evals and wiki-lint fixtures.
@@ -19,21 +19,23 @@ Guild is a Claude Code plugin that ships a team of 14 domain specialists plus a 
 
 ## v2 phase → skill dispatch
 
-The 6 phase commands are thin entrypoints; each invokes its producer skill(s)
-in order. This is the one-place wiring reference — each command's `## Dispatch`
-section is canonical, this table is the index. (`--rigor=deep` wrappers in
-parens; no skill is re-spelled here.)
+The 6 phase commands (plus the NEW `learn` command) are thin entrypoints; each
+invokes its producer skill(s) in order. The invoked skills are **model-invoked,
+never user-typed** (D2). This is the one-place wiring reference — each command's
+`## Dispatch` section is canonical, this table is the index. (`--rigor=deep`
+wrappers in parens; no skill is re-spelled here.)
 
 | Phase verb | Skill(s) invoked, in order | Output artifact |
 |---|---|---|
-| `/guild init` | `guild:init` → `guild:understand-engine` (brownfield cheap-scan tier only) | `.guild/init/<slug>.md`, `.guild/wiki/**`, `codebase-map.json` + `architecture-map.md` stub |
-| `/guild ideate` | `guild:brainstorm` (deep: wrapped by `guild:loop-clarify`) | `.guild/spec/<slug>.md` |
-| `/guild plan` | `guild:team-compose` → `guild:plan` (deep: + `guild:loop-plan-review`) | `.guild/team/<slug>.yaml`, `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` |
-| `/guild build` | per lane: `guild:context-assemble` → `guild:execute-plan` → `guild:review` (deep: + `guild:loop-implement`) | handoff receipts, `assumptions.md`, `review.md` |
-| `/guild qa` | `guild:quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
-| `/guild ops` | `guild:operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
+| `/guild:init` | `guild:init` (cheap by default: wiki + brownfield cheap-scan CodebaseMap + architecture-map stub) — full `learn-*` pipeline runs ONLY under `--learn` / `defaults.auto_learn` (D3) | `.guild/init/<slug>.md`, `.guild/wiki/**`, `codebase-map.json` + `architecture-map.md` stub |
+| `/guild:ideate` | `guild:brainstorm` (deep: wrapped by `guild:loop-clarify`) | `.guild/spec/<slug>.md` |
+| `/guild:plan` | `guild:team-compose` → `guild:plan` (deep: + `guild:loop-plan-review`) | `.guild/team/<slug>.yaml`, `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` |
+| `/guild:build` | per lane: `guild:context-assemble` → `guild:execute-plan` → `guild:review` (deep: + `guild:loop-implement`) | handoff receipts, `assumptions.md`, `review.md` |
+| `/guild:qa` | `guild:quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
+| `/guild:ops` | `guild:operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
+| `/guild:learn` (NEW) | the `learn-*` family — `guild:learn-map` / `learn-graph` / `learn-onboard` / `learn-diff` / `learn-explain` (D3/D4; one implementation, two triggers — same pipeline as `init --learn`) | deep knowledge-graph + onboarding / diff / explain artifacts (lazy, gated) |
 
-Skill bodies live at `skills/meta/{init,brainstorm,team-compose,plan,context-assemble,execute-plan,review}/`, `skills/knowledge/understand-engine/`, and `skills/{guild-quality,guild-operations}/`. Verb↔phase edge: `architecture/command-surface.md §6` (D-14). Note: the Init-phase skill's frontmatter `name:` is `init` (namespaced `guild:init`).
+Skill bodies live at `skills/meta/{init,brainstorm,team-compose,plan,context-assemble,execute-plan,review}/`, the `learn-*` family (clean-room re-authored from the former `skills/knowledge/understand-engine/` per D4 — exact file granularity is skill-author's call), and `skills/{guild-quality,guild-operations}/`. Verb↔phase edge: `architecture/command-surface.md §6` (D-14), corrected to flat-token / sub-verbs-as-arguments by D1. Note: the Init-phase skill's frontmatter `name:` is `init` (namespaced `guild:init`).
 
 ## Dev team (`.claude/agents/`)
 
@@ -88,22 +90,22 @@ The wiki for the Guild repo lives at `.guild/wiki/` (start at `index.md`). Read 
 
 For cross-tree truths (operator preferences that survive *outside* this working directory), use auto-memory at `~/.claude/projects/.../memory/`. The wiki is repo-scoped; memory is operator-scoped.
 
-## Backend default — agent-team when tmux is available
+## Backend default — the `agent_mode` dispatch ladder
 
-When composing a team for any `/guild` lifecycle run, default `team.yaml`'s `backend:` field to `agent-team` whenever `which tmux` succeeds — **whether or not** the orchestrator is already inside a tmux session. Fall back to `backend: subagent` only on tmux-less machines (CI, fresh installs), where `guild:execute-plan` dispatches specialists via the Agent tool and no tmux is required.
+`agent_mode: team | agent | subagent | auto` (`.guild/settings.json`, default `auto`) governs the execution backend for every `/guild` lifecycle run. It **supersedes** the old binary `defaults.agent_team` and resolves the prior `guild-plan.md §7.3` (subagent-default) ↔ this file (agent-team-default) contradiction in favor of one deterministic ladder (ADR D5: `docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md`).
 
-The launcher (`scripts/agent-team-launcher.ts`) picks its tmux strategy from `$TMUX`:
+**On `auto`, resolve in order — team and independent agents are PRIMARY; subagent is the documented last resort:**
 
-- **`$TMUX` unset** (plain shell): creates a fresh **detached session** with one pane per specialist, then attaches your terminal to it.
-- **`$TMUX` set** (already inside tmux): spawns the team **in the current session** as a new window (`tmux new-window -n guild-<slug>`), builds one pane per specialist by splitting that window, then `select-window`s it so the panes are immediately visible. It never splits or disturbs your currently-active pane and never kills an existing pane/window. The earlier "exit tmux and re-run from a plain shell" workaround is retired — the in-session window is the path now.
+1. **Inside tmux** (`$TMUX` set) → **TEAM** in-session: a new window in the current session (`tmux new-window -n guild-<slug>`), one pane per specialist, `select-window`ed so the panes are immediately visible. Never splits or kills the currently-active pane/window.
+2. **tmux installed** (but not currently inside one) → **TEAM** in a fresh **detached session**, then attaches your terminal to it.
+3. **No tmux, but the host (`claude` | `codex`) supports independent agents from the main session** → **AGENT** (independent, no tmux).
+4. **Else** → **SUBAGENT** (fallback): `guild:execute-plan` dispatches specialists via the Agent tool; no tmux required (CI, fresh installs).
 
-The one-team-per-session rule (§7.3) is preserved in both modes: a team-window collision (in-session, window already named `guild-<slug>`) or a session-name collision (new-session) makes the launcher refuse to clobber and print how to switch to or kill the existing team.
+An explicit `agent_mode` value other than `auto` **pins** the backend, subject to availability — pinning `team` on a tmux-less host is rejected/warned (owner: `tooling-engineer`). `defaults.agent_team` is read as a **deprecated warn-once alias** for one minor (`true → team`, `false → subagent`, absent → `auto`), then removed at v2.1.0.
 
-This satisfies the §7.3 user-approval requirement for the agent-team backend — the user's instruction (2026-04-27) explicitly approves agent-team as the durable default for all future Guild work on this operator's machine, not just one task.
+**§7.3 hard invariants preserved in every mode:** one team per session; a team-window collision (in-session, window already named `guild-<slug>`) or a session-name collision (new-session) makes the launcher **refuse to clobber** and print how to switch to or kill the existing team; the pre-flight env gate `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (checked by `scripts/agent-team-launcher.ts`) stays in force for team spawn — absent, the launcher refuses. The launcher owns the tmux strategy and these gates.
 
-The pre-flight env-var gate `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (checked by `scripts/agent-team-launcher.ts`) remains in force. Operators must set it for agent-team to spawn; absent, the launcher refuses.
-
-Full rationale + options scored: `.guild/wiki/decisions/agent-team-default-when-tmux-available.md`. Subsumes the v1.0 task-scoped approval at `.guild/wiki/decisions/agent-team-via-tmux.md`.
+This satisfies the §7.3 user-approval requirement for the agent-team backend — the operator's instruction (2026-04-27) approves agent-team as the durable default whenever tmux is present on this machine, now expressed as the `auto` ladder above. Full rationale + options scored: `.guild/wiki/decisions/agent-team-default-when-tmux-available.md` (subsumed by D5); subsumes the v1.0 task-scoped approval at `.guild/wiki/decisions/agent-team-via-tmux.md`.
 
 ## Codex adversarial review
 

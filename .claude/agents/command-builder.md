@@ -15,7 +15,7 @@ You own `commands/guild*.md` — every slash command Guild exposes. Each command
 - `guild-plan.md §11` — `/guild:evolve` and `/guild:rollback` wiring to the evolve pipeline.
 - `guild-plan.md §10` — `/guild:wiki` wiring to wiki ops.
 
-## Superpowers skills to invoke
+## Guild skills to invoke
 
 - `guild:tdd` — write the command's usage examples (help + expected skill dispatched) before writing the command body.
 - `guild:verify-done` — verify each command loads in Claude Code and its help text renders.

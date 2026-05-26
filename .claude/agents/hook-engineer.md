@@ -14,7 +14,7 @@ You own every file under `hooks/`: `hooks.json`, shell scripts (`bootstrap.sh`, 
 - `guild-plan.md §8` — task lifecycle context: what hooks are observing at each phase.
 - `guild-plan.md §11` — how `maybe-reflect.ts` feeds the evolve pipeline.
 
-## Superpowers skills to invoke
+## Guild skills to invoke
 
 - `guild:tdd` — for every script, write a test that invokes the script with fixture NDJSON events and asserts on output before writing the script.
 - `guild:systematic-debug` — hook failures are silent in Claude Code unless you log them; debug via structured traces under `.guild/runs/<run-id>/`.

@@ -7,104 +7,67 @@ type: meta
 
 # guild:team-compose
 
-Implements `guild-plan.md §7` (team composition). Runs after `guild:brainstorm` has written `.guild/spec/<slug>.md` and before `guild:plan`. Output is a resolved team file that downstream planning and execution steps consume verbatim.
+Implements `guild-plan.md §7` (team composition). Runs after `guild:brainstorm` writes `.guild/spec/<slug>.md` and before `guild:plan`. Output is a resolved team file downstream planning and execution consume verbatim.
 
 ## Input
 
-`.guild/spec/<slug>.md` — the approved spec from `guild:brainstorm`. The spec's Goal, Success criteria, Constraints, and Non-goals sections are the authoritative source for domain matching. Do not infer domains from the user's chat history outside the spec.
+`.guild/spec/<slug>.md` — the approved spec. Its Goal, Success criteria, Constraints, and Non-goals sections are the authoritative source for domain matching. Do not infer domains from chat history outside the spec.
 
 ## Workflow
 
-Four ordered steps, lifted from `guild-plan.md §7.1`:
+Five ordered steps (`guild-plan.md §7.1`). The gap-handling options and approval shapes are detailed in `gap-handling.md`:
 
-0. **Self-build check (first).** If the target repo IS the Guild plugin itself (editing `plugin/**` — skills, commands, hooks, scripts, agents, docs, manifests, tests), compose the team from the **dev-team agents under `.claude/agents/`** (`plugin-architect, skill-author, specialist-agent-writer, command-builder, hook-engineer, tooling-engineer, docs-writer, eval-engineer`), routed by changed path (see `CLAUDE.md §"Dev team"` for the path→agent table). Do **not** match against the 14 `guild:` product specialists — those build *user* products. Skip steps 1–3's product-roster matching and go to step 4 with the dev-team lanes. (The cap-6 / 3–4 default and backend choice still apply.)
+0. **Self-build check (first).** If the target repo IS the Guild plugin itself (editing `plugin/**` — skills, commands, hooks, scripts, agents, docs, manifests, tests), compose the team from the **dev-team agents under `.claude/agents/`** (`plugin-architect, skill-author, specialist-agent-writer, command-builder, hook-engineer, tooling-engineer, docs-writer, eval-engineer`), routed by changed path (see `CLAUDE.md §"Dev team"` for the path→agent table). Do **not** match against the 14 `guild:` product specialists — those build *user* products. Skip steps 1–3's product-roster matching and go to step 4 with the dev-team lanes. (Cap-6 / 3–4 default and backend choice still apply.)
 
-1. **Match.** (Non-self-build.) Read `.guild/spec/<slug>.md` and match its domains against the **available-specialist set** — the union of **(a)** the shipped specialist roster (`guild-plan.md §6.1–§6.3`: architect, researcher, backend, devops, qa, mobile, security, copywriter, technical-writer, social-media, seo, marketing, sales) **and (b)** the consuming repo's project-local specialists already minted under `.guild/agents/*.md` (the live tree only — the `.guild/agents/proposed/*` incubation tree is **never** a candidate, per `guild:create-specialist`'s incubation contract). A domain that **either** source covers is a candidate match; a project-local specialist minted on a previous task is reused here, never re-created.
-2. **Classify.** Bucket every matched domain as either *existing* or *gap*:
-   - **Existing** — covered by **either** the shipped roster **or** an already-minted `.guild/agents/*.md` project specialist. Either source satisfies the need; existing specialists join the team with **no creation step**.
-   - **Gap** — covered by **neither** source. Gaps get a proposed role name and one-line description so the user can see exactly what would be created if they pick option A.
-3. **Present to user.** Show the matched existing specialists with a one-line reasoning each, and — for every gap — the four gap-handling options:
-   - **A · auto-create** — invoke `guild:create-specialist` to mint the missing role before proceeding. Per the **v2 DH-3 boundary** (cited by pointer: `templates-and-migration.md` / `architecture/target-architecture.md §"Canonical template-version strings + derived_from_template invariant"`), the new agent is minted into the consuming repo's `.guild/agents/<role>.md` carrying `derived_from_template: guild.agent_template.v1` (template id resolved via `contract-map.md §A`) — **never** into the read-only plugin install dir. The freshly-minted specialist is **proposed to the user for explicit approval** before it joins the team (see **User approval** below). Adjacent-specialist boundary updates are proposed as part of that flow (`guild-plan.md §12`).
-   - **B · skip gap** — proceed with existing specialists only; the missing coverage is flagged in the final task report.
-   - **C · substitute** — reassign the gap to an existing specialist with an explicit scope override recorded in `team.yaml`.
-   - **D · compose from scratch** — discard the proposal entirely and hand-pick the team via `/guild plan`.
-4. **Write** `.guild/team/<slug>.yaml` with the resolved team — only after the applicable approval shape (see **User approval** below) has cleared — each entry carrying per-specialist scope, cross-specialist dependencies, and the chosen execution backend.
+1. **Match.** (Non-self-build.) Match the spec's domains against the **available-specialist set** — the union of **(a)** the shipped roster (`§6.1–§6.3`: architect, researcher, backend, devops, qa, mobile, security, copywriter, technical-writer, social-media, seo, marketing, sales) **and (b)** the consuming repo's project-local specialists already minted under `.guild/agents/*.md` (the live tree only — the `.guild/agents/proposed/*` incubation tree is **never** a candidate, per `guild:create-specialist`'s incubation contract). A domain either source covers is a candidate match; a project-local specialist minted on a previous task is **reused here, never re-created**.
 
-## User approval
+2. **Classify** every matched domain as either *existing* — covered by **either** the shipped roster **or** an already-minted `.guild/agents/*.md` project specialist (joins the team with **no creation step**) — or *gap* — covered by **neither** (gets a proposed role name + one-line description so the user sees exactly what option A would create).
 
-Exactly **one** of two approval shapes runs before step 4 writes `team.yaml`, selected by whether Classify surfaced any gap the user resolved with option A (auto-create):
+3. **Present to user.** Show the matched existing specialists with one-line reasoning each, and — for every gap — the four options **A · auto-create / B · skip gap / C · substitute / D · compose from scratch** (full semantics, including the v2 DH-3 mint boundary, in `gap-handling.md`).
 
-- **(i) All needed specialists already exist.** Every match is *existing* (shipped roster or `.guild/agents/*.md`), or every gap was resolved with B/C/D so nothing is minted. The user gives a **single approval — the team constitution** (resolved roster + per-specialist scope + chosen backend). No specialist-creation approval is requested because no new agent is created.
-- **(ii) One or more specialists must be created.** At least one gap was resolved with option A. Each freshly-minted specialist is **proposed for approval first** — one approval per minted role, surfaced as it returns from `guild:create-specialist`, before that role is added to the roster — **and then** the team constitution is approved as in (i). A minted specialist the user rejects falls back to options B/C/D for that gap; it is **never** silently added to the team.
+4. **Write** `.guild/team/<slug>.yaml` with the resolved team — only after the applicable approval shape (see `gap-handling.md`) has cleared — each entry carrying per-specialist scope, cross-specialist dependencies, and the chosen execution backend.
 
-Reuse is automatic: an existing specialist from **either** source never triggers a creation approval. The constitution approval is mandatory in both shapes; shape (ii) layers the per-specialist creation approvals **ahead** of it.
+**Reuse, never re-create** is load-bearing: an existing specialist from *either* source joins with no creation step and no creation approval. Only a gap covered by neither source can become a newly-minted specialist (option A → `guild:create-specialist`), and only with explicit per-role approval.
 
 ## Hard rules
 
-From `guild-plan.md §7.2`. These are non-negotiable; if a user request conflicts, raise it before writing `team.yaml`.
+From `guild-plan.md §7.2`. Non-negotiable; if a user request conflicts, raise it before writing `team.yaml`:
 
-- **Cap at 6 specialists** per task. The only override is an explicit `/guild plan --team-size=N` from the user — context fragmentation destroys coherence above six.
-- **Recommended default: 3–4 specialists.** Six is the ceiling, not the norm. Only widen the team when the task has genuinely independent lanes that benefit from parallel specialists.
-- **Architect is implied** on any multi-component build. If the spec touches two or more components (e.g. frontend + backend, service + infra), add architect whether the user named it or not.
-- **Security is implied** on anything touching auth, secrets management, or external integrations (third-party APIs, webhooks, OAuth, payment providers, etc.).
+- **Cap at 6 specialists** per task. The only override is an explicit `/guild:plan --team-size=N` — context fragmentation destroys coherence above six.
+- **Recommended default: 3–4.** Six is the ceiling, not the norm. Widen only when the task has genuinely independent lanes that benefit from parallel specialists.
+- **Architect is implied** on any multi-component build (frontend + backend, service + infra, …).
+- **Security is implied** on anything touching auth, secrets management, or external integrations (third-party APIs, webhooks, OAuth, payment providers).
 - **QA is implied whenever backend is present** in the team. Server-side changes ship with a qa slot by default.
-- **Orchestrator is implicit** — the top-level `/guild` session plays coordinator. It does not occupy a specialist slot and does not count toward the cap.
-- **New specialists must pass the evolve gate** (`guild-plan.md §11`) before joining. If a create-specialist proposal fails evals, fall back to options B / C / D.
+- **Orchestrator is implicit** — the top-level `/guild` session coordinates; it occupies no specialist slot and does not count toward the cap.
+- **New specialists must pass the evolve gate** (`§11`) before joining. A failing create-specialist proposal falls back to options B / C / D.
 
 ## Execution backend
 
-From `guild-plan.md §7.3`. Two backends are supported:
-
-- **Subagents via the Agent tool — default.** Use when each specialist's work is self-contained and only the final artifact needs to return to the orchestrator. Lower token cost, simpler cleanup, fewer coordination failures. This is the production default.
-- **Agent teams — opt-in.** Use when teammates need to share findings, challenge each other, coordinate dependencies, or run competing hypotheses. Gated by three conditions that *all* must hold:
-  1. The user has **explicitly approved** the agent-team backend for this task (not "sounds fine" — explicit yes).
-  2. `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set in the environment.
-  3. The task has peer-coordination needs the orchestrator cannot satisfy by serializing subagent runs.
-
-Agent teams are experimental: one team per session, no nested teams, higher token cost. If any of the three conditions is missing, default to subagents and note the fallback in the team-compose presentation.
+From `guild-plan.md §7.3`. **Subagents via the Agent tool — default** (self-contained work; only the final artifact returns; lower cost, simpler cleanup, fewer coordination failures). **Agent teams — opt-in**, gated by three conditions that *all* must hold: (1) the user **explicitly approved** the agent-team backend; (2) `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set; (3) peer-coordination needs the orchestrator can't satisfy by serializing subagents. Agent teams are experimental (one team per session, no nesting, higher cost). If any condition is missing, default to subagents and note the fallback in the presentation. The chosen value is written to `team.yaml`'s top-level `backend`, authoritative for `guild:plan` and `guild:execute-plan`.
 
 ## Output contract
 
-Write `.guild/team/<slug>.yaml`. Schema:
+Write `.guild/team/<slug>.yaml`. Full annotated schema + per-field semantics in `gap-handling.md`; the shape is:
 
 ```yaml
 spec: .guild/spec/<slug>.md
-backend: subagent  # or: agent-team
-allow_larger: false  # true only if user passed --allow-larger
+backend: subagent          # or: agent-team
+allow_larger: false        # true only if user passed --allow-larger
 specialists:
-  - name: architect
-    scope: "System boundaries, component split, tradeoff matrix for the pricing service."
-    depends-on: []
-    implied-by: "multi-component"  # or omit if user-requested
-  - name: backend
-    scope: "REST contract + data layer for /pricing endpoints."
-    depends-on: [architect]
-  - name: qa
-    scope: "Property-based tests for quote calculator; regression suite hookup."
-    depends-on: [backend]
-    implied-by: "backend-present"
-  - name: security
-    scope: "Auth flow review for the new pricing admin routes."
-    depends-on: [backend]
-    implied-by: "auth-touched"
+  - name: architect        # exact roster slug
+    scope: "One-sentence bounded responsibility for THIS task."
+    depends-on: []          # specialist slugs whose handoff this waits on
+    implied-by: "multi-component"   # or omit if user-requested
 gaps_resolved:
   - proposed_role: data-scientist
-    resolution: "B"  # A / B / C / D
+    resolution: "B"         # A / B / C / D
     notes: "User accepted missing coverage; flagged in final report."
 coverage_flags:
-  - "No specialist covers ML modelling (user selected B on data-scientist gap)."
+  - "No specialist covers ML modelling (B on data-scientist gap)."
 ```
 
-Per-specialist fields:
-- `name` — exact specialist slug from the roster.
-- `scope` — one-sentence bounded responsibility for *this* task. No copy-paste of the specialist's full remit.
-- `depends-on` — list of other specialist slugs whose handoff this specialist waits on.
-- `implied-by` (optional) — records which hard rule triggered the inclusion (`multi-component`, `auth-touched`, `backend-present`) so the user can audit.
-
-The top-level `backend` field is authoritative for `guild:plan` and `guild:execute-plan`. The team is capped at 6 entries unless `allow_larger: true` is set.
+`implied-by` records which hard rule triggered an inclusion (`multi-component`, `auth-touched`, `backend-present`) for audit. The team is capped at 6 entries unless `allow_larger: true`.
 
 ## Handoff
 
-Hand off to `guild:plan` with the team.yaml path as its argument. Do not proceed into planning yourself — `guild:plan` is a separate skill with its own responsibilities (`guild-plan.md §8`).
-
-Handoff receipt should list: `team_path`, `specialist_count`, `backend`, `gaps_resolved` count, and whether any `implied-by` rule fired.
+Hand off to `guild:plan` with the team.yaml path as its argument. Do not proceed into planning yourself — `guild:plan` is a separate skill (`guild-plan.md §8`). Handoff receipt lists: `team_path`, `specialist_count`, `backend`, `gaps_resolved` count, and whether any `implied-by` rule fired.

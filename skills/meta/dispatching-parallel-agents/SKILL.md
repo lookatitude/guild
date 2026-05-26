@@ -8,8 +8,6 @@ type: meta
 derived_from_template: guild.skill_template.v1
 ---
 
-> **Meta skill** — forked from `superpowers:dispatching-parallel-agents` v5.0.7 §5 (MIT, © 2025 Jesse Vincent). Guild-native adaptation, **zero runtime dependency** on superpowers. See `LICENSE-attribution.md`.
-
 # When to use it
 
 Use during Development when the lane plan has two or more lanes whose

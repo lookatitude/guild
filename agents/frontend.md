@@ -20,12 +20,12 @@ The `§15.2 risk #1` pushy DO NOT TRIGGER discipline applies here because fronte
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `frontend-react` (T5, **forward-declared**) — React-specific component authoring: hooks discipline, suspense boundaries, error boundaries, memoization heuristics, render-cost reasoning, JSX patterns.
-- `frontend-state-management` (T5, **forward-declared**) — framework-agnostic state patterns: local vs. global state, server-state vs. client-state separation (React Query / SWR / TanStack Query), store shape (Redux / Zustand / Pinia / Svelte stores), selectors, normalisation.
-- `frontend-bundler-config` (T5, **forward-declared**) — Vite / Webpack / esbuild config: dev server, code splitting, tree shaking, asset handling, environment variables, production build optimisation, bundle-size budgets.
-- `frontend-a11y` (T5, **forward-declared**) — accessibility patterns: semantic HTML defaults, ARIA only when needed, keyboard navigation, focus management, screen-reader testing, Lighthouse a11y baseline.
+- `frontend-react` (T5, exists) — React-specific component authoring: hooks discipline, suspense boundaries, error boundaries, memoization heuristics, render-cost reasoning, JSX patterns.
+- `frontend-state-management` (T5, exists) — framework-agnostic state patterns: local vs. global state, server-state vs. client-state separation (React Query / SWR / TanStack Query), store shape (Redux / Zustand / Pinia / Svelte stores), selectors, normalisation.
+- `frontend-bundler-config` (T5, exists) — Vite / Webpack / esbuild config: dev server, code splitting, tree shaking, asset handling, environment variables, production build optimisation, bundle-size budgets.
+- `frontend-a11y` (T5, exists) — accessibility patterns: semantic HTML defaults, ARIA only when needed, keyboard navigation, focus management, screen-reader testing, Lighthouse a11y baseline.
 
-None of the four `frontend-*` T5 skills exist yet. Until they're authored, main session substitutes `guild:tdd` + `guild:systematic-debug` when frontend needs methodology.
+All four `frontend-*` T5 skills exist under `skills/specialists/`. When a task needs frontend methodology beyond them, the main session may also pull `guild:tdd` + `guild:systematic-debug`.
 
 ## When to invoke
 

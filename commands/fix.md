@@ -1,11 +1,11 @@
 ---
-name: guild fix
+name: fix
 description: "Maintenance — diagnose a failed/suspicious Guild run, produce a fix plan, and optionally apply approved fixes. The v2 surface of the v1 diagnose command (verb rename diagnose→fix; --codex-review→--review=cross). Requires an explicit edit-approval gate."
 argument-hint: "[run-id | \"symptom\"] [--review=cross]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion
 ---
 
-# /guild fix — maintenance verb (the v2 diagnose entry)
+# /guild:fix — maintenance verb (the v2 diagnose entry)
 
 The v2 maintenance entry for diagnosing Guild's own runtime failures and
 applying gated fixes. This is the **renamed v2 surface of the v1 diagnose
@@ -21,10 +21,10 @@ skill `guild:diagnose`.
 ## Usage
 
 ```
-/guild fix
-/guild fix run-2026-05-18-ab12
-/guild fix "hooks not firing after a /guild run"
-/guild fix run-2026-05-18-ab12 --review=cross
+/guild:fix
+/guild:fix run-2026-05-18-ab12
+/guild:fix "hooks not firing after a /guild:guild run"
+/guild:fix run-2026-05-18-ab12 --review=cross
 ```
 
 Arguments are optional. A run id diagnoses that run first; free text is the

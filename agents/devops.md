@@ -18,12 +18,12 @@ Engineering group specialist (`guild-plan.md §6.1`). Owns the path from "code m
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `devops-ci-cd-pipeline` (T5, **forward-declared — P3 scope**) — pipeline design: stages, caching, parallelism, required checks, artifact promotion, environment gates, rollback paths.
-- `devops-infrastructure-as-code` (T5, **forward-declared — P3 scope**) — declarative infra patterns: module boundaries, state management, drift detection, plan-before-apply, blast-radius scoping.
-- `devops-observability-setup` (T5, **forward-declared — P3 scope**) — the three pillars plus SLO/SLI/error-budget wiring: metric naming, log schemas, trace sampling, dashboard layouts, alert routing, noise budgets.
-- `devops-incident-runbook` (T5, **forward-declared — P3 scope**) — runbook format: symptom → detection → diagnosis → mitigation → recovery → postmortem seam, with per-step verification commands and escalation paths.
+- `devops-ci-cd-pipeline` (T5, exists) — pipeline design: stages, caching, parallelism, required checks, artifact promotion, environment gates, rollback paths.
+- `devops-infrastructure-as-code` (T5, exists) — declarative infra patterns: module boundaries, state management, drift detection, plan-before-apply, blast-radius scoping.
+- `devops-observability-setup` (T5, exists) — the three pillars plus SLO/SLI/error-budget wiring: metric naming, log schemas, trace sampling, dashboard layouts, alert routing, noise budgets.
+- `devops-incident-runbook` (T5, exists) — runbook format: symptom → detection → diagnosis → mitigation → recovery → postmortem seam, with per-step verification commands and escalation paths.
 
-The four `devops-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:systematic-debug` + `guild:verify-done` when a devops invocation needs methodology before those skills land.
+All four `devops-*` T5 skills are authored and live under `skills/specialists/`; `guild:context-assemble` loads the relevant ones into the devops context bundle. `guild:systematic-debug` + `guild:verify-done` remain available as complementary methodology.
 
 ## When to invoke
 

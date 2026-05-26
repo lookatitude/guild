@@ -7,170 +7,112 @@ type: meta
 
 # guild:loop-clarify
 
-Implements `.guild/spec/v1.4.0-adversarial-loops.md` SC1 (F-1) and the binding contract at `guild-benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 1 — `guild:loop-clarify`".
+Implements `.guild/spec/v1.4.0-adversarial-loops.md` SC1 (F-1) and the binding
+contract `guild-benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 1".
 
-This skill **wraps** `guild:brainstorm`; it does not replace it. The loop runs BEFORE `guild:brainstorm` writes the spec. Researcher fact-checking runs alongside the architect's scope proposal so blocking unknowns are surfaced and explicitly converted to assumptions before the spec is committed.
+This skill **wraps** `guild:brainstorm`; it does not replace it. The loop runs
+BEFORE `guild:brainstorm` writes the spec. Researcher fact-checking runs
+alongside the architect's scope proposal so blocking unknowns are surfaced and
+explicitly converted to assumptions before the spec is committed.
 
 ## What you do
 
-Drive a fixed-cap, sentinel-terminated dialog between **architect** (writer) and **researcher** (challenger). Each round the architect emits a brief or revised brief; the researcher emits a critique containing either more questions OR the literal sentinel `## NO MORE QUESTIONS` on its own line. The loop continues until the researcher signals satisfaction with a clean post-sentinel region, the cap is reached, or two consecutive malformed terminations escalate.
+Drive a fixed-cap, sentinel-terminated dialog between **architect** (writer) and
+**researcher** (challenger). Each round the architect emits a brief or revised
+brief; the researcher emits a critique containing either more questions OR the
+literal sentinel `## NO MORE QUESTIONS` on its own line. The loop continues until
+the researcher signals satisfaction with a clean post-sentinel region, the cap is
+reached, or two consecutive malformed terminations escalate.
 
-The driver is a pure state machine — it does not synthesise content. Architect and researcher are dispatched as Agent-tool subagents with their own context bundles per `guild-plan.md §9.3`; this skill only owns the round-counter, the sentinel detector, and the escalation gate.
+The driver is a pure state machine — it does not synthesise content. Architect
+and researcher are dispatched as Agent-tool subagents with their own context
+bundles per `guild-plan.md §9.3`; this skill only owns the round-counter, the
+sentinel detector, and the escalation gate.
 
 ## Input shape
 
-```typescript
-type LoopClarifyInput = {
-  brief: string;                    // The user's initial brief, verbatim.
-  loops_mode: "spec" | "all";       // Active --loops value (only spec/all activate L1).
-  cap: number;                      // Effective cap (CLI/env-resolved; default 16, ≤ 256).
-  run_id: string;                   // .guild/runs/<run-id>/ scope.
-};
-```
+`LoopClarifyInput` — `brief` (verbatim), `loops_mode` (`spec|all`), `cap`
+(default 16, ≤ 256), `run_id`. Full TypeScript type → **`io-contract.md`**.
 
 ## Output shape
 
-```typescript
-type LoopClarifyOutput = {
-  status: "satisfied" | "cap_hit" | "escalated" | "rework";
-  rounds: number;                   // Total rounds executed (1-indexed).
-  architect_handoffs: string[];     // Paths under .guild/runs/<run-id>/handoffs/loop-clarify/.
-  researcher_handoffs: string[];    // Last one carries the sentinel on success.
-  unresolved_questions: string[];   // Empty on satisfied; populated on cap_hit / force-pass / rework.
-  assumptions: string[];            // Appended to spec's Assumptions section.
-  next: "guild:brainstorm" | "abort";
-};
-```
+`LoopClarifyOutput` — `status` (`satisfied|cap_hit|escalated|rework`), `rounds`,
+`architect_handoffs`, `researcher_handoffs` (last carries the sentinel on
+success), `unresolved_questions`, `assumptions` (fed to the spec's Assumptions
+section), `next` (`guild:brainstorm|abort`). Full type → **`io-contract.md`**.
 
 ## Termination contract — verbatim from the binding contract
 
-The challenger (researcher) terminates the loop by emitting `## NO MORE QUESTIONS` as a standalone line in its handoff body. The sentinel must:
-
-- Equal the entire trimmed line — not appear inline or with bullet decoration.
-- Appear **exactly once** in the body. Multiple occurrences = malformed termination.
-
-After the sentinel the driver runs the **post-sentinel regex set** against the substring AFTER the sentinel line. If any of the three patterns matches, the round is recorded as `loop_round_end.terminated = "malformed_termination"` and the loop continues for one extra round.
-
-### Pattern 1 — lines ending in `?` (unresolved questions)
-
-```regex
-/^.*\?\s*$/m
-```
-
-### Pattern 2 — bullet lines starting with hard-blocker words
-
-```regex
-/^\s*[-*]\s+(blocker|must fix|cannot proceed|MUST|BLOCKING)\b/im
-```
-
-### Pattern 3 — TODO/FIXME/XXX markers (case-sensitive)
-
-```regex
-/\b(TODO|FIXME|XXX)\b/
-```
-
-The keyword set `/concern|issue|gap|missing|undefined/i` was REMOVED after Codex review round 2 because it false-positived on legitimate phrasings like "no concerns remain". Do not re-introduce it.
+Researcher terminates by emitting `## NO MORE QUESTIONS` as a standalone line,
+exactly once, with no inline/bullet decoration. The driver then runs the three
+post-sentinel regex patterns against the substring AFTER the sentinel; any match
+→ `malformed_termination` + one extra round. The removed
+`/concern|issue|gap|missing|undefined/i` keyword set (Codex round-2 regression —
+false-positived on "no concerns remain") must NOT be re-introduced. Patterns →
+**`loop-mechanics.md`**.
 
 ## Workflow
 
-1. **Initialize.** Read `loops_mode`, `cap`, `run_id` from the orchestrator. The L1 cap counter is `counters.json` key `L1` (single global counter for the whole brainstorm phase — no lane suffix). Reset on `status="satisfied"`.
-
-2. **Per round, in order:**
-   a. Increment `L1` counter via `incrementCounter(runDir, run_id, "L1")`.
-   b. Emit `loop_round_start` event via `scripts/emit-loop-event.ts`:
-      ```bash
-      npx tsx scripts/emit-loop-event.ts \
-        --event loop_round_start --layer L1 --lane phase:brainstorm \
-        --round <N> --cap <cap> \
-        [--run-id <run-id>] [--cwd <repo-root>]
-      ```
-   c. Dispatch architect (round 1: brief; round N: revised brief incorporating round N-1 researcher questions).
-   d. Dispatch researcher with the architect's output as the round-input.
-   e. Inspect researcher's body with the sentinel detector.
-   f. Emit `loop_round_end` event via `scripts/emit-loop-event.ts`:
-      ```bash
-      npx tsx scripts/emit-loop-event.ts \
-        --event loop_round_end --layer L1 --lane phase:brainstorm \
-        --round <N> --terminated <satisfied|malformed_termination|cap_hit|escalation|error> \
-        --terminator researcher \
-        [--run-id <run-id>] [--cwd <repo-root>]
-      ```
-      Use `satisfied` when the sentinel was clean (researcher emitted `## NO MORE QUESTIONS` with a clean post-sentinel region). Use `malformed_termination`, `cap_hit`, `escalation`, or `error` for the corresponding non-final outcomes.
-
-3. **Decide.**
-   - `clean` (sentinel + clean post-sentinel) → return `status: "satisfied"`, `next: "guild:brainstorm"`. Reset `L1` counter on the next read.
-   - `malformed_termination` → record; if 2 consecutive at this layer → escalate.
-   - `no_sentinel` AND round < cap → continue.
-   - round == cap AND no clean termination → escalate (cap-hit).
-
-4. **Escalate.** Dispatch `AskUserQuestion` with the binding payload (see below). User's choice routes:
-   - **`force-pass`** → write `unresolved_questions` to `.guild/runs/<run-id>/assumptions.md`, return `status="escalated"` (force-pass-as-satisfied), `next: "guild:brainstorm"`.
-   - **`extend-cap`** → user supplies N (4/8/16/custom — second AskUserQuestion); cap extended; loop continues.
-   - **`rework`** → return `status="rework"`, `next: "abort"`.
+(1) Initialize from the orchestrator (L1 cap counter is `counters.json` key `L1`,
+no lane suffix). (2) Per round: increment `L1`, emit `loop_round_start`, dispatch
+architect then researcher, `detectSentinel`, emit `loop_round_end`. (3) Decide
+clean/malformed/continue/cap-hit. (4) Escalate via `AskUserQuestion`. Full steps
+with the `emit-loop-event.ts` invocations → **`loop-mechanics.md`**.
 
 ## Cap-hit escalation copy — exact literals
 
-The orchestrator dispatches `AskUserQuestion` with `header: "Loop escalation"`, `multiSelect: false`, and exactly three options. Their `label` strings are verbatim:
-
-- **`force-pass`** — "Accept the artifact as-is; log unresolved questions to assumptions.md; proceed."
-- **`extend-cap`** — "Extend the cap by N rounds (you'll be asked for N)."
-- **`rework`** — "Abort the current loop; return control to the producing skill with the unresolved questions."
-
-Helper functions in `guild-benchmark/src/loop-escalation.ts` build the payload (`buildEscalationPayload`, `buildExtendCapPayload`).
+The orchestrator dispatches `AskUserQuestion` (`header: "Loop escalation"`,
+`multiSelect: false`) with three verbatim-labelled options: `force-pass` /
+`extend-cap` / `rework`. Exact label strings + `buildEscalationPayload` /
+`buildExtendCapPayload` → **`loop-mechanics.md`**.
 
 ## Backwards-compat fallback
 
-When the host runtime does NOT support `AskUserQuestion` (older Claude Code; non-interactive `claude --print`), fall back to the v1.3 free-text stdin path:
-
-1. Print to stderr: a numbered list of the three options + their labels.
-2. Read one line from stdin.
-3. Trim + lowercase; match against the three labels (`force-pass` / `extend-cap` / `rework`); reject anything else with a re-prompt.
-4. Log the choice to `escalation.user_choice` identically to the AskUserQuestion path.
-
-`formatFallbackPrompt(...)` and `parseFallbackChoice(...)` in `guild-benchmark/src/loop-escalation.ts` provide the prompt + parser.
+When the host runtime does NOT support `AskUserQuestion` (older Claude Code;
+non-interactive `claude --print`), fall back to the v1.3 free-text stdin path
+(stderr options → read line → match the three labels → log `escalation.user_choice`).
+`formatFallbackPrompt(...)` / `parseFallbackChoice(...)` provide prompt + parser.
+Full steps → **`loop-mechanics.md`**.
 
 ## Per-lane counter
 
-L1 has **one cap counter** for the whole brainstorm phase. Counter file `.guild/runs/<run-id>/counters.json` key `L1`. Resets when control passes to brainstorm-write-spec (i.e., on `status="satisfied"`).
-
-Restart semantics are NOT applicable to L1 — restart is L3/L4/security-only (see `guild:loop-implement`). L1 cap-hit escalates directly via the 3-option choice.
+L1 has **one cap counter** for the whole brainstorm phase (`counters.json` key
+`L1`), reset on `status="satisfied"`. Restart semantics are NOT applicable to L1
+— restart is L3/L4/security-only (see `guild:loop-implement`); L1 cap-hit
+escalates directly via the 3-option choice. Detail → **`loop-mechanics.md`**.
 
 ## JSONL events emitted
 
-Per `guild-benchmark/plans/v1.4-jsonl-schema.md` §5/§6/§11:
-
-- `loop_round_start` — per round; `lane_id: "phase:brainstorm"`, `loop_layer: "L1"`.
-- `loop_round_end` — per round; same `lane_id`/`loop_layer`/`round_number` pair.
-- `escalation` — on cap-hit OR malformed-termination ×2; `reason ∈ {"cap_hit", "malformed_termination_x2"}`; `options_offered` is ALWAYS `["force-pass", "extend-cap", "rework"]`; `user_choice` records the user's choice.
-- `assumption_logged` — on `force-pass` (one event per unresolved question).
-
-The JSONL appender is supplied by T3c-backend-logging's `log-jsonl.ts`. Until T3c lands, callers use `loop-jsonl-stub.ts`'s `LoopJsonlAppender` interface — same shape, same call sites.
+`loop_round_start`, `loop_round_end`, `escalation` (`reason ∈ {"cap_hit",
+"malformed_termination_x2"}`; `options_offered` ALWAYS
+`["force-pass", "extend-cap", "rework"]`), `assumption_logged` (one per
+unresolved question on `force-pass`). Appender from T3c's `log-jsonl.ts`
+(`loop-jsonl-stub.ts` until T3c lands). Schema reference → **`loop-mechanics.md`**.
 
 ## Output contract — handoff and follow-on
 
-On `status="satisfied"` (or `force-pass-as-satisfied`):
-
-1. Write a manifest at `.guild/runs/<run-id>/loops/loop-clarify-summary.md` listing rounds, terminator, unresolved-questions count, and the path to each round's architect+researcher handoff under `.guild/runs/<run-id>/handoffs/loop-clarify/`.
-2. Append every recorded assumption to `.guild/runs/<run-id>/assumptions.md`.
-3. Hand off to `guild:brainstorm` with the architect's last brief + the researcher's residual notes as additional context.
-
-On `rework`: return control to the user; do not invoke `guild:brainstorm`.
+On `status="satisfied"` (or force-pass-as-satisfied): write the
+`loop-clarify-summary.md` manifest, append recorded assumptions to
+`assumptions.md`, hand off to `guild:brainstorm` with the last brief +
+researcher's residual notes. On `rework`: return control to the user; do not
+invoke `guild:brainstorm`. Full steps → **`io-contract.md`**.
 
 ## Anti-patterns
 
-- Synthesising the researcher's response from training-data priors. The challenger MUST be a separate dispatch with its own bundle; otherwise the loop is a self-review and the adversarial contract is broken.
-- Re-introducing the removed `/concern|issue|gap|missing|undefined/i` keyword set. Codex review pinned this regression — false positives on phrases like "no concerns remain".
-- Treating the sentinel as case-insensitive or accepting bullet-decorated variants. The architect contract is exact: trimmed line equals `## NO MORE QUESTIONS`, no exceptions.
-- Skipping the JSONL event emit on cap-hit. The verify-done harness reads `escalation` events to confirm `options_offered` is the canonical 3-label list.
-- Continuing the loop after `rework`. A `rework` choice ends the loop; orchestrator routes to user-decision.
+- Synthesising the researcher's response from training-data priors — the
+  challenger MUST be a separate dispatch with its own bundle, or the loop is a
+  self-review and the adversarial contract is broken.
+- Re-introducing the removed `/concern|issue|gap|missing|undefined/i` keyword set
+  (Codex-pinned regression — false positives on "no concerns remain").
+- Treating the sentinel as case-insensitive or accepting bullet-decorated
+  variants — the contract is exact: trimmed line equals `## NO MORE QUESTIONS`.
+- Skipping the JSONL event emit on cap-hit — the verify-done harness reads
+  `escalation` events to confirm `options_offered` is the canonical 3-label list.
+- Continuing the loop after `rework` — a `rework` choice ends the loop;
+  orchestrator routes to user-decision.
 
 ## Handoff receipt
 
-Per `guild-plan.md §8.2`. Required fields:
-
-- `loop_id: loop-clarify`
-- `lane_id: phase:brainstorm`
-- `rounds: <int>`
-- `status: <satisfied|cap_hit|escalated|rework>`
-- `next: <guild:brainstorm|abort>`
-- `evidence:` paths to each round's architect+researcher handoff + the manifest + JSONL log path.
+Per `guild-plan.md §8.2`: `loop_id`, `lane_id: phase:brainstorm`, `rounds`,
+`status`, `next`, and `evidence:` (round handoffs + manifest + JSONL path). Full
+field list → **`io-contract.md`**.

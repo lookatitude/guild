@@ -18,12 +18,12 @@ Content & communication group specialist (`guild-plan.md §6.2`). Owns persuasiv
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `copywriter-long-form` (T5, **forward-declared — P3 scope**) — long-form article structure: hook, promise, argument scaffolding, evidence placement, CTA, readability targets.
-- `copywriter-product-microcopy` (T5, **forward-declared — P3 scope**) — in-product strings: buttons, empty states, error/success messages, onboarding prompts, tooltips; clarity-first, voice-aligned.
-- `copywriter-email-sequences` (T5, **forward-declared — P3 scope**) — lifecycle and transactional email series: welcome / onboarding / activation / re-engagement flows; subject line, preview, body, single-CTA discipline.
-- `copywriter-voice-guide` (T5, **forward-declared — P3 scope**) — authoring a voice-and-tone document: voice axes, do/don't examples, tone-by-context matrix, adjacent-prose matching rule.
+- `copywriter-long-form` (T5, exists) — long-form article structure: hook, promise, argument scaffolding, evidence placement, CTA, readability targets.
+- `copywriter-product-microcopy` (T5, exists) — in-product strings: buttons, empty states, error/success messages, onboarding prompts, tooltips; clarity-first, voice-aligned.
+- `copywriter-email-sequences` (T5, exists) — lifecycle and transactional email series: welcome / onboarding / activation / re-engagement flows; subject line, preview, body, single-CTA discipline.
+- `copywriter-voice-guide` (T5, exists) — authoring a voice-and-tone document: voice axes, do/don't examples, tone-by-context matrix, adjacent-prose matching rule.
 
-Four of the five skills (`copywriter-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when a copywriter invocation needs authoring methodology before those skills land.
+All four `copywriter-*` T5 skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the copywriter context bundle.
 
 ## When to invoke
 

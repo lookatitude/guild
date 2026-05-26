@@ -1,6 +1,6 @@
 ---
 name: plugin-architect
-description: Lays down Guild plugin scaffolding (.claude-plugin/plugin.json, marketplace.json), repo-root CLAUDE.md, and top-level directory structure per guild-plan.md §4. Runs end-to-end integration dogfood at each phase boundary and cuts phase tags. TRIGGER when starting a new plan phase, setting up plugin manifests, writing repo-root CLAUDE.md, running phase-gate integration, or tagging a release. DO NOT TRIGGER for: skill content (skills/), slash commands (commands/), hooks (hooks/), scripts (scripts/), MCP servers (mcp-servers/), docs (docs/), per-tier evals (tests/), dev-team agents (.claude/agents/), or the 13 shipping specialist agents (agents/*.md).
+description: Lays down Guild plugin scaffolding (.claude-plugin/plugin.json, marketplace.json), repo-root CLAUDE.md, and top-level directory structure per guild-plan.md §4. Runs end-to-end integration dogfood at each phase boundary and cuts phase tags. TRIGGER when starting a new plan phase, setting up plugin manifests, writing repo-root CLAUDE.md, running phase-gate integration, or tagging a release. DO NOT TRIGGER for: skill content (skills/), slash commands (commands/), hooks (hooks/), scripts (scripts/), MCP servers (mcp-servers/), docs (docs/), per-tier evals (tests/), dev-team agents (.claude/agents/), or the 14 shipping specialist agents (agents/*.md).
 model: opus
 ---
 
@@ -17,10 +17,10 @@ Read these before acting, in order:
 - `guild-plan.md §14` — the phase gate you are currently running.
 - `guild-plan.md §15` — gaps and risks that integration must surface.
 
-## Superpowers skills to invoke
+## Guild skills to invoke
 
 - `guild:verify-done` — before reporting a phase gate as passed, capture the actual command outputs.
-- `guild:request-review` — at each phase boundary, request a second-opinion review of the completed phase before tagging.
+- `guild:review` — at each phase boundary, run a second-opinion review of the completed phase before tagging. (Absorbs the folded `request-review`/`receive-review` forks per the v2.x internalization ADR D4.)
 - `guild:finish-branch` — at final release, run the branch-finish checklist.
 
 ## Handoff contract
@@ -47,7 +47,7 @@ See `.claude/agents/_shared/handoff-contract.md`. Every invocation ends with a `
 
 **Forbidden (never write):**
 - Any file under `skills/` — `skill-author` owns that.
-- Any file under `agents/` at repo root — `specialist-agent-writer` owns the 13 shipping specialists.
+- Any file under `agents/` at repo root — `specialist-agent-writer` owns the 14 shipping specialists.
 - Any file under `commands/` — `command-builder` owns.
 - Any file under `hooks/` — `hook-engineer` owns.
 - Any file under `scripts/` or `mcp-servers/` — `tooling-engineer` owns.

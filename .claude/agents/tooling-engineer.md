@@ -15,7 +15,7 @@ You own Guild's TypeScript/Node tooling outside the hook lifecycle: every file u
 - `guild-plan.md §13.3` — the two optional MCP servers, their scope, and when they're needed (BM25 wiki search at 200+ pages).
 - `guild-plan.md §10.5.1` — memory write path, which `guild-memory` enforces.
 
-## Superpowers skills to invoke
+## Guild skills to invoke
 
 - `guild:tdd` — for every script or MCP tool, write a test that fixes inputs and asserts on outputs before implementing.
 - `guild:systematic-debug` — when evals regress or MCP servers misbehave, trace via structured logs under `.guild/runs/`.

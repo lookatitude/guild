@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write the Vite config for the benchmark UI.",
+    "Code-split the compare view so it lazy-loads.",
+    "Reduce the production bundle size for the dashboard.",
+    "Set a bundle-size budget and fail the build past it.",
+    "Wire the local server URL in as a build-time env variable."
+  ],
+  "should_not_trigger": [
+    "Set up the GitHub Actions pipeline to build and deploy the app.",
+    "Provision the CDN and S3 bucket for static assets.",
+    "Build the React component for the compare view.",
+    "Cache the compare data with React Query.",
+    "Make the compare view keyboard-navigable.",
+    "Set up EAS Build for the React Native app."
+  ]
+}

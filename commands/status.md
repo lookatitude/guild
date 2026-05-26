@@ -1,11 +1,11 @@
 ---
-name: guild status
+name: status
 description: "Orchestrator — read current run state, furthest phase, next gate, blockers. Read-only; never writes."
 argument-hint: "[--no-index]"
 allowed-tools: Read, Grep, Glob, Bash, Skill
 ---
 
-# /guild status — lifecycle helper (read-only)
+# /guild:status — lifecycle helper (read-only)
 
 Reads the active run state: current run, furthest phase, next gate, and
 blockers. **No phase** — acts on the active run. Read-only **R**, writes no

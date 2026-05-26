@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Build the codebase map for this repo.",
+    "Inventory the project structure with a cheap scan.",
+    "Run learn map on this brownfield repo.",
+    "Map the repo so Init can finish.",
+    "Give me the cheap-scan CodebaseMap and architecture stub."
+  ],
+  "should_not_trigger": [
+    "Build the deep knowledge graph for this repo.",
+    "Narrate the onboarding tour for new hires.",
+    "Analyze the diff's blast radius before planning.",
+    "Explain how the auth middleware works.",
+    "Ingest this Stripe API doc into the wiki.",
+    "Launch the interactive web dashboard for the graph."
+  ]
+}

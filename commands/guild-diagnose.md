@@ -1,9 +1,9 @@
 ---
 name: guild-diagnose
-description: "RENAMED in Guild v2 → /guild fix — print-only redirect stub. Prints the v1→v2 redirect and exits non-zero, runs nothing. Sunset: deleted at v2.1.0 (MIGRATION.md §5)."
+description: "RENAMED in Guild v2 → /guild:fix — print-only redirect stub. Prints the v1→v2 redirect and exits non-zero, runs nothing. Sunset: deleted at v2.1.0 (MIGRATION.md §5)."
 ---
 
-# /guild:diagnose — renamed (print-only redirect stub)
+# /guild:guild-diagnose — renamed (print-only redirect stub)
 
 This v1 command name was renamed in Guild v2 (verb diagnose→`fix`;
 `--codex-review`→`--review=cross`). This file is a **print-only redirect
@@ -17,10 +17,10 @@ Print exactly the following block, then stop. Invoke no skill, write no
 file, take no other action. Exit non-zero.
 
 ```
-/guild:diagnose was renamed in Guild v2.
+/guild:guild-diagnose was renamed in Guild v2.
 
-  v2 equivalent:  /guild fix [run-id | "symptom"] [--review=cross]
+  v2 equivalent:  /guild:fix [run-id | "symptom"] [--review=cross]
 
-(`--codex-review` is now `--review=cross`.)
-Full mapping: MIGRATION.md §2.
+Guild v2 keeps the `:` namespace (a Claude Code requirement) and drops the
+redundant `guild` prefix. Full mapping: MIGRATION.md.
 ```

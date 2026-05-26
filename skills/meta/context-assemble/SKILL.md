@@ -1,7 +1,7 @@
 ---
 name: guild-context-assemble
 description: Assembles per-specialist 3-layer context bundle: Universal (~400 tokens — guild:principles + project-overview + goals) + Role-dependent (~800–1500 — standards + 2–4 entity pages matching role) + Task-dependent (~800–1500 — lane from plan + named refs + upstream contracts + active decisions). Target ~3k tokens, hard cap 6k. TRIGGER: "build the context bundle for <specialist>", "prepare the brief for <role>", "what context does the architect need", "assemble context for backend". DO NOT TRIGGER for: loading all wiki pages, showing the full repo, compressing a single file.
-when_to_use: Fourth step of /guild lifecycle, invoked per-specialist by guild:execute-plan before dispatching each lane.
+when_to_use: Fourth step of Guild lifecycle, invoked per-specialist by guild:execute-plan before dispatching each lane.
 type: meta
 ---
 
@@ -67,7 +67,7 @@ Record the final token estimate in the bundle's frontmatter so `guild:review` an
 When a brownfield `KnowledgeGraph` index exists
 (`.guild/indexes/knowledge-graph.json`, `guild.knowledge_graph.v1` — bound by
 pointer: `docs/knowledge/implementation/contract-map.md §A` row 12; built by
-`guild:understand-engine`), the **task-dependent** layer MAY include a
+`guild:learn-graph`), the **task-dependent** layer MAY include a
 bounded graph sub-source. Rules are fixed by
 `docs/knowledge/architecture/codebase-understanding.md §"Relationship to the
 wiki and guild-memory"` (cited, never re-spelled here):

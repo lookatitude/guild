@@ -1,11 +1,11 @@
 ---
-name: guild rollback
+name: rollback
 description: "Self-maintenance — revert a skill to a previous version by snapshotting current state as vN+1 and restoring vN (or vN-n). Non-destructive. Dispatches to guild:rollback-skill."
 argument-hint: "<skill> [n]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion
 ---
 
-# /guild rollback — self-maintenance (Guild-on-Guild)
+# /guild:rollback — self-maintenance (Guild-on-Guild)
 
 Reverts a skill to a previous version. Maps to skill
 `guild:rollback-skill`. The rollback is itself a versioned artifact —
@@ -16,8 +16,8 @@ Canonical surface: `architecture/command-surface.md §3.5` (rollback row).
 ## Usage
 
 ```
-/guild rollback guild-brainstorm
-/guild rollback guild-brainstorm 2
+/guild:rollback guild-brainstorm
+/guild:rollback guild-brainstorm 2
 ```
 
 ## Args

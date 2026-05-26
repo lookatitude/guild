@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Run the monitoring runbook for this service.",
+    "The ops router selected class=monitoring — execute the monitoring playbook.",
+    "Set up the observability dashboards and alerts via the runbook.",
+    "Execute the monitoring-class operations playbook under the router's rails.",
+    "Stand up the SLO/alerting runbook."
+  ],
+  "should_not_trigger": [
+    "Run the release runbook and cut a release.",
+    "Run the incident runbook — production is down.",
+    "Roll back the last deploy.",
+    "Run the maintenance runbook for the dependency bump.",
+    "Compute the release-readiness gate — should we release?",
+    "Author the observability instrumentation for this service.",
+    "Close out the initiative."
+  ]
+}

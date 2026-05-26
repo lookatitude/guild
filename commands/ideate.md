@@ -1,17 +1,17 @@
 ---
-name: guild ideate
+name: ideate
 description: "Ideation — Socratic spec; opt-in --rigor=deep runs the clarify loop"
 argument-hint: "[brief] [--skip]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
 
-# /guild ideate — phase: Ideation
+# /guild:ideate — phase: Ideation
 
 The **Ideation** phase entrypoint. Runs the Socratic spec flow; the opt-in
 `--rigor=deep` profile runs the clarify loop.
 
 Canonical surface: `architecture/command-surface.md §3.1` (Ideation row) and
-the verb↔phase edge in `§6` (D-14: `/guild ideate` → Ideation). Phase concept
+the verb↔phase edge in `§6` (D-14: `/guild:ideate` → Ideation). Phase concept
 binding: `lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
 
 ## Contract binding (by pointer — never re-spelled)
@@ -26,8 +26,8 @@ Before producer work begins, this phase **resolves the frozen
 ## Usage
 
 ```
-/guild ideate "realtime presence"
-/guild ideate "realtime presence" --skip
+/guild:ideate "realtime presence"
+/guild:ideate "realtime presence" --skip
 ```
 
 All six global flags + `--dry-run` apply (`command-surface.md §4`, by

@@ -1,11 +1,11 @@
 ---
-name: guild initiative
-description: "Durable work — opt-in noun. Sub-verbs new|status|list|resume|update|archive|restore|close. A one-off /guild run never creates an initiative; attachment is explicit only."
+name: initiative
+description: "Durable work — opt-in noun. Sub-verbs new|status|list|resume|update|archive|restore|close. A one-off /guild:guild run never creates an initiative; attachment is explicit only."
 argument-hint: "new|status|list|resume|update|archive|restore|close [id] [--add-goal \"…\"]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion
 ---
 
-# /guild initiative — durable-work noun (opt-in)
+# /guild:initiative — durable-work noun (opt-in)
 
 The opt-in durable-goal container. `new|status|resume|update|close` are the
 primary user-facing lifecycle sub-verbs; `list|archive|restore` are
@@ -30,10 +30,10 @@ Canonical surface: `architecture/command-surface.md §3.4` (full set) + `§1`
 
 ## Opt-in attachment binding (cited — `command-surface.md §3.4`)
 
-A one-off `/guild` run does **not** create an initiative. An initiative is
-attached only when (a) the user runs `/guild initiative …` explicitly,
+A one-off `/guild:guild` run does **not** create an initiative. An initiative is
+attached only when (a) the user runs `/guild:initiative …` explicitly,
 (b) `--initiative=<id|new>` is passed, or (c) the brief carries a
-durable-goal signal — in which case `/guild` *asks* "attach to an
+durable-goal signal — in which case `/guild:guild` *asks* "attach to an
 initiative? [new / existing / one-off]" rather than auto-attaching. One-off
 runs are first-class.
 

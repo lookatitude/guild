@@ -18,12 +18,12 @@ Engineering group specialist (`guild-plan.md §6.1`). Owns the test suite as a w
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `qa-test-strategy` (T5, **forward-declared — P3 scope**) — risk-weighted test planning: test pyramid shaping, what to cover where, coverage-target justification, non-goals explicitly named.
-- `qa-property-based-tests` (T5, **forward-declared — P3 scope**) — property/fuzz testing craft: invariant discovery, generator design, shrinking, oracle selection, boundary-case seeding.
-- `qa-snapshot-tests` (T5, **forward-declared — P3 scope**) — snapshot and golden-file tests: when they're the right tool, how to keep them legible, snapshot-rot prevention, review discipline.
-- `qa-flaky-test-hunter` (T5, **forward-declared — P3 scope**) — systematic flakiness triage: reproduce → categorize (timing / order / IO / env / nondeterminism) → root-cause → fix-or-quarantine protocol.
+- `qa-test-strategy` (T5, exists) — risk-weighted test planning: test pyramid shaping, what to cover where, coverage-target justification, non-goals explicitly named.
+- `qa-property-based-tests` (T5, exists) — property/fuzz testing craft: invariant discovery, generator design, shrinking, oracle selection, boundary-case seeding.
+- `qa-snapshot-tests` (T5, exists) — snapshot and golden-file tests: when they're the right tool, how to keep them legible, snapshot-rot prevention, review discipline.
+- `qa-flaky-test-hunter` (T5, exists) — systematic flakiness triage: reproduce → categorize (timing / order / IO / env / nondeterminism) → root-cause → fix-or-quarantine protocol.
 
-The four `qa-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:tdd` + `guild:systematic-debug` when a qa invocation needs methodology before those skills land.
+All four `qa-*` T5 skills are authored and live under `skills/specialists/`; `guild:context-assemble` loads the relevant ones into the qa context bundle. `guild:tdd` + `guild:systematic-debug` remain available as complementary methodology.
 
 ## When to invoke
 

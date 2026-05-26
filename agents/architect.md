@@ -17,11 +17,11 @@ Engineering group specialist (`guild-plan.md §6.1`). Owns architecture-level th
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `architect-systems-design` (T5, **forward-declared — P3 scope**) — how to shape a system-design brief: bounded context, component sketch, data flow, failure modes, open questions.
-- `architect-tradeoff-matrix` (T5, **forward-declared — P3 scope**) — structured option-comparison: criteria rows, option columns, weighted scoring, explicit non-goals.
-- `architect-adr-writer` (T5, **forward-declared — P3 scope**) — Architecture Decision Record format: context → decision → consequences → alternatives considered, with `significance` feeding `guild:decisions` (`guild-plan.md §10.3`).
+- `architect-systems-design` (T5, exists) — how to shape a system-design brief: bounded context, component sketch, data flow, failure modes, open questions.
+- `architect-tradeoff-matrix` (T5, exists) — structured option-comparison: criteria rows, option columns, weighted scoring, explicit non-goals.
+- `architect-adr-writer` (T5, exists) — Architecture Decision Record format: context → decision → consequences → alternatives considered, with `significance` feeding `guild:decisions` (`guild-plan.md §10.3`).
 
-The three `architect-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:brainstorm` + `guild:plan` when an architect invocation needs methodology before those skills land.
+All three `architect-*` T5 skills are authored and live under `skills/specialists/`; `guild:context-assemble` loads the relevant ones into the architect's context bundle. `guild:brainstorm` + `guild:plan` remain available as complementary lifecycle methodology.
 
 ## When to invoke
 

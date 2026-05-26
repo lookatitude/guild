@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Build the deep knowledge graph for this repo.",
+    "Analyse this codebase deeply and reverse-spec it.",
+    "Run learn graph — we need P2 plan-impact.",
+    "Refresh the knowledge graph, it looks stale.",
+    "Derive the domain and layer map from the codebase."
+  ],
+  "should_not_trigger": [
+    "Build the cheap-scan codebase map for Init.",
+    "Narrate the onboarding tour from the skeleton.",
+    "Analyze the diff's blast radius for this plan.",
+    "Explain how the payment retry module works.",
+    "Query the graph for the auth nodes.",
+    "Launch the interactive web dashboard."
+  ]
+}

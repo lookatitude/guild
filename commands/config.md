@@ -5,7 +5,7 @@ argument-hint: "<init|show|validate> [--cwd <repo-root>] [--force]"
 allowed-tools: Read, Write, Bash
 ---
 
-# /guild config — project config surface (`.guild/settings.json`)
+# /guild:config — project config surface (`.guild/settings.json`)
 
 `.guild/settings.json` is the single v2 config file. It carries every Guild
 option; **CLI flags always override it** (precedence ladder

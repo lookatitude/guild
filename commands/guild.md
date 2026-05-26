@@ -1,25 +1,25 @@
 ---
 name: guild
-description: "Bare Guild entry — smart phase detection. /guild [brief] inspects .guild/ state and surfaces the proposed lifecycle phase (init · ideate · plan · build · qa · ops), always confirmed never silent. Named phase verbs, nouns (wiki, initiative), and maintenance verbs (evolve, rollback, stats, audit, fix) are separate commands. Canonical: architecture/command-surface.md §1/§5.1; v1→v2: MIGRATION.md."
+description: "Bare Guild entry — smart phase detection. /guild:guild [brief] inspects .guild/ state and surfaces the proposed lifecycle phase (init · ideate · plan · build · qa · ops), always confirmed never silent. Named phase verbs, nouns (wiki, initiative), and maintenance verbs (evolve, rollback, stats, audit, fix) are separate commands. Canonical: architecture/command-surface.md §1/§5.1; v1→v2: MIGRATION.md."
 argument-hint: "[brief] [--rigor=quick|standard|deep] [--auto-approve[=spec,plan,build,all]] [--review=local|cross|off] [--host=claude|codex|auto] [--initiative=<id>|new] [--dry-run]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
 
-# /guild — bare entry (smart phase detection)
+# /guild:guild — bare entry (smart phase detection)
 
-`/guild [brief]` with no phase verb runs **phase detection** — an
+`/guild:guild [brief]` with no phase verb runs **phase detection** — an
 orchestrator behavior (not a skill) that inspects `.guild/` state for the
 active slug and **surfaces the proposed next phase, always confirmed, never
 silent** (`architecture/command-surface.md §5.1`). Named phases
-(`/guild init|ideate|plan|build|qa|ops`), nouns (`/guild wiki`,
-`/guild initiative`), and maintenance verbs
-(`/guild evolve|rollback|stats|audit|fix`) are their own commands; this file
+(`/guild:init|ideate|plan|build|qa|ops`), nouns (`/guild:wiki`,
+`/guild:initiative`), and maintenance verbs
+(`/guild:evolve|rollback|stats|audit|fix`) are their own commands; this file
 only does detection + delegation. No lifecycle logic is re-spelled here —
 each phase command owns its phase; all state lives in `.guild/`.
 
 ```
-/guild "build a REST API for user auth"   ← detect + propose a phase
-/guild                                     ← detect from .guild/ state alone
+/guild:guild "build a REST API for user auth"   ← detect + propose a phase
+/guild:guild                                     ← detect from .guild/ state alone
 ```
 
 ## Phase detection (the §5.1 table)
@@ -36,15 +36,15 @@ Inspect `.guild/` for the active slug and propose exactly one phase:
 | explicit ops phrasing ("incident", "rollback", "monitor") | `ops` |
 
 **Determinism caveat.** The deterministic CI/script contract is the
-**explicit phase verb** (`/guild qa`, `/guild ops`, …) — those resolve from
+**explicit phase verb** (`/guild:qa`, `/guild:ops`, …) — those resolve from
 artifact presence alone with no NL inference. The natural-language cues
 (last two rows) are a convenience layer only: they **always surface and
 confirm** the proposed phase and never override an explicit verb. Scripts
 and CI must name the phase explicitly.
 
 **Quality is never silently skipped.** When `build` receipts exist and
-`.guild/runs/<run-id>/quality/<run-id>.md` is absent, bare `/guild`
-**surfaces `/guild qa` as the proposed next phase** (confirm / pick-phase /
+`.guild/runs/<run-id>/quality/<run-id>.md` is absent, bare `/guild:guild`
+**surfaces `/guild:qa` as the proposed next phase** (confirm / pick-phase /
 explain) — Quality stays opt-in but is always offered, never bypassed.
 
 ## Surfaced confirmation (never silent)
@@ -53,19 +53,19 @@ Detection is always surfaced and gated:
 
 ```
 Detected: spec exists and is approved; no approved plan.
-Proposed phase → /guild plan
+Proposed phase → /guild:plan
 Brief carried forward: "add OAuth login"
 Proceed? [proceed / pick-phase / explain]
 ```
 
 - **proceed** — delegate to the proposed phase command (e.g. invoke
-  `/guild plan`'s contract).
+  `/guild:plan`'s contract).
 - **pick-phase** — list the canonical phase verbs and run the chosen one.
 - **explain** — print which `.guild/` artifacts drove the detection, then
   re-prompt.
 
 Resumption is the same mechanism: the first absent artifact in the table
-order is the resume point. Restart is `/guild resume --restart` (the v1
+order is the resume point. Restart is `/guild:resume --restart` (the v1
 `--restart` first-word positional is removed).
 
 ## Flags
@@ -92,7 +92,7 @@ re-spelled).
 
 ## Non-interactive / CI behaviour (OQ11)
 
-This contract wires the OQ11 non-interactive hard-fail into the bare-`/guild`
+This contract wires the OQ11 non-interactive hard-fail into the bare-`/guild:guild`
 entry path (`decisions/command-clean-slate.md #7`; `MIGRATION.md §7` CI
 ergonomics note; `architecture/command-surface.md §5.1`/§5.4). It introduces
 **no new gate** — it reuses the existing gate machinery's non-interactive
@@ -100,14 +100,14 @@ branch.
 
 **Trigger (all of):** an interactive gate is reached **AND** the context is
 non-interactive (CI / no TTY) **AND** no `--auto-approve=` covers that gate
-**AND** no explicit named phase verb was given (this bare `/guild` NL-detect
+**AND** no explicit named phase verb was given (this bare `/guild:guild` NL-detect
 path).
 
 **Behaviour:** Guild **HARD-FAILS — exits non-zero — with the actionable
 message below. It NEVER implicitly grants autonomy** (never silently
 proceeds, never auto-satisfies a soft gate; the hard-fail happens *before*
 any gated action). The deterministic CI contract is the **explicit-verb
-path**, not bare-`/guild` NL detection (`command-surface.md §5.1`: scripts
+path**, not bare-`/guild:guild` NL detection (`command-surface.md §5.1`: scripts
 and CI must name the phase explicitly). The always-ask hard set
 (destructive / network / spend) is orthogonal and never relaxed by this path
 or by `--auto-approve`.
@@ -121,11 +121,11 @@ error: interactive gate '<gate>' reached in a non-interactive context
 Guild will not implicitly grant autonomy. Fix — name the phase and
 pre-approve the soft gate explicitly, e.g.:
 
-  /guild build --auto-approve=spec,plan,build
-  /guild qa
-  /guild ops <runbook>
+  /guild:build --auto-approve=spec,plan,build
+  /guild:qa
+  /guild:ops <runbook>
 
-(bare /guild NL phase-detection is interactive by design and is never the
+(bare /guild:guild NL phase-detection is interactive by design and is never the
  deterministic CI contract — command-surface.md §5.1.)
 
 exit: non-zero  ·  no gate auto-satisfied  ·  no gated action taken

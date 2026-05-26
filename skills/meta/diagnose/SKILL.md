@@ -1,7 +1,7 @@
 ---
 name: guild-diagnose
-description: Diagnose Guild plugin failures from recent .guild/runs telemetry, optional operator context, hook/audit-log evidence, and run artifacts; write a diagnosis report and fix plan; require explicit user approval before applying edits. TRIGGER for /guild fix, "diagnose this Guild run", "why did /guild fail", "Guild hooks are not firing", "audit log is empty", "agent-team stalled", "self-fix Guild". DO NOT TRIGGER for auditing plugin script trust (/guild audit), reviewing user application code (security specialist), normal /guild task review (guild-review), or evolving a skill based on accumulated reflections (guild:evolve-skill).
-when_to_use: Explicit /guild fix command or direct user request to diagnose/self-fix Guild plugin behavior.
+description: Diagnose Guild plugin failures from recent .guild/runs telemetry, optional operator context, hook/audit-log evidence, and run artifacts; write a diagnosis report and fix plan; require explicit user approval before applying edits. TRIGGER for /guild:fix, "diagnose this Guild run", "why did /guild fail", "Guild hooks are not firing", "audit log is empty", "agent-team stalled", "self-fix Guild". DO NOT TRIGGER for auditing plugin script trust (/guild:audit), reviewing user application code (security specialist), normal /guild task review (guild-review), or evolving a skill based on accumulated reflections (guild:evolve-skill).
+when_to_use: Explicit /guild:fix command or direct user request to diagnose/self-fix Guild plugin behavior.
 type: meta
 ---
 
@@ -13,7 +13,7 @@ not edit anything until the user approves a concrete fix plan.
 
 ## Inputs
 
-Accept a raw argument string from `/guild fix`:
+Accept a raw argument string from `/guild:fix`:
 
 - A run id, e.g. `run-2026-05-01-a62fc657`.
 - Free-text operator context, e.g. `"PostToolUse audit log is empty"`.
@@ -89,7 +89,7 @@ review the diagnosis and fix plan before asking the user to approve edits.
 Config resolution:
 
 ```bash
-npx tsx scripts/read-guild-config.ts [--cwd <repo-root>] [raw /guild fix flags]
+npx tsx scripts/read-guild-config.ts [--cwd <repo-root>] [raw /guild:fix flags]
 ```
 
 If `codex_review` resolves true:
@@ -181,7 +181,7 @@ prompt.
 Return a concise summary:
 
 ```text
-/guild fix — <diagnose-only | fixed | aborted>
+/guild:fix — <diagnose-only | fixed | aborted>
 Report: .guild/diagnose/<timestamp>-<slug>.md
 Diagnosis: <category> (<confidence>)
 Root cause: <one sentence>

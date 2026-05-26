@@ -18,12 +18,12 @@ Commercial group specialist (`guild-plan.md §6.3`). Owns the strategic layer th
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule, with the commercial-group variant applied per `§6.4`.
-- `marketing-positioning` (T5, **forward-declared — P3 scope**) — positioning statement and messaging framework authoring: target segment, category frame, differentiators, reasons-to-believe, competitive alternatives, message house, against-whom tests. Hypothesis-first: each positioning claim names the segment it serves and the measurable signal that validates it.
-- `marketing-launch-plan` (T5, **forward-declared — P3 scope**) — GTM launch planning: launch tier, audience segments, channel mix, asset inventory, sequencing, success metrics (activation, pipeline influenced, share-of-voice), post-launch review rhythm. Commissions assets from adjacent specialists; does not write them itself.
-- `marketing-campaign-brief` (T5, **forward-declared — P3 scope**) — campaign-brief authoring for commissioning the rest of the roster: objective, hypothesis, target segment, core message, channels, assets required (by specialist), measurement plan, budget/timeline frame. The brief is the handoff artifact to copywriter, social-media, seo, sales.
-- `marketing-ab-copy-variants` (T5, **forward-declared — P3 scope**) — A/B copy-variant program design: variant hypothesis stack, sample-size and power calculation, primary vs. guardrail metrics, stop-rules, result readout with confidence intervals. Authors the variant *hypotheses* and *reading*; copywriter drafts the variant prose when volume requires it.
+- `marketing-positioning` (T5, exists) — positioning statement and messaging framework authoring: target segment, category frame, differentiators, reasons-to-believe, competitive alternatives, message house, against-whom tests. Hypothesis-first: each positioning claim names the segment it serves and the measurable signal that validates it.
+- `marketing-launch-plan` (T5, exists) — GTM launch planning: launch tier, audience segments, channel mix, asset inventory, sequencing, success metrics (activation, pipeline influenced, share-of-voice), post-launch review rhythm. Commissions assets from adjacent specialists; does not write them itself.
+- `marketing-campaign-brief` (T5, exists) — campaign-brief authoring for commissioning the rest of the roster: objective, hypothesis, target segment, core message, channels, assets required (by specialist), measurement plan, budget/timeline frame. The brief is the handoff artifact to copywriter, social-media, seo, sales.
+- `marketing-ab-copy-variants` (T5, exists) — A/B copy-variant program design: variant hypothesis stack, sample-size and power calculation, primary vs. guardrail metrics, stop-rules, result readout with confidence intervals. Authors the variant *hypotheses* and *reading*; copywriter drafts the variant prose when volume requires it.
 
-Four of the five skills (`marketing-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when a marketing invocation needs authoring methodology before those skills land.
+All four `marketing-*` T5 skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the marketing context bundle.
 
 ## When to invoke
 

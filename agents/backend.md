@@ -18,12 +18,12 @@ Engineering group specialist (`guild-plan.md §6.1`). Owns the implementation la
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `backend-api-contract` (T5, **forward-declared — P3 scope**) — REST/GraphQL/RPC contract shape: resource modeling, verb/status semantics, versioning, pagination, error envelope, idempotency.
-- `backend-data-layer` (T5, **forward-declared — P3 scope**) — data-access patterns: repository boundaries, transaction scope, N+1 avoidance, read/write split, cache invalidation seams.
-- `backend-migration-writer` (T5, **forward-declared — P3 scope**) — forward/backward-compatible schema migrations: expand-contract pattern, backfill strategy, lock/timeout hazards, rollback plan.
-- `backend-service-integration` (T5, **forward-declared — P3 scope**) — external-service clients, queue consumers, worker jobs: timeouts, retries, idempotency keys, circuit breaking, dead-letter handling, contract tests.
+- `backend-api-contract` (T5, exists) — REST/GraphQL/RPC contract shape: resource modeling, verb/status semantics, versioning, pagination, error envelope, idempotency.
+- `backend-data-layer` (T5, exists) — data-access patterns: repository boundaries, transaction scope, N+1 avoidance, read/write split, cache invalidation seams.
+- `backend-migration-writer` (T5, exists) — forward/backward-compatible schema migrations: expand-contract pattern, backfill strategy, lock/timeout hazards, rollback plan.
+- `backend-service-integration` (T5, exists) — external-service clients, queue consumers, worker jobs: timeouts, retries, idempotency keys, circuit breaking, dead-letter handling, contract tests.
 
-The four `backend-*` T5 skills do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:tdd` + `guild:systematic-debug` when a backend invocation needs methodology before those skills land.
+All four `backend-*` T5 skills are authored and live under `skills/specialists/`; `guild:context-assemble` loads the relevant ones into the backend context bundle. `guild:tdd` + `guild:systematic-debug` remain available as complementary methodology.
 
 ## When to invoke
 

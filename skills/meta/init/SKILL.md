@@ -2,17 +2,17 @@
 # Derived from the canonical skill template (DH-3 boundary): instance frontmatter
 # carries derived_from_template for traceability to the canonical base.
 name: init
-description: "Init-phase skill — onboard an existing repo or scaffold new-product knowledge; build the wiki and (brownfield) the cheap-scan CodebaseMap + a confidence-tagged architecture-map stub. The deep KnowledgeGraph + tour are lazy and gated, NOT produced at Init. Drives the /guild init phase entrypoint."
-when_to_use: "First phase of the lifecycle on a fresh or unonboarded repo, or when the user runs /guild init or smart-detect proposes Init (no wiki/init present)."
+description: "Init-phase skill — onboard an existing repo or scaffold new-product knowledge; build the wiki and (brownfield) the cheap-scan CodebaseMap + a confidence-tagged architecture-map stub. The deep KnowledgeGraph + tour are lazy and gated, NOT produced at Init. Drives the /guild:init phase entrypoint."
+when_to_use: "First phase of the lifecycle on a fresh or unonboarded repo, or when the user runs /guild:init or smart-detect proposes Init (no wiki/init present)."
 type: meta
 derived_from_template: guild.skill_template.v1
 ---
 
 # When to use it
 
-Use when the Init phase is entered — `/guild init`, or bare `/guild`
+Use when the Init phase is entered — `/guild:init`, or bare `/guild`
 smart-detect proposing Init because no `.guild/wiki` / `.guild/init` exists
-(`architecture/command-surface.md §6` D-14: `no wiki/init → /guild init`).
+(`architecture/command-surface.md §6` D-14: `no wiki/init → /guild:init`).
 Two paths: **brownfield** (onboard an existing repo) and **new-product**
 (scaffold knowledge from a Socratic intake). Resolves the frozen
 `guild.phase_entry.v1` contract before any producer work (pointer:
@@ -21,7 +21,7 @@ Two paths: **brownfield** (onboard an existing repo) and **new-product**
 # When not to use it
 
 Not for Ideation/spec work (`guild:brainstorm`), not for re-onboarding an
-already-initialized repo without an explicit `/guild init` (use `/guild
+already-initialized repo without an explicit `/guild:init` (use `/guild
 status`/`resume`), not for wiki ingest of a single source (`guild:wiki-ingest`),
 not for codebase questions answerable from an existing wiki
 (`guild:wiki-query`). One state machine, six phase entrypoints — Init is the
@@ -34,7 +34,8 @@ first, never auto-skipped.
 - Init mode signal: brownfield (repo present) vs `--new` (force new-product).
 - Tier-2 `defaults:` config folded at intake (pointer:
   `architecture/command-surface.md §4.4`).
-- Deep-scan consent (the ask-before-deep-scan gate) unless `--deep-scan`.
+- Learn-pipeline trigger: the `--learn` flag or `defaults.auto_learn: true`
+  (else cheap-scan tier only — no ask-before-deep-scan gate, per D3).
 
 # Output format
 
@@ -42,14 +43,15 @@ first, never auto-skipped.
 `.guild/settings.json` (the project config surface — scaffolded
 fully-documented **if absent**, idempotent, via
 `npx tsx scripts/read-guild-config.ts --scaffold > .guild/settings.json`;
-never clobbered; regenerate/inspect with `/guild config init|show|validate`),
+never clobbered; regenerate/inspect with `/guild:config init|show|validate`),
 and — brownfield, **cheap scan tier only** — `.guild/indexes/codebase-map.json`
 plus a **confidence-tagged** `wiki/concepts/architecture-map.md` **stub**.
 That pair **is Init-DONE**. The deep semantic `knowledge-graph.json` +
-`onboarding-tour.md` are **NOT** produced at Init — they are lazy and
-ask-before-deep-scan gated, built by `guild:understand-engine` when the first
-plan needing P2 plan-impact / P3 scope-check is created (or on an explicit
-refresh). The CodebaseMap conforms to its frozen contract by pointer
+`onboarding-tour.md` are **NOT** produced at Init by default — they are lazy
+and gated by `--learn` / `defaults.auto_learn`, built by `guild:learn-graph`
+when the first plan needing P2 plan-impact / P3 scope-check is created (or on
+an explicit refresh; the full `learn-*` pipeline also runs at Init under
+`--learn` / `defaults.auto_learn`). The CodebaseMap conforms to its frozen contract by pointer
 (`docs/knowledge/implementation/contract-map.md §A` row 11; KnowledgeGraph =
 row 12, when later built) — never schema-copied here.
 
@@ -57,15 +59,17 @@ row 12, when later built) — never schema-copied here.
 
 1. Resolve `guild.phase_entry.v1` (pointer) and fold the Tier-2 `defaults:`.
 2. Detect mode: brownfield vs new-product (`--new`).
-3. Surface the ask-before-deep-scan gate (it governs the *deep* tier; the
-   cheap scan tier runs without it).
+3. Cheap-scan tier runs by default (no gate). The full `learn-*` pipeline runs
+   only under `--learn` or `defaults.auto_learn: true` (D3) — no
+   ask-before-deep-scan gate.
 4. Brownfield (**cheap scan tier = Init-DONE**): invoke
-   `guild:understand-engine`'s stage-1 scan → `codebase-map.json`, build the
+   `guild:learn-map`'s stage-1 scan → `codebase-map.json`, build the
    wiki, and write the confidence-tagged `architecture-map.md` **stub**. Do
    **not** build the knowledge-graph or tour here — they are lazy + gated and
-   owned by `guild:understand-engine` (deep tier) when a later P2/P3 plan
-   needs them. New-product: run the Socratic new-product Q&A and scaffold the
-   wiki.
+   owned by `guild:learn-graph` (deep tier) when a later P2/P3 plan
+   needs them (or run the full `learn-*` pipeline now under `--learn` /
+   `defaults.auto_learn`). New-product: run the Socratic new-product Q&A and
+   scaffold the wiki.
 5. Write the Init record and updated wiki index (record that the deep graph
    is deferred, not produced).
 6. Surface the G-init review (autonomous within an approved contract).
@@ -102,6 +106,6 @@ hard set). Writes confined to `.guild/` (DH-3 boundary).
   they are lazy + gated, not an Init deliverable.
 - `--new` on an empty dir → new-product Q&A runs; scaffolded wiki, no
   codebase-map.
-- Deep-scan refused at the gate → cheap scan tier still completes Init;
-  the deep graph stays deferred; limitation recorded, no hard failure.
+- No `--learn` / `defaults.auto_learn` → cheap scan tier completes Init; the
+  deep graph stays deferred (correct, not a failure; run `/guild:learn` later).
 - Pre-existing conflicting `.guild/` → stop-and-ask, nothing overwritten.

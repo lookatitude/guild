@@ -50,7 +50,10 @@ interface QualityBudget {
   total_minutes: number;
 }
 interface DefaultsBlock {
+  /** @deprecated Use top-level `agent_mode` (D5). Warn-once alias: auto→auto, on→team, off→subagent. Removed at v2.1.0. */
   agent_team: "auto" | "on" | "off";
+  /** When true, `/guild init` runs the full learn-* pipeline at bootstrap (D3). Default false. */
+  auto_learn: boolean;
   adversarial: "on" | "off";
   team: { size: number | null; always_include: string[] };
   review_workflow: "standard" | "cross" | "minimal";
@@ -67,6 +70,8 @@ interface GuildSettings {
   host: "claude" | "codex" | "auto";
   initiative_default: string | null;
   index: "auto" | "off";
+  /** Execution backend selection (D5 dispatch ladder). Default "auto". */
+  agent_mode: "team" | "agent" | "subagent" | "auto";
   // power-user overrides
   loops: string | null;
   loop_cap: number;
@@ -81,11 +86,13 @@ const DEFAULTS: GuildSettings = {
   host: "auto",
   initiative_default: null,
   index: "auto",
+  agent_mode: "auto",
   loops: null,
   loop_cap: 16,
   codex_cap: 5,
   defaults: {
     agent_team: "auto",
+    auto_learn: false,
     adversarial: "on",
     team: { size: null, always_include: [] },
     review_workflow: "standard",
@@ -105,10 +112,20 @@ const HELP: Record<string, string> = {
   host: "claude | codex | auto — co-equal host adapter selection",
   initiative_default: "null | <initiative-id> — attach runs to a durable initiative",
   index: "auto | off — optional SQLite read-through cache (auto = lazy-build past measured slowness)",
+  agent_mode:
+    "team | agent | subagent | auto (default) — execution backend (D5 dispatch ladder). " +
+    "auto: $TMUX→team(in-session); tmux-installed→team(new-session); " +
+    "independent-agents-supported→agent; else→subagent. " +
+    "Replaces deprecated defaults.agent_team.",
   loops: "null | none|spec|plan|implementation|all|<csv> — power-user; null = derive from rigor",
   loop_cap: "int 1-256 — max rounds per adversarial loop",
   codex_cap: "int 1-10 — max rounds per Codex review gate",
-  "defaults.agent_team": "auto | on | off — tmux multi-agent team backend",
+  "defaults.agent_team":
+    "[DEPRECATED → use top-level agent_mode] auto | on | off — " +
+    "warn-once alias: auto→auto, on→team, off→subagent. Removed at v2.1.0.",
+  "defaults.auto_learn":
+    "bool (default false) — when true, /guild init runs the full learn-* pipeline at bootstrap (D3). " +
+    "Precedence: --learn CLI flag > settings.json > built-in(false).",
   "defaults.adversarial": "on | off — (off REJECTED for Guild self-build)",
   "defaults.team.size": "null = 3-4 rule | <int> (cap-6 unless overridden)",
   "defaults.team.always_include": "[] | subset of the 14 specialists",
@@ -129,6 +146,7 @@ const VALID_RIGOR = new Set(["quick", "standard", "deep"]);
 const VALID_REVIEW = new Set(["local", "cross", "off"]);
 const VALID_HOST = new Set(["claude", "codex", "auto"]);
 const VALID_PHASES = new Set(["spec", "plan", "build", "all"]);
+const VALID_AGENT_MODE = new Set(["team", "agent", "subagent", "auto"]);
 
 interface ParsedArgs {
   cwd?: string;
@@ -172,6 +190,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       flags.auto_approve = ["all"]; // bare flag = all
     } else if (arg.startsWith("--auto-approve=")) {
       flags.auto_approve = parseAutoApprove(arg.slice("--auto-approve=".length));
+    } else if (arg.startsWith("--agent-mode=")) {
+      const v = arg.slice("--agent-mode=".length);
+      if (VALID_AGENT_MODE.has(v)) flags.agent_mode = v as GuildSettings["agent_mode"];
     } else if (arg.startsWith("--loops=")) {
       flags.loops = arg.slice("--loops=".length);
     } else if (arg.startsWith("--loop-cap=")) {
@@ -232,7 +253,9 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 function validateDefaults(d: Record<string, unknown>, selfBuild: boolean): string[] {
   const rejects: string[] = [];
   const ALLOWED = new Set([
-    "agent_team", "adversarial", "team", "review_workflow", "skill_policy",
+    "agent_team",   // DEPRECATED alias — still accepted, warn-once in loadFileConfig
+    "auto_learn",   // D3: bool, default false
+    "adversarial", "team", "review_workflow", "skill_policy",
     "gates", "wiki", "quality", "reporting",
   ]);
   for (const k of Object.keys(d)) {
@@ -269,7 +292,7 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     const rejects: string[] = [];
     const TIER1 = new Set([
       "rigor", "auto_approve", "review", "host", "initiative_default",
-      "index", "loops", "loop_cap", "codex_cap", "defaults",
+      "index", "agent_mode", "loops", "loop_cap", "codex_cap", "defaults",
     ]);
     for (const k of Object.keys(parsed)) {
       if (k.startsWith("_")) continue; // _help / _docs annotations
@@ -283,6 +306,9 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
       out.initiative_default = parsed["initiative_default"] as string | null;
     if (parsed["index"] === "auto" || parsed["index"] === "off") out.index = parsed["index"];
+    // D5: agent_mode as Tier-1 key (supersedes defaults.agent_team).
+    if (VALID_AGENT_MODE.has(parsed["agent_mode"] as string))
+      out.agent_mode = parsed["agent_mode"] as GuildSettings["agent_mode"];
     if (typeof parsed["loops"] === "string" || parsed["loops"] === null) out.loops = parsed["loops"] as string | null;
     if (typeof parsed["loop_cap"] === "number") out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
     if (typeof parsed["codex_cap"] === "number") out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
@@ -290,6 +316,27 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       rejects.push(...validateDefaults(parsed["defaults"], selfBuild));
       // deep-merge known sub-keys over DEFAULTS.defaults
       out.defaults = { ...DEFAULTS.defaults, ...(parsed["defaults"] as Partial<DefaultsBlock>) } as DefaultsBlock;
+
+      // Deprecation: defaults.agent_team → top-level agent_mode (D5, warn-once).
+      // Mapping: auto→auto, on→team, off→subagent.
+      const d = parsed["defaults"] as Record<string, unknown>;
+      if (d["agent_team"] !== undefined) {
+        process.stderr.write(
+          "[read-guild-config] WARN: defaults.agent_team is DEPRECATED — use top-level agent_mode instead. " +
+            "Migration: auto→auto, on→team, off→subagent. " +
+            "Will be removed at v2.1.0. Run `/guild config init` to regenerate settings.json.\n"
+        );
+        // Translate to agent_mode only when Tier-1 agent_mode was NOT explicitly set.
+        if (out.agent_mode === undefined) {
+          const mapping: Record<string, GuildSettings["agent_mode"]> = {
+            auto: "auto",
+            on: "team",
+            off: "subagent",
+          };
+          const mapped = mapping[d["agent_team"] as string];
+          if (mapped) out.agent_mode = mapped;
+        }
+      }
     }
     return { config: out, rejects, source: "settings.json" };
   }

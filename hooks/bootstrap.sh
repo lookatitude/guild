@@ -59,15 +59,16 @@ cat <<STATUS
 ┌─────────────────────────────────────────────────────────────────┐
 │  Guild ${GUILD_VERSION} — self-evolving specialist teams for Claude Code   │
 ├─────────────────────────────────────────────────────────────────┤
-│  Commands (daily tier — full surface via /guild status)         │
+│  Commands (daily tier — full surface via /guild:status)         │
 │                                                                 │
-│    /guild [brief]      run from the right phase, auto-detected  │
-│    /guild status       where am I, what's next, resume hint     │
-│    /guild wiki <ingest|query|lint>   project knowledge          │
+│    /guild:guild [brief]  run from the right phase, auto-detected│
+│    /guild:status       where am I, what's next, resume hint     │
+│    /guild:wiki <ingest|query|lint>   project knowledge          │
 │                                                                 │
-│  First run on a new repo → /guild proposes /guild init          │
-│  Guild v2 dropped the ':' namespace — every command is now      │
-│  /guild <subcommand>  (full v1→v2 map: MIGRATION.md).           │
+│  First run on a new repo → /guild:guild proposes /guild:init    │
+│  Guild v2 keeps the ':' namespace and drops the redundant       │
+│  'guild' prefix — commands are /guild:<verb>                    │
+│  (full map: MIGRATION.md).                                      │
 │                                                                 │
 │  Optional MCP servers (pre-bundled; no install needed):         │
 │    guild-memory       BM25 wiki search                          │

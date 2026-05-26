@@ -338,6 +338,158 @@ describe("agent-team-launcher.ts", () => {
   });
 
   // ─────────────────────────────────────────────────────────────
+  // D5 dispatch ladder (--agent-mode)
+  // ─────────────────────────────────────────────────────────────
+
+  // Helper: fake tmux that makes -V exit 1 (tmux "unavailable")
+  function makeUnavailableTmuxBin(dir: string): string {
+    const binDir = path.join(dir, "fakebin-notmux");
+    fs.mkdirSync(binDir, { recursive: true });
+    const tmuxPath = path.join(binDir, "tmux");
+    fs.writeFileSync(tmuxPath, ["#!/bin/sh", "exit 1", ""].join("\n"), { mode: 0o755 });
+    return binDir;
+  }
+
+  describe("D5 dispatch ladder (--agent-mode)", () => {
+    // Step 1: --agent-mode=auto + $TMUX set → team in-session (covered by existing in-session tests).
+    // We verify the dry-run output targets a window (not a session).
+    it("auto + TMUX set → team in-session (new-window in dry-run output)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto", "--dry-run"],
+        { TMUX: "/tmp/tmux-1000/default,12345,0" }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/new-window/); // in-session: window, not a session
+      expect(stdout).not.toMatch(/new-session/);
+    });
+
+    // Step 2: --agent-mode=auto + $TMUX unset + tmux installed → team new-session
+    it("auto + TMUX unset + tmux available → team new-session (dry-run output)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const fakeBin = makeFakeTmuxBin(tmpDir, []);
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto",
+         "--session-name", "guild-ladder-test-001", "--dry-run"],
+        { TMUX: undefined, PATH: `${fakeBin}:${process.env.PATH ?? ""}` }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/new-session/);
+      expect(stdout).not.toMatch(/new-window/);
+    });
+
+    // Step 3: --agent-mode=auto + no tmux + GUILD_INDEPENDENT_AGENTS_SUPPORTED=1 → agent signal
+    it("auto + no tmux + independent agents supported → agent JSON signal", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto"],
+        {
+          TMUX: undefined,
+          PATH: `${noTmuxBin}:${process.env.PATH ?? ""}`,
+          GUILD_INDEPENDENT_AGENTS_SUPPORTED: "1",
+        }
+      );
+      expect(exitCode).toBe(0);
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe("agent");
+      expect(signal.reason).toMatch(/agent|independent/i);
+    });
+
+    // Step 4: --agent-mode=auto + no tmux + GUILD_INDEPENDENT_AGENTS_SUPPORTED=0 → subagent signal
+    it("auto + no tmux + no agent support → subagent JSON signal", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto"],
+        {
+          TMUX: undefined,
+          PATH: `${noTmuxBin}:${process.env.PATH ?? ""}`,
+          GUILD_INDEPENDENT_AGENTS_SUPPORTED: "0",
+        }
+      );
+      expect(exitCode).toBe(0);
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe("subagent");
+      expect(signal.reason).toMatch(/subagent|fallback/i);
+    });
+
+    // Explicit --agent-mode=subagent → subagent signal regardless of tmux/env
+    it("explicit --agent-mode=subagent emits subagent signal and exits 0", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=subagent"]
+      );
+      expect(exitCode).toBe(0);
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe("subagent");
+      expect(signal.slug).toBe("test-slug");
+    });
+
+    // Explicit --agent-mode=agent → agent signal regardless of tmux/env
+    it("explicit --agent-mode=agent emits agent signal and exits 0", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent"]
+      );
+      expect(exitCode).toBe(0);
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe("agent");
+    });
+
+    // Explicit --agent-mode=team + TMUX set → in-session (dry-run)
+    it("explicit --agent-mode=team + TMUX set → in-session mode (dry-run)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=team", "--dry-run"],
+        { TMUX: "/tmp/tmux-1000/default,12345,0" }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/new-window/); // in-session: uses new-window
+    });
+
+    // Explicit --agent-mode=team + no TMUX → new-session (dry-run skips tmux-available check)
+    it("explicit --agent-mode=team + no TMUX + dry-run → new-session mode", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=team",
+         "--session-name", "guild-ladder-pin-001", "--dry-run"],
+        { TMUX: undefined, PATH: `${noTmuxBin}:${process.env.PATH ?? ""}` }
+      );
+      // dry-run: availability check is skipped, so team mode proceeds as requested
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/new-session/);
+    });
+
+    // Explicit --agent-mode=team + no TMUX + real run + no tmux → falls back to subagent
+    it("explicit --agent-mode=team + no tmux on real run → subagent fallback signal", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
+      const { exitCode, stdout, stderr } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=team"],
+        { TMUX: undefined, PATH: `${noTmuxBin}:${process.env.PATH ?? ""}` }
+      );
+      expect(exitCode).toBe(0); // fallback, not crash
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe("subagent");
+      expect(stderr).toMatch(/WARN.*agent_mode=team.*tmux/i);
+    });
+
+    // --agent-mode with subagent.yaml (non-agent-team yaml) → still emits signal
+    // (agent_mode overrides team.yaml backend check)
+    it("--agent-mode=agent with subagent yaml → agent signal (no backend check error)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "subagent-slug", "team-subagent.yaml");
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent"]
+      );
+      expect(exitCode).toBe(0);
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe("agent");
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
   // Session-name collision
   // ─────────────────────────────────────────────────────────────
   describe("session-name collision (non-dry-run)", () => {

@@ -1,11 +1,11 @@
 ---
-name: guild stats
+name: stats
 description: "Self-maintenance — show usage + telemetry dashboard. Pure read; never writes. --rebuild-index drops + rebuilds the optional cache; --no-index forces a one-shot filesystem scan."
 argument-hint: "[--rebuild-index] [--no-index]"
 allowed-tools: Read, Grep, Glob, Bash, Skill
 ---
 
-# /guild stats — self-maintenance (Guild-on-Guild)
+# /guild:stats — self-maintenance (Guild-on-Guild)
 
 Prints the usage / telemetry dashboard. Telemetry read — **R**, never
 writes.

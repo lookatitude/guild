@@ -1,11 +1,11 @@
 ---
-name: guild evolve
+name: evolve
 description: "Self-maintenance — run the evolve pipeline on one skill/instance. --auto runs unattended (promotion gate still respected). --to-template=vN is the lazy template-migration trigger (id required). Dispatches to guild:evolve-skill."
 argument-hint: "[<id>] [--auto] [--to-template=vN]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion
 ---
 
-# /guild evolve — self-maintenance (Guild-on-Guild)
+# /guild:evolve — self-maintenance (Guild-on-Guild)
 
 Kicks off skill evolution. Maps to skill `guild:evolve-skill`.
 
@@ -17,7 +17,7 @@ re-spelled.
 ## Canonical grammar (verbatim — `command-surface.md §3.5`)
 
 ```
-/guild evolve [<id>] [--auto] [--to-template=vN]
+/guild:evolve [<id>] [--auto] [--to-template=vN]
 ```
 
 - **`<id>` (positional, optional)** — the skill or evolvable instance to

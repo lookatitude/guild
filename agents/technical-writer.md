@@ -18,12 +18,12 @@ Content & communication group specialist (`guild-plan.md §6.2`). Owns functiona
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `technical-writer-api-docs` (T5, **forward-declared — P3 scope**) — reference documentation for APIs: endpoint tables, request/response shapes, auth, error codes, rate limits, code samples in target languages; consistency with the contract backend ships.
-- `technical-writer-user-manual` (T5, **forward-declared — P3 scope**) — end-user manuals and product guides: task-oriented information architecture, progressive disclosure, screenshots/diagrams placement, glossary discipline.
-- `technical-writer-tutorial` (T5, **forward-declared — P3 scope**) — tutorials and how-to guides (Diátaxis distinction respected): learning-oriented tutorials vs. goal-oriented how-tos; prerequisites, steps, verification, troubleshooting.
-- `technical-writer-release-notes` (T5, **forward-declared — P3 scope**) — release notes and changelogs: Keep-a-Changelog categories (Added / Changed / Deprecated / Removed / Fixed / Security), migration guides, breaking-change callouts.
+- `technical-writer-api-docs` (T5, exists) — reference documentation for APIs: endpoint tables, request/response shapes, auth, error codes, rate limits, code samples in target languages; consistency with the contract backend ships.
+- `technical-writer-user-manual` (T5, exists) — end-user manuals and product guides: task-oriented information architecture, progressive disclosure, screenshots/diagrams placement, glossary discipline.
+- `technical-writer-tutorial` (T5, exists) — tutorials and how-to guides (Diátaxis distinction respected): learning-oriented tutorials vs. goal-oriented how-tos; prerequisites, steps, verification, troubleshooting.
+- `technical-writer-release-notes` (T5, exists) — release notes and changelogs: Keep-a-Changelog categories (Added / Changed / Deprecated / Removed / Fixed / Security), migration guides, breaking-change callouts.
 
-Four of the five skills (`technical-writer-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when a technical-writer invocation needs authoring methodology before those skills land.
+All four `technical-writer-*` T5 skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the technical-writer context bundle.
 
 ## When to invoke
 

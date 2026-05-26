@@ -24,8 +24,9 @@
     "./skills/core/",
     "./skills/meta/",
     "./skills/knowledge/",
-    "./skills/fallback/",
-    "./skills/specialists/"
+    "./skills/specialists/",
+    "./skills/guild-quality/",
+    "./skills/guild-operations/"
   ],
   "commands": [
     "./commands/guild.md",
@@ -38,6 +39,7 @@
     "./commands/status.md",
     "./commands/resume.md",
     "./commands/wiki.md",
+    "./commands/learn.md",
     "./commands/fix.md",
     "./commands/config.md",
     "./commands/initiative.md",
@@ -50,7 +52,8 @@
     "./commands/guild-rollback.md",
     "./commands/guild-stats.md",
     "./commands/guild-audit.md",
-    "./commands/guild-diagnose.md"
+    "./commands/guild-diagnose.md",
+    "./commands/guild-team.md"
   ],
   "agents": [
     "./agents/architect.md",

@@ -18,12 +18,12 @@ Content & communication group specialist (`guild-plan.md §6.2`, commercial-flav
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `seo-keyword-research` (T5, **forward-declared — P3 scope**) — keyword research and prioritization: search volume, difficulty, intent classification (informational / navigational / transactional / commercial), SERP feature analysis, cluster grouping.
-- `seo-on-page-optimization` (T5, **forward-declared — P3 scope**) — on-page recommendations: title tags, meta descriptions, H1/H2 structure, content-to-intent alignment, entity coverage, image alt text, URL slugs. Recommendations, not rewrites of the body — body remains copywriter's.
-- `seo-technical-audit` (T5, **forward-declared — P3 scope**) — technical SEO audit: crawlability, indexation, robots.txt, sitemap.xml, canonicals, hreflang, Core Web Vitals diagnosis, structured-data validation (JSON-LD / schema.org), redirect chains, duplicate content.
-- `seo-internal-linking` (T5, **forward-declared — P3 scope**) — internal-linking strategy: topic cluster / pillar architecture, anchor-text planning, orphan-page detection, link-equity distribution, breadcrumb structure.
+- `seo-keyword-research` (T5, exists) — keyword research and prioritization: search volume, difficulty, intent classification (informational / navigational / transactional / commercial), SERP feature analysis, cluster grouping.
+- `seo-on-page-optimization` (T5, exists) — on-page recommendations: title tags, meta descriptions, H1/H2 structure, content-to-intent alignment, entity coverage, image alt text, URL slugs. Recommendations, not rewrites of the body — body remains copywriter's.
+- `seo-technical-audit` (T5, exists) — technical SEO audit: crawlability, indexation, robots.txt, sitemap.xml, canonicals, hreflang, Core Web Vitals diagnosis, structured-data validation (JSON-LD / schema.org), redirect chains, duplicate content.
+- `seo-internal-linking` (T5, exists) — internal-linking strategy: topic cluster / pillar architecture, anchor-text planning, orphan-page detection, link-equity distribution, breadcrumb structure.
 
-Four of the five skills (`seo-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when an seo invocation needs authoring methodology before those skills land.
+All four `seo-*` T5 skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the seo context bundle.
 
 ## When to invoke
 

@@ -70,6 +70,8 @@ interface CliArgs {
   sessionName: string | null;
   cwd: string;
   dryRun: boolean;
+  /** Explicit agent_mode override (D5). null = not provided → use team.yaml backend check (old behavior). */
+  agentMode: "team" | "agent" | "subagent" | "auto" | null;
 }
 
 interface ParsedTmuxCommand {
@@ -79,14 +81,20 @@ interface ParsedTmuxCommand {
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
+const VALID_AGENT_MODE_VALUES = new Set(["team", "agent", "subagent", "auto"]);
+
 function parseArgs(argv: string[]): CliArgs {
-  const out: CliArgs = { team: null, sessionName: null, cwd: ".", dryRun: false };
+  const out: CliArgs = { team: null, sessionName: null, cwd: ".", dryRun: false, agentMode: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--team" && i + 1 < argv.length) out.team = argv[++i];
     else if (a === "--session-name" && i + 1 < argv.length) out.sessionName = argv[++i];
     else if (a === "--cwd" && i + 1 < argv.length) out.cwd = argv[++i];
     else if (a === "--dry-run") out.dryRun = true;
+    else if (a.startsWith("--agent-mode=")) {
+      const v = a.slice("--agent-mode=".length);
+      if (VALID_AGENT_MODE_VALUES.has(v)) out.agentMode = v as CliArgs["agentMode"];
+    }
   }
   return out;
 }
@@ -459,6 +467,90 @@ function writeManifest(cwd: string, manifest: Manifest): string {
   return out;
 }
 
+// ── D5 dispatch ladder ─────────────────────────────────────────────────────
+//
+// Resolves the execution backend per D5 (v2x-command-surface-dispatch-and-
+// internalization.md). Explicit `agent_mode` wins over auto-detection.
+// auto resolution order:
+//   1. $TMUX set → team (in-session window — PRESERVE shipped in-session fix)
+//   2. tmux installed → team (new detached session)
+//   3. Host (claude|codex) signals independent agent support → agent
+//   4. Fallback → subagent
+
+type AgentModeExplicit = "team" | "agent" | "subagent" | "auto";
+interface ResolvedMode {
+  mode: "team" | "agent" | "subagent";
+  reason: string;
+}
+
+/**
+ * Returns true when the host signals it supports independent (non-tmux) agents.
+ * Signaled via GUILD_INDEPENDENT_AGENTS_SUPPORTED env var. When absent, falls
+ * back to GUILD_HOST: claude|auto is assumed to support them; codex currently
+ * does not. This env probe is intentionally cheap — no subprocess spawn.
+ */
+function hostSupportsIndependentAgents(): boolean {
+  const explicit = process.env["GUILD_INDEPENDENT_AGENTS_SUPPORTED"];
+  if (explicit !== undefined) {
+    const s = explicit.trim().toLowerCase();
+    return !(s === "0" || s === "false" || s === "no" || s === "off");
+  }
+  // Default: assume claude (the expected host) supports independent agents.
+  const host = (process.env["GUILD_HOST"] ?? "auto").toLowerCase();
+  return host === "claude" || host === "auto";
+}
+
+/**
+ * Resolve the D5 ladder. `dryRun=true` still checks $TMUX and tmux availability
+ * so the dry-run output accurately reflects what a real launch would choose.
+ *
+ * When `explicit` is non-null and not "auto", that value is used directly
+ * (subject to availability: pinning "team" on a tmux-less host warns + falls
+ * back to "subagent" for real runs; dry-run leaves team as-is to show intent).
+ */
+function resolveAgentMode(explicit: AgentModeExplicit | null, dryRun: boolean): ResolvedMode {
+  const val: AgentModeExplicit = explicit ?? "auto";
+
+  if (val === "team") {
+    // Pinned team: validate tmux availability for real launches.
+    if (!dryRun && !tmuxAvailable()) {
+      process.stderr.write(
+        "[agent-team-launcher] WARN: agent_mode=team pinned but tmux is not available — " +
+          "falling back to subagent. Install tmux or use agent_mode=auto.\n"
+      );
+      return { mode: "subagent", reason: "agent_mode=team pinned but tmux unavailable → subagent fallback" };
+    }
+    return { mode: "team", reason: "explicit agent_mode=team" };
+  }
+
+  if (val === "agent") {
+    return { mode: "agent", reason: "explicit agent_mode=agent" };
+  }
+
+  if (val === "subagent") {
+    return { mode: "subagent", reason: "explicit agent_mode=subagent" };
+  }
+
+  // auto — D5 ladder
+  // Step 1: inside a tmux session → team in-session (preserves shipped fix)
+  if (process.env["TMUX"]) {
+    return { mode: "team", reason: "auto: $TMUX set → team in-session" };
+  }
+
+  // Step 2: tmux installed but not currently inside one → team new-session
+  if (tmuxAvailable()) {
+    return { mode: "team", reason: "auto: tmux installed → team new-session" };
+  }
+
+  // Step 3: host signals independent agent support → agent
+  if (hostSupportsIndependentAgents()) {
+    return { mode: "agent", reason: "auto: host supports independent agents → agent" };
+  }
+
+  // Step 4: fallback
+  return { mode: "subagent", reason: "auto: no tmux, no independent-agent support → subagent" };
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 function main(): void {
@@ -470,12 +562,6 @@ function main(): void {
     );
     process.exit(1);
   }
-
-  // Launch-mode selection (guild-plan.md §7.3, one team per session). If we are
-  // already inside a tmux session ($TMUX set), DO NOT refuse — instead spawn the
-  // team in a NEW WINDOW of the current session (in-session mode) so the panes
-  // are visible. Outside tmux we create + attach a fresh detached session.
-  const mode: LaunchMode = process.env["TMUX"] ? "in-session" : "new-session";
 
   if (!fs.existsSync(args.team)) {
     process.stderr.write(
@@ -494,15 +580,44 @@ function main(): void {
     process.exit(1);
   }
 
-  if (team.backend !== "agent-team") {
-    process.stderr.write(
-      `[agent-team-launcher] ERROR: team.yaml declares backend: ${team.backend || "(missing)"}.\n` +
-        `  This launcher only runs when backend is exactly "agent-team".\n` +
-        `  For backend: subagent, use the standard guild:execute-plan dispatch path\n` +
-        `  (it invokes specialists via the Agent tool, not tmux).\n`
-    );
-    process.exit(1);
+  // ── D5 dispatch ladder ────────────────────────────────────────────────────
+  // When --agent-mode is provided, run the D5 ladder. Non-team modes emit a
+  // JSON signal so the caller (guild:execute-plan) can route accordingly.
+  // When --agent-mode is absent, fall through to the legacy team.backend check
+  // for backward compatibility with existing callers.
+  if (args.agentMode !== null) {
+    const { mode: resolvedMode, reason } = resolveAgentMode(args.agentMode, args.dryRun);
+    if (resolvedMode !== "team") {
+      // Non-team backend: emit JSON signal and exit 0. The caller reads this
+      // to dispatch via the Agent tool (agent) or inline subagent path.
+      const signal = {
+        backend: resolvedMode,
+        reason,
+        slug: slugFromTeamPath(args.team),
+      };
+      process.stdout.write(JSON.stringify(signal) + "\n");
+      process.exit(0);
+    }
+    // resolvedMode === "team" → fall through to the tmux launch below.
+    // (Skip the legacy team.backend check — agent_mode=team|auto overrides it.)
+  } else {
+    // Legacy behavior: require team.yaml to declare backend: agent-team.
+    if (team.backend !== "agent-team") {
+      process.stderr.write(
+        `[agent-team-launcher] ERROR: team.yaml declares backend: ${team.backend || "(missing)"}.\n` +
+          `  This launcher only runs when backend is exactly "agent-team".\n` +
+          `  For backend: subagent, use the standard guild:execute-plan dispatch path\n` +
+          `  (it invokes specialists via the Agent tool, not tmux).\n`
+      );
+      process.exit(1);
+    }
   }
+
+  // Launch-mode selection (guild-plan.md §7.3, one team per session). If we are
+  // already inside a tmux session ($TMUX set), DO NOT refuse — instead spawn the
+  // team in a NEW WINDOW of the current session (in-session mode) so the panes
+  // are visible. Outside tmux we create + attach a fresh detached session.
+  const mode: LaunchMode = process.env["TMUX"] ? "in-session" : "new-session";
 
   if (team.specialists.length === 0) {
     process.stderr.write(

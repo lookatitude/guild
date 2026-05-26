@@ -1,6 +1,6 @@
 # Specialist Roster
 
-Implements `guild-plan.md §6`. 14 shipping specialists across 3 groups, 50 T5 skills (plus 4 forward-declared `frontend-*` skills pending authoring).
+Implements `guild-plan.md §6`. 14 shipping specialists across 3 groups, 54 T5 skills (including the 4 `frontend-*` skills under `skills/specialists/`).
 
 Every specialist inherits `guild-principles` (T1) as a mandatory first load: the
 Karpathy 4 plus Guild's evidence rule. Per-specialist T5 skills live under
@@ -77,8 +77,8 @@ Karpathy 4 plus Guild's evidence rule. Per-specialist T5 skills live under
   layer (backend), test strategy and suite shape (qa), iOS/Android/RN (mobile),
   CI/CD and infra (devops), UI microcopy (copywriter), SEO technical audits (seo).
 - **Skills:** `frontend-react`, `frontend-state-management`, `frontend-bundler-config`,
-  `frontend-a11y` — all forward-declared; main session substitutes `guild:tdd` +
-  `guild:systematic-debug` until the T5 skill files are authored.
+  `frontend-a11y` — all authored under `skills/specialists/`; the main session may
+  also pull `guild:tdd` + `guild:systematic-debug` for methodology beyond them.
 
 Engineering-group principles: TDD-first, surgical diffs, evidence = passing tests
 plus diff trace.

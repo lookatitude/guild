@@ -1,7 +1,7 @@
 ---
 name: guild-plan
 description: Turns an approved `.guild/spec/<slug>.md` plus `.guild/team/<slug>.yaml` into a per-specialist lane plan at `.guild/plan/<slug>.md`. Each lane carries `task-id`, `owner`, `depends-on:`, `scope`, `success-criteria`, and `autonomy-policy` so `guild:execute-plan` can dispatch parallel-where-possible subagents per `guild-plan.md §8`. FORKS `guild:plan` rather than referencing — writing-plans emits a generic linear implementation plan; `guild:plan` emits specialist lanes tied to a composed team and feeds Guild's dispatch/review loop. TRIGGER on "turn this spec into a plan", "break the work down by specialist", "what does each role do on this spec", "plan the lanes for this task", "we have a team — now plan the work". DO NOT TRIGGER for: writing the code itself (`guild:execute-plan`), brainstorming a new feature (`guild:brainstorm`), reviewing finished work (`guild:review`), or generic implementation plans outside the Guild lifecycle (use `guild:plan`).
-when_to_use: Third step of /guild lifecycle, after guild:team-compose has produced .guild/team/<slug>.yaml.
+when_to_use: Third step of Guild lifecycle, after guild:team-compose has produced .guild/team/<slug>.yaml.
 type: meta
 ---
 

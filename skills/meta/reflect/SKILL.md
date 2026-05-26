@@ -1,7 +1,7 @@
 ---
 name: guild-reflect
 description: Post-task reflection. Consumes a compact run summary (from scripts/trace-summarize.ts), handoff receipts, and verify.md, and emits proposals to .guild/reflections/<run-id>.md. Proposals cover (a) skill-improvement candidates (a skill triggered wrong N times, or body needs a new section), (b) missing-specialist candidates (gap repeated >=3 runs), (c) context-bundle issues (over 3k tokens, summarization hit), (d) followups not addressed. Does NOT write to .guild/wiki/ — that is wiki-ingest / decisions territory. TRIGGER for "reflect on this run", "what did we learn", "run post-task reflection", "capture lessons from the specialist outputs", "any skill gaps in this run". DO NOT TRIGGER for wiki ingest (guild:wiki-ingest owns), capturing a decision (guild:decisions), any mid-task reflection (only fires post-verify-done), or promoting a reflection to the wiki.
-when_to_use: Final step of /guild lifecycle after guild:verify-done passes. Invoked automatically by hooks/maybe-reflect.ts Stop hook when the heuristic gate (>=1 specialist dispatched + >=1 file edited + no error) clears.
+when_to_use: Final step of Guild lifecycle after guild:verify-done passes. Invoked automatically by hooks/maybe-reflect.ts Stop hook when the heuristic gate (>=1 specialist dispatched + >=1 file edited + no error) clears.
 type: meta
 ---
 
@@ -29,7 +29,7 @@ Walk the inputs once and classify every observation into one of four buckets. Em
 
 3. **Context bundle issue.** `guild:context-assemble` hit the 6k token cap, or summarization was invoked mid-run, or a specialist's followup flagged missing context. Record the affected specialist/bundle pair and which wiki pages (if any) were dropped.
 
-4. **Followup backlog.** Every entry from the union of handoff `followups:` that verify-done carried forward as "non-blocking" and that does not already appear as a new task in `.guild/runs/`. Record `<specialist>/<taskid>` pairs so `/guild stats` can show them grouped by owner.
+4. **Followup backlog.** Every entry from the union of handoff `followups:` that verify-done carried forward as "non-blocking" and that does not already appear as a new task in `.guild/runs/`. Record `<specialist>/<taskid>` pairs so `/guild:stats` can show them grouped by owner.
 
 ## Output
 
@@ -61,15 +61,15 @@ Body: one `##` section per non-empty category. Each section lists the proposal(s
 
 Per `§15.2` ("evolution loop overfits" risk), not every reflection deserves attention.
 
-- **low** — zero non-empty categories, or only one followup-backlog entry. Stays in `.guild/reflections/` as an audit record, not surfaced in `/guild stats` by default.
-- **medium** — at least one skill-improvement or context-bundle issue, or >=3 followup-backlog entries. Surfaces in `/guild stats` (P6) and is a candidate input to `guild:evolve-skill` (P6).
-- **high** — a missing-specialist proposal, or a skill-improvement proposal with evidence from >=2 earlier reflections (cross-referenced by name; reflect does not aggregate but it may cite). Forces a `/guild stats` surface.
+- **low** — zero non-empty categories, or only one followup-backlog entry. Stays in `.guild/reflections/` as an audit record, not surfaced in `/guild:stats` by default.
+- **medium** — at least one skill-improvement or context-bundle issue, or >=3 followup-backlog entries. Surfaces in `/guild:stats` (P6) and is a candidate input to `guild:evolve-skill` (P6).
+- **high** — a missing-specialist proposal, or a skill-improvement proposal with evidence from >=2 earlier reflections (cross-referenced by name; reflect does not aggregate but it may cite). Forces a `/guild:stats` surface.
 
 Tier the reflection before writing the frontmatter so the significance field is consistent with the body.
 
 ## Aggregation rule
 
-Reflect writes exactly ONE reflection per run and never modifies prior reflections. Cross-run aggregation — "the same skill has been named in three reflections, open an evolve task" — is `/guild evolve`'s job per `§11.1`. The automatic threshold there is >=3 reflections for a single skill; that counter is computed by walking `.guild/reflections/*.md` frontmatter `proposals.skill_improvement`, and reflect's job is to fill that frontmatter correctly so evolve can count.
+Reflect writes exactly ONE reflection per run and never modifies prior reflections. Cross-run aggregation — "the same skill has been named in three reflections, open an evolve task" — is `/guild:evolve`'s job per `§11.1`. The automatic threshold there is >=3 reflections for a single skill; that counter is computed by walking `.guild/reflections/*.md` frontmatter `proposals.skill_improvement`, and reflect's job is to fill that frontmatter correctly so evolve can count.
 
 If you notice a pattern worth aggregating, emit the per-run evidence and stop. Do not pre-emptively collapse into a single cross-run proposal.
 
@@ -79,11 +79,11 @@ This skill NEVER writes to `.guild/wiki/`, NEVER edits an existing skill or agen
 
 ## Handoff
 
-Emit a `handoff` block naming the reflection path so the orchestrator can hand off to `/guild stats` (P6) or `/guild evolve` (P6). Payload fields:
+Emit a `handoff` block naming the reflection path so the orchestrator can hand off to `/guild:stats` (P6) or `/guild:evolve` (P6). Payload fields:
 
 - `run_id` — carried forward from the inputs.
 - `reflection_path` — absolute path to `.guild/reflections/<run-id>.md`.
 - `significance` — `low` / `medium` / `high`, matching the frontmatter.
-- `proposal_counts` — a `{skill_improvement: N, missing_specialist: N, context_issues: N, followup_backlog: N}` summary so `/guild stats` can render without re-parsing.
+- `proposal_counts` — a `{skill_improvement: N, missing_specialist: N, context_issues: N, followup_backlog: N}` summary so `/guild:stats` can render without re-parsing.
 
-For P5 this is a forward reference: `/guild stats` and `/guild evolve` land in P6. If neither is installed, stop after writing the reflection and return its path to the user.
+For P5 this is a forward reference: `/guild:stats` and `/guild:evolve` land in P6. If neither is installed, stop after writing the reflection and return its path to the user.

@@ -18,12 +18,12 @@ Commercial group specialist (`guild-plan.md §6.3`). Owns the outbound revenue-m
 ## Skills pulled
 
 - `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule, with the commercial-group variant applied per `§6.4`.
-- `sales-cold-outreach` (T5, **forward-declared — P3 scope**) — cold outreach sequence authoring: ICP definition, trigger event, hypothesis per touch, per-touch channel and timing, subject/preview/body/CTA, reply-bait discipline, deliverability guardrails. Hypothesis-first: each sequence names the ICP, trigger, and the measurable response rate it targets.
-- `sales-discovery-framework` (T5, **forward-declared — P3 scope**) — discovery-call scripts and qualification frameworks (MEDDIC / SPIN / BANT / custom): opening, qualifying questions, pain-quantification prompts, decision-process mapping, next-step setting. Outputs are repeatable scripts plus a scoring rubric tied to pipeline stage.
-- `sales-proposal-writer` (T5, **forward-declared — P3 scope**) — proposal authoring: executive summary, situation/complication/resolution structure, scope, pricing options, terms, success criteria, next steps. Proposal narrative is sales; technical appendices are commissioned from technical-writer; pricing math is sales' responsibility.
-- `sales-follow-up-sequence` (T5, **forward-declared — P3 scope**) — follow-up sequences and objection handling: per-objection response frameworks (price, timing, authority, competitor, status-quo), nudge cadence, breakup email, re-engagement triggers, stall-unblocking moves.
+- `sales-cold-outreach` (T5, exists) — cold outreach sequence authoring: ICP definition, trigger event, hypothesis per touch, per-touch channel and timing, subject/preview/body/CTA, reply-bait discipline, deliverability guardrails. Hypothesis-first: each sequence names the ICP, trigger, and the measurable response rate it targets.
+- `sales-discovery-framework` (T5, exists) — discovery-call scripts and qualification frameworks (MEDDIC / SPIN / BANT / custom): opening, qualifying questions, pain-quantification prompts, decision-process mapping, next-step setting. Outputs are repeatable scripts plus a scoring rubric tied to pipeline stage.
+- `sales-proposal-writer` (T5, exists) — proposal authoring: executive summary, situation/complication/resolution structure, scope, pricing options, terms, success criteria, next steps. Proposal narrative is sales; technical appendices are commissioned from technical-writer; pricing math is sales' responsibility.
+- `sales-follow-up-sequence` (T5, exists) — follow-up sequences and objection handling: per-objection response frameworks (price, timing, authority, competitor, status-quo), nudge cadence, breakup email, re-engagement triggers, stall-unblocking moves.
 
-Four of the five skills (`sales-*`) do not exist in P1. `skill-author` authors them in P3 as part of the T5 specialist-skills batch. Until then, main session substitutes `guild:evolve-skill` when a sales invocation needs authoring methodology before those skills land.
+All four `sales-*` T5 skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the sales context bundle.
 
 ## When to invoke
 

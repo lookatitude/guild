@@ -207,4 +207,170 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
       expect(j._rigor_expanded.note).toMatch(/weak-independence/);
     });
   });
+
+  // ── D3: defaults.auto_learn (closed key, bool, default false)
+  describe("defaults.auto_learn (D3)", () => {
+    test("--scaffold includes defaults.auto_learn: false + _help entry", () => {
+      const { status, out } = run(["--scaffold"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.defaults.auto_learn).toBe(false);
+      expect(j._help["defaults.auto_learn"]).toBeDefined();
+      expect(j._help["defaults.auto_learn"]).toMatch(/auto_learn|learn-\*/i);
+    });
+
+    test("settings.json with defaults.auto_learn: true is read and present in output", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { auto_learn: true } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.defaults.auto_learn).toBe(true);
+    });
+
+    test("settings.json with defaults.auto_learn: false resolves to false", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { auto_learn: false } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.defaults.auto_learn).toBe(false);
+    });
+
+    test("--validate accepts defaults.auto_learn (closed-key passes)", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { auto_learn: true } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+
+    test("defaults.auto_learn absent from settings.json defaults to false via deep-merge", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { adversarial: "on" } }); // no auto_learn key
+      const { out } = run(["--cwd", dir]);
+      const j = JSON.parse(out);
+      expect(j.defaults.auto_learn).toBe(false); // DEFAULTS.defaults fills it
+    });
+  });
+
+  // ── D5: agent_mode Tier-1 key
+  describe("agent_mode (D5 Tier-1 key)", () => {
+    test("--scaffold includes agent_mode: auto + _help entry", () => {
+      const { status, out } = run(["--scaffold"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("auto");
+      expect(j._help["agent_mode"]).toBeDefined();
+      expect(j._help["agent_mode"]).toMatch(/team|agent|subagent|auto/i);
+    });
+
+    test("settings.json agent_mode=team is read as Tier-1", () => {
+      const dir = repo();
+      writeSettings(dir, { agent_mode: "team" });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("team");
+    });
+
+    test("settings.json agent_mode=subagent is read as Tier-1", () => {
+      const dir = repo();
+      writeSettings(dir, { agent_mode: "subagent" });
+      const { out } = run(["--cwd", dir]);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("subagent");
+    });
+
+    test("settings.json agent_mode=agent is read as Tier-1", () => {
+      const dir = repo();
+      writeSettings(dir, { agent_mode: "agent" });
+      const { out } = run(["--cwd", dir]);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("agent");
+    });
+
+    test("--agent-mode=subagent CLI flag overrides settings.json agent_mode=team (flag wins)", () => {
+      const dir = repo();
+      writeSettings(dir, { agent_mode: "team" });
+      const { out } = run(["--cwd", dir, "--agent-mode=subagent"]);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("subagent");
+    });
+
+    test("--agent-mode=team CLI flag overrides settings.json agent_mode=auto (flag wins)", () => {
+      const dir = repo();
+      writeSettings(dir, { agent_mode: "auto" });
+      const { out } = run(["--cwd", dir, "--agent-mode=team"]);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("team");
+    });
+
+    test("built-in default for agent_mode is auto when not set anywhere", () => {
+      const dir = repo(); // no settings.json
+      const { out } = run(["--cwd", dir]);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("auto");
+    });
+
+    test("invalid --agent-mode= value is silently ignored (falls back to default)", () => {
+      const dir = repo();
+      const { out } = run(["--cwd", dir, "--agent-mode=bogus"]);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("auto"); // invalid → ignored, default applies
+    });
+  });
+
+  // ── D5: defaults.agent_team deprecation alias (warn-once)
+  describe("defaults.agent_team deprecation (D5 alias → agent_mode)", () => {
+    test("defaults.agent_team: on warns on stderr and translates to agent_mode: team", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { agent_team: "on" } });
+      const { status, out, err } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      expect(err).toMatch(/agent_team.*DEPRECATED|DEPRECATED.*agent_team/i);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("team"); // on → team
+      expect(j.defaults.agent_team).toBe("on"); // still present in defaults (deep-merge)
+    });
+
+    test("defaults.agent_team: off warns and translates to agent_mode: subagent", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { agent_team: "off" } });
+      const { status, out, err } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      expect(err).toMatch(/DEPRECATED/);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("subagent"); // off → subagent
+    });
+
+    test("defaults.agent_team: auto warns and translates to agent_mode: auto", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { agent_team: "auto" } });
+      const { out, err } = run(["--cwd", dir]);
+      expect(err).toMatch(/DEPRECATED/);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("auto"); // auto → auto
+    });
+
+    test("explicit Tier-1 agent_mode wins over deprecated defaults.agent_team alias", () => {
+      const dir = repo();
+      // agent_mode=subagent at Tier-1, agent_team: on in defaults
+      writeSettings(dir, { agent_mode: "subagent", defaults: { agent_team: "on" } });
+      const { out, err } = run(["--cwd", dir]);
+      // Deprecation warning still fires (agent_team is present)
+      expect(err).toMatch(/DEPRECATED/);
+      const j = JSON.parse(out);
+      // Tier-1 wins: subagent, not "team" from the alias
+      expect(j.agent_mode).toBe("subagent");
+    });
+
+    test("defaults.agent_team still passes --validate (kept in ALLOWED set)", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { agent_team: "on" } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0); // deprecated but not rejected
+      expect(out).toMatch(/VALID/);
+    });
+  });
 });

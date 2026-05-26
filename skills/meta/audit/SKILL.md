@@ -1,13 +1,13 @@
 ---
 name: guild-audit
-description: Security audit of Guild plugin scripts — SHA256 hashes, source, network + filesystem flags. Produces a static report listing every hook script, tooling script, and MCP server with (a) file hash, (b) declared tool access / allowed-tools frontmatter, (c) any network/egress calls (fetch, http, WebFetch, WebSearch), (d) any filesystem writes outside .guild/. Per §15.1 #12, meta-skills are filesystem-restricted; only agents/researcher.md has web access by default. Per §15.2 "Arbitrary code in installed skills", the plugin is only as safe as its installed-from source — echo Anthropic's "only install from trusted sources" guidance. TRIGGER for "audit Guild scripts", "what does <script>.ts do", "show all network calls from hooks", "list SHA256 hashes for the plugin scripts", "run /guild audit". DO NOT TRIGGER for: wiki lint (guild:wiki-lint), reviewing a run (guild:review), a security-specialist audit of the user's own application code (agents/security owns), or rolling back a skill (guild:rollback-skill).
-when_to_use: Explicit /guild audit OR periodic (weekly recommended) OR after installing a new skill/hook/MCP from an untrusted source.
+description: Security audit of Guild plugin scripts — SHA256 hashes, source, network + filesystem flags. Produces a static report listing every hook script, tooling script, and MCP server with (a) file hash, (b) declared tool access / allowed-tools frontmatter, (c) any network/egress calls (fetch, http, WebFetch, WebSearch), (d) any filesystem writes outside .guild/. Per §15.1 #12, meta-skills are filesystem-restricted; only agents/researcher.md has web access by default. Per §15.2 "Arbitrary code in installed skills", the plugin is only as safe as its installed-from source — echo Anthropic's "only install from trusted sources" guidance. TRIGGER for "audit Guild scripts", "what does <script>.ts do", "show all network calls from hooks", "list SHA256 hashes for the plugin scripts", "run /guild:audit". DO NOT TRIGGER for: wiki lint (guild:wiki-lint), reviewing a run (guild:review), a security-specialist audit of the user's own application code (agents/security owns), or rolling back a skill (guild:rollback-skill).
+when_to_use: Explicit /guild:audit OR periodic (weekly recommended) OR after installing a new skill/hook/MCP from an untrusted source.
 type: meta
 ---
 
 # guild:audit
 
-Implements `guild-plan.md §15.1 #12` (privacy + egress — meta-skills restricted to filesystem; only researcher has web access by default; `/guild audit` surfaces script hashes) and the `§15.2` "Arbitrary code in installed skills" risk (the plugin is only as safe as its installed-from source — install from trusted sources per Anthropic's guidance).
+Implements `guild-plan.md §15.1 #12` (privacy + egress — meta-skills restricted to filesystem; only researcher has web access by default; `/guild:audit` surfaces script hashes) and the `§15.2` "Arbitrary code in installed skills" risk (the plugin is only as safe as its installed-from source — install from trusted sources per Anthropic's guidance).
 
 The audit is **static** — it reads source files, computes hashes, greps for egress and filesystem patterns, and writes a dated report. It does not execute any script under audit.
 
@@ -62,7 +62,7 @@ Structure:
 
 ## Handoff
 
-Emit a `handoff` block with the audit-run metadata and a pointer to `/guild stats` for drift surfacing.
+Emit a `handoff` block with the audit-run metadata and a pointer to `/guild:stats` for drift surfacing.
 
 Payload fields:
 
@@ -74,4 +74,4 @@ Payload fields:
 - `hashes_changed_since_last_audit` — list of `{path, old_sha256, new_sha256}` entries; empty on the first audit.
 - `prior_audit_path` — the prior audit file compared against, or `null` on the first audit.
 
-`/guild stats` reads the audit handoff to surface any CHANGED hashes on the next stats view so the user sees drift without re-running the audit. Hash drift is not inherently bad — edits happen — but it should never be invisible.
+`/guild:stats` reads the audit handoff to surface any CHANGED hashes on the next stats view so the user sees drift without re-running the audit. Hash drift is not inherently bad — edits happen — but it should never be invisible.

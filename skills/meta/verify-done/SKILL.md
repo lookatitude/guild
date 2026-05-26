@@ -1,7 +1,7 @@
 ---
 name: guild-verify-done
-description: Final gate before task close. Runs (1) tests the spec defined, (2) scope check — every changed file traces to a lane, (3) success-criteria match, (4) no open blocker `followups:`, (5) assumptions reviewed. Writes `.guild/runs/<run-id>/verify.md` — pass/fail + run summary. On pass, hands off to `guild:reflect` (lands P5). TRIGGER:  "is this done", "final check", "verify the task is complete", "run the done-gate". DO NOT TRIGGER for: verifying a single PR outside Guild flow (use guild:verify-done), reviewing individual handoffs (guild:review), starting new work.
-when_to_use: Seventh and final step of /guild lifecycle, after guild:review confirms all lanes passed.
+description: Final gate before task close, and the home of Guild's verify-the-claim discipline — no completion language before an independent VCS diff confirms the change exists on disk. Runs five checks: (1) tests the spec defined, (2) scope — every changed file traces to a lane's diff, (3) success-criteria match, (4) no open blocker `followups:`, (5) assumptions reviewed. Writes `.guild/runs/<run-id>/verify.md` (pass/fail + run summary); on pass hands off to `guild:reflect`. TRIGGER: "is this done", "final check", "verify the task is complete", "run the done-gate", "ready to hand off — confirm the diff", "tests pass, are we done". DO NOT TRIGGER for: reviewing individual handoffs (guild:review), or starting new work.
+when_to_use: Seventh and final step of Guild lifecycle, after guild:review confirms all lanes passed. Also the per-claim precondition a lane self-applies before emitting a handoff receipt — confirm the change with an independent diff before any success language.
 type: meta
 ---
 
@@ -45,9 +45,43 @@ It contains, in order:
 
 Keep it terse and grep-friendly; downstream (`guild:reflect`) reads this file, not the specialist transcripts.
 
-## Distinction from guild:verify-done
+## Verify the claim against an independent diff (absorbed)
 
-`guild:verify-done` is a single-PR / single-change discipline: before you claim a piece of work is done, run the verification command and show the output. It knows nothing about lanes, receipts, or assumption logs. `guild:verify-done` is the Guild-task analogue: it verifies a whole multi-lane run — several specialists' receipts, a spec's `success_criteria`, a scope union across lanes, and an assumption log accumulated over the run. Use the superpowers skill inside any single change; use this skill at the end of a full `/guild` lifecycle. Picking the wrong one either under-verifies (superpowers on a Guild run skips scope/assumption review) or over-verifies (this skill on a one-file PR demands artifacts that do not exist). This skill forks rather than references because it consumes Guild-specific artifacts that the superpowers skill has no concept of.
+This skill is the home of Guild's per-claim verification discipline: **no
+completion or success language before an independent VCS diff confirms the
+change exists on disk.** A completion claim is a hypothesis until the diff
+proves it — a lane that writes "done — all changes applied" over an empty tree,
+a partial edit, or changes in the wrong path poisons the receipt that
+`guild:review` then trusts, and the gap surfaces a lane later, far from its
+origin.
+
+One principle, two scopes:
+
+- **Per-claim precondition (every lane, before its receipt).** Before writing
+  any of "done", "complete", "finished", "ready to hand off", or "tests pass",
+  the specialist takes an independent diff and gates the claim on it — never
+  trusting its own running narrative of what it changed:
+  ```bash
+  git status --porcelain            # every modified/added/untracked path
+  git diff --stat HEAD              # scope of the change
+  git diff HEAD -- <expected-paths> # the change is where the lane scoped it
+  ```
+  For every scoped file, confirm a diff hunk exists; for every diff hunk,
+  confirm it traces to the lane scope (an out-of-scope edit is a finding, not a
+  pass). Run the spec's defined checks and capture the **actual** exit status —
+  never infer pass from "it should pass". Diff present + in-scope + checks green
+  → the claim is evidence-backed, proceed to the receipt; otherwise do **not**
+  claim completion — report the gap with the diff output as evidence and
+  continue the work.
+
+- **Final multi-lane gate (the five checks above).** They re-apply the same
+  diff-is-the-evidence rule across the whole run: check 2 unions the
+  `changed_files` across every receipt and re-confirms each traces to its
+  lane's `scope`, and check 1 re-runs the spec's test rather than trusting a
+  receipt's word.
+
+The VCS diff — not the narrative — is the single source of truth for what
+changed, at both scopes.
 
 ## Handoff
 

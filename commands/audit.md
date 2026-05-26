@@ -1,11 +1,11 @@
 ---
-name: guild audit
+name: audit
 description: "Self-maintenance — static security audit of installed Guild scripts (SHA-256 hashes, network/filesystem flags) + the static boundary-check section. Read-only static analysis. Dispatches to guild:audit."
 argument-hint: ""
 allowed-tools: Read, Grep, Glob, Bash, Skill
 ---
 
-# /guild audit — self-maintenance (Guild-on-Guild)
+# /guild:audit — self-maintenance (Guild-on-Guild)
 
 Static security audit of installed Guild scripts. Maps to skill
 `guild:audit`. **R** static analysis — includes the static

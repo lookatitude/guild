@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Build the React component for the runs table.",
+    "Wrap the dashboard data fetch in a Suspense boundary.",
+    "Add an error boundary around the chart panel.",
+    "Why is this React list re-rendering on every keystroke?",
+    "Author a custom hook for the filter logic."
+  ],
+  "should_not_trigger": [
+    "Build the same screen in React Native for iOS and Android.",
+    "Set up React Query to cache the runs data.",
+    "Write the Vite config to code-split this view.",
+    "Make the table keyboard-navigable and screen-reader friendly.",
+    "Design the REST endpoints the component will call.",
+    "Decide the test pyramid for the dashboard feature."
+  ]
+}

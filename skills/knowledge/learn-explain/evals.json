@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Explain how the payment-retry module works.",
+    "Walk me through src/auth/middleware.ts and what calls it.",
+    "What does the short-code generator do and what depends on it?",
+    "Deep-dive this file before I change it.",
+    "Run learn explain on the rate-limiter class."
+  ],
+  "should_not_trigger": [
+    "Build the cheap-scan codebase map.",
+    "Build the deep knowledge graph.",
+    "Narrate the onboarding tour.",
+    "Analyze the diff's blast radius.",
+    "Search the whole graph for every auth-related node.",
+    "Launch the interactive dashboard."
+  ]
+}

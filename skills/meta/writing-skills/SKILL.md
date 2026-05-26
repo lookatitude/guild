@@ -8,8 +8,6 @@ type: meta
 derived_from_template: guild.skill_template.v1
 ---
 
-> **Meta skill** — forked from `superpowers:writing-skills` v5.0.7 §13 (MIT, © 2025 Jesse Vincent). Guild-native adaptation, **zero runtime dependency** on superpowers. See `LICENSE-attribution.md`.
-
 # When to use it
 
 Use when a skill body must be written or substantially rewritten — minting a

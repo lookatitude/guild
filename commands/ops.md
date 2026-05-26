@@ -1,11 +1,11 @@
 ---
-name: guild ops
+name: ops
 description: "Operations — full guild:operations skill [v2]: five runbook classes (release / monitoring / incident / rollback / maintenance) selected by the positional [runbook] else by surfaced detection (always confirmed, overridable), under a split autonomy posture + four non-negotiable safety rails (incident/rollback never autonomous; first run always interactive; always-ask hard set unconditional; mandatory pre-flight dry-run); devops-* producer vs security+architect G-operations challenger; consumes Quality, feeds the D8 release leg"
 argument-hint: "[runbook]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
 
-# /guild ops — phase: Operations `[v2]`
+# /guild:ops — phase: Operations `[v2]`
 
 The **Operations** phase entrypoint — the full `guild:operations` skill
 `[v2]` (promoted from the v1 reserved notice). Five runbook classes —
@@ -19,7 +19,7 @@ challenger. Consumes Quality, feeds the D8 release leg.
 
 Promotion behaviour is canonical in `architecture/command-surface.md §3.1`
 (Operations `[v2]` row) — bound by pointer, not re-spelled. Verb↔phase edge:
-`§6` (D-14: `/guild ops` → Operations; node id `OPS`). Phase concept
+`§6` (D-14: `/guild:ops` → Operations; node id `OPS`). Phase concept
 binding: `lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
 
 ## Contract binding (by pointer — never re-spelled)
@@ -37,8 +37,8 @@ Not re-spelled.
 ## Usage
 
 ```
-/guild ops
-/guild ops release
+/guild:ops
+/guild:ops release
 ```
 
 All six global flags + `--dry-run` apply (`command-surface.md §4`, by
@@ -69,7 +69,7 @@ pointer). The mandatory pre-flight dry-run is a safety rail, independent of
 Resolve `guild.phase_entry.v1` (pointer above), then drive the Operations
 phase by invoking:
 
-1. **`guild:operations`** (`skills/guild-operations`) — the full `[v2]`
+1. **`guild:operations`** (`skills/guild:guild-operations`) — the full `[v2]`
    skill: confirm the runbook class (positional `[runbook]` ∈ {release,
    monitoring, incident, rollback, maintenance} else surfaced detection,
    overridable), run the **mandatory pre-flight dry-run**, then ExecuteRunbook

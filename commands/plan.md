@@ -1,21 +1,21 @@
 ---
-name: guild plan
+name: plan
 description: "Planning — team-compose + PRD + per-specialist lane plan + autonomy contract"
 argument-hint: "[--team-size=N]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
 
-# /guild plan — phase: Planning
+# /guild:plan — phase: Planning
 
 The **Planning** phase entrypoint. Composes the team, writes the PRD and the
 per-specialist lane plan, and authors the additive optional per-lane autonomy
 contract. **Team composition is a sub-step strictly inside this command**
 (its own approval gate); there is no standalone team command in v2 — inspect
-via `/guild status`, edit via the `[edit]` response at the plan/team approval
+via `/guild:status`, edit via the `[edit]` response at the plan/team approval
 gate, raise the cap with `--team-size=N`.
 
 Canonical surface: `architecture/command-surface.md §3.1` (Planning row) and
-the verb↔phase edge in `§6` (D-14: `/guild plan` → Planning). Phase concept
+the verb↔phase edge in `§6` (D-14: `/guild:plan` → Planning). Phase concept
 binding: `lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
 
 ## Contract binding (by pointer — never re-spelled)
@@ -34,8 +34,8 @@ optional per-lane `autonomy_contract` is authored here and approved at the
 ## Usage
 
 ```
-/guild plan
-/guild plan --team-size=8
+/guild:plan
+/guild:plan --team-size=8
 ```
 
 All six global flags + `--dry-run` apply (`command-surface.md §4`, by

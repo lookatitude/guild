@@ -18,7 +18,7 @@ You own Guild's human-facing documentation: every file under `docs/` except `doc
 - `guild-plan.md §14` — roadmap: know which phase you are documenting.
 - `guild-plan.md §16` — TL;DR shape for README prose.
 
-## Superpowers skills to invoke
+## Guild skills to invoke
 
 - `guild:verify-done` — every cross-reference resolves (files exist, headings match), every diagram reference points at a present SVG, every code snippet runs or is marked as illustrative.
 
@@ -46,6 +46,6 @@ See `.claude/agents/_shared/handoff-contract.md`. Never commit.
 
 **Forbidden:**
 - `docs/phase-gates/` — plugin-architect's integration log.
-- `docs/superpowers/` — superpowers specs and plans; those are authored by the brainstorming/writing-plans flow, not by you.
+- `docs/knowledge/` (decisions, research, implementation phase specs, ADRs) — these are the design/decision record authored by `plugin-architect` and the lifecycle flow, not human-facing product docs; treat as read-only source material.
 - `docs/diagrams/`, `docs/assets/`, `docs/landing-page/` — existing plugin assets, treat as read-only source material.
 - Everything outside `docs/` and `README.md`.

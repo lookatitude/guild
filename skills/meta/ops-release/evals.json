@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Run the release runbook for this run.",
+    "The ops router selected class=release — execute the release playbook.",
+    "Cut the release using the approved deploy runbook.",
+    "Ship runbook: populate guild.release.v1 and supply the D8 release evidence.",
+    "Execute the release-class operations playbook under the router's rails."
+  ],
+  "should_not_trigger": [
+    "Run the incident runbook — production is down.",
+    "Roll back the last deploy.",
+    "Set up monitoring and observability dashboards.",
+    "Run the maintenance runbook for the dependency bump.",
+    "Compute the release-readiness gate — should we release?",
+    "Author the CI/CD pipeline for this service.",
+    "Close out the initiative now that the release shipped."
+  ]
+}

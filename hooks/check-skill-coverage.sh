@@ -89,7 +89,7 @@ fi
 # ── Emit nudge (once per session) ─────────────────────────────────────────
 if [[ -n "${NUDGE_DOMAIN}" ]]; then
   touch "${LOCK_FILE}" 2>/dev/null || true
-  echo "[Guild] No specialist covers \"${NUDGE_DOMAIN}\" yet. The closest available specialists are Architect and Backend. Use /guild to compose a team — or propose a new specialist via /guild plan (team is composed as a plan sub-step)."
+  echo "[Guild] No specialist covers \"${NUDGE_DOMAIN}\" yet. The closest available specialists are Architect and Backend. Use /guild:guild to compose a team — or propose a new specialist via /guild:plan (team is composed as a plan sub-step)."
 fi
 
 exit 0

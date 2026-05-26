@@ -1,13 +1,13 @@
 ---
 name: guild-evolve-skill
 description: Runs the §11.2 10-step evolve pipeline on one named skill — snapshot, load evals, dispatch paired subagents (A=current, B=proposed), drafter writes assertions, grader evaluates, benchmark + flip report, shadow mode, promotion gate, description optimizer, commit or archive. NEVER auto-edits a skill without passing the promotion gate; rejected attempts are archived, not deleted. TRIGGER for "evolve guild:<skill-name>", "run the evolve loop on <skill>", "re-tune this skill's description", "promote this reflection into a skill edit". DO NOT TRIGGER for creating a new skill from scratch (skill-author authors new skills directly), creating a new specialist (use guild:create-specialist), rolling back a skill version (guild:rollback-skill), reviewing runs (guild:review), composing a team (guild:team-compose), or ingesting wiki sources (guild:wiki-ingest).
-when_to_use: Explicit user request /guild evolve <skill> OR automatic threshold when ≥3 reflection-proposals accumulate for one skill (per §11.1 automatic trigger).
+when_to_use: Explicit user request /guild:evolve <skill> OR automatic threshold when ≥3 reflection-proposals accumulate for one skill (per §11.1 automatic trigger).
 type: meta
 ---
 
 # guild:evolve-skill
 
-Implements `guild-plan.md §11.2` (self-evolution pipeline — 10 steps) and the two `§11.1` triggers (automatic ≥3-reflection threshold + explicit `/guild evolve <skill>`). Runs paired-subagent evals in the skill-creator style with an AgentDevel-style flip-centered promotion gate, then commits the edit only if the gate passes. Rejected attempts are archived under `.guild/evolve/<run-id>/archived/` per `§11.3` (no destructive operations — rollbacks themselves snapshot as new versions).
+Implements `guild-plan.md §11.2` (self-evolution pipeline — 10 steps) and the two `§11.1` triggers (automatic ≥3-reflection threshold + explicit `/guild:evolve <skill>`). Runs paired-subagent evals in the skill-creator style with an AgentDevel-style flip-centered promotion gate, then commits the edit only if the gate passes. Rejected attempts are archived under `.guild/evolve/<run-id>/archived/` per `§11.3` (no destructive operations — rollbacks themselves snapshot as new versions).
 
 This skill is a **gatekeeper**, not a free-form editor. It refuses to mutate a live skill file without a passed promotion gate. If the gate fails, it stops and surfaces the flip report + shadow-mode output so the user can decide.
 
@@ -64,7 +64,7 @@ If the gate returns "regressions present" and the user declines to approve, stop
 
 Emit a `handoff` block naming the evolve run and gate outcome so the orchestrator can route downstream:
 
-- On **promote**: emits a summary to `/guild stats` (the promoted version + flip report highlights) so the next `/guild stats` surfaces the evolved skill. If the user later invokes `/guild rollback <skill>`, the snapshot taken in step 1 is the target.
+- On **promote**: emits a summary to `/guild:stats` (the promoted version + flip report highlights) so the next `/guild:stats` surfaces the evolved skill. If the user later invokes `/guild:rollback <skill>`, the snapshot taken in step 1 is the target.
 - On **reject**: emits the archived-attempt path + the gate's triggering-condition rationale. The user may re-run with a refined proposed edit; the archived attempt is re-openable.
 
 Payload fields: `run_id`, `skill`, `gate_outcome` (`promoted` / `rejected`), `flip_summary` (`regressions: N, fixes: N, token_delta: ±X%`), `version_path` (the `.guild/skill-versions/<skill>/v<N>/` snapshot), and `archived_path` (only on reject).
