@@ -20,7 +20,8 @@
     },
     "testMatch": [
       "**/evolve/harness.test.ts",
-      "**/shadow/harness.test.ts"
+      "**/shadow/harness.test.ts",
+      "**/workspace/*.test.ts"
     ],
     "testTimeout": 60000
   }

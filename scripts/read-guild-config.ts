@@ -63,6 +63,11 @@ interface DefaultsBlock {
   quality: { budget: QualityBudget };
   reporting: "standard" | "quiet" | "verbose";
 }
+interface WorkspaceBlock {
+  /** auto (default) = detect by immediate-child rule; on = force workspace; off = force regular. NO max_depth — depth is fixed at 1. */
+  mode: "auto" | "on" | "off";
+}
+
 interface GuildSettings {
   rigor: "quick" | "standard" | "deep";
   auto_approve: string[]; // [] | [spec,plan,build] | [all]
@@ -72,6 +77,8 @@ interface GuildSettings {
   index: "auto" | "off";
   /** Execution backend selection (D5 dispatch ladder). Default "auto". */
   agent_mode: "team" | "agent" | "subagent" | "auto";
+  /** Workspace federation mode (guild.workspace.v1). Depth is hard-fixed at 1 — no max_depth. */
+  workspace: WorkspaceBlock;
   // power-user overrides
   loops: string | null;
   loop_cap: number;
@@ -87,6 +94,7 @@ const DEFAULTS: GuildSettings = {
   initiative_default: null,
   index: "auto",
   agent_mode: "auto",
+  workspace: { mode: "auto" },
   loops: null,
   loop_cap: 16,
   codex_cap: 5,
@@ -117,6 +125,10 @@ const HELP: Record<string, string> = {
     "auto: $TMUX→team(in-session); tmux-installed→team(new-session); " +
     "independent-agents-supported→agent; else→subagent. " +
     "Replaces deprecated defaults.agent_team.",
+  "workspace.mode":
+    "auto (default) | on | off — workspace federation mode (guild.workspace.v1). " +
+    "auto: detect by immediate-child rule (.git/.guild). on: force workspace. off: force regular. " +
+    "Depth is hard-fixed at 1 — no max_depth knob. Overridden by --mode flag on workspace/detect.ts.",
   loops: "null | none|spec|plan|implementation|all|<csv> — power-user; null = derive from rigor",
   loop_cap: "int 1-256 — max rounds per adversarial loop",
   codex_cap: "int 1-10 — max rounds per Codex review gate",
@@ -292,7 +304,7 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     const rejects: string[] = [];
     const TIER1 = new Set([
       "rigor", "auto_approve", "review", "host", "initiative_default",
-      "index", "agent_mode", "loops", "loop_cap", "codex_cap", "defaults",
+      "index", "agent_mode", "workspace", "loops", "loop_cap", "codex_cap", "defaults",
     ]);
     for (const k of Object.keys(parsed)) {
       if (k.startsWith("_")) continue; // _help / _docs annotations
@@ -309,6 +321,27 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     // D5: agent_mode as Tier-1 key (supersedes defaults.agent_team).
     if (VALID_AGENT_MODE.has(parsed["agent_mode"] as string))
       out.agent_mode = parsed["agent_mode"] as GuildSettings["agent_mode"];
+    // workspace.mode (guild.workspace.v1): auto|on|off. No max_depth — depth is fixed at 1.
+    if (isPlainObject(parsed["workspace"])) {
+      const ws = parsed["workspace"] as Record<string, unknown>;
+      const wsMode = ws["mode"];
+      if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
+        out.workspace = { mode: wsMode };
+      } else if (ws["mode"] !== undefined) {
+        process.stderr.write(
+          `[read-guild-config] WARN: unknown workspace.mode "${wsMode}" — valid values: auto|on|off. Using auto.\n`
+        );
+      }
+      // Closed-key: reject unknown workspace.* keys (no max_depth — depth is fixed at 1)
+      const VALID_WS_KEYS = new Set(["mode"]);
+      for (const wk of Object.keys(ws)) {
+        if (!VALID_WS_KEYS.has(wk)) {
+          rejects.push(
+            `unknown workspace key "${wk}" (closed key set — no max_depth, depth is hard-fixed at 1)`
+          );
+        }
+      }
+    }
     if (typeof parsed["loops"] === "string" || parsed["loops"] === null) out.loops = parsed["loops"] as string | null;
     if (typeof parsed["loop_cap"] === "number") out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
     if (typeof parsed["codex_cap"] === "number") out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
@@ -423,6 +456,8 @@ function main(): void {
     ...fileConfig,
     ...flags,
     defaults: { ...DEFAULTS.defaults, ...(fileConfig.defaults ?? {}) },
+    // workspace is a nested object — deep-merge so partial overrides work
+    workspace: { ...DEFAULTS.workspace, ...(fileConfig.workspace ?? {}), ...(flags.workspace ?? {}) },
   };
 
   // Which rigor-expandable keys did the user set EXPLICITLY (CLI flag OR present in

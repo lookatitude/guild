@@ -4,7 +4,10 @@
     "Inventory the project structure with a cheap scan.",
     "Run learn map on this brownfield repo.",
     "Map the repo so Init can finish.",
-    "Give me the cheap-scan CodebaseMap and architecture stub."
+    "Give me the cheap-scan CodebaseMap and architecture stub.",
+    "Check children first — is this root a workspace of sub-repos?",
+    "Register the sub-guilds in this monorepo-of-repos and write the manifest.",
+    "Learn map this umbrella repo; don't scan the whole tree as one blob."
   ],
   "should_not_trigger": [
     "Build the deep knowledge graph for this repo.",
@@ -12,6 +15,7 @@
     "Analyze the diff's blast radius before planning.",
     "Explain how the auth middleware works.",
     "Ingest this Stripe API doc into the wiki.",
-    "Launch the interactive web dashboard for the graph."
+    "Launch the interactive web dashboard for the graph.",
+    "This is a plain single repo with only a docs folder — just plan the feature."
   ]
 }

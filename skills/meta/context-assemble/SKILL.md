@@ -88,6 +88,12 @@ wiki and guild-memory"` (cited, never re-spelled here):
   `guild:wiki-lint` (same channel as the ambient-conflict caveat below).
 - Skip silently when no graph index exists (greenfield, or the deep tier was
   never built) — never fabricate or stub graph content.
+- **Workspace fan-out.** When the root carries a `.guild/workspace.json`
+  (`guild.workspace.v1`), wiki/kg recall fans out across the registered
+  sub-guilds via the guild-memory `cwd` override — each hit tagged by its
+  source sub-guild — instead of reading the (often empty) root wiki alone. See
+  `guild:wiki-query`'s `## Federated fan-out` section; no sub-guild knowledge is
+  copied into the bundle, and the 6k hard cap is unchanged.
 
 ## Ambient context caveat
 

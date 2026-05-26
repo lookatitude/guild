@@ -39,6 +39,21 @@ first, never auto-skipped.
 
 # Output format
 
+On a **workspace** root (detected per the step below): `.guild/workspace.json`
+(`guild.workspace.v1` — bound by pointer to the contract map, never
+schema-copied here: `docs/knowledge/implementation/contract-map.md §A` row
+`guild.workspace.v1` → its canonical body in the federation ADR
+`docs/knowledge/decisions/workspace-aware-init-and-federation.md`). It is
+written by the Lane-B script, not hand-built: `npx tsx
+scripts/workspace/write-manifest.ts --cwd <workspace-root>`. A workspace builds
+its **own** `.guild/wiki/**` **only if** `root_wiki` is true (D-OQ2 — the
+workspace root itself has scannable top-level code); a pure federation root
+(e.g. just `docs/` + sub-repos) gets `root_wiki: false` and **no** root wiki.
+No sub-guild's pages are ever copied up (federation, not duplication).
+
+On a **regular** repo (the default), nothing above is written and the path below
+is byte-for-byte unchanged:
+
 `.guild/init/<slug>.md` (the Init record), `.guild/wiki/**`, `.guild/raw/**`,
 `.guild/settings.json` (the project config surface — scaffolded
 fully-documented **if absent**, idempotent, via
@@ -59,10 +74,31 @@ row 12, when later built) — never schema-copied here.
 
 1. Resolve `guild.phase_entry.v1` (pointer) and fold the Tier-2 `defaults:`.
 2. Detect mode: brownfield vs new-product (`--new`).
+2a. **Detect repo kind (workspace vs regular).** Run `npx tsx
+   scripts/workspace/detect.ts --cwd <root>` — it classifies the target
+   `regular` or `workspace` by stat-ing **immediate children only** (depth
+   fixed at 1, no nesting, no knob) for a nested `.git/` **or** `.guild/`, and
+   honors `settings.json` `workspace.mode: auto | on | off`. Plain dirs (e.g.
+   `docs/`) match neither and are ignored. **Surface the verdict** ("detected N
+   sub-guilds: …, by rule …"), never silent; it is overridable. On `regular`
+   (the common case) skip the workspace branch in step 4 → the rest is unchanged
+   (zero-cost). On `workspace`, take the federation branch in step 4 first.
 3. Cheap-scan tier runs by default (no gate). The full `learn-*` pipeline runs
    only under `--learn` or `defaults.auto_learn: true` (D3) — no
    ask-before-deep-scan gate.
-4. Brownfield (**cheap scan tier = Init-DONE**): invoke
+4. **Workspace path (federation, not duplication):** write the federation
+   manifest with `npx tsx scripts/workspace/write-manifest.ts --cwd
+   <workspace-root>` → `.guild/workspace.json` (`guild.workspace.v1`, by
+   pointer). The writer sets `root_wiki` per D-OQ2 (true iff the root itself has
+   scannable top-level code) and enumerates each detected sub-guild. Build a
+   root wiki **only when** `root_wiki` is true; **never** copy a sub-guild's
+   pages up. For each detected **sub-project with no `.guild/` yet**,
+   **interactively OFFER** `/guild:init` on it (D-OQ3) — register it in the
+   manifest regardless, but never auto-init and never force (mirrors init's
+   stop-and-ask posture). Re-running Init refreshes the manifest idempotently
+   (no clobber of unrelated state). Run the root-wiki branch in step 5 **only
+   when** `root_wiki` is true; a pure federation root stops at the manifest.
+5. Brownfield (**cheap scan tier = Init-DONE**): invoke
    `guild:learn-map`'s stage-1 scan → `codebase-map.json`, build the
    wiki, and write the confidence-tagged `architecture-map.md` **stub**. Do
    **not** build the knowledge-graph or tour here — they are lazy + gated and
@@ -70,9 +106,10 @@ row 12, when later built) — never schema-copied here.
    needs them (or run the full `learn-*` pipeline now under `--learn` /
    `defaults.auto_learn`). New-product: run the Socratic new-product Q&A and
    scaffold the wiki.
-5. Write the Init record and updated wiki index (record that the deep graph
-   is deferred, not produced).
-6. Surface the G-init review (autonomous within an approved contract).
+6. Write the Init record and updated wiki index (record that the deep graph
+   is deferred, not produced; on a workspace, record the manifest path + the
+   federation verdict).
+7. Surface the G-init review (autonomous within an approved contract).
 
 # Evidence requirements
 
@@ -88,7 +125,11 @@ Ambiguous or missing intake answers → surface to the user, do not invent.
 Deep-scan refused → proceed with the shallow scan and record the limitation.
 A pre-existing `.guild/` that conflicts with a fresh Init → stop and ask
 (never overwrite prior knowledge silently). Boundary: all writes land under
-the consuming repo's `.guild/` (never plugin install state).
+the consuming repo's `.guild/` (never plugin install state). On a **workspace**,
+all writes land under the *workspace's* `.guild/` only — detection/registration
+is **read-only** on every sub-guild's `.guild/` (never written during Init).
+Ambiguous detection (a child `.git`/`.guild` that may not be a sibling project)
+→ surface the verdict, let the operator override via `workspace.mode`.
 
 # Safety constraints
 
@@ -109,3 +150,12 @@ hard set). Writes confined to `.guild/` (DH-3 boundary).
 - No `--learn` / `defaults.auto_learn` → cheap scan tier completes Init; the
   deep graph stays deferred (correct, not a failure; run `/guild:learn` later).
 - Pre-existing conflicting `.guild/` → stop-and-ask, nothing overwritten.
+- Workspace root (≥1 child with nested `.git/` or `.guild/`, e.g. just `docs/` +
+  sub-repos) → classified `workspace`, `.guild/workspace.json`
+  (`guild.workspace.v1`) written via `write-manifest.ts`, `root_wiki: false`
+  (no top-level code), no sub-guild pages copied up; verdict surfaced.
+- Workspace with a detected sub-project that has **no `.guild/`** → it is
+  registered in the manifest and `/guild:init` on it is **offered**
+  interactively (never auto-run, never forced).
+- Regular repo with only a `docs/` dir (no nested `.git`/`.guild`) →
+  classified `regular`, no `workspace.json`, cheap-scan path byte-unchanged.

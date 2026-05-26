@@ -116,6 +116,19 @@ Guild registers a tiered command surface. v2 removed the colon namespace
 | `/guild audit` | `guild:audit` | Static security audit of plugin scripts. |
 | `/guild fix` | `guild:diagnose` | Diagnose failed Guild runs and produce a gated self-fix plan. |
 
+### Workspace federation
+
+On a **workspace** root (a monorepo-of-repos whose immediate children are
+themselves sub-projects or sub-guilds — ≥1 child has a nested `.git/` or
+`.guild/`), `/guild init` and `/guild learn` check children first and write a
+federation manifest (`.guild/workspace.json`, `guild.workspace.v1`) instead of
+scanning the union as one repo. The workspace `.guild/` **federates** — it
+queries each sub-guild's wiki via the guild-memory `cwd` override and tags
+results by source, never copying a sub-guild's pages up. Detection is depth-1
+(no nesting, no `max_depth`), overridable via the `workspace.mode: auto|on|off`
+setting; a regular repo is unchanged. Canonical model + schema:
+`docs/knowledge/decisions/workspace-aware-init-and-federation.md`.
+
 ## Backend options
 
 Two execution backends, configured per-task in `.guild/team/<slug>.yaml`:

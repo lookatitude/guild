@@ -373,4 +373,76 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
       expect(out).toMatch(/VALID/);
     });
   });
+
+  // ── workspace.mode (guild.workspace.v1) ─────────────────────────────────────
+  describe("workspace.mode (guild.workspace.v1)", () => {
+    test("--scaffold includes workspace.mode: auto and _help entry", () => {
+      const { status, out } = run(["--scaffold"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.workspace).toBeDefined();
+      expect(j.workspace.mode).toBe("auto");
+      expect(j._help["workspace.mode"]).toBeDefined();
+      expect(j._help["workspace.mode"]).toMatch(/auto.*on.*off|on.*auto/i);
+    });
+
+    test("settings.json workspace.mode=on is read and resolved", () => {
+      const dir = repo();
+      writeSettings(dir, { workspace: { mode: "on" } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.workspace.mode).toBe("on");
+    });
+
+    test("settings.json workspace.mode=off is read and resolved", () => {
+      const dir = repo();
+      writeSettings(dir, { workspace: { mode: "off" } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.workspace.mode).toBe("off");
+    });
+
+    test("default workspace.mode is auto when not set in settings.json", () => {
+      const dir = repo();
+      // no settings.json
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.workspace.mode).toBe("auto");
+    });
+
+    test("--validate rejects unknown workspace.* key (closed key set, no max_depth)", () => {
+      const dir = repo();
+      writeSettings(dir, { workspace: { mode: "auto", max_depth: 2 } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/unknown workspace key "max_depth"/);
+    });
+
+    test("--validate passes valid workspace.mode: auto", () => {
+      const dir = repo();
+      writeSettings(dir, { workspace: { mode: "auto" } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+
+    test("--validate passes valid workspace.mode: on", () => {
+      const dir = repo();
+      writeSettings(dir, { workspace: { mode: "on" } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+
+    test("--validate passes valid workspace.mode: off", () => {
+      const dir = repo();
+      writeSettings(dir, { workspace: { mode: "off" } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+  });
 });

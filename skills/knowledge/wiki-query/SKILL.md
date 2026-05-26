@@ -1,6 +1,6 @@
 ---
 name: guild-wiki-query
-description: Searches .guild/wiki/ by category, tag, freshness, confidence, or full-text. Under ~200 pages uses ripgrep/filesystem via Grep/Glob tools. Above that scale, delegates to guild-memory MCP (optional P6). Resolves source_refs back to .guild/raw/sources/<slug>/ when users ask "where does this come from". TRIGGER for "search the wiki for X", "what do we have on Y", "find standards about Z", "which decisions touched the pricing calculator", "show me recent sources on competitors". DO NOT TRIGGER for: ingesting a new source (guild:wiki-ingest), running lint (guild:wiki-lint), capturing a decision (guild:decisions), or searching the repo source code (use Grep directly).
+description: Searches .guild/wiki/ by category, tag, freshness, confidence, or full-text. Under ~200 pages uses ripgrep/filesystem via Grep/Glob tools. Above that scale, delegates to guild-memory MCP (optional P6). Resolves source_refs back to .guild/raw/sources/<slug>/ when users ask "where does this come from". TRIGGER for "search the wiki for X", "what do we have on Y", "find standards about Z", "which decisions touched the pricing calculator", "show me recent sources on competitors", "search across all sub-guilds in this workspace", "what does the plugin sub-guild know about Z". DO NOT TRIGGER for: ingesting a new source (guild:wiki-ingest), running lint (guild:wiki-lint), capturing a decision (guild:decisions), or searching the repo source code (use Grep directly).
 when_to_use: Any specialist needs wiki knowledge. Invoked inside guild:context-assemble during role-dependent layer builds, and directly by the user via /guild:wiki query.
 type: knowledge
 ---
@@ -33,6 +33,35 @@ Two paths, chosen by scale; pick one per invocation (no mid-query switching):
 
 Check page count first (`§10.5`); over ~200 with no MCP, queries still run via ripgrep but suggest installing `guild-memory` in `followups:`. Full step-by-step, the `find` count command, and the result-list template: **`query-modes.md`** (this directory).
 
+## Federated fan-out (workspace)
+
+When the consuming root carries a `.guild/workspace.json`
+(`guild.workspace.v1` — bound by pointer to the contract map,
+`docs/knowledge/implementation/contract-map.md §A` row `guild.workspace.v1`;
+canonical body in `docs/knowledge/decisions/workspace-aware-init-and-federation.md`),
+a workspace-level query does **not** read the workspace's own (often empty)
+wiki as the whole answer. It **fans out** across every registered sub-guild and
+merges the results — no sub-guild knowledge is ever copied up. Use the manifest's
+own `query_recipe` block (the recipe is self-documented in the manifest):
+
+1. Read `sub_guilds[]` from `workspace.json`; iterate the entries where
+   `has_wiki: true`.
+2. For each, recall from **its** wiki via the existing guild-memory MCP `cwd`
+   override (`wiki_search`/`wiki_get`/`wiki_list` with `cwd: <sub.path>`, or
+   `GUILD_MEMORY_WIKI_ROOT=<sub.path>/.guild/wiki`) — no new MCP, no index copy.
+   The shipped helper `npx tsx scripts/workspace/federated-query.ts` performs
+   this read-only fan-out + merge for you.
+3. **Tag each hit with its source sub-guild** (`sub_guild.name`) and merge into
+   one ranked list (same ranking/contradiction rules as above, applied across
+   the merged set).
+
+**Scoping:** a query that **names one sub-guild** scopes to that sub-guild only
+(query just its wiki via the `cwd` override). A query that names none fans out
+across all `has_wiki` sub-guilds. If the root also has its own wiki
+(`root_wiki: true`), include it as one more source, tagged as the root.
+On a **regular** repo (no `workspace.json`) this section does not apply — the
+single-wiki search strategy above runs unchanged.
+
 ## Contradiction policy
 
 Per `§10.5`: when two returned pages contradict on the same claim, apply the rule and surface BOTH — never silently pick. Rule: **newer wins unless older has `confidence: high` and newer does not.** Mark the conflict in the result (both paths + `updated_at` + `confidence` + a `resolution:` line) and suggest `guild:wiki-lint` in `followups:` so it enters the lint report for human adjudication (`§10.6`). Conflict-block format: **`query-modes.md`**.
@@ -54,6 +83,6 @@ Read-only: never modify `.guild/wiki/`, `.guild/raw/`, `index.md`, or `log.md` u
 The handoff receipt must include:
 
 - `changed_files:` — `- none` (always; read-only).
-- `evidence:` — the query, the filter set, candidates walked, number returned.
-- `assumptions:` — case-sensitivity choice, ambiguous filters defaulted, MCP vs ripgrep path used.
+- `evidence:` — the query, the filter set, candidates walked, number returned (on a workspace: which sub-guilds were fanned out to and the per-source hit counts).
+- `assumptions:` — case-sensitivity choice, ambiguous filters defaulted, MCP vs ripgrep path used, and (on a workspace) whether the query fanned out across all sub-guilds or scoped to one named sub-guild.
 - `followups:` — pages with broken frontmatter, missing raw metadata, contradictions, or a scale-transition suggestion if page count crossed ~200.
