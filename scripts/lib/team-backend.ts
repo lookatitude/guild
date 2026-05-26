@@ -35,12 +35,75 @@ import { spawnSync } from "child_process";
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 
+/**
+ * CLI brand of a host. Canonical home for the cross-host union (CH-1/CH-2 of
+ * docs/knowledge/decisions/v2-cross-host-orchestration.md). `pane-adapter.ts`
+ * and `host-router.ts` import it from here; `write-host-capability.ts` declares
+ * an identical `"claude" | "codex"` union (kept separate to avoid a module
+ * import cycle — the two are structurally assignable).
+ */
+export type HostKind = "claude" | "codex";
+
 export interface Specialist {
   name: string;
   scope: string;
   dependsOn: string[];
   backend?: string;
+  /**
+   * CH-1 (cross-host ADR): per-specialist host brand from `team.yaml`'s `host:`
+   * field. Optional + additive — absent ⇒ the orchestrator host (claude), so a
+   * team with no `host_kind` on any specialist composes byte-identically to the
+   * Claude-only path. Consulted only when a PaneAdapter resolver is wired.
+   */
+  host_kind?: HostKind;
 }
+
+// ── PaneAdapter seam (CH-2, cross-host ADR) ──────────────────────────────────
+//
+// The provider-neutral seam that lets `TmuxTeamBackend` spawn a pane on any CLI
+// brand. The interface lives HERE (the lowest-level lib) so composeTmuxCommands
+// can type against it without importing the concrete adapters; the concrete
+// `ClaudePaneAdapter` / `CodexPaneAdapter` + the `host_kind`-keyed `ADAPTERS`
+// map live in `pane-adapter.ts` (one-directional import → no cycle).
+// Canonical body: docs/knowledge/decisions/v2-cross-host-orchestration.md §CH-2.
+
+/** What a single pane needs to render its launch command + env. */
+export interface PaneSpec {
+  /** Specialist name, or "orchestrator" for the lead pane. */
+  name: string;
+  scope: string;
+  runId: string;
+  slug: string;
+  /** Pre-built staging prompt (from buildPrompt). */
+  prompt: string;
+  hostKind: HostKind;
+}
+
+/** Result of a pre-spawn binary/credential probe (CH-6 fail-fast). */
+export interface PreflightResult {
+  ok: boolean;
+  message: string;
+}
+
+/**
+ * Provider-neutral pane adapter. One implementation per `host_kind`. Adding a
+ * future host (Gemini, …) is one new adapter file — no launcher-core change.
+ */
+export interface PaneAdapter {
+  readonly hostKind: HostKind;
+  /** Bumped when the spawn command/env shape changes (recorded in CH-5). */
+  readonly adapterVersion: string;
+  /** Binary + credential check run BEFORE any pane spawns (CH-6). */
+  preflight(): PreflightResult;
+  /** Shell command for the pane (self-contained: exports env inline). */
+  command(spec: PaneSpec): string;
+  /** Env vars for the pane (informational / manifest; command() inlines them). */
+  env(spec: PaneSpec): Record<string, string>;
+  expectedOutputs(): Array<"heartbeat" | "handoff_receipt" | "approval_request">;
+}
+
+/** Resolver: host brand → its adapter (default map lives in pane-adapter.ts). */
+export type AdapterResolver = (hostKind: HostKind) => PaneAdapter;
 
 export type LaunchMode = "new-session" | "in-session";
 
@@ -181,15 +244,39 @@ export function composeTmuxCommands(opts: {
   slug: string;
   runId: string;
   specialists: Specialist[];
+  /**
+   * CH-1 (cross-host): optional per-pane adapter resolver. When ABSENT the
+   * legacy Claude-only path runs verbatim (`paneCommand(buildPrompt(...))`),
+   * so single-host teams compose byte-identically to today (the launcher
+   * regression anchor). When PRESENT, each pane's command is produced by the
+   * adapter for its `host_kind` — the orchestrator pane is ALWAYS the claude
+   * host (CH-4: orchestrator = the starting host).
+   */
+  resolveAdapter?: AdapterResolver;
 }): ParsedTmuxCommand[] {
-  const { mode, targetName, cwd, slug, runId, specialists } = opts;
+  const { mode, targetName, cwd, slug, runId, specialists, resolveAdapter } = opts;
   const cmds: ParsedTmuxCommand[] = [];
 
-  // Claude Code invocation is the same for every pane: set env vars, cd
-  // into the consumer repo, then launch `claude` with a staging prompt. We
-  // rely on the user's PATH to find the `claude` binary; if it is unresolved
-  // the pane will surface that error directly.
-  const orchestratorCmd = paneCommand(buildPrompt(slug, runId, null), runId);
+  // Per-pane command builder. Default (no resolver) path is the legacy
+  // Claude-only invocation: set env vars, cd into the consumer repo, then
+  // launch `claude` with a staging prompt — relying on PATH to find `claude`.
+  // With a resolver, the pane's host_kind picks the adapter; the orchestrator
+  // (spec === null) is pinned to claude regardless (CH-4).
+  const commandFor = (spec: Specialist | null): string => {
+    const prompt = buildPrompt(slug, runId, spec);
+    if (!resolveAdapter) return paneCommand(prompt, runId);
+    const hostKind: HostKind = spec?.host_kind ?? "claude";
+    return resolveAdapter(hostKind).command({
+      name: spec?.name ?? "orchestrator",
+      scope: spec?.scope ?? "",
+      runId,
+      slug,
+      prompt,
+      hostKind,
+    });
+  };
+
+  const orchestratorCmd = commandFor(null);
 
   if (mode === "new-session") {
     // Pane 1: detached session with the orchestrator.
@@ -229,7 +316,7 @@ export function composeTmuxCommands(opts: {
   // the new pane becomes active, so the next split chains off it. Shared by
   // both modes so the pane/env construction cannot drift.
   for (const spec of specialists) {
-    const cmd = paneCommand(buildPrompt(slug, runId, spec), runId);
+    const cmd = commandFor(spec);
     cmds.push({
       argv: ["tmux", "split-window", "-t", targetName, "-c", cwd, cmd],
       display:
@@ -279,9 +366,18 @@ export interface TmuxSpawnOutcome {
 export class TmuxTeamBackend implements TeamBackend {
   readonly kind = "tmux" as const;
   private run: RunFn;
+  /**
+   * CH-1 (cross-host): optional per-pane adapter resolver. When undefined the
+   * backend behaves exactly as the shipped Claude-only launcher (the
+   * regression anchor). The launcher constructs `new TmuxTeamBackend()` with no
+   * resolver, so its default path is unchanged. A mixed-host caller injects a
+   * resolver (e.g. pane-adapter's `resolveAdapter`) to spawn per-host panes.
+   */
+  private resolveAdapter?: AdapterResolver;
 
-  constructor(opts: { run?: RunFn } = {}) {
+  constructor(opts: { run?: RunFn; resolveAdapter?: AdapterResolver } = {}) {
     this.run = opts.run ?? defaultRun;
+    this.resolveAdapter = opts.resolveAdapter;
   }
 
   isAvailable(): boolean {
@@ -326,8 +422,41 @@ export class TmuxTeamBackend implements TeamBackend {
       slug: req.slug,
       runId: req.runId,
       specialists: req.specialists,
+      resolveAdapter: this.resolveAdapter,
     });
     return { mode: req.mode, targetName: req.targetName, commands };
+  }
+
+  /**
+   * CH-6 — fail-fast preflight. Probe every pane's adapter (orchestrator =
+   * claude, plus each specialist's host) BEFORE any pane spawns. On the first
+   * failure the caller MUST abort with zero panes opened, naming the failing
+   * specialist + host + missing dependency (no partial spawn).
+   *
+   * No-op (always ok) when no adapter resolver is wired — the legacy Claude-only
+   * launcher never preflighted (it let the pane surface a missing `claude`), so
+   * this preserves that behavior for single-host teams.
+   */
+  preflight(specialists: Specialist[]): {
+    ok: boolean;
+    failures: Array<{ specialist: string; hostKind: HostKind; message: string }>;
+  } {
+    if (!this.resolveAdapter) return { ok: true, failures: [] };
+    const failures: Array<{ specialist: string; hostKind: HostKind; message: string }> = [];
+    // Orchestrator pane is always the claude host (CH-4).
+    const panes: Array<{ name: string; hostKind: HostKind }> = [
+      { name: "orchestrator", hostKind: "claude" },
+      ...specialists.map((s) => ({ name: s.name, hostKind: s.host_kind ?? "claude" })),
+    ];
+    // De-dupe identical (host) probes — preflight per distinct host is enough,
+    // but we report against the first specialist that needs it.
+    for (const pane of panes) {
+      const r = this.resolveAdapter(pane.hostKind).preflight();
+      if (!r.ok) {
+        failures.push({ specialist: pane.name, hostKind: pane.hostKind, message: r.message });
+      }
+    }
+    return { ok: failures.length === 0, failures };
   }
 
   /**

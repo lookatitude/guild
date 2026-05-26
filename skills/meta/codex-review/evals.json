@@ -1,0 +1,72 @@
+{
+  "skill": "guild:codex-review",
+  "description": "Trigger-accuracy evals for the Codex adapter skill (deprecated lifecycle entry-point; internal adapter invoked by guild:review-broker per D-BR-A).",
+  "cases": [
+    {
+      "id": "pos-1",
+      "type": "should_trigger",
+      "input": "invoke the Codex adapter for this artifact",
+      "rationale": "Direct adapter invocation phrase — the skill's retained trigger surface as the Codex adapter."
+    },
+    {
+      "id": "pos-2",
+      "type": "should_trigger",
+      "input": "run codex adversarial review adapter on this plan file",
+      "rationale": "Explicit 'codex adversarial review adapter' phrasing targets this skill, not the broker."
+    },
+    {
+      "id": "pos-3",
+      "type": "should_trigger",
+      "input": "dispatch codex:codex-rescue for G-plan gate",
+      "rationale": "Naming the underlying codex-rescue dispatch mechanism is an explicit adapter invocation."
+    },
+    {
+      "id": "pos-4",
+      "type": "should_trigger",
+      "input": "one-off Codex critique of this spec, bypass the broker",
+      "rationale": "One-off Codex-only critique that intentionally bypasses review-broker is the remaining direct-call use case."
+    },
+    {
+      "id": "pos-5",
+      "type": "should_trigger",
+      "input": "codex review adapter — check that ## SATISFIED fires on this artifact",
+      "rationale": "Referencing the ## SATISFIED sentinel mechanic and the adapter pattern targets this skill."
+    },
+    {
+      "id": "neg-1",
+      "type": "should_not_trigger",
+      "input": "run /guild build --review=cross",
+      "rationale": "--review=cross lifecycle trigger now routes to guild:review-broker, not this deprecated entry-point."
+    },
+    {
+      "id": "neg-2",
+      "type": "should_not_trigger",
+      "input": "review: cross is set in settings.json, start adversarial review at G-plan",
+      "rationale": "Lifecycle gate with review:cross routes to guild:review-broker per D-BR-A."
+    },
+    {
+      "id": "neg-3",
+      "type": "should_not_trigger",
+      "input": "run the review broker for this artifact",
+      "rationale": "Explicit review-broker invocation targets guild:review-broker, not the internal adapter."
+    },
+    {
+      "id": "neg-4",
+      "type": "should_not_trigger",
+      "input": "loop L2 plan review — clarify the spec before team-compose",
+      "rationale": "Guild internal loops L1–L4 are owned by guild:loop-clarify / guild:loop-plan-review, never this skill."
+    },
+    {
+      "id": "neg-5",
+      "type": "should_not_trigger",
+      "input": "evolve the brainstorm skill body",
+      "rationale": "Skill evolution routes to guild:evolve-skill, not codex-review."
+    },
+    {
+      "id": "neg-6",
+      "type": "should_not_trigger",
+      "input": "host-agnostic adversarial review — pick the best reviewer family for this lane receipt",
+      "rationale": "Host-agnostic cross-family review is guild:review-broker's domain; codex-review is Codex-only."
+    }
+  ]
+}

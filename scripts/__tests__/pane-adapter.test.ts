@@ -1,0 +1,233 @@
+/**
+ * scripts/__tests__/pane-adapter.test.ts
+ *
+ * CH-2 / CH-6 — PaneAdapter implementations + fail-fast preflight.
+ *
+ * Covers:
+ *   - resolveAdapter selection by host_kind; unknown brand throws.
+ *   - ClaudePaneAdapter.command is byte-identical to the legacy paneCommand
+ *     (the launcher regression anchor) + carries the team env gate.
+ *   - CodexPaneAdapter.command uses `codex exec`, exports GUILD_RUN_ID, and does
+ *     NOT inject the Claude team env gate.
+ *   - preflight: claude --version; codex --version AND non-empty OPENAI_API_KEY.
+ *   - preflightTeam fail-fast: orchestrator is always claude; specialist host
+ *     picked from host_kind; failures collected.
+ *   - TmuxTeamBackend.preflight() no-ops without a resolver (regression) and
+ *     reports failures with one.
+ *   - composeTmuxCommands with an all-claude resolver === the no-resolver path
+ *     (byte-for-byte), and emits a `codex exec` pane for a codex specialist.
+ */
+
+import {
+  buildAdapters,
+  resolveAdapter,
+  preflightTeam,
+  ClaudePaneAdapter,
+  CodexPaneAdapter,
+} from "../lib/pane-adapter";
+import {
+  composeTmuxCommands,
+  paneCommand,
+  buildPrompt,
+  TmuxTeamBackend,
+  type PaneSpec,
+  type RunFn,
+  type RunResult,
+  type Specialist,
+} from "../lib/team-backend";
+
+const OK: RunResult = { status: 0, stdout: "ok", stderr: "" };
+const FAIL: RunResult = { status: 127, stdout: "", stderr: "not found" };
+
+/** A runner that returns a per-binary status. */
+function runner(map: Record<string, RunResult>): RunFn {
+  return (cmd) => map[cmd] ?? FAIL;
+}
+
+function spec(overrides: Partial<PaneSpec> = {}): PaneSpec {
+  return {
+    name: "backend",
+    scope: "api + data",
+    runId: "run-001",
+    slug: "demo",
+    prompt: buildPrompt("demo", "run-001", { name: "backend", scope: "api", dependsOn: [] }),
+    hostKind: "claude",
+    ...overrides,
+  };
+}
+
+describe("resolveAdapter — selection by host_kind", () => {
+  it("returns the Claude adapter for claude and the Codex adapter for codex", () => {
+    const r = resolveAdapter();
+    expect(r("claude")).toBeInstanceOf(ClaudePaneAdapter);
+    expect(r("codex")).toBeInstanceOf(CodexPaneAdapter);
+  });
+
+  it("buildAdapters exposes both brands keyed by host_kind", () => {
+    const a = buildAdapters();
+    expect(a.claude.hostKind).toBe("claude");
+    expect(a.codex.hostKind).toBe("codex");
+    expect(a.claude.adapterVersion).toBe("1");
+  });
+
+  it("throws on an unregistered host_kind (programming error, not a fallback)", () => {
+    const r = resolveAdapter();
+    expect(() => r("gemini" as never)).toThrow(/No PaneAdapter registered/);
+  });
+});
+
+describe("ClaudePaneAdapter", () => {
+  const adapter = new ClaudePaneAdapter();
+
+  it("command is byte-identical to the legacy paneCommand", () => {
+    const s = spec();
+    expect(adapter.command(s)).toBe(paneCommand(s.prompt, s.runId));
+  });
+
+  it("command carries the agent-team env gate + run id + keeps the pane alive", () => {
+    const c = adapter.command(spec());
+    expect(c).toContain("export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1");
+    expect(c).toContain("export GUILD_RUN_ID=run-001");
+    expect(c).toContain("exec $SHELL");
+  });
+
+  it("env reports the team gate + run id", () => {
+    expect(adapter.env(spec())).toEqual({
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
+      GUILD_RUN_ID: "run-001",
+    });
+  });
+
+  it("preflight passes when claude --version exits 0, fails otherwise", () => {
+    expect(new ClaudePaneAdapter({ run: runner({ claude: OK }) }).preflight().ok).toBe(true);
+    const bad = new ClaudePaneAdapter({ run: runner({ claude: FAIL }) }).preflight();
+    expect(bad.ok).toBe(false);
+    expect(bad.message).toMatch(/claude/);
+  });
+});
+
+describe("CodexPaneAdapter", () => {
+  it("command uses `codex exec`, exports GUILD_RUN_ID, NO claude team gate", () => {
+    const adapter = new CodexPaneAdapter({ env: { OPENAI_API_KEY: "sk-x" } });
+    const c = adapter.command(spec({ hostKind: "codex" }));
+    expect(c).toContain("codex exec");
+    expect(c).toContain("export GUILD_RUN_ID=run-001");
+    expect(c).toContain("exec $SHELL");
+    expect(c).not.toContain("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS");
+  });
+
+  it("env reports only the run id (no team gate)", () => {
+    const adapter = new CodexPaneAdapter({ env: {} });
+    expect(adapter.env(spec({ hostKind: "codex" }))).toEqual({ GUILD_RUN_ID: "run-001" });
+  });
+
+  it("preflight requires BOTH codex --version AND a non-empty OPENAI_API_KEY", () => {
+    // both present → ok
+    expect(
+      new CodexPaneAdapter({ run: runner({ codex: OK }), env: { OPENAI_API_KEY: "sk-x" } })
+        .preflight().ok
+    ).toBe(true);
+    // missing binary → fail
+    const noBin = new CodexPaneAdapter({ run: runner({ codex: FAIL }), env: { OPENAI_API_KEY: "sk-x" } }).preflight();
+    expect(noBin.ok).toBe(false);
+    expect(noBin.message).toMatch(/codex/);
+    // missing key → fail (CH-6 refuse-to-spawn)
+    const noKey = new CodexPaneAdapter({ run: runner({ codex: OK }), env: {} }).preflight();
+    expect(noKey.ok).toBe(false);
+    expect(noKey.message).toMatch(/OPENAI_API_KEY/);
+    // empty/whitespace key → fail
+    const blank = new CodexPaneAdapter({ run: runner({ codex: OK }), env: { OPENAI_API_KEY: "   " } }).preflight();
+    expect(blank.ok).toBe(false);
+  });
+});
+
+describe("preflightTeam — fail-fast (CH-6)", () => {
+  const claudeOk = runner({ claude: OK, codex: OK });
+
+  it("orchestrator is always probed as claude; a mixed team passes when all probes pass", () => {
+    const resolver = resolveAdapter({ run: claudeOk, env: { OPENAI_API_KEY: "sk-x" } });
+    const specialists: Array<{ name: string; host_kind?: "claude" | "codex" }> = [
+      { name: "architect" }, // defaults to claude
+      { name: "security", host_kind: "codex" },
+    ];
+    const r = preflightTeam(specialists, resolver);
+    expect(r.ok).toBe(true);
+    expect(r.failures).toHaveLength(0);
+  });
+
+  it("collects a failure naming the specialist + host + dependency", () => {
+    // codex binary present but OPENAI_API_KEY missing → the codex pane fails.
+    const resolver = resolveAdapter({ run: claudeOk, env: {} });
+    const r = preflightTeam([{ name: "security", host_kind: "codex" }], resolver);
+    expect(r.ok).toBe(false);
+    const f = r.failures.find((x) => x.specialist === "security");
+    expect(f?.hostKind).toBe("codex");
+    expect(f?.message).toMatch(/OPENAI_API_KEY/);
+  });
+
+  it("fails when the orchestrator's claude binary is missing", () => {
+    const resolver = resolveAdapter({ run: runner({ claude: FAIL, codex: OK }), env: { OPENAI_API_KEY: "sk-x" } });
+    const r = preflightTeam([{ name: "security", host_kind: "codex" }], resolver);
+    expect(r.ok).toBe(false);
+    expect(r.failures.some((x) => x.specialist === "orchestrator")).toBe(true);
+  });
+});
+
+describe("TmuxTeamBackend integration (regression-preserving)", () => {
+  const SPECIALISTS: Specialist[] = [
+    { name: "architect", scope: "boundaries", dependsOn: [] },
+    { name: "backend", scope: "api", dependsOn: ["architect"] },
+  ];
+
+  it("composeTmuxCommands with an all-claude resolver === the no-resolver path (byte-for-byte)", () => {
+    const common = {
+      mode: "new-session" as const,
+      targetName: "guild-demo",
+      cwd: "/tmp/repo",
+      slug: "demo",
+      runId: "run-test-001",
+      specialists: SPECIALISTS,
+    };
+    const legacy = composeTmuxCommands(common);
+    const viaAdapter = composeTmuxCommands({ ...common, resolveAdapter: resolveAdapter() });
+    expect(viaAdapter.map((c) => c.display)).toEqual(legacy.map((c) => c.display));
+  });
+
+  it("a codex specialist gets a `codex exec` pane; orchestrator stays claude", () => {
+    const mixed: Specialist[] = [
+      { name: "architect", scope: "boundaries", dependsOn: [] },
+      { name: "security", scope: "audit", dependsOn: [], host_kind: "codex" },
+    ];
+    const cmds = composeTmuxCommands({
+      mode: "new-session",
+      targetName: "guild-demo",
+      cwd: "/tmp/repo",
+      slug: "demo",
+      runId: "run-test-001",
+      specialists: mixed,
+      resolveAdapter: resolveAdapter({ env: { OPENAI_API_KEY: "sk-x" } }),
+    });
+    const inline = cmds.map((c) => c.argv[c.argv.length - 1]);
+    // Orchestrator (new-session) pane is claude.
+    expect(inline[0]).toContain("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1");
+    // Exactly one pane runs `codex exec` (the security specialist).
+    const codexPanes = inline.filter((c) => c.includes("codex exec"));
+    expect(codexPanes).toHaveLength(1);
+    expect(codexPanes[0]).not.toContain("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS");
+  });
+
+  it("TmuxTeamBackend.preflight() no-ops without a resolver (regression)", () => {
+    const backend = new TmuxTeamBackend({ run: runner({}) });
+    expect(backend.preflight(SPECIALISTS)).toEqual({ ok: true, failures: [] });
+  });
+
+  it("TmuxTeamBackend.preflight() reports failures when a resolver is wired", () => {
+    const backend = new TmuxTeamBackend({
+      run: runner({}),
+      resolveAdapter: resolveAdapter({ run: runner({ claude: OK, codex: FAIL }), env: { OPENAI_API_KEY: "sk-x" } }),
+    });
+    const r = backend.preflight([{ name: "security", scope: "audit", dependsOn: [], host_kind: "codex" }]);
+    expect(r.ok).toBe(false);
+    expect(r.failures.some((f) => f.hostKind === "codex")).toBe(true);
+  });
+});

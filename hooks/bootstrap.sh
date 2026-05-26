@@ -54,6 +54,18 @@ except Exception as e:
 " 2>/dev/null || echo "(unknown)")"
 fi
 
+# ── Write host-capability manifest (RE-5, idempotent) ─────────────────────
+# Ensures .guild/hosts/<host-id>/capability.json exists before the cross-host
+# router (RE-4) needs it. The script is atomic (temp-then-rename) and never
+# deletes or replaces a fresh same-session file — true idempotent at write time.
+# Failure is non-fatal: the router reads a degraded/absent manifest gracefully.
+_WRITE_CAPABILITY="${PLUGIN_ROOT}/scripts/write-host-capability.ts"
+if [[ -f "${_WRITE_CAPABILITY}" ]] && command -v npx &>/dev/null; then
+  npx --yes tsx "${_WRITE_CAPABILITY}" \
+    --cwd "${PWD}" \
+    --source "session-start" >/dev/null 2>&1 || true
+fi
+
 # ── Print status block ─────────────────────────────────────────────────────
 cat <<STATUS
 ┌─────────────────────────────────────────────────────────────────┐

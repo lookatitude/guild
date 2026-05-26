@@ -120,8 +120,8 @@ this skill's deep halves:
 
 **`powerful` is invoked ONLY** when the stage-2 edge-candidate count exceeds the
 configurable threshold (the cross-document graph-schema/topology check) OR a
-`mid` stage flags `escalate` in its typed `guild.handoff.v2` output (ADR
-§3/§5/§8). A `mid` stage that hits something above its tier escalates for **one
+`mid` stage flags `escalate` in its typed `guild.handoff.v2` output
+(`contract-map.md §B-post` row 2; ADR §3/§8). A `mid` stage that hits something above its tier escalates for **one
 `powerful` sub-answer for that sub-question only** — it is not re-run wholesale
 (ADR §3 advisor pattern).
 

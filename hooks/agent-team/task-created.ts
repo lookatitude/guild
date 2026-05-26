@@ -44,6 +44,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
+import { markLaneInProgress } from "../lib/run-state.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -168,6 +169,31 @@ async function main(): Promise<void> {
         );
       }
     }
+  }
+
+  // ── Seed run-state in_progress (ADR-RE-1 dispatch seam) ──────────────────
+  // TaskCreated is the closest hook-layer observable to a lane dispatch.
+  // There is no "TaskStarted" event, so this is the best proxy available.
+  // The agent-team launcher (scripts/agent-team-launcher.ts) MUST ALSO call
+  // `markLaneInProgress` per specialist pane before spawning so the transition
+  // is seeded from the launch side (launcher owns the authoritative write;
+  // this hook-side write is the earliest observable hook checkpoint).
+  // Non-fatal: run-state is a rebuildable cache, never the system of record.
+  // Use || so an empty GUILD_RUN_ID string also falls through to the fallback
+  // (matches task-completed.ts's deriveRunId() semantics for consistency).
+  const runId = process.env["GUILD_RUN_ID"] || `run-${(payload.session_id ?? "unknown")}`;
+  const runDir = path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  try {
+    markLaneInProgress(runDir, { runId }, taskId);
+    process.stderr.write(
+      `[task-created] run-state: lane "${taskId}" → in_progress ` +
+        `(${path.join(runDir, "run-state.json")}).\n`
+    );
+  } catch (err) {
+    process.stderr.write(
+      `[task-created] WARN: run-state in_progress write failed (non-fatal, ` +
+        `rebuildable cache): ${err instanceof Error ? err.message : String(err)}\n`
+    );
   }
 
   // All validations passed

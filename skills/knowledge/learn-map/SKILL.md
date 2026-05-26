@@ -131,7 +131,7 @@ re-spells the tier→model map or the config schema (SC-1).
 
 **`powerful` is invoked ONLY** when an edge-candidate count exceeds the
 configurable threshold OR a `mid` stage flags `escalate` in its typed
-`guild.handoff.v2` output (ADR §3/§5/§8). For the cheap-scan tier this skill
+`guild.handoff.v2` output (`contract-map.md §B-post` row 2; ADR §3/§8). For the cheap-scan tier this skill
 produces (stage 1 + the architecture-map stub), **every LLM half is `cheap`**
 and **zero `powerful` calls** are made — a plain `/guild:init` cheap-scan never
 escalates (SC-1, VC-1). The deep stages that can reach `mid`/`powerful` live in

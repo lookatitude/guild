@@ -1,15 +1,30 @@
 ---
 name: guild-codex-review
-description: Adversarial Codex review gate for Guild lifecycle artifacts. Dispatches `codex:codex-rescue` at Guild gates — G-spec (after brainstorm, before team-compose), G-plan (after plan, before user-approval), G-lane (after each lane receipt), and G-diagnose (diagnosis/fix plans). Loops until Codex emits `## SATISFIED` on its own line, cap = 5 rounds per gate (configurable via `--codex-cap=N`). Writes trail to `.guild/runs/<run-id>/codex-review/<gate>.md`. Gracefully skips if `codex --version` fails. TRIGGER on `--review=cross` flag in `/guild`, "run codex adversarial review", "adversarial review the spec/plan/lane", "codex gate G-spec/G-plan/G-lane", "codex review diagnose plan". DO NOT TRIGGER for: internal Guild adversarial loops (L1–L4, owned by `guild:loop-clarify`, `guild:loop-plan-review`, `guild:loop-implement`), direct skill evolution (`guild:evolve-skill`), or any run where `--review=cross` flag is absent.
-when_to_use: Invoked by brainstorm/plan/execute-plan skills when `codex_review: true` is set in the run context. Called at the three lifecycle gates. Also callable directly for one-off artifact review. Emits `codex_review_round` events to the v1.4 JSONL audit log.
+description: "DEPRECATED lifecycle entry-point (D-BR-A) — now the internal Codex adapter invoked BY `guild:review-broker`, never called directly from Guild lifecycle gates. Route `--review=cross` / `review: cross` to `guild:review-broker`. Survives as the Codex-specific adapter: dispatches `codex:codex-rescue` against an artifact, loops until `## SATISFIED` on its own line (cap=5 rounds, `--codex-cap=N`), writes trail to `.guild/runs/<run-id>/codex-review/<gate>.md`, skips gracefully when `codex --version` fails. TRIGGER on: \"invoke the Codex adapter\", \"codex adapter for gate\", \"dispatch codex adversarial review\", \"run Codex critique on artifact\", \"one-off Codex gate review\". DO NOT TRIGGER for: `--review=cross` lifecycle entry (→ `guild:review-broker`), Guild internal loops L1–L4, skill evolution."
+when_to_use: "Invoked by `guild:review-broker` as the internal Codex adapter whenever the resolved reviewer host is Codex. Still callable directly for a one-off Codex-only artifact critique. DEPRECATED as a direct lifecycle gate — route `--review=cross` and all G-spec/G-plan/G-lane/G-diagnose triggers to `guild:review-broker`. Emits `codex_review_round` events to the v1.4 JSONL audit log."
 type: meta
 ---
 
 # guild:codex-review
 
-Brings Codex adversarial review into the `/guild` lifecycle as a first-class user-facing feature. Available to any plugin user who has `codex-plugin` installed. Graceful degradation when Codex is unavailable.
+> **⚠️ DEPRECATED as a lifecycle entry-point (ADR D-BR-A,
+> `docs/knowledge/decisions/v2-review-broker-and-artifact-bus.md`).**
+> This skill is now the **internal Codex adapter** invoked by
+> `guild:review-broker`. All lifecycle gate wiring (`--review=cross`,
+> `review: cross`) routes through the broker. Direct invocation is
+> permitted only for one-off Codex-only artifact critiques that bypass the
+> broker intentionally. New lifecycle gates **must not** call this skill
+> directly.
 
-Implements the discipline previously documented as dev-only in `CLAUDE.md`. Now ships as a meta-skill so any `/guild` run can opt in via `--review=cross`.
+The Codex-specific adapter beneath `guild:review-broker`. Dispatches
+`codex:codex-rescue`, manages the `## SATISFIED` sentinel loop, and writes
+the per-gate trail. The broker owns author/reviewer resolution; this
+adapter owns the Codex dispatch mechanism.
+
+Previously shipped as a first-class user-facing lifecycle gate. That role
+is superseded by `guild:review-broker` (host-agnostic, bidirectional,
+structured `review_result.v1`). This skill's sentinel + trail + telemetry
+mechanics are unchanged — the broker relies on them.
 
 ## Gates
 
