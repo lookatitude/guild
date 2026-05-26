@@ -7,8 +7,8 @@ type: meta
 
 # guild:loop-clarify
 
-Implements `.guild/spec/v1.4.0-adversarial-loops.md` SC1 (F-1) and the binding
-contract `guild-benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 1".
+Implements `../benchmark/plans/adr-009-v1.4-adversarial-loops-and-plugin-restructure.md` §SC1 (F-1) and the binding
+contract `../benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 1".
 
 This skill **wraps** `guild:brainstorm`; it does not replace it. The loop runs
 BEFORE `guild:brainstorm` writes the spec. Researcher fact-checking runs
@@ -86,8 +86,9 @@ escalates directly via the 3-option choice. Detail → **`loop-mechanics.md`**.
 `loop_round_start`, `loop_round_end`, `escalation` (`reason ∈ {"cap_hit",
 "malformed_termination_x2"}`; `options_offered` ALWAYS
 `["force-pass", "extend-cap", "rework"]`), `assumption_logged` (one per
-unresolved question on `force-pass`). Appender from T3c's `log-jsonl.ts`
-(`loop-jsonl-stub.ts` until T3c lands). Schema reference → **`loop-mechanics.md`**.
+unresolved question on `force-pass`). Appender from the vendored
+`hooks/lib/v1.4/log-jsonl.ts` (T3c has landed; the former `loop-jsonl-stub.ts`
+is gone). Schema reference → **`loop-mechanics.md`**.
 
 ## Output contract — handoff and follow-on
 

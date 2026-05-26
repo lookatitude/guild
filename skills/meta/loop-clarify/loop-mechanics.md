@@ -3,7 +3,7 @@
 Detail for SKILL.md §"Termination contract", §"Workflow", §"Cap-hit escalation
 copy", §"Backwards-compat fallback", §"Per-lane counter", and §"JSONL events".
 Verbatim from the binding contract
-(`guild-benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 1").
+(`../benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 1").
 
 ## Termination contract — verbatim from the binding contract
 
@@ -98,7 +98,7 @@ verbatim:
 - **`extend-cap`** — "Extend the cap by N rounds (you'll be asked for N)."
 - **`rework`** — "Abort the current loop; return control to the producing skill with the unresolved questions."
 
-Helper functions in `guild-benchmark/src/loop-escalation.ts` build the payload
+Helper functions in `../benchmark/src/loop-escalation.ts` build the payload
 (`buildEscalationPayload`, `buildExtendCapPayload`).
 
 ## Backwards-compat fallback
@@ -114,7 +114,7 @@ non-interactive `claude --print`), fall back to the v1.3 free-text stdin path:
    path.
 
 `formatFallbackPrompt(...)` and `parseFallbackChoice(...)` in
-`guild-benchmark/src/loop-escalation.ts` provide the prompt + parser.
+`../benchmark/src/loop-escalation.ts` provide the prompt + parser.
 
 ## Per-lane counter
 
@@ -127,7 +127,7 @@ Restart semantics are NOT applicable to L1 — restart is L3/L4/security-only (s
 
 ## JSONL events emitted
 
-Per `guild-benchmark/plans/v1.4-jsonl-schema.md` §5/§6/§11:
+Per `../benchmark/plans/v1.4-jsonl-schema.md` §5/§6/§11:
 
 - `loop_round_start` — per round; `lane_id: "phase:brainstorm"`, `loop_layer: "L1"`.
 - `loop_round_end` — per round; same `lane_id`/`loop_layer`/`round_number` pair.
@@ -136,6 +136,7 @@ Per `guild-benchmark/plans/v1.4-jsonl-schema.md` §5/§6/§11:
   `["force-pass", "extend-cap", "rework"]`; `user_choice` records the user's choice.
 - `assumption_logged` — on `force-pass` (one event per unresolved question).
 
-The JSONL appender is supplied by T3c-backend-logging's `log-jsonl.ts`. Until T3c
-lands, callers use `loop-jsonl-stub.ts`'s `LoopJsonlAppender` interface — same
-shape, same call sites.
+JSONL events are appended by `scripts/emit-loop-event.ts` (self-contained;
+writes directly to `events.ndjson`). The vendored log lib is at
+`hooks/lib/v1.4/log-jsonl.ts`. T3c has landed; `loop-jsonl-stub.ts` is no
+longer needed.

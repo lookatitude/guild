@@ -3,7 +3,7 @@
 Detail for SKILL.md §"Termination contract", §"Workflow", §"Cap-hit escalation
 copy", §"Backwards-compat fallback", §"Per-lane counter", and §"JSONL events".
 Verbatim from the binding contract
-(`guild-benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 2").
+(`../benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 2").
 
 ## Termination contract — verbatim from the binding contract
 
@@ -97,7 +97,7 @@ verbatim:
 - **`extend-cap`** — "Extend the cap by N rounds (you'll be asked for N)."
 - **`rework`** — "Abort the current loop; return control to the producing skill with the unresolved questions."
 
-Helper functions in `guild-benchmark/src/loop-escalation.ts` build the payload
+Helper functions in `../benchmark/src/loop-escalation.ts` build the payload
 (`buildEscalationPayload`, `buildExtendCapPayload`).
 
 ## Backwards-compat fallback
@@ -122,7 +122,7 @@ Restart semantics are NOT applicable to L2 — restart is L3/L4/security-only (s
 
 ## JSONL events emitted
 
-Per `guild-benchmark/plans/v1.4-jsonl-schema.md`:
+Per `../benchmark/plans/v1.4-jsonl-schema.md`:
 
 - `loop_round_start` — per round; `lane_id: "phase:plan"`, `loop_layer: "L2"`.
 - `loop_round_end` — per round.
@@ -130,5 +130,7 @@ Per `guild-benchmark/plans/v1.4-jsonl-schema.md`:
   ALWAYS `["force-pass", "extend-cap", "rework"]`.
 - `assumption_logged` — on `force-pass`.
 
-The JSONL appender is supplied by T3c-backend-logging's `log-jsonl.ts` (stub
-interface in `loop-jsonl-stub.ts` until T3c lands).
+JSONL events are appended by `scripts/emit-loop-event.ts` (self-contained;
+writes directly to `events.ndjson`). The vendored log lib is at
+`hooks/lib/v1.4/log-jsonl.ts`. T3c has landed; `loop-jsonl-stub.ts` is no
+longer needed.

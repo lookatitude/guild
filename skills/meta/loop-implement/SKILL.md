@@ -7,8 +7,8 @@ type: meta
 
 # guild:loop-implement
 
-Implements `.guild/spec/v1.4.0-adversarial-loops.md` SC3 (F-3) and the binding
-contract `guild-benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 3".
+Implements `../benchmark/plans/adr-009-v1.4-adversarial-loops-and-plugin-restructure.md` §SC3 (F-3) and the binding
+contract `../benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 3".
 
 This skill **layers atop** `guild:execute-plan` per lane; it does not replace it.
 The lane's owning specialist (backend / frontend / mobile / devops / qa) is the

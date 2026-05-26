@@ -6,7 +6,7 @@ field selects which layers run for a lane.
 ## Five valid values (fixed order)
 
 Plan-validate (T3a-backend-config) accepts ONLY these five values, in this
-fixed order in `LOOPS_APPLICABLE_VALUES` (`guild-benchmark/src/loop-applicable.ts`):
+fixed order in `LOOPS_APPLICABLE_VALUES` (`../benchmark/src/loop-applicable.ts`):
 
 ```
 none, l3-only, l4-only, both, full
@@ -47,7 +47,7 @@ loops_applicable must be one of: none, l3-only, l4-only, both, full
 A security-owned implementation lane cannot also run security-review against
 itself (self-review defeats the adversarial contract). The plan-validate
 decision tree is the binding contract — `validatePlanLane(...)` in
-`guild-benchmark/src/loop-applicable.ts` implements all 4 cases; qa pins each in
+`../benchmark/src/loop-applicable.ts` implements all 4 cases; qa pins each in
 `loop-implement.test.ts`:
 
 1. **Security-owned lane omits `loops_applicable`** → reject exit 2 with literal

@@ -74,7 +74,7 @@ At every site the orchestrator dispatches `AskUserQuestion` with
 - **`extend-cap`** — "Extend the cap by N rounds (you'll be asked for N)."
 - **`rework`** — "Abort the current loop; return control to the producing skill with the unresolved questions."
 
-`buildEscalationPayload(...)` in `guild-benchmark/src/loop-escalation.ts` builds
+`buildEscalationPayload(...)` in `../benchmark/src/loop-escalation.ts` builds
 the payload.
 
 ## Backwards-compat fallback
@@ -91,7 +91,7 @@ Tests pin both branches at every escalation site.
 
 ## JSONL events emitted
 
-Per `guild-benchmark/plans/v1.4-jsonl-schema.md`:
+Per `../benchmark/plans/v1.4-jsonl-schema.md`:
 
 - `loop_round_start` — per round per layer per lane.
 - `loop_round_end` — per round per layer per lane.
@@ -100,5 +100,7 @@ Per `guild-benchmark/plans/v1.4-jsonl-schema.md`:
 - `assumption_logged` — on `force-pass`, on malformed security finding bullets,
   on no-restart-but-logged findings.
 
-The JSONL appender is supplied by T3c-backend-logging's `log-jsonl.ts` (stub
-interface in `loop-jsonl-stub.ts` until T3c lands).
+JSONL events are appended by `scripts/emit-loop-event.ts` (self-contained;
+writes directly to `events.ndjson`). The vendored log lib is at
+`hooks/lib/v1.4/log-jsonl.ts`. T3c has landed; `loop-jsonl-stub.ts` is no
+longer needed.

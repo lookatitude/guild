@@ -7,8 +7,8 @@ type: meta
 
 # guild:loop-plan-review
 
-Implements `.guild/spec/v1.4.0-adversarial-loops.md` SC2 (F-2) and the binding
-contract `guild-benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 2".
+Implements `../benchmark/plans/adr-009-v1.4-adversarial-loops-and-plugin-restructure.md` §SC2 (F-2) and the binding
+contract `../benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 2".
 
 This skill **wraps** `guild:plan`; it does not replace it. The loop runs AFTER
 `guild:plan` writes the plan and BEFORE Gate 3 (user-approval). Security's job is
