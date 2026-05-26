@@ -1,6 +1,6 @@
 ---
 name: guild-team-compose
-description: Match spec domains against BOTH Guild's shipping specialist roster AND the consuming repo's project-local `.guild/agents/*.md` (existing project specialists are reused, never re-created); present existing + gaps with A/B/C/D options (auto-create / skip / substitute / compose from scratch), enforce cap-6 and default 3–4 rules, choose subagent (default) vs agent-team backend, and write `.guild/team/<slug>.yaml`. TRIGGER on "propose a team", "who should work on this", "compose specialists for the spec". DO NOT TRIGGER for: writing the code (execute-plan), creating a new specialist TYPE for Guild itself (that's guild:create-specialist in P6), reviewing completed work (guild:review).
+description: Match spec domains against BOTH Guild's shipping specialist roster AND the consuming repo's project-local `.guild/agents/*.md` (existing project specialists are reused, never re-created); present existing + gaps with A/B/C/D options (auto-create / skip / substitute / compose from scratch), enforce cap-6 and default 3–4 rules, resolve the execution backend via the agent_mode ladder (agent-team / tmux visible panes under tmux; subagent only as the no-tmux fallback), and write `.guild/team/<slug>.yaml`. TRIGGER on "propose a team", "who should work on this", "compose specialists for the spec". DO NOT TRIGGER for: writing the code (execute-plan), creating a new specialist TYPE for Guild itself (that's guild:create-specialist in P6), reviewing completed work (guild:review).
 when_to_use: Second step of the `/guild` lifecycle, after `guild:brainstorm` has produced `.guild/spec/<slug>.md`. Also fires when the user asks to reshape an existing team (e.g. "rework the team for this task", "swap the qa slot for security").
 type: meta
 ---
@@ -43,7 +43,12 @@ From `guild-plan.md §7.2`. Non-negotiable; if a user request conflicts, raise i
 
 ## Execution backend
 
-From `guild-plan.md §7.3`. **Subagents via the Agent tool — default** (self-contained work; only the final artifact returns; lower cost, simpler cleanup, fewer coordination failures). **Agent teams — opt-in**, gated by three conditions that *all* must hold: (1) the user **explicitly approved** the agent-team backend; (2) `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set; (3) peer-coordination needs the orchestrator can't satisfy by serializing subagents. Agent teams are experimental (one team per session, no nesting, higher cost). If any condition is missing, default to subagents and note the fallback in the presentation. The chosen value is written to `team.yaml`'s top-level `backend`, authoritative for `guild:plan` and `guild:execute-plan`.
+Resolved by the **`agent_mode` dispatch ladder** (`CLAUDE.md §"Backend default — the agent_mode dispatch ladder"`; ADR D5, `docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md`) — **not** a hard-coded subagent default. Read `agent_mode` from `.guild/settings.json` (default `auto`) and resolve via `scripts/agent-team-launcher.ts` (`--dry-run` prints the chosen mode + reason without spawning):
+
+- **`auto` (default):** inside tmux (`$TMUX` set) → **agent-team in-session** (a new window in the current session, **one visible pane per specialist**); tmux installed but not currently inside one → **agent-team new-session** (detached session, then attach); host supports independent agents (no tmux) → **agent**; else → **subagent**.
+- **Explicit pin** (`team | agent | subagent`) is honored subject to availability — pinning `team` on a tmux-less host warns and falls back to subagent.
+
+**Team/agent is PRIMARY whenever tmux is available; subagent is the documented last resort** (CI, fresh installs, no tmux) — never the default on a developer machine. The ladder's selection of agent-team under tmux **is** the operator's durable approval, recorded once as `agent_mode: team` (or left at `auto`) in `.guild/settings.json` — there is **no per-run re-prompt** for the team backend. `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` must be set for any team spawn; if it is absent when the ladder resolved to `team`, the launcher **refuses and surfaces the blocker** (it never silently swaps to subagent — that would change execution semantics out from under the plan). The resolved value is written to `team.yaml`'s top-level `backend`, authoritative for `guild:plan` and `guild:execute-plan`.
 
 ## Output contract
 
@@ -51,7 +56,7 @@ Write `.guild/team/<slug>.yaml`. Full annotated schema + per-field semantics in 
 
 ```yaml
 spec: .guild/spec/<slug>.md
-backend: subagent          # or: agent-team
+backend: agent-team        # resolved by the agent_mode ladder (auto→team under tmux); subagent only as fallback
 allow_larger: false        # true only if user passed --allow-larger
 specialists:
   - name: architect        # exact roster slug

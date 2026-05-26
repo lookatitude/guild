@@ -4,17 +4,18 @@ Detail for `guild:execute-plan`'s `## Backend + routing (summary)` and paralleli
 
 ## Backend choice
 
-Guild supports two execution backends. The choice is made at `guild:team-compose` and mirrored into `team.yaml`; `guild:execute-plan` **reads and honors** it — it never re-picks.
+Guild supports three execution backends. The choice is **resolved by the `agent_mode` ladder** (ADR D5; `CLAUDE.md §"Backend default"`) at `guild:team-compose` and mirrored into `team.yaml`; `guild:execute-plan` **reads and honors** it — it never re-picks. **Team/agent is primary whenever tmux is present; subagent is the fallback, not the default.**
 
-| Backend | Default? | Use when | Tradeoff |
-|---|---:|---|---|
-| **Subagents via Agent tool** | Yes | Work is self-contained; results only need to return to the orchestrator. | Lower token cost, simpler cleanup, fewer coordination failures. |
-| **Agent teams** | Opt-in | Teammates need to share findings, challenge each other, coordinate dependencies, or run competing hypotheses. | Experimental; requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; higher token cost; one team per session; no nested teams. |
+| Backend | Selected when (`agent_mode` resolves to…) | Tradeoff |
+|---|---|---|
+| **Agent teams (tmux panes)** | `team` — `auto` + tmux available (the common case on a dev machine) **or** an explicit `team` pin. One **visible pane per specialist**. | Experimental; requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; one team per session; no nested teams; higher token cost. **PRIMARY under tmux.** |
+| **Independent agents** | `agent` — host supports independent agents, no tmux. | No tmux needed; surfaces as agent activity rather than panes. |
+| **Subagents via Agent tool** | `subagent` — the **fallback**: no tmux + no independent-agent support (CI, fresh installs), or an explicit `subagent` pin. | Lower cost, simplest cleanup; runs in the background, only the final artifact returns. The documented last resort. |
 
 Two hard constraints:
 
-- **User approval is required for `agent-team`.** If `team.yaml` specifies `backend: agent-team`, confirm the user has explicitly approved the opt-in (the approval is recorded in `team.yaml` by `guild:team-compose`). If `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is not set, refuse to dispatch and surface the blocker to the user rather than silently falling back to subagents — falling back would change the execution semantics out from under the plan.
-- **Subagent is the production default.** Unless `team.yaml` explicitly says `agent-team`, dispatch each lane via the Agent tool with **`subagent_type` set to the lane's specialist agent name** (e.g. `subagent_type: backend`, `qa`, `devops`, `architect`) — NOT `general-purpose`. The named agent (`agents/<name>.md` or, for self-build, `.claude/agents/<name>.md`) supplies the lane's persona, scoped skills, tool permissions, and TRIGGER/DO-NOT-TRIGGER boundaries; dispatching `general-purpose` discards all of that and is a defect. The `subagent_type` is the lane's `owner_role` from the plan, resolved against `team.yaml`'s agent-definition paths.
+- **`agent-team` requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.** When `team.yaml` records `backend: agent-team` (the ladder resolved to `team`), the durable operator approval is the `agent_mode: team|auto` setting itself — no per-run re-prompt. But if `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is not set, **refuse to dispatch and surface the blocker** rather than silently falling back to subagents — falling back would change execution semantics out from under the plan. Invoke `scripts/agent-team-launcher.ts` (below) — it owns the ladder resolution, the env gate, and the tmux strategy.
+- **Always dispatch to the lane's NAMED specialist agent — never `general-purpose`.** Whatever backend `team.yaml` records, route each lane to its `owner_role` agent: for subagents, `subagent_type: <name>` (`backend`, `qa`, `devops`, `architect`, …); for teams, the teammate spawned from that agent definition. The named agent (`agents/<name>.md` or, for self-build, `.claude/agents/<name>.md`) supplies the lane's persona, scoped skills, tool permissions, and TRIGGER/DO-NOT-TRIGGER boundaries; dispatching `general-purpose` discards all of that and is a defect. The name is the lane's `owner_role` from the plan, resolved against `team.yaml`'s agent-definition paths.
 
 ## Self-build dev-team routing
 
