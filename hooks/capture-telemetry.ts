@@ -59,6 +59,14 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { resolveGuildRoot } from "./lib/guild-root.js";
 
+// ── v2 security ADR (D-SECRETS): scrub the one raw free-text field that lands
+// in telemetry (the UserPromptSubmit prompt) through the built-in redaction +
+// the operator's secrets_policy.redaction_patterns, honoring fail_mode_telemetry.
+// Schema/settings bound BY POINTER — see lib/security/* headers.
+import { readSecurityConfig } from "./lib/security/config.js";
+import { applySecretsPolicy, resolveTelemetryField } from "./lib/security/secrets.js";
+import { appendSecurityEvent, buildSecurityEvent, resolveRunDir } from "./lib/security/events.js";
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface HookPayload {
@@ -197,7 +205,33 @@ async function main(): Promise<void> {
     event.model = payload.model;
   }
   if (eventName === "UserPromptSubmit" && typeof payload.prompt === "string") {
-    event.prompt = payload.prompt;
+    // D-SECRETS: never write a raw prompt. Built-in redaction always runs;
+    // secrets_policy.redaction_patterns layer on top; fail_mode_telemetry
+    // decides what happens if a custom pattern fails to compile/apply.
+    const secPolicy = readSecurityConfig(cwd).secrets_policy;
+    const scrub = applySecretsPolicy(payload.prompt, secPolicy);
+    const resolved = resolveTelemetryField(scrub, secPolicy);
+    if (resolved.value !== undefined) event.prompt = resolved.value;
+    if (resolved.warn) {
+      process.stderr.write(
+        `[capture-telemetry] WARN: secrets_policy redaction_patterns failure on prompt (fail_mode_telemetry=${secPolicy.fail_mode_telemetry}): ${scrub.failures.join("; ")}\n`,
+      );
+      try {
+        const evRunDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+        appendSecurityEvent(
+          evRunDir,
+          buildSecurityEvent({
+            run_id: runId,
+            event_type: "secret_scrub_failure",
+            decision: secPolicy.fail_mode_telemetry === "closed" ? "deny" : "allow",
+            tool: "",
+            detail: `secrets_policy redaction_patterns failed on telemetry prompt: ${scrub.failures.join("; ")}`,
+          }),
+        );
+      } catch {
+        /* telemetry must never block */
+      }
+    }
   }
   // loop_round_start / loop_round_end extra fields
   if (eventName === "loop_round_start" || eventName === "loop_round_end") {

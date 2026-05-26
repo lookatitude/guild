@@ -33,8 +33,8 @@ __export(pre_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_tool_use_exports);
-var fs2 = __toESM(require("node:fs"));
-var path2 = __toESM(require("node:path"));
+var fs4 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -172,11 +172,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path3 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path3), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path3)) return;
+  const path5 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path5), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path5)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path3, "wx");
+    const fd = (0, import_node_fs.openSync)(path5, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -273,14 +273,14 @@ var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 var SIDECAR_MAX_BYTES = 1024 * 1024;
 function appendSidecarPre(runDir, entry, opts = {}) {
   validateSidecarEntry(entry);
-  const path3 = sidecarPath(runDir);
-  (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path3), { recursive: true });
+  const path5 = sidecarPath(runDir);
+  (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path5), { recursive: true });
   const redacted = redactEventFields(entry, opts.fieldCap);
   const line = JSON.stringify(redacted) + "\n";
   const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES;
   const appendCapped = () => {
-    const existing = (0, import_node_fs2.existsSync)(path3) ? (0, import_node_fs2.readFileSync)(path3, "utf8") : "";
-    (0, import_node_fs2.writeFileSync)(path3, capSidecarText(existing, line, maxBytes));
+    const existing = (0, import_node_fs2.existsSync)(path5) ? (0, import_node_fs2.readFileSync)(path5, "utf8") : "";
+    (0, import_node_fs2.writeFileSync)(path5, capSidecarText(existing, line, maxBytes));
   };
   if (process.platform === "win32") {
     appendCapped();
@@ -317,6 +317,251 @@ function capSidecarText(existing, incomingLine, maxBytes) {
   return kept.length === 0 ? "" : kept.join("\n") + "\n";
 }
 
+// lib/security/config.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+function securityDefaults() {
+  return {
+    bypass_permissions_policy: "audit",
+    secrets_policy: {
+      env_allowlist: [],
+      redaction_patterns: [],
+      fail_mode_durable: "closed",
+      fail_mode_telemetry: "open"
+    },
+    tool_description_hashes: {}
+  };
+}
+function isPlainObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function isStringArray(v) {
+  return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
+function parseSecurityConfig(parsed) {
+  const out = securityDefaults();
+  if (!isPlainObject(parsed)) return out;
+  if (isPlainObject(parsed["security"])) {
+    const bpp = parsed["security"]["bypass_permissions_policy"];
+    if (bpp === "deny" || bpp === "audit" || bpp === "allow") {
+      out.bypass_permissions_policy = bpp;
+    }
+  }
+  if (isPlainObject(parsed["secrets_policy"])) {
+    const sp = parsed["secrets_policy"];
+    if (isStringArray(sp["env_allowlist"])) out.secrets_policy.env_allowlist = sp["env_allowlist"];
+    if (isStringArray(sp["redaction_patterns"])) {
+      out.secrets_policy.redaction_patterns = sp["redaction_patterns"];
+    }
+    if (sp["fail_mode_durable"] === "closed" || sp["fail_mode_durable"] === "open") {
+      out.secrets_policy.fail_mode_durable = sp["fail_mode_durable"];
+    }
+    if (sp["fail_mode_telemetry"] === "open" || sp["fail_mode_telemetry"] === "closed") {
+      out.secrets_policy.fail_mode_telemetry = sp["fail_mode_telemetry"];
+    }
+  }
+  if (isPlainObject(parsed["mcp"]) && isPlainObject(parsed["mcp"]["tool_description_hashes"])) {
+    const hashes = {};
+    for (const [k, v] of Object.entries(parsed["mcp"]["tool_description_hashes"])) {
+      if (typeof v === "string") hashes[k] = v;
+    }
+    out.tool_description_hashes = hashes;
+  }
+  return out;
+}
+function readSecurityConfig(cwd) {
+  const settingsPath = path2.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  let raw;
+  try {
+    raw = fs2.readFileSync(settingsPath, "utf8");
+  } catch {
+    return securityDefaults();
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return securityDefaults();
+  }
+  return parseSecurityConfig(parsed);
+}
+
+// lib/security/events.ts
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
+function buildSecurityEvent(input) {
+  const rec = {
+    schema_version: SECURITY_EVENT_SCHEMA_VERSION,
+    ts: (/* @__PURE__ */ new Date()).toISOString(),
+    run_id: input.run_id,
+    event_type: input.event_type,
+    decision: input.decision,
+    tool: input.tool,
+    detail: redactField(input.detail ?? "")
+  };
+  if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
+  if (input.policy !== void 0) rec.policy = input.policy;
+  if (typeof input.permission_mode === "string" && input.permission_mode.length > 0) {
+    rec.permission_mode = input.permission_mode;
+  }
+  return rec;
+}
+function appendSecurityEvent(runDir, record) {
+  try {
+    const logsDir = path3.join(runDir, "logs");
+    fs3.mkdirSync(logsDir, { recursive: true });
+    fs3.appendFileSync(path3.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [security-events] write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+function resolveRunDir(cwd, runId, explicitRunDir) {
+  if (typeof explicitRunDir === "string" && explicitRunDir.length > 0) return explicitRunDir;
+  return path3.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+}
+
+// lib/security/enforce.ts
+function parseRuleArray(raw) {
+  if (typeof raw !== "string" || raw.trim().length === 0) return { rules: null, invalid: false };
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string")) {
+      return { rules: parsed, invalid: false };
+    }
+    return { rules: [], invalid: true };
+  } catch {
+    return { rules: [], invalid: true };
+  }
+}
+function readScopeContext(env) {
+  const cap = parseRuleArray(env["GUILD_CAPABILITY_SCOPE"]);
+  if (cap.rules === null && !cap.invalid) return null;
+  const autonomy = parseRuleArray(env["GUILD_AUTONOMY_CONTRACT"]);
+  return {
+    capability: cap.rules ?? [],
+    autonomy: autonomy.rules,
+    // null ⇒ no mask
+    invalid: cap.invalid || autonomy.invalid
+  };
+}
+var ARG_FIELDS = ["command", "file_path", "path", "pattern"];
+function toolArgString(toolName, toolInput) {
+  if (toolName === "Bash" && toolInput && typeof toolInput === "object") {
+    const cmd = toolInput["command"];
+    if (typeof cmd === "string") return cmd;
+  }
+  if (toolInput && typeof toolInput === "object") {
+    for (const f of ARG_FIELDS) {
+      const v = toolInput[f];
+      if (typeof v === "string") return v;
+    }
+    try {
+      return JSON.stringify(toolInput);
+    } catch {
+      return "";
+    }
+  }
+  if (typeof toolInput === "string") return toolInput;
+  return "";
+}
+function globToRegExp(glob) {
+  const escaped = glob.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*");
+  return new RegExp(`^${escaped}$`);
+}
+function ruleMatches(rule, toolName, toolInput) {
+  if (rule === "*") return true;
+  const open = rule.indexOf("(");
+  if (open === -1 || !rule.endsWith(")")) {
+    return rule === toolName;
+  }
+  const name = rule.slice(0, open);
+  if (name !== toolName) return false;
+  const glob = rule.slice(open + 1, rule.length - 1);
+  if (glob === "" || glob === "*") return true;
+  try {
+    return globToRegExp(glob).test(toolArgString(toolName, toolInput));
+  } catch {
+    return false;
+  }
+}
+function anyRuleMatches(rules, toolName, toolInput) {
+  return rules.some((r) => ruleMatches(r, toolName, toolInput));
+}
+function isInScope(scope, toolName, toolInput) {
+  if (scope.invalid) return false;
+  if (!anyRuleMatches(scope.capability, toolName, toolInput)) return false;
+  if (scope.autonomy !== null && !anyRuleMatches(scope.autonomy, toolName, toolInput)) return false;
+  return true;
+}
+function resolveScopeDecision(args) {
+  const { scope, toolName, toolInput, policy, permissionMode } = args;
+  if (isInScope(scope, toolName, toolInput)) {
+    return { gate: false, recordedDecision: "pass", eventType: null, reason: "" };
+  }
+  const underBypass = permissionMode === "bypassPermissions";
+  const baseReason = `capability-scope: tool "${toolName}" is outside this lane's effective allow-set (capability_scope AND-masked with autonomy_contract).`;
+  if (!underBypass) {
+    return {
+      gate: true,
+      permissionDecision: "ask",
+      recordedDecision: "ask",
+      eventType: "capability_scope_violation",
+      reason: `${baseReason} Confirm this tool call is intentional.`
+    };
+  }
+  switch (policy) {
+    case "deny":
+      return {
+        gate: true,
+        permissionDecision: "deny",
+        recordedDecision: "deny",
+        eventType: "capability_scope_violation",
+        reason: `${baseReason} bypass_permissions_policy=deny \u2014 hard-blocked under bypassPermissions.`
+      };
+    case "allow":
+      return {
+        gate: false,
+        recordedDecision: "allow",
+        eventType: "bypass_permission_allowed",
+        reason: `${baseReason} bypass_permissions_policy=allow \u2014 permitted under bypassPermissions (audited).`
+      };
+    case "audit":
+    default:
+      return {
+        gate: false,
+        recordedDecision: "allow",
+        eventType: "capability_scope_violation",
+        reason: `${baseReason} bypass_permissions_policy=audit \u2014 permitted under bypassPermissions but recorded.`
+      };
+  }
+}
+
+// lib/security/mcp-hash-pin.ts
+var crypto = __toESM(require("node:crypto"));
+function isMcpTool(toolName) {
+  return typeof toolName === "string" && toolName.startsWith("mcp__");
+}
+function hashDescription(description) {
+  return crypto.createHash("sha256").update(description, "utf8").digest("hex");
+}
+function verifyMcpDescription(toolName, liveDescription, pins) {
+  const pinned = pins[toolName];
+  if (typeof pinned !== "string" || pinned.length === 0) return { status: "unpinned" };
+  if (typeof liveDescription !== "string") return { status: "unverifiable", pinned };
+  const actual = hashDescription(liveDescription);
+  return {
+    status: actual.toLowerCase() === pinned.toLowerCase() ? "match" : "mismatch",
+    pinned,
+    actual
+  };
+}
+
 // pre-tool-use.ts
 async function readStdin() {
   return new Promise((resolve3) => {
@@ -340,9 +585,9 @@ function isKnownTool(name) {
   return TOOL_CALL_TOOL_VALUES.includes(name);
 }
 function readCurrentRunId(cwd) {
-  const sentinelPath = path2.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
+  const sentinelPath = path4.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
-    const value = fs2.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs4.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -368,7 +613,7 @@ function hasGuildSignature(content) {
   return false;
 }
 function isInsideGuildDir(absPath) {
-  return path2.resolve(absPath).split(path2.sep).includes(".guild");
+  return path4.resolve(absPath).split(path4.sep).includes(".guild");
 }
 function runBoundaryGuard(payload, cwd) {
   const tool = payload.tool_name;
@@ -392,7 +637,7 @@ ${e.new_string}`;
     }
   }
   if (!hasGuildSignature(content)) return false;
-  const abs = path2.isAbsolute(filePath) ? filePath : path2.resolve(cwd, filePath);
+  const abs = path4.isAbsolute(filePath) ? filePath : path4.resolve(cwd, filePath);
   if (isInsideGuildDir(abs)) return false;
   const decision = {
     hookSpecificOutput: {
@@ -404,6 +649,96 @@ ${e.new_string}`;
   process.stdout.write(JSON.stringify(decision));
   return true;
 }
+function readMcpDescription(payload, runDir, toolName) {
+  if (typeof payload.tool_description === "string" && payload.tool_description.length > 0) {
+    return payload.tool_description;
+  }
+  if (runDir !== void 0) {
+    try {
+      const p = path4.join(runDir, "logs", "mcp-tool-descriptions.json");
+      const map = JSON.parse(fs4.readFileSync(p, "utf8"));
+      const d = map[toolName];
+      if (typeof d === "string") return d;
+    } catch {
+    }
+  }
+  return void 0;
+}
+function runSecurityEnforcement(payload, cwd) {
+  const scope = readScopeContext(process.env);
+  const toolName = payload.tool_name ?? "";
+  const sec = readSecurityConfig(cwd);
+  const mcpPinned = isMcpTool(toolName) && sec.tool_description_hashes[toolName] !== void 0;
+  if (scope === null && !mcpPinned) return false;
+  const runId = resolveRunId(cwd);
+  const runDir = runId !== void 0 ? process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId) : void 0;
+  const laneEnv = process.env["GUILD_LANE_ID"];
+  const laneId = typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv) ? laneEnv : void 0;
+  const permissionMode = payload.permission_mode;
+  const emit = (input) => {
+    if (runId === void 0 || runDir === void 0) {
+      process.stderr.write(
+        `warn: [pre-tool-use] security event '${input.event_type}' not logged (no run id resolvable).
+`
+      );
+      return;
+    }
+    appendSecurityEvent(runDir, buildSecurityEvent({ run_id: runId, lane_id: laneId, ...input }));
+  };
+  const gate = (permissionDecision, eventType, reason) => {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision,
+          permissionDecisionReason: `Guild security (${eventType}): ${reason}`
+        }
+      })
+    );
+    return true;
+  };
+  if (scope !== null) {
+    const d = resolveScopeDecision({
+      scope,
+      toolName,
+      toolInput: payload.tool_input,
+      policy: sec.bypass_permissions_policy,
+      permissionMode
+    });
+    if (d.eventType !== null) {
+      emit({
+        event_type: d.eventType,
+        decision: d.recordedDecision,
+        tool: toolName,
+        detail: d.reason,
+        policy: permissionMode === "bypassPermissions" ? sec.bypass_permissions_policy : void 0,
+        permission_mode: permissionMode
+      });
+    }
+    if (d.gate && d.permissionDecision !== void 0) {
+      return gate(d.permissionDecision, d.eventType ?? "capability_scope_violation", d.reason);
+    }
+  }
+  if (mcpPinned) {
+    const live = readMcpDescription(payload, runDir, toolName);
+    const r = verifyMcpDescription(toolName, live, sec.tool_description_hashes);
+    if (r.status === "mismatch") {
+      const reason = `MCP tool "${toolName}" description hash mismatch (pinned ${r.pinned?.slice(0, 12)}\u2026, live ${r.actual?.slice(0, 12)}\u2026) \u2014 possible description rug-pull (PI-6).`;
+      emit({ event_type: "mcp_description_mismatch", decision: "ask", tool: toolName, detail: reason, permission_mode: permissionMode });
+      return gate("ask", "mcp_description_mismatch", `${reason} Confirm before allowing.`);
+    }
+    if (r.status === "unverifiable") {
+      emit({
+        event_type: "mcp_description_unverifiable",
+        decision: "allow",
+        tool: toolName,
+        detail: `MCP tool "${toolName}" pinned but live description unobtainable \u2014 cannot verify; proceeding.`,
+        permission_mode: permissionMode
+      });
+    }
+  }
+  return false;
+}
 async function main() {
   const raw = await readStdin();
   let payload = {};
@@ -414,6 +749,7 @@ async function main() {
     return;
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  if (runSecurityEnforcement(payload, cwd)) return;
   if (runBoundaryGuard(payload, cwd)) return;
   const runId = resolveRunId(cwd);
   if (typeof runId !== "string" || runId.length === 0) {
@@ -436,7 +772,7 @@ async function main() {
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path2.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path4.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const laneId = process.env["GUILD_LANE_ID"];
   const entry = {
     run_id: runId,
@@ -452,7 +788,7 @@ async function main() {
     );
   }
   try {
-    fs2.mkdirSync(path2.join(runDir, "logs"), { recursive: true });
+    fs4.mkdirSync(path4.join(runDir, "logs"), { recursive: true });
     appendSidecarPre(runDir, entry);
   } catch (err) {
     process.stderr.write(

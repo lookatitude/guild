@@ -52,6 +52,19 @@ import {
   type ToolCallTool,
 } from "./lib/v1.4/log-jsonl.js";
 
+// ── v2 security ADR (hook-side): capability-scope enforcement, security-event
+// log, and MCP description hash-pin. Schema/settings bound BY POINTER — see
+// each lib header. (docs/knowledge/decisions/v2-security-and-untrusted-content.md)
+import { readSecurityConfig } from "./lib/security/config.js";
+import {
+  appendSecurityEvent,
+  buildSecurityEvent,
+  resolveRunDir,
+  type SecurityEventInput,
+} from "./lib/security/events.js";
+import { readScopeContext, resolveScopeDecision } from "./lib/security/enforce.js";
+import { isMcpTool, verifyMcpDescription } from "./lib/security/mcp-hash-pin.js";
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface PreToolUsePayload {
@@ -60,6 +73,10 @@ interface PreToolUsePayload {
   hook_event_name?: string;
   tool_name?: string;
   tool_input?: unknown;
+  /** Claude Code permission mode: "default" | "plan" | "acceptEdits" | "bypassPermissions". */
+  permission_mode?: string;
+  /** Live MCP tool description, when the host provides it on the payload (forward-compatible). */
+  tool_description?: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -247,6 +264,139 @@ function runBoundaryGuard(
   return true;
 }
 
+// ── v2 security enforcement (PreToolUse) ────────────────────────────────────
+//
+// Priority order (v2-security-and-untrusted-content ADR, hook side):
+//   1. capability-scope enforcement (per-lane allow-set AND-masked with the
+//      autonomy_contract) — gate out-of-scope calls through the EXISTING
+//      always-ask channel. Fail-closed. Only engages for a scoped lane
+//      (GUILD_CAPABILITY_SCOPE present).
+//   3. MCP tool-description hash-pin — gate on description drift for a pinned
+//      MCP tool.
+// Every policy decision/violation is logged as a guild.security_event.v1 to
+// <runDir>/logs/security-events.jsonl. The gate decision NEVER depends on the
+// log write succeeding.
+
+/** Obtain a live MCP tool description: payload field, else session sidecar. */
+function readMcpDescription(
+  payload: PreToolUsePayload,
+  runDir: string | undefined,
+  toolName: string,
+): string | undefined {
+  if (typeof payload.tool_description === "string" && payload.tool_description.length > 0) {
+    return payload.tool_description;
+  }
+  if (runDir !== undefined) {
+    try {
+      const p = path.join(runDir, "logs", "mcp-tool-descriptions.json");
+      const map = JSON.parse(fs.readFileSync(p, "utf8")) as Record<string, unknown>;
+      const d = map[toolName];
+      if (typeof d === "string") return d;
+    } catch {
+      /* no sidecar — description unobtainable */
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Run capability-scope enforcement + MCP description hash-pin. Returns true iff
+ * it emitted a PreToolUse permission decision (the caller then owns nothing
+ * further and must return). Returns false to let the rest of the hook proceed.
+ */
+function runSecurityEnforcement(payload: PreToolUsePayload, cwd: string): boolean {
+  const scope = readScopeContext(process.env);
+  const toolName = payload.tool_name ?? "";
+  const sec = readSecurityConfig(cwd);
+  const mcpPinned = isMcpTool(toolName) && sec.tool_description_hashes[toolName] !== undefined;
+
+  // Clean fall-through: not a scoped lane AND no pin for this tool ⇒ nothing
+  // to enforce (lead/orchestrator + non-Guild sessions unaffected).
+  if (scope === null && !mcpPinned) return false;
+
+  const runId = resolveRunId(cwd);
+  const runDir =
+    runId !== undefined ? (process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId)) : undefined;
+  const laneEnv = process.env["GUILD_LANE_ID"];
+  const laneId =
+    typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv) ? laneEnv : undefined;
+  const permissionMode = payload.permission_mode;
+
+  const emit = (input: Omit<SecurityEventInput, "run_id" | "lane_id">): void => {
+    if (runId === undefined || runDir === undefined) {
+      process.stderr.write(
+        `warn: [pre-tool-use] security event '${input.event_type}' not logged (no run id resolvable).\n`,
+      );
+      return;
+    }
+    appendSecurityEvent(runDir, buildSecurityEvent({ run_id: runId, lane_id: laneId, ...input }));
+  };
+
+  const gate = (permissionDecision: "ask" | "deny", eventType: string, reason: string): boolean => {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision,
+          permissionDecisionReason: `Guild security (${eventType}): ${reason}`,
+        },
+      }),
+    );
+    return true;
+  };
+
+  // 1. Capability-scope (only for a declared scoped lane).
+  if (scope !== null) {
+    const d = resolveScopeDecision({
+      scope,
+      toolName,
+      toolInput: payload.tool_input,
+      policy: sec.bypass_permissions_policy,
+      permissionMode,
+    });
+    if (d.eventType !== null) {
+      emit({
+        event_type: d.eventType,
+        decision: d.recordedDecision,
+        tool: toolName,
+        detail: d.reason,
+        policy: permissionMode === "bypassPermissions" ? sec.bypass_permissions_policy : undefined,
+        permission_mode: permissionMode,
+      });
+    }
+    if (d.gate && d.permissionDecision !== undefined) {
+      return gate(d.permissionDecision, d.eventType ?? "capability_scope_violation", d.reason);
+    }
+  }
+
+  // 3. MCP description hash-pin (independent of scope; only for pinned tools).
+  if (mcpPinned) {
+    const live = readMcpDescription(payload, runDir, toolName);
+    const r = verifyMcpDescription(toolName, live, sec.tool_description_hashes);
+    if (r.status === "mismatch") {
+      const reason =
+        `MCP tool "${toolName}" description hash mismatch (pinned ${r.pinned?.slice(0, 12)}…, ` +
+        `live ${r.actual?.slice(0, 12)}…) — possible description rug-pull (PI-6).`;
+      emit({ event_type: "mcp_description_mismatch", decision: "ask", tool: toolName, detail: reason, permission_mode: permissionMode });
+      return gate("ask", "mcp_description_mismatch", `${reason} Confirm before allowing.`);
+    }
+    if (r.status === "unverifiable") {
+      // Pinned but no live description source — record + proceed (do not brick
+      // every pinned MCP call). Wiring a description source is the followup
+      // that upgrades this to a fail-closed gate.
+      emit({
+        event_type: "mcp_description_unverifiable",
+        decision: "allow",
+        tool: toolName,
+        detail: `MCP tool "${toolName}" pinned but live description unobtainable — cannot verify; proceeding.`,
+        permission_mode: permissionMode,
+      });
+    }
+  }
+
+  return false;
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export async function main(): Promise<void> {
@@ -260,6 +410,11 @@ export async function main(): Promise<void> {
   }
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+
+  // v2 security ADR — capability-scope enforcement + MCP description hash-pin.
+  // Runs BEFORE the boundary guard so a security gate owns stdout for this
+  // event. If it emits a permission decision, skip everything else and return.
+  if (runSecurityEnforcement(payload, cwd)) return;
 
   // P5-boundary-001 — additive Guild-owned-file boundary guard. Runs for
   // EVERY Write/Edit regardless of the telemetry run-id gating below. If it
