@@ -62,6 +62,8 @@ interface DefaultsBlock {
   wiki: { share_mode: "team" | "private"; autopromote: boolean };
   quality: { budget: QualityBudget };
   reporting: "standard" | "quiet" | "verbose";
+  /** SQLite lazy-cache trigger thresholds (v2-persistence-and-sqlite-index ADR D-PS-1). */
+  index: IndexBlock;
 }
 interface WorkspaceBlock {
   /** auto (default) = detect by immediate-child rule; on = force workspace; off = force regular. NO max_depth — depth is fixed at 1. */
@@ -108,6 +110,49 @@ interface ModelsBlock {
   cacheTTL: CacheTTLBlock;
   /** Min wiki importance level (1–5) for routine recall (ADR §6). Default 3. */
   importanceGate: number;
+  /** BM25 top-1 similarity threshold for the ingest anomaly gate (D-INGEST-GATE). Default 0.80. */
+  ingestSimilarityGate: number;
+}
+
+// ── Security block (v2-security-and-untrusted-content ADR — D-BYPASS).
+interface SecurityBlock {
+  /** bypassPermissions governance during Guild-managed runs (D-BYPASS). Default "audit". */
+  bypass_permissions_policy: "deny" | "audit" | "allow";
+}
+
+// ── Secrets-policy block (v2-security-and-untrusted-content ADR — D-SECRETS).
+interface SecretsPolicyBlock {
+  /** Env vars explicitly allowed in agent-context injection. Default []. */
+  env_allowlist: string[];
+  /** Redaction regex patterns applied over all .guild/ artifact writes. Default []. */
+  redaction_patterns: string[];
+  /** Fail mode for durable shared-git writes on scrub failure: closed (block) | open (warn). Default "closed". */
+  fail_mode_durable: "closed" | "open";
+  /** Fail mode for local gitignored telemetry writes on scrub failure: open (warn+event) | closed (block). Default "open". */
+  fail_mode_telemetry: "open" | "closed";
+}
+
+// ── MCP block (v2-security-and-untrusted-content ADR — D-MCP, PI-6 description pinning).
+interface McpBlock {
+  /** Pinned SHA-256 hashes of MCP tool descriptions (tool-name → hash). Default {}. */
+  tool_description_hashes: Record<string, string>;
+}
+
+// ── defaults.index sub-block (v2-persistence-and-sqlite-index ADR — D-PS-1).
+// Configures the measured-slowness thresholds for the lazy index.sqlite cache.
+interface IndexBlock {
+  /** Master switch: false = always direct-parse, no index.sqlite written. Default true. */
+  enabled: boolean;
+  /** Populate kg_nodes/kg_edges when knowledge-graph.json has > N nodes. Default 2000. */
+  kg_node_threshold: number;
+  /** Populate kg_nodes/kg_edges when knowledge-graph.json is > N MB. Default 1. */
+  kg_size_threshold_mb: number;
+  /** Populate kl_edges when knowledge-links.json has > N edges. Default 2000. */
+  links_edge_threshold: number;
+  /** Populate run_provenance when runs/[id]/provenance.json count > N. Default 20. */
+  runs_threshold: number;
+  /** Populate wiki_fts when wiki file count > N. Default 500. */
+  wiki_file_threshold: number;
 }
 
 interface GuildSettings {
@@ -123,6 +168,12 @@ interface GuildSettings {
   workspace: WorkspaceBlock;
   /** Host-agnostic model tier map + cost-tiering config (ADR cost-aware-tiering-and-lean-context §1/§10). */
   models: ModelsBlock;
+  /** bypassPermissions governance (v2-security-and-untrusted-content ADR D-BYPASS). */
+  security: SecurityBlock;
+  /** Secrets redaction policy (v2-security-and-untrusted-content ADR D-SECRETS). */
+  secrets_policy: SecretsPolicyBlock;
+  /** MCP description pinning + capability declarations (v2-security-and-untrusted-content ADR D-MCP). */
+  mcp: McpBlock;
   // power-user overrides
   loops: string | null;
   loop_cap: number;
@@ -172,6 +223,19 @@ const DEFAULTS: GuildSettings = {
     structuredOutputRequired: true,
     cacheTTL: { coordinator: "1h", leaf: "5m" },
     importanceGate: 3,
+    ingestSimilarityGate: 0.80,
+  },
+  security: {
+    bypass_permissions_policy: "audit",
+  },
+  secrets_policy: {
+    env_allowlist: [],
+    redaction_patterns: [],
+    fail_mode_durable: "closed",
+    fail_mode_telemetry: "open",
+  },
+  mcp: {
+    tool_description_hashes: {},
   },
   loops: null,
   loop_cap: 16,
@@ -187,6 +251,14 @@ const DEFAULTS: GuildSettings = {
     wiki: { share_mode: "team", autopromote: false },
     quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
     reporting: "standard",
+    index: {
+      enabled: true,
+      kg_node_threshold: 2000,
+      kg_size_threshold_mb: 1,
+      links_edge_threshold: 2000,
+      runs_threshold: 20,
+      wiki_file_threshold: 500,
+    },
   },
 };
 
@@ -257,6 +329,48 @@ const HELP: Record<string, string> = {
     "\"1h\" | \"5m\" | \"off\" (default \"5m\") — leaf-agent prompt-cache TTL hint (ADR §9).",
   "models.importanceGate":
     "int 1–5 (default 3) — min wiki importance level for routine recall (ADR §6).",
+  "models.ingestSimilarityGate":
+    "float 0–1 (default 0.80) — BM25 top-1 similarity threshold for the wiki ingest anomaly gate (D-INGEST-GATE). " +
+    "If a candidate page scores ≥ this against existing pages, guild:wiki-ingest pauses: supersede / skip / proceed — never silently overwrites.",
+  // ── security: block (v2-security-and-untrusted-content ADR — D-BYPASS)
+  "security.bypass_permissions_policy":
+    "\"deny\" | \"audit\" | \"allow\" (default \"audit\") — bypassPermissions governance during Guild-managed runs (D-BYPASS). " +
+    "deny: hard-block + security event (forced under auto_approve / autonomous_after_plan_approval). " +
+    "audit: surfaces always-ask channel + security event (default for interactive mode). " +
+    "allow: opt-in for interactive mode only. Guild cannot govern bypass outside its own run lifecycle.",
+  // ── secrets_policy: block (v2-security-and-untrusted-content ADR — D-SECRETS)
+  "secrets_policy.env_allowlist":
+    "string[] (default []) — env var names explicitly permitted in agent-context injection. " +
+    "All others are redacted before context assembly.",
+  "secrets_policy.redaction_patterns":
+    "string[] (default []) — regex patterns applied as the first stage of the 3-stage secrets scrubber " +
+    "(prefix regexes → Shannon-entropy → file-path context). Run over all .guild/ artifact writes.",
+  "secrets_policy.fail_mode_durable":
+    "\"closed\" | \"open\" (default \"closed\") — on scrub failure for durable shared-git artifacts " +
+    "(handoff, provenance, wiki, review): closed = block the write + surface always-ask; open = warn + proceed.",
+  "secrets_policy.fail_mode_telemetry":
+    "\"open\" | \"closed\" (default \"open\") — on scrub failure for local gitignored telemetry writes " +
+    "(runs/<id>/logs/*.jsonl): open = warn + security event + proceed; closed = block.",
+  // ── mcp: block (v2-security-and-untrusted-content ADR — D-MCP)
+  "mcp.tool_description_hashes":
+    "object (default {}) — map of MCP tool-name → SHA-256 hash of (description + inputSchema), " +
+    "pinned at /guild:config init time (D-MCP PI-6). PreToolUse compares the live hash per call. " +
+    "Drift triggers a warn+gate-on-approval. Re-pin via /guild:config update-mcp-hashes.",
+  // ── defaults.index: block (v2-persistence-and-sqlite-index ADR — D-PS-1)
+  "defaults.index.enabled":
+    "bool (default true) — master switch for the lazy index.sqlite cache. false = always direct-parse, " +
+    "no index.sqlite ever written. Equivalent to the /guild:stats --no-index one-shot, made persistent.",
+  "defaults.index.kg_node_threshold":
+    "int (default 2000) — populate kg_nodes/kg_edges tables when knowledge-graph.json has more than N nodes.",
+  "defaults.index.kg_size_threshold_mb":
+    "number (default 1) — populate kg_nodes/kg_edges tables when knowledge-graph.json exceeds N MB.",
+  "defaults.index.links_edge_threshold":
+    "int (default 2000) — populate kl_edges table when knowledge-links.json has more than N edges.",
+  "defaults.index.runs_threshold":
+    "int (default 20) — populate run_provenance table when runs/*/provenance.json count exceeds N.",
+  "defaults.index.wiki_file_threshold":
+    "int (default 500) — populate wiki_fts table when wiki/** file count exceeds N. " +
+    "Below threshold, guild-memory BM25 grep path is used unchanged.",
   _precedence:
     "CLI flag > --rigor profile > settings.json > built-in default. " +
     "For model tier: --model-tier=cheap|mid|powerful > per-lane plan override > models.tiers/thresholds > built-in.",
@@ -272,11 +386,28 @@ const VALID_AGENT_MODE = new Set(["team", "agent", "subagent", "auto"]);
 const VALID_MODEL_TIER = new Set(["cheap", "mid", "powerful"]);
 const VALID_CACHE_TTL = new Set(["1h", "5m", "off"]);
 
-// Closed-key set for models.* top-level fields (ADR §10).
+// Closed-key set for models.* top-level fields (ADR §10 + D-INGEST-GATE).
 const VALID_MODELS_KEYS = new Set([
   "enabled", "tiers", "scoreWeights", "thresholds", "advisorRounds",
   "escalationMarkers", "recallBeforeRead", "recallScoreThreshold",
-  "structuredOutputRequired", "cacheTTL", "importanceGate",
+  "structuredOutputRequired", "cacheTTL", "importanceGate", "ingestSimilarityGate",
+]);
+
+// Closed-key set for security.* block (D-BYPASS).
+const VALID_SECURITY_KEYS = new Set(["bypass_permissions_policy"]);
+
+// Closed-key set for secrets_policy.* block (D-SECRETS).
+const VALID_SECRETS_POLICY_KEYS = new Set([
+  "env_allowlist", "redaction_patterns", "fail_mode_durable", "fail_mode_telemetry",
+]);
+
+// Closed-key set for mcp.* block (D-MCP).
+const VALID_MCP_KEYS = new Set(["tool_description_hashes"]);
+
+// Closed-key set for defaults.index.* sub-block (D-PS-1).
+const VALID_INDEX_KEYS = new Set([
+  "enabled", "kg_node_threshold", "kg_size_threshold_mb",
+  "links_edge_threshold", "runs_threshold", "wiki_file_threshold",
 ]);
 
 interface ParsedArgs {
@@ -440,6 +571,67 @@ function validateModels(m: Record<string, unknown>): string[] {
       rejects.push(`models.recallScoreThreshold must be a float 0–1 (got ${JSON.stringify(rs)})`);
     }
   }
+  // ingestSimilarityGate 0–1 (D-INGEST-GATE, default 0.80)
+  if (m["ingestSimilarityGate"] !== undefined) {
+    const ig = m["ingestSimilarityGate"];
+    if (typeof ig !== "number" || ig < 0 || ig > 1) {
+      rejects.push(`models.ingestSimilarityGate must be a float 0–1 (got ${JSON.stringify(ig)})`);
+    }
+  }
+  return rejects;
+}
+
+/** Closed-key validation of the `security:` block (D-BYPASS). Returns reject messages. */
+function validateSecurity(s: Record<string, unknown>): string[] {
+  const rejects: string[] = [];
+  for (const k of Object.keys(s)) {
+    if (!VALID_SECURITY_KEYS.has(k)) {
+      rejects.push(`unknown security key "${k}" (closed key set — only bypass_permissions_policy is valid)`);
+    }
+  }
+  if (s["bypass_permissions_policy"] !== undefined) {
+    const v = s["bypass_permissions_policy"];
+    if (v !== "deny" && v !== "audit" && v !== "allow") {
+      rejects.push(`security.bypass_permissions_policy "${v}" is invalid — valid: deny|audit|allow`);
+    }
+  }
+  return rejects;
+}
+
+/** Closed-key validation of the `secrets_policy:` block (D-SECRETS). Returns reject messages. */
+function validateSecretsPolicy(sp: Record<string, unknown>): string[] {
+  const rejects: string[] = [];
+  for (const k of Object.keys(sp)) {
+    if (!VALID_SECRETS_POLICY_KEYS.has(k)) {
+      rejects.push(`unknown secrets_policy key "${k}" (closed key set — check v2-security-and-untrusted-content ADR)`);
+    }
+  }
+  if (sp["fail_mode_durable"] !== undefined && sp["fail_mode_durable"] !== "closed" && sp["fail_mode_durable"] !== "open") {
+    rejects.push(`secrets_policy.fail_mode_durable "${sp["fail_mode_durable"]}" is invalid — valid: closed|open`);
+  }
+  if (sp["fail_mode_telemetry"] !== undefined && sp["fail_mode_telemetry"] !== "open" && sp["fail_mode_telemetry"] !== "closed") {
+    rejects.push(`secrets_policy.fail_mode_telemetry "${sp["fail_mode_telemetry"]}" is invalid — valid: open|closed`);
+  }
+  if (sp["env_allowlist"] !== undefined && !Array.isArray(sp["env_allowlist"])) {
+    rejects.push(`secrets_policy.env_allowlist must be an array of strings`);
+  }
+  if (sp["redaction_patterns"] !== undefined && !Array.isArray(sp["redaction_patterns"])) {
+    rejects.push(`secrets_policy.redaction_patterns must be an array of regex strings`);
+  }
+  return rejects;
+}
+
+/** Closed-key validation of the `mcp:` block (D-MCP). Returns reject messages. */
+function validateMcp(m: Record<string, unknown>): string[] {
+  const rejects: string[] = [];
+  for (const k of Object.keys(m)) {
+    if (!VALID_MCP_KEYS.has(k)) {
+      rejects.push(`unknown mcp key "${k}" (closed key set — only tool_description_hashes is valid)`);
+    }
+  }
+  if (m["tool_description_hashes"] !== undefined && !isPlainObject(m["tool_description_hashes"])) {
+    rejects.push(`mcp.tool_description_hashes must be an object (tool-name → SHA-256 hash)`);
+  }
   return rejects;
 }
 
@@ -451,6 +643,7 @@ function validateDefaults(d: Record<string, unknown>, selfBuild: boolean): strin
     "auto_learn",   // D3: bool, default false
     "adversarial", "team", "review_workflow", "skill_policy",
     "gates", "wiki", "quality", "reporting",
+    "index",        // D-PS-1: SQLite lazy-cache trigger thresholds
   ]);
   for (const k of Object.keys(d)) {
     if (!ALLOWED.has(k)) rejects.push(`unknown defaults key "${k}" (closed key set — a typo must surface)`);
@@ -465,6 +658,32 @@ function validateDefaults(d: Record<string, unknown>, selfBuild: boolean): strin
       for (const bk of Object.keys(q)) {
         if (bk !== "per_class_minutes" && bk !== "total_minutes")
           rejects.push(`unknown defaults.quality.budget key "${bk}"`);
+      }
+    }
+  }
+  // defaults.index.* — closed key set (D-PS-1)
+  if (isPlainObject(d["index"])) {
+    const idx = d["index"] as Record<string, unknown>;
+    for (const ik of Object.keys(idx)) {
+      if (!VALID_INDEX_KEYS.has(ik)) {
+        rejects.push(`unknown defaults.index key "${ik}" (closed key set — see v2-persistence-and-sqlite-index ADR D-PS-1)`);
+      }
+    }
+    if (idx["enabled"] !== undefined && typeof idx["enabled"] !== "boolean") {
+      rejects.push(`defaults.index.enabled must be a boolean (got ${JSON.stringify(idx["enabled"])})`);
+    }
+    for (const numKey of ["kg_node_threshold", "links_edge_threshold", "runs_threshold", "wiki_file_threshold"] as const) {
+      if (idx[numKey] !== undefined) {
+        const v = idx[numKey];
+        if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
+          rejects.push(`defaults.index.${numKey} must be a positive integer (got ${JSON.stringify(v)})`);
+        }
+      }
+    }
+    if (idx["kg_size_threshold_mb"] !== undefined) {
+      const v = idx["kg_size_threshold_mb"];
+      if (typeof v !== "number" || v <= 0) {
+        rejects.push(`defaults.index.kg_size_threshold_mb must be a positive number (got ${JSON.stringify(v)})`);
       }
     }
   }
@@ -486,7 +705,9 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     const rejects: string[] = [];
     const TIER1 = new Set([
       "rigor", "auto_approve", "review", "host", "initiative_default",
-      "index", "agent_mode", "workspace", "models", "loops", "loop_cap", "codex_cap", "defaults",
+      "index", "agent_mode", "workspace", "models",
+      "security", "secrets_policy", "mcp",
+      "loops", "loop_cap", "codex_cap", "defaults",
     ]);
     for (const k of Object.keys(parsed)) {
       if (k.startsWith("_")) continue; // _help / _docs annotations
@@ -566,7 +787,40 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       if (typeof rawModels["importanceGate"] === "number" && rawModels["importanceGate"] >= 1 && rawModels["importanceGate"] <= 5) {
         mergedModels.importanceGate = Math.floor(rawModels["importanceGate"]);
       }
+      if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1) {
+        mergedModels.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
+      }
       out.models = mergedModels;
+    }
+    // security: block — bypassPermissions governance (D-BYPASS).
+    if (isPlainObject(parsed["security"])) {
+      const rawSec = parsed["security"] as Record<string, unknown>;
+      rejects.push(...validateSecurity(rawSec));
+      const mergedSec: SecurityBlock = { ...DEFAULTS.security };
+      const bpp = rawSec["bypass_permissions_policy"];
+      if (bpp === "deny" || bpp === "audit" || bpp === "allow") mergedSec.bypass_permissions_policy = bpp;
+      out.security = mergedSec;
+    }
+    // secrets_policy: block — secrets redaction policy (D-SECRETS).
+    if (isPlainObject(parsed["secrets_policy"])) {
+      const rawSp = parsed["secrets_policy"] as Record<string, unknown>;
+      rejects.push(...validateSecretsPolicy(rawSp));
+      const mergedSp: SecretsPolicyBlock = { ...DEFAULTS.secrets_policy };
+      if (Array.isArray(rawSp["env_allowlist"])) mergedSp.env_allowlist = rawSp["env_allowlist"] as string[];
+      if (Array.isArray(rawSp["redaction_patterns"])) mergedSp.redaction_patterns = rawSp["redaction_patterns"] as string[];
+      if (rawSp["fail_mode_durable"] === "closed" || rawSp["fail_mode_durable"] === "open") mergedSp.fail_mode_durable = rawSp["fail_mode_durable"];
+      if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") mergedSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
+      out.secrets_policy = mergedSp;
+    }
+    // mcp: block — description pinning (D-MCP).
+    if (isPlainObject(parsed["mcp"])) {
+      const rawMcp = parsed["mcp"] as Record<string, unknown>;
+      rejects.push(...validateMcp(rawMcp));
+      const mergedMcp: McpBlock = { ...DEFAULTS.mcp };
+      if (isPlainObject(rawMcp["tool_description_hashes"])) {
+        mergedMcp.tool_description_hashes = rawMcp["tool_description_hashes"] as Record<string, string>;
+      }
+      out.mcp = mergedMcp;
     }
     if (typeof parsed["loops"] === "string" || parsed["loops"] === null) out.loops = parsed["loops"] as string | null;
     if (typeof parsed["loop_cap"] === "number") out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
@@ -688,11 +942,20 @@ function main(): void {
     ...DEFAULTS,
     ...fileConfig,
     ...flags,
-    defaults: { ...DEFAULTS.defaults, ...(fileConfig.defaults ?? {}) },
+    defaults: {
+      ...DEFAULTS.defaults,
+      ...(fileConfig.defaults ?? {}),
+      // deep-merge defaults.index sub-block
+      index: { ...DEFAULTS.defaults.index, ...((fileConfig.defaults as Partial<DefaultsBlock>)?.index ?? {}) },
+    },
     // workspace is a nested object — deep-merge so partial overrides work
     workspace: { ...DEFAULTS.workspace, ...(fileConfig.workspace ?? {}), ...(flags.workspace ?? {}) },
     // models is a nested object — deep-merge so partial overrides work (ADR §10)
     models: { ...DEFAULTS.models, ...(fileConfig.models ?? {}), ...(flags.models ?? {}) },
+    // security, secrets_policy, mcp — deep-merge so partial overrides work
+    security: { ...DEFAULTS.security, ...(fileConfig.security ?? {}), ...(flags.security ?? {}) },
+    secrets_policy: { ...DEFAULTS.secrets_policy, ...(fileConfig.secrets_policy ?? {}), ...(flags.secrets_policy ?? {}) },
+    mcp: { ...DEFAULTS.mcp, ...(fileConfig.mcp ?? {}), ...(flags.mcp ?? {}) },
   };
 
   // Which rigor-expandable keys did the user set EXPLICITLY (CLI flag OR present in
