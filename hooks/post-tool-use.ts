@@ -40,6 +40,9 @@ import {
   TOOL_CALL_TOOL_VALUES,
   type ToolCallTool,
 } from "./lib/v1.4/log-jsonl.js";
+// guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
+// lib/trace-v2.ts header + contract-map §B-post.
+import { normalizeTokens, resolveTraceV2Fields, type TraceTokens } from "./lib/trace-v2.js";
 
 interface PostToolUsePayload {
   session_id?: string;
@@ -49,6 +52,9 @@ interface PostToolUsePayload {
   tool_input?: unknown;
   tool_response?: { success?: boolean; error?: string } | unknown;
   duration_ms?: number;
+  // D-OBS-1: token usage — only meaningful for LLM-call tools (Agent/Skill).
+  tokens?: unknown;
+  usage?: unknown;
 }
 
 async function readStdin(): Promise<string> {
@@ -217,7 +223,20 @@ export async function main(): Promise<void> {
         result_excerpt_redacted: resultExcerpt(payload),
       });
     }
-    appendEvent(runDir, event);
+    // D-OBS-1/6: attach guild.trace_event.v2 fields. tokens only for LLM-call
+    // tools (Agent/Skill) and only when the payload actually carried usage.
+    const isLlmCallTool = toolName === "Agent" || toolName === "Skill";
+    const tokens: TraceTokens | undefined = isLlmCallTool
+      ? normalizeTokens(payload.tokens ?? payload.usage)
+      : undefined;
+    const traceV2 = resolveTraceV2Fields({
+      runId,
+      eventType: "tool_call",
+      ts: tsPost,
+      actorId: laneId ?? "main",
+      tokens,
+    });
+    appendEvent(runDir, event, { traceV2 });
   } catch (err) {
     process.stderr.write(
       `warn: [post-tool-use] tool_call emit failed: ${

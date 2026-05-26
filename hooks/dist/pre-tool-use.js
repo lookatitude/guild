@@ -228,6 +228,9 @@ function withStableLock(runDir, fn, opts = {}) {
   }
 }
 
+// lib/trace-v2.ts
+var SIDECAR_MAX_BYTES = 16 * 1024;
+
 // lib/v1.4/log-jsonl.ts
 function sidecarPath(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "tool-call-pre.jsonl");
@@ -270,14 +273,14 @@ function assertSafeLaneId(id) {
   }
 }
 var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
-var SIDECAR_MAX_BYTES = 1024 * 1024;
+var SIDECAR_MAX_BYTES2 = 1024 * 1024;
 function appendSidecarPre(runDir, entry, opts = {}) {
   validateSidecarEntry(entry);
   const path5 = sidecarPath(runDir);
   (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path5), { recursive: true });
   const redacted = redactEventFields(entry, opts.fieldCap);
   const line = JSON.stringify(redacted) + "\n";
-  const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES;
+  const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES2;
   const appendCapped = () => {
     const existing = (0, import_node_fs2.existsSync)(path5) ? (0, import_node_fs2.readFileSync)(path5, "utf8") : "";
     (0, import_node_fs2.writeFileSync)(path5, capSidecarText(existing, line, maxBytes));

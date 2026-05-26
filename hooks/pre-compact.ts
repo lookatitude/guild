@@ -33,6 +33,9 @@ import * as path from "node:path";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { appendEvent, type HookEvent } from "./lib/v1.4/log-jsonl.js";
+// guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
+// lib/trace-v2.ts header. Hook events are not LLM calls → no tokens.
+import { resolveTraceV2Fields } from "./lib/trace-v2.js";
 
 interface PreCompactPayload {
   session_id?: string;
@@ -110,8 +113,9 @@ export async function main(): Promise<void> {
     process.env["GUILD_RUN_DIR"] ??
     path.join(guildRoot, ".guild", "runs", runId);
 
+  const ts = new Date().toISOString();
   const event: HookEvent = {
-    ts: new Date().toISOString(),
+    ts,
     event: "hook_event",
     run_id: runId,
     hook_name: "PreCompact",
@@ -119,9 +123,16 @@ export async function main(): Promise<void> {
     latency_ms: 0,
     status: "ok",
   };
+  // D-OBS-1/6: span_id + env-threaded tier/model/parent (no tokens for hooks).
+  const traceV2 = resolveTraceV2Fields({
+    runId,
+    eventType: "hook_event",
+    ts,
+    actorId: "main",
+  });
 
   try {
-    appendEvent(runDir, event);
+    appendEvent(runDir, event, { traceV2 });
   } catch (err) {
     process.stderr.write(
       `warn: [pre-compact] log emit failed: ${

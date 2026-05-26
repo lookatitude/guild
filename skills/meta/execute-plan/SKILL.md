@@ -25,7 +25,7 @@ Four strict phases per lane. A lane does not advance until the previous phase ha
 
 1. **Context bundle.** Invoke `guild:context-assemble` for the lane; it writes `.guild/context/<run-id>/<specialist>-<task-id>.md` per §9.3. Read back the bundle's handoff receipt to confirm `bundle_path`, `token_estimate`, `layers_included`. A missing bundle blocks the dispatch — do not paper over with chat context.
 2. **Tier resolution.** Auto-score the lane and resolve its tier per `## Tier resolution` — print the score + chosen tier (never silent). The resolved tier becomes the Agent `model` param at dispatch.
-3. **Dispatch.** Spawn an **ephemeral one-agent-per-task** agent (see `## §task§agent lifecycle`) at the resolved tier, using the backend selected in `team.yaml`, passing the bundle path as the primary task brief. The agent escalates via `## Advisor escalation` if it hits something above its tier. Routing rules and backend mechanics: see `dispatch.md`.
+3. **Dispatch.** Spawn an **ephemeral one-agent-per-task** agent (see `## §task§agent lifecycle`) at the resolved tier, using the backend selected in `team.yaml`, passing the bundle path as the primary task brief. Before spawning, inject capability-scope env vars into the agent's environment (see `## Capability-scope env injection`). The agent escalates via `## Advisor escalation` if it hits something above its tier. Routing rules, backend mechanics, and env injection detail: see `dispatch.md`.
 4. **Receipt.** Confirm the agent wrote its handoff receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` per §8.2, then **extract its `learnings[]` and dismiss the agent** (lifecycle below). A missing or malformed receipt (no `evidence:` field, no `files changed`) → treat the lane as errored, record the failure in the run log, and do not mark it complete.
 
 A specialist dispatched without a bundle violates the context contract (§9); one that completes without a receipt violates the handoff contract (§8.2). Either condition blocks `guild:review`.
@@ -53,6 +53,17 @@ Implements ADR §3. When a low-tier agent hits something above its tier it gets 
 5. **Trail.** Record the escalation trail (trigger, sub-question, advisor tier, result ref, round count) in the run record under `.guild/runs/<run-id>/` alongside the dispatch trace, so SC-6 is verifiable.
 
 Review/critic work folds into this advisor pass + the existing `guild:review`/`qa` lanes — there is **no standalone reviewer agent type** (ADR O-1 resolution).
+
+## Capability-scope env injection
+
+Implements the dispatch-side of the v2 security ADR (`docs/knowledge/decisions/v2-security-and-untrusted-content.md` — bound by pointer). Before spawning each lane's ephemeral agent, populate two env vars so the PreToolUse hook (`hooks/lib/security/enforce.ts`) can enforce tool-level isolation:
+
+- **`GUILD_CAPABILITY_SCOPE`** — Set to `JSON.stringify(lane.capability_scope)` where `lane.capability_scope` is the string array from `team.yaml` for this specialist. **Absent field ⇒ omit the env var entirely** (enforcement does not engage; current behaviour unchanged — no breaking change for existing team.yaml files without the field).
+- **`GUILD_AUTONOMY_CONTRACT`** — Set to a JSON string array of tool-permission rules derived from the plan lane's `autonomy-policy` `may act without asking` entries. These must be in Claude Code's permission-rule grammar (same syntax as `capability_scope` — e.g. `"Bash"`, `"Write"`, `"Read(*)"` — see `hooks/lib/security/enforce.ts` for rule syntax). **Omit when no machine-readable rules can be derived** from the natural-language entries (absent ⇒ no additional AND-masking).
+
+Both env vars are set **only on the spawned lane agent**, never on the orchestrator process. Enforcement only engages when `GUILD_CAPABILITY_SCOPE` is present — an absent or empty var is a clean fall-through; orchestrator and non-Guild sessions are never affected.
+
+Full env injection detail and backend-specific wiring: `dispatch.md §"Capability-scope env injection"`.
 
 ## §task§agent lifecycle
 

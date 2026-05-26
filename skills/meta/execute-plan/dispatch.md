@@ -60,6 +60,50 @@ scripts/agent-team-launcher.ts --team .guild/team/<slug>.yaml --cwd <repo-root>
 
 Pass `--dry-run` first to preview the tmux commands without spawning the session; use `--session-name` when a name collision would otherwise block launch.
 
+## Capability-scope env injection
+
+Implements the dispatch-side of the v2 security ADR (`docs/knowledge/decisions/v2-security-and-untrusted-content.md` — bound by pointer). The Wave-3 PreToolUse hook (`hooks/lib/security/enforce.ts`) reads `GUILD_CAPABILITY_SCOPE` and `GUILD_AUTONOMY_CONTRACT` from the spawned agent's environment to gate tool calls. This section specifies exactly how and when to populate them.
+
+### When to inject
+
+Inject **before spawning** each lane's ephemeral agent, once per lane per run. The orchestrator process itself never receives these vars.
+
+### `GUILD_CAPABILITY_SCOPE`
+
+Source: the lane specialist's `capability_scope:` field in `team.yaml`.
+
+```
+env["GUILD_CAPABILITY_SCOPE"] = JSON.stringify(team.specialists[lane.owner].capability_scope)
+```
+
+- **Field absent** (no `capability_scope:` key in the specialist block) → **do not set** the env var. Enforcement does not engage; the hook falls through cleanly. No breaking change for existing `team.yaml` files.
+- **Field present, empty array** → set `GUILD_CAPABILITY_SCOPE=[]`. Enforcement engages with an empty allow-set — every tool call is out-of-scope (fail-closed). Only do this intentionally for a fully sandboxed read-only role; the default tables in `team-compose/SKILL.md §"Capability scope defaults"` are safe starting points.
+- **Value is a JSON string array** of Claude Code permission-rule strings (e.g. `["Read","Write","Edit","Bash"]`). Rule syntax reference: `hooks/lib/security/enforce.ts` (bound by pointer — not re-spelled here).
+
+### `GUILD_AUTONOMY_CONTRACT`
+
+Source: the lane's `autonomy-policy` in the approved plan file (`.guild/plan/<slug>.md`).
+
+The plan's `autonomy-policy` is natural language ("may act without asking: …"; "forbidden: …"). To populate `GUILD_AUTONOMY_CONTRACT`:
+
+1. Extract the `may act without asking:` bullet(s) for the lane.
+2. If the entries reference specific files or operations that map to Claude Code tool-permission rules (e.g. "create new files under `services/pricing/`" → `"Write(services/pricing/*)"`, "run the test suite" → `"Bash(npm test*)"`) — serialise those as a JSON string array and set `GUILD_AUTONOMY_CONTRACT`.
+3. **If no machine-readable rules can be derived** from the natural-language entries → **do not set** `GUILD_AUTONOMY_CONTRACT`. Absent ⇒ no additional AND-masking; `GUILD_CAPABILITY_SCOPE` alone governs.
+
+`GUILD_AUTONOMY_CONTRACT` is an AND-mask over `GUILD_CAPABILITY_SCOPE` — it can only narrow, never widen. When present, a tool call must match both the capability scope and the autonomy contract to be permitted.
+
+### Backend-specific wiring
+
+| Backend | Injection method |
+|---|---|
+| **subagent** (Agent tool) | Pass via the Agent tool's `env` parameter: `Agent({ subagent_type: <name>, env: { GUILD_CAPABILITY_SCOPE: "...", GUILD_AUTONOMY_CONTRACT: "..." }, ... })`. Omit keys whose source field is absent. |
+| **agent-team** (tmux panes) | Export vars in the pane environment before attaching Claude Code: `tmux send-keys -t <pane> 'export GUILD_CAPABILITY_SCOPE='"'"'[...]'"'"'' Enter` — the launcher script (`scripts/agent-team-launcher.ts`) is responsible for this injection. |
+| **independent agents** | Set via the same env injection channel the host's independent-agent API provides; the launcher owns the wiring. |
+
+### Trace + audit
+
+Record the injected values alongside the lane's tier trace in the run record (`.guild/runs/<run-id>/` — the same record that holds the dispatch line). This makes the effective allow-set verifiable in audit and reproducible across re-runs (SC-5).
+
 ## Parallelism rules
 
 Read the DAG encoded by each lane's `depends-on:` and schedule dispatches accordingly, per `guild-plan.md §8`:

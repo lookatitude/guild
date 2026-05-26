@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write a feature guide explaining how the new permissions system works in our product docs.",
+    "Add a conceptual overview page for the caching layer so developers understand the architecture.",
+    "Write a how-to doc for configuring SSO with our platform.",
+    "Create a what-is page for the Workflows feature that explains the mental model to new users.",
+    "Write a product documentation page for the new analytics dashboard feature."
+  ],
+  "should_not_trigger": [
+    "Document the /auth/token endpoint with request and response schemas.",
+    "Write a Diátaxis-style tutorial with prerequisites and verification steps for the SDK.",
+    "Write a marketing blog post about the new permissions system launch.",
+    "Write the formal user manual for the admin console.",
+    "Write the release notes for version 4.2.0 of the platform.",
+    "Design the doc-site sidebar navigation for the new features section."
+  ]
+}

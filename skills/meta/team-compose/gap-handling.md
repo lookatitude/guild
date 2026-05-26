@@ -31,17 +31,46 @@ specialists:
     scope: "System boundaries, component split, tradeoff matrix for the pricing service."
     depends-on: []
     implied-by: "multi-component"  # or omit if user-requested
+    # capability_scope is OPTIONAL — absent ⇒ no scoping (additive; current behaviour unchanged)
+    capability_scope:
+      - "Read"
+      - "Write"
+      - "Edit"
+      - "Glob"
+      - "Grep"
+      - "WebSearch"
+      - "WebFetch"
   - name: backend
     scope: "REST contract + data layer for /pricing endpoints."
     depends-on: [architect]
+    capability_scope:
+      - "Read"
+      - "Write"
+      - "Edit"
+      - "Bash"
+      - "Glob"
+      - "Grep"
   - name: qa
     scope: "Property-based tests for quote calculator; regression suite hookup."
     depends-on: [backend]
     implied-by: "backend-present"
+    capability_scope:
+      - "Read"
+      - "Write"
+      - "Edit"
+      - "Bash"
+      - "Glob"
+      - "Grep"
   - name: security
     scope: "Auth flow review for the new pricing admin routes."
     depends-on: [backend]
     implied-by: "auth-touched"
+    capability_scope:
+      - "Read"
+      - "Glob"
+      - "Grep"
+      - "WebSearch"
+      - "WebFetch"
 gaps_resolved:
   - proposed_role: data-scientist
     resolution: "B"  # A / B / C / D
@@ -55,5 +84,6 @@ Per-specialist fields:
 - `scope` — one-sentence bounded responsibility for *this* task. No copy-paste of the specialist's full remit.
 - `depends-on` — list of other specialist slugs whose handoff this specialist waits on.
 - `implied-by` (optional) — records which hard rule triggered the inclusion (`multi-component`, `auth-touched`, `backend-present`) so the user can audit.
+- `capability_scope` (optional) — list of Claude Code tool-permission rules (e.g. `"Read"`, `"Bash"`, `"Write"`) serialised as `GUILD_CAPABILITY_SCOPE` by `guild:execute-plan` at dispatch so the PreToolUse hook can enforce tool-level isolation. **Absent ⇒ no scoping** (additive: current behaviour unchanged). See `SKILL.md §"Capability scope defaults"` for the role→scope defaults table and rule syntax reference (`hooks/lib/security/enforce.ts`).
 
 The top-level `backend` field is authoritative for `guild:plan` and `guild:execute-plan`. The team is capped at 6 entries unless `allow_larger: true` is set.

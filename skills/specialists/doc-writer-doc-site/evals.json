@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Build out the Docusaurus docs site with sections for Getting Started, Guides, and API Reference.",
+    "Design the sidebar navigation for our MkDocs site — we're adding a new Integrations section.",
+    "Write the documentation site pages for the new billing features in our Nextra site.",
+    "Update the doc-site nav to add a new Configuration section and provide a redirect map for moved pages.",
+    "Create the VitePress pages for the plugin system with proper cross-links to the architecture guide."
+  ],
+  "should_not_trigger": [
+    "Write the API endpoint reference tables for the billing API.",
+    "Deploy the Docusaurus site to Vercel and set up the CI/CD pipeline.",
+    "Write the project README with quick-start instructions.",
+    "Write a CONTRIBUTING.md and developer onboarding guide.",
+    "Write a launch blog post about the new documentation site.",
+    "Write the changelog page listing all version history entries."
+  ]
+}

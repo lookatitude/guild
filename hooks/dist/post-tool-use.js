@@ -229,6 +229,59 @@ function withStableLock(runDir, fn, opts = {}) {
   }
 }
 
+// lib/trace-v2.ts
+var crypto = __toESM(require("crypto"));
+var SIDECAR_MAX_BYTES = 16 * 1024;
+function genSpanId(runId, eventType, ts, actorId) {
+  const material = `${runId}|${eventType}|${ts}|${actorId || "main"}`;
+  return crypto.createHash("sha256").update(material).digest("hex").slice(0, 16);
+}
+function num(v) {
+  return typeof v === "number" && Number.isFinite(v) ? v : void 0;
+}
+function normalizeTokens(raw) {
+  if (raw === null || typeof raw !== "object") return void 0;
+  const r = raw;
+  const out = {};
+  const input = num(r["input"]) ?? num(r["input_tokens"]);
+  const output = num(r["output"]) ?? num(r["output_tokens"]);
+  const cached = num(r["cached"]) ?? num(r["cache_read_input_tokens"]) ?? num(r["cached_tokens"]);
+  const cost = num(r["cost_usd"]) ?? num(r["cost"]);
+  if (input !== void 0) out.input = input;
+  if (output !== void 0) out.output = output;
+  if (cached !== void 0) out.cached = cached;
+  if (cost !== void 0) out.cost_usd = cost;
+  return Object.keys(out).length > 0 ? out : void 0;
+}
+function envStr(env, key) {
+  const v = env[key];
+  return typeof v === "string" && v.length > 0 ? v : void 0;
+}
+function resolveTraceV2Fields(opts) {
+  const env = opts.env ?? process.env;
+  const out = {
+    span_id: genSpanId(opts.runId, opts.eventType, opts.ts, opts.actorId)
+  };
+  const parent = envStr(env, "GUILD_PARENT_SPAN_ID");
+  if (parent !== void 0) out.parent_span_id = parent;
+  const tier = envStr(env, "GUILD_TIER");
+  if (tier !== void 0) out.tier = tier;
+  const model = envStr(env, "GUILD_MODEL") ?? opts.payloadModel;
+  if (typeof model === "string" && model.length > 0) out.model = model;
+  if (opts.tokens !== void 0) out.tokens = opts.tokens;
+  if (typeof opts.payloadRef === "string" && opts.payloadRef.length > 0) {
+    out.payload_ref = opts.payloadRef;
+  }
+  return out;
+}
+function pruneUndefined(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== void 0) out[k] = v;
+  }
+  return out;
+}
+
 // lib/v1.4/log-jsonl.ts
 function liveLogPath(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "v1.4-events.jsonl");
@@ -294,7 +347,8 @@ function appendEvent(runDir, event, opts = {}) {
   validateEventIds(event);
   const cap = opts.fieldCap;
   const redacted = redactEventFields(event, cap);
-  const line = JSON.stringify(redacted) + "\n";
+  const withV2 = opts.traceV2 !== void 0 ? { ...redacted, ...pruneUndefined(opts.traceV2) } : redacted;
+  const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId = opts.laneId ?? "global";
     const path3 = laneFallbackPath(runDir, laneId);
@@ -369,7 +423,7 @@ function rotateLocked(runDir) {
     `log-jsonl: failed to recreate live log at ${live} with O_EXCL after 5 retries`
   );
 }
-var SIDECAR_MAX_BYTES = 1024 * 1024;
+var SIDECAR_MAX_BYTES2 = 1024 * 1024;
 function sidecarKeyMatches(entry, key) {
   if (entry.run_id !== key.run_id) return false;
   if (entry.tool !== key.tool) return false;
@@ -661,7 +715,16 @@ async function main() {
         result_excerpt_redacted: resultExcerpt(payload)
       });
     }
-    appendEvent(runDir, event);
+    const isLlmCallTool = toolName === "Agent" || toolName === "Skill";
+    const tokens = isLlmCallTool ? normalizeTokens(payload.tokens ?? payload.usage) : void 0;
+    const traceV2 = resolveTraceV2Fields({
+      runId,
+      eventType: "tool_call",
+      ts: tsPost,
+      actorId: laneId ?? "main",
+      tokens
+    });
+    appendEvent(runDir, event, { traceV2 });
   } catch (err) {
     process.stderr.write(
       `warn: [post-tool-use] tool_call emit failed: ${err instanceof Error ? err.message : String(err)}

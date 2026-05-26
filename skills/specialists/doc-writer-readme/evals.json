@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write a README for this Python CLI tool with quick-start and installation instructions.",
+    "The README is outdated — update it to reflect the new authentication flow and add badges.",
+    "Add a quick-start section and contributing pointer to our library's README.",
+    "Create a README for our monorepo that explains the repo structure and how to run each package.",
+    "Our README has no usage examples — add runnable code examples for the three main commands."
+  ],
+  "should_not_trigger": [
+    "Write the API reference docs for the /users endpoint.",
+    "Write a blog post announcing the open-source release of our CLI tool.",
+    "Create a CONTRIBUTING.md with our branch and PR conventions.",
+    "Write the changelog entry for version 3.1.0.",
+    "Write the user manual for the admin dashboard.",
+    "Draft a landing-page hero section for the product."
+  ]
+}

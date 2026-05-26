@@ -20,8 +20,21 @@
  *   "loop_layer":     "<L1|L2|L3|L4|security-review — loop events only>",
  *   "loop_round":     <1-indexed round number — loop events only>,
  *   "loop_gate":      "<G-spec|G-plan|G-diagnose|G-lane:<lane-id> — codex_review_round only>",
- *   "loop_terminated":<bool — loop_round_end/codex_review_round only>
+ *   "loop_terminated":<bool — loop_round_end/codex_review_round only>,
+ *   // ── guild.trace_event.v2 additive fields (D-OBS-1; OPTIONAL, absence valid) ──
+ *   "span_id":        "<sha256(run_id|event|ts|actor_id)[0:16] — D-OBS-6>",
+ *   "parent_span_id": "<GUILD_PARENT_SPAN_ID env, when threaded>",
+ *   "tier":           "<GUILD_TIER env: cheap|mid|powerful>",
+ *   "model":          "<GUILD_MODEL env > payload.model>",
+ *   "tokens":         { "input", "output", "cached", "cost_usd" } // LLM-call events only,
+ *   "payload_ref":    "logs/payloads/<span_id>.json — guild.trace_payload.v1 sidecar (D-OBS-2)"
  * }
+ *
+ * Payload sidecar (D-OBS-2): a redacted structured body is written to
+ * <runDir>/logs/payloads/<span_id>.json (schema guild.trace_payload.v1) via the
+ * secrets gatekeeper. Raw provider prompts are NEVER stored — only the scrubbed
+ * structured body. payload_ref on the event points at the sidecar. Sidecars are
+ * size-capped (SIDECAR_MAX_BYTES) and share events.ndjson's retention story.
  *
  * Run-id resolution (priority order):
  *   1. GUILD_RUN_ID env var (set by tests or orchestrator)
@@ -67,6 +80,20 @@ import { readSecurityConfig } from "./lib/security/config.js";
 import { applySecretsPolicy, resolveTelemetryField } from "./lib/security/secrets.js";
 import { appendSecurityEvent, buildSecurityEvent, resolveRunDir } from "./lib/security/events.js";
 
+// ── v2 observability ADR (D-OBS-1/2/6): guild.trace_event.v2 additive fields,
+// deterministic hook-side span ids, and the redacted guild.trace_payload.v1
+// sidecar. Schema/contracts bound BY POINTER — see lib/trace-v2.ts header
+// (docs/knowledge/decisions/v2-observability-and-replay.md + contract-map §B-post).
+import {
+  genSpanId,
+  isLlmCallEvent,
+  normalizeTokens,
+  pruneUndefined,
+  resolveTraceV2Fields,
+  writePayloadSidecar,
+  type TraceTokens,
+} from "./lib/trace-v2.js";
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface HookPayload {
@@ -86,6 +113,9 @@ interface HookPayload {
   loop_round?: number;
   loop_gate?: string;
   loop_terminated?: boolean;
+  // D-OBS-1: provider token/usage object, present on LLM-call events only.
+  tokens?: unknown;
+  usage?: unknown;
 }
 
 interface TelemetryEvent {
@@ -103,6 +133,12 @@ interface TelemetryEvent {
   loop_round?: number;
   loop_gate?: string;
   loop_terminated?: boolean;
+  // ── guild.trace_event.v2 additive fields (D-OBS-1; optional, absence valid) ──
+  span_id?: string;
+  parent_span_id?: string;
+  tier?: string;
+  tokens?: TraceTokens;
+  payload_ref?: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -191,9 +227,13 @@ async function main(): Promise<void> {
   );
   const ok = isOk(payload);
   const ms = typeof payload.duration_ms === "number" ? payload.duration_ms : 0;
+  // Single ts shared by the event line, its span_id, and the sidecar so they
+  // all join deterministically (D-OBS-6 span = sha256(run|event|ts|actor)).
+  const ts = new Date().toISOString();
+  const actorId = specialist || "main";
 
   const event: TelemetryEvent = {
-    ts: new Date().toISOString(),
+    ts,
     event: eventName,
     tool,
     specialist,
@@ -201,14 +241,14 @@ async function main(): Promise<void> {
     ok,
     ms,
   };
-  if (typeof payload.model === "string" && payload.model.length > 0) {
-    event.model = payload.model;
-  }
+  // `model` is resolved below via the v2 helper (GUILD_MODEL env > payload.model).
+  // The secrets gatekeeper is read once and reused by the prompt scrub (below)
+  // and the v2 payload-sidecar redactor (D-OBS-2).
+  const secPolicy = readSecurityConfig(cwd).secrets_policy;
   if (eventName === "UserPromptSubmit" && typeof payload.prompt === "string") {
     // D-SECRETS: never write a raw prompt. Built-in redaction always runs;
     // secrets_policy.redaction_patterns layer on top; fail_mode_telemetry
     // decides what happens if a custom pattern fails to compile/apply.
-    const secPolicy = readSecurityConfig(cwd).secrets_policy;
     const scrub = applySecretsPolicy(payload.prompt, secPolicy);
     const resolved = resolveTelemetryField(scrub, secPolicy);
     if (resolved.value !== undefined) event.prompt = resolved.value;
@@ -241,8 +281,64 @@ async function main(): Promise<void> {
     if (typeof payload.loop_terminated === "boolean") event.loop_terminated = payload.loop_terminated;
   }
 
-  // Write to .guild/runs/<run-id>/events.ndjson
+  // ── guild.trace_event.v2 + payload sidecar (D-OBS-1/2/6) ────────────────────
+  // Additive: the frozen v1 fields above are untouched; everything here is
+  // optional. Compose with the secrets gatekeeper — never store a raw prompt.
   const runsDir = path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const redact = (s: string): string => applySecretsPolicy(s, secPolicy).value;
+  const spanId = genSpanId(runId, eventName, ts, actorId);
+
+  // Build the structured, redactable sidecar body from the payload. The prompt,
+  // if any, is the ALREADY-scrubbed value (event.prompt) — never the raw text.
+  const body: Record<string, unknown> = {};
+  if (tool) body["tool"] = tool;
+  if (payload.tool_input !== undefined) body["tool_input"] = payload.tool_input;
+  if (payload.tool_response !== undefined) body["tool_response"] = payload.tool_response;
+  if (typeof payload.stop_reason === "string") body["stop_reason"] = payload.stop_reason;
+  if (specialist) body["agent_name"] = specialist;
+  if (typeof event.prompt === "string") body["prompt"] = event.prompt;
+  if (typeof event.loop_layer === "string") body["loop_layer"] = event.loop_layer;
+  if (typeof event.loop_gate === "string") body["loop_gate"] = event.loop_gate;
+
+  let payloadRef: string | undefined;
+  if (Object.keys(body).length > 0) {
+    payloadRef = writePayloadSidecar(
+      runsDir,
+      spanId,
+      {
+        runId,
+        spanId,
+        eventType: eventName,
+        ts,
+        actorId,
+        parentSpanId: process.env["GUILD_PARENT_SPAN_ID"] || undefined,
+        body,
+      },
+      redact,
+    );
+  }
+
+  // tokens — D-OBS-1: only on LLM-call events, sourced from payload usage.
+  const tokens: TraceTokens | undefined = isLlmCallEvent(eventName)
+    ? normalizeTokens(payload.tokens ?? payload.usage)
+    : undefined;
+
+  Object.assign(
+    event,
+    pruneUndefined(
+      resolveTraceV2Fields({
+        runId,
+        eventType: eventName,
+        ts,
+        actorId,
+        payloadModel: payload.model,
+        tokens,
+        payloadRef,
+      }),
+    ),
+  );
+
+  // Write to .guild/runs/<run-id>/events.ndjson
   const eventsFile = path.join(runsDir, "events.ndjson");
 
   try {

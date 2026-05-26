@@ -23,9 +23,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // capture-telemetry.ts
-var fs4 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
-var crypto = __toESM(require("crypto"));
+var fs5 = __toESM(require("fs"));
+var path5 = __toESM(require("path"));
+var crypto2 = __toESM(require("crypto"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -270,10 +270,121 @@ function resolveRunDir(cwd, runId, explicitRunDir) {
   return path3.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
 }
 
+// lib/trace-v2.ts
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
+var crypto = __toESM(require("crypto"));
+var TRACE_PAYLOAD_SCHEMA = "guild.trace_payload.v1";
+var SIDECAR_MAX_BYTES = 16 * 1024;
+function genSpanId(runId, eventType, ts, actorId) {
+  const material = `${runId}|${eventType}|${ts}|${actorId || "main"}`;
+  return crypto.createHash("sha256").update(material).digest("hex").slice(0, 16);
+}
+function num(v) {
+  return typeof v === "number" && Number.isFinite(v) ? v : void 0;
+}
+function normalizeTokens(raw) {
+  if (raw === null || typeof raw !== "object") return void 0;
+  const r = raw;
+  const out = {};
+  const input = num(r["input"]) ?? num(r["input_tokens"]);
+  const output = num(r["output"]) ?? num(r["output_tokens"]);
+  const cached = num(r["cached"]) ?? num(r["cache_read_input_tokens"]) ?? num(r["cached_tokens"]);
+  const cost = num(r["cost_usd"]) ?? num(r["cost"]);
+  if (input !== void 0) out.input = input;
+  if (output !== void 0) out.output = output;
+  if (cached !== void 0) out.cached = cached;
+  if (cost !== void 0) out.cost_usd = cost;
+  return Object.keys(out).length > 0 ? out : void 0;
+}
+var LLM_CALL_EVENTS = /* @__PURE__ */ new Set([
+  "SubagentStop",
+  "loop_round_start",
+  "loop_round_end",
+  "codex_review_round",
+  "specialist_dispatch",
+  "specialist_receipt"
+]);
+function isLlmCallEvent(eventType) {
+  return LLM_CALL_EVENTS.has(eventType);
+}
+function envStr(env, key) {
+  const v = env[key];
+  return typeof v === "string" && v.length > 0 ? v : void 0;
+}
+function resolveTraceV2Fields(opts) {
+  const env = opts.env ?? process.env;
+  const out = {
+    span_id: genSpanId(opts.runId, opts.eventType, opts.ts, opts.actorId)
+  };
+  const parent = envStr(env, "GUILD_PARENT_SPAN_ID");
+  if (parent !== void 0) out.parent_span_id = parent;
+  const tier = envStr(env, "GUILD_TIER");
+  if (tier !== void 0) out.tier = tier;
+  const model = envStr(env, "GUILD_MODEL") ?? opts.payloadModel;
+  if (typeof model === "string" && model.length > 0) out.model = model;
+  if (opts.tokens !== void 0) out.tokens = opts.tokens;
+  if (typeof opts.payloadRef === "string" && opts.payloadRef.length > 0) {
+    out.payload_ref = opts.payloadRef;
+  }
+  return out;
+}
+function pruneUndefined(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== void 0) out[k] = v;
+  }
+  return out;
+}
+function payloadSidecarPath(runDir, evtId) {
+  return path4.join(runDir, "logs", "payloads", `${evtId}.json`);
+}
+function payloadRef(evtId) {
+  return `logs/payloads/${evtId}.json`;
+}
+function redactDeep(value, redact) {
+  if (typeof value === "string") return redact(value);
+  if (Array.isArray(value)) return value.map((v) => redactDeep(v, redact));
+  if (value !== null && typeof value === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = redactDeep(v, redact);
+    }
+    return out;
+  }
+  return value;
+}
+function writePayloadSidecar(runDir, evtId, input, redact) {
+  try {
+    const record = {
+      schema_version: TRACE_PAYLOAD_SCHEMA,
+      evt_id: evtId,
+      span_id: input.spanId,
+      run_id: input.runId,
+      event: input.eventType,
+      ts: input.ts,
+      actor_id: input.actorId || "main",
+      body: redactDeep(input.body, redact)
+    };
+    if (input.parentSpanId !== void 0) record["parent_span_id"] = input.parentSpanId;
+    let serialized = JSON.stringify(record);
+    if (Buffer.byteLength(serialized, "utf8") > SIDECAR_MAX_BYTES) {
+      record["body"] = { truncated: true, reason: "sidecar exceeded SIDECAR_MAX_BYTES" };
+      serialized = JSON.stringify(record);
+    }
+    const file = payloadSidecarPath(runDir, evtId);
+    fs4.mkdirSync(path4.dirname(file), { recursive: true });
+    fs4.writeFileSync(file, serialized + "\n", "utf8");
+    return payloadRef(evtId);
+  } catch {
+    return void 0;
+  }
+}
+
 // capture-telemetry.ts
 function digest(value) {
   const str = typeof value === "string" ? value : JSON.stringify(value ?? "");
-  return crypto.createHash("sha256").update(str).digest("hex").slice(0, 12);
+  return crypto2.createHash("sha256").update(str).digest("hex").slice(0, 12);
 }
 function isOk(payload) {
   const resp = payload.tool_response;
@@ -294,9 +405,9 @@ async function readStdin() {
   });
 }
 function readCurrentRunId(cwd) {
-  const sentinelPath = path4.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
+  const sentinelPath = path5.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
-    const value = fs4.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs5.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -328,8 +439,10 @@ async function main() {
   );
   const ok = isOk(payload);
   const ms = typeof payload.duration_ms === "number" ? payload.duration_ms : 0;
+  const ts = (/* @__PURE__ */ new Date()).toISOString();
+  const actorId = specialist || "main";
   const event = {
-    ts: (/* @__PURE__ */ new Date()).toISOString(),
+    ts,
     event: eventName,
     tool,
     specialist,
@@ -337,11 +450,8 @@ async function main() {
     ok,
     ms
   };
-  if (typeof payload.model === "string" && payload.model.length > 0) {
-    event.model = payload.model;
-  }
+  const secPolicy = readSecurityConfig(cwd).secrets_policy;
   if (eventName === "UserPromptSubmit" && typeof payload.prompt === "string") {
-    const secPolicy = readSecurityConfig(cwd).secrets_policy;
     const scrub = applySecretsPolicy(payload.prompt, secPolicy);
     const resolved = resolveTelemetryField(scrub, secPolicy);
     if (resolved.value !== void 0) event.prompt = resolved.value;
@@ -372,11 +482,54 @@ async function main() {
     if (typeof payload.loop_gate === "string") event.loop_gate = payload.loop_gate;
     if (typeof payload.loop_terminated === "boolean") event.loop_terminated = payload.loop_terminated;
   }
-  const runsDir = path4.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
-  const eventsFile = path4.join(runsDir, "events.ndjson");
+  const runsDir = path5.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const redact = (s) => applySecretsPolicy(s, secPolicy).value;
+  const spanId = genSpanId(runId, eventName, ts, actorId);
+  const body = {};
+  if (tool) body["tool"] = tool;
+  if (payload.tool_input !== void 0) body["tool_input"] = payload.tool_input;
+  if (payload.tool_response !== void 0) body["tool_response"] = payload.tool_response;
+  if (typeof payload.stop_reason === "string") body["stop_reason"] = payload.stop_reason;
+  if (specialist) body["agent_name"] = specialist;
+  if (typeof event.prompt === "string") body["prompt"] = event.prompt;
+  if (typeof event.loop_layer === "string") body["loop_layer"] = event.loop_layer;
+  if (typeof event.loop_gate === "string") body["loop_gate"] = event.loop_gate;
+  let payloadRef2;
+  if (Object.keys(body).length > 0) {
+    payloadRef2 = writePayloadSidecar(
+      runsDir,
+      spanId,
+      {
+        runId,
+        spanId,
+        eventType: eventName,
+        ts,
+        actorId,
+        parentSpanId: process.env["GUILD_PARENT_SPAN_ID"] || void 0,
+        body
+      },
+      redact
+    );
+  }
+  const tokens = isLlmCallEvent(eventName) ? normalizeTokens(payload.tokens ?? payload.usage) : void 0;
+  Object.assign(
+    event,
+    pruneUndefined(
+      resolveTraceV2Fields({
+        runId,
+        eventType: eventName,
+        ts,
+        actorId,
+        payloadModel: payload.model,
+        tokens,
+        payloadRef: payloadRef2
+      })
+    )
+  );
+  const eventsFile = path5.join(runsDir, "events.ndjson");
   try {
-    fs4.mkdirSync(runsDir, { recursive: true });
-    fs4.appendFileSync(eventsFile, JSON.stringify(event) + "\n", "utf8");
+    fs5.mkdirSync(runsDir, { recursive: true });
+    fs5.appendFileSync(eventsFile, JSON.stringify(event) + "\n", "utf8");
   } catch (err) {
     process.stderr.write(
       `[capture-telemetry] ERROR: failed to write event: ${err instanceof Error ? err.message : String(err)}

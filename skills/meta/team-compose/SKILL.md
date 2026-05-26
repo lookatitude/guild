@@ -1,6 +1,6 @@
 ---
 name: guild-team-compose
-description: Match spec domains against BOTH Guild's shipping specialist roster AND the consuming repo's project-local `.guild/agents/*.md` (existing project specialists are reused, never re-created); present existing + gaps with A/B/C/D options (auto-create / skip / substitute / compose from scratch), enforce cap-6 and default 3–4 rules, assign each specialist a `default_tier` (cheap/mid/powerful) from the cost-aware role→tier table, resolve the execution backend via the agent_mode ladder (agent-team / tmux visible panes under tmux; subagent only as the no-tmux fallback), and write `.guild/team/<slug>.yaml`. TRIGGER on "propose a team", "who should work on this", "compose specialists for the spec". DO NOT TRIGGER for: writing the code (execute-plan), creating a new specialist TYPE for Guild itself (that's guild:create-specialist in P6), reviewing completed work (guild:review).
+description: Match spec domains against BOTH Guild's shipping specialist roster AND the consuming repo's project-local `.guild/agents/*.md` (existing project specialists are reused, never re-created); present existing + gaps with A/B/C/D options (auto-create / skip / substitute / compose from scratch), enforce cap-6 and default 3–4 rules, assign each specialist a `default_tier` (cheap/mid/powerful) from the cost-aware role→tier table, derive an optional per-specialist `capability_scope:` (tool allow-list; absent ⇒ no scoping — additive) using the role→scope defaults table, resolve the execution backend via the agent_mode ladder (agent-team / tmux visible panes under tmux; subagent only as the no-tmux fallback), and write `.guild/team/<slug>.yaml`. TRIGGER on "propose a team", "who should work on this", "compose specialists for the spec". DO NOT TRIGGER for: writing the code (execute-plan), creating a new specialist TYPE for Guild itself (that's guild:create-specialist in P6), reviewing completed work (guild:review).
 when_to_use: Second step of the `/guild` lifecycle, after `guild:brainstorm` has produced `.guild/spec/<slug>.md`. Also fires when the user asks to reshape an existing team (e.g. "rework the team for this task", "swap the qa slot for security").
 type: meta
 ---
@@ -64,6 +64,14 @@ specialists:
     depends-on: []          # specialist slugs whose handoff this waits on
     default_tier: powerful  # cheap|mid|powerful — from the §7 role→tier table (a default, NOT a pin)
     implied-by: "multi-component"   # or omit if user-requested
+    capability_scope:       # OPTIONAL — tool allow-list serialised as GUILD_CAPABILITY_SCOPE at dispatch
+      - "Read"              # absent ⇒ no scoping (additive; current behaviour unchanged)
+      - "Write"
+      - "Edit"
+      - "Glob"
+      - "Grep"
+      - "WebSearch"
+      - "WebFetch"
 gaps_resolved:
   - proposed_role: data-scientist
     resolution: "B"         # A / B / C / D
@@ -88,6 +96,28 @@ Each composed specialist carries a **default model tier** (`cheap | mid | powerf
 | seo, social-media, marketing, sales | `cheap`→`mid` | Template-guided generation cheap; positioning/strategy mid. |
 
 A `cheap`→`mid` entry records the **lower bound** as `default_tier`; the work-type signal in the lane auto-scores the actual dispatch tier (ADR §2). The tier here is a **default**, not a pin — the §2 auto-score and the `--model-tier` / per-lane precedence ladder (ADR §10) decide the final dispatch tier. Self-build dev-team lanes inherit the same table by role analogy (`plugin-architect`→`powerful`, code/skill/hook/tooling lanes→`mid`, `docs-writer`→`cheap`→`mid`).
+
+## Capability scope defaults
+
+Implements the capability-scoping contract from the v2 security ADR (`docs/knowledge/decisions/v2-security-and-untrusted-content.md` — bound by pointer). The `capability_scope:` field is **optional and additive**: absent ⇒ no scoping, current behaviour unchanged. When present it is serialised as `GUILD_CAPABILITY_SCOPE` (JSON string array) by `guild:execute-plan` at dispatch so the PreToolUse hook can enforce it.
+
+Derive `capability_scope` from the role→scope defaults below. Override when a task's narrower scope warrants it (e.g. a security audit lane may restrict even further); widen only when explicitly justified.
+
+Rule syntax follows Claude Code's own permission-rule grammar (bound by convention — see `hooks/lib/security/enforce.ts`):
+- `"ToolName"` — matches any call to that tool.
+- `"ToolName(glob)"` — matches only when the argument string matches the glob.
+
+| Role group | Default `capability_scope` | Rationale |
+|---|---|---|
+| `architect` | `["Read","Write","Edit","Glob","Grep","WebSearch","WebFetch"]` | Reads codebase, writes ADRs/docs; no Bash execution needed. |
+| `researcher` | `["Read","Glob","Grep","WebSearch","WebFetch"]` | Read + search only; no file writes, no shell. |
+| `backend`, `frontend`, `mobile`, `devops` (build lanes) | `["Read","Write","Edit","Bash","Glob","Grep"]` | Needs full read/write/bash to implement a lane. |
+| `qa` | `["Read","Write","Edit","Bash","Glob","Grep"]` | Runs tests and writes fixtures; same profile as build lanes. |
+| `security` | `["Read","Glob","Grep","WebSearch","WebFetch"]` | Audit-only: read + search; no writes, no unguarded bash. |
+| `doc-writer`, `copywriter`, `technical-writer` | `["Read","Write","Edit","Glob","Grep"]` | Reads source, writes doc files; no shell or external requests. |
+| `seo`, `social-media`, `marketing`, `sales` | `["Read","Write","Edit","Glob","Grep","WebSearch","WebFetch"]` | Needs search for current data; writes copy/config files. |
+
+Self-build dev-team lanes inherit by analogy: `plugin-architect`→`architect` scope; skill/hook/command/tooling lanes→build-lane scope; `docs-writer`→doc-writer scope; `eval-engineer`→build-lane scope.
 
 ## Handoff
 

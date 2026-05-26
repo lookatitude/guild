@@ -342,6 +342,120 @@ describe("capture-telemetry.ts", () => {
     });
   });
 
+  describe("guild.trace_event.v2 additive fields (D-OBS-1/6)", () => {
+    function lastEvent(file: string): any {
+      const lines = fs.readFileSync(file, "utf8").trim().split("\n").filter(Boolean);
+      return JSON.parse(lines[lines.length - 1]);
+    }
+
+    it("always stamps a deterministic 16-hex span_id", () => {
+      runScript(readFixture("post-tool-use.json"), { GUILD_CWD: tmpDir, GUILD_RUN_ID: "test-run" });
+      const ev = lastEvent(eventsFile);
+      expect(ev.span_id).toMatch(/^[0-9a-f]{16}$/);
+    });
+
+    it("re-derives the same span_id for identical (run,event,ts,actor) inputs", () => {
+      // span = sha256(run|event|ts|actor); recompute from the emitted ts.
+      const crypto = require("crypto");
+      runScript(readFixture("post-tool-use.json"), { GUILD_CWD: tmpDir, GUILD_RUN_ID: "test-run" });
+      const ev = lastEvent(eventsFile);
+      const actor = ev.specialist || "main";
+      const expected = crypto
+        .createHash("sha256")
+        .update(`test-run|PostToolUse|${ev.ts}|${actor}`)
+        .digest("hex")
+        .slice(0, 16);
+      expect(ev.span_id).toBe(expected);
+    });
+
+    it("threads parent_span_id and tier from env", () => {
+      runScript(readFixture("post-tool-use.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "test-run",
+        GUILD_PARENT_SPAN_ID: "0123456789abcdef",
+        GUILD_TIER: "mid",
+      });
+      const ev = lastEvent(eventsFile);
+      expect(ev.parent_span_id).toBe("0123456789abcdef");
+      expect(ev.tier).toBe("mid");
+    });
+
+    it("prefers GUILD_MODEL env over payload.model", () => {
+      runScript(readFixture("subagent-stop-tokens.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "test-run",
+        GUILD_MODEL: "claude-opus-4-6",
+      });
+      const ev = lastEvent(eventsFile);
+      expect(ev.model).toBe("claude-opus-4-6");
+    });
+
+    it("omits v2 fields that have no source (absence valid, no nulls)", () => {
+      runScript(readFixture("post-tool-use.json"), { GUILD_CWD: tmpDir, GUILD_RUN_ID: "test-run" });
+      const ev = lastEvent(eventsFile);
+      expect(ev.parent_span_id).toBeUndefined();
+      expect(ev.tier).toBeUndefined();
+      expect(ev.tokens).toBeUndefined();
+      // no field should be null
+      for (const v of Object.values(ev)) expect(v).not.toBeNull();
+    });
+
+    it("attaches tokens on an LLM-call event (SubagentStop) from payload", () => {
+      runScript(readFixture("subagent-stop-tokens.json"), { GUILD_CWD: tmpDir, GUILD_RUN_ID: "test-run" });
+      const ev = lastEvent(eventsFile);
+      expect(ev.event).toBe("SubagentStop");
+      expect(ev.tokens).toEqual({ input: 1200, output: 340, cached: 800, cost_usd: 0.0123 });
+    });
+
+    it("never attaches tokens on a non-LLM event (PostToolUse)", () => {
+      runScript(readFixture("post-tool-use.json"), { GUILD_CWD: tmpDir, GUILD_RUN_ID: "test-run" });
+      const ev = lastEvent(eventsFile);
+      expect(ev.tokens).toBeUndefined();
+    });
+  });
+
+  describe("guild.trace_payload.v1 sidecar (D-OBS-2)", () => {
+    function lastEvent(file: string): any {
+      const lines = fs.readFileSync(file, "utf8").trim().split("\n").filter(Boolean);
+      return JSON.parse(lines[lines.length - 1]);
+    }
+
+    it("writes a redacted sidecar and points payload_ref at it", () => {
+      runScript(readFixture("post-tool-use.json"), { GUILD_CWD: tmpDir, GUILD_RUN_ID: "test-run" });
+      const ev = lastEvent(eventsFile);
+      expect(ev.payload_ref).toBe(`logs/payloads/${ev.span_id}.json`);
+      const sidecar = path.join(runDir, "logs", "payloads", `${ev.span_id}.json`);
+      expect(fs.existsSync(sidecar)).toBe(true);
+      const body = JSON.parse(fs.readFileSync(sidecar, "utf8"));
+      expect(body.schema_version).toBe("guild.trace_payload.v1");
+      expect(body.evt_id).toBe(ev.span_id);
+      expect(body.run_id).toBe("test-run");
+      expect(body.body.tool).toBe("Write");
+      // The structured tool_input is captured; its string leaves pass through
+      // the gatekeeper (the long absolute path is high-entropy-redacted — the
+      // gatekeeper is intentionally aggressive on slash-paths).
+      expect(typeof body.body.tool_input.file_path).toBe("string");
+      expect(body.body.tool_input.file_path).toMatch(/\.ts$/);
+    });
+
+    it("never stores a raw prompt — only the scrubbed value lands in the sidecar", () => {
+      const payload = JSON.stringify({
+        session_id: "sess-x",
+        cwd: tmpDir,
+        hook_event_name: "UserPromptSubmit",
+        prompt: "deploy with token=ghp_0123456789012345678901234567890123456789",
+      });
+      runScript(payload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: "test-run" });
+      const ev = lastEvent(eventsFile);
+      // event.prompt is scrubbed
+      expect(ev.prompt).not.toContain("ghp_0123456789012345678901234567890123456789");
+      // sidecar prompt is the scrubbed value too — no raw token anywhere
+      const sidecar = path.join(runDir, "logs", "payloads", `${ev.span_id}.json`);
+      const body = JSON.parse(fs.readFileSync(sidecar, "utf8"));
+      expect(JSON.stringify(body)).not.toContain("ghp_0123456789012345678901234567890123456789");
+    });
+  });
+
   describe("error resilience", () => {
     it("exits 0 even when given invalid JSON", () => {
       const { exitCode } = runScript("not valid json at all", {

@@ -51,6 +51,10 @@ import {
   stableLockPath,
   withStableLock,
 } from "./v1.4-lock.js";
+// guild.trace_event.v2 additive fields (D-OBS-1). Bound BY POINTER — see
+// ../trace-v2.ts header + contract-map §B-post. These are OPTIONAL structured
+// (non-free-text) fields merged onto the FROZEN v1 event AFTER redaction.
+import { pruneUndefined, type TraceV2Fields } from "../trace-v2.js";
 
 // Re-export for tests + downstream callers that imported from this module
 // before the shared helper existed. The body below uses the shared impl.
@@ -376,6 +380,13 @@ export interface AppendOptions {
   laneId?: string;
   /** Override field-size cap (testing). */
   fieldCap?: number;
+  /**
+   * guild.trace_event.v2 additive fields (D-OBS-1). When present, the defined
+   * fields are merged onto the serialized event line. The frozen v1 field set
+   * is unchanged; absence is valid; values are never null. These are structured
+   * (non-free-text) fields, so they are merged AFTER redaction.
+   */
+  traceV2?: TraceV2Fields;
 }
 
 /**
@@ -399,7 +410,14 @@ export function appendEvent(
   // Redact + serialize FIRST so any error in encoding is surfaced before
   // we acquire the lock.
   const redacted = redactEventFields(event as unknown as Record<string, unknown>, cap);
-  const line = JSON.stringify(redacted) + "\n";
+  // D-OBS-1: merge the OPTIONAL guild.trace_event.v2 fields (span_id,
+  // parent_span_id, tier, model, tokens, payload_ref) AFTER redaction — they
+  // are structured, not free-text. pruneUndefined keeps absence valid (no null).
+  const withV2 =
+    opts.traceV2 !== undefined
+      ? { ...redacted, ...pruneUndefined(opts.traceV2 as unknown as Record<string, unknown>) }
+      : redacted;
+  const line = JSON.stringify(withV2) + "\n";
 
   // Cross-platform fallback — per-lane file, no shared lock.
   if (opts.forceFallback || process.platform === "win32") {
@@ -737,12 +755,15 @@ function appendParsedLines(
     if (opts.validate) {
       const result = opts.validate(parsed);
       if (!result.ok) {
+        // `in`-narrowing works under the loose (no base tsconfig) ts-jest
+        // compiler options where `!result.ok` flow-narrowing does not.
+        const reason = "reason" in result ? result.reason : "unknown";
         opts.onSkip?.({
           source,
           line: i + 1,
           streamIndex: out.length,
           raw,
-          reason: `schema validation failed: ${result.reason}`,
+          reason: `schema validation failed: ${reason}`,
         });
         continue;
       }
