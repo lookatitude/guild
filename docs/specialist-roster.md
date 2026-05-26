@@ -1,6 +1,6 @@
 # Specialist Roster
 
-Implements `guild-plan.md §6`. 14 shipping specialists across 3 groups, 54 T5 skills (including the 4 `frontend-*` skills under `skills/specialists/`).
+Implements `guild-plan.md §6`. 15 shipping specialists across 3 groups (doc-writer promoted to first-class in v2.0; previously reconciled onto technical-writer per §7 tiered-worker roster).
 
 Every specialist inherits `guild-principles` (T1) as a mandatory first load: the
 Karpathy 4 plus Guild's evidence rule. Per-specialist T5 skills live under
@@ -101,11 +101,26 @@ plus diff trace.
 - **Skills:** `copywriter-long-form`, `copywriter-product-microcopy`,
   `copywriter-email-sequences`, `copywriter-voice-guide`.
 
+### doc-writer — `agents/doc-writer.md`
+
+- **Triggers:** "write a README", doc site, documentation page, product docs,
+  feature docs, how-to guide, getting-started guide (narrative), onboarding
+  documentation, wiki page, knowledge base, conceptual guide, contributor guide.
+- **DO NOT trigger for:** API reference, user manuals, changelogs, release notes
+  (technical-writer); blog posts, microcopy, email, voice guides (copywriter);
+  social posts (social-media); SEO mechanics (seo).
+- **Skills:** `doc-writer-readme`, `doc-writer-product-guide`,
+  `doc-writer-doc-site`, `doc-writer-onboarding-doc`
+  *(needs authoring — followup for `skill-author`)*.
+- **Default tier:** `cheap`→`mid` (sonnet).
+
 ### technical-writer — `agents/technical-writer.md`
 
-- **Triggers:** API docs, user manual, tutorial, how-to, changelog, release notes.
-- **DO NOT trigger for:** marketing / persuasive copy (copywriter / marketing),
-  short-form social posts (social-media).
+- **Triggers:** API docs, user manual, changelog, release notes, migration guide,
+  runbook prose.
+- **DO NOT trigger for:** product READMEs, doc-site pages, feature docs, how-to
+  guides, onboarding docs, wikis (doc-writer); marketing / persuasive copy
+  (copywriter / marketing); short-form social posts (social-media).
 - **Skills:** `technical-writer-api-docs`, `technical-writer-user-manual`,
   `technical-writer-tutorial`, `technical-writer-release-notes`.
 
@@ -172,7 +187,7 @@ existing `guild:review` / `qa` lanes.
 | `architect` | `powerful` | `opus` | **annotated** `agents/architect.md` (already powerful) | Shape systems, compare options, author ADRs (high-judgment, low frequency). |
 | `advisor` | `powerful` | `opus` | **NEW** `agents/advisor.md` | Answer one escalated sub-question seeing draft + question only (§3); never raw context. |
 | `developer` | `mid` | `sonnet` | **NEW** `agents/developer.md` | Implement a domain-*less* task lane (draft/reason/build); escalates to advisor when above tier. |
-| `doc-writer` | `cheap`→`mid` | `sonnet` | **retiered** `agents/technical-writer.md` (role reconciled) | Write/update docs from a settled decision; cheap for mechanical edits, mid for synthesis. |
+| `doc-writer` | `cheap`→`mid` | `sonnet` | **PROMOTED** `agents/doc-writer.md` (first-class v2.0) | READMEs, doc-site pages, feature guides, how-tos, onboarding docs, wikis; cheap for mechanical edits, mid for synthesis. |
 
 Notes:
 
@@ -186,10 +201,11 @@ Notes:
   is dispatched to *own a design/decision*; `advisor` answers a single in-flight
   *escalation* on a draft. The architect boundary block now defers escalated
   one-off critique to `advisor`.
-- **`doc-writer` reconciled onto `technical-writer`.** No separate generic
-  `doc-writer` file ships — it would collide with the `technical-writer` lane.
-  The §7 role is reconciled there (cheap for mechanical edits, mid for synthesis),
-  keeping the roster minimal.
+- **`doc-writer` promoted to first-class specialist (v2.0).** A standalone
+  `agents/doc-writer.md` ships — it is cleanly separated from `technical-writer`
+  (which keeps API reference / manuals / changelogs / release notes) by the boundary
+  in `doc-writer.md §Scope boundaries`. The §7 tiered-worker row is updated from
+  "reconciled onto technical-writer" to "PROMOTED `agents/doc-writer.md`".
 - **All 14 shipping specialists are now tiered** — every agent file carries an
   explicit `model:` plus a `**Default tier:**` note, not just the §7 roster rows.
   `architect` and `security` are `powerful` (`opus`); every other engineering /
@@ -217,14 +233,15 @@ default to `cheap`, or escalate one sub-question to the `powerful` `advisor`
 | `qa` | engineering | `mid` | `sonnet` |
 | `developer` | tiered-worker (NEW) | `mid` | `sonnet` |
 | `copywriter` | content & comms | `mid` | `sonnet` |
-| `technical-writer` (`doc-writer`) | content & comms | `cheap`→`mid` | `sonnet` |
+| `doc-writer` | content & comms | `cheap`→`mid` | `sonnet` |
+| `technical-writer` | content & comms | `cheap`→`mid` | `sonnet` |
 | `social-media` | content & comms | `mid` | `sonnet` |
 | `seo` | content & comms | `mid` | `sonnet` |
 | `marketing` | commercial | `mid` | `sonnet` |
 | `sales` | commercial | `mid` | `sonnet` |
 
-14 shipping specialists + the 2 NEW tiered-worker roles (`advisor`, `developer`)
-= 16. `powerful` is reserved for the three high-stakes / low-frequency roles
+15 shipping specialists + the 2 NEW tiered-worker roles (`advisor`, `developer`)
+= 17. `powerful` is reserved for the three high-stakes / low-frequency roles
 (`architect`, `security`, `advisor`); no implementer or content/commercial role
 defaults to `powerful`.
 

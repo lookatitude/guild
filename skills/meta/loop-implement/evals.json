@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Run the lane loops for the backend implementation.",
+    "Kick off the L3 loop — dev↔tester for this lane.",
+    "Start the L4 owner↔QA adversarial loop.",
+    "Security review for the frontend lane.",
+    "Implementation-phase adversarial loop — loops_applicable: full."
+  ],
+  "should_not_trigger": [
+    "Fact-check the brief before writing the spec.",
+    "Audit the plan for defects before approval.",
+    "Write the property-based tests for this feature.",
+    "Review the entire codebase for style issues.",
+    "Run the loop with --loops=none."
+  ]
+}

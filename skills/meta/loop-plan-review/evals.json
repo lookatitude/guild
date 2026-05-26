@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Review the plan for defects before approval.",
+    "Run the L2 loop.",
+    "Security plan-review — audit the plan for security holes and scope creep.",
+    "Kick off the plan adversarial loop.",
+    "Audit the plan for defects before the Gate-3 approval."
+  ],
+  "should_not_trigger": [
+    "Fact-check the brief before writing the spec.",
+    "Run the dev↔tester loop for this implementation lane.",
+    "Review code style for this pull request.",
+    "Approve the plan and proceed to build.",
+    "Run the loop with --loops=none."
+  ]
+}

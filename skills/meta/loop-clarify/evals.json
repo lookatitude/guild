@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "Run the brainstorm loop on this brief.",
+    "Kick off the L1 loop.",
+    "Fact-check this brief before we write the spec.",
+    "Researcher, review the brief for gaps before the spec is written.",
+    "Kick off the spec adversarial loop — loops=spec is active."
+  ],
+  "should_not_trigger": [
+    "Review the plan for defects before approval.",
+    "Run the dev↔tester loop for the backend lane.",
+    "Write the spec now — skip the adversarial pass.",
+    "Brainstorm the feature directly.",
+    "Run the loop with --loops=none."
+  ]
+}
