@@ -23,7 +23,10 @@ Everything this skill writes lands in the **consuming repo's `.guild/`** — **n
 - **Incubate** → files stay under `proposed/` until both gates pass. `guild:team-compose` reads `.guild/agents/*.md` (+ shipped `plugin/agents/*.md`), **never** `.guild/agents/proposed/*.md`.
 - **Register** → a **move within `.guild/`**: `.guild/agents/proposed/<role>.md` → `.guild/agents/<role>.md`, and `.guild/skills/proposed-<role>-*/` → `.guild/skills/<role>-*/`. Register is a move, not a rewrite — the `derived_from_template` stamp is preserved unchanged. The v1 behavior (moving into `agents/<role>.md` / `skills/specialists/<role>-*/` in the plugin install dir) is the explicit **v2 DH-3 defect being fixed**.
 
-**Restart required.** Claude Code loads plugin agents once at session start. A specialist created mid-session is NOT dispatchable via `Agent({ subagent_type: "<new-role>" })` until restart. Tell the user: "New specialist registered at `.guild/agents/<role>.md`. Restart Claude Code for it to become available in team composition." Same-session workaround: inject the specialist's skill paths into a generic `Agent()` call (no restart, but loses TRIGGER/DO NOT TRIGGER routing).
+**Same-session constraint** — ADR: `docs/knowledge/decisions/new-specialist-same-session-constraint.md` (normative). Claude Code loads plugin agents once at session start; a specialist registered mid-session is **never discoverable via `Agent({ subagent_type: "<new-role>" })`** in that session.
+
+- **Default (defer to next session):** After step 7, tell the user: _"New specialist registered at `.guild/agents/<role>.md`. Restart Claude Code for the specialist to become available for team composition."_ Do not attempt same-session dispatch unless the user explicitly requests it.
+- **Degraded same-session path (opt-in only):** If the user explicitly acknowledges the constraint and requests immediate use, inject the specialist's `.guild/skills/<role>-*/` skill paths into a generic `Agent()` call with no `subagent_type`. This path **must** be logged as `degraded: true` in the step-7 handoff payload and in `.guild/evolve/<run-id>/proposed-<role>-registered.md`. Consequence: TRIGGER/DO NOT TRIGGER routing is bypassed, model tier defaults to `mid`, and the specialist is not addressable by name in subsequent lanes of the same session.
 
 ## 7-step workflow (§12)
 

@@ -6,7 +6,8 @@
     "Dispatch all the specialists on this plan.",
     "Kick off execution.",
     "Dispatch each lane at its lowest viable tier.",
-    "This lane is stuck — escalate the sub-question to the advisor."
+    "This lane is stuck — escalate the sub-question to the advisor.",
+    "A cheap lane came back with suspiciously few tokens — check the short-output threshold and escalate to the advisor if it's configured."
   ],
   "should_not_trigger": [
     "Explain the plan to me.",
@@ -14,6 +15,7 @@
     "Write more tests.",
     "Brainstorm a new feature.",
     "Compose a different team.",
-    "Edit the models.tiers map in settings.json."
+    "Edit the models.tiers map in settings.json.",
+    "Scan the JSONL event log to derive a short-output threshold for the backend tier."
   ]
 }
