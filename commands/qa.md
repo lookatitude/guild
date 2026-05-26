@@ -63,7 +63,22 @@ evidence under `quality/evidence/`).
 
 ## Dispatch
 
-Resolve `guild.phase_entry.v1` (pointer above), surface the selection matrix
-(`[proceed] / [edit-selection] / [explain-signals]`), then drive the full
-`guild:quality` `[v2]` skill. Thin phase entrypoint — phase logic and
-`.guild/` writes live in the `guild:quality` skill set.
+Resolve `guild.phase_entry.v1` (pointer above), then drive the Quality phase
+by invoking:
+
+1. **`guild:quality`** (`skills/guild-quality`) — the full `[v2]` skill:
+   SignalScan → SelectMatrix (surface the selection matrix `[proceed] /
+   [edit-selection] / [explain-signals]`, overridable, never silent) →
+   RunChecks under the run sandbox + canonical budget → advisory G-quality
+   challenger trail → the COMPUTED `ReleaseGate` recommendation.
+
+Input gate: build receipts present (`.guild/runs/<run-id>/handoffs/*.md`).
+Output gate: `.guild/runs/<run-id>/quality/<run-id>.md` (frozen
+`guild.quality.v1`; evidence under `quality/evidence/`).
+Confirmation gates (from **Gates**): release / blocker gate **I** (a
+BLOCK→release override stays human-gated even under `--auto-approve=all`) ·
+G-quality review **A**. **Opt-in phase — never auto-entered, never silently
+skipped.**
+
+Thin phase entrypoint — phase logic and `.guild/` writes live in the
+`guild:quality` skill set.

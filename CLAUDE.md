@@ -17,6 +17,24 @@ Guild is a Claude Code plugin that ships a team of 14 domain specialists plus a 
 - `docs/phase-gates/` — phase-by-phase integration logs.
 - `benchmark/` — sibling autoresearch-pattern benchmark factory; v1.1 ships 2026-04-27.
 
+## v2 phase → skill dispatch
+
+The 6 phase commands are thin entrypoints; each invokes its producer skill(s)
+in order. This is the one-place wiring reference — each command's `## Dispatch`
+section is canonical, this table is the index. (`--rigor=deep` wrappers in
+parens; no skill is re-spelled here.)
+
+| Phase verb | Skill(s) invoked, in order | Output artifact |
+|---|---|---|
+| `/guild init` | `guild:init` → `guild:understand-engine` (brownfield cheap-scan tier only) | `.guild/init/<slug>.md`, `.guild/wiki/**`, `codebase-map.json` + `architecture-map.md` stub |
+| `/guild ideate` | `guild:brainstorm` (deep: wrapped by `guild:loop-clarify`) | `.guild/spec/<slug>.md` |
+| `/guild plan` | `guild:team-compose` → `guild:plan` (deep: + `guild:loop-plan-review`) | `.guild/team/<slug>.yaml`, `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` |
+| `/guild build` | per lane: `guild:context-assemble` → `guild:execute-plan` → `guild:review` (deep: + `guild:loop-implement`) | handoff receipts, `assumptions.md`, `review.md` |
+| `/guild qa` | `guild:quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
+| `/guild ops` | `guild:operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
+
+Skill bodies live at `skills/meta/{init,brainstorm,team-compose,plan,context-assemble,execute-plan,review}/`, `skills/knowledge/understand-engine/`, and `skills/{guild-quality,guild-operations}/`. Verb↔phase edge: `architecture/command-surface.md §6` (D-14). Note: the Init-phase skill's frontmatter `name:` is `init` (namespaced `guild:init`).
+
 ## Dev team (`.claude/agents/`)
 
 The plugin is built by 8 dev-team agents, each owning a scoped slice: `plugin-architect`, `skill-author`, `specialist-agent-writer`, `command-builder`, `hook-engineer`, `tooling-engineer`, `docs-writer`, `eval-engineer`. Dispatch through the main session; agents never commit themselves.

@@ -66,8 +66,26 @@ pointer). The mandatory pre-flight dry-run is a safety rail, independent of
 
 ## Dispatch
 
-Resolve `guild.phase_entry.v1` (pointer above), confirm the runbook class
-(positional or surfaced + overridable), run the mandatory pre-flight
-dry-run, then drive the full `guild:operations` `[v2]` skill under the four
-safety rails. Thin phase entrypoint — phase logic and `.guild/` writes live
-in the `guild:operations` skill set.
+Resolve `guild.phase_entry.v1` (pointer above), then drive the Operations
+phase by invoking:
+
+1. **`guild:operations`** (`skills/guild-operations`) — the full `[v2]`
+   skill: confirm the runbook class (positional `[runbook]` ∈ {release,
+   monitoring, incident, rollback, maintenance} else surfaced detection,
+   overridable), run the **mandatory pre-flight dry-run**, then ExecuteRunbook
+   under the split autonomy posture + the advisory G-operations challenger
+   trail. Consumes Quality, feeds the D8 release leg.
+
+Input gate: for a release-class runbook, a Quality record
+(`.guild/runs/<run-id>/quality/<run-id>.md`); other classes may run without
+one.
+Output gate: `.guild/runs/<run-id>/ops/<run-id>.md` (frozen `guild.ops.v1`;
++ `guild.incident.v1` / `guild.release.v1` by class).
+Confirmation gates (from **Gates**): risky / destructive **I always** (a
+release, destructive, incident, or rollback action always prompts even under
+`--auto-approve=all`) · G-operations review **A**. Four non-negotiable safety
+rails: incident/rollback never autonomous · first run always interactive ·
+always-ask hard set unconditional · mandatory pre-flight dry-run.
+
+Thin phase entrypoint — phase logic and `.guild/` writes live in the
+`guild:operations` skill set.

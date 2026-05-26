@@ -61,6 +61,22 @@ pointer).
 ## Dispatch
 
 Resolve `guild.phase_entry.v1` (pointer above), then drive the Planning phase
-(team-compose sub-step → PRD → lane plan → per-lane autonomy contract). Thin
-phase entrypoint — phase logic and `.guild/` writes live in the phase skill
-set.
+by invoking, in order:
+
+1. **`guild:team-compose`** (`skills/meta/team-compose`) — the team-compose
+   sub-step (its own approval gate); writes `.guild/team/<slug>.yaml`.
+2. **`guild:plan`** (`skills/meta/plan`) — turns the approved spec + team into
+   the PRD and per-specialist lane plan with the additive per-lane autonomy
+   contract; writes `.guild/prd/<slug>.md` + `.guild/plan/<slug>.md`.
+3. **`guild:loop-plan-review`** — **`--rigor=deep` only**: the L2 architect↔
+   security plan-defect loop runs AFTER `guild:plan` writes the plan and
+   BEFORE the plan-approval gate.
+
+Input gate: an approved `.guild/spec/<slug>.md`.
+Output gate: the **Output artifact** set above is written; the plan carries
+`approved:` per the gate outcome.
+Confirmation gates (from **Gates**): team-approval **I** · plan/PRD-approval
+**I** · G-planning review **A**.
+
+Thin phase entrypoint — phase logic and `.guild/` writes live in the phase
+skill set.

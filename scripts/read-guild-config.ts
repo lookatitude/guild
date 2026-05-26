@@ -19,7 +19,11 @@
  * authoritative.
  *
  * Modes:
- *   (default)     resolve + print the merged config JSON
+ *   (default)     resolve + print the merged config JSON. The resolver expands
+ *                 `--rigor` into loops/loop_cap/review (command-surface.md §4.3)
+ *                 and emits an `_rigor_expanded` annotation — the expansion is
+ *                 ALWAYS visible. Explicit user values (flag or settings.json)
+ *                 win over rigor-derived values; rigor only FILLS unset keys.
  *   --scaffold    print the canonical settings.json (all keys = defaults + a
  *                 self-documenting `_help` block); used by `/guild config init`
  *   --validate    read settings.json, run the closed-key reject rules, print a
@@ -310,6 +314,37 @@ function scaffold(): string {
   return JSON.stringify({ ...DEFAULTS, _help: HELP }, null, 2) + "\n";
 }
 
+// ── --rigor profile expansion (command-surface.md §4.3 — the anti-soup mechanism).
+// Each profile maps to loops / loop_cap / review. loop_cap is null ("—") for quick.
+interface RigorProfile {
+  loops: string;
+  loop_cap: number | null;
+  review: GuildSettings["review"];
+}
+function rigorProfile(rigor: GuildSettings["rigor"]): RigorProfile {
+  switch (rigor) {
+    case "quick":
+      return { loops: "none", loop_cap: null, review: "off" };
+    case "deep":
+      // deep AUTO-IMPLIES review=cross (§4.3); host-availability fallback at apply time.
+      return { loops: "all", loop_cap: 16, review: "cross" };
+    case "standard":
+    default:
+      return { loops: "spec,plan", loop_cap: 16, review: "local" };
+  }
+}
+
+// Cross-host (Codex) availability for the deep→cross auto-implication. We do NOT
+// probe Codex here; the orchestrator signals availability via env. Absent ⇒ assume
+// available (so rigor=deep resolves to review=cross by default). When unavailable,
+// deep falls back to review=local + a weak-independence note (D7) — NEVER a hard fail.
+function crossHostAvailable(): boolean {
+  const v = process.env["GUILD_CROSS_HOST_AVAILABLE"];
+  if (v === undefined) return true;
+  const s = v.trim().toLowerCase();
+  return !(s === "0" || s === "false" || s === "no" || s === "off");
+}
+
 function main(): void {
   const { cwd: cwdFlag, mode, selfBuild, flags } = parseArgs(process.argv.slice(2));
   const cwd = cwdFlag ?? process.env["GUILD_CWD"] ?? process.cwd();
@@ -335,7 +370,7 @@ function main(): void {
     process.exit(1);
   }
 
-  // resolve: built-in < file < flags
+  // resolve: built-in < file < flags  (CLI flag > settings.json > built-in per key)
   const resolved: GuildSettings = {
     ...DEFAULTS,
     ...fileConfig,
@@ -343,18 +378,85 @@ function main(): void {
     defaults: { ...DEFAULTS.defaults, ...(fileConfig.defaults ?? {}) },
   };
 
-  // validate loops (CSV of valid values)
+  // Which rigor-expandable keys did the user set EXPLICITLY (CLI flag OR present in
+  // settings.json)? An explicit value WINS over the rigor-derived value; rigor only
+  // FILLS keys the user did not set (command-surface.md §4.3 "those override the
+  // profile"). Note: an explicit `loops: null` is NOT a choice — null means "derive
+  // from rigor" — so only a non-null loops string counts as explicit.
+  let loopsExplicit = typeof flags.loops === "string" || typeof fileConfig.loops === "string";
+  const loopCapExplicit = "loop_cap" in flags || "loop_cap" in fileConfig;
+  const reviewExplicit = "review" in flags || "review" in fileConfig;
+
+  // validate an explicit loops CSV; an invalid value reverts to "derive from rigor".
   if (resolved.loops) {
     for (const v of resolved.loops.split(",").map((s) => s.trim())) {
       if (!VALID_LOOPS.has(v)) {
         process.stderr.write(`[read-guild-config] WARN: unknown loops value "${v}"; treating as null (derive from rigor)\n`);
         resolved.loops = null;
+        loopsExplicit = false;
         break;
       }
     }
   }
 
-  process.stdout.write(JSON.stringify(resolved, null, 2) + "\n");
+  // ── Expand --rigor into loops / loop_cap / review (§4.3). Explicitly-set keys are
+  // recorded as overridden and left untouched; everything else is filled from the
+  // profile. The expansion is ALWAYS surfaced via _rigor_expanded.
+  const profile = rigorProfile(resolved.rigor);
+  const applied: string[] = [];
+  const overridden: string[] = [];
+
+  // review: deep auto-implies cross, with a host-availability fallback to local (D7).
+  let derivedReview = profile.review;
+  let reviewFallback = false;
+  let fallbackNote: string | undefined;
+  if (resolved.rigor === "deep" && derivedReview === "cross" && !crossHostAvailable()) {
+    derivedReview = "local";
+    reviewFallback = true;
+    fallbackNote =
+      "rigor=deep implies review=cross, but the cross-host (Codex) is unavailable — " +
+      "fell back to review=local with a weak-independence caveat (command-surface.md §4.3 / D7). Not a hard failure.";
+  }
+
+  // loops
+  if (loopsExplicit) overridden.push("loops");
+  else {
+    resolved.loops = profile.loops;
+    applied.push("loops");
+  }
+  // loop_cap (skip when the profile leaves it N/A — quick's "—")
+  if (profile.loop_cap !== null) {
+    if (loopCapExplicit) overridden.push("loop_cap");
+    else {
+      resolved.loop_cap = profile.loop_cap;
+      applied.push("loop_cap");
+    }
+  }
+  // review
+  if (reviewExplicit) overridden.push("review");
+  else {
+    resolved.review = derivedReview;
+    applied.push("review");
+  }
+
+  // _rigor_expanded — what rigor derived, ALWAYS emitted (§4.3 "the expansion is
+  // always visible"). Shows the profile mapping plus which keys it actually applied
+  // vs. which the user pinned explicitly.
+  const rigorExpanded: Record<string, unknown> = {
+    rigor: resolved.rigor,
+    loops: profile.loops,
+    loop_cap: profile.loop_cap, // null = N/A for quick
+    review: derivedReview,
+    applied, // keys filled from the profile
+    overridden_by_explicit: overridden, // expandable keys the user set — profile skipped
+  };
+  if (resolved.rigor === "deep") rigorExpanded["review_implied"] = "cross";
+  if (reviewFallback) {
+    rigorExpanded["review_fallback"] = true;
+    rigorExpanded["note"] = fallbackNote;
+  }
+
+  process.stdout.write(JSON.stringify({ ...resolved, _rigor_expanded: rigorExpanded }, null, 2) + "\n");
 }
 
 main();

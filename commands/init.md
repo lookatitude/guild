@@ -84,6 +84,22 @@ present, its values are read via the back-compat shim until migrated.
 ## Dispatch
 
 Resolve `guild.phase_entry.v1` (pointer above), confirm the deep-scan /
-new-product gates per default, then drive the Init phase via the
-orchestrator. This command is a thin phase entrypoint — phase logic and all
-`.guild/` writes live in the phase skill set, never in this file.
+new-product gates per the **Gates** block, then drive the Init phase by
+invoking, in order:
+
+1. **`guild:init`** (`skills/meta/init`) — the Init-phase producer:
+   bootstraps the wiki, scaffolds `.guild/settings.json` (idempotent), writes
+   `.guild/init/<slug>.md`.
+2. **`guild:understand-engine`** — brownfield only, **cheap-scan tier**:
+   derives `.guild/indexes/codebase-map.json` + the confidence-tagged
+   `wiki/concepts/architecture-map.md` stub. The deep `KnowledgeGraph` + tour
+   stay **lazy + ask-before-deep-scan gated** (built later when a plan needs
+   P2/P3), never at Init.
+
+Input gate: a brownfield repo, or `--new` for the greenfield scaffold path.
+Output gate (Init-DONE): the **Output artifact** set above is written.
+Confirmation gates (from **Gates**): ask-before-deep-scan **I** · new-product
+Q&A **I** · G-init review **A**.
+
+Thin phase entrypoint — phase logic and all `.guild/` writes live in the
+phase skill set, never in this file.

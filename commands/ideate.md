@@ -53,5 +53,20 @@ pointer). `--rigor=deep` runs the clarify loop (semantics by pointer,
 ## Dispatch
 
 Resolve `guild.phase_entry.v1` (pointer above), then drive the Ideation phase
-(`guild:brainstorm` producer; `--skip` validates a supplied spec). Thin phase
-entrypoint — phase logic and `.guild/` writes live in the phase skill set.
+by invoking:
+
+1. **`guild:brainstorm`** (`skills/meta/brainstorm`) — the Socratic spec
+   producer; writes `.guild/spec/<idea-slug>.md`. `--skip` validates a
+   supplied spec (flags gaps) instead of asking the full question set.
+2. **`guild:loop-clarify`** — **`--rigor=deep` only**: the L1 architect↔
+   researcher clarify loop runs BEFORE brainstorm writes the spec; its
+   findings feed brainstorm's Assumptions section.
+
+Input gate: an optional `[brief]`; Init artifacts present (or smart-detect).
+Output gate: `.guild/spec/<idea-slug>.md` (+ optional
+`.guild/research/<idea-slug>.md`).
+Confirmation gates (from **Gates**): spec-approval **I** · G-ideation review
+**A**.
+
+Thin phase entrypoint — phase logic and `.guild/` writes live in the phase
+skill set.
