@@ -21024,16 +21024,37 @@ function resolveCwd(cwdArg) {
 function runsDir(cwd) {
   return path.join(cwd, ".guild", "runs");
 }
+function eventsFilePath(runDir) {
+  const v14 = path.join(runDir, "logs", "v1.4-events.jsonl");
+  if (fs.existsSync(v14)) return v14;
+  const legacy = path.join(runDir, "events.ndjson");
+  if (fs.existsSync(legacy)) return legacy;
+  return null;
+}
+function normalizeEvent(raw) {
+  const e = { ...raw };
+  if (e.tool === void 0 && e.event === "hook_event" && typeof e.hook_name === "string") {
+    e.tool = e.hook_name;
+  }
+  if (e.ok === void 0 && typeof e.status === "string") {
+    e.ok = e.status === "ok";
+  }
+  if (e.ms === void 0) {
+    if (typeof e.latency_ms === "number") e.ms = e.latency_ms;
+    else if (typeof e.duration_ms === "number") e.ms = e.duration_ms;
+  }
+  return e;
+}
 function readEvents(runDir) {
-  const file = path.join(runDir, "events.ndjson");
-  if (!fs.existsSync(file)) return [];
+  const file = eventsFilePath(runDir);
+  if (!file) return [];
   const content = fs.readFileSync(file, "utf8");
   const events = [];
   for (const line of content.split("\n")) {
     const t = line.trim();
     if (!t) continue;
     try {
-      events.push(JSON.parse(t));
+      events.push(normalizeEvent(JSON.parse(t)));
     } catch {
     }
   }
@@ -21140,6 +21161,51 @@ function buildSummary(runId, events) {
     ""
   ].join("\n");
 }
+function num(v) {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+function eventTokens(e) {
+  let input = 0;
+  let output = 0;
+  let cached2 = 0;
+  if (e.tokens && typeof e.tokens === "object") {
+    input += num(e.tokens.input);
+    output += num(e.tokens.output);
+    cached2 += num(e.tokens.cached);
+  }
+  input += num(e.tokens_in);
+  output += num(e.tokens_out);
+  return { input, output, cached: cached2 };
+}
+function hasTokens(t) {
+  return t.input > 0 || t.output > 0 || t.cached > 0;
+}
+function addTokens(into, t) {
+  into.input += t.input;
+  into.output += t.output;
+  into.cached += t.cached;
+}
+function bucketAdd(m, key, t) {
+  const cur = m.get(key) ?? { input: 0, output: 0, cached: 0 };
+  addTokens(cur, t);
+  m.set(key, cur);
+}
+function rollupRows(m, keyName) {
+  return Array.from(m.entries()).map(([key, t]) => ({
+    [keyName]: key,
+    input: t.input,
+    output: t.output,
+    cached: t.cached,
+    total: t.input + t.output
+  })).sort(
+    (a, b) => b.total - a.total || String(a[keyName]).localeCompare(String(b[keyName]))
+  );
+}
+function specialistKey(e) {
+  if (typeof e.specialist === "string" && e.specialist) return e.specialist;
+  if (typeof e.lane_id === "string" && e.lane_id) return e.lane_id;
+  return "(none)";
+}
 function jsonResult(value) {
   return {
     content: [{ type: "text", text: JSON.stringify(value, null, 2) }]
@@ -21155,7 +21221,7 @@ function buildServer() {
   const server = new McpServer(
     { name: "guild-telemetry", version: "0.1.0" },
     {
-      instructions: "Read-only structured query over .guild/runs/. Use trace_list_runs first to discover run ids, then trace_summary or trace_query."
+      instructions: "Read-only structured query over .guild/runs/. Reads each run's logs/v1.4-events.jsonl (falls back to legacy events.ndjson). Use trace_list_runs first to discover run ids, then trace_summary, trace_query, or trace_cost_rollup (token usage by tier/model/specialist)."
     }
   );
   server.registerTool(
@@ -21268,6 +21334,65 @@ function buildServer() {
       }).sort((a, b) => a.run_id.localeCompare(b.run_id));
       const trimmed = typeof limit === "number" ? runs.slice(0, limit) : runs;
       return jsonResult({ runs: trimmed, total: runs.length });
+    }
+  );
+  server.registerTool(
+    "trace_cost_rollup",
+    {
+      title: "Roll up token cost across Guild runs",
+      description: "Aggregate guild.trace_event.v2 token usage (input/output/cached) across recorded events, broken down by tier, model, and specialist. Merges the v2 `tokens` object and the v1.4 tool_call tokens_in/out scalars. Reads logs/v1.4-events.jsonl (falls back to events.ndjson). Read-only; deterministic sort (total desc, then key).",
+      inputSchema: {
+        run_id: external_exports.string().optional().describe("Restrict to one run; omit to roll up across all runs"),
+        since: external_exports.string().optional().describe("ISO date/time; keep events on/after this timestamp"),
+        cwd: external_exports.string().optional().describe("Override consuming-repo root")
+      }
+    },
+    async ({ run_id, since, cwd }) => {
+      const base = resolveCwd(cwd);
+      const runIds = run_id ? [run_id] : listRunIds(base);
+      const cutoff = since ? new Date(since).getTime() : null;
+      const totals = { input: 0, output: 0, cached: 0 };
+      const byTier = /* @__PURE__ */ new Map();
+      const byModel = /* @__PURE__ */ new Map();
+      const bySpecialist = /* @__PURE__ */ new Map();
+      let eventCount = 0;
+      let llmEventCount = 0;
+      for (const rid of runIds) {
+        const runDir = path.join(runsDir(base), rid);
+        if (!fs.existsSync(runDir)) {
+          if (run_id) return errorResult(`Run not found: ${rid}`);
+          continue;
+        }
+        for (const e of readEvents(runDir)) {
+          if (cutoff !== null) {
+            const t = new Date(e.ts).getTime();
+            if (Number.isNaN(t) || t < cutoff) continue;
+          }
+          eventCount++;
+          const tk = eventTokens(e);
+          if (!hasTokens(tk)) continue;
+          llmEventCount++;
+          addTokens(totals, tk);
+          bucketAdd(byTier, typeof e.tier === "string" && e.tier ? e.tier : "(none)", tk);
+          bucketAdd(byModel, typeof e.model === "string" && e.model ? e.model : "(none)", tk);
+          bucketAdd(bySpecialist, specialistKey(e), tk);
+        }
+      }
+      return jsonResult({
+        run_id: run_id ?? null,
+        scope: run_id ? `run:${run_id}` : "all-runs",
+        event_count: eventCount,
+        llm_event_count: llmEventCount,
+        totals: {
+          input: totals.input,
+          output: totals.output,
+          cached: totals.cached,
+          total: totals.input + totals.output
+        },
+        by_tier: rollupRows(byTier, "tier"),
+        by_model: rollupRows(byModel, "model"),
+        by_specialist: rollupRows(bySpecialist, "specialist")
+      });
     }
   );
   return server;

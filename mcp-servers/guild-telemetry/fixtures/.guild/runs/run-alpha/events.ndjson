@@ -1,0 +1,8 @@
+{"ts":"2026-03-10T10:00:00.000Z","event":"PreToolUse","tool":"Read","specialist":"","payload_digest":"a1","ok":true,"ms":5}
+{"ts":"2026-03-10T10:00:01.000Z","event":"PostToolUse","tool":"Read","specialist":"","payload_digest":"a2","ok":true,"ms":12}
+{"ts":"2026-03-10T10:00:02.000Z","event":"PostToolUse","tool":"Write","specialist":"backend","payload_digest":"a3","ok":true,"ms":20}
+{"ts":"2026-03-10T10:00:03.000Z","event":"PostToolUse","tool":"Edit","specialist":"backend","payload_digest":"a4","ok":false,"ms":8}
+{"ts":"2026-03-10T10:00:04.000Z","event":"PostToolUse","tool":"Bash","specialist":"backend","payload_digest":"a5","ok":true,"ms":30}
+{"ts":"2026-03-10T10:00:05.000Z","event":"SubagentStop","tool":"","specialist":"backend","payload_digest":"a6","ok":true,"ms":100}
+{"ts":"2026-03-10T10:00:06.000Z","event":"PostToolUse","tool":"Read","specialist":"qa","payload_digest":"a7","ok":true,"ms":7}
+{"ts":"2026-03-10T10:00:07.000Z","event":"SubagentStop","tool":"","specialist":"qa","payload_digest":"a8","ok":true,"ms":90}

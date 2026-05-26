@@ -1,0 +1,5 @@
+{"ts":"2026-05-02T09:00:00.000Z","event":"PostToolUse","tool":"Read","specialist":"legacy","ok":true,"ms":1}
+{"ts":"2026-05-02T09:00:01.000Z","event":"PostToolUse","tool":"Write","specialist":"legacy","ok":true,"ms":2}
+{"ts":"2026-05-02T09:00:02.000Z","event":"PostToolUse","tool":"Edit","specialist":"legacy","ok":true,"ms":3}
+{"ts":"2026-05-02T09:00:03.000Z","event":"PostToolUse","tool":"Bash","specialist":"legacy","ok":true,"ms":4}
+{"ts":"2026-05-02T09:00:04.000Z","event":"SubagentStop","tool":"","specialist":"legacy","ok":true,"ms":5}

@@ -13,6 +13,17 @@ the most recent run". This server exposes those queries over stdio so other
 tools and skills can treat runs as a queryable store rather than a pile of
 NDJSON.
 
+## Run-artifact read order (ADR-OBS-4)
+
+Post telemetry-split, the plugin **records** every run to its v1.4 JSONL live
+log. This server reads that artifact by format (it imports no recorder code):
+
+1. **Primary:** `<runDir>/logs/v1.4-events.jsonl` — the format the plugin emits.
+2. **Fallback:** `<runDir>/events.ndjson` — legacy pre-split runs.
+
+v1.4 events are normalized additively (e.g. `status` → `ok`, `latency_ms` → `ms`,
+`hook_name` → `tool`) so every tool works against both shapes unchanged.
+
 ## Tools
 
 ### `trace_summary`
@@ -54,6 +65,20 @@ trace_list_runs { since?: string, limit?: number, cwd?: string }
 List known runs with `event_count`, `started_at`, and `ended_at`. `since`
 filters on the run's `ended_at` (falling back to `started_at` if a run has
 no events yet).
+
+### `trace_cost_rollup` (ADR-OBS-4)
+
+```
+trace_cost_rollup { run_id?: string, since?: string, cwd?: string }
+```
+
+Aggregate `guild.trace_event.v2` token usage across recorded events, merging
+both token sources — the v2 `tokens` object (`{input,output,cached}`) and the
+v1.4 `tool_call` `tokens_in`/`tokens_out` scalars. Returns run-wide `totals`
+plus `by_tier`, `by_model`, and `by_specialist` breakdowns (each row is
+`{key, input, output, cached, total}`), sorted by `total` descending then key.
+Events with no token fields are skipped; `llm_event_count` reports how many
+contributed. Omit `run_id` to roll up across all runs.
 
 ## cwd resolution
 
