@@ -37,7 +37,20 @@ Skill bodies live at `skills/meta/{init,brainstorm,team-compose,plan,context-ass
 
 ## Dev team (`.claude/agents/`)
 
-The plugin is built by 8 dev-team agents, each owning a scoped slice: `plugin-architect`, `skill-author`, `specialist-agent-writer`, `command-builder`, `hook-engineer`, `tooling-engineer`, `docs-writer`, `eval-engineer`. Dispatch through the main session; agents never commit themselves.
+The plugin is built by 8 dev-team agents, each owning a scoped slice. **These — not the 14 `guild:` product specialists — are the team for any self-build work** (the product specialists build *user* products). Dispatch each via the Agent tool with `subagent_type: <agent-name>` (never `general-purpose`); agents never commit themselves. They live in `.claude/agents/` (canonical: `plugin/.claude/agents/`; mirrored to the workspace root so they are dispatchable when developing from there).
+
+| Changed path | Dev-team agent (`subagent_type`) |
+|---|---|
+| `scripts/`, `mcp-servers/`, `.mcp.json` | `tooling-engineer` |
+| `hooks/` (hooks.json + hook scripts) | `hook-engineer` |
+| `commands/` | `command-builder` |
+| `skills/**` (bodies + per-skill evals.json) | `skill-author` |
+| `agents/*.md` (the 14 shipping specialists) | `specialist-agent-writer` |
+| `tests/` (cross-cutting evals/fixtures) | `eval-engineer` |
+| `docs/`, repo-root/plugin `CLAUDE.md` | `docs-writer` |
+| `.claude-plugin/*`, manifests, ADRs, phase-gate integration | `plugin-architect` |
+
+Route by the path being changed; when a task spans several, dispatch the matching specialists in parallel (worktree-isolated) per `guild:execute-plan`.
 
 ## Project-local state
 

@@ -17,7 +17,9 @@ Implements `guild-plan.md §7` (team composition). Runs after `guild:brainstorm`
 
 Four ordered steps, lifted from `guild-plan.md §7.1`:
 
-1. **Match.** Read `.guild/spec/<slug>.md` and match its domains against the 13 shipping specialist descriptions (see `guild-plan.md §6.1–§6.3`: architect, researcher, backend, devops, qa, mobile, security, copywriter, technical-writer, social-media, seo, marketing, sales).
+0. **Self-build check (first).** If the target repo IS the Guild plugin itself (editing `plugin/**` — skills, commands, hooks, scripts, agents, docs, manifests, tests), compose the team from the **dev-team agents under `.claude/agents/`** (`plugin-architect, skill-author, specialist-agent-writer, command-builder, hook-engineer, tooling-engineer, docs-writer, eval-engineer`), routed by changed path (see `CLAUDE.md §"Dev team"` for the path→agent table). Do **not** match against the 14 `guild:` product specialists — those build *user* products. Skip steps 1–3's product-roster matching and go to step 4 with the dev-team lanes. (The cap-6 / 3–4 default and backend choice still apply.)
+
+1. **Match.** (Non-self-build.) Read `.guild/spec/<slug>.md` and match its domains against the 13 shipping specialist descriptions (see `guild-plan.md §6.1–§6.3`: architect, researcher, backend, devops, qa, mobile, security, copywriter, technical-writer, social-media, seo, marketing, sales).
 2. **Classify.** Bucket every matched domain as either *existing* (a roster specialist covers it) or *gap* (no specialist covers it). Gaps get a proposed role name and one-line description so the user can see exactly what would be created if they pick option A.
 3. **Present to user.** Show the matched existing specialists with a one-line reasoning each, and — for every gap — the four gap-handling options:
    - **A · auto-create** — invoke `guild:create-specialist` to mint the missing role before proceeding. Adjacent-specialist boundary updates are proposed as part of that flow (`guild-plan.md §12`).
