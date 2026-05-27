@@ -9,13 +9,26 @@ Guild supports three execution backends. The choice is **resolved by the `agent_
 | Backend | Selected when (`agent_mode` resolves to…) | Tradeoff |
 |---|---|---|
 | **Agent teams (tmux panes)** | `team` — `auto` + tmux available (the common case on a dev machine) **or** an explicit `team` pin. One **visible pane per specialist**. | Experimental; requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; one team per session; no nested teams; higher token cost. **PRIMARY under tmux.** |
-| **Independent agents** | `agent` — host supports independent agents, no tmux. | No tmux needed; surfaces as agent activity rather than panes. |
+| **In-process / Independent agents** | `agent` — D5 rung 3: host supports independent agents, no tmux. `InProcessTeamBackend.launch()` returns `ok:true` with `dispatchPlan: AgentDispatchDescriptor[]` (one descriptor per specialist: `name / subagentType / model=null / env / prompt`); `orchestratorPaneId: null`, `teammatePaneIds: {}`. `guild:execute-plan` issues one `Agent()` call per descriptor in `result.dispatchPlan`, applying tier + model at dispatch (`model: null` from backend — tiering is orthogonal; execute-plan scores and resolves). ADR: `/Users/miguelp/Projects/guild/docs/knowledge/decisions/v2-runtime-and-execution-model.md` §RE-4 / VC-RE-4. | No tmux; fully implemented (VC-RE-4). Declarative plan from launcher → `Agent()` calls in execute-plan. Not a fallback stub. |
 | **Subagents via Agent tool** | `subagent` — the **fallback**: no tmux + no independent-agent support (CI, fresh installs), or an explicit `subagent` pin. | Lower cost, simplest cleanup; runs in the background, only the final artifact returns. The documented last resort. |
 
 Two hard constraints:
 
 - **`agent-team` requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.** When `team.yaml` records `backend: agent-team` (the ladder resolved to `team`), the durable operator approval is the `agent_mode: team|auto` setting itself — no per-run re-prompt. But if `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is not set, **refuse to dispatch and surface the blocker** rather than silently falling back to subagents — falling back would change execution semantics out from under the plan. Invoke `scripts/agent-team-launcher.ts` (below) — it owns the ladder resolution, the env gate, and the tmux strategy.
 - **Always dispatch to the lane's NAMED specialist agent — never `general-purpose`.** Whatever backend `team.yaml` records, route each lane to its `owner_role` agent: for subagents, `subagent_type: <name>` (`backend`, `qa`, `devops`, `architect`, …); for teams, the teammate spawned from that agent definition. The named agent (`agents/<name>.md` or, for self-build, `.claude/agents/<name>.md`) supplies the lane's persona, scoped skills, tool permissions, and TRIGGER/DO-NOT-TRIGGER boundaries; dispatching `general-purpose` discards all of that and is a defect. The name is the lane's `owner_role` from the plan, resolved against `team.yaml`'s agent-definition paths.
+
+### In-process dispatchPlan consumption
+
+When `team.yaml` records `backend: in-process` (D5 `agent` rung — `/Users/miguelp/Projects/guild/docs/knowledge/decisions/v2-runtime-and-execution-model.md` §RE-4 / VC-RE-4), the launcher (`InProcessTeamBackend.launch()`) returns `ok:true` with a declarative `dispatchPlan: AgentDispatchDescriptor[]` — one descriptor per specialist. A `TeamBackend` is a plain TypeScript class; it **cannot** call the Agent tool. `guild:execute-plan` consumes `result.dispatchPlan` and issues the Agent tool calls itself:
+
+1. **For each descriptor in `result.dispatchPlan`** (in DAG order per `## Parallelism rules`):
+   - Resolve tier + model via tier resolution (`model: null` from backend — tiering is orthogonal to backend choice; execute-plan scores and resolves).
+   - Inject capability-scope env vars (`GUILD_CAPABILITY_SCOPE` / `GUILD_AUTONOMY_CONTRACT`) onto the descriptor's `env` map. The descriptor already carries `GUILD_RUN_ID` from the launcher; execute-plan layers the capability-scope vars on top at dispatch (same injection path as subagent — `env` param on `Agent()`).
+   - Issue: `Agent({ subagent_type: descriptor.subagentType, model: <resolved>, prompt: descriptor.prompt, env: { ...descriptor.env, GUILD_CAPABILITY_SCOPE: "...", GUILD_AUTONOMY_CONTRACT: "..." } })`. Omit capability-scope keys whose source field is absent.
+2. **No tmux** — `orchestratorPaneId: null`, `teammatePaneIds: {}`. The orchestrator stays in-process and never gets a descriptor (only specialists do, mirroring `RemoteTeamBackend §CH-4`).
+3. **Named specialist — never `general-purpose`.** `descriptor.subagentType` is the lane's `owner_role` (bare name from `team.yaml`); resolved against `team.yaml`'s agent-definition paths. Same invariant as all other backends.
+
+`dryRun: true` on `InProcessTeamBackend` is semantically a no-op (no subprocess is suppressed — the plan is purely declarative); the launcher annotates a note and returns the same `dispatchPlan` so execute-plan can display the planned `Agent()` call strings.
 
 ## Tier → Agent `model` param
 
@@ -98,7 +111,7 @@ The plan's `autonomy-policy` is natural language ("may act without asking: …";
 |---|---|
 | **subagent** (Agent tool) | Pass via the Agent tool's `env` parameter: `Agent({ subagent_type: <name>, env: { GUILD_CAPABILITY_SCOPE: "...", GUILD_AUTONOMY_CONTRACT: "..." }, ... })`. Omit keys whose source field is absent. |
 | **agent-team** (tmux panes) | Export vars in the pane environment before attaching Claude Code: `tmux send-keys -t <pane> 'export GUILD_CAPABILITY_SCOPE='"'"'[...]'"'"'' Enter` — the launcher script (`scripts/agent-team-launcher.ts`) is responsible for this injection. |
-| **independent agents** | Set via the same env injection channel the host's independent-agent API provides; the launcher owns the wiring. |
+| **in-process / independent agents** | Same `env` param path as subagent: execute-plan passes `GUILD_CAPABILITY_SCOPE` / `GUILD_AUTONOMY_CONTRACT` (when their source fields are present) on each `Agent()` call issued from `result.dispatchPlan`. The descriptor already carries `GUILD_RUN_ID` from the launcher; execute-plan layers the capability-scope vars on top at dispatch. Omit keys whose source field is absent. |
 
 ### Trace + audit
 
