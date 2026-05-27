@@ -286,7 +286,7 @@ async function main() {
       }
     }
   }
-  const runId = process.env["GUILD_RUN_ID"] ?? `run-${payload.session_id ?? "unknown"}`;
+  const runId = process.env["GUILD_RUN_ID"] || `run-${payload.session_id ?? "unknown"}`;
   const runDir = path3.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   try {
     markLaneInProgress(runDir, { runId }, taskId);
