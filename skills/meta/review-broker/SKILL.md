@@ -61,10 +61,10 @@ transport layer **RE-4 / RE-5** (built this wave by impl-runtime-backend) —
 **bind by pointer, do not re-implement here.** This skill owns the *broker
 logic* (author/reviewer resolution, the round loop, sentinel detection,
 escalation); RE-4/RE-5 own *how the packet reaches the reviewer and the result
-comes back*. Where RE-4/RE-5 are not yet wired, the broker falls back to the
-already-working Codex-adapter dispatch path (the `codex:codex-rescue` mechanism
-from `guild:codex-review`) for Claude-authored artifacts — that path works
-today.
+comes back*. Where a remote transport is NOT CONFIGURED (cross_host disabled /
+no endpoint set), the broker falls back to the Codex-adapter dispatch path (the
+`codex:codex-rescue` mechanism from `guild:codex-review`) for Claude-authored
+artifacts.
 
 ### Post-v2 seam (bind by pointer, DO NOT build)
 

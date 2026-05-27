@@ -13,9 +13,9 @@
  * The D5 `agent_mode` ladder (mode axis) is canonical in
  *   v2x-command-surface-dispatch-and-internalization.md.
  *
- * This is the deterministic three-axis compose function the cost ADR + RE-5 left
- * unwired: *mode* (D5) × *tier* (cost auto-scorer output) × *host* (RE-5
- * `guild.host_capability.v1` manifest). It is PURE and SYNCHRONOUS — no network
+ * This is the deterministic three-axis compose function that resolves what the
+ * cost ADR + RE-5 specified: *mode* (D5) × *tier* (cost auto-scorer output) ×
+ * *host* (RE-5 `guild.host_capability.v1` manifest). It is PURE and SYNCHRONOUS — no network
  * call, no filesystem read, no clock read unless `opts.now` is omitted — so it
  * satisfies the CR-1 "< 5 ms" budget and is trivially testable.
  *

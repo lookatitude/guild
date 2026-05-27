@@ -17,12 +17,17 @@
  *                           Owns tmux probes (availability, session/window
  *                           collision), pure command composition, and the
  *                           spawn/teardown loop. The launcher delegates to it.
- *   - InProcessTeamBackend — stub. Conforms to the interface; spawn is not yet
- *                           implemented (returns ok:false with a note, never
- *                           throws — graceful so callers can fall back).
- *   - RemoteTeamBackend    — SEAM ONLY. Interface present, `launch()` throws
- *                           NotImplemented. Cross-host dispatch lands a later
- *                           wave; this file declares the shape it must satisfy.
+ *   - InProcessTeamBackend — reserved seam (RE-4). isAvailable()=true;
+ *                           launch() returns ok:false (graceful, never throws).
+ *                           The Agent-tool dispatch body is pending — ADR-RE-4
+ *                           VC-RE-4 mandates functional in-process; implementing
+ *                           it is a real build task, not a doc/truth fix.
+ *   - RemoteTeamBackend    — implemented against the RemoteTransport seam
+ *                           (MockTransport + SshRemoteTransport). Inert ONLY
+ *                           when no transport is wired (isAvailable()=false; the
+ *                           `auto` resolver never selects it). Documented
+ *                           residual: live SSH validation against real remote
+ *                           hardware (not exercisable in CI).
  *
  * REGRESSION INVARIANT: TmuxTeamBackend reproduces the launcher's prior tmux
  * behavior byte-for-byte — identical `display` strings, identical spawnSync
@@ -554,20 +559,30 @@ export class TmuxTeamBackend implements TeamBackend {
   }
 }
 
-// ── InProcessTeamBackend — stub (RE-4) ───────────────────────────────────────
+// ── InProcessTeamBackend — reserved seam (RE-4) ──────────────────────────────
+//
+// ADR-RE-4 mandates this backend be functional (dispatch via the Agent tool,
+// no tmux, for CI / no-tmux hosts — VC-RE-4). The body is PENDING; this seam
+// holds the interface shape. The D5 `agent` rung routes here but launch()
+// returns ok:false, so a live run degrades gracefully (caller falls back).
+// Making this functional is a real build task — it cannot be resolved by a
+// doc/truth fix alone.
 
 /**
- * Spawns teammates in-process (no tmux, no separate panes). Not yet
- * implemented — conforms to the seam so the launcher/router can target it, but
- * `launch()` is a graceful no-op that returns ok:false with a note. It never
- * throws, so a caller can fall back to another backend.
+ * Reserved seam for in-process Agent-tool dispatch (no tmux, no separate
+ * panes). ADR-RE-4 mandates this be functional for CI / no-tmux hosts
+ * (VC-RE-4); the body is pending. `launch()` is a graceful no-op (ok:false,
+ * never throws) so callers that encounter it can fall back to another backend
+ * rather than crashing.
  */
 export class InProcessTeamBackend implements TeamBackend {
   readonly kind = "in-process" as const;
 
-  // In-process spawn needs no tmux, so the host is "capable"; the impl is what
-  // is pending. Kept true so the seam is discoverable; callers check the
-  // launch() result's `ok`/`notes` before relying on it.
+  // isAvailable() reports true because no environmental constraint (like
+  // tmux being absent) prevents the in-process path — what is missing is the
+  // implementation body. Callers MUST check launch().ok before relying on the
+  // result. The D5 `auto` ladder currently resolves to `subagent` in practice
+  // when this backend fails.
   isAvailable(): boolean {
     return true;
   }
