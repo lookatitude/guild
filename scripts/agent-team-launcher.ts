@@ -56,11 +56,14 @@ import * as path from "path";
 // See scripts/lib/team-backend.ts and the §RE-4 contract pointer there.
 import {
   TmuxTeamBackend,
+  RemoteTeamBackend,
+  SshRemoteTransport,
   probeTmuxAvailable,
   shellQuote,
   type Specialist,
   type LaunchMode,
   type HostKind,
+  type RemoteHostTarget,
 } from "./lib/team-backend";
 // CH-1/CH-2: mixed-host pane adapters (claude + codex) for a mixed `host:` team.
 import { resolveAdapter } from "./lib/pane-adapter";
@@ -344,12 +347,51 @@ function loadHostManifests(cwd: string): RoutableHost[] {
   return out;
 }
 
-// `defaults.cross_host.enabled` is the canonical settings.json key; the launcher
-// reads the env mirror (consistent with its GUILD_HOST / GUILD_INDEPENDENT_*
-// probes). RESIDUAL: wiring settings.json → this env is a followup.
-function crossHostEnabled(env: NodeJS.ProcessEnv): boolean {
+// ── defaults.cross_host config reader ─────────────────────────────────────────
+//
+// SECURITY: stores address/port/user only — NO secrets, NO passwords.
+// Auth via ssh keys/agent. This mirrors read-guild-config.ts DefaultsBlock.cross_host.
+
+interface CrossHostEndpointCfg {
+  address: string;
+  port?: number;
+  user?: string;
+}
+interface CrossHostConfig {
+  enabled: boolean;
+  hosts: Record<string, CrossHostEndpointCfg>;
+}
+
+/** Read defaults.cross_host from .guild/settings.json. Graceful on missing/parse errors. */
+function loadCrossHostConfig(cwd: string): CrossHostConfig {
+  const settingsPath = path.join(cwd, ".guild", "settings.json");
+  try {
+    const raw = fs.readFileSync(settingsPath, "utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const defaults = parsed?.defaults as Record<string, unknown> | undefined;
+    const ch = defaults?.cross_host as Record<string, unknown> | undefined;
+    if (!ch || typeof ch !== "object") return { enabled: false, hosts: {} };
+    return {
+      enabled: ch.enabled === true,
+      hosts:
+        typeof ch.hosts === "object" && ch.hosts !== null
+          ? (ch.hosts as Record<string, CrossHostEndpointCfg>)
+          : {},
+    };
+  } catch {
+    return { enabled: false, hosts: {} };
+  }
+}
+
+// `defaults.cross_host.enabled` is the canonical settings.json key.
+// GUILD_CROSS_HOST_ENABLED env mirrors it with higher precedence when explicitly set.
+function crossHostEnabled(env: NodeJS.ProcessEnv, cwd: string): boolean {
   const v = (env["GUILD_CROSS_HOST_ENABLED"] ?? "").trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes" || v === "on";
+  // Explicit env wins in both directions (set to 1 or 0).
+  if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
+  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+  // Env not set → fall through to settings.json defaults.cross_host.enabled.
+  return loadCrossHostConfig(cwd).enabled;
 }
 
 // ── D5 dispatch ladder ─────────────────────────────────────────────────────
@@ -523,18 +565,24 @@ function main(): void {
       : `guild-${slug}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
   const cwd = path.resolve(args.cwd);
 
+  // Mint the unified run-id ONCE per launcher invocation and thread it through
+  // both prompts and the manifest. Exported into each pane's env so hooks
+  // inside (capture-telemetry, maybe-reflect, agent-team handlers) converge
+  // on the same `.guild/runs/<run-id>/` path. Defined here (before the cross-
+  // host block) so both remote + local tmux paths share the same run ID.
+  const runId = makeRunId();
+
   // ── CH-1 routing: local tmux vs remote, via host-router ──────────────────
-  // When cross-host is enabled AND host-capability manifests exist, route each
-  // specialist THROUGH the CR-1 routing function and detect any that resolve to
-  // a remote host. Default (flag off, or no `.guild/hosts/` manifests) → inert,
-  // single-host behavior byte-identical to today.
+  // When cross-host is enabled (env OR defaults.cross_host.enabled in settings.json)
+  // AND host-capability manifests exist, route each specialist THROUGH the CR-1
+  // routing function and detect any that resolve to a remote host.
   //
-  // RESIDUAL: live remote DISPATCH from the CLI is not yet wired —
-  // RemoteTeamBackend + its transport are implemented and unit-tested, but the
-  // endpoint-config source (host_id → ssh address) is a documented followup. A
-  // remote-routed specialist is therefore surfaced and refused here, not
-  // silently dropped.
-  if (crossHostEnabled(process.env)) {
+  // For each remote-routed specialist:
+  //   - endpoint configured in defaults.cross_host.hosts → dispatch via RemoteTeamBackend
+  //   - endpoint NOT configured → surface + refuse (safe, no partial dispatch)
+  //
+  // Disabled OR no manifests → inert, single-host behavior byte-identical to today.
+  if (crossHostEnabled(process.env, cwd)) {
     const manifests = loadHostManifests(cwd);
     if (manifests.length > 0) {
       const localHostId =
@@ -546,18 +594,95 @@ function main(): void {
         });
         const remote = routes.filter((r) => r.backend === "remote");
         if (remote.length > 0) {
-          const lines = remote
-            .map((r) => `    - ${r.specialist} → ${r.decision.host} (${r.hostKind})`)
-            .join("\n");
-          process.stderr.write(
-            `[agent-team-launcher] ERROR: ${remote.length} specialist(s) route to a REMOTE host:\n` +
-              `${lines}\n` +
-              `  Live remote dispatch is not yet wired from the CLI — RemoteTeamBackend and\n` +
-              `  its transport are implemented + unit-tested, but the endpoint-config source\n` +
-              `  (host_id → ssh address) is a documented residual. Run those specialists on\n` +
-              `  their host, or drop \`host:\` to keep them local.\n`
+          const chConfig = loadCrossHostConfig(cwd);
+          // Partition: specialists with endpoint config vs. those without.
+          const withEndpoint = remote.filter((r) => !!chConfig.hosts[r.decision.host]);
+          const noEndpoint = remote.filter((r) => !chConfig.hosts[r.decision.host]);
+
+          if (noEndpoint.length > 0) {
+            // Safe surface+refuse: never silently drop a specialist.
+            const lines = noEndpoint
+              .map(
+                (r) =>
+                  `    - ${r.specialist} → ${r.decision.host} (${r.hostKind}) — no SSH endpoint configured`
+              )
+              .join("\n");
+            process.stderr.write(
+              `[agent-team-launcher] ERROR: ${noEndpoint.length} specialist(s) route to a REMOTE host ` +
+                `with no SSH endpoint in defaults.cross_host.hosts:\n${lines}\n` +
+                `  Add defaults.cross_host.hosts["<host_id>"].address to .guild/settings.json\n` +
+                `  or drop \`host:\` from team.yaml to keep those specialists local.\n`
+            );
+            process.exit(1);
+          }
+
+          // All remote specialists have endpoints — dispatch via RemoteTeamBackend.
+          // SECURITY: endpoint carries address/user only; auth via ssh keys/agent (no passwords).
+          const remoteSpecialists = withEndpoint.map(
+            (r) => team.specialists.find((s) => s.name === r.specialist)!
           );
-          process.exit(1);
+
+          const resolveHostTarget = (spec: Specialist): RemoteHostTarget => {
+            const r = routes.find((rt) => rt.specialist === spec.name)!;
+            const entry = chConfig.hosts[r.decision.host];
+            // Build ssh endpoint: [user@]address. Port belongs in ~/.ssh/config.
+            // SECURITY: address/user only — no passwords.
+            const endpoint = entry.user
+              ? `${entry.user}@${entry.address}`
+              : entry.address;
+            return { hostId: r.decision.host, hostKind: r.hostKind, endpoint };
+          };
+
+          const remoteBackend = new RemoteTeamBackend({
+            transport: new SshRemoteTransport(),
+            resolveHostTarget,
+            resolveAdapter: resolveAdapter(),
+          });
+
+          const remoteResult = remoteBackend.launch({
+            slug,
+            runId,
+            cwd,
+            specialists: remoteSpecialists,
+            targetName,
+            mode,
+            dryRun: args.dryRun,
+          });
+
+          if (!remoteResult.ok) {
+            process.stderr.write(
+              `[agent-team-launcher] ERROR: remote dispatch failed — ` +
+                `${remoteResult.notes?.join("; ") ?? "unknown"}\n`
+            );
+            process.exit(2);
+          }
+
+          if (args.dryRun) {
+            process.stdout.write(
+              `[agent-team-launcher] dry-run — remote dispatch (${remoteSpecialists.length} specialist(s)):\n`
+            );
+            for (const cmd of remoteResult.plannedCommands ?? []) {
+              process.stdout.write(`  ${cmd}\n`);
+            }
+          }
+
+          // Remove dispatched-remote specialists from the local tmux pool.
+          const remoteNames = new Set(remote.map((r) => r.specialist));
+          team.specialists = team.specialists.filter((s) => !remoteNames.has(s.name));
+
+          if (team.specialists.length === 0) {
+            // All specialists dispatched remotely — no local tmux session needed.
+            if (args.dryRun) {
+              process.stdout.write(
+                "[agent-team-launcher] dry-run: all specialists remote; no local tmux session.\n"
+              );
+            } else {
+              process.stdout.write(
+                "[agent-team-launcher] all specialists dispatched remotely.\n"
+              );
+            }
+            process.exit(0);
+          }
         }
       } catch (err) {
         if (err instanceof RouteError) {
@@ -639,12 +764,6 @@ function main(): void {
       }
     }
   }
-
-  // Mint the unified run-id ONCE per launcher invocation and thread it through
-  // both prompts and the manifest. Exported into each pane's env so hooks
-  // inside (capture-telemetry, maybe-reflect, agent-team handlers) converge
-  // on the same `.guild/runs/<run-id>/` path.
-  const runId = makeRunId();
 
   const plan = tmux.plan({
     mode,

@@ -64,6 +64,8 @@ interface DefaultsBlock {
   reporting: "standard" | "quiet" | "verbose";
   /** SQLite lazy-cache trigger thresholds (v2-persistence-and-sqlite-index ADR D-PS-1). */
   index: IndexBlock;
+  /** Cross-host SSH endpoint config (v2-cross-host-orchestration.md CR-1/CH-1). Default { enabled: false, hosts: {} }. */
+  cross_host: CrossHostBlock;
 }
 interface WorkspaceBlock {
   /** auto (default) = detect by immediate-child rule; on = force workspace; off = force regular. NO max_depth — depth is fixed at 1. */
@@ -153,6 +155,27 @@ interface IndexBlock {
   runs_threshold: number;
   /** Populate wiki_fts when wiki file count > N. Default 500. */
   wiki_file_threshold: number;
+}
+
+// ── defaults.cross_host sub-block (v2-cross-host-orchestration ADR — CH-1/CR-1).
+// SECURITY: address/port/user only — NO secrets, NO passwords. Auth via ssh keys/agent.
+// Passwords must never appear here; the ssh binary reads ~/.ssh/config or the agent socket.
+interface CrossHostEndpointEntry {
+  /** SSH target address (hostname or IP). SECURITY: no credentials stored here. */
+  address: string;
+  /** SSH port (optional, default 22). Non-standard ports prefer ~/.ssh/config Host entries. */
+  port?: number;
+  /** SSH username (optional). Produces `user@address` endpoint. No passwords stored here. */
+  user?: string;
+}
+interface CrossHostBlock {
+  /** Master toggle. false (default) ⇒ single-host behavior byte-identical to today. */
+  enabled: boolean;
+  /**
+   * Per-host SSH endpoint config keyed by guild.host_capability.v1 host_id.
+   * SECURITY: address/port/user only — NO secrets, NO passwords. Auth via ssh keys/agent.
+   */
+  hosts: Record<string, CrossHostEndpointEntry>;
 }
 
 interface GuildSettings {
@@ -259,6 +282,8 @@ const DEFAULTS: GuildSettings = {
       runs_threshold: 20,
       wiki_file_threshold: 500,
     },
+    // SECURITY: address/port/user only — no secrets, no passwords. Auth via ssh keys/agent.
+    cross_host: { enabled: false, hosts: {} },
   },
 };
 
@@ -371,6 +396,17 @@ const HELP: Record<string, string> = {
   "defaults.index.wiki_file_threshold":
     "int (default 500) — populate wiki_fts table when wiki/** file count exceeds N. " +
     "Below threshold, guild-memory BM25 grep path is used unchanged.",
+  // ── defaults.cross_host: block (v2-cross-host-orchestration ADR — CR-1/CH-1)
+  "defaults.cross_host.enabled":
+    "bool (default false) — master toggle for mixed-host routing/teams " +
+    "(v2-cross-host-orchestration ADR CR-1/CH-1). false ⇒ single-host behavior byte-identical " +
+    "to today. Env override: GUILD_CROSS_HOST_ENABLED=1 (mirrors this key; env wins when set). " +
+    "SECURITY: enables SSH dispatch — ensure ssh keys/agent are configured; no passwords.",
+  "defaults.cross_host.hosts":
+    "object { <host_id>: { address: string, port?: number, user?: string } } — " +
+    "SSH endpoint config keyed by guild.host_capability.v1 host_id. " +
+    "SECURITY: address/port/user ONLY — NO secrets, NO passwords. Auth via ssh keys/agent. " +
+    "Non-standard ports: prefer ~/.ssh/config Host entries over the port field.",
   _precedence:
     "CLI flag > --rigor profile > settings.json > built-in default. " +
     "For model tier: --model-tier=cheap|mid|powerful > per-lane plan override > models.tiers/thresholds > built-in.",
@@ -635,6 +671,68 @@ function validateMcp(m: Record<string, unknown>): string[] {
   return rejects;
 }
 
+/**
+ * Closed-key validation of the `defaults.cross_host` block (cross-host ADR CR-1/CH-1).
+ * Returns reject messages. SECURITY: validates that only address/port/user are present.
+ */
+function validateCrossHostBlock(ch: Record<string, unknown>): string[] {
+  const rejects: string[] = [];
+  const ALLOWED_CH = new Set(["enabled", "hosts"]);
+  for (const k of Object.keys(ch)) {
+    if (!ALLOWED_CH.has(k)) {
+      rejects.push(`unknown defaults.cross_host key "${k}" (closed key set — valid: enabled, hosts)`);
+    }
+  }
+  if (ch["enabled"] !== undefined && typeof ch["enabled"] !== "boolean") {
+    rejects.push(`defaults.cross_host.enabled must be a boolean (got ${JSON.stringify(ch["enabled"])})`);
+  }
+  if (ch["hosts"] !== undefined) {
+    if (!isPlainObject(ch["hosts"])) {
+      rejects.push(`defaults.cross_host.hosts must be an object { host_id: { address, port?, user? } }`);
+    } else {
+      const hosts = ch["hosts"] as Record<string, unknown>;
+      const ALLOWED_ENTRY = new Set(["address", "port", "user"]);
+      for (const [hostId, entry] of Object.entries(hosts)) {
+        if (!isPlainObject(entry)) {
+          rejects.push(`defaults.cross_host.hosts["${hostId}"] must be an object { address, port?, user? }`);
+          continue;
+        }
+        const e = entry as Record<string, unknown>;
+        for (const ek of Object.keys(e)) {
+          if (!ALLOWED_ENTRY.has(ek)) {
+            // SECURITY: reject any unexpected key (e.g. "password", "key_path") from the config.
+            rejects.push(
+              `unknown defaults.cross_host.hosts["${hostId}"] key "${ek}" ` +
+                `(closed key set — valid: address, port, user; no secrets stored here)`
+            );
+          }
+        }
+        if (!e["address"] || typeof e["address"] !== "string") {
+          rejects.push(
+            `defaults.cross_host.hosts["${hostId}"].address is required and must be a string`
+          );
+        }
+        if (e["port"] !== undefined) {
+          const p = e["port"];
+          if (typeof p !== "number" || !Number.isInteger(p) || p < 1 || p > 65535) {
+            rejects.push(
+              `defaults.cross_host.hosts["${hostId}"].port must be an integer 1–65535 ` +
+                `(got ${JSON.stringify(p)})`
+            );
+          }
+        }
+        if (e["user"] !== undefined && typeof e["user"] !== "string") {
+          rejects.push(
+            `defaults.cross_host.hosts["${hostId}"].user must be a string ` +
+              `(got ${JSON.stringify(e["user"])})`
+          );
+        }
+      }
+    }
+  }
+  return rejects;
+}
+
 /** Closed-key validation of the `defaults:` block. Returns reject messages. */
 function validateDefaults(d: Record<string, unknown>, selfBuild: boolean): string[] {
   const rejects: string[] = [];
@@ -644,6 +742,7 @@ function validateDefaults(d: Record<string, unknown>, selfBuild: boolean): strin
     "adversarial", "team", "review_workflow", "skill_policy",
     "gates", "wiki", "quality", "reporting",
     "index",        // D-PS-1: SQLite lazy-cache trigger thresholds
+    "cross_host",   // CR-1/CH-1: cross-host SSH endpoint config
   ]);
   for (const k of Object.keys(d)) {
     if (!ALLOWED.has(k)) rejects.push(`unknown defaults key "${k}" (closed key set — a typo must surface)`);
@@ -660,6 +759,10 @@ function validateDefaults(d: Record<string, unknown>, selfBuild: boolean): strin
           rejects.push(`unknown defaults.quality.budget key "${bk}"`);
       }
     }
+  }
+  // defaults.cross_host.* — closed key set (CR-1/CH-1)
+  if (isPlainObject(d["cross_host"])) {
+    rejects.push(...validateCrossHostBlock(d["cross_host"] as Record<string, unknown>));
   }
   // defaults.index.* — closed key set (D-PS-1)
   if (isPlainObject(d["index"])) {
@@ -947,6 +1050,15 @@ function main(): void {
       ...(fileConfig.defaults ?? {}),
       // deep-merge defaults.index sub-block
       index: { ...DEFAULTS.defaults.index, ...((fileConfig.defaults as Partial<DefaultsBlock>)?.index ?? {}) },
+      // deep-merge defaults.cross_host sub-block (hosts map is additive over the empty default)
+      cross_host: {
+        ...DEFAULTS.defaults.cross_host,
+        ...((fileConfig.defaults as Partial<DefaultsBlock>)?.cross_host ?? {}),
+        hosts: {
+          ...DEFAULTS.defaults.cross_host.hosts,
+          ...((fileConfig.defaults as Partial<DefaultsBlock>)?.cross_host?.hosts ?? {}),
+        },
+      },
     },
     // workspace is a nested object — deep-merge so partial overrides work
     workspace: { ...DEFAULTS.workspace, ...(fileConfig.workspace ?? {}), ...(flags.workspace ?? {}) },

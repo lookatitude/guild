@@ -688,25 +688,97 @@ describe("agent-team-launcher.ts", () => {
   // CH-1 — routing to local tmux vs remote, via host-router
   // ─────────────────────────────────────────────────────────────
   describe("cross-host routing detection (host-router)", () => {
-    it("enabled + remote manifest: a remote-routed specialist is refused with a clear residual message", () => {
+    // Helper: write .guild/settings.json with defaults.cross_host config.
+    function writeSettingsCrossHost(
+      cwd: string,
+      opts: { enabled: boolean; hosts: Record<string, { address: string; user?: string; port?: number }> }
+    ): void {
+      const dir = path.join(cwd, ".guild");
+      fs.mkdirSync(dir, { recursive: true });
+      const settings = {
+        defaults: { cross_host: { enabled: opts.enabled, hosts: opts.hosts } },
+      };
+      fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify(settings, null, 2), "utf8");
+    }
+
+    it("enabled + remote manifest + no endpoint in config → refuses with missing-endpoint message", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
       writeHostManifest(tmpDir, "claude", "claude");
       writeHostManifest(tmpDir, "codex-remote", "codex");
+      // No endpoint configured → should surface+refuse.
       const { exitCode, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
       expect(exitCode).toBe(1);
       expect(stderr).toMatch(/route to a REMOTE host/i);
+      expect(stderr).toMatch(/no SSH endpoint/i);
       expect(stderr).toMatch(/security/);
       expect(stderr).toMatch(/codex-remote/);
     });
 
-    it("disabled (default): same team + manifests stays local (exit 0, codex pane runs locally)", () => {
+    it("enabled + remote manifest + endpoint configured → dispatches via RemoteTeamBackend (dry-run, exit 0)", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
       writeHostManifest(tmpDir, "claude", "claude");
       writeHostManifest(tmpDir, "codex-remote", "codex");
-      // No GUILD_CROSS_HOST_ENABLED → routing block inert → local mixed-host tmux.
+      // Configure the endpoint for codex-remote.
+      writeSettingsCrossHost(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
+      });
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+      // Remote dispatch message should appear.
+      expect(stdout).toMatch(/dry-run.*remote dispatch/i);
+      // The planned command should reference the remote specialist.
+      expect(stdout).toMatch(/security/i);
+      // No REFUSED/residual message.
+      expect(stdout).not.toMatch(/not yet wired/i);
+    });
+
+    it("enabled via settings.json (no env) + endpoint configured → dispatches (dry-run, exit 0)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      // Enable via settings.json (no env var).
+      writeSettingsCrossHost(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "10.0.1.5" } },
+      });
+      // Explicitly unset the env var to ensure settings.json drives it.
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: undefined, GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/dry-run.*remote dispatch/i);
+    });
+
+    it("disabled via settings.json (enabled:false) + env absent → inert, single-host tmux path", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeSettingsCrossHost(tmpDir, {
+        enabled: false,
+        hosts: { "codex-remote": { address: "10.0.1.5" } },
+      });
+      // No env and settings.json disabled → routing block inert → local mixed-host tmux.
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: undefined }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/codex exec/);
+    });
+
+    it("disabled (default, no settings.json): same team + manifests stays local (exit 0, codex pane runs locally)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      // No GUILD_CROSS_HOST_ENABLED, no settings.json → routing block inert → local mixed-host tmux.
       const { exitCode, stdout } = runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
       expect(exitCode).toBe(0);
       expect(stdout).toMatch(/codex exec/);

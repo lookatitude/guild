@@ -1126,4 +1126,143 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
       expect(out).toMatch(/VALID/);
     });
   });
+
+  // ── defaults.cross_host: block (v2-cross-host-orchestration ADR — CR-1/CH-1) ──
+  describe("defaults.cross_host: block (CR-1/CH-1 cross-host endpoint config)", () => {
+    test("no settings.json → defaults.cross_host present with built-in defaults (zero-config)", () => {
+      const dir = repo();
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.defaults.cross_host.enabled).toBe(false);
+      expect(j.defaults.cross_host.hosts).toEqual({});
+    });
+
+    test("settings.json defaults.cross_host.enabled: true is read and resolved", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { cross_host: { enabled: true, hosts: {} } } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.defaults.cross_host.enabled).toBe(true);
+    });
+
+    test("settings.json defaults.cross_host.hosts entries are read and resolved", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        defaults: {
+          cross_host: {
+            enabled: true,
+            hosts: {
+              "codex-remote": { address: "10.0.0.5", user: "ubuntu", port: 2222 },
+            },
+          },
+        },
+      });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.defaults.cross_host.hosts["codex-remote"]).toMatchObject({
+        address: "10.0.0.5",
+        user: "ubuntu",
+        port: 2222,
+      });
+    });
+
+    test("defaults.cross_host.hosts without user/port is valid (address-only entry)", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        defaults: {
+          cross_host: { enabled: false, hosts: { myhost: { address: "gpu-box.local" } } },
+        },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+
+    test("--validate rejects unknown defaults.cross_host key (closed key set)", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        defaults: { cross_host: { enabled: false, hosts: {}, bogus: true } },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/unknown defaults\.cross_host key "bogus"/);
+    });
+
+    test("--validate rejects defaults.cross_host.enabled as non-boolean", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        defaults: { cross_host: { enabled: "yes", hosts: {} } },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/defaults\.cross_host\.enabled must be a boolean/);
+    });
+
+    test("--validate rejects unknown key inside a hosts entry (SECURITY: no passwords)", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        defaults: {
+          cross_host: {
+            enabled: false,
+            hosts: { myhost: { address: "box.local", password: "secret" } },
+          },
+        },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/unknown defaults\.cross_host\.hosts\["myhost"\] key "password"/);
+    });
+
+    test("--validate rejects missing address in a hosts entry", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        defaults: {
+          cross_host: { enabled: false, hosts: { myhost: { user: "ubuntu" } } },
+        },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/address is required/);
+    });
+
+    test("--validate rejects out-of-range port (0 is invalid)", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        defaults: {
+          cross_host: { enabled: false, hosts: { myhost: { address: "box", port: 0 } } },
+        },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/port must be an integer 1–65535/);
+    });
+
+    test("--validate rejects defaults key 'cross_host' accepted (in ALLOWED set)", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        defaults: { cross_host: { enabled: false, hosts: {} } },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+
+    test("deep-merge: cross_host.hosts from file merges over empty default", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        defaults: {
+          cross_host: { enabled: true, hosts: { "h1": { address: "1.2.3.4" } } },
+        },
+      });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      // Host entry resolved, enabled flag set.
+      expect(j.defaults.cross_host.enabled).toBe(true);
+      expect(j.defaults.cross_host.hosts["h1"].address).toBe("1.2.3.4");
+    });
+  });
 });
