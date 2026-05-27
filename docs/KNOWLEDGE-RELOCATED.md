@@ -8,21 +8,21 @@ single source of truth for established Guild architecture).
 
 ## Canonical user-facing docs → website (D-WEB-2)
 
-`https://lookatitude.github.io/guild-website/docs/` is the documentation home (URL not yet locked — see
-`docs/DOCS-SITE.md` for the placeholder note; operator replaces `https://lookatitude.github.io/guild-website`
+`https://guildstack.dev/docs/` is the documentation home (URL not yet locked — see
+`docs/DOCS-SITE.md` for the placeholder note; operator replaces `https://guildstack.dev`
 once the website repo move + Pages domain are finalised).
 Website source: `../website/src/content/docs/`.
 
-| Was here (`plugin/docs/`) | Now at website (`https://lookatitude.github.io/guild-website/docs/<slug>`) |
+| Was here (`plugin/docs/`) | Now at website (`https://guildstack.dev/docs/<slug>`) |
 |---|---|
-| `architecture.md` | `https://lookatitude.github.io/guild-website/docs/architecture` |
-| `configuration.md` | `https://lookatitude.github.io/guild-website/docs/configuration` |
-| `context-assembly.md` | `https://lookatitude.github.io/guild-website/docs/context-assembly` |
-| `cost-and-tiering.md` | `https://lookatitude.github.io/guild-website/docs/cost-and-tiering` |
-| `self-evolution.md` | `https://lookatitude.github.io/guild-website/docs/self-evolution` |
-| `specialist-roster.md` | `https://lookatitude.github.io/guild-website/docs/specialist-roster` — **also kept in-repo** (`docs/specialist-roster.md`) for `scripts/check-roster-consistency.ts` |
-| `status-line.md` | `https://lookatitude.github.io/guild-website/docs/status-line` |
-| `wiki-pattern.md` | `https://lookatitude.github.io/guild-website/docs/wiki-pattern` |
+| `architecture.md` | `https://guildstack.dev/docs/architecture` |
+| `configuration.md` | `https://guildstack.dev/docs/configuration` |
+| `context-assembly.md` | `https://guildstack.dev/docs/context-assembly` |
+| `cost-and-tiering.md` | `https://guildstack.dev/docs/cost-and-tiering` |
+| `self-evolution.md` | `https://guildstack.dev/docs/self-evolution` |
+| `specialist-roster.md` | `https://guildstack.dev/docs/specialist-roster` — **also kept in-repo** (`docs/specialist-roster.md`) for `scripts/check-roster-consistency.ts` |
+| `status-line.md` | `https://guildstack.dev/docs/status-line` |
+| `wiki-pattern.md` | `https://guildstack.dev/docs/wiki-pattern` |
 | `plugin-marketplace-copy.md` | Retired (marketing artifact; superseded by website) |
 
 ## Earlier relocations (2026-05-16)

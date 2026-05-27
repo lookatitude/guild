@@ -44,7 +44,7 @@ All five v1.4 environment variables are opt-in. Defaults preserve v1.3 behaviour
 | `GUILD_LOOP_CAP` | `16` | Per-lane iteration cap, applied **only** when loops are active. Resets at phase boundaries. | Positive integer in `[1, 256]`. |
 | `GUILD_AUTO_APPROVE` | `none` | No gates auto-approve; the operator approves spec/plan/implementation manually as in v1.3. | `none`, `spec-and-plan`, `implementation`, `all`. |
 | `GUILD_LOG_RETENTION` | `unlimited` | The audit log is never trimmed; archives accumulate. | Positive integer suffixed with `MB` or `GB` (e.g. `500MB`, `2GB`), or the literal `unlimited`. |
-| `GUILD_STATUSLINE` | `0` | The status-line script emits no output. See the Guild docs site → `https://lookatitude.github.io/guild-website/docs/status-line` to wire it in. | `0` (off), `1` (on). Empty string is treated as `0`. |
+| `GUILD_STATUSLINE` | `0` | The status-line script emits no output. See the Guild docs site → `https://guildstack.dev/docs/status-line` to wire it in. | `0` (off), `1` (on). Empty string is treated as `0`. |
 
 The "default" semantics differ per variable. `none` and `0` are **disabled-state** defaults — Guild does nothing extra. `16` is the **active value** the loop driver uses *if* loops opt in. `unlimited` keeps the audit trail complete.
 
@@ -163,7 +163,7 @@ When an archive rotation occurs, the archived file lands at:
 | Custom fork of `commands/guild.md` | Rebase `allowed-tools` onto the v1.4 line above. |
 | Reading `.guild/runs/<run-id>/events.ndjson` | None. The file is still written by `capture-telemetry.js`. |
 | Custom shell aliases for `/guild` invocations | None — the new flags are global and additive. |
-| Status-line wiring | Optional. See the Guild docs site → `https://lookatitude.github.io/guild-website/docs/status-line` to wire the new script. |
+| Status-line wiring | Optional. See the Guild docs site → `https://guildstack.dev/docs/status-line` to wire the new script. |
 
 ## Quick reference — opting into v1.4 features
 
@@ -173,4 +173,4 @@ When an archive rotation occurs, the archived file lands at:
 | Run with plan + implementation loops, cap 8 | `/guild --loops=plan,implementation --loop-cap=8 "<brief>"` |
 | Run with auto-approve through implementation | `/guild --auto-approve=implementation "<brief>"` |
 | Cap audit-log footprint at 500 MB | `GUILD_LOG_RETENTION=500MB /guild "<brief>"` |
-| Enable the status-line | `GUILD_STATUSLINE=1 /guild "<brief>"` (then wire `~/.claude/settings.json` per the Guild docs site → `https://lookatitude.github.io/guild-website/docs/status-line`) |
+| Enable the status-line | `GUILD_STATUSLINE=1 /guild "<brief>"` (then wire `~/.claude/settings.json` per the Guild docs site → `https://guildstack.dev/docs/status-line`) |
