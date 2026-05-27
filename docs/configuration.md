@@ -114,6 +114,7 @@ Closed key set — unknown `models.*` keys are rejected by `--validate`.
 | `models.cacheTTL.leaf` | `"1h"` \| `"5m"` \| `"off"` | `"5m"` | Leaf-agent prompt-cache TTL hint (ADR §9). |
 | `models.importanceGate` | `integer` 1–5 | `3` | Min wiki importance level for routine recall (ADR §6). Pages below this level are skipped in the recall pass. |
 | `models.ingestSimilarityGate` | `float` 0–1 | `0.80` | BM25 top-1 similarity threshold for the wiki ingest anomaly gate (D-INGEST-GATE). When a candidate page scores ≥ this against existing pages, `guild:wiki-ingest` pauses for user decision (supersede / skip / proceed) — never silently overwrites. |
+| `models.shortOutputThreshold` | `Record<task_type, Record<tier, number>>` | `{}` | O-3 short-output advisor trigger buckets (D-OBS-3). Each entry maps a `task_type` → `tier` → output-token floor. Empty map (default) ⇒ O-3 trigger is silent for all buckets. Proposed values come from `benchmark/src/calibrate-o3-cli.ts`; operator reviews and lands them here — nothing auto-writes this key. |
 
 ### Default tier map
 
@@ -178,6 +179,43 @@ architect/review/schema = +2. The other weights are additive per signal.
   }
 }
 ```
+
+### `models.shortOutputThreshold` — O-3 calibration buckets
+
+> ADR: `v2-observability-and-replay` §D-OBS-3
+
+The O-3 "anomalously short output" advisor trigger fires when a lane's output
+token count falls below the p10 baseline for that `(task_type, tier)` bucket.
+Thresholds are **not built-in** — they must be derived from ≥ 30 run samples
+and landed here by the operator.
+
+**Workflow:**
+1. Run `npx tsx benchmark/src/calibrate-o3-cli.ts` (after sufficient samples).
+2. The CLI prints a `models.shortOutputThreshold` JSON fragment with proposed
+   floors per `(task_type, tier)`.
+3. Operator reviews the proposal and merges it into `.guild/settings.json`.
+4. Nothing auto-writes this key — all writes are explicit.
+
+Until a `(task_type, tier)` pair appears in this map, the O-3 trigger is silent
+for that bucket (only deterministic `status: escalate` + uncertainty-marker
+triggers apply).
+
+**Example** (after calibration on a mature repo):
+```json
+{
+  "models": {
+    "shortOutputThreshold": {
+      "build":  { "cheap": 80,  "mid": 150, "powerful": 200 },
+      "review": { "cheap": 120, "mid": 200, "powerful": 300 },
+      "plan":   { "mid": 180,   "powerful": 250 }
+    }
+  }
+}
+```
+
+Malformed outer entries (non-object task-type values) and malformed inner
+entries (non-number tier values) are silently dropped — a partial or
+in-progress calibration proposal never hard-blocks config load.
 
 ---
 

@@ -713,6 +713,92 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
       expect(out).toMatch(/VALID/);
     });
 
+    // ── models.shortOutputThreshold (D-OBS-3) ────────────────────────────────
+
+    test("absent shortOutputThreshold → default {}", () => {
+      const dir = repo();
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.shortOutputThreshold).toBeDefined();
+      expect(j.models.shortOutputThreshold).toEqual({});
+    });
+
+    test("settings.json valid shortOutputThreshold parses and is exposed on typed config", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        models: {
+          shortOutputThreshold: {
+            build:  { cheap: 80,  mid: 150, powerful: 200 },
+            review: { cheap: 120, mid: 200 },
+          },
+        },
+      });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.shortOutputThreshold).toEqual({
+        build:  { cheap: 80,  mid: 150, powerful: 200 },
+        review: { cheap: 120, mid: 200 },
+      });
+    });
+
+    test("--validate accepts settings.json carrying shortOutputThreshold (closed-key no longer rejects it)", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        models: {
+          shortOutputThreshold: {
+            plan: { mid: 180, powerful: 250 },
+          },
+        },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+
+    test("malformed shortOutputThreshold outer entry (non-object task_type) is silently dropped", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        models: {
+          shortOutputThreshold: {
+            build:  { cheap: 80 },   // valid
+            review: "notanobject",    // malformed outer entry — silently dropped
+          },
+        },
+      });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      // only the valid entry survives; "review" is dropped
+      expect(j.models.shortOutputThreshold).toEqual({ build: { cheap: 80 } });
+    });
+
+    test("malformed shortOutputThreshold inner entry (non-number tier value) is silently dropped", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        models: {
+          shortOutputThreshold: {
+            build: { cheap: 80, mid: "notanumber" }, // "mid" value is malformed
+          },
+        },
+      });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      // only numeric tier values survive
+      expect(j.models.shortOutputThreshold).toEqual({ build: { cheap: 80 } });
+    });
+
+    test("--scaffold includes models.shortOutputThreshold key set to {} + _help entry", () => {
+      const { status, out } = run(["--scaffold"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.shortOutputThreshold).toEqual({});
+      expect(j._help["models.shortOutputThreshold"]).toBeDefined();
+      expect(j._help["models.shortOutputThreshold"]).toMatch(/O-3|shortOutputThreshold/i);
+    });
+
     // ── --model-tier CLI escape hatch ─────────────────────────────────────────
 
     test("--model-tier=cheap is surfaced in _model_tier_override", () => {

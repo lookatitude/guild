@@ -114,6 +114,13 @@ interface ModelsBlock {
   importanceGate: number;
   /** BM25 top-1 similarity threshold for the ingest anomaly gate (D-INGEST-GATE). Default 0.80. */
   ingestSimilarityGate: number;
+  /**
+   * O-3 short-output advisor trigger buckets (D-OBS-3).
+   * Keyed by task_type → tier → output-token floor.
+   * Empty map (default) ⇒ O-3 trigger is silent for all buckets.
+   * Values are proposed by `benchmark/src/calibrate-o3-cli.ts`; operator reviews + lands.
+   */
+  shortOutputThreshold: Record<string, Record<string, number>>;
 }
 
 // ── Security block (v2-security-and-untrusted-content ADR — D-BYPASS).
@@ -247,6 +254,7 @@ const DEFAULTS: GuildSettings = {
     cacheTTL: { coordinator: "1h", leaf: "5m" },
     importanceGate: 3,
     ingestSimilarityGate: 0.80,
+    shortOutputThreshold: {},
   },
   security: {
     bypass_permissions_policy: "audit",
@@ -357,6 +365,12 @@ const HELP: Record<string, string> = {
   "models.ingestSimilarityGate":
     "float 0–1 (default 0.80) — BM25 top-1 similarity threshold for the wiki ingest anomaly gate (D-INGEST-GATE). " +
     "If a candidate page scores ≥ this against existing pages, guild:wiki-ingest pauses: supersede / skip / proceed — never silently overwrites.",
+  "models.shortOutputThreshold":
+    "object (default {}) — O-3 short-output advisor trigger buckets (D-OBS-3). " +
+    "Shape: { [task_type]: { [tier]: number } } where numbers are output-token floors. " +
+    "Empty map ⇒ O-3 trigger is silent for all (task_type, tier) buckets. " +
+    "Values are proposed by benchmark/src/calibrate-o3-cli.ts after ≥30 samples per bucket; " +
+    "operator reviews and lands them here — nothing auto-writes this key.",
   // ── security: block (v2-security-and-untrusted-content ADR — D-BYPASS)
   "security.bypass_permissions_policy":
     "\"deny\" | \"audit\" | \"allow\" (default \"audit\") — bypassPermissions governance during Guild-managed runs (D-BYPASS). " +
@@ -422,11 +436,12 @@ const VALID_AGENT_MODE = new Set(["team", "agent", "subagent", "auto"]);
 const VALID_MODEL_TIER = new Set(["cheap", "mid", "powerful"]);
 const VALID_CACHE_TTL = new Set(["1h", "5m", "off"]);
 
-// Closed-key set for models.* top-level fields (ADR §10 + D-INGEST-GATE).
+// Closed-key set for models.* top-level fields (ADR §10 + D-INGEST-GATE + D-OBS-3).
 const VALID_MODELS_KEYS = new Set([
   "enabled", "tiers", "scoreWeights", "thresholds", "advisorRounds",
   "escalationMarkers", "recallBeforeRead", "recallScoreThreshold",
   "structuredOutputRequired", "cacheTTL", "importanceGate", "ingestSimilarityGate",
+  "shortOutputThreshold",
 ]);
 
 // Closed-key set for security.* block (D-BYPASS).
@@ -892,6 +907,27 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       }
       if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1) {
         mergedModels.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
+      }
+      // shortOutputThreshold: nested map { task_type → { tier → token-floor } } (D-OBS-3).
+      // Malformed outer values (non-object) are silently dropped; malformed inner values
+      // (non-number) are silently dropped — graceful degradation so a partial calibration
+      // proposal never hard-blocks the config load.
+      if (isPlainObject(rawModels["shortOutputThreshold"])) {
+        const sot = rawModels["shortOutputThreshold"] as Record<string, unknown>;
+        const merged: Record<string, Record<string, number>> = {};
+        for (const taskType of Object.keys(sot)) {
+          if (!isPlainObject(sot[taskType])) continue; // drop malformed outer entry
+          const innerRaw = sot[taskType] as Record<string, unknown>;
+          const innerMerged: Record<string, number> = {};
+          for (const tier of Object.keys(innerRaw)) {
+            if (typeof innerRaw[tier] === "number") {
+              innerMerged[tier] = innerRaw[tier] as number;
+            }
+            // non-number inner values silently dropped
+          }
+          if (Object.keys(innerMerged).length > 0) merged[taskType] = innerMerged;
+        }
+        mergedModels.shortOutputThreshold = merged;
       }
       out.models = mergedModels;
     }
