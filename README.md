@@ -13,7 +13,7 @@ significant question becomes a structured decision. Every skill edit is a
 versioned artifact with rollback. Nothing durable is written without passing a
 gate.
 
-## What v1 ships
+## What v2 ships
 
 - **14 specialists** across three groups — engineering (architect, researcher,
   backend, frontend, devops, qa, mobile, security), content & communication (copywriter,
@@ -39,8 +39,26 @@ gate.
 - **2 optional MCP servers** — `mcp-servers/guild-memory/` (BM25 over the wiki
   once it crosses ~200 pages) and `mcp-servers/guild-telemetry/` (structured
   trace query). Both stdio-only, no network. Guild runs without them.
-- **agent-team tmux launcher** — opt-in peer-to-peer backend. Subagents via the
-  Agent tool remain the default.
+- **Three execution backends** (D5 `agent_mode` ladder) — tmux visible panes
+  (in-session or detached); `InProcessTeamBackend` (implemented: orchestrator
+  consumes a declarative `dispatchPlan`, each specialist runs as an independent
+  Agent-tool call, no tmux required); remote cross-host SSH dispatch; `SUBAGENT`
+  last resort for CI / fresh installs. See [docs/architecture.md](docs/architecture.md).
+- **Cost-aware model tiering** — cheap / mid / powerful, auto-scored per lane
+  from deterministic signals, with advisor escalation for uncertainty.
+  Zero-config stable. See [docs/configuration.md](docs/configuration.md) (`models.*`).
+- **SQLite read-through wiki cache** — lazy-build, opt-in (`index: "auto"`,
+  default). Direct-parse below threshold; disable with `index: "off"`.
+  See [docs/configuration.md](docs/configuration.md) (`defaults.index.*`).
+- **O-3 short-output advisor** — fires when a lane's output token count falls
+  below calibrated p10 floors (`models.shortOutputThreshold`). Calibrate with
+  `npx tsx benchmark/src/calibrate-o3-cli.ts`.
+  See [docs/configuration.md](docs/configuration.md).
+- **Security + observability** — `security.bypass_permissions_policy`
+  (capability-scope enforcement), 3-stage secrets redaction
+  (`secrets_policy.*`), and structured trace cost rollup via the
+  `guild-telemetry` MCP (`trace_cost_rollup`).
+  See [docs/configuration.md](docs/configuration.md).
 
 ## Getting Started
 
@@ -209,6 +227,9 @@ currently requires each file's frontmatter to include `final_status: satisfied` 
   raw vs synthesized, decision capture, scale transition.
 - [docs/self-evolution.md](docs/self-evolution.md) — the two triggers, the
   10-step pipeline, promotion gate, versioning + rollback.
+- [docs/configuration.md](docs/configuration.md) — complete `settings.json`
+  reference: `agent_mode`, model tiering, SQLite index, security / secrets
+  policy, O-3 calibration, cross-host dispatch.
 - [guild-plan.md](guild-plan.md) — the single source of truth that all docs
   derive from.
 

@@ -58,6 +58,8 @@ Route by the path being changed; when a task spans several, dispatch the matchin
 
 Runtime artifacts live under `.guild/` at the consuming repo's root (never committed by Guild itself). Layout in `guild-plan.md §4`. The Guild repo itself uses `.guild/` for its own self-build knowledge — gitignored, but durable across sessions.
 
+The wiki read path uses a lazy SQLite read-through cache (`index: "auto"`, default); disable with `index: "off"`. See [docs/configuration.md](docs/configuration.md) `defaults.index.*`.
+
 ## Branch + PR discipline (mandatory)
 
 **No direct commits to `main` going forward.** Every change — fix-packs, polish rounds, single-line edits — lands through a feature/release branch and a pull request.
@@ -98,10 +100,12 @@ For cross-tree truths (operator preferences that survive *outside* this working 
 
 1. **Inside tmux** (`$TMUX` set) → **TEAM** in-session: a new window in the current session (`tmux new-window -n guild-<slug>`), one pane per specialist, `select-window`ed so the panes are immediately visible. Never splits or kills the currently-active pane/window.
 2. **tmux installed** (but not currently inside one) → **TEAM** in a fresh **detached session**, then attaches your terminal to it.
-3. **No tmux, but the host (`claude` | `codex`) supports independent agents from the main session** → **AGENT** (independent, no tmux).
+3. **No tmux, but the host (`claude` | `codex`) supports independent agents from the main session** → **AGENT** — `InProcessTeamBackend` (implemented): the orchestrator consumes a declarative `dispatchPlan`; each specialist is dispatched as an independent Agent-tool call, no tmux required.
 4. **Else** → **SUBAGENT** (fallback): `guild:execute-plan` dispatches specialists via the Agent tool; no tmux required (CI, fresh installs).
 
 An explicit `agent_mode` value other than `auto` **pins** the backend, subject to availability — pinning `team` on a tmux-less host is rejected/warned (owner: `tooling-engineer`). `defaults.agent_team` is read as a **deprecated warn-once alias** for one minor (`true → team`, `false → subagent`, absent → `auto`), then removed at v2.1.0.
+
+Remote cross-host SSH dispatch is gated by `defaults.cross_host` (`.guild/settings.json`) and declared per-team via `host:` in `team.yaml`. See [docs/configuration.md](docs/configuration.md) `defaults.cross_host.*`.
 
 **§7.3 hard invariants preserved in every mode:** one team per session; a team-window collision (in-session, window already named `guild-<slug>`) or a session-name collision (new-session) makes the launcher **refuse to clobber** and print how to switch to or kill the existing team; the pre-flight env gate `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (checked by `scripts/agent-team-launcher.ts`) stays in force for team spawn — absent, the launcher refuses. The launcher owns the tmux strategy and these gates.
 
@@ -152,6 +156,9 @@ frozen receipt; the two do not compete.
 **Zero-config stable.** An absent `models:` block ⇒ current v2 behavior
 except cheaper `learn-*` (the built-in tier-map biases cheap). Scaffold
 and inspect the block with `/guild:config init` / `/guild:config show`.
+O-3 short-output advisor floors land in `models.shortOutputThreshold` after
+running `npx tsx benchmark/src/calibrate-o3-cli.ts` — nothing auto-writes
+this key. Full config reference: [docs/configuration.md](docs/configuration.md).
 
 ## Codex adversarial review
 

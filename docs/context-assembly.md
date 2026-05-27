@@ -83,9 +83,59 @@ bundle path and any required skill playbooks explicitly in the spawn prompt.
   against a prior run.
 - **Cheap** → no redundant project-wide prose in every specialist invocation.
 
+## Recall-before-read — two-path implementation
+
+Before an agent opens a file, it queries the wiki knowledge base for its task
+description (**recall-before-read**; `cost-aware-tiering-and-lean-context.md
+§4`). If recall returns ≥1 chunk with score ≥ `models.recallScoreThreshold`
+(default `0.4`), the agent receives the chunk(s) + specific file references and
+**skips the full file read**. Full reads are permitted only when recall returns
+0 hits or the task requires source-of-truth verification.
+
+The recall implementation has two paths, selected at runtime by
+`scripts/lib/wiki-recall.ts`:
+
+### Path A — SQLite FTS5 (`wiki_fts`)
+
+Activated when the **D-PS-1 lazy-build gate** fires:
+- `defaults.index.enabled` is `true` (default), **and**
+- the `.guild/wiki/` file count exceeds `defaults.index.wiki_file_threshold`
+  (default `500`).
+
+`ensureWikiFtsIndex` populates `wiki_fts` on first crossing (lazy, never
+eager). Subsequent calls use a SHA-256 fingerprint to skip re-population when
+the wiki is unchanged. The query runs FTS5 `bm25()` over `wiki_fts`, returning
+up to 10 hits ordered by relevance (most negative BM25 rank first).
+
+On a **cache hit** — index populated, query executed — `wikiRecall()` returns a
+`WikiRecallResult { source: "sqlite-wiki_fts", hits[], dbPath }`. An empty
+`hits[]` means the index exists but the query had no FTS5 matches; this is
+distinct from `null`.
+
+### Path B — guild-memory MCP BM25 (unchanged fallback)
+
+`wikiRecall()` returns `null` in four cases:
+1. `defaults.index.enabled` is `false`.
+2. Wiki file count is at or below `wiki_file_threshold`.
+3. `ensureWikiFtsIndex` returns without a `dbPath` (index not yet populated or
+   population failed silently).
+4. Any error during DB open or FTS5 query.
+
+When `null` is returned the caller **falls through** to the `guild-memory` MCP
+BM25 path — the same grep-backed path used before this ADR. The off-path is
+**byte-identical** to pre-ADR behavior: no `index.sqlite` is written, no side
+effects occur.
+
+The 6k hard cap on the assembled bundle is **unchanged** regardless of which
+path supplies the recall result.
+
+See `/Users/miguelp/Projects/guild/docs/knowledge/decisions/v2-persistence-and-sqlite-index.md`
+(D-PS-1, D-PS-2) for the gate thresholds and schema body.
+
 ## See also
 
 - `guild-plan.md §9` — full rationale with size budgets.
 - `skills/meta/context-assemble/SKILL.md` — the live assembler.
 - `architecture.md` — where context assembly sits in the lifecycle.
 - `wiki-pattern.md` — the categories the assembler reads from.
+- `cost-and-tiering.md` — tier auto-score, recall-score threshold config.
