@@ -97,9 +97,21 @@ wiki and guild-memory"` (cited, never re-spelled here):
 
 ## Recall-before-read (per-agent context-pull)
 
-Implements the cost-aware-tiering ADR (`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §4`). Each agent assembles its **own** task-scoped context by querying the knowledge base for **exactly its task** — not a broadcast of the whole project. This is a pull discipline layered onto the three-layer rule above; the **~3k target / 6k hard cap is unchanged** (`## Size budget` — bound by pointer, never re-spelled).
+Implements the cost-aware-tiering ADR (`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §4`) + D-PS-2 of `docs/knowledge/decisions/v2-persistence-and-sqlite-index.md`. Each agent assembles its **own** task-scoped context by querying the knowledge base for **exactly its task** — not a broadcast of the whole project. This is a pull discipline layered onto the three-layer rule above; the **~3k target / 6k hard cap is unchanged** (`## Size budget` — bound by pointer, never re-spelled).
 
-The **recall-before-read rule** (`cost-techniques.md §3`, surfaced in ADR §4): before an agent reads a file, recall the task description against the wiki via `guild-memory` BM25 (+ bounded `kg-query` for relationship-heavy queries, default 2 hops). Then:
+The **recall-before-read rule** (`cost-techniques.md §3`, surfaced in ADR §4 + D-PS-2): before an agent reads a file, recall the task description against the wiki. The path depends on the `defaults.index` config (resolved from `.guild/settings.json`):
+
+**SQLite path (auto, above threshold — D-PS-2 live):** When `defaults.index.enabled=true` AND the wiki file count is at/above `defaults.index.wiki_file_threshold` (default 500 files), call:
+
+```
+npx tsx plugin/scripts/lib/wiki-recall.ts --query "<task description>" --cwd <repo-root> [--limit 10]
+```
+
+This queries `wiki_fts` in `.guild/index.sqlite` via FTS5 BM25 — identical recall semantics to `guild-memory`, higher throughput at scale. The script handles the lazy-build trigger (D-PS-1): if `wiki_fts` is not yet populated it is built on first call, then fingerprint-gated on subsequent calls (no redundant re-index). Output is JSON: `{ source: "sqlite-wiki_fts", hits: [{path, title, rank, snippet}], dbPath }`. A `{ fallthrough: true }` response means the index was not available — proceed to the guild-memory path below.
+
+**guild-memory path (default / below threshold — unchanged):** When below threshold OR `defaults.index.enabled=false` (or the SQLite path returns `{fallthrough:true}`), recall the task description against the wiki via `guild-memory` BM25 (+ bounded `kg-query` for relationship-heavy queries, default 2 hops). This path is byte-identical to pre-ADR behavior. **The OFF path is a hard zero-cost regression guarantee — no new overhead, no `index.sqlite` ever written.**
+
+After recall (either path):
 
 - If recall returns ≥1 chunk with **score ≥ `models.recallScoreThreshold`** (default `0.4`, closed-key — ADR §10, bound by pointer), the agent receives the chunk(s) + the specific file references and **skips the full file read**.
 - **Full reads are permitted only** when recall returns 0 hits OR the task requires source-of-truth verification (e.g. `guild:verify-done`).
