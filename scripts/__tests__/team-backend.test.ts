@@ -12,7 +12,9 @@
  *   - TmuxTeamBackend probes (isAvailable / sessionExists / windowExists /
  *     currentSessionName) read the injected runner correctly.
  *   - TmuxTeamBackend.spawn() success → pane ids; failure → teardown + ok:false.
- *   - InProcessTeamBackend is a graceful stub (ok:false, never throws).
+ *   - InProcessTeamBackend (RE-4 / VC-RE-4): launch() yields a declarative
+ *     Agent-tool dispatch plan (ok:true, no tmux commands, no panes) — one
+ *     descriptor per specialist with the right name/subagent_type/model/env.
  *   - RemoteTeamBackend is a seam (isAvailable false; launch throws).
  *   - pure helpers shellQuote / buildPrompt / paneCommand.
  *
@@ -26,6 +28,7 @@ import {
   InProcessTeamBackend,
   RemoteTeamBackend,
   composeTmuxCommands,
+  composeInProcessDispatch,
   shellQuote,
   buildPrompt,
   paneCommand,
@@ -237,14 +240,89 @@ describe("TmuxTeamBackend.launch() — seam-conformant entry", () => {
   });
 });
 
-describe("InProcessTeamBackend — graceful stub", () => {
-  it("isAvailable true, launch returns ok:false with a stub note, never throws", () => {
+describe("InProcessTeamBackend — Agent-tool dispatch plan (RE-4 / VC-RE-4)", () => {
+  it("isAvailable is unconditionally true (no tmux / transport gate)", () => {
     const backend = new InProcessTeamBackend();
     expect(backend.kind).toBe("in-process");
     expect(backend.isAvailable()).toBe(true);
-    const result = backend.launch(req());
-    expect(result.ok).toBe(false);
-    expect(result.notes.join(" ")).toMatch(/stub|not yet implemented/i);
+  });
+
+  it("launch() returns ok:true with a declarative dispatch plan, never throws", () => {
+    const backend = new InProcessTeamBackend();
+    let result;
+    expect(() => {
+      result = backend.launch(req());
+    }).not.toThrow();
+    expect(result!.ok).toBe(true);
+    expect(result!.kind).toBe("in-process");
+    expect(Array.isArray(result!.dispatchPlan)).toBe(true);
+    // No stub language remains — this is a shipping backend now.
+    expect(result!.notes.join(" ")).not.toMatch(/stub|not yet implemented/i);
+  });
+
+  it("plans one descriptor per specialist with the right name/subagent_type/model/env", () => {
+    const result = new InProcessTeamBackend().launch(req());
+    const plan = result.dispatchPlan!;
+    expect(plan).toHaveLength(SPECIALISTS.length);
+    // One descriptor per specialist, in order; subagent_type = bare owner_role
+    // (= name), never general-purpose; model null (execute-plan auto-scores);
+    // env carries the run-id for hook convergence.
+    expect(plan.map((d) => d.name)).toEqual(["architect", "backend", "qa"]);
+    expect(plan.map((d) => d.subagentType)).toEqual(["architect", "backend", "qa"]);
+    expect(plan.every((d) => d.subagentType !== "general-purpose")).toBe(true);
+    expect(plan.every((d) => d.model === null)).toBe(true);
+    expect(plan.every((d) => d.env.GUILD_RUN_ID === "run-test-001")).toBe(true);
+    // Each descriptor carries the specialist staging prompt (NOT the orchestrator one).
+    const backendDesc = plan.find((d) => d.name === "backend")!;
+    expect(backendDesc.prompt).toContain("`backend`");
+    expect(backendDesc.prompt).toContain("api + data");
+  });
+
+  it("the in-process env does NOT carry the tmux team gate (it is the no-tmux path)", () => {
+    const result = new InProcessTeamBackend().launch(req());
+    for (const d of result.dispatchPlan!) {
+      expect(d.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBeUndefined();
+    }
+  });
+
+  it("emits zero tmux commands / panes: orchestratorPaneId null, teammatePaneIds empty", () => {
+    // The backend takes no RunFn — there is no subprocess seam to invoke, so it
+    // structurally cannot shell out to tmux. plannedCommands describe Agent()
+    // calls, never `tmux …`.
+    const result = new InProcessTeamBackend().launch(req());
+    expect(result.orchestratorPaneId).toBeNull();
+    expect(result.teammatePaneIds).toEqual({});
+    expect(result.plannedCommands.every((c) => !c.startsWith("tmux"))).toBe(true);
+    expect(result.plannedCommands.every((c) => c.includes("Agent({"))).toBe(true);
+    expect(result.plannedCommands.some((c) => c.includes("subagent_type: backend"))).toBe(true);
+  });
+
+  it("dry-run is a side-effect-free no-op: same plan, annotated note", () => {
+    const wet = new InProcessTeamBackend().launch(req({ dryRun: false }));
+    const dry = new InProcessTeamBackend().launch(req({ dryRun: true }));
+    expect(dry.ok).toBe(true);
+    expect(dry.dispatchPlan).toEqual(wet.dispatchPlan);
+    expect(dry.notes.join(" ")).toMatch(/dry-run/i);
+  });
+
+  it("VC-RE-4: the SAME dispatch runs in-process (no tmux) as on tmux — same specialist set", () => {
+    // The tmux backend would spawn a pane per specialist; the in-process backend
+    // plans an Agent() dispatch per specialist. Same team in → same lane owners
+    // out, just a different execution substrate (D5 selects which).
+    const inProcess = new InProcessTeamBackend().launch(req());
+    const tmuxPlan = new TmuxTeamBackend({ run: makeFakeRun().run }).plan(req());
+    const tmuxSpecialistTargets = tmuxPlan.commands
+      .filter((c) => c.argv[1] === "select-pane" && c.argv[2] === "-T")
+      .map((c) => c.argv[3]);
+    expect(inProcess.dispatchPlan!.map((d) => d.name)).toEqual(tmuxSpecialistTargets);
+    // ...and the in-process path uses no tmux at all.
+    expect(inProcess.teammatePaneIds).toEqual({});
+  });
+
+  it("composeInProcessDispatch is pure and matches the backend's plan", () => {
+    const direct = composeInProcessDispatch(req());
+    const viaBackend = new InProcessTeamBackend().launch(req()).dispatchPlan!;
+    expect(viaBackend).toEqual(direct);
   });
 });
 

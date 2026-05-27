@@ -17,11 +17,15 @@
  *                           Owns tmux probes (availability, session/window
  *                           collision), pure command composition, and the
  *                           spawn/teardown loop. The launcher delegates to it.
- *   - InProcessTeamBackend — reserved seam (RE-4). isAvailable()=true;
- *                           launch() returns ok:false (graceful, never throws).
- *                           The Agent-tool dispatch body is pending — ADR-RE-4
- *                           VC-RE-4 mandates functional in-process; implementing
- *                           it is a real build task, not a doc/truth fix.
+ *   - InProcessTeamBackend — IMPLEMENTED (ADR-RE-4 / VC-RE-4). isAvailable()=true;
+ *                           launch() returns ok:true carrying a DECLARATIVE
+ *                           Agent-tool dispatch plan (no tmux) — one descriptor
+ *                           per specialist (name / subagent_type / model / env /
+ *                           prompt) in `result.dispatchPlan`. A TeamBackend is a
+ *                           plain TS class and CANNOT call the Agent tool itself,
+ *                           so the orchestrator (guild:execute-plan) consumes the
+ *                           plan and issues the Agent() calls. For CI / no-tmux
+ *                           hosts — the D5 `agent`/`subagent` rungs route here.
  *   - RemoteTeamBackend    — implemented against the RemoteTransport seam
  *                           (MockTransport + SshRemoteTransport). Inert ONLY
  *                           when no transport is wired (isAvailable()=false; the
@@ -133,6 +137,48 @@ export interface TeamLaunchRequest {
   dryRun: boolean;
 }
 
+/**
+ * One declarative Agent-tool dispatch descriptor (ADR-RE-4, InProcessTeamBackend).
+ *
+ * A `TeamBackend` is a plain TS class invoked by the launcher — it CANNOT call
+ * the Agent tool (that is an LLM/orchestrator-level tool). So the in-process
+ * backend does not dispatch; it returns this declarative descriptor per
+ * specialist and the orchestrator (guild:execute-plan) issues one `Agent()` call
+ * per descriptor. Shape only, zero side effects.
+ */
+export interface AgentDispatchDescriptor {
+  /** Lane owner — the lane's `owner_role` (e.g. "backend", "qa", "architect"). */
+  name: string;
+  /**
+   * Agent-tool `subagent_type`: the lane's NAMED specialist agent — the bare
+   * `owner_role`, never `general-purpose` (execute-plan/dispatch.md). Equals
+   * `name` here (the launcher's Specialist carries no separate agent id);
+   * execute-plan resolves it against team.yaml's agent-definition paths.
+   */
+  subagentType: string;
+  /**
+   * Resolved Agent-tool `model:` param, or null. NULL from the backend by
+   * design: tiering (auto-score → tier → host-agnostic `models.tiers` map at
+   * dispatch) is execute-plan's job and is ORTHOGONAL to the backend — it never
+   * changes `subagentType` (dispatch.md §tiering). The backend emits the
+   * structural plan; execute-plan layers the model on at dispatch.
+   */
+  model: string | null;
+  /**
+   * Env parity with the tmux pane. Carries `GUILD_RUN_ID` so in-agent hooks
+   * (capture-telemetry / maybe-reflect / agent-team handlers) converge on the
+   * same `.guild/runs/<run-id>/` path. Deliberately does NOT carry
+   * `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`: that gate is tmux-team-spawn-specific;
+   * the in-process Agent-tool path is the documented no-tmux dispatch route and
+   * needs no experimental team gate. `GUILD_CAPABILITY_SCOPE` /
+   * `GUILD_AUTONOMY_CONTRACT` are layered by execute-plan at dispatch (omitted
+   * when their source field is absent — dispatch.md §env).
+   */
+  env: Record<string, string>;
+  /** The staging prompt (from buildPrompt) the dispatched agent receives. */
+  prompt: string;
+}
+
 /** Backend-agnostic launch outcome (what callers that use the seam see). */
 export interface TeamLaunchResult {
   kind: TeamBackendKind;
@@ -142,6 +188,14 @@ export interface TeamLaunchResult {
   orchestratorPaneId: string | null;
   teammatePaneIds: Record<string, string>;
   notes: string[];
+  /**
+   * ADR-RE-4 in-process dispatch plan. Present (and ok) on InProcessTeamBackend:
+   * one descriptor per specialist for the orchestrator (guild:execute-plan) to
+   * turn into `Agent()` calls. Absent on tmux/remote backends (they spawn
+   * panes/processes directly). Additive + optional under the lenient-reader rule
+   * — pre-existing tmux/remote results that omit it stay valid.
+   */
+  dispatchPlan?: AgentDispatchDescriptor[];
 }
 
 /**
@@ -559,45 +613,90 @@ export class TmuxTeamBackend implements TeamBackend {
   }
 }
 
-// ── InProcessTeamBackend — reserved seam (RE-4) ──────────────────────────────
+// ── InProcessTeamBackend — Agent-tool dispatch, no tmux (RE-4 / VC-RE-4) ──────
 //
-// ADR-RE-4 mandates this backend be functional (dispatch via the Agent tool,
-// no tmux, for CI / no-tmux hosts — VC-RE-4). The body is PENDING; this seam
-// holds the interface shape. The D5 `agent` rung routes here but launch()
-// returns ok:false, so a live run degrades gracefully (caller falls back).
-// Making this functional is a real build task — it cannot be resolved by a
-// doc/truth fix alone.
+// IMPLEMENTED. ADR-RE-4 mandates a functional in-process backend (dispatch via
+// the Agent tool, no tmux, for CI / no-tmux hosts — VC-RE-4); the D5 `agent` /
+// `subagent` rungs route here. The KEY constraint: a TeamBackend is a plain TS
+// class invoked by the launcher — it CANNOT call the Agent tool (an LLM/
+// orchestrator-level tool). So launch() does not spawn anything; it composes a
+// DECLARATIVE dispatch plan (one AgentDispatchDescriptor per specialist) that
+// the orchestrator (guild:execute-plan) consumes to issue its own Agent() calls
+// — one per descriptor. No tmux ⇒ teammatePaneIds is empty, orchestratorPaneId
+// is null (the lead orchestrates in-process; it is never spawned as a teammate,
+// mirroring RemoteTeamBackend §CH-4). launch() is total + side-effect-free.
 
 /**
- * Reserved seam for in-process Agent-tool dispatch (no tmux, no separate
- * panes). ADR-RE-4 mandates this be functional for CI / no-tmux hosts
- * (VC-RE-4); the body is pending. `launch()` is a graceful no-op (ok:false,
- * never throws) so callers that encounter it can fall back to another backend
- * rather than crashing.
+ * Pure: compose the in-process Agent-tool dispatch plan for a request — one
+ * descriptor per specialist (the orchestrator stays in-process and is NOT
+ * dispatched, so it gets no descriptor). No side effects; exported for reuse +
+ * testing, mirroring `composeTmuxCommands`.
+ *
+ * `subagentType` is the lane's bare `owner_role` (= `name`) per
+ * execute-plan/dispatch.md; `model` is null (execute-plan auto-scores the tier
+ * and resolves tier→model at dispatch — orthogonal to the backend); `env`
+ * carries `GUILD_RUN_ID` for hook convergence (no tmux env gate); `prompt` is
+ * the standard staging prompt from `buildPrompt`.
+ */
+export function composeInProcessDispatch(
+  req: TeamLaunchRequest
+): AgentDispatchDescriptor[] {
+  return req.specialists.map((spec) => ({
+    name: spec.name,
+    subagentType: spec.name,
+    model: null,
+    env: { GUILD_RUN_ID: req.runId },
+    prompt: buildPrompt(req.slug, req.runId, spec),
+  }));
+}
+
+/**
+ * In-process Agent-tool dispatch backend (no tmux, no panes). launch() returns
+ * ok:true with a declarative `dispatchPlan` the orchestrator (guild:execute-plan)
+ * turns into Agent() calls — the backend itself never calls the Agent tool. For
+ * CI / no-tmux hosts (the D5 `agent` / `subagent` rungs). Never throws.
  */
 export class InProcessTeamBackend implements TeamBackend {
   readonly kind = "in-process" as const;
 
-  // isAvailable() reports true because no environmental constraint (like
-  // tmux being absent) prevents the in-process path — what is missing is the
-  // implementation body. Callers MUST check launch().ok before relying on the
-  // result. The D5 `auto` ladder currently resolves to `subagent` in practice
-  // when this backend fails.
+  // Always available: no environmental constraint (tmux, a wired transport)
+  // gates the in-process path — Agent-tool dispatch is the host's baseline
+  // capability. This is exactly why the D5 ladder treats it as the no-tmux
+  // dispatch route.
   isAvailable(): boolean {
     return true;
   }
 
+  /**
+   * Compose the declarative dispatch plan. No spawn, no subprocess, no tmux:
+   * the plan is the product. `dryRun` is therefore semantically a no-op (there
+   * is nothing to suppress) — it only annotates the note. The orchestrator
+   * consumes `result.dispatchPlan` to issue one `Agent()` call per descriptor.
+   */
   launch(req: TeamLaunchRequest): TeamLaunchResult {
+    const dispatchPlan = composeInProcessDispatch(req);
+    const plannedCommands = dispatchPlan.map(
+      (d) =>
+        `Agent({ subagent_type: ${shellQuote(d.subagentType)}, ` +
+        `model: ${d.model ?? "<auto-scored at dispatch>"}, ` +
+        `description: ${shellQuote(`${d.name} lane`)} })`
+    );
+    const head = req.dryRun
+      ? `dry-run: in-process backend has no side effects — declarative plan only.`
+      : `in-process: ${dispatchPlan.length} specialist(s) planned for Agent-tool ` +
+        `dispatch (no tmux).`;
     return {
       kind: this.kind,
-      ok: false,
-      plannedCommands: [],
+      ok: true,
+      plannedCommands,
+      // No tmux ⇒ no panes; the lead orchestrates in-process (never a teammate).
       orchestratorPaneId: null,
       teammatePaneIds: {},
       notes: [
-        `InProcessTeamBackend is a stub — in-process team spawn not yet ` +
-          `implemented (RE-4 seam; team \`${req.slug}\`, run-id \`${req.runId}\`).`,
+        `${head} guild:execute-plan issues one Agent() call per descriptor in ` +
+          `result.dispatchPlan (team \`${req.slug}\`, run-id \`${req.runId}\`).`,
       ],
+      dispatchPlan,
     };
   }
 }
