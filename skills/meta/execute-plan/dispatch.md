@@ -66,24 +66,56 @@ The file-based handoff design is correct; this section makes it **enforced and s
 
 **Copy the block below verbatim into every agent's prompt before dispatch.** Substitute `<RECEIPT_PATH>` and `<TASK_ID>` with the values for this lane. Do **not** paraphrase or rewrite it per-brief — per-brief rewording is the root cause of F1/F2 and must not recur.
 
-```
+````
 ---
-HANDOFF PROTOCOL (mandatory — all backends)
+HANDOFF PROTOCOL (mandatory — single channel, strict fenced-JSON)
 
-Your final action is writing your guild.handoff.v2 envelope to the receipt file.
+Your final action is writing your handoff receipt to the receipt file.
 Receipt path (absolute): <RECEIPT_PATH>
-Schema pointer: docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5
-  (Read the schema from that source. Do NOT re-spell or summarise it here.)
 
-STEP 1 — Write the receipt file via the Write/file tool using the absolute path above.
-STEP 2 — Team/pane mode only: after the file is written, send exactly ONE SendMessage:
+THE ENVELOPE IS JSON INSIDE THE FENCED BLOCK — NOT YAML FRONTMATTER.
+A frontmatter-only receipt (--- schema_version: guild.handoff.v2 ...) is REJECTED by
+the validator. There is exactly ONE accepted shape, shown below.
+
+Write the receipt file with BOTH parts, in this order:
+
+PART A — five §8.2 sections as "## <name>" headings (human review contract):
+
+## changed_files
+## opens_for
+## assumptions
+## evidence
+## followups
+
+PART B — exactly ONE fenced block tagged guild.handoff.v2 containing JSON:
+
+```guild.handoff.v2
+{
+  "schema_version": "guild.handoff.v2",
+  "task_id": "<TASK_ID>",
+  "tier": "cheap|mid|powerful",
+  "status": "done|blocked|escalate",
+  "summary": "<= 600 chars",
+  "artifacts": ["path:line-range"],
+  "issues": [],
+  "learnings": ["optional"],
+  "escalate_reason": "required ONLY when status==escalate"
+}
+```
+
+Allowed top-level JSON keys (strict — validator rejects any other key):
+  schema_version, task_id, tier, status, summary, artifacts, issues,
+  escalate_reason, learnings, notes.
+
+STEP 1 — Write the receipt FILE via the Write tool at the absolute path above.
+STEP 2 — Send exactly ONE SendMessage to team-lead:
             done · <TASK_ID> · status:<done|blocked|escalate> · receipt:<RECEIPT_PATH>
-          Nothing else. NEVER paste the envelope into chat or response text.
-          The lead reads the file — not the chat — so chat content is ignored anyway.
-STEP 3 — Subagent/in-process mode: writing the file is your final action. No SendMessage needed.
+          Nothing else. NEVER paste the envelope or receipt body into chat.
+          (Subagent/in-process mode: skip this step — writing the file is your final action.)
+STEP 3 — No further action. The lead reads the FILE, not chat.
 
 OUTPUT-CAP GUARD: Large artifacts (SVGs, generated source files, long configs) must be written
-via the Write/file tool in structural sections — never emitted as one inline response. Budget:
+via the Write tool in structural sections — never emitted as one inline response. Budget:
 ≤500 lines per write call; for larger files use multiple calls (scaffold → fill sections →
 close). Emitting a large file inline and hitting the 32k output-token cap writes nothing and
 is an unrecoverable total lane loss.
@@ -92,7 +124,7 @@ ABSOLUTE-PATH RULE: All cross-repo and umbrella paths — in this brief and in y
 artifacts — are absolute. Never assume a relative path resolves correctly across worktrees or
 repo boundaries.
 ---
-```
+````
 
 ### Orchestrator injection mechanics
 

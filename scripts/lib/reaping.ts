@@ -114,16 +114,46 @@ function extractEnvelope(content: string): unknown | null {
   }
 }
 
+// Allowed top-level keys for a guild.handoff.v2 envelope (spec §2, ALLOWED set).
+// Mirror of hooks/lib/handoff-v2.ts — kept self-contained so scripts/ never
+// imports hooks/.
+const ALLOWED_ENVELOPE_KEYS: ReadonlySet<string> = new Set([
+  "schema_version", "task_id", "tier", "status", "summary",
+  "artifacts", "issues", "escalate_reason", "learnings", "notes",
+]);
+
+/**
+ * Validate a parsed guild.handoff.v2 envelope against spec §2:
+ *   - schema_version must equal "guild.handoff.v2"
+ *   - No unknown top-level keys (ALLOWED_ENVELOPE_KEYS)
+ * Returns error strings (empty = valid). Mirror of validateHandoffV2 unknown-key
+ * check in hooks/lib/handoff-v2.ts so detectDismissible and teammate-idle agree
+ * on every receipt — including rejecting the p2-3 drift shape (`schema:` key).
+ */
+function envelopeShapeErrors(value: unknown): string[] {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return ["envelope is not a JSON object"];
+  }
+  const obj = value as Record<string, unknown>;
+  const errors: string[] = [];
+  if (obj["schema_version"] !== "guild.handoff.v2") {
+    errors.push("guild.handoff.v2 block present but schema_version mismatch");
+  }
+  for (const key of Object.keys(obj)) {
+    if (!ALLOWED_ENVELOPE_KEYS.has(key)) {
+      errors.push(`unknown key "${key}" (did you mean schema_version? strict v2 rejects extras)`);
+    }
+  }
+  return errors;
+}
+
 /**
  * Lightweight shape-check for an extracted guild.handoff.v2 envelope.
- * Validates only the discriminant (`schema_version`) so the dismissal signal
- * is robust to optional field additions without needing the full validator
- * from hooks/lib/handoff-v2.ts.
+ * Spec §2: requires schema_version === "guild.handoff.v2" AND no unknown
+ * top-level keys. Mirror of validateHandoffV2 in hooks/lib/handoff-v2.ts.
  */
 function isEnvelopeShapeValid(value: unknown): boolean {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const obj = value as Record<string, unknown>;
-  return obj["schema_version"] === "guild.handoff.v2";
+  return envelopeShapeErrors(value).length === 0;
 }
 
 // ── Public type: receipt check result ─────────────────────────────────────────
@@ -134,9 +164,9 @@ export interface ReceiptCheckResult {
   /** True when all five §8.2 required fields are present. */
   hasRequiredFields: boolean;
   /**
-   * True/false when a guild.handoff.v2 block was found; null when absent.
-   * null is NOT a failure — envelopes are optional for the dismissal signal
-   * (the file + §8.2 fields are the primary gate).
+   * true  — fenced guild.handoff.v2 block present and shape-valid.
+   * false — block present but shape-invalid (unknown key, wrong schema_version).
+   * null  — block absent; always treated as invalid per spec §2 condition 3.
    */
   envelopeValid: boolean | null;
   /** Human-readable reasons why the receipt is invalid (empty when valid). */
@@ -169,11 +199,19 @@ export function checkReceipt(
 
   const envelope = extractEnvelope(content);
   let envelopeValid: boolean | null = null;
-  if (envelope !== null) {
-    envelopeValid = isEnvelopeShapeValid(envelope);
-    if (!envelopeValid) {
-      errors.push("guild.handoff.v2 block present but schema_version mismatch");
-    }
+  if (envelope === null) {
+    // Spec §2 condition 3: a valid receipt MUST contain a fenced guild.handoff.v2 block
+    // parseable as JSON. No parseable block → always invalid, matching the hook validator.
+    const blockTagPresent = /```guild\.handoff\.v2/.test(content);
+    errors.push(
+      blockTagPresent
+        ? "guild.handoff.v2 fenced block is not valid JSON — strict v2 requires parseable JSON"
+        : "no guild.handoff.v2 fenced block — strict v2 requires it"
+    );
+  } else {
+    const envErrors = envelopeShapeErrors(envelope);
+    envelopeValid = envErrors.length === 0;
+    errors.push(...envErrors);
   }
 
   return {
@@ -185,13 +223,15 @@ export function checkReceipt(
 }
 
 /**
- * A receipt is "valid" (= safe to dismiss on) when:
+ * A receipt is "valid" (= safe to dismiss on) when all spec §2 conditions hold:
  *   - it exists
  *   - it has all §8.2 required fields
- *   - if an envelope block is present, its shape is valid (envelopeValid !== false)
+ *   - a valid fenced guild.handoff.v2 block is present (envelopeValid === true)
+ * Fail-closed: null (no block) is treated the same as false (invalid block).
+ * Matches the hook validator's verdict on every receipt, including frontmatter-only.
  */
 function isValid(r: ReceiptCheckResult): boolean {
-  return r.exists && r.hasRequiredFields && r.envelopeValid !== false;
+  return r.exists && r.hasRequiredFields && r.envelopeValid === true;
 }
 
 // ── A2a: Dismissible detection ─────────────────────────────────────────────────

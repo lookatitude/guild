@@ -10,6 +10,7 @@ import {
   isHandoffV2,
   SUMMARY_MAX_CHARS,
   NOTES_MAX_CHARS,
+  ALLOWED_TOP_LEVEL_KEYS,
   HandoffV2,
 } from "../lib/handoff-v2";
 
@@ -199,6 +200,59 @@ describe("validateHandoffV2 — non-object inputs", () => {
   it("rejects string", () => {
     const result = validateHandoffV2("guild.handoff.v2");
     expect(result.valid).toBe(false);
+  });
+});
+
+describe("validateHandoffV2 — unknown-key rejection (strict v2)", () => {
+  it("rejects an envelope with a single unknown top-level key", () => {
+    const result = validateHandoffV2({ ...VALID_BASE, extra: "oops" });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('unknown key "extra"'))).toBe(true);
+  });
+
+  it("rejects multiple unknown keys and lists each", () => {
+    const result = validateHandoffV2({ ...VALID_BASE, foo: 1, bar: 2 });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('unknown key "foo"'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('unknown key "bar"'))).toBe(true);
+  });
+
+  it("rejects the literal p2-3 drift shape (schema: instead of schema_version:, extra keys)", () => {
+    // Exact p2-3 drift: used `schema` (not `schema_version`), plus `specialist` and `timestamp`
+    const p23Drift = {
+      schema: "guild.handoff.v2",
+      task_id: "p2-3",
+      specialist: "backend",
+      status: "done",
+      timestamp: "2026-05-27T00:00:00Z",
+    };
+    const result = validateHandoffV2(p23Drift);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('unknown key "schema"'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('unknown key "specialist"'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('unknown key "timestamp"'))).toBe(true);
+  });
+
+  it("accepts all known optional keys without error", () => {
+    const result = validateHandoffV2({
+      ...VALID_BASE,
+      status: "escalate",
+      escalate_reason: "Need clarification on topology",
+      learnings: ["key insight"],
+      notes: "short note",
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("ALLOWED_TOP_LEVEL_KEYS export matches spec §2", () => {
+    const expected = [
+      "schema_version", "task_id", "tier", "status", "summary",
+      "artifacts", "issues", "escalate_reason", "learnings", "notes",
+    ];
+    for (const k of expected) {
+      expect(ALLOWED_TOP_LEVEL_KEYS.has(k)).toBe(true);
+    }
+    expect(ALLOWED_TOP_LEVEL_KEYS.size).toBe(expected.length);
   });
 });
 

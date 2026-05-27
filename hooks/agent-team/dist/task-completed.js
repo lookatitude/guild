@@ -58,12 +58,31 @@ var SUMMARY_MAX_CHARS = 600;
 var NOTES_MAX_CHARS = 200;
 var VALID_TIERS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
 var VALID_STATUSES = /* @__PURE__ */ new Set(["done", "blocked", "escalate"]);
+var ALLOWED_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
+  "schema_version",
+  "task_id",
+  "tier",
+  "status",
+  "summary",
+  "artifacts",
+  "issues",
+  "escalate_reason",
+  "learnings",
+  "notes"
+]);
 function validateHandoffV2(value) {
   const errors = [];
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { valid: false, errors: ["envelope must be a non-null object"] };
   }
   const obj = value;
+  for (const k of Object.keys(obj)) {
+    if (!ALLOWED_TOP_LEVEL_KEYS.has(k)) {
+      errors.push(
+        `unknown key "${k}" \u2014 strict guild.handoff.v2 rejects extra/misspelled keys`
+      );
+    }
+  }
   if (obj["schema_version"] !== "guild.handoff.v2") {
     errors.push(
       `schema_version must be "guild.handoff.v2"; got ${JSON.stringify(obj["schema_version"])}`

@@ -106,6 +106,14 @@ interface CliArgs {
    * null = not provided; callers may default to scanning all runs.
    */
   runId: string | null;
+  /**
+   * P1-4: dismiss lanes with a valid handoff receipt (auto-dismiss loop).
+   * When set, requires --run-id. Reads teammates from the run's session.json,
+   * calls detectDismissible, and prints a machine-readable DISMISS line per
+   * dismissible lane. Falls through to reapDeadMembers for cleanup.
+   * Always exits 0 (maintenance op).
+   */
+  dismissCompleted: boolean;
 }
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
@@ -121,6 +129,7 @@ function parseArgs(argv: string[]): CliArgs {
     agentMode: null,
     reap: false,
     runId: null,
+    dismissCompleted: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -129,6 +138,7 @@ function parseArgs(argv: string[]): CliArgs {
     else if (a === "--cwd" && i + 1 < argv.length) out.cwd = argv[++i];
     else if (a === "--dry-run") out.dryRun = true;
     else if (a === "--reap") out.reap = true;
+    else if (a === "--dismiss-completed") out.dismissCompleted = true;
     else if (a === "--run-id" && i + 1 < argv.length) out.runId = argv[++i];
     else if (a.startsWith("--agent-mode=")) {
       const v = a.slice("--agent-mode=".length);
@@ -568,6 +578,82 @@ function main(): void {
       `[agent-team-launcher] --reap: done. ` +
         `${totalReaped} dead pane(s) pruned across ${runIds.length} run(s).\n`
     );
+    process.exit(0);
+  }
+
+  // ── P1-4: --dismiss-completed path ────────────────────────────────────────
+  // Resolves teammates from the run's session.json, calls detectDismissible,
+  // and emits a machine-readable DISMISS line per dismissible lane. Also runs
+  // reapDeadMembers to clean up any dead panes (the "already gone" fall-through).
+  //
+  // NOTE (spec §4 known limitation): the launcher is a one-shot process, not a
+  // daemon; it cannot push dismissals mid-run. This mode is invoked by the lead
+  // when the teammate-idle hook emits an [AUTO-DISMISS] directive — the hook fires
+  // deterministically, the lead/launcher consumes it deterministically. That
+  // removes the agent's responsibility for the second step without adding a
+  // background reaper daemon (out of scope).
+  //
+  // Usage:
+  //   agent-team-launcher.ts --dismiss-completed --run-id <id> [--cwd <path>]
+  //
+  // Exit 0 always (maintenance op, never a hard failure).
+  if (args.dismissCompleted) {
+    const cwd = path.resolve(args.cwd);
+    if (!args.runId) {
+      process.stdout.write(
+        "[agent-team-launcher] --dismiss-completed: --run-id <id> is required\n"
+      );
+      process.exit(0);
+    }
+    const runId = args.runId;
+    const runDir = path.join(cwd, ".guild", "runs", runId);
+    const sjPath = sessionJsonPath(cwd, runId);
+
+    if (!fs.existsSync(sjPath)) {
+      process.stdout.write(
+        `[agent-team-launcher] --dismiss-completed: no session.json for run "${runId}"\n`
+      );
+      process.exit(0);
+    }
+
+    let sessionManifest: { teammate_panes?: Array<{ specialist: string }> };
+    try {
+      sessionManifest = JSON.parse(fs.readFileSync(sjPath, "utf8")) as typeof sessionManifest;
+    } catch {
+      process.stdout.write(
+        `[agent-team-launcher] --dismiss-completed: could not parse session.json for run "${runId}"\n`
+      );
+      process.exit(0);
+    }
+
+    const teammates = (sessionManifest.teammate_panes ?? []).map((p) => p.specialist);
+    if (teammates.length === 0) {
+      process.stdout.write(
+        `[agent-team-launcher] --dismiss-completed: run "${runId}" has no teammates\n`
+      );
+      process.exit(0);
+    }
+
+    const dismissibles = detectDismissible(runDir, teammates);
+    let dismissCount = 0;
+    for (const entry of dismissibles) {
+      if (entry.dismissible) {
+        dismissCount++;
+        process.stdout.write(
+          `[DISMISS] specialist="${entry.specialist}" task="${entry.taskId}" receipt="${entry.receiptPath}"\n`
+        );
+      }
+    }
+
+    if (dismissCount === 0) {
+      process.stdout.write(
+        `[agent-team-launcher] --dismiss-completed: no dismissible lanes found for run "${runId}"\n`
+      );
+    }
+
+    // Fall-through: reap any panes that are already dead.
+    reapDeadMembers(sjPath);
+
     process.exit(0);
   }
 

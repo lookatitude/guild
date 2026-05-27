@@ -6,7 +6,7 @@
  * Covers:
  *   checkReceipt —
  *     - missing file → exists:false, errors populated
- *     - file with all §8.2 fields, no envelope → valid (dismissible)
+ *     - file with all §8.2 fields, no envelope → INVALID (strict v2 requires fenced block)
  *     - file missing one §8.2 field → hasRequiredFields:false, errors list missing
  *     - file with valid guild.handoff.v2 envelope → envelopeValid:true
  *     - file with malformed envelope (wrong schema_version) → envelopeValid:false, error listed
@@ -224,13 +224,13 @@ describe("checkReceipt — receipt validation", () => {
     expect(r.errors).toContain("receipt file not found");
   });
 
-  it("returns valid when all §8.2 fields present and no envelope", () => {
+  it("returns invalid when fenced block absent (spec §2 condition 3 — strict v2 requires it)", () => {
     const fs = makeFs({ [P]: validReceiptMd() });
     const r = checkReceipt(P, fs);
     expect(r.exists).toBe(true);
     expect(r.hasRequiredFields).toBe(true);
-    expect(r.envelopeValid).toBeNull(); // no envelope → null, not an error
-    expect(r.errors).toHaveLength(0);
+    expect(r.envelopeValid).toBeNull(); // no block found → null
+    expect(r.errors.some((e) => e.includes("no guild.handoff.v2 fenced block"))).toBe(true);
   });
 
   it("lists missing §8.2 fields in errors", () => {
@@ -242,7 +242,7 @@ describe("checkReceipt — receipt validation", () => {
     expect(r.errors.some((e) => e.includes("evidence"))).toBe(true);
   });
 
-  it("accepts ## heading form (case-insensitive match)", () => {
+  it("accepts ## heading form (case-insensitive match) for §8.2 fields", () => {
     const content = [
       "## changed_files",
       "- foo",
@@ -257,8 +257,9 @@ describe("checkReceipt — receipt validation", () => {
     ].join("\n");
     const fs = makeFs({ [P]: content });
     const r = checkReceipt(P, fs);
+    // §8.2 fields correctly detected (envelope-absent error is separate)
     expect(r.hasRequiredFields).toBe(true);
-    expect(r.errors).toHaveLength(0);
+    expect(r.errors.some((e) => e.includes("fenced block"))).toBe(true);
   });
 
   it("accepts label: form for §8.2 fields", () => {
@@ -293,15 +294,84 @@ describe("checkReceipt — receipt validation", () => {
     expect(r.errors.some((e) => e.includes("schema_version"))).toBe(true);
   });
 
-  it("envelopeValid:null (ignored) when block is not valid JSON", () => {
+  it("envelopeValid:null + error when block is not valid JSON (spec §2 condition 3)", () => {
     const md = validReceiptMd() + "\n```guild.handoff.v2\nnot valid json\n```\n";
     const fs = makeFs({ [P]: md });
     const r = checkReceipt(P, fs);
-    // Unparseable → extractEnvelope returns null → envelopeValid stays null
+    // Block tag present but JSON.parse failed → null + specific error
     expect(r.envelopeValid).toBeNull();
-    // §8.2 fields still present → valid receipt
     expect(r.hasRequiredFields).toBe(true);
+    expect(r.errors.some((e) => e.includes("not valid JSON"))).toBe(true);
+  });
+});
+
+// ── checkReceipt — strict v2 shape validation (spec §2 hardening) ────────────
+
+describe("checkReceipt — strict v2 shape (unknown-key rejection)", () => {
+  const P = "/run/handoffs/backend-task-001.md";
+
+  it("accepts a full valid envelope with all allowed keys present", () => {
+    const md = withEnvelope(validReceiptMd(), {
+      schema_version: "guild.handoff.v2",
+      task_id: "task-001",
+      tier: "mid",
+      status: "done",
+      summary: "All done.",
+      artifacts: ["src/api.ts:1-50"],
+      issues: [],
+      learnings: ["lesson learned"],
+      notes: "optional note",
+    });
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(true);
     expect(r.errors).toHaveLength(0);
+  });
+
+  it("rejects p2-3 drift shape: JSON block with schema: key instead of schema_version:", () => {
+    // The literal p2-3 drift used `schema:` — an unknown key.
+    // Both reaping.ts and hooks/lib/handoff-v2.ts must reject this.
+    const driftEnvelope = {
+      schema: "guild.handoff.v2",
+      task_id: "p2-3",
+      tier: "mid",
+      status: "done",
+      summary: "Done.",
+      artifacts: [],
+      issues: [],
+    };
+    const md = withEnvelope(validReceiptMd(), driftEnvelope);
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    // Rejected for unknown key "schema"
+    expect(r.errors.some((e) => e.includes("unknown key"))).toBe(true);
+    expect(r.errors.some((e) => e.includes('"schema"'))).toBe(true);
+    // Also rejected for missing schema_version (undefined !== "guild.handoff.v2")
+    expect(r.errors.some((e) => e.includes("schema_version"))).toBe(true);
+  });
+
+  it("rejects envelope with an extra/misspelled key", () => {
+    const md = withEnvelope(validReceiptMd(), {
+      ...validEnvelope(),
+      schema_versoin: "typo-misspelled-key",
+    });
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("unknown key"))).toBe(true);
+    expect(r.errors.some((e) => e.includes('"schema_versoin"'))).toBe(true);
+  });
+
+  it("rejects envelope with any non-allowed extra key alongside correct schema_version", () => {
+    const md = withEnvelope(validReceiptMd(), {
+      ...validEnvelope(),
+      extra_field: "should not be here",
+    });
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes('"extra_field"'))).toBe(true);
   });
 });
 
@@ -321,7 +391,8 @@ describe("detectDismissible — A2a receipt-based dismissal signal", () => {
 
   it("returns dismissible:false when specialist has no receipt file", () => {
     // handoffs dir exists but no file for 'backend'
-    const fs = makeFs({ [`${HANDOFFS}/qa-task-001.md`]: validReceiptMd() });
+    const validMd = withEnvelope(validReceiptMd(), validEnvelope());
+    const fs = makeFs({ [`${HANDOFFS}/qa-task-001.md`]: validMd });
     const results = detectDismissible(RUN_DIR, ["backend"], fs);
     const [entry] = results;
     expect(entry.dismissible).toBe(false);
@@ -331,7 +402,7 @@ describe("detectDismissible — A2a receipt-based dismissal signal", () => {
 
   it("returns dismissible:true with path+taskId when valid receipt present", () => {
     const rPath = `${HANDOFFS}/backend-task-001.md`;
-    const fs = makeFs({ [rPath]: validReceiptMd() });
+    const fs = makeFs({ [rPath]: withEnvelope(validReceiptMd(), validEnvelope()) });
     const results = detectDismissible(RUN_DIR, ["backend"], fs);
     const [entry] = results;
     expect(entry.dismissible).toBe(true);
@@ -355,7 +426,7 @@ describe("detectDismissible — A2a receipt-based dismissal signal", () => {
     const good = `${HANDOFFS}/backend-task-002.md`;
     const fs = makeFs({
       [bad]: "# incomplete", // invalid
-      [good]: validReceiptMd(), // valid
+      [good]: withEnvelope(validReceiptMd(), validEnvelope()), // valid (has fenced block)
     });
     const results = detectDismissible(RUN_DIR, ["backend"], fs);
     const [entry] = results;
@@ -367,7 +438,7 @@ describe("detectDismissible — A2a receipt-based dismissal signal", () => {
 
   it("handles mixed teammates: some dismissible, some not", () => {
     const fs = makeFs({
-      [`${HANDOFFS}/backend-task-001.md`]: validReceiptMd(),
+      [`${HANDOFFS}/backend-task-001.md`]: withEnvelope(validReceiptMd(), validEnvelope()),
       [`${HANDOFFS}/qa-task-001.md`]: "# incomplete",
     });
     const results = detectDismissible(RUN_DIR, ["backend", "qa", "architect"], fs);
@@ -402,6 +473,55 @@ describe("detectDismissible — A2a receipt-based dismissal signal", () => {
     const fs = makeFs();
     const results = detectDismissible(RUN_DIR, [], fs);
     expect(results).toHaveLength(0);
+  });
+
+  it("dismissible:false for frontmatter-only receipt (§8.2 present, no fenced block) — matches hook reject verdict", () => {
+    // This is the literal p2-3 scenario: §8.2 sections present but no fenced JSON block.
+    // The hook validator rejects it (no fenced block); reaping must agree (fail-closed).
+    const frontmatterOnly = [
+      "---",
+      "schema: guild.handoff.v2",
+      "task_id: p2-3",
+      "---",
+      "",
+      "## changed_files",
+      "- src/api.ts",
+      "",
+      "## opens_for",
+      "- qa",
+      "",
+      "## assumptions",
+      "- none",
+      "",
+      "## evidence",
+      "- tests pass",
+      "",
+      "## followups",
+      "- none",
+    ].join("\n");
+    const rPath = `${HANDOFFS}/backend-p2-3.md`;
+    const fsMod = makeFs({ [rPath]: frontmatterOnly });
+    const [entry] = detectDismissible(RUN_DIR, ["backend"], fsMod);
+    expect(entry.dismissible).toBe(false);
+    expect(entry.errors.some((e) => e.includes("fenced block"))).toBe(true);
+  });
+
+  it("dismissible:false when envelope uses p2-3 drift key schema: instead of schema_version:", () => {
+    const rPath = `${HANDOFFS}/backend-p2-3.md`;
+    const driftMd = withEnvelope(validReceiptMd(), {
+      schema: "guild.handoff.v2",
+      task_id: "p2-3",
+      tier: "mid",
+      status: "done",
+      summary: "Done.",
+      artifacts: [],
+      issues: [],
+    });
+    const fsMod = makeFs({ [rPath]: driftMd });
+    const [entry] = detectDismissible(RUN_DIR, ["backend"], fsMod);
+    expect(entry.dismissible).toBe(false);
+    expect(entry.errors.some((e) => e.includes("unknown key"))).toBe(true);
+    expect(entry.errors.some((e) => e.includes('"schema"'))).toBe(true);
   });
 });
 

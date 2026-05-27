@@ -83,6 +83,8 @@ interface NudgeContext {
   invalidReceiptTaskIds: string[];
   /** Task IDs whose receipt exists and has a valid guild.handoff.v2 envelope. */
   validReceiptTaskIds: string[];
+  /** Full assessments for valid receipts (carries receiptPath + envelopeStatus). */
+  validReceipts: ReceiptAssessment[];
   runDir: string;
 }
 
@@ -102,6 +104,8 @@ interface ReceiptAssessment {
   /** True iff the receipt contains a valid guild.handoff.v2 envelope. */
   envelopeValid: boolean;
   envelopeErrors: string[];
+  /** Status from the validated envelope (present only when envelopeValid is true). */
+  envelopeStatus?: string;
 }
 
 /**
@@ -130,6 +134,7 @@ function assessReceipts(runDir: string, teammate: string): ReceiptAssessment[] {
     const rPath = path.join(handoffsDir, file);
     let envelopeValid = false;
     let envelopeErrors: string[] = [];
+    let envelopeStatus: string | undefined;
     try {
       const content = fs.readFileSync(rPath, "utf8");
       const rawEnvelope = extractHandoffEnvelope(content);
@@ -137,6 +142,10 @@ function assessReceipts(runDir: string, teammate: string): ReceiptAssessment[] {
         const result = validateHandoffV2(rawEnvelope);
         envelopeValid = result.valid;
         envelopeErrors = result.errors;
+        if (result.valid) {
+          const env = rawEnvelope as Record<string, unknown>;
+          envelopeStatus = typeof env["status"] === "string" ? env["status"] : undefined;
+        }
       } else {
         envelopeErrors = ["no guild.handoff.v2 envelope found in receipt"];
       }
@@ -145,7 +154,7 @@ function assessReceipts(runDir: string, teammate: string): ReceiptAssessment[] {
         `could not read receipt: ${err instanceof Error ? err.message : String(err)}`,
       ];
     }
-    results.push({ taskId, receiptPath: rPath, envelopeValid, envelopeErrors });
+    results.push({ taskId, receiptPath: rPath, envelopeValid, envelopeErrors, envelopeStatus });
   }
   return results;
 }
@@ -229,15 +238,27 @@ function composeNudge(ctx: NudgeContext): string {
   // Receipt present + valid envelope = safe-to-dismiss.  The launcher (P1-3)
   // keys off the [LANE-COMPLETE] sentinel.  Always exit-0 — non-gating.
   if (hasValid && !hasPending && !hasInvalid) {
-    const receipts = ctx.validReceiptTaskIds
-      .map((tid) => `${ctx.runDir}/handoffs/${ctx.teammate}-${tid}.md`)
-      .join(", ");
+    const receipts = ctx.validReceipts.map((r) => r.receiptPath).join(", ");
+    const pointerLines = ctx.validReceipts
+      .map(
+        (r) =>
+          `done · ${r.taskId} · status:${r.envelopeStatus ?? "done"} · receipt:${r.receiptPath}`
+      )
+      .join("\n");
+    const dismissLines = ctx.validReceipts
+      .map(
+        (r) =>
+          `[AUTO-DISMISS] teammate="${ctx.teammate}" team="${ctx.teamName}" reason=valid-receipt task=${r.taskId}`
+      )
+      .join("\n");
     return (
       `[TeammateIdle ${timestamp}] ` +
       `[LANE-COMPLETE] teammate="${ctx.teammate}" team="${ctx.teamName}" ` +
       `status=safe-to-dismiss\n` +
       `${livenessLine}\n` +
       `Valid guild.handoff.v2 receipt(s) confirmed: ${receipts}\n` +
+      `${pointerLines}\n` +
+      `${dismissLines}\n` +
       `The launcher may safely dismiss this pane.\n`
     );
   }
@@ -254,7 +275,10 @@ function composeNudge(ctx: NudgeContext): string {
       `${livenessLine}\n` +
       `write your guild.handoff.v2 receipt to ${paths}; do not paste it in chat.\n` +
       `Required sections: changed_files, opens_for, assumptions, evidence, followups.\n` +
-      `Include a \`\`\`guild.handoff.v2 { ... }\`\`\` envelope block.\n` +
+      `Required format: a strict fenced JSON block (the envelope is JSON inside the fenced block, NOT YAML frontmatter; a frontmatter-only receipt is rejected):\n` +
+      `\`\`\`guild.handoff.v2\n` +
+      `{ "schema_version": "guild.handoff.v2", "task_id": "...", "tier": "cheap|mid|powerful", "status": "done|blocked|escalate", "summary": "...", "artifacts": [], "issues": [] }\n` +
+      `\`\`\`\n` +
       `Or, if still working, update the structured heartbeat at ` +
       `${ctx.runDir}/in-progress/${ctx.teammate}.json ` +
       `({ timestamp, step, pct_complete, last_action }) to signal progress.\n`
@@ -272,7 +296,10 @@ function composeNudge(ctx: NudgeContext): string {
       `guild.handoff.v2 envelope is missing or invalid.\n` +
       `${livenessLine}\n` +
       `write your guild.handoff.v2 receipt to ${paths}; do not paste it in chat.\n` +
-      `Add a valid \`\`\`guild.handoff.v2 { ... }\`\`\` envelope block with all required fields.\n`
+      `Required format: a strict fenced JSON block (the envelope is JSON inside the fenced block, NOT YAML frontmatter; a frontmatter-only receipt is rejected):\n` +
+      `\`\`\`guild.handoff.v2\n` +
+      `{ "schema_version": "guild.handoff.v2", "task_id": "...", "tier": "cheap|mid|powerful", "status": "done|blocked|escalate", "summary": "...", "artifacts": [], "issues": [] }\n` +
+      `\`\`\`\n`
     );
   }
 
@@ -286,7 +313,10 @@ function composeNudge(ctx: NudgeContext): string {
     `If you have an active task, write your guild.handoff.v2 receipt to ` +
     `${ctx.runDir}/handoffs/${ctx.teammate}-${taskIdHint}.md; do not paste it in chat.\n` +
     `Required sections: changed_files, opens_for, assumptions, evidence, followups.\n` +
-    `Include a \`\`\`guild.handoff.v2 { ... }\`\`\` envelope block.\n` +
+    `Required format: a strict fenced JSON block (the envelope is JSON inside the fenced block, NOT YAML frontmatter; a frontmatter-only receipt is rejected):\n` +
+    `\`\`\`guild.handoff.v2\n` +
+    `{ "schema_version": "guild.handoff.v2", "task_id": "...", "tier": "cheap|mid|powerful", "status": "done|blocked|escalate", "summary": "...", "artifacts": [], "issues": [] }\n` +
+    `\`\`\`\n` +
     `Heartbeat path: ${ctx.runDir}/in-progress/${ctx.teammate}.json ` +
     `({ timestamp, step, pct_complete, last_action }).\n` +
     `If all tasks are complete, no action is needed.\n`
@@ -353,6 +383,8 @@ async function main(): Promise<void> {
       `ageMs=${liveness.ageMs ?? "n/a"} timeoutMs=${timeoutMs}\n`
   );
 
+  const validReceipts = receiptAssessments.filter((r) => r.envelopeValid);
+
   const ctx: NudgeContext = {
     teammate,
     teamName,
@@ -362,6 +394,7 @@ async function main(): Promise<void> {
     pendingTaskIds,
     invalidReceiptTaskIds,
     validReceiptTaskIds,
+    validReceipts,
     runDir,
   };
 

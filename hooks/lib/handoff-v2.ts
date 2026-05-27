@@ -64,6 +64,23 @@ export const NOTES_MAX_CHARS = 200;
 const VALID_TIERS = new Set<string>(["cheap", "mid", "powerful"]);
 const VALID_STATUSES = new Set<string>(["done", "blocked", "escalate"]);
 
+/**
+ * Exhaustive allowed top-level key set (spec §2). Any key not in this set is
+ * rejected — catches `schema:` (p2-3 drift) and any misspelled/extra key.
+ */
+export const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
+  "schema_version",
+  "task_id",
+  "tier",
+  "status",
+  "summary",
+  "artifacts",
+  "issues",
+  "escalate_reason",
+  "learnings",
+  "notes",
+]);
+
 // ── Validation result ──────────────────────────────────────────────────────
 
 export interface ValidationResult {
@@ -90,6 +107,15 @@ export function validateHandoffV2(value: unknown): ValidationResult {
   }
 
   const obj = value as Record<string, unknown>;
+
+  // Unknown-key rejection — strict guild.handoff.v2 (spec §2)
+  for (const k of Object.keys(obj)) {
+    if (!ALLOWED_TOP_LEVEL_KEYS.has(k)) {
+      errors.push(
+        `unknown key "${k}" — strict guild.handoff.v2 rejects extra/misspelled keys`
+      );
+    }
+  }
 
   // schema_version
   if (obj["schema_version"] !== "guild.handoff.v2") {

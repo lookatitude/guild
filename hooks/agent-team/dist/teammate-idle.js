@@ -58,12 +58,31 @@ var SUMMARY_MAX_CHARS = 600;
 var NOTES_MAX_CHARS = 200;
 var VALID_TIERS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
 var VALID_STATUSES = /* @__PURE__ */ new Set(["done", "blocked", "escalate"]);
+var ALLOWED_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
+  "schema_version",
+  "task_id",
+  "tier",
+  "status",
+  "summary",
+  "artifacts",
+  "issues",
+  "escalate_reason",
+  "learnings",
+  "notes"
+]);
 function validateHandoffV2(value) {
   const errors = [];
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { valid: false, errors: ["envelope must be a non-null object"] };
   }
   const obj = value;
+  for (const k of Object.keys(obj)) {
+    if (!ALLOWED_TOP_LEVEL_KEYS.has(k)) {
+      errors.push(
+        `unknown key "${k}" \u2014 strict guild.handoff.v2 rejects extra/misspelled keys`
+      );
+    }
+  }
   if (obj["schema_version"] !== "guild.handoff.v2") {
     errors.push(
       `schema_version must be "guild.handoff.v2"; got ${JSON.stringify(obj["schema_version"])}`
@@ -250,6 +269,7 @@ function assessReceipts(runDir, teammate) {
     const rPath = path3.join(handoffsDir, file);
     let envelopeValid = false;
     let envelopeErrors = [];
+    let envelopeStatus;
     try {
       const content = fs3.readFileSync(rPath, "utf8");
       const rawEnvelope = extractHandoffEnvelope(content);
@@ -257,6 +277,10 @@ function assessReceipts(runDir, teammate) {
         const result = validateHandoffV2(rawEnvelope);
         envelopeValid = result.valid;
         envelopeErrors = result.errors;
+        if (result.valid) {
+          const env = rawEnvelope;
+          envelopeStatus = typeof env["status"] === "string" ? env["status"] : void 0;
+        }
       } else {
         envelopeErrors = ["no guild.handoff.v2 envelope found in receipt"];
       }
@@ -265,7 +289,7 @@ function assessReceipts(runDir, teammate) {
         `could not read receipt: ${err instanceof Error ? err.message : String(err)}`
       ];
     }
-    results.push({ taskId, receiptPath: rPath, envelopeValid, envelopeErrors });
+    results.push({ taskId, receiptPath: rPath, envelopeValid, envelopeErrors, envelopeStatus });
   }
   return results;
 }
@@ -307,10 +331,18 @@ function composeNudge(ctx) {
   const hasInvalid = ctx.invalidReceiptTaskIds.length > 0;
   const hasValid = ctx.validReceiptTaskIds.length > 0;
   if (hasValid && !hasPending && !hasInvalid) {
-    const receipts = ctx.validReceiptTaskIds.map((tid) => `${ctx.runDir}/handoffs/${ctx.teammate}-${tid}.md`).join(", ");
+    const receipts = ctx.validReceipts.map((r) => r.receiptPath).join(", ");
+    const pointerLines = ctx.validReceipts.map(
+      (r) => `done \xB7 ${r.taskId} \xB7 status:${r.envelopeStatus ?? "done"} \xB7 receipt:${r.receiptPath}`
+    ).join("\n");
+    const dismissLines = ctx.validReceipts.map(
+      (r) => `[AUTO-DISMISS] teammate="${ctx.teammate}" team="${ctx.teamName}" reason=valid-receipt task=${r.taskId}`
+    ).join("\n");
     return `[TeammateIdle ${timestamp}] [LANE-COMPLETE] teammate="${ctx.teammate}" team="${ctx.teamName}" status=safe-to-dismiss
 ${livenessLine}
 Valid guild.handoff.v2 receipt(s) confirmed: ${receipts}
+${pointerLines}
+${dismissLines}
 The launcher may safely dismiss this pane.
 `;
   }
@@ -320,7 +352,10 @@ The launcher may safely dismiss this pane.
 ${livenessLine}
 write your guild.handoff.v2 receipt to ${paths}; do not paste it in chat.
 Required sections: changed_files, opens_for, assumptions, evidence, followups.
-Include a \`\`\`guild.handoff.v2 { ... }\`\`\` envelope block.
+Required format: a strict fenced JSON block (the envelope is JSON inside the fenced block, NOT YAML frontmatter; a frontmatter-only receipt is rejected):
+\`\`\`guild.handoff.v2
+{ "schema_version": "guild.handoff.v2", "task_id": "...", "tier": "cheap|mid|powerful", "status": "done|blocked|escalate", "summary": "...", "artifacts": [], "issues": [] }
+\`\`\`
 Or, if still working, update the structured heartbeat at ${ctx.runDir}/in-progress/${ctx.teammate}.json ({ timestamp, step, pct_complete, last_action }) to signal progress.
 `;
   }
@@ -329,7 +364,10 @@ Or, if still working, update the structured heartbeat at ${ctx.runDir}/in-progre
     return `[TeammateIdle ${timestamp}] Teammate "${ctx.teammate}" (team: "${ctx.teamName}") has a receipt but the guild.handoff.v2 envelope is missing or invalid.
 ${livenessLine}
 write your guild.handoff.v2 receipt to ${paths}; do not paste it in chat.
-Add a valid \`\`\`guild.handoff.v2 { ... }\`\`\` envelope block with all required fields.
+Required format: a strict fenced JSON block (the envelope is JSON inside the fenced block, NOT YAML frontmatter; a frontmatter-only receipt is rejected):
+\`\`\`guild.handoff.v2
+{ "schema_version": "guild.handoff.v2", "task_id": "...", "tier": "cheap|mid|powerful", "status": "done|blocked|escalate", "summary": "...", "artifacts": [], "issues": [] }
+\`\`\`
 `;
   }
   const taskIdHint = process.env["GUILD_TASK_ID"] ?? "<task-id>";
@@ -337,7 +375,10 @@ Add a valid \`\`\`guild.handoff.v2 { ... }\`\`\` envelope block with all require
 ${livenessLine}
 If you have an active task, write your guild.handoff.v2 receipt to ${ctx.runDir}/handoffs/${ctx.teammate}-${taskIdHint}.md; do not paste it in chat.
 Required sections: changed_files, opens_for, assumptions, evidence, followups.
-Include a \`\`\`guild.handoff.v2 { ... }\`\`\` envelope block.
+Required format: a strict fenced JSON block (the envelope is JSON inside the fenced block, NOT YAML frontmatter; a frontmatter-only receipt is rejected):
+\`\`\`guild.handoff.v2
+{ "schema_version": "guild.handoff.v2", "task_id": "...", "tier": "cheap|mid|powerful", "status": "done|blocked|escalate", "summary": "...", "artifacts": [], "issues": [] }
+\`\`\`
 Heartbeat path: ${ctx.runDir}/in-progress/${ctx.teammate}.json ({ timestamp, step, pct_complete, last_action }).
 If all tasks are complete, no action is needed.
 `;
@@ -380,6 +421,7 @@ async function main() {
     `[teammate-idle] INFO: teammate="${teammate}" assigned=[${assignedIds.join(",")}] validReceipts=[${validReceiptTaskIds.join(",")}] invalidReceipts=[${invalidReceiptTaskIds.join(",")}] pending=[${pendingTaskIds.join(",")}] liveness=${liveness.source}/${liveness.fresh ? "fresh" : "stale"} ageMs=${liveness.ageMs ?? "n/a"} timeoutMs=${timeoutMs}
 `
   );
+  const validReceipts = receiptAssessments.filter((r) => r.envelopeValid);
   const ctx = {
     teammate,
     teamName,
@@ -389,6 +431,7 @@ async function main() {
     pendingTaskIds,
     invalidReceiptTaskIds,
     validReceiptTaskIds,
+    validReceipts,
     runDir
   };
   process.stdout.write(composeNudge(ctx));

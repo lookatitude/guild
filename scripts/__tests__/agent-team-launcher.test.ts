@@ -784,4 +784,112 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).toMatch(/codex exec/);
     });
   });
+
+  // ─────────────────────────────────────────────────────────────
+  // --dismiss-completed (P1-4 auto-dismiss loop)
+  // ─────────────────────────────────────────────────────────────
+  describe("--dismiss-completed", () => {
+    function validReceiptContent(): string {
+      return [
+        "# Handoff",
+        "",
+        "## changed_files",
+        "- src/api.ts",
+        "",
+        "## opens_for",
+        "- qa",
+        "",
+        "## assumptions",
+        "- DB available",
+        "",
+        "## evidence",
+        "- tests pass",
+        "",
+        "## followups",
+        "- add index",
+        "",
+        "```guild.handoff.v2",
+        JSON.stringify({
+          schema_version: "guild.handoff.v2",
+          task_id: "task-001",
+          tier: "mid",
+          status: "done",
+          summary: "Done.",
+          artifacts: [],
+          issues: [],
+        }, null, 2),
+        "```",
+      ].join("\n");
+    }
+
+    function writeSessionJson(cwd: string, runId: string, specialists: string[]): void {
+      const dir = path.join(cwd, ".guild", "runs", runId, "agent-team");
+      fs.mkdirSync(dir, { recursive: true });
+      const manifest = {
+        run_id: runId,
+        teammate_panes: specialists.map((s) => ({
+          specialist: s,
+          pane_id: "(dry-run: not spawned)",
+          host_kind: "claude",
+          adapter_version: "1",
+        })),
+      };
+      fs.writeFileSync(path.join(dir, "session.json"), JSON.stringify(manifest, null, 2), "utf8");
+    }
+
+    function writeHandoffReceipt(cwd: string, runId: string, specialist: string, taskId: string): void {
+      const dir = path.join(cwd, ".guild", "runs", runId, "handoffs");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${specialist}-${taskId}.md`), validReceiptContent(), "utf8");
+    }
+
+    it("exits 0 and prints [DISMISS] line when a lane has a valid receipt", () => {
+      const runId = "run-dismiss-test-001";
+      writeSessionJson(tmpDir, runId, ["backend"]);
+      writeHandoffReceipt(tmpDir, runId, "backend", "task-001");
+
+      const { exitCode, stdout } = runScript([
+        "--dismiss-completed",
+        "--run-id", runId,
+        "--cwd", tmpDir,
+      ]);
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/\[DISMISS\]/);
+      expect(stdout).toMatch(/specialist="backend"/);
+      expect(stdout).toMatch(/task="task-001"/);
+    });
+
+    it("exits 0 with no crash when session.json does not exist", () => {
+      const { exitCode, stdout, stderr } = runScript([
+        "--dismiss-completed",
+        "--run-id", "run-nonexistent-999",
+        "--cwd", tmpDir,
+      ]);
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toBe("");
+      expect(stdout).toMatch(/no session\.json/);
+    });
+
+    it("exits 0 when --run-id is not provided", () => {
+      const { exitCode } = runScript(["--dismiss-completed", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+    });
+
+    it("does not print [DISMISS] when receipt is missing for the lane", () => {
+      const runId = "run-dismiss-test-002";
+      writeSessionJson(tmpDir, runId, ["backend"]);
+      // No handoff receipt written
+
+      const { exitCode, stdout } = runScript([
+        "--dismiss-completed",
+        "--run-id", runId,
+        "--cwd", tmpDir,
+      ]);
+
+      expect(exitCode).toBe(0);
+      expect(stdout).not.toMatch(/\[DISMISS\]/);
+    });
+  });
 });
