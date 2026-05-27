@@ -65,6 +65,13 @@ import {
   type HostKind,
   type RemoteHostTarget,
 } from "./lib/team-backend";
+// P1-3 A2a/A2b: dismissible detection + force-reap of dead panes.
+import {
+  detectDismissible,
+  reapDeadMembers,
+  sessionJsonPath,
+  listRunnableRunIds,
+} from "./lib/reaping";
 // CH-1/CH-2: mixed-host pane adapters (claude + codex) for a mixed `host:` team.
 import { resolveAdapter } from "./lib/pane-adapter";
 // CH-1: route each specialist to its backend (local tmux vs remote) via the
@@ -87,6 +94,18 @@ interface CliArgs {
   dryRun: boolean;
   /** Explicit agent_mode override (D5). null = not provided → use team.yaml backend check (old behavior). */
   agentMode: "team" | "agent" | "subagent" | "auto" | null;
+  /**
+   * P1-3 A2b: force-reap dead members from the team registry.
+   * When set, skip the normal launch path and run reapDeadMembers for the
+   * specified run (--run-id) or all runs under <cwd>/.guild/runs/ that have a
+   * session.json.  Exits 0 on completion.
+   */
+  reap: boolean;
+  /**
+   * P1-3: explicit run ID (used with --reap or future ops).
+   * null = not provided; callers may default to scanning all runs.
+   */
+  runId: string | null;
 }
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
@@ -94,13 +113,23 @@ interface CliArgs {
 const VALID_AGENT_MODE_VALUES = new Set(["team", "agent", "subagent", "auto"]);
 
 function parseArgs(argv: string[]): CliArgs {
-  const out: CliArgs = { team: null, sessionName: null, cwd: ".", dryRun: false, agentMode: null };
+  const out: CliArgs = {
+    team: null,
+    sessionName: null,
+    cwd: ".",
+    dryRun: false,
+    agentMode: null,
+    reap: false,
+    runId: null,
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--team" && i + 1 < argv.length) out.team = argv[++i];
     else if (a === "--session-name" && i + 1 < argv.length) out.sessionName = argv[++i];
     else if (a === "--cwd" && i + 1 < argv.length) out.cwd = argv[++i];
     else if (a === "--dry-run") out.dryRun = true;
+    else if (a === "--reap") out.reap = true;
+    else if (a === "--run-id" && i + 1 < argv.length) out.runId = argv[++i];
     else if (a.startsWith("--agent-mode=")) {
       const v = a.slice("--agent-mode=".length);
       if (VALID_AGENT_MODE_VALUES.has(v)) out.agentMode = v as CliArgs["agentMode"];
@@ -482,6 +511,65 @@ function resolveAgentMode(explicit: AgentModeExplicit | null, dryRun: boolean): 
 
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
+
+  // ── P1-3 A2b: --reap path ──────────────────────────────────────────────────
+  // When --reap is passed, skip the normal launch flow and force-reap dead
+  // members from the session registry.  Requires --cwd (defaults to ".").
+  // Optionally scoped to a single run via --run-id; without it, all runs that
+  // have a session.json are checked.
+  //
+  // Usage:
+  //   agent-team-launcher.ts --reap --cwd /path/to/repo [--run-id run-2026-...]
+  //
+  // Exit 0 always (reaping is a maintenance op, never a hard failure).
+  if (args.reap) {
+    const cwd = path.resolve(args.cwd);
+    const runIds: string[] = args.runId
+      ? [args.runId]
+      : listRunnableRunIds(cwd);
+
+    if (runIds.length === 0) {
+      process.stdout.write(
+        "[agent-team-launcher] --reap: no runs with session.json found " +
+          `under ${path.join(cwd, ".guild", "runs")}\n`
+      );
+      process.exit(0);
+    }
+
+    let totalReaped = 0;
+    for (const runId of runIds) {
+      const sjPath = sessionJsonPath(cwd, runId);
+      if (!fs.existsSync(sjPath)) continue;
+
+      const result = reapDeadMembers(sjPath);
+      if (result.reaped.length > 0) {
+        totalReaped += result.reaped.length;
+        process.stdout.write(
+          `[agent-team-launcher] --reap: run "${runId}" — reaped ${result.reaped.length} ` +
+            `dead pane(s): [${result.reaped.join(", ")}]; ` +
+            `live: [${result.live.join(", ") || "none"}]; ` +
+            `skipped: [${result.skipped.join(", ") || "none"}]; ` +
+            `session.json ${result.updated ? "updated" : "NOT updated (write failed)"}\n`
+        );
+      } else if (result.skipped.length > 0) {
+        process.stdout.write(
+          `[agent-team-launcher] --reap: run "${runId}" — all panes skipped ` +
+            `(dry-run placeholders or tmux unavailable): [${result.skipped.join(", ")}]\n`
+        );
+      } else {
+        process.stdout.write(
+          `[agent-team-launcher] --reap: run "${runId}" — all panes live ` +
+            `[${result.live.join(", ") || "none"}]; nothing to reap.\n`
+        );
+      }
+    }
+
+    process.stdout.write(
+      `[agent-team-launcher] --reap: done. ` +
+        `${totalReaped} dead pane(s) pruned across ${runIds.length} run(s).\n`
+    );
+    process.exit(0);
+  }
 
   if (!args.team) {
     process.stderr.write(

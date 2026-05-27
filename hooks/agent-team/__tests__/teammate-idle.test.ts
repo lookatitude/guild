@@ -110,6 +110,140 @@ describe("teammate-idle.ts", () => {
     });
   });
 
+  // ── Receipt-channel enforcement — R4a / P1-2 ────────────────────────────────
+
+  describe("receipt-channel enforcement (R4a / P1-2)", () => {
+    /** Write a receipt markdown, optionally with a guild.handoff.v2 envelope. */
+    function writeReceipt(
+      runDir: string,
+      teammate: string,
+      taskId: string,
+      envelope?: object
+    ): string {
+      const handoffsDir = path.join(runDir, "handoffs");
+      fs.mkdirSync(handoffsDir, { recursive: true });
+      let content =
+        `# Handoff Receipt\n\n` +
+        `## changed_files\n- test.ts\n\n` +
+        `## opens_for\n- none\n\n` +
+        `## assumptions\n- test\n\n` +
+        `## evidence\n- tested\n\n` +
+        `## followups\n- none\n`;
+      if (envelope) {
+        content += `\n\`\`\`guild.handoff.v2\n${JSON.stringify(envelope, null, 2)}\n\`\`\`\n`;
+      }
+      const filePath = path.join(handoffsDir, `${teammate}-${taskId}.md`);
+      fs.writeFileSync(filePath, content);
+      return filePath;
+    }
+
+    const VALID_ENVELOPE = {
+      schema_version: "guild.handoff.v2",
+      task_id: "task-001",
+      tier: "mid",
+      status: "done",
+      summary: "Implemented the auth endpoints and tests.",
+      artifacts: ["src/auth.ts:1-80"],
+      issues: [],
+    };
+
+    it("emits [LANE-COMPLETE] / safe-to-dismiss when receipt has a valid guild.handoff.v2 envelope", () => {
+      const runId = "run-sess-receipt-valid";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      writeReceipt(runDir, "backend", "task-001", VALID_ENVELOPE);
+
+      const { exitCode, stdout } = runScript(
+        {
+          session_id: "sess-receipt-valid",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(exitCode).toBe(0); // always exits 0
+      expect(stdout).toMatch(/\[LANE-COMPLETE\]/);
+      expect(stdout).toMatch(/safe-to-dismiss/);
+      expect(stdout).toMatch(/backend-task-001\.md/);
+    });
+
+    it("emits 'do not paste it in chat' nudge when no receipt exists (no plan)", () => {
+      const { exitCode, stdout } = runScript(
+        {
+          session_id: "sess-no-receipt",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/do not paste it in chat/i);
+      expect(stdout).not.toMatch(/\[LANE-COMPLETE\]/);
+    });
+
+    it("includes GUILD_TASK_ID in the nudge path when set and receipt is missing", () => {
+      const runId = "run-sess-taskid";
+      const { stdout } = runScript(
+        {
+          session_id: "sess-taskid",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        {
+          CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
+          GUILD_TASK_ID: "task-007",
+          GUILD_RUN_ID: runId,
+        }
+      );
+      expect(stdout).toMatch(/task-007/);
+      expect(stdout).toMatch(/do not paste it in chat/i);
+    });
+
+    it("emits 'do not paste in chat' nudge when receipt exists but has no guild.handoff.v2 envelope", () => {
+      const runId = "run-sess-no-envelope";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      // Write receipt WITHOUT a guild.handoff.v2 envelope block
+      writeReceipt(runDir, "backend", "task-001" /* no envelope */);
+
+      const { exitCode, stdout } = runScript(
+        {
+          session_id: "sess-no-envelope",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/do not paste it in chat/i);
+      expect(stdout).not.toMatch(/\[LANE-COMPLETE\]/);
+    });
+
+    it("still always exits 0 with a valid receipt (non-gating)", () => {
+      const runId = "run-sess-exits0";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      writeReceipt(runDir, "qa", "task-002", VALID_ENVELOPE);
+
+      const { exitCode } = runScript(
+        {
+          session_id: "sess-exits0",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "qa",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(exitCode).toBe(0);
+    });
+  });
+
   describe("structured heartbeat liveness (ADR-RE-3)", () => {
     function writeHeartbeat(runId: string, teammate: string, record: object): void {
       const hbDir = path.join(tmpDir, ".guild", "runs", runId, "in-progress");

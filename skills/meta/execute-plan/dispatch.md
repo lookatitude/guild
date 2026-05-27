@@ -48,6 +48,69 @@ The lane's resolved tier (`guild:execute-plan §"Tier resolution"`; ADR §2) map
 
 Every lane is dispatched as an **ephemeral one-agent-per-task** agent (ADR §6) — spawn → work → extract → dismiss — on whatever backend `team.yaml` records. Concurrent lanes get **distinct** agents (never shared, SC-8); on receipt the agent's `learnings[]` are extracted and the agent terminates (no idle agents persist). This lifecycle is orthogonal to the backend table above: it applies identically whether the backend is team, agent, or subagent. Caches are model-specific, so a tier switch uses a separate agent process — which the per-task lifecycle gives for free (ADR §9).
 
+The agent's **final action** in this lifecycle is writing its receipt file — see `## Handoff protocol` below for the single-channel protocol that every brief carries.
+
+## Handoff protocol (canonical — inject verbatim into every agent brief)
+
+**Implements `docs/knowledge/implementation/agent-reliability-and-evolution-plan.md` §3 Track R (R1/R2/R3/R5) + A1/A3. Fixes flaws F1 (idle without handoff), F2 (dual-channel envelope), F4 (output-cap failure), F6 (cwd/path ambiguity).**
+
+The file-based handoff design is correct; this section makes it **enforced and single-channel on every backend**. Every §task§agent writes its `guild.handoff.v2` envelope to a receipt file as its final action — never to chat, never to SendMessage body. The lead reads receipt files (deterministic); SendMessage is a liveness ping only.
+
+### Protocol rules (normative)
+
+- **R1 — Receipt file is the single source of truth, every backend.** Every §task§agent — whether dispatched via agent-team (tmux pane), in-process Agent(), or subagent — writes its `guild.handoff.v2` envelope to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` as its **final action**. Envelope schema: `docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5` (bound by pointer — never re-spelled here). One format, one location, always.
+- **R2 — SendMessage is a one-line pointer; pasting the envelope is forbidden.** In team/pane mode: after the receipt file is written, send exactly one line via SendMessage: `done · <task-id> · status:<done|blocked|escalate> · receipt:<absolute-path>`. Nothing else. **Pasting the envelope text into chat or into the SendMessage body is explicitly forbidden** — this is the dual-channel defect (F2): two copies in two shapes, neither authoritative. The lead never reads handoff content from chat.
+- **R3 — The lead reads receipt files; it never parses chat.** The orchestrator collects handoffs by reading receipt files (deterministic). SendMessage is a liveness signal; the lead checks the file, not the message body. This removes the "did it send the envelope?" non-determinism (F1).
+
+### Canonical prompt injection block (R5)
+
+**Copy the block below verbatim into every agent's prompt before dispatch.** Substitute `<RECEIPT_PATH>` and `<TASK_ID>` with the values for this lane. Do **not** paraphrase or rewrite it per-brief — per-brief rewording is the root cause of F1/F2 and must not recur.
+
+```
+---
+HANDOFF PROTOCOL (mandatory — all backends)
+
+Your final action is writing your guild.handoff.v2 envelope to the receipt file.
+Receipt path (absolute): <RECEIPT_PATH>
+Schema pointer: docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5
+  (Read the schema from that source. Do NOT re-spell or summarise it here.)
+
+STEP 1 — Write the receipt file via the Write/file tool using the absolute path above.
+STEP 2 — Team/pane mode only: after the file is written, send exactly ONE SendMessage:
+            done · <TASK_ID> · status:<done|blocked|escalate> · receipt:<RECEIPT_PATH>
+          Nothing else. NEVER paste the envelope into chat or response text.
+          The lead reads the file — not the chat — so chat content is ignored anyway.
+STEP 3 — Subagent/in-process mode: writing the file is your final action. No SendMessage needed.
+
+OUTPUT-CAP GUARD: Large artifacts (SVGs, generated source files, long configs) must be written
+via the Write/file tool in structural sections — never emitted as one inline response. Budget:
+≤500 lines per write call; for larger files use multiple calls (scaffold → fill sections →
+close). Emitting a large file inline and hitting the 32k output-token cap writes nothing and
+is an unrecoverable total lane loss.
+
+ABSOLUTE-PATH RULE: All cross-repo and umbrella paths — in this brief and in your output
+artifacts — are absolute. Never assume a relative path resolves correctly across worktrees or
+repo boundaries.
+---
+```
+
+### Orchestrator injection mechanics
+
+Before spawning each lane's agent, substitute in the canonical block:
+
+- `<RECEIPT_PATH>` → absolute path: `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`
+- `<TASK_ID>` → the lane's `task_id` from the plan
+
+Then inject:
+
+| Backend | Injection point |
+|---|---|
+| **Subagent** (`Agent()`) | Append verbatim block to the end of the `prompt` passed to `Agent()`. |
+| **Agent-team** (tmux pane) | Include block in the pane's initial system prompt; the launcher injects it at pane spawn before the task brief. |
+| **In-process** (`result.dispatchPlan`) | Append to each descriptor's `prompt` in `dispatchPlan`, same as subagent. |
+
+The block must appear in every brief without modification. If you find yourself rewriting it per-brief, that is the F1/F2 drift pattern recurring — stop and use the canonical block verbatim.
+
 ## Self-build dev-team routing
 
 When the target repo IS the Guild plugin itself (self-build), `team.yaml` is composed from the **dev-team agents under `.claude/agents/`** — `plugin-architect, skill-author, specialist-agent-writer, command-builder, hook-engineer, tooling-engineer, docs-writer, eval-engineer` — each owning a plugin path-slice (see `CLAUDE.md §"Dev team"`). The 14 `guild:` product specialists build *user* products; they are NOT the self-build team. Route by changed path:

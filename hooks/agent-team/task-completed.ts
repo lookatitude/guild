@@ -53,7 +53,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
-import { validateHandoffV2, HandoffV2 } from "../lib/handoff-v2.js";
+import { validateHandoffV2, extractHandoffEnvelope, HandoffV2 } from "../lib/handoff-v2.js";
 import {
   upsertLane,
   LaneStatus,
@@ -137,26 +137,10 @@ function missingFields(content: string): string[] {
   });
 }
 
-/**
- * Extract `guild.handoff.v2` envelope from a markdown receipt if present.
- * Looks for a fenced JSON block tagged with `guild.handoff.v2`.
- *
- * ```guild.handoff.v2
- * { ... }
- * ```
- *
- * Returns the parsed value or null if no such block is found.
- */
-function extractHandoffEnvelope(content: string): unknown | null {
-  const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/;
-  const match = pattern.exec(content);
-  if (!match || !match[1]) return null;
-  try {
-    return JSON.parse(match[1].trim());
-  } catch {
-    return null;
-  }
-}
+// extractHandoffEnvelope imported from hooks/lib/handoff-v2.ts (shared with teammate-idle.ts).
+// R4b (P1-2): this validation runs for ALL dispatch paths — execute-plan AND agent-team/tmux.
+// It is NOT execute-plan-only. Any TaskCompleted event with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+// goes through this validation regardless of how the task was dispatched.
 
 /**
  * Write learnings from a valid `guild.handoff.v2` envelope into the run record.

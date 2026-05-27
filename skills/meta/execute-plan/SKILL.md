@@ -25,7 +25,7 @@ Four strict phases per lane. A lane does not advance until the previous phase ha
 
 1. **Context bundle.** Invoke `guild:context-assemble` for the lane; it writes `.guild/context/<run-id>/<specialist>-<task-id>.md` per §9.3. Read back the bundle's handoff receipt to confirm `bundle_path`, `token_estimate`, `layers_included`. A missing bundle blocks the dispatch — do not paper over with chat context.
 2. **Tier resolution.** Auto-score the lane and resolve its tier per `## Tier resolution` — print the score + chosen tier (never silent). The resolved tier becomes the Agent `model` param at dispatch.
-3. **Dispatch.** Spawn an **ephemeral one-agent-per-task** agent (see `## §task§agent lifecycle`) at the resolved tier, using the backend selected in `team.yaml`, passing the bundle path as the primary task brief. Before spawning, inject capability-scope env vars into the agent's environment (see `## Capability-scope env injection`). The agent escalates via `## Advisor escalation` if it hits something above its tier. Routing rules, backend mechanics, and env injection detail: see `dispatch.md`.
+3. **Dispatch.** Spawn an **ephemeral one-agent-per-task** agent (see `## §task§agent lifecycle`) at the resolved tier, using the backend selected in `team.yaml`, passing the bundle path as the primary task brief. Before spawning, inject capability-scope env vars (`## Capability-scope env injection`) **and the canonical handoff protocol block** (`dispatch.md §"Handoff protocol"`) verbatim into the agent's prompt — substitute `<RECEIPT_PATH>` and `<TASK_ID>` for this lane before sending. The agent escalates via `## Advisor escalation` if it hits something above its tier. Routing rules, backend mechanics, env injection, and handoff protocol injection: `dispatch.md`.
 4. **Receipt.** Confirm the agent wrote its handoff receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` per §8.2, then **extract its `learnings[]` and dismiss the agent** (lifecycle below). A missing or malformed receipt (no `evidence:` field, no `files changed`) → treat the lane as errored, record the failure in the run log, and do not mark it complete.
 
 A specialist dispatched without a bundle violates the context contract (§9); one that completes without a receipt violates the handoff contract (§8.2). Either condition blocks `guild:review`.
@@ -72,6 +72,8 @@ Full env injection detail and backend-specific wiring: `dispatch.md §"Capabilit
 
 Implements ADR §6 (D3). The **default execution unit is an ephemeral per-task agent** — one agent per task, never shared across tasks, never left idle. This is **orthogonal to** (composes with, never replaces) the D5 `agent_mode` backend ladder: D5 picks the *backend* (team / agent / subagent), this fixes the *lifecycle* (ephemeral, per-task) on whichever backend D5 selected. Visible-pane teams remain opt-in.
 
+**Single-channel handoff protocol.** Every agent in this lifecycle writes its `guild.handoff.v2` receipt file as its final action — never to chat. The canonical protocol block is injected verbatim into every brief at dispatch (step 3 of `## Per-lane flow`); full rules and the injection block: `dispatch.md §"Handoff protocol"`.
+
 Sequence **spawn → work → extract → dismiss**:
 
 1. **Spawn.** Dispatch creates a **new** agent for the task at its resolved tier (`## Tier resolution`) with its pulled task-scoped context (`guild:context-assemble`). Two concurrent tasks get two **distinct** agents — never shared (SC-8).
@@ -103,6 +105,8 @@ Substitute `<task-id>` with the lane's task-id (e.g. `T2-backend`); run per-lane
 ## Receipt collection
 
 This skill does not author receipts — it confirms each exists at `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`, is readable, and carries the §8.2 fields (scope, files changed, decisions, assumptions, evidence, risks, follow-ups). `guild:review` and `guild:verify-done` read these receipts instead of rehydrating full conversations (§8.2), so receipt integrity is load-bearing.
+
+**Single-channel invariant.** The receipt file is the **authoritative handoff source across all backends** (team / in-process / subagent). The lead never reads handoff content from chat text or SendMessage body — it reads the file. A missing or malformed receipt is an errored lane regardless of what the agent said in chat. Full protocol: `dispatch.md §"Handoff protocol"`.
 
 **Lean-lead intake (ADR §4/§5).** The coordinator dispatches **by pointer** and **never absorbs full specialist transcripts** — it consumes only the compact `guild.handoff.v2` envelope each agent emits (canonical body at ADR §5, bound by pointer). The agent's terminal `guild.handoff.v2` envelope is the input from which the durable `guild.handoff_receipt.v1` is produced for review/verify — the two compose (in-flight envelope → durable receipt), they do not compete. When `models.structuredOutputRequired` is `true`, a return that is not a valid `guild.handoff.v2` envelope (or over-runs the `summary` cap) is a dispatch defect: treat the lane as errored. Full transcripts remain in `.guild/runs/` for audit; they never enter lead context. The lead holds last-N envelopes in full + a rolling summary of older work (`guild:context-assemble §"Lead context"` — bound by pointer).
 

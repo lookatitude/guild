@@ -53,6 +53,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
+import { validateHandoffV2, extractHandoffEnvelope } from "../lib/handoff-v2.js";
 import { assessLiveness, readHeartbeatTimeoutMs, Liveness } from "../lib/heartbeat.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -72,7 +73,16 @@ interface NudgeContext {
   hasReceipt: boolean;
   /** Structured liveness verdict (ADR-RE-3): heartbeat → mtime fallback. */
   liveness: Liveness;
+  /** Task IDs that have NO receipt file. */
   pendingTaskIds: string[];
+  /**
+   * Task IDs whose receipt exists but contains no valid guild.handoff.v2 envelope.
+   * A2 (P1-2): receipt-present + envelope-valid is the deterministic dismissal signal.
+   * The launcher (P1-3) keys off [LANE-COMPLETE]/safe-to-dismiss in the nudge output.
+   */
+  invalidReceiptTaskIds: string[];
+  /** Task IDs whose receipt exists and has a valid guild.handoff.v2 envelope. */
+  validReceiptTaskIds: string[];
   runDir: string;
 }
 
@@ -85,19 +95,59 @@ function deriveRunId(sessionId: string): string {
   return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
 }
 
+/** Per-receipt validity verdict used to build the nudge context. */
+interface ReceiptAssessment {
+  taskId: string;
+  receiptPath: string;
+  /** True iff the receipt contains a valid guild.handoff.v2 envelope. */
+  envelopeValid: boolean;
+  envelopeErrors: string[];
+}
+
 /**
- * Find all handoff receipts already written for this teammate in this run.
+ * Assess all handoff receipts already written for this teammate in this run.
+ *
+ * For each receipt file found at `<runDir>/handoffs/<teammate>-<task-id>.md`:
+ *   - Extract the guild.handoff.v2 envelope (if present).
+ *   - Validate it via validateHandoffV2.
+ *   - Record valid/invalid verdict.
+ *
+ * A receipt with no envelope is recorded as invalid: the single-channel
+ * protocol (R4a/P1-2) requires the envelope; a missing envelope means the
+ * teammate has not yet completed the handoff.
  */
-function findCompletedTaskIds(runDir: string, teammate: string): Set<string> {
+function assessReceipts(runDir: string, teammate: string): ReceiptAssessment[] {
   const handoffsDir = path.join(runDir, "handoffs");
-  if (!fs.existsSync(handoffsDir)) return new Set();
+  if (!fs.existsSync(handoffsDir)) return [];
   const prefix = `${teammate}-`;
-  return new Set(
-    fs
-      .readdirSync(handoffsDir)
-      .filter((f) => f.startsWith(prefix) && f.endsWith(".md"))
-      .map((f) => f.slice(prefix.length, -".md".length))
-  );
+  const results: ReceiptAssessment[] = [];
+  const files = fs
+    .readdirSync(handoffsDir)
+    .filter((f) => f.startsWith(prefix) && f.endsWith(".md"));
+
+  for (const file of files) {
+    const taskId = file.slice(prefix.length, -".md".length);
+    const rPath = path.join(handoffsDir, file);
+    let envelopeValid = false;
+    let envelopeErrors: string[] = [];
+    try {
+      const content = fs.readFileSync(rPath, "utf8");
+      const rawEnvelope = extractHandoffEnvelope(content);
+      if (rawEnvelope !== null) {
+        const result = validateHandoffV2(rawEnvelope);
+        envelopeValid = result.valid;
+        envelopeErrors = result.errors;
+      } else {
+        envelopeErrors = ["no guild.handoff.v2 envelope found in receipt"];
+      }
+    } catch (err) {
+      envelopeErrors = [
+        `could not read receipt: ${err instanceof Error ? err.message : String(err)}`,
+      ];
+    }
+    results.push({ taskId, receiptPath: rPath, envelopeValid, envelopeErrors });
+  }
+  return results;
 }
 
 /**
@@ -146,41 +196,99 @@ function renderLiveness(liveness: Liveness): string {
 }
 
 /**
- * Compose a clear, actionable nudge message for the orchestrator. Includes the
- * structured-heartbeat liveness verdict so the orchestrator can distinguish a
- * fast-iterating agent from a genuine stall.
+ * Compose a clear, actionable nudge message for the orchestrator.
+ *
+ * R4a (P1-2) single-channel enforcement:
+ *
+ *   • LANE-COMPLETE / safe-to-dismiss — emitted when the teammate has a valid
+ *     guild.handoff.v2 receipt for every known task and has no pending work.
+ *     The launcher (P1-3) keys off the "[LANE-COMPLETE]" sentinel to dismiss
+ *     the pane (A2 deterministic dismissal signal).
+ *
+ *   • Specific receipt nudge — emitted when tasks have no receipt or the
+ *     receipt lacks a valid guild.handoff.v2 envelope.  Includes the EXACT
+ *     canonical path and "do not paste it in chat" to enforce the
+ *     single-channel rule (R1/R2 — file receipt is the source of truth).
+ *
+ *   • Conservative nudge — emitted when no plan file exists and no receipts
+ *     have been written; includes the canonical path template and the
+ *     single-channel reminder.
+ *
+ * The structured-heartbeat liveness verdict (ADR-RE-3) is always included so
+ * the orchestrator can distinguish a fast-iterating agent from a genuine stall.
  */
 function composeNudge(ctx: NudgeContext): string {
   const timestamp = new Date().toISOString();
   const livenessLine = renderLiveness(ctx.liveness);
 
-  if (ctx.pendingTaskIds.length > 0) {
+  const hasPending = ctx.pendingTaskIds.length > 0;
+  const hasInvalid = ctx.invalidReceiptTaskIds.length > 0;
+  const hasValid = ctx.validReceiptTaskIds.length > 0;
+
+  // ── A2: deterministic dismissal signal ─────────────────────────────────────
+  // Receipt present + valid envelope = safe-to-dismiss.  The launcher (P1-3)
+  // keys off the [LANE-COMPLETE] sentinel.  Always exit-0 — non-gating.
+  if (hasValid && !hasPending && !hasInvalid) {
+    const receipts = ctx.validReceiptTaskIds
+      .map((tid) => `${ctx.runDir}/handoffs/${ctx.teammate}-${tid}.md`)
+      .join(", ");
+    return (
+      `[TeammateIdle ${timestamp}] ` +
+      `[LANE-COMPLETE] teammate="${ctx.teammate}" team="${ctx.teamName}" ` +
+      `status=safe-to-dismiss\n` +
+      `${livenessLine}\n` +
+      `Valid guild.handoff.v2 receipt(s) confirmed: ${receipts}\n` +
+      `The launcher may safely dismiss this pane.\n`
+    );
+  }
+
+  // ── R4a: missing receipt — specific, actionable nudge ──────────────────────
+  if (hasPending) {
+    const paths = ctx.pendingTaskIds
+      .map((tid) => `${ctx.runDir}/handoffs/${ctx.teammate}-${tid}.md`)
+      .join(", ");
     return (
       `[TeammateIdle ${timestamp}] ` +
       `Teammate "${ctx.teammate}" (team: "${ctx.teamName}") is idle but has ` +
       `${ctx.pendingTaskIds.length} incomplete task(s): [${ctx.pendingTaskIds.join(", ")}].\n` +
       `${livenessLine}\n` +
-      `Action required: ${ctx.teammate} should either\n` +
-      `  1. Write a handoff receipt at ` +
-      `${ctx.runDir}/handoffs/${ctx.teammate}-<task-id>.md with sections: ` +
-      `changed_files, opens_for, assumptions, evidence, followups — then mark the task complete.\n` +
-      `  2. Or, if still working, update the structured heartbeat at ` +
+      `write your guild.handoff.v2 receipt to ${paths}; do not paste it in chat.\n` +
+      `Required sections: changed_files, opens_for, assumptions, evidence, followups.\n` +
+      `Include a \`\`\`guild.handoff.v2 { ... }\`\`\` envelope block.\n` +
+      `Or, if still working, update the structured heartbeat at ` +
       `${ctx.runDir}/in-progress/${ctx.teammate}.json ` +
       `({ timestamp, step, pct_complete, last_action }) to signal progress.\n`
     );
   }
 
-  // No assigned tasks found in plan (or plan absent) — conservative nudge
+  // ── R4a: receipt exists but envelope missing/invalid ───────────────────────
+  if (hasInvalid) {
+    const paths = ctx.invalidReceiptTaskIds
+      .map((tid) => `${ctx.runDir}/handoffs/${ctx.teammate}-${tid}.md`)
+      .join(", ");
+    return (
+      `[TeammateIdle ${timestamp}] ` +
+      `Teammate "${ctx.teammate}" (team: "${ctx.teamName}") has a receipt but the ` +
+      `guild.handoff.v2 envelope is missing or invalid.\n` +
+      `${livenessLine}\n` +
+      `write your guild.handoff.v2 receipt to ${paths}; do not paste it in chat.\n` +
+      `Add a valid \`\`\`guild.handoff.v2 { ... }\`\`\` envelope block with all required fields.\n`
+    );
+  }
+
+  // ── Conservative nudge: no plan, no receipts ───────────────────────────────
+  // Use GUILD_TASK_ID env var (set by the launcher) for a more specific path.
+  const taskIdHint = process.env["GUILD_TASK_ID"] ?? "<task-id>";
   return (
     `[TeammateIdle ${timestamp}] ` +
     `Teammate "${ctx.teammate}" (team: "${ctx.teamName}") is idle.\n` +
     `${livenessLine}\n` +
-    `If you have an active task, please write a handoff receipt or update your ` +
-    `structured heartbeat to signal progress. Receipt path: ` +
-    `${ctx.runDir}/handoffs/${ctx.teammate}-<task-id>.md\n` +
+    `If you have an active task, write your guild.handoff.v2 receipt to ` +
+    `${ctx.runDir}/handoffs/${ctx.teammate}-${taskIdHint}.md; do not paste it in chat.\n` +
+    `Required sections: changed_files, opens_for, assumptions, evidence, followups.\n` +
+    `Include a \`\`\`guild.handoff.v2 { ... }\`\`\` envelope block.\n` +
     `Heartbeat path: ${ctx.runDir}/in-progress/${ctx.teammate}.json ` +
     `({ timestamp, step, pct_complete, last_action }).\n` +
-    `Required receipt sections: changed_files, opens_for, assumptions, evidence, followups.\n` +
     `If all tasks are complete, no action is needed.\n`
   );
 }
@@ -219,11 +327,18 @@ async function main(): Promise<void> {
   const runId = deriveRunId(sessionId);
   const runDir = path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
 
-  // Gather context
-  const completedIds = findCompletedTaskIds(runDir, teammate);
+  // Gather context — assess receipt validity first (R4a).
+  const receiptAssessments = assessReceipts(runDir, teammate);
+  const validReceiptTaskIds = receiptAssessments
+    .filter((r) => r.envelopeValid)
+    .map((r) => r.taskId);
+  const invalidReceiptTaskIds = receiptAssessments
+    .filter((r) => !r.envelopeValid)
+    .map((r) => r.taskId);
+  const completedIds = new Set(receiptAssessments.map((r) => r.taskId));
   const assignedIds = findAssignedTaskIds(cwd, teammate);
   const pendingTaskIds = assignedIds.filter((id) => !completedIds.has(id));
-  const hasReceipt = completedIds.size > 0;
+  const hasReceipt = receiptAssessments.length > 0;
 
   // Liveness via the structured heartbeat (ADR-RE-3), mtime fallback baked in.
   const timeoutMs = readHeartbeatTimeoutMs(cwd);
@@ -231,7 +346,9 @@ async function main(): Promise<void> {
 
   process.stderr.write(
     `[teammate-idle] INFO: teammate="${teammate}" assigned=[${assignedIds.join(",")}] ` +
-      `completed=[${[...completedIds].join(",")}] pending=[${pendingTaskIds.join(",")}] ` +
+      `validReceipts=[${validReceiptTaskIds.join(",")}] ` +
+      `invalidReceipts=[${invalidReceiptTaskIds.join(",")}] ` +
+      `pending=[${pendingTaskIds.join(",")}] ` +
       `liveness=${liveness.source}/${liveness.fresh ? "fresh" : "stale"} ` +
       `ageMs=${liveness.ageMs ?? "n/a"} timeoutMs=${timeoutMs}\n`
   );
@@ -243,6 +360,8 @@ async function main(): Promise<void> {
     hasReceipt,
     liveness,
     pendingTaskIds,
+    invalidReceiptTaskIds,
+    validReceiptTaskIds,
     runDir,
   };
 

@@ -199,3 +199,27 @@ export function validateHandoffV2(value: unknown): ValidationResult {
 export function isHandoffV2(value: unknown): value is HandoffV2 {
   return validateHandoffV2(value).valid;
 }
+
+/**
+ * Extract a `guild.handoff.v2` envelope from a markdown receipt string.
+ *
+ * Looks for a fenced JSON block tagged with `guild.handoff.v2`:
+ *
+ * ```guild.handoff.v2
+ * { ... }
+ * ```
+ *
+ * Returns the parsed value or `null` if no such block is found or it is not
+ * valid JSON. Shared by task-completed.ts and teammate-idle.ts so the
+ * extraction logic stays in one place.
+ */
+export function extractHandoffEnvelope(content: string): unknown | null {
+  const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/;
+  const match = pattern.exec(content);
+  if (!match || !match[1]) return null;
+  try {
+    return JSON.parse(match[1].trim());
+  } catch {
+    return null;
+  }
+}
