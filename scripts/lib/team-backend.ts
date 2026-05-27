@@ -587,26 +587,360 @@ export class InProcessTeamBackend implements TeamBackend {
   }
 }
 
-// ── RemoteTeamBackend — SEAM ONLY (RE-4) ─────────────────────────────────────
+// ── RemoteTransport seam (RE-4 cross-host) ───────────────────────────────────
+//
+// RemoteTeamBackend dispatches specialist panes onto a DIFFERENT physical host.
+// HOW bytes reach that host is abstracted behind `RemoteTransport` — the same
+// class of seam as `PaneAdapter` (a TypeScript seam, NOT a wire schema; the
+// cross-host ADR notes PaneAdapter "is a TypeScript seam in the launcher, not a
+// wire schema" — this is its remote-transport sibling). The cross-host ADR
+// mandates FILE-BASED coordination over the shared `.guild/runs/<run-id>/`
+// artifact bus and forbids a cross-host event bus / daemon (§CH-3); the
+// transport therefore only handles process LIFECYCLE (connect / spawn /
+// teardown) plus the initial task hand-off (`send`) — never an ongoing event
+// channel.
+//
+// Two implementations ship:
+//   - MockTransport      — in-memory test double; records every call so the
+//                          full RemoteTeamBackend lifecycle is unit-testable
+//                          WITHOUT real hardware (the primary test seam).
+//   - SshRemoteTransport — the representative real transport (zero-infra, no
+//                          daemon — consistent with §CH-3). Command CONSTRUCTION
+//                          is unit-tested via an injected RunFn; the live network
+//                          hop against real remote hardware is the DOCUMENTED
+//                          RESIDUAL (it cannot be exercised in CI).
+//
+// NOTE on ADR fidelity: the cross-host ADR fixes the file-based COORDINATION
+// channel (§CH-3) but does NOT name a wire transport for the remote spawn. SSH
+// is chosen here as the canonical zero-daemon remote-exec mechanism consistent
+// with the ADR's "no daemon, no external service" posture. Swapping it for
+// another transport (mosh, a cloud exec API, …) is one new class implementing
+// this interface — no RemoteTeamBackend change.
+
+/** A reachable remote host + the transport endpoint used to dial it. */
+export interface RemoteHostTarget {
+  hostId: string;
+  hostKind: HostKind;
+  /**
+   * Transport-specific endpoint. For SshRemoteTransport this is the ssh
+   * destination (`user@host` or a `~/.ssh/config` alias). RESIDUAL: the SOURCE
+   * of this value is not carried by `guild.host_capability.v1` — endpoint config
+   * is a followup (see the RemoteTeamBackend docstring).
+   */
+  endpoint: string;
+}
+
+export interface RemoteConnectResult {
+  ok: boolean;
+  message: string;
+}
+
+/** A handle to one spawned remote agent process. */
+export interface RemotePaneHandle {
+  /** Pane owner — a specialist name (the orchestrator always stays local). */
+  specialist: string;
+  hostId: string;
+  hostKind: HostKind;
+  endpoint: string;
+  /** Transport-assigned id (ssh invocation surrogate / mock counter). */
+  remoteId: string;
+}
 
 /**
- * Cross-host team dispatch. SEAM ONLY for this wave: the shape is declared so
- * the cross-host router (next wave, reading guild.host_capability.v1) can be
- * typed against it, but `launch()` throws NotImplemented. `isAvailable()`
- * returns false so an `auto` resolver never selects it yet.
+ * The remote-execution seam. Process lifecycle only; coordination is file-based
+ * per §CH-3 (no event bus). RemoteTeamBackend drives every member; the concrete
+ * wire (ssh / mock) lives in the implementation.
+ */
+export interface RemoteTransport {
+  readonly kind: string;
+  /** Establish / probe the connection to one remote host. Idempotent per host. */
+  connect(host: RemoteHostTarget): RemoteConnectResult;
+  /** Start ONE remote agent process for `spec`, executing `command`. */
+  spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle;
+  /** Hand the initial task brief to a spawned pane (file-based, §CH-3). */
+  send(handle: RemotePaneHandle, payload: string): void;
+  /** Terminate every spawned process and close all connections. */
+  teardown(): void;
+}
+
+// ── MockTransport — in-memory test double ────────────────────────────────────
+
+export interface MockTransportOpts {
+  /** Return ok:false from connect() for hosts matching this predicate (outage sim). */
+  failConnectFor?: (host: RemoteHostTarget) => boolean;
+}
+
+/**
+ * Records every call so a test can assert the RemoteTeamBackend lifecycle
+ * (connect → spawn → send → teardown) without touching the network. Never
+ * spawns a real process.
+ */
+export class MockTransport implements RemoteTransport {
+  readonly kind = "mock";
+  readonly connects: RemoteHostTarget[] = [];
+  readonly spawns: Array<{ host: RemoteHostTarget; spec: PaneSpec; command: string }> = [];
+  readonly sends: Array<{ handle: RemotePaneHandle; payload: string }> = [];
+  teardowns = 0;
+  private failConnectFor?: (host: RemoteHostTarget) => boolean;
+  private counter = 0;
+
+  constructor(opts: MockTransportOpts = {}) {
+    this.failConnectFor = opts.failConnectFor;
+  }
+
+  connect(host: RemoteHostTarget): RemoteConnectResult {
+    this.connects.push(host);
+    if (this.failConnectFor?.(host)) {
+      return { ok: false, message: `mock: connect refused for ${host.hostId} (${host.endpoint})` };
+    }
+    return { ok: true, message: `mock: connected ${host.hostId} (${host.endpoint})` };
+  }
+
+  spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle {
+    this.spawns.push({ host, spec, command });
+    return {
+      specialist: spec.name,
+      hostId: host.hostId,
+      hostKind: host.hostKind,
+      endpoint: host.endpoint,
+      remoteId: `mock-${++this.counter}`,
+    };
+  }
+
+  send(handle: RemotePaneHandle, payload: string): void {
+    this.sends.push({ handle, payload });
+  }
+
+  teardown(): void {
+    this.teardowns++;
+  }
+}
+
+// ── SshRemoteTransport — representative real transport (live = residual) ──────
+
+/**
+ * Drives a remote host over plain `ssh` (zero-infra, no daemon — §CH-3). Every
+ * subprocess goes through the injected RunFn, so the COMMAND CONSTRUCTION is
+ * fully unit-tested; only the live network hop against real hardware is the
+ * documented residual.
+ */
+export class SshRemoteTransport implements RemoteTransport {
+  readonly kind = "ssh";
+  private run: RunFn;
+  private handles: RemotePaneHandle[] = [];
+  private counter = 0;
+
+  constructor(opts: { run?: RunFn } = {}) {
+    this.run = opts.run ?? defaultRun;
+  }
+
+  /** `ssh -o BatchMode=yes <endpoint> true` — non-interactive reachability probe. */
+  connect(host: RemoteHostTarget): RemoteConnectResult {
+    const r = this.run("ssh", ["-o", "BatchMode=yes", host.endpoint, "true"]);
+    if (r.status === 0) return { ok: true, message: `ssh: reachable ${host.endpoint}` };
+    return {
+      ok: false,
+      message: `ssh: cannot reach ${host.endpoint} (exit ${r.status ?? "null"}): ${r.stderr.trim()}`,
+    };
+  }
+
+  /**
+   * `ssh <endpoint> <command>`. RESIDUAL: a live launch must background the
+   * remote process (the pane outlives the ssh call) and likely allocate a PTY
+   * (`ssh -t`); the exact detach/PTY shape is validated against real hardware,
+   * not in CI. Command CONSTRUCTION is unit-tested via the injected RunFn.
+   */
+  spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle {
+    this.run("ssh", [host.endpoint, command]);
+    const handle: RemotePaneHandle = {
+      specialist: spec.name,
+      hostId: host.hostId,
+      hostKind: host.hostKind,
+      endpoint: host.endpoint,
+      remoteId: `ssh-${host.endpoint}-${++this.counter}`,
+    };
+    this.handles.push(handle);
+    return handle;
+  }
+
+  /**
+   * Deliver the task brief to the pane's inbox on the remote host. §CH-3 is
+   * file-based, so this writes the payload (base64'd to dodge shell-quoting)
+   * into a transport-owned inbox keyed by the handle id. RESIDUAL: shared-FS
+   * mount vs ssh-push and the exact bus path are an operator/topology choice
+   * validated live.
+   */
+  send(handle: RemotePaneHandle, payload: string): void {
+    const b64 = Buffer.from(payload, "utf8").toString("base64");
+    const inbox = `~/.guild/inbox/${handle.remoteId}.task`;
+    this.run("ssh", [
+      handle.endpoint,
+      `mkdir -p ~/.guild/inbox && printf %s ${b64} | base64 -d > ${inbox}`,
+    ]);
+  }
+
+  teardown(): void {
+    // Best-effort terminate each spawned pane, then forget the handles.
+    for (const h of this.handles) {
+      this.run("ssh", [h.endpoint, `pkill -f ${shellQuote(h.remoteId)} || true`]);
+    }
+    this.handles = [];
+  }
+}
+
+// ── RemoteTeamBackend — cross-host dispatch over a RemoteTransport (RE-4) ─────
+
+export interface RemoteTeamBackendOpts {
+  /** The wire. Without it the backend is inert: isAvailable()=false, launch() throws. */
+  transport?: RemoteTransport;
+  /**
+   * Map a specialist → its remote host target (id / kind / endpoint). REQUIRED
+   * for a live launch. The orchestrator stays local (§CH-4) and is never passed
+   * here. RESIDUAL: the endpoint config source is a followup (not in
+   * guild.host_capability.v1).
+   */
+  resolveHostTarget?: (spec: Specialist) => RemoteHostTarget;
+  /**
+   * Brand → PaneAdapter (pane-adapter's resolveAdapter()). When omitted, a
+   * claude-only command is built via paneCommand — so a single-brand remote team
+   * works standalone, while a mixed-brand remote team injects the resolver.
+   */
+  resolveAdapter?: AdapterResolver;
+}
+
+/**
+ * Cross-host team dispatch. Real implementation against the RemoteTransport
+ * seam: a launch connects each distinct remote host (fail-fast — nothing spawns
+ * if any host is unreachable), spawns one remote pane per specialist, and hands
+ * each its task brief over the file-based bus (§CH-3). The orchestrator is NOT
+ * spawned here — it always runs on the local/starting host (§CH-4), so
+ * `orchestratorPaneId` is always null.
+ *
+ * Without a transport the backend is INERT (isAvailable()=false so an `auto`
+ * resolver never picks it; launch() throws). This preserves the seam posture for
+ * callers that have not wired a transport yet.
+ *
+ * RESIDUAL (the only documented gap): live validation against real remote
+ * hardware. The lifecycle + command construction are exercised by MockTransport
+ * / a RunFn-injected SshRemoteTransport; the actual network hop, remote process
+ * backgrounding, and endpoint-config source are not reachable from CI.
  */
 export class RemoteTeamBackend implements TeamBackend {
   readonly kind = "remote" as const;
+  private transport?: RemoteTransport;
+  private resolveHostTarget?: (spec: Specialist) => RemoteHostTarget;
+  private resolveAdapter?: AdapterResolver;
 
-  isAvailable(): boolean {
-    return false;
+  constructor(opts: RemoteTeamBackendOpts = {}) {
+    this.transport = opts.transport;
+    this.resolveHostTarget = opts.resolveHostTarget;
+    this.resolveAdapter = opts.resolveAdapter;
   }
 
-  launch(_req: TeamLaunchRequest): TeamLaunchResult {
-    throw new Error(
-      "RemoteTeamBackend not implemented — cross-host team dispatch lands a " +
-        "later wave (RE-4 seam; see docs/knowledge/decisions/" +
-        "v2-runtime-and-execution-model.md §RE-4)."
+  /** Usable only when a transport is wired (never auto-selected otherwise). */
+  isAvailable(): boolean {
+    return !!this.transport;
+  }
+
+  /** Build the per-specialist command for a remote pane (orchestrator excluded). */
+  private commandFor(spec: Specialist, req: TeamLaunchRequest): { paneSpec: PaneSpec; command: string } {
+    const hostKind: HostKind = spec.host_kind ?? "claude";
+    const prompt = buildPrompt(req.slug, req.runId, spec);
+    const paneSpec: PaneSpec = {
+      name: spec.name,
+      scope: spec.scope,
+      runId: req.runId,
+      slug: req.slug,
+      prompt,
+      hostKind,
+    };
+    const command = this.resolveAdapter
+      ? this.resolveAdapter(hostKind).command(paneSpec)
+      : paneCommand(prompt, req.runId);
+    return { paneSpec, command };
+  }
+
+  /** Tear the remote team down (delegates to the transport). Safe with no transport. */
+  teardown(): void {
+    this.transport?.teardown();
+  }
+
+  launch(req: TeamLaunchRequest): TeamLaunchResult {
+    if (!this.transport) {
+      throw new Error(
+        "RemoteTeamBackend has no RemoteTransport — cross-host dispatch has no " +
+          "wire without one (RE-4 seam; see docs/knowledge/decisions/" +
+          "v2-runtime-and-execution-model.md §RE-4)."
+      );
+    }
+    if (!this.resolveHostTarget) {
+      throw new Error(
+        "RemoteTeamBackend has no host-target resolver — cannot map specialists " +
+          "to remote endpoints (RE-4 seam; endpoint config is a documented residual)."
+      );
+    }
+    const transport = this.transport;
+    const resolveHostTarget = this.resolveHostTarget;
+
+    // Pure plan: one entry per specialist (the orchestrator stays local, §CH-4).
+    const planned = req.specialists.map((spec) => {
+      const target = resolveHostTarget(spec);
+      const { paneSpec, command } = this.commandFor(spec, req);
+      return { spec, target, paneSpec, command };
+    });
+    const plannedCommands = planned.map(
+      (p) =>
+        `remote[${transport.kind}] spawn ${p.spec.name} → ${p.target.hostId} ` +
+        `(${p.target.endpoint}) [${p.paneSpec.hostKind}]: ${p.command}`
     );
+
+    if (req.dryRun) {
+      return {
+        kind: this.kind,
+        ok: true,
+        plannedCommands,
+        orchestratorPaneId: null,
+        teammatePaneIds: {},
+        notes: [`dry-run: ${transport.kind} transport not invoked`],
+      };
+    }
+
+    // Phase 1 — connect every DISTINCT host first (fail-fast; nothing spawned
+    // until all hosts are reachable, so a remote team is never half-spawned).
+    const seen = new Set<string>();
+    const distinctTargets = planned
+      .map((p) => p.target)
+      .filter((t) => (seen.has(t.hostId) ? false : (seen.add(t.hostId), true)));
+    for (const target of distinctTargets) {
+      const c = transport.connect(target);
+      if (!c.ok) {
+        transport.teardown(); // close any opened connections; nothing spawned yet
+        return {
+          kind: this.kind,
+          ok: false,
+          plannedCommands,
+          orchestratorPaneId: null,
+          teammatePaneIds: {},
+          notes: [`remote connect failed: ${target.hostId} (${target.endpoint}): ${c.message}`],
+        };
+      }
+    }
+
+    // Phase 2 — spawn each pane + hand it its task brief over the bus (§CH-3).
+    const teammatePaneIds: Record<string, string> = {};
+    for (const p of planned) {
+      const handle = transport.spawn(p.target, p.paneSpec, p.command);
+      transport.send(handle, p.paneSpec.prompt);
+      teammatePaneIds[p.spec.name] = handle.remoteId;
+    }
+
+    return {
+      kind: this.kind,
+      ok: true,
+      plannedCommands,
+      orchestratorPaneId: null,
+      teammatePaneIds,
+      notes: [`spawned ${planned.length} remote pane(s) via ${transport.kind}`],
+    };
   }
 }

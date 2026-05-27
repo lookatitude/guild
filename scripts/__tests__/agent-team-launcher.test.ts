@@ -94,6 +94,69 @@ function makeFakeTmuxBin(tmpDir: string, existingWindows: string[]): string {
   return binDir;
 }
 
+// Fake bin dir with tmux + claude + codex stubs for mixed-host preflight tests.
+// `claudeOk` / `codexOk` toggle each binary's `--version` exit status so the
+// CH-6 fail-fast path is exercisable; tmux behaves like makeFakeTmuxBin.
+function makeFakeMixedBin(
+  tmpDir: string,
+  opts: { windows?: string[]; claudeOk?: boolean; codexOk?: boolean } = {}
+): string {
+  const binDir = path.join(tmpDir, "fakebin-mixed");
+  fs.mkdirSync(binDir, { recursive: true });
+  const windowList = (opts.windows ?? []).join("\\n");
+  fs.writeFileSync(
+    path.join(binDir, "tmux"),
+    [
+      "#!/bin/sh",
+      'case "$1" in',
+      '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
+      `  list-windows) printf '${windowList}\\n'; exit 0;;`,
+      "  *) exit 0;;",
+      "esac",
+      "",
+    ].join("\n"),
+    { mode: 0o755 }
+  );
+  fs.writeFileSync(
+    path.join(binDir, "claude"),
+    ["#!/bin/sh", opts.claudeOk === false ? "exit 1" : "exit 0", ""].join("\n"),
+    { mode: 0o755 }
+  );
+  fs.writeFileSync(
+    path.join(binDir, "codex"),
+    ["#!/bin/sh", opts.codexOk === false ? "exit 1" : "exit 0", ""].join("\n"),
+    { mode: 0o755 }
+  );
+  return binDir;
+}
+
+// Write a guild.host_capability.v1 manifest the launcher's routing block reads.
+function writeHostManifest(cwd: string, hostId: string, hostKind: "claude" | "codex"): void {
+  const dir = path.join(cwd, ".guild", "hosts", hostId);
+  fs.mkdirSync(dir, { recursive: true });
+  const tiers =
+    hostKind === "codex"
+      ? { cheap: "gpt-4o-mini", mid: "gpt-4o", powerful: "o3" }
+      : { cheap: "haiku", mid: "sonnet", powerful: "opus" };
+  const manifest = {
+    schema_version: "guild.host_capability.v1",
+    host_id: hostId,
+    host_kind: hostKind,
+    detected_at: new Date().toISOString(),
+    source: "test",
+    tiers,
+    models: Object.values(tiers),
+    tool_support: {
+      subagent: true,
+      agent_team: hostKind === "claude",
+      independent_agents: hostKind === "claude",
+      tmux: hostKind === "claude",
+      mcp: true,
+    },
+  };
+  fs.writeFileSync(path.join(dir, "capability.json"), JSON.stringify(manifest, null, 2), "utf8");
+}
+
 describe("agent-team-launcher.ts", () => {
   let tmpDir: string;
 
@@ -546,6 +609,107 @@ describe("agent-team-launcher.ts", () => {
       } finally {
         spawnSync("tmux", ["kill-session", "-t", sessionName]);
       }
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // CH-1/CH-2/CH-5/CH-6 — mixed-host `host:` teams
+  // ─────────────────────────────────────────────────────────────
+  describe("mixed-host (per-specialist host:)", () => {
+    it("dry-run: emits a `codex exec` pane for the codex specialist, claude for the rest", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      const { exitCode, stdout } = runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/codex exec/);
+      // Orchestrator + the claude specialist still carry the Claude team gate.
+      expect(stdout).toMatch(/CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1/);
+    });
+
+    it("dry-run: session.json records host_kind + adapter_version per pane (CH-5)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
+      const manifest = JSON.parse(fs.readFileSync(findSessionJson(tmpDir)!, "utf8"));
+      const byName: Record<string, { host_kind: string; adapter_version: string }> =
+        Object.fromEntries(manifest.teammate_panes.map((p: { specialist: string }) => [p.specialist, p]));
+      expect(byName.security.host_kind).toBe("codex");
+      expect(byName.architect.host_kind).toBe("claude");
+      expect(byName.security.adapter_version).toBe("1");
+    });
+
+    it("real run: preflight passes with claude+codex bins + OPENAI_API_KEY (exit 0)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      const bin = makeFakeMixedBin(tmpDir, { windows: ["other-window"], claudeOk: true, codexOk: true });
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir],
+        {
+          TMUX: "/tmp/tmux-1000/default,12345,0",
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+          OPENAI_API_KEY: "sk-x",
+        }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/team window "guild-test-slug" created/);
+    });
+
+    it("real run: missing codex binary → CH-6 preflight aborts (exit 1, zero panes)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      const bin = makeFakeMixedBin(tmpDir, { windows: ["other-window"], claudeOk: true, codexOk: false });
+      const { exitCode, stderr } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir],
+        {
+          TMUX: "/tmp/tmux-1000/default,12345,0",
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+          OPENAI_API_KEY: "sk-x",
+        }
+      );
+      expect(exitCode).toBe(1);
+      expect(stderr).toMatch(/preflight failed/i);
+      expect(stderr).toMatch(/security/);
+      expect(stderr).toMatch(/codex/);
+    });
+
+    it("real run: missing OPENAI_API_KEY → CH-6 preflight aborts (exit 1)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      const bin = makeFakeMixedBin(tmpDir, { windows: ["other-window"], claudeOk: true, codexOk: true });
+      const { exitCode, stderr } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir],
+        {
+          TMUX: "/tmp/tmux-1000/default,12345,0",
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+          OPENAI_API_KEY: undefined,
+        }
+      );
+      expect(exitCode).toBe(1);
+      expect(stderr).toMatch(/OPENAI_API_KEY/);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // CH-1 — routing to local tmux vs remote, via host-router
+  // ─────────────────────────────────────────────────────────────
+  describe("cross-host routing detection (host-router)", () => {
+    it("enabled + remote manifest: a remote-routed specialist is refused with a clear residual message", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      const { exitCode, stderr } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(1);
+      expect(stderr).toMatch(/route to a REMOTE host/i);
+      expect(stderr).toMatch(/security/);
+      expect(stderr).toMatch(/codex-remote/);
+    });
+
+    it("disabled (default): same team + manifests stays local (exit 0, codex pane runs locally)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      // No GUILD_CROSS_HOST_ENABLED → routing block inert → local mixed-host tmux.
+      const { exitCode, stdout } = runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/codex exec/);
     });
   });
 });

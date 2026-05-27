@@ -248,13 +248,15 @@ describe("InProcessTeamBackend — graceful stub", () => {
   });
 });
 
-describe("RemoteTeamBackend — seam only", () => {
-  it("isAvailable is false (never auto-selected this wave)", () => {
+describe("RemoteTeamBackend — no-transport guard", () => {
+  // Full transport-driven lifecycle lives in remote-backend.test.ts; here we
+  // only pin the inert posture when NO transport is wired.
+  it("isAvailable is false without a transport (never auto-selected)", () => {
     expect(new RemoteTeamBackend().isAvailable()).toBe(false);
   });
 
-  it("launch throws NotImplemented pointing at the RE-4 contract", () => {
-    expect(() => new RemoteTeamBackend().launch(req())).toThrow(/not implemented|RE-4/i);
+  it("launch throws (no wire) pointing at the RE-4 contract", () => {
+    expect(() => new RemoteTeamBackend().launch(req())).toThrow(/transport|RE-4/i);
   });
 });
 

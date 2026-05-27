@@ -1,0 +1,12 @@
+spec: .guild/spec/test-slug.md
+backend: agent-team
+allow_larger: false
+user_approved_agent_team: true
+specialists:
+  - name: architect
+    scope: "System boundaries and component split for the pricing service."
+    depends-on: []
+  - name: security
+    scope: "Adversarial audit of the auth flow."
+    depends-on: [architect]
+    host: codex

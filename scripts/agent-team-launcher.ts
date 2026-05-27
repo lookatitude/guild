@@ -60,7 +60,15 @@ import {
   shellQuote,
   type Specialist,
   type LaunchMode,
+  type HostKind,
 } from "./lib/team-backend";
+// CH-1/CH-2: mixed-host pane adapters (claude + codex) for a mixed `host:` team.
+import { resolveAdapter } from "./lib/pane-adapter";
+// CH-1: route each specialist to its backend (local tmux vs remote) via the
+// CR-1 routing function, reading guild.host_capability.v1 manifests.
+import { planTeamRouting, RouteError, type RoutableHost } from "./lib/host-router";
+
+const ADAPTER_VERSION = "1"; // CH-5 — PaneAdapter version recorded per pane.
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -120,6 +128,7 @@ function parseYaml(raw: string): TeamYaml {
         scope: cur.scope ?? "",
         dependsOn: cur.dependsOn ?? [],
         backend: cur.backend,
+        host_kind: cur.host_kind,
       });
     }
     cur = null;
@@ -191,6 +200,18 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
   else if (key === "depends-on" || key === "depends_on" || key === "dependsOn") {
     target.dependsOn = parseFlowList(value);
   } else if (key === "backend") target.backend = stripQuotes(value);
+  // CH-1: per-specialist `host:` brand. Only the known brands are accepted; an
+  // unknown value is ignored (the pane defaults to the orchestrator host,
+  // claude), keeping the parser lenient like the rest of the known schema.
+  else if (key === "host" || key === "host_kind") {
+    const hk = parseHostKind(value);
+    if (hk) target.host_kind = hk;
+  }
+}
+
+function parseHostKind(value: string): HostKind | undefined {
+  const v = stripQuotes(value).trim().toLowerCase();
+  return v === "claude" || v === "codex" ? v : undefined;
 }
 
 function parseFlowList(value: string): string[] {
@@ -230,7 +251,16 @@ interface Manifest {
   window_name: string | null;
   created_at: string;
   orchestrator_pane_id: string;
-  teammate_panes: Array<{ specialist: string; pane_id: string }>;
+  // CH-5: `host_kind` + `adapter_version` are additive optional per-pane fields
+  // under the lenient-reader rule (no schema_version bump). Existing readers
+  // ignore them; resume/telemetry read host_kind from here rather than
+  // re-inferring the CLI brand.
+  teammate_panes: Array<{
+    specialist: string;
+    pane_id: string;
+    host_kind: HostKind;
+    adapter_version: string;
+  }>;
   env: Record<string, string>;
 }
 
@@ -260,6 +290,8 @@ function buildManifest(opts: {
       pane_id: dryRun
         ? "(dry-run: not spawned)"
         : realPaneIds?.teammates?.[s.name] ?? "(unknown)",
+      host_kind: s.host_kind ?? "claude",
+      adapter_version: ADAPTER_VERSION,
     })),
     env: {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
@@ -284,6 +316,40 @@ function writeManifest(cwd: string, manifest: Manifest): string {
   const out = path.join(dir, "session.json");
   fs.writeFileSync(out, JSON.stringify(manifest, null, 2) + "\n", "utf8");
   return out;
+}
+
+// ── Cross-host routing inputs (CH-1) ─────────────────────────────────────────
+//
+// Best-effort load of the guild.host_capability.v1 manifests the CR-1 router
+// reads. Absent dir / unreadable files ⇒ empty list (single-host behavior).
+
+function loadHostManifests(cwd: string): RoutableHost[] {
+  const dir = path.join(cwd, ".guild", "hosts");
+  let ids: string[];
+  try {
+    ids = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const out: RoutableHost[] = [];
+  for (const id of ids) {
+    try {
+      const raw = fs.readFileSync(path.join(dir, id, "capability.json"), "utf8");
+      const m = JSON.parse(raw) as RoutableHost;
+      if (m && typeof m.host_id === "string") out.push(m);
+    } catch {
+      // skip a missing/unreadable manifest — the router excludes absent hosts.
+    }
+  }
+  return out;
+}
+
+// `defaults.cross_host.enabled` is the canonical settings.json key; the launcher
+// reads the env mirror (consistent with its GUILD_HOST / GUILD_INDEPENDENT_*
+// probes). RESIDUAL: wiring settings.json → this env is a followup.
+function crossHostEnabled(env: NodeJS.ProcessEnv): boolean {
+  const v = (env["GUILD_CROSS_HOST_ENABLED"] ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
 // ── D5 dispatch ladder ─────────────────────────────────────────────────────
@@ -457,11 +523,66 @@ function main(): void {
       : `guild-${slug}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
   const cwd = path.resolve(args.cwd);
 
+  // ── CH-1 routing: local tmux vs remote, via host-router ──────────────────
+  // When cross-host is enabled AND host-capability manifests exist, route each
+  // specialist THROUGH the CR-1 routing function and detect any that resolve to
+  // a remote host. Default (flag off, or no `.guild/hosts/` manifests) → inert,
+  // single-host behavior byte-identical to today.
+  //
+  // RESIDUAL: live remote DISPATCH from the CLI is not yet wired —
+  // RemoteTeamBackend + its transport are implemented and unit-tested, but the
+  // endpoint-config source (host_id → ssh address) is a documented followup. A
+  // remote-routed specialist is therefore surfaced and refused here, not
+  // silently dropped.
+  if (crossHostEnabled(process.env)) {
+    const manifests = loadHostManifests(cwd);
+    if (manifests.length > 0) {
+      const localHostId =
+        process.env["GUILD_HOST_ID"] ?? process.env["GUILD_HOST"] ?? "claude";
+      try {
+        const routes = planTeamRouting(team.specialists, manifests, {
+          localHostId,
+          crossHostEnabled: true,
+        });
+        const remote = routes.filter((r) => r.backend === "remote");
+        if (remote.length > 0) {
+          const lines = remote
+            .map((r) => `    - ${r.specialist} → ${r.decision.host} (${r.hostKind})`)
+            .join("\n");
+          process.stderr.write(
+            `[agent-team-launcher] ERROR: ${remote.length} specialist(s) route to a REMOTE host:\n` +
+              `${lines}\n` +
+              `  Live remote dispatch is not yet wired from the CLI — RemoteTeamBackend and\n` +
+              `  its transport are implemented + unit-tested, but the endpoint-config source\n` +
+              `  (host_id → ssh address) is a documented residual. Run those specialists on\n` +
+              `  their host, or drop \`host:\` to keep them local.\n`
+          );
+          process.exit(1);
+        }
+      } catch (err) {
+        if (err instanceof RouteError) {
+          process.stderr.write(
+            `[agent-team-launcher] ERROR: cross-host routing failed — ${err.message}\n`
+          );
+          process.exit(1);
+        }
+        throw err;
+      }
+    }
+  }
+
+  // CH-1: a team is "mixed-host" when any specialist names a non-claude `host:`.
+  // For a mixed team we wire pane-adapter's resolver so each pane spawns via its
+  // brand's adapter (codex → `codex exec`); a pure-claude team keeps the legacy
+  // resolver-less path (byte-identical to the shipped launcher — the regression
+  // anchor).
+  const mixedHost = team.specialists.some((s) => s.host_kind && s.host_kind !== "claude");
+
   // RE-4: the tmux spawn logic lives behind the TeamBackend seam. The launcher
   // drives one TmuxTeamBackend for probes (availability, collision), pure
   // command composition (plan), and the spawn/teardown loop. The launcher keeps
   // the CLI-specific UX (exact error messages, exit codes, manifest, attach).
-  const tmux = new TmuxTeamBackend();
+  const tmux = new TmuxTeamBackend(mixedHost ? { resolveAdapter: resolveAdapter() } : {});
 
   // For real (non-dry-run) launches: tmux must be installed, and the target must
   // not already exist (refuse to clobber). Which collision we check depends on
@@ -497,6 +618,25 @@ function main(): void {
           `  Refusing to clobber. Re-run with --session-name <unique-name>.\n`
       );
       process.exit(1);
+    }
+
+    // CH-6: fail-fast preflight for a mixed-host team. Probe every pane's
+    // adapter (orchestrator = claude + each specialist's host) BEFORE any pane
+    // spawns; on failure abort naming the specialist + host + missing
+    // dependency, with ZERO panes opened (no partial spawn). No-op for a
+    // pure-claude team (no resolver wired → preflight returns ok).
+    if (mixedHost) {
+      const pf = tmux.preflight(team.specialists);
+      if (!pf.ok) {
+        const lines = pf.failures
+          .map((f) => `    - ${f.specialist} [${f.hostKind}]: ${f.message}`)
+          .join("\n");
+        process.stderr.write(
+          `[agent-team-launcher] ERROR: mixed-host preflight failed ` +
+            `(CH-6 fail-fast — zero panes opened):\n${lines}\n`
+        );
+        process.exit(1);
+      }
     }
   }
 

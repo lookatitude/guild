@@ -32,6 +32,7 @@
  */
 
 import type { HostCapabilityManifest, HostKind } from "../write-host-capability";
+import type { Specialist } from "./team-backend";
 
 // ── Axes + request ────────────────────────────────────────────────────────────
 
@@ -400,4 +401,60 @@ export function route(
   opts.onDecision?.(decision);
 
   return decision;
+}
+
+// ── planTeamRouting — per-specialist backend selection (CH-1 launcher wiring) ─
+
+/** The execution backend a specialist's routing decision maps to. */
+export type SpecialistBackend = "tmux" | "remote";
+
+export interface SpecialistRoute {
+  specialist: string;
+  hostKind: HostKind;
+  decision: RoutingDecision;
+  /**
+   * "tmux" = a LOCAL pane on the orchestrator host (TmuxTeamBackend);
+   * "remote" = a DIFFERENT physical host (RemoteTeamBackend). The split is
+   * decision.host vs the local host id.
+   */
+  backend: SpecialistBackend;
+}
+
+export interface PlanTeamRoutingOpts extends RouteOptions {
+  /** host_id of the local/orchestrator host; lanes resolving here run local. */
+  localHostId: string;
+  /** Tier applied to every lane (per-lane tiers are a later wave). Default "mid". */
+  tier?: Tier;
+  /** D5 mode applied to every lane. Default "auto" (no hard backend requirement). */
+  mode?: AgentMode;
+}
+
+/**
+ * Route every specialist to its backend THROUGH the CR-1 routing function — the
+ * launcher's CH-1 wiring point. For each specialist it builds a `LaneRequest`
+ * (its `host:` brand becomes `preferredHostKind`) and calls `route()`; a
+ * decision whose `host` equals `localHostId` runs as a local tmux pane,
+ * otherwise it is a remote host (RemoteTeamBackend). Pure (delegates to the pure
+ * `route()`); throws RouteError if any lane cannot be satisfied — the launcher
+ * catches it and surfaces the reject trail.
+ */
+export function planTeamRouting(
+  specialists: Array<Pick<Specialist, "name" | "scope" | "dependsOn"> & { host_kind?: HostKind }>,
+  hosts: RoutableHost[],
+  opts: PlanTeamRoutingOpts
+): SpecialistRoute[] {
+  const { localHostId, tier = "mid", mode = "auto", ...routeOpts } = opts;
+  return specialists.map((s) => {
+    const decision = route(
+      { taskId: s.name, tier, mode, preferredHostKind: s.host_kind },
+      hosts,
+      routeOpts
+    );
+    return {
+      specialist: s.name,
+      hostKind: decision.hostKind,
+      decision,
+      backend: decision.host === localHostId ? "tmux" : "remote",
+    };
+  });
 }
