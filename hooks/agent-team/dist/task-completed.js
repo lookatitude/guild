@@ -137,6 +137,16 @@ function validateHandoffV2(value) {
   }
   return { valid: errors.length === 0, errors };
 }
+function extractHandoffEnvelope(content) {
+  const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/;
+  const match = pattern.exec(content);
+  if (!match || !match[1]) return null;
+  try {
+    return JSON.parse(match[1].trim());
+  } catch {
+    return null;
+  }
+}
 
 // lib/run-state.ts
 var fs2 = __toESM(require("node:fs"));
@@ -305,16 +315,6 @@ function missingFields(content) {
     const pattern = new RegExp(`(?:^##?\\s+${field}\\b|^${field}\\s*:)`, "im");
     return !pattern.test(content);
   });
-}
-function extractHandoffEnvelope(content) {
-  const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/;
-  const match = pattern.exec(content);
-  if (!match || !match[1]) return null;
-  try {
-    return JSON.parse(match[1].trim());
-  } catch {
-    return null;
-  }
 }
 function persistLearnings(envelope, outPath, specialist, taskId) {
   if (!envelope.learnings || envelope.learnings.length === 0) return;
