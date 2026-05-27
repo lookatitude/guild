@@ -1,9 +1,31 @@
-# Knowledge relocated to the workspace root
+# Knowledge relocated to the workspace root and website
 
-The v2 architecture knowledge, its research corpus, and the marketing site were
-moved out of this plugin repo into independent workspace repos (2026-05-16).
+The v2 architecture knowledge, its research corpus, the marketing site, and the
+**user-facing plugin guides** were moved out of this plugin repo into independent
+workspace repos (2026-05-16 → 2026-05-27, decision D-WEB-2).
 This plugin repo now holds only plugin implementation + `guild-plan.md` (the
 single source of truth for established Guild architecture).
+
+## Canonical user-facing docs → website (D-WEB-2)
+
+`<GUILD_DOCS_URL>/docs/` is the documentation home (URL not yet locked — see
+`docs/DOCS-SITE.md` for the placeholder note; operator replaces `<GUILD_DOCS_URL>`
+once the website repo move + Pages domain are finalised).
+Website source: `../website/src/content/docs/`.
+
+| Was here (`plugin/docs/`) | Now at website (`<GUILD_DOCS_URL>/docs/<slug>`) |
+|---|---|
+| `architecture.md` | `<GUILD_DOCS_URL>/docs/architecture` |
+| `configuration.md` | `<GUILD_DOCS_URL>/docs/configuration` |
+| `context-assembly.md` | `<GUILD_DOCS_URL>/docs/context-assembly` |
+| `cost-and-tiering.md` | `<GUILD_DOCS_URL>/docs/cost-and-tiering` |
+| `self-evolution.md` | `<GUILD_DOCS_URL>/docs/self-evolution` |
+| `specialist-roster.md` | `<GUILD_DOCS_URL>/docs/specialist-roster` — **also kept in-repo** (`docs/specialist-roster.md`) for `scripts/check-roster-consistency.ts` |
+| `status-line.md` | `<GUILD_DOCS_URL>/docs/status-line` |
+| `wiki-pattern.md` | `<GUILD_DOCS_URL>/docs/wiki-pattern` |
+| `plugin-marketplace-copy.md` | Retired (marketing artifact; superseded by website) |
+
+## Earlier relocations (2026-05-16)
 
 | Was here | Now lives in |
 |---|---|

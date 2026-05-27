@@ -87,7 +87,7 @@ cat <<STATUS
 │    guild-telemetry    Trace query over .guild/runs/             │
 ├─────────────────────────────────────────────────────────────────┤
 │  Plan & architecture: guild-plan.md (start at §1 or §13.2)     │
-│  Docs: docs/architecture.md, docs/specialist-roster.md          │
+│  Docs: the Guild docs site · docs/specialist-roster.md          │
 └─────────────────────────────────────────────────────────────────┘
 STATUS
 

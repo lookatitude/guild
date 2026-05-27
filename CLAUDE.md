@@ -1,3 +1,5 @@
+> **TODO (operator):** Replace `<GUILD_DOCS_URL>` throughout this repo with the final docs-site base URL once the website repo move + Pages domain are confirmed. See `docs/DOCS-SITE.md`.
+
 # Guild — repo orientation
 
 Guild is a Claude Code plugin that ships a team of 14 domain specialists plus a brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.
@@ -58,7 +60,7 @@ Route by the path being changed; when a task spans several, dispatch the matchin
 
 Runtime artifacts live under `.guild/` at the consuming repo's root (never committed by Guild itself). Layout in `guild-plan.md §4`. The Guild repo itself uses `.guild/` for its own self-build knowledge — gitignored, but durable across sessions.
 
-The wiki read path uses a lazy SQLite read-through cache (`index: "auto"`, default); disable with `index: "off"`. See [docs/configuration.md](docs/configuration.md) `defaults.index.*`.
+The wiki read path uses a lazy SQLite read-through cache (`index: "auto"`, default); disable with `index: "off"`. See the Guild docs site → `<GUILD_DOCS_URL>/docs/configuration` (`defaults.index.*`).
 
 ## Branch + PR discipline (mandatory)
 
@@ -105,7 +107,7 @@ For cross-tree truths (operator preferences that survive *outside* this working 
 
 An explicit `agent_mode` value other than `auto` **pins** the backend, subject to availability — pinning `team` on a tmux-less host is rejected/warned (owner: `tooling-engineer`). `defaults.agent_team` is read as a **deprecated warn-once alias** for one minor (`true → team`, `false → subagent`, absent → `auto`), then removed at v2.1.0.
 
-Remote cross-host SSH dispatch is gated by `defaults.cross_host` (`.guild/settings.json`) and declared per-team via `host:` in `team.yaml`. See [docs/configuration.md](docs/configuration.md) `defaults.cross_host.*`.
+Remote cross-host SSH dispatch is gated by `defaults.cross_host` (`.guild/settings.json`) and declared per-team via `host:` in `team.yaml`. See the Guild docs site → `<GUILD_DOCS_URL>/docs/configuration` (`defaults.cross_host.*`).
 
 **§7.3 hard invariants preserved in every mode:** one team per session; a team-window collision (in-session, window already named `guild-<slug>`) or a session-name collision (new-session) makes the launcher **refuse to clobber** and print how to switch to or kill the existing team; the pre-flight env gate `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (checked by `scripts/agent-team-launcher.ts`) stays in force for team spawn — absent, the launcher refuses. The launcher owns the tmux strategy and these gates.
 
@@ -158,7 +160,7 @@ except cheaper `learn-*` (the built-in tier-map biases cheap). Scaffold
 and inspect the block with `/guild:config init` / `/guild:config show`.
 O-3 short-output advisor floors land in `models.shortOutputThreshold` after
 running `npx tsx benchmark/src/calibrate-o3-cli.ts` — nothing auto-writes
-this key. Full config reference: [docs/configuration.md](docs/configuration.md).
+this key. Full config reference: Guild docs site → `<GUILD_DOCS_URL>/docs/configuration`.
 
 ## Codex adversarial review
 

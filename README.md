@@ -43,22 +43,22 @@ gate.
   (in-session or detached); `InProcessTeamBackend` (implemented: orchestrator
   consumes a declarative `dispatchPlan`, each specialist runs as an independent
   Agent-tool call, no tmux required); remote cross-host SSH dispatch; `SUBAGENT`
-  last resort for CI / fresh installs. See [docs/architecture.md](docs/architecture.md).
+  last resort for CI / fresh installs. See the Guild docs site → `<GUILD_DOCS_URL>/docs/architecture`.
 - **Cost-aware model tiering** — cheap / mid / powerful, auto-scored per lane
   from deterministic signals, with advisor escalation for uncertainty.
-  Zero-config stable. See [docs/configuration.md](docs/configuration.md) (`models.*`).
+  Zero-config stable. See the Guild docs site → `<GUILD_DOCS_URL>/docs/configuration` (`models.*`).
 - **SQLite read-through wiki cache** — lazy-build, opt-in (`index: "auto"`,
   default). Direct-parse below threshold; disable with `index: "off"`.
-  See [docs/configuration.md](docs/configuration.md) (`defaults.index.*`).
+  See the Guild docs site → `<GUILD_DOCS_URL>/docs/configuration` (`defaults.index.*`).
 - **O-3 short-output advisor** — fires when a lane's output token count falls
   below calibrated p10 floors (`models.shortOutputThreshold`). Calibrate with
   `npx tsx benchmark/src/calibrate-o3-cli.ts`.
-  See [docs/configuration.md](docs/configuration.md).
+  See the Guild docs site → `<GUILD_DOCS_URL>/docs/configuration`.
 - **Security + observability** — `security.bypass_permissions_policy`
   (capability-scope enforcement), 3-stage secrets redaction
   (`secrets_policy.*`), and structured trace cost rollup via the
   `guild-telemetry` MCP (`trace_cost_rollup`).
-  See [docs/configuration.md](docs/configuration.md).
+  See the Guild docs site → `<GUILD_DOCS_URL>/docs/configuration`.
 
 ## Getting Started
 
@@ -213,25 +213,17 @@ currently requires each file's frontmatter to include `final_status: satisfied` 
 
 ## Documentation
 
-- [Static site](https://lookatitude.github.io/guild/) — install page,
-  operating docs, and the live URL-shortener end-to-end use case.
-  The site is generated with `node docs/website/build-site.mjs`,
-  including the command / agent / skill reference.
-- [docs/architecture.md](docs/architecture.md) — shipped plugin architecture,
-  directory layout, 7-step lifecycle, hook inventory, backend options.
-- [docs/specialist-roster.md](docs/specialist-roster.md) — the 14 specialists,
-  their triggers, DO NOT TRIGGER boundaries, and owned skills.
-- [docs/context-assembly.md](docs/context-assembly.md) — three-layer context
-  contract, role mapping, ambient-context caveat.
-- [docs/wiki-pattern.md](docs/wiki-pattern.md) — categorized project memory,
-  raw vs synthesized, decision capture, scale transition.
-- [docs/self-evolution.md](docs/self-evolution.md) — the two triggers, the
-  10-step pipeline, promotion gate, versioning + rollback.
-- [docs/configuration.md](docs/configuration.md) — complete `settings.json`
-  reference: `agent_mode`, model tiering, SQLite index, security / secrets
-  policy, O-3 calibration, cross-host dispatch.
-- [guild-plan.md](guild-plan.md) — the single source of truth that all docs
-  derive from.
+The canonical docs live at the **Guild docs site** (decision D-WEB-2 — website is the docs home).
+Base URL: `<GUILD_DOCS_URL>` — see `docs/DOCS-SITE.md` for the placeholder note; operator replaces once the website repo move + Pages domain are finalised.
+
+- `<GUILD_DOCS_URL>/docs/getting-started` — install, first run, and basic configuration.
+- `<GUILD_DOCS_URL>/docs/architecture` — shipped plugin architecture, directory layout, 7-step lifecycle, hook inventory, backend options.
+- `<GUILD_DOCS_URL>/docs/specialist-roster` — the 14 specialists, their triggers, DO NOT TRIGGER boundaries, and owned skills.
+- `<GUILD_DOCS_URL>/docs/context-assembly` — three-layer context contract, role mapping, ambient-context caveat.
+- `<GUILD_DOCS_URL>/docs/wiki-pattern` — categorized project memory, raw vs synthesized, decision capture, scale transition.
+- `<GUILD_DOCS_URL>/docs/self-evolution` — the two triggers, the 10-step pipeline, promotion gate, versioning + rollback.
+- `<GUILD_DOCS_URL>/docs/configuration` — complete `settings.json` reference: `agent_mode`, model tiering, SQLite index, security / secrets policy, O-3 calibration, cross-host dispatch.
+- [guild-plan.md](guild-plan.md) — the single source of truth that all docs derive from.
 
 ## Architecture at a glance
 
