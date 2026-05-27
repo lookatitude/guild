@@ -11,7 +11,7 @@ This document explains the trust model and how we handle security.
   `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `SubagentStop`,
   `Stop`, `TaskCreated`, `TaskCompleted`, and `TeammateIdle` event.
   See [hooks/hooks.json](hooks/hooks.json) for the full wiring and
-  the Guild docs site → `<GUILD_DOCS_URL>/docs/architecture` for each event's purpose.
+  the Guild docs site → `https://lookatitude.github.io/guild-website/docs/architecture` for each event's purpose.
 - **Tooling scripts** under `scripts/` run only when invoked by a skill
   or by `/guild evolve`, `/guild rollback`, etc. They are not auto-run.
 - **MCP servers** under `mcp-servers/` run as long-lived stdio subprocesses

@@ -8,21 +8,21 @@ single source of truth for established Guild architecture).
 
 ## Canonical user-facing docs → website (D-WEB-2)
 
-`<GUILD_DOCS_URL>/docs/` is the documentation home (URL not yet locked — see
-`docs/DOCS-SITE.md` for the placeholder note; operator replaces `<GUILD_DOCS_URL>`
+`https://lookatitude.github.io/guild-website/docs/` is the documentation home (URL not yet locked — see
+`docs/DOCS-SITE.md` for the placeholder note; operator replaces `https://lookatitude.github.io/guild-website`
 once the website repo move + Pages domain are finalised).
 Website source: `../website/src/content/docs/`.
 
-| Was here (`plugin/docs/`) | Now at website (`<GUILD_DOCS_URL>/docs/<slug>`) |
+| Was here (`plugin/docs/`) | Now at website (`https://lookatitude.github.io/guild-website/docs/<slug>`) |
 |---|---|
-| `architecture.md` | `<GUILD_DOCS_URL>/docs/architecture` |
-| `configuration.md` | `<GUILD_DOCS_URL>/docs/configuration` |
-| `context-assembly.md` | `<GUILD_DOCS_URL>/docs/context-assembly` |
-| `cost-and-tiering.md` | `<GUILD_DOCS_URL>/docs/cost-and-tiering` |
-| `self-evolution.md` | `<GUILD_DOCS_URL>/docs/self-evolution` |
-| `specialist-roster.md` | `<GUILD_DOCS_URL>/docs/specialist-roster` — **also kept in-repo** (`docs/specialist-roster.md`) for `scripts/check-roster-consistency.ts` |
-| `status-line.md` | `<GUILD_DOCS_URL>/docs/status-line` |
-| `wiki-pattern.md` | `<GUILD_DOCS_URL>/docs/wiki-pattern` |
+| `architecture.md` | `https://lookatitude.github.io/guild-website/docs/architecture` |
+| `configuration.md` | `https://lookatitude.github.io/guild-website/docs/configuration` |
+| `context-assembly.md` | `https://lookatitude.github.io/guild-website/docs/context-assembly` |
+| `cost-and-tiering.md` | `https://lookatitude.github.io/guild-website/docs/cost-and-tiering` |
+| `self-evolution.md` | `https://lookatitude.github.io/guild-website/docs/self-evolution` |
+| `specialist-roster.md` | `https://lookatitude.github.io/guild-website/docs/specialist-roster` — **also kept in-repo** (`docs/specialist-roster.md`) for `scripts/check-roster-consistency.ts` |
+| `status-line.md` | `https://lookatitude.github.io/guild-website/docs/status-line` |
+| `wiki-pattern.md` | `https://lookatitude.github.io/guild-website/docs/wiki-pattern` |
 | `plugin-marketplace-copy.md` | Retired (marketing artifact; superseded by website) |
 
 ## Earlier relocations (2026-05-16)
