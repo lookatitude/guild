@@ -1,0 +1,4192 @@
+{
+  "version": "guild.codebase_map.v1",
+  "generated_from_commit": "a6ed553b8db73047b1fc82387b55d76c961248f7",
+  "project": {
+    "root": "/Users/miguelp/Projects/guild/plugin",
+    "languages": [
+      "json",
+      "markdown",
+      "shell",
+      "typescript",
+      "yaml"
+    ],
+    "frameworks": []
+  },
+  "files": [
+    {
+      "path": ".claude-plugin/marketplace.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude-plugin",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude-plugin/plugin.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude-plugin",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/_shared/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/_shared/AUDIT.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/_shared/handoff-contract.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/_shared/plan-anchors.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/_shared/superpowers-mapping.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/command-builder.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/docs-writer.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/eval-engineer.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/hook-engineer.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/plugin-architect.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/skill-author.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/specialist-agent-writer.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/tooling-engineer.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/settings.local.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".githooks/pre-push",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".githooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".github",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".mcp.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "(root)",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".understand-anything/.understandignore",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".understand-anything",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".understand-anything/knowledge-graph.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".understand-anything",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".understand-anything/meta.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".understand-anything",
+      "is_entrypoint": false
+    },
+    {
+      "path": "AGENTS.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "(root)",
+      "is_entrypoint": false
+    },
+    {
+      "path": "CHANGELOG.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "(root)",
+      "is_entrypoint": false
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "(root)",
+      "is_entrypoint": false
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "(root)",
+      "is_entrypoint": false
+    },
+    {
+      "path": "MIGRATION.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "(root)",
+      "is_entrypoint": false
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "(root)",
+      "is_entrypoint": false
+    },
+    {
+      "path": "SECURITY.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "(root)",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/architect.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/backend.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/copywriter.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/devops.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/frontend.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/marketing.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/mobile.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/qa.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/researcher.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/sales.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/security.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/seo.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/social-media.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/technical-writer.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/audit.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/build.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/evolve.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/fix.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/guild-audit.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/guild-diagnose.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/guild-evolve.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/guild-rollback.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/guild-stats.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/guild-wiki.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/guild.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/ideate.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/init.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/initiative.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/ops.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/plan.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/qa.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/resume.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/rollback.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/stats.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/status.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/wiki.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/KNOWLEDGE-RELOCATED.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/architecture.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/audit/2026-04-25.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/context-assembly.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/demo/E2E-DEMO-STORY.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/migration-v1.3-to-v1.4.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/E2E-TEST-REPORT.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P0.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P1-audit.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P1.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P2-audit.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P2.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P3-audit.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P3.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P4-audit.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P4.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P5-audit.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P5.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P6-audit.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P6.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P7-audit.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/P7.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/E2E-REPORT.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/context/run-001/architect-arch-001.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/context/run-001/copywriter-copy-001.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/context/run-001/frontend-engineer-fe-001.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/context/run-001/seo-seo-001.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/plan/pricing-calculator.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/reflections/run-001.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/runs/run-001/assumptions.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/runs/run-001/handoffs/architect-arch-001.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/runs/run-001/handoffs/copywriter-copy-001.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/runs/run-001/handoffs/frontend-engineer-fe-001.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/runs/run-001/handoffs/seo-seo-001.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/runs/run-001/review.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/runs/run-001/verify.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/spec/pricing-calculator.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/phase-gates/dogfood/team/pricing-calculator.yaml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/plugin-marketplace-copy.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/self-evolution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/specialist-roster.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/status-line.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/superpowers/plans/2026-04-24-dev-team-agents.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/superpowers/plans/2026-04-24-p1-spine.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/superpowers/specs/2026-04-24-dev-team-agents-design.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/wiki-pattern.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "guild-plan.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "(root)",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/capture-telemetry.test.ts",
+      "language": "typescript",
+      "loc": 327,
+      "complexity": 0.31,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/maybe-reflect.test.ts",
+      "language": "typescript",
+      "loc": 289,
+      "complexity": 0.29,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/__tests__/task-completed.test.ts",
+      "language": "typescript",
+      "loc": 135,
+      "complexity": 0.14,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/__tests__/task-created.test.ts",
+      "language": "typescript",
+      "loc": 88,
+      "complexity": 0.09,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/__tests__/teammate-idle.test.ts",
+      "language": "typescript",
+      "loc": 101,
+      "complexity": 0.1,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/fixtures/task-completed.invalid.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/fixtures/task-completed.valid.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/fixtures/task-created.invalid.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/fixtures/task-created.valid.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/fixtures/teammate-idle.invalid.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/fixtures/teammate-idle.valid.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/package.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/task-completed.ts",
+      "language": "typescript",
+      "loc": 156,
+      "complexity": 0.2,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/task-created.ts",
+      "language": "typescript",
+      "loc": 165,
+      "complexity": 0.24,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/teammate-idle.ts",
+      "language": "typescript",
+      "loc": 208,
+      "complexity": 0.3,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/bootstrap.sh",
+      "language": "shell",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/capture-telemetry.ts",
+      "language": "typescript",
+      "loc": 212,
+      "complexity": 0.33,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/check-skill-coverage.sh",
+      "language": "shell",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/fixtures/loop-round-end-satisfied.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/fixtures/loop-round-end.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/fixtures/loop-round-start.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/fixtures/post-tool-use.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/fixtures/session-start.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/fixtures/stop.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/fixtures/subagent-stop.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/fixtures/user-prompt-submit.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/hooks.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/v1.4/log-jsonl.ts",
+      "language": "typescript",
+      "loc": 1138,
+      "complexity": 1,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/v1.4/redact-log.ts",
+      "language": "typescript",
+      "loc": 275,
+      "complexity": 0.41,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/v1.4/v1.4-lock.ts",
+      "language": "typescript",
+      "loc": 301,
+      "complexity": 0.46,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/maybe-reflect.ts",
+      "language": "typescript",
+      "loc": 311,
+      "complexity": 0.46,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/package.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/post-tool-use.ts",
+      "language": "typescript",
+      "loc": 222,
+      "complexity": 0.36,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/pre-compact.ts",
+      "language": "typescript",
+      "loc": 129,
+      "complexity": 0.2,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/pre-tool-use.ts",
+      "language": "typescript",
+      "loc": 320,
+      "complexity": 0.55,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-memory/README.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-memory/__tests__/guild-memory.test.ts",
+      "language": "typescript",
+      "loc": 254,
+      "complexity": 0.27,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-memory/fixtures/wiki/context/project-overview.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-memory/fixtures/wiki/context/team-composition.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-memory/fixtures/wiki/decisions/bm25-over-embeddings.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-memory/fixtures/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-memory/fixtures/wiki/standards/naming-conventions.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-memory/fixtures/wiki/standards/testing-policy.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-memory/package.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-memory/src/index.ts",
+      "language": "typescript",
+      "loc": 392,
+      "complexity": 0.65,
+      "module": "mcp-servers",
+      "is_entrypoint": true
+    },
+    {
+      "path": "mcp-servers/guild-telemetry/README.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-telemetry/__tests__/guild-telemetry.test.ts",
+      "language": "typescript",
+      "loc": 247,
+      "complexity": 0.26,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-telemetry/package.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
+      "path": "mcp-servers/guild-telemetry/src/index.ts",
+      "language": "typescript",
+      "loc": 384,
+      "complexity": 0.58,
+      "module": "mcp-servers",
+      "is_entrypoint": true
+    },
+    {
+      "path": "scripts/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/README.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/agent-team-launcher.test.ts",
+      "language": "typescript",
+      "loc": 269,
+      "complexity": 0.31,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/description-optimizer.test.ts",
+      "language": "typescript",
+      "loc": 147,
+      "complexity": 0.18,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/evolve-loop.test.ts",
+      "language": "typescript",
+      "loc": 209,
+      "complexity": 0.21,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/flip-report.test.ts",
+      "language": "typescript",
+      "loc": 139,
+      "complexity": 0.15,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/rollback-walker.test.ts",
+      "language": "typescript",
+      "loc": 142,
+      "complexity": 0.15,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/run-scoping-and-loop-event.test.ts",
+      "language": "typescript",
+      "loc": 119,
+      "complexity": 0.11,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/shadow-mode.test.ts",
+      "language": "typescript",
+      "loc": 199,
+      "complexity": 0.23,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/trace-summarize.test.ts",
+      "language": "typescript",
+      "loc": 255,
+      "complexity": 0.25,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/understand-engine.test.ts",
+      "language": "typescript",
+      "loc": 160,
+      "complexity": 0.19,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/agent-team-launcher.ts",
+      "language": "typescript",
+      "loc": 514,
+      "complexity": 0.79,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/description-optimizer.ts",
+      "language": "typescript",
+      "loc": 202,
+      "complexity": 0.34,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/emit-loop-event.ts",
+      "language": "typescript",
+      "loc": 194,
+      "complexity": 0.33,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/evolve-loop.ts",
+      "language": "typescript",
+      "loc": 255,
+      "complexity": 0.35,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/evals-for-optimizer.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/events-empty.ndjson",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/events-happy.ndjson",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/events-malformed.ndjson",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/grading-empty.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/grading-happy.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/shadow-run-1/events.ndjson",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/shadow-run-2/events.ndjson",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/skill-v1/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/skill-v1/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/skill-v1/meta.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/skill-v2/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/skill-v2/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/skill-v2/meta.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/skill-v3/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/skill-v3/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/skill-v3/meta.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/team-agent-team.yaml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/team-subagent.yaml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/flip-report.ts",
+      "language": "typescript",
+      "loc": 319,
+      "complexity": 0.57,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/v1.4/log-jsonl.ts",
+      "language": "typescript",
+      "loc": 1138,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/v1.4/redact-log.ts",
+      "language": "typescript",
+      "loc": 275,
+      "complexity": 0.41,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/v1.4/v1.4-lock.ts",
+      "language": "typescript",
+      "loc": 301,
+      "complexity": 0.46,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/new-run-id.ts",
+      "language": "typescript",
+      "loc": 72,
+      "complexity": 0.09,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/package.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/read-guild-config.ts",
+      "language": "typescript",
+      "loc": 139,
+      "complexity": 0.29,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/rollback-walker.ts",
+      "language": "typescript",
+      "loc": 182,
+      "complexity": 0.26,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/shadow-mode.ts",
+      "language": "typescript",
+      "loc": 352,
+      "complexity": 0.56,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/statusline-guild.sh",
+      "language": "shell",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/trace-summarize.ts",
+      "language": "typescript",
+      "loc": 349,
+      "complexity": 0.53,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/analyze-structural.ts",
+      "language": "typescript",
+      "loc": 51,
+      "complexity": 0.06,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/assign-layers.ts",
+      "language": "typescript",
+      "loc": 48,
+      "complexity": 0.07,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/build-tour.ts",
+      "language": "typescript",
+      "loc": 34,
+      "complexity": 0.04,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/derive-domain.ts",
+      "language": "typescript",
+      "loc": 61,
+      "complexity": 0.1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/diff-understanding.ts",
+      "language": "typescript",
+      "loc": 88,
+      "complexity": 0.14,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/kg-query.ts",
+      "language": "typescript",
+      "loc": 80,
+      "complexity": 0.13,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/domain.ts",
+      "language": "typescript",
+      "loc": 136,
+      "complexity": 0.19,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/extract.ts",
+      "language": "typescript",
+      "loc": 279,
+      "complexity": 0.55,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/fingerprint.ts",
+      "language": "typescript",
+      "loc": 161,
+      "complexity": 0.28,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/git.ts",
+      "language": "typescript",
+      "loc": 39,
+      "complexity": 0.08,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/graph.ts",
+      "language": "typescript",
+      "loc": 146,
+      "complexity": 0.23,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/ignore.ts",
+      "language": "typescript",
+      "loc": 151,
+      "complexity": 0.26,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/import-map.ts",
+      "language": "typescript",
+      "loc": 164,
+      "complexity": 0.32,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/languages.ts",
+      "language": "typescript",
+      "loc": 99,
+      "complexity": 0.16,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/layers.ts",
+      "language": "typescript",
+      "loc": 71,
+      "complexity": 0.12,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/paths.ts",
+      "language": "typescript",
+      "loc": 101,
+      "complexity": 0.17,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/schema.ts",
+      "language": "typescript",
+      "loc": 357,
+      "complexity": 0.59,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/tour.ts",
+      "language": "typescript",
+      "loc": 54,
+      "complexity": 0.1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/lib/walk.ts",
+      "language": "typescript",
+      "loc": 40,
+      "complexity": 0.09,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/scan.ts",
+      "language": "typescript",
+      "loc": 95,
+      "complexity": 0.13,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/staleness.ts",
+      "language": "typescript",
+      "loc": 82,
+      "complexity": 0.12,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/understand/validate-graph.ts",
+      "language": "typescript",
+      "loc": 65,
+      "complexity": 0.09,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/v1.4-log-validator.ts",
+      "language": "typescript",
+      "loc": 452,
+      "complexity": 0.65,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/v1.4-summary-md-regen.ts",
+      "language": "typescript",
+      "loc": 444,
+      "complexity": 0.79,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/verify-codex-review-trail.ts",
+      "language": "typescript",
+      "loc": 227,
+      "complexity": 0.38,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/core/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/core/principles/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/core/principles/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/finish-branch/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/finish-branch/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/finish-branch/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/receive-review/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/receive-review/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/request-review/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/request-review/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/request-review/code-reviewer.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/request-review/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/condition-based-waiting-example.ts",
+      "language": "typescript",
+      "loc": 144,
+      "complexity": 0.26,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/condition-based-waiting.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/defense-in-depth.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/find-polluter.sh",
+      "language": "shell",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/root-cause-tracing.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/test-academic.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/test-pressure-1.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/test-pressure-2.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/systematic-debug/test-pressure-3.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/tdd/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/tdd/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/tdd/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/tdd/testing-anti-patterns.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/verify-claim/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/verify-claim/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/worktrees/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/worktrees/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/fallback/worktrees/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/guild-operations/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/guild-quality/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/understand-engine/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/understand-engine/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/understand-engine/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/understand-onboard/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/understand-onboard/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/understand-onboard/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/wiki-ingest/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/wiki-ingest/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/wiki-lint/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/wiki-lint/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/wiki-query/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/wiki-query/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/audit/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/audit/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/brainstorm/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/brainstorm/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/codex-review/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/context-assemble/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/context-assemble/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/create-specialist/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/create-specialist/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/decisions/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/decisions/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/diagnose/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/dispatching-parallel-agents/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/dispatching-parallel-agents/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/evolve-skill/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/evolve-skill/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/execute-plan/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/execute-plan/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/init/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-clarify/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-implement/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-plan-review/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/plan/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/plan/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/reflect/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/reflect/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/review/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/review/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/rollback-skill/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/rollback-skill/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/team-compose/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/team-compose/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/verify-done/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/verify-done/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/writing-skills/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/writing-skills/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/architect-adr-writer/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/architect-adr-writer/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/architect-systems-design/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/architect-systems-design/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/architect-tradeoff-matrix/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/architect-tradeoff-matrix/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/backend-api-contract/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/backend-api-contract/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/backend-data-layer/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/backend-data-layer/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/backend-migration-writer/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/backend-migration-writer/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/backend-service-integration/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/backend-service-integration/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/copywriter-email-sequences/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/copywriter-email-sequences/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/copywriter-long-form/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/copywriter-long-form/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/copywriter-product-microcopy/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/copywriter-product-microcopy/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/copywriter-voice-guide/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/copywriter-voice-guide/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/devops-ci-cd-pipeline/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/devops-ci-cd-pipeline/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/devops-incident-runbook/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/devops-incident-runbook/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/devops-infrastructure-as-code/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/devops-infrastructure-as-code/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/devops-observability-setup/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/devops-observability-setup/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/marketing-ab-copy-variants/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/marketing-ab-copy-variants/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/marketing-campaign-brief/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/marketing-campaign-brief/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/marketing-launch-plan/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/marketing-launch-plan/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/marketing-positioning/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/marketing-positioning/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/mobile-android-kotlin/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/mobile-android-kotlin/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/mobile-ios-swift/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/mobile-ios-swift/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/mobile-performance-tuning/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/mobile-performance-tuning/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/mobile-react-native/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/mobile-react-native/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/qa-flaky-test-hunter/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/qa-flaky-test-hunter/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/qa-property-based-tests/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/qa-property-based-tests/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/qa-snapshot-tests/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/qa-snapshot-tests/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/qa-test-strategy/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/qa-test-strategy/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/researcher-comparison-table/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/researcher-comparison-table/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/researcher-deep-dive/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/researcher-deep-dive/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/researcher-paper-digest/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/researcher-paper-digest/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/sales-cold-outreach/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/sales-cold-outreach/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/sales-discovery-framework/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/sales-discovery-framework/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/sales-follow-up-sequence/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/sales-follow-up-sequence/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/sales-proposal-writer/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/sales-proposal-writer/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/security-auth-flow-review/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/security-auth-flow-review/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/security-dependency-audit/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/security-dependency-audit/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/security-secrets-scan/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/security-secrets-scan/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/security-threat-modeling/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/security-threat-modeling/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/seo-internal-linking/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/seo-internal-linking/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/seo-keyword-research/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/seo-keyword-research/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/seo-on-page-optimization/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/seo-on-page-optimization/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/seo-technical-audit/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/seo-technical-audit/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/social-media-content-calendar/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/social-media-content-calendar/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/social-media-engagement-templates/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/social-media-engagement-templates/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/social-media-platform-post/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/social-media-platform-post/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/social-media-thread/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/social-media-thread/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/technical-writer-api-docs/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/technical-writer-api-docs/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/technical-writer-release-notes/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/technical-writer-release-notes/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/technical-writer-tutorial/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/technical-writer-tutorial/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/technical-writer-user-manual/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/technical-writer-user-manual/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/agents/AGENT.template.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/skills/SKILL.template.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/boundary/README.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/boundary/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/evolve/README.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/evolve/fixtures/malformed.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/evolve/fixtures/neutral.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/evolve/fixtures/pure-fixes.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/evolve/fixtures/regression-heavy.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/evolve/harness.test.ts",
+      "language": "typescript",
+      "loc": 226,
+      "complexity": 0.23,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/package.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/shadow/README.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/shadow/fixtures/historical-agreement/events.ndjson",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/shadow/fixtures/historical-divergence/events.ndjson",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/shadow/fixtures/historical-empty/events.ndjson",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/shadow/harness.test.ts",
+      "language": "typescript",
+      "loc": 298,
+      "complexity": 0.33,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/trigger/core/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/trigger/meta/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/README.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-contradictions/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-contradictions/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-contradictions/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-contradictions/wiki/standards/indentation-rule-a.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-contradictions/wiki/standards/indentation-rule-b.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-decision-shape/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-decision-shape/wiki/decisions/example-decision.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-decision-shape/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-decision-shape/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-directory-hygiene/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-directory-hygiene/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-directory-hygiene/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-directory-hygiene/wiki/misc/stray.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-frontmatter-completeness/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-frontmatter-completeness/wiki/context/project-overview.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-frontmatter-completeness/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-frontmatter-completeness/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-missing-concept/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-missing-concept/wiki/context/project-overview.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-missing-concept/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-missing-concept/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-missing-concept/wiki/products/example-product.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-missing-concept/wiki/standards/coding-standards.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-orphan/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-orphan/wiki/context/project-overview.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-orphan/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-orphan/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-orphan/wiki/standards/orphan-standard.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-source-refs/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-source-refs/raw/sources/.gitkeep",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-source-refs/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-source-refs/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-source-refs/wiki/sources/example-source.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-stale-claims/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-stale-claims/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-stale-claims/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-stale-claims/wiki/standards/coding-standards.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/raw/sources/example-source/metadata.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/raw/sources/example-source/original.txt",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/wiki/concepts/example-pattern.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/wiki/context/project-overview.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/wiki/decisions/example-decision.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/wiki/entities/example-team.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/wiki/products/example-product.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/wiki/sources/example-source.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/pass/wiki/standards/coding-standards.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    }
+  ],
+  "import_map": [
+    {
+      "from": "scripts/__tests__/understand-engine.test.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/analyze-structural.ts",
+      "to": "scripts/understand/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/analyze-structural.ts",
+      "to": "scripts/understand/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/analyze-structural.ts",
+      "to": "scripts/understand/lib/walk.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/analyze-structural.ts",
+      "to": "scripts/understand/lib/graph.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/assign-layers.ts",
+      "to": "scripts/understand/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/assign-layers.ts",
+      "to": "scripts/understand/lib/layers.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/assign-layers.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/build-tour.ts",
+      "to": "scripts/understand/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/build-tour.ts",
+      "to": "scripts/understand/lib/tour.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/build-tour.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/derive-domain.ts",
+      "to": "scripts/understand/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/derive-domain.ts",
+      "to": "scripts/understand/lib/domain.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/derive-domain.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/diff-understanding.ts",
+      "to": "scripts/understand/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/diff-understanding.ts",
+      "to": "scripts/understand/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/diff-understanding.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/kg-query.ts",
+      "to": "scripts/understand/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/kg-query.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/domain.ts",
+      "to": "scripts/understand/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/domain.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/extract.ts",
+      "to": "scripts/understand/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/fingerprint.ts",
+      "to": "scripts/understand/lib/extract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/graph.ts",
+      "to": "scripts/understand/lib/extract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/graph.ts",
+      "to": "scripts/understand/lib/import-map.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/graph.ts",
+      "to": "scripts/understand/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/graph.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/import-map.ts",
+      "to": "scripts/understand/lib/extract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/import-map.ts",
+      "to": "scripts/understand/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/layers.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/tour.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/lib/walk.ts",
+      "to": "scripts/understand/lib/ignore.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/scan.ts",
+      "to": "scripts/understand/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/scan.ts",
+      "to": "scripts/understand/lib/walk.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/scan.ts",
+      "to": "scripts/understand/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/scan.ts",
+      "to": "scripts/understand/lib/extract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/scan.ts",
+      "to": "scripts/understand/lib/import-map.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/scan.ts",
+      "to": "scripts/understand/lib/ignore.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/staleness.ts",
+      "to": "scripts/understand/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/staleness.ts",
+      "to": "scripts/understand/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/staleness.ts",
+      "to": "scripts/understand/lib/walk.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/staleness.ts",
+      "to": "scripts/understand/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/staleness.ts",
+      "to": "scripts/understand/lib/fingerprint.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/validate-graph.ts",
+      "to": "scripts/understand/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/understand/validate-graph.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    }
+  ],
+  "stats": {
+    "file_count": 493,
+    "module_count": 15
+  }
+}

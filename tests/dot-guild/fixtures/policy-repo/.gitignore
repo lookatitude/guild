@@ -1,0 +1,40 @@
+# .guild/ — share-dot-guild policy (Decision E)
+# NOTE: Uses .guild (no trailing slash) + !.guild/ so un-ignore patterns can traverse
+# the directory. See followup: Lane B's real .gitignores use .guild/ which prevents traversal.
+.guild
+!.guild/
+!.guild/wiki/
+!.guild/wiki/**
+!.guild/initiatives/
+!.guild/initiatives/**
+!.guild/spec/
+!.guild/spec/**
+!.guild/plan/
+!.guild/plan/**
+!.guild/prd/
+!.guild/prd/**
+!.guild/team/
+!.guild/team/**
+!.guild/reflections/
+!.guild/reflections/**
+!.guild/evolve/
+!.guild/evolve/**
+!.guild/indexes/
+!.guild/indexes/**
+!.guild/workspace.json
+!.guild/settings.json
+!.guild/runs/
+!.guild/runs/*/
+!.guild/runs/*/handoffs/
+!.guild/runs/*/handoffs/**
+!.guild/runs/*/verify.md
+!.guild/runs/*/review.md
+!.guild/runs/*/provenance.json
+!.guild/runs/*/summary.md
+!.guild/runs/*/share-payloads.flag
+
+# Re-deny operator-private / local-only sub-paths (D-SHR-4 + Decision G)
+.guild/settings.local.json
+.guild/hosts/
+.guild/runs/*/events.ndjson
+.guild/runs/*/logs/

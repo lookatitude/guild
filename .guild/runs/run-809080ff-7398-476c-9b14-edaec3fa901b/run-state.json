@@ -1,0 +1,31 @@
+{
+  "schema_version": "guild.run_state.v1",
+  "run_id": "run-809080ff-7398-476c-9b14-edaec3fa901b",
+  "plan_slug": "run-809080ff-7398-476c-9b14-edaec3fa901b",
+  "program_id": null,
+  "wave_index": 0,
+  "lanes": {
+    "1": {
+      "status": "in_progress",
+      "attempt": 1,
+      "depends_on": [],
+      "receipt_ref": null,
+      "updated_at": "2026-05-26T19:03:51.784Z"
+    },
+    "2": {
+      "status": "in_progress",
+      "attempt": 1,
+      "depends_on": [],
+      "receipt_ref": null,
+      "updated_at": "2026-05-26T19:03:53.629Z"
+    },
+    "3": {
+      "status": "in_progress",
+      "attempt": 1,
+      "depends_on": [],
+      "receipt_ref": null,
+      "updated_at": "2026-05-26T19:03:55.276Z"
+    }
+  },
+  "last_checkpoint_at": "2026-05-26T19:03:55.276Z"
+}

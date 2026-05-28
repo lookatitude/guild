@@ -565,6 +565,125 @@ interface FileLoad {
   source: "settings.json" | "config.yml" | "none";
 }
 
+// ── settings.local.json merge (Decision F — guild-boundary-config-and-tracking.md)
+// Precedence: CLI flag > --rigor profile > settings.local.json > settings.json > built-in.
+// Deep-merge for objects; list values replace wholesale; unknown local keys throw.
+
+/**
+ * Collect all dotted key paths present in a (potentially nested) object.
+ * Used to build the allow-list from settings.json for the local-key validator.
+ */
+function collectKeyPaths(obj: Record<string, unknown>, prefix = ""): Set<string> {
+  const paths = new Set<string>();
+  for (const [k, v] of Object.entries(obj)) {
+    const full = prefix ? `${prefix}.${k}` : k;
+    paths.add(full);
+    if (isPlainObject(v)) {
+      for (const sub of collectKeyPaths(v as Record<string, unknown>, full)) {
+        paths.add(sub);
+      }
+    }
+  }
+  return paths;
+}
+
+/**
+ * Validate that every top-level key in localObj exists in baseObj.
+ * Only validates the first level (top-level keys of settings.local.json);
+ * nested keys are acceptable as long as the top-level parent exists in base.
+ * Throws a clear error (Decision F.3) on unknown key.
+ */
+function validateLocalKeys(
+  localObj: Record<string, unknown>,
+  baseObj: Record<string, unknown>
+): void {
+  const basePaths = collectKeyPaths(baseObj);
+  for (const key of Object.keys(localObj)) {
+    if (key.startsWith("_")) continue; // _help / _docs annotations exempt
+    if (!basePaths.has(key)) {
+      throw new Error(
+        `share-dot-guild: settings.local.json key '${key}' not in settings.json schema — ` +
+          `refusing to silently extend. Declare it in settings.json first (with the team default) ` +
+          `or remove it from settings.local.json.`
+      );
+    }
+  }
+}
+
+/**
+ * Deep-merge `local` over `base`:
+ *  - object-typed values → deep merge key-by-key
+ *  - array-typed values  → wholesale replace (Decision F.2)
+ *  - scalar values       → replace
+ */
+function deepMergeLocal(
+  base: Record<string, unknown>,
+  local: Record<string, unknown>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(local)) {
+    if (Array.isArray(v)) {
+      // List-typed: replace wholesale (Decision F.2)
+      result[k] = v;
+    } else if (isPlainObject(v) && isPlainObject(result[k])) {
+      // Object-typed: deep merge
+      result[k] = deepMergeLocal(
+        result[k] as Record<string, unknown>,
+        v as Record<string, unknown>
+      );
+    } else {
+      // Scalar: replace
+      result[k] = v;
+    }
+  }
+  return result;
+}
+
+/**
+ * loadLocalOverride — reads .guild/settings.local.json (if present) and merges
+ * it over fileConfig. Returns a new Partial<GuildSettings> or throws on unknown key.
+ * Called AFTER loadFileConfig; only runs when source is "settings.json".
+ */
+function loadLocalOverride(
+  cwd: string,
+  fileConfig: Partial<GuildSettings>,
+  selfBuild: boolean
+): Partial<GuildSettings> {
+  const localPath = path.join(cwd, ".guild", "settings.local.json");
+  if (!fs.existsSync(localPath)) return fileConfig; // no-op when absent
+
+  let localParsed: Record<string, unknown>;
+  try {
+    localParsed = JSON.parse(fs.readFileSync(localPath, "utf8"));
+  } catch (e) {
+    process.stderr.write(
+      `[read-guild-config] WARN: could not parse .guild/settings.local.json ` +
+        `(${(e as Error).message}) — local overrides ignored.\n`
+    );
+    return fileConfig;
+  }
+
+  // Build a reference object for the allow-list: the DEFAULTS shape is the canonical schema.
+  // We use DEFAULTS directly as the base schema (all legal top-level keys present there).
+  const schemaBase = DEFAULTS as unknown as Record<string, unknown>;
+  validateLocalKeys(localParsed, schemaBase);
+
+  // Deep-merge local over fileConfig (fileConfig may be partial; fill gaps from DEFAULTS first)
+  const base: Record<string, unknown> = {
+    ...(DEFAULTS as unknown as Record<string, unknown>),
+    ...(fileConfig as unknown as Record<string, unknown>),
+  };
+  const merged = deepMergeLocal(base, localParsed);
+
+  process.stderr.write(
+    `[read-guild-config] INFO: .guild/settings.local.json loaded — ` +
+      `${Object.keys(localParsed).length} override key(s): ` +
+      `[${Object.keys(localParsed).join(", ")}]\n`
+  );
+
+  return merged as Partial<GuildSettings>;
+}
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -1060,7 +1179,20 @@ function main(): void {
     return;
   }
 
-  const { config: fileConfig, rejects, source } = loadFileConfig(cwd, selfBuild);
+  const { config: fileConfigRaw, rejects, source } = loadFileConfig(cwd, selfBuild);
+
+  // Decision F: merge settings.local.json over settings.json (local slot in precedence ladder).
+  // Only when a settings.json was actually found (not on config.yml shim or "none").
+  let fileConfig = fileConfigRaw;
+  if (source === "settings.json") {
+    try {
+      fileConfig = loadLocalOverride(cwd, fileConfigRaw, selfBuild);
+    } catch (e) {
+      // Unknown local key — surface as a reject (treated as a validation error)
+      rejects.push((e as Error).message);
+      process.stderr.write(`[read-guild-config] ERROR: ${(e as Error).message}\n`);
+    }
+  }
 
   if (mode === "validate") {
     if (source === "none") {

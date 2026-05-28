@@ -1351,4 +1351,81 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
       expect(j.defaults.cross_host.hosts["h1"].address).toBe("1.2.3.4");
     });
   });
+
+  // ── settings.local.json merge (Decision F — guild-boundary-config-and-tracking.md)
+  // Precedence: CLI flag > --rigor profile > settings.local.json > settings.json > built-in.
+  describe("settings.local.json merge (Decision F)", () => {
+    function writeLocal(dir: string, obj: unknown): void {
+      fs.writeFileSync(path.join(dir, ".guild", "settings.local.json"), JSON.stringify(obj, null, 2));
+    }
+
+    test("absence of settings.local.json is a no-op (loader does nothing extra)", () => {
+      const dir = repo();
+      writeSettings(dir, { rigor: "standard" });
+      // No settings.local.json
+      const { status, out, err } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.rigor).toBe("standard");
+      expect(err).not.toMatch(/settings\.local\.json/);
+    });
+
+    test("merge happy path: local override wins over settings.json value", () => {
+      const dir = repo();
+      writeSettings(dir, { rigor: "standard", review: "local" });
+      writeLocal(dir, { review: "off" });
+      const { status, out, err } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.review).toBe("off"); // local wins over settings.json
+      expect(err).toMatch(/settings\.local\.json loaded/);
+    });
+
+    test("deep-merge: local sets one nested key; sibling keys from settings.json survive", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        defaults: {
+          adversarial: "on",
+          reporting: "standard",
+          team: { size: null, always_include: [] },
+        },
+      });
+      writeLocal(dir, { defaults: { reporting: "verbose" } });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.defaults.reporting).toBe("verbose"); // local wins
+      expect(j.defaults.adversarial).toBe("on");    // settings.json default survives
+    });
+
+    test("list-replace: local list replaces settings.json list wholesale", () => {
+      const dir = repo();
+      writeSettings(dir, { auto_approve: ["spec", "plan"] });
+      writeLocal(dir, { auto_approve: ["all"] });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.auto_approve).toEqual(["all"]); // wholesale replace, not concat
+    });
+
+    test("unknown-key rejection: key in local not in settings.json schema throws", () => {
+      const dir = repo();
+      writeSettings(dir, { rigor: "standard" });
+      writeLocal(dir, { totally_unknown_key_xyz: "bad" });
+      const { status, err } = run(["--cwd", dir]);
+      // Unknown key causes an error to be surfaced on stderr
+      expect(err).toMatch(/settings\.local\.json key 'totally_unknown_key_xyz' not in settings\.json schema/);
+    });
+
+    test("CLI flag still beats settings.local.json (CLI flag wins at top of ladder)", () => {
+      const dir = repo();
+      writeSettings(dir, { review: "local" });
+      writeLocal(dir, { review: "off" });
+      // CLI flag --review=cross beats both
+      const { status, out } = run(["--cwd", dir, "--review=cross"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.review).toBe("cross"); // CLI flag wins
+    });
+  });
 });

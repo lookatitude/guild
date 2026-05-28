@@ -614,10 +614,13 @@ function scanMissingImportance(corpus: string[]) {
 }
 
 // ---- 6. Secrets grep -------------------------------------------------------
-const SECRET_PATTERNS: Array<[RegExp, string]> = [
-  [/password\s*=\s*["']?[^\s"']{6,}/, "password= assignment"],
-  [/api_key\s*=\s*["']?[^\s"']{6,}/i, "api_key= assignment"],
-  [/secret\s*=\s*["']?[^\s"']{8,}/i, "secret= assignment"],
+export const SECRET_PATTERNS: Array<[RegExp, string]> = [
+  // NOTE: labels deliberately drop the `=` so the redaction replacement
+  // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
+  // on a subsequent scrub pass. Idempotency depends on this.
+  [/password\s*=\s*["']?[^\s"']{6,}/, "password-assignment"],
+  [/api_key\s*=\s*["']?[^\s"']{6,}/i, "api_key-assignment"],
+  [/secret\s*=\s*["']?[^\s"']{8,}/i, "secret-assignment"],
   [/AKIA[0-9A-Z]{16}/, "AWS access key"],
   [/AIza[0-9A-Za-z_-]{35}/, "GCP API key"],
   [/ghp_[0-9A-Za-z]{36}/, "GitHub personal access token"],

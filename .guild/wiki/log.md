@@ -1,0 +1,13 @@
+# Guild Wiki Log
+
+## 2026-05-02
+
+- decided guild-diagnose-self-fix-command
+- decided codex-review-user-facing-opt-in
+- decided run-scoped-telemetry-and-loop-events
+- decided benchmark-import-and-fixture-artifact-policy
+- decided archived-phase-gates-remain-historical
+- decided emit-loop-event-self-contained
+- decided two-audit-schemas
+- standard shell-hook-json-parsing
+

@@ -22,7 +22,8 @@
       "**/evolve/harness.test.ts",
       "**/shadow/harness.test.ts",
       "**/workspace/*.test.ts",
-      "**/integration/*.test.ts"
+      "**/integration/*.test.ts",
+      "**/dot-guild/*.test.ts"
     ],
     "testTimeout": 60000
   }
