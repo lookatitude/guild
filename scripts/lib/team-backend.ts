@@ -44,14 +44,11 @@ import { spawnSync } from "child_process";
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 
-/**
- * CLI brand of a host. Canonical home for the cross-host union (CH-1/CH-2 of
- * docs/knowledge/decisions/v2-cross-host-orchestration.md). `pane-adapter.ts`
- * and `host-router.ts` import it from here; `write-host-capability.ts` declares
- * an identical `"claude" | "codex"` union (kept separate to avoid a module
- * import cycle — the two are structurally assignable).
- */
-export type HostKind = "claude" | "codex";
+// PHASE-1-DISPATCH-WAVE-1: HostKind canonicalized in lib/host-types.ts.
+// The prior duplication-with-structural-assignability hack is gone; the
+// canonical module is sibling to this one so no import cycle exists.
+import type { HostKind } from "./host-types";
+export type { HostKind };
 
 export interface Specialist {
   name: string;
@@ -146,7 +143,10 @@ export interface TeamLaunchRequest {
  * specialist and the orchestrator (guild:execute-plan) issues one `Agent()` call
  * per descriptor. Shape only, zero side effects.
  */
-export interface AgentDispatchDescriptor {
+// PHASE-1-DISPATCH-WAVE-1: AgentDispatchDescriptor renamed to
+// GuildDispatchDescriptor (host-neutral by name). The deprecated alias below
+// preserves Wave-1 compatibility; Wave-2 removes it.
+export interface GuildDispatchDescriptor {
   /** Lane owner — the lane's `owner_role` (e.g. "backend", "qa", "architect"). */
   name: string;
   /**
@@ -179,6 +179,13 @@ export interface AgentDispatchDescriptor {
   prompt: string;
 }
 
+/**
+ * @deprecated Renamed to GuildDispatchDescriptor in Phase-1 dispatch Wave-1
+ * (2026-05-28). The alias preserves Wave-1 compatibility; Wave-2 removes it.
+ * See .guild/initiatives/active/phase-1-dispatch/ for context.
+ */
+export type AgentDispatchDescriptor = GuildDispatchDescriptor;
+
 /** Backend-agnostic launch outcome (what callers that use the seam see). */
 export interface TeamLaunchResult {
   kind: TeamBackendKind;
@@ -195,7 +202,7 @@ export interface TeamLaunchResult {
    * panes/processes directly). Additive + optional under the lenient-reader rule
    * — pre-existing tmux/remote results that omit it stay valid.
    */
-  dispatchPlan?: AgentDispatchDescriptor[];
+  dispatchPlan?: GuildDispatchDescriptor[];
 }
 
 /**
@@ -620,7 +627,7 @@ export class TmuxTeamBackend implements TeamBackend {
 // `subagent` rungs route here. The KEY constraint: a TeamBackend is a plain TS
 // class invoked by the launcher — it CANNOT call the Agent tool (an LLM/
 // orchestrator-level tool). So launch() does not spawn anything; it composes a
-// DECLARATIVE dispatch plan (one AgentDispatchDescriptor per specialist) that
+// DECLARATIVE dispatch plan (one GuildDispatchDescriptor per specialist) that
 // the orchestrator (guild:execute-plan) consumes to issue its own Agent() calls
 // — one per descriptor. No tmux ⇒ teammatePaneIds is empty, orchestratorPaneId
 // is null (the lead orchestrates in-process; it is never spawned as a teammate,
@@ -640,7 +647,7 @@ export class TmuxTeamBackend implements TeamBackend {
  */
 export function composeInProcessDispatch(
   req: TeamLaunchRequest
-): AgentDispatchDescriptor[] {
+): GuildDispatchDescriptor[] {
   return req.specialists.map((spec) => ({
     name: spec.name,
     subagentType: spec.name,

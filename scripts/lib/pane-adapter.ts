@@ -172,8 +172,15 @@ export class CodexPaneAdapter implements PaneAdapter {
 /**
  * Build the `host_kind` → adapter map. Constructed per call so test seams (run /
  * env overrides) propagate to every adapter. A future host adds one row here.
+ *
+ * PHASE-1-DISPATCH-WAVE-1: return type widened from
+ * `Record<HostKind, PaneAdapter>` to `Partial<Record<HostKind, PaneAdapter>>`
+ * because HostKind widened from 2 to 9 hosts in Wave-1; only claude + codex
+ * are wired up today. `resolveAdapter` below already throws on an unknown
+ * key, so the runtime semantics are unchanged. Per-host adapter
+ * implementations land in their own downstream initiatives.
  */
-export function buildAdapters(opts: AdapterOpts = {}): Record<HostKind, PaneAdapter> {
+export function buildAdapters(opts: AdapterOpts = {}): Partial<Record<HostKind, PaneAdapter>> {
   return {
     claude: new ClaudePaneAdapter(opts),
     codex: new CodexPaneAdapter(opts),

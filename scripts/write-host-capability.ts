@@ -44,7 +44,9 @@ import { probeTmuxAvailable } from "./lib/team-backend";
 
 // ── Schema (guild.host_capability.v1) ────────────────────────────────────────
 
-export type HostKind = "claude" | "codex";
+// PHASE-1-DISPATCH-WAVE-1: HostKind canonicalized in lib/host-types.ts.
+import type { HostKind } from "./lib/host-types";
+export type { HostKind };
 
 export interface HostCapabilityManifest {
   schema_version: "guild.host_capability.v1";

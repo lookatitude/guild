@@ -143,11 +143,33 @@ export interface RoutingDecision extends RouteTarget {
 
 // ── Built-in default tier ladder (claude fallback; cost ADR §1) ───────────────
 
-const BUILTIN_DEFAULT_TIERS: Record<Tier, string> = {
-  cheap: "haiku",
-  mid: "sonnet",
-  powerful: "opus",
-};
+// PHASE-1-DISPATCH-WAVE-1: hardcoded tier-map hoisted to a registry function.
+// Currently returns Claude defaults for every host; per-host tuning is
+// downstream work tracked in the cross-platform-compatibility followups
+// (audit leak D-8: "Model-tier defaults are Claude-specific"). The exhaustive
+// switch makes future per-host overrides a compile-time obligation — extending
+// HostKind without adding a case will type-error here.
+export function getDefaultModelTierMap(host: HostKind): Record<Tier, string> {
+  // Claude defaults; reused by every host until per-host overrides land.
+  const claudeDefaults: Record<Tier, string> = {
+    cheap: "haiku",
+    mid: "sonnet",
+    powerful: "opus",
+  };
+  // Per-host overrides land here in downstream initiatives.
+  switch (host) {
+    case "claude":
+    case "codex":
+    case "gemini":
+    case "pi":
+    case "antigravity-2":
+    case "claude-code-desktop":
+    case "claude-code-web":
+    case "codex-app":
+    case "claude-ai-connector":
+      return claudeDefaults;
+  }
+}
 
 const DEFAULT_TTL_S = 3600;
 
@@ -266,7 +288,10 @@ export function resolveModel(
   if (typeof override === "string" && override.trim()) return override.trim();
   const fromManifest = host.tiers?.[tier];
   if (typeof fromManifest === "string" && fromManifest.trim()) return fromManifest.trim();
-  return BUILTIN_DEFAULT_TIERS[tier];
+  // PHASE-1-DISPATCH-WAVE-1: was BUILTIN_DEFAULT_TIERS[tier]; now routed through
+  // the per-host registry function. Wave-1 values are identical (Claude defaults
+  // for every host) so behavior is byte-identical pending downstream per-host work.
+  return getDefaultModelTierMap(host.host_kind)[tier];
 }
 
 // ── Ranking ───────────────────────────────────────────────────────────────────
