@@ -221,6 +221,82 @@ function isSupersessionBookkeeping(line: string): boolean {
 }
 
 /**
+ * Returns true if a line carries an explicit v1→v2 lineage marker.
+ * Recalibrated 2026-05-28 (task-2-evolve follow-up): the prior pattern
+ * over-matched lines that deliberately cite a v1 path inside a v2-authored
+ * passage marking it as the frozen historical record (e.g. `plugin/guild-plan.md`
+ * referenced as "the frozen v1 record" in command-surface.md). These are
+ * LOAD-BEARING lineage callouts, not drift.
+ *
+ * The exemption is line-local — only lines that ALSO carry one of these
+ * markers near the v1 reference are exempted. A bare `commands/guild-init.md`
+ * with no lineage context still flags.
+ */
+const LINEAGE_MARKERS = [
+  /\bfrozen v1\b/i,
+  /\bv1 record\b/i,
+  /\bv1 name:\s*/i,
+  /\bv1 path\b/i,
+  /\bv1 7-step\b/i,
+  /\bv2 note:/i,
+  /\bbanner only\b/i,
+  /\bv1[→>-]v2\b/i,
+  /\bsuperseded by\b/i,
+  /\bfrozen as\b/i,
+  /\b(?:is|are|stays?) frozen\b/i,
+  /architecture-draft record/i,
+];
+
+function isExplicitLineageReference(line: string): boolean {
+  const t = line.trim();
+  return LINEAGE_MARKERS.some((m) => m.test(t));
+}
+
+/**
+ * Scans the previous N lines for a lineage marker. Handles multi-line bullet
+ * items where the marker is on line K and the v1 reference on line K+1..K+N.
+ * Example (`v2x-command-surface-dispatch-and-internalization.md` L319-L321):
+ *
+ *   - `guild-plan.md §5` ... are superseded; `guild-plan.md` stays the
+ *     frozen v1 record and gains conceptual `supersedes:` pointers
+ *     (recorded in prose only — this ADR does not edit `plugin/guild-plan.md`).
+ *
+ * The first line carries "stays the frozen v1 record"; the second-and-third
+ * lines carry the v1 reference but no marker. All three lines belong to the
+ * same bullet — exempt all three.
+ */
+function hasLineagePrior(contentLines: string[], idx: number, lookback = 3): boolean {
+  for (let k = Math.max(0, idx - lookback); k < idx; k++) {
+    if (isExplicitLineageReference(contentLines[k])) return true;
+  }
+  return false;
+}
+
+/**
+ * File-level exemption: returns true if the file's body opens with an explicit
+ * "v2 note:" or "frozen v1 record" callout that puts the whole doc in
+ * historical-provenance mode. Recalibrated 2026-05-28.
+ *
+ * The check scans the first 60 body lines (skipping frontmatter). A single
+ * callout is enough — the doc has self-marked its provenance status.
+ */
+function isFrozenV1Doc(content: string): boolean {
+  const lines = content.split("\n");
+  let i = 0;
+  // Skip frontmatter
+  if (lines[0]?.startsWith("---")) {
+    i = 1;
+    while (i < lines.length && lines[i].trim() !== "---") i++;
+    i++; // past closing ---
+  }
+  const head = lines.slice(i, i + 60).join("\n");
+  if (/\bv2 note:/i.test(head)) return true;
+  if (/\bfrozen v1 record\b/i.test(head)) return true;
+  if (/\barchitecture-draft record\b/i.test(head)) return true;
+  return false;
+}
+
+/**
  * Returns true if the file is a provenance/historical document where v1 references
  * are LEGITIMATE (not drift). Provenance docs include:
  *   - research/ and ideation/ directories (always exempt)
@@ -247,6 +323,10 @@ function scanDrift(corpus: string[], excludeResearch = true) {
     // Legacy excludeResearch flag (now subsumed by isProvenanceDoc but kept for compat)
     if (excludeResearch && (rel.includes("/research/") || rel.includes("/ideation/"))) continue;
     const content = readFile(fpath);
+    // File-level exemption: docs self-marked as "frozen v1 record" / "v2 note:" callouts
+    // are historical provenance; their v1 references are deliberate lineage citations.
+    // Recalibrated 2026-05-28 (task-2-evolve follow-up).
+    if (isFrozenV1Doc(content)) continue;
     const contentLines = content.split("\n");
 
     // Detect frontmatter boundary
@@ -277,6 +357,13 @@ function scanDrift(corpus: string[], excludeResearch = true) {
 
         // Skip supersession bookkeeping lines in body (e.g. "supersedes plugin/guild-plan.md" prose)
         if (isSupersessionBookkeeping(line)) continue;
+
+        // Skip lines with explicit v1→v2 lineage markers — these are deliberate
+        // historical citations in v2 docs, not drift. Recalibrated 2026-05-28.
+        if (isExplicitLineageReference(line)) continue;
+        // Skip multi-line bullet continuations where the marker is on a prior
+        // line of the same bullet (3-line lookback handles typical 2-3 line items).
+        if (hasLineagePrior(contentLines, i, 3)) continue;
 
         addFlag({
           category: "drift",
@@ -356,6 +443,12 @@ function scanProgressMsg(corpus: string[]) {
       }
     }
 
+    // File-level exemption: roadmap docs are state-tracking by purpose.
+    // post-v2-roadmap.md (and any *roadmap*.md) carries milestone-completion
+    // markers as load-bearing content. Recalibrated 2026-05-28.
+    const bnameLower = bname.toLowerCase();
+    if (bnameLower.includes("roadmap")) continue;
+
     for (const [pattern, label] of PROGRESS_PATTERNS) {
       for (let i = 0; i < contentLines.length; i++) {
         // Skip frontmatter
@@ -374,6 +467,19 @@ function scanProgressMsg(corpus: string[]) {
         // Simple heuristic: skip if the line is indented 4+ spaces (code fence content)
         // or starts with ``` — better to leave those for human review than to over-flag
         if (trimmed.startsWith("```") || trimmed.startsWith("    ")) continue;
+
+        // Skip ADR ratification / status-block markers — load-bearing decision
+        // provenance, not progress messaging. Recalibrated 2026-05-28.
+        // Examples: "Accepted (operator-ratified 2026-05-26)" "ratified 2026-05-26"
+        if (/\bAccepted\s*\(/.test(line)) continue;
+        if (/\boperator-ratified\b/i.test(line)) continue;
+        if (/\bratified\s+20\d\d/i.test(line)) continue;
+
+        // Skip evidence-table commit-provenance rows: a backticked short SHA
+        // (7-12 hex chars) co-occurring with a wave/date tuple. Example:
+        //   | `hooks/lib/foo.ts` | 1243 | yes | `9bef0c7` (2026-05-26, Wave-4 v2 commit) |
+        // These rows cite specific commits for ADR provenance — not progress.
+        if (/`[0-9a-f]{7,12}`\s*\([^)]*Wave-?\d+/.test(line)) continue;
 
         // For pattern-2 (emoji) and pattern-3 (Wave-N), require a co-occurrence signal
         const isWeakPattern = label.includes("C.3-pattern-2") || label.includes("C.3-pattern-3");
