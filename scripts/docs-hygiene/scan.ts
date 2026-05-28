@@ -56,9 +56,12 @@ import * as os from "os";
 
 const args = process.argv.slice(2);
 const workspaceArg = args.find((a) => a.startsWith("--workspace="));
+// docs-hygiene/ → scripts/ → plugin/ → workspace root = three "..".
+// Previous "../../../.." went one level too high and produced output paths
+// like /Users/<NAME>/Projects/.guild/ (sibling of the actual workspace).
 const WORKSPACE = workspaceArg
   ? workspaceArg.split("=")[1]
-  : path.resolve(__dirname, "../../../..");
+  : path.resolve(__dirname, "../../..");
 
 const DOCS_KNOWLEDGE = path.join(WORKSPACE, "docs/knowledge");
 const PLUGIN_WIKI = path.join(WORKSPACE, "plugin/.guild/wiki");
@@ -69,11 +72,15 @@ const ROOT_README = path.join(WORKSPACE, "README.md");
 const PLUGIN_README = path.join(WORKSPACE, "plugin/README.md");
 const PLUGIN_CLAUDE = path.join(WORKSPACE, "plugin/CLAUDE.md");
 
-const OUTPUT_DIR = path.join(
-  WORKSPACE,
-  ".guild/initiatives/active/docs-clean-up/artifacts"
-);
-const OUTPUT_PATH = path.join(OUTPUT_DIR, "scan-flag-list.md");
+// Default output location is script-local + transient. Override via --output.
+// Previously hardcoded to .guild/initiatives/active/docs-clean-up/artifacts/
+// which broke once docs-clean-up was archived (D8 close re-spawned an orphan
+// active/ dir on each scan).
+const outputArg = args.find((a) => a.startsWith("--output="));
+const OUTPUT_PATH = outputArg
+  ? path.resolve(outputArg.split("=")[1])
+  : path.resolve(__dirname, ".last-scan.md");
+const OUTPUT_DIR = path.dirname(OUTPUT_PATH);
 
 // Canonical page: under docs/knowledge, NOT under research/ or ideation/,
 // NOT one of the landing file names (A.3 + A.4 from the ADR).
@@ -660,6 +667,15 @@ function scanSecrets(corpus: string[]) {
 }
 
 // ---------------------------------------------------------------------------
+// FU-A: bail out when this module is imported (e.g. by scrub.ts which needs
+// SECRET_PATTERNS only). Without this guard the entire scan runs every time
+// scrub.ts does `require('scan.ts')`, producing stray scan-flag-list.md
+// files in any cwd the scrub touches (observed: benchmark + website during
+// the share-dot-guild commit).
+// ---------------------------------------------------------------------------
+if (require.main === module) {
+
+// ---------------------------------------------------------------------------
 // Collect corpora
 // ---------------------------------------------------------------------------
 
@@ -798,3 +814,5 @@ console.error(`  dangling-related:  ${counts["dangling-related"]}`);
 console.error(`  dangling-source-refs: ${counts["dangling-source-refs"]}`);
 console.error(`  missing-importance: ${counts["missing-importance"]}`);
 console.error(`  secrets:           ${counts["secrets"]}`);
+
+} // end if (require.main === module) — FU-A

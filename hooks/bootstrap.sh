@@ -91,4 +91,30 @@ cat <<STATUS
 └─────────────────────────────────────────────────────────────────┘
 STATUS
 
+# ── FU-E: self-build context detection + codex-review enforcement banner ──
+# Self-build = working on the Guild plugin itself. Detected when the cwd has
+# a plugin/CLAUDE.md whose orientation banner matches. In self-build sessions
+# Codex adversarial review is "implicitly always-on" — but two consecutive
+# self-build reflections (docs-clean-up + share-dot-guild) named codex-review
+# skipping as a discipline gap. This panel makes the rule visible at every
+# session start so the orchestrator can't silently skip it.
+if [[ -f "${PWD}/plugin/CLAUDE.md" ]] && grep -q "Guild — repo orientation" "${PWD}/plugin/CLAUDE.md" 2>/dev/null; then
+  cat <<'SELFBUILD'
+┌─────────────────────────────────────────────────────────────────┐
+│  ⚠  SELF-BUILD DETECTED  ⚠                                       │
+│                                                                 │
+│  You are working on the Guild plugin itself. Codex adversarial  │
+│  review is IMPLICITLY ALWAYS-ON for every G-spec / G-plan /     │
+│  G-lane gate (plugin/CLAUDE.md §"Codex adversarial review").    │
+│                                                                 │
+│  Skipping it is a discipline gap, not a default. If Codex is    │
+│  unavailable, emit `warn: codex-review skipped — codex plugin   │
+│  not installed` AT EACH GATE before proceeding.                 │
+│                                                                 │
+│  Followup ref: FU-E in share-dot-guild closeout                 │
+│  (.guild/initiatives/archived/share-dot-guild/release/).        │
+└─────────────────────────────────────────────────────────────────┘
+SELFBUILD
+fi
+
 exit 0

@@ -18,13 +18,64 @@ const wsArg   = args.find(a => a.startsWith("--workspace="));
 const reposArg = args.find(a => a.startsWith("--repos="));
 const outArg  = args.find(a => a.startsWith("--output="));
 
-const WORKSPACE = wsArg ? wsArg.split("=")[1] : path.resolve(__dirname, "../../../..");
+// dot-guild/ → scripts/ → plugin/ → workspace = three "..".
+const WORKSPACE = wsArg ? wsArg.split("=")[1] : path.resolve(__dirname, "../../..");
 const repoList: string[] = reposArg
   ? reposArg.split("=").slice(1).join("=").split(",").map(p => p.trim()).filter(Boolean)
   : [WORKSPACE];
 const outputPath = outArg ? outArg.split("=")[1] : undefined;
 
-interface FileFlag { runId: string; file: string; kind: "operator-path" | "secret" | "payload-excluded"; detail: string; }
+interface FileFlag { runId: string; file: string; kind: "operator-path" | "secret" | "payload-excluded" | "nested-guild"; detail: string; }
+
+// FU-F: declared fixture exemptions (mirror plugin/.gitignore — keep in sync).
+// Any .guild/ under one of these glob roots is a test fixture, not a leak.
+// `(?:[^/]+/)*` matches zero or more intermediate directory segments — the
+// fixture .guild/ can live directly under fixtures/ OR nested below it.
+const FIXTURE_EXEMPT_PATTERNS = [
+  /\/benchmark\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
+  /\/mcp-servers\/guild-telemetry\/fixtures(?:-v14)?\/(?:[^/]+\/)*\.guild(\/|$)/,
+  /\/plugin\/tests\/dot-guild\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
+  /\/plugin\/tests\/wiki-lint\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
+];
+
+// FU-F: ONE .guild/ per project (= git repo) root. Walk the workspace, classify
+// every .guild/ directory as repo-root / fixture-exempt / leak. Surface leaks
+// to the audit report so the SC-7 risk gate (and CI) catches them.
+function findNestedGuildLeaks(repoPath: string): FileFlag[] {
+  const flags: FileFlag[] = [];
+  const skipDirs = new Set(["node_modules", ".git", "dist", "build", ".next", ".cache"]);
+  function walk(dir: string): void {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      if (skipDirs.has(e.name)) continue;
+      const full = path.join(dir, e.name);
+      if (e.name === ".guild") {
+        // Repo root? Parent has .git (file or dir).
+        const parent = path.dirname(full);
+        const hasGit = fs.existsSync(path.join(parent, ".git"));
+        if (hasGit) continue; // legitimate per-repo .guild/
+        // Fixture-exempt? Resolve to absolute so the leading-slash regexes match
+        // regardless of whether the walk started from a relative or absolute path.
+        const absFull = path.resolve(full);
+        if (FIXTURE_EXEMPT_PATTERNS.some(p => p.test(absFull))) continue;
+        // Leak.
+        flags.push({
+          runId: "(workspace)",
+          file: path.relative(repoPath, full) || full,
+          kind: "nested-guild",
+          detail: "non-repo-root .guild/ outside declared fixtures — violates the one-.guild-per-repo invariant",
+        });
+        // Do NOT descend further into a nested .guild/ — its contents inherit the same status.
+        continue;
+      }
+      walk(full);
+    }
+  }
+  walk(repoPath);
+  return flags;
+}
 
 function auditRepo(repoPath: string): { flags: FileFlag[]; } {
   const scrubScript = path.resolve(__dirname, "scrub.ts");
@@ -65,6 +116,7 @@ function renderReport(repoResults: Array<{ repo: string; flags: FileFlag[] }>, n
     for (const f of r.flags) {
       const action = f.kind === "operator-path" ? "Run scrub.ts before commit"
         : f.kind === "secret" ? "Rotate credential; scrub.ts will redact"
+        : f.kind === "nested-guild" ? "DELETE the nested .guild/ — it's a leftover; resolver enforces one-.guild-per-repo. If legitimate fixture, add its path to FIXTURE_EXEMPT_PATTERNS"
         : "Informational — add share-payloads.flag to opt in";
       out += `| \`${f.runId}\` | \`${f.file}\` | ${f.kind} | ${f.detail} | ${action} |\n`;
     }
@@ -80,7 +132,9 @@ function main(): void {
   for (const repo of repoList) {
     process.stderr.write(`[audit] Scanning ${repo} ...\n`);
     const { flags } = auditRepo(repo);
-    repoResults.push({ repo: path.relative(WORKSPACE, repo) || path.basename(repo), flags });
+    // FU-F: also walk for nested-.guild leaks at any depth.
+    const nestedLeaks = findNestedGuildLeaks(repo);
+    repoResults.push({ repo: path.relative(WORKSPACE, repo) || path.basename(repo), flags: [...flags, ...nestedLeaks] });
   }
 
   const report = renderReport(repoResults, now);
