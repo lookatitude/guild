@@ -115,6 +115,58 @@ if [[ -f "${PWD}/plugin/CLAUDE.md" ]] && grep -q "Guild — repo orientation" "$
 │  (.guild/initiatives/archived/share-dot-guild/release/).        │
 └─────────────────────────────────────────────────────────────────┘
 SELFBUILD
+
+  # ── FU-3: docs-hygiene lifecycle hook surface ─────────────────────────────
+  # Parse the last hygiene scan if present and show flag totals. The scan is
+  # not run here (it costs ~2s); operator invokes it explicitly via
+  # `npx tsx plugin/scripts/docs-hygiene/scan.ts` or `/guild:wiki lint`. The
+  # standing display turns the scan into a continuous-feedback hook without
+  # adding wall-clock cost to every session start.
+  SCAN_FILE="${PWD}/plugin/scripts/docs-hygiene/.last-scan.md"
+  if [[ -f "${SCAN_FILE}" ]]; then
+    # Extract counts from the scan output's summary markdown table.
+    # Table shape: "| <Label> | <count> |". Use awk to take the 3rd pipe column
+    # so labels like "Drift markers (v1/single-repo)" don't pollute the match.
+    parse_count() {
+      awk -F'|' -v label="$1" '
+        index($0, label) && NF >= 3 {
+          gsub(/[[:space:]]/, "", $3);
+          if ($3 ~ /^[0-9]+$/) { print $3; exit }
+        }
+      ' "${SCAN_FILE}"
+    }
+    DRIFT=$(parse_count "Drift markers")
+    PROGRESS=$(parse_count "Progress messaging")
+    DREL=$(parse_count "Dangling related")
+    DSRC=$(parse_count "Dangling source_refs")
+    MISS=$(parse_count "Missing importance")
+    SEC=$(parse_count "Secrets grep")
+    : "${DRIFT:=0}" "${PROGRESS:=0}" "${DREL:=0}" "${DSRC:=0}" "${MISS:=0}" "${SEC:=0}"
+    TOTAL=$(( ${DRIFT:-0} + ${PROGRESS:-0} + ${DREL:-0} + ${DSRC:-0} + ${MISS:-0} + ${SEC:-0} )) 2>/dev/null || TOTAL="?"
+    SCAN_AGE_DAYS=$(( ( $(date +%s) - $(stat -f %m "${SCAN_FILE}" 2>/dev/null || stat -c %Y "${SCAN_FILE}" 2>/dev/null || echo 0) ) / 86400 ))
+    # Show panel only if scan is stale (>1 day) or there are flags worth surfacing.
+    if [[ "${TOTAL}" != "0" && "${TOTAL}" != "?" ]] || [[ "${SCAN_AGE_DAYS}" -gt 1 ]]; then
+      printf "┌─────────────────────────────────────────────────────────────────┐\n"
+      printf "│  📋  docs-hygiene status (last scan: %2dd ago)                    │\n" "${SCAN_AGE_DAYS}"
+      printf "│  drift:%3d  progress-msg:%3d  dangling-related:%3d              │\n" "${DRIFT:-0}" "${PROGRESS:-0}" "${DREL:-0}"
+      printf "│  dangling-source-refs:%3d  missing-importance:%3d  secrets:%3d  │\n" "${DSRC:-0}" "${MISS:-0}" "${SEC:-0}"
+      printf "│  Re-scan:   npx tsx plugin/scripts/docs-hygiene/scan.ts         │\n"
+      printf "│  Lint mode: /guild:wiki lint                                    │\n"
+      printf "└─────────────────────────────────────────────────────────────────┘\n"
+    fi
+  else
+    cat <<'NOSCAN'
+┌─────────────────────────────────────────────────────────────────┐
+│  📋  docs-hygiene status: no scan on record                      │
+│                                                                 │
+│  Run once to seed the standing display:                         │
+│    npx tsx plugin/scripts/docs-hygiene/scan.ts                  │
+│                                                                 │
+│  See: docs/knowledge/decisions/                                 │
+│       knowledge-base-hygiene-and-grading.md                     │
+└─────────────────────────────────────────────────────────────────┘
+NOSCAN
+  fi
 fi
 
 exit 0
