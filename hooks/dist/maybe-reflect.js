@@ -190,6 +190,30 @@ async function main() {
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
+  try {
+    const isSelfBuild = fs2.existsSync(path2.join(guildRoot, "plugin", "CLAUDE.md"));
+    if (isSelfBuild) {
+      const reflectionsDir = path2.join(guildRoot, ".guild", "reflections");
+      if (fs2.existsSync(reflectionsDir)) {
+        const reflectionFiles = fs2.readdirSync(reflectionsDir).filter((f) => f.endsWith(".md")).map((f) => path2.join(reflectionsDir, f)).map((p) => ({ path: p, mtime: fs2.statSync(p).mtimeMs })).sort((a, b) => b.mtime - a.mtime).slice(0, 3);
+        const codexSkipCount = reflectionFiles.filter(({ path: p }) => {
+          try {
+            const content = fs2.readFileSync(p, "utf8");
+            const m = content.match(/skill_improvement:\s*\[([^\]]*)\]/);
+            return m ? m[1].includes("guild:codex-review") : false;
+          } catch {
+            return false;
+          }
+        }).length;
+        if (codexSkipCount >= 3) {
+          process.stderr.write(
+            "\n[maybe-reflect] \u26A0\u26A0\u26A0 DISCIPLINE WARNING \u26A0\u26A0\u26A0\n[maybe-reflect] The last 3 reflections all named guild:codex-review\n[maybe-reflect] in skill_improvement \u2014 codex adversarial review has been\n[maybe-reflect] skipped on 3 consecutive self-build runs. This is the\n[maybe-reflect] \xA711.1 \u22653-reflection threshold for /guild:evolve auto-trigger.\n[maybe-reflect] Run `/guild:evolve guild:codex-review` to act on the proposals,\n[maybe-reflect] or wire codex (`codex --version` + OPENAI_API_KEY) before\n[maybe-reflect] the next G-gate. See plugin/CLAUDE.md \xA7'Codex adversarial review'.\n\n"
+          );
+        }
+      }
+    }
+  } catch {
+  }
   const sessionId = payload.session_id;
   const runId = process.env["GUILD_RUN_ID"] ?? (sessionId ? `run-${sessionId}` : `run-session-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`);
   const eventsFile = path2.join(guildRoot, ".guild", "runs", runId, "events.ndjson");

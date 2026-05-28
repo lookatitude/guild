@@ -99,7 +99,17 @@ STATUS
 # skipping as a discipline gap. This panel makes the rule visible at every
 # session start so the orchestrator can't silently skip it.
 if [[ -f "${PWD}/plugin/CLAUDE.md" ]] && grep -q "Guild — repo orientation" "${PWD}/plugin/CLAUDE.md" 2>/dev/null; then
-  cat <<'SELFBUILD'
+  # Detect codex availability — both binary on PATH AND a non-empty API key.
+  # (Mirrors the pane-adapter preflight: codex --version + OPENAI_API_KEY.)
+  CODEX_OK=0
+  if command -v codex >/dev/null 2>&1 && codex --version >/dev/null 2>&1; then
+    if [[ -n "${OPENAI_API_KEY:-}" ]]; then
+      CODEX_OK=1
+    fi
+  fi
+
+  if [[ "${CODEX_OK}" == "1" ]]; then
+    cat <<'SELFBUILD_OK'
 ┌─────────────────────────────────────────────────────────────────┐
 │  ⚠  SELF-BUILD DETECTED  ⚠                                       │
 │                                                                 │
@@ -107,14 +117,38 @@ if [[ -f "${PWD}/plugin/CLAUDE.md" ]] && grep -q "Guild — repo orientation" "$
 │  review is IMPLICITLY ALWAYS-ON for every G-spec / G-plan /     │
 │  G-lane gate (plugin/CLAUDE.md §"Codex adversarial review").    │
 │                                                                 │
-│  Skipping it is a discipline gap, not a default. If Codex is    │
-│  unavailable, emit `warn: codex-review skipped — codex plugin   │
-│  not installed` AT EACH GATE before proceeding.                 │
+│  ✓ codex CLI detected + OPENAI_API_KEY present.                 │
+│    Invoke at every gate via `guild:codex-review` or              │
+│    `Agent({subagent_type: "codex:codex-rescue", …})`.           │
+│                                                                 │
+│  Skipping a gate is a discipline gap. Two consecutive runs      │
+│  named codex-review skipping in their reflections.              │
+└─────────────────────────────────────────────────────────────────┘
+SELFBUILD_OK
+  else
+    cat <<'SELFBUILD_FAIL'
+┌─────────────────────────────────────────────────────────────────┐
+│  ⚠  SELF-BUILD DETECTED — CODEX UNAVAILABLE  ⚠                   │
+│                                                                 │
+│  You are working on the Guild plugin itself. Codex adversarial  │
+│  review is IMPLICITLY ALWAYS-ON for every G-spec / G-plan /     │
+│  G-lane gate — but codex isn't reachable here.                  │
+│                                                                 │
+│  Missing one or more of:                                        │
+│    □ `codex` binary on PATH (run `codex --version`)             │
+│    □ Non-empty OPENAI_API_KEY in env                            │
+│                                                                 │
+│  Required discipline when codex is unavailable: emit            │
+│    `warn: codex-review skipped — codex plugin not installed`    │
+│  AT EACH GATE before proceeding. The reflection must record     │
+│  every skip; three consecutive skips trigger a hard fail at     │
+│  the gate (maybe-reflect.ts checks the reflection trail).       │
 │                                                                 │
 │  Followup ref: FU-E in share-dot-guild closeout                 │
 │  (.guild/initiatives/archived/share-dot-guild/release/).        │
 └─────────────────────────────────────────────────────────────────┘
-SELFBUILD
+SELFBUILD_FAIL
+  fi
 
   # ── FU-3: docs-hygiene lifecycle hook surface ─────────────────────────────
   # Parse the last hygiene scan if present and show flag totals. The scan is

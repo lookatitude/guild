@@ -289,6 +289,47 @@ async function main(): Promise<void> {
   // Walk up from cwd to find the repo root — ensures .guild/ always lands at
   // the nearest .git / .guild ancestor, never in a subdirectory.
   const guildRoot = resolveGuildRoot(cwd);
+
+  // Signal 2 (cross-run): codex-skip discipline check on self-build runs.
+  // If the last 3 reflections each named `guild:codex-review` in their
+  // skill_improvement frontmatter, emit a loud stderr warning. We do NOT
+  // block the hook — that's still policy, not enforcement; the SessionStart
+  // panel + this trailing warning are the two surfaces operators see.
+  try {
+    const isSelfBuild = fs.existsSync(path.join(guildRoot, "plugin", "CLAUDE.md"));
+    if (isSelfBuild) {
+      const reflectionsDir = path.join(guildRoot, ".guild", "reflections");
+      if (fs.existsSync(reflectionsDir)) {
+        const reflectionFiles = fs.readdirSync(reflectionsDir)
+          .filter(f => f.endsWith(".md"))
+          .map(f => path.join(reflectionsDir, f))
+          .map(p => ({ path: p, mtime: fs.statSync(p).mtimeMs }))
+          .sort((a, b) => b.mtime - a.mtime)
+          .slice(0, 3);
+        const codexSkipCount = reflectionFiles.filter(({ path: p }) => {
+          try {
+            const content = fs.readFileSync(p, "utf8");
+            // Match `skill_improvement: [...guild:codex-review...]` in frontmatter.
+            const m = content.match(/skill_improvement:\s*\[([^\]]*)\]/);
+            return m ? m[1].includes("guild:codex-review") : false;
+          } catch { return false; }
+        }).length;
+        if (codexSkipCount >= 3) {
+          process.stderr.write(
+            "\n[maybe-reflect] ⚠⚠⚠ DISCIPLINE WARNING ⚠⚠⚠\n" +
+            "[maybe-reflect] The last 3 reflections all named guild:codex-review\n" +
+            "[maybe-reflect] in skill_improvement — codex adversarial review has been\n" +
+            "[maybe-reflect] skipped on 3 consecutive self-build runs. This is the\n" +
+            "[maybe-reflect] §11.1 ≥3-reflection threshold for /guild:evolve auto-trigger.\n" +
+            "[maybe-reflect] Run `/guild:evolve guild:codex-review` to act on the proposals,\n" +
+            "[maybe-reflect] or wire codex (`codex --version` + OPENAI_API_KEY) before\n" +
+            "[maybe-reflect] the next G-gate. See plugin/CLAUDE.md §'Codex adversarial review'.\n\n"
+          );
+        }
+      }
+    }
+  } catch { /* never block reflect on this advisory check */ }
+
   const sessionId = payload.session_id;
   const runId =
     process.env["GUILD_RUN_ID"] ??

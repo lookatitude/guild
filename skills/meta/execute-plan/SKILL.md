@@ -112,6 +112,93 @@ This skill does not author receipts — it confirms each exists at `.guild/runs/
 
 **Assumption aggregation.** Before the stop condition, aggregate every receipt's `assumptions:` list into `.guild/runs/<run-id>/assumptions.md` (one section per specialist, verbatim). If no lane reported assumptions, still create the file empty (header only) so `guild:verify-done` can tell "no assumptions" from "aggregation skipped" — it is the single handoff verify-done reads for its check #5.
 
+## Mid-run scope expansion (operator-mandate absorption)
+
+Two consecutive self-build initiatives (`docs-clean-up`, `share-dot-guild`)
+landed a new operator mandate **mid-run** — at a soft gate (CQ answer
+broader than the option set), at the SC-7 risk gate (Decision M added
+after audit), or even **post-commit** (the "one `.guild/` per repo root"
+policy that emerged after SC-10). In both cases the run absorbed the
+expansion cleanly without restarting the lifecycle. This section codifies
+the absorption pattern so future orchestrators recognize and execute it
+deterministically.
+
+### Detection signals
+
+A mid-run scope expansion is in play when **all** of these hold:
+
+- The mandate arrives in operator chat *between* gates (not in the
+  original spec/plan).
+- It is broader than the surfaced option set for the active gate (e.g.
+  operator answers a 2-option question with a 3rd option that's a policy
+  extension).
+- It does not invalidate the work already completed — it extends or
+  re-scopes ongoing/upcoming lanes.
+
+If the mandate **invalidates** completed work (e.g. "redo the previous
+lane with X"), this is **not** scope expansion — it's a re-dispatch
+request; halt and surface to the operator before proceeding.
+
+### Absorption protocol (5 steps, in order)
+
+1. **Lock the new decision.** Append a new decision row to the active
+   initiative's `decisions.md` with a freshly-allocated ID
+   (e.g. `D-SHR-5` after `D-SHR-1..4`) and verbatim quote the operator's
+   mandate. Cite the gate / chat point where it landed. Decisions are
+   immutable once locked — do not edit prior ones, only add.
+
+2. **Update the controlling ADR.** Author a new `## Decision <Letter>`
+   section in the relevant ADR with the policy in full (rationale +
+   enforcement mechanism + scope). Maintain the cross-reference between
+   the initiative-scoped decision ID (D-SHR-5) and the ADR-scoped letter
+   (Decision M).
+
+3. **Apply inline to in-flight work.** Identify which lanes are
+   affected; for each, decide:
+   - **Already-complete lane** → audit its output against the new rule;
+     if it conforms, no rework; if not, apply a surgical patch (do not
+     re-dispatch the lane unless the operator requests).
+   - **In-flight lane** → inject the new rule into the lane's autonomy
+     policy (the next handoff receipt must show compliance).
+   - **Not-yet-dispatched lane** → update the lane's scope in the plan
+     before its Wave dispatches.
+
+4. **Log to activity.jsonl.** Append a `policy_clarification` event
+   (mirror the existing event types in `share-dot-guild`'s log):
+   ```json
+   {"ts":"…","event":"policy_clarification","id":"<initiative>",
+    "trigger":"operator","clarification":"<verbatim>",
+    "absorption":[...what was patched...],"verified":"<how>"}
+   ```
+   This makes the expansion auditable in `/guild:stats` and surfaces
+   in the reflection.
+
+5. **Carry forward in verify.md.** The verify-done writeup
+   (`.guild/runs/<run-id>/verify.md`) must include the mid-run mandate
+   in its "Assumptions reviewed" or a dedicated "Mid-run policy
+   expansions" section, so the closeout reflects the actual rule set
+   the run shipped — not just the original plan.
+
+### What absorption is NOT
+
+- **Not** a re-spec. The original spec stays as-is; the new decision
+  *extends* it, doesn't supersede it.
+- **Not** silent. Every step above leaves an artifact (decision row,
+  ADR section, activity entry, verify.md note). An orchestrator that
+  "just applied the patch" without these is producing un-auditable runs.
+- **Not** an excuse to skip gates. If the new mandate changes what
+  the *next* gate should ask, update the gate questions; never proceed
+  past a gate that hasn't yet seen the new rule.
+
+### Why this is in `execute-plan` and not `guild:plan`
+
+`guild:plan` writes the original lane plan at planning time, before
+operator-mandate-at-gate is possible. `execute-plan` is the orchestrator
+that actually sees the mandate land mid-run; the absorption protocol
+must live where the orchestrator can reach it. If a mandate lands
+*before* the first lane dispatches, prefer re-running `guild:plan` with
+the new constraint — absorption is for after Wave 1 has begun.
+
 ## Stop condition
 
 Execution is complete when every lane has a non-error receipt under `handoffs/`:

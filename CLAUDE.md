@@ -41,9 +41,9 @@ Skill bodies live at `skills/meta/{init,brainstorm,team-compose,plan,context-ass
 
 ## Dev team (`.claude/agents/`)
 
-The plugin is built by 8 dev-team agents, each owning a scoped slice. **These — not the 14 `guild:` product specialists — are the team for any self-build work** (the product specialists build *user* products). Dispatch each via the Agent tool with `subagent_type: <agent-name>` (never `general-purpose`); agents never commit themselves. They live in `.claude/agents/` (canonical: `plugin/.claude/agents/`; mirrored to the workspace root so they are dispatchable when developing from there).
+The plugin is built by 10 dev-team agents, each owning a scoped slice. **These — not the 14 `guild:` product specialists — are the team for any self-build work** (the product specialists build *user* products). Dispatch each via the Agent tool with `subagent_type: <agent-name>` (never `general-purpose`); agents never commit themselves. They live in `.claude/agents/` (canonical: `plugin/.claude/agents/`; mirrored to the workspace root so they are dispatchable when developing from there).
 
-| Changed path | Dev-team agent (`subagent_type`) |
+| Changed path / concern | Dev-team agent (`subagent_type`) |
 |---|---|
 | `scripts/`, `mcp-servers/`, `.mcp.json` | `tooling-engineer` |
 | `hooks/` (hooks.json + hook scripts) | `hook-engineer` |
@@ -53,6 +53,10 @@ The plugin is built by 8 dev-team agents, each owning a scoped slice. **These �
 | `tests/` (cross-cutting evals/fixtures) | `eval-engineer` |
 | `docs/`, repo-root/plugin `CLAUDE.md` | `docs-writer` |
 | `.claude-plugin/*`, manifests, ADRs, phase-gate integration | `plugin-architect` |
+| Harvest research/ideation provenance → recallable canonical pages (self-build only) | `research-digester` |
+| Pre-commit leak audits + scrub-policy review on share-policy-extension initiatives | `security-auditor` |
+
+Route by the path being changed; when a task spans several, dispatch the matching specialists in parallel (worktree-isolated) per `guild:execute-plan`. `research-digester` and `security-auditor` were minted 2026-05-28 after two consecutive self-builds hit recurring gaps (docs-clean-up's research harvest used the shipping `guild:researcher`; share-dot-guild's SC-7 pre-flight audit used the shipping `guild:security`); see the closeout in `.guild/initiatives/archived/share-dot-guild/release/closeout.md` cross-run signals.
 
 Route by the path being changed; when a task spans several, dispatch the matching specialists in parallel (worktree-isolated) per `guild:execute-plan`.
 
