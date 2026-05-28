@@ -169,6 +169,62 @@ The specialist prompt must instruct the specialist to privilege the bundle over 
 
 This caveat is the reason Guild does not pretend to build an airtight sandbox; it builds a stronger signal in the middle of a noisy channel.
 
+## Mandatory-invocation threshold
+
+`guild:execute-plan §"Inline shortcut under high autonomy"` defines when
+the orchestrator may inline this skill rather than invoking it formally.
+This section defines when invocation is **mandatory regardless of posture**.
+
+### Trigger conditions (any one forces invocation)
+
+Invoke `guild:context-assemble` formally — never inline — when any of:
+
+1. **Source-file count > 3.** The lane's input corpus references more than
+   3 distinct source files. (Working baseline derived from
+   `run-b6337cbc`: Lane A read 5 source files + audit = 39 tool uses;
+   Lane B read 4 source files + audit = 25 tool uses. Both should have
+   pre-staged a bundle. The threshold is conservative; raise it only with
+   evidence.)
+2. **Any single source > 500 lines.** Long sources (specs, audits,
+   ADRs) need a recall-before-read pull captured in a bundle, not held
+   in orchestrator working memory.
+3. **Upstream `depends-on:` contract.** The lane reads a sibling lane's
+   handoff receipt verbatim — bundle this as the upstream contract so
+   future re-runs are reproducible.
+4. **Cross-repo or cross-workspace corpus.** Sources span more than the
+   single project's repo (e.g. workspace fan-out via
+   `.guild/workspace.json`). Bundle so the recall path is recorded.
+5. **`--rigor=deep` AND any of above-threshold signals.** Deep rigor
+   amplifies the cost of a missing bundle; when any source-count or
+   length flag is borderline, deep rigor breaks the tie toward formal
+   invocation.
+
+### What "formal invocation" produces
+
+A formal invocation writes the bundle to
+`.guild/context/<run-id>/<specialist>-<task-id>.md` per `## Output path`
+above. The bundle is the **audit-trail anchor** — telemetry can later
+diff bundle size, layer composition, and source-priority decisions
+across runs. The inline shortcut produces no such anchor; that's
+acceptable for small lanes and forbidden for the threshold cases above.
+
+### Why this is here, not in `execute-plan`
+
+`execute-plan` is the dispatcher (it decides whether to inline this
+skill); this skill owns the **invocation contract** (when its own
+invocation is non-optional). The two cross-reference so the decision
+point and the rule live next to each other but in their proper homes.
+
+### Why this section exists
+
+Three consecutive reflections named `guild:context-assemble` in
+`proposals.skill_improvement` (`run-2b531201`, `run-0c8ae3ca`,
+`run-b6337cbc-cross-platform`), each citing the same diagnosis: no lane
+invoked context-assemble despite corpus sizes that warranted it.
+Without an explicit threshold, the orchestrator defaulted to inlining
+every time. The threshold above is the §11.1 evolve outcome — an
+explicit rule replaces a missing default.
+
 ## Handoff
 
 `guild:context-assemble` is invoked once per specialist per run by `guild:execute-plan`. For a plan with four lanes, four bundles are written before the first subagent dispatches.

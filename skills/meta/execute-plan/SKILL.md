@@ -112,6 +112,71 @@ This skill does not author receipts — it confirms each exists at `.guild/runs/
 
 **Assumption aggregation.** Before the stop condition, aggregate every receipt's `assumptions:` list into `.guild/runs/<run-id>/assumptions.md` (one section per specialist, verbatim). If no lane reported assumptions, still create the file empty (header only) so `guild:verify-done` can tell "no assumptions" from "aggregation skipped" — it is the single handoff verify-done reads for its check #5.
 
+## Inline shortcut under high autonomy (`--rigor=deep --auto-approve=all`)
+
+When the run posture is `--rigor=deep --auto-approve=all` AND the operator is
+**not** engaged for per-gate confirmation, the orchestrator MAY inline the
+per-lane chain (`guild:context-assemble → dispatch → guild:review`) instead
+of invoking each sub-skill formally. This shortcut emerged organically across
+three self-build runs (`docs-clean-up`, `share-dot-guild`,
+`cross-platform-compatibility`) and is now codified — it is **not** a defect.
+
+### When inline IS valid
+
+All three conditions must hold:
+
+1. **Posture allows it.** `--auto-approve=all` set on the run, OR
+   `defaults.auto_approve: all` in `.guild/settings.json`. The autonomy
+   contract is genuinely high — no per-gate confirmation expected.
+2. **Lane corpus is small.** The lane's input fits the orchestrator's
+   working set without a structured bundle — see
+   `guild:context-assemble §"Mandatory-invocation threshold"` for the cap.
+   When the cap is crossed, formal `guild:context-assemble` is **mandatory**
+   regardless of posture.
+3. **No cross-lane contract handoff.** The lane has no upstream
+   `depends-on:` requiring a verbatim contract pull from a sibling lane's
+   handoff receipt. Cross-lane contracts demand a bundle for reproducibility.
+
+### When inline is FORBIDDEN
+
+Any of these conditions forces the formal sub-skill chain:
+
+- Operator is **engaged for per-gate confirmation** (`--auto-approve` unset
+  or value `risky-only`/`destructive-only`). Each gate must surface for
+  approval — inlining bypasses the approval surface.
+- **Lane corpus exceeds the threshold** in
+  `guild:context-assemble §"Mandatory-invocation threshold"`.
+- **Upstream `depends-on:` contract** must be threaded into the lane
+  (`guild:context-assemble §"Role mapping" / §"Task-dependent layer"`).
+- A **regression-prone area** — the lane touches an L1/L2 loop, the
+  promotion gate, or another single-point-of-failure surface where the
+  bundle's `source_paths` are part of the audit trail.
+
+### Audit trail when inlining
+
+Even under the inline shortcut, the run record MUST capture equivalent
+evidence:
+
+- `.guild/runs/<run-id>/dispatch-trace.md` — what lanes were dispatched,
+  at which tier, against which bundle equivalent (the orchestrator's
+  inlined working set, file-listed).
+- `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` — receipt
+  required as usual.
+- Reflection notes that inlining was used and **why** (which conditions
+  qualified). This is exactly how `run-b6337cbc` recorded the inlining;
+  the pattern is now the contract.
+
+### Why this clarification exists
+
+Three consecutive reflections named `guild:execute-plan` in
+`proposals.skill_improvement` (`run-2b531201`, `run-0c8ae3ca`,
+`run-b6337cbc-cross-platform`). Each one observed the orchestrator
+satisfying the per-lane chain by inline action under
+`--auto-approve=all` rather than formal sub-skill dispatch. The pattern
+worked every time; the §11.1 ≥3-reflection trigger fired on what was
+actually an **under-specification** of valid orchestrator behavior, not a
+defect.
+
 ## Mid-run scope expansion (operator-mandate absorption)
 
 Two consecutive self-build initiatives (`docs-clean-up`, `share-dot-guild`)
