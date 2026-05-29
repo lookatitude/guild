@@ -669,6 +669,13 @@ describe("agent-team-launcher.ts", () => {
     });
 
     it("real run: missing OPENAI_API_KEY → CH-6 preflight aborts (exit 1)", () => {
+      // Null out BOTH auth paths to deterministically exercise the CH-6 refusal:
+      //   1. OPENAI_API_KEY cleared (set to undefined so it is deleted from child env).
+      //   2. CODEX_HOME pointed at an empty temp dir so auth.json is absent there too
+      //      (without this, a real ~/.codex/auth.json on the host satisfies the new
+      //      two-path auth contract and preflight passes — the pre-fix regression).
+      const emptyCodexHome = path.join(tmpDir, "empty-codex-home");
+      fs.mkdirSync(emptyCodexHome, { recursive: true });
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
       const bin = makeFakeMixedBin(tmpDir, { windows: ["other-window"], claudeOk: true, codexOk: true });
       const { exitCode, stderr } = runScript(
@@ -677,10 +684,34 @@ describe("agent-team-launcher.ts", () => {
           TMUX: "/tmp/tmux-1000/default,12345,0",
           PATH: `${bin}:${process.env.PATH ?? ""}`,
           OPENAI_API_KEY: undefined,
+          CODEX_HOME: emptyCodexHome,
         }
       );
       expect(exitCode).toBe(1);
+      // The refusal message names both missing credential paths (CH-6 two-path contract).
       expect(stderr).toMatch(/OPENAI_API_KEY/);
+      expect(stderr).toMatch(/codex login|auth\.json/i);
+    });
+
+    it("real run: auth.json present (CODEX_HOME login session) → CH-6 preflight passes (exit 0)", () => {
+      // Positive case for the new two-path auth contract: OPENAI_API_KEY absent but
+      // a non-empty auth.json exists at the CODEX_HOME path → preflight passes.
+      const fakeCodexHome = path.join(tmpDir, "fake-codex-home");
+      fs.mkdirSync(fakeCodexHome, { recursive: true });
+      fs.writeFileSync(path.join(fakeCodexHome, "auth.json"), JSON.stringify({ token: "tok" }), "utf8");
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      const bin = makeFakeMixedBin(tmpDir, { windows: ["other-window"], claudeOk: true, codexOk: true });
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir],
+        {
+          TMUX: "/tmp/tmux-1000/default,12345,0",
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+          OPENAI_API_KEY: undefined,
+          CODEX_HOME: fakeCodexHome,
+        }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/team window "guild-test-slug" created/);
     });
   });
 

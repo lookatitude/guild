@@ -325,6 +325,12 @@ function readRecordStatusRuns(root) {
 function runDir2(root, runId) {
   return path3.join(root, ".guild", "runs", runId);
 }
+function liveLogPath(root, runId) {
+  return path3.join(runDir2(root, runId), "logs", "v1.4-events.jsonl");
+}
+function provenancePath2(root, runId) {
+  return path3.join(runDir2(root, runId), "provenance.json");
+}
 function skippedFilesPath(root, runId) {
   return path3.join(runDir2(root, runId), "learn", "skipped-files.json");
 }
@@ -333,7 +339,56 @@ function defaultResolveHost(requested) {
   const resolved = raw === "codex" ? "codex" : raw === "gemini" ? "gemini" : raw === "pi" ? "pi" : "claude";
   return { requested, resolved };
 }
-function startAndCloseRun(root, resolveHost, opts = {}) {
+function appendTraceLine(file, event) {
+  fs2.mkdirSync(path3.dirname(file), { recursive: true });
+  fs2.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
+}
+function emitRunClosed(root, runId, resolveHost, opts = {}) {
+  try {
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
+    lifecycle.closeRun(runId, {
+      status: opts.status ?? "closed",
+      touched: opts.touched,
+      coverage: opts.coverage,
+      final_learning_checkpoint: opts.final_learning_checkpoint,
+      artifacts: opts.artifacts
+    });
+    const prov = JSON.parse(fs2.readFileSync(provenancePath2(root, runId), "utf8"));
+    const pointer = prov.terminal_trace_event;
+    if (!pointer || typeof pointer.event_id !== "string") {
+      process.stderr.write(
+        `[run-trace] WARN: provenance.json missing terminal_trace_event pointer for ${runId}
+`
+      );
+      return;
+    }
+    appendTraceLine(liveLogPath(root, runId), {
+      schema_version: "guild.trace_event.v1",
+      event_id: pointer.event_id,
+      event_name: "run_closed",
+      run_id: runId,
+      at: typeof pointer.at === "string" ? pointer.at : (/* @__PURE__ */ new Date()).toISOString()
+    });
+  } catch (err) {
+    process.stderr.write(
+      `[run-trace] WARN: emitRunClosed failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+  }
+}
+function startRunOnly(root, resolveHost, opts = {}) {
+  try {
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
+    return lifecycle.startRun(buildStartRunOpts(root, opts));
+  } catch (err) {
+    process.stderr.write(
+      `[run-trace] WARN: startRunOnly failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return null;
+  }
+}
+function buildStartRunOpts(root, opts) {
   const runClass = opts.run_class ?? "full";
   const command = opts.command ?? "/guild:learn";
   const cwd = opts.cwd ?? root;
@@ -342,25 +397,29 @@ function startAndCloseRun(root, resolveHost, opts = {}) {
   const scanPolicy = runClass === "lightweight" ? "n/a (no scan)" : "default";
   const ignorePolicy = runClass === "lightweight" ? "n/a (no scan)" : "default";
   const phase = runClass === "lightweight" ? command.replace(/^\/guild:/, "") : null;
+  return {
+    command,
+    arguments: {},
+    cwd,
+    root,
+    target_kind: targetKind,
+    workspace: { is_workspace: false, root },
+    project: runClass === "lightweight" ? command.replace(/^\/guild:/, "") : "project",
+    host_requested: process.env["GUILD_HOST"] ?? "auto",
+    model_tier_policy: tierPolicy,
+    ignore_policy: ignorePolicy,
+    scan_policy: scanPolicy,
+    initiative: opts.initiative ?? null,
+    // NN#5: scalar record ONLY, never a dir
+    phase,
+    run_class: runClass
+  };
+}
+function startAndCloseRun(root, resolveHost, opts = {}) {
   try {
     const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
-    const runId = lifecycle.startRun({
-      command,
-      arguments: {},
-      cwd,
-      root,
-      target_kind: targetKind,
-      workspace: { is_workspace: false, root },
-      project: runClass === "lightweight" ? command.replace(/^\/guild:/, "") : "project",
-      host_requested: process.env["GUILD_HOST"] ?? "auto",
-      model_tier_policy: tierPolicy,
-      ignore_policy: ignorePolicy,
-      scan_policy: scanPolicy,
-      initiative: null,
-      phase,
-      run_class: runClass
-    });
-    lifecycle.closeRun(runId, { status: "closed" });
+    const runId = lifecycle.startRun(buildStartRunOpts(root, opts));
+    emitRunClosed(root, runId, resolveHost, { status: "closed" });
     return runId;
   } catch (err) {
     process.stderr.write(
@@ -420,10 +479,17 @@ async function main() {
     const command = flag(argv, "command") ?? "/guild:learn";
     const runClassRaw = flag(argv, "run-class");
     const runClass = runClassRaw === "lightweight" ? "lightweight" : "full";
-    const runId = startAndCloseRun(root, defaultResolveHost, {
+    const initiative = flag(argv, "initiative") ?? null;
+    const runId = runClass === "lightweight" ? startAndCloseRun(root, defaultResolveHost, {
       command,
       cwd,
-      run_class: runClass
+      run_class: "lightweight",
+      initiative
+    }) : startRunOnly(root, defaultResolveHost, {
+      command,
+      cwd,
+      run_class: "full",
+      initiative
     });
     if (runId) process.stdout.write(runId + "\n");
     process.exit(0);

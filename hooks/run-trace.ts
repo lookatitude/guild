@@ -8,9 +8,19 @@
  *
  *   start — uniform run-record path (A2 rollout seam):
  *       npx tsx hooks/run-trace.ts start --command=/guild:learn [--cwd <root>]
- *             [--run-class=full|lightweight]
- *     Default run-class is "full". When "lightweight", writes run.yaml +
- *     provenance.json under .guild/runs/ ONLY — never wiki/decisions/indexes.
+ *             [--run-class=full|lightweight] [--initiative=<id>]
+ *     Default run-class is "full". Behavior splits by run-class:
+ *       --run-class=full (default): starts the run ONLY and leaves run.yaml
+ *         OPEN. The Stop hook (run-trace-close) closes it at session end, once
+ *         work has actually happened. Writes NO provenance.json inline — closing
+ *         inline would make the Stop hook skip the already-closed run and record
+ *         empty touched/artifact data (P1).
+ *       --run-class=lightweight: a point-in-time snapshot (status/stats/wiki
+ *         query) that legitimately starts AND closes at once. Writes run.yaml +
+ *         provenance.json under .guild/runs/ ONLY — never wiki/decisions/indexes
+ *         — AND appends the matching run_closed line to logs/v1.4-events.jsonl.
+ *     --initiative=<id> records the scalar initiative attachment (NN#5: recorded
+ *     only, never creates a .guild/initiatives/ dir).
  *     The OQ6 record_status_runs gate is NOT applied here — A2 applies it
  *     before invoking this for /guild:status.
  *     Prints the run-id on stdout.
@@ -37,6 +47,7 @@ import {
   defaultResolveHost,
   recordStatusLightweight,
   startAndCloseRun,
+  startRunOnly,
   writeSkippedFiles,
   type SkippedFileEntry,
 } from "./lib/run-trace.js";
@@ -85,12 +96,33 @@ async function main(): Promise<void> {
     const runClassRaw = flag(argv, "run-class");
     const runClass: "full" | "lightweight" =
       runClassRaw === "lightweight" ? "lightweight" : "full";
+    // --initiative=<id> threads into startRun as the scalar attachment (NN#5:
+    // recorded only, never creates a .guild/initiatives/ dir). Without this the
+    // run always records initiative:null and an --initiative-attached command is
+    // stored as a one-off (retention one-off-90d), detached from its initiative.
+    const initiative = flag(argv, "initiative") ?? null;
 
-    const runId = startAndCloseRun(root, defaultResolveHost, {
-      command,
-      cwd,
-      run_class: runClass,
-    });
+    // Split by run-class:
+    //   full (default) — start ONLY, leave run.yaml OPEN. The Stop hook
+    //     (run-trace-close) closes it at session end once work has happened.
+    //     Closing inline here would skip the Stop-hook close and record empty
+    //     touched/artifact data (P1).
+    //   lightweight — a point-in-time snapshot run (status/stats/wiki-query)
+    //     that legitimately starts AND closes at once.
+    const runId =
+      runClass === "lightweight"
+        ? startAndCloseRun(root, defaultResolveHost, {
+            command,
+            cwd,
+            run_class: "lightweight",
+            initiative,
+          })
+        : startRunOnly(root, defaultResolveHost, {
+            command,
+            cwd,
+            run_class: "full",
+            initiative,
+          });
     if (runId) process.stdout.write(runId + "\n");
     process.exit(0);
   }

@@ -298,15 +298,102 @@ export interface StartAndCloseOpts {
    * store.
    */
   run_class?: "full" | "lightweight";
+  /**
+   * Optional initiative attachment slug (e.g. from `--initiative=<id>`). NN#5:
+   * recording the scalar attachment MUST NOT create any .guild/initiatives/
+   * dir — B2's startRun records it as run.yaml.initiative_attachment +
+   * provenance.json.initiative only. Default null (one-off run).
+   */
+  initiative?: string | null;
+}
+
+/**
+ * Start a run ONLY (write run.yaml status:open + the run-id sentinel) and return
+ * the run-id, leaving the run OPEN. This is the correct path for a FULL lifecycle
+ * command's `start`: the run must stay open for the session so the Stop hook
+ * (run-trace-close.ts → emitRunClosed) closes it once work has actually happened.
+ * Closing inline (startAndCloseRun) would flip run.yaml to `closed` + write
+ * provenance.json BEFORE any work — the Stop hook would then skip the
+ * already-closed run, and the recorded run would carry empty touched/artifact
+ * data. (P1.)
+ *
+ * NN#5: an `initiative` slug is recorded as the scalar attachment ONLY — B2's
+ * startRun never creates a .guild/initiatives/ dir.
+ *
+ * Best-effort; returns null on error (never throws).
+ */
+export function startRunOnly(
+  root: string,
+  resolveHost: ResolveHost,
+  opts: StartAndCloseOpts = {},
+): string | null {
+  try {
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
+    return lifecycle.startRun(buildStartRunOpts(root, opts));
+  } catch (err) {
+    process.stderr.write(
+      `[run-trace] WARN: startRunOnly failed: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Assemble the B2 StartRunOpts from the B3 StartAndCloseOpts. Single place that
+ * derives the run-class-dependent policy labels + threads the initiative scalar.
+ */
+function buildStartRunOpts(
+  root: string,
+  opts: StartAndCloseOpts,
+): Parameters<ReturnType<typeof createRunLifecycle>["startRun"]>[0] {
+  const runClass = opts.run_class ?? "full";
+  const command = opts.command ?? "/guild:learn";
+  const cwd = opts.cwd ?? root;
+  const targetKind = opts.target_kind ?? "existing_guild_project";
+
+  // Derive a human-readable tier/scan label appropriate for the run class.
+  const tierPolicy =
+    runClass === "lightweight"
+      ? "n/a (read-only lightweight run)"
+      : "default (full run)";
+  const scanPolicy = runClass === "lightweight" ? "n/a (no scan)" : "default";
+  const ignorePolicy = runClass === "lightweight" ? "n/a (no scan)" : "default";
+  const phase =
+    runClass === "lightweight"
+      ? command.replace(/^\/guild:/, "") // e.g. "status", "stats", "wiki"
+      : null;
+
+  return {
+    command,
+    arguments: {},
+    cwd,
+    root,
+    target_kind: targetKind,
+    workspace: { is_workspace: false, root },
+    project: runClass === "lightweight" ? command.replace(/^\/guild:/, "") : "project",
+    host_requested: process.env["GUILD_HOST"] ?? "auto",
+    model_tier_policy: tierPolicy,
+    ignore_policy: ignorePolicy,
+    scan_policy: scanPolicy,
+    initiative: opts.initiative ?? null, // NN#5: scalar record ONLY, never a dir
+    phase,
+    run_class: runClass,
+  };
 }
 
 /**
  * Start + immediately close a run and return the run-id. This is the shared
- * primitive that both recordStatusLightweight and the `start` CLI sub-command
- * call — the single place that enforces "lightweight ⇒ runs/-only, no durable
- * writes". Full-class runs record the usual way; for them the CLI caller is
- * responsible for closing separately (run-trace-close.ts Stop hook) unless
- * they want an instant point-in-time trace.
+ * primitive that both recordStatusLightweight and the `start` CLI sub-command's
+ * LIGHTWEIGHT branch call — the single place that enforces "lightweight ⇒
+ * runs/-only, no durable writes". A lightweight snapshot run (status/stats/wiki
+ * query) legitimately starts AND closes at once: there is no deferred work.
+ *
+ * The close reuses emitRunClosed (NOT a bare lifecycle.closeRun), so the inline
+ * lightweight close ALSO appends the matching `run_closed` line into
+ * logs/v1.4-events.jsonl carrying the SAME event_id the provenance pointer
+ * references. A bare closeRun would write the provenance pointer but leave the
+ * JSONL line missing, so any reader following the pointer would find nothing.
+ * (P2a.)
  *
  * NEVER applies the OQ6 record_status_runs gate — that gate is the caller's
  * responsibility (recordStatusLightweight gates; the raw CLI start sub-command
@@ -319,46 +406,13 @@ export function startAndCloseRun(
   resolveHost: ResolveHost,
   opts: StartAndCloseOpts = {},
 ): string | null {
-  const runClass = opts.run_class ?? "full";
-  const command = opts.command ?? "/guild:learn";
-  const cwd = opts.cwd ?? root;
-  const targetKind = opts.target_kind ?? "existing_guild_project";
-
-  // Derive a human-readable tier/scan label appropriate for the run class.
-  const tierPolicy =
-    runClass === "lightweight"
-      ? "n/a (read-only lightweight run)"
-      : "default (full run)";
-  const scanPolicy =
-    runClass === "lightweight" ? "n/a (no scan)" : "default";
-  const ignorePolicy =
-    runClass === "lightweight" ? "n/a (no scan)" : "default";
-  const phase =
-    runClass === "lightweight"
-      ? command.replace(/^\/guild:/, "") // e.g. "status", "stats", "wiki"
-      : null;
-
   try {
     const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
-    const runId = lifecycle.startRun({
-      command,
-      arguments: {},
-      cwd,
-      root,
-      target_kind: targetKind,
-      workspace: { is_workspace: false, root },
-      project: runClass === "lightweight" ? command.replace(/^\/guild:/, "") : "project",
-      host_requested: process.env["GUILD_HOST"] ?? "auto",
-      model_tier_policy: tierPolicy,
-      ignore_policy: ignorePolicy,
-      scan_policy: scanPolicy,
-      initiative: null,
-      phase,
-      run_class: runClass,
-    });
-    // Immediately close — produces provenance.json. For lightweight runs B2
+    const runId = lifecycle.startRun(buildStartRunOpts(root, opts));
+    // Close via emitRunClosed so the run_closed JSONL line is appended with the
+    // event_id matching the provenance pointer (P2a). For lightweight runs B2
     // enforces final_learning_checkpoint:null and the write-set stays runs/-only.
-    lifecycle.closeRun(runId, { status: "closed" });
+    emitRunClosed(root, runId, resolveHost, { status: "closed" });
     return runId;
   } catch (err) {
     process.stderr.write(

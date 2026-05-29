@@ -26,6 +26,7 @@ import {
   emitRunClosed,
   recordStatusLightweight,
   startAndCloseRun,
+  startRunOnly,
   writeSkippedFiles,
   resolveRunIdForTrace,
   type SkippedFileEntry,
@@ -279,6 +280,113 @@ describe("run-trace lib (Lane B3)", () => {
       // startAndCloseRun itself does not gate — it wrote.
       expect(runId).not.toBeNull();
     });
+
+    // P2a — inline (lightweight) close MUST append the matching run_closed line.
+    it("lightweight close appends a run_closed jsonl line whose event_id matches the provenance pointer", () => {
+      const runId = startAndCloseRun(root, resolveHost, {
+        command: "/guild:status",
+        cwd: root,
+        run_class: "lightweight",
+      });
+      expect(runId).not.toBeNull();
+      const runDir = path.join(root, ".guild", "runs", runId as string);
+
+      // provenance.json carries the terminal_trace_event POINTER.
+      const prov = JSON.parse(
+        fs.readFileSync(path.join(runDir, "provenance.json"), "utf8"),
+      );
+      const pointer = prov.terminal_trace_event;
+      expect(pointer.event_name).toBe("run_closed");
+      expect(typeof pointer.event_id).toBe("string");
+
+      // The JSONL line the pointer references must EXIST and carry the same id.
+      const closed = readJsonl(liveLog(root, runId as string)).filter(
+        (e) => e["event_name"] === "run_closed",
+      );
+      expect(closed).toHaveLength(1);
+      expect(closed[0]["event_id"]).toBe(pointer.event_id);
+      expect(closed[0]["schema_version"]).toBe("guild.trace_event.v1");
+      expect(closed[0]["run_id"]).toBe(runId);
+    });
+
+    // P2b — initiative scalar threads through, with NO initiatives/ dir (NN#5).
+    it("initiative scalar is recorded in run.yaml + provenance, and creates NO .guild/initiatives/ dir", () => {
+      const runId = startAndCloseRun(root, resolveHost, {
+        command: "/guild:build",
+        cwd: root,
+        run_class: "full",
+        initiative: "foo",
+      });
+      expect(runId).not.toBeNull();
+      const runDir = path.join(root, ".guild", "runs", runId as string);
+
+      const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
+      expect(runYaml).toMatch(/^initiative_attachment: foo$/m);
+
+      const prov = JSON.parse(
+        fs.readFileSync(path.join(runDir, "provenance.json"), "utf8"),
+      );
+      expect(prov.initiative).toBe("foo");
+      // Attached runs retain until archive (not the one-off-90d detached class).
+      expect(prov.retention_class).toBe("until-archive");
+
+      // NN#5: the scalar attachment MUST NOT create any initiatives/ dir.
+      expect(fs.existsSync(path.join(root, ".guild", "initiatives"))).toBe(false);
+    });
+  });
+
+  // ── startRunOnly (P1 — full-run start leaves the run OPEN) ─────────────────
+
+  describe("startRunOnly (P1 — full start leaves run OPEN)", () => {
+    it("writes run.yaml with status:open and NO provenance.json (close deferred to Stop hook)", () => {
+      const runId = startRunOnly(root, resolveHost, {
+        command: "/guild:build",
+        cwd: root,
+        run_class: "full",
+      });
+      expect(runId).not.toBeNull();
+      const runDir = path.join(root, ".guild", "runs", runId as string);
+
+      // run.yaml exists and is OPEN — not flipped to closed.
+      const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
+      expect(runYaml).toMatch(/^status: open$/m);
+
+      // NO provenance.json — the Stop hook (emitRunClosed) writes it at close.
+      expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(false);
+
+      // No run_closed line has been emitted yet either.
+      const closed = readJsonl(liveLog(root, runId as string)).filter(
+        (e) => e["event_name"] === "run_closed",
+      );
+      expect(closed).toHaveLength(0);
+    });
+
+    it("a deferred Stop-hook close (emitRunClosed) then closes the OPEN run normally", () => {
+      const runId = startRunOnly(root, resolveHost, {
+        command: "/guild:build",
+        run_class: "full",
+      }) as string;
+      // Simulate the Stop hook firing at session end.
+      emitRunClosed(root, runId, resolveHost, { status: "closed" });
+      const runDir = path.join(root, ".guild", "runs", runId);
+      expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(true);
+      const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
+      expect(runYaml).toMatch(/^status: closed$/m);
+    });
+
+    it("threads --initiative scalar with NO initiatives/ dir (NN#5)", () => {
+      const runId = startRunOnly(root, resolveHost, {
+        command: "/guild:build",
+        run_class: "full",
+        initiative: "foo",
+      }) as string;
+      const runYaml = fs.readFileSync(
+        path.join(root, ".guild", "runs", runId, "run.yaml"),
+        "utf8",
+      );
+      expect(runYaml).toMatch(/^initiative_attachment: foo$/m);
+      expect(fs.existsSync(path.join(root, ".guild", "initiatives"))).toBe(false);
+    });
   });
 
   // ── run-trace CLI `start` sub-command ──────────────────────────────────────
@@ -319,23 +427,38 @@ describe("run-trace lib (Lane B3)", () => {
   }
 
   describe("run-trace CLI start sub-command", () => {
-    it("start with default run-class=full exits 0 and prints a run-id", () => {
+    it("start with default run-class=full exits 0, prints a run-id, leaves run.yaml OPEN with NO provenance.json (P1)", () => {
       const { exitCode, stdout } = runCli(
         ["start", "--command=/guild:learn", `--cwd=${cliRoot}`],
       );
       expect(exitCode).toBe(0);
       const runId = stdout.trim();
       expect(runId.length).toBeGreaterThan(0);
-      expect(
-        fs.existsSync(path.join(cliRoot, ".guild", "runs", runId, "provenance.json")),
-      ).toBe(true);
-      const prov = JSON.parse(
-        fs.readFileSync(
-          path.join(cliRoot, ".guild", "runs", runId, "provenance.json"),
-          "utf8",
-        ),
+      const runDir = path.join(cliRoot, ".guild", "runs", runId);
+      // run.yaml written + OPEN (close deferred to the Stop hook).
+      const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
+      expect(runYaml).toMatch(/^status: open$/m);
+      // P1: full start must NOT close inline — no provenance.json yet.
+      expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(false);
+    });
+
+    it("start --initiative=foo records the attachment with NO initiatives/ dir created (P2b/NN#5)", () => {
+      const { exitCode, stdout } = runCli([
+        "start",
+        "--command=/guild:build",
+        "--initiative=foo",
+        `--cwd=${cliRoot}`,
+      ]);
+      expect(exitCode).toBe(0);
+      const runId = stdout.trim();
+      expect(runId.length).toBeGreaterThan(0);
+      const runYaml = fs.readFileSync(
+        path.join(cliRoot, ".guild", "runs", runId, "run.yaml"),
+        "utf8",
       );
-      expect(prov.run_class).toBe("full");
+      expect(runYaml).toMatch(/^initiative_attachment: foo$/m);
+      // NN#5: scalar attachment never creates a .guild/initiatives/ dir.
+      expect(fs.existsSync(path.join(cliRoot, ".guild", "initiatives"))).toBe(false);
     });
 
     it("start --run-class=lightweight exits 0, run_class:lightweight, no durable dirs", () => {
@@ -360,19 +483,17 @@ describe("run-trace lib (Lane B3)", () => {
       }
     });
 
-    it("start --run-class=full and start with no --run-class both produce run_class:full", () => {
+    it("start --run-class=full and start with no --run-class both record run_class:full + stay OPEN (P1)", () => {
       const r1 = runCli(["start", "--run-class=full", `--cwd=${cliRoot}`]);
       const r2 = runCli(["start", `--cwd=${cliRoot}`]); // no flag → default full
       expect(r1.exitCode).toBe(0);
       expect(r2.exitCode).toBe(0);
       for (const runId of [r1.stdout.trim(), r2.stdout.trim()]) {
-        const prov = JSON.parse(
-          fs.readFileSync(
-            path.join(cliRoot, ".guild", "runs", runId, "provenance.json"),
-            "utf8",
-          ),
-        );
-        expect(prov.run_class).toBe("full");
+        const runDir = path.join(cliRoot, ".guild", "runs", runId);
+        const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
+        expect(runYaml).toMatch(/^run_class: full$/m);
+        // P1: full start defers close to the Stop hook — no inline provenance.json.
+        expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(false);
       }
     });
 
