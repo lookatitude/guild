@@ -278,7 +278,7 @@ async function main() {
 [maybe-reflect]   .guild/codex-skip-streak.json  (blocked: true)
 [maybe-reflect] The NEXT G-gate (G-spec/G-plan/G-lane) must REFUSE to pass
 [maybe-reflect] until codex review runs or the streak is cleared. To clear:
-[maybe-reflect]   1. wire codex (\`codex --version\` + OPENAI_API_KEY) and run
+[maybe-reflect]   1. wire codex (\`codex --version\` + \`codex login\`, or OPENAI_API_KEY) and run
 [maybe-reflect]      \`guild:codex-review\` at the gate, OR
 [maybe-reflect]   2. record a reflection WITHOUT a codex_review: SKIPPED marker
 [maybe-reflect]      (a real review breaks the consecutive streak), OR

@@ -9,7 +9,11 @@
  *     (the launcher regression anchor) + carries the team env gate.
  *   - CodexPaneAdapter.command uses `codex exec`, exports GUILD_RUN_ID, and does
  *     NOT inject the Claude team env gate.
- *   - preflight: claude --version; codex --version AND non-empty OPENAI_API_KEY.
+ *   - preflight: claude --version; codex --version AND usable auth:
+ *       (a) auth.json present (codex login) + no OPENAI_API_KEY → pass
+ *       (b) OPENAI_API_KEY present + no auth.json → pass
+ *       (c) neither present → refuse with message naming both paths
+ *       (d) codex --version failing → refuse regardless of auth
  *   - preflightTeam fail-fast: orchestrator is always claude; specialist host
  *     picked from host_kind; failures collected.
  *   - TmuxTeamBackend.preflight() no-ops without a resolver (regression) and
@@ -24,6 +28,7 @@ import {
   preflightTeam,
   ClaudePaneAdapter,
   CodexPaneAdapter,
+  type FsSeam,
 } from "../lib/pane-adapter";
 import {
   composeTmuxCommands,
@@ -38,6 +43,18 @@ import {
 
 const OK: RunResult = { status: 0, stdout: "ok", stderr: "" };
 const FAIL: RunResult = { status: 127, stdout: "", stderr: "not found" };
+
+/** FsSeam that reports auth.json as present and non-empty. */
+const AUTH_JSON_PRESENT: FsSeam = {
+  existsSync: () => true,
+  statSync: () => ({ size: 42 }),
+};
+
+/** FsSeam that reports auth.json as absent. */
+const AUTH_JSON_ABSENT: FsSeam = {
+  existsSync: () => false,
+  statSync: () => { throw new Error("ENOENT"); },
+};
 
 /** A runner that returns a per-binary status. */
 function runner(map: Record<string, RunResult>): RunFn {
@@ -121,31 +138,90 @@ describe("CodexPaneAdapter", () => {
     expect(adapter.env(spec({ hostKind: "codex" }))).toEqual({ GUILD_RUN_ID: "run-001" });
   });
 
-  it("preflight requires BOTH codex --version AND a non-empty OPENAI_API_KEY", () => {
-    // both present → ok
-    expect(
-      new CodexPaneAdapter({ run: runner({ codex: OK }), env: { OPENAI_API_KEY: "sk-x" } })
-        .preflight().ok
-    ).toBe(true);
-    // missing binary → fail
-    const noBin = new CodexPaneAdapter({ run: runner({ codex: FAIL }), env: { OPENAI_API_KEY: "sk-x" } }).preflight();
+  it("preflight passes when codex --version ok AND OPENAI_API_KEY present (no auth.json)", () => {
+    const r = new CodexPaneAdapter({
+      run: runner({ codex: OK }),
+      env: { OPENAI_API_KEY: "sk-x" },
+      fs: AUTH_JSON_ABSENT,
+    }).preflight();
+    expect(r.ok).toBe(true);
+    expect(r.message).toContain("OPENAI_API_KEY present");
+  });
+
+  it("preflight passes when codex --version ok AND auth.json present (no OPENAI_API_KEY)", () => {
+    const r = new CodexPaneAdapter({
+      run: runner({ codex: OK }),
+      env: {},
+      fs: AUTH_JSON_PRESENT,
+    }).preflight();
+    expect(r.ok).toBe(true);
+    expect(r.message).toContain("codex login session");
+  });
+
+  it("preflight passes when both OPENAI_API_KEY and auth.json are present", () => {
+    const r = new CodexPaneAdapter({
+      run: runner({ codex: OK }),
+      env: { OPENAI_API_KEY: "sk-x" },
+      fs: AUTH_JSON_PRESENT,
+    }).preflight();
+    expect(r.ok).toBe(true);
+  });
+
+  it("preflight refuses when neither OPENAI_API_KEY nor auth.json is present (CH-6)", () => {
+    const r = new CodexPaneAdapter({
+      run: runner({ codex: OK }),
+      env: {},
+      fs: AUTH_JSON_ABSENT,
+    }).preflight();
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/OPENAI_API_KEY/);
+    expect(r.message).toMatch(/codex login/);
+    expect(r.message).toMatch(/auth\.json/);
+  });
+
+  it("preflight refuses when OPENAI_API_KEY is whitespace-only and no auth.json (CH-6)", () => {
+    const r = new CodexPaneAdapter({
+      run: runner({ codex: OK }),
+      env: { OPENAI_API_KEY: "   " },
+      fs: AUTH_JSON_ABSENT,
+    }).preflight();
+    expect(r.ok).toBe(false);
+  });
+
+  it("preflight refuses when codex --version fails (regardless of auth)", () => {
+    const noBin = new CodexPaneAdapter({
+      run: runner({ codex: FAIL }),
+      env: { OPENAI_API_KEY: "sk-x" },
+      fs: AUTH_JSON_PRESENT,
+    }).preflight();
     expect(noBin.ok).toBe(false);
     expect(noBin.message).toMatch(/codex/);
-    // missing key → fail (CH-6 refuse-to-spawn)
-    const noKey = new CodexPaneAdapter({ run: runner({ codex: OK }), env: {} }).preflight();
-    expect(noKey.ok).toBe(false);
-    expect(noKey.message).toMatch(/OPENAI_API_KEY/);
-    // empty/whitespace key → fail
-    const blank = new CodexPaneAdapter({ run: runner({ codex: OK }), env: { OPENAI_API_KEY: "   " } }).preflight();
-    expect(blank.ok).toBe(false);
+  });
+
+  it("CODEX_HOME env override is used to resolve auth.json path", () => {
+    // Inject a CODEX_HOME that the fs seam reports as having auth.json.
+    const customFs: FsSeam = {
+      existsSync: (p) => p === "/custom/codex/auth.json",
+      statSync: (p) => {
+        if (p === "/custom/codex/auth.json") return { size: 10 };
+        throw new Error("ENOENT");
+      },
+    };
+    const r = new CodexPaneAdapter({
+      run: runner({ codex: OK }),
+      env: { CODEX_HOME: "/custom/codex" },
+      fs: customFs,
+    }).preflight();
+    expect(r.ok).toBe(true);
+    expect(r.message).toContain("/custom/codex/auth.json");
   });
 });
 
 describe("preflightTeam — fail-fast (CH-6)", () => {
   const claudeOk = runner({ claude: OK, codex: OK });
 
-  it("orchestrator is always probed as claude; a mixed team passes when all probes pass", () => {
-    const resolver = resolveAdapter({ run: claudeOk, env: { OPENAI_API_KEY: "sk-x" } });
+  it("orchestrator is always probed as claude; a mixed team passes when all probes pass (key auth)", () => {
+    const resolver = resolveAdapter({ run: claudeOk, env: { OPENAI_API_KEY: "sk-x" }, fs: AUTH_JSON_ABSENT });
     const specialists: Array<{ name: string; host_kind?: "claude" | "codex" }> = [
       { name: "architect" }, // defaults to claude
       { name: "security", host_kind: "codex" },
@@ -155,18 +231,34 @@ describe("preflightTeam — fail-fast (CH-6)", () => {
     expect(r.failures).toHaveLength(0);
   });
 
-  it("collects a failure naming the specialist + host + dependency", () => {
-    // codex binary present but OPENAI_API_KEY missing → the codex pane fails.
-    const resolver = resolveAdapter({ run: claudeOk, env: {} });
+  it("orchestrator is always probed as claude; a mixed team passes when all probes pass (auth.json)", () => {
+    const resolver = resolveAdapter({ run: claudeOk, env: {}, fs: AUTH_JSON_PRESENT });
+    const specialists: Array<{ name: string; host_kind?: "claude" | "codex" }> = [
+      { name: "architect" },
+      { name: "security", host_kind: "codex" },
+    ];
+    const r = preflightTeam(specialists, resolver);
+    expect(r.ok).toBe(true);
+    expect(r.failures).toHaveLength(0);
+  });
+
+  it("collects a failure naming the specialist + host + both missing credential paths", () => {
+    // codex binary present but neither OPENAI_API_KEY nor auth.json → the codex pane fails.
+    const resolver = resolveAdapter({ run: claudeOk, env: {}, fs: AUTH_JSON_ABSENT });
     const r = preflightTeam([{ name: "security", host_kind: "codex" }], resolver);
     expect(r.ok).toBe(false);
     const f = r.failures.find((x) => x.specialist === "security");
     expect(f?.hostKind).toBe("codex");
     expect(f?.message).toMatch(/OPENAI_API_KEY/);
+    expect(f?.message).toMatch(/codex login/);
   });
 
   it("fails when the orchestrator's claude binary is missing", () => {
-    const resolver = resolveAdapter({ run: runner({ claude: FAIL, codex: OK }), env: { OPENAI_API_KEY: "sk-x" } });
+    const resolver = resolveAdapter({
+      run: runner({ claude: FAIL, codex: OK }),
+      env: { OPENAI_API_KEY: "sk-x" },
+      fs: AUTH_JSON_ABSENT,
+    });
     const r = preflightTeam([{ name: "security", host_kind: "codex" }], resolver);
     expect(r.ok).toBe(false);
     expect(r.failures.some((x) => x.specialist === "orchestrator")).toBe(true);
@@ -205,7 +297,7 @@ describe("TmuxTeamBackend integration (regression-preserving)", () => {
       slug: "demo",
       runId: "run-test-001",
       specialists: mixed,
-      resolveAdapter: resolveAdapter({ env: { OPENAI_API_KEY: "sk-x" } }),
+      resolveAdapter: resolveAdapter({ env: { OPENAI_API_KEY: "sk-x" }, fs: AUTH_JSON_ABSENT }),
     });
     const inline = cmds.map((c) => c.argv[c.argv.length - 1]);
     // Orchestrator (new-session) pane is claude.
@@ -224,7 +316,11 @@ describe("TmuxTeamBackend integration (regression-preserving)", () => {
   it("TmuxTeamBackend.preflight() reports failures when a resolver is wired", () => {
     const backend = new TmuxTeamBackend({
       run: runner({}),
-      resolveAdapter: resolveAdapter({ run: runner({ claude: OK, codex: FAIL }), env: { OPENAI_API_KEY: "sk-x" } }),
+      resolveAdapter: resolveAdapter({
+        run: runner({ claude: OK, codex: FAIL }),
+        env: { OPENAI_API_KEY: "sk-x" },
+        fs: AUTH_JSON_ABSENT,
+      }),
     });
     const r = backend.preflight([{ name: "security", scope: "audit", dependsOn: [], host_kind: "codex" }]);
     expect(r.ok).toBe(false);

@@ -453,7 +453,7 @@ async function main(): Promise<void> {
       "[maybe-reflect]   .guild/codex-skip-streak.json  (blocked: true)\n" +
       "[maybe-reflect] The NEXT G-gate (G-spec/G-plan/G-lane) must REFUSE to pass\n" +
       "[maybe-reflect] until codex review runs or the streak is cleared. To clear:\n" +
-      "[maybe-reflect]   1. wire codex (`codex --version` + OPENAI_API_KEY) and run\n" +
+      "[maybe-reflect]   1. wire codex (`codex --version` + `codex login`, or OPENAI_API_KEY) and run\n" +
       "[maybe-reflect]      `guild:codex-review` at the gate, OR\n" +
       "[maybe-reflect]   2. record a reflection WITHOUT a codex_review: SKIPPED marker\n" +
       "[maybe-reflect]      (a real review breaks the consecutive streak), OR\n" +

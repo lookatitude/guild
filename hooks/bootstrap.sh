@@ -99,11 +99,14 @@ STATUS
 # skipping as a discipline gap. This panel makes the rule visible at every
 # session start so the orchestrator can't silently skip it.
 if [[ -f "${PWD}/plugin/CLAUDE.md" ]] && grep -q "Guild — repo orientation" "${PWD}/plugin/CLAUDE.md" 2>/dev/null; then
-  # Detect codex availability — both binary on PATH AND a non-empty API key.
-  # (Mirrors the pane-adapter preflight: codex --version + OPENAI_API_KEY.)
+  # Detect codex availability — binary on PATH AND usable auth exists.
+  # Usable auth = (a) non-empty auth.json at ${CODEX_HOME:-$HOME/.codex}/auth.json,
+  #               OR (b) non-empty OPENAI_API_KEY.
+  # (Mirrors the pane-adapter preflight: same shared detection contract.)
   CODEX_OK=0
   if command -v codex >/dev/null 2>&1 && codex --version >/dev/null 2>&1; then
-    if [[ -n "${OPENAI_API_KEY:-}" ]]; then
+    _auth_file="${CODEX_HOME:-$HOME/.codex}/auth.json"
+    if [[ -s "${_auth_file}" || -n "${OPENAI_API_KEY:-}" ]]; then
       CODEX_OK=1
     fi
   fi
@@ -117,7 +120,7 @@ if [[ -f "${PWD}/plugin/CLAUDE.md" ]] && grep -q "Guild — repo orientation" "$
 │  review is IMPLICITLY ALWAYS-ON for every G-spec / G-plan /     │
 │  G-lane gate (plugin/CLAUDE.md §"Codex adversarial review").    │
 │                                                                 │
-│  ✓ codex CLI detected + OPENAI_API_KEY present.                 │
+│  ✓ codex CLI + auth detected (codex login or OPENAI_API_KEY).   │
 │    Invoke at every gate via `guild:codex-review` or              │
 │    `Agent({subagent_type: "codex:codex-rescue", …})`.           │
 │                                                                 │
@@ -137,7 +140,8 @@ SELFBUILD_OK
 │                                                                 │
 │  Missing one or more of:                                        │
 │    □ `codex` binary on PATH (run `codex --version`)             │
-│    □ Non-empty OPENAI_API_KEY in env                            │
+│    □ codex login session (<CODEX_HOME>/auth.json) OR non-empty  │
+│      OPENAI_API_KEY                                             │
 │                                                                 │
 │  Required discipline when codex is unavailable: emit            │
 │    `warn: codex-review skipped — codex plugin not installed`    │

@@ -65,6 +65,33 @@ warn: codex-review skipped — codex plugin not installed (gate: <gate>)
 
 And return immediately with `status: "skipped"`. Do **not** hard-block the lifecycle — the run continues without adversarial review.
 
+If `codex --version` exits 0, also verify that usable auth exists before dispatching:
+
+```bash
+# (a) codex login path — present and non-empty
+AUTH_FILE="${CODEX_HOME:-$HOME/.codex}/auth.json"
+[ -s "$AUTH_FILE" ] && AUTH_OK=1
+
+# (b) legacy env-var path
+[ -n "$OPENAI_API_KEY" ] && AUTH_OK=1
+```
+
+**Codex is available iff `codex --version` exits 0 AND `AUTH_OK` is set** (either path). If `codex --version` succeeds but neither auth path is satisfied, emit:
+
+```
+warn: codex-review skipped — codex not authenticated (gate: <gate>)
+```
+
+And return `status: "skipped"`.
+
+> **Known false-negative (codex ≥0.x stored-creds auth).** Gating availability on
+> `OPENAI_API_KEY` alone produces a false negative for any codex version that
+> authenticates via `codex login` (stored in `~/.codex/auth.json`). The
+> `OPENAI_API_KEY` env var is never set in that flow, so a check that only
+> tests the env var will incorrectly report codex as unavailable even when it
+> is fully authenticated and reachable. Always check BOTH paths (a) and (b)
+> above. Do not reintroduce an env-var-only gate.
+
 ## Codex-skip sentinel gate-read (FU-E enforcement)
 
 This is the **consuming half** of the FU-E codex-skip discipline contract. The Stop hook `hooks/maybe-reflect.ts` *writes* the sentinel; this skill *reads* it. The full loop: skip → sentinel + non-zero Stop exit (hook) → gate surfaces/refuses (here) → install codex or a `codex_review: RAN` reflection clears it (`guild:reflect`).
@@ -93,7 +120,7 @@ warn: codex-skip discipline OVERDUE (gate: <gate>)
   codex adversarial review skipped on <streak> consecutive self-build reflections
   (threshold <threshold>; sentinel updated <updated_at>).
   Codex review is overdue. To resolve:
-    1. install + authenticate codex (`codex --version` + OPENAI_API_KEY) so this gate runs, OR
+    1. install + authenticate codex (`codex --version` exits 0, then run `codex login` OR set OPENAI_API_KEY) so this gate runs, OR
     2. record a reflection with `codex_review: RAN` (a real review breaks the streak), OR
     3. delete .guild/codex-skip-streak.json after an explicit operator override, OR
     4. set `codex_skip_enforcement: block` in .guild/settings.json to hard-enforce.

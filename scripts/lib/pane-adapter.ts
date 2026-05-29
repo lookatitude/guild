@@ -15,8 +15,9 @@
  *     (byte-identical to the shipped launcher); injects the agent-team env gate
  *     + GUILD_RUN_ID; preflight `claude --version`.
  *   - CodexPaneAdapter — emits `codex exec '<prompt>'`; injects GUILD_RUN_ID only
- *     (NO Claude team env gate); preflight `codex --version` AND non-empty
- *     OPENAI_API_KEY (refuses to spawn if absent — CH-6).
+ *     (NO Claude team env gate); preflight `codex --version` AND usable auth,
+ *     where usable auth = a non-empty auth.json at CODEX_HOME/auth.json OR a
+ *     non-empty OPENAI_API_KEY (refuses to spawn if both are absent — CH-6).
  *
  * Adding a future host (Gemini, …) is one new adapter file + one ADAPTERS row —
  * no launcher-core change (CH-2 extension point).
@@ -36,6 +37,9 @@ import {
   type RunFn,
 } from "./team-backend";
 import { spawnSync } from "child_process";
+import * as nodefs from "fs";
+import * as nodepath from "path";
+import * as os from "os";
 
 const ADAPTER_VERSION = "1";
 
@@ -53,11 +57,19 @@ const defaultRun: RunFn = (cmd, args, opts = {}) => {
   };
 };
 
+/** Minimal fs seam — only the two operations used by CodexPaneAdapter.preflight(). */
+export interface FsSeam {
+  existsSync(path: string): boolean;
+  statSync(path: string): { size: number };
+}
+
 export interface AdapterOpts {
   /** Test seam: override the version-probe runner. */
   run?: RunFn;
   /** Test seam: override env lookups (defaults to process.env). */
   env?: NodeJS.ProcessEnv;
+  /** Test seam: override filesystem operations (defaults to node:fs). */
+  fs?: FsSeam;
 }
 
 // ── ClaudePaneAdapter ─────────────────────────────────────────────────────────
@@ -112,17 +124,40 @@ export class ClaudePaneAdapter implements PaneAdapter {
  * Codex CLI pane. Emits `codex exec '<prompt>'`. Does NOT inject the Claude
  * agent-team env gate (Codex panes cannot join Claude Code's event bus — CH-3).
  * Exports GUILD_RUN_ID so hooks/telemetry converge on the shared run path.
- * Preflight requires `codex --version` AND a non-empty OPENAI_API_KEY (CH-6).
+ * Preflight requires `codex --version` AND usable auth (CH-6):
+ *   (a) a non-empty auth.json at ${CODEX_HOME:-$HOME/.codex}/auth.json, OR
+ *   (b) a non-empty OPENAI_API_KEY.
+ * Refuses to spawn only when BOTH are absent.
  */
 export class CodexPaneAdapter implements PaneAdapter {
   readonly hostKind = "codex" as const;
   readonly adapterVersion = ADAPTER_VERSION;
   private run: RunFn;
   private env_: NodeJS.ProcessEnv;
+  private fs_: FsSeam;
 
   constructor(opts: AdapterOpts = {}) {
     this.run = opts.run ?? defaultRun;
     this.env_ = opts.env ?? process.env;
+    this.fs_ = opts.fs ?? nodefs;
+  }
+
+  /** Resolve the auth.json path, honouring CODEX_HOME env override. */
+  private authJsonPath(): string {
+    const codexHome = (this.env_["CODEX_HOME"] ?? "").trim();
+    const base = codexHome || nodepath.join(os.homedir(), ".codex");
+    return nodepath.join(base, "auth.json");
+  }
+
+  /** Returns true when auth.json exists at the resolved path and is non-empty. */
+  private hasAuthJson(): boolean {
+    const p = this.authJsonPath();
+    try {
+      if (!this.fs_.existsSync(p)) return false;
+      return this.fs_.statSync(p).size > 0;
+    } catch {
+      return false;
+    }
   }
 
   preflight(): PreflightResult {
@@ -136,15 +171,19 @@ export class CodexPaneAdapter implements PaneAdapter {
       };
     }
     const key = (this.env_["OPENAI_API_KEY"] ?? "").trim();
-    if (!key) {
+    const authJson = this.hasAuthJson();
+    if (!key && !authJson) {
+      const authJsonPath = this.authJsonPath();
       return {
         ok: false,
         message:
-          "OPENAI_API_KEY is unset or empty — CodexPaneAdapter refuses to spawn " +
-          "a Codex pane without a credential (CH-6 fail-fast).",
+          "no OPENAI_API_KEY and no codex login session at " +
+          `${authJsonPath} — run \`codex login\` or set OPENAI_API_KEY ` +
+          "(CH-6 fail-fast).",
       };
     }
-    return { ok: true, message: "codex --version ok; OPENAI_API_KEY present" };
+    const authDesc = key ? "OPENAI_API_KEY present" : `codex login session (${this.authJsonPath()})`;
+    return { ok: true, message: `codex --version ok; ${authDesc}` };
   }
 
   command(spec: PaneSpec): string {
