@@ -121,8 +121,9 @@ if [[ -f "${PWD}/plugin/CLAUDE.md" ]] && grep -q "Guild — repo orientation" "$
 │    Invoke at every gate via `guild:codex-review` or              │
 │    `Agent({subagent_type: "codex:codex-rescue", …})`.           │
 │                                                                 │
-│  Skipping a gate is a discipline gap. Two consecutive runs      │
-│  named codex-review skipping in their reflections.              │
+│  Skipping a gate is a discipline gap. Each reflection records   │
+│  `codex_review: RAN` or `SKIPPED`; 3 consecutive SKIPPED trips  │
+│  a blocking sentinel + non-zero Stop-hook exit (FU-E).          │
 └─────────────────────────────────────────────────────────────────┘
 SELFBUILD_OK
   else
@@ -140,9 +141,13 @@ SELFBUILD_OK
 │                                                                 │
 │  Required discipline when codex is unavailable: emit            │
 │    `warn: codex-review skipped — codex plugin not installed`    │
-│  AT EACH GATE before proceeding. The reflection must record     │
-│  every skip; three consecutive skips trigger a hard fail at     │
-│  the gate (maybe-reflect.ts checks the reflection trail).       │
+│  AT EACH GATE before proceeding. Every reflection MUST record   │
+│  the skip as frontmatter `codex_review: SKIPPED` (a real        │
+│  review records `codex_review: RAN`). After 3 consecutive       │
+│  SKIPPED reflections, the Stop hook (maybe-reflect.ts) writes   │
+│  a blocking sentinel `.guild/codex-skip-streak.json` AND exits  │
+│  non-zero with a loud DISCIPLINE banner — the next G-gate must  │
+│  refuse until codex runs or the streak is cleared.              │
 │                                                                 │
 │  Followup ref: FU-E in share-dot-guild closeout                 │
 │  (.guild/initiatives/archived/share-dot-guild/release/).        │

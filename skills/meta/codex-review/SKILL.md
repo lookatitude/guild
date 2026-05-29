@@ -65,6 +65,67 @@ warn: codex-review skipped — codex plugin not installed (gate: <gate>)
 
 And return immediately with `status: "skipped"`. Do **not** hard-block the lifecycle — the run continues without adversarial review.
 
+## Codex-skip sentinel gate-read (FU-E enforcement)
+
+This is the **consuming half** of the FU-E codex-skip discipline contract. The Stop hook `hooks/maybe-reflect.ts` *writes* the sentinel; this skill *reads* it. The full loop: skip → sentinel + non-zero Stop exit (hook) → gate surfaces/refuses (here) → install codex or a `codex_review: RAN` reflection clears it (`guild:reflect`).
+
+**At the START of every gate** (before the availability check, before round 1), read the sentinel:
+
+```bash
+cat .guild/codex-skip-streak.json 2>/dev/null   # absent ⇒ no block, proceed normally
+```
+
+Parse it as `schema_version: guild.codex_skip_streak.v1` with fields `streak`, `threshold`, `blocked`, `updated_at`, `reason`, `clear_by`. **Only act when `blocked == true`** (a malformed/unparseable file ⇒ treat as no block and proceed; never let a bad sentinel stall the lifecycle). The hook maintains this file; **trust it** — do not recompute the streak here (that is the hook's job, walking the reflection trail newest-first).
+
+Enforcement is **CONFIGURABLE via `.guild/settings.json` key `codex_skip_enforcement`** and **DEFAULTS TO NON-BLOCKING**:
+
+| `codex_skip_enforcement` | Behavior when `blocked: true` |
+|---|---|
+| `warn` (default, or key absent) | **SURFACE loudly, then PROCEED.** Print the block to stdout and continue the gate normally. |
+| `block` (opt-in) | **HARD-REFUSE.** Halt this gate and do not run the review/proceed until the sentinel clears or the operator explicitly overrides. |
+
+### `warn` (default — do NOT brick the operator's workflow)
+
+Print, then continue into the normal availability check / round loop:
+
+```
+warn: codex-skip discipline OVERDUE (gate: <gate>)
+  codex adversarial review skipped on <streak> consecutive self-build reflections
+  (threshold <threshold>; sentinel updated <updated_at>).
+  Codex review is overdue. To resolve:
+    1. install + authenticate codex (`codex --version` + OPENAI_API_KEY) so this gate runs, OR
+    2. record a reflection with `codex_review: RAN` (a real review breaks the streak), OR
+    3. delete .guild/codex-skip-streak.json after an explicit operator override, OR
+    4. set `codex_skip_enforcement: block` in .guild/settings.json to hard-enforce.
+  Proceeding (enforcement: warn).
+```
+
+### `block` (opt-in hard-refuse)
+
+Halt the gate and surface via `AskUserQuestion` (`header: "Codex-skip discipline"`, `multiSelect: false`) — do not silently proceed:
+
+```
+Codex adversarial review is BLOCKED at gate <gate> (codex_skip_enforcement: block).
+<streak> consecutive self-build reflections skipped codex review (threshold <threshold>).
+  [run-codex]  Install/authenticate codex now and run the gate review (clears via a RAN reflection).
+  [override]   Operator override — delete .guild/codex-skip-streak.json and proceed this once.
+  [rework]     Return to the prior lifecycle step.
+```
+
+Wait for an explicit choice. Do **not** proceed to the round loop while `blocked: true` under `block` enforcement unless the operator chooses `override`.
+
+### How the sentinel clears
+
+The sentinel is **hook-maintained**, so the durable clear is to make the hook recompute `streak < threshold`:
+
+- **A `codex_review: RAN` reflection** (written by `guild:reflect` after codex actually runs) breaks the consecutive-skip streak; the next Stop-hook evaluation computes `streak = 0` and does not re-arm. This is the canonical clear.
+- When this gate **successfully runs** codex review (`status: "satisfied"` / `force_passed`) and `blocked: true`, delete the stale sentinel as the gate-side acknowledgement that review just happened: `rm -f .guild/codex-skip-streak.json`. The authoritative reset still comes from the next `RAN` reflection — this deletion just stops the *current* gate from re-warning after a real review this turn.
+- An explicit operator `override` (or manual `rm`) clears it unconditionally.
+
+Coordinate with the hook semantics: the hook counts **consecutive** skips and re-derives the streak every Stop, so the gate-read trusts the hook-maintained `blocked` flag rather than maintaining its own counter.
+
+> **NOTE (followup — config schema):** `codex_skip_enforcement` (`warn` | `block`, default `warn`) is REFERENCED here but not yet registered in the `.guild/settings.json` schema. Registering the key + its closed-value validation is owned by tooling-engineer / `guild:config` (`architecture/command-surface.md §4.4`). See `followups:` in the handoff.
+
 ## Dispatch
 
 For each round (1-indexed, up to `codex_cap`):

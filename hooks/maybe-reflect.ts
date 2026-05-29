@@ -55,8 +55,11 @@
  *
  * Stdin:   JSON — Claude Code Stop or SubagentStop hook payload.
  * Stdout:  Either empty (gate failed) or "GUILD_REFLECT run_id=<id>" (gate passed).
- * Stderr:  Diagnostic messages only.
- * Exit:    Always 0.
+ * Stderr:  Diagnostic messages + (self-build only) the codex-skip DISCIPLINE banner.
+ * Exit:    0 in all normal paths. EXCEPTION (self-build only): exits 2 when the
+ *          codex adversarial-review skip streak reaches >= 3 consecutive
+ *          reflections (FU-E) — the loudest honest escalation a Stop hook has,
+ *          paired with the .guild/codex-skip-streak.json blocking sentinel.
  *
  * Runner:  npx -y tsx hooks/maybe-reflect.ts
  */
@@ -268,6 +271,139 @@ function tryRealSummarizer(cwd: string, runId: string): boolean {
   return true;
 }
 
+// ── Codex-skip discipline guard (FU-E) ──────────────────────────────────────
+
+/** Consecutive skip count at which the guard hard-fails. Matches the banner. */
+const CODEX_SKIP_THRESHOLD = 3;
+
+/** Non-zero exit code emitted when the threshold is breached. */
+const CODEX_SKIP_EXIT_CODE = 2;
+
+/**
+ * Marker contract — a reflection "records a codex-review skip" if ANY of:
+ *
+ *   1. Frontmatter field (CANONICAL, machine-readable — emit this going
+ *      forward):                    codex_review: SKIPPED
+ *   2. Legacy proposals list:       skill_improvement: [..., guild:codex-review, ...]
+ *   3. Body marker (for prose-style reflections):  <!-- codex_review: SKIPPED -->
+ *
+ * (1) is what new reflections SHOULD write — guild:reflect must emit
+ * `codex_review: SKIPPED` (or `codex_review: RAN`) in frontmatter on every
+ * self-build run. (2) and (3) are accepted for backward/forward compatibility
+ * with the formats already on disk.
+ */
+function reflectionRecordsCodexSkip(content: string): boolean {
+  // (1) Canonical frontmatter field.
+  if (/^\s*codex_review:\s*SKIPPED\s*$/im.test(content)) return true;
+  // (3) Body / prose marker.
+  if (/<!--\s*codex_review:\s*SKIPPED\s*-->/i.test(content)) return true;
+  // (2) Legacy skill_improvement list naming guild:codex-review.
+  const m = content.match(/skill_improvement:\s*\[([^\]]*)\]/);
+  if (m && m[1].includes("guild:codex-review")) return true;
+  return false;
+}
+
+/**
+ * Count the streak of CONSECUTIVE most-recent reflections (newest first by
+ * mtime) that record a codex-review skip. A reflection that explicitly does
+ * NOT record a skip (i.e. codex review ran) breaks the streak — that is the
+ * honest meaning of "consecutive skips".
+ *
+ * `armed` is true only in self-build context (plugin/CLAUDE.md present with the
+ * orientation banner). Outside self-build the guard never fires.
+ */
+function evaluateCodexSkipGuard(guildRoot: string): {
+  armed: boolean;
+  streak: number;
+} {
+  try {
+    const claudeMd = path.join(guildRoot, "plugin", "CLAUDE.md");
+    if (!fs.existsSync(claudeMd)) return { armed: false, streak: 0 };
+    // Confirm it's the Guild orientation file, not some other plugin/CLAUDE.md.
+    let armed = false;
+    try {
+      armed = fs
+        .readFileSync(claudeMd, "utf8")
+        .includes("Guild — repo orientation");
+    } catch {
+      armed = false;
+    }
+    if (!armed) return { armed: false, streak: 0 };
+
+    const reflectionsDir = path.join(guildRoot, ".guild", "reflections");
+    if (!fs.existsSync(reflectionsDir)) return { armed: true, streak: 0 };
+
+    const files = fs
+      .readdirSync(reflectionsDir)
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => path.join(reflectionsDir, f))
+      .map((p) => {
+        let mtime = 0;
+        try {
+          mtime = fs.statSync(p).mtimeMs;
+        } catch {
+          mtime = 0;
+        }
+        return { path: p, mtime };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+
+    let streak = 0;
+    for (const { path: p } of files) {
+      let content = "";
+      try {
+        content = fs.readFileSync(p, "utf8");
+      } catch {
+        // unreadable file breaks the streak (can't confirm a skip)
+        break;
+      }
+      if (reflectionRecordsCodexSkip(content)) {
+        streak += 1;
+      } else {
+        break; // first non-skip reflection ends the consecutive run
+      }
+    }
+    return { armed: true, streak };
+  } catch {
+    // Never let the guard's own failure block the hook.
+    return { armed: false, streak: 0 };
+  }
+}
+
+/**
+ * Persist the blocking sentinel the NEXT G-gate reads. Atomic-ish: a plain
+ * write is fine here (single-writer, idempotent content). The gate refuses
+ * while `blocked: true`.
+ */
+function writeCodexSkipSentinel(guildRoot: string, streak: number): void {
+  try {
+    const guildDir = path.join(guildRoot, ".guild");
+    fs.mkdirSync(guildDir, { recursive: true });
+    const sentinel = path.join(guildDir, "codex-skip-streak.json");
+    const data = {
+      schema_version: "guild.codex_skip_streak.v1",
+      streak,
+      threshold: CODEX_SKIP_THRESHOLD,
+      blocked: true,
+      updated_at: new Date().toISOString(),
+      reason:
+        "codex adversarial review skipped on >= 3 consecutive self-build reflections (FU-E)",
+      clear_by:
+        "run guild:codex-review at the next gate, OR record a reflection without a codex_review: SKIPPED marker, OR delete this file after an explicit operator override",
+    };
+    fs.writeFileSync(sentinel, JSON.stringify(data, null, 2) + "\n", "utf8");
+    process.stderr.write(
+      `[maybe-reflect] wrote codex-skip sentinel: ${sentinel}\n`,
+    );
+  } catch (err) {
+    process.stderr.write(
+      `[maybe-reflect] WARN: failed to write codex-skip sentinel: ${
+        err instanceof Error ? err.message : String(err)
+      }\n`,
+    );
+  }
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -290,45 +426,46 @@ async function main(): Promise<void> {
   // the nearest .git / .guild ancestor, never in a subdirectory.
   const guildRoot = resolveGuildRoot(cwd);
 
-  // Signal 2 (cross-run): codex-skip discipline check on self-build runs.
-  // If the last 3 reflections each named `guild:codex-review` in their
-  // skill_improvement frontmatter, emit a loud stderr warning. We do NOT
-  // block the hook — that's still policy, not enforcement; the SessionStart
-  // panel + this trailing warning are the two surfaces operators see.
-  try {
-    const isSelfBuild = fs.existsSync(path.join(guildRoot, "plugin", "CLAUDE.md"));
-    if (isSelfBuild) {
-      const reflectionsDir = path.join(guildRoot, ".guild", "reflections");
-      if (fs.existsSync(reflectionsDir)) {
-        const reflectionFiles = fs.readdirSync(reflectionsDir)
-          .filter(f => f.endsWith(".md"))
-          .map(f => path.join(reflectionsDir, f))
-          .map(p => ({ path: p, mtime: fs.statSync(p).mtimeMs }))
-          .sort((a, b) => b.mtime - a.mtime)
-          .slice(0, 3);
-        const codexSkipCount = reflectionFiles.filter(({ path: p }) => {
-          try {
-            const content = fs.readFileSync(p, "utf8");
-            // Match `skill_improvement: [...guild:codex-review...]` in frontmatter.
-            const m = content.match(/skill_improvement:\s*\[([^\]]*)\]/);
-            return m ? m[1].includes("guild:codex-review") : false;
-          } catch { return false; }
-        }).length;
-        if (codexSkipCount >= 3) {
-          process.stderr.write(
-            "\n[maybe-reflect] ⚠⚠⚠ DISCIPLINE WARNING ⚠⚠⚠\n" +
-            "[maybe-reflect] The last 3 reflections all named guild:codex-review\n" +
-            "[maybe-reflect] in skill_improvement — codex adversarial review has been\n" +
-            "[maybe-reflect] skipped on 3 consecutive self-build runs. This is the\n" +
-            "[maybe-reflect] §11.1 ≥3-reflection threshold for /guild:evolve auto-trigger.\n" +
-            "[maybe-reflect] Run `/guild:evolve guild:codex-review` to act on the proposals,\n" +
-            "[maybe-reflect] or wire codex (`codex --version` + OPENAI_API_KEY) before\n" +
-            "[maybe-reflect] the next G-gate. See plugin/CLAUDE.md §'Codex adversarial review'.\n\n"
-          );
-        }
-      }
-    }
-  } catch { /* never block reflect on this advisory check */ }
+  // Signal 2 (cross-run): codex-skip discipline guard on self-build runs (FU-E).
+  //
+  // Contract (SessionStart banner): "three consecutive skips trigger a hard
+  // fail at the gate (maybe-reflect.ts checks the reflection trail)."
+  //
+  // A Stop hook fires AFTER the turn — it cannot retroactively fail a gate that
+  // already passed. The honest enforcement a Stop hook CAN deliver is:
+  //   (a) a persisted sentinel (.guild/codex-skip-streak.json) that the NEXT
+  //       G-gate reads and refuses on, and
+  //   (b) a loud stderr DISCIPLINE banner + NON-ZERO exit so the skip is
+  //       impossible to miss in the transcript.
+  // Both fire at the >= 3 consecutive-skip threshold. Below threshold we record
+  // the streak quietly (no sentinel, exit continues normally).
+  //
+  // This guard ONLY arms in self-build context (cwd has plugin/CLAUDE.md with
+  // the orientation banner) so it never disturbs a consuming repo's session.
+  const codexGuard = evaluateCodexSkipGuard(guildRoot);
+  if (codexGuard.armed && codexGuard.streak >= CODEX_SKIP_THRESHOLD) {
+    writeCodexSkipSentinel(guildRoot, codexGuard.streak);
+    process.stderr.write(
+      "\n[maybe-reflect] ⚠⚠⚠ DISCIPLINE HARD-FAIL ⚠⚠⚠\n" +
+      `[maybe-reflect] codex adversarial review has been SKIPPED on ${codexGuard.streak}\n` +
+      "[maybe-reflect] consecutive self-build reflections (>= 3 threshold reached).\n" +
+      "[maybe-reflect] A blocking sentinel was written to:\n" +
+      "[maybe-reflect]   .guild/codex-skip-streak.json  (blocked: true)\n" +
+      "[maybe-reflect] The NEXT G-gate (G-spec/G-plan/G-lane) must REFUSE to pass\n" +
+      "[maybe-reflect] until codex review runs or the streak is cleared. To clear:\n" +
+      "[maybe-reflect]   1. wire codex (`codex --version` + OPENAI_API_KEY) and run\n" +
+      "[maybe-reflect]      `guild:codex-review` at the gate, OR\n" +
+      "[maybe-reflect]   2. record a reflection WITHOUT a codex_review: SKIPPED marker\n" +
+      "[maybe-reflect]      (a real review breaks the consecutive streak), OR\n" +
+      "[maybe-reflect]   3. delete .guild/codex-skip-streak.json after an explicit\n" +
+      "[maybe-reflect]      operator override.\n" +
+      "[maybe-reflect] See plugin/CLAUDE.md §'Codex adversarial review'.\n\n"
+    );
+    // Non-zero exit is the loudest honest escalation a Stop hook has. It does
+    // NOT run the reflect path — the discipline failure takes precedence over
+    // emitting a reflect marker for this turn.
+    process.exit(CODEX_SKIP_EXIT_CODE);
+  }
 
   const sessionId = payload.session_id;
   const runId =

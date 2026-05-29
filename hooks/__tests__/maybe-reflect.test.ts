@@ -315,3 +315,163 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     expect(stderr).toMatch(/spec dir not found/);
   });
 });
+
+// ── Codex-skip discipline guard (FU-E) ──────────────────────────────────────
+// The SessionStart banner promises: "three consecutive skips trigger a hard
+// fail at the gate (maybe-reflect.ts checks the reflection trail)." These
+// tests pin BOTH halves of the contract:
+//   1. The counter actually counts reflections that record a codex-review skip,
+//      across all three marker formats (frontmatter codex_review: SKIPPED,
+//      legacy skill_improvement list, and the canonical body marker).
+//   2. At >= 3 the guard escalates for real: writes the .guild sentinel AND
+//      exits non-zero with a loud DISCIPLINE warning (Stop hooks can't fail a
+//      past gate, so the sentinel + non-zero exit are the honest enforcement).
+// The guard ONLY arms in self-build context (cwd has plugin/CLAUDE.md with the
+// orientation banner) so it never fires on a consuming repo's normal session.
+describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
+  let tmpDir: string;
+  const stopPayload = fs
+    .readFileSync(path.join(FIXTURES, "stop.json"), "utf8")
+    .toString();
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-reflect-codex-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // Mark tmpDir as a self-build root so the guard arms.
+  function seedSelfBuild(cwd: string): void {
+    const pluginDir = path.join(cwd, "plugin");
+    fs.mkdirSync(pluginDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, "CLAUDE.md"),
+      "# Guild — repo orientation\n\nself-build marker\n",
+      "utf8",
+    );
+  }
+
+  // Write a reflection file with a codex-skip marker in the given format.
+  type MarkerStyle = "frontmatter" | "legacy-list" | "body-marker" | "none";
+  function writeReflection(
+    cwd: string,
+    name: string,
+    style: MarkerStyle,
+  ): void {
+    const dir = path.join(cwd, ".guild", "reflections");
+    fs.mkdirSync(dir, { recursive: true });
+    let body: string;
+    switch (style) {
+      case "frontmatter":
+        body =
+          "---\nschema_version: guild.reflection.v1\ncodex_review: SKIPPED\n---\n\n# reflection\n";
+        break;
+      case "legacy-list":
+        body =
+          "---\nschema_version: guild.reflection.v1\nproposals:\n  skill_improvement: [guild:codex-review, guild:execute-plan]\n---\n\n# reflection\n";
+        break;
+      case "body-marker":
+        body =
+          "---\nschema_version: guild.reflection.v1\n---\n\n# reflection\n\n<!-- codex_review: SKIPPED -->\nprose about the skip\n";
+        break;
+      case "none":
+        body = "---\nschema_version: guild.reflection.v1\n---\n\n# reflection\n";
+        break;
+    }
+    fs.writeFileSync(path.join(dir, name), body, "utf8");
+  }
+
+  it("does NOT arm outside self-build context (no plugin/CLAUDE.md)", () => {
+    // 3 skip-marked reflections but no self-build marker → silent, exit 0.
+    writeReflection(tmpDir, "r1.md", "frontmatter");
+    writeReflection(tmpDir, "r2.md", "frontmatter");
+    writeReflection(tmpDir, "r3.md", "frontmatter");
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode, stderr } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(stderr).not.toMatch(/DISCIPLINE/);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".guild", "codex-skip-streak.json")),
+    ).toBe(false);
+  });
+
+  it("counts < 3 skip reflections → warns softly, exits 0, no sentinel", () => {
+    seedSelfBuild(tmpDir);
+    writeReflection(tmpDir, "r1.md", "frontmatter");
+    writeReflection(tmpDir, "r2.md", "legacy-list");
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".guild", "codex-skip-streak.json")),
+    ).toBe(false);
+  });
+
+  it("counts 3 frontmatter codex_review: SKIPPED → escalates (sentinel + non-zero exit)", () => {
+    seedSelfBuild(tmpDir);
+    writeReflection(tmpDir, "r1.md", "frontmatter");
+    writeReflection(tmpDir, "r2.md", "frontmatter");
+    writeReflection(tmpDir, "r3.md", "frontmatter");
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode, stderr } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toMatch(/DISCIPLINE/);
+    const sentinel = path.join(tmpDir, ".guild", "codex-skip-streak.json");
+    expect(fs.existsSync(sentinel)).toBe(true);
+    const data = JSON.parse(fs.readFileSync(sentinel, "utf8"));
+    expect(data.streak).toBeGreaterThanOrEqual(3);
+    expect(data.blocked).toBe(true);
+  });
+
+  it("counts mixed marker formats (frontmatter + legacy + body) toward the streak", () => {
+    seedSelfBuild(tmpDir);
+    writeReflection(tmpDir, "r1.md", "frontmatter");
+    writeReflection(tmpDir, "r2.md", "legacy-list");
+    writeReflection(tmpDir, "r3.md", "body-marker");
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode, stderr } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toMatch(/DISCIPLINE/);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".guild", "codex-skip-streak.json")),
+    ).toBe(true);
+  });
+
+  it("a non-skip reflection breaks the consecutive streak (newest first)", () => {
+    seedSelfBuild(tmpDir);
+    // Oldest 3 are skips; newest has no marker → streak resets to 0.
+    // mtime ordering: write oldest first, newest last.
+    writeReflection(tmpDir, "r1.md", "frontmatter");
+    writeReflection(tmpDir, "r2.md", "frontmatter");
+    writeReflection(tmpDir, "r3.md", "frontmatter");
+    // Force r4 to be newest by touching after the others.
+    writeReflection(tmpDir, "r4.md", "none");
+    const r4 = path.join(tmpDir, ".guild", "reflections", "r4.md");
+    const future = Date.now() / 1000 + 100;
+    fs.utimesSync(r4, future, future);
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode, stderr } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(stderr).not.toMatch(/DISCIPLINE/);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".guild", "codex-skip-streak.json")),
+    ).toBe(false);
+  });
+});

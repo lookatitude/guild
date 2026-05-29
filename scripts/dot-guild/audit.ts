@@ -25,7 +25,92 @@ const repoList: string[] = reposArg
   : [WORKSPACE];
 const outputPath = outArg ? outArg.split("=")[1] : undefined;
 
-interface FileFlag { runId: string; file: string; kind: "operator-path" | "secret" | "payload-excluded" | "nested-guild"; detail: string; }
+interface FileFlag { runId: string; file: string; kind: "operator-path" | "secret" | "payload-excluded" | "nested-guild" | "scrub-uncovered"; detail: string; }
+
+// SC-7 blind-spot guard: scrub.ts's share-set (mirror of scrub.ts — keep in
+// sync with SHARED_SCRUBBED_NAMES + isHandoffFile + isPayloadFile). audit.ts
+// only parses scrub's per-file dry-run lines, so any run-dir file that is
+// git-trackable (would be committed/shared) but OUTSIDE this set never reaches
+// a redaction pass and silently escapes the SC-7 leak gate. The check below
+// flags exactly those files.
+const SCRUB_SHARED_NAMES = new Set(["verify.md", "review.md", "provenance.json", "summary.md", "run.yaml"]);
+// Control/meta files that are intentionally git-trackable but NOT redacted by
+// scrub (they carry no operator content). share-payloads.flag is the per-run
+// opt-in sentinel; .gitignore itself is allow-list config. Exempt so they do
+// not false-positive as "uncovered".
+const SCRUB_COVERAGE_EXEMPT_NAMES = new Set(["share-payloads.flag", ".gitignore"]);
+
+// Mirror of scrub.ts inShareSet (sans the payload-flag branch, which scrub
+// handles via share-payloads.flag — payloads are covered when the flag is set).
+function inScrubShareSet(rel: string, hasFlag: boolean): boolean {
+  const base = path.basename(rel);
+  if (SCRUB_SHARED_NAMES.has(base)) return true;
+  if (rel.startsWith("handoffs" + path.sep) && rel.endsWith(".md")) return true;
+  const isPayload = base === "events.ndjson" || rel.startsWith("logs" + path.sep + "payloads" + path.sep);
+  if (isPayload) return hasFlag;
+  return false;
+}
+
+// SC-7 blind-spot guard: walk each run dir; for every file that git would track
+// (NOT ignored = would be shared), flag it if scrub.ts has no coverage for it.
+// Uses `git check-ignore` against the repo's allow-list — a non-zero exit means
+// the path is NOT ignored, i.e. it WOULD be committed/shared.
+function findScrubCoverageGaps(repoPath: string): FileFlag[] {
+  const flags: FileFlag[] = [];
+  const runsDir = path.join(repoPath, ".guild", "runs");
+  if (!fs.existsSync(runsDir)) return flags;
+
+  let runEntries: fs.Dirent[];
+  try { runEntries = fs.readdirSync(runsDir, { withFileTypes: true }); } catch { return flags; }
+
+  for (const runEnt of runEntries) {
+    if (!runEnt.isDirectory()) continue;
+    const runDir = path.join(runsDir, runEnt.name);
+    const hasFlag = fs.existsSync(path.join(runDir, "share-payloads.flag"));
+
+    // Collect every file under this run dir.
+    const files: string[] = [];
+    (function walk(dir: string): void {
+      let entries: fs.Dirent[];
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (e.isFile()) files.push(full);
+      }
+    })(runDir);
+    if (files.length === 0) continue;
+
+    // Batch-query git for trackability: stdin = NUL-separated paths; stdout
+    // lists the IGNORED ones. Anything absent from stdout is git-trackable.
+    const rel = (p: string) => path.relative(repoPath, p);
+    const checked = spawnSync(
+      "git", ["-C", repoPath, "check-ignore", "--stdin", "-z"],
+      { input: files.map(rel).join("\0"), encoding: "utf8" },
+    );
+    // git check-ignore exits 0 (some ignored), 1 (none ignored), or 128 (error
+    // e.g. not a git repo). On 128 we cannot determine trackability — skip
+    // (the nested-guild + dry-run checks still run; this guard is additive).
+    if (checked.status === 128) continue;
+    const ignored = new Set((checked.stdout ?? "").split("\0").filter(Boolean));
+
+    for (const abs of files) {
+      const relToRepo = rel(abs);
+      if (ignored.has(relToRepo)) continue;           // ignored ⇒ not shared
+      const base = path.basename(abs);
+      if (SCRUB_COVERAGE_EXEMPT_NAMES.has(base)) continue;
+      const relToRun = path.relative(runDir, abs);
+      if (inScrubShareSet(relToRun, hasFlag)) continue; // scrub covers it
+      flags.push({
+        runId: runEnt.name,
+        file: relToRun,
+        kind: "scrub-uncovered",
+        detail: "git-trackable (would be shared) but outside scrub.ts's share-set — no redaction pass; SC-7 blind spot",
+      });
+    }
+  }
+  return flags;
+}
 
 // FU-F: declared fixture exemptions (mirror plugin/.gitignore — keep in sync).
 // Any .guild/ under one of these glob roots is a test fixture, not a leak.
@@ -117,6 +202,7 @@ function renderReport(repoResults: Array<{ repo: string; flags: FileFlag[] }>, n
       const action = f.kind === "operator-path" ? "Run scrub.ts before commit"
         : f.kind === "secret" ? "Rotate credential; scrub.ts will redact"
         : f.kind === "nested-guild" ? "DELETE the nested .guild/ — it's a leftover; resolver enforces one-.guild-per-repo. If legitimate fixture, add its path to FIXTURE_EXEMPT_PATTERNS"
+        : f.kind === "scrub-uncovered" ? "Add the file's basename to scrub.ts SHARED_SCRUBBED_NAMES (so it gets a redaction pass), OR exempt it in SCRUB_COVERAGE_EXEMPT_NAMES if it carries no operator content, OR remove it from the .gitignore allow-list so it is not shared"
         : "Informational — add share-payloads.flag to opt in";
       out += `| \`${f.runId}\` | \`${f.file}\` | ${f.kind} | ${f.detail} | ${action} |\n`;
     }
@@ -134,7 +220,9 @@ function main(): void {
     const { flags } = auditRepo(repo);
     // FU-F: also walk for nested-.guild leaks at any depth.
     const nestedLeaks = findNestedGuildLeaks(repo);
-    repoResults.push({ repo: path.relative(WORKSPACE, repo) || path.basename(repo), flags: [...flags, ...nestedLeaks] });
+    // SC-7 blind-spot guard: flag git-trackable run files scrub doesn't cover.
+    const coverageGaps = findScrubCoverageGaps(repo);
+    repoResults.push({ repo: path.relative(WORKSPACE, repo) || path.basename(repo), flags: [...flags, ...nestedLeaks, ...coverageGaps] });
   }
 
   const report = renderReport(repoResults, now);

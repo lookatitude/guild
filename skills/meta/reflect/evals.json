@@ -4,7 +4,8 @@
     "What did we learn from this task?",
     "Run post-task reflection on run-XYZ.",
     "Capture lessons from the specialist outputs.",
-    "Any skill gaps in this run?"
+    "Any skill gaps in this run?",
+    "Reflect on this self-build run and record the codex_review marker."
   ],
   "should_not_trigger": [
     "Ingest this new source.",

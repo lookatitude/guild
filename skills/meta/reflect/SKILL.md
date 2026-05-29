@@ -53,6 +53,7 @@ proposals:
   context_issues: [<specialist>/<bundle>, ...]
   followup_backlog: [<specialist>/<taskid>, ...]
 significance: low | medium | high
+codex_review: RAN | SKIPPED   # REQUIRED on self-build runs — see § Codex-review marker
 ---
 ```
 
@@ -67,6 +68,26 @@ Per `§15.2` ("evolution loop overfits" risk), not every reflection deserves att
 - **high** — a missing-specialist proposal, or a skill-improvement proposal with evidence from >=2 earlier reflections (cross-referenced by name; reflect does not aggregate but it may cite). Forces a `/guild:stats` surface.
 
 Tier the reflection before writing the frontmatter so the significance field is consistent with the body.
+
+## Codex-review marker (self-build runs)
+
+Implements the reflect half of the FU-E codex-skip discipline contract (`plugin/CLAUDE.md` §"Codex adversarial review"; `guild-plan.md §11` self-evolution gate). On **self-build runs** (developing the Guild plugin itself — `plugin/CLAUDE.md` is present), every reflection's frontmatter MUST carry a canonical machine-readable field:
+
+```yaml
+codex_review: RAN        # codex adversarial review actually ran at this run's gates
+# or
+codex_review: SKIPPED    # codex was unavailable / unused at the run's gates
+```
+
+Rules:
+
+- **Always emit it on self-build runs.** Omitting the field is a silent skip — the `hooks/maybe-reflect.ts` Stop-hook guard treats a reflection that records no codex run as a *skip*, but prose-only reflections that lack the field count as **zero** signal, so the consecutive-skip streak never advances and the guard never arms. Emitting the canonical field is the reliable path the hook prefers (it has legacy `proposals.skill_improvement: [guild:codex-review]` and body-comment `<!-- codex_review: SKIPPED -->` fallbacks, but the frontmatter field is authoritative).
+- **`RAN`** — emit when `guild:codex-review` / `guild:review-broker` actually executed and reached a verdict at one or more of this run's G-gates (G-spec / G-plan / G-lane / G-diagnose). A `RAN` reflection **breaks the consecutive-skip streak** — this is how the discipline self-clears (see below).
+- **`SKIPPED`** — emit when codex was unavailable (`codex --version` failed / not authenticated), the gate emitted its `warn: codex-review skipped …` line, or no adversarial review ran at any gate. The hook counts consecutive `SKIPPED` reflections; at ≥ 3 it writes the blocking sentinel `.guild/codex-skip-streak.json` and exits non-zero.
+
+**How the streak clears.** The hook counts the streak of *consecutive most-recent* reflections (newest first by mtime) that record a skip; the first reflection that does **not** record a skip ends the run. So a single reflection with `codex_review: RAN` at the top of the trail breaks the streak — the next Stop-hook evaluation computes `streak = 0` and does not re-arm. This is the canonical clear path: run codex, then a `RAN` reflection resets the discipline. (The stale sentinel file is consumed/cleared by the gate-read side in `guild:codex-review` — reflect's only job is to write the honest `RAN`/`SKIPPED` field; it never touches `.guild/codex-skip-streak.json`.)
+
+On **non-self-build runs** (consuming repos), the field is optional — the guard only arms in self-build context — but emitting it is harmless and recommended for forward consistency.
 
 ## Aggregation rule
 

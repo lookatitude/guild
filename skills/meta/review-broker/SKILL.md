@@ -131,21 +131,38 @@ type ReviewBrokerOutput = {
 };
 ```
 
+## Codex-skip sentinel gate-read (FU-E)
+
+As the canonical lifecycle front door, the broker runs the **same FU-E
+codex-skip sentinel check** at the START of every gate that
+`guild:codex-review` documents — read it by pointer, do not re-specify it here:
+see `skills/meta/codex-review/SKILL.md` § "Codex-skip sentinel gate-read". Read
+`.guild/codex-skip-streak.json` (schema `guild.codex_skip_streak.v1`); when
+`blocked: true`, honor `codex_skip_enforcement` from `.guild/settings.json`
+(**default `warn` = surface loudly and proceed; opt-in `block` = hard-refuse**).
+The sentinel is hook-maintained (`hooks/maybe-reflect.ts`); trust the `blocked`
+flag rather than recomputing the streak, and let a `codex_review: RAN`
+reflection (`guild:reflect`) clear it. This applies regardless of the resolved
+reviewer host — the discipline is about *whether* adversarial review is
+overdue, not which family runs it.
+
 ## Round loop
 
 For each round (1-indexed, up to the resolved cap):
 
-1. Resolve author/reviewer hosts; assert reviewer family ≠ author family (else
+1. **Read the codex-skip sentinel** (see § above); under `block` enforcement
+   with `blocked: true`, halt before resolving hosts.
+2. Resolve author/reviewer hosts; assert reviewer family ≠ author family (else
    degrade → `skipped`).
-2. Write the review packet to `.guild/runs/<run-id>/review/<gate>/packet-<round>.md`
+3. Write the review packet to `.guild/runs/<run-id>/review/<gate>/packet-<round>.md`
    (artifact + adversarial instructions + prior trail on rounds 2+).
-3. Dispatch to the reviewer host via its adapter (RE-4/RE-5 transport; Codex
+4. Dispatch to the reviewer host via its adapter (RE-4/RE-5 transport; Codex
    adapter = the `codex:codex-rescue` path that works today).
-4. Read back `review_result.v1` from
+5. Read back `review_result.v1` from
    `.guild/runs/<run-id>/review/<gate>/result-<round>.json`.
-5. Append the round to the trail `.guild/runs/<run-id>/review/<gate>/trail.md`.
-6. Emit a round telemetry event (see [Telemetry](#telemetry)).
-7. `verdict: satisfied` → return `status: "satisfied"`. Round == cap → escalate.
+6. Append the round to the trail `.guild/runs/<run-id>/review/<gate>/trail.md`.
+7. Emit a round telemetry event (see [Telemetry](#telemetry)).
+8. `verdict: satisfied` → return `status: "satisfied"`. Round == cap → escalate.
    Otherwise continue, passing the trail forward.
 
 ## Termination

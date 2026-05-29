@@ -179,6 +179,82 @@ function tryRealSummarizer(cwd, runId) {
   }
   return true;
 }
+var CODEX_SKIP_THRESHOLD = 3;
+var CODEX_SKIP_EXIT_CODE = 2;
+function reflectionRecordsCodexSkip(content) {
+  if (/^\s*codex_review:\s*SKIPPED\s*$/im.test(content)) return true;
+  if (/<!--\s*codex_review:\s*SKIPPED\s*-->/i.test(content)) return true;
+  const m = content.match(/skill_improvement:\s*\[([^\]]*)\]/);
+  if (m && m[1].includes("guild:codex-review")) return true;
+  return false;
+}
+function evaluateCodexSkipGuard(guildRoot) {
+  try {
+    const claudeMd = path2.join(guildRoot, "plugin", "CLAUDE.md");
+    if (!fs2.existsSync(claudeMd)) return { armed: false, streak: 0 };
+    let armed = false;
+    try {
+      armed = fs2.readFileSync(claudeMd, "utf8").includes("Guild \u2014 repo orientation");
+    } catch {
+      armed = false;
+    }
+    if (!armed) return { armed: false, streak: 0 };
+    const reflectionsDir = path2.join(guildRoot, ".guild", "reflections");
+    if (!fs2.existsSync(reflectionsDir)) return { armed: true, streak: 0 };
+    const files = fs2.readdirSync(reflectionsDir).filter((f) => f.endsWith(".md")).map((f) => path2.join(reflectionsDir, f)).map((p) => {
+      let mtime = 0;
+      try {
+        mtime = fs2.statSync(p).mtimeMs;
+      } catch {
+        mtime = 0;
+      }
+      return { path: p, mtime };
+    }).sort((a, b) => b.mtime - a.mtime);
+    let streak = 0;
+    for (const { path: p } of files) {
+      let content = "";
+      try {
+        content = fs2.readFileSync(p, "utf8");
+      } catch {
+        break;
+      }
+      if (reflectionRecordsCodexSkip(content)) {
+        streak += 1;
+      } else {
+        break;
+      }
+    }
+    return { armed: true, streak };
+  } catch {
+    return { armed: false, streak: 0 };
+  }
+}
+function writeCodexSkipSentinel(guildRoot, streak) {
+  try {
+    const guildDir = path2.join(guildRoot, ".guild");
+    fs2.mkdirSync(guildDir, { recursive: true });
+    const sentinel = path2.join(guildDir, "codex-skip-streak.json");
+    const data = {
+      schema_version: "guild.codex_skip_streak.v1",
+      streak,
+      threshold: CODEX_SKIP_THRESHOLD,
+      blocked: true,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString(),
+      reason: "codex adversarial review skipped on >= 3 consecutive self-build reflections (FU-E)",
+      clear_by: "run guild:codex-review at the next gate, OR record a reflection without a codex_review: SKIPPED marker, OR delete this file after an explicit operator override"
+    };
+    fs2.writeFileSync(sentinel, JSON.stringify(data, null, 2) + "\n", "utf8");
+    process.stderr.write(
+      `[maybe-reflect] wrote codex-skip sentinel: ${sentinel}
+`
+    );
+  } catch (err) {
+    process.stderr.write(
+      `[maybe-reflect] WARN: failed to write codex-skip sentinel: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+  }
+}
 async function main() {
   const raw = await readStdin();
   let payload = {};
@@ -190,29 +266,29 @@ async function main() {
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
-  try {
-    const isSelfBuild = fs2.existsSync(path2.join(guildRoot, "plugin", "CLAUDE.md"));
-    if (isSelfBuild) {
-      const reflectionsDir = path2.join(guildRoot, ".guild", "reflections");
-      if (fs2.existsSync(reflectionsDir)) {
-        const reflectionFiles = fs2.readdirSync(reflectionsDir).filter((f) => f.endsWith(".md")).map((f) => path2.join(reflectionsDir, f)).map((p) => ({ path: p, mtime: fs2.statSync(p).mtimeMs })).sort((a, b) => b.mtime - a.mtime).slice(0, 3);
-        const codexSkipCount = reflectionFiles.filter(({ path: p }) => {
-          try {
-            const content = fs2.readFileSync(p, "utf8");
-            const m = content.match(/skill_improvement:\s*\[([^\]]*)\]/);
-            return m ? m[1].includes("guild:codex-review") : false;
-          } catch {
-            return false;
-          }
-        }).length;
-        if (codexSkipCount >= 3) {
-          process.stderr.write(
-            "\n[maybe-reflect] \u26A0\u26A0\u26A0 DISCIPLINE WARNING \u26A0\u26A0\u26A0\n[maybe-reflect] The last 3 reflections all named guild:codex-review\n[maybe-reflect] in skill_improvement \u2014 codex adversarial review has been\n[maybe-reflect] skipped on 3 consecutive self-build runs. This is the\n[maybe-reflect] \xA711.1 \u22653-reflection threshold for /guild:evolve auto-trigger.\n[maybe-reflect] Run `/guild:evolve guild:codex-review` to act on the proposals,\n[maybe-reflect] or wire codex (`codex --version` + OPENAI_API_KEY) before\n[maybe-reflect] the next G-gate. See plugin/CLAUDE.md \xA7'Codex adversarial review'.\n\n"
-          );
-        }
-      }
-    }
-  } catch {
+  const codexGuard = evaluateCodexSkipGuard(guildRoot);
+  if (codexGuard.armed && codexGuard.streak >= CODEX_SKIP_THRESHOLD) {
+    writeCodexSkipSentinel(guildRoot, codexGuard.streak);
+    process.stderr.write(
+      `
+[maybe-reflect] \u26A0\u26A0\u26A0 DISCIPLINE HARD-FAIL \u26A0\u26A0\u26A0
+[maybe-reflect] codex adversarial review has been SKIPPED on ${codexGuard.streak}
+[maybe-reflect] consecutive self-build reflections (>= 3 threshold reached).
+[maybe-reflect] A blocking sentinel was written to:
+[maybe-reflect]   .guild/codex-skip-streak.json  (blocked: true)
+[maybe-reflect] The NEXT G-gate (G-spec/G-plan/G-lane) must REFUSE to pass
+[maybe-reflect] until codex review runs or the streak is cleared. To clear:
+[maybe-reflect]   1. wire codex (\`codex --version\` + OPENAI_API_KEY) and run
+[maybe-reflect]      \`guild:codex-review\` at the gate, OR
+[maybe-reflect]   2. record a reflection WITHOUT a codex_review: SKIPPED marker
+[maybe-reflect]      (a real review breaks the consecutive streak), OR
+[maybe-reflect]   3. delete .guild/codex-skip-streak.json after an explicit
+[maybe-reflect]      operator override.
+[maybe-reflect] See plugin/CLAUDE.md \xA7'Codex adversarial review'.
+
+`
+    );
+    process.exit(CODEX_SKIP_EXIT_CODE);
   }
   const sessionId = payload.session_id;
   const runId = process.env["GUILD_RUN_ID"] ?? (sessionId ? `run-${sessionId}` : `run-session-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`);

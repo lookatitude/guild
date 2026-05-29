@@ -544,6 +544,7 @@ Two triggers, one pipeline. Skill-creator eval loop + AgentDevel-style flip-cent
    - 0 regressions AND ≥ 1 fix.
    - No flip change AND tokens ↓ ≥ 10%.
    - Regressions present AND user approves via review viewer.
+   - **Doc-only fast-path** — edit classified doc-only (no body-logic, trigger-phrase, algorithm, or eval-case change; prose/description/comment/clarification only) AND user explicitly approves, recorded in `gate.json` as `condition: doc-only-fast-path`. A behavior-changing edit CANNOT use this path. Motivating runs: `evolve-doc-clarification-20260528-134115` + `run-learn-knowledge-convergence-20260529-094021`. Full gate spec: `skills/meta/evolve-skill/SKILL.md §Pipeline step 8`.
 9. On promote: description optimizer runs (train/test on `should_trigger`, fixes under-triggers and false triggers, ≤ 1024 chars), commit edit, bump version.
 10. On reject: archive attempt for future iterations.
 
