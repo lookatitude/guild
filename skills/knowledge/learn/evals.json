@@ -1,0 +1,23 @@
+{
+  "should_trigger": [
+    "/guild:learn with no arguments — run the full smart learn pipeline.",
+    "Learn this project completely end to end.",
+    "Run the full learn pipeline on this workspace.",
+    "Smart learn everything in this repo.",
+    "Do a full codebase learn with all the artifacts.",
+    "Learn all artifacts from scratch — map, graph, candidates, provenance.",
+    "Run learn-all on this multi-repo workspace and fan out to children."
+  ],
+  "should_not_trigger": [
+    "Run learn map only.",
+    "Build just the deep knowledge graph.",
+    "Narrate the onboarding tour.",
+    "Analyse the diff blast radius for this PR.",
+    "Explain how the auth middleware works.",
+    "Query the graph for all auth-related nodes.",
+    "Ingest this Stripe API doc into the wiki.",
+    "Run /guild:learn graph.",
+    "Run /guild:learn diff HEAD~1.",
+    "Run /guild:learn explain src/billing/invoice.ts."
+  ]
+}

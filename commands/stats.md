@@ -31,6 +31,23 @@ top-requested specialists, open reflection backlog, audit-drift summary). No
 file written. `--rebuild-index` only rebuilds the optional cache, not
 telemetry data.
 
+## Run recording
+
+Before the telemetry read begins, start a lightweight run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:stats \
+  --run-class=lightweight \
+  --cwd "$(pwd)"
+```
+
+`run-class=lightweight`: stats is read-only diagnostic, analogous to status.
+Lightweight writes only `run.yaml` + `provenance.json` to `.guild/runs/` —
+never touches wiki/decisions/indexes/initiatives. No `--initiative` flag
+(NN#5). The "stats never writes data" contract is preserved; only a replay
+trace is added.
+
 ## Dispatch
 
 Thin telemetry-read entrypoint. Read `.guild/runs/**` (or the optional

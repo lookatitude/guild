@@ -22,6 +22,22 @@ each phase command owns its phase; all state lives in `.guild/`.
 /guild:guild                                     ← detect from .guild/ state alone
 ```
 
+## Run recording
+
+Before reading `.guild/` state, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:guild \
+  --cwd "$(pwd)"
+# If --initiative=<id> was supplied by the user, add: --initiative=<id>
+```
+
+`run-class` default (`full`). The run is recorded before detection so the
+complete session — including the phase-detection decision and any user
+gates — is replayable from the entrypoint. `--initiative` is forwarded only
+when the user supplied it explicitly; it is never synthesised (NN#5).
+
 ## Phase detection (the §5.1 table)
 
 Inspect `.guild/` for the active slug and propose exactly one phase:

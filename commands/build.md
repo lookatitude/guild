@@ -52,6 +52,22 @@ pointer).
 
 `.guild/runs/<run-id>/handoffs/*.md`, `assumptions.md`, changed files.
 
+## Run recording
+
+Before context-assemble begins for the first lane, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:build \
+  --cwd "$(pwd)"
+# If --initiative=<id> was supplied by the user, add: --initiative=<id>
+```
+
+`run-class` default (`full`). Records the run before any lane work so the
+complete session — context assembly, dispatch, and reviews — is replayable
+from the entrypoint. `--initiative` forwarded only when user-supplied
+explicitly; never auto-detected from `.guild/initiatives/` (NN#5).
+
 ## Dispatch
 
 Resolve `guild.phase_entry.v1` (pointer above), then drive the Development

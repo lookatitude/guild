@@ -1,0 +1,134 @@
+#!/usr/bin/env -S npx tsx
+/**
+ * hooks/run-trace.ts — CLI entry for the run-trace lib (Lane B3).
+ *
+ * The hook entrypoints (run-trace-start.ts / run-trace-close.ts) consume the lib
+ * directly. This CLI is the seam for the COMMAND / SKILL legs that run outside a
+ * native hook event:
+ *
+ *   start — uniform run-record path (A2 rollout seam):
+ *       npx tsx hooks/run-trace.ts start --command=/guild:learn [--cwd <root>]
+ *             [--run-class=full|lightweight]
+ *     Default run-class is "full". When "lightweight", writes run.yaml +
+ *     provenance.json under .guild/runs/ ONLY — never wiki/decisions/indexes.
+ *     The OQ6 record_status_runs gate is NOT applied here — A2 applies it
+ *     before invoking this for /guild:status.
+ *     Prints the run-id on stdout.
+ *
+ *   status — convenience alias for `start --run-class=lightweight
+ *             --command=/guild:status` WITH the OQ6 gate applied:
+ *       npx tsx hooks/run-trace.ts status [--cwd <root>]
+ *     Prints the run-id, or nothing when record_status_runs:false.
+ *
+ *   skipped — SC-G skipped-files sink (Lane A1):
+ *       npx tsx hooks/run-trace.ts skipped --run-id <id> [--cwd <root>] < entries.json
+ *     stdin is a JSON array of {path, reason, rule, can_manually_include,
+ *     summary_produced} entries. Prints the written file path on stdout.
+ *
+ * Flag parsing: --foo=bar and --foo bar are both supported for all flags.
+ *
+ * Exit: 0 on success / no-op; 1 only on a usage error.
+ *
+ * Runner: bundled to dist/run-trace.js via esbuild (hooks/package.json).
+ */
+
+import { resolveGuildRoot } from "./lib/guild-root.js";
+import {
+  defaultResolveHost,
+  recordStatusLightweight,
+  startAndCloseRun,
+  writeSkippedFiles,
+  type SkippedFileEntry,
+} from "./lib/run-trace.js";
+
+/**
+ * Parse --name=value OR --name value. Returns undefined when absent.
+ * Handles both forms so callers can use either style.
+ */
+function flag(argv: string[], name: string): string | undefined {
+  // --name=value form
+  const prefix = `--${name}=`;
+  const eqMatch = argv.find((a) => a.startsWith(prefix));
+  if (eqMatch) return eqMatch.slice(prefix.length);
+  // --name value form
+  const i = argv.indexOf(`--${name}`);
+  return i !== -1 && argv[i + 1] && !argv[i + 1].startsWith("--")
+    ? argv[i + 1]
+    : undefined;
+}
+
+async function readStdin(): Promise<string> {
+  if (process.stdin.isTTY) return "";
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    process.stdin.on("data", (c: Buffer) => chunks.push(c));
+    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve(""));
+  });
+}
+
+const USAGE =
+  "usage: run-trace.ts <start|status|skipped> [--cwd <root>] [--run-id <id>]\n" +
+  "  start   --command=/guild:learn [--run-class=full|lightweight] [--cwd <root>]\n" +
+  "  status  [--cwd <root>]   (alias: start --run-class=lightweight + OQ6 gate)\n" +
+  "  skipped --run-id <id>    [--cwd <root>] < entries.json\n";
+
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+  const sub = argv[0];
+  const cwd = flag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
+  const root = resolveGuildRoot(cwd);
+
+  // ── start — uniform record path (A2 rollout seam) ──────────────────────────
+  if (sub === "start") {
+    const command = flag(argv, "command") ?? "/guild:learn";
+    const runClassRaw = flag(argv, "run-class");
+    const runClass: "full" | "lightweight" =
+      runClassRaw === "lightweight" ? "lightweight" : "full";
+
+    const runId = startAndCloseRun(root, defaultResolveHost, {
+      command,
+      cwd,
+      run_class: runClass,
+    });
+    if (runId) process.stdout.write(runId + "\n");
+    process.exit(0);
+  }
+
+  // ── status — convenience alias with OQ6 gate ────────────────────────────────
+  if (sub === "status") {
+    const runId = recordStatusLightweight(root, defaultResolveHost, { cwd });
+    if (runId) process.stdout.write(runId + "\n");
+    process.exit(0);
+  }
+
+  // ── skipped — SC-G sink ─────────────────────────────────────────────────────
+  if (sub === "skipped") {
+    const runId = flag(argv, "run-id") ?? process.env["GUILD_RUN_ID"];
+    if (!runId) {
+      process.stderr.write("[run-trace] usage: skipped --run-id <id> [--cwd <root>] < entries.json\n");
+      process.exit(1);
+    }
+    const raw = await readStdin();
+    let entries: SkippedFileEntry[] = [];
+    try {
+      const parsed = JSON.parse(raw.trim() || "[]");
+      if (Array.isArray(parsed)) entries = parsed as SkippedFileEntry[];
+    } catch {
+      process.stderr.write("[run-trace] skipped: invalid JSON on stdin; writing empty set.\n");
+    }
+    const out = writeSkippedFiles(root, runId, entries);
+    process.stdout.write(out + "\n");
+    process.exit(0);
+  }
+
+  process.stderr.write("[run-trace] " + USAGE);
+  process.exit(1);
+}
+
+main().catch((err: unknown) => {
+  process.stderr.write(
+    `[run-trace] FATAL: ${err instanceof Error ? err.message : String(err)}\n`,
+  );
+  process.exit(1);
+});

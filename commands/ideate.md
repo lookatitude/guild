@@ -50,6 +50,21 @@ pointer). `--rigor=deep` runs the clarify loop (semantics by pointer,
 
 `.guild/spec/<idea-slug>.md`, optional `.guild/research/<idea-slug>.md`.
 
+## Run recording
+
+Before the brainstorm / clarify loop begins, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:ideate \
+  --cwd "$(pwd)"
+# If --initiative=<id> was supplied by the user, add: --initiative=<id>
+```
+
+`run-class` default (`full`). Records the run before the spec-approval gate
+so the complete session is replayable from the entrypoint. `--initiative`
+forwarded only when user-supplied (NN#5).
+
 ## Dispatch
 
 Resolve `guild.phase_entry.v1` (pointer above), then drive the Ideation phase

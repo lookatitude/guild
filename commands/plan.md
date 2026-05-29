@@ -58,6 +58,22 @@ pointer).
 
 `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md`, `.guild/team/<slug>.yaml`.
 
+## Run recording
+
+Before team-compose begins, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:plan \
+  --cwd "$(pwd)"
+# If --initiative=<id> was supplied by the user, add: --initiative=<id>
+```
+
+`run-class` default (`full`). Records the run before the team-approval gate
+so the complete session — team compose, plan, and all review loops — is
+replayable from the entrypoint. `--initiative` forwarded only when
+user-supplied (NN#5).
+
 ## Dispatch
 
 Resolve `guild.phase_entry.v1` (pointer above), then drive the Planning phase

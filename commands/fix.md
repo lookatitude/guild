@@ -45,6 +45,21 @@ observed symptom; neither ⇒ inspect the most recent `.guild/runs/*`.
 
 `.guild/` diagnosis + fix-plan.
 
+## Run recording
+
+Before the diagnose skill is invoked, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:fix \
+  --cwd "$(pwd)"
+```
+
+`run-class` default (`full`). Records the run before telemetry scan so the
+complete session — diagnosis, fix plan, and the explicit edit-approval gate —
+is replayable from the entrypoint. No `--initiative` flag (fix runs are
+one-off; NN#5).
+
 ## Dispatch
 
 ```

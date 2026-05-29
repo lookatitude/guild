@@ -12,6 +12,8 @@
     "Run wiki-lint.",
     "Start a new brainstorm.",
     "Verify we're done.",
-    "Promote this reflection to the wiki."
+    "Promote this reflection to the wiki.",
+    "Harvest the phase artifacts into structured candidates — run learn-harvest.",
+    "Extract wiki and decision candidates from the run closeout."
   ]
 }

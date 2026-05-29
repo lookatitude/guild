@@ -1,21 +1,21 @@
 ---
 name: learn
-description: "Understand-everything — owns ALL codebase-understanding capabilities. Sub-verbs: map (CodebaseMap + architecture overview), graph (deep KnowledgeGraph), onboard (guided tour), diff (change analysis), explain (file/module deep-dive). One command, one implementation — same learn-* skills as init --learn. Dispatches to guild:learn-map / learn-graph / learn-onboard / learn-diff / learn-explain."
-argument-hint: "<map|graph|onboard|diff|explain> [target] [--rigor=quick|standard|deep]"
+description: "Understand-everything — smart full learn-all when no sub-verb is given (detects target shape, starts a run, runs the full learn pipeline, updates indexes, emits knowledge candidates, leaves replayable evidence). With a sub-verb: map (CodebaseMap + architecture overview), graph (deep KnowledgeGraph), onboard (guided tour), diff (change analysis), explain (file/module deep-dive). One command, one implementation — same learn-* skills as init --learn. Dispatches to guild:learn (no-arg smart mode) or guild:learn-map / learn-graph / learn-onboard / learn-diff / learn-explain."
+argument-hint: "[map|graph|onboard|diff|explain] [target] [--rigor=quick|standard|deep]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion
 ---
 
-# /guild:learn — understand-everything (`<map|graph|onboard|diff|explain>`)
+# /guild:learn — understand-everything
 
 <!-- §13.1 ADR row: D3 — NEW command, owns understand-everything. Sub-verbs are
      positional ARGUMENTS (D1); never separate files or namespaces. Same learn-*
-     skills as `/guild:init --learn` — one implementation, two triggers. -->
+     skills as `/guild:init --learn` — one implementation, two triggers.
+     learn-knowledge-convergence SC-A: no-arg form → smart full learn-all, NOT
+     usage-stop. Mirrors /guild:guild §5.1 surfaced-confirm pattern. -->
 
 The single entry-point for **all codebase-understanding capabilities**. A thin
 dispatcher over the `learn-*` skill family (`guild:learn-map`, `learn-graph`,
-`learn-onboard`, `learn-diff`, `learn-explain`). The first positional argument
-selects the sub-verb; none of the sub-verbs are separate command files or
-namespaces (D1).
+`learn-onboard`, `learn-diff`, `learn-explain`) AND the smart full learn-all path.
 
 **One implementation, two triggers (D3):** the pipeline this command runs is
 byte-identical to what `/guild:init --learn` and `defaults.auto_learn: true`
@@ -27,7 +27,100 @@ v2x-command-surface-dispatch-and-internalization.md` D3.
 
 ---
 
-## Sub-verbs
+## Usage
+
+```
+/guild:learn                              smart full learn-all (detect + confirm + pipeline)
+/guild:learn map                          CodebaseMap + architecture overview only
+/guild:learn graph                        Deep semantic KnowledgeGraph only
+/guild:learn graph --rigor=deep           Deep graph, highest fidelity
+/guild:learn onboard                      Guided architecture tour only
+/guild:learn diff                         Change analysis vs HEAD only
+/guild:learn diff src/auth/               Change analysis scoped to path
+/guild:learn explain src/billing/invoice.ts
+/guild:learn explain "how does the auth flow work"
+```
+
+All five global flags + `--dry-run` apply (`command-surface.md §4`, by
+pointer). `--rigor=deep` runs the highest-fidelity graph/analysis pass.
+
+---
+
+## No-arg form — smart full learn-all
+
+`/guild:learn` with no sub-verb triggers the **smart full learn-all path**.
+This is the core correction from the brief (learn-knowledge-convergence §"Core
+Correction"): absent arguments mean "learn this workspace or project completely,"
+NOT "missing argument, print usage, stop."
+
+### What the no-arg form does
+
+1. **Start a run** (SC-B, §435) — before detection or any scanning:
+
+   ```bash
+   node plugin/hooks/dist/run-trace.js start \
+     --command=/guild:learn \
+     --cwd "$(pwd)"
+   ```
+
+   Records command, args, cwd, host, workspace/project identity, tier policy,
+   ignore and scan policy, and gates. No `--run-class` override (default
+   `full`). No `--initiative` flag (learn runs are not initiative-attached by
+   default; NN#5 — no `.guild/initiatives/` directory created).
+
+2. **Detect target shape.** Classify the target into one of:
+   - `regular_project`
+   - `workspace`
+   - `existing_guild_project`
+   - `new_or_sparse_project`
+   - `mixed_or_uncertain`
+
+3. **Surface detection — always confirmed, never silent (§5.1 pattern).** Mirror the bare `/guild:guild` surfaced-confirm contract:
+
+   ```
+   Detected: existing_guild_project — .guild/ present, wiki populated.
+   Proposed action → full learn-all (map → graph → onboard → knowledge candidates)
+   Proceed? [proceed / pick-subverb / explain]
+   ```
+
+   - **proceed** — run the full learn pipeline.
+   - **pick-subverb** — list the sub-verb options; run the one chosen.
+   - **explain** — print which artifacts and heuristics drove the classification, then re-prompt.
+
+   For `mixed_or_uncertain`, ask one targeted clarifying question before proceeding.
+
+4. **Run the full learn pipeline.** Delegates to `guild:learn` skill in smart-learn mode (A1's skill logic). The pipeline order is:
+   - cheap map (`guild:learn-map`)
+   - deep graph (`guild:learn-graph`) — see cost gate below
+   - domains / flows / components / labels derivation
+   - `knowledge-links.json` build or refresh
+   - onboarding tour (`guild:learn-onboard`)
+   - durable knowledge candidates extraction
+   - decision candidates, open questions, risks, standards, patterns, anti-patterns
+   - derived indexes update
+   - provenance write
+   - learning checkpoint emission
+   - reflection candidates emission
+   - run close with replayable evidence
+
+5. **Workspace vs regular project.** For `workspace`, the pipeline checks child repos first — it does NOT scan all sub-repos as one monolithic codebase. Workspace flow follows the brief §"Workspace Full Learn" contract (auto fan-out per OQ2, aggregate cost estimate surfaced before child scans, `--dry-run` prints the fan-out plan without scanning).
+
+### Cost gate (OQ1 — no hidden cost non-negotiable)
+
+Deep-graph on large repos surfaces a cost estimate and asks before running. It never auto-runs silently:
+
+```
+Deep graph estimated: ~N files, ~M tokens, ~$X at current tier.
+Proceed with deep graph? [proceed / skip-graph / explain]
+```
+
+- **proceed** — run deep graph.
+- **skip-graph** — run the rest of the pipeline without graph (graph can be run separately via `/guild:learn graph`).
+- **explain** — show file/cost breakdown, then re-prompt.
+
+---
+
+## Sub-verbs (scoped, unchanged behavior)
 
 | Sub-verb | What it does | Skill | Output artifact |
 |---|---|---|---|
@@ -39,28 +132,11 @@ v2x-command-surface-dispatch-and-internalization.md` D3.
 
 ---
 
-## Usage
-
-```
-/guild:learn map
-/guild:learn graph
-/guild:learn graph --rigor=deep
-/guild:learn onboard
-/guild:learn diff
-/guild:learn diff src/auth/
-/guild:learn explain src/billing/invoice.ts
-/guild:learn explain "how does the auth flow work"
-```
-
-All five global flags + `--dry-run` apply (`command-surface.md §4`, by
-pointer). `--rigor=deep` runs the highest-fidelity graph/analysis pass.
-
----
-
 ## Args & local flags
 
-- Args: `<map|graph|onboard|diff|explain>` — **required** first positional;
-  selects the sub-verb. Unknown value ⇒ print usage help, invoke no skill.
+- Args: `[map|graph|onboard|diff|explain]` — **optional** first positional.
+  - **Absent** → smart full learn-all (detection + confirmation + full pipeline). See above.
+  - **Present** → scoped sub-verb; unknown value ⇒ print usage help, invoke no skill.
 - `[target]` — optional second positional; interpreted by each skill:
   - `diff`: a path, commit ref, or branch (defaults to HEAD vs previous).
   - `explain`: a file path, symbol name, or free-text concept.
@@ -71,42 +147,69 @@ pointer). `--rigor=deep` runs the highest-fidelity graph/analysis pass.
 
 ## Gates
 
-- `graph` confirmation **I** (deep graph is slow; surface estimated duration
-  before starting, confirm or `[skip]`).
+- **No-arg (smart full learn-all):** detection surface + confirmation **before** any scan (never silent, §5.1 pattern). Deep-graph cost estimate + confirm (OQ1 non-negotiable).
+- `graph` sub-verb: cost estimate + confirmation **I** (deep graph is slow; surface estimated duration before starting, confirm or `[skip]`).
 - All other sub-verbs: **A** / **R** (fast enough not to gate).
 
 ---
 
 ## Output artifacts
 
-| Sub-verb | Primary artifact | Overwritten? |
-|---|---|---|
-| `map` | `.guild/indexes/codebase-map.json` + `wiki/concepts/architecture-map.md` | idempotent (incremental) |
-| `graph` | `.guild/indexes/knowledge-graph.json` | idempotent (full rebuild) |
-| `onboard` | `.guild/indexes/onboarding-tour.md` | idempotent |
-| `diff` | `.guild/runs/<run-id>/learn/diff-<ts>.md` | one per invocation |
-| `explain` | prints to console; `--save` writes `.guild/runs/<run-id>/learn/explain-<ts>.md` | — |
+| Path | Produced by |
+|---|---|
+| `.guild/runs/<run-id>/run.yaml` | run start (every invocation) |
+| `.guild/runs/<run-id>/provenance.json` | run close (every invocation) |
+| `.guild/runs/<run-id>/learn/skipped-files.json` | learn scan (every full or map pass) |
+| `.guild/indexes/codebase-map.json` | `map` / full pipeline |
+| `wiki/concepts/architecture-map.md` | `map` / full pipeline |
+| `.guild/indexes/knowledge-graph.json` | `graph` / full pipeline |
+| `.guild/indexes/onboarding-tour.md` | `onboard` / full pipeline |
+| `.guild/indexes/knowledge-links.json` | full pipeline |
+| `.guild/runs/<run-id>/learn/diff-<ts>.md` | `diff` |
+| `.guild/runs/<run-id>/learn/explain-<ts>.md` | `explain --save` only |
+
+Sub-verb artifacts are idempotent (incremental or full rebuild per sub-verb).
+Full pipeline artifacts are idempotent. `diff` and `explain` produce one file
+per invocation.
 
 ---
 
+## Run recording (sub-verb forms)
+
+For explicit sub-verb invocations, start a run before the skill is called
+(SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:learn \
+  --cwd "$(pwd)"
+```
+
+`run-class` default (`full`) for all sub-verbs. No `--initiative` flag
+(NN#5). The no-arg form's run-start is described in "No-arg form — smart full
+learn-all" above — one call, not two; the dispatch branch determines which
+path runs, not whether a run is started.
+
 ## Dispatch
 
-Parse `$ARGUMENTS`. The first token must be one of `map`, `graph`, `onboard`,
-`diff`, `explain`; all further tokens are forwarded as `args` to the skill.
+Parse `$ARGUMENTS`. If the first token is one of `map`, `graph`, `onboard`,
+`diff`, `explain` — start a run (see above), then route to the corresponding
+scoped sub-verb. All further tokens are forwarded as `args` to the skill.
 
 ```
-map     → Skill: guild:learn-map     args: $REMAINING_ARGS
-graph   → Skill: guild:learn-graph   args: $REMAINING_ARGS
-onboard → Skill: guild:learn-onboard args: $REMAINING_ARGS
-diff    → Skill: guild:learn-diff    args: $REMAINING_ARGS
-explain → Skill: guild:learn-explain args: $REMAINING_ARGS
+(absent)  → run-trace.js start; detect target; surface + confirm; Skill: guild:learn (smart-learn mode)
+map       → run-trace.js start; Skill: guild:learn-map     args: $REMAINING_ARGS
+graph     → run-trace.js start; Skill: guild:learn-graph   args: $REMAINING_ARGS
+onboard   → run-trace.js start; Skill: guild:learn-onboard args: $REMAINING_ARGS
+diff      → run-trace.js start; Skill: guild:learn-diff    args: $REMAINING_ARGS
+explain   → run-trace.js start; Skill: guild:learn-explain args: $REMAINING_ARGS
 ```
 
-Unknown or absent sub-verb ⇒ print usage help and stop; invoke no skill,
-write no files:
+Unknown sub-verb ⇒ print usage help and stop; invoke no skill, write no files:
 
 ```
 Usage:
+  /guild:learn                           Smart full learn-all (detect + confirm + pipeline)
   /guild:learn map                       CodebaseMap + architecture overview
   /guild:learn graph [--rigor=deep]      Deep semantic KnowledgeGraph (slow)
   /guild:learn onboard                   Guided architecture tour
@@ -114,9 +217,10 @@ Usage:
   /guild:learn explain <path|concept>    Deep-dive explanation
 ```
 
-All skill logic and `.guild/` writes live in the `learn-*` skill bodies
-(clean-room re-authored from the former `understand-engine` /
-`understand-onboard` per D4). This command file only dispatches.
+All skill logic and `.guild/` writes live in the `learn-*` skill bodies and the
+`guild:learn` smart-learn skill (A1's skill logic; clean-room re-authored from the
+former `understand-engine` / `understand-onboard` per D4). This command file only
+dispatches.
 
 ---
 
@@ -132,12 +236,18 @@ implementation** (D3). When Init's full pipeline fires, it calls these same
 
 `/guild:learn diff` and `/guild:learn explain` are not called by Init (they
 are change-analysis and query-time skills, not bootstrap artifacts). The
-`/guild:learn` command can call all five sub-verbs at user discretion.
+`/guild:learn` command can call all five sub-verbs at user discretion. The
+no-arg smart full learn-all runs all five phases plus knowledge candidate
+extraction, which Init's scoped pipeline does not do.
 
 ---
 
 ## followups
 
+- `skill-author` (A1): author the smart full learn-all logic in the `guild:learn`
+  skill body (the no-arg delegation target). The command dispatches to it — the
+  detection classifier, workspace fan-out, skipped-files sink integration, and
+  knowledge candidate extraction all live in the skill, not here.
 - `skill-author`: author the `learn-*` family (`guild:learn-map`,
   `learn-graph`, `learn-onboard`, `learn-diff`, `learn-explain`) as
   clean-room re-implementations of the former `understand-engine` /

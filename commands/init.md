@@ -88,6 +88,23 @@ block. CLI flags always override it (precedence ladder
 `/guild:config init|show|validate`. If a legacy `.guild/config.yml` is
 present, its values are read via the back-compat shim until migrated.
 
+## Run recording
+
+Before any `.guild/` inspection, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:init \
+  --cwd "$(pwd)"
+# If --initiative=<id> was supplied by the user, add: --initiative=<id>
+```
+
+`run-class` default (`full`). Records the run before slug resolution and
+config scaffold so the complete session — including new-product Q&A gates —
+is replayable from the entrypoint. `--initiative` forwarded only when
+user-supplied (NN#5); the init skill writes `.guild/init/` not
+`.guild/initiatives/` — orthogonal and not a NN#5 concern.
+
 ## Dispatch
 
 Resolve `guild.phase_entry.v1` (pointer above), confirm the new-product

@@ -64,6 +64,25 @@ pointer). The mandatory pre-flight dry-run is a safety rail, independent of
 `.guild/runs/<run-id>/ops/<run-id>.md` (frozen `guild.ops.v1`; +
 `guild.incident.v1` / `guild.release.v1` records by class).
 
+## Run recording
+
+Before the operations skill is invoked, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:ops \
+  --cwd "$(pwd)"
+# If --initiative=<id> was supplied by the user, add: --initiative=<id>
+```
+
+`run-class` default (`full`). Records the run before the mandatory pre-flight
+dry-run so the complete session — runbook class selection, dry-run, and
+all safety-rail gates — is replayable from the entrypoint. `--initiative`
+forwarded only when user-supplied explicitly (NN#5). The four non-negotiable
+safety rails (incident/rollback never autonomous; first run always
+interactive; always-ask hard set; mandatory dry-run) are unaffected by
+run recording — they fire independently.
+
 ## Dispatch
 
 Resolve `guild.phase_entry.v1` (pointer above), then drive the Operations

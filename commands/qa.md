@@ -61,6 +61,23 @@ pointer).
 `.guild/runs/<run-id>/quality/<run-id>.md` (frozen `guild.quality.v1`;
 evidence under `quality/evidence/`).
 
+## Run recording
+
+Before the quality skill is invoked, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:qa \
+  --cwd "$(pwd)"
+# If --initiative=<id> was supplied by the user, add: --initiative=<id>
+```
+
+`run-class` default (`full`). Records the run before the SignalScan so the
+complete session — class-matrix selection gate, harness execution, and
+release/blocker gate — is replayable from the entrypoint. Writes to
+`.guild/runs/<run-id>/quality/` — not an initiatives directory (NN#5
+unaffected). `--initiative` forwarded only when user-supplied.
+
 ## Dispatch
 
 Resolve `guild.phase_entry.v1` (pointer above), then drive the Quality phase

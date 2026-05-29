@@ -30,9 +30,28 @@ None — **R** (read-only).
 
 Prints state (no file written).
 
+## Run recording
+
+At the very top of the command body — before any filesystem scan — record a
+lightweight status run (SC-B OQ6, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js status \
+  --cwd "$(pwd)"
+```
+
+This uses the dedicated `status` sub-command of `run-trace.js`, which calls
+`recordStatusLightweight`. Gate: if `settings.json record_status_runs: false`,
+the call is a no-op (pure-read path restored). On the recorded path, writes
+only `run.yaml` + `provenance.json` to `.guild/runs/` — never touches
+wiki/decisions/indexes/initiatives. The "status is read-only" contract is
+preserved; only a lightweight replay trace is added. No `--initiative` flag;
+no `--run-class` flag (the `status` sub-command forces `lightweight`
+internally via B3).
+
 ## Dispatch
 
 Thin orchestrator-read entrypoint. Resolve run state by filesystem scan
 (or the optional `.guild/index.sqlite` read-through cache unless
 `--no-index`), then print furthest phase, next pending gate, blockers, and
-the active team. No `.guild/` writes.
+the active team. No `.guild/` data writes.

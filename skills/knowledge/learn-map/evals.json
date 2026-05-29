@@ -18,6 +18,9 @@
     "Ingest this Stripe API doc into the wiki.",
     "Launch the interactive web dashboard for the graph.",
     "Run the powerful-tier cross-document graph-schema validation pass.",
-    "This is a plain single repo with only a docs folder — just plan the feature."
+    "This is a plain single repo with only a docs folder — just plan the feature.",
+    "Run /guild:learn with no arguments — use the smart full-learn dispatcher.",
+    "Full learn this workspace end to end including all child repos.",
+    "Harvest knowledge candidates from this run's phase artifacts."
   ]
 }

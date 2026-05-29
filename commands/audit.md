@@ -28,6 +28,21 @@ write into the plugin install dir) and flags each as a boundary violation.
 This is the static belt to the PreToolUse guard's runtime suspenders; both
 reuse existing surfaces and add **no new gate**.
 
+## Run recording
+
+Before the audit skill is invoked, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:audit \
+  --cwd "$(pwd)"
+```
+
+`run-class` default (`full`). Records the run before the SHA-256 hash scan
+so the complete session — boundary-check and static analysis — is replayable
+from the entrypoint. Audit writes to `.guild/audit/` — not
+`.guild/initiatives/` (NN#5 unaffected). No `--initiative` flag.
+
 ## Dispatch
 
 ```

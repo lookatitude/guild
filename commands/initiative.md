@@ -37,6 +37,23 @@ durable-goal signal — in which case `/guild:guild` *asks* "attach to an
 initiative? [new / existing / one-off]" rather than auto-attaching. One-off
 runs are first-class.
 
+## Run recording
+
+Before the initiative skill is invoked, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:initiative \
+  --cwd "$(pwd)"
+```
+
+`run-class` default (`full`). NN#5 applies to `startRun` itself — the
+library does not create `.guild/initiatives/` as a side effect of run
+recording. The `initiative` command's OWN skill writes `.guild/initiatives/`
+as part of its purpose; those writes are orthogonal to and unaffected by
+the run-recording call here. No `--initiative` flag forwarded (the
+`initiative` command manages its own id resolution internally).
+
 ## Dispatch
 
 Parse `$ARGUMENTS`. Dispatch on the first token to the initiative-layer

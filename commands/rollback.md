@@ -33,6 +33,21 @@ Confirm past v1 **I**.
 
 `.guild/skill-versions/<skill>/v<N+1>/`.
 
+## Run recording
+
+Before the rollback-skill is invoked, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:rollback \
+  --cwd "$(pwd)"
+```
+
+`run-class` default (`full`). Records the run before the snapshot + restore
+so the complete session — confirm-past-v1 gate and eval suite re-run — is
+replayable from the entrypoint. Writes to `.guild/skill-versions/` — not
+`.guild/initiatives/` (NN#5 unaffected). No `--initiative` flag.
+
 ## Dispatch
 
 ```

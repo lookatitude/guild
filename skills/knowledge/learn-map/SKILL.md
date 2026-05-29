@@ -88,9 +88,13 @@ source"* constraint (`codebase-understanding.md §"two-phase"`).
    repo: register the detected sub-guilds and write the federation manifest with
    `npx tsx scripts/workspace/write-manifest.ts --cwd <root>` →
    `.guild/workspace.json` (`guild.workspace.v1`, by pointer — see the
-   output-locations table). Deep per-sub-repo learn is **delegated/offered**
-   (run `/guild:learn map --cwd <sub>` or `/guild:init` on a sub-project),
-   **never auto-run** across the tree. Surface the verdict; it is overridable.
+   output-locations table). For the cheap-map sub-verb (`/guild:learn map`),
+   deep per-sub-repo learn is **delegated/offered** (run `/guild:learn map
+   --cwd <sub>` or `/guild:init` on a sub-project), **never auto-run** here
+   — fan-out is the responsibility of the no-arg `guild:learn` smart dispatcher
+   (which reads `learn_fanout: "auto"|"plan-only"` from
+   `readWorkspaceKnowledgeConfig(root)` and applies the OQ2 auto-fan-out
+   contract). Surface the verdict; it is overridable.
    On a **regular** repo (the default) skip to step 1 — the scan below is
    unchanged (zero-cost).
 1. **Scan.** Script: `scan.ts --cwd <root> [--gen-ignore]` →

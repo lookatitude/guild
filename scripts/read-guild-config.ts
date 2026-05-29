@@ -192,6 +192,13 @@ interface GuildSettings {
   host: "claude" | "codex" | "auto";
   initiative_default: string | null;
   index: "auto" | "off";
+  /**
+   * OQ6 (SC-B) — /guild:status records a lightweight run (run.yaml +
+   * provenance.json, runs/-only) when true. false reverts status to its
+   * historical pure-read behavior. Default true. B3 wires the gate; this
+   * reader surfaces the key.
+   */
+  record_status_runs: boolean;
   /** Execution backend selection (D5 dispatch ladder). Default "auto". */
   agent_mode: "team" | "agent" | "subagent" | "auto";
   /** Workspace federation mode (guild.workspace.v1). Depth is hard-fixed at 1 — no max_depth. */
@@ -229,6 +236,7 @@ const DEFAULTS: GuildSettings = {
   host: "auto",
   initiative_default: null,
   index: "auto",
+  record_status_runs: true,
   agent_mode: "auto",
   workspace: { mode: "auto" },
   models: {
@@ -303,6 +311,10 @@ const HELP: Record<string, string> = {
   host: "claude | codex | auto — co-equal host adapter selection",
   initiative_default: "null | <initiative-id> — attach runs to a durable initiative",
   index: "auto | off — optional SQLite read-through cache (auto = lazy-build past measured slowness)",
+  record_status_runs:
+    "bool (default true) — OQ6 (SC-B): /guild:status records a lightweight run " +
+    "(run.yaml + provenance.json, runs/-only; never wiki/decisions/indexes). " +
+    "false = revert to historical pure-read (no run written). Default-safe-when-absent.",
   agent_mode:
     "team | agent | subagent | auto (default) — execution backend (D5 dispatch ladder). " +
     "auto: $TMUX→team(in-session); tmux-installed→team(new-session); " +
@@ -942,7 +954,7 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     const rejects: string[] = [];
     const TIER1 = new Set([
       "rigor", "auto_approve", "review", "host", "initiative_default",
-      "index", "agent_mode", "workspace", "models",
+      "index", "record_status_runs", "agent_mode", "workspace", "models",
       "security", "secrets_policy", "mcp",
       "loops", "loop_cap", "codex_cap", "defaults",
     ]);
@@ -958,6 +970,9 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
       out.initiative_default = parsed["initiative_default"] as string | null;
     if (parsed["index"] === "auto" || parsed["index"] === "off") out.index = parsed["index"];
+    // OQ6 (SC-B): record_status_runs — default-safe-when-absent (true).
+    if (typeof parsed["record_status_runs"] === "boolean")
+      out.record_status_runs = parsed["record_status_runs"] as boolean;
     // D5: agent_mode as Tier-1 key (supersedes defaults.agent_team).
     if (VALID_AGENT_MODE.has(parsed["agent_mode"] as string))
       out.agent_mode = parsed["agent_mode"] as GuildSettings["agent_mode"];

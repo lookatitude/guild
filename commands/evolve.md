@@ -43,6 +43,22 @@ archived, not deleted.
 
 `.guild/evolve/<run-id>/**`, version bump on promote.
 
+## Run recording
+
+Before the evolve-skill is invoked, start a run (SC-B, §435):
+
+```bash
+node plugin/hooks/dist/run-trace.js start \
+  --command=/guild:evolve \
+  --cwd "$(pwd)"
+```
+
+`run-class` default (`full`). Records the run before the promotion gate so
+the complete session — shadow evaluation, promotion decision, and any
+template-migration steps — is replayable from the entrypoint. Writes to
+`.guild/evolve/` — not `.guild/initiatives/` (NN#5 unaffected). No
+`--initiative` flag.
+
 ## Dispatch
 
 ```
