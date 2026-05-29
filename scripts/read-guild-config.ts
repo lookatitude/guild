@@ -199,6 +199,13 @@ interface GuildSettings {
    * reader surfaces the key.
    */
   record_status_runs: boolean;
+  /**
+   * FU-E codex-skip enforcement — governs whether the codex-skip streak
+   * sentinel (.guild/codex-skip-streak.json) causes G-gates to merely
+   * surface a warning (warn) or hard-refuse dispatch (block). Default "warn".
+   * Referenced by guild:codex-review and guild:review-broker skills.
+   */
+  codex_skip_enforcement: "warn" | "block";
   /** Execution backend selection (D5 dispatch ladder). Default "auto". */
   agent_mode: "team" | "agent" | "subagent" | "auto";
   /** Workspace federation mode (guild.workspace.v1). Depth is hard-fixed at 1 — no max_depth. */
@@ -237,6 +244,7 @@ const DEFAULTS: GuildSettings = {
   initiative_default: null,
   index: "auto",
   record_status_runs: true,
+  codex_skip_enforcement: "warn",
   agent_mode: "auto",
   workspace: { mode: "auto" },
   models: {
@@ -315,6 +323,11 @@ const HELP: Record<string, string> = {
     "bool (default true) — OQ6 (SC-B): /guild:status records a lightweight run " +
     "(run.yaml + provenance.json, runs/-only; never wiki/decisions/indexes). " +
     "false = revert to historical pure-read (no run written). Default-safe-when-absent.",
+  codex_skip_enforcement:
+    "\"warn\" | \"block\" (default \"warn\") — FU-E codex-skip enforcement: " +
+    "warn surfaces the block sentinel (.guild/codex-skip-streak.json) at G-gates without stopping dispatch; " +
+    "block hard-refuses dispatch at the gate until the streak is cleared. " +
+    "Referenced by guild:codex-review and guild:review-broker.",
   agent_mode:
     "team | agent | subagent | auto (default) — execution backend (D5 dispatch ladder). " +
     "auto: $TMUX→team(in-session); tmux-installed→team(new-session); " +
@@ -954,7 +967,7 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     const rejects: string[] = [];
     const TIER1 = new Set([
       "rigor", "auto_approve", "review", "host", "initiative_default",
-      "index", "record_status_runs", "agent_mode", "workspace", "models",
+      "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace", "models",
       "security", "secrets_policy", "mcp",
       "loops", "loop_cap", "codex_cap", "defaults",
     ]);
@@ -973,6 +986,14 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     // OQ6 (SC-B): record_status_runs — default-safe-when-absent (true).
     if (typeof parsed["record_status_runs"] === "boolean")
       out.record_status_runs = parsed["record_status_runs"] as boolean;
+    // FU-E: codex_skip_enforcement — closed values warn|block; default-safe-when-absent (warn).
+    if (parsed["codex_skip_enforcement"] === "warn" || parsed["codex_skip_enforcement"] === "block")
+      out.codex_skip_enforcement = parsed["codex_skip_enforcement"];
+    else if (parsed["codex_skip_enforcement"] !== undefined) {
+      rejects.push(
+        `codex_skip_enforcement "${parsed["codex_skip_enforcement"]}" is invalid — valid: warn|block`
+      );
+    }
     // D5: agent_mode as Tier-1 key (supersedes defaults.agent_team).
     if (VALID_AGENT_MODE.has(parsed["agent_mode"] as string))
       out.agent_mode = parsed["agent_mode"] as GuildSettings["agent_mode"];

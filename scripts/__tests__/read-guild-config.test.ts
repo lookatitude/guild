@@ -1428,4 +1428,58 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
       expect(j.review).toBe("cross"); // CLI flag wins
     });
   });
+
+  // ── codex_skip_enforcement (FU-E codex-skip streak sentinel governance)
+  describe("codex_skip_enforcement (FU-E)", () => {
+    test("absent codex_skip_enforcement defaults to \"warn\" (default-safe-when-absent)", () => {
+      const dir = repo(); // no settings.json at all
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.codex_skip_enforcement).toBe("warn");
+    });
+
+    test("settings.json codex_skip_enforcement: \"block\" is read and accepted", () => {
+      const dir = repo();
+      writeSettings(dir, { codex_skip_enforcement: "block" });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.codex_skip_enforcement).toBe("block");
+    });
+
+    test("settings.json codex_skip_enforcement: \"warn\" is read and accepted", () => {
+      const dir = repo();
+      writeSettings(dir, { codex_skip_enforcement: "warn" });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.codex_skip_enforcement).toBe("warn");
+    });
+
+    test("--validate rejects an invalid codex_skip_enforcement value", () => {
+      const dir = repo();
+      writeSettings(dir, { codex_skip_enforcement: "silent" });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/codex_skip_enforcement.*invalid|invalid.*codex_skip_enforcement/i);
+    });
+
+    test("--validate passes codex_skip_enforcement: \"block\"", () => {
+      const dir = repo();
+      writeSettings(dir, { codex_skip_enforcement: "block" });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+
+    test("--scaffold includes codex_skip_enforcement: \"warn\" + _help entry", () => {
+      const { status, out } = run(["--scaffold"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.codex_skip_enforcement).toBe("warn");
+      expect(j._help["codex_skip_enforcement"]).toBeDefined();
+      expect(j._help["codex_skip_enforcement"]).toMatch(/warn|block|FU-E|codex-skip/i);
+    });
+  });
 });
