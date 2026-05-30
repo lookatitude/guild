@@ -290,17 +290,27 @@ export function convert(
   }
 
   // ── Write the shared .unmigrated-v1.json ─────────────────────────────────
-  // P2 fix — merge with any EXISTING .unmigrated-v1.json from a prior partial
-  // migration (never clobber). Existing entries are read first; new ones appended.
+  // Merge with any EXISTING .unmigrated-v1.json from a prior partial migration
+  // (never clobber). Deduplicate by (source, key) so a repeated run with an
+  // unresolved C4+C2 source does not accumulate duplicate entries. (P3 fix.)
   if (out.relocated.length > 0 && !dryRun) {
     const unmigratedPath = j(".unmigrated-v1.json");
     const isNew = !fs.existsSync(unmigratedPath);
-    let mergedEntries = [...out.relocated];
+    let mergedEntries: UnmigratedEntry[] = [];
     if (!isNew) {
       const existing = parseJson(fs.readFileSync(unmigratedPath));
       if (existing.ok && existing.value && typeof existing.value === "object") {
         const prior = (existing.value as Record<string, unknown>)["entries"];
-        if (Array.isArray(prior)) mergedEntries = [...prior, ...out.relocated];
+        if (Array.isArray(prior)) mergedEntries = prior as UnmigratedEntry[];
+      }
+    }
+    // Build a set of already-present (source, key) pairs for O(1) dedup.
+    const seen = new Set(mergedEntries.map((e) => `${e.source}\0${e.key}`));
+    for (const entry of out.relocated) {
+      const id = `${entry.source}\0${entry.key}`;
+      if (!seen.has(id)) {
+        mergedEntries.push(entry);
+        seen.add(id);
       }
     }
     const doc = buildUnmigratedDoc(clock.iso(), snapshotRef, mergedEntries);
@@ -501,23 +511,21 @@ function convertLegacyRuns(ctx: Ctx): void {
       (m["initiative"] ? `initiative: ${m["initiative"]}\n` : "") +
       (m["status"] ? `status: ${m["status"]}\n` : "");
 
-    // P2 fix — never blind-overwrite an existing v2 provenance.json.
-    // If one already exists (from a partial prior migration), preserve it and flag
-    // the conflict instead of clobbering the v2 artifact.
+    // Run-level C4 analog: if provenance.json already exists (an existing v2
+    // artifact), this is a genuine conflict — keep metadata.json LIVE (never write
+    // run.yaml, never delete metadata.json) and re-surface next open. Writing
+    // run.yaml + deleting metadata.json while provenance.json exists would silently
+    // "resolve" the conflict without user action, leaving the tree with a fabricated
+    // run.yaml and no way to re-surface. (P2 fix — round-2 correction.)
     if (provExists) {
       ctx.out.artifacts.push({
         rel: rel(guildDir, meta),
         disposition: "preserve+flag",
-        target: `runs/${e.name}/run.yaml`,
-        note: `provenance.json already exists — preserved (NOT clobbered); run.yaml written only`,
+        note: `run-level conflict: provenance.json already exists — metadata.json kept LIVE, run.yaml NOT written, re-surface next open`,
         removed: false,
       });
-      if (!dryRun) {
-        fs.writeFileSync(runYaml, runDoc);
-        ctx.out.generated.push(rel(guildDir, runYaml));
-        fs.rmFileSync(meta);
-      }
-      ctx.out.removed.push(rel(guildDir, meta));
+      // Nothing written, nothing removed. Source stays live; detection re-fires P6
+      // on the next open so the conflict re-surfaces correctly.
       continue;
     }
 

@@ -124,18 +124,27 @@ export interface KeyClassification {
  *   - mapped + existing v2 value DIFFERING    → C4 (keep LIVE, surface, re-surface)
  *   - unmapped (no v2 home)                   → C2 (relocate verbatim)
  *
- * SAME-NAME ALIAS handling (P2 fix): when v1Key === v2Key (e.g. auto_approve
- * string→array), the "existing" v2 value in the target IS the v1 value — there is
- * no separate v2 counterpart to conflict with. Comparing v1 against itself would
- * produce a false C4 (the value is a string, the mapped v2Value is an array → they
- * differ → stuck forever). The correct behavior: same-name aliases are always C1
- * (transform in place) or C3 (already transformed). A C4 can only arise when
- * v1Key !== v2Key and a DIFFERENT v2 key already holds a conflicting value.
+ * SAME-NAME ALIAS: when v1Key === v2Key (e.g. `auto_approve` string→array), the key
+ * name is preserved but the VALUE SHAPE changes. The correct behavior depends on
+ * whether this is an IN-PLACE transform (source and target are the SAME file, e.g.
+ * rewriting a stray v1 key inside settings.json) or a CROSS-FILE migration (source
+ * is config.yml, target is settings.json):
+ *
+ *   - IN-PLACE (inPlace=true):  the v2Target already holds the v1 value — there is
+ *     no separate v2 counterpart. Skip the target lookup; always C1 (transform it)
+ *     or C3 (already the right shape). Never C4 against itself.
+ *
+ *   - CROSS-FILE (inPlace=false, the default): settings.json may already hold a v2
+ *     value for the same key set by a prior migration or by the user. Do the target
+ *     lookup: absent → C1; equal → C3; DIFFERING → C4 (keep the authoritative v2
+ *     value, surface the conflict). Without this, config.yml `auto_approve: "all"`
+ *     would silently overwrite settings.json `auto_approve: ["spec","plan"]`.
  */
 export function classifyKey(
   v1Key: string,
   value: unknown,
-  v2Target: Record<string, unknown> | undefined
+  v2Target: Record<string, unknown> | undefined,
+  inPlace = false
 ): KeyClassification {
   const mapped = mapV1Key(v1Key, value);
   if (!mapped) {
@@ -146,10 +155,9 @@ export function classifyKey(
     };
   }
 
-  // Same-name alias: v1Key === v2Key (e.g. auto_approve string→array).
-  // The current value IS the v1 form; there is no separate counterpart to conflict with.
-  // Result is C1 (transform it) or C3 (already the correct v2 form).
-  if (mapped.v1Key === mapped.v2Key) {
+  // Same-name alias + IN-PLACE: the target file IS the source; the existing value
+  // is the v1 form itself. No separate counterpart → C1 or C3, never C4.
+  if (mapped.v1Key === mapped.v2Key && inPlace) {
     if (valueEqual(value, mapped.v2Value)) {
       return {
         outcome: {
@@ -169,7 +177,10 @@ export function classifyKey(
     };
   }
 
-  // Different-name mapping: check for a pre-existing v2 counterpart in the target.
+  // Cross-file (default) or different-name mapping: check the target for a
+  // pre-existing v2 value. A same-name cross-file mapping (e.g. config.yml
+  // `auto_approve` vs settings.json `auto_approve`) is handled here — the target
+  // may hold a user-set v2 value that must win on conflict (C4).
   const existing = getPath(v2Target, mapped.v2Key);
   if (existing === undefined) {
     // C1 — write to v2, drop v1.
