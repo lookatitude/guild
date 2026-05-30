@@ -187,9 +187,18 @@ export function convert(
           if (allKeys.includes(k)) continue;
           const handledChildren = allKeys.filter((hk) => hk.startsWith(k + "."));
           if (handledChildren.length === 0) {
-            // Fully unhandled top-level key — classify and relocate as-is.
+            // Fully unhandled top-level key — classify AND APPLY.
+            // Includes literal dotted keys like "defaults.agent_team" that v1KeysIn
+            // does not put in allKeys (because v1KeysIn reads nested paths, not literal
+            // dotted-string keys). classifyKey may return C1 (write to v2) for these —
+            // we MUST apply the write here, not just record it. (P1 data-loss fix.)
             const cls = classifyKey(k, parsed[k], v2Settings);
             outcomes.push(cls.outcome);
+            if (cls.write) {
+              // C1: apply the v2 value into settings and mark settings as mutated.
+              setPath(v2Settings, cls.write.v2Key, cls.write.v2Value);
+              settingsMutated = true;
+            }
             if (cls.relocate)
               out.relocated.push({ source: rel(guildDir, p), key: k, value: parsed[k], reason: "unmapped" });
             if (cls.outcome.case === "C4") out.conflicts.push(cls.outcome);

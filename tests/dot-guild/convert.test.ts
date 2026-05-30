@@ -990,6 +990,109 @@ describe("REGRESSION P2c: literal dotted YAML key wiki.share_mode stripped corre
   });
 });
 
+describe("REGRESSION P2c-config: literal dotted key in config.yml C1 write must be APPLIED, not just recorded", () => {
+  /**
+   * Combined-codex data-loss bug (gap in the 94-test suite — covered wiki.share_mode
+   * in project.yaml but NOT a literal dotted key in config.yml that maps to a C1 write).
+   *
+   * Bug: config.yml with a LITERAL flat key `"defaults.agent_team": true` (NOT nested
+   * `defaults: { agent_team: ... }`). `v1KeysIn()` only matches the NESTED form, so the
+   * literal key is absent from `allKeys`. It then hits the remaining-key fallback branch
+   * in convert.ts, where `classifyKey(k, parsed[k], v2Settings)` returns C1 for agent_mode
+   * — but that branch only PUSHED `cls.outcome` (recorded it) and never applied
+   * `cls.write` via setPath. Result: config.yml is removed (no C4) but settings.json is
+   * NOT written with agent_mode → silent DATA LOSS.
+   *
+   * This guards the "fallback branch must APPLY the write, not just record" fix.
+   * Pre-fix: the settings.json-agent_mode assertion FAILS (write never applied).
+   * Post-fix (W1b lands in parallel): all assertions pass.
+   */
+  test("literal dotted 'defaults.agent_team': true in config.yml → settings.json agent_mode:team (write APPLIED)", () => {
+    const fs = buildFs({
+      // YAML literal flat key — NOT nested. js-yaml parses this as
+      // { "defaults.agent_team": true }, a top-level key with a dot in its name.
+      [path.join(GUILD, "config.yml")]: "\"defaults.agent_team\": true\n",
+    });
+    const h = fsHelper(fs);
+    runMigration({ root: ROOT, mode: "migrate", fs, clock });
+
+    // The C1 write MUST have been applied — settings.json carries agent_mode:team.
+    // (Pre-fix: settings.json is absent or missing agent_mode → DATA LOSS.)
+    expect(h._hasFile(path.join(GUILD, "settings.json"))).toBe(true);
+    const settings = JSON.parse(h._read(path.join(GUILD, "settings.json")));
+    expect(settings["agent_mode"]).toBe("team");
+  });
+
+  test("literal dotted C1: config.yml removed from live (snapshot holds original)", () => {
+    const fs = buildFs({
+      [path.join(GUILD, "config.yml")]: "\"defaults.agent_team\": true\n",
+    });
+    const h = fsHelper(fs);
+    runMigration({ root: ROOT, mode: "migrate", fs, clock });
+    expect(h._hasFile(path.join(GUILD, "config.yml"))).toBe(false);
+  });
+
+  test("literal dotted C1: report records the conversion truthfully (a write happened)", () => {
+    const fs = buildFs({
+      [path.join(GUILD, "config.yml")]: "\"defaults.agent_team\": true\n",
+    });
+    const res = runMigration({ root: ROOT, mode: "migrate", fs, clock });
+    const child = res.children[0];
+    // config.yml artifact must be a truthful `convert` (not preserve+flag, no C4),
+    // and the recorded key outcome must be the C1 agent_mode write that ACTUALLY
+    // landed in settings.json. A report claiming convert while settings.json is
+    // empty would be a lie — assert both the disposition AND the C1 outcome.
+    const cfg = child.artifacts.find((a) => a.rel === "config.yml");
+    expect(cfg).toBeDefined();
+    expect(cfg?.disposition).toBe("convert");
+    const c1 = (cfg?.keys ?? []).find((k) => k.case === "C1");
+    expect(c1).toBeDefined();
+    // No C4 conflicts — this was a clean C1.
+    expect(child.conflicts).toHaveLength(0);
+  });
+
+  test("literal dotted C1: 2nd run is a v2 no-op (idempotency holds, nothing lost)", () => {
+    const fs = buildFs({
+      [path.join(GUILD, "config.yml")]: "\"defaults.agent_team\": false\n",
+    });
+    runMigration({ root: ROOT, mode: "migrate", fs, clock });
+    const res2 = runMigration({ root: ROOT, mode: "migrate", fs, clock });
+    expect(res2.children[0].action).toBe("v2-noop");
+  });
+
+  test("literal dotted C3: 'defaults.agent_team': false EQUAL to existing agent_mode:subagent → dropped, no data loss", () => {
+    // The C3 sibling: settings.json already has the equivalent v2 value
+    // (agent_mode:subagent ≡ defaults.agent_team:false). The literal dotted key
+    // must be DROPPED (redundant) — not relocated, not cause a C4 — and the
+    // existing settings.json value must be UNTOUCHED.
+    const fs = buildFs({
+      [path.join(GUILD, "settings.json")]: JSON.stringify({ agent_mode: "subagent" }),
+      [path.join(GUILD, "config.yml")]: "\"defaults.agent_team\": false\n",
+    });
+    const h = fsHelper(fs);
+    runMigration({ root: ROOT, mode: "migrate", fs, clock });
+
+    // settings.json value preserved, not clobbered.
+    const settings = JSON.parse(h._read(path.join(GUILD, "settings.json")));
+    expect(settings["agent_mode"]).toBe("subagent");
+    // config.yml removed (the redundant C3 key dropped → fully migrated).
+    expect(h._hasFile(path.join(GUILD, "config.yml"))).toBe(false);
+    // No data loss: the literal key was NOT relocated to .unmigrated-v1.json
+    // (C3 drops redundant, it is not unmapped C2).
+    const unmigratedPath = path.join(GUILD, ".unmigrated-v1.json");
+    if (h._hasFile(unmigratedPath)) {
+      const doc = JSON.parse(h._read(unmigratedPath));
+      const stray = (doc.entries ?? []).find(
+        (e: { key: string }) => e.key === "defaults.agent_team" || e.key === "agent_mode"
+      );
+      expect(stray).toBeUndefined();
+    }
+    // 2nd run no-op.
+    const res2 = runMigration({ root: ROOT, mode: "migrate", fs, clock });
+    expect(res2.children[0].action).toBe("v2-noop");
+  });
+});
+
 describe("REGRESSION P2d: existing provenance.json preserved+flagged, NOT overwritten", () => {
   /**
    * Before fix: convertLegacyRuns wrote provenance.json unconditionally even if
