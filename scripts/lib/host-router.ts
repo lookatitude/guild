@@ -7,7 +7,7 @@
  *   §CR-1 (routing decision function), §CR-2 (capability pre-check),
  *   §CR-3 (ranked fallback chain — NO silent tier downgrade),
  *   §CR-4 (work-type → host affinity), §CR-5 (manifest freshness TTL),
- *   §CR-6 (budget cap deferred to v2.1 — telemetry spend stub only),
+ *   §CR-6 (budget cap deferred — telemetry spend stub only; issue: oc-budget-cap),
  *   §"Null codex/gemini tier-slot fill" (merge precedence).
  * Tier ladder is canonical in cost-aware-tiering-and-lean-context.md §1/§2.
  * The D5 `agent_mode` ladder (mode axis) is canonical in
@@ -106,8 +106,8 @@ export interface RouteOptions {
   settingsOverride?: Partial<Record<Tier, Partial<Record<HostKind, string>>>>;
   /**
    * CR-6 telemetry spend stub. Invoked once with the final decision so actual
-   * routing spend can be recorded now; the budget CAP itself is deferred to v2.1
-   * (oc-budget-cap). Default: no-op.
+   * routing spend can be recorded now; the budget CAP itself is deferred
+   * (tracked as oc-budget-cap). Default: no-op.
    */
   onDecision?: (decision: RoutingDecision) => void;
 }
@@ -418,7 +418,7 @@ export function route(
       `backend=${requiredBackend ?? "any"}; workType=${lane.workType ?? "none"}`,
     rejected,
     notes: [
-      "budget-cap deferred to v2.1 (oc-budget-cap, CR-6); spend recorded via telemetry stub",
+      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub",
     ],
   };
 

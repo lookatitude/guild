@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-const NEW_RUN_ID = path.resolve(__dirname, "../new-run-id.ts");
+// new-run-id.ts deleted in SC-8 W2B-4; run-lifecycle.ts:startRun is the sole sentinel writer.
 const EMIT_LOOP_EVENT = path.resolve(__dirname, "../emit-loop-event.ts");
 
 // Suppress Node-internal/tsx-loader warnings (e.g. DEP0205
@@ -22,30 +22,6 @@ describe("run scoping and loop event helpers", () => {
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it("new-run-id writes current-run-id and metadata for one /guild invocation", () => {
-    const result = spawnSync("npx", ["tsx", NEW_RUN_ID, "--cwd", tmpDir], {
-      encoding: "utf8",
-      timeout: 15000,
-      env: SPAWN_ENV,
-    });
-
-    expect(result.status).toBe(0);
-    const runId = result.stdout.trim();
-    expect(runId).toMatch(/^run-\d{4}-\d{2}-\d{2}-[a-f0-9]{8}$/);
-    expect(
-      fs.readFileSync(path.join(tmpDir, ".guild", "runs", "current-run-id"), "utf8"),
-    ).toBe(runId);
-
-    const metadata = JSON.parse(
-      fs.readFileSync(path.join(tmpDir, ".guild", "runs", runId, "metadata.json"), "utf8"),
-    );
-    expect(metadata).toMatchObject({
-      schema_version: 1,
-      run_id: runId,
-      invocation: "/guild",
-    });
   });
 
   it("emit-loop-event writes v1.4 loop_round_start/end rows using the sentinel run id", () => {

@@ -69,9 +69,6 @@ function runYamlPath(root, runId) {
 function provenancePath(root, runId) {
   return path2.join(runDir(root, runId), "provenance.json");
 }
-function metadataPath(root, runId) {
-  return path2.join(runDir(root, runId), "metadata.json");
-}
 function logsDir(root, runId) {
   return path2.join(runDir(root, runId), "logs");
 }
@@ -262,18 +259,6 @@ function createRunLifecycle(env) {
       };
       if (opts.coverage) provenance.coverage = opts.coverage;
       env.fs.writeFile(provenancePath(root, runId), JSON.stringify(provenance, null, 2) + "\n");
-      const a = opts.artifacts ?? {};
-      const metadata = {
-        run_id: runId,
-        initiative: facts.initiative,
-        spec: a["spec"] ?? null,
-        plan: a["plan"] ?? null,
-        team: a["team"] ?? null,
-        backend: a["backend"] ?? null,
-        started_at: facts.started_at,
-        self_build: facts.self_build
-      };
-      env.fs.writeFile(metadataPath(root, runId), JSON.stringify(metadata, null, 2) + "\n");
       flipRunStatus(env, root, runId, opts.status);
     }
   };

@@ -8,8 +8,9 @@
  * current-run-id sentinel + an empty logs/ dir, and returns the run-id.
  * `closeRun` writes the `guild.provenance.v1` close-shape (provenance.json),
  * references the terminal `guild.trace_event.v1` BY POINTER, references the
- * final learning checkpoint, dual-writes the legacy metadata.json subset, and
- * flips run.yaml.status.
+ * final learning checkpoint, and flips run.yaml.status.
+ * v2 run records are run.yaml + provenance.json ONLY — metadata.json dual-write
+ * removed (SC-8 cleanup).
  *
  * Hard invariants (B1 §3/§4/§5):
  *   - NN#5: startRun creates ZERO .guild/initiatives/ dir. initiative is a
@@ -156,7 +157,7 @@ export interface RunLifecycle {
   /**
    * Writes provenance.json (guild.provenance.v1), references the terminal
    * run_closed guild.trace_event.v1 BY POINTER, references the final learning
-   * checkpoint, dual-writes metadata.json for back-compat, sets run.yaml.status.
+   * checkpoint, and sets run.yaml.status.
    */
   closeRun(runId: string, opts: CloseRunOpts): void;
 }
@@ -219,16 +220,15 @@ function runYamlPath(root: string, runId: string): string {
 function provenancePath(root: string, runId: string): string {
   return path.join(runDir(root, runId), "provenance.json");
 }
-function metadataPath(root: string, runId: string): string {
-  return path.join(runDir(root, runId), "metadata.json");
-}
 function logsDir(root: string, runId: string): string {
   return path.join(runDir(root, runId), "logs");
 }
 function sentinelPath(root: string): string {
-  // Convention: .guild/runs/current-run-id — matches new-run-id.ts,
-  // capture-telemetry.ts, post-tool-use.ts, pre-compact.ts, pre-tool-use.ts
-  // (the entire legacy hook ecosystem). FU-B3-1 convergence fix.
+  // Canonical sentinel location: .guild/runs/current-run-id.
+  // startRun is the SOLE writer (new-run-id.ts deleted in SC-8 W2B-4).
+  // Consumed by: capture-telemetry.ts, post-tool-use.ts, pre-compact.ts,
+  // pre-tool-use.ts, and the hook run-trace chain
+  // (GUILD_RUN_ID → runs/current-run-id → current-run-id).
   return path.join(root, ".guild", "runs", "current-run-id");
 }
 /** Trace log_ref recorded into provenance — a POSIX-style .guild-relative pointer. */
@@ -478,20 +478,6 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       if (opts.coverage) provenance.coverage = opts.coverage;
 
       env.fs.writeFile(provenancePath(root, runId), JSON.stringify(provenance, null, 2) + "\n");
-
-      // Dual-write the legacy metadata.json subset (§6 migration ladder, step 1).
-      const a = opts.artifacts ?? {};
-      const metadata = {
-        run_id: runId,
-        initiative: facts.initiative,
-        spec: a["spec"] ?? null,
-        plan: a["plan"] ?? null,
-        team: a["team"] ?? null,
-        backend: a["backend"] ?? null,
-        started_at: facts.started_at,
-        self_build: facts.self_build,
-      };
-      env.fs.writeFile(metadataPath(root, runId), JSON.stringify(metadata, null, 2) + "\n");
 
       // Flip run.yaml.status to the terminal value.
       flipRunStatus(env, root, runId, opts.status);

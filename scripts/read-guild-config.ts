@@ -13,10 +13,11 @@
  *   3. .guild/settings.json keys (Tier-1 + the closed-key `defaults:` block)
  *   4. Built-in defaults
  *
- * `.guild/settings.json` REPLACES the v1 `.guild/config.yml`. A one-time
- * back-compat shim reads + migrates an existing config.yml when settings.json
- * is absent and warns once (MIGRATION.md). Once settings.json exists it is
- * authoritative.
+ * `.guild/settings.json` is the single v2 config surface. The v1 `.guild/config.yml`
+ * runtime reader has been removed (SC-8 W2B-5). The on-open converter
+ * (`scripts/dot-guild/convert/`) is the ONLY migration path: it materializes
+ * `settings.json` from `config.yml` on first open. Users who skip the converter
+ * get built-in defaults (no silent v1 fallback — locked by OQ5). See MIGRATION.md.
  *
  * Modes:
  *   (default)     resolve + print the merged config JSON. The resolver expands
@@ -36,7 +37,7 @@
  *   npx tsx scripts/read-guild-config.ts --self-build --validate   (enables the adversarial:off reject)
  *
  * Stdout: JSON object (resolve/scaffold) or a validation report (--validate).
- * Stderr: warnings for unknown keys, parse errors, deprecation shim.
+ * Stderr: warnings for unknown keys, parse errors.
  * Exit:   0 in resolve/scaffold (config failures must not block the lifecycle);
  *         non-zero only from --validate on a closed-key violation.
  */
@@ -50,8 +51,6 @@ interface QualityBudget {
   total_minutes: number;
 }
 interface DefaultsBlock {
-  /** @deprecated Use top-level `agent_mode` (D5). Warn-once alias: auto→auto, on→team, off→subagent. Removed at v2.1.0. */
-  agent_team: "auto" | "on" | "off";
   /** When true, `/guild init` runs the full learn-* pipeline at bootstrap (D3). Default false. */
   auto_learn: boolean;
   adversarial: "on" | "off";
@@ -288,7 +287,6 @@ const DEFAULTS: GuildSettings = {
   loop_cap: 16,
   codex_cap: 5,
   defaults: {
-    agent_team: "auto",
     auto_learn: false,
     adversarial: "on",
     team: { size: null, always_include: [] },
@@ -331,8 +329,7 @@ const HELP: Record<string, string> = {
   agent_mode:
     "team | agent | subagent | auto (default) — execution backend (D5 dispatch ladder). " +
     "auto: $TMUX→team(in-session); tmux-installed→team(new-session); " +
-    "independent-agents-supported→agent; else→subagent. " +
-    "Replaces deprecated defaults.agent_team.",
+    "independent-agents-supported→agent; else→subagent.",
   "workspace.mode":
     "auto (default) | on | off — workspace federation mode (guild.workspace.v1). " +
     "auto: detect by immediate-child rule (.git/.guild). on: force workspace. off: force regular. " +
@@ -340,9 +337,6 @@ const HELP: Record<string, string> = {
   loops: "null | none|spec|plan|implementation|all|<csv> — power-user; null = derive from rigor",
   loop_cap: "int 1-256 — max rounds per adversarial loop",
   codex_cap: "int 1-10 — max rounds per Codex review gate",
-  "defaults.agent_team":
-    "[DEPRECATED → use top-level agent_mode] auto | on | off — " +
-    "warn-once alias: auto→auto, on→team, off→subagent. Removed at v2.1.0.",
   "defaults.auto_learn":
     "bool (default false) — when true, /guild init runs the full learn-* pipeline at bootstrap (D3). " +
     "Precedence: --learn CLI flag > settings.json > built-in(false).",
@@ -522,8 +516,6 @@ function parseArgs(argv: string[]): ParsedArgs {
     } else if (arg.startsWith("--review=")) {
       const v = arg.slice("--review=".length);
       if (VALID_REVIEW.has(v)) flags.review = v as GuildSettings["review"];
-    } else if (arg === "--codex-review") {
-      flags.review = "cross"; // v1 back-compat → v2 review=cross
     } else if (arg.startsWith("--host=")) {
       const v = arg.slice("--host=".length);
       if (VALID_HOST.has(v)) flags.host = v as GuildSettings["host"];
@@ -551,43 +543,10 @@ function parseArgs(argv: string[]): ParsedArgs {
   return { cwd, mode, selfBuild, modelTier, flags };
 }
 
-// ── config.yml back-compat shim (flat v1 keys → v2 shape). MIGRATION.md §3.
-function parseYamlSimple(content: string): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const raw of content.split("\n")) {
-    const line = raw.replace(/#.*$/, "").trim();
-    if (!line || !line.includes(":")) continue;
-    const i = line.indexOf(":");
-    const key = line.slice(0, i).trim();
-    const val = line.slice(i + 1).trim();
-    if (!key) continue;
-    if (val === "true") result[key] = true;
-    else if (val === "false") result[key] = false;
-    else if (/^\d+$/.test(val)) result[key] = parseInt(val, 10);
-    else result[key] = val.replace(/^["']|["']$/g, "");
-  }
-  return result;
-}
-
-function migrateLegacyConfig(parsed: Record<string, unknown>): Partial<GuildSettings> {
-  const out: Partial<GuildSettings> = {};
-  if (typeof parsed["loops"] === "string") out.loops = parsed["loops"];
-  if (typeof parsed["loop_cap"] === "number") out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
-  if (typeof parsed["codex_cap"] === "number") out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
-  if (parsed["codex_review"] === true) out.review = "cross";
-  if (typeof parsed["auto_approve"] === "string") {
-    const m = parsed["auto_approve"] as string;
-    if (m === "spec-and-plan") out.auto_approve = ["spec", "plan"];
-    else if (m === "all") out.auto_approve = ["all"];
-    else if (m === "implementation") out.auto_approve = ["build"];
-  }
-  return out;
-}
-
 interface FileLoad {
   config: Partial<GuildSettings>;
   rejects: string[];
-  source: "settings.json" | "config.yml" | "none";
+  source: "settings.json" | "none";
 }
 
 // ── settings.local.json merge (Decision F — guild-boundary-config-and-tracking.md)
@@ -892,19 +851,21 @@ function validateCrossHostBlock(ch: Record<string, unknown>): string[] {
   return rejects;
 }
 
+// Closed-key set for defaults.* block. Shared by validateDefaults and the
+// resolve-mode strip so unknown keys are NEVER carried into resolved config.
+const DEFAULTS_ALLOWED_KEYS = new Set([
+  "auto_learn",   // D3: bool, default false
+  "adversarial", "team", "review_workflow", "skill_policy",
+  "gates", "wiki", "quality", "reporting",
+  "index",        // D-PS-1: SQLite lazy-cache trigger thresholds
+  "cross_host",   // CR-1/CH-1: cross-host SSH endpoint config
+]);
+
 /** Closed-key validation of the `defaults:` block. Returns reject messages. */
 function validateDefaults(d: Record<string, unknown>, selfBuild: boolean): string[] {
   const rejects: string[] = [];
-  const ALLOWED = new Set([
-    "agent_team",   // DEPRECATED alias — still accepted, warn-once in loadFileConfig
-    "auto_learn",   // D3: bool, default false
-    "adversarial", "team", "review_workflow", "skill_policy",
-    "gates", "wiki", "quality", "reporting",
-    "index",        // D-PS-1: SQLite lazy-cache trigger thresholds
-    "cross_host",   // CR-1/CH-1: cross-host SSH endpoint config
-  ]);
   for (const k of Object.keys(d)) {
-    if (!ALLOWED.has(k)) rejects.push(`unknown defaults key "${k}" (closed key set — a typo must surface)`);
+    if (!DEFAULTS_ALLOWED_KEYS.has(k)) rejects.push(`unknown defaults key "${k}" (closed key set — a typo must surface)`);
   }
   if (d["adversarial"] === "off" && selfBuild)
     rejects.push(`defaults.adversarial: off is REJECTED for Guild self-build`);
@@ -954,7 +915,6 @@ function validateDefaults(d: Record<string, unknown>, selfBuild: boolean): strin
 
 function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
   const settingsPath = path.join(cwd, ".guild", "settings.json");
-  const legacyPath = path.join(cwd, ".guild", "config.yml");
 
   if (fs.existsSync(settingsPath)) {
     let parsed: Record<string, unknown>;
@@ -1121,58 +1081,27 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     if (typeof parsed["codex_cap"] === "number") out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
     if (isPlainObject(parsed["defaults"])) {
       rejects.push(...validateDefaults(parsed["defaults"], selfBuild));
-      // deep-merge known sub-keys over DEFAULTS.defaults
-      out.defaults = { ...DEFAULTS.defaults, ...(parsed["defaults"] as Partial<DefaultsBlock>) } as DefaultsBlock;
-
-      // Deprecation: defaults.agent_team → top-level agent_mode (D5, warn-once).
-      // Mapping: auto→auto, on→team, off→subagent.
-      const d = parsed["defaults"] as Record<string, unknown>;
-      if (d["agent_team"] !== undefined) {
-        process.stderr.write(
-          "[read-guild-config] WARN: defaults.agent_team is DEPRECATED — use top-level agent_mode instead. " +
-            "Migration: auto→auto, on→team, off→subagent. " +
-            "Will be removed at v2.1.0. Run `/guild config init` to regenerate settings.json.\n"
-        );
-        // Translate to agent_mode only when Tier-1 agent_mode was NOT explicitly set.
-        if (out.agent_mode === undefined) {
-          const mapping: Record<string, GuildSettings["agent_mode"]> = {
-            auto: "auto",
-            on: "team",
-            off: "subagent",
-          };
-          const mapped = mapping[d["agent_team"] as string];
-          if (mapped) out.agent_mode = mapped;
-        }
+      // Strip unknown keys before merging so resolved config never carries them.
+      // (--validate hard-rejects above; resolve mode must also not leak them.)
+      const rawDefaults = parsed["defaults"] as Record<string, unknown>;
+      const knownDefaults: Record<string, unknown> = {};
+      for (const k of Object.keys(rawDefaults)) {
+        if (DEFAULTS_ALLOWED_KEYS.has(k)) knownDefaults[k] = rawDefaults[k];
       }
+      out.defaults = { ...DEFAULTS.defaults, ...(knownDefaults as Partial<DefaultsBlock>) } as DefaultsBlock;
     }
     return { config: out, rejects, source: "settings.json" };
   }
 
-  if (fs.existsSync(legacyPath)) {
-    process.stderr.write(
-      "[read-guild-config] WARN: .guild/config.yml is DEPRECATED. Reading it via the back-compat shim. " +
-        "Run `/guild config init` to migrate to .guild/settings.json (then config.yml is ignored).\n"
-    );
-    try {
-      return { config: migrateLegacyConfig(parseYamlSimple(fs.readFileSync(legacyPath, "utf8"))), rejects: [], source: "config.yml" };
-    } catch {
-      process.stderr.write("[read-guild-config] WARN: could not read/parse .guild/config.yml — using defaults\n");
-      return { config: {}, rejects: [], source: "none" };
-    }
-  }
-
+  // No settings.json — return built-in defaults.
+  // config.yml is no longer read at runtime (SC-8 W2B-5).
+  // Migration path: run the on-open converter (scripts/dot-guild/convert/) which
+  // materializes settings.json from config.yml. See MIGRATION.md.
   return { config: {}, rejects: [], source: "none" };
 }
 
 function scaffold(): string {
-  // Omit the deprecated `defaults.agent_team` key from the scaffolded output.
-  // The top-level `agent_mode: "auto"` already replaces it (D5). A freshly-
-  // scaffolded settings.json must not contain a deprecated key — otherwise
-  // every subsequent `loadFileConfig` call would fire the WARN on its own output.
-  // Back-compat reading (warn-once + migrate auto→auto / on→team / off→subagent)
-  // is preserved in loadFileConfig for EXISTING configs that still carry the key.
-  const { agent_team: _omitDeprecated, ...scaffoldDefaults } = DEFAULTS.defaults;
-  return JSON.stringify({ ...DEFAULTS, defaults: scaffoldDefaults, _help: HELP }, null, 2) + "\n";
+  return JSON.stringify({ ...DEFAULTS, _help: HELP }, null, 2) + "\n";
 }
 
 // ── --rigor profile expansion (command-surface.md §4.3 — the anti-soup mechanism).

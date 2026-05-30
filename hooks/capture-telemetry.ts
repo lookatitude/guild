@@ -210,8 +210,9 @@ async function main(): Promise<void> {
 
   // Resolve run context.
   // Priority order: GUILD_RUN_ID env → current-run-id sentinel → run-<session_id> → date fallback.
-  // The sentinel file is written by scripts/new-run-id.ts at the start of each /guild invocation,
-  // allowing multiple /guild runs within one Claude session to produce distinct run directories.
+  // The sentinel file is written by scripts/lib/run-lifecycle.ts (startRun) at the start of each
+  // /guild invocation, allowing multiple /guild runs within one Claude session to produce distinct
+  // run directories.
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const runId = resolveRunId(cwd, payload);
 

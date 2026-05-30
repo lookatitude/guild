@@ -12,7 +12,7 @@
  *   - host-neutrality: a NON-claude HostKind resolves + is recorded verbatim
  *     with no error and no claude assumption.
  *   - closeRun writes provenance.json (guild.provenance.v1), references the
- *     terminal trace event by pointer, dual-writes metadata.json legacy subset,
+ *     terminal trace event by pointer,
  *     flips run.yaml.status.
  *   - lightweight run_class: closeRun short-circuits the learning checkpoint
  *     (final_learning_checkpoint === null) and writes only runs/-scoped files.
@@ -300,7 +300,7 @@ describe("run-lifecycle — closeRun (SC-B §2)", () => {
     expect(raw).not.toContain("status: open");
   });
 
-  it("dual-writes metadata.json with the legacy subset", () => {
+  it("does NOT write metadata.json (SC-8: dual-write removed, v2 is run.yaml + provenance.json only)", () => {
     const { mem, runId } = startThenClose(
       { initiative: "alpha" },
       {
@@ -308,16 +308,8 @@ describe("run-lifecycle — closeRun (SC-B §2)", () => {
         artifacts: { spec: ".guild/spec/x.md", plan: ".guild/plan/x.md", team: ".guild/team/x.yaml" },
       }
     );
-    const meta = JSON.parse(
-      mem.files.get(path.join(ROOT, ".guild", "runs", runId, "metadata.json")) as string
-    );
-    expect(meta.run_id).toBe(runId);
-    expect(meta.initiative).toBe("alpha");
-    expect(meta.spec).toBe(".guild/spec/x.md");
-    expect(meta.plan).toBe(".guild/plan/x.md");
-    expect(meta.team).toBe(".guild/team/x.yaml");
-    expect(meta.started_at).toBe("2026-05-29T08:40:21Z");
-    expect(meta).toHaveProperty("backend");
+    const metaPath = path.join(ROOT, ".guild", "runs", runId, "metadata.json");
+    expect(mem.files.has(metaPath)).toBe(false);
   });
 
   it("retention_class is until-archive for an initiative-attached run", () => {

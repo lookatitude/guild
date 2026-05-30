@@ -582,7 +582,7 @@ function scanDanglingRelated(corpus: string[], slugSet: Set<string>) {
 
 // ---- 4. Dangling source_refs: paths ----------------------------------------
 // Only check refs that look like file paths (contain / or end with .md or .ts etc.)
-// Research and ideation source_refs are provenance back-links (deferred to v2.1 cleanup)
+// Research and ideation source_refs are provenance back-links (deferred cleanup — issue: oc-docs-sourcing)
 function scanDanglingSourceRefs(corpus: string[]) {
   const pathLike = /^[./]|\/|\.(md|ts|js|json|yaml|yml)($|\s)/;
 

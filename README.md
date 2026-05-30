@@ -25,11 +25,13 @@ gate.
   (TDD, systematic-debug, worktrees, request-review, finish-branch — forked
   from `superpowers:*` v5.0.7 under MIT, attribution preserved), and 50 authored
   specialist skills.
-- **The v2 command surface** — `/guild [brief]` plus the phase verbs
-  `/guild init|ideate|plan|build|qa|ops`, helpers `/guild status|resume`,
-  nouns `/guild wiki|initiative`, and maintenance
-  `/guild evolve|rollback|stats|audit|fix`. The `:` namespace is gone — every
-  command is `/guild <subcommand>` (v1→v2: MIGRATION.md).
+- **The v2 command surface** — `/guild:guild [brief]` plus the phase verbs
+  `/guild:init|ideate|plan|build|qa|ops`, helpers `/guild:status|resume`,
+  nouns `/guild:wiki|initiative`, and maintenance
+  `/guild:evolve|rollback|stats|audit|fix|migrate`. The `:` plugin namespace
+  **stays** (Claude Code requires it) — v2 drops only the redundant `guild-`
+  command prefix (v1 `/guild:guild-wiki` → v2 `/guild:wiki`); every command is
+  `/guild:<verb>` (v1→v2: MIGRATION.md).
 - **10 hook events wired** — `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
   `PostToolUse`, `PreCompact`, `SubagentStop`, `Stop`, `TaskCreated`,
   `TaskCompleted`, `TeammateIdle`.

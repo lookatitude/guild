@@ -86,7 +86,8 @@ It is written with every option = its default + a self-documenting `_help`
 block. CLI flags always override it (precedence ladder
 `command-surface.md §4.3/§4.4`). Re-generate or inspect any time with
 `/guild:config init|show|validate`. If a legacy `.guild/config.yml` is
-present, its values are read via the back-compat shim until migrated.
+present, run `/guild:migrate` to convert it to `settings.json` — `config.yml`
+is not read at runtime in v2 (the back-compat reader was removed in v2.0).
 
 ## Run recording
 

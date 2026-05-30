@@ -48,8 +48,9 @@ verb is `ops`, and `--rigor=deep` auto-implies `--review=cross`.
 - `/guild:guild-diagnose` → **`/guild:fix`**.
 - **Initiatives are NEW and OPT-IN** — one-off runs stay first-class.
 - **No shims that execute.** Every removed name prints a redirect and exits
-  non-zero (documentation, not a behavioral shim). Redirect stubs live
-  exactly one minor version (v2.0.x) and are deleted at v2.1.0.
+  non-zero (documentation, not a behavioral shim). **Redirect stubs were
+  deleted in this release (v2.0).** A bare unknown subcommand prints usage
+  help only.
 
 Full design spec: [architecture/command-surface.md](../docs/knowledge/architecture/command-surface.md).
 
@@ -150,11 +151,12 @@ still works. The only behavioral change a user sees on first run is the
 > It is the single config file and holds every option (Tier-1 keys + the
 > closed-key `defaults:` block). Scaffold it fully-documented with
 > `/guild:config init`; inspect the resolved config with `/guild:config show`;
-> check it with `/guild:config validate`. A **back-compat shim** in
-> `read-guild-config.ts` still reads an existing `.guild/config.yml` (mapping
-> the v1 keys below) and **warns once**; the moment `settings.json` exists it
-> is authoritative and `config.yml` is ignored. The key mapping and precedence
-> ladder are unchanged — only the file + format changed (YAML → JSON).
+> check it with `/guild:config validate`. **The `.guild/config.yml` runtime
+> reader was removed in v2.0** — `config.yml` is no longer read at runtime, and
+> there is no back-compat shim. To convert a v1 `.guild/config.yml`, run
+> `/guild:migrate` (the on-open converter — the only migration path). The key
+> mapping below is what the converter applies; the precedence ladder is
+> unchanged — only the file + format changed (YAML → JSON).
 
 ### 3.1 Key mapping
 
@@ -168,22 +170,18 @@ still works. The only behavioral change a user sees on first run is the
 | *(new)* | `rigor: standard` | New profile knob; the primary control |
 | *(new)* | `host: auto` | New host-adapter selection |
 | *(new)* | `initiative_default: null` | New; still opt-in |
-| `defaults.agent_team: true\|false` | `agent_mode: team\|agent\|subagent\|auto` (Tier-1) | **Replaced by the dispatch ladder (D5).** `true`→`team`, `false`→`subagent`, absent→`auto`. `defaults.agent_team` is read as a **warn-once deprecated alias** for one minor, then removed at v2.1.0. |
+| `defaults.agent_team: true\|false` | `agent_mode: team\|agent\|subagent\|auto` (Tier-1) | **Replaced by the dispatch ladder (D5).** `true`→`team`, `false`→`subagent`, absent→`auto`. `defaults.agent_team` is **hard-removed in v2.0**: `--validate` REJECTS `agent_team` as an unknown key; resolve mode strips it. The `.guild/config.yml` runtime fallback reader is also removed — use the on-open converter (`/guild:migrate`) as the migration path. |
 | *(new)* | `defaults.auto_learn: false` | When `true`, `/guild:init` runs the full `learn-*` pipeline at bootstrap (D3). Precedence: `--learn` flag > `settings.json` > built-in(`false`). |
 
-### 3.2 Back-compat shim
+### 3.2 Back-compat shim (removed in v2.0)
 
-`read-guild-config.ts` is intended to ship a **back-compat shim** that maps
-the old keys onto the new schema and **warns once per run**:
+The `.guild/config.yml` runtime fallback reader (`read-guild-config.ts` back-compat shim)
+**has been removed in v2.0**. `.guild/config.yml` is no longer read at runtime.
 
-```
-warn: .guild/config.yml uses v1 keys (codex_review, auto_approve=spec-and-plan).
-      Mapped to v2 (review=cross, auto_approve=[spec,plan]). Update the file to
-      silence this — see MIGRATION.md §3.
-```
-
-The shim is mapping-and-warn only; it does not rewrite the file. (This is a
-design statement of intended behavior; no code is authored here.)
+**Migration path:** run `/guild:migrate` (dry-run by default, safe) to detect a v1 `.guild/`
+layout and convert it to v2. The converter snapshots the existing `.guild/` before
+writing anything. See the migrate command reference in
+[architecture/command-surface.md §3.5](../docs/knowledge/architecture/command-surface.md).
 
 ### 3.3 Worked example
 
@@ -222,15 +220,16 @@ key set and the extended precedence ladder are specified in
 [architecture/command-surface.md](../docs/knowledge/architecture/command-surface.md) §4.4 (the
 canonical schema — not re-spelled here).
 
-> **v2.x amendment (D5 dispatch ladder).** The v2.0 `defaults.agent_team`
-> boolean is **superseded** by a new Tier-1 key
+> **v2.0 amendment (D5 dispatch ladder — shipped in this release).** The
+> `defaults.agent_team` boolean is **superseded** by a new Tier-1 key
 > `agent_mode: team|agent|subagent|auto` (default `auto`). On `auto` the run
 > resolves the backend: inside tmux → team in-session; tmux installed → team in
 > a detached session; host supports independent agents → agent; else →
-> subagent (the documented fallback). `defaults.agent_team` is read as a
-> warn-once alias (`true→team`, `false→subagent`) for one minor, then removed at
-> v2.1.0. The new `defaults.auto_learn` bool (default `false`) gates whether
-> `/guild:init` runs the full `learn-*` pipeline at bootstrap. Both are
+> subagent (the documented fallback). **`defaults.agent_team` is hard-removed
+> in v2.0**: it is rejected as an unknown key by `--validate`, stripped by
+> resolve mode, and the `.guild/config.yml` runtime reader is gone. Migrate via
+> `/guild:migrate`. The new `defaults.auto_learn` bool (default `false`) gates
+> whether `/guild:init` runs the full `learn-*` pipeline at bootstrap. Both are
 > closed-key additions; the reject rules are unchanged. See
 > [decisions/v2x-command-surface-dispatch-and-internalization.md](../docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md).
 
@@ -241,17 +240,18 @@ What a v1 user needs to know for migration:
   only add it if you want project-wide defaults.
 - **It lives in `.guild/settings.json`** (the single v2 config file, which
   replaces `.guild/config.yml`). Generate it with `/guild:config init`; the
-  `defaults:` block is one section of it. An existing `config.yml` is read via
-  the back-compat shim until you migrate.
+  `defaults:` block is one section of it. An existing v1 `config.yml` is
+  **converted to `settings.json` by `/guild:migrate`** — there is no runtime
+  `config.yml` reader in v2.
 - **Precedence:** a CLI flag still wins, then the `--rigor` profile, then
   your `defaults:` block, then the built-in default. Each folded key is
   printed in the pre-first-gate profile line, so a default is never silent.
 - **Identity vs behavior split.** `project.yaml` is now identity-only
   (name, slug, label taxonomy, initiative identity); all *behavior* lives in
-  `config.yml`. In particular `wiki.share_mode` moved from `project.yaml`
-  into `config.yml`'s `defaults.wiki.share_mode`. If you previously set
+  `settings.json`. In particular `wiki.share_mode` moved from `project.yaml`
+  into `settings.json`'s `defaults.wiki.share_mode`. If you previously set
   `share_mode` in `project.yaml`, move it under
-  `defaults: { wiki: { share_mode: … } }` in `config.yml`.
+  `defaults: { wiki: { share_mode: … } }` in `settings.json`.
 - **Unknown keys are rejected** (config is human-authored, not
   lenient-read); `defaults.wiki.autopromote: true` is rejected always and
   `defaults.adversarial: off` is rejected for Guild self-build.
@@ -262,10 +262,10 @@ What a v1 user needs to know for migration:
 
 | v1 flag | v2 |
 |---|---|
-| `--loops=<…>` | **gone** — use `--rigor=quick\|standard\|deep` or `.guild/config.yml` `loops:` |
+| `--loops=<…>` | **gone** — use `--rigor=quick\|standard\|deep` or `.guild/settings.json` `loops:` |
 | `--loop-cap=N` | **gone** — config-only (`loop_cap:`) |
 | `--codex-cap=N` | **gone** — config-only (`codex_cap:`) |
-| `--codex-review` | `--review=cross` |
+| `--codex-review` | **removed in v2.0** — use `--review=cross` |
 | `--auto-approve=spec-and-plan` | `--auto-approve=spec,plan` |
 | `--auto-approve=implementation` | `--auto-approve=build` |
 | `--auto-approve=all` | `--auto-approve=all` (or bare `--auto-approve`) |
@@ -274,21 +274,23 @@ What a v1 user needs to know for migration:
 | `--deep-scan` (on `/guild:init`) | `--learn` (one trigger name going forward; `init --learn` runs the same `learn-*` pipeline as `/guild:learn`, or set `defaults.auto_learn: true`) |
 
 "Give me the old always-loop behavior" → `--rigor=deep` (or set
-`rigor: deep` in `.guild/config.yml`). Note `--rigor=deep` also auto-implies
+`rigor: deep` in `.guild/settings.json`). Note `--rigor=deep` also auto-implies
 `--review=cross`; the expanded profile is printed before the first gate so
 this is never a hidden mode.
 
 ---
 
-## 5. Deprecation timeline
+## 5. Removed-command behavior (v2.0)
 
-| Version | Removed-command behavior |
+All v1→v2 redirect stubs were **deleted in v2.0** (this release). There is no
+v2.1 deprecation window. A bare unknown subcommand prints usage help only.
+
+| What | v2.0 behavior |
 |---|---|
-| **v2.0.x** | Removed/renamed names print a redirect stub (exit non-zero, runs nothing). |
-| **v2.1.0** | Redirect stubs deleted. A bare unknown subcommand prints usage help only. |
-
-The one-version sunset is what caps the support tail. Documenting the stub
-removal here is deliberate so v2.1.0 is not itself a surprise.
+| Removed/renamed v1 command names | **Deleted.** A bare unknown subcommand token prints usage help and exits non-zero; it runs nothing. |
+| `defaults.agent_team` config key | **Hard-removed.** Rejected by `--validate` as an unknown key; stripped by resolve mode. Migrate via `/guild:migrate`. |
+| `--codex-review` flag | **Removed.** Use `--review=cross`. |
+| `.guild/config.yml` runtime reader | **Removed.** Use `/guild:migrate` to convert a v1 layout to v2. |
 
 ---
 
@@ -413,7 +415,7 @@ lead, `guild.handoff.v2` schema, §task§agent lifecycle).
   fully deletable anytime with zero data loss, and never required** — the
   filesystem stays canonical (absence = identical filesystem-scan result). It
   is lazy-built only when scanning is measurably slow; set `index: off` in
-  `.guild/config.yml` for zero hidden state. It is explicitly outside the
+  `.guild/settings.json` for zero hidden state. It is explicitly outside the
   plugin↔benchmark telemetry boundary (the benchmark imports only the
   canonical JSONL). Nothing to migrate; `rm .guild/index.sqlite` is always
   safe.
@@ -456,10 +458,10 @@ message rather than implicitly grant autonomy.
 
 ## 8. FAQ
 
-**Why no shims?** v2 is a full clean slate — no shims that execute. A
-print-only redirect stub is documentation, not a behavioral shim: it runs
-nothing and advances nothing. The one-version sunset (§5) caps the support
-tail.
+**Why no shims?** v2 is a full clean slate — no shims that execute. The
+redirect stubs were **removed in v2.0 (no sunset window)**; a bare unknown
+subcommand now prints usage help only (§5). There is no v2.0.x→v2.1 support
+tail to carry.
 
 **Where did `/guild:guild-team` go?** Team composition is now a step *inside*
 `/guild:plan` with its own approval gate. Inspect the active team via
@@ -468,7 +470,7 @@ raise the cap with `/guild:plan --team-size=N` (which prints the cap-6
 warning).
 
 **How do I get the old always-loop behavior?** Use `--rigor=deep` per
-invocation, or set `rigor: deep` in `.guild/config.yml`. `deep` =
+invocation, or set `rigor: deep` in `.guild/settings.json`. `deep` =
 loops=all + cap=16 + `--review=cross` (auto-implied, profile printed
 before the first gate).
 

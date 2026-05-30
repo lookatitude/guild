@@ -143,9 +143,6 @@ export interface TeamLaunchRequest {
  * specialist and the orchestrator (guild:execute-plan) issues one `Agent()` call
  * per descriptor. Shape only, zero side effects.
  */
-// PHASE-1-DISPATCH-WAVE-1: AgentDispatchDescriptor renamed to
-// GuildDispatchDescriptor (host-neutral by name). The deprecated alias below
-// preserves Wave-1 compatibility; Wave-2 removes it.
 export interface GuildDispatchDescriptor {
   /** Lane owner — the lane's `owner_role` (e.g. "backend", "qa", "architect"). */
   name: string;
@@ -178,13 +175,6 @@ export interface GuildDispatchDescriptor {
   /** The staging prompt (from buildPrompt) the dispatched agent receives. */
   prompt: string;
 }
-
-/**
- * @deprecated Renamed to GuildDispatchDescriptor in Phase-1 dispatch Wave-1
- * (2026-05-28). The alias preserves Wave-1 compatibility; Wave-2 removes it.
- * See .guild/initiatives/active/phase-1-dispatch/ for context.
- */
-export type AgentDispatchDescriptor = GuildDispatchDescriptor;
 
 /** Backend-agnostic launch outcome (what callers that use the seam see). */
 export interface TeamLaunchResult {

@@ -47,13 +47,7 @@
     "./commands/rollback.md",
     "./commands/stats.md",
     "./commands/audit.md",
-    "./commands/guild-wiki.md",
-    "./commands/guild-evolve.md",
-    "./commands/guild-rollback.md",
-    "./commands/guild-stats.md",
-    "./commands/guild-audit.md",
-    "./commands/guild-diagnose.md",
-    "./commands/guild-team.md"
+    "./commands/migrate.md"
   ],
   "agents": [
     "./agents/architect.md",

@@ -46,13 +46,12 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
 
   test("settings.json overrides built-in defaults", () => {
     const dir = repo();
-    writeSettings(dir, { rigor: "deep", review: "cross", defaults: { agent_team: "on" } });
+    writeSettings(dir, { rigor: "deep", review: "cross", defaults: { adversarial: "on" } });
     const { status, out } = run(["--cwd", dir]);
     expect(status).toBe(0);
     const j = JSON.parse(out);
     expect(j.rigor).toBe("deep");
     expect(j.review).toBe("cross");
-    expect(j.defaults.agent_team).toBe("on");
     expect(j.defaults.adversarial).toBe("on"); // unspecified key keeps default (deep-merge)
   });
 
@@ -65,7 +64,7 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
     expect(j.review).toBe("off");
   });
 
-  test("config.yml back-compat shim migrates + warns once when settings.json absent", () => {
+  test("config.yml is NOT read at runtime — built-in defaults apply when only config.yml exists (SC-8 W2B-5)", () => {
     const dir = repo();
     fs.writeFileSync(
       path.join(dir, ".guild", "config.yml"),
@@ -74,20 +73,23 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
     const { status, out, err } = run(["--cwd", dir]);
     expect(status).toBe(0);
     const j = JSON.parse(out);
-    expect(j.loops).toBe("all");
-    expect(j.review).toBe("cross"); // codex_review:true → review:cross
-    expect(j.auto_approve).toEqual(["spec", "plan"]); // spec-and-plan → [spec,plan]
-    expect(err).toMatch(/config\.yml is DEPRECATED/);
+    // config.yml is not read — values must come from built-in defaults + rigor expansion,
+    // not from the config.yml values. rigor=standard expands loops to "spec,plan" (not "all").
+    expect(j.loops).toBe("spec,plan"); // rigor=standard default, NOT "all" from config.yml
+    expect(j.review).toBe("local"); // default, not "cross" from codex_review: true
+    expect(j.auto_approve).toEqual([]); // default [], not ["spec","plan"] from spec-and-plan
+    // No DEPRECATED warning since config.yml is not touched.
+    expect(err).not.toMatch(/config\.yml|DEPRECATED/);
   });
 
-  test("settings.json takes precedence over a legacy config.yml (authoritative)", () => {
+  test("settings.json is still read correctly when config.yml also exists (settings.json is authoritative)", () => {
     const dir = repo();
     fs.writeFileSync(path.join(dir, ".guild", "config.yml"), "loops: all\n");
     writeSettings(dir, { rigor: "deep" });
     const { out, err } = run(["--cwd", dir]);
     const j = JSON.parse(out);
     expect(j.rigor).toBe("deep");
-    expect(err).not.toMatch(/DEPRECATED/); // config.yml ignored when settings.json present
+    expect(err).not.toMatch(/DEPRECATED/);
   });
 
   test("--validate rejects an unknown defaults.* key (closed-key)", () => {
@@ -321,77 +323,60 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
     });
   });
 
-  // ── D5: defaults.agent_team deprecation alias (warn-once)
-  describe("defaults.agent_team deprecation (D5 alias → agent_mode)", () => {
-    test("defaults.agent_team: on warns on stderr and translates to agent_mode: team", () => {
-      const dir = repo();
-      writeSettings(dir, { defaults: { agent_team: "on" } });
-      const { status, out, err } = run(["--cwd", dir]);
-      expect(status).toBe(0);
-      expect(err).toMatch(/agent_team.*DEPRECATED|DEPRECATED.*agent_team/i);
-      const j = JSON.parse(out);
-      expect(j.agent_mode).toBe("team"); // on → team
-      expect(j.defaults.agent_team).toBe("on"); // still present in defaults (deep-merge)
-    });
-
-    test("defaults.agent_team: off warns and translates to agent_mode: subagent", () => {
-      const dir = repo();
-      writeSettings(dir, { defaults: { agent_team: "off" } });
-      const { status, out, err } = run(["--cwd", dir]);
-      expect(status).toBe(0);
-      expect(err).toMatch(/DEPRECATED/);
-      const j = JSON.parse(out);
-      expect(j.agent_mode).toBe("subagent"); // off → subagent
-    });
-
-    test("defaults.agent_team: auto warns and translates to agent_mode: auto", () => {
-      const dir = repo();
-      writeSettings(dir, { defaults: { agent_team: "auto" } });
-      const { out, err } = run(["--cwd", dir]);
-      expect(err).toMatch(/DEPRECATED/);
-      const j = JSON.parse(out);
-      expect(j.agent_mode).toBe("auto"); // auto → auto
-    });
-
-    test("explicit Tier-1 agent_mode wins over deprecated defaults.agent_team alias", () => {
-      const dir = repo();
-      // agent_mode=subagent at Tier-1, agent_team: on in defaults
-      writeSettings(dir, { agent_mode: "subagent", defaults: { agent_team: "on" } });
-      const { out, err } = run(["--cwd", dir]);
-      // Deprecation warning still fires (agent_team is present)
-      expect(err).toMatch(/DEPRECATED/);
-      const j = JSON.parse(out);
-      // Tier-1 wins: subagent, not "team" from the alias
-      expect(j.agent_mode).toBe("subagent");
-    });
-
-    test("defaults.agent_team still passes --validate (kept in ALLOWED set)", () => {
+  // ── SC-7: defaults.agent_team removed — now rejected as unknown key ──────────
+  describe("defaults.agent_team rejected as unknown (SC-7 removal)", () => {
+    test("defaults.agent_team: on is rejected by --validate as unknown defaults key", () => {
       const dir = repo();
       writeSettings(dir, { defaults: { agent_team: "on" } });
       const { status, out } = run(["--cwd", dir, "--validate"]);
-      expect(status).toBe(0); // deprecated but not rejected
-      expect(out).toMatch(/VALID/);
+      expect(status).toBe(1);
+      expect(out).toMatch(/unknown defaults key "agent_team"/);
     });
 
-    // ── defect guard: scaffold must not emit the deprecated key so a fresh
-    //    settings.json never self-triggers the DEPRECATED warning on every read.
-    test("--scaffold output does NOT contain defaults.agent_team (fresh scaffold must be warn-free)", () => {
+    test("defaults.agent_team: off is rejected by --validate as unknown defaults key", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { agent_team: "off" } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/unknown defaults key "agent_team"/);
+    });
+
+    test("defaults.agent_team: auto is rejected by --validate as unknown defaults key", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { agent_team: "auto" } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/unknown defaults key "agent_team"/);
+    });
+
+    test("--scaffold output does NOT contain defaults.agent_team (key removed from schema)", () => {
       const { status, out } = run(["--scaffold"]);
       expect(status).toBe(0);
       const j = JSON.parse(out);
-      // The deprecated key must be absent from the scaffold — top-level agent_mode replaces it.
+      // agent_team must be absent — the top-level agent_mode replaces it (D5).
       expect(j.defaults.agent_team).toBeUndefined();
     });
 
-    // ── back-compat read path is still active: an EXISTING config with agent_team
-    //    must still warn once on stderr (covered by the tests above that write
-    //    settings.json with defaults.agent_team — kept here as an explicit sanity pin).
-    test("reading a settings.json that contains defaults.agent_team still emits DEPRECATED warning", () => {
+    test("agent_mode is still resolved correctly with no agent_team present", () => {
       const dir = repo();
-      writeSettings(dir, { defaults: { agent_team: "auto" } });
-      const { status, err } = run(["--cwd", dir]);
+      writeSettings(dir, { agent_mode: "team" });
+      const { status, out } = run(["--cwd", dir]);
       expect(status).toBe(0);
-      expect(err).toMatch(/defaults\.agent_team.*DEPRECATED|DEPRECATED.*agent_team/i);
+      const j = JSON.parse(out);
+      expect(j.agent_mode).toBe("team");
+    });
+
+    test("resolve mode: agent_team does NOT leak into resolved defaults (W2B-3 strip)", () => {
+      const dir = repo();
+      writeSettings(dir, { defaults: { agent_team: "on", adversarial: "on" } });
+      // Resolve mode is non-blocking (exit 0) but must strip unknown keys from output.
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      // agent_team must be absent from resolved output even in non-validate mode.
+      expect(j.defaults.agent_team).toBeUndefined();
+      // Known keys pass through correctly.
+      expect(j.defaults.adversarial).toBe("on");
     });
   });
 

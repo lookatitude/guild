@@ -277,9 +277,9 @@ describe("route — telemetry spend stub (CR-6) + decision log shape", () => {
     expect(seen[0]).toBe(d);
   });
 
-  it("records the budget-cap deferral note (cap itself is v2.1)", () => {
+  it("records the budget-cap deferral note (oc-budget-cap, CR-6)", () => {
     const d = route(lane(), [host()], baseOpts);
-    expect(d.notes.join(" ")).toMatch(/budget-cap deferred to v2\.1/i);
+    expect(d.notes.join(" ")).toMatch(/budget-cap deferred.*oc-budget-cap/i);
   });
 
   it("the decision carries the full {host, hostKind, tier, model} + reason", () => {

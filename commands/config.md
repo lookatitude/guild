@@ -1,6 +1,6 @@
 ---
 name: config
-description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_team/tmux, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config validate` runs the closed-key checks. CLI flags always override settings.json (precedence: CLI flag > --rigor profile > settings.json > built-in). Canonical schema: architecture/command-surface.md §4.4."
+description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config validate` runs the closed-key checks. CLI flags always override settings.json (precedence: CLI flag > --rigor profile > settings.json > built-in). Canonical schema: architecture/command-surface.md §4.4."
 argument-hint: "<init|show|validate> [--cwd <repo-root>] [--force]"
 allowed-tools: Read, Write, Bash
 ---
@@ -11,9 +11,10 @@ allowed-tools: Read, Write, Bash
 option; **CLI flags always override it** (precedence ladder
 `CLI flag > --rigor profile > settings.json > built-in default`,
 `architecture/command-surface.md §4.3/§4.4`). It replaces the v1
-`.guild/config.yml` (a back-compat shim still reads an old config.yml until you
-migrate). The schema is closed-key: unknown `defaults.*` keys are rejected so a
-typo surfaces.
+`.guild/config.yml`; **the runtime `config.yml` reader was removed in v2.0** —
+`config.yml` is never read at runtime. To convert an old `config.yml`, run
+`/guild:migrate`. The schema is closed-key: unknown `defaults.*` keys are
+rejected so a typo surfaces.
 
 The sub-verb is the first positional argument.
 
@@ -35,9 +36,9 @@ Steps:
    and stop (never silently overwrite operator config).
 3. Otherwise run `npx tsx scripts/read-guild-config.ts --scaffold` and write the
    output to `.guild/settings.json`.
-4. If a legacy `.guild/config.yml` is present, tell the operator their values
-   were migrated into the new file (the resolver's shim handles the read) and
-   that `config.yml` is now ignored once `settings.json` exists.
+4. If a legacy `.guild/config.yml` is present, tell the operator to run
+   `/guild:migrate` to convert it to `settings.json` — `config.yml` is **not**
+   read at runtime in v2 (the back-compat reader was removed in v2.0).
 
 ## `show` — print the resolved config
 
