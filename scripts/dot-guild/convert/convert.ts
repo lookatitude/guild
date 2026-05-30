@@ -239,8 +239,14 @@ export function convert(
           let localMutated = false;
           for (const k of v1Keys) {
             const value = readKeyValue(parsed, k);
-            // settings.local.json keys are migrated against the EFFECTIVE v2 settings.
-            const cls = classifyKey(k, value, v2Settings);
+            // settings.local.json is a v2-era IN-PLACE override surface. A same-name
+            // alias (e.g. auto_approve string) must transform in-place (C1/C3), NOT be
+            // compared cross-file against settings.json and stuck C4. Pass inPlace=true
+            // so classifyKey skips the v2Target lookup for same-name aliases.
+            // Different-name aliases (e.g. defaults.agent_team → agent_mode) still use
+            // v2Settings as the target for the existence/conflict check, which is correct:
+            // the v2 key (agent_mode) lives in settings.json, not in the local file.
+            const cls = classifyKey(k, value, v2Settings, /*inPlace=*/true);
             outcomes.push(cls.outcome);
             if (cls.write) {
               // Rewrite in place in the local file (it is a v2 surface).
@@ -304,13 +310,20 @@ export function convert(
         if (Array.isArray(prior)) mergedEntries = prior as UnmigratedEntry[];
       }
     }
-    // Build a set of already-present (source, key) pairs for O(1) dedup.
-    const seen = new Set(mergedEntries.map((e) => `${e.source}\0${e.key}`));
+    // UPSERT by (source, key): if the identity already exists in the prior entries,
+    // REPLACE its value with the current run's (newer) value — the user may have
+    // edited the source between runs while a C4 kept it live. If the identity is
+    // new, append it. This gives no-duplicate AND latest-value-wins semantics. (P2b fix.)
+    const indexMap = new Map(mergedEntries.map((e, i) => [`${e.source}\0${e.key}`, i]));
     for (const entry of out.relocated) {
       const id = `${entry.source}\0${entry.key}`;
-      if (!seen.has(id)) {
+      const existing = indexMap.get(id);
+      if (existing !== undefined) {
+        // Replace with current run's entry (newer value wins).
+        mergedEntries[existing] = entry;
+      } else {
+        indexMap.set(id, mergedEntries.length);
         mergedEntries.push(entry);
-        seen.add(id);
       }
     }
     const doc = buildUnmigratedDoc(clock.iso(), snapshotRef, mergedEntries);
