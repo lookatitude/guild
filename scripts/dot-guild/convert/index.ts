@@ -91,6 +91,33 @@ interface Units {
 }
 
 /**
+ * Validate that `childRel` (from workspace.json sub_guilds) resolves to an
+ * IMMEDIATE child of `root` — depth-1, no `..`, not absolute-outside-root.
+ *
+ * Returns the resolved absolute path if valid, or null if rejected. Rejecting
+ * prevents path-traversal: a crafted workspace.json could otherwise point at
+ * an arbitrary directory on disk and cause runMigration to mutate it.
+ *
+ * Rules (P2 workspace path-traversal fix):
+ *   - Must not be absolute (an absolute path is either the root itself or
+ *     something entirely outside it).
+ *   - After resolving, dirname of the result must equal the resolved root
+ *     (i.e. exactly one level deep).
+ *   - The basename must not be "." or "..".
+ */
+function validateImmediateChild(root: string, childRel: string): string | null {
+  // Reject bare absolute paths.
+  if (path.isAbsolute(childRel)) return null;
+  const resolved = path.resolve(root, childRel);
+  const resolvedRoot = path.resolve(root);
+  // Must be exactly one directory level below root.
+  if (path.dirname(resolved) !== resolvedRoot) return null;
+  const base = path.basename(resolved);
+  if (base === "." || base === "..") return null;
+  return resolved;
+}
+
+/**
  * Discover the units to migrate (SC-5). One `.guild/` per repo root; never nested,
  * never below depth 1. Workspace discovery uses `.guild/workspace.json` sub_guilds
  * (if present) or the immediate-child `.git`/`.guild` rule.
@@ -115,19 +142,20 @@ function discoverUnits(fs: Fs, root: string, forceWorkspace?: boolean): Units {
         isWorkspace = true;
         for (const s of sub) {
           const childRel = typeof s === "string" ? s : (s as Record<string, unknown>)?.["path"];
-          if (typeof childRel === "string") childRoots.push(path.resolve(root, childRel));
+          if (typeof childRel === "string") {
+            const validated = validateImmediateChild(root, childRel);
+            if (validated) childRoots.push(validated);
+            // else: skip and flag — absolute path / ".." escape / depth > 1 is rejected
+          }
         }
       }
     }
   }
 
-  // P2 fix (auto workspace): run the immediate-child depth-1 scan in both
-  // explicit-workspace (forceWorkspace=true) and auto-detect (forceWorkspace=undefined)
-  // modes. At this point in the function `forceWorkspace` is already `true | undefined`
-  // (the `=== false` early-return above narrowed it), so we always run the scan
-  // when childRoots is still empty — it just won't set isWorkspace unless children
-  // are actually found (depth-1 .guild/.git check). Without this, a root with
-  // child repos but NO workspace.json silently skips all children in auto mode.
+  // Auto workspace: run the immediate-child depth-1 scan in both
+  // explicit-workspace (forceWorkspace=true) and auto-detect (forceWorkspace=undefined).
+  // `path.join(root, e.name)` is already depth-1 safe since `e.name` is a simple
+  // readdir basename (never `..` or absolute) — no additional path guard needed here.
   if (childRoots.length === 0) {
     // Immediate-child rule (depth-1 only): a child dir with .git AND/OR .guild.
     if (fs.existsSync(root)) {
@@ -208,6 +236,7 @@ function processChild(fs: Fs, clock: Clock, root: string, mode: Mode): ChildResu
   if (mode === "skip") {
     base.action = "skip";
     base.reportBody = renderReport(base, mode, clock.iso());
+    writeReport(fs, base); // skip still produces its audit trail (P3 fix)
     return base;
   }
 

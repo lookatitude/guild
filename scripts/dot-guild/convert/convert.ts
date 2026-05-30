@@ -119,10 +119,30 @@ export function convert(
   const out: ConvertOutput = { artifacts: [], relocated: [], conflicts: [], removed: [], generated: [] };
   const ctx: Ctx = { fs, clock, guildDir, dryRun, snapshotRef, out };
   const j = (r: string) => path.join(guildDir, r);
+  // Deferred removals (P2 delete-before-write fix): v1 source files are collected
+  // here and only deleted AFTER all v2 artifacts have been written. If any write
+  // throws mid-pipeline, sources are never removed without a completed replacement.
+  const deferredRemovals: string[] = [];
 
   const settingsPath = j("settings.json");
   const v2Settings = readSettings(fs, settingsPath);
   let settingsMutated = false;
+
+  // ── NORMALIZE v2 surfaces FIRST (P2 normalize-before-cross-file fix) ──────
+  // settings.json and settings.local.json may carry stray v1 aliases
+  // (e.g. auto_approve: "spec-and-plan"). If we process config.yml first, the
+  // cross-file conflict check compares config.yml's value against the RAW v1
+  // alias string in v2Settings → false C4. By normalising v2Settings in-place
+  // first, the conflict check sees the authoritative v2 array form → correct
+  // C3/C4 result.
+
+  // ── Row: settings.json carrying a stray v1 key (hand-mixed) ───────────────
+  convertV2SurfaceInPlace(ctx, settingsPath, v2Settings, (mut) => {
+    if (mut) settingsMutated = true;
+  });
+
+  // ── Row: settings.local.json carrying a v1 key (P9 / CF-W1b-7) ────────────
+  convertSettingsLocal(ctx, j, v2Settings, guildDir, out);
 
   // ── Row: config.yml → settings.json (+ .unmigrated-v1.json) ───────────────
   {
@@ -152,8 +172,14 @@ export function convert(
         );
         if (mutated) settingsMutated = true;
         // Any remaining key in config.yml with no v2 home + not handled ⇒ C2 relocate.
+        // P2 parent-container fix: skip a top-level key `k` if any key in `allKeys`
+        // starts with `k + "."` — that means `k` is a parent container whose nested
+        // descendants were already classified by the handlers above (e.g. `defaults`
+        // is a container for `defaults.agent_team`). Relocating the parent would
+        // duplicate already-migrated data as a spurious C2 record.
         for (const k of Object.keys(parsed)) {
           if (allKeys.includes(k)) continue;
+          if (allKeys.some((hk) => hk.startsWith(k + "."))) continue; // parent of handled leaf
           const cls = classifyKey(k, parsed[k], v2Settings);
           outcomes.push(cls.outcome);
           if (cls.relocate)
@@ -172,10 +198,11 @@ export function convert(
             : "converted to settings.json; removed from live (snapshot holds original)",
           removed: sourceRemovable,
         });
-        if (sourceRemovable && !dryRun) {
-          fs.rmFileSync(p);
+        // Defer removal until AFTER all v2 writes complete (P2 delete-before-write fix).
+        if (sourceRemovable) {
+          if (!dryRun) deferredRemovals.push(p);
+          out.removed.push(rel(guildDir, p));
         }
-        if (sourceRemovable) out.removed.push(rel(guildDir, p));
       }
     }
   }
@@ -213,69 +240,6 @@ export function convert(
               : cls.outcome.case === "C3"
                 ? "redundant share_mode dropped from project.yaml (settings.json authoritative)"
                 : "wiki.share_mode moved to settings.json; key removed from project.yaml",
-            removed: false,
-          });
-        }
-      }
-    }
-  }
-
-  // ── Row: settings.json carrying a stray v1 key (hand-mixed) ───────────────
-  convertV2SurfaceInPlace(ctx, settingsPath, v2Settings, (mut) => {
-    if (mut) settingsMutated = true;
-  });
-
-  // ── Row: settings.local.json carrying a v1 key (P9 / CF-W1b-7) ────────────
-  {
-    const p = j("settings.local.json");
-    if (fs.existsSync(p)) {
-      const res = parseJson(fs.readFileSync(p));
-      if (res.ok && res.value && typeof res.value === "object") {
-        const parsed = res.value as Record<string, unknown>;
-        const v1Keys = v1KeysIn(parsed);
-        if (v1Keys.length > 0) {
-          const outcomes: KeyOutcome[] = [];
-          let anyC4 = false;
-          let localMutated = false;
-          for (const k of v1Keys) {
-            const value = readKeyValue(parsed, k);
-            // settings.local.json is a v2-era IN-PLACE override surface. A same-name
-            // alias (e.g. auto_approve string) must transform in-place (C1/C3), NOT be
-            // compared cross-file against settings.json and stuck C4. Pass inPlace=true
-            // so classifyKey skips the v2Target lookup for same-name aliases.
-            // Different-name aliases (e.g. defaults.agent_team → agent_mode) still use
-            // v2Settings as the target for the existence/conflict check, which is correct:
-            // the v2 key (agent_mode) lives in settings.json, not in the local file.
-            const cls = classifyKey(k, value, v2Settings, /*inPlace=*/true);
-            outcomes.push(cls.outcome);
-            if (cls.write) {
-              // Rewrite in place in the local file (it is a v2 surface).
-              // Same-name alias guard (P2 fix): if v1Key === v2Key, the write IS
-              // the in-place replace — do NOT strip (that would delete the new value).
-              setPath(parsed, cls.write.v2Key, cls.write.v2Value);
-              if (cls.write.v1Key !== cls.write.v2Key) stripKey(parsed, k);
-              localMutated = true;
-            } else if (cls.relocate) {
-              out.relocated.push({ source: rel(guildDir, p), key: k, value, reason: "unmapped" });
-              stripKey(parsed, k);
-              localMutated = true;
-            } else if (cls.outcome.case === "C3") {
-              stripKey(parsed, k);
-              localMutated = true;
-            } else if (cls.outcome.case === "C4") {
-              anyC4 = true;
-              out.conflicts.push(cls.outcome);
-              // C4 — key STAYS LIVE; do not strip.
-            }
-          }
-          if (localMutated && !dryRun) fs.writeFileSync(p, JSON.stringify(parsed, null, 2) + "\n");
-          out.artifacts.push({
-            rel: rel(guildDir, p),
-            disposition: anyC4 ? "preserve+flag" : "convert",
-            keys: outcomes,
-            note: anyC4
-              ? "C4 conflict — deprecated alias kept LIVE in settings.local.json, re-surface"
-              : "v1 keys migrated in place (file is a v2 surface; stays)",
             removed: false,
           });
         }
@@ -331,6 +295,14 @@ export function convert(
     if (isNew) out.generated.push(rel(guildDir, unmigratedPath));
   }
 
+  // ── Drain deferred removals (P2 delete-before-write fix) ─────────────────
+  // All v2 artifacts are now durably written above. Only NOW remove the live
+  // v1 sources. If any write above had thrown, we would never reach here and
+  // the sources would survive intact (snapshot already holds the backup).
+  for (const p of deferredRemovals) {
+    fs.rmFileSync(p);
+  }
+
   return out;
 }
 
@@ -384,6 +356,69 @@ function normalizeCarry(k: string, v: unknown): unknown {
   if (k === "loop_cap" && typeof v === "number") return Math.min(256, Math.max(1, v));
   if (k === "codex_cap" && typeof v === "number") return Math.min(10, Math.max(1, v));
   return v;
+}
+
+/**
+ * Process settings.local.json carrying v1 keys — extracted to a named function
+ * so it can be called BEFORE config.yml processing (normalize-before-cross-file
+ * ordering). settings.local.json is an IN-PLACE v2 override surface; same-name
+ * aliases transform in-place (inPlace=true).
+ */
+function convertSettingsLocal(
+  ctx: Ctx,
+  j: (r: string) => string,
+  v2Settings: Record<string, unknown>,
+  guildDir: string,
+  out: ConvertOutput
+): void {
+  const { fs, dryRun } = ctx;
+  const p = j("settings.local.json");
+  if (!fs.existsSync(p)) return;
+  const res = parseJson(fs.readFileSync(p));
+  if (!res.ok || !res.value || typeof res.value !== "object") return;
+  const parsed = res.value as Record<string, unknown>;
+  const v1Keys = v1KeysIn(parsed);
+  if (v1Keys.length === 0) return;
+  const outcomes: KeyOutcome[] = [];
+  let anyC4 = false;
+  let localMutated = false;
+  for (const k of v1Keys) {
+    const value = readKeyValue(parsed, k);
+    // settings.local.json is a v2-era IN-PLACE override surface. A same-name
+    // alias (e.g. auto_approve string) must transform in-place (C1/C3), NOT be
+    // compared cross-file against settings.json and stuck C4. Pass inPlace=true
+    // so classifyKey skips the v2Target lookup for same-name aliases.
+    // Different-name aliases (e.g. defaults.agent_team → agent_mode) still use
+    // v2Settings as the target for the existence/conflict check (correct: the
+    // v2 key lives in settings.json, not in the local file).
+    const cls = classifyKey(k, value, v2Settings, /*inPlace=*/true);
+    outcomes.push(cls.outcome);
+    if (cls.write) {
+      setPath(parsed, cls.write.v2Key, cls.write.v2Value);
+      if (cls.write.v1Key !== cls.write.v2Key) stripKey(parsed, k);
+      localMutated = true;
+    } else if (cls.relocate) {
+      out.relocated.push({ source: rel(guildDir, p), key: k, value, reason: "unmapped" });
+      stripKey(parsed, k);
+      localMutated = true;
+    } else if (cls.outcome.case === "C3") {
+      stripKey(parsed, k);
+      localMutated = true;
+    } else if (cls.outcome.case === "C4") {
+      anyC4 = true;
+      out.conflicts.push(cls.outcome);
+    }
+  }
+  if (localMutated && !dryRun) fs.writeFileSync(p, JSON.stringify(parsed, null, 2) + "\n");
+  out.artifacts.push({
+    rel: rel(guildDir, p),
+    disposition: anyC4 ? "preserve+flag" : "convert",
+    keys: outcomes,
+    note: anyC4
+      ? "C4 conflict — deprecated alias kept LIVE in settings.local.json, re-surface"
+      : "v1 keys migrated in place (file is a v2 surface; stays)",
+    removed: false,
+  });
 }
 
 /**
