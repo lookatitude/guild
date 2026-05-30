@@ -121,7 +121,14 @@ function discoverUnits(fs: Fs, root: string, forceWorkspace?: boolean): Units {
     }
   }
 
-  if (childRoots.length === 0 && forceWorkspace) {
+  // P2 fix (auto workspace): run the immediate-child depth-1 scan in both
+  // explicit-workspace (forceWorkspace=true) and auto-detect (forceWorkspace=undefined)
+  // modes. At this point in the function `forceWorkspace` is already `true | undefined`
+  // (the `=== false` early-return above narrowed it), so we always run the scan
+  // when childRoots is still empty — it just won't set isWorkspace unless children
+  // are actually found (depth-1 .guild/.git check). Without this, a root with
+  // child repos but NO workspace.json silently skips all children in auto mode.
+  if (childRoots.length === 0) {
     // Immediate-child rule (depth-1 only): a child dir with .git AND/OR .guild.
     if (fs.existsSync(root)) {
       let entries: Array<{ name: string; isDirectory: boolean; isFile: boolean }>;
@@ -231,16 +238,28 @@ function processChild(fs: Fs, clock: Clock, root: string, mode: Mode): ChildResu
   base.artifacts = out.artifacts;
   base.relocated = out.relocated;
   base.conflicts = out.conflicts;
-  base.restoreCommand = buildRestore(snap.destRel, out.removed);
+  base.restoreCommand = buildRestore(snap.destRel, out.removed, out.generated);
   base.reportBody = renderReport(base, mode, clock.iso());
   writeReport(fs, base);
   return base;
 }
 
-/** §4.1 one-line restore command (exact dest + converted paths). */
-function buildRestore(destRel: string, removed: string[]): string {
-  const paths = removed.length ? removed.map((p) => `.guild/${p}`).join(" ") : "<converted-paths>";
-  return `rm -f ${paths} && cp -R .guild/${destRel}/. .guild/`;
+/**
+ * §4.1 one-line restore command.
+ *
+ * P1 fix: a correct rollback must (a) remove GENERATED v2 files that were not in
+ * the snapshot (settings.json, .unmigrated-v1.json, run.yaml, provenance.json) AND
+ * (b) copy the snapshot over the live tree.  Without (a), `cp -R` does not delete
+ * new files absent from the snapshot, leaving the tree mixed/modified after restore.
+ *
+ * Command: rm the removed + generated files, then copy snapshot back.
+ */
+function buildRestore(destRel: string, removed: string[], generated: string[]): string {
+  const toDelete = [...removed, ...generated];
+  const rmPart = toDelete.length
+    ? `rm -f ${toDelete.map((p) => `.guild/${p}`).join(" ")} && `
+    : "";
+  return `${rmPart}cp -R .guild/${destRel}/. .guild/`;
 }
 
 /** Write the report file unless the classification is silent (v2/none). */

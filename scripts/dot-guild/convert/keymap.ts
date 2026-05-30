@@ -116,14 +116,21 @@ export interface KeyClassification {
 }
 
 /**
- * §2.0a classifier. Given a v1 key/value found in `sourceRel` and the CURRENT v2
- * target object (e.g. the existing settings.json contents), return the C1/C2/C3/C4
- * outcome.
+ * §2.0a classifier. Given a v1 key/value found in a source and the CURRENT v2
+ * target object, return the C1/C2/C3/C4 outcome.
  *
  *   - mapped + no existing v2 value          → C1 (write v2, drop v1)
  *   - mapped + existing v2 value EQUAL        → C3 (drop redundant v1)
  *   - mapped + existing v2 value DIFFERING    → C4 (keep LIVE, surface, re-surface)
  *   - unmapped (no v2 home)                   → C2 (relocate verbatim)
+ *
+ * SAME-NAME ALIAS handling (P2 fix): when v1Key === v2Key (e.g. auto_approve
+ * string→array), the "existing" v2 value in the target IS the v1 value — there is
+ * no separate v2 counterpart to conflict with. Comparing v1 against itself would
+ * produce a false C4 (the value is a string, the mapped v2Value is an array → they
+ * differ → stuck forever). The correct behavior: same-name aliases are always C1
+ * (transform in place) or C3 (already transformed). A C4 can only arise when
+ * v1Key !== v2Key and a DIFFERENT v2 key already holds a conflicting value.
  */
 export function classifyKey(
   v1Key: string,
@@ -138,6 +145,31 @@ export function classifyKey(
       relocate: { key: v1Key, value },
     };
   }
+
+  // Same-name alias: v1Key === v2Key (e.g. auto_approve string→array).
+  // The current value IS the v1 form; there is no separate counterpart to conflict with.
+  // Result is C1 (transform it) or C3 (already the correct v2 form).
+  if (mapped.v1Key === mapped.v2Key) {
+    if (valueEqual(value, mapped.v2Value)) {
+      return {
+        outcome: {
+          key: v1Key,
+          case: "C3",
+          detail: `${v1Key} already in v2 form ${JSON.stringify(value)}; redundant`,
+        },
+      };
+    }
+    return {
+      outcome: {
+        key: v1Key,
+        case: "C1",
+        detail: `${v1Key} transformed in-place → ${JSON.stringify(mapped.v2Value)}`,
+      },
+      write: mapped,
+    };
+  }
+
+  // Different-name mapping: check for a pre-existing v2 counterpart in the target.
   const existing = getPath(v2Target, mapped.v2Key);
   if (existing === undefined) {
     // C1 — write to v2, drop v1.
