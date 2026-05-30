@@ -142,7 +142,7 @@ export function convert(
   });
 
   // ── Row: settings.local.json carrying a v1 key (P9 / CF-W1b-7) ────────────
-  convertSettingsLocal(ctx, j, v2Settings, guildDir, out);
+  convertSettingsLocal(ctx, j, guildDir, out);
 
   // ── Row: config.yml → settings.json (+ .unmigrated-v1.json) ───────────────
   {
@@ -385,7 +385,6 @@ function normalizeCarry(k: string, v: unknown): unknown {
 function convertSettingsLocal(
   ctx: Ctx,
   j: (r: string) => string,
-  v2Settings: Record<string, unknown>,
   guildDir: string,
   out: ConvertOutput
 ): void {
@@ -402,14 +401,22 @@ function convertSettingsLocal(
   let localMutated = false;
   for (const k of v1Keys) {
     const value = readKeyValue(parsed, k);
-    // settings.local.json is a v2-era IN-PLACE override surface. A same-name
-    // alias (e.g. auto_approve string) must transform in-place (C1/C3), NOT be
-    // compared cross-file against settings.json and stuck C4. Pass inPlace=true
-    // so classifyKey skips the v2Target lookup for same-name aliases.
-    // Different-name aliases (e.g. defaults.agent_team → agent_mode) still use
-    // v2Settings as the target for the existence/conflict check (correct: the
-    // v2 key lives in settings.json, not in the local file).
-    const cls = classifyKey(k, value, v2Settings, /*inPlace=*/true);
+    // settings.local.json is a v2-era IN-PLACE override surface that is
+    // deep-merged OVER settings.json at load time. Its v1 aliases must migrate
+    // within the local file itself — not conflict against settings.json.
+    //
+    // - Same-name aliases (auto_approve string→array): inPlace=true bypasses the
+    //   target lookup entirely, always C1/C3. Correct — the alias transforms in place.
+    // - Different-name aliases (codex_review→review, defaults.agent_team→agent_mode):
+    //   inPlace=true doesn't help (the same-name gate is `v1Key===v2Key && inPlace`).
+    //   We pass `parsed` as the v2Target so the lookup checks whether the LOCAL file
+    //   already has the v2 key — not settings.json. If the local file already has
+    //   `review: "local"` AND `codex_review: true`, those differ → genuine C4 within
+    //   the local surface. If the local file has no `review` key at all, the alias
+    //   maps to a new `review: "cross"` written INTO settings.local.json. This keeps
+    //   the override intent intact (the user wanted a local override, so we migrate
+    //   it as a local override).
+    const cls = classifyKey(k, value, parsed, /*inPlace=*/true);
     outcomes.push(cls.outcome);
     if (cls.write) {
       setPath(parsed, cls.write.v2Key, cls.write.v2Value);
@@ -576,6 +583,11 @@ function convertLegacyRuns(ctx: Ctx): void {
     const provPath = path.join(runDir, "provenance.json");
     const provExists = fs.existsSync(provPath);
 
+    // Derive ONE fallback status used for BOTH run.yaml and provenance.json so
+    // they stay consistent. Legacy metadata runs are historical (the process is
+    // gone), so "closed" is the honest default. (P2 status-mismatch fix.)
+    const runStatus = (m["status"] as string | undefined) ?? "closed";
+
     // Emit canonical guild.run.v1 field names per the run-lifecycle-contract.md
     // field table: started_at (not created_at), initiative_attachment (not initiative).
     const runDoc =
@@ -583,7 +595,7 @@ function convertLegacyRuns(ctx: Ctx): void {
       `run_id: ${runId}\n` +
       `started_at: ${startedAt}\n` +
       (initiativeAttachment ? `initiative_attachment: ${initiativeAttachment}\n` : `initiative_attachment: null\n`) +
-      (m["status"] ? `status: ${m["status"]}\n` : "status: open\n");
+      `status: ${runStatus}\n`;
 
     // Run-level C4 analog: if provenance.json already exists (an existing v2
     // artifact), this is a genuine conflict — keep metadata.json LIVE (never write
@@ -606,13 +618,14 @@ function convertLegacyRuns(ctx: Ctx): void {
     // provenance.json canonical fields per run-lifecycle-contract.md §2:
     //   initiative mirrors run.yaml.initiative_attachment (the provenance field is "initiative")
     //   started_at mirrors run.yaml.started_at
+    //   status uses the same derived runStatus for consistency with run.yaml.
     const provDoc = {
       schema_version: "guild.provenance.v1",
       run_id: runId,
       initiative: initiativeAttachment,
       started_at: startedAt,
       reconstructed_from: "metadata.json",
-      status: (m["status"] as string | undefined) ?? "closed",
+      status: runStatus,
     };
     if (!dryRun) {
       fs.writeFileSync(runYaml, runDoc);
