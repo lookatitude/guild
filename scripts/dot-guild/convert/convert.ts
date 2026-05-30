@@ -172,19 +172,37 @@ export function convert(
         );
         if (mutated) settingsMutated = true;
         // Any remaining key in config.yml with no v2 home + not handled ⇒ C2 relocate.
-        // P2 parent-container fix: skip a top-level key `k` if any key in `allKeys`
-        // starts with `k + "."` — that means `k` is a parent container whose nested
-        // descendants were already classified by the handlers above (e.g. `defaults`
-        // is a container for `defaults.agent_team`). Relocating the parent would
-        // duplicate already-migrated data as a spurious C2 record.
+        //
+        // PARTIAL-PARENT handling (P1 regression fix): when a top-level key `k` is a
+        // CONTAINER object whose sub-paths were PARTIALLY handled (some in `allKeys`,
+        // some not), we must NOT skip the entire container (that loses unhandled
+        // siblings like `defaults.auto_learn`) AND we must NOT relocate the whole
+        // container (that duplicates already-migrated data). Instead:
+        //   1. If `k` itself is in allKeys → it was directly handled; skip.
+        //   2. If `k` has NO descendant in allKeys → fully unhandled; classify+relocate as-is.
+        //   3. If `k` has SOME handled descendants → partial parent: strip the handled
+        //      sub-keys from a deep-clone, then relocate only the remainder. If the
+        //      remainder is empty (all descendants were handled), skip (nothing to relocate).
         for (const k of Object.keys(parsed)) {
           if (allKeys.includes(k)) continue;
-          if (allKeys.some((hk) => hk.startsWith(k + "."))) continue; // parent of handled leaf
-          const cls = classifyKey(k, parsed[k], v2Settings);
-          outcomes.push(cls.outcome);
-          if (cls.relocate)
-            out.relocated.push({ source: rel(guildDir, p), key: k, value: parsed[k], reason: "unmapped" });
-          if (cls.outcome.case === "C4") out.conflicts.push(cls.outcome);
+          const handledChildren = allKeys.filter((hk) => hk.startsWith(k + "."));
+          if (handledChildren.length === 0) {
+            // Fully unhandled top-level key — classify and relocate as-is.
+            const cls = classifyKey(k, parsed[k], v2Settings);
+            outcomes.push(cls.outcome);
+            if (cls.relocate)
+              out.relocated.push({ source: rel(guildDir, p), key: k, value: parsed[k], reason: "unmapped" });
+            if (cls.outcome.case === "C4") out.conflicts.push(cls.outcome);
+          } else {
+            // Partial parent: remove handled sub-keys from a clone, then relocate the rest.
+            const remainder = stripHandledLeaves(parsed[k], k, allKeys);
+            if (remainder !== undefined) {
+              // There are unhandled leaves/subtrees — relocate only those.
+              out.relocated.push({ source: rel(guildDir, p), key: k, value: remainder, reason: "unmapped" });
+              outcomes.push({ key: k, case: "C2", detail: `partial parent: unhandled sub-keys relocated (handled: ${handledChildren.join(", ")})` });
+            }
+            // else: all descendants were handled → nothing to relocate; skip.
+          }
         }
         const anyC4 = outcomes.some((o) => o.case === "C4");
         const sourceRemovable = !anyC4;
@@ -538,9 +556,11 @@ function convertLegacyRuns(ctx: Ctx): void {
     }
     const m = res.value as Record<string, unknown>;
     const runId = (m["run_id"] ?? m["id"] ?? e.name) as string;
-    const createdAt = (m["created_at"] ?? m["started_at"]) as string | undefined;
+    // Prefer `started_at`; fall back to `created_at` for legacy metadata that
+    // only carried `created_at`. The canonical guild.run.v1 field is `started_at`.
+    const startedAt = (m["started_at"] ?? m["created_at"]) as string | undefined;
     // Minimal faithfulness check (CF-W1b-4): need at least a run id + a timestamp.
-    if (!runId || !createdAt) {
+    if (!runId || !startedAt) {
       ctx.out.artifacts.push({
         rel: rel(guildDir, meta),
         disposition: "preserve+flag",
@@ -549,15 +569,21 @@ function convertLegacyRuns(ctx: Ctx): void {
       });
       continue;
     }
+    // initiative_attachment is the canonical guild.run.v1 field name (not "initiative").
+    // Accept either form from legacy metadata.json.
+    const initiativeAttachment = (m["initiative_attachment"] ?? m["initiative"] ?? null) as string | null;
+
     const provPath = path.join(runDir, "provenance.json");
     const provExists = fs.existsSync(provPath);
 
+    // Emit canonical guild.run.v1 field names per the run-lifecycle-contract.md
+    // field table: started_at (not created_at), initiative_attachment (not initiative).
     const runDoc =
       `schema_version: guild.run.v1\n` +
       `run_id: ${runId}\n` +
-      `created_at: ${createdAt}\n` +
-      (m["initiative"] ? `initiative: ${m["initiative"]}\n` : "") +
-      (m["status"] ? `status: ${m["status"]}\n` : "");
+      `started_at: ${startedAt}\n` +
+      (initiativeAttachment ? `initiative_attachment: ${initiativeAttachment}\n` : `initiative_attachment: null\n`) +
+      (m["status"] ? `status: ${m["status"]}\n` : "status: open\n");
 
     // Run-level C4 analog: if provenance.json already exists (an existing v2
     // artifact), this is a genuine conflict — keep metadata.json LIVE (never write
@@ -577,12 +603,16 @@ function convertLegacyRuns(ctx: Ctx): void {
       continue;
     }
 
+    // provenance.json canonical fields per run-lifecycle-contract.md §2:
+    //   initiative mirrors run.yaml.initiative_attachment (the provenance field is "initiative")
+    //   started_at mirrors run.yaml.started_at
     const provDoc = {
       schema_version: "guild.provenance.v1",
       run_id: runId,
-      created_at: createdAt,
+      initiative: initiativeAttachment,
+      started_at: startedAt,
       reconstructed_from: "metadata.json",
-      ...("status" in m ? { status: m["status"] } : {}),
+      status: (m["status"] as string | undefined) ?? "closed",
     };
     if (!dryRun) {
       fs.writeFileSync(runYaml, runDoc);
@@ -607,6 +637,46 @@ function convertLegacyRuns(ctx: Ctx): void {
  * stripping wiki.share_mode). Uses js-yaml via seams to stay lossless for the
  * shapes we touch.
  */
+/**
+ * Given a container value `obj` (whose dotted path is `prefix`) and the set of
+ * fully-handled dotted key paths `handledKeys`, return a deep clone of `obj`
+ * with all handled leaf paths removed. Returns `undefined` if the resulting
+ * object is empty (every descendant was handled). Returns `obj` as-is if it is
+ * not a plain object (non-object unhandled value — caller relocates it whole).
+ *
+ * Example: prefix="defaults", obj={agent_team:"on", auto_learn:false},
+ *   handledKeys=["defaults.agent_team"]
+ *   → returns {auto_learn:false}  (agent_team stripped, auto_learn kept)
+ */
+function stripHandledLeaves(
+  obj: unknown,
+  prefix: string,
+  handledKeys: string[]
+): unknown {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+    // Not a plain object — unhandled as-is (can't strip sub-keys from a scalar/array).
+    return obj;
+  }
+  const rec = obj as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(rec)) {
+    const dotted = `${prefix}.${k}`;
+    if (handledKeys.includes(dotted)) continue; // this exact leaf was handled
+    // Check if this sub-key has its own handled descendants (recurse).
+    const handledBelow = handledKeys.filter((hk) => hk.startsWith(dotted + "."));
+    if (handledBelow.length > 0) {
+      // Partially-handled sub-container: recurse.
+      const sub = stripHandledLeaves(v, dotted, handledKeys);
+      if (sub !== undefined) result[k] = sub;
+      // else all sub-children handled → k contributes nothing
+    } else {
+      // Fully unhandled leaf or sub-container — keep it.
+      result[k] = v;
+    }
+  }
+  return Object.keys(result).length === 0 ? undefined : result;
+}
+
 function serializeYaml(obj: Record<string, unknown>): string {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const yaml = require("js-yaml") as { dump(o: unknown): string };

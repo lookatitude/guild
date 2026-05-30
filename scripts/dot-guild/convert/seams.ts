@@ -44,6 +44,13 @@ export const realFs: Fs = {
       isDirectory: e.isDirectory(),
       isFile: e.isFile(),
     })),
+  isSymlink: (p) => {
+    try {
+      return fs.lstatSync(p).isSymbolicLink();
+    } catch {
+      return false;
+    }
+  },
   sha256: (p) => crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex"),
 };
 

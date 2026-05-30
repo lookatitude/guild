@@ -91,21 +91,19 @@ interface Units {
 }
 
 /**
- * Validate that `childRel` (from workspace.json sub_guilds) resolves to an
- * IMMEDIATE child of `root` — depth-1, no `..`, not absolute-outside-root.
+ * Validate that `childRel` resolves to an IMMEDIATE child of `root` that is a
+ * real directory (not a symlink) — depth-1, no `..`, not absolute-outside-root.
  *
- * Returns the resolved absolute path if valid, or null if rejected. Rejecting
- * prevents path-traversal: a crafted workspace.json could otherwise point at
- * an arbitrary directory on disk and cause runMigration to mutate it.
+ * Returns the resolved absolute path if valid, or null if rejected.
  *
- * Rules (P2 workspace path-traversal fix):
- *   - Must not be absolute (an absolute path is either the root itself or
- *     something entirely outside it).
- *   - After resolving, dirname of the result must equal the resolved root
- *     (i.e. exactly one level deep).
- *   - The basename must not be "." or "..".
+ * Rules:
+ *   - Must not be absolute.
+ *   - After resolving, dirname must equal path.resolve(root) (exactly depth-1).
+ *   - Basename must not be "." or "..".
+ *   - MUST NOT be a symlink (symlinks pass the lexical dirname check but can
+ *     point anywhere on the filesystem — P1 symlink-escape fix).
  */
-function validateImmediateChild(root: string, childRel: string): string | null {
+function validateImmediateChild(fs: Fs, root: string, childRel: string): string | null {
   // Reject bare absolute paths.
   if (path.isAbsolute(childRel)) return null;
   const resolved = path.resolve(root, childRel);
@@ -114,6 +112,8 @@ function validateImmediateChild(root: string, childRel: string): string | null {
   if (path.dirname(resolved) !== resolvedRoot) return null;
   const base = path.basename(resolved);
   if (base === "." || base === "..") return null;
+  // Reject symlinks — they pass the lexical check but may point outside root.
+  if (fs.isSymlink(resolved)) return null;
   return resolved;
 }
 
@@ -143,9 +143,9 @@ function discoverUnits(fs: Fs, root: string, forceWorkspace?: boolean): Units {
         for (const s of sub) {
           const childRel = typeof s === "string" ? s : (s as Record<string, unknown>)?.["path"];
           if (typeof childRel === "string") {
-            const validated = validateImmediateChild(root, childRel);
+            const validated = validateImmediateChild(fs, root, childRel);
             if (validated) childRoots.push(validated);
-            // else: skip and flag — absolute path / ".." escape / depth > 1 is rejected
+            // else: skip — absolute / ".." / depth>1 / symlink rejected
           }
         }
       }
@@ -168,6 +168,9 @@ function discoverUnits(fs: Fs, root: string, forceWorkspace?: boolean): Units {
       for (const e of entries) {
         if (!e.isDirectory) continue;
         const childRoot = path.join(root, e.name);
+        // Reject symlinks — an immediate-child symlink is lexically depth-1 but
+        // follows to an arbitrary target outside root (P1 symlink-escape fix).
+        if (fs.isSymlink(childRoot)) continue;
         if (fs.existsSync(path.join(childRoot, ".guild")) || fs.existsSync(path.join(childRoot, ".git"))) {
           childRoots.push(childRoot);
         }

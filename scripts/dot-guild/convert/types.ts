@@ -54,6 +54,13 @@ export interface Fs {
   rmFileSync(p: string): void;
   /** List directory entries (name + isDirectory/isFile). */
   readdirSync(p: string): Array<{ name: string; isDirectory: boolean; isFile: boolean }>;
+  /**
+   * Returns true if the path is a symbolic link (lstat, not stat — does NOT
+   * follow the link). Used by the workspace-child validator to reject symlinks
+   * that lexically appear as immediate children but point outside the root.
+   * Returns false if the path does not exist.
+   */
+  isSymlink(p: string): boolean;
   /** sha256 hex of a file's bytes. */
   sha256(p: string): string;
 }
