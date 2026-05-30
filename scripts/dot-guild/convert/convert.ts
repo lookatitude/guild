@@ -1,0 +1,470 @@
+/**
+ * scripts/dot-guild/convert/convert.ts — applies the §2 26-row mapping table.
+ *
+ * Operates ONLY after a verified snapshot (the caller guarantees this). For each
+ * v1 source it partitions keys per §2.0a (C1/C2/C3/C4), writes the v2 artifact,
+ * relocates C2 keys to `.unmigrated-v1.json`, and removes the live v1 source IFF
+ * every key is C1/C2/C3 (zero C4) — the §2.0a removal predicate. Strict ordering
+ * (§2.0): snapshot (done) → write v2 → write .unmigrated-v1.json → re-verify →
+ * THEN remove live source. A C4 conflict (or unreconstructable source) keeps the
+ * source LIVE (preserve+flag) and is re-surfaced.
+ *
+ * dryRun=true: compute every record + would-relocate + would-remove, write NOTHING.
+ */
+
+import * as path from "path";
+import type {
+  Fs,
+  Clock,
+  ArtifactRecord,
+  KeyOutcome,
+  UnmigratedEntry,
+} from "./types";
+import { parseJson, parseYaml } from "./seams";
+import { v1KeysIn } from "./detect";
+import {
+  classifyKey,
+  setPath,
+  buildUnmigratedDoc,
+  valueEqual,
+  getPath,
+  mapV1Key,
+} from "./keymap";
+
+export interface ConvertOutput {
+  artifacts: ArtifactRecord[];
+  relocated: UnmigratedEntry[];
+  conflicts: KeyOutcome[];
+  /** Paths (rel to .guild) the live tree had removed (or would remove on dry-run). */
+  removed: string[];
+}
+
+interface Ctx {
+  fs: Fs;
+  clock: Clock;
+  guildDir: string;
+  dryRun: boolean;
+  snapshotRef: string;
+  out: ConvertOutput;
+  /** Accumulated relocations across all sources (one shared .unmigrated-v1.json). */
+}
+
+function rel(guildDir: string, p: string): string {
+  return path.relative(guildDir, p);
+}
+
+/** Read the existing v2 settings.json (object) if present + parseable. */
+function readSettings(fs: Fs, p: string): Record<string, unknown> {
+  if (!fs.existsSync(p)) return {};
+  const res = parseJson(fs.readFileSync(p));
+  return res.ok && res.value && typeof res.value === "object"
+    ? (res.value as Record<string, unknown>)
+    : {};
+}
+
+/** Read a possibly-dotted key value out of a parsed config object. */
+function readKeyValue(parsed: Record<string, unknown>, dotted: string): unknown {
+  if (dotted in parsed) return parsed[dotted];
+  return getPath(parsed, dotted);
+}
+
+/** Remove a v1 key (possibly dotted) from a config object, returning a new object. */
+function stripKey(obj: Record<string, unknown>, dotted: string): void {
+  const parts = dotted.split(".");
+  if (parts.length === 1) {
+    delete obj[parts[0]];
+    return;
+  }
+  let cur: unknown = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (cur && typeof cur === "object" && parts[i] in (cur as Record<string, unknown>)) {
+      cur = (cur as Record<string, unknown>)[parts[i]];
+    } else {
+      return;
+    }
+  }
+  if (cur && typeof cur === "object") delete (cur as Record<string, unknown>)[parts[parts.length - 1]];
+}
+
+/**
+ * Main convert entry — iterates the §2 rows that produce action. carry-forward
+ * rows are not visited (they need no work); the report records them separately if
+ * desired, but the converter touches only convert/preserve+flag artifacts.
+ */
+export function convert(
+  fs: Fs,
+  clock: Clock,
+  guildDir: string,
+  dryRun: boolean,
+  snapshotRef: string
+): ConvertOutput {
+  const out: ConvertOutput = { artifacts: [], relocated: [], conflicts: [], removed: [] };
+  const ctx: Ctx = { fs, clock, guildDir, dryRun, snapshotRef, out };
+  const j = (r: string) => path.join(guildDir, r);
+
+  const settingsPath = j("settings.json");
+  const v2Settings = readSettings(fs, settingsPath);
+  let settingsMutated = false;
+
+  // ── Row: config.yml → settings.json (+ .unmigrated-v1.json) ───────────────
+  {
+    const p = j("config.yml");
+    if (fs.existsSync(p)) {
+      const res = parseYaml(fs.readFileSync(p));
+      if (!res.ok || !res.value || typeof res.value !== "object") {
+        // Should not happen (corrupt would have blocked), but be safe: preserve+flag.
+        out.artifacts.push({
+          rel: rel(guildDir, p),
+          disposition: "preserve+flag",
+          note: "config.yml unparseable at convert time — preserved",
+        });
+      } else {
+        const parsed = res.value as Record<string, unknown>;
+        const v1Keys = v1KeysIn(parsed);
+        // config.yml may also carry mappable-but-not-"v1-only" keys (loops/loop_cap/
+        // codex_cap) — those are C1 carry-into-settings if absent in v2.
+        const carryKeys = ["loops", "loop_cap", "codex_cap"].filter((k) => k in parsed);
+        const allKeys = [...new Set([...v1Keys, ...carryKeys])];
+        const { outcomes, mutated } = convertSurfaceWithCarry(
+          ctx,
+          rel(guildDir, p),
+          parsed,
+          v2Settings,
+          allKeys
+        );
+        if (mutated) settingsMutated = true;
+        // Any remaining key in config.yml with no v2 home + not handled ⇒ C2 relocate.
+        for (const k of Object.keys(parsed)) {
+          if (allKeys.includes(k)) continue;
+          const cls = classifyKey(k, parsed[k], v2Settings);
+          outcomes.push(cls.outcome);
+          if (cls.relocate)
+            out.relocated.push({ source: rel(guildDir, p), key: k, value: parsed[k], reason: "unmapped" });
+          if (cls.outcome.case === "C4") out.conflicts.push(cls.outcome);
+        }
+        const anyC4 = outcomes.some((o) => o.case === "C4");
+        const sourceRemovable = !anyC4;
+        out.artifacts.push({
+          rel: rel(guildDir, p),
+          disposition: anyC4 ? "preserve+flag" : "convert",
+          target: "settings.json",
+          keys: outcomes,
+          note: anyC4
+            ? "C4 conflict — config.yml kept LIVE, tree stays mixed, re-surface next open"
+            : "converted to settings.json; removed from live (snapshot holds original)",
+          removed: sourceRemovable,
+        });
+        if (sourceRemovable && !dryRun) {
+          fs.rmFileSync(p);
+        }
+        if (sourceRemovable) out.removed.push(rel(guildDir, p));
+      }
+    }
+  }
+
+  // ── Row: project.yaml wiki.share_mode → settings.json defaults.wiki.share_mode
+  {
+    const p = j("project.yaml");
+    if (fs.existsSync(p)) {
+      const res = parseYaml(fs.readFileSync(p));
+      if (res.ok && res.value && typeof res.value === "object") {
+        const parsed = res.value as Record<string, unknown>;
+        const shareVal = readKeyValue(parsed, "wiki.share_mode");
+        if (shareVal !== undefined) {
+          const cls = classifyKey("wiki.share_mode", shareVal, v2Settings);
+          const outcomes = [cls.outcome];
+          if (cls.write) {
+            setPath(v2Settings, cls.write.v2Key, cls.write.v2Value);
+            settingsMutated = true;
+          }
+          const isC4 = cls.outcome.case === "C4";
+          if (isC4) out.conflicts.push(cls.outcome);
+          // project.yaml is identity-bearing — NEVER removed; only the migrated key
+          // is stripped (C1/C3). On C4 the key stays LIVE.
+          if (!isC4 && !dryRun) {
+            stripKey(parsed, "wiki.share_mode");
+            fs.writeFileSync(p, serializeYaml(parsed));
+          }
+          out.artifacts.push({
+            rel: rel(guildDir, p),
+            disposition: isC4 ? "preserve+flag" : "convert",
+            target: "settings.json:defaults.wiki.share_mode",
+            keys: outcomes,
+            note: isC4
+              ? "C4 share_mode conflict — wiki.share_mode kept LIVE in project.yaml, settings.json NOT clobbered, re-surface"
+              : cls.outcome.case === "C3"
+                ? "redundant share_mode dropped from project.yaml (settings.json authoritative)"
+                : "wiki.share_mode moved to settings.json; key removed from project.yaml",
+            removed: false,
+          });
+        }
+      }
+    }
+  }
+
+  // ── Row: settings.json carrying a stray v1 key (hand-mixed) ───────────────
+  convertV2SurfaceInPlace(ctx, settingsPath, v2Settings, (mut) => {
+    if (mut) settingsMutated = true;
+  });
+
+  // ── Row: settings.local.json carrying a v1 key (P9 / CF-W1b-7) ────────────
+  {
+    const p = j("settings.local.json");
+    if (fs.existsSync(p)) {
+      const res = parseJson(fs.readFileSync(p));
+      if (res.ok && res.value && typeof res.value === "object") {
+        const parsed = res.value as Record<string, unknown>;
+        const v1Keys = v1KeysIn(parsed);
+        if (v1Keys.length > 0) {
+          const outcomes: KeyOutcome[] = [];
+          let anyC4 = false;
+          let localMutated = false;
+          for (const k of v1Keys) {
+            const value = readKeyValue(parsed, k);
+            // settings.local.json keys are migrated against the EFFECTIVE v2 settings.
+            const cls = classifyKey(k, value, v2Settings);
+            outcomes.push(cls.outcome);
+            if (cls.write) {
+              // Rewrite in place in the local file (it is a v2 surface): write v2 form, drop v1 key.
+              setPath(parsed, cls.write.v2Key, cls.write.v2Value);
+              stripKey(parsed, k);
+              localMutated = true;
+            } else if (cls.relocate) {
+              out.relocated.push({ source: rel(guildDir, p), key: k, value, reason: "unmapped" });
+              stripKey(parsed, k);
+              localMutated = true;
+            } else if (cls.outcome.case === "C3") {
+              stripKey(parsed, k);
+              localMutated = true;
+            } else if (cls.outcome.case === "C4") {
+              anyC4 = true;
+              out.conflicts.push(cls.outcome);
+              // C4 — key STAYS LIVE; do not strip.
+            }
+          }
+          if (localMutated && !dryRun) fs.writeFileSync(p, JSON.stringify(parsed, null, 2) + "\n");
+          out.artifacts.push({
+            rel: rel(guildDir, p),
+            disposition: anyC4 ? "preserve+flag" : "convert",
+            keys: outcomes,
+            note: anyC4
+              ? "C4 conflict — deprecated alias kept LIVE in settings.local.json, re-surface"
+              : "v1 keys migrated in place (file is a v2 surface; stays)",
+            removed: false,
+          });
+        }
+      }
+    }
+  }
+
+  // ── Row: runs/<id>/metadata.json (no run.yaml) → run.yaml + provenance.json
+  convertLegacyRuns(ctx);
+
+  // ── Persist settings.json once (single write) ─────────────────────────────
+  if (settingsMutated && !dryRun) {
+    fs.writeFileSync(settingsPath, JSON.stringify(v2Settings, null, 2) + "\n");
+  }
+
+  // ── Write the shared .unmigrated-v1.json (only if there are C2 relocations) ─
+  if (out.relocated.length > 0 && !dryRun) {
+    const doc = buildUnmigratedDoc(clock.iso(), snapshotRef, out.relocated);
+    fs.writeFileSync(j(".unmigrated-v1.json"), doc);
+  }
+
+  return out;
+}
+
+/**
+ * Convert a config surface that mixes v1-only keys AND carry-keys (loops/loop_cap/
+ * codex_cap). carry-keys are C1 into settings.json when absent, C3 when equal,
+ * C4 when differing.
+ */
+function convertSurfaceWithCarry(
+  ctx: Ctx,
+  sourceRel: string,
+  parsed: Record<string, unknown>,
+  v2Target: Record<string, unknown>,
+  keys: string[]
+): { outcomes: KeyOutcome[]; mutated: boolean } {
+  const outcomes: KeyOutcome[] = [];
+  let mutated = false;
+  for (const k of keys) {
+    const value = readKeyValue(parsed, k);
+    // carry-keys (loops/loop_cap/codex_cap) map to the SAME key name in v2.
+    if (k === "loops" || k === "loop_cap" || k === "codex_cap") {
+      const existing = getPath(v2Target, k);
+      if (existing === undefined) {
+        setPath(v2Target, k, normalizeCarry(k, value));
+        mutated = true;
+        outcomes.push({ key: k, case: "C1", detail: `${k}=${JSON.stringify(normalizeCarry(k, value))}` });
+      } else if (valueEqual(existing, normalizeCarry(k, value))) {
+        outcomes.push({ key: k, case: "C3", detail: `${k} redundant (already ${JSON.stringify(existing)})` });
+      } else {
+        outcomes.push({ key: k, case: "C4", detail: `${k} conflict: v2=${JSON.stringify(existing)} vs v1=${JSON.stringify(value)}` });
+        ctx.out.conflicts.push(outcomes[outcomes.length - 1]);
+      }
+      continue;
+    }
+    const cls = classifyKey(k, value, v2Target);
+    outcomes.push(cls.outcome);
+    if (cls.write) {
+      setPath(v2Target, cls.write.v2Key, cls.write.v2Value);
+      mutated = true;
+    }
+    if (cls.relocate)
+      ctx.out.relocated.push({ source: sourceRel, key: cls.relocate.key, value: cls.relocate.value, reason: "unmapped" });
+    if (cls.outcome.case === "C4") {
+      ctx.out.conflicts.push(cls.outcome);
+    }
+  }
+  return { outcomes, mutated };
+}
+
+function normalizeCarry(k: string, v: unknown): unknown {
+  if (k === "loop_cap" && typeof v === "number") return Math.min(256, Math.max(1, v));
+  if (k === "codex_cap" && typeof v === "number") return Math.min(10, Math.max(1, v));
+  return v;
+}
+
+/**
+ * A v2 surface file (settings.json) that carries a stray v1 key: rewrite in place
+ * to v2 form (C1), drop redundant (C3), relocate unmapped (C2), keep C4 live.
+ */
+function convertV2SurfaceInPlace(
+  ctx: Ctx,
+  p: string,
+  v2Obj: Record<string, unknown>,
+  onMutate: (mutated: boolean) => void
+): void {
+  if (!ctx.fs.existsSync(p)) return;
+  const v1Keys = v1KeysIn(v2Obj);
+  if (v1Keys.length === 0) return;
+  const outcomes: KeyOutcome[] = [];
+  let anyC4 = false;
+  let mutated = false;
+  for (const k of v1Keys) {
+    const value = readKeyValue(v2Obj, k);
+    // Compare the v1 key against the v2 counterpart ALREADY in this same object.
+    const mapped = mapV1Key(k, value);
+    if (!mapped) {
+      ctx.out.relocated.push({ source: rel(ctx.guildDir, p), key: k, value, reason: "unmapped" });
+      stripKey(v2Obj, k);
+      mutated = true;
+      outcomes.push({ key: k, case: "C2", detail: `relocated verbatim (${JSON.stringify(value)})` });
+      continue;
+    }
+    const existing = getPath(v2Obj, mapped.v2Key);
+    if (existing === undefined) {
+      setPath(v2Obj, mapped.v2Key, mapped.v2Value);
+      stripKey(v2Obj, k);
+      mutated = true;
+      outcomes.push({ key: k, case: "C1", detail: `${k} → ${mapped.v2Key}=${JSON.stringify(mapped.v2Value)}` });
+    } else if (valueEqual(existing, mapped.v2Value)) {
+      stripKey(v2Obj, k);
+      mutated = true;
+      outcomes.push({ key: k, case: "C3", detail: `redundant: ${mapped.v2Key} already ${JSON.stringify(existing)}` });
+    } else {
+      anyC4 = true;
+      outcomes.push({
+        key: k,
+        case: "C4",
+        detail: `CONFLICT: ${mapped.v2Key}=${JSON.stringify(existing)} vs v1 ${k}=${JSON.stringify(value)} → kept LIVE`,
+      });
+      ctx.out.conflicts.push(outcomes[outcomes.length - 1]);
+    }
+  }
+  onMutate(mutated);
+  ctx.out.artifacts.push({
+    rel: rel(ctx.guildDir, p),
+    disposition: anyC4 ? "preserve+flag" : "convert",
+    keys: outcomes,
+    note: anyC4
+      ? "C4 stray-key conflict — v1 key kept LIVE in settings.json, re-surface"
+      : "stray v1 key(s) rewritten in place to v2 form",
+    removed: false,
+  });
+}
+
+/**
+ * runs/<id>/metadata.json (no sibling run.yaml) → reconstruct run.yaml +
+ * provenance.json. If fields are insufficient → preserve+flag (CF-W1b-4: do NOT
+ * fabricate). events.ndjson is carry-forward (CF-W1b-3).
+ */
+function convertLegacyRuns(ctx: Ctx): void {
+  const { fs, guildDir, dryRun } = ctx;
+  const runsDir = path.join(guildDir, "runs");
+  if (!fs.existsSync(runsDir)) return;
+  let entries;
+  try {
+    entries = fs.readdirSync(runsDir);
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory) continue;
+    const runDir = path.join(runsDir, e.name);
+    const meta = path.join(runDir, "metadata.json");
+    const runYaml = path.join(runDir, "run.yaml");
+    if (!fs.existsSync(meta) || fs.existsSync(runYaml)) continue;
+    const res = parseJson(fs.readFileSync(meta));
+    if (!res.ok || !res.value || typeof res.value !== "object") {
+      ctx.out.artifacts.push({
+        rel: rel(guildDir, meta),
+        disposition: "preserve+flag",
+        note: "metadata.json unparseable — preserved",
+        removed: false,
+      });
+      continue;
+    }
+    const m = res.value as Record<string, unknown>;
+    const runId = (m["run_id"] ?? m["id"] ?? e.name) as string;
+    const createdAt = (m["created_at"] ?? m["started_at"]) as string | undefined;
+    // Minimal faithfulness check (CF-W1b-4): need at least a run id + a timestamp.
+    if (!runId || !createdAt) {
+      ctx.out.artifacts.push({
+        rel: rel(guildDir, meta),
+        disposition: "preserve+flag",
+        note: "insufficient fields to reconstruct a faithful run.yaml — preserved (NOT fabricated)",
+        removed: false,
+      });
+      continue;
+    }
+    const runDoc =
+      `schema_version: guild.run.v1\n` +
+      `run_id: ${runId}\n` +
+      `created_at: ${createdAt}\n` +
+      (m["initiative"] ? `initiative: ${m["initiative"]}\n` : "") +
+      (m["status"] ? `status: ${m["status"]}\n` : "");
+    const provDoc = {
+      schema_version: "guild.provenance.v1",
+      run_id: runId,
+      created_at: createdAt,
+      reconstructed_from: "metadata.json",
+      ...("status" in m ? { status: m["status"] } : {}),
+    };
+    if (!dryRun) {
+      fs.writeFileSync(runYaml, runDoc);
+      fs.writeFileSync(path.join(runDir, "provenance.json"), JSON.stringify(provDoc, null, 2) + "\n");
+      fs.rmFileSync(meta);
+    }
+    ctx.out.removed.push(rel(guildDir, meta));
+    ctx.out.artifacts.push({
+      rel: rel(guildDir, meta),
+      disposition: "convert",
+      target: `runs/${e.name}/run.yaml + provenance.json`,
+      note: "legacy metadata.json → run.yaml/provenance reconstructed; metadata.json moved to snapshot",
+      removed: true,
+    });
+  }
+}
+
+/**
+ * Minimal YAML serializer for the flat project.yaml shape we re-write (after
+ * stripping wiki.share_mode). Uses js-yaml via seams to stay lossless for the
+ * shapes we touch.
+ */
+function serializeYaml(obj: Record<string, unknown>): string {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const yaml = require("js-yaml") as { dump(o: unknown): string };
+  return yaml.dump(obj);
+}
