@@ -38,3 +38,4 @@
 .guild/hosts/
 .guild/runs/*/events.ndjson
 .guild/runs/*/logs/
+.guild/runs/*/codex-review/

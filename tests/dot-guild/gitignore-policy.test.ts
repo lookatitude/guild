@@ -177,4 +177,12 @@ describe("gitignore-policy: Decision E classification table", () => {
   test(".guild/runs/run-X/logs/payloads/x.json → IGNORED (Decision G: logs/payloads local-only by default)", () => {
     expect(isIgnored(repoDir, ".guild/runs/run-X/logs/payloads/x.json")).toBe(true);
   });
+
+  test(".guild/runs/run-X/codex-review/gate.md → IGNORED (Decision E: codex-review trail local-only, declined for share)", () => {
+    expect(isIgnored(repoDir, ".guild/runs/run-X/codex-review/gate.md")).toBe(true);
+  });
+
+  test(".guild/runs/run-X/logs/v1.4-events.jsonl → IGNORED (Decision E: logs/*.jsonl trace local-only)", () => {
+    expect(isIgnored(repoDir, ".guild/runs/run-X/logs/v1.4-events.jsonl")).toBe(true);
+  });
 });
