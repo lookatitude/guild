@@ -45,8 +45,34 @@ function isReportFile(name: string): boolean {
   return name.startsWith(".migration-report-");
 }
 
-/** Recursively list files under a dir using the injected Fs, with an exclusion predicate. */
-function walk(fs: Fs, dir: string, excludeDir: (name: string) => boolean, base: string): string[] {
+/**
+ * Walk budget — generous limits that no real .guild tree will ever hit, but
+ * that prevent a pathological / adversarial tree from stalling SessionStart
+ * (Fix D / F7 redo). On exceeding either limit, stop descending and return
+ * what was collected — never throw.
+ *
+ * _budget.nodes counts EVERY visited entry (files AND directories) so that a
+ * tree of empty directories — which contributes zero files but still costs
+ * readdir calls — is also bounded.
+ */
+const WALK_MAX_DEPTH = 25;
+const WALK_MAX_NODES = 20_000;
+
+/**
+ * Recursively list files under a dir using the injected Fs, with an exclusion
+ * predicate. Stops collecting once WALK_MAX_NODES is reached or WALK_MAX_DEPTH
+ * is exceeded — returns the partial set (never throws).
+ */
+function walk(
+  fs: Fs,
+  dir: string,
+  excludeDir: (name: string) => boolean,
+  base: string,
+  _depth = 0,
+  _budget = { nodes: 0 }
+): string[] {
+  if (_depth > WALK_MAX_DEPTH) return [];
+  if (_budget.nodes >= WALK_MAX_NODES) return [];
   if (!fs.existsSync(dir)) return [];
   const out: string[] = [];
   let entries: DirEntry[];
@@ -56,10 +82,14 @@ function walk(fs: Fs, dir: string, excludeDir: (name: string) => boolean, base: 
     return out;
   }
   for (const e of entries) {
+    if (_budget.nodes >= WALK_MAX_NODES) break;
+    // Count every entry — file or directory — against the shared node budget.
+    _budget.nodes += 1;
     const full = path.join(dir, e.name);
     if (e.isDirectory) {
       if (excludeDir(e.name)) continue;
-      out.push(...walk(fs, full, excludeDir, base));
+      const sub = walk(fs, full, excludeDir, base, _depth + 1, _budget);
+      out.push(...sub);
     } else if (e.isFile) {
       out.push(full);
     }
