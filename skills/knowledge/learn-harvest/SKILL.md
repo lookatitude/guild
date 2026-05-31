@@ -98,7 +98,9 @@ All outputs land under `.guild/runs/<run-id>/learn/`:
       "linked_run": "<run-id>",
       "linked_initiative": "<slug-or-null>",
       "when_to_revisit": "...",
-      "promotion_gate": "guild:wiki-ingest"
+      "promotion_gate": "guild:wiki-ingest",
+      "applies_to": ["<repo-name>", ...],
+      "upstream": false
     }
   ],
   "decision_candidates": [
@@ -114,7 +116,9 @@ All outputs land under `.guild/runs/<run-id>/learn/`:
       "linked_initiatives": [],
       "linked_components": [],
       "confidence": "low|medium|high",
-      "promotion_gate": "guild:decisions"
+      "promotion_gate": "guild:decisions",
+      "applies_to": ["<repo-name>", ...],
+      "upstream": false
     }
   ],
   "reflection_candidates": [
@@ -147,6 +151,22 @@ All outputs land under `.guild/runs/<run-id>/learn/`:
 
 Field names and schema version are canonical. `promotion_gate` records which
 human-gated skill must approve any promotion — never null.
+
+**Cross-cutting signal fields (OPTIONAL — additive, backward-compatible).**
+Both `wiki_candidates[]` and `decision_candidates[]` accept two optional fields:
+
+- `applies_to?: string[]` — repos this knowledge spans (e.g. `["plugin", "website"]`).
+  Absent or a single-element list means the candidate is scoped to one project and
+  is NOT considered cross-cutting. Present with two or more entries signals that this
+  knowledge is relevant across multiple repos.
+- `upstream?: boolean` — explicit "promote to workspace root" signal. When `true`,
+  the candidate is staged for upstream promotion regardless of `applies_to` length.
+  Absent or `false` means not explicitly promoted (safe default).
+
+**Lenient reader contract:** a reader that does not recognise these fields MUST
+ignore them (no schema_version bump — this is additive). A reader that does
+recognise them uses the rule: cross-cutting iff
+`applies_to.length > 1 OR upstream === true`. Absent ⇒ not cross-cutting.
 
 **`harvest-summary.md`** is a human-readable companion covering:
 - Input artifacts processed (count and kinds)
