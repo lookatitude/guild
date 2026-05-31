@@ -604,6 +604,70 @@ describe("gatherCrossRepoInputs — two-git-repo cross-repo scenario (Finding #6
     expect(result.flagged).toBe(false);
   });
 
+  test("same repo for plugin+root (CI advisory mode) → no duplicate files", () => {
+    // When --plugin-repo and --root-repo point at the SAME checkout (the plugin-repo
+    // CI advisory mode, where docs/knowledge/ isn't present), the same diff would be
+    // gathered twice. gatherCrossRepoInputs must dedup so the surface list/count is honest.
+    gitCommit(pluginRepo, "feat: add ops command", {
+      "commands/guild-ops.md": "# Ops command\n",
+    });
+
+    const { input, fatal } = gatherCrossRepoInputs({
+      pluginRepo,
+      rootRepo: pluginRepo, // same checkout — the CI advisory form
+      pluginRange: "HEAD~1..HEAD",
+      rootRange: "HEAD~1..HEAD",
+    });
+
+    expect(fatal).toBe(false);
+    const occurrences = input.changedFiles.filter((f) => f === "commands/guild-ops.md");
+    expect(occurrences).toHaveLength(1); // deduped, not 2
+    const result = evaluateDocSync(input);
+    expect(result.flagged).toBe(true);
+    expect(result.surfaceFiles).toEqual(["commands/guild-ops.md"]);
+  });
+
+  test("three-dot range: a base-side 'docs-sync: n/a' does NOT suppress the PR advisory (Codex-CI MAJOR-1)", () => {
+    // Topology: M1 (base) → feature commits a command (no escape); base branch separately
+    // commits a 'docs-sync: n/a' on a non-surface file. A three-dot range B...F includes the
+    // base commit in `git log` (symmetric diff) — the escape would WRONGLY suppress. The
+    // two-dot translation for the log must exclude it.
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "guild-doc-sync-3dot-"));
+    try {
+      gitInit(repo);
+      gitCommit(repo, "M1 init", { "base.txt": "0\n" });
+      // Capture the default branch name (environment-dependent: main vs master)
+      const baseBranch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+      // feature branch: a command change, NO escape
+      execFileSync("git", ["checkout", "-b", "feature"], { cwd: repo });
+      gitCommit(repo, "feat: add a command", { "commands/guild-x.md": "# X\n" });
+      const featureSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+      // base branch advances separately with an escape token on a non-surface file
+      execFileSync("git", ["checkout", baseBranch], { cwd: repo, stdio: ["pipe", "pipe", "pipe"] });
+      gitCommit(repo, "chore: base churn\n\ndocs-sync: n/a (base side, unrelated)", { "base.txt": "1\n" });
+      const baseSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+
+      const threeDot = `${baseSha}...${featureSha}`;
+      const msgs = getCommitMessagesResult(threeDot, repo);
+      expect(msgs.ok).toBe(true);
+      // The base-side escape must NOT appear (two-dot log = PR commits only)
+      const hasEscape = (msgs.value ?? []).some((m) => /docs-sync:\s*n\/a/i.test(m));
+      expect(hasEscape).toBe(false);
+
+      // And the full evaluation flags (surface changed, escape correctly excluded)
+      const changed = getChangedFilesResult(threeDot, repo);
+      expect(changed.ok).toBe(true);
+      const result = evaluateDocSync({
+        changedFiles: changed.value ?? [],
+        commitMessages: msgs.value ?? [],
+        userFacingSkillPaths: [],
+      });
+      expect(result.flagged).toBe(true);
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   test("gatherCrossRepoInputs: missing origin does NOT silently produce CLEAN", () => {
     // With a valid range (HEAD~1..HEAD) in an existing repo, the result
     // should not be ok:false while also returning no files (fail-open).

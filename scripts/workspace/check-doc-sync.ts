@@ -214,10 +214,19 @@ export function getChangedFilesResult(range: string, cwd: string): GitResult<str
  * Returns a typed GitResult: ok:true with messages array, or ok:false with error string.
  *
  * Finding #3: NEVER returns ok:false silently as [] — callers must handle the error.
+ *
+ * Codex-CI MAJOR-1: the escape-token scan must see ONLY this changeset's commits.
+ * `git diff A...B` (three-dot) is correct for the PR's file changes, but `git log A...B`
+ * (three-dot) is the SYMMETRIC difference and would also include base-branch commits — a
+ * `docs-sync: n/a` on the base side could then falsely suppress the advisory. So for the
+ * LOG we translate a three-dot range to two-dot (`A..B` = commits in B not in A = the PR's
+ * own commits). Diff keeps three-dot; only the log range is narrowed.
  */
 export function getCommitMessagesResult(range: string, cwd: string): GitResult<string[]> {
+  // Narrow three-dot → two-dot for the log (symmetric-diff → PR-commits-only).
+  const logRange = range.includes("...") ? range.replace("...", "..") : range;
   try {
-    const out = execFileSync("git", ["log", range, "--format=%B"], {
+    const out = execFileSync("git", ["log", logRange, "--format=%B"], {
       cwd,
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -369,10 +378,14 @@ export function gatherCrossRepoInputs(
   // If the plugin repo root is a subdirectory of the workspace (e.g. workspace/plugin/),
   // we do NOT prepend "plugin/" — the normalisation depends on what the diff returns.
   // Both "commands/..." and "plugin/commands/..." match isCommandFile.
-  const allChangedFiles = [...plugin.files, ...root.files];
+  // Dedup the combined list: in the cross-repo case plugin/root file sets are disjoint,
+  // but when both --plugin-repo and --root-repo point at the SAME checkout (the CI
+  // advisory mode, where docs/knowledge/ isn't present in the plugin repo) the same
+  // paths would otherwise appear twice and inflate the surface-file count/list.
+  const allChangedFiles = [...new Set([...plugin.files, ...root.files])];
 
-  // Combine commit messages from both repos
-  const allMessages = [...plugin.messages, ...root.messages];
+  // Combine commit messages from both repos (deduped — same reason as above).
+  const allMessages = [...new Set([...plugin.messages, ...root.messages])];
 
   // User-facing skills: only look in the plugin repo
   const userFacingSkillPaths = resolveUserFacingSkillPaths(plugin.files, pluginRepo);
