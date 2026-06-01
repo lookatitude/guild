@@ -51,6 +51,19 @@ type CodexReviewInput = {
 
 ## Availability check
 
+> **Alignment with provider detection (Unit 4).** This adapter is the **Codex
+> ADAPTER beneath the broker**, not the lifecycle front door — `--review=cross`
+> routes through `guild:review-broker`, which calls `scripts/lib/provider-detect.ts`
+> to decide WHO reviews. That detection models two Codex providers: `codex-plugin`
+> (this `codex:codex-rescue` adapter — `selectable` when detected) and `codex-cli`
+> (`selectable` when authed). The availability check below is the **same probe
+> contract** provider-detect uses for the codex family: `codex --version` exits 0
+> **AND** usable auth exists (stored `~/.codex/auth.json` **or** `OPENAI_API_KEY`).
+> Per OD-6, a detected-but-unauthed codex is **not selectable** for a cross gate;
+> per AC-8, the broker also refuses Codex entirely when the **author** host is
+> Codex (same-family self-review). When invoked directly as a one-off, this
+> adapter still applies its own availability check below and skips gracefully.
+
 Before dispatching Codex, check availability:
 
 ```bash

@@ -45,6 +45,62 @@ and return `status: "skipped"`. The lifecycle continues without cross-family
 review, exactly as `codex-review` skips when Codex is absent. Graceful
 degradation is mandated by the ADR; do not stall the run.
 
+## Provider resolution — input from the resolved settings (Unit 4)
+
+Before resolving author/reviewer hosts, the broker takes a **provider-resolver
+input** computed from the run's resolved settings (the `review` projection of
+`.guild/settings.json`, produced by the settings resolver — `scripts/lib/settings-resolver.ts`).
+The detection + ranking is a pure library, `scripts/lib/provider-detect.ts`,
+which picks **WHO** reviews — never **HOW** they communicate. The packet/result/
+trail contract below is unchanged by provider choice (see
+[Communication contract is provider-invariant](#communication-contract-is-provider-invariant)).
+
+The resolver exposes three calls the broker consumes (consume-only — do not
+re-implement detection in a prompt):
+
+- `detectProviders({ cwd, host })` → `{ authorHost, providers[] }`. Tiered
+  detection (OD-6): a provider is `detected` when its CLI is on PATH and a light
+  version/auth probe passes, **or** a `.guild/hosts/**/capability.json` declares
+  it. A provider is `selectable` for cross-review **only when a real adapter
+  exists**: `codex-plugin` (the `codex:codex-rescue` reference adapter) and
+  `codex-cli` (when authed) are selectable; `gemini-cli` / `pi` / `antigravity`
+  are **detect-only** (NOT selectable) until their adapters ship.
+- `recommendProvider(detection, review)` → `{ recommended, reason }`. **AC-7:**
+  a **Claude author with `codex-plugin` available recommends `codex-plugin`** for
+  `provider=auto`. `provider=auto` **re-detects every run (OD-5)** and never
+  persists — persisting a provider is an explicit `config set
+  review.adversarial.provider …` action only; run provenance (U6) records what
+  was recommended + selected.
+- `selectReviewer(detection, review)` → `{ provider, status, reason }`. This is
+  the **AC-8 false-signoff guard** (see next section). The different-family
+  ranker prefers a **native plugin adapter over an authed CLI** (`codex-plugin` >
+  `codex-cli`).
+
+### AC-8 — same-family review NEVER satisfies `review=cross`
+
+`selectReviewer` enforces the STRONG-independence rule as a **hard predicate**, so
+a same-family reviewer can never be returned as a sign-off:
+
+| Situation | `status` | `provider` |
+|---|---|---|
+| Selectable different-family reviewer available | `selected` | that provider |
+| `authorHost === "unknown"` (cannot prove independence) | `degraded-local` / `skipped` | `null` (**never selected**) |
+| Operator pins a **same-family** provider | `skipped` | `null` (refused — self-review) |
+| Operator pins a **non-selectable** provider (no adapter yet) | `skipped` | `null` (no silent substitution) |
+| Only same-family / detect-only reviewers present | `degraded-local` | `null` (weak/local, labelled, NOT adversarial) |
+| No reviewer at all + `review=cross` | `skipped` | `null` (reason given — **never a false signoff**) |
+| `review=local` / `review=off` | `degraded-local` / `skipped` | `null` |
+
+There is **no code path** that returns `selected` with a same-family provider,
+and **no code path** that returns `selected` when `authorHost === "unknown"`.
+The broker MUST treat a `degraded-local` / `skipped` result as exactly that — a
+weak-or-absent review with a recorded reason — and never up-convert it to a pass.
+
+> **Security note.** The `authorHost: "unknown"` guard closes the hole where
+> `reviewer.family !== "unknown"` would be vacuously true for any provider,
+> yielding a `selected` verdict with zero actual independence guarantee. An unknown
+> author family is a real, safe value — it forces degradation rather than guessing.
+
 ## Transport — v2.0 is filesystem-canonical, co-located
 
 Both hosts run on the **same filesystem**. The broker speaks to the reviewer
@@ -73,6 +129,22 @@ HTTP/MCP — is a documented future seam. The packet/result schema is
 transport-agnostic by design precisely so a remote-pull adapter can slot in
 later behind the same broker. **Do not build the remote path in v2.0.** Bind the
 seam by pointer to the ADR; ship only the co-located FS path.
+
+## Communication contract is provider-invariant (AC-9)
+
+Provider choice picks **WHO** reviews; it does **NOT** fork **HOW** reviewers
+communicate. **Every** provider — `codex-plugin`, `codex-cli`, and any
+future different-family adapter — uses the **same** broker contract, UNCHANGED by
+Unit 4:
+
+- packet: `.guild/runs/<run-id>/review/<gate>/packet-<round>.md`
+- result: `.guild/runs/<run-id>/review/<gate>/result-<round>.json` (`review_result.v1`)
+- trail: `.guild/runs/<run-id>/review/<gate>/trail.md`
+
+`scripts/lib/provider-detect.ts` deliberately returns only `{ provider, status,
+reason }` — it carries **no** transport/comms field. The broker remains the
+single owner of the packet/result/trail contract; host chat, `SendMessage`, or
+pane text stay optional decoration. Do not add a per-provider communication path.
 
 ## `review_result.v1` — FROZEN, bind by pointer
 
