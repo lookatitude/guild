@@ -680,7 +680,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 /** Closed-key validation of the `models:` block. Returns reject messages. (ADR §10) */
-function validateModels(m: Record<string, unknown>): string[] {
+export function validateModels(m: Record<string, unknown>): string[] {
   const rejects: string[] = [];
   for (const k of Object.keys(m)) {
     if (!VALID_MODELS_KEYS.has(k)) {
@@ -743,7 +743,7 @@ function validateModels(m: Record<string, unknown>): string[] {
 }
 
 /** Closed-key validation of the `security:` block (D-BYPASS). Returns reject messages. */
-function validateSecurity(s: Record<string, unknown>): string[] {
+export function validateSecurity(s: Record<string, unknown>): string[] {
   const rejects: string[] = [];
   for (const k of Object.keys(s)) {
     if (!VALID_SECURITY_KEYS.has(k)) {
@@ -760,7 +760,7 @@ function validateSecurity(s: Record<string, unknown>): string[] {
 }
 
 /** Closed-key validation of the `secrets_policy:` block (D-SECRETS). Returns reject messages. */
-function validateSecretsPolicy(sp: Record<string, unknown>): string[] {
+export function validateSecretsPolicy(sp: Record<string, unknown>): string[] {
   const rejects: string[] = [];
   for (const k of Object.keys(sp)) {
     if (!VALID_SECRETS_POLICY_KEYS.has(k)) {
@@ -783,7 +783,7 @@ function validateSecretsPolicy(sp: Record<string, unknown>): string[] {
 }
 
 /** Closed-key validation of the `mcp:` block (D-MCP). Returns reject messages. */
-function validateMcp(m: Record<string, unknown>): string[] {
+export function validateMcp(m: Record<string, unknown>): string[] {
   const rejects: string[] = [];
   for (const k of Object.keys(m)) {
     if (!VALID_MCP_KEYS.has(k)) {
@@ -800,7 +800,7 @@ function validateMcp(m: Record<string, unknown>): string[] {
  * Closed-key validation of the `defaults.cross_host` block (cross-host ADR CR-1/CH-1).
  * Returns reject messages. SECURITY: validates that only address/port/user are present.
  */
-function validateCrossHostBlock(ch: Record<string, unknown>): string[] {
+export function validateCrossHostBlock(ch: Record<string, unknown>): string[] {
   const rejects: string[] = [];
   const ALLOWED_CH = new Set(["enabled", "hosts"]);
   for (const k of Object.keys(ch)) {
@@ -869,7 +869,7 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
 ]);
 
 /** Closed-key validation of the `defaults:` block. Returns reject messages. */
-function validateDefaults(d: Record<string, unknown>, selfBuild: boolean): string[] {
+export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean): string[] {
   const rejects: string[] = [];
   for (const k of Object.keys(d)) {
     if (!DEFAULTS_ALLOWED_KEYS.has(k)) rejects.push(`unknown defaults key "${k}" (closed key set — a typo must surface)`);
@@ -1256,4 +1256,9 @@ function main(): void {
   process.stdout.write(JSON.stringify(output, null, 2) + "\n");
 }
 
-main();
+// Only run the CLI when executed directly — NOT when imported. config-cmd.ts imports the
+// exported validators; without this guard the import would run main(), parse the importer's
+// argv, and pollute its stdout. Matches the require.main===module pattern used across scripts/.
+if (require.main === module) {
+  main();
+}
