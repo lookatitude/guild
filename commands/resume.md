@@ -31,6 +31,25 @@ gate.
 
 Continues the active run's phase artifacts (no new artifact kind introduced).
 
+## Run-start preflight (settings-control-and-tmux U3/U6)
+
+Before locating the next pending gate — run the preflight
+(`scripts/lib/runstart-preflight.ts`; canonical contract in `guild.md
+§Run-start preflight`):
+
+1. Call `runStartPreflight({ cwd, flags? })` — resolves the 7-source
+   inheritance chain + validates + probes tmux + detects providers
+   (full chain: see `/guild:guild §Run-start preflight`).
+2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
+   `config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   on NO continue with the resolved backend.
+3. `resume` continues an existing run: the snapshot for the active run is
+   already on disk (written at the original run-start). Read it back with
+   `readResolvedSettingsSnapshot(runId, { cwd })` rather than overwriting it.
+   The preflight result is used only for the tmux/provider check — it does not
+   replace the locked-in snapshot for the resumed run.
+4. Proceed to gate continuation.
+
 ## Dispatch
 
 Thin orchestrator-continue entrypoint. Locate the next pending gate

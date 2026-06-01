@@ -61,6 +61,22 @@ pointer).
 `.guild/runs/<run-id>/quality/<run-id>.md` (frozen `guild.quality.v1`;
 evidence under `quality/evidence/`).
 
+## Run-start preflight (settings-control-and-tmux U3/U6)
+
+Before the quality skill is invoked — and before run-trace start — run the
+preflight (`scripts/lib/runstart-preflight.ts`; canonical contract in
+`guild.md §Run-start preflight`):
+
+1. Call `runStartPreflight({ cwd, flags? })` — resolves the 7-source
+   inheritance chain + validates + probes tmux + detects providers
+   (full chain: see `/guild:guild §Run-start preflight`).
+2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
+   `config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   on NO continue with the resolved backend.
+3. Pass `result.snapshot` to `startRun` (U6 writes the resolved-settings
+   snapshot; all later phases read it back via `readResolvedSettingsSnapshot`).
+4. Proceed to run-trace start.
+
 ## Run recording
 
 Before the quality skill is invoked, start a run (SC-B, §435):

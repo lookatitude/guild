@@ -83,11 +83,40 @@ test -f .guild/settings.json || npx tsx scripts/read-guild-config.ts --scaffold 
 ```
 
 It is written with every option = its default + a self-documenting `_help`
-block. CLI flags always override it (precedence ladder
-`command-surface.md §4.3/§4.4`). Re-generate or inspect any time with
-`/guild:config init|show|validate`. If a legacy `.guild/config.yml` is
-present, run `/guild:migrate` to convert it to `settings.json` — `config.yml`
-is not read at runtime in v2 (the back-compat reader was removed in v2.0).
+block. CLI flags always override it. Full 7-source resolution precedence
+(lowest to highest): `builtin < workspace < workspace-local < project <
+project-local < rigor < CLI` (`command-surface.md §4.3/§4.4`; `config.md`
+inheritance chain). The scaffold writes the project layer only
+(`<cwd>/.guild/settings.json`); workspace-level keys from the root
+`.guild/settings.json` are inherited automatically at runtime — Init does NOT
+copy or merge them into the child file (preserving workspace-inherits-unless-overridden
+semantics, OD-2).
+
+Re-generate or inspect any time with `/guild:config init|show|validate`. If a
+legacy `.guild/config.yml` is present, run `/guild:migrate` to convert it to
+`settings.json` — `config.yml` is not read at runtime in v2 (the back-compat
+reader was removed in v2.0).
+
+## Run-start preflight (settings-control-and-tmux U3/U6)
+
+Before any `.guild/` inspection — and before run-trace start — run the
+preflight (`scripts/lib/runstart-preflight.ts`; canonical contract in
+`guild.md §Run-start preflight`):
+
+1. Call `runStartPreflight({ cwd, flags? })` — resolves the 7-source
+   inheritance chain + validates + probes tmux + detects providers
+   (full chain: see `/guild:guild §Run-start preflight`).
+2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
+   `config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   on NO continue with the resolved backend.
+3. Pass `result.snapshot` to `startRun` — U6 writes
+   `.guild/runs/<id>/resolved-settings.json` + `settings_ref` in `run.yaml`.
+4. Proceed to run-trace start.
+
+Note: the config scaffold step (below) writes the project settings layer only —
+it runs AFTER the preflight so that a freshly created `settings.json` is
+available to subsequent phases, but the preflight itself uses whatever is
+already on disk (or inherited from the workspace root).
 
 ## Run recording
 

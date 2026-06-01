@@ -1,16 +1,17 @@
 ---
 name: config
-description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config. CLI flags always override settings.json (precedence: CLI flag > --rigor profile > settings.json > built-in). Canonical schema: architecture/command-surface.md §4.4."
-argument-hint: "<init|set|show|validate|providers> [--cwd <repo-root>] [--force]"
+description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config. CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Canonical schema: architecture/command-surface.md §4.4."
+argument-hint: "<init|set|show|validate> [--cwd <repo-root>] [--force]"
 allowed-tools: Read, Write, Bash
 ---
 
 # /guild:config — project config surface (`.guild/settings.json`)
 
 `.guild/settings.json` is the single v2 config file. It carries every Guild
-option; **CLI flags always override it** (precedence ladder
-`CLI flag > --rigor profile > settings.json > built-in default`,
-`architecture/command-surface.md §4.3/§4.4`). It replaces the v1
+option; **CLI flags always override it** (full 7-source precedence ladder,
+lowest to highest: `builtin < workspace < workspace-local < project <
+project-local < rigor < CLI`; `architecture/command-surface.md §4.3/§4.4`).
+It replaces the v1
 `.guild/config.yml`; **the runtime `config.yml` reader was removed in v2.0** —
 `config.yml` is never read at runtime. To convert an old `config.yml`, run
 `/guild:migrate`. The schema is closed-key: unknown `defaults.*` keys are
@@ -55,17 +56,29 @@ npx tsx scripts/config-cmd.ts set <key> <value> --scope workspace|project|local 
 
 | `--scope` | Target file | When to use |
 |---|---|---|
-| `workspace` | workspace-root `.guild/settings.json` | Keys that should cascade to all child projects via the 5-layer chain (OD-2). Workspace root is discovered by walking up from `--cwd` to the nearest ancestor with `.guild/workspace.json` (`is_workspace: true`). |
+| `workspace` | workspace-root `.guild/settings.json` | Keys that should cascade to all child projects via the 7-source chain (OD-2). Workspace root is discovered by walking up from `--cwd` to the nearest ancestor with `.guild/workspace.json` (`is_workspace: true`). Most keys inherit; `workspace.mode` and `initiative_default` do **not** inherit workspace→child (non-inheritable keys — see inheritance note below). |
 | `project` | `<cwd>/.guild/settings.json` | Keys specific to this project only. |
 | `local` | `<cwd>/.guild/settings.local.json` | Local developer overrides (gitignored). |
 
 Inheritance chain (lowest to highest precedence):
 ```
-built-in < workspace settings < workspace local < project settings < project local < CLI flags
+builtin < workspace < workspace-local < project < project-local < rigor < CLI
 ```
-A workspace-scoped key (`--scope workspace`) applies to all child projects unless
+(`rigor` is the `--rigor` profile expansion step between project-local and CLI;
+these are the exact `Source` enum values from `scripts/lib/settings-resolver.ts`.)
+
+A workspace-scoped key (`--scope workspace`) cascades to all child projects unless
 a child explicitly overrides it. Child files always win over workspace files for
 the same key.
+
+**Non-inheritable keys.** Two keys do NOT inherit workspace→child:
+- `workspace.mode` — root workspace detection only; a child cannot mutate the
+  parent manifest by setting this key.
+- `initiative_default` — does not inherit workspace→child, unconditionally. It is
+  stripped by `NON_INHERITABLE_KEYS` in the resolver regardless of scope; child
+  runs are never silently attached to a parent workspace's initiative.
+
+All other keys in the closed key-set inherit normally down the chain.
 
 **Dotted key paths** are supported for nested settings:
 
@@ -81,8 +94,9 @@ a clear error message (OD-4 minimal-churn: no new keys, only known keys allowed)
 
 ## `show` — print the resolved config
 
-Resolve built-in defaults < `settings.json` < any flags and print the merged
-JSON (what Guild will actually use this run):
+Resolve the full 7-source chain (`builtin < workspace < workspace-local <
+project < project-local < rigor < CLI`) and print the merged JSON (what
+Guild will actually use this run):
 
 ```bash
 npx tsx scripts/read-guild-config.ts [--cwd <repo-root>] [flags…]
@@ -121,7 +135,7 @@ npx tsx scripts/read-guild-config.ts --validate [--cwd <repo-root>] [--self-buil
 
 ### `validate --effective` — validate the POST-INHERITANCE resolved config
 
-Resolve the full 5-layer chain (workspace + project + local layers) and validate
+Resolve the full 7-source chain (builtin + workspace + workspace-local + project + project-local + rigor + CLI) and validate
 the **merged result** against closed-key rules. This catches violations that only
 appear after inheritance — for example, a workspace settings file that sets
 `defaults.wiki.autopromote: true` will cause a violation in every child project,
@@ -133,12 +147,17 @@ npx tsx scripts/config-cmd.ts validate --effective [--cwd <p>] [--self-build]
 
 Exits 0 on a clean resolved config; exits non-zero listing all violations.
 
-## `providers detect` — detect available review providers
+## `providers detect` — planned followup (not shipped)
 
-(provider detection: U4) — not yet implemented. Will probe available review
-providers (codex-plugin, codex-cli, gemini etc.) and report which are detected,
-which are selectable for `review=cross`, and the recommended provider for the
-current host.
+**Not implemented in the shipped `config-cmd.ts`.** The `config-cmd.ts` script
+accepts only `set`, `show`, and `validate` sub-verbs. Running
+`/guild:config providers detect` will error.
+
+Provider detection is already performed automatically at run-start by
+`runStartPreflight` (U3 — `scripts/lib/runstart-preflight.ts`); the detected
+providers and recommended reviewer are recorded in
+`.guild/runs/<id>/resolved-settings.json`. A standalone `/guild:config providers
+detect` CLI path is a planned followup for U4+.
 
 ## Notes
 

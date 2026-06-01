@@ -22,6 +22,39 @@ each phase command owns its phase; all state lives in `.guild/`.
 /guild:guild                                     ← detect from .guild/ state alone
 ```
 
+## Run-start preflight (settings-control-and-tmux U3/U6)
+
+Before run-trace start — and before any `.guild/` state inspection — run the
+preflight. This is the phase-wide intake step for every `/guild:*` lifecycle
+command (briefing §10; `scripts/lib/runstart-preflight.ts`):
+
+1. **Resolve settings** via `runStartPreflight({ cwd, flags? })` — walks the
+   full 7-source inheritance chain:
+   `builtin < workspace < workspace-local < project < project-local < rigor < CLI`
+   (these are the exact `Source` enum values from the resolver; `rigor` is the
+   `--rigor` profile expansion step that sits between project-local and CLI).
+   Validates closed keys.
+2. **Destructure the result:**
+   ```
+   const { resolved, sources, validation, tmux, needsTmuxPrompt, tmuxPrompt,
+           providers, snapshot } = result;
+   ```
+3. **Tmux prompt (OD-3, operator-confirmed):** if `needsTmuxPrompt` is true
+   (tmux on PATH AND effective `agent_mode !== "team"`):
+   - Show the operator: `tmuxPrompt.question`
+   - On YES: run `npx tsx scripts/config-cmd.ts <...tmuxPrompt.persistCommand>
+     --cwd <cwd>` (U2 HARD-SET path — always-asks under auto-approve).
+   - On NO: continue with the current resolved backend; record the decision.
+4. **Pass `result.snapshot`** to `startRun` (U6 writes
+   `.guild/runs/<id>/resolved-settings.json` + a compact `settings_ref` in
+   `run.yaml`; `resolved_at_ref` is stamped to the run-id at write time).
+5. **Proceed to run-trace start.** All later phases read the snapshot via
+   `readResolvedSettingsSnapshot(runId, { cwd })` rather than re-resolving.
+
+In this workspace, root `agent_mode: "team"` is inherited by all child
+projects after U1 fixes inheritance; `needsTmuxPrompt` will be false on
+every child run once inheritance is in place.
+
 ## Run recording
 
 Before reading `.guild/` state, start a run (SC-B, §435):
@@ -91,9 +124,10 @@ The five surviving global flags (`command-surface.md §4.2`):
 depth per §4.3), `--auto-approve[=spec,plan,build,all]` (opt-in autonomy;
 destructive/network/spend STILL ask even with `all`), `--review=local|cross|off`,
 `--host=claude|codex|auto`, `--initiative=<id>|new`, plus universal
-`--dry-run`. Resolution precedence: **CLI flag > `--rigor` profile >
-`.guild/settings.json` `defaults:` > built-in default**
-(`command-surface.md §4.3`/§4.4).
+`--dry-run`. Resolution precedence (full 7-source chain, lowest to highest):
+`builtin < workspace < workspace-local < project < project-local < rigor < CLI`
+(`command-surface.md §4.3`/§4.4; `config.md` inheritance chain; `rigor` is
+the `--rigor` profile expansion step between project-local and CLI).
 
 **Deleted tuning flags (v1 → v2).** `--loops`, `--loop-cap`, `--codex-cap`
 are **removed from the CLI** — folded into `--rigor` profiles and still

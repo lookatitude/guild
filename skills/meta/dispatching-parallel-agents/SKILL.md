@@ -3,7 +3,7 @@
 # carries derived_from_template for traceability to the canonical base.
 name: dispatching-parallel-agents
 description: "The discipline for dispatching independent specialist lanes in parallel — respect depends-on edges, isolate context, collect handoff receipts, and never parallelize work with ordering or shared-state hazards."
-when_to_use: "During the Development phase when guild:execute-plan has independent lanes whose depends-on graph permits concurrent dispatch (subagent default; agent-team opt-in)."
+when_to_use: "During the Development phase when guild:execute-plan has independent lanes whose depends-on graph permits concurrent dispatch. The backend (team/tmux primary when available; subagent as last resort for CI/no-tmux) is resolved ONCE at command intake by runStartPreflight, frozen in the run's resolved-settings snapshot, and read here via snapshot.effective.agent_mode — not re-decided here (team.yaml only mirrors it for audit)."
 type: meta
 derived_from_template: guild.skill_template.v1
 ---
@@ -12,9 +12,15 @@ derived_from_template: guild.skill_template.v1
 
 Use during Development when the lane plan has two or more lanes whose
 `depends-on:` edges permit concurrent execution. Invoked by
-`guild:execute-plan` to fan out independent lanes (subagent backend default;
-agent-team opt-in) and fan in their handoff receipts. The autonomy posture
-is the `task_run.autonomy_policy` recorded at plan approval (pointer:
+`guild:execute-plan` to fan out independent lanes and fan in their handoff
+receipts. The execution backend (team/tmux primary when available per the D5
+`agent_mode` ladder; subagent only as a last resort for CI or no-tmux hosts)
+is resolved **once** at command intake by `runStartPreflight` (U3) and frozen
+in the run's resolved-settings snapshot (U6); this skill **reads**
+`snapshot.effective.agent_mode` (via `readResolvedSettingsSnapshot`) and does
+not re-decide it. `team.yaml`'s `backend` field is only a composition-time
+mirror for audit, never the authority. The autonomy posture is the
+`task_run.autonomy_policy` recorded at plan approval (pointer:
 `contract-map.md §A` row 1).
 
 # When not to use it
@@ -29,8 +35,11 @@ for the plan — it dispatches an approved plan, it does not author one.
 - The approved lane plan with per-lane `task-id`, `owner`, `depends-on:`,
   `scope`, `success-criteria`, `autonomy-policy`.
 - The recorded `task_run.autonomy_policy` (pointer, not re-spelled).
-- The backend selection (subagent default; agent-team iff approved + tmux
-  available).
+- The settings-resolved backend from the run's resolved-settings snapshot
+  (`snapshot.effective.agent_mode`, read via `readResolvedSettingsSnapshot`) —
+  team/tmux primary when available per the D5 ladder; resolved once at command
+  intake by `runStartPreflight`, not re-decided here. (`team.yaml`'s `backend`
+  is a mirror for audit only, not the source.)
 - Per-lane assembled context bundles (`guild:context-assemble`).
 
 # Output format
@@ -70,8 +79,13 @@ hard set fires regardless of autonomy policy.
 Never parallelize lanes with ordering or shared-state hazards. The
 always-ask hard set (destructive/network/spend) is unconditional and never
 relaxed by an autonomy contract or `--auto-approve`. All writes confined to
-the consuming repo's `.guild/` (DH-3 boundary). Agent-team backend only when
-explicitly approved and tmux is available (else subagent fallback).
+the consuming repo's `.guild/` (DH-3 boundary). The backend comes from the
+run's resolved-settings snapshot (`snapshot.effective.agent_mode`), resolved
+once at intake by `runStartPreflight` per the D5 `agent_mode` ladder —
+team/tmux is primary when available; subagent is the fallback for CI or
+no-tmux hosts only. This skill dispatches on whichever backend the snapshot
+carries; it never overrides, re-negotiates, or re-reads it from `team.yaml`
+(whose `backend` is a mirror for audit only).
 
 # Eval cases
 

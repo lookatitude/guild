@@ -30,6 +30,25 @@ None — **R** (read-only).
 
 Prints state (no file written).
 
+## Run-start preflight (settings-control-and-tmux U3/U6)
+
+At the very top — before any filesystem scan and before the lightweight
+run-trace — run the preflight (`scripts/lib/runstart-preflight.ts`; canonical
+contract in `guild.md §Run-start preflight`):
+
+1. Call `runStartPreflight({ cwd, flags? })` — resolves the 7-source
+   inheritance chain + validates + probes tmux + detects providers
+   (full chain: see `/guild:guild §Run-start preflight`).
+2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
+   `config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   on NO continue with the resolved backend.
+3. `status` uses the lightweight run-trace path (not `startRun`); pass
+   `result.snapshot` to the lightweight recorder if/when the lightweight path
+   supports it — otherwise this step is a no-op for `status` (the snapshot is
+   not written for lightweight runs). The preflight still fires so the tmux
+   prompt and provider detection are consistent with other commands.
+4. Proceed to the lightweight run-trace.
+
 ## Run recording
 
 At the very top of the command body — before any filesystem scan — record a

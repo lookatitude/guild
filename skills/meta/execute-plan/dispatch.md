@@ -4,7 +4,7 @@ Detail for `guild:execute-plan`'s `## Backend + routing (summary)` and paralleli
 
 ## Backend choice
 
-Guild supports three execution backends. The choice is **resolved by the `agent_mode` ladder** (ADR D5; `CLAUDE.md §"Backend default"`) at `guild:team-compose` and mirrored into `team.yaml`; `guild:execute-plan` **reads and honors** it — it never re-picks. **Team/agent is primary whenever tmux is present; subagent is the fallback, not the default.**
+Guild supports three execution backends. The choice is **resolved by the `agent_mode` ladder** (ADR D5; `CLAUDE.md §"Backend default"`) **once at run-start intake** by `runStartPreflight` (U3), frozen in the run's resolved-settings snapshot (U6). `guild:execute-plan` **reads it from the snapshot** (`readResolvedSettingsSnapshot` → `snapshot.effective.agent_mode`) and honors it — it never re-picks, and it does not read the backend from `team.yaml` (whose top-level `backend` is only a mirror for audit; `team.yaml` is composition-only). **Team/agent is primary whenever tmux is present; subagent is the fallback, not the default.**
 
 | Backend | Selected when (`agent_mode` resolves to…) | Tradeoff |
 |---|---|---|
@@ -14,12 +14,12 @@ Guild supports three execution backends. The choice is **resolved by the `agent_
 
 Two hard constraints:
 
-- **`agent-team` requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.** When `team.yaml` records `backend: agent-team` (the ladder resolved to `team`), the durable operator approval is the `agent_mode: team|auto` setting itself — no per-run re-prompt. But if `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is not set, **refuse to dispatch and surface the blocker** rather than silently falling back to subagents — falling back would change execution semantics out from under the plan. Invoke `scripts/agent-team-launcher.ts` (below) — it owns the ladder resolution, the env gate, and the tmux strategy.
-- **Always dispatch to the lane's NAMED specialist agent — never `general-purpose`.** Whatever backend `team.yaml` records, route each lane to its `owner_role` agent: for subagents, `subagent_type: <name>` (`backend`, `qa`, `devops`, `architect`, …); for teams, the teammate spawned from that agent definition. The named agent (`agents/<name>.md` or, for self-build, `.claude/agents/<name>.md`) supplies the lane's persona, scoped skills, tool permissions, and TRIGGER/DO-NOT-TRIGGER boundaries; dispatching `general-purpose` discards all of that and is a defect. The name is the lane's `owner_role` from the plan, resolved against `team.yaml`'s agent-definition paths.
+- **`agent-team` requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.** When the snapshot resolves the backend to `agent-team` (the ladder resolved to `team`) and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is not set, **refuse to dispatch and surface the blocker** rather than silently falling back to subagents — falling back would change execution semantics out from under the plan. Invoke `scripts/agent-team-launcher.ts` (below) — it owns the ladder resolution, the env gate, and the tmux strategy. (The tmux **enablement** prompt is not raised here at dispatch — `runStartPreflight` owns it at intake, and it fires **per-run** while tmux is available && effective `agent_mode != "team"` (`needsTmuxPrompt`); a **yes** persists `agent_mode: team` so future runs stop prompting, a **no** persists nothing and may prompt again next run. It is **not** a one-time "durable approval".)
+- **Always dispatch to the lane's NAMED specialist agent — never `general-purpose`.** Whatever the snapshot-resolved backend (`snapshot.effective.agent_mode`), route each lane to its `owner_role` agent: for subagents, `subagent_type: <name>` (`backend`, `qa`, `devops`, `architect`, …); for teams, the teammate spawned from that agent definition. The named agent (`agents/<name>.md` or, for self-build, `.claude/agents/<name>.md`) supplies the lane's persona, scoped skills, tool permissions, and TRIGGER/DO-NOT-TRIGGER boundaries; dispatching `general-purpose` discards all of that and is a defect. The name is the lane's `owner_role` from the plan, resolved against `team.yaml`'s agent-definition paths.
 
 ### In-process dispatchPlan consumption
 
-When `team.yaml` records `backend: in-process` (D5 `agent` rung — `/Users/miguelp/Projects/guild/docs/knowledge/decisions/v2-runtime-and-execution-model.md` §RE-4 / VC-RE-4), the launcher (`InProcessTeamBackend.launch()`) returns `ok:true` with a declarative `dispatchPlan: GuildDispatchDescriptor[]` — one descriptor per specialist. A `TeamBackend` is a plain TypeScript class; it **cannot** call the Agent tool. `guild:execute-plan` consumes `result.dispatchPlan` and issues the Agent tool calls itself:
+When the snapshot-resolved backend is `in-process` (D5 `agent` rung — `/Users/miguelp/Projects/guild/docs/knowledge/decisions/v2-runtime-and-execution-model.md` §RE-4 / VC-RE-4), the launcher (`InProcessTeamBackend.launch()`) returns `ok:true` with a declarative `dispatchPlan: GuildDispatchDescriptor[]` — one descriptor per specialist. A `TeamBackend` is a plain TypeScript class; it **cannot** call the Agent tool. `guild:execute-plan` consumes `result.dispatchPlan` and issues the Agent tool calls itself:
 
 1. **For each descriptor in `result.dispatchPlan`** (in DAG order per `## Parallelism rules`):
    - Resolve tier + model via tier resolution (`model: null` from backend — tiering is orthogonal to backend choice; execute-plan scores and resolves).
@@ -46,7 +46,7 @@ The lane's resolved tier (`guild:execute-plan §"Tier resolution"`; ADR §2) map
 
 ## §task§agent lifecycle at dispatch
 
-Every lane is dispatched as an **ephemeral one-agent-per-task** agent (ADR §6) — spawn → work → extract → dismiss — on whatever backend `team.yaml` records. Concurrent lanes get **distinct** agents (never shared, SC-8); on receipt the agent's `learnings[]` are extracted and the agent terminates (no idle agents persist). This lifecycle is orthogonal to the backend table above: it applies identically whether the backend is team, agent, or subagent. Caches are model-specific, so a tier switch uses a separate agent process — which the per-task lifecycle gives for free (ADR §9).
+Every lane is dispatched as an **ephemeral one-agent-per-task** agent (ADR §6) — spawn → work → extract → dismiss — on whatever backend the run snapshot resolves (`snapshot.effective.agent_mode`). Concurrent lanes get **distinct** agents (never shared, SC-8); on receipt the agent's `learnings[]` are extracted and the agent terminates (no idle agents persist). This lifecycle is orthogonal to the backend table above: it applies identically whether the backend is team, agent, or subagent. Caches are model-specific, so a tier switch uses a separate agent process — which the per-task lifecycle gives for free (ADR §9).
 
 The agent's **final action** in this lifecycle is writing its receipt file — see `## Handoff protocol` below for the single-channel protocol that every brief carries.
 
@@ -160,7 +160,7 @@ When the target repo IS the Guild plugin itself (self-build), `team.yaml` is com
 
 ## Agent-team launcher
 
-When `team.yaml` declares `backend: agent-team` and the opt-in is confirmed, invoke `scripts/agent-team-launcher.ts` to spawn the tmux session — one pane for the orchestrator plus one pane per specialist, with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` exported in each pane. The launcher is the canonical entry point for the agent-team backend; it writes a session manifest to `.guild/runs/<run-id>/agent-team/session.json` and refuses to spawn nested teams per §7.3. Run it once per execute-plan invocation:
+When the snapshot-resolved backend is `agent-team` (the D5 ladder resolved `agent_mode` to `team` at intake; team is primary whenever tmux is present — not an opt-in), invoke `scripts/agent-team-launcher.ts` to spawn the tmux session — one pane for the orchestrator plus one pane per specialist, with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` exported in each pane. The launcher is the canonical entry point for the agent-team backend; it writes a session manifest to `.guild/runs/<run-id>/agent-team/session.json` and refuses to spawn nested teams per §7.3. Run it once per execute-plan invocation:
 
 ```
 scripts/agent-team-launcher.ts --team .guild/team/<slug>.yaml --cwd <repo-root>

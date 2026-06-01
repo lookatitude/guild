@@ -25,7 +25,7 @@ Five ordered steps (`guild-plan.md §7.1`). The gap-handling options and approva
 
 3. **Present to user.** Show the matched existing specialists with one-line reasoning each, and — for every gap — the four options **A · auto-create / B · skip gap / C · substitute / D · compose from scratch** (full semantics, including the v2 DH-3 mint boundary, in `gap-handling.md`).
 
-4. **Write** `.guild/team/<slug>.yaml` with the resolved team — only after the applicable approval shape (see `gap-handling.md`) has cleared — each entry carrying per-specialist scope, cross-specialist dependencies, and the chosen execution backend.
+4. **Write** `.guild/team/<slug>.yaml` with the resolved team — only after the applicable approval shape (see `gap-handling.md`) has cleared — each entry carrying per-specialist scope and cross-specialist dependencies, plus a **mirror** of the snapshot-resolved execution backend (resolved at intake by `runStartPreflight`, not chosen here — see `## Execution backend`).
 
 **Reuse, never re-create** is load-bearing: an existing specialist from *either* source joins with no creation step and no creation approval. Only a gap covered by neither source can become a newly-minted specialist (option A → `guild:create-specialist`), and only with explicit per-role approval.
 
@@ -43,12 +43,18 @@ From `guild-plan.md §7.2`. Non-negotiable; if a user request conflicts, raise i
 
 ## Execution backend
 
-Resolved by the **`agent_mode` dispatch ladder** (`CLAUDE.md §"Backend default — the agent_mode dispatch ladder"`; ADR D5, `docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md`) — **not** a hard-coded subagent default. Read `agent_mode` from `.guild/settings.json` (default `auto`) and resolve via `scripts/agent-team-launcher.ts` (`--dry-run` prints the chosen mode + reason without spawning):
+**`team-compose` does NOT resolve the backend.** The backend is resolved **once at command intake** by `runStartPreflight` (`scripts/lib/runstart-preflight.ts`) — before run-trace start, before `team-compose` is invoked — applying the **`agent_mode` dispatch ladder** (`CLAUDE.md §"Backend default — the agent_mode dispatch ladder"`; ADR D5, `docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md`) and frozen in the run's resolved-settings snapshot (U6). `team-compose` **consumes** `snapshot.effective.agent_mode` (read via `readResolvedSettingsSnapshot`) and **records a mirror** of it in `team.yaml`'s `backend` field for audit/readability — it neither re-reads `.guild/settings.json`, re-runs `scripts/agent-team-launcher.ts`, nor owns the OD-3 operator ask.
+
+For reference, the intake-time ladder `runStartPreflight` applies (you do not re-run it here):
 
 - **`auto` (default):** inside tmux (`$TMUX` set) → **agent-team in-session** (a new window in the current session, **one visible pane per specialist**); tmux installed but not currently inside one → **agent-team new-session** (detached session, then attach); host supports independent agents (no tmux) → **agent**; else → **subagent**.
 - **Explicit pin** (`team | agent | subagent`) is honored subject to availability — pinning `team` on a tmux-less host warns and falls back to subagent.
 
-**Team/agent is PRIMARY whenever tmux is available; subagent is the documented last resort** (CI, fresh installs, no tmux) — never the default on a developer machine. The ladder's selection of agent-team under tmux **is** the operator's durable approval, recorded once as `agent_mode: team` (or left at `auto`) in `.guild/settings.json` — there is **no per-run re-prompt** for the team backend. `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` must be set for any team spawn; if it is absent when the ladder resolved to `team`, the launcher **refuses and surfaces the blocker** (it never silently swaps to subagent — that would change execution semantics out from under the plan). The resolved value is written to `team.yaml`'s top-level `backend`, authoritative for `guild:plan` and `guild:execute-plan`.
+**Team/agent is PRIMARY whenever tmux is available; subagent is the documented last resort** (CI, fresh installs, no tmux) — never the default on a developer machine.
+
+The tmux prompt is **evaluated every run**, not once-and-never-again. Ground truth (`runStartPreflight`): `needsTmuxPrompt = tmuxAvailable && effective agent_mode !== "team"`. So while `agent_mode` is anything other than `team` (including `auto`), and tmux is available, **each run** surfaces the question. On **yes**, `agent_mode: "team"` is persisted via `config-cmd set agent_mode team --scope workspace` (U2 HARD-SET path) — so subsequent runs resolve `team` and the prompt no longer fires. On **no**, nothing is persisted, so the next run prompts again. In this workspace the root is already `team`, so the predicate is false and the prompt stays silent.
+
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` must be set for any team spawn; if it is absent when the resolved backend is `team`, the launcher **refuses and surfaces the blocker** (it never silently swaps to subagent — that would change execution semantics out from under the plan). `team.yaml`'s top-level `backend` is a **mirror** of the snapshot-resolved value for readability/audit — it is **not** the backend authority. The authoritative backend for `guild:plan` and `guild:execute-plan` is the run's resolved-settings snapshot (`snapshot.effective.agent_mode`, written by U6); `team.yaml` remains authoritative for team **composition** (roster, scope, dependencies, tiers, agent-definition paths), not the backend selection.
 
 ## Output contract
 
@@ -56,7 +62,7 @@ Write `.guild/team/<slug>.yaml`. Full annotated schema + per-field semantics in 
 
 ```yaml
 spec: .guild/spec/<slug>.md
-backend: agent-team        # resolved by the agent_mode ladder (auto→team under tmux); subagent only as fallback
+backend: agent-team        # MIRROR of the snapshot-resolved backend (snapshot.effective.agent_mode) for audit; NOT the authority — execute-plan reads the snapshot
 allow_larger: false        # true only if user passed --allow-larger
 specialists:
   - name: architect        # exact roster slug

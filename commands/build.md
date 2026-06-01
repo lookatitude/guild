@@ -1,6 +1,6 @@
 ---
 name: build
-description: "Development — context-assemble + dispatch lanes (subagent default; agent-team opt-in)"
+description: "Development — context-assemble + dispatch lanes. Backend (agent_mode/tmux) is resolved once at intake via the run-start preflight snapshot — not selected per-phase. Snapshot effective.agent_mode drives lane dispatch (team / agent / subagent)."
 argument-hint: "[lane-id]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
@@ -8,8 +8,11 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestio
 # /guild:build — phase: Development
 
 The **Development** phase entrypoint. Assembles per-specialist context and
-dispatches lanes (subagent backend default; agent-team opt-in). An optional
-positional `[lane-id]` re-runs a single lane.
+dispatches lanes. The backend (`agent_mode`) is resolved once at command
+intake via the run-start preflight snapshot — it is not selected per-phase.
+`snapshot.effective.agent_mode` (team / agent / subagent) drives lane
+dispatch; `execute-plan` reads it from the locked-in snapshot rather than
+re-resolving. An optional positional `[lane-id]` re-runs a single lane.
 
 Canonical surface: `architecture/command-surface.md §3.1` (Development row)
 and the verb↔phase edge in `§6` (D-14: `/guild:build` → Development). Phase
@@ -52,6 +55,27 @@ pointer).
 
 `.guild/runs/<run-id>/handoffs/*.md`, `assumptions.md`, changed files.
 
+## Run-start preflight (settings-control-and-tmux U3/U6)
+
+Before context-assemble begins for the first lane — and before run-trace
+start — run the preflight (`scripts/lib/runstart-preflight.ts`; canonical
+contract in `guild.md §Run-start preflight`):
+
+1. Call `runStartPreflight({ cwd, flags? })` — resolves the 7-source
+   inheritance chain + validates + probes tmux + detects providers
+   (full chain: see `/guild:guild §Run-start preflight`).
+2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
+   `config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   on NO continue with the resolved backend.
+3. Pass `result.snapshot` to `startRun` — U6 writes
+   `.guild/runs/<id>/resolved-settings.json` + `settings_ref` in `run.yaml`.
+4. Proceed to run-trace start.
+
+**Backend selection is phase-wide, not phase-local.** `execute-plan` reads
+`snapshot.effective.agent_mode` via `readResolvedSettingsSnapshot(runId,
+{ cwd })` to determine the dispatch mode (team / agent / subagent). It does
+not re-resolve settings or re-select the backend mid-run.
+
 ## Run recording
 
 Before context-assemble begins for the first lane, start a run (SC-B, §435):
@@ -77,8 +101,10 @@ where `depends-on:` allows; `[lane-id]` re-runs one), invoke in order:
 1. **`guild:context-assemble`** (`skills/meta/context-assemble`) — build the
    specialist's 3-layer context bundle (~3k tokens, hard cap 6k).
 2. **`guild:execute-plan`** (`skills/meta/execute-plan`) — dispatch the
-   specialist (subagent default; agent-team opt-in) and collect the handoff
-   receipt at `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`.
+   specialist using the backend locked in at intake
+   (`snapshot.effective.agent_mode` from `readResolvedSettingsSnapshot`) and
+   collect the handoff receipt at
+   `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`.
 3. **`guild:review`** (`skills/meta/review`) — two-stage per-lane review
    (spec-compliance, then quality) of the handoff receipt; writes
    `.guild/runs/<run-id>/review.md`.

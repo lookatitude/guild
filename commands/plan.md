@@ -1,6 +1,6 @@
 ---
 name: plan
-description: "Planning — team-compose + PRD + per-specialist lane plan + autonomy contract"
+description: "Planning — team-compose + PRD + per-specialist lane plan + autonomy contract. Backend (agent_mode/tmux) is resolved once at intake from the run-start preflight snapshot — not selected per-phase."
 argument-hint: "[--team-size=N]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
@@ -57,6 +57,28 @@ pointer).
 ## Output artifact
 
 `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md`, `.guild/team/<slug>.yaml`.
+
+## Run-start preflight (settings-control-and-tmux U3/U6)
+
+Before team-compose begins — and before run-trace start — run the preflight
+(`scripts/lib/runstart-preflight.ts`; canonical contract in `guild.md
+§Run-start preflight`):
+
+1. Call `runStartPreflight({ cwd, flags? })` — resolves the 7-source
+   inheritance chain + validates + probes tmux + detects providers
+   (full chain: see `/guild:guild §Run-start preflight`).
+2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
+   `config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   on NO continue with the resolved backend.
+3. Pass `result.snapshot` to `startRun` — U6 writes
+   `.guild/runs/<id>/resolved-settings.json` + `settings_ref` in `run.yaml`.
+4. Proceed to run-trace start.
+
+**Backend selection is phase-wide, not phase-local.** The `agent_mode`
+(subagent / agent / team) resolved at intake is locked in the snapshot and
+consumed by all phases. `team-compose` and `execute-plan` read the locked-in
+`snapshot.effective.agent_mode` via `readResolvedSettingsSnapshot(runId,
+{ cwd })` — they do not re-resolve or re-select the backend.
 
 ## Run recording
 
