@@ -40,6 +40,7 @@ import * as fsNode from "fs";
 import * as path from "path";
 import type { HostKind } from "./host-types";
 import { resolveSettings } from "./settings-resolver";
+import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
 
 // ── Injected seams (B1 §4) ───────────────────────────────────────────────────
 
@@ -117,6 +118,13 @@ export interface StartRunOpts {
   phase?: string | null;
   /** "full" (default) or "lightweight" (OQ6 status variant — §5). */
   run_class?: RunClass;
+  /**
+   * U6 — Optional resolved-settings snapshot produced by runStartPreflight (U3).
+   * When provided, startRun writes .guild/runs/<id>/resolved-settings.json and
+   * adds a compact settings_ref block to run.yaml. When absent, behavior is
+   * unchanged (back-compat — existing runs and tests stay green).
+   */
+  snapshot?: ResolvedSettingsSnapshot;
 }
 
 /** What closeRun records into provenance.json (caller assembles touched-facts). */
@@ -223,6 +231,9 @@ function provenancePath(root: string, runId: string): string {
 }
 function logsDir(root: string, runId: string): string {
   return path.join(runDir(root, runId), "logs");
+}
+function resolvedSettingsPath(root: string, runId: string): string {
+  return path.join(runDir(root, runId), "resolved-settings.json");
 }
 function sentinelPath(root: string): string {
   // Canonical sentinel location: .guild/runs/current-run-id.
@@ -335,7 +346,7 @@ function buildRunManifest(opts: StartRunOpts, runId: string, env: RunLifecycleEn
 
   const phase = opts.phase ?? null;
 
-  return {
+  const manifest: Record<string, unknown> = {
     schema_version: "guild.run.v1",
     run_id: runId,
     command: opts.command,
@@ -358,6 +369,21 @@ function buildRunManifest(opts: StartRunOpts, runId: string, env: RunLifecycleEn
       ? [{ phase, at: env.now() }]
       : [],
   };
+
+  // U6: compact settings_ref when snapshot is provided. This is an audit pointer
+  // to the resolved-settings.json written alongside run.yaml. Mid-run consumers
+  // read the full JSON; this block gives a quick at-a-glance summary.
+  if (opts.snapshot) {
+    manifest["settings_ref"] = {
+      path: "resolved-settings.json",
+      schema_version: opts.snapshot.schema_version,
+      effective_backend: opts.snapshot.effective.agent_mode,
+      review: opts.snapshot.effective.review,
+      recommended_provider: opts.snapshot.providers.recommended,
+    };
+  }
+
+  return manifest;
 }
 
 // ── closeRun helpers ─────────────────────────────────────────────────────────
@@ -425,6 +451,17 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       // logs/ dir (mkdirp also ensures runs/<id>/ exists). NN#5: we touch ONLY
       // .guild/runs/<id>/ — never .guild/initiatives/.
       env.fs.mkdirp(logsDir(root, runId));
+
+      // U6: write resolved-settings.json BEFORE run.yaml so the file is on disk
+      // before any consumer might read it. When no snapshot, skip (back-compat).
+      if (opts.snapshot) {
+        writeResolvedSettingsSnapshot(runId, opts.snapshot, {
+          cwd: root,
+          fs: env.fs,
+          // Use the run-id as the resolved_at_ref (deterministic, no Date.now).
+          resolvedAtRef: runId,
+        });
+      }
 
       // run.yaml (guild.run.v1) — the single start manifest.
       const manifest = buildRunManifest(opts, runId, env);
@@ -545,6 +582,165 @@ export function createRealEnv(
     __rootHint: root,
   };
   return env;
+}
+
+// ── U6 — Run-provenance helpers ───────────────────────────────────────────────
+
+/**
+ * Validate that a runId is safe to use as a single directory-name component
+ * inside .guild/runs/. Mirrors the identical check in promote-upstream.ts
+ * (validateRunId) — any change here should be reflected there and vice versa.
+ *
+ * Rejects: empty/whitespace, NUL byte, absolute path prefix, path separators
+ * (/ or \), lone ".", ".." prefix, or any occurrence of "..".
+ *
+ * Returns true iff the runId is safe.
+ */
+export function validateRunId(runId: string): boolean {
+  if (!runId || !runId.trim()) return false;
+  if (runId.includes("\x00")) return false;
+  if (runId.startsWith("/") || runId.startsWith("\\")) return false;
+  if (runId.includes("/") || runId.includes("\\")) return false;
+  if (runId === ".") return false;
+  if (runId === ".." || runId.startsWith("..")) return false;
+  if (runId.includes("..")) return false;
+  return true;
+}
+
+/**
+ * Assert that `target` is a strict subdirectory of `base` (i.e. starts with
+ * `base + path.sep`). Mirrors the containment assertion in promote-upstream.ts.
+ * Throws with a clear message on violation.
+ */
+function assertContained(target: string, base: string, label: string): void {
+  const resolvedTarget = path.resolve(target);
+  const resolvedBase = path.resolve(base);
+  if (!resolvedTarget.startsWith(resolvedBase + path.sep)) {
+    throw new Error(
+      `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" escapes runs base "${resolvedBase}"`
+    );
+  }
+}
+
+/**
+ * Minimal fs surface accepted by writeResolvedSettingsSnapshot and
+ * readResolvedSettingsSnapshot. Callers may pass the RunLifecycleEnv.fs seam
+ * (in-memory for tests) or omit it to use the real node fs.
+ */
+export interface ProvenanceFsSeam {
+  writeFile(absPath: string, contents: string): void;
+  readFile(absPath: string): string | null;
+}
+
+/** Real-fs implementation of ProvenanceFsSeam (used when no seam is injected). */
+function realProvenanceFsSeam(): ProvenanceFsSeam {
+  return {
+    writeFile(absPath: string, contents: string): void {
+      fsNode.mkdirSync(path.dirname(absPath), { recursive: true });
+      fsNode.writeFileSync(absPath, contents, "utf8");
+    },
+    readFile(absPath: string): string | null {
+      try {
+        return fsNode.readFileSync(absPath, "utf8");
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
+/**
+ * Options for writeResolvedSettingsSnapshot.
+ * `cwd` is the project/workspace root (the .guild/ write base).
+ * `fs`  is an optional injected fs seam; defaults to real node fs.
+ * `resolvedAtRef` is the ref to stamp into resolved_at_ref; defaults to the
+ *   runId — this keeps the function deterministic and Date.now-free.
+ */
+export interface WriteSnapshotOpts {
+  cwd: string;
+  fs?: ProvenanceFsSeam;
+  resolvedAtRef?: string;
+}
+
+/**
+ * Persist the ResolvedSettingsSnapshot to .guild/runs/<runId>/resolved-settings.json.
+ *
+ * - Sets resolved_at_ref to the passed `resolvedAtRef` (or the runId when omitted).
+ * - Does NOT mutate the input snapshot.
+ * - Returns the absolute path written.
+ *
+ * U6 contract: the orchestrator calls runStartPreflight (U3) to get the snapshot,
+ * then passes result.snapshot to startRun (or calls writeResolvedSettingsSnapshot
+ * directly). The resolvedAtRef is stamped here so U3 stays Date.now-free.
+ */
+export function writeResolvedSettingsSnapshot(
+  runId: string,
+  snapshot: ResolvedSettingsSnapshot,
+  opts: WriteSnapshotOpts
+): string {
+  if (!validateRunId(runId)) {
+    throw new Error(
+      `[run-lifecycle] writeResolvedSettingsSnapshot: invalid runId ${JSON.stringify(runId)} — ` +
+        `must be a non-empty single path component with no separators, no "..", not ".", not absolute`
+    );
+  }
+  const { cwd, fs: fsSeam, resolvedAtRef } = opts;
+  const fs = fsSeam ?? realProvenanceFsSeam();
+  const outPath = resolvedSettingsPath(cwd, runId);
+
+  // Containment assertion: outPath must be a strict subdir of .guild/runs/.
+  // Catches any edge case that slips past validateRunId on unusual platforms.
+  const runsBase = path.resolve(cwd, ".guild", "runs");
+  assertContained(outPath, runsBase, "writeResolvedSettingsSnapshot");
+
+  // Build the on-disk record — resolved_at_ref is set here, not in U3.
+  // We shallow-spread to avoid mutating the caller's snapshot.
+  // resolved_at_ref is declared `null` in the pre-write interface (U3 contract:
+  // the field is null until U6 fills it in). We override it on write via a cast;
+  // the JSON on disk has the real string value.
+  const onDisk = {
+    ...snapshot,
+    resolved_at_ref: (resolvedAtRef ?? runId) as unknown as null,
+  } satisfies ResolvedSettingsSnapshot;
+
+  fs.writeFile(outPath, JSON.stringify(onDisk, null, 2) + "\n");
+  return outPath;
+}
+
+/**
+ * Read back the ResolvedSettingsSnapshot for a run. Returns null when the file
+ * does not exist or is not valid JSON (default-safe — mid-run consumers degrade
+ * gracefully rather than crashing on missing provenance).
+ *
+ * AC-10 consumer contract: phase skills call this when CONTINUING a run so
+ * mid-run config edits don't silently change behavior. The snapshot was locked
+ * in at startRun; this read-back restores it.
+ */
+export function readResolvedSettingsSnapshot(
+  runId: string,
+  opts: { cwd: string; fs?: ProvenanceFsSeam }
+): ResolvedSettingsSnapshot | null {
+  if (!validateRunId(runId)) return null;
+  const { cwd, fs: fsSeam } = opts;
+  const fs = fsSeam ?? realProvenanceFsSeam();
+  const filePath = resolvedSettingsPath(cwd, runId);
+
+  // Containment assertion: filePath must be a strict subdir of .guild/runs/.
+  // Return null rather than throwing — read callers degrade gracefully.
+  const runsBase = path.resolve(cwd, ".guild", "runs");
+  try {
+    assertContained(filePath, runsBase, "readResolvedSettingsSnapshot");
+  } catch {
+    return null;
+  }
+
+  const raw = fs.readFile(filePath);
+  if (raw === null) return null;
+  try {
+    return JSON.parse(raw) as ResolvedSettingsSnapshot;
+  } catch {
+    return null;
+  }
 }
 
 // ── SC-D workspace-knowledge config reader (B1 §3 schema delta) ──────────────
