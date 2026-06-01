@@ -8,22 +8,29 @@
  *   npx tsx scripts/config-cmd.ts set <key> <value> --scope workspace|project|local [--cwd <p>]
  *   npx tsx scripts/config-cmd.ts show --sources [--cwd <p>]
  *   npx tsx scripts/config-cmd.ts validate --effective [--cwd <p>]
+ *   npx tsx scripts/config-cmd.ts providers detect [--cwd <p>]
  *
  * Subcommands:
- *   set         Hard-set write: reads the target file, merges the key at the given
- *               dotted path, and writes back. Validates the FULL dotted path and
- *               value type before writing. Refuses unknown keys at every segment.
- *               Scalar TIER1 keys (rigor, review, …) reject any sub-path.
- *               Preserves _help and all unrelated keys (read-modify-write).
- *               Fails CLOSED if the existing file has malformed JSON.
- *               Prints exactly what was written and to which file.
+ *   set            Hard-set write: reads the target file, merges the key at the given
+ *                  dotted path, and writes back. Validates the FULL dotted path and
+ *                  value type before writing. Refuses unknown keys at every segment.
+ *                  Scalar TIER1 keys (rigor, review, …) reject any sub-path.
+ *                  Preserves _help and all unrelated keys (read-modify-write).
+ *                  Fails CLOSED if the existing file has malformed JSON.
+ *                  Prints exactly what was written and to which file.
  *
- *   show        Print resolved key→value with per-key Source annotation.
- *               --sources is required.
+ *   show           Print resolved key→value with per-key Source annotation.
+ *                  --sources is required.
  *
- *   validate    Validate the POST-INHERITANCE resolved config against the FULL
- *               closed-key/value validators imported from read-guild-config.ts
- *               (single source of truth — no drift). --effective is required.
+ *   validate       Validate the POST-INHERITANCE resolved config against the FULL
+ *                  closed-key/value validators imported from read-guild-config.ts
+ *                  (single source of truth — no drift). --effective is required.
+ *
+ *   providers      Sub-group for provider management.
+ *     detect       Detect available review providers and print a human-readable
+ *                  table: author host family, each provider's detected/authed/selectable
+ *                  state, and the recommended cross-review provider + reason.
+ *                  READ-ONLY (no writes). Exits 0 on success; 2 on bad --cwd.
  *
  * Scope semantics (--scope):
  *   workspace   Writes workspace-root .guild/settings.json. Workspace root is
@@ -32,7 +39,6 @@
  *   local       Writes <cwd>/.guild/settings.local.json.
  *
  * OD-4 (minimal-churn): no schema flatten.
- * providers detect: (provider detection: U4) — not yet implemented.
  */
 
 import * as fs from "fs";
@@ -48,6 +54,13 @@ import {
   validateCrossHostBlock,
   validateDefaults,
 } from "./read-guild-config";
+import {
+  detectProviders,
+  recommendProvider,
+  defaultProbeEnv,
+  type ProbeEnv,
+  type ResolvedReview,
+} from "./lib/provider-detect";
 
 // ---------------------------------------------------------------------------
 // Prototype-pollution guard
@@ -628,7 +641,9 @@ function validateResolved(config: Record<string, unknown>, selfBuild = false): s
 // ---------------------------------------------------------------------------
 
 interface ParsedArgs {
-  subcommand: "set" | "show" | "validate";
+  subcommand: "set" | "show" | "validate" | "providers";
+  /** For subcommand=providers: the sub-verb (e.g. "detect"). */
+  providersVerb?: string;
   key?: string;
   rawValue?: string;
   scope?: "workspace" | "project" | "local";
@@ -643,16 +658,17 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   if (args.length === 0) {
     return {
       error:
-        "Usage: config-cmd.ts <set|show|validate> [options...]\n" +
+        "Usage: config-cmd.ts <set|show|validate|providers> [options...]\n" +
         "  set <key> <value> --scope workspace|project|local [--cwd <p>]\n" +
         "  show --sources [--cwd <p>]\n" +
-        "  validate --effective [--cwd <p>]",
+        "  validate --effective [--cwd <p>]\n" +
+        "  providers detect [--cwd <p>]",
     };
   }
 
   const sub = args[0];
-  if (sub !== "set" && sub !== "show" && sub !== "validate") {
-    return { error: `unknown subcommand "${sub}" — expected: set, show, validate` };
+  if (sub !== "set" && sub !== "show" && sub !== "validate" && sub !== "providers") {
+    return { error: `unknown subcommand "${sub}" — expected: set, show, validate, providers` };
   }
 
   let key: string | undefined;
@@ -662,9 +678,24 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   let showSources = false;
   let validateEffective = false;
   let selfBuild = false;
+  let providersVerb: string | undefined;
 
+  // For `providers`, the second positional is the sub-verb (e.g. "detect")
+  if (sub === "providers") {
+    if (args[1] && !args[1].startsWith("--")) {
+      providersVerb = args[1];
+      if (providersVerb !== "detect") {
+        return { error: `unknown providers sub-verb "${providersVerb}" — expected: detect` };
+      }
+    } else {
+      return { error: 'providers requires a sub-verb — expected: providers detect [--cwd <p>]' };
+    }
+  }
+
+  // Parse flags from the rest of the args (skip the sub-verb for providers)
+  const flagStart = sub === "providers" ? 2 : 1;
   const positionals: string[] = [];
-  for (let i = 1; i < args.length; i++) {
+  for (let i = flagStart; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--sources") {
       showSources = true;
@@ -703,7 +734,17 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     }
   }
 
-  return { subcommand: sub, key, rawValue, scope, cwd, showSources, validateEffective, selfBuild };
+  return {
+    subcommand: sub,
+    providersVerb,
+    key,
+    rawValue,
+    scope,
+    cwd,
+    showSources,
+    validateEffective,
+    selfBuild,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -854,6 +895,111 @@ function cmdValidateEffective(cwd: string, selfBuild: boolean): number {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: providers detect
+// ---------------------------------------------------------------------------
+
+/**
+ * Print a human-readable detection table:
+ *   - Author host family (from resolved config's host key)
+ *   - Each provider: id, kind, family, detected, authed, selectable, detail
+ *   - Recommended cross-review provider + reason
+ *
+ * READ-ONLY. Exits 0 on success, 2 on bad --cwd.
+ *
+ * The optional `probe` parameter is an injectable ProbeEnv (used by tests to
+ * supply a deterministic fake without shelling out). Production callers — the
+ * CLI entrypoint and any future programmatic callers — pass no probe, which
+ * causes the function to fall back to defaultProbeEnv(cwd). There is NO CLI
+ * flag for probe injection; injection is only possible via direct function call.
+ */
+export function cmdProvidersDetect(cwd: string, probe?: ProbeEnv): number {
+  // Validate cwd exists and is a directory
+  try {
+    const stat = fs.statSync(cwd);
+    if (!stat.isDirectory()) {
+      process.stdout.write(
+        `[config-cmd] ERROR: --cwd "${cwd}" is not a directory\n`
+      );
+      return 2;
+    }
+  } catch {
+    process.stdout.write(
+      `[config-cmd] ERROR: --cwd "${cwd}" does not exist or is not readable\n`
+    );
+    return 2;
+  }
+
+  // Resolve settings to get host and review config
+  let resolvedHost = "auto";
+  let resolvedReview: ResolvedReview = { mode: "local", provider: "auto" };
+  try {
+    const { config } = resolveSettings({ cwd });
+    resolvedHost = config.host ?? "auto";
+    resolvedReview = {
+      mode: config.review as ResolvedReview["mode"],
+      provider: "auto",
+    };
+  } catch {
+    // If settings can't be resolved, use defaults — detection still runs
+  }
+
+  // Build the probe env: use the injected probe (test path) or the real default
+  // (production path). No file-read hook exists in the production CLI — the only
+  // way to inject a fake probe is via direct function call from test code.
+  const resolvedProbe: ProbeEnv = probe ?? defaultProbeEnv(cwd);
+
+  // Run detection
+  const detection = detectProviders({
+    cwd,
+    host: resolvedHost,
+    probe: resolvedProbe,
+  });
+
+  // Get recommendation
+  const rec = recommendProvider(detection, resolvedReview);
+
+  // ---------------------------------------------------------------------------
+  // Print table
+  // ---------------------------------------------------------------------------
+
+  const lines: string[] = [];
+
+  lines.push(`[config-cmd] providers detect`);
+  lines.push(`  author host family : ${detection.authorHost}`);
+  lines.push(`  review.mode        : ${resolvedReview.mode}`);
+  lines.push("");
+  lines.push(
+    `  ${"PROVIDER".padEnd(18)} ${"KIND".padEnd(16)} ${"FAMILY".padEnd(12)} ` +
+    `${"DETECTED".padEnd(9)} ${"AUTHED".padEnd(7)} ${"SELECTABLE".padEnd(11)} DETAIL`
+  );
+  lines.push(
+    `  ${"─".repeat(18)} ${"─".repeat(16)} ${"─".repeat(12)} ` +
+    `${"─".repeat(9)} ${"─".repeat(7)} ${"─".repeat(11)} ${"─".repeat(40)}`
+  );
+
+  for (const p of detection.providers) {
+    const detected = p.detected ? "yes" : "no";
+    const authed = p.authed ? "yes" : "no";
+    const selectable = p.selectable ? "yes" : "no";
+    lines.push(
+      `  ${p.id.padEnd(18)} ${p.kind.padEnd(16)} ${p.family.padEnd(12)} ` +
+      `${detected.padEnd(9)} ${authed.padEnd(7)} ${selectable.padEnd(11)} ${p.detail}`
+    );
+  }
+
+  lines.push("");
+  if (rec.recommended) {
+    lines.push(`  recommended cross-review : ${rec.recommended}`);
+  } else {
+    lines.push(`  recommended cross-review : (none)`);
+  }
+  lines.push(`  reason : ${rec.reason}`);
+
+  process.stdout.write(lines.join("\n") + "\n");
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Entrypoint
 // ---------------------------------------------------------------------------
 
@@ -899,6 +1045,14 @@ function main(): void {
       break;
     }
 
+    case "providers": {
+      // Only "detect" sub-verb is supported (validated in parseArgs).
+      // No probe is passed — production always uses defaultProbeEnv(cwd).
+      // Probe injection is only possible via direct function import (tests).
+      exitCode = cmdProvidersDetect(parsed.cwd);
+      break;
+    }
+
     default: {
       process.stdout.write("[config-cmd] ERROR: unknown subcommand\n");
       exitCode = 1;
@@ -908,4 +1062,9 @@ function main(): void {
   process.exit(exitCode);
 }
 
-main();
+// Only run main() when this file is the entry-point (invoked directly via tsx/node).
+// When imported by tests, the module executes but main() is NOT called — the
+// exported functions are used directly instead.
+if (require.main === module) {
+  main();
+}

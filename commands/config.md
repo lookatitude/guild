@@ -1,7 +1,7 @@
 ---
 name: config
-description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config. CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Canonical schema: architecture/command-surface.md §4.4."
-argument-hint: "<init|set|show|validate> [--cwd <repo-root>] [--force]"
+description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table. CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Canonical schema: architecture/command-surface.md §4.4."
+argument-hint: "<init|set|show|validate|providers> [--cwd <repo-root>] [--force]"
 allowed-tools: Read, Write, Bash
 ---
 
@@ -147,17 +147,67 @@ npx tsx scripts/config-cmd.ts validate --effective [--cwd <p>] [--self-build]
 
 Exits 0 on a clean resolved config; exits non-zero listing all violations.
 
-## `providers detect` — planned followup (not shipped)
+## `providers detect` — probe available cross-review providers
 
-**Not implemented in the shipped `config-cmd.ts`.** The `config-cmd.ts` script
-accepts only `set`, `show`, and `validate` sub-verbs. Running
-`/guild:config providers detect` will error.
+Probe every known review provider, print a human-readable detection table, and
+show which provider would be recommended for `review=cross`. READ-ONLY — no
+settings file is written.
 
-Provider detection is already performed automatically at run-start by
-`runStartPreflight` (U3 — `scripts/lib/runstart-preflight.ts`); the detected
-providers and recommended reviewer are recorded in
-`.guild/runs/<id>/resolved-settings.json`. A standalone `/guild:config providers
-detect` CLI path is a planned followup for U4+.
+```bash
+npx tsx scripts/config-cmd.ts providers detect [--cwd <p>]
+```
+
+Note: `providers detect` is a two-token form — `providers` is the subcommand
+group and `detect` is its sub-verb.
+
+**Output includes:**
+
+- Author host family (resolved from the `host` key in the layered config).
+- Review mode currently in effect (`review.mode`).
+- A table with one row per known provider:
+
+  | Column | Meaning |
+  |---|---|
+  | `PROVIDER` | Stable provider id (`codex-plugin`, `codex-cli`, `gemini-cli`, `pi`, `antigravity`). |
+  | `KIND` | Reachability class: `host`, `plugin-adapter`, or `cli`. |
+  | `FAMILY` | Host family used for the cross-independence check. |
+  | `DETECTED` | `yes` if the provider's CLI is on PATH + version probe passed, or a `.guild/hosts/**/capability.json` manifest declares it, or (for plugin-adapters) the native plugin is installed. |
+  | `AUTHED` | `yes` if the provider's auth probe passed (codex stored-auth or `OPENAI_API_KEY`; equivalent per provider). |
+  | `SELECTABLE` | `yes` only when a real cross-review adapter exists AND detection + auth requirements are met. `gemini-cli`, `pi`, `antigravity` are detect-only (selectable=no) until their adapters ship. |
+  | `DETAIL` | Human-readable probe findings. |
+
+- The recommended cross-review provider + reason (re-detected fresh each call; never reads persisted state).
+
+**Example output:**
+
+```
+[config-cmd] providers detect
+  author host family : claude
+  review.mode        : cross
+
+  PROVIDER           KIND             FAMILY       DETECTED  AUTHED  SELECTABLE  DETAIL
+  ────────────────── ──────────────── ──────────── ───────── ─────── ─────────── ────────────────────────────────────────
+  claude             host             claude       yes       no      no          current author host
+  codex-plugin       plugin-adapter   codex        yes       yes     yes         native plugin adapter 'codex-plugin' installed; authed
+  codex-cli          cli              codex        no        no      no          not detected; adapter present but not yet usable (detection/auth incomplete)
+  gemini-cli         cli              gemini       no        no      no          not detected; detect-only (no adapter yet — not selectable)
+  ...
+
+  recommended cross-review : codex-plugin
+  reason : claude author prefers the native Codex plugin adapter (codex:codex-rescue); recommended 'codex-plugin' — highest-ranked selectable codex-family reviewer
+```
+
+**Exit codes:**
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Detection ran successfully (even if no selectable provider was found). |
+| `2` | `--cwd` does not exist or is not a directory. |
+
+**Relationship to run-start detection:** `runStartPreflight` (U3) performs the
+same detection automatically at run-start and records results in
+`.guild/runs/<id>/resolved-settings.json`. `providers detect` is the
+operator-facing CLI surface to inspect provider state on demand.
 
 ## Notes
 

@@ -861,6 +861,159 @@ describe("validate --effective — no-drift: uses real read-guild-config validat
 });
 
 // ===========================================================================
+// FU-2: providers detect subcommand (direct function import — no CLI flag)
+// ===========================================================================
+
+/**
+ * Tests for `providers detect` use direct function import rather than CLI flags
+ * for probe injection. The production CLI has NO --probe-fixture flag (removed
+ * in the Codex G-lane MAJOR fix). Tests import cmdProvidersDetect directly and
+ * pass a fake ProbeEnv as the second argument.
+ */
+import { cmdProvidersDetect } from "../config-cmd";
+import type { ProbeEnv } from "../lib/provider-detect";
+
+/** Build a deterministic fake ProbeEnv — no binaries ever touched. */
+function makeProbe(world: {
+  onPath?: string[];
+  versionOk?: string[];
+  codexStoredAuth?: boolean;
+  env?: Record<string, string>;
+  capabilityProviders?: string[];
+  pluginAdapters?: string[];
+}): ProbeEnv {
+  const onPath = new Set(world.onPath ?? []);
+  const versionOk = new Set(world.versionOk ?? []);
+  const plugins = new Set(world.pluginAdapters ?? []);
+  const envMap = world.env ?? {};
+  return {
+    commandOnPath: (bin: string) => onPath.has(bin),
+    probeVersion: (bin: string) => versionOk.has(bin),
+    readStoredCodexAuth: () => world.codexStoredAuth === true,
+    readEnv: (name: string) => envMap[name],
+    readCapabilityProviders: () => world.capabilityProviders ?? [],
+    readPluginAdapter: (id: string) => plugins.has(id),
+  };
+}
+
+/**
+ * Capture stdout from a synchronous function that calls process.stdout.write.
+ * Returns { output, exitCode } where exitCode is the return value of fn().
+ */
+function captureStdout(fn: () => number): { output: string; exitCode: number } {
+  const chunks: string[] = [];
+  const orig = process.stdout.write.bind(process.stdout);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (process.stdout as any).write = (chunk: string) => { chunks.push(chunk); return true; };
+  let exitCode: number;
+  try {
+    exitCode = fn();
+  } finally {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (process.stdout as any).write = orig;
+  }
+  return { output: chunks.join(""), exitCode };
+}
+
+describe("providers detect — FU-2: injected probe via direct import (no CLI flag)", () => {
+  test("claude host + codex-plugin available: prints table with codex-plugin recommendation, exits 0", () => {
+    // Claude is the author host; codex-plugin is installed and authed; review=cross
+    const probe = makeProbe({ pluginAdapters: ["codex-plugin"], codexStoredAuth: true });
+    const project = tmp(mkProject({ settings: { host: "claude", review: "cross" } }));
+
+    const { output, exitCode } = captureStdout(() => cmdProvidersDetect(project, probe));
+
+    expect(exitCode).toBe(0);
+    // Table must include the author host family
+    expect(output).toMatch(/author.*host|host.*family|claude/i);
+    // Provider rows must be present
+    expect(output).toMatch(/codex-plugin/);
+    // Detection state columns
+    expect(output).toMatch(/detected|authed|selectable/i);
+    // Recommendation must call out codex-plugin
+    expect(output).toMatch(/recommend.*codex-plugin|codex-plugin.*recommend/i);
+  });
+
+  test("codex absent: codex-plugin shows as not detected and not selectable, exits 0", () => {
+    // No plugin adapters, no codex on PATH — codex providers not available
+    const probe = makeProbe({ pluginAdapters: [], codexStoredAuth: false, onPath: [], versionOk: [] });
+    const project = tmp(mkProject({ settings: { host: "claude" } }));
+
+    const { output, exitCode } = captureStdout(() => cmdProvidersDetect(project, probe));
+
+    expect(exitCode).toBe(0);
+    // codex-plugin row still appears but with selectable=no
+    expect(output).toMatch(/codex-plugin/);
+    // selectable column for codex-plugin must show "no"
+    expect(output).toMatch(/codex-plugin[\s\S]{0,120}no/);
+  });
+
+  test("bad cwd (non-existent path): exits 2", () => {
+    const probe = makeProbe({});
+    const badCwd = "/tmp/this-path-does-not-exist-guild-fu2-" + Date.now();
+
+    const { exitCode } = captureStdout(() => cmdProvidersDetect(badCwd, probe));
+
+    expect(exitCode).toBe(2);
+  });
+
+  test("review != cross with selectable codex-plugin: recommendation is (none), exits 0", () => {
+    // Even when codex-plugin is fully available, review=local means no cross recommendation
+    const probe = makeProbe({ pluginAdapters: ["codex-plugin"], codexStoredAuth: true });
+    // Settings have review=local (the default), NOT cross
+    const project = tmp(mkProject({ settings: { host: "claude", review: "local" } }));
+
+    const { output, exitCode } = captureStdout(() => cmdProvidersDetect(project, probe));
+
+    expect(exitCode).toBe(0);
+    // No spurious recommendation should appear
+    expect(output).toMatch(/recommended cross-review\s*:\s*\(none\)/i);
+  });
+});
+
+describe("providers detect — FU-2: production CLI surface contracts", () => {
+  test("production CLI does NOT accept --probe-fixture flag (unknown flag is silently ignored, table is printed)", () => {
+    // The production CLI has no --probe-fixture flag. Passing it should NOT crash
+    // the process. Since it's an unrecognised flag beginning with '--', parseArgs
+    // silently ignores it and the command runs with the real defaultProbeEnv.
+    // We verify: exit 0, output contains provider table structure (the flag does nothing).
+    const project = tmp(mkProject({ settings: { host: "claude" } }));
+
+    const result = run(["providers", "detect", "--cwd", project, "--probe-fixture", "/some/path"]);
+
+    // Must exit 0 — the flag is silently dropped, production probe runs
+    expect(result.status).toBe(0);
+    // Output must be the real detection table, not a fixture-injected result
+    expect(result.out).toMatch(/\[config-cmd\] providers detect/);
+    expect(result.out).toMatch(/author.*host|host.*family/i);
+    expect(result.out).toMatch(/codex-plugin/);
+    // CRITICAL: the output must NOT show fixture-injected "yes" for selectable
+    // (on a clean machine codex-plugin is not installed — so selectable is "no").
+    // We cannot assert on the exact value since CI may have codex installed,
+    // so we just assert the table rendered and the process did not crash.
+    expect(result.out).toMatch(/PROVIDER/);
+  });
+
+  test("providers with no sub-verb: exits non-zero with clear error message", () => {
+    const project = tmp(mkProject({}));
+
+    const result = run(["providers", "--cwd", project]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.out + result.err).toMatch(/sub-verb|providers detect|expected/i);
+  });
+
+  test("providers <unknown-verb>: exits non-zero with clear error message", () => {
+    const project = tmp(mkProject({}));
+
+    const result = run(["providers", "bogus", "--cwd", project]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.out + result.err).toMatch(/unknown|bogus|expected/i);
+  });
+});
+
+// ===========================================================================
 // Round-2 MAJOR #2 — scalar top-level keys with extra segments, and
 // models.thresholds.nope path validation
 // ===========================================================================
