@@ -28,8 +28,7 @@
  * Exit:   0 always (scoring failures must not block dispatch).
  */
 
-import { spawnSync } from "child_process";
-import * as path from "path";
+import { resolveSettings } from "./lib/settings-resolver";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -180,25 +179,20 @@ export function scoreTier(signals: TierSignals, opts: ScorerOpts = {}): TierResu
   return { score, tier, model };
 }
 
-// ── Config loader (reuses read-guild-config.ts — no re-spelling of the map) ──
+// ── Config loader (uses settings-resolver — no subprocess, inherits workspace) ─
 
+/**
+ * Load models config (scoreWeights, thresholds, tiers) from the settings resolver.
+ * Replaces the former subprocess call to read-guild-config.ts.
+ *
+ * The resolver applies the full 5-layer inheritance chain so a workspace root's
+ * models config is inherited by child projects (unless the child overrides).
+ * Graceful on missing/parse errors — returns {} so scoreTier falls back to built-ins.
+ */
 function loadConfigModels(cwd: string): Pick<ScorerOpts, "scoreWeights" | "thresholds" | "tiers"> {
-  const scriptPath = path.resolve(__dirname, "read-guild-config.ts");
-  const r = spawnSync(
-    "npx",
-    ["tsx", scriptPath, "--cwd", cwd],
-    { encoding: "utf8", env: { ...process.env, NODE_NO_WARNINGS: "1" } }
-  );
-  if (r.status !== 0 || !r.stdout) return {};
   try {
-    const cfg = JSON.parse(r.stdout) as {
-      models?: {
-        scoreWeights?: Partial<ScoreWeights>;
-        thresholds?: Partial<Thresholds>;
-        tiers?: ScorerOpts["tiers"];
-      };
-    };
-    const m = cfg.models;
+    const { config } = resolveSettings({ cwd });
+    const m = config.models;
     if (!m) return {};
     return {
       scoreWeights: m.scoreWeights,

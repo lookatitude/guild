@@ -39,6 +39,7 @@ import * as crypto from "crypto";
 import * as fsNode from "fs";
 import * as path from "path";
 import type { HostKind } from "./host-types";
+import { resolveSettings } from "./settings-resolver";
 
 // ── Injected seams (B1 §4) ───────────────────────────────────────────────────
 
@@ -594,19 +595,20 @@ export function readWorkspaceKnowledgeConfig(root: string): WorkspaceKnowledgeCo
 }
 
 /**
- * Read settings.json `record_status_runs` (OQ6 rollback switch). Default true
- * when absent. When false, /guild:status reverts to pure-read (no run written) —
- * B3 owns that wiring; this reader only surfaces the key. Lenient on malformed.
+ * Read `record_status_runs` (OQ6 rollback switch) via the settings resolver.
+ * Default true when absent. When false, /guild:status reverts to pure-read
+ * (no run written) — B3 owns that wiring; this reader only surfaces the key.
+ *
+ * Inherits from workspace settings when the project is a child of a workspace
+ * (the resolver's 5-layer chain applies). A child without its own
+ * record_status_runs will receive the workspace value, or the built-in default
+ * (true) when absent from all layers.
  */
 export function readRecordStatusRuns(root: string): boolean {
   try {
-    const raw = fsNode.readFileSync(path.join(root, ".guild", "settings.json"), "utf8");
-    const obj = JSON.parse(raw);
-    if (obj && typeof obj === "object" && typeof (obj as Record<string, unknown>)["record_status_runs"] === "boolean") {
-      return (obj as Record<string, unknown>)["record_status_runs"] as boolean;
-    }
+    const { config } = resolveSettings({ cwd: root });
+    return config.record_status_runs;
   } catch {
     return true;
   }
-  return true;
 }

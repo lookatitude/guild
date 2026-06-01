@@ -77,6 +77,8 @@ import { resolveAdapter } from "./lib/pane-adapter";
 // CH-1: route each specialist to its backend (local tmux vs remote) via the
 // CR-1 routing function, reading guild.host_capability.v1 manifests.
 import { planTeamRouting, RouteError, type RoutableHost } from "./lib/host-router";
+// U5: typed settings projection via the resolver (replaces direct settings slice reads)
+import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
 
 const ADAPTER_VERSION = "1"; // CH-5 — PaneAdapter version recorded per pane.
 
@@ -401,21 +403,30 @@ interface CrossHostConfig {
   hosts: Record<string, CrossHostEndpointCfg>;
 }
 
-/** Read defaults.cross_host from .guild/settings.json. Graceful on missing/parse errors. */
+/**
+ * Read defaults.cross_host via the settings resolver.
+ * Graceful on missing/parse errors — returns the built-in default { enabled: false, hosts: {} }.
+ *
+ * Inherits from workspace settings when the project is a child of a workspace
+ * (the resolver's 5-layer chain applies). A child without its own cross_host config
+ * will receive the workspace value via inheritance.
+ *
+ * Value guards (restores the old direct-reader's strict checks):
+ *   - enabled: must be EXACTLY boolean true to activate cross-host; any other
+ *     truthy value (string "yes", number 1, etc.) is treated as false.
+ *     This matches the old `ch.enabled === true` guard.
+ *   - hosts: must be a plain object; any non-object value falls back to {}.
+ *     This matches the old `typeof ch.hosts === "object" && ch.hosts !== null` guard.
+ */
 function loadCrossHostConfig(cwd: string): CrossHostConfig {
-  const settingsPath = path.join(cwd, ".guild", "settings.json");
   try {
-    const raw = fs.readFileSync(settingsPath, "utf8");
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const defaults = parsed?.defaults as Record<string, unknown> | undefined;
-    const ch = defaults?.cross_host as Record<string, unknown> | undefined;
-    if (!ch || typeof ch !== "object") return { enabled: false, hosts: {} };
+    const { config } = resolveSettings({ cwd });
+    const ch = config.defaults.cross_host as Record<string, unknown> | undefined;
     return {
-      enabled: ch.enabled === true,
-      hosts:
-        typeof ch.hosts === "object" && ch.hosts !== null
-          ? (ch.hosts as Record<string, CrossHostEndpointCfg>)
-          : {},
+      enabled: ch?.enabled === true,
+      hosts: isPlainObject(ch?.hosts)
+        ? (ch.hosts as Record<string, CrossHostEndpointCfg>)
+        : {},
     };
   } catch {
     return { enabled: false, hosts: {} };

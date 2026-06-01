@@ -40,6 +40,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
+import { resolveSettings } from "../lib/settings-resolver";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,21 +70,23 @@ export interface DetectionResult {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Read workspace.mode from .guild/settings.json. Returns "auto" if absent/invalid. */
+/**
+ * Read workspace.mode for this repo root via the settings resolver.
+ * Returns "auto" if absent/invalid.
+ *
+ * OD-1 caveat: workspace.mode is NON-INHERITABLE (root-detection-only).
+ * The resolver strips workspace.mode from workspace→child inheritance, so
+ * `resolvedConfig.workspace.mode` always reflects THIS project's own file
+ * (or the built-in default "auto") — never a parent workspace's value.
+ * This preserves the original semantics exactly.
+ */
 function readSettingsMode(root: string): WorkspaceMode {
-  const settingsPath = path.join(root, ".guild", "settings.json");
-  if (!fs.existsSync(settingsPath)) return "auto";
   try {
-    const raw = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as Record<string, unknown>;
-    const ws = raw["workspace"];
-    if (typeof ws === "object" && ws !== null) {
-      const mode = (ws as Record<string, unknown>)["mode"];
-      if (mode === "on" || mode === "off" || mode === "auto") return mode;
-    }
+    const { config } = resolveSettings({ cwd: root });
+    return config.workspace.mode;
   } catch {
-    // parse failure → default
+    return "auto";
   }
-  return "auto";
 }
 
 /** Best-effort: parse remote URL from <childPath>/.git/config */
