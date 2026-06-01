@@ -44,6 +44,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { resolveSettings } from "./lib/settings-resolver";
 
 // ── Schema (Tier-1 + Tier-2 defaults). Canonical body: command-surface.md §4.4.
 interface QualityBudget {
@@ -600,12 +601,18 @@ function validateLocalKeys(
  *  - array-typed values  → wholesale replace (Decision F.2)
  *  - scalar values       → replace
  */
+// SECURITY: prototype-pollution guard — these keys are never merged in from an
+// untrusted settings.local.json (mirrors PROTO_POISON_KEYS in lib/settings-resolver.ts;
+// closes the validate-path residual flagged by codex G-lane on U1).
+const PROTO_POISON_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
 function deepMergeLocal(
   base: Record<string, unknown>,
   local: Record<string, unknown>
 ): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...base };
+  const result: Record<string, unknown> = Object.assign(Object.create(null), base);
   for (const [k, v] of Object.entries(local)) {
+    if (PROTO_POISON_KEYS.has(k)) continue; // never assign __proto__/prototype/constructor
     if (Array.isArray(v)) {
       // List-typed: replace wholesale (Decision F.2)
       result[k] = v;
@@ -1144,22 +1151,21 @@ function main(): void {
     return;
   }
 
-  const { config: fileConfigRaw, rejects, source } = loadFileConfig(cwd, selfBuild);
-
-  // Decision F: merge settings.local.json over settings.json (local slot in precedence ladder).
-  // Only when a settings.json was actually found (not on config.yml shim or "none").
-  let fileConfig = fileConfigRaw;
-  if (source === "settings.json") {
-    try {
-      fileConfig = loadLocalOverride(cwd, fileConfigRaw, selfBuild);
-    } catch (e) {
-      // Unknown local key — surface as a reject (treated as a validation error)
-      rejects.push((e as Error).message);
-      process.stderr.write(`[read-guild-config] ERROR: ${(e as Error).message}\n`);
-    }
-  }
-
+  // ── --validate mode: run closed-key validation on the project's settings.json.
+  // Uses the local loadFileConfig/loadLocalOverride path (full validation rejects).
   if (mode === "validate") {
+    const { config: fileConfigRaw, rejects, source } = loadFileConfig(cwd, selfBuild);
+
+    let fileConfig = fileConfigRaw;
+    if (source === "settings.json") {
+      try {
+        fileConfig = loadLocalOverride(cwd, fileConfigRaw, selfBuild);
+      } catch (e) {
+        rejects.push((e as Error).message);
+        process.stderr.write(`[read-guild-config] ERROR: ${(e as Error).message}\n`);
+      }
+    }
+
     if (source === "none") {
       process.stdout.write("no .guild/settings.json found — built-in defaults are valid.\n");
       return;
@@ -1171,118 +1177,74 @@ function main(): void {
     process.stdout.write(`.guild/${source}: INVALID — ${rejects.length} violation(s):\n`);
     for (const r of rejects) process.stdout.write(`  - ${r}\n`);
     process.exit(1);
+    return;
   }
 
-  // resolve: built-in < file < flags  (CLI flag > settings.json > built-in per key)
-  const resolved: GuildSettings = {
-    ...DEFAULTS,
-    ...fileConfig,
-    ...flags,
-    defaults: {
-      ...DEFAULTS.defaults,
-      ...(fileConfig.defaults ?? {}),
-      // deep-merge defaults.index sub-block
-      index: { ...DEFAULTS.defaults.index, ...((fileConfig.defaults as Partial<DefaultsBlock>)?.index ?? {}) },
-      // deep-merge defaults.cross_host sub-block (hosts map is additive over the empty default)
-      cross_host: {
-        ...DEFAULTS.defaults.cross_host,
-        ...((fileConfig.defaults as Partial<DefaultsBlock>)?.cross_host ?? {}),
-        hosts: {
-          ...DEFAULTS.defaults.cross_host.hosts,
-          ...((fileConfig.defaults as Partial<DefaultsBlock>)?.cross_host?.hosts ?? {}),
-        },
-      },
-    },
-    // workspace is a nested object — deep-merge so partial overrides work
-    workspace: { ...DEFAULTS.workspace, ...(fileConfig.workspace ?? {}), ...(flags.workspace ?? {}) },
-    // models is a nested object — deep-merge so partial overrides work (ADR §10)
-    models: { ...DEFAULTS.models, ...(fileConfig.models ?? {}), ...(flags.models ?? {}) },
-    // security, secrets_policy, mcp — deep-merge so partial overrides work
-    security: { ...DEFAULTS.security, ...(fileConfig.security ?? {}), ...(flags.security ?? {}) },
-    secrets_policy: { ...DEFAULTS.secrets_policy, ...(fileConfig.secrets_policy ?? {}), ...(flags.secrets_policy ?? {}) },
-    mcp: { ...DEFAULTS.mcp, ...(fileConfig.mcp ?? {}), ...(flags.mcp ?? {}) },
-  };
+  // ── resolve mode: delegate to the shared settings-resolver library.
+  // This is the canonical path; all workspace inheritance and precedence
+  // chain logic lives in lib/settings-resolver.ts.
+  const localPath = path.join(cwd, ".guild", "settings.local.json");
+  let localLoadedKeys: string[] = [];
 
-  // Which rigor-expandable keys did the user set EXPLICITLY (CLI flag OR present in
-  // settings.json)? An explicit value WINS over the rigor-derived value; rigor only
-  // FILLS keys the user did not set (command-surface.md §4.3 "those override the
-  // profile"). Note: an explicit `loops: null` is NOT a choice — null means "derive
-  // from rigor" — so only a non-null loops string counts as explicit.
-  let loopsExplicit = typeof flags.loops === "string" || typeof fileConfig.loops === "string";
-  const loopCapExplicit = "loop_cap" in flags || "loop_cap" in fileConfig;
-  const reviewExplicit = "review" in flags || "review" in fileConfig;
-
-  // validate an explicit loops CSV; an invalid value reverts to "derive from rigor".
-  if (resolved.loops) {
-    for (const v of resolved.loops.split(",").map((s) => s.trim())) {
-      if (!VALID_LOOPS.has(v)) {
-        process.stderr.write(`[read-guild-config] WARN: unknown loops value "${v}"; treating as null (derive from rigor)\n`);
-        resolved.loops = null;
-        loopsExplicit = false;
-        break;
+  // Surface settings.local.json INFO/ERROR log (parity with the old loader's stderr output).
+  // We validate keys here before delegating to the library so the error message surfaces
+  // on stderr for the CLI consumer, consistent with the original behavior.
+  if (fs.existsSync(localPath)) {
+    try {
+      const rawLocal = JSON.parse(fs.readFileSync(localPath, "utf8")) as Record<string, unknown>;
+      localLoadedKeys = Object.keys(rawLocal).filter((k) => !k.startsWith("_"));
+      // Validate top-level keys against the schema (same rule as old loadLocalOverride)
+      const schemaBase = DEFAULTS as unknown as Record<string, unknown>;
+      const basePaths = new Set<string>();
+      (function collectPaths(obj: Record<string, unknown>, prefix = ""): void {
+        for (const [k, v] of Object.entries(obj)) {
+          const full = prefix ? `${prefix}.${k}` : k;
+          basePaths.add(full);
+          if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+            collectPaths(v as Record<string, unknown>, full);
+          }
+        }
+      })(schemaBase);
+      for (const key of localLoadedKeys) {
+        if (!basePaths.has(key)) {
+          const errMsg =
+            `share-dot-guild: settings.local.json key '${key}' not in settings.json schema — ` +
+            `refusing to silently extend. Declare it in settings.json first (with the team default) ` +
+            `or remove it from settings.local.json.`;
+          process.stderr.write(`[read-guild-config] ERROR: ${errMsg}\n`);
+          // Don't emit INFO — surface error only (same as original behavior)
+          localLoadedKeys = []; // prevent INFO from firing below
+          break;
+        }
       }
+      if (localLoadedKeys.length > 0) {
+        process.stderr.write(
+          `[read-guild-config] INFO: .guild/settings.local.json loaded — ` +
+            `${localLoadedKeys.length} override key(s): ` +
+            `[${localLoadedKeys.join(", ")}]\n`
+        );
+      }
+    } catch {
+      // parse error already handled inside the library
     }
   }
 
-  // ── Expand --rigor into loops / loop_cap / review (§4.3). Explicitly-set keys are
-  // recorded as overridden and left untouched; everything else is filled from the
-  // profile. The expansion is ALWAYS surfaced via _rigor_expanded.
-  const profile = rigorProfile(resolved.rigor);
-  const applied: string[] = [];
-  const overridden: string[] = [];
+  const { config: resolved } = resolveSettings({
+    cwd,
+    flags: flags as Partial<import("./lib/settings-resolver").ResolvedConfig>,
+    selfBuild,
+  });
 
-  // review: deep auto-implies cross, with a host-availability fallback to local (D7).
-  let derivedReview = profile.review;
-  let reviewFallback = false;
-  let fallbackNote: string | undefined;
-  if (resolved.rigor === "deep" && derivedReview === "cross" && !crossHostAvailable()) {
-    derivedReview = "local";
-    reviewFallback = true;
-    fallbackNote =
-      "rigor=deep implies review=cross, but the cross-host (Codex) is unavailable — " +
-      "fell back to review=local with a weak-independence caveat (command-surface.md §4.3 / D7). Not a hard failure.";
-  }
+  // Remap _rigorExpanded → _rigor_expanded for CLI output (backwards compat)
+  const rigorExpanded = resolved._rigorExpanded;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { _rigorExpanded: _drop, ...resolvedWithout } = resolved;
 
-  // loops
-  if (loopsExplicit) overridden.push("loops");
-  else {
-    resolved.loops = profile.loops;
-    applied.push("loops");
-  }
-  // loop_cap (skip when the profile leaves it N/A — quick's "—")
-  if (profile.loop_cap !== null) {
-    if (loopCapExplicit) overridden.push("loop_cap");
-    else {
-      resolved.loop_cap = profile.loop_cap;
-      applied.push("loop_cap");
-    }
-  }
-  // review
-  if (reviewExplicit) overridden.push("review");
-  else {
-    resolved.review = derivedReview;
-    applied.push("review");
-  }
-
-  // _rigor_expanded — what rigor derived, ALWAYS emitted (§4.3 "the expansion is
-  // always visible"). Shows the profile mapping plus which keys it actually applied
-  // vs. which the user pinned explicitly.
-  const rigorExpanded: Record<string, unknown> = {
-    rigor: resolved.rigor,
-    loops: profile.loops,
-    loop_cap: profile.loop_cap, // null = N/A for quick
-    review: derivedReview,
-    applied, // keys filled from the profile
-    overridden_by_explicit: overridden, // expandable keys the user set — profile skipped
+  const output: Record<string, unknown> = {
+    ...resolvedWithout,
+    _rigor_expanded: rigorExpanded,
   };
-  if (resolved.rigor === "deep") rigorExpanded["review_implied"] = "cross";
-  if (reviewFallback) {
-    rigorExpanded["review_fallback"] = true;
-    rigorExpanded["note"] = fallbackNote;
-  }
 
-  // Surface --model-tier CLI escape hatch in output (ADR §2, O-2). Top of tier precedence ladder.
-  const output: Record<string, unknown> = { ...resolved, _rigor_expanded: rigorExpanded };
   if (modelTier !== undefined) {
     output["_model_tier_override"] = {
       tier: modelTier,
