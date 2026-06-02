@@ -71,12 +71,17 @@ A workspace-scoped key (`--scope workspace`) cascades to all child projects unle
 a child explicitly overrides it. Child files always win over workspace files for
 the same key.
 
-**Non-inheritable keys.** Two keys do NOT inherit workspace→child:
-- `workspace.mode` — root workspace detection only; a child cannot mutate the
-  parent manifest by setting this key.
-- `initiative_default` — does not inherit workspace→child, unconditionally. It is
-  stripped by `NON_INHERITABLE_KEYS` in the resolver regardless of scope; child
-  runs are never silently attached to a parent workspace's initiative.
+**Non-inheritable keys.** Inheritance from workspace→child is restricted for two keys:
+- `workspace.mode` — root workspace detection only; never inherits
+  (unconditional). A child cannot mutate the parent manifest by setting this key.
+- `initiative_default` — inherits workspace→child **only when the workspace's
+  `initiative_default` names an initiative that is `scope:workspace`** (resolved
+  by `initiativeIsWorkspaceScoped`: registry lookup, then fallback to the
+  initiative's `initiative.yaml`). Otherwise it is stripped, so a child resolves
+  its own `initiative_default` or the built-in `null` and child runs are never
+  silently attached to a project-scoped parent initiative. The id is validated
+  against path traversal before any file I/O; the lookup fails closed to
+  non-inheriting on any invalid/missing/malformed input.
 
 All other keys in the closed key-set inherit normally down the chain.
 
