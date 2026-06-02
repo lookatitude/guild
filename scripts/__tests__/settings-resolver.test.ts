@@ -17,7 +17,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { resolveSettings, ResolvedConfig, Source } from "../lib/settings-resolver";
+import { resolveSettings, initiativeIsWorkspaceScoped, ResolvedConfig, Source } from "../lib/settings-resolver";
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -530,11 +530,17 @@ describe("7 — Source-map: each key tagged with correct Source", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 8. Non-inherit (OD-1) — child does NOT inherit initiative_default
+// 8. Non-inherit (OD-1 conditional) — initiative_default does NOT inherit
+//    from workspace UNLESS the named initiative has scope: workspace in the
+//    workspace's initiatives registry (OD-1 exception, FU-3).
+//    workspace.mode is UNCONDITIONALLY non-inheriting (unchanged).
 // ---------------------------------------------------------------------------
 
-describe("8 — OD-1: initiative_default does NOT inherit from workspace", () => {
-  test("child resolves null initiative_default even when workspace has one set", () => {
+describe("8 — OD-1 conditional: initiative_default inheritance depends on scope", () => {
+  test("child does NOT inherit when registry is absent (safe default — no registry = no inherit)", () => {
+    // Represents the safe-default case: no .guild/indexes/initiatives-registry.yaml
+    // at the workspace root. Even if workspace has initiative_default set,
+    // the child must NOT inherit it.
     const wsRoot = tmpDir();
     const childDir = path.join(wsRoot, "plugin");
     mkGuildDir(wsRoot);
@@ -544,12 +550,12 @@ describe("8 — OD-1: initiative_default does NOT inherit from workspace", () =>
       initiative_default: "workspace-initiative-123",
     });
     writeWorkspaceManifest(wsRoot, [childDir]);
-    // child has no settings.json
+    // child has no settings.json; no registry at wsRoot
 
     const { config, sources } = resolveSettings({ cwd: childDir });
 
     expect(config.initiative_default).toBeNull();
-    // agent_mode does inherit (it's a normal key)
+    // agent_mode does inherit (it's a normal inheritable key)
     expect(config.agent_mode).toBe("team");
     // initiative_default resolves from built-in (null), not workspace
     expect(sources.initiative_default).toBe("builtin");
@@ -578,6 +584,250 @@ describe("8 — OD-1: initiative_default does NOT inherit from workspace", () =>
 
     const { config, sources } = resolveSettings({ cwd: wsRoot });
 
+    expect(config.initiative_default).toBe("ws-initiative");
+    expect(sources.initiative_default).toBe("project");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8b. OD-1 workspace-scoped exception (FU-3)
+//     initiative_default INHERITS workspace→child ONLY when the named
+//     initiative has scope: workspace in the workspace registry.
+//     All other cases (project scope, registry absent, entry missing,
+//     malformed registry) → safe default: do NOT inherit.
+// ---------------------------------------------------------------------------
+
+// ---- YAML fixture helpers (used only in describe 8b) ----------------------
+
+/** Write raw text to an arbitrary path (creating parent dirs). */
+function writeRaw(filePath: string, content: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content, "utf8");
+}
+
+/**
+ * Write a well-formed initiatives-registry.yaml at
+ * <wsRoot>/.guild/indexes/initiatives-registry.yaml.
+ * entries: Array<{ id: string; scope: string; [extra: string]: string }>
+ */
+function mkInitiativeRegistry(
+  wsRoot: string,
+  entries: Array<{ id: string; scope: string; [key: string]: string }>
+): void {
+  const lines = [
+    "schema_version: guild.initiatives_registry.v1",
+    "initiatives:",
+    ...entries.map((e) =>
+      [
+        `  - id: ${e.id}`,
+        `    scope: ${e.scope}`,
+        `    status: active`,
+      ].join("\n")
+    ),
+  ];
+  writeRaw(
+    path.join(wsRoot, ".guild", "indexes", "initiatives-registry.yaml"),
+    lines.join("\n") + "\n"
+  );
+}
+
+/**
+ * Write a minimal initiative.yaml for <id> at
+ * <wsRoot>/.guild/initiatives/active/<id>/initiative.yaml.
+ * Fallback path used when the registry lacks the entry.
+ */
+function mkInitiativeYaml(wsRoot: string, id: string, scope: string): void {
+  const content = [
+    "initiative:",
+    `  id: ${id}`,
+    `  scope: ${scope}`,
+    `  status: active`,
+    "",
+  ].join("\n");
+  writeRaw(
+    path.join(wsRoot, ".guild", "initiatives", "active", id, "initiative.yaml"),
+    content
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+describe("8b — OD-1 workspace-scoped exception: conditional initiative_default inheritance", () => {
+  // --- 8b-1: inherits when registry marks the initiative scope: workspace ---
+
+  test("child INHERITS initiative_default when registry marks it scope:workspace", () => {
+    const wsRoot = tmpDir();
+    const childDir = path.join(wsRoot, "plugin");
+    mkGuildDir(wsRoot);
+    fs.mkdirSync(path.join(childDir, ".guild"), { recursive: true });
+    writeSettings(wsRoot, {
+      agent_mode: "team",
+      initiative_default: "my-ws-initiative",
+    });
+    writeWorkspaceManifest(wsRoot, [childDir]);
+    mkInitiativeRegistry(wsRoot, [{ id: "my-ws-initiative", scope: "workspace" }]);
+    // child has no settings.json
+
+    const { config, sources } = resolveSettings({ cwd: childDir });
+
+    // Must inherit because the registry marks the initiative as workspace-scoped
+    expect(config.initiative_default).toBe("my-ws-initiative");
+    expect(sources.initiative_default).toBe("workspace");
+  });
+
+  // --- 8b-2: does NOT inherit when registry marks scope: project ------------
+
+  test("child does NOT inherit when registry marks initiative scope:project", () => {
+    const wsRoot = tmpDir();
+    const childDir = path.join(wsRoot, "plugin");
+    mkGuildDir(wsRoot);
+    fs.mkdirSync(path.join(childDir, ".guild"), { recursive: true });
+    writeSettings(wsRoot, {
+      initiative_default: "proj-initiative",
+    });
+    writeWorkspaceManifest(wsRoot, [childDir]);
+    mkInitiativeRegistry(wsRoot, [{ id: "proj-initiative", scope: "project" }]);
+
+    const { config, sources } = resolveSettings({ cwd: childDir });
+
+    expect(config.initiative_default).toBeNull();
+    expect(sources.initiative_default).toBe("builtin");
+  });
+
+  // --- 8b-3: does NOT inherit when registry entry for id is missing ---------
+
+  test("child does NOT inherit when registry exists but the entry for the id is absent", () => {
+    const wsRoot = tmpDir();
+    const childDir = path.join(wsRoot, "plugin");
+    mkGuildDir(wsRoot);
+    fs.mkdirSync(path.join(childDir, ".guild"), { recursive: true });
+    writeSettings(wsRoot, { initiative_default: "unknown-initiative" });
+    writeWorkspaceManifest(wsRoot, [childDir]);
+    // Registry exists but lists a DIFFERENT id
+    mkInitiativeRegistry(wsRoot, [{ id: "other-initiative", scope: "workspace" }]);
+
+    const { config, sources } = resolveSettings({ cwd: childDir });
+
+    expect(config.initiative_default).toBeNull();
+    expect(sources.initiative_default).toBe("builtin");
+  });
+
+  // --- 8b-4: does NOT inherit when registry YAML is malformed ---------------
+
+  test("child does NOT inherit when registry YAML is malformed (safe default, no throw)", () => {
+    const wsRoot = tmpDir();
+    const childDir = path.join(wsRoot, "plugin");
+    mkGuildDir(wsRoot);
+    fs.mkdirSync(path.join(childDir, ".guild"), { recursive: true });
+    writeSettings(wsRoot, { initiative_default: "some-initiative" });
+    writeWorkspaceManifest(wsRoot, [childDir]);
+    // Write intentionally malformed YAML
+    writeRaw(
+      path.join(wsRoot, ".guild", "indexes", "initiatives-registry.yaml"),
+      "{ this is: [not: valid yaml\n  for: sure"
+    );
+
+    // Must not throw — resolveSettings is always safe
+    let result: ReturnType<typeof resolveSettings> | undefined;
+    expect(() => {
+      result = resolveSettings({ cwd: childDir });
+    }).not.toThrow();
+
+    expect(result!.config.initiative_default).toBeNull();
+    expect(result!.sources.initiative_default).toBe("builtin");
+  });
+
+  // --- 8b-5: fallback to initiative.yaml when registry lacks the entry ------
+
+  test("child INHERITS when registry lacks the entry but initiative.yaml has scope:workspace", () => {
+    const wsRoot = tmpDir();
+    const childDir = path.join(wsRoot, "plugin");
+    mkGuildDir(wsRoot);
+    fs.mkdirSync(path.join(childDir, ".guild"), { recursive: true });
+    writeSettings(wsRoot, { initiative_default: "fallback-initiative" });
+    writeWorkspaceManifest(wsRoot, [childDir]);
+    // Registry exists but does NOT contain our id
+    mkInitiativeRegistry(wsRoot, [{ id: "other-id", scope: "project" }]);
+    // initiative.yaml fallback has scope: workspace
+    mkInitiativeYaml(wsRoot, "fallback-initiative", "workspace");
+
+    const { config, sources } = resolveSettings({ cwd: childDir });
+
+    expect(config.initiative_default).toBe("fallback-initiative");
+    expect(sources.initiative_default).toBe("workspace");
+  });
+
+  test("child does NOT inherit when initiative.yaml fallback has scope:project", () => {
+    const wsRoot = tmpDir();
+    const childDir = path.join(wsRoot, "plugin");
+    mkGuildDir(wsRoot);
+    fs.mkdirSync(path.join(childDir, ".guild"), { recursive: true });
+    writeSettings(wsRoot, { initiative_default: "project-scoped-init" });
+    writeWorkspaceManifest(wsRoot, [childDir]);
+    // No registry
+    mkInitiativeYaml(wsRoot, "project-scoped-init", "project");
+
+    const { config, sources } = resolveSettings({ cwd: childDir });
+
+    expect(config.initiative_default).toBeNull();
+    expect(sources.initiative_default).toBe("builtin");
+  });
+
+  // --- 8b-6: child's own initiative_default always wins ---------------------
+
+  test("child's own initiative_default overrides regardless of workspace scope", () => {
+    // Even when workspace has a workspace-scoped initiative, child's own value wins
+    const wsRoot = tmpDir();
+    const childDir = path.join(wsRoot, "plugin");
+    mkGuildDir(wsRoot);
+    fs.mkdirSync(path.join(childDir, ".guild"), { recursive: true });
+    writeSettings(wsRoot, { initiative_default: "ws-wide-initiative" });
+    writeSettings(childDir, { initiative_default: "child-own-initiative" });
+    writeWorkspaceManifest(wsRoot, [childDir]);
+    mkInitiativeRegistry(wsRoot, [{ id: "ws-wide-initiative", scope: "workspace" }]);
+
+    const { config, sources } = resolveSettings({ cwd: childDir });
+
+    // Child's own value wins — source is project, not workspace
+    expect(config.initiative_default).toBe("child-own-initiative");
+    expect(sources.initiative_default).toBe("project");
+  });
+
+  // --- 8b-7: workspace.mode STILL never inherits (unchanged) ---------------
+
+  test("workspace.mode is UNCONDITIONALLY non-inheriting regardless of registry", () => {
+    const wsRoot = tmpDir();
+    const childDir = path.join(wsRoot, "plugin");
+    mkGuildDir(wsRoot);
+    fs.mkdirSync(path.join(childDir, ".guild"), { recursive: true });
+    writeSettings(wsRoot, {
+      workspace: { mode: "on" },
+      initiative_default: "ws-scope-init",
+    });
+    writeWorkspaceManifest(wsRoot, [childDir]);
+    mkInitiativeRegistry(wsRoot, [{ id: "ws-scope-init", scope: "workspace" }]);
+
+    const { config, sources } = resolveSettings({ cwd: childDir });
+
+    // workspace.mode must NEVER inherit — always built-in/project only
+    expect(config.workspace.mode).toBe("auto"); // built-in default
+    expect(sources["workspace.mode"]).toBe("builtin");
+    // But initiative_default DOES inherit (it's workspace-scoped)
+    expect(config.initiative_default).toBe("ws-scope-init");
+  });
+
+  // --- 8b-8: resolving AT the workspace root is unchanged ------------------
+
+  test("workspace root resolves its own initiative_default as project layer (no change)", () => {
+    const wsRoot = tmpDir();
+    mkGuildDir(wsRoot);
+    writeSettings(wsRoot, { initiative_default: "ws-initiative" });
+    writeWorkspaceManifest(wsRoot, []);
+    mkInitiativeRegistry(wsRoot, [{ id: "ws-initiative", scope: "workspace" }]);
+
+    const { config, sources } = resolveSettings({ cwd: wsRoot });
+
+    // At the root itself, there is no workspace→child inheritance question
     expect(config.initiative_default).toBe("ws-initiative");
     expect(sources.initiative_default).toBe("project");
   });
@@ -1033,5 +1283,194 @@ describe("F6 — rigor expansion tags loops, loop_cap, AND review as source=rigo
     // review and loop_cap still derived from rigor
     expect(sources.review).toBe("rigor");
     expect(sources.loop_cap).toBe("rigor");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// G-lane MAJOR: path traversal via initiative id in initiativeIsWorkspaceScoped
+// An initiative id is used as a path segment in the fallback lookup. A crafted
+// id containing "../" can escape .guild/initiatives/{active,archived} and cause
+// the resolver to read arbitrary files. Fix: validate id before path join;
+// defense-in-depth: containment assertion after join.
+// ---------------------------------------------------------------------------
+
+describe("G-lane MAJOR — initiativeIsWorkspaceScoped: path traversal prevention", () => {
+  // Helper: create a workspace root with a legitimate workspace-scoped initiative
+  // at <wsRoot>/.guild/initiatives/active/legit/initiative.yaml so we can
+  // verify the fallback path still works for safe ids.
+  function mkWorkspaceWithLegitInitiative(wsRoot: string): void {
+    mkGuildDir(wsRoot);
+    writeWorkspaceManifest(wsRoot, []);
+    mkInitiativeYaml(wsRoot, "legit", "workspace");
+  }
+
+  // --- Traversal via "../" in id (the reported vector) ---
+  // IMPORTANT: these tests place a workspace-scoped initiative.yaml AT the
+  // traversal-resolved path so that "file doesn't exist" is NOT the reason
+  // the test passes. The only reason they must pass is that the id is rejected
+  // BEFORE any file I/O. This proves the validation, not just lucky absence.
+
+  test("id='../../etc/passwd' → returns false even when a workspace-scoped yaml exists at the resolved path", () => {
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+
+    // Place a workspace-scoped initiative.yaml at the EXACT path that
+    // path.join(wsRoot, ".guild", "initiatives", "active", "../../etc/passwd", "initiative.yaml")
+    // would resolve to without validation:
+    //   <wsRoot>/.guild/initiatives/active/../../etc/passwd/initiative.yaml
+    //   = <wsRoot>/.guild/etc/passwd/initiative.yaml
+    // If the id reaches the filesystem call, this file would be read and return true.
+    // We must return false — meaning the id was rejected before file I/O.
+    const trapPath = path.join(wsRoot, ".guild", "etc", "passwd", "initiative.yaml");
+    writeRaw(trapPath, "initiative:\n  id: trap\n  scope: workspace\n");
+
+    const result = initiativeIsWorkspaceScoped(wsRoot, "../../etc/passwd");
+    expect(result).toBe(false);
+  });
+
+  test("id='../legit' → returns false even though the resolved path points to the legit initiative", () => {
+    // path.join(wsRoot, ".guild", "initiatives", "active", "../legit", "initiative.yaml")
+    // resolves to <wsRoot>/.guild/initiatives/legit/initiative.yaml.
+    // Place a workspace-scoped yaml there — if id reaches I/O, it returns true.
+    // Must return false because id is rejected first.
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+    const trapPath = path.join(wsRoot, ".guild", "initiatives", "legit", "initiative.yaml");
+    writeRaw(trapPath, "initiative:\n  id: trap\n  scope: workspace\n");
+
+    const result = initiativeIsWorkspaceScoped(wsRoot, "../legit");
+    expect(result).toBe(false);
+  });
+
+  test("id that uses '..' to reach <wsRoot>/.guild/initiatives/active/legit via a different angle → rejected", () => {
+    // "active/../active/legit" — path.join resolves this to .../active/legit.
+    // The legit initiative.yaml IS workspace-scoped. If id reaches I/O it returns true.
+    // Must return false because id contains ".." and is rejected before file I/O.
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+
+    const result = initiativeIsWorkspaceScoped(wsRoot, "active/../active/legit");
+    expect(result).toBe(false);
+  });
+
+  test("id='..' (lone double-dot) → returns false", () => {
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+
+    expect(initiativeIsWorkspaceScoped(wsRoot, "..")).toBe(false);
+  });
+
+  test("id='.' (lone dot) → returns false", () => {
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+
+    expect(initiativeIsWorkspaceScoped(wsRoot, ".")).toBe(false);
+  });
+
+  // --- Slash in id (path separator) ---
+
+  test("id='a/b' (forward slash) → returns false", () => {
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+
+    expect(initiativeIsWorkspaceScoped(wsRoot, "a/b")).toBe(false);
+  });
+
+  test("id='a\\\\b' (backslash) → returns false", () => {
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+
+    expect(initiativeIsWorkspaceScoped(wsRoot, "a\\b")).toBe(false);
+  });
+
+  // --- Absolute path prefix ---
+
+  test("id='/etc/passwd' (absolute) → returns false", () => {
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+
+    expect(initiativeIsWorkspaceScoped(wsRoot, "/etc/passwd")).toBe(false);
+  });
+
+  test("id='\\\\server\\share' (UNC-style absolute) → returns false", () => {
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+
+    expect(initiativeIsWorkspaceScoped(wsRoot, "\\\\server\\share")).toBe(false);
+  });
+
+  // --- Empty / whitespace ids ---
+
+  test("id='' (empty) → returns false", () => {
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+
+    expect(initiativeIsWorkspaceScoped(wsRoot, "")).toBe(false);
+  });
+
+  test("id='   ' (whitespace-only) → returns false", () => {
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+
+    expect(initiativeIsWorkspaceScoped(wsRoot, "   ")).toBe(false);
+  });
+
+  // --- NUL byte ---
+
+  test("id with embedded NUL byte → returns false", () => {
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+
+    expect(initiativeIsWorkspaceScoped(wsRoot, "legit\x00evil")).toBe(false);
+  });
+
+  // --- Normal slug ids still work (regression guard) ---
+
+  test("normal slug id via fallback initiative.yaml (scope:workspace) → returns true", () => {
+    // No registry present — fallback to initiative.yaml
+    const wsRoot = tmpDir();
+    mkWorkspaceWithLegitInitiative(wsRoot);
+    // No registry written — only the initiative.yaml placed by mkWorkspaceWithLegitInitiative
+
+    const result = initiativeIsWorkspaceScoped(wsRoot, "legit");
+    expect(result).toBe(true);
+  });
+
+  test("normal slug id via registry (scope:workspace) → returns true", () => {
+    const wsRoot = tmpDir();
+    mkGuildDir(wsRoot);
+    writeWorkspaceManifest(wsRoot, []);
+    mkInitiativeRegistry(wsRoot, [{ id: "my-initiative", scope: "workspace" }]);
+
+    const result = initiativeIsWorkspaceScoped(wsRoot, "my-initiative");
+    expect(result).toBe(true);
+  });
+
+  test("normal slug id via registry (scope:project) → returns false", () => {
+    const wsRoot = tmpDir();
+    mkGuildDir(wsRoot);
+    writeWorkspaceManifest(wsRoot, []);
+    mkInitiativeRegistry(wsRoot, [{ id: "proj-init", scope: "project" }]);
+
+    expect(initiativeIsWorkspaceScoped(wsRoot, "proj-init")).toBe(false);
+  });
+
+  // --- Integration: traversal id through resolveSettings → no inherit ---
+
+  test("resolveSettings: traversal id in workspace initiative_default → child does NOT inherit", () => {
+    const wsRoot = tmpDir();
+    const childDir = path.join(wsRoot, "plugin");
+    mkGuildDir(wsRoot);
+    fs.mkdirSync(path.join(childDir, ".guild"), { recursive: true });
+    // Workspace has a traversal id as initiative_default
+    writeSettings(wsRoot, { initiative_default: "../../etc/passwd" });
+    writeWorkspaceManifest(wsRoot, [childDir]);
+    mkInitiativeYaml(wsRoot, "legit", "workspace"); // legitimate initiative exists
+
+    const { config, sources } = resolveSettings({ cwd: childDir });
+
+    // Traversal id must NOT be inherited; safe default applies
+    expect(config.initiative_default).toBeNull();
+    expect(sources.initiative_default).toBe("builtin");
   });
 });

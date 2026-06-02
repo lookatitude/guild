@@ -41,6 +41,8 @@
 
 import * as fs from "fs";
 import * as path from "path";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const yaml = require("js-yaml") as { load: (src: string) => unknown };
 
 // ---------------------------------------------------------------------------
 // Re-exported types from the schema defined in read-guild-config.ts
@@ -845,6 +847,173 @@ function crossHostAvailable(): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Initiative scope lookup (OD-1 conditional / FU-3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate that an initiative id is safe to use as a single directory-name
+ * component inside .guild/initiatives/{active,archived}/.
+ *
+ * Mirrors the validateRunId pattern in run-lifecycle.ts and promote-upstream.ts.
+ *
+ * Rejects:
+ *  - empty or whitespace-only
+ *  - NUL byte (\x00)
+ *  - absolute path prefix (/ or \)
+ *  - any forward or backward slash (path separators)
+ *  - lone "."
+ *  - ".." anywhere in the string (catches pure "..", "..foo", "foo..bar")
+ *
+ * Returns true iff the id is safe to use as a directory segment.
+ */
+function isValidInitiativeId(id: string): boolean {
+  if (!id || !id.trim()) return false;
+  if (id.includes("\x00")) return false;
+  if (id.startsWith("/") || id.startsWith("\\")) return false;
+  if (id.includes("/") || id.includes("\\")) return false;
+  if (id === ".") return false;
+  if (id === ".." || id.startsWith("..")) return false;
+  if (id.includes("..")) return false;
+  return true;
+}
+
+/**
+ * Assert that `candidatePath` is strictly contained within `baseDir` after
+ * resolving both to absolute paths. Returns false (safe default) if not.
+ * Defense-in-depth check applied after path.join to catch any edge case that
+ * slips past isValidInitiativeId on unusual platforms.
+ */
+function isContainedIn(candidatePath: string, baseDir: string): boolean {
+  const resolved = path.resolve(candidatePath);
+  const resolvedBase = path.resolve(baseDir);
+  return resolved.startsWith(resolvedBase + path.sep);
+}
+
+/**
+ * Determine whether the initiative with the given `id` has `scope: "workspace"`
+ * at the given workspace root.
+ *
+ * Lookup order (first hit wins):
+ *  1. <workspaceRoot>/.guild/indexes/initiatives-registry.yaml
+ *     Find the entry whose `id` matches; read its `scope`.
+ *     (Registry lookup is by-value id match in parsed YAML — no path join involved.)
+ *  2. Fallback: <workspaceRoot>/.guild/initiatives/active/<id>/initiative.yaml
+ *     (also checks archived/ if active/ is absent)
+ *     Read `initiative.scope`.
+ *
+ * Returns `true` iff scope resolves to exactly "workspace".
+ * Returns `false` on ANY error (missing file, malformed YAML, missing entry,
+ * unknown scope, invalid id, containment violation, etc.) — this is the safe
+ * default (do NOT inherit).
+ *
+ * SECURITY: `id` is validated with isValidInitiativeId before being used as a
+ * path segment. Defense-in-depth: a containment assertion is applied after
+ * path.join. An invalid or escaping id always returns false — no file I/O.
+ *
+ * NEVER throws.
+ */
+export function initiativeIsWorkspaceScoped(
+  workspaceRoot: string,
+  id: string
+): boolean {
+  try {
+    // --- Security: validate id before ANY file I/O using it as a path segment.
+    // The registry lookup (step 1) uses by-value string comparison only and
+    // does not join `id` into a path, so this guard is specifically for step 2.
+    // We validate here (before step 1) so the function is unconditionally safe.
+    if (!isValidInitiativeId(id)) return false;
+
+    // --- 1. Try registry -------------------------------------------------
+    // id is compared by value against registry entries — NOT used as a path.
+    const registryPath = path.join(
+      workspaceRoot,
+      ".guild",
+      "indexes",
+      "initiatives-registry.yaml"
+    );
+    if (fs.existsSync(registryPath)) {
+      try {
+        const raw = fs.readFileSync(registryPath, "utf8");
+        const parsed = yaml.load(raw) as Record<string, unknown> | null;
+        if (isPlainObject(parsed)) {
+          const list = (parsed as Record<string, unknown>)["initiatives"];
+          if (Array.isArray(list)) {
+            for (const entry of list) {
+              if (!isPlainObject(entry)) continue;
+              const rec = entry as Record<string, unknown>;
+              if (rec["id"] === id) {
+                // Found the entry — return true only for "workspace" scope
+                return rec["scope"] === "workspace";
+              }
+            }
+            // Entry not found in registry → fall through to initiative.yaml
+          }
+        }
+      } catch {
+        // Malformed YAML or read error → safe default: do NOT inherit
+        return false;
+      }
+    }
+
+    // --- 2. Fallback: initiative.yaml ------------------------------------
+    // id has already been validated by isValidInitiativeId above.
+    // Defense-in-depth: verify the joined path stays within the initiatives
+    // base dir before reading.
+    const initiativesBase = path.join(workspaceRoot, ".guild", "initiatives");
+
+    const activePath = path.join(
+      initiativesBase,
+      "active",
+      id,
+      "initiative.yaml"
+    );
+    const archivedPath = path.join(
+      initiativesBase,
+      "archived",
+      id,
+      "initiative.yaml"
+    );
+
+    // Containment assertions — defense-in-depth after path.join
+    const activeBase = path.join(initiativesBase, "active");
+    const archivedBase = path.join(initiativesBase, "archived");
+    if (!isContainedIn(activePath, activeBase) && !isContainedIn(archivedPath, archivedBase)) {
+      // Resolved path escapes the expected base — reject
+      return false;
+    }
+
+    let yamlPath: string | null = null;
+    if (isContainedIn(activePath, activeBase) && fs.existsSync(activePath)) {
+      yamlPath = activePath;
+    } else if (isContainedIn(archivedPath, archivedBase) && fs.existsSync(archivedPath)) {
+      yamlPath = archivedPath;
+    }
+
+    if (yamlPath !== null) {
+      try {
+        const raw = fs.readFileSync(yamlPath, "utf8");
+        const parsed = yaml.load(raw) as Record<string, unknown> | null;
+        if (isPlainObject(parsed)) {
+          const doc = (parsed as Record<string, unknown>)["initiative"];
+          if (isPlainObject(doc)) {
+            return (doc as Record<string, unknown>)["scope"] === "workspace";
+          }
+        }
+      } catch {
+        // Malformed YAML → safe default
+        return false;
+      }
+    }
+  } catch {
+    // Any unexpected error → safe default
+    return false;
+  }
+
+  // No authoritative source found → safe default: do NOT inherit
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Rigor explicitness helper
 // ---------------------------------------------------------------------------
 
@@ -904,12 +1073,24 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
     const wsGuildDir = path.join(ws.rootDir, ".guild");
     const rawWsSettings = parseSettingsFile(path.join(wsGuildDir, "settings.json"));
 
-    // Strip non-inheritable keys from workspace layer
+    // Strip non-inheritable keys from workspace layer.
+    // EXCEPTION (OD-1 / FU-3): initiative_default inherits workspace→child ONLY
+    // when the initiative it names has scope: "workspace" in the workspace
+    // registry (or fallback initiative.yaml). workspace.mode is UNCONDITIONALLY
+    // non-inheriting — the initiativeIsWorkspaceScoped check never applies to it.
     const wsInheritable: Partial<ResolvedConfig> = {};
     for (const [k, v] of Object.entries(rawWsSettings) as Array<[keyof ResolvedConfig, unknown]>) {
-      if (!NON_INHERITABLE_KEYS.has(k as string)) {
-        (wsInheritable as Record<string, unknown>)[k as string] = v;
+      const key = k as string;
+      if (!NON_INHERITABLE_KEYS.has(key)) {
+        (wsInheritable as Record<string, unknown>)[key] = v;
+      } else if (key === "initiative_default" && typeof v === "string" && v !== null) {
+        // Conditional exception: allow through only if the initiative is workspace-scoped
+        if (initiativeIsWorkspaceScoped(ws.rootDir, v)) {
+          (wsInheritable as Record<string, unknown>)[key] = v;
+        }
+        // Otherwise: do not add to wsInheritable (safe default: no inherit)
       }
+      // workspace (workspace.mode): unconditionally non-inheriting — never added
     }
     wsSettings = wsInheritable;
 
@@ -921,11 +1102,16 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
     // Layer C: workspace settings.local.json
     try {
       const rawWsLocal = parseLocalFile(wsGuildDir);
-      // Strip non-inheritable keys
+      // Strip non-inheritable keys (same conditional exception for initiative_default)
       const wsLocalInheritable: Partial<ResolvedConfig> = {};
       for (const [k, v] of Object.entries(rawWsLocal) as Array<[keyof ResolvedConfig, unknown]>) {
-        if (!NON_INHERITABLE_KEYS.has(k as string)) {
-          (wsLocalInheritable as Record<string, unknown>)[k as string] = v;
+        const key = k as string;
+        if (!NON_INHERITABLE_KEYS.has(key)) {
+          (wsLocalInheritable as Record<string, unknown>)[key] = v;
+        } else if (key === "initiative_default" && typeof v === "string" && v !== null) {
+          if (initiativeIsWorkspaceScoped(ws.rootDir, v)) {
+            (wsLocalInheritable as Record<string, unknown>)[key] = v;
+          }
         }
       }
       wsLocalSettings = wsLocalInheritable;
