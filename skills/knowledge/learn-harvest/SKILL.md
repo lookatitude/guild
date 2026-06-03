@@ -17,7 +17,7 @@ classifier itself (which stays cheap and deterministic).
 
 Inputs are lifecycle artifacts, not raw source code:
 - phase receipts
-- handoff receipts (`guild.handoff_receipt.v1`)
+- handoff receipts (`guild.handoff_receipt.v1`) — when a receipt is consumed, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
 - review outputs (`.guild/runs/<run-id>/review.md`)
 - verify reports (`.guild/runs/<run-id>/verify.md`)
 - run traces (`logs/v1.4-events.jsonl`)

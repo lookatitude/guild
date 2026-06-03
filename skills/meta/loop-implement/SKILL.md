@@ -43,6 +43,8 @@ is rejected with exit 2. Defaults per lane type, the layer-set table, and the
 `cap` (16), `restart_cap` (3), `run_id`, `task_id`, plus restart-only
 `prior_receipts?` / `security_findings?`. Full type → **`io-contract.md`**.
 
+When a receipt is consumed (here, the restart-only `prior_receipts?` / `security_findings?` inputs), the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
+
 ## Output shape
 
 `LoopImplementOutput` — `status` (`satisfied|cap_hit|escalated|rework|restart_cap_hit`),
@@ -65,6 +67,8 @@ single finding has `severity: high` AND `addressed_by_owner: false`.** Lower or
 already-addressed findings are logged (`assumption_logged`), not restarted;
 malformed bullets are no-restart. Findings format, regex, test pins, and the
 6-step on-restart machinery → **`security-review-restart.md`**.
+
+When this terminating receipt is consumed, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
 
 ## Restart cap = 3
 

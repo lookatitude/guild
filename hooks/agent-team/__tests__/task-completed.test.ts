@@ -8,6 +8,13 @@
  *   - receipt missing required §8.2 fields → blocked
  *   - valid guild.handoff.v2 envelope in receipt → accepted, learnings persisted
  *   - invalid guild.handoff.v2 envelope (bloat / schema error) → blocked (SC-7)
+ *   - OD-4 discriminator (AC-3): in-scope receipt (post-effective-date run.yaml)
+ *     with no envelope → fail-closed (exit non-zero)
+ *   - OD-4 discriminator (AC-3): in-scope receipt WITH valid envelope → done (exit 0)
+ *   - OD-4 discriminator (AC-3): grandfathered (pre-effective-date) receipt with
+ *     no envelope → lenient, still exit 0
+ *   - OD-4 discriminator (AC-3): malformed/undeterminable run date → fail-open
+ *     (lenient + logged)
  */
 
 import { spawnSync } from "child_process";
@@ -431,6 +438,179 @@ describe("task-completed.ts", () => {
       );
       expect(exitCode).not.toBe(0);
       expect(fs.existsSync(runStateFor(runId))).toBe(false);
+    });
+  });
+
+  // ── OD-4 discriminator tests (AC-3) ──────────────────────────────────────
+  //
+  // Policy effective date: 2026-06-03 (communication-format-policy.md §policy_effective_date)
+  // In-scope: run.yaml.started_at >= 2026-06-03 → fail-closed on missing envelope
+  // Grandfathered: run.yaml.started_at < 2026-06-03 → lenient (envelope optional)
+  // Undeterminable date (no run.yaml / bad value): fail-open lenient + log warning
+
+  /**
+   * Write a minimal run.yaml with started_at set to the given ISO date string.
+   * Mirrors the real guild.run.v1 schema (started_at is a top-level YAML scalar).
+   */
+  function writeRunYaml(runDir: string, startedAt: string): void {
+    fs.mkdirSync(runDir, { recursive: true });
+    const content = [
+      `schema_version: guild.run.v1`,
+      `run_id: ${path.basename(runDir)}`,
+      `command: /guild:build`,
+      `started_at: ${startedAt}`,
+      `status: open`,
+    ].join("\n") + "\n";
+    fs.writeFileSync(path.join(runDir, "run.yaml"), content);
+  }
+
+  describe("OD-4 discriminator — in-scope receipt (post-effective-date), no v2 envelope → fail-closed", () => {
+    // AC-3 case 1: in-scope receipt with NO valid embedded v2 block → INVALID (exit non-zero)
+    it("exits non-zero when run is post-effective-date and receipt has no guild.handoff.v2 envelope", () => {
+      const runId = "run-scope-postdate";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      // started_at on the effective date itself (2026-06-03) → in-scope
+      writeRunYaml(runDir, "2026-06-03T00:00:00Z");
+      createReceipt(runDir, "backend", "task-scope-001", FULL_RECEIPT_FIELDS); // no envelope
+
+      const { exitCode, stderr } = runScript(
+        {
+          session_id: "scope-postdate",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-scope-001",
+          task_subject: "In-scope task",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1", GUILD_RUN_ID: runId }
+      );
+      expect(exitCode).not.toBe(0);
+      // Must mention both: the missing envelope AND the in-scope enforcement
+      expect(stderr).toMatch(/missing.*guild\.handoff\.v2.*envelope|guild\.handoff\.v2.*envelope.*missing/i);
+      expect(stderr).toMatch(/in-scope for enforcement|in-scope.*enforcement/i);
+    });
+
+    it("exits non-zero when run started_at is after effective date and receipt has no envelope", () => {
+      const runId = "run-scope-future";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      writeRunYaml(runDir, "2026-07-01T10:00:00Z"); // clearly after 2026-06-03
+      createReceipt(runDir, "backend", "task-scope-002", FULL_RECEIPT_FIELDS); // no envelope
+
+      const { exitCode, stderr } = runScript(
+        {
+          session_id: "scope-future",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-scope-002",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1", GUILD_RUN_ID: runId }
+      );
+      expect(exitCode).not.toBe(0);
+      expect(stderr).toMatch(/in-scope|fail-closed/i);
+    });
+  });
+
+  describe("OD-4 discriminator — in-scope receipt WITH valid v2 envelope → done (exit 0)", () => {
+    // AC-3 case 2: in-scope receipt WITH a valid embedded v2 block → accepted (exit 0)
+    it("exits 0 when run is post-effective-date and receipt has a valid guild.handoff.v2 envelope", () => {
+      const runId = "run-scope-valid";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      writeRunYaml(runDir, "2026-06-03T00:00:00Z");
+      const envelope = { ...VALID_ENVELOPE, task_id: "task-scope-valid" };
+      createReceipt(runDir, "backend", "task-scope-valid", FULL_RECEIPT_FIELDS, envelope);
+
+      const { exitCode, stderr } = runScript(
+        {
+          session_id: "scope-valid",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-scope-valid",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1", GUILD_RUN_ID: runId }
+      );
+      expect(exitCode).toBe(0);
+      expect(stderr).toMatch(/envelope validated/i);
+    });
+  });
+
+  describe("OD-4 discriminator — grandfathered (pre-effective-date) receipt, no envelope → lenient (exit 0)", () => {
+    // AC-3 case 3: pre-effective-date run → envelope is optional; still exits 0
+    it("exits 0 when run is pre-effective-date and receipt has no guild.handoff.v2 envelope", () => {
+      const runId = "run-legacy-predate";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      writeRunYaml(runDir, "2026-06-02T23:59:59Z"); // one second before effective date
+      createReceipt(runDir, "backend", "task-legacy-001", FULL_RECEIPT_FIELDS); // no envelope
+
+      const { exitCode, stderr } = runScript(
+        {
+          session_id: "legacy-predate",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-legacy-001",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1", GUILD_RUN_ID: runId }
+      );
+      expect(exitCode).toBe(0);
+      expect(stderr).toMatch(/grandfathered|legacy|optional/i);
+    });
+  });
+
+  describe("OD-4 discriminator — undeterminable run date → fail-open lenient + logged", () => {
+    // AC-3 case 4: missing run.yaml → fail-open (lenient, exit 0) + logs warning
+    it("exits 0 (fail-open lenient) when run.yaml is absent (cannot determine run date)", () => {
+      const runId = "run-no-yaml";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      // Do NOT write run.yaml — run dir exists but no manifest
+      fs.mkdirSync(runDir, { recursive: true });
+      createReceipt(runDir, "backend", "task-nodate-001", FULL_RECEIPT_FIELDS); // no envelope
+
+      const { exitCode, stderr } = runScript(
+        {
+          session_id: "no-yaml",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-nodate-001",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1", GUILD_RUN_ID: runId }
+      );
+      expect(exitCode).toBe(0);
+      // Must log a warning about indeterminate date
+      expect(stderr).toMatch(/indeterminate|undetermined|cannot.*date|fail.open|unknown.*date/i);
+    });
+
+    it("exits 0 (fail-open lenient) when run.yaml has a malformed started_at value", () => {
+      const runId = "run-bad-date";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      // Write run.yaml with an unparseable date
+      fs.mkdirSync(runDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(runDir, "run.yaml"),
+        "schema_version: guild.run.v1\nrun_id: run-bad-date\nstarted_at: not-a-date\n"
+      );
+      createReceipt(runDir, "backend", "task-baddate-001", FULL_RECEIPT_FIELDS); // no envelope
+
+      const { exitCode, stderr } = runScript(
+        {
+          session_id: "bad-date",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-baddate-001",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1", GUILD_RUN_ID: runId }
+      );
+      expect(exitCode).toBe(0);
+      expect(stderr).toMatch(/indeterminate|undetermined|cannot.*date|fail.open|unknown.*date/i);
     });
   });
 });

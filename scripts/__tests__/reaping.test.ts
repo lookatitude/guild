@@ -40,6 +40,7 @@ import {
   reapDeadMembers,
   sessionJsonPath,
   listRunnableRunIds,
+  isRunInScope,
   type FsLike,
   type ReceiptCheckResult,
   type DismissibleEntry,
@@ -375,6 +376,192 @@ describe("checkReceipt — strict v2 shape (unknown-key rejection)", () => {
   });
 });
 
+// ── checkReceipt — full required-field parity with validateHandoffV2 (BLOCKER fix) ─
+//
+// These tests verify that reaping's envelope validator matches the FULL semantics
+// of validateHandoffV2 in hooks/lib/handoff-v2.ts — not just unknown-key and
+// schema_version checks.  A receipt that would be REJECTED by task-completed must
+// also be REJECTED by detectDismissible (AC-3 full consumer agreement).
+//
+// Each case: a structurally valid fenced block that is missing one required field
+// or violates a size cap.  All must produce envelopeValid:false + a matching error.
+
+describe("checkReceipt — full v2 required-field parity (mirror of validateHandoffV2)", () => {
+  const P = "/run/handoffs/backend-task-001.md";
+
+  it("rejects envelope missing task_id — task_id must be a non-empty string", () => {
+    const { task_id: _dropped, ...noTaskId } = validEnvelope() as Record<string, unknown>;
+    const md = withEnvelope(validReceiptMd(), noTaskId);
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("task_id"))).toBe(true);
+  });
+
+  it("rejects envelope with empty task_id string", () => {
+    const md = withEnvelope(validReceiptMd(), validEnvelope({ task_id: "  " }));
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("task_id"))).toBe(true);
+  });
+
+  it("rejects envelope missing tier", () => {
+    const { tier: _dropped, ...noTier } = validEnvelope() as Record<string, unknown>;
+    const md = withEnvelope(validReceiptMd(), noTier);
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("tier"))).toBe(true);
+  });
+
+  it("rejects envelope with invalid tier value", () => {
+    const md = withEnvelope(validReceiptMd(), validEnvelope({ tier: "ultra" }));
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("tier"))).toBe(true);
+  });
+
+  it("rejects envelope missing status", () => {
+    const { status: _dropped, ...noStatus } = validEnvelope() as Record<string, unknown>;
+    const md = withEnvelope(validReceiptMd(), noStatus);
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("status"))).toBe(true);
+  });
+
+  it("rejects envelope with invalid status value", () => {
+    const md = withEnvelope(validReceiptMd(), validEnvelope({ status: "pending" }));
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("status"))).toBe(true);
+  });
+
+  it("rejects envelope missing summary", () => {
+    const { summary: _dropped, ...noSummary } = validEnvelope() as Record<string, unknown>;
+    const md = withEnvelope(validReceiptMd(), noSummary);
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("summary"))).toBe(true);
+  });
+
+  it("rejects envelope with empty summary string", () => {
+    const md = withEnvelope(validReceiptMd(), validEnvelope({ summary: "   " }));
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("summary"))).toBe(true);
+  });
+
+  it("rejects envelope with summary over 600 chars (SC-7 bloat rejection)", () => {
+    const md = withEnvelope(validReceiptMd(), validEnvelope({ summary: "x".repeat(601) }));
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("summary") && e.includes("cap"))).toBe(true);
+  });
+
+  it("rejects envelope missing artifacts", () => {
+    const { artifacts: _dropped, ...noArtifacts } = validEnvelope() as Record<string, unknown>;
+    const md = withEnvelope(validReceiptMd(), noArtifacts);
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("artifacts"))).toBe(true);
+  });
+
+  it("rejects envelope where artifacts is not an array", () => {
+    const md = withEnvelope(validReceiptMd(), validEnvelope({ artifacts: "not-an-array" }));
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("artifacts"))).toBe(true);
+  });
+
+  it("rejects envelope missing issues", () => {
+    const { issues: _dropped, ...noIssues } = validEnvelope() as Record<string, unknown>;
+    const md = withEnvelope(validReceiptMd(), noIssues);
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("issues"))).toBe(true);
+  });
+
+  it("rejects envelope where issues is not an array", () => {
+    const md = withEnvelope(validReceiptMd(), validEnvelope({ issues: "not-an-array" }));
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("issues"))).toBe(true);
+  });
+
+  it("rejects escalate status without escalate_reason (conditional required field)", () => {
+    const md = withEnvelope(
+      validReceiptMd(),
+      validEnvelope({ status: "escalate" })
+      // escalate_reason is absent → must fail
+    );
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("escalate_reason"))).toBe(true);
+  });
+
+  it("accepts escalate status WITH a non-empty escalate_reason", () => {
+    const md = withEnvelope(
+      validReceiptMd(),
+      validEnvelope({ status: "escalate", escalate_reason: "need architect review" })
+    );
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(true);
+    expect(r.errors).toHaveLength(0);
+  });
+
+  it("rejects escalate status with empty escalate_reason string", () => {
+    const md = withEnvelope(
+      validReceiptMd(),
+      validEnvelope({ status: "escalate", escalate_reason: "  " })
+    );
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("escalate_reason"))).toBe(true);
+  });
+
+  it("rejects notes over 200 chars (O-4 cap)", () => {
+    const md = withEnvelope(
+      validReceiptMd(),
+      validEnvelope({ notes: "n".repeat(201) })
+    );
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    expect(r.errors.some((e) => e.includes("notes") && e.includes("cap"))).toBe(true);
+  });
+
+  it("dismissible:false when envelope has only schema_version (missing all other required fields)", () => {
+    // This is the exact case the BLOCKER identified: the old envelopeShapeErrors
+    // would have accepted this (schema_version OK + no unknown keys) but
+    // validateHandoffV2 rejects it (missing task_id, tier, status, summary, etc.).
+    const md = withEnvelope(validReceiptMd(), { schema_version: "guild.handoff.v2" });
+    const fsMod = makeFs({ [P]: md });
+    const r = checkReceipt(P, fsMod);
+    expect(r.envelopeValid).toBe(false);
+    // Must report multiple missing required fields
+    expect(r.errors.some((e) => e.includes("task_id"))).toBe(true);
+    expect(r.errors.some((e) => e.includes("tier"))).toBe(true);
+    expect(r.errors.some((e) => e.includes("status"))).toBe(true);
+    expect(r.errors.some((e) => e.includes("summary"))).toBe(true);
+    expect(r.errors.some((e) => e.includes("artifacts"))).toBe(true);
+    expect(r.errors.some((e) => e.includes("issues"))).toBe(true);
+  });
+});
+
 // ── detectDismissible ─────────────────────────────────────────────────────────
 
 describe("detectDismissible — A2a receipt-based dismissal signal", () => {
@@ -475,9 +662,11 @@ describe("detectDismissible — A2a receipt-based dismissal signal", () => {
     expect(results).toHaveLength(0);
   });
 
-  it("dismissible:false for frontmatter-only receipt (§8.2 present, no fenced block) — matches hook reject verdict", () => {
+  it("dismissible:false for frontmatter-only receipt (§8.2 present, no fenced block) — in-scope run, matches hook reject verdict", () => {
     // This is the literal p2-3 scenario: §8.2 sections present but no fenced JSON block.
-    // The hook validator rejects it (no fenced block); reaping must agree (fail-closed).
+    // The hook validator rejects it (no fenced block). For an in-scope run (>= policy_effective_date)
+    // reaping must agree (fail-closed).  A run.yaml with an in-scope date is required so the
+    // OD-4 discriminator enforces the fail-closed path (undeterminable → fail-open, not tested here).
     const frontmatterOnly = [
       "---",
       "schema: guild.handoff.v2",
@@ -500,7 +689,11 @@ describe("detectDismissible — A2a receipt-based dismissal signal", () => {
       "- none",
     ].join("\n");
     const rPath = `${HANDOFFS}/backend-p2-3.md`;
-    const fsMod = makeFs({ [rPath]: frontmatterOnly });
+    const fsMod = makeFs({
+      [rPath]: frontmatterOnly,
+      // in-scope run: envelope is required → fail-closed
+      [`${RUN_DIR}/run.yaml`]: "schema_version: guild.run.v1\nrun_id: run-001\nstarted_at: 2026-06-03T00:00:00.000Z\nstatus: open\n",
+    });
     const [entry] = detectDismissible(RUN_DIR, ["backend"], fsMod);
     expect(entry.dismissible).toBe(false);
     expect(entry.errors.some((e) => e.includes("fenced block"))).toBe(true);
@@ -695,5 +888,138 @@ describe("sessionJsonPath + listRunnableRunIds helpers", () => {
     });
     const ids = listRunnableRunIds("/repo", fs);
     expect(ids).toEqual(["run-a", "run-b"]);
+  });
+});
+
+// ── OD-4 discriminator — isRunInScope ─────────────────────────────────────────
+//
+// policy_effective_date: 2026-06-03 (docs/knowledge/decisions/communication-format-policy.md)
+// A runtime receipt written for a run whose started_at / run-id timestamp is
+//   >= 2026-06-03  → in-scope (fail-closed on missing envelope)
+//   <  2026-06-03  → grandfathered (fail-open / lenient: §8.2 alone is enough)
+//   undeterminable → fail-open lenient + warn log
+
+/** Minimal run.yaml content fragment with a given started_at date. */
+function runYaml(startedAt: string): string {
+  return `schema_version: guild.run.v1\nrun_id: run-test\nstarted_at: ${startedAt}\nstatus: open\n`;
+}
+
+describe("isRunInScope — OD-4 discriminator", () => {
+  const RUN_DIR = "/repo/.guild/runs/run-test";
+
+  it("returns true for started_at on the effective date (2026-06-03)", () => {
+    const fs = makeFs({ [`${RUN_DIR}/run.yaml`]: runYaml("2026-06-03T00:00:00.000Z") });
+    expect(isRunInScope(RUN_DIR, fs)).toBe(true);
+  });
+
+  it("returns true for started_at after the effective date", () => {
+    const fs = makeFs({ [`${RUN_DIR}/run.yaml`]: runYaml("2026-06-04T12:30:00.000Z") });
+    expect(isRunInScope(RUN_DIR, fs)).toBe(true);
+  });
+
+  it("returns false for started_at before the effective date (grandfathered)", () => {
+    const fs = makeFs({ [`${RUN_DIR}/run.yaml`]: runYaml("2026-06-02T23:59:59.000Z") });
+    expect(isRunInScope(RUN_DIR, fs)).toBe(false);
+  });
+
+  it("returns false for a clearly legacy started_at (grandfathered)", () => {
+    const fs = makeFs({ [`${RUN_DIR}/run.yaml`]: runYaml("2026-01-15T08:00:00.000Z") });
+    expect(isRunInScope(RUN_DIR, fs)).toBe(false);
+  });
+
+  it("returns false (fail-open) when run.yaml is absent — undeterminable date", () => {
+    const fs = makeFs(); // no run.yaml
+    expect(isRunInScope(RUN_DIR, fs)).toBe(false);
+  });
+
+  it("returns false (fail-open) when run.yaml has no started_at line — undeterminable date", () => {
+    const fs = makeFs({
+      [`${RUN_DIR}/run.yaml`]: "schema_version: guild.run.v1\nrun_id: run-test\nstatus: open\n",
+    });
+    expect(isRunInScope(RUN_DIR, fs)).toBe(false);
+  });
+
+  it("returns false (fail-open) when started_at is unparseable — undeterminable date", () => {
+    const fs = makeFs({ [`${RUN_DIR}/run.yaml`]: runYaml("NOT-A-DATE") });
+    expect(isRunInScope(RUN_DIR, fs)).toBe(false);
+  });
+
+  it("parses date-only ISO form (YYYY-MM-DD) correctly — on the boundary", () => {
+    const fs = makeFs({ [`${RUN_DIR}/run.yaml`]: runYaml("2026-06-03") });
+    expect(isRunInScope(RUN_DIR, fs)).toBe(true);
+  });
+
+  it("parses date-only ISO form (YYYY-MM-DD) correctly — day before boundary", () => {
+    const fs = makeFs({ [`${RUN_DIR}/run.yaml`]: runYaml("2026-06-02") });
+    expect(isRunInScope(RUN_DIR, fs)).toBe(false);
+  });
+});
+
+// ── OD-4 discriminator — detectDismissible grandfathering ─────────────────────
+//
+// When a receipt has §8.2 fields but no fenced v2 envelope, the dismissal result
+// depends on whether the run is in-scope (OD-4):
+//   in-scope run  → dismissible:false (fail-closed — envelope required)
+//   legacy run    → dismissible:true  (grandfathered — §8.2 alone is enough)
+//   no run.yaml   → dismissible:true  (fail-open — undeterminable date is lenient)
+
+describe("detectDismissible — OD-4 grandfathering via run.yaml", () => {
+  const RUN_DIR = "/repo/.guild/runs/run-od4";
+  const HANDOFFS = `${RUN_DIR}/handoffs`;
+  const RECEIPT_PATH = `${HANDOFFS}/backend-task-001.md`;
+
+  // A receipt that has all §8.2 fields but NO fenced v2 block (legacy shape).
+  const legacyReceiptMd = validReceiptMd();
+
+  it("dismissible:false for in-scope run (>= 2026-06-03) with no envelope — fail-closed", () => {
+    const fs = makeFs({
+      [RECEIPT_PATH]: legacyReceiptMd,
+      [`${RUN_DIR}/run.yaml`]: runYaml("2026-06-03T00:00:00.000Z"),
+    });
+    const [entry] = detectDismissible(RUN_DIR, ["backend"], fs);
+    expect(entry.dismissible).toBe(false);
+    expect(entry.errors.some((e) => e.includes("fenced block") || e.includes("envelope"))).toBe(true);
+  });
+
+  it("dismissible:true for grandfathered run (< 2026-06-03) with no envelope — §8.2 alone is enough", () => {
+    const fs = makeFs({
+      [RECEIPT_PATH]: legacyReceiptMd,
+      [`${RUN_DIR}/run.yaml`]: runYaml("2026-06-02T23:59:59.000Z"),
+    });
+    const [entry] = detectDismissible(RUN_DIR, ["backend"], fs);
+    expect(entry.dismissible).toBe(true);
+    expect(entry.errors).toHaveLength(0);
+  });
+
+  it("dismissible:true when run.yaml absent and receipt has §8.2 fields — fail-open on undeterminable date", () => {
+    const fs = makeFs({ [RECEIPT_PATH]: legacyReceiptMd });
+    // No run.yaml → date is undeterminable → fail-open (lenient)
+    const [entry] = detectDismissible(RUN_DIR, ["backend"], fs);
+    expect(entry.dismissible).toBe(true);
+    expect(entry.errors).toHaveLength(0);
+  });
+
+  it("dismissible:true for in-scope run WITH valid envelope — envelope present and valid", () => {
+    const md = withEnvelope(validReceiptMd(), validEnvelope());
+    const fs = makeFs({
+      [RECEIPT_PATH]: md,
+      [`${RUN_DIR}/run.yaml`]: runYaml("2026-06-03T00:00:00.000Z"),
+    });
+    const [entry] = detectDismissible(RUN_DIR, ["backend"], fs);
+    expect(entry.dismissible).toBe(true);
+    expect(entry.errors).toHaveLength(0);
+  });
+
+  it("dismissible:false for grandfathered run with invalid envelope shape (shape errors still reject)", () => {
+    // Even for a legacy run, a PRESENT but malformed envelope is still invalid.
+    // Grandfathering only applies when NO envelope exists (the old shape).
+    const md = withEnvelope(validReceiptMd(), validEnvelope({ schema_version: "guild.handoff.v0" }));
+    const fs = makeFs({
+      [RECEIPT_PATH]: md,
+      [`${RUN_DIR}/run.yaml`]: runYaml("2026-06-01T00:00:00.000Z"),
+    });
+    const [entry] = detectDismissible(RUN_DIR, ["backend"], fs);
+    expect(entry.dismissible).toBe(false);
+    expect(entry.errors.some((e) => e.includes("schema_version"))).toBe(true);
   });
 });

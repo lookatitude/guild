@@ -122,7 +122,7 @@ Recall content lands in the **task-dependent** layer and is subject to the same 
 
 ## Lead context (lean lead — compaction, not summarization)
 
-Implements ADR §4 (SC-3). The coordinator stays lean by **dispatching by pointer** and consuming only compact `guild.handoff.v2` envelopes (canonical body at ADR §5, bound by pointer — distinct from the frozen `guild.handoff_receipt.v1`), **never** full specialist transcripts (which remain in `.guild/runs/` for audit and never enter lead context). The lead holds:
+Implements ADR §4 (SC-3). The coordinator stays lean by **dispatching by pointer** and consuming only compact `guild.handoff.v2` envelopes (canonical body at ADR §5, bound by pointer — distinct from the frozen `guild.handoff_receipt.v1`), **never** full specialist transcripts (which remain in `.guild/runs/` for audit and never enter lead context). When a receipt is consumed (here, or as an upstream `depends-on:` contract in the task-dependent layer above), the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt. The lead holds:
 
 - **Last-N envelopes in full** (default last-N = 5) + a **rolling summary** of older work.
 - **Recompute at a capacity threshold** (~70% of context capacity; `cost-techniques.md §4`).

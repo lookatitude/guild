@@ -808,3 +808,38 @@ export function readRecordStatusRuns(root: string): boolean {
     return true;
   }
 }
+
+/**
+ * Read the `started_at` scalar from `<runDir>/run.yaml` using the same
+ * top-level-scalar extraction logic `readStartFacts` already uses internally.
+ *
+ * Exported so other scripts/ consumers (e.g. reaping.ts) can read the run
+ * timestamp without adding a new hand-rolled YAML reader (OD-3 compliance).
+ *
+ * @param runDir  Absolute path to `.guild/runs/<run-id>/` (the run directory).
+ * @param readFile  Injectable reader: `(absPath) => string | null`.
+ *   Accepts either the `RunLifecycleEnv.fs.readFile` interface or a thin
+ *   adapter over `FsLike` (returns null on ENOENT/error rather than throwing).
+ *   Default: real fs via `fsNode.readFileSync`.
+ * @returns The raw `started_at` string value, or `null` when:
+ *   - `run.yaml` does not exist at the expected path, OR
+ *   - the `started_at:` field is absent from the file.
+ */
+export function readRunStartedAt(
+  runDir: string,
+  readFile: (absPath: string) => string | null = (p) => {
+    try {
+      return fsNode.readFileSync(p, "utf8");
+    } catch {
+      return null;
+    }
+  }
+): string | null {
+  const p = path.join(runDir, "run.yaml");
+  const raw = readFile(p);
+  if (raw === null) return null;
+  // Mirror of the readStartFacts top-level scalar extractor:
+  // Match `started_at: <value>` as a bare scalar (the start writer's shape).
+  const m = raw.match(/^started_at:[ \t]*(.*)$/m);
+  return m ? m[1].trim() || null : null;
+}

@@ -55,6 +55,11 @@ import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
 import { validateHandoffV2, extractHandoffEnvelope, HandoffV2 } from "../lib/handoff-v2.js";
 import {
+  POLICY_EFFECTIVE_DATE,
+  isRunInScope,
+  RunScopeResult,
+} from "../lib/run-date.js";
+import {
   upsertLane,
   LaneStatus,
   LaneTier,
@@ -76,6 +81,10 @@ interface TaskCompletedPayload {
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
+
+// POLICY_EFFECTIVE_DATE is imported from ../lib/run-date.ts — it is the SINGLE
+// named constant for the OD-4 enforcement boundary. Canonical source:
+//   docs/knowledge/decisions/communication-format-policy.md §"policy_effective_date"
 
 /**
  * §8.2 required fields that every handoff receipt markdown must contain.
@@ -304,7 +313,13 @@ async function main(): Promise<void> {
     );
   }
 
-  // ── Validate guild.handoff.v2 envelope if present ─────────────────────────
+  // ── Validate guild.handoff.v2 envelope (OD-4 discriminator, AC-3) ───────────
+  //
+  // For in-scope receipts (run.yaml.started_at >= POLICY_EFFECTIVE_DATE), a
+  // missing or invalid v2 envelope is a hard failure (fail-closed). For
+  // grandfathered or indeterminate-date receipts the envelope remains optional
+  // (lenient). The discriminator always fails-open on indeterminate dates to
+  // never break runs with missing run manifests.
   const rawEnvelope = extractHandoffEnvelope(content);
   let envelopeStatus: HandoffV2["status"] | null = null;
   let laneTier: LaneTier | undefined;
@@ -329,10 +344,33 @@ async function main(): Promise<void> {
         `status: ${envelope.status}).\n`
     );
   } else {
-    process.stderr.write(
-      `[task-completed] NOTE: no guild.handoff.v2 envelope found in receipt — ` +
-        `validation skipped (envelope optional for legacy receipts).\n`
-    );
+    // No v2 envelope found — apply OD-4 discriminator to decide lenient vs fail-closed.
+    const disc: RunScopeResult = isRunInScope(runDir, taskId);
+    if (disc.inscope) {
+      // In-scope receipt: fail-closed (AC-3 enforcement).
+      die(
+        `Task "${taskId}" receipt at "${rPath}" is missing a guild.handoff.v2 envelope.\n` +
+          `This run is in-scope for enforcement (run started_at >= policy_effective_date ` +
+          `${POLICY_EFFECTIVE_DATE.toISOString().slice(0, 10)}).\n` +
+          `Add a fenced \`\`\`guild.handoff.v2 { ... } \`\`\` JSON block to the receipt ` +
+          `before marking complete. A frontmatter-only receipt is not a valid machine receipt ` +
+          `(communication-format-policy.md §"Handoff contract", OD-2).`
+      );
+    } else if (disc.reason === "indeterminate") {
+      // Indeterminate date: fail-open lenient + log warning.
+      process.stderr.write(disc.warn + "\n");
+      process.stderr.write(
+        `[task-completed] NOTE: no guild.handoff.v2 envelope found in receipt for task "${taskId}" — ` +
+          `validation skipped (envelope optional for indeterminate-date runs).\n`
+      );
+    } else {
+      // Grandfathered (pre-effective-date): lenient, envelope optional.
+      process.stderr.write(
+        `[task-completed] NOTE: no guild.handoff.v2 envelope found in receipt for task "${taskId}" — ` +
+          `validation skipped (grandfathered legacy receipt, run pre-dates policy_effective_date ` +
+          `${POLICY_EFFECTIVE_DATE.toISOString().slice(0, 10)}).\n`
+      );
+    }
   }
 
   // ── Persist run-state checkpoint (ADR-RE-1) — lane has terminated ─────────

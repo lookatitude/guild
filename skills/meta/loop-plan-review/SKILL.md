@@ -44,7 +44,11 @@ must independently emit the sentinel for clean termination.
 Security terminates by emitting `## NO MORE QUESTIONS` as a standalone line,
 exactly once, with no inline/bullet decoration. The driver then runs the three
 post-sentinel regex patterns against the substring AFTER the sentinel; any match
-→ `malformed_termination` + one extra round. The removed
+→ `malformed_termination` + one extra round.
+
+When a round emission is consumed as a receipt, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
+
+The removed
 `/concern|issue|gap|missing|undefined/i` keyword set must NOT be re-introduced.
 Patterns → **`loop-mechanics.md`**.
 

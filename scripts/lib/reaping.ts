@@ -18,10 +18,18 @@
  *   1. File exists at <runDir>/handoffs/<specialist>-<task-id>.md
  *   2. Contains all five §8.2 required fields (changed_files, opens_for,
  *      assumptions, evidence, followups)
- *   3. If a ```guild.handoff.v2 fence block is present, its schema_version
- *      must be "guild.handoff.v2" (lightweight shape check)
+ *   3. OD-4 discriminator: whether the fenced guild.handoff.v2 envelope is
+ *      REQUIRED or OPTIONAL depends on the run's policy scope:
+ *        - in-scope run (run.yaml started_at >= POLICY_EFFECTIVE_DATE): required,
+ *          fail-closed (no valid envelope → invalid receipt).
+ *        - grandfathered run (started_at < POLICY_EFFECTIVE_DATE): optional,
+ *          §8.2 fields alone are sufficient.
+ *        - undeterminable (run.yaml absent or unparseable date): fail-open,
+ *          treat as grandfathered + log a warning.
+ *      Authority: docs/knowledge/decisions/communication-format-policy.md
+ *      §"OD-4 discriminator" + §"policy_effective_date: 2026-06-03".
  *
- * A receipt satisfying these three criteria is the deterministic dismissal
+ * A receipt satisfying these criteria is the deterministic dismissal
  * signal that P1-2 documents; the orchestrator can safely dismiss a teammate
  * as soon as its receipt lands.
  *
@@ -34,6 +42,7 @@ import * as fsNode from "fs";
 import * as path from "path";
 import { spawnSync } from "child_process";
 import type { RunFn } from "./team-backend";
+import { readRunStartedAt as _readRunStartedAt } from "./run-lifecycle";
 
 // ── Injectable filesystem seam ────────────────────────────────────────────────
 //
@@ -114,46 +123,232 @@ function extractEnvelope(content: string): unknown | null {
   }
 }
 
-// Allowed top-level keys for a guild.handoff.v2 envelope (spec §2, ALLOWED set).
-// Mirror of hooks/lib/handoff-v2.ts — kept self-contained so scripts/ never
-// imports hooks/.
+// ── guild.handoff.v2 envelope validator ──────────────────────────────────────
+//
+// Full mirror of validateHandoffV2 in hooks/lib/handoff-v2.ts.
+// scripts/ does not import hooks/ (self-contained by design), so this is a
+// deliberate, commented duplication — not a new independent implementation.
+// Canonical source of truth: hooks/lib/handoff-v2.ts:validateHandoffV2.
+// If the canonical changes, update this mirror in lockstep (AC-3 consumer parity).
+
+/** Allowed top-level keys — mirror of ALLOWED_TOP_LEVEL_KEYS in hooks/lib/handoff-v2.ts. */
 const ALLOWED_ENVELOPE_KEYS: ReadonlySet<string> = new Set([
   "schema_version", "task_id", "tier", "status", "summary",
   "artifacts", "issues", "escalate_reason", "learnings", "notes",
 ]);
 
+const VALID_ENVELOPE_TIERS = new Set<string>(["cheap", "mid", "powerful"]);
+const VALID_ENVELOPE_STATUSES = new Set<string>(["done", "blocked", "escalate"]);
+
+/** ~100-token proxy — mirror of SUMMARY_MAX_CHARS in hooks/lib/handoff-v2.ts. */
+const ENVELOPE_SUMMARY_MAX_CHARS = 600;
+
+/** O-4 cap — mirror of NOTES_MAX_CHARS in hooks/lib/handoff-v2.ts. */
+const ENVELOPE_NOTES_MAX_CHARS = 200;
+
 /**
- * Validate a parsed guild.handoff.v2 envelope against spec §2:
- *   - schema_version must equal "guild.handoff.v2"
- *   - No unknown top-level keys (ALLOWED_ENVELOPE_KEYS)
- * Returns error strings (empty = valid). Mirror of validateHandoffV2 unknown-key
- * check in hooks/lib/handoff-v2.ts so detectDismissible and teammate-idle agree
- * on every receipt — including rejecting the p2-3 drift shape (`schema:` key).
+ * Full mirror of validateHandoffV2 from hooks/lib/handoff-v2.ts.
+ *
+ * Validates ALL required fields (task_id, tier, status, summary, artifacts,
+ * issues) and conditional fields (escalate_reason when status==="escalate"),
+ * rejects unknown top-level keys, and enforces size caps on summary and notes.
+ *
+ * Returns error strings (empty = valid). Keeps detectDismissible and the hook
+ * validator in FULL agreement so a receipt that passes one passes the other —
+ * the AC-3 "FULL consumer agreement" requirement.
+ *
+ * Canonical reference: hooks/lib/handoff-v2.ts validateHandoffV2 (OD-2).
  */
 function envelopeShapeErrors(value: unknown): string[] {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return ["envelope is not a JSON object"];
+    return ["envelope must be a non-null object"];
   }
   const obj = value as Record<string, unknown>;
   const errors: string[] = [];
-  if (obj["schema_version"] !== "guild.handoff.v2") {
-    errors.push("guild.handoff.v2 block present but schema_version mismatch");
-  }
-  for (const key of Object.keys(obj)) {
-    if (!ALLOWED_ENVELOPE_KEYS.has(key)) {
-      errors.push(`unknown key "${key}" (did you mean schema_version? strict v2 rejects extras)`);
+
+  // Unknown-key rejection — strict guild.handoff.v2 (spec §2)
+  for (const k of Object.keys(obj)) {
+    if (!ALLOWED_ENVELOPE_KEYS.has(k)) {
+      errors.push(
+        `unknown key "${k}" — strict guild.handoff.v2 rejects extra/misspelled keys`
+      );
     }
   }
+
+  // schema_version
+  if (obj["schema_version"] !== "guild.handoff.v2") {
+    errors.push(
+      `schema_version must be "guild.handoff.v2"; got ${JSON.stringify(obj["schema_version"])}`
+    );
+  }
+
+  // task_id — required non-empty string
+  if (typeof obj["task_id"] !== "string" || obj["task_id"].trim() === "") {
+    errors.push("task_id must be a non-empty string");
+  }
+
+  // tier — required, one of cheap|mid|powerful
+  if (typeof obj["tier"] !== "string" || !VALID_ENVELOPE_TIERS.has(obj["tier"])) {
+    errors.push(`tier must be one of cheap|mid|powerful; got ${JSON.stringify(obj["tier"])}`);
+  }
+
+  // status — required, one of done|blocked|escalate
+  if (typeof obj["status"] !== "string" || !VALID_ENVELOPE_STATUSES.has(obj["status"])) {
+    errors.push(
+      `status must be one of done|blocked|escalate; got ${JSON.stringify(obj["status"])}`
+    );
+  }
+
+  // summary — required, non-empty, size-capped
+  if (typeof obj["summary"] !== "string") {
+    errors.push("summary must be a string");
+  } else if (obj["summary"].trim() === "") {
+    errors.push("summary must not be empty");
+  } else if (obj["summary"].length > ENVELOPE_SUMMARY_MAX_CHARS) {
+    errors.push(
+      `summary exceeds ${ENVELOPE_SUMMARY_MAX_CHARS} char cap (bloat rejection SC-7): ` +
+        `got ${obj["summary"].length} chars`
+    );
+  }
+
+  // artifacts — required array (may be empty)
+  if (!Array.isArray(obj["artifacts"])) {
+    errors.push("artifacts must be an array (may be empty)");
+  } else {
+    for (let i = 0; i < obj["artifacts"].length; i++) {
+      if (typeof obj["artifacts"][i] !== "string") {
+        errors.push(`artifacts[${i}] must be a string`);
+      }
+    }
+  }
+
+  // issues — required array (may be empty)
+  if (!Array.isArray(obj["issues"])) {
+    errors.push("issues must be an array (may be empty)");
+  } else {
+    for (let i = 0; i < obj["issues"].length; i++) {
+      if (typeof obj["issues"][i] !== "string") {
+        errors.push(`issues[${i}] must be a string`);
+      }
+    }
+  }
+
+  // escalate_reason — required when status === "escalate"
+  if (obj["status"] === "escalate") {
+    if (
+      obj["escalate_reason"] === undefined ||
+      obj["escalate_reason"] === null ||
+      (typeof obj["escalate_reason"] === "string" && obj["escalate_reason"].trim() === "")
+    ) {
+      errors.push(
+        "escalate_reason is required and must be non-empty when status is 'escalate'"
+      );
+    }
+  }
+
+  // escalate_reason type check (if present)
+  if (obj["escalate_reason"] !== undefined && typeof obj["escalate_reason"] !== "string") {
+    errors.push("escalate_reason must be a string when provided");
+  }
+
+  // learnings — optional array of strings
+  if (obj["learnings"] !== undefined) {
+    if (!Array.isArray(obj["learnings"])) {
+      errors.push("learnings must be an array when provided");
+    } else {
+      for (let i = 0; i < obj["learnings"].length; i++) {
+        if (typeof obj["learnings"][i] !== "string") {
+          errors.push(`learnings[${i}] must be a string`);
+        }
+      }
+    }
+  }
+
+  // notes — optional, capped at 200 chars (O-4)
+  if (obj["notes"] !== undefined) {
+    if (typeof obj["notes"] !== "string") {
+      errors.push("notes must be a string when provided");
+    } else if (obj["notes"].length > ENVELOPE_NOTES_MAX_CHARS) {
+      errors.push(
+        `notes exceeds ${ENVELOPE_NOTES_MAX_CHARS} char cap (O-4 binding resolution): ` +
+          `got ${obj["notes"].length} chars`
+      );
+    }
+  }
+
   return errors;
 }
 
+// ── OD-4 discriminator ────────────────────────────────────────────────────────
+//
+// Authority: docs/knowledge/decisions/communication-format-policy.md
+//   §"policy_effective_date" and §"OD-4 discriminator"
+//
+// A runtime receipt for a run whose `run.yaml.started_at` is >= this date is
+// IN-SCOPE for enforcement (envelope required, fail-closed). Everything before
+// this date is grandfathered (envelope optional for legacy receipts).
+//
+// NOTE: this constant is the single citable boundary shared by U3 (this file,
+// task-completed.ts, teammate-idle.ts) and U5 (lint).  If the date changes,
+// amend the policy doc heading AND this one constant — nowhere else.
+// Coordination note: task-completed.ts (hook-engineer lane) must also apply this
+// same discriminator so both the writer (hook) and the reader (reaping/dismissal)
+// enforce the same boundary.  A shared helper was considered; because scripts/
+// is intentionally self-contained (no hooks/ import), the constant is mirrored
+// here by declaration.  See handoff notes for the hook-engineer coordination item.
+
+export const POLICY_EFFECTIVE_DATE = "2026-06-03";
+
 /**
- * Lightweight shape-check for an extracted guild.handoff.v2 envelope.
- * Spec §2: requires schema_version === "guild.handoff.v2" AND no unknown
- * top-level keys. Mirror of validateHandoffV2 in hooks/lib/handoff-v2.ts.
+ * Adapt a FsLike stub (used throughout scripts/) to the `(p) => string | null`
+ * interface that `readRunStartedAt` from run-lifecycle.ts expects.  Returns null
+ * on ENOENT / read error rather than throwing, matching run-lifecycle's seam.
  */
-function isEnvelopeShapeValid(value: unknown): boolean {
-  return envelopeShapeErrors(value).length === 0;
+function fsLikeReader(fsMod: FsLike): (p: string) => string | null {
+  return (p: string): string | null => {
+    if (!fsMod.existsSync(p)) return null;
+    try {
+      return fsMod.readFileSync(p, "utf8");
+    } catch {
+      return null;
+    }
+  };
+}
+
+/**
+ * OD-4 discriminator: returns true when the run identified by `runDir` is
+ * in-scope for envelope-required enforcement (started_at >= POLICY_EFFECTIVE_DATE).
+ *
+ * Delegates run.yaml reading to `readRunStartedAt` from scripts/lib/run-lifecycle.ts
+ * (OD-3: reuses the existing reader, zero new hand-rolled YAML regex in reaping).
+ *
+ * Fail-open contract: when the date is undeterminable (missing run.yaml, absent
+ * or unparseable started_at), returns false (treat as grandfathered) and logs a
+ * warning to stderr so the issue is visible without blocking dismissal.
+ *
+ * Exported for unit-testing; not part of the public API surface otherwise.
+ */
+export function isRunInScope(runDir: string, fsMod: FsLike = realFs()): boolean {
+  const raw = _readRunStartedAt(runDir, fsLikeReader(fsMod));
+  if (raw === null) {
+    process.stderr.write(
+      `[reaping] WARN: could not read run.yaml started_at from "${runDir}" — ` +
+        `treating as grandfathered (fail-open per OD-4 discriminator).\n`
+    );
+    return false;
+  }
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) {
+    process.stderr.write(
+      `[reaping] WARN: unparseable started_at "${raw}" in "${runDir}/run.yaml" — ` +
+        `treating as grandfathered (fail-open per OD-4 discriminator).\n`
+    );
+    return false;
+  }
+  // Effective-date parsed as UTC midnight: 2026-06-03T00:00:00.000Z.
+  // Using lexicographic comparison of ISO strings works for well-formed ISO-8601.
+  const effectiveMs = new Date(POLICY_EFFECTIVE_DATE + "T00:00:00.000Z").getTime();
+  return d.getTime() >= effectiveMs;
 }
 
 // ── Public type: receipt check result ─────────────────────────────────────────
@@ -223,15 +418,33 @@ export function checkReceipt(
 }
 
 /**
- * A receipt is "valid" (= safe to dismiss on) when all spec §2 conditions hold:
+ * A receipt is "valid" (= safe to dismiss on) per the OD-4 discriminator:
+ *
+ * In-scope run (inScope === true, default — fail-closed):
  *   - it exists
  *   - it has all §8.2 required fields
  *   - a valid fenced guild.handoff.v2 block is present (envelopeValid === true)
- * Fail-closed: null (no block) is treated the same as false (invalid block).
- * Matches the hook validator's verdict on every receipt, including frontmatter-only.
+ *   Fail-closed: null (no block) or false (invalid block) → invalid.
+ *
+ * Grandfathered run (inScope === false — fail-open for missing envelope):
+ *   - it exists
+ *   - it has all §8.2 required fields
+ *   - envelopeValid is true (block present and valid) OR null (no block found —
+ *     grandfathered: §8.2 fields alone are sufficient for pre-effective-date runs)
+ *   - NOTE: a PRESENT but shape-invalid envelope (envelopeValid === false) is
+ *     still rejected even for grandfathered runs — a malformed embedded envelope
+ *     is a clear bug, not a legacy shape.
+ *
+ * Authority: docs/knowledge/decisions/communication-format-policy.md §"OD-4 discriminator"
  */
-function isValid(r: ReceiptCheckResult): boolean {
-  return r.exists && r.hasRequiredFields && r.envelopeValid === true;
+function isValid(r: ReceiptCheckResult, inScope: boolean = true): boolean {
+  if (!r.exists || !r.hasRequiredFields) return false;
+  if (r.envelopeValid === true) return true; // envelope present and valid: always OK
+  if (r.envelopeValid === false) return false; // envelope present but malformed: always reject
+  // envelopeValid === null: no block found.
+  // in-scope: fail-closed (envelope required) → invalid.
+  // grandfathered: §8.2 alone is enough → valid.
+  return !inScope;
 }
 
 // ── A2a: Dismissible detection ─────────────────────────────────────────────────
@@ -269,6 +482,11 @@ export interface DismissibleEntry {
  * is found; multiple task receipts for the same specialist are all checked
  * (first valid one wins).
  *
+ * Receipt validity is gated by the OD-4 discriminator (isRunInScope): for
+ * in-scope runs (started_at >= POLICY_EFFECTIVE_DATE) the fenced guild.handoff.v2
+ * envelope is required; for grandfathered runs §8.2 fields alone are sufficient.
+ * When the run date is undeterminable the check is fail-open (lenient).
+ *
  * Pure-ish: all filesystem operations go through `fsMod` (inject a stub for
  * tests).  No subprocess calls.
  *
@@ -282,6 +500,9 @@ export function detectDismissible(
   fsMod: FsLike = realFs()
 ): DismissibleEntry[] {
   const handoffsDir = path.join(runDir, "handoffs");
+
+  // OD-4: compute the run's scope once — same answer for every receipt in the run.
+  const inScope = isRunInScope(runDir, fsMod);
 
   const handoffsExist = fsMod.existsSync(handoffsDir);
   let allFiles: string[] = [];
@@ -319,12 +540,12 @@ export function detectDismissible(
       };
     }
 
-    // Check each receipt; return on the first valid one.
+    // Check each receipt; return on the first valid one (OD-4 scope applied).
     for (const filename of matches) {
       const rPath = path.join(handoffsDir, filename);
       const taskId = filename.slice(prefix.length, -".md".length);
       const check = checkReceipt(rPath, fsMod);
-      if (isValid(check)) {
+      if (isValid(check, inScope)) {
         return {
           specialist,
           dismissible: true,
@@ -335,7 +556,9 @@ export function detectDismissible(
       }
     }
 
-    // All receipts invalid — report the last one's errors
+    // All receipts invalid — report the last one's errors.
+    // For grandfathered runs with no envelope, suppress the envelope-absent error
+    // so the caller sees a clean "valid" without a misleading envelope error.
     const lastFile = matches[matches.length - 1];
     const rPath = path.join(handoffsDir, lastFile);
     const taskId = lastFile.slice(prefix.length, -".md".length);
