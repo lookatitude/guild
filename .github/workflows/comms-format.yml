@@ -1,0 +1,110 @@
+# comms-format.yml — communication-format lint (U5a warn-mode advisory)
+#
+# Runs the comms-format-lint core over the PR diff range in WARN mode.
+# U5a discipline: annotations only, never fails the build.
+# U5b (enforce mode, blocking gate) is a future lane that flips the --enforce
+# flag after every receipt emitter (U6) is updated.
+#
+# Policy ref: docs/knowledge/decisions/communication-format-policy.md
+# OD-4 discriminator: only changed paths in the PR diff range are in-scope.
+# Pre-effective-date and grandfathered files are never flagged.
+#
+# Owner: tooling-engineer.
+# Lint core: scripts/comms/comms-format-lint.ts (pure library, import-safe)
+# CLI entry: scripts/comms/comms-format-lint.cli.ts (invoked here)
+
+name: comms-format (warn-mode advisory)
+
+on:
+  pull_request:
+    # Fire on any PR — the OD-4 discriminator narrows scope internally.
+    # No path filter here: a changed receipt anywhere in the repo is in-scope.
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  comms-format:
+    runs-on: ubuntu-latest
+    # Advisory: NEVER blocks a PR in U5a. continue-on-error ensures an
+    # infrastructure failure (npm outage, checkout hiccup) cannot redden the PR.
+    continue-on-error: true
+    steps:
+      - name: Checkout (full history for the PR diff range)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install scripts/ dependencies
+        run: |
+          if [ -f scripts/package.json ]; then
+            cd scripts && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+          fi
+
+      - name: Resolve PR diff (changed paths)
+        id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Three-dot for the diff (PR file changes vs merge-base).
+          RANGE="${BASE_SHA}...${HEAD_SHA}"
+          echo "comms-format PR range: $RANGE"
+          # Resolve changed paths to absolute paths for the lint core.
+          CHANGED="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | tr '\n' ',')"
+          echo "changed=${CHANGED}" >> "$GITHUB_OUTPUT"
+          echo "range=${RANGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Run comms-format lint (warn mode — non-blocking)
+        env:
+          CHANGED_PATHS: ${{ steps.diff.outputs.changed }}
+        run: |
+          set -uo pipefail
+          # Convert comma-separated relative paths to absolute paths.
+          # Pass them to the lint core via --paths.
+          # The lint core exits 0 in U5a regardless of findings.
+          if [ -z "${CHANGED_PATHS:-}" ]; then
+            echo "No changed paths detected — skipping lint."
+            exit 0
+          fi
+
+          # Resolve relative paths to absolute (from repo root = $GITHUB_WORKSPACE).
+          ABS_PATHS=""
+          IFS=',' read -ra FILES <<< "${CHANGED_PATHS%,}"
+          for f in "${FILES[@]}"; do
+            [ -n "$f" ] && ABS_PATHS="${ABS_PATHS}${GITHUB_WORKSPACE}/${f},"
+          done
+          ABS_PATHS="${ABS_PATHS%,}"
+
+          set +e
+          OUT="$(npx tsx scripts/comms/comms-format-lint.cli.ts \
+            --paths "${ABS_PATHS}" 2>&1)"
+          CODE=$?
+          set -e
+          echo "$OUT"
+
+          # Emit GitHub annotations for each warning line.
+          while IFS= read -r line; do
+            if echo "$line" | grep -q '\[comms-format-lint\] WARN'; then
+              # Extract file path from the log line for annotation context.
+              echo "::warning::${line}"
+            fi
+          done <<< "$OUT"
+
+          # Surface summary.
+          {
+            echo "## comms-format — communication-format lint (warn mode)"
+            echo ""
+            printf '%s\n' "$OUT" | sed 's/^/    /'
+            echo ""
+            echo "_U5a warn-mode: findings are advisory (non-blocking). Scope: changed files in this PR only (OD-4 discriminator). Pre-effective-date and grandfathered files are exempt. Canon: \`docs/knowledge/decisions/communication-format-policy.md\`._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: comms-format lint OK
+        run: echo "comms-format lint completed (warn mode — always exits 0 in U5a)"

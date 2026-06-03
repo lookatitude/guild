@@ -56,6 +56,15 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/post-tool-use.js"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/comms-format-lint.js"
+          }
+        ]
       }
     ],
     "PreCompact": [
