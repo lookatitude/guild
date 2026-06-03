@@ -2,12 +2,35 @@
  * hooks/lib/handoff-v2.ts
  *
  * Canonical TypeScript type + runtime validator for the `guild.handoff.v2`
- * dispatch envelope (ADR §5, cost-aware-tiering-and-lean-context.md).
+ * dispatch envelope.
  *
- * Composes WITH, does NOT supersede, the frozen `guild.handoff_receipt.v1`
- * (target-architecture.md §"handoff_receipt contract"). That receipt is the
- * durable review/verify linchpin; this envelope is the lighter in-flight
- * dispatch return consumed by the lead coordinator.
+ * ## Handoff receipt contract (OD-2, operator-confirmed 2026-06-02)
+ *
+ * Canonical reference:
+ *   docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"
+ *
+ * The normative rule (communication-format-policy §7):
+ *   `guild.handoff_receipt.v1` is the durable human-review wrapper. Its YAML
+ *   frontmatter (frozen field set) is human/review metadata and is preserved
+ *   unchanged. A valid v1 receipt MUST embed exactly ONE fenced
+ *   `guild.handoff.v2` JSON block — that single embedded block is the
+ *   canonical machine truth. The "external pointer / dereference" option is
+ *   REJECTED: `extractHandoffEnvelope` accepts ONLY an embedded fenced block,
+ *   never a pointer to an out-of-file envelope. A frontmatter-only message
+ *   (no embedded v2 block) is NOT a valid machine receipt.
+ *
+ * NORMATIVE vs. CURRENT EXTRACTOR: the contract above is the normative OD-2
+ *   target. `extractHandoffEnvelope` implements the EXTRACTION step only: it
+ *   returns the FIRST matching fenced block (first-match regex) and does not
+ *   count or reject duplicate blocks. Duplicate-block rejection is enforced in
+ *   U5b (lint), not here. Caller rejection of a null (missing/invalid) envelope
+ *   is also NOT uniform today — `task-completed.ts` logs a note and continues
+ *   for legacy receipts. Making callers fail-closed on a missing envelope is
+ *   the behavior-changing scope of lane U3.
+ *
+ * This file owns the v2 schema + validator; it does NOT supersede the frozen
+ * `guild.handoff_receipt.v1` wrapper. The two compose — v1 wraps v2 via the
+ * embedded block; they do not compete.
  *
  * Runner: imported by hooks/agent-team/task-completed.ts (tsx / esbuild dist).
  * Tests:  hooks/__tests__/handoff-v2.test.ts
@@ -28,7 +51,12 @@ export type HandoffStatus = "done" | "blocked" | "escalate";
 
 /**
  * `guild.handoff.v2` — the canonical in-flight dispatch envelope.
- * Single source of truth: docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5
+ *
+ * This is the machine-truth schema embedded inside a `guild.handoff_receipt.v1`
+ * wrapper as a fenced JSON block. Schema authority:
+ *   docs/knowledge/decisions/communication-format-policy.md §"Handoff contract" (OD-2)
+ *
+ * Field definitions: docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5
  */
 export interface HandoffV2 {
   /** Self-versioned discriminator; always "guild.handoff.v2". */
@@ -229,15 +257,31 @@ export function isHandoffV2(value: unknown): value is HandoffV2 {
 /**
  * Extract a `guild.handoff.v2` envelope from a markdown receipt string.
  *
- * Looks for a fenced JSON block tagged with `guild.handoff.v2`:
+ * Implements the extraction step of the OD-2 rule
+ * (docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"):
+ * looks ONLY for an embedded fenced JSON block tagged `guild.handoff.v2`:
  *
  * ```guild.handoff.v2
  * { ... }
  * ```
  *
- * Returns the parsed value or `null` if no such block is found or it is not
- * valid JSON. Shared by task-completed.ts and teammate-idle.ts so the
- * extraction logic stays in one place.
+ * What this function does:
+ *   - Returns the FIRST matching fenced block parsed as JSON.
+ *   - Returns `null` when no block is found or the block is not valid JSON
+ *     (including receipts that contain only YAML frontmatter with no fenced
+ *     block — those produce no regex match and therefore return `null`).
+ *   - Performs NO pointer resolution.
+ *
+ * What this function does NOT do:
+ *   - It does not count or reject duplicate embedded blocks. Duplicate-block
+ *     rejection is enforced by lint in lane U5b, not here.
+ *   - It does not itself reject a null return as invalid. Caller behavior
+ *     varies: `task-completed.ts` logs a note and continues for legacy
+ *     receipts (envelope optional today). Making callers fail-closed on a
+ *     missing envelope is the behavior-changing scope of lane U3.
+ *
+ * Shared by task-completed.ts and teammate-idle.ts so the extraction logic
+ * stays in one place.
  */
 export function extractHandoffEnvelope(content: string): unknown | null {
   const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/;
