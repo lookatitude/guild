@@ -54,11 +54,11 @@ The agent's **final action** in this lifecycle is writing its receipt file — s
 
 **Implements `docs/knowledge/implementation/agent-reliability-and-evolution-plan.md` §3 Track R (R1/R2/R3/R5) + A1/A3. Fixes flaws F1 (idle without handoff), F2 (dual-channel envelope), F4 (output-cap failure), F6 (cwd/path ambiguity).**
 
-The file-based handoff design is correct; this section makes it **enforced and single-channel on every backend**. Every §task§agent writes its `guild.handoff.v2` envelope to a receipt file as its final action — never to chat, never to SendMessage body. The lead reads receipt files (deterministic); SendMessage is a liveness ping only.
+The file-based handoff design is correct; this section makes it **enforced and single-channel on every backend**. Every §task§agent writes its receipt — a `guild.handoff_receipt.v1` Markdown wrapper embedding exactly ONE fenced `guild.handoff.v2` JSON block — to a receipt file as its final action — never to chat, never to SendMessage body. The lead reads receipt files (deterministic); SendMessage is a liveness ping only.
 
 ### Protocol rules (normative)
 
-- **R1 — Receipt file is the single source of truth, every backend.** Every §task§agent — whether dispatched via agent-team (tmux pane), in-process Agent(), or subagent — writes its `guild.handoff.v2` envelope to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` as its **final action**. Envelope schema: `docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5` (bound by pointer — never re-spelled here). One format, one location, always. When the lead consumes a receipt, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
+- **R1 — Receipt file is the single source of truth, every backend.** Every §task§agent — whether dispatched via agent-team (tmux pane), in-process Agent(), or subagent — writes its receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` as its **final action**: a `guild.handoff_receipt.v1` Markdown wrapper that **embeds exactly ONE** fenced ```` ```guild.handoff.v2 ```` JSON block. Envelope schema: `docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5` (bound by pointer — never re-spelled here). One format, one location, always. When the lead consumes a receipt, that single embedded `guild.handoff.v2` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt, and a receipt carrying two or more `guild.handoff.v2` blocks is rejected as a duplicate-block defect.
 - **R2 — SendMessage is a one-line pointer; pasting the envelope is forbidden.** In team/pane mode: after the receipt file is written, send exactly one line via SendMessage: `done · <task-id> · status:<done|blocked|escalate> · receipt:<absolute-path>`. Nothing else. **Pasting the envelope text into chat or into the SendMessage body is explicitly forbidden** — this is the dual-channel defect (F2): two copies in two shapes, neither authoritative. The lead never reads handoff content from chat.
 - **R3 — The lead reads receipt files; it never parses chat.** The orchestrator collects handoffs by reading receipt files (deterministic). SendMessage is a liveness signal; the lead checks the file, not the message body. This removes the "did it send the envelope?" non-determinism (F1).
 
@@ -77,9 +77,31 @@ THE ENVELOPE IS JSON INSIDE THE FENCED BLOCK — NOT YAML FRONTMATTER.
 A frontmatter-only receipt (--- schema_version: guild.handoff.v2 ...) is REJECTED by
 the validator. There is exactly ONE accepted shape, shown below.
 
-Write the receipt file with BOTH parts, in this order:
+THE RECEIPT IS A guild.handoff_receipt.v1 MARKDOWN WRAPPER (human-review context)
+that EMBEDS EXACTLY ONE fenced ```guild.handoff.v2``` JSON block (the machine
+contract). Standard: docs/knowledge/decisions/communication-format-policy.md
+§"Handoff contract". Three hard rules, checked by validator + lint enforcement:
+  1. The embedded JSON block is the machine truth — NOT the YAML frontmatter.
+  2. EXACTLY ONE such block. Zero blocks (frontmatter-only) is REJECTED by the
+     validator; two or more guild.handoff.v2 blocks is REJECTED as a
+     duplicate-block defect (lint-enforced in U5b).
+  3. Frontmatter-only is invalid — the wrapper without the embedded block is not
+     a valid machine receipt.
 
-PART A — five §8.2 sections as "## <name>" headings (human review contract):
+Write the receipt file with ALL THREE parts, in this order:
+
+PART A — guild.handoff_receipt.v1 YAML frontmatter wrapper (the frozen v1 field
+set — human/review metadata only; bind by pointer, do NOT invent fields:
+docs/knowledge/architecture/target-architecture.md §"handoff_receipt contract"
++ the policy doc §"Handoff contract"):
+
+---
+schema_version: guild.handoff_receipt.v1
+task_id: <TASK_ID>
+... (remaining frozen guild.handoff_receipt.v1 frontmatter fields) ...
+---
+
+PART B — five §8.2 sections as "## <name>" headings (human review contract):
 
 ## changed_files
 ## opens_for
@@ -87,19 +109,22 @@ PART A — five §8.2 sections as "## <name>" headings (human review contract):
 ## evidence
 ## followups
 
-PART B — exactly ONE fenced block tagged guild.handoff.v2 containing JSON:
+PART C — exactly ONE fenced block tagged guild.handoff.v2 containing JSON.
+Substitute EVERY <...> placeholder with a concrete value — never emit a
+pipe-delimited choice string ("cheap|mid|powerful") into the real receipt; the
+validator requires ONE exact tier and ONE exact terminal status:
 
 ```guild.handoff.v2
 {
   "schema_version": "guild.handoff.v2",
   "task_id": "<TASK_ID>",
-  "tier": "cheap|mid|powerful",
-  "status": "done|blocked|escalate",
-  "summary": "<= 600 chars",
+  "tier": "<TIER: cheap|mid|powerful — pick exactly one>",
+  "status": "<STATUS: done|blocked|escalate — pick exactly one>",
+  "summary": "<= 600 chars>",
   "artifacts": ["path:line-range"],
   "issues": [],
   "learnings": ["optional"],
-  "escalate_reason": "required ONLY when status==escalate"
+  "escalate_reason": "<required ONLY when status==escalate; omit otherwise>"
 }
 ```
 
@@ -128,10 +153,12 @@ repo boundaries.
 
 ### Orchestrator injection mechanics
 
-Before spawning each lane's agent, substitute in the canonical block:
+Before spawning each lane's agent, substitute the orchestrator-known placeholders in the canonical block:
 
 - `<RECEIPT_PATH>` → absolute path: `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`
 - `<TASK_ID>` → the lane's `task_id` from the plan
+
+The remaining placeholders are **agent-supplied at receipt-write time** — the orchestrator does NOT pre-fill them because their values are only known after the agent works: `<TIER>` (the lane's resolved tier — one of cheap/mid/powerful), `<STATUS>` (the terminal disposition — one of done/blocked/escalate), `<summary>`, `artifacts`, and `<escalate_reason>` (only when status==escalate). The prompt's PART C explicitly instructs the agent to substitute every `<...>` with a concrete value and never emit a pipe-delimited choice string.
 
 Then inject:
 

@@ -30,7 +30,22 @@ type:
   duplicated here.
   Required-heading set = the 9 skill-creator items
     (factory/skill-creator.md §"Skill Body Requirements", cited by pointer).
+
+  HANDOFF-RECEIPT EMITTER CONTRACT (fill under "# Output format" only when this
+  skill instructs a dispatched agent to write a handoff receipt). The receipt is
+  a `guild.handoff_receipt.v1` Markdown wrapper (frozen frontmatter = human-review
+  context) that EMBEDS EXACTLY ONE fenced ```guild.handoff.v2``` JSON block (the
+  machine contract). The embedded JSON block — never the frontmatter — is the
+  machine truth; frontmatter-only is invalid; two or more v2 blocks is a
+  duplicate-block defect. Do NOT re-spell the v2 field schema or the v1
+  frontmatter field set here — bind both by pointer:
+    - canonical emitter prompt: skills/meta/execute-plan/dispatch.md
+      §"Handoff protocol" (inject its canonical block verbatim — never reword it);
+    - the standard: docs/knowledge/decisions/communication-format-policy.md
+      §"Handoff contract";
+    - v2 envelope schema: docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5.
 -->
+
 
 # When to use it
 
