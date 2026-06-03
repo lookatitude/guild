@@ -327,20 +327,33 @@ function envelopeShapeErrors(value: unknown): string[] {
 // ── Check (a): ambiguous receipts ─────────────────────────────────────────
 
 /**
- * Determine whether a file looks like a handoff receipt (has guild.handoff_receipt
- * frontmatter marker OR contains ```guild.handoff.v2 fence OR filename suggests
- * receipt). In U5a we cast a broad net: any .md under a handoffs/ directory, or
- * any .md whose frontmatter contains `type: handoff_receipt`.
+ * Determine whether a file looks like a handoff receipt.
+ *
+ * A file is a receipt ONLY if:
+ *   (a) its path is under a /handoffs/ or /receipts/ directory, OR
+ *   (b) its frontmatter `type:` field is exactly `handoff_receipt`.
+ *
+ * A file whose frontmatter declares a DIFFERENT type (decision, standard,
+ * recipe, reflection, run_manifest, etc.) is NOT a receipt even if its prose
+ * body mentions the ```guild.handoff.v2 fence format (e.g. a policy doc that
+ * documents the format). The previous third heuristic — "has a guild.handoff.v2
+ * fence in content" — was removed because it caused false positives on docs/
+ * knowledge pages that describe the fence syntax in prose. The frontmatter type
+ * is authoritative; path location is a sufficient structural signal for runtime
+ * receipts written without a type field.
+ *
+ * Note: arm 2 of lintCommsFormat (runsDir) feeds runtime receipts that live
+ * under .guild/runs/<id>/handoffs/ — those are caught by the path heuristic.
  */
 function looksLikeReceipt(filePath: string, content: string): boolean {
   if (!filePath.endsWith(".md")) return false;
   // Path heuristic: under a handoffs/ or receipts/ directory
   const normalised = normalisePath(filePath);
   if (normalised.includes("/handoffs/") || normalised.includes("/receipts/")) return true;
-  // Frontmatter heuristic: type: handoff_receipt
+  // Frontmatter heuristic: type: handoff_receipt (authoritative)
+  // A different `type:` value (decision, standard, etc.) disqualifies the file
+  // as a receipt regardless of any guild.handoff.v2 mention in its body.
   if (/^type:\s*handoff_receipt\s*$/m.test(content)) return true;
-  // Already has a guild.handoff.v2 fence → definitely a receipt
-  if (/```guild\.handoff\.v2/.test(content)) return true;
   return false;
 }
 
@@ -578,13 +591,36 @@ function checkNewHandRolledYaml(
 // ── Check (c): undeclared artifact category ───────────────────────────────
 
 /**
- * Communication artifact types that require a category declaration.
- * These are known `type:` frontmatter values from the policy artifact categories.
- * A file with one of these types but no `artifact_category:` field is flagged.
+ * Machine-communication artifact types that require an explicit `artifact_category:`
+ * declaration in their frontmatter.
+ *
+ * SCOPE: only genuinely NEW machine-communication artifacts — envelopes, receipts,
+ * and runtime manifests — that sit on a NEW communication boundary and therefore
+ * need to explicitly declare which policy category they belong to (per
+ * communication-format-policy.md §"New artifact must declare its category").
+ *
+ * EXCLUDED by design (human knowledge / established convention):
+ *   - `decision` — category 2 (human knowledge doc, MD+frontmatter) by established
+ *     convention for docs/knowledge/ pages. These files are not machine protocol.
+ *   - `standard`, `recipe`, `reflection`, `learning` — same: human knowledge docs
+ *     under docs/knowledge/ or .guild/wiki/ (category 2 by location, not by label).
+ *
+ * A separate location exemption (isHumanKnowledgeDoc) additionally guards any file
+ * under docs/knowledge/ or .guild/wiki/ from check-(c), regardless of its type
+ * field, because those directories are category-2 by established convention and
+ * must NOT require an explicit artifact_category: to participate in the lint gate.
+ *
+ * Types in this set are machine-protocol surfaces that are genuinely new or
+ * ambiguous without an explicit category declaration:
+ *   - handoff_receipt     — category 7 (mixed Markdown wrapper + JSON envelope)
+ *   - run_manifest        — category 3 (human-authored YAML, but must be explicit)
+ *   - team_manifest       — category 3
+ *   - review_packet       — category 7 (new, ambiguous without a declaration)
+ *   - learning_checkpoint — category 7 (new)
+ *   - trace_event         — category 5 (JSONL; new files of this type must declare)
  */
 const COMM_ARTIFACT_TYPES = new Set([
   "handoff_receipt",
-  "decision",
   "run_manifest",
   "team_manifest",
   "review_packet",
@@ -592,10 +628,36 @@ const COMM_ARTIFACT_TYPES = new Set([
   "trace_event",
 ]);
 
+/**
+ * Human knowledge / established-convention location exemption for check-(c).
+ *
+ * Files under docs/knowledge/ or .guild/wiki/ are category-2 (human knowledge,
+ * MD+YAML frontmatter) by established convention — they do NOT need to carry an
+ * explicit `artifact_category:` field to satisfy the "new artifact must declare
+ * its category" discipline. The location IS the declaration.
+ *
+ * This exemption covers:
+ *   - docs/knowledge/**   — policy pages, ADRs, standards, recipes, reflections
+ *   - .guild/wiki/**      — durable wiki knowledge base
+ *
+ * It does NOT cover runtime state (.guild/runs/, .guild/team/, etc.) which
+ * should carry explicit categories on new artifact types.
+ */
+function isHumanKnowledgeDoc(filePath: string): boolean {
+  const normalised = normalisePath(filePath);
+  return (
+    normalised.includes("/docs/knowledge/") ||
+    normalised.includes("/.guild/wiki/")
+  );
+}
+
 function checkUndeclaredCategory(filePath: string, content: string): CommsLintFinding[] {
   if (!filePath.endsWith(".md") && !filePath.endsWith(".yaml") && !filePath.endsWith(".yml")) {
     return [];
   }
+
+  // Exempt human knowledge / established-convention docs (category-2 by location).
+  if (isHumanKnowledgeDoc(filePath)) return [];
 
   // Extract the raw frontmatter block between the --- delimiters.
   // We locate the delimiters first with a simple index search to avoid
@@ -621,7 +683,7 @@ function checkUndeclaredCategory(filePath: string, content: string): CommsLintFi
   if (typeof fm !== "object" || fm === null || Array.isArray(fm)) return [];
   const fmObj = fm as Record<string, unknown>;
 
-  // Check for a known communication artifact type
+  // Check for a known machine-communication artifact type
   const artifactType = typeof fmObj["type"] === "string" ? fmObj["type"].trim() : null;
   if (!artifactType || !COMM_ARTIFACT_TYPES.has(artifactType)) return [];
 

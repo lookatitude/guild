@@ -3007,7 +3007,6 @@ function looksLikeReceipt(filePath, content) {
   const normalised = normalisePath(filePath);
   if (normalised.includes("/handoffs/") || normalised.includes("/receipts/")) return true;
   if (/^type:\s*handoff_receipt\s*$/m.test(content)) return true;
-  if (/```guild\.handoff\.v2/.test(content)) return true;
   return false;
 }
 function checkAmbiguousReceipt(filePath, content) {
@@ -3149,17 +3148,21 @@ function checkNewHandRolledYaml(filePath, content, allowList) {
 }
 var COMM_ARTIFACT_TYPES = /* @__PURE__ */ new Set([
   "handoff_receipt",
-  "decision",
   "run_manifest",
   "team_manifest",
   "review_packet",
   "learning_checkpoint",
   "trace_event"
 ]);
+function isHumanKnowledgeDoc(filePath) {
+  const normalised = normalisePath(filePath);
+  return normalised.includes("/docs/knowledge/") || normalised.includes("/.guild/wiki/");
+}
 function checkUndeclaredCategory(filePath, content) {
   if (!filePath.endsWith(".md") && !filePath.endsWith(".yaml") && !filePath.endsWith(".yml")) {
     return [];
   }
+  if (isHumanKnowledgeDoc(filePath)) return [];
   const fmStart = content.indexOf("---");
   if (fmStart !== 0 && fmStart !== -1) return [];
   if (fmStart === -1) return [];
@@ -3277,23 +3280,43 @@ async function readStdin() {
     process.stdin.on("error", () => resolve3(""));
   });
 }
-function printFindings(findings) {
+function isEnforceEnabled() {
+  return process.env["GUILD_COMMS_FORMAT_ENFORCE"] === "1";
+}
+function printFindings(findings, enforceMode) {
   if (findings.length === 0) {
-    return;
+    return false;
   }
+  let hasCheckA = false;
   for (const f of findings) {
     const loc = f.line !== void 0 ? `:${f.line}` : "";
     process.stderr.write(
       `[comms-format-lint] WARN [check-${f.check}] ${f.file}${loc}: ${f.message}
 `
     );
+    if (f.check === "a") {
+      hasCheckA = true;
+    }
   }
+  if (enforceMode && hasCheckA) {
+    const checkAFindings = findings.filter((f) => f.check === "a");
+    process.stderr.write(
+      `[comms-format-lint] BLOCK: enforce mode active (GUILD_COMMS_FORMAT_ENFORCE=1) \u2014 ${checkAFindings.length} check-a violation(s) detected.
+  Receipts must embed exactly ONE valid \`guild.handoff.v2\` JSON block (communication-format-policy \xA7"Handoff contract", OD-2).
+  To suppress this block, fix the receipt or set GUILD_COMMS_FORMAT_ENFORCE=0.
+`
+    );
+    return true;
+  }
+  const mode = enforceMode ? "enforce mode (check-b/c advisory only)" : "U5a warn mode";
   process.stderr.write(
-    `[comms-format-lint] ${findings.length} warning(s) \u2014 non-blocking (U5a warn mode)
+    `[comms-format-lint] ${findings.length} warning(s) \u2014 non-blocking (${mode})
 `
   );
+  return false;
 }
 async function main() {
+  const enforceMode = isEnforceEnabled();
   const raw = await readStdin();
   let payload = {};
   try {
@@ -3312,7 +3335,7 @@ async function main() {
   const absolutePath = path2.isAbsolute(filePath) ? filePath : path2.resolve(process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd(), filePath);
   let findings = [];
   try {
-    findings = lintCommsFormat({ paths: [absolutePath] });
+    findings = lintCommsFormat({ paths: [absolutePath], enforce: enforceMode });
   } catch (err) {
     process.stderr.write(
       `[comms-format-lint] WARN: lint core threw \u2014 ${err instanceof Error ? err.message : String(err)}
@@ -3320,7 +3343,10 @@ async function main() {
     );
     process.exit(0);
   }
-  printFindings(findings);
+  const shouldBlock = printFindings(findings, enforceMode);
+  if (shouldBlock) {
+    process.exit(2);
+  }
   process.exit(0);
 }
 main().catch((err) => {

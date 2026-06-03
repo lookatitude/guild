@@ -943,3 +943,187 @@ describe("WARN mode — non-blocking contract", () => {
     }
   });
 });
+
+// ─── U5b ENFORCE mode — CLI exit-code contract ────────────────────────────
+//
+// These tests exercise the CLI entry (comms-format-lint.cli.ts) directly via
+// spawnSync to verify the exit-code policy:
+//   --enforce + ≥1 finding  → exit 1 (blocking)
+//   --enforce + 0 findings  → exit 0 (clean)
+//   no --enforce + ≥1 finding → exit 0 (warn-only; U5a behaviour preserved)
+//
+// The core (lintCommsFormat) is NOT tested for exit codes — it is a pure
+// function that returns findings; exit-code policy is CLI-only.
+
+describe("U5b ENFORCE mode — CLI exit-code contract", () => {
+  const { spawnSync } = require("child_process");
+  const CLI_CWD = "/Users/miguelp/Projects/guild/plugin/scripts";
+
+  function runCli(args: string[]): { status: number | null; combined: string } {
+    const result = spawnSync(
+      "npx",
+      ["tsx", "comms/comms-format-lint.cli.ts", ...args],
+      {
+        cwd: CLI_CWD,
+        encoding: "utf8",
+        timeout: 20000,
+      }
+    );
+    return {
+      status: result.status,
+      combined: (result.stdout ?? "") + (result.stderr ?? ""),
+    };
+  }
+
+  it("--enforce + finding => exit 1 (blocking)", () => {
+    // A receipt with no guild.handoff.v2 block produces check-(a) finding.
+    const base = tmpDir();
+    const receiptPath = writeFile(base, "handoffs/receipt.md", receiptNoBlock());
+    const { status, combined } = runCli(["--paths", receiptPath, "--enforce"]);
+    expect(status).toBe(1);
+    // Findings must still be printed (authors need to see what failed).
+    expect(combined).toMatch(/\[comms-format-lint\]/);
+    // The ENFORCE banner must appear.
+    expect(combined).toMatch(/ENFORCE/);
+  });
+
+  it("--enforce + no finding => exit 0 (clean)", () => {
+    // A fully-compliant receipt: valid v2 block + artifact_category declared.
+    // check (a): valid v2 block — no finding.
+    // check (c): artifact_category present — no finding.
+    // This represents a receipt that satisfies OD-2 (valid envelope) and the
+    // "new artifact must declare its category" discipline.
+    const base = tmpDir();
+    const compliantContent = `---
+type: handoff_receipt
+task_id: T-1
+artifact_category: "7"
+---
+
+# Handoff
+
+Some prose.
+
+\`\`\`guild.handoff.v2
+${VALID_V2_BLOCK}
+\`\`\`
+`;
+    const receiptPath = writeFile(base, "handoffs/receipt.md", compliantContent);
+    const { status } = runCli(["--paths", receiptPath, "--enforce"]);
+    expect(status).toBe(0);
+  });
+
+  it("no --enforce + finding => exit 0 (warn-only; U5a behaviour preserved)", () => {
+    // Even with a bad receipt, omitting --enforce must exit 0.
+    const base = tmpDir();
+    const receiptPath = writeFile(base, "handoffs/receipt.md", receiptNoBlock());
+    const { status, combined } = runCli(["--paths", receiptPath]);
+    expect(status).toBe(0);
+    // Findings are still printed (advisory annotations).
+    expect(combined).toMatch(/\[comms-format-lint\] WARN/);
+  });
+
+  it("no paths, no --enforce => exit 0 (nothing to check)", () => {
+    const { status } = runCli([]);
+    expect(status).toBe(0);
+  });
+
+  it("--enforce with no changed paths => exit 0 (nothing to enforce)", () => {
+    const { status } = runCli(["--enforce"]);
+    expect(status).toBe(0);
+  });
+});
+
+// ─── FIX C: looksLikeReceipt false-positive + check-(c) human-knowledge-doc exemption ──
+//
+// Three targeted regressions from the U5b safety-check STOP:
+//   (1) A type:decision doc under docs/knowledge/ that MENTIONS guild.handoff.v2
+//       in prose must produce NO check-(a), NO check-(c) findings.
+//   (2) A genuine handoff_receipt with no artifact_category still fires check-(c)
+//       when NOT under docs/knowledge/ (behaviour unchanged).
+//   (3) A real receipt with a duplicate block still fires check-(a) (detection intact).
+
+describe("FIX C — looksLikeReceipt narrowing + human-knowledge-doc exemption", () => {
+  it("(1) type:decision doc under docs/knowledge/ mentioning guild.handoff.v2 in prose => NO check-(a), NO check-(c)", () => {
+    // This is the exact pattern that caused the safety-check STOP:
+    // communication-format-policy.md has type:decision, is under docs/knowledge/,
+    // and documents the ```guild.handoff.v2 fence in its body prose.
+    // The old looksLikeReceipt classified it as a receipt via the fence-content
+    // heuristic; the new logic exempts it because type: is not handoff_receipt
+    // and the path is not under /handoffs/ or /receipts/.
+    // check-(c) must also be silent because docs/knowledge/ is category-2 by
+    // established convention (isHumanKnowledgeDoc exemption).
+    const base = tmpDir();
+    const policyDoc = writeFile(
+      base,
+      "docs/knowledge/decisions/communication-format-policy.md",
+      `---
+type: decision
+owner: architect
+confidence: high
+---
+
+# Communication-format policy
+
+A valid v1 receipt MUST embed exactly ONE fenced \`\`\`guild.handoff.v2\`\`\`
+JSON block as machine truth.
+
+The fence format is documented here for human readers.
+`
+    );
+    const findings = lintCommsFormat({ paths: [policyDoc] });
+    // No check-(a): this is not a receipt despite mentioning the fence in prose.
+    expect(findings.filter((f) => f.check === "a").length).toBe(0);
+    // No check-(c): docs/knowledge/ files are category-2 by convention.
+    expect(findings.filter((f) => f.check === "c").length).toBe(0);
+    // No findings at all.
+    expect(findings.length).toBe(0);
+  });
+
+  it("(1b) type:standard / type:reflection under docs/knowledge/ => NO check-(c)", () => {
+    // Other human knowledge doc types must also be exempt from check-(c).
+    const base = tmpDir();
+    const standard = writeFile(
+      base,
+      "docs/knowledge/standards/some-standard.md",
+      `---\ntype: standard\nowner: architect\n---\n\n# A standard\n`
+    );
+    const reflection = writeFile(
+      base,
+      "docs/knowledge/reflections/some-reflection.md",
+      `---\ntype: reflection\nowner: lead\n---\n\n# Reflection\n`
+    );
+    expect(lintCommsFormat({ paths: [standard] }).filter((f) => f.check === "c").length).toBe(0);
+    expect(lintCommsFormat({ paths: [reflection] }).filter((f) => f.check === "c").length).toBe(0);
+  });
+
+  it("(2) genuine handoff_receipt without artifact_category, NOT under docs/knowledge/ => check-(c) still fires", () => {
+    // Receipts outside docs/knowledge/ are machine-communication artifacts and must
+    // still be required to declare their category. This verifies the exemption is
+    // location-scoped and does not silently exempt real receipts.
+    const base = tmpDir();
+    const receiptPath = writeFile(
+      base,
+      "artifacts/new-receipt.md",
+      `---
+type: handoff_receipt
+task_id: T-new
+---
+
+Some content without a category field.
+`
+    );
+    const findings = lintCommsFormat({ paths: [receiptPath] });
+    // check-(c) must still fire: not under docs/knowledge/, type is in COMM_ARTIFACT_TYPES.
+    expect(findings.filter((f) => f.check === "c").length).toBeGreaterThan(0);
+  });
+
+  it("(3) genuine receipt with duplicate guild.handoff.v2 blocks => check-(a) still fires", () => {
+    // The detection narrowing must not prevent real receipt violations from being caught.
+    // A file under /handoffs/ with two v2 blocks is still an ambiguous receipt.
+    const base = tmpDir();
+    const receiptPath = writeFile(base, "handoffs/receipt.md", receiptTwoBlocks());
+    const findings = lintCommsFormat({ paths: [receiptPath] });
+    expect(findings.filter((f) => f.check === "a").length).toBeGreaterThan(0);
+  });
+});

@@ -1,9 +1,15 @@
-# comms-format.yml — communication-format lint (U5a warn-mode advisory)
+# comms-format.yml — communication-format lint (U5b enforce mode)
 #
-# Runs the comms-format-lint core over the PR diff range in WARN mode.
-# U5a discipline: annotations only, never fails the build.
-# U5b (enforce mode, blocking gate) is a future lane that flips the --enforce
-# flag after every receipt emitter (U6) is updated.
+# Runs the comms-format-lint core over the PR diff range.
+# U5b discipline: the enforcing step FAILS the job on ≥1 in-scope violation.
+# OD-4 scoping is preserved — only changed paths in the PR diff range are
+# tested, so the existing committed corpus is never retro-failed.
+#
+# Two-step design:
+#   (1) comms-format-enforce — the blocking gate; runs with --enforce and fails
+#       the job on any finding. This step does NOT use continue-on-error.
+#   (2) comms-format-summary — always runs (if: always()) to emit the advisory
+#       GitHub Step Summary regardless of the gate result, so authors see details.
 #
 # Policy ref: docs/knowledge/decisions/communication-format-policy.md
 # OD-4 discriminator: only changed paths in the PR diff range are in-scope.
@@ -13,7 +19,7 @@
 # Lint core: scripts/comms/comms-format-lint.ts (pure library, import-safe)
 # CLI entry: scripts/comms/comms-format-lint.cli.ts (invoked here)
 
-name: comms-format (warn-mode advisory)
+name: comms-format (enforce)
 
 on:
   pull_request:
@@ -27,9 +33,6 @@ permissions:
 jobs:
   comms-format:
     runs-on: ubuntu-latest
-    # Advisory: NEVER blocks a PR in U5a. continue-on-error ensures an
-    # infrastructure failure (npm outage, checkout hiccup) cannot redden the PR.
-    continue-on-error: true
     steps:
       - name: Checkout (full history for the PR diff range)
         uses: actions/checkout@v4
@@ -61,16 +64,14 @@ jobs:
           echo "changed=${CHANGED}" >> "$GITHUB_OUTPUT"
           echo "range=${RANGE}" >> "$GITHUB_OUTPUT"
 
-      - name: Run comms-format lint (warn mode — non-blocking)
+      - name: comms-format lint — enforce gate (blocking, OD-4 diff-range scoped)
+        id: enforce
         env:
           CHANGED_PATHS: ${{ steps.diff.outputs.changed }}
         run: |
           set -uo pipefail
-          # Convert comma-separated relative paths to absolute paths.
-          # Pass them to the lint core via --paths.
-          # The lint core exits 0 in U5a regardless of findings.
           if [ -z "${CHANGED_PATHS:-}" ]; then
-            echo "No changed paths detected — skipping lint."
+            echo "No changed paths detected — skipping enforce gate."
             exit 0
           fi
 
@@ -82,29 +83,58 @@ jobs:
           done
           ABS_PATHS="${ABS_PATHS%,}"
 
+          # Run with --enforce: exits 1 on any finding, 0 if clean.
+          # Findings are printed to stdout/stderr by the CLI.
+          # This step is the gating step — no continue-on-error.
+          npx tsx scripts/comms/comms-format-lint.cli.ts \
+            --paths "${ABS_PATHS}" \
+            --enforce
+
+      - name: comms-format lint — advisory summary (always runs)
+        if: always()
+        env:
+          CHANGED_PATHS: ${{ steps.diff.outputs.changed }}
+          ENFORCE_OUTCOME: ${{ steps.enforce.outcome }}
+        run: |
+          set -uo pipefail
+          if [ -z "${CHANGED_PATHS:-}" ]; then
+            {
+              echo "## comms-format — communication-format lint (enforce mode)"
+              echo ""
+              echo "_No changed paths detected — lint skipped._"
+              echo ""
+              echo "_U5b enforce mode: new/changed files in PR diff range are gated. OD-4 scoped — pre-effective-date and grandfathered files are exempt. Canon: \`docs/knowledge/decisions/communication-format-policy.md\`._"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          ABS_PATHS=""
+          IFS=',' read -ra FILES <<< "${CHANGED_PATHS%,}"
+          for f in "${FILES[@]}"; do
+            [ -n "$f" ] && ABS_PATHS="${ABS_PATHS}${GITHUB_WORKSPACE}/${f},"
+          done
+          ABS_PATHS="${ABS_PATHS%,}"
+
+          # Capture output in warn mode (always exits 0) for the summary.
           set +e
           OUT="$(npx tsx scripts/comms/comms-format-lint.cli.ts \
             --paths "${ABS_PATHS}" 2>&1)"
-          CODE=$?
           set -e
-          echo "$OUT"
 
           # Emit GitHub annotations for each warning line.
           while IFS= read -r line; do
             if echo "$line" | grep -q '\[comms-format-lint\] WARN'; then
-              # Extract file path from the log line for annotation context.
               echo "::warning::${line}"
             fi
           done <<< "$OUT"
 
-          # Surface summary.
+          # Surface summary with enforce status.
+          GATE_STATUS="PASS"
+          [ "${ENFORCE_OUTCOME}" = "failure" ] && GATE_STATUS="FAIL"
           {
-            echo "## comms-format — communication-format lint (warn mode)"
+            echo "## comms-format — communication-format lint (enforce mode) — ${GATE_STATUS}"
             echo ""
             printf '%s\n' "$OUT" | sed 's/^/    /'
             echo ""
-            echo "_U5a warn-mode: findings are advisory (non-blocking). Scope: changed files in this PR only (OD-4 discriminator). Pre-effective-date and grandfathered files are exempt. Canon: \`docs/knowledge/decisions/communication-format-policy.md\`._"
+            echo "_U5b enforce mode: new/changed files in PR diff range are gated (blocking). OD-4 scoped — pre-effective-date and grandfathered files are exempt. Canon: \`docs/knowledge/decisions/communication-format-policy.md\`._"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: comms-format lint OK
-        run: echo "comms-format lint completed (warn mode — always exits 0 in U5a)"
