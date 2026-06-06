@@ -1,0 +1,147 @@
+# comms-negative.yml — U7 AC-6 negative gate (no-accidental-write)
+#
+# Runs the no-accidental-write guard over the PR diff range.
+# FAILS the build if any changed path alters the FORMAT or SCHEMA of a
+# protected surface:
+#   (1) .guild/settings.json      — must stay JSON; required top-level keys stable
+#   (2) .guild/workspace.json     — must stay JSON; schema_version required
+#   (3) provenance JSON           — .guild/runs/<id>/provenance.json shape pinned
+#   (4) trace JSONL               — logs/*.jsonl, events.ndjson line shape pinned
+#   (5) docs/knowledge frontmatter— YAML-frontmatter key-set convention pinned
+#
+# This is the AC-6 NEGATIVE gate: the communication-format-standardization
+# initiative must NOT change these surfaces. It is a guard, not a freeze —
+# legitimate changes to these files via OTHER initiatives are out of scope.
+#
+# OD-4 scoping (same mechanism as comms-format.yml):
+#   Only paths in the PR diff range are checked. The existing committed corpus
+#   is never retro-failed. Pre-effective-date and unrelated paths pass silently.
+#
+# Two-step design (mirrors comms-format.yml):
+#   (1) comms-negative-enforce — blocking gate; exits 1 on any violation.
+#   (2) comms-negative-summary — always runs (if: always()) to emit GitHub
+#       Step Summary with violation details so authors can act.
+#
+# Policy ref: docs/knowledge/decisions/communication-format-policy.md
+#   §"Invariants / non-goals"
+# Lib:    scripts/comms/no-accidental-write.ts (pure, import-safe)
+# CLI:    scripts/comms/no-accidental-write.cli.ts
+# Tests:  scripts/comms/__tests__/no-accidental-write.test.ts
+# Owner:  tooling-engineer.
+
+name: comms-negative (enforce)
+
+on:
+  pull_request:
+    # Fire on any PR — the path classifier narrows scope internally.
+    # No path filter here: a changed protected surface anywhere in the repo is
+    # in-scope.
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  comms-negative:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for the PR diff range)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install scripts/ dependencies
+        run: |
+          if [ -f scripts/package.json ]; then
+            cd scripts && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+          fi
+
+      - name: Resolve PR diff (changed paths)
+        id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          RANGE="${BASE_SHA}...${HEAD_SHA}"
+          echo "comms-negative PR range: $RANGE"
+          CHANGED="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | tr '\n' ',')"
+          echo "changed=${CHANGED}" >> "$GITHUB_OUTPUT"
+          echo "range=${RANGE}" >> "$GITHUB_OUTPUT"
+
+      - name: comms-negative — enforce gate (blocking)
+        id: enforce
+        env:
+          CHANGED_PATHS: ${{ steps.diff.outputs.changed }}
+        run: |
+          set -uo pipefail
+          if [ -z "${CHANGED_PATHS:-}" ]; then
+            echo "No changed paths detected — skipping negative gate."
+            exit 0
+          fi
+
+          # Resolve relative paths to absolute (from repo root = $GITHUB_WORKSPACE).
+          ABS_PATHS=""
+          IFS=',' read -ra FILES <<< "${CHANGED_PATHS%,}"
+          for f in "${FILES[@]}"; do
+            [ -n "$f" ] && ABS_PATHS="${ABS_PATHS}${GITHUB_WORKSPACE}/${f},"
+          done
+          ABS_PATHS="${ABS_PATHS%,}"
+
+          # Run with --enforce: exits 1 on any violation, 0 if clean.
+          # This step is the blocking gate — no continue-on-error.
+          npx tsx scripts/comms/no-accidental-write.cli.ts \
+            --paths "${ABS_PATHS}" \
+            --enforce
+
+      - name: comms-negative — advisory summary (always runs)
+        if: always()
+        env:
+          CHANGED_PATHS: ${{ steps.diff.outputs.changed }}
+          ENFORCE_OUTCOME: ${{ steps.enforce.outcome }}
+        run: |
+          set -uo pipefail
+          if [ -z "${CHANGED_PATHS:-}" ]; then
+            {
+              echo "## comms-negative — AC-6 negative gate (no-accidental-write)"
+              echo ""
+              echo "_No changed paths detected — negative gate skipped._"
+              echo ""
+              echo "_AC-6: the comms-format initiative must not alter protected surface schemas. Canon: \`docs/knowledge/decisions/communication-format-policy.md\` §\"Invariants / non-goals\"._"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          ABS_PATHS=""
+          IFS=',' read -ra FILES <<< "${CHANGED_PATHS%,}"
+          for f in "${FILES[@]}"; do
+            [ -n "$f" ] && ABS_PATHS="${ABS_PATHS}${GITHUB_WORKSPACE}/${f},"
+          done
+          ABS_PATHS="${ABS_PATHS%,}"
+
+          # Capture advisory output (always exits 0 without --enforce).
+          set +e
+          OUT="$(npx tsx scripts/comms/no-accidental-write.cli.ts \
+            --paths "${ABS_PATHS}" 2>&1)"
+          set -e
+
+          # Emit GitHub annotations for each violation line.
+          while IFS= read -r line; do
+            if echo "$line" | grep -qE '\[no-accidental-write\] (WARN|ERROR)'; then
+              echo "::warning::${line}"
+            fi
+          done <<< "$OUT"
+
+          GATE_STATUS="PASS"
+          [ "${ENFORCE_OUTCOME}" = "failure" ] && GATE_STATUS="FAIL"
+          {
+            echo "## comms-negative — AC-6 negative gate — ${GATE_STATUS}"
+            echo ""
+            printf '%s\n' "$OUT" | sed 's/^/    /'
+            echo ""
+            echo "_AC-6 gate: the communication-format-standardization initiative must NOT alter the schema/format of protected surfaces (.guild/settings.json, .guild/workspace.json, provenance JSON, trace JSONL, docs/knowledge frontmatter). Canon: \`docs/knowledge/decisions/communication-format-policy.md\` §\"Invariants / non-goals\"._"
+          } >> "$GITHUB_STEP_SUMMARY"
