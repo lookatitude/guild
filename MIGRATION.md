@@ -65,7 +65,7 @@ user-visible redirect message** each removed/renamed name prints.
 
 | v1 command | v2 replacement | Behavior delta | Fate |
 |---|---|---|---|
-| `/guild:guild [brief] [--loops --loop-cap --auto-approve --codex-review --codex-cap]` | `/guild:guild [brief]` + phase subcommands `init/ideate/plan/build/qa/ops`; flags → `--rigor` + 5 globals | Phases now addressable; flag soup removed; surfaced phase auto-detect added | renamed / restructured (not removed) |
+| `/guild:guild [brief] [--loops --loop-cap --auto-approve --codex-review --codex-cap]` | `/guild:guild [brief]` + phase subcommands `init/ideate/plan/build/qa/ops`; flags → `--rigor` + 5 globals | Phases now addressable; flag soup consolidated under `--rigor` (the tuning flags stay supported for power users); surfaced phase auto-detect added | renamed / restructured (not removed) |
 | `/guild:guild-team [propose\|show\|edit] [--allow-larger]` | **removed.** `propose`→ inside `/guild:plan`; `show`→ `/guild:status` (team section); `edit`→ the `[edit]` response at the plan/team approval gate; `--allow-larger`→ `--team-size=N` on `/guild:plan` | Team is no longer a standalone surface; it is a planning sub-step | **REMOVED** |
 | `/guild:guild-wiki [ingest\|query\|lint]` | `/guild:wiki <ingest\|query\|lint>` | prefix drop only; behavior identical | renamed |
 | `/guild:guild-evolve [skill] [--auto]` | `/guild:evolve [skill] [--auto]` | prefix drop only | renamed |
@@ -141,7 +141,7 @@ Full mapping: MIGRATION.md §2.
 
 **The mega-verb `/guild:guild [brief]`** is renamed/restructured, not removed — it
 still works. The only behavioral change a user sees on first run is the
-**surfaced phase-detection prompt** and the **deleted tuning flags** (see §4).
+**surfaced phase-detection prompt** and the **tuning flags** (retained — CLI-accepted; config keys are the persistent equivalent) (see §4).
 
 ---
 
@@ -163,8 +163,8 @@ still works. The only behavioral change a user sees on first run is the
 | v1 key | v2 key | Note |
 |---|---|---|
 | `loops:` | `loops:` (still present, but `null` = derive from `rigor`) | Prefer `rigor:`; `loops:` is now a power-user override only |
-| `loop_cap:` | `loop_cap:` | Config-only; no CLI equivalent |
-| `codex_cap:` | `codex_cap:` | Config-only; no CLI equivalent |
+| `loop_cap:` | `loop_cap:` | CLI `--loop-cap=N` also accepted; config key is the persistent form |
+| `codex_cap:` | `codex_cap:` | CLI `--codex-cap=N` also accepted; config key persists it |
 | `codex_review: true\|false` | `review: local \| cross \| off` | `true`→`cross`, `false`→`local` |
 | `auto_approve: none\|spec-and-plan\|implementation\|all` | `auto_approve: []` csv | `none`→`[]`, `spec-and-plan`→`[spec,plan]`, `implementation`→`[build]`, `all`→`[all]` |
 | *(new)* | `rigor: standard` | New profile knob; the primary control |
@@ -195,20 +195,22 @@ codex_cap: 5
 auto_approve: spec-and-plan
 ```
 
-v2 equivalent:
+v2 equivalent (`.guild/settings.json` — JSON, not YAML):
 
-```yaml
-rigor: deep            # loops=all + review=cross + cap=16, all in one knob
-auto_approve: [spec,plan]
-# (omit `review:` — `rigor: deep` already implies `review=cross`)
-host: auto
-initiative_default: null
-
-# Only if you truly need to pin exact knobs independent of rigor:
-loops: null            # null = derive from rigor (recommended)
-loop_cap: 16
-codex_cap: 5
+```json
+{
+  "rigor": "deep",
+  "auto_approve": ["spec", "plan"],
+  "host": "auto",
+  "initiative_default": null
+}
 ```
+
+`rigor: "deep"` already implies `review: "cross"` and expands to loops=all +
+cap=16 in one knob, so there is no separate `review` key to set. Power users
+who need to pin exact knobs independent of the profile may add `"loops": null`
+(null = derive from rigor — recommended), `"loop_cap": 16`, and
+`"codex_cap": 5`.
 
 ### 3.4 New optional `defaults:` block (nothing to migrate)
 
@@ -262,9 +264,9 @@ What a v1 user needs to know for migration:
 
 | v1 flag | v2 |
 |---|---|
-| `--loops=<…>` | **gone** — use `--rigor=quick\|standard\|deep` or `.guild/settings.json` `loops:` |
-| `--loop-cap=N` | **gone** — config-only (`loop_cap:`) |
-| `--codex-cap=N` | **gone** — config-only (`codex_cap:`) |
+| `--loops=<…>` | **retained** — still parsed; `--rigor` or `loops:` is the recommended persistent form |
+| `--loop-cap=N` | **retained** — still parsed; `loop_cap:` persists it |
+| `--codex-cap=N` | **retained** — still parsed; `codex_cap:` persists it |
 | `--codex-review` | **removed in v2.0** — use `--review=cross` |
 | `--auto-approve=spec-and-plan` | `--auto-approve=spec,plan` |
 | `--auto-approve=implementation` | `--auto-approve=build` |
@@ -480,8 +482,8 @@ changed because a user wants the thing fixed, not merely diagnosed.
 
 **Is `/guild:guild` itself breaking?** The verb still works. You will see two
 visible changes: a surfaced phase-detection prompt on bare `/guild:guild`, and the
-removal of `--loops/--loop-cap/--codex-cap` from the CLI (now `--rigor` +
-config).
+addition of `--rigor` alongside the retained `--loops/--loop-cap/--codex-cap`
+flags (config keys persist them).
 
 ---
 

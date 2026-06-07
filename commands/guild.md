@@ -129,12 +129,15 @@ destructive/network/spend STILL ask even with `all`), `--review=local|cross|off`
 (`command-surface.md §4.3`/§4.4; `config.md` inheritance chain; `rigor` is
 the `--rigor` profile expansion step between project-local and CLI).
 
-**Deleted tuning flags (v1 → v2).** `--loops`, `--loop-cap`, `--codex-cap`
-are **removed from the CLI** — folded into `--rigor` profiles and still
-power-user-configurable in `.guild/settings.json` (`loops:`/`loop_cap:`/
-`codex_cap:` keys). `--codex-review` is **replaced** by `--review=cross`.
-A user never types `--loops` again — they type one of three `--rigor`
-words. The full v1→v2 flag map is `MIGRATION.md §3`; the closed-key
+**Tuning flags (v1 → v2).** `--loops`, `--loop-cap`, `--codex-cap` are
+**retained** — the CLI still accepts all three (the arg-parse switch in
+`read-guild-config.ts` handles their `--loops`/`--loop-cap`/`--codex-cap`
+cases), and they're also settable in `.guild/settings.json`
+(`loops:`/`loop_cap:`/`codex_cap:` keys) as the persistent form. The
+`--rigor` profiles set all three in bulk, so most users reach for one of
+three `--rigor` words instead of the individual flags. `--codex-review` is
+**replaced** by `--review=cross`. The full v1→v2 flag map is
+`MIGRATION.md §3`; the closed-key
 `defaults:` config schema is `command-surface.md §4.4` (cited, not
 re-spelled).
 
