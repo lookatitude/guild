@@ -231,3 +231,73 @@ function safeIsFile(p: string): boolean {
     return false;
   }
 }
+
+// ── R-016 SSH lane-key join (plan owner → task-id) ───────────────────────────
+//
+// The canonical lane key everywhere downstream (run-state lanes, resume.json dirs,
+// resume-lanes.ts reader, execute-plan re-entry) is the PLAN TASK-ID (e.g.
+// `T2-backend`), NOT the specialist name (`backend`). team.yaml — the launcher's
+// only input — carries specialist NAMES, not task-ids. The task-id↔owner mapping
+// lives solely in `.guild/plan/<slug>.md` (lane blocks: `- task-id: …` / `- owner: …`).
+// The SSH `onExhausted` path therefore must JOIN specialist→task-id via the plan so
+// its dead-lane checkpoint is keyed identically to the prose path (write↔read symmetry).
+
+/**
+ * Parse `.guild/plan/<slug>.md` into an `owner(specialist-name) → task-id[]` map.
+ * Plan lane format (skills/meta/plan/SKILL.md): each `## Lane:` block carries
+ * `- task-id: <id>` immediately followed by `- owner: <name>`. A specialist may own
+ * multiple lanes → multiple task-ids. Tolerant: missing/unreadable plan → empty map;
+ * never throws.
+ */
+export function readPlanOwnerTaskIds(guildRoot: string, slug: string): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  let raw: string;
+  try {
+    raw = fs.readFileSync(path.join(guildRoot, ".guild", "plan", `${slug}.md`), "utf8");
+  } catch {
+    return map; // no plan → empty map (caller falls back to the specialist name)
+  }
+  let pendingTaskId: string | null = null;
+  for (const line of raw.split("\n")) {
+    if (/^##\s+Lane:/.test(line)) {
+      pendingTaskId = null; // new lane block — reset
+      continue;
+    }
+    const t = line.match(/^\s*-\s*task-id:\s*(\S+)/);
+    if (t) {
+      pendingTaskId = t[1];
+      continue;
+    }
+    const o = line.match(/^\s*-\s*owner:\s*(\S+)/);
+    if (o && pendingTaskId) {
+      const owner = o[1];
+      const arr = map.get(owner) ?? [];
+      arr.push(pendingTaskId);
+      map.set(owner, arr);
+      pendingTaskId = null;
+    }
+  }
+  return map;
+}
+
+/**
+ * Resolve the dead-lane checkpoint key(s) for a remote specialist that could not be
+ * dispatched (SSH transport exhausted). Returns the specialist's plan TASK-ID(s) so
+ * the checkpoint is keyed the same way resume-lanes.ts + execute-plan re-entry expect.
+ *
+ * A specialist that owns several lanes returns ALL its task-ids — an undispatchable
+ * specialist means none of its lanes can run, so each is dead-lettered.
+ *
+ * FALLBACK: when the plan has no task-id for the specialist (plan absent, or the
+ * specialist isn't an owner), returns `[specName]` so the dead lane is NEVER silently
+ * dropped — but the caller should warn, since a name-keyed checkpoint may not map back
+ * to a plan lane on resume.
+ */
+export function resolveDeadLaneKeys(
+  guildRoot: string,
+  slug: string,
+  specName: string,
+): string[] {
+  const taskIds = readPlanOwnerTaskIds(guildRoot, slug).get(specName);
+  return taskIds && taskIds.length > 0 ? taskIds : [specName];
+}

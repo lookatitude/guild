@@ -27,6 +27,8 @@ import {
   readActivePhase,
   readCurrentPhasePointer,
   writeCurrentPhasePointer,
+  readPlanOwnerTaskIds,
+  resolveDeadLaneKeys,
   CANONICAL_PHASES,
 } from "../lib/team-file";
 
@@ -283,5 +285,122 @@ describe("readActivePhase", () => {
   it("returns null when no sentinel and no runId", () => {
     const root = makeRoot();
     expect(readActivePhase(root)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. R-016 SSH lane-key join (readPlanOwnerTaskIds + resolveDeadLaneKeys)
+// ---------------------------------------------------------------------------
+
+/** Write a `.guild/plan/<slug>.md` with the given lanes (owner → task-id). */
+function writePlan(
+  root: string,
+  slug: string,
+  lanes: Array<{ owner: string; taskId: string }>,
+): void {
+  const dir = path.join(root, ".guild", "plan");
+  fs.mkdirSync(dir, { recursive: true });
+  const blocks = lanes
+    .map(
+      (l) =>
+        `## Lane: ${l.owner}\n- task-id: ${l.taskId}\n- owner: ${l.owner}\n- depends-on: []\n- scope: do ${l.owner} work.\n`,
+    )
+    .join("\n");
+  fs.writeFileSync(path.join(dir, `${slug}.md`), `# Plan: test\n\n${blocks}`);
+}
+
+describe("readPlanOwnerTaskIds (R-016 lane-key join)", () => {
+  it("parses owner → task-id from a plan's lane blocks", () => {
+    const root = makeRoot();
+    writePlan(root, "demo", [
+      { owner: "architect", taskId: "T1-architect" },
+      { owner: "backend", taskId: "T2-backend" },
+      { owner: "qa", taskId: "T3-qa" },
+    ]);
+    const map = readPlanOwnerTaskIds(root, "demo");
+    expect(map.get("architect")).toEqual(["T1-architect"]);
+    expect(map.get("backend")).toEqual(["T2-backend"]);
+    expect(map.get("qa")).toEqual(["T3-qa"]);
+  });
+
+  it("collects MULTIPLE task-ids for an owner of several lanes", () => {
+    const root = makeRoot();
+    writePlan(root, "demo", [
+      { owner: "backend", taskId: "T2-backend" },
+      { owner: "backend", taskId: "T5-backend-migration" },
+    ]);
+    const map = readPlanOwnerTaskIds(root, "demo");
+    expect(map.get("backend")).toEqual(["T2-backend", "T5-backend-migration"]);
+  });
+
+  it("returns an empty map when the plan is absent (tolerant)", () => {
+    const root = makeRoot();
+    const map = readPlanOwnerTaskIds(root, "nope");
+    expect(map.size).toBe(0);
+  });
+});
+
+describe("resolveDeadLaneKeys (R-016 SSH dead-lane key resolution)", () => {
+  it("returns the plan TASK-ID for a specialist (the canonical lane key)", () => {
+    const root = makeRoot();
+    writePlan(root, "demo", [{ owner: "backend", taskId: "T2-backend" }]);
+    expect(resolveDeadLaneKeys(root, "demo", "backend")).toEqual(["T2-backend"]);
+  });
+
+  it("returns ALL task-ids when the specialist owns multiple lanes", () => {
+    const root = makeRoot();
+    writePlan(root, "demo", [
+      { owner: "backend", taskId: "T2-backend" },
+      { owner: "backend", taskId: "T5-backend-migration" },
+    ]);
+    expect(resolveDeadLaneKeys(root, "demo", "backend")).toEqual([
+      "T2-backend",
+      "T5-backend-migration",
+    ]);
+  });
+
+  it("FALLS BACK to the specialist name when the plan has no task-id for it", () => {
+    const root = makeRoot();
+    writePlan(root, "demo", [{ owner: "architect", taskId: "T1-architect" }]);
+    // "backend" isn't an owner in this plan → fallback to the name (never drop the dead lane)
+    expect(resolveDeadLaneKeys(root, "demo", "backend")).toEqual(["backend"]);
+  });
+
+  it("FALLS BACK to the specialist name when the plan is absent", () => {
+    const root = makeRoot();
+    expect(resolveDeadLaneKeys(root, "no-plan", "backend")).toEqual(["backend"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. R-016 write↔read key agreement (the re-gate gap)
+// ---------------------------------------------------------------------------
+//
+// Proves the SSH dead-lane key the launcher resolves (resolveDeadLaneKeys, joined
+// from the plan) is the SAME task-id key that resume-lanes.ts reads + execute-plan
+// re-enters by. The launcher writes via markLaneDead(runDir, init, <resolvedKey>, …);
+// here we assert the resolved key IS the plan task-id (so the round-trip closes).
+
+describe("R-016 SSH lane-key write↔read agreement", () => {
+  it("the resolved dead-lane key matches the plan task-id (the resume/run-state key)", () => {
+    const root = makeRoot();
+    writePlan(root, "demo", [
+      { owner: "architect", taskId: "T1-architect" },
+      { owner: "backend", taskId: "T2-backend" },
+    ]);
+
+    // What the SSH onExhausted resolves for specialist "backend":
+    const sshKeys = resolveDeadLaneKeys(root, "demo", "backend");
+    expect(sshKeys).toEqual(["T2-backend"]);
+
+    // The plan lane the resume re-entry maps `lane_id` back to:
+    const planOwners = readPlanOwnerTaskIds(root, "demo");
+    const planTaskIdsForBackend = planOwners.get("backend");
+
+    // AGREEMENT: the key the launcher would checkpoint under == the plan task-id
+    // == the run-state lanes key == the resume-lanes lane_id == execute-plan re-entry key.
+    expect(sshKeys).toEqual(planTaskIdsForBackend);
+    // And it is NOT the bare specialist name (the old, broken key).
+    expect(sshKeys).not.toContain("backend");
   });
 });

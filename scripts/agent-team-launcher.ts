@@ -85,7 +85,9 @@ import { runWithRetry, loadRetryOpts } from "./retry-lane";
 import { markLaneDead, type RunStateInit } from "../hooks/lib/run-state";
 // C4 (G-PHASE-COMPOSE): slugFromTeamPath now lives in team-file.ts (the inverse of
 // teamFilePath) so it tolerates the <slug>.<phase>.yaml basename + is unit-tested there.
-import { slugFromTeamPath } from "./lib/team-file";
+// resolveDeadLaneKeys (R-016 SSH lane-key fix): joins specialist→plan task-id so the
+// SSH dead-lane checkpoint is keyed identically to the resume reader + execute-plan.
+import { slugFromTeamPath, resolveDeadLaneKeys } from "./lib/team-file";
 
 const ADAPTER_VERSION = "1"; // CH-5 — PaneAdapter version recorded per pane.
 
@@ -923,13 +925,33 @@ async function main(): Promise<void> {
                 onExhausted: (signal) => {
                   // Mark every remote lane dead + write resume.json (resume.enabled honored
                   // inside markLaneDead). One writer for both SSH + prose paths (R-016 bridge).
+                  //
+                  // R-016 lane-key fix: key the checkpoint by the PLAN TASK-ID (e.g.
+                  // `T2-backend`), NOT the specialist name (`backend`). team.yaml carries
+                  // only names; the task-id↔owner map lives in the plan, so we JOIN via
+                  // resolveDeadLaneKeys(cwd, slug, spec.name). This makes the SSH write key
+                  // identical to the resume-lanes.ts read key + execute-plan re-entry key
+                  // (run-state lanes are task-id-keyed). A specialist that owns several
+                  // lanes dead-letters each (an undispatchable specialist runs none of them).
                   for (const spec of remoteSpecialists) {
-                    try {
-                      markLaneDead(runDir, init, spec.name, signal, cwd);
-                    } catch (e) {
+                    const laneKeys = resolveDeadLaneKeys(cwd, slug, spec.name);
+                    // Fallback (no plan task-id) → keyed by spec.name; warn so a
+                    // name-keyed checkpoint that resume can't map is never silent.
+                    if (laneKeys.length === 1 && laneKeys[0] === spec.name) {
                       process.stderr.write(
-                        `[agent-team-launcher] WARN: could not mark lane "${spec.name}" dead — ${(e as Error).message}\n`
+                        `[agent-team-launcher] WARN: no plan task-id for specialist "${spec.name}" ` +
+                          `(.guild/plan/${slug}.md) — keying its dead-lane checkpoint by specialist name; ` +
+                          `/guild:resume may not map it to a plan lane.\n`,
                       );
+                    }
+                    for (const laneKey of laneKeys) {
+                      try {
+                        markLaneDead(runDir, init, laneKey, signal, cwd);
+                      } catch (e) {
+                        process.stderr.write(
+                          `[agent-team-launcher] WARN: could not mark lane "${laneKey}" dead — ${(e as Error).message}\n`,
+                        );
+                      }
                     }
                   }
                 },
