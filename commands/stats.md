@@ -36,7 +36,7 @@ telemetry data.
 Before the telemetry read begins, start a lightweight run (SC-B, §435):
 
 ```bash
-node plugin/hooks/dist/run-trace.js start \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
   --command=/guild:stats \
   --run-class=lightweight \
   --cwd "$(pwd)"

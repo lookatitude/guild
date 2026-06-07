@@ -33,7 +33,7 @@ reuse existing surfaces and add **no new gate**.
 Before the audit skill is invoked, start a run (SC-B, §435):
 
 ```bash
-node plugin/hooks/dist/run-trace.js start \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
   --command=/guild:audit \
   --cwd "$(pwd)"
 ```

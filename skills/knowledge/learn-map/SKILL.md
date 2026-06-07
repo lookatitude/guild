@@ -80,13 +80,13 @@ by an **LLM semantic half** under the strict *"trust the script, do not re-read
 source"* constraint (`codebase-understanding.md §"two-phase"`).
 
 0. **Check children first (workspace detection, before any scan).** Run `npx
-   tsx scripts/workspace/detect.ts --cwd <root>` — a bounded `.git/`/`.guild/`
+   tsx ${CLAUDE_PLUGIN_ROOT}/scripts/workspace/detect.ts --cwd <root>` — a bounded `.git/`/`.guild/`
    stat over **immediate children only** (depth fixed at 1; no nesting, no
    knob), honoring `settings.json` `workspace.mode: auto | on | off`. If the
    root is a **workspace** (≥1 child has a nested `.git/` or `.guild/`; plain
    dirs like `docs/` are ignored), do **not** scan the union as one monolithic
    repo: register the detected sub-guilds and write the federation manifest with
-   `npx tsx scripts/workspace/write-manifest.ts --cwd <root>` →
+   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/workspace/write-manifest.ts --cwd <root>` →
    `.guild/workspace.json` (`guild.workspace.v1`, by pointer — see the
    output-locations table). For the cheap-map sub-verb (`/guild:learn map`),
    deep per-sub-repo learn is **delegated/offered** (run `/guild:learn map

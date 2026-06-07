@@ -270,7 +270,7 @@ Emit one `codex_review_round` event per round to
 `.guild/runs/<run-id>/logs/v1.4-events.jsonl` via the shared helper:
 
 ```bash
-npx tsx scripts/emit-loop-event.ts \
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/emit-loop-event.ts \
   --event codex_review_round \
   --gate <G-spec|G-plan|G-diagnose|G-lane:lane-id> \
   --round <N> \

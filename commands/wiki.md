@@ -33,13 +33,13 @@ depends on the sub-verb: `ingest` and `lint` are durable-write operations
 
 ```bash
 # ingest or lint:
-node plugin/hooks/dist/run-trace.js start \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
   --command=/guild:wiki \
   --run-class=full \
   --cwd "$(pwd)"
 
 # query:
-node plugin/hooks/dist/run-trace.js start \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
   --command=/guild:wiki \
   --run-class=lightweight \
   --cwd "$(pwd)"

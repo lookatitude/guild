@@ -50,7 +50,7 @@ observed symptom; neither ⇒ inspect the most recent `.guild/runs/*`.
 Before the diagnose skill is invoked, start a run (SC-B, §435):
 
 ```bash
-node plugin/hooks/dist/run-trace.js start \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
   --command=/guild:fix \
   --cwd "$(pwd)"
 ```

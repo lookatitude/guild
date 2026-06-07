@@ -93,7 +93,7 @@ before finalizing lanes (`docs/knowledge/architecture/codebase-understanding.md
 §"Where it sits"` plug point P2):
 
 ```
-npx tsx plugin/scripts/understand/diff-understanding.ts --cwd <repo-root> \
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/understand/diff-understanding.ts --cwd <repo-root> \
   --base <merge-base-with-integration-branch> [--head HEAD] [--run-id <id>]
 ```
 

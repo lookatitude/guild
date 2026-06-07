@@ -54,7 +54,7 @@ No `.guild/` artifacts are written in `dry-run` or `skip` mode.
 Before the converter is invoked, start a lightweight run (SC-B, §435):
 
 ```bash
-node plugin/hooks/dist/run-trace.js start \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
   --command=/guild:migrate \
   --run-class=lightweight \
   --cwd "$(pwd)"

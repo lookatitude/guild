@@ -42,7 +42,7 @@ contract in `guild.md §Run-start preflight`):
    inheritance chain + validates + probes tmux + detects providers
    (full chain: see `/guild:guild §Run-start preflight`).
 2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
-   `config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
    on NO continue with the resolved backend.
 3. `status` uses the lightweight run-trace path (not `startRun`); pass
    `result.snapshot` to the lightweight recorder if/when the lightweight path
@@ -57,7 +57,7 @@ At the very top of the command body — before any filesystem scan — record a
 lightweight status run (SC-B OQ6, §435):
 
 ```bash
-node plugin/hooks/dist/run-trace.js status \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js status \
   --cwd "$(pwd)"
 ```
 

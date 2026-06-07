@@ -42,7 +42,7 @@ command (briefing §10; `scripts/lib/runstart-preflight.ts`):
 3. **Tmux prompt (OD-3, operator-confirmed):** if `needsTmuxPrompt` is true
    (tmux on PATH AND effective `agent_mode !== "team"`):
    - Show the operator: `tmuxPrompt.question`
-   - On YES: run `npx tsx scripts/config-cmd.ts <...tmuxPrompt.persistCommand>
+   - On YES: run `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand>
      --cwd <cwd>` (U2 HARD-SET path — always-asks under auto-approve).
    - On NO: continue with the current resolved backend; record the decision.
 4. **Pass `result.snapshot`** to `startRun` (U6 writes
@@ -60,7 +60,7 @@ every child run once inheritance is in place.
 Before reading `.guild/` state, start a run (SC-B, §435):
 
 ```bash
-node plugin/hooks/dist/run-trace.js start \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
   --command=/guild:guild \
   --cwd "$(pwd)"
 # If --initiative=<id> was supplied by the user, add: --initiative=<id>

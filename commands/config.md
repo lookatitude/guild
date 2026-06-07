@@ -28,14 +28,14 @@ Generate the config with **every** key set to its default plus a self-documentin
 ```bash
 # only write if absent (idempotent); use --force to overwrite
 test -f .guild/settings.json && [ "$1" != "--force" ] && echo "exists; pass --force to overwrite" || \
-  npx tsx scripts/read-guild-config.ts --scaffold > .guild/settings.json
+  npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/read-guild-config.ts --scaffold > .guild/settings.json
 ```
 
 Steps:
 1. Ensure `.guild/` exists.
 2. If `.guild/settings.json` exists and `--force` was not passed, print its path
    and stop (never silently overwrite operator config).
-3. Otherwise run `npx tsx scripts/read-guild-config.ts --scaffold` and write the
+3. Otherwise run `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/read-guild-config.ts --scaffold` and write the
    output to `.guild/settings.json`.
 4. If a legacy `.guild/config.yml` is present, tell the operator to run
    `/guild:migrate` to convert it to `settings.json` — `config.yml` is **not**
@@ -49,7 +49,7 @@ existing `_help` block and all unrelated keys (read-modify-write). Prints
 exactly what it wrote and to which file.
 
 ```bash
-npx tsx scripts/config-cmd.ts set <key> <value> --scope workspace|project|local [--cwd <p>]
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts set <key> <value> --scope workspace|project|local [--cwd <p>]
 ```
 
 **Scope semantics and inheritance:**
@@ -88,9 +88,9 @@ All other keys in the closed key-set inherit normally down the chain.
 **Dotted key paths** are supported for nested settings:
 
 ```bash
-npx tsx scripts/config-cmd.ts set defaults.team.size 5 --scope project --cwd /path/to/project
-npx tsx scripts/config-cmd.ts set defaults.wiki.share_mode private --scope workspace
-npx tsx scripts/config-cmd.ts set agent_mode team --scope workspace --cwd /path/to/child
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts set defaults.team.size 5 --scope project --cwd /path/to/project
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts set defaults.wiki.share_mode private --scope workspace
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts set agent_mode team --scope workspace --cwd /path/to/child
 ```
 
 The `set` command validates the key against the closed key-set before writing.
@@ -104,7 +104,7 @@ project < project-local < rigor < CLI`) and print the merged JSON (what
 Guild will actually use this run):
 
 ```bash
-npx tsx scripts/read-guild-config.ts [--cwd <repo-root>] [flags…]
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/read-guild-config.ts [--cwd <repo-root>] [flags…]
 ```
 
 ### `show --sources` — annotate each key with its inheritance layer (AC-3)
@@ -113,7 +113,7 @@ Print each effective key with its resolved value AND the layer it came from
 (builtin / workspace / workspace-local / project / project-local / rigor / cli):
 
 ```bash
-npx tsx scripts/config-cmd.ts show --sources [--cwd <p>]
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts show --sources [--cwd <p>]
 ```
 
 Example output:
@@ -135,7 +135,7 @@ key; `defaults.wiki.autopromote: true`; `defaults.adversarial: off` for
 self-build with `--self-build`). Exits non-zero on a violation.
 
 ```bash
-npx tsx scripts/read-guild-config.ts --validate [--cwd <repo-root>] [--self-build]
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/read-guild-config.ts --validate [--cwd <repo-root>] [--self-build]
 ```
 
 ### `validate --effective` — validate the POST-INHERITANCE resolved config
@@ -147,7 +147,7 @@ appear after inheritance — for example, a workspace settings file that sets
 even if the child file itself is clean.
 
 ```bash
-npx tsx scripts/config-cmd.ts validate --effective [--cwd <p>] [--self-build]
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts validate --effective [--cwd <p>] [--self-build]
 ```
 
 Exits 0 on a clean resolved config; exits non-zero listing all violations.
@@ -159,7 +159,7 @@ show which provider would be recommended for `review=cross`. READ-ONLY — no
 settings file is written.
 
 ```bash
-npx tsx scripts/config-cmd.ts providers detect [--cwd <p>]
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts providers detect [--cwd <p>]
 ```
 
 Note: `providers detect` is a two-token form — `providers` is the subcommand

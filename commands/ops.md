@@ -74,7 +74,7 @@ the preflight (`scripts/lib/runstart-preflight.ts`; canonical contract in
    inheritance chain + validates + probes tmux + detects providers
    (full chain: see `/guild:guild §Run-start preflight`).
 2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
-   `config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
    on NO continue with the resolved backend.
 3. Pass `result.snapshot` to `startRun` (U6 writes the resolved-settings
    snapshot; all later phases read it back via `readResolvedSettingsSnapshot`).
@@ -85,7 +85,7 @@ the preflight (`scripts/lib/runstart-preflight.ts`; canonical contract in
 Before the operations skill is invoked, start a run (SC-B, §435):
 
 ```bash
-node plugin/hooks/dist/run-trace.js start \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
   --command=/guild:ops \
   --cwd "$(pwd)"
 # If --initiative=<id> was supplied by the user, add: --initiative=<id>
@@ -97,7 +97,7 @@ the lifecycle; `start` writes `current-run-id` synchronously so `phase`
 resolves the open run):
 
 ```bash
-node plugin/hooks/dist/run-trace.js phase \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js phase \
   --phase=ops \
   --cwd "$(pwd)"
 ```

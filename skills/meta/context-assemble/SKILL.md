@@ -73,7 +73,7 @@ bounded graph sub-source. Rules are fixed by
 wiki and guild-memory"` (cited, never re-spelled here):
 
 - **Grep-first, never dump the graph.** Retrieve via the shipped helper
-  `npx tsx plugin/scripts/understand/kg-query.ts --cwd <repo-root>
+  `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/understand/kg-query.ts --cwd <repo-root>
   --q "<task terms>" [--type file,function,…] --json` (deterministic token
   scoring, hard-capped output). Never read the whole graph file into the
   bundle.
@@ -104,7 +104,7 @@ The **recall-before-read rule** (`cost-techniques.md §3`, surfaced in ADR §4 +
 **SQLite path (auto, above threshold — D-PS-2 live):** When `defaults.index.enabled=true` AND the wiki file count is at/above `defaults.index.wiki_file_threshold` (default 500 files), call:
 
 ```
-npx tsx plugin/scripts/lib/wiki-recall.ts --query "<task description>" --cwd <repo-root> [--limit 10]
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/lib/wiki-recall.ts --query "<task description>" --cwd <repo-root> [--limit 10]
 ```
 
 This queries `wiki_fts` in `.guild/index.sqlite` via FTS5 BM25 — identical recall semantics to `guild-memory`, higher throughput at scale. The script handles the lazy-build trigger (D-PS-1): if `wiki_fts` is not yet populated it is built on first call, then fingerprint-gated on subsequent calls (no redundant re-index). Output is JSON: `{ source: "sqlite-wiki_fts", hits: [{path, title, rank, snippet}], dbPath }`. A `{ fallthrough: true }` response means the index was not available — proceed to the guild-memory path below.

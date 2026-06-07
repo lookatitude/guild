@@ -49,7 +49,7 @@ regression guard). Do not re-introduce it.
    a. Increment `L2` counter via `incrementCounter(runDir, run_id, "L2")`.
    b. Emit `loop_round_start` event via `scripts/emit-loop-event.ts`:
       ```bash
-      npx tsx scripts/emit-loop-event.ts \
+      npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/emit-loop-event.ts \
         --event loop_round_start --layer L2 --lane phase:plan \
         --round <N> --cap <cap> \
         [--run-id <run-id>] [--cwd <repo-root>]
@@ -61,7 +61,7 @@ regression guard). Do not re-introduce it.
    e. Inspect security's body with the sentinel detector.
    f. Emit `loop_round_end` event via `scripts/emit-loop-event.ts`:
       ```bash
-      npx tsx scripts/emit-loop-event.ts \
+      npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/emit-loop-event.ts \
         --event loop_round_end --layer L2 --lane phase:plan \
         --round <N> --terminated <satisfied|malformed_termination|cap_hit|escalation|error> \
         --terminator security \

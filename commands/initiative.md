@@ -42,7 +42,7 @@ runs are first-class.
 Before the initiative skill is invoked, start a run (SC-B, §435):
 
 ```bash
-node plugin/hooks/dist/run-trace.js start \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
   --command=/guild:initiative \
   --cwd "$(pwd)"
 ```

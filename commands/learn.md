@@ -58,7 +58,7 @@ NOT "missing argument, print usage, stop."
 1. **Start a run** (SC-B, §435) — before detection or any scanning:
 
    ```bash
-   node plugin/hooks/dist/run-trace.js start \
+   node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
      --command=/guild:learn \
      --cwd "$(pwd)"
    ```
@@ -180,7 +180,7 @@ For explicit sub-verb invocations, start a run before the skill is called
 (SC-B, §435):
 
 ```bash
-node plugin/hooks/dist/run-trace.js start \
+node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
   --command=/guild:learn \
   --cwd "$(pwd)"
 ```
