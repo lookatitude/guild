@@ -65,7 +65,13 @@ function securityDefaults() {
       fail_mode_durable: "closed",
       fail_mode_telemetry: "open"
     },
-    tool_description_hashes: {}
+    tool_description_hashes: {},
+    mcp_availability: {
+      stdio_available: true,
+      http_available: false,
+      bridge_package: null
+    },
+    allowed_tools: []
   };
 }
 function isPlainObject(v) {
@@ -96,12 +102,30 @@ function parseSecurityConfig(parsed) {
       out.secrets_policy.fail_mode_telemetry = sp["fail_mode_telemetry"];
     }
   }
-  if (isPlainObject(parsed["mcp"]) && isPlainObject(parsed["mcp"]["tool_description_hashes"])) {
-    const hashes = {};
-    for (const [k, v] of Object.entries(parsed["mcp"]["tool_description_hashes"])) {
-      if (typeof v === "string") hashes[k] = v;
+  if (isPlainObject(parsed["defaults"])) {
+    const defs = parsed["defaults"];
+    if (isStringArray(defs["allowed_tools"])) {
+      out.allowed_tools = defs["allowed_tools"];
     }
-    out.tool_description_hashes = hashes;
+  }
+  if (isPlainObject(parsed["mcp"])) {
+    const mcp = parsed["mcp"];
+    if (isPlainObject(mcp["tool_description_hashes"])) {
+      const hashes = {};
+      for (const [k, v] of Object.entries(mcp["tool_description_hashes"])) {
+        if (typeof v === "string") hashes[k] = v;
+      }
+      out.tool_description_hashes = hashes;
+    }
+    if (typeof mcp["stdio_available"] === "boolean") {
+      out.mcp_availability.stdio_available = mcp["stdio_available"];
+    }
+    if (typeof mcp["http_available"] === "boolean") {
+      out.mcp_availability.http_available = mcp["http_available"];
+    }
+    if (mcp["bridge_package"] === null || typeof mcp["bridge_package"] === "string") {
+      out.mcp_availability.bridge_package = mcp["bridge_package"];
+    }
   }
   return out;
 }

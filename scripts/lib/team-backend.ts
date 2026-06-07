@@ -274,10 +274,17 @@ export function paneCommand(prompt: string, runId: string): string {
   // GUILD_RUN_ID is also exported so hooks inside the pane converge on the
   // launcher's session manifest path (unified run-id convention with
   // capture-telemetry.ts / maybe-reflect.ts / agent-team handlers).
+  // GUILD_STATUSLINE is propagated from the parent session when the operator
+  // has opted in (R-009): the statusline-guild.sh script exits immediately
+  // unless GUILD_STATUSLINE=1 is set, so specialist panes would otherwise
+  // show no status output even when the orchestrator session has opted in.
   // We keep the pane alive after `claude` exits so the user can inspect handoffs.
+  const statuslineFragment =
+    process.env["GUILD_STATUSLINE"] === "1" ? `export GUILD_STATUSLINE=1; ` : "";
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
     `export GUILD_RUN_ID=${shellQuote(runId)}; ` +
+    statuslineFragment +
     `claude ${shellQuote(prompt)}; ` +
     `exec $SHELL`
   );

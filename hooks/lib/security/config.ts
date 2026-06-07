@@ -30,6 +30,28 @@ export type BypassPolicy = "deny" | "audit" | "allow";
 export type FailModeDurable = "closed" | "open";
 export type FailModeTelemetry = "open" | "closed";
 
+/**
+ * MCP transport availability flags (R-019 / FDC-13 / adapter docs).
+ * Written to settings.json under the `mcp` block by operators or adapter
+ * setup scripts; consumed by the runtime to decide whether to attempt
+ * stdio/HTTP MCP transport or fall back to the fs_scanner reader.
+ *
+ * Defaults: stdio assumed present (backward-compat); HTTP and bridge absent.
+ * BIND BY POINTER — canonical validation lives in scripts/read-guild-config.ts
+ * (McpBlock / validateMcp). This reader is the tolerant runtime consumer.
+ */
+export interface McpAvailability {
+  /** Is stdio-based MCP transport available? Default true (safe backward-compat assumption). */
+  stdio_available: boolean;
+  /** Is HTTP-based MCP transport available (e.g. web adapter)? Default false. */
+  http_available: boolean;
+  /**
+   * Bridge package name when a PI adapter provides MCP bridging
+   * (e.g. "guild-pi-mcp"). null = no bridge present.
+   */
+  bridge_package: string | null;
+}
+
 export interface SecretsPolicy {
   env_allowlist: string[];
   redaction_patterns: string[];
@@ -42,6 +64,16 @@ export interface SecurityConfig {
   secrets_policy: SecretsPolicy;
   /** tool-name → pinned SHA-256 hash of the tool description. */
   tool_description_hashes: Record<string, string>;
+  /** MCP transport availability flags (R-019 / FDC-13). */
+  mcp_availability: McpAvailability;
+  /**
+   * Project-wide baseline allow-list (R-020 / guild-boundary-config Decision F).
+   * Sourced from `defaults.allowed_tools` in settings.json. Merged with the
+   * per-lane GUILD_CAPABILITY_SCOPE in enforce.ts — tools in this list are
+   * permitted even if not present in the per-lane capability scope.
+   * Default [] ⇒ no baseline restriction (current behaviour preserved).
+   */
+  allowed_tools: string[];
 }
 
 /**
@@ -59,6 +91,12 @@ export function securityDefaults(): SecurityConfig {
       fail_mode_telemetry: "open",
     },
     tool_description_hashes: {},
+    mcp_availability: {
+      stdio_available: true,
+      http_available: false,
+      bridge_package: null,
+    },
+    allowed_tools: [],
   };
 }
 
@@ -103,13 +141,41 @@ export function parseSecurityConfig(parsed: unknown): SecurityConfig {
     }
   }
 
-  // mcp.tool_description_hashes (D-MCP / PI-6)
-  if (isPlainObject(parsed["mcp"]) && isPlainObject(parsed["mcp"]["tool_description_hashes"])) {
-    const hashes: Record<string, string> = {};
-    for (const [k, v] of Object.entries(parsed["mcp"]["tool_description_hashes"])) {
-      if (typeof v === "string") hashes[k] = v;
+  // defaults.allowed_tools (R-020 / guild-boundary-config Decision F)
+  // Project-wide baseline allow-list consumed by enforce.ts to union with the
+  // per-lane GUILD_CAPABILITY_SCOPE. Tolerant: non-array or absent → [].
+  if (isPlainObject(parsed["defaults"])) {
+    const defs = parsed["defaults"] as Record<string, unknown>;
+    if (isStringArray(defs["allowed_tools"])) {
+      out.allowed_tools = defs["allowed_tools"];
     }
-    out.tool_description_hashes = hashes;
+  }
+
+  // mcp block (D-MCP / PI-6 + R-019 / FDC-13)
+  if (isPlainObject(parsed["mcp"])) {
+    const mcp = parsed["mcp"] as Record<string, unknown>;
+
+    // mcp.tool_description_hashes — description hash-pin map (PI-6)
+    if (isPlainObject(mcp["tool_description_hashes"])) {
+      const hashes: Record<string, string> = {};
+      for (const [k, v] of Object.entries(mcp["tool_description_hashes"])) {
+        if (typeof v === "string") hashes[k] = v;
+      }
+      out.tool_description_hashes = hashes;
+    }
+
+    // mcp.stdio_available / http_available / bridge_package — transport
+    // availability flags (R-019 / FDC-13). Tolerant reader: unknown or
+    // mistyped values fall back to the documented defaults silently.
+    if (typeof mcp["stdio_available"] === "boolean") {
+      out.mcp_availability.stdio_available = mcp["stdio_available"];
+    }
+    if (typeof mcp["http_available"] === "boolean") {
+      out.mcp_availability.http_available = mcp["http_available"];
+    }
+    if (mcp["bridge_package"] === null || typeof mcp["bridge_package"] === "string") {
+      out.mcp_availability.bridge_package = mcp["bridge_package"] as string | null;
+    }
   }
 
   return out;

@@ -64,8 +64,35 @@ interface DefaultsBlock {
   reporting: "standard" | "quiet" | "verbose";
   /** SQLite lazy-cache trigger thresholds (v2-persistence-and-sqlite-index ADR D-PS-1). */
   index: IndexBlock;
-  /** Cross-host SSH endpoint config (v2-cross-host-orchestration.md CR-1/CH-1). Default { enabled: false, hosts: {} }. */
+  /** Cross-host SSH endpoint config (v2-cross-host-orchestration.md CR-1/CH-1). Default { enabled: false, hosts: {}, fallback_to_claude: true }. */
   cross_host: CrossHostBlock;
+  /**
+   * R-016: Per-lane retry policy (v2-runtime-and-execution-model.md §"retry").
+   * max_attempts: int ≥ 1 (default 1 — no retry by default).
+   * backoff: "immediate" | "linear" | "exponential" (default "exponential").
+   */
+  retry: { max_attempts: number; backoff: "immediate" | "linear" | "exponential" };
+  /**
+   * R-016: Lane resume behavior (v2-runtime-and-execution-model.md §"resume").
+   * enabled: bool (default true — failed lanes can be resumed from checkpoint).
+   */
+  resume: { enabled: boolean };
+  /**
+   * R-017: Heartbeat staleness threshold in milliseconds.
+   * hooks/lib/heartbeat.ts:153 reads this via a tolerant reader; absent → DEFAULT_HEARTBEAT_TIMEOUT_MS (600000 ms).
+   * Adding to the closed-key set lets `config validate` accept it and `config set` write it.
+   */
+  heartbeat_timeout_ms: number;
+  /**
+   * R-018: Host capability manifest freshness TTL in seconds (v2-cross-host-orchestration.md CR-5).
+   * host-router.ts RouteOptions.manifestTtlS consumes this value. Default 3600 (1 hour).
+   */
+  capability_manifest_ttl_s: number;
+  /**
+   * R-020: Explicit allowed-tools list (guild-boundary-config-and-tracking.md Decision F).
+   * Replaces, not extends, the shared tool allow-list. Default [] (no restriction).
+   */
+  allowed_tools: string[];
 }
 interface WorkspaceBlock {
   /** auto (default) = detect by immediate-child rule; on = force workspace; off = force regular. NO max_depth — depth is fixed at 1. */
@@ -145,6 +172,17 @@ interface SecretsPolicyBlock {
 interface McpBlock {
   /** Pinned SHA-256 hashes of MCP tool descriptions (tool-name → hash). Default {}. */
   tool_description_hashes: Record<string, string>;
+  /**
+   * R-019: MCP transport availability flags (feature-degradation-contracts ADR FDC-13).
+   * Optional (defaults provided by DEFAULTS.mcp) so partial mcp overrides remain type-safe.
+   * Consumed by hooks/lib/security/config.ts (McpAvailability).
+   */
+  /** stdio transport available (Claude Code Desktop, Claude Code CLI). Default true. */
+  stdio_available?: boolean;
+  /** HTTP transport available (Claude Code Web, some enterprise setups). Default false. */
+  http_available?: boolean;
+  /** Bridge package name for restricted-transport envs (pi-adapter, antigravity). Default null. */
+  bridge_package?: string | null;
 }
 
 // ── defaults.index sub-block (v2-persistence-and-sqlite-index ADR — D-PS-1).
@@ -183,6 +221,13 @@ interface CrossHostBlock {
    * SECURITY: address/port/user only — NO secrets, NO passwords. Auth via ssh keys/agent.
    */
   hosts: Record<string, CrossHostEndpointEntry>;
+  /**
+   * R-015: CR-3 level-4 Claude-only fallback. When true (default), the router falls back to
+   * the Claude host if no non-Claude host can satisfy a lane request. host-router.ts
+   * RouteOptions.fallbackToClaude consumes this value.
+   * v2-cross-host-orchestration.md CR-3 / §CR-3 §"level-4 fallback".
+   */
+  fallback_to_claude: boolean;
 }
 
 interface GuildSettings {
@@ -216,8 +261,22 @@ interface GuildSettings {
   security: SecurityBlock;
   /** Secrets redaction policy (v2-security-and-untrusted-content ADR D-SECRETS). */
   secrets_policy: SecretsPolicyBlock;
-  /** MCP description pinning + capability declarations (v2-security-and-untrusted-content ADR D-MCP). */
+  /** MCP description pinning + capability declarations + transport flags (v2-security ADR D-MCP + R-019). */
   mcp: McpBlock;
+  /**
+   * R-009: Enable the Guild status-line runner / GUILD_STATUSLINE integration.
+   * When true, the skill orchestrator sets GUILD_STATUSLINE=1 in the session env before
+   * invoking the launcher, and statusline-guild.sh reads the flag to enable the pane.
+   * CLI flag: --statusline. Default false.
+   */
+  statusline: boolean;
+  /**
+   * R-008: Pin the cross-review provider (v2-cross-host-orchestration ADR). Default "auto".
+   * "auto" → provider-detect.ts selects the best available cross-review provider.
+   * Any provider-id (e.g. "codex-plugin", "codex-cli") → pin that provider; ignored when
+   * review is not "cross". Set via: config set adversarial_review_provider codex-plugin
+   */
+  adversarial_review_provider: string;
   // power-user overrides
   loops: string | null;
   loop_cap: number;
@@ -283,7 +342,12 @@ const DEFAULTS: GuildSettings = {
   },
   mcp: {
     tool_description_hashes: {},
+    stdio_available: true,   // R-019: stdio transport on by default (Claude Code CLI/Desktop)
+    http_available:  false,  // R-019: HTTP transport off by default
+    bridge_package:  null,   // R-019: no bridge package by default
   },
+  statusline: false,                      // R-009: status-line pane off by default; --statusline enables
+  adversarial_review_provider: "auto",   // R-008: "auto" → provider-detect selects best
   loops: null,
   loop_cap: 16,
   codex_cap: 5,
@@ -306,7 +370,12 @@ const DEFAULTS: GuildSettings = {
       wiki_file_threshold: 500,
     },
     // SECURITY: address/port/user only — no secrets, no passwords. Auth via ssh keys/agent.
-    cross_host: { enabled: false, hosts: {} },
+    cross_host: { enabled: false, hosts: {}, fallback_to_claude: true }, // R-015
+    retry:   { max_attempts: 1, backoff: "exponential" },  // R-016
+    resume:  { enabled: true },                            // R-016
+    heartbeat_timeout_ms:     600000, // R-017: 10 min — mirrors hooks/lib/heartbeat.ts DEFAULT_HEARTBEAT_TIMEOUT_MS
+    capability_manifest_ttl_s: 3600,  // R-018: 1 hour — per ADR CR-5 default
+    allowed_tools: [],                // R-020: no restriction by default
   },
 };
 
@@ -412,7 +481,8 @@ const HELP: Record<string, string> = {
     "(runs/<id>/logs/*.jsonl): open = warn + security event + proceed; closed = block.",
   // ── mcp: block (v2-security-and-untrusted-content ADR — D-MCP)
   "mcp.tool_description_hashes":
-    "object (default {}) — map of MCP tool-name → SHA-256 hash of (description + inputSchema), " +
+    "object (default {}) — map of MCP tool-name → SHA-256 hash of the tool description string " +
+    "(description only; see hooks/lib/security/mcp-hash-pin.ts hashDescription), " +
     "pinned at /guild:config init time (D-MCP PI-6). PreToolUse compares the live hash per call. " +
     "Drift triggers a warn+gate-on-approval. Re-pin via /guild:config update-mcp-hashes.",
   // ── defaults.index: block (v2-persistence-and-sqlite-index ADR — D-PS-1)
@@ -441,6 +511,55 @@ const HELP: Record<string, string> = {
     "SSH endpoint config keyed by guild.host_capability.v1 host_id. " +
     "SECURITY: address/port/user ONLY — NO secrets, NO passwords. Auth via ssh keys/agent. " +
     "Non-standard ports: prefer ~/.ssh/config Host entries over the port field.",
+  // ── R-009: statusline
+  statusline:
+    "bool (default false) — enable the Guild status-line pane (R-009). " +
+    "When true, the skill orchestrator sets GUILD_STATUSLINE=1 in the session env before " +
+    "invoking the launcher; statusline-guild.sh reads the flag to enable the tmux status pane. " +
+    "CLI flag: --statusline. Config: config set statusline true --scope project",
+  // ── R-019: mcp transport availability
+  "mcp.stdio_available":
+    "bool (default true) — MCP stdio transport available (R-019, FDC-13). " +
+    "true for Claude Code CLI/Desktop; consumed by hooks/lib/security/config.ts McpAvailability.",
+  "mcp.http_available":
+    "bool (default false) — MCP HTTP transport available (R-019, FDC-13). " +
+    "true for Claude Code Web and some enterprise setups.",
+  "mcp.bridge_package":
+    "string|null (default null) — MCP bridge package name for restricted-transport envs (R-019, FDC-13). " +
+    "null = no bridge. Used by pi-adapter and antigravity connectors.",
+  // ── R-008: adversarial_review_provider
+  adversarial_review_provider:
+    "\"auto\" | <provider-id> (default \"auto\") — pin the cross-review provider " +
+    "(R-008, v2-cross-host-orchestration ADR). Only honored when review=cross. " +
+    "\"auto\" ⇒ provider-detect.ts selects the best available provider. " +
+    "Explicit IDs: \"codex-plugin\", \"codex-cli\". Set via: config set adversarial_review_provider codex-plugin",
+  // ── R-015: defaults.cross_host.fallback_to_claude
+  "defaults.cross_host.fallback_to_claude":
+    "bool (default true) — CR-3 level-4 Claude-only fallback (v2-cross-host-orchestration ADR CR-3). " +
+    "When true, the host-router falls back to the Claude host if no non-Claude host can satisfy a lane. " +
+    "Consumed by host-router.ts RouteOptions.fallbackToClaude.",
+  // ── R-016: defaults.retry.* + defaults.resume.*
+  "defaults.retry.max_attempts":
+    "int ≥ 1 (default 1) — max retry attempts per lane on transient failure " +
+    "(v2-runtime-and-execution-model.md §retry). 1 = no retry.",
+  "defaults.retry.backoff":
+    "\"immediate\" | \"linear\" | \"exponential\" (default \"exponential\") — backoff strategy between retries.",
+  "defaults.resume.enabled":
+    "bool (default true) — enable lane resume from checkpoint on failure " +
+    "(v2-runtime-and-execution-model.md §resume).",
+  // ── R-017: defaults.heartbeat_timeout_ms
+  "defaults.heartbeat_timeout_ms":
+    "int > 0 (default 600000 ms = 10 min) — staleness threshold for the heartbeat sentinel. " +
+    "hooks/lib/heartbeat.ts:153 reads this via tolerant reader (fallback = DEFAULT_HEARTBEAT_TIMEOUT_MS). " +
+    "Adding to the closed-key set lets config validate accept it and config set write it.",
+  // ── R-018: defaults.capability_manifest_ttl_s
+  "defaults.capability_manifest_ttl_s":
+    "number > 0 (default 3600 s = 1 hour) — host capability manifest freshness TTL " +
+    "(v2-cross-host-orchestration ADR CR-5). Consumed by host-router.ts RouteOptions.manifestTtlS.",
+  // ── R-020: defaults.allowed_tools
+  "defaults.allowed_tools":
+    "string[] (default []) — explicit allowed-tools list (guild-boundary-config-and-tracking.md Decision F). " +
+    "Replaces, not extends, the shared tool allow-list. [] ⇒ no restriction.",
   _precedence:
     "CLI flag > --rigor profile > settings.json > built-in default. " +
     "For model tier: --model-tier=cheap|mid|powerful > per-lane plan override > models.tiers/thresholds > built-in.",
@@ -472,8 +591,13 @@ const VALID_SECRETS_POLICY_KEYS = new Set([
   "env_allowlist", "redaction_patterns", "fail_mode_durable", "fail_mode_telemetry",
 ]);
 
-// Closed-key set for mcp.* block (D-MCP).
-const VALID_MCP_KEYS = new Set(["tool_description_hashes"]);
+// Closed-key set for mcp.* block (D-MCP + R-019).
+const VALID_MCP_KEYS = new Set([
+  "tool_description_hashes",
+  "stdio_available",  // R-019: bool — stdio transport available
+  "http_available",   // R-019: bool — HTTP transport available
+  "bridge_package",   // R-019: string|null — bridge package name
+]);
 
 // Closed-key set for defaults.index.* sub-block (D-PS-1).
 const VALID_INDEX_KEYS = new Set([
@@ -539,6 +663,9 @@ function parseArgs(argv: string[]): ParsedArgs {
     } else if (arg.startsWith("--codex-cap=")) {
       const n = parseInt(arg.slice("--codex-cap=".length), 10);
       if (!isNaN(n)) flags.codex_cap = Math.min(10, Math.max(1, n));
+    } else if (arg === "--statusline") {
+      // R-009: enable status-line pane; orchestrator reads this and sets GUILD_STATUSLINE=1
+      flags.statusline = true;
     }
   }
   return { cwd, mode, selfBuild, modelTier, flags };
@@ -782,16 +909,26 @@ export function validateSecretsPolicy(sp: Record<string, unknown>): string[] {
   return rejects;
 }
 
-/** Closed-key validation of the `mcp:` block (D-MCP). Returns reject messages. */
+/** Closed-key validation of the `mcp:` block (D-MCP + R-019). Returns reject messages. */
 export function validateMcp(m: Record<string, unknown>): string[] {
   const rejects: string[] = [];
   for (const k of Object.keys(m)) {
     if (!VALID_MCP_KEYS.has(k)) {
-      rejects.push(`unknown mcp key "${k}" (closed key set — only tool_description_hashes is valid)`);
+      rejects.push(`unknown mcp key "${k}" (closed key set — valid: tool_description_hashes, stdio_available, http_available, bridge_package)`);
     }
   }
   if (m["tool_description_hashes"] !== undefined && !isPlainObject(m["tool_description_hashes"])) {
     rejects.push(`mcp.tool_description_hashes must be an object (tool-name → SHA-256 hash)`);
+  }
+  // R-019: transport availability flags
+  if (m["stdio_available"] !== undefined && typeof m["stdio_available"] !== "boolean") {
+    rejects.push(`mcp.stdio_available must be a boolean (got ${JSON.stringify(m["stdio_available"])})`);
+  }
+  if (m["http_available"] !== undefined && typeof m["http_available"] !== "boolean") {
+    rejects.push(`mcp.http_available must be a boolean (got ${JSON.stringify(m["http_available"])})`);
+  }
+  if (m["bridge_package"] !== undefined && m["bridge_package"] !== null && typeof m["bridge_package"] !== "string") {
+    rejects.push(`mcp.bridge_package must be a string or null (got ${JSON.stringify(m["bridge_package"])})`);
   }
   return rejects;
 }
@@ -802,14 +939,19 @@ export function validateMcp(m: Record<string, unknown>): string[] {
  */
 export function validateCrossHostBlock(ch: Record<string, unknown>): string[] {
   const rejects: string[] = [];
-  const ALLOWED_CH = new Set(["enabled", "hosts"]);
+  // R-015: added fallback_to_claude to the closed key set (CR-3 level-4 Claude-only fallback).
+  const ALLOWED_CH = new Set(["enabled", "hosts", "fallback_to_claude"]);
   for (const k of Object.keys(ch)) {
     if (!ALLOWED_CH.has(k)) {
-      rejects.push(`unknown defaults.cross_host key "${k}" (closed key set — valid: enabled, hosts)`);
+      rejects.push(`unknown defaults.cross_host key "${k}" (closed key set — valid: enabled, hosts, fallback_to_claude)`);
     }
   }
   if (ch["enabled"] !== undefined && typeof ch["enabled"] !== "boolean") {
     rejects.push(`defaults.cross_host.enabled must be a boolean (got ${JSON.stringify(ch["enabled"])})`);
+  }
+  // R-015: fallback_to_claude validation
+  if (ch["fallback_to_claude"] !== undefined && typeof ch["fallback_to_claude"] !== "boolean") {
+    rejects.push(`defaults.cross_host.fallback_to_claude must be a boolean (got ${JSON.stringify(ch["fallback_to_claude"])})`);
   }
   if (ch["hosts"] !== undefined) {
     if (!isPlainObject(ch["hosts"])) {
@@ -865,7 +1007,12 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "adversarial", "team", "review_workflow", "skill_policy",
   "gates", "wiki", "quality", "reporting",
   "index",        // D-PS-1: SQLite lazy-cache trigger thresholds
-  "cross_host",   // CR-1/CH-1: cross-host SSH endpoint config
+  "cross_host",   // CR-1/CH-1: cross-host SSH endpoint config (R-015 adds fallback_to_claude)
+  "retry",        // R-016: { max_attempts: int, backoff: "immediate"|"linear"|"exponential" }
+  "resume",       // R-016: { enabled: bool }
+  "heartbeat_timeout_ms",    // R-017: int ms (hooks/lib/heartbeat.ts tolerant reader)
+  "capability_manifest_ttl_s", // R-018: number s (host-router.ts CR-5 manifest freshness)
+  "allowed_tools",           // R-020: string[] (boundary-config-and-tracking Decision F)
 ]);
 
 /** Closed-key validation of the `defaults:` block. Returns reject messages. */
@@ -887,10 +1034,53 @@ export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean)
       }
     }
   }
-  // defaults.cross_host.* — closed key set (CR-1/CH-1)
+  // defaults.cross_host.* — closed key set (CR-1/CH-1), R-015 adds fallback_to_claude
   if (isPlainObject(d["cross_host"])) {
     rejects.push(...validateCrossHostBlock(d["cross_host"] as Record<string, unknown>));
   }
+  // R-016: defaults.retry.* — lane retry policy
+  if (isPlainObject(d["retry"])) {
+    const retry = d["retry"] as Record<string, unknown>;
+    const VALID_RETRY_KEYS = new Set(["max_attempts", "backoff"]);
+    for (const rk of Object.keys(retry)) {
+      if (!VALID_RETRY_KEYS.has(rk)) rejects.push(`unknown defaults.retry key "${rk}" (valid: max_attempts, backoff)`);
+    }
+    if (retry["max_attempts"] !== undefined) {
+      const v = retry["max_attempts"];
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
+        rejects.push(`defaults.retry.max_attempts must be an integer ≥ 1 (got ${JSON.stringify(v)})`);
+    }
+    if (retry["backoff"] !== undefined) {
+      const v = retry["backoff"];
+      if (v !== "immediate" && v !== "linear" && v !== "exponential")
+        rejects.push(`defaults.retry.backoff must be "immediate"|"linear"|"exponential" (got ${JSON.stringify(v)})`);
+    }
+  }
+  // R-016: defaults.resume.* — lane resume behavior
+  if (isPlainObject(d["resume"])) {
+    const res = d["resume"] as Record<string, unknown>;
+    const VALID_RESUME_KEYS = new Set(["enabled"]);
+    for (const rk of Object.keys(res)) {
+      if (!VALID_RESUME_KEYS.has(rk)) rejects.push(`unknown defaults.resume key "${rk}" (valid: enabled)`);
+    }
+    if (res["enabled"] !== undefined && typeof res["enabled"] !== "boolean")
+      rejects.push(`defaults.resume.enabled must be a boolean (got ${JSON.stringify(res["enabled"])})`);
+  }
+  // R-017: defaults.heartbeat_timeout_ms — positive integer (ms)
+  if (d["heartbeat_timeout_ms"] !== undefined) {
+    const v = d["heartbeat_timeout_ms"];
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
+      rejects.push(`defaults.heartbeat_timeout_ms must be a positive integer (ms) (got ${JSON.stringify(v)})`);
+  }
+  // R-018: defaults.capability_manifest_ttl_s — positive number (seconds)
+  if (d["capability_manifest_ttl_s"] !== undefined) {
+    const v = d["capability_manifest_ttl_s"];
+    if (typeof v !== "number" || v <= 0)
+      rejects.push(`defaults.capability_manifest_ttl_s must be a positive number (seconds) (got ${JSON.stringify(v)})`);
+  }
+  // R-020: defaults.allowed_tools — string[]
+  if (d["allowed_tools"] !== undefined && !Array.isArray(d["allowed_tools"]))
+    rejects.push(`defaults.allowed_tools must be an array of strings`);
   // defaults.index.* — closed key set (D-PS-1)
   if (isPlainObject(d["index"])) {
     const idx = d["index"] as Record<string, unknown>;
@@ -936,6 +1126,8 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       "rigor", "auto_approve", "review", "host", "initiative_default",
       "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace", "models",
       "security", "secrets_policy", "mcp",
+      "statusline",                  // R-009: status-line pane enable (--statusline flag / settings key)
+      "adversarial_review_provider", // R-008: cross-review provider pin
       "loops", "loop_cap", "codex_cap", "defaults",
     ]);
     for (const k of Object.keys(parsed)) {
@@ -1073,7 +1265,7 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") mergedSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
       out.secrets_policy = mergedSp;
     }
-    // mcp: block — description pinning (D-MCP).
+    // mcp: block — description pinning (D-MCP) + transport availability (R-019).
     if (isPlainObject(parsed["mcp"])) {
       const rawMcp = parsed["mcp"] as Record<string, unknown>;
       rejects.push(...validateMcp(rawMcp));
@@ -1081,11 +1273,23 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       if (isPlainObject(rawMcp["tool_description_hashes"])) {
         mergedMcp.tool_description_hashes = rawMcp["tool_description_hashes"] as Record<string, string>;
       }
+      // R-019: transport availability flags
+      if (typeof rawMcp["stdio_available"] === "boolean") mergedMcp.stdio_available = rawMcp["stdio_available"];
+      if (typeof rawMcp["http_available"] === "boolean")  mergedMcp.http_available  = rawMcp["http_available"];
+      if (rawMcp["bridge_package"] === null || typeof rawMcp["bridge_package"] === "string") {
+        mergedMcp.bridge_package = rawMcp["bridge_package"] as string | null;
+      }
       out.mcp = mergedMcp;
     }
     if (typeof parsed["loops"] === "string" || parsed["loops"] === null) out.loops = parsed["loops"] as string | null;
     if (typeof parsed["loop_cap"] === "number") out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
     if (typeof parsed["codex_cap"] === "number") out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
+    // R-009: statusline — bool; --statusline flag sets it true at CLI level too
+    if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
+    // R-008: adversarial_review_provider — open string; any non-empty string is a valid provider id
+    if (typeof parsed["adversarial_review_provider"] === "string") {
+      out.adversarial_review_provider = parsed["adversarial_review_provider"];
+    }
     if (isPlainObject(parsed["defaults"])) {
       rejects.push(...validateDefaults(parsed["defaults"], selfBuild));
       // Strip unknown keys before merging so resolved config never carries them.
@@ -1095,7 +1299,18 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       for (const k of Object.keys(rawDefaults)) {
         if (DEFAULTS_ALLOWED_KEYS.has(k)) knownDefaults[k] = rawDefaults[k];
       }
+      // Deep-merge cross_host so fallback_to_claude (R-015) is preserved alongside enabled/hosts
+      const rawCrossHost = knownDefaults["cross_host"];
+      if (rawCrossHost && isPlainObject(rawCrossHost)) {
+        knownDefaults["cross_host"] = { ...DEFAULTS.defaults.cross_host, ...(rawCrossHost as Record<string, unknown>) };
+      }
       out.defaults = { ...DEFAULTS.defaults, ...(knownDefaults as Partial<DefaultsBlock>) } as DefaultsBlock;
+    }
+    // R-007: top-level `index:"off"` must cohere with IndexBlock.enabled.
+    // When the operator sets index:"off", the SQLite cache must also be fully disabled.
+    // The two config surfaces are separate but must stay coherent after merge.
+    if (out.index === "off" && out.defaults) {
+      out.defaults = { ...out.defaults, index: { ...out.defaults.index, enabled: false } };
     }
     return { config: out, rejects, source: "settings.json" };
   }

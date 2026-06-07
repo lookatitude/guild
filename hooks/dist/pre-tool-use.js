@@ -332,7 +332,13 @@ function securityDefaults() {
       fail_mode_durable: "closed",
       fail_mode_telemetry: "open"
     },
-    tool_description_hashes: {}
+    tool_description_hashes: {},
+    mcp_availability: {
+      stdio_available: true,
+      http_available: false,
+      bridge_package: null
+    },
+    allowed_tools: []
   };
 }
 function isPlainObject(v) {
@@ -363,12 +369,30 @@ function parseSecurityConfig(parsed) {
       out.secrets_policy.fail_mode_telemetry = sp["fail_mode_telemetry"];
     }
   }
-  if (isPlainObject(parsed["mcp"]) && isPlainObject(parsed["mcp"]["tool_description_hashes"])) {
-    const hashes = {};
-    for (const [k, v] of Object.entries(parsed["mcp"]["tool_description_hashes"])) {
-      if (typeof v === "string") hashes[k] = v;
+  if (isPlainObject(parsed["defaults"])) {
+    const defs = parsed["defaults"];
+    if (isStringArray(defs["allowed_tools"])) {
+      out.allowed_tools = defs["allowed_tools"];
     }
-    out.tool_description_hashes = hashes;
+  }
+  if (isPlainObject(parsed["mcp"])) {
+    const mcp = parsed["mcp"];
+    if (isPlainObject(mcp["tool_description_hashes"])) {
+      const hashes = {};
+      for (const [k, v] of Object.entries(mcp["tool_description_hashes"])) {
+        if (typeof v === "string") hashes[k] = v;
+      }
+      out.tool_description_hashes = hashes;
+    }
+    if (typeof mcp["stdio_available"] === "boolean") {
+      out.mcp_availability.stdio_available = mcp["stdio_available"];
+    }
+    if (typeof mcp["http_available"] === "boolean") {
+      out.mcp_availability.http_available = mcp["http_available"];
+    }
+    if (mcp["bridge_package"] === null || typeof mcp["bridge_package"] === "string") {
+      out.mcp_availability.bridge_package = mcp["bridge_package"];
+    }
   }
   return out;
 }
@@ -442,7 +466,7 @@ function parseRuleArray(raw) {
     return { rules: [], invalid: true };
   }
 }
-function readScopeContext(env) {
+function readScopeContext(env, baseline = []) {
   const cap = parseRuleArray(env["GUILD_CAPABILITY_SCOPE"]);
   if (cap.rules === null && !cap.invalid) return null;
   const autonomy = parseRuleArray(env["GUILD_AUTONOMY_CONTRACT"]);
@@ -450,7 +474,8 @@ function readScopeContext(env) {
     capability: cap.rules ?? [],
     autonomy: autonomy.rules,
     // null ⇒ no mask
-    invalid: cap.invalid || autonomy.invalid
+    invalid: cap.invalid || autonomy.invalid,
+    baseline
   };
 }
 var ARG_FIELDS = ["command", "file_path", "path", "pattern"];
@@ -498,7 +523,9 @@ function anyRuleMatches(rules, toolName, toolInput) {
 }
 function isInScope(scope, toolName, toolInput) {
   if (scope.invalid) return false;
-  if (!anyRuleMatches(scope.capability, toolName, toolInput)) return false;
+  const baseline = scope.baseline ?? [];
+  const inEffectiveCapability = anyRuleMatches(scope.capability, toolName, toolInput) || baseline.length > 0 && anyRuleMatches(baseline, toolName, toolInput);
+  if (!inEffectiveCapability) return false;
   if (scope.autonomy !== null && !anyRuleMatches(scope.autonomy, toolName, toolInput)) return false;
   return true;
 }
@@ -668,9 +695,9 @@ function readMcpDescription(payload, runDir, toolName) {
   return void 0;
 }
 function runSecurityEnforcement(payload, cwd) {
-  const scope = readScopeContext(process.env);
-  const toolName = payload.tool_name ?? "";
   const sec = readSecurityConfig(cwd);
+  const toolName = payload.tool_name ?? "";
+  const scope = readScopeContext(process.env, sec.allowed_tools);
   const mcpPinned = isMcpTool(toolName) && sec.tool_description_hashes[toolName] !== void 0;
   if (scope === null && !mcpPinned) return false;
   const runId = resolveRunId(cwd);

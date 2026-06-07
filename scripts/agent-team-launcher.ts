@@ -401,11 +401,21 @@ interface CrossHostEndpointCfg {
 interface CrossHostConfig {
   enabled: boolean;
   hosts: Record<string, CrossHostEndpointCfg>;
+  /**
+   * R-015: CR-3 level-4 Claude-only fallback (v2-cross-host-orchestration ADR CR-3).
+   * Default true — matches host-router.ts RouteOptions.fallbackToClaude default.
+   */
+  fallback_to_claude: boolean;
+  /**
+   * R-018: Host capability manifest freshness TTL in seconds (ADR CR-5).
+   * Default 3600 — matches host-router.ts DEFAULT_TTL_S.
+   */
+  capability_manifest_ttl_s: number;
 }
 
 /**
- * Read defaults.cross_host via the settings resolver.
- * Graceful on missing/parse errors — returns the built-in default { enabled: false, hosts: {} }.
+ * Read defaults.cross_host (+ defaults.capability_manifest_ttl_s) via the settings resolver.
+ * Graceful on missing/parse errors — returns the built-in defaults.
  *
  * Inherits from workspace settings when the project is a child of a workspace
  * (the resolver's 5-layer chain applies). A child without its own cross_host config
@@ -417,19 +427,29 @@ interface CrossHostConfig {
  *     This matches the old `ch.enabled === true` guard.
  *   - hosts: must be a plain object; any non-object value falls back to {}.
  *     This matches the old `typeof ch.hosts === "object" && ch.hosts !== null` guard.
+ *   - fallback_to_claude (R-015): bool; defaults to true (preserves CR-3 behavior).
+ *   - capability_manifest_ttl_s (R-018): positive number; defaults to 3600 (1 hour, CR-5).
  */
 function loadCrossHostConfig(cwd: string): CrossHostConfig {
   try {
     const { config } = resolveSettings({ cwd });
     const ch = config.defaults.cross_host as Record<string, unknown> | undefined;
+    // R-018: capability_manifest_ttl_s lives under defaults.*, not under cross_host.
+    const defs = config.defaults as Record<string, unknown>;
+    const rawTtl = defs["capability_manifest_ttl_s"];
     return {
       enabled: ch?.enabled === true,
       hosts: isPlainObject(ch?.hosts)
         ? (ch.hosts as Record<string, CrossHostEndpointCfg>)
         : {},
+      // R-015: fallback_to_claude — must be EXACTLY false to disable; default true.
+      fallback_to_claude: ch?.["fallback_to_claude"] === false ? false : true,
+      // R-018: manifest TTL — must be a positive number; default 3600.
+      capability_manifest_ttl_s:
+        typeof rawTtl === "number" && rawTtl > 0 ? rawTtl : 3600,
     };
   } catch {
-    return { enabled: false, hosts: {} };
+    return { enabled: false, hosts: {}, fallback_to_claude: true, capability_manifest_ttl_s: 3600 };
   }
 }
 
@@ -442,6 +462,26 @@ function crossHostEnabled(env: NodeJS.ProcessEnv, cwd: string): boolean {
   if (v === "0" || v === "false" || v === "no" || v === "off") return false;
   // Env not set → fall through to settings.json defaults.cross_host.enabled.
   return loadCrossHostConfig(cwd).enabled;
+}
+
+// ── R-009: statusline env gate ────────────────────────────────────────────────
+//
+// Reads `statusline` from the resolved settings and exports GUILD_STATUSLINE=1
+// into the launcher's process env so paneCommand() (team-backend.ts) propagates
+// it into every specialist pane. Only acts when the env var is not already set;
+// a pre-existing GUILD_STATUSLINE=1 (user-exported in shell before starting
+// Claude Code) is preserved as-is. Failure to read settings is non-fatal.
+function applyStatuslineEnv(cwd: string): void {
+  if (process.env["GUILD_STATUSLINE"] === "1") return;
+  try {
+    const { config } = resolveSettings({ cwd });
+    // R-009: config.statusline is wired in ResolvedConfig + DEFAULTS by tooling-engineer.
+    if (config.statusline === true) {
+      process.env["GUILD_STATUSLINE"] = "1";
+    }
+  } catch {
+    // Non-fatal: missing settings.json or resolver error → leave env unset.
+  }
 }
 
 // ── D5 dispatch ladder ─────────────────────────────────────────────────────
@@ -750,6 +790,13 @@ function main(): void {
       : `guild-${slug}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
   const cwd = path.resolve(args.cwd);
 
+  // R-009: apply statusline env gate before pane commands are composed.
+  // If settings.json resolves statusline: true (via --statusline flag or
+  // `config set statusline true`), export GUILD_STATUSLINE=1 into the process
+  // env so paneCommand() propagates it into every specialist pane. A pre-
+  // existing GUILD_STATUSLINE=1 (user-exported in shell) is never cleared.
+  applyStatuslineEnv(cwd);
+
   // Mint the unified run-id ONCE per launcher invocation and thread it through
   // both prompts and the manifest. Exported into each pane's env so hooks
   // inside (capture-telemetry, maybe-reflect, agent-team handlers) converge
@@ -773,13 +820,20 @@ function main(): void {
       const localHostId =
         process.env["GUILD_HOST_ID"] ?? process.env["GUILD_HOST"] ?? "claude";
       try {
+        // Load cross-host config here so R-015/R-018 values are available
+        // for both the routing decision AND the endpoint lookup below.
+        const chConfig = loadCrossHostConfig(cwd);
         const routes = planTeamRouting(team.specialists, manifests, {
           localHostId,
           crossHostEnabled: true,
+          // R-015: pass defaults.cross_host.fallback_to_claude → RouteOptions.fallbackToClaude
+          fallbackToClaude: chConfig.fallback_to_claude,
+          // R-018: pass defaults.capability_manifest_ttl_s → RouteOptions.manifestTtlS
+          manifestTtlS: chConfig.capability_manifest_ttl_s,
         });
         const remote = routes.filter((r) => r.backend === "remote");
         if (remote.length > 0) {
-          const chConfig = loadCrossHostConfig(cwd);
+          // chConfig already loaded above — reuse it.
           // Partition: specialists with endpoint config vs. those without.
           const withEndpoint = remote.filter((r) => !!chConfig.hosts[r.decision.host]);
           const noEndpoint = remote.filter((r) => !chConfig.hosts[r.decision.host]);

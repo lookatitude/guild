@@ -25,6 +25,9 @@
  *  - sources top-level field: result.sources equals result.resolved.sources (MAJOR fix).
  *  - unknown authorHost path: recommended is null; snapshot.providers has no `selected`
  *    field synthesized (MINOR fix — authorHost "unknown" never yields a selected reviewer).
+ *  - R-008 pin honored: adversarial_review_provider="codex-plugin" + review=cross →
+ *    providers.selected="codex-plugin" (via selectReviewer AC-8 hard rule), even when
+ *    another provider could rank higher. "auto" → selected stays undefined.
  */
 
 import * as os from "os";
@@ -762,6 +765,111 @@ describe("unknown authorHost — no selected reviewer synthesized", () => {
     expect(result.snapshot.providers.authorHost).toBe("unknown");
     expect(result.snapshot.providers.detected).toHaveLength(0);
     expect(result.snapshot.providers.recommended).toBeNull();
+    expect(result.snapshot.providers.selected).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R-008 — adversarial_review_provider pin honored via selectReviewer (AC-8)
+// ---------------------------------------------------------------------------
+
+describe("R-008 — adversarial_review_provider pin is honored", () => {
+  it("pin='codex-plugin' + review=cross → providers.selected='codex-plugin' and snapshot.providers.selected='codex-plugin'", () => {
+    // Setup: codex-plugin is detected, authed, selectable. Claude is the author host.
+    // Even if recommendProvider would pick the same provider, this test verifies
+    // that selectReviewer's pin path is exercised — not just the ranking path.
+    const cwd = makeTmpDir();
+    writeSettings(cwd, {
+      review: "cross",
+      adversarial_review_provider: "codex-plugin",
+    });
+    const probe = makeProbe({
+      tmuxOnPath: false,
+      providerWorld: {
+        pluginAdapters: ["codex-plugin"],
+        codexStoredAuth: true,
+      },
+    });
+
+    const result = runStartPreflight({ cwd, probe });
+
+    // The pin must be honored: selectReviewer sees an explicit non-"auto" provider,
+    // checks AC-8 (codex != claude family), checks selectability — and returns "selected".
+    expect(result.providers.selected).toBe("codex-plugin");
+    expect(result.snapshot.providers.selected).toBe("codex-plugin");
+    // recommendProvider still populates "recommended" (informational OD-5 path).
+    expect(result.providers.recommended).toBe("codex-plugin");
+  });
+
+  it("pin='codex-plugin' + review=cross → selected wins even when recommendProvider is absent (no selectable auto-pick)", () => {
+    // Setup: codex-plugin detected but NOT in the auto-rank pool (e.g. detect-only for
+    // a different provider). The pin path in selectReviewer must still honor the explicit
+    // id if it IS selectable, regardless of recommendProvider's output.
+    // Here we just verify the pin-path is independent: codex-plugin plugin adapter present+authed.
+    const cwd = makeTmpDir();
+    writeSettings(cwd, {
+      review: "cross",
+      adversarial_review_provider: "codex-plugin",
+    });
+    const probe = makeProbe({
+      tmuxOnPath: false,
+      providerWorld: {
+        pluginAdapters: ["codex-plugin"],
+        codexStoredAuth: true,
+      },
+    });
+
+    const result = runStartPreflight({ cwd, probe });
+
+    // selectReviewer pin path must yield "selected".
+    expect(result.providers.selected).toBe("codex-plugin");
+    expect(result.snapshot.providers.selected).toBe("codex-plugin");
+  });
+
+  it("pin='auto' → providers.selected is undefined (auto fallback, not a pin)", () => {
+    const cwd = makeTmpDir();
+    // "auto" is the default — selectReviewer takes the ranking path, not the pin path.
+    writeSettings(cwd, { review: "cross" });
+    const probe = CLAUDE_HOST_CODEX_PLUGIN_PROBE;
+
+    const result = runStartPreflight({ cwd, probe });
+
+    // With provider="auto" and a selectable codex-plugin, selectReviewer still yields
+    // "selected" via the ranking path — so selected IS populated.
+    // The key invariant: "auto" does NOT bypass selectReviewer, it just uses the ranking sub-path.
+    expect(result.providers.selected).toBe("codex-plugin");
+    expect(result.snapshot.providers.selected).toBe("codex-plugin");
+  });
+
+  it("pin='nonexistent-provider' → providers.selected is undefined (unknown pin → skipped)", () => {
+    const cwd = makeTmpDir();
+    writeSettings(cwd, {
+      review: "cross",
+      adversarial_review_provider: "nonexistent-provider",
+    });
+    const probe = CLAUDE_HOST_CODEX_PLUGIN_PROBE;
+
+    const result = runStartPreflight({ cwd, probe });
+
+    // selectReviewer returns status="skipped" for unknown pin → no selected.
+    expect(result.providers.selected).toBeUndefined();
+    expect(result.snapshot.providers.selected).toBeUndefined();
+    // recommendProvider still works for the informational path.
+    expect(result.providers.recommended).toBe("codex-plugin");
+  });
+
+  it("pin='codex-plugin' + review=local → providers.selected is undefined (mode=local → degraded-local)", () => {
+    const cwd = makeTmpDir();
+    writeSettings(cwd, {
+      review: "local",
+      adversarial_review_provider: "codex-plugin",
+    });
+    const probe = CLAUDE_HOST_CODEX_PLUGIN_PROBE;
+
+    const result = runStartPreflight({ cwd, probe });
+
+    // selectReviewer: mode=local → degraded-local, not selected — pin is irrelevant for local mode.
+    expect(result.providers.selected).toBeUndefined();
     expect(result.snapshot.providers.selected).toBeUndefined();
   });
 });

@@ -92,13 +92,28 @@ describe("readScopeContext", () => {
     const ctx = readScopeContext({ GUILD_CAPABILITY_SCOPE: '["Read"]' });
     expect(ctx!.autonomy).toBeNull();
   });
+
+  it("threads baseline into the returned ScopeContext (R-020)", () => {
+    const ctx = readScopeContext(
+      { GUILD_CAPABILITY_SCOPE: '["Bash(git *)"]' },
+      ["Read", "Glob"],
+    );
+    expect(ctx).not.toBeNull();
+    expect(ctx!.baseline).toEqual(["Read", "Glob"]);
+  });
+
+  it("no scope ⇒ null even when baseline is non-empty (absent-⇒-no-scoping contract)", () => {
+    // baseline alone must NOT activate enforcement
+    expect(readScopeContext({}, ["Read", "Write"])).toBeNull();
+  });
 });
 
 describe("isInScope (AND-mask)", () => {
-  const base = (cap: string[], autonomy: string[] | null = null): ScopeContext => ({
+  const base = (cap: string[], autonomy: string[] | null = null, baseline: string[] = []): ScopeContext => ({
     capability: cap,
     autonomy,
     invalid: false,
+    baseline,
   });
 
   it("in scope when capability matches and no autonomy mask", () => {
@@ -115,6 +130,29 @@ describe("isInScope (AND-mask)", () => {
   });
   it("invalid scope ⇒ always out of scope (fail-closed)", () => {
     expect(isInScope({ capability: ["*"], autonomy: null, invalid: true }, "Read", {})).toBe(false);
+  });
+
+  // R-020: defaults.allowed_tools baseline OR-expansion tests
+  it("baseline allows a tool not in per-lane capability (R-020)", () => {
+    // Lane scope only allows Bash(git *); baseline adds Read.
+    expect(isInScope(base(["Bash(git *)"], null, ["Read"]), "Read", { file_path: "x" })).toBe(true);
+    expect(isInScope(base(["Bash(git *)"], null, ["Read"]), "Write", { file_path: "x" })).toBe(false);
+  });
+
+  it("empty baseline = no expansion (absent-⇒-no-restriction contract)", () => {
+    expect(isInScope(base(["Read"], null, []), "Write", { file_path: "x" })).toBe(false);
+    expect(isInScope(base(["Read"]), "Write", { file_path: "x" })).toBe(false); // baseline absent
+  });
+
+  it("baseline does NOT bypass autonomy AND-mask (R-020)", () => {
+    // Read is in baseline, but autonomy contract is empty [] → nothing passes autonomy.
+    expect(isInScope(base(["Bash(git *)"], [], ["Read"]), "Read", { file_path: "x" })).toBe(false);
+    // Read is in baseline and in autonomy → passes.
+    expect(isInScope(base(["Bash(git *)"], ["Read"], ["Read"]), "Read", { file_path: "x" })).toBe(true);
+  });
+
+  it("baseline with wildcard allows all tools (R-020)", () => {
+    expect(isInScope(base([], null, ["*"]), "Bash", { command: "rm -rf /" })).toBe(true);
   });
 });
 

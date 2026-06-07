@@ -47,6 +47,7 @@ import {
 import {
   detectProviders,
   recommendProvider,
+  selectReviewer,
   type DetectionResult,
   type DetectedProvider,
   type HostFamily,
@@ -189,12 +190,20 @@ export interface PreflightResult {
      */
     persistCommand: string[];
   } | null;
-  /** Provider detection + recommendation. */
+  /** Provider detection + recommendation + R-008 selection. */
   providers: {
     authorHost: HostFamily;
     detected: DetectedProvider[];
     recommended: string | null;
     reason: string;
+    /**
+     * R-008: The deterministically SELECTED provider via selectReviewer (AC-8 hard rule).
+     * Present when selectReviewer returns status="selected" (explicit pin honored, or
+     * auto-pick succeeded). Undefined when degraded-local or skipped.
+     * The orchestrator MUST use `selected` (not `recommended`) as the dispatch target
+     * when non-undefined — `selected` has passed the AC-8 false-signoff guard.
+     */
+    selected?: string;
   };
   /**
    * The data object U6 will write to .guild/runs/<id>/resolved-settings.json.
@@ -324,10 +333,18 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
   // Step 5 — Detect host + providers (U4, injectable probe)
   // ------------------------------------------------------------------
   // Build the review projection from the resolved config.
+  // R-008: use the adversarial_review_provider pin from settings when set.
+  // Falls back to "auto" (provider-detect selects best) when absent or "auto".
+  // config.adversarial_review_provider is always a string (default "auto") per ResolvedConfig.
+  const resolvedProvider: string =
+    config.adversarial_review_provider !== "auto"
+      ? config.adversarial_review_provider
+      : "auto";
+
   const reviewProjection = {
     mode: config.review,
-    provider: "auto" as const,
-  };
+    provider: resolvedProvider,
+  } as { mode: typeof config.review; provider: string };
 
   const detection: DetectionResult = safeProbe(
     () =>
@@ -344,11 +361,28 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
     { recommended: null as string | null, reason: "provider detection failed" }
   );
 
+  // R-008: when adversarial_review_provider is explicitly pinned (not "auto"),
+  // route through selectReviewer (AC-8 hard-rule) so the pin is actually honored.
+  // selectReviewer enforces the false-signoff guard (same-family rejection) and
+  // the selectability check — it never silently substitutes another provider.
+  // recommendProvider (OD-5 auto recommendation) is kept for the `providers.recommended`
+  // field so auto-detection still surfaces the best available provider for informational
+  // purposes, but `providers.selected` is what the orchestrator MUST use when non-null.
+  const selResult = safeProbe(
+    () => selectReviewer(detection, reviewProjection),
+    { provider: null as string | null, status: "skipped" as const, reason: "selectReviewer failed" }
+  );
+  const selectedProvider: string | undefined =
+    selResult.status === "selected" ? (selResult.provider ?? undefined) : undefined;
+
   const providers: PreflightResult["providers"] = {
     authorHost: detection.authorHost,
     detected: detection.providers,
     recommended: recResult.recommended,
     reason: recResult.reason,
+    // R-008: populated when a provider is deterministically selected (explicit pin or auto).
+    // undefined when degraded-local or skipped.
+    ...(selectedProvider !== undefined ? { selected: selectedProvider } : {}),
   };
 
   // ------------------------------------------------------------------
@@ -369,6 +403,9 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
       authorHost: detection.authorHost,
       detected: detection.providers,
       recommended: recResult.recommended,
+      // R-008: store the selectReviewer decision in the persisted snapshot so U6/hooks
+      // can read the actual provider-to-dispatch from resolved-settings.json.
+      ...(selectedProvider !== undefined ? { selected: selectedProvider } : {}),
     },
     communication_contract: "review_result.v1",
     resolved_at_ref: null,

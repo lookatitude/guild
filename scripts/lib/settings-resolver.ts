@@ -73,6 +73,15 @@ interface DefaultsBlock {
   reporting: "standard" | "quiet" | "verbose";
   index: IndexBlock;
   cross_host: CrossHostBlock;
+  // R-016: lane retry + resume policies (v2-runtime-and-execution-model.md)
+  retry: { max_attempts: number; backoff: "immediate" | "linear" | "exponential" };
+  resume: { enabled: boolean };
+  // R-017: heartbeat staleness threshold ms (hooks/lib/heartbeat.ts tolerant reader)
+  heartbeat_timeout_ms: number;
+  // R-018: host capability manifest TTL s (host-router.ts CR-5)
+  capability_manifest_ttl_s: number;
+  // R-020: explicit allowed-tools list (boundary-config-and-tracking Decision F)
+  allowed_tools: string[];
 }
 interface WorkspaceBlock {
   mode: "auto" | "on" | "off";
@@ -117,6 +126,11 @@ interface SecretsPolicyBlock {
 }
 interface McpBlock {
   tool_description_hashes: Record<string, string>;
+  // R-019: FDC-13 MCP transport flags. Optional in the type (defaults provided by DEFAULTS.mcp)
+  // so partial flag overrides in tests and consumer code remain type-safe.
+  stdio_available?: boolean;
+  http_available?: boolean;
+  bridge_package?: string | null;
 }
 interface IndexBlock {
   enabled: boolean;
@@ -134,6 +148,7 @@ interface CrossHostEndpointEntry {
 interface CrossHostBlock {
   enabled: boolean;
   hosts: Record<string, CrossHostEndpointEntry>;
+  fallback_to_claude: boolean; // R-015: CR-3 level-4 Claude-only fallback. Default true.
 }
 
 /**
@@ -156,6 +171,10 @@ export interface ResolvedConfig {
   security: SecurityBlock;
   secrets_policy: SecretsPolicyBlock;
   mcp: McpBlock;
+  /** R-009: status-line pane enable. Default false. --statusline CLI flag or config set statusline true. */
+  statusline: boolean;
+  /** R-008: cross-review provider pin. "auto" = provider-detect selects best. Default "auto". */
+  adversarial_review_provider: string;
   loops: string | null;
   loop_cap: number;
   codex_cap: number;
@@ -265,7 +284,11 @@ const DEFAULTS: ResolvedConfig = {
   },
   mcp: {
     tool_description_hashes: {},
+    stdio_available: true,   // R-019
+    http_available:  false,  // R-019
+    bridge_package:  null,   // R-019
   },
+  statusline: false,         // R-009
   loops: null,
   loop_cap: 16,
   codex_cap: 5,
@@ -287,8 +310,14 @@ const DEFAULTS: ResolvedConfig = {
       runs_threshold: 20,
       wiki_file_threshold: 500,
     },
-    cross_host: { enabled: false, hosts: {} },
+    cross_host: { enabled: false, hosts: {}, fallback_to_claude: true }, // R-015
+    retry:   { max_attempts: 1, backoff: "exponential" as const },       // R-016
+    resume:  { enabled: true },                                           // R-016
+    heartbeat_timeout_ms:      600000, // R-017: 10 min — matches hooks/lib/heartbeat.ts DEFAULT_HEARTBEAT_TIMEOUT_MS
+    capability_manifest_ttl_s: 3600,   // R-018: 1 hour per ADR CR-5
+    allowed_tools: [],                 // R-020: no restriction by default
   },
+  adversarial_review_provider: "auto", // R-008
 };
 
 // ---------------------------------------------------------------------------
@@ -333,7 +362,10 @@ const VALID_SECURITY_KEYS       = new Set(["bypass_permissions_policy"]);
 const VALID_SECRETS_POLICY_KEYS = new Set([
   "env_allowlist", "redaction_patterns", "fail_mode_durable", "fail_mode_telemetry",
 ]);
-const VALID_MCP_KEYS        = new Set(["tool_description_hashes"]);
+const VALID_MCP_KEYS        = new Set([
+  "tool_description_hashes",
+  "stdio_available", "http_available", "bridge_package", // R-019
+]);
 const VALID_INDEX_KEYS      = new Set([
   "enabled", "kg_node_threshold", "kg_size_threshold_mb",
   "links_edge_threshold", "runs_threshold", "wiki_file_threshold",
@@ -341,11 +373,17 @@ const VALID_INDEX_KEYS      = new Set([
 const DEFAULTS_ALLOWED_KEYS = new Set([
   "auto_learn", "adversarial", "team", "review_workflow", "skill_policy",
   "gates", "wiki", "quality", "reporting", "index", "cross_host",
+  "retry", "resume",                // R-016
+  "heartbeat_timeout_ms",           // R-017
+  "capability_manifest_ttl_s",      // R-018
+  "allowed_tools",                  // R-020
 ]);
 const TIER1_KEYS = new Set([
   "rigor", "auto_approve", "review", "host", "initiative_default",
   "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace",
   "models", "security", "secrets_policy", "mcp",
+  "statusline",                  // R-009
+  "adversarial_review_provider", // R-008
   "loops", "loop_cap", "codex_cap", "defaults",
 ]);
 
@@ -636,7 +674,18 @@ function parseSettingsFile(filePath: string): Partial<ResolvedConfig> {
     const sparseMcp: Partial<McpBlock> = {};
     if (isPlainObject(rawMcp["tool_description_hashes"]))
       sparseMcp.tool_description_hashes = rawMcp["tool_description_hashes"] as Record<string, string>;
+    // R-019: transport availability flags
+    if (typeof rawMcp["stdio_available"] === "boolean") sparseMcp.stdio_available = rawMcp["stdio_available"];
+    if (typeof rawMcp["http_available"] === "boolean")  sparseMcp.http_available  = rawMcp["http_available"];
+    if (rawMcp["bridge_package"] === null || typeof rawMcp["bridge_package"] === "string")
+      sparseMcp.bridge_package = rawMcp["bridge_package"] as string | null;
     out.mcp = sparseMcp as McpBlock;
+  }
+  // R-009: statusline
+  if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
+  // R-008: adversarial_review_provider — open string; any non-empty string is valid
+  if (typeof parsed["adversarial_review_provider"] === "string") {
+    out.adversarial_review_provider = parsed["adversarial_review_provider"];
   }
   if (typeof parsed["loops"] === "string" || parsed["loops"] === null)
     out.loops = parsed["loops"] as string | null;
@@ -783,7 +832,18 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
     const sparseMcp: Partial<McpBlock> = {};
     if (isPlainObject(rawMcp["tool_description_hashes"]))
       sparseMcp.tool_description_hashes = rawMcp["tool_description_hashes"] as Record<string, string>;
+    // R-019: transport availability flags
+    if (typeof rawMcp["stdio_available"] === "boolean") sparseMcp.stdio_available = rawMcp["stdio_available"];
+    if (typeof rawMcp["http_available"] === "boolean")  sparseMcp.http_available  = rawMcp["http_available"];
+    if (rawMcp["bridge_package"] === null || typeof rawMcp["bridge_package"] === "string")
+      sparseMcp.bridge_package = rawMcp["bridge_package"] as string | null;
     out.mcp = sparseMcp as McpBlock;
+  }
+  // R-009: statusline
+  if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
+  // R-008: adversarial_review_provider — open string
+  if (typeof parsed["adversarial_review_provider"] === "string") {
+    out.adversarial_review_provider = parsed["adversarial_review_provider"];
   }
   if (typeof parsed["loops"] === "string" || parsed["loops"] === null)
     out.loops = parsed["loops"] as string | null;
@@ -1283,6 +1343,17 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
     rigorExpanded.note = fallbackNote;
   }
   assembled._rigorExpanded = rigorExpanded;
+
+  // R-007: top-level `index:"off"` must cohere with IndexBlock.enabled.
+  // The two config surfaces are separate (top-level "index" key for the CLI / settings,
+  // defaults.index.enabled for the SQLite cache gate) but must stay consistent after
+  // all layers are merged. When the resolved index is "off", force the cache gate off too.
+  if (assembled.index === "off" && assembled.defaults.index.enabled !== false) {
+    assembled.defaults = {
+      ...assembled.defaults,
+      index: { ...assembled.defaults.index, enabled: false },
+    };
+  }
 
   return { config: assembled, sources };
 }

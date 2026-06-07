@@ -83,6 +83,12 @@ export interface ScorerOpts {
   host?: "claude" | "codex" | "gemini";
   /** Explicit tier pin (--model-tier or per-lane override). Bypasses scoring. */
   modelTierPin?: Tier;
+  /**
+   * R-006: models.enabled gate. When false, skip auto-scoring entirely and use the
+   * default `mid` tier (current v2 behavior). Default true (scoring active).
+   * Consumed from settings.models.enabled via loadConfigModels().
+   */
+  enabled?: boolean;
 }
 
 export interface TierResult {
@@ -145,6 +151,19 @@ export function scoreTier(signals: TierSignals, opts: ScorerOpts = {}): TierResu
   const tiers = opts.tiers ?? DEFAULT_TIERS;
   const host = opts.host ?? "claude";
 
+  // R-006: models.enabled gate — when false, skip scoring and use the static mid tier.
+  // This matches documented behavior: "false = all lanes run at mid (current v2 behavior)".
+  // The modelTierPin still overrides even when enabled=false (explicit pin is always top).
+  if (opts.enabled === false && opts.modelTierPin === undefined) {
+    const midEntry = tiers["mid"] as Record<string, string | null | undefined> | undefined;
+    const midModel = midEntry?.[host];
+    return {
+      score: 0,
+      tier: "mid",
+      model: (midModel != null) ? midModel : undefined,
+    };
+  }
+
   // Compute score
   let score = 0;
   score += workTypeDelta(signals.workType);
@@ -189,12 +208,13 @@ export function scoreTier(signals: TierSignals, opts: ScorerOpts = {}): TierResu
  * models config is inherited by child projects (unless the child overrides).
  * Graceful on missing/parse errors — returns {} so scoreTier falls back to built-ins.
  */
-function loadConfigModels(cwd: string): Pick<ScorerOpts, "scoreWeights" | "thresholds" | "tiers"> {
+function loadConfigModels(cwd: string): Pick<ScorerOpts, "scoreWeights" | "thresholds" | "tiers" | "enabled"> {
   try {
     const { config } = resolveSettings({ cwd });
     const m = config.models;
     if (!m) return {};
     return {
+      enabled: m.enabled,     // R-006: gate the scorer on this flag
       scoreWeights: m.scoreWeights,
       thresholds: m.thresholds,
       tiers: m.tiers,

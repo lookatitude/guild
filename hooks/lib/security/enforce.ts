@@ -52,6 +52,13 @@ export interface ScopeContext {
   autonomy: string[] | null;
   /** True when the scope env was present but unparseable ⇒ fail-closed. */
   invalid: boolean;
+  /**
+   * Project-wide baseline allow-list (R-020 / `defaults.allowed_tools`).
+   * Tools matching any rule here are permitted even if not in the per-lane
+   * `capability` scope. Optional — absent or [] ⇒ no baseline expansion
+   * (current behaviour preserved).
+   */
+  baseline?: string[];
 }
 
 function parseRuleArray(raw: string | undefined): { rules: string[] | null; invalid: boolean } {
@@ -70,8 +77,13 @@ function parseRuleArray(raw: string | undefined): { rules: string[] | null; inva
 /**
  * Build the scope context from an env bag. Returns null when no
  * GUILD_CAPABILITY_SCOPE is present (⇒ enforcement does not engage).
+ *
+ * @param env      Process environment bag (GUILD_CAPABILITY_SCOPE / GUILD_AUTONOMY_CONTRACT).
+ * @param baseline Project-wide baseline allow-list from `defaults.allowed_tools` (R-020).
+ *                 Merged into the scope as an OR-expansion of the per-lane capability.
+ *                 Empty or absent ⇒ no baseline restriction (absent-⇒-no-scoping contract intact).
  */
-export function readScopeContext(env: NodeJS.ProcessEnv): ScopeContext | null {
+export function readScopeContext(env: NodeJS.ProcessEnv, baseline: string[] = []): ScopeContext | null {
   const cap = parseRuleArray(env["GUILD_CAPABILITY_SCOPE"]);
   if (cap.rules === null && !cap.invalid) return null; // not a scoped lane
   const autonomy = parseRuleArray(env["GUILD_AUTONOMY_CONTRACT"]);
@@ -79,6 +91,7 @@ export function readScopeContext(env: NodeJS.ProcessEnv): ScopeContext | null {
     capability: cap.rules ?? [],
     autonomy: autonomy.rules, // null ⇒ no mask
     invalid: cap.invalid || autonomy.invalid,
+    baseline,
   };
 }
 
@@ -136,10 +149,23 @@ export function anyRuleMatches(rules: string[], toolName: string, toolInput: unk
   return rules.some((r) => ruleMatches(r, toolName, toolInput));
 }
 
-/** Effective AND-mask: in capability_scope AND (no autonomy mask OR in it). */
+/**
+ * Effective scope check:
+ *   in (capability_scope UNION baseline) AND (no autonomy mask OR in it).
+ *
+ * The baseline (from `defaults.allowed_tools`, R-020) is a project-wide OR-
+ * expansion of the per-lane capability scope — a tool matching it is permitted
+ * even when not in the per-lane list. The autonomy AND-mask still applies over
+ * the full effective capability (baseline does not bypass autonomy narrowing).
+ */
 export function isInScope(scope: ScopeContext, toolName: string, toolInput: unknown): boolean {
   if (scope.invalid) return false; // unparseable scope ⇒ fail-closed
-  if (!anyRuleMatches(scope.capability, toolName, toolInput)) return false;
+  const baseline = scope.baseline ?? [];
+  // Effective capability = per-lane scope OR project-wide baseline (R-020).
+  const inEffectiveCapability =
+    anyRuleMatches(scope.capability, toolName, toolInput) ||
+    (baseline.length > 0 && anyRuleMatches(baseline, toolName, toolInput));
+  if (!inEffectiveCapability) return false;
   if (scope.autonomy !== null && !anyRuleMatches(scope.autonomy, toolName, toolInput)) return false;
   return true;
 }

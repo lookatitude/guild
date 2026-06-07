@@ -26,6 +26,13 @@ describe("securityDefaults", () => {
     expect(d.tool_description_hashes).toEqual({});
   });
 
+  it("mcp_availability defaults: stdio=true, http=false, bridge=null (R-019)", () => {
+    const d = securityDefaults();
+    expect(d.mcp_availability.stdio_available).toBe(true);
+    expect(d.mcp_availability.http_available).toBe(false);
+    expect(d.mcp_availability.bridge_package).toBeNull();
+  });
+
   it("returns a fresh object (no shared mutation)", () => {
     const a = securityDefaults();
     a.secrets_policy.redaction_patterns.push("x");
@@ -57,6 +64,53 @@ describe("parseSecurityConfig", () => {
     expect(cfg.secrets_policy.fail_mode_durable).toBe("open");
     expect(cfg.secrets_policy.fail_mode_telemetry).toBe("closed");
     expect(cfg.tool_description_hashes).toEqual({ "mcp__x__y": "abc123" });
+  });
+
+  it("parses mcp_availability sub-keys (R-019 / FDC-13)", () => {
+    const cfg = parseSecurityConfig({
+      mcp: {
+        tool_description_hashes: { "mcp__a__b": "deadbeef" },
+        stdio_available: false,
+        http_available: true,
+        bridge_package: "guild-pi-mcp",
+      },
+    });
+    expect(cfg.tool_description_hashes).toEqual({ "mcp__a__b": "deadbeef" });
+    expect(cfg.mcp_availability.stdio_available).toBe(false);
+    expect(cfg.mcp_availability.http_available).toBe(true);
+    expect(cfg.mcp_availability.bridge_package).toBe("guild-pi-mcp");
+  });
+
+  it("mcp_availability falls back to defaults for missing / mistyped values", () => {
+    // No mcp block at all → defaults.
+    const none = parseSecurityConfig({});
+    expect(none.mcp_availability.stdio_available).toBe(true);
+    expect(none.mcp_availability.http_available).toBe(false);
+    expect(none.mcp_availability.bridge_package).toBeNull();
+
+    // mcp block present but availability keys mistyped → defaults preserved.
+    const bad = parseSecurityConfig({
+      mcp: { stdio_available: "yes", http_available: 1, bridge_package: 42 },
+    });
+    expect(bad.mcp_availability.stdio_available).toBe(true);
+    expect(bad.mcp_availability.http_available).toBe(false);
+    expect(bad.mcp_availability.bridge_package).toBeNull();
+  });
+
+  it("accepts null bridge_package explicitly (R-019)", () => {
+    const cfg = parseSecurityConfig({ mcp: { bridge_package: null } });
+    expect(cfg.mcp_availability.bridge_package).toBeNull();
+  });
+
+  it("parses defaults.allowed_tools as the scope baseline (R-020)", () => {
+    const cfg = parseSecurityConfig({ defaults: { allowed_tools: ["Read", "Glob"] } });
+    expect(cfg.allowed_tools).toEqual(["Read", "Glob"]);
+  });
+
+  it("allowed_tools defaults to [] when absent or mistyped (R-020)", () => {
+    expect(parseSecurityConfig({}).allowed_tools).toEqual([]);
+    expect(parseSecurityConfig({ defaults: { allowed_tools: "Read" } }).allowed_tools).toEqual([]);
+    expect(parseSecurityConfig({ defaults: {} }).allowed_tools).toEqual([]);
   });
 
   it("ignores invalid enum values and falls back to defaults", () => {

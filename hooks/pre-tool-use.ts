@@ -305,9 +305,15 @@ function readMcpDescription(
  * further and must return). Returns false to let the rest of the hook proceed.
  */
 function runSecurityEnforcement(payload: PreToolUsePayload, cwd: string): boolean {
-  const scope = readScopeContext(process.env);
-  const toolName = payload.tool_name ?? "";
+  // Read settings first — sec.allowed_tools feeds the scope baseline (R-020)
+  // and sec.tool_description_hashes feeds the MCP pin check. Both are needed
+  // before the early-exit below, so the read is unconditional (the file is
+  // already opened here, not further down, to avoid a second cold read).
   const sec = readSecurityConfig(cwd);
+  const toolName = payload.tool_name ?? "";
+  // Pass defaults.allowed_tools as the project-wide capability baseline so
+  // enforce.ts unions it with the per-lane GUILD_CAPABILITY_SCOPE (R-020).
+  const scope = readScopeContext(process.env, sec.allowed_tools);
   const mcpPinned = isMcpTool(toolName) && sec.tool_description_hashes[toolName] !== undefined;
 
   // Clean fall-through: not a scoped lane AND no pin for this tool ⇒ nothing

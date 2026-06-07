@@ -86,6 +86,8 @@ const SCALAR_TIER1_KEYS = new Set([
   "record_status_runs",
   "codex_skip_enforcement",
   "agent_mode",
+  "statusline",                  // R-009: bool — status-line pane enable
+  "adversarial_review_provider", // R-008: open string — any provider-id
   "loops",
   "loop_cap",
   "codex_cap",
@@ -148,8 +150,13 @@ const SECRETS_POLICY_KEYS = new Set([
   "fail_mode_telemetry",
 ]);
 
-/** Valid sub-keys for mcp.* */
-const MCP_KEYS = new Set(["tool_description_hashes"]);
+/** Valid sub-keys for mcp.* (D-MCP + R-019) */
+const MCP_KEYS = new Set([
+  "tool_description_hashes",
+  "stdio_available",   // R-019: bool — MCP stdio transport available
+  "http_available",    // R-019: bool — MCP HTTP transport available
+  "bridge_package",    // R-019: string|null — MCP bridge package name
+]);
 
 /** Valid sub-keys for defaults.* */
 const DEFAULTS_ALLOWED_KEYS = new Set([
@@ -164,6 +171,11 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "reporting",
   "index",
   "cross_host",
+  "retry",                     // R-016
+  "resume",                    // R-016
+  "heartbeat_timeout_ms",      // R-017
+  "capability_manifest_ttl_s", // R-018
+  "allowed_tools",             // R-020
 ]);
 
 /** Valid sub-keys for defaults.team.* */
@@ -191,8 +203,14 @@ const DEFAULTS_INDEX_KEYS = new Set([
   "wiki_file_threshold",
 ]);
 
-/** Valid sub-keys for defaults.cross_host.* */
-const DEFAULTS_CROSS_HOST_KEYS = new Set(["enabled", "hosts"]);
+/** Valid sub-keys for defaults.cross_host.* (R-015 adds fallback_to_claude) */
+const DEFAULTS_CROSS_HOST_KEYS = new Set(["enabled", "hosts", "fallback_to_claude"]);
+
+/** Valid sub-keys for defaults.retry.* (R-016) */
+const DEFAULTS_RETRY_KEYS = new Set(["max_attempts", "backoff"]);
+
+/** Valid sub-keys for defaults.resume.* (R-016) */
+const DEFAULTS_RESUME_KEYS = new Set(["enabled"]);
 
 // ---------------------------------------------------------------------------
 // Full dotted-path validator (findings #2 + round-2 #2)
@@ -358,6 +376,26 @@ function validateKeyPath(keyPath: string): string | null {
       }
       return null;
     }
+    // R-016: retry.* and resume.* sub-paths
+    if (seg1 === "retry") {
+      if (!DEFAULTS_RETRY_KEYS.has(seg2)) {
+        return `unknown defaults.retry key "${seg2}" (valid: ${[...DEFAULTS_RETRY_KEYS].join(", ")})`;
+      }
+      return null;
+    }
+    if (seg1 === "resume") {
+      if (!DEFAULTS_RESUME_KEYS.has(seg2)) {
+        return `unknown defaults.resume key "${seg2}" (valid: ${[...DEFAULTS_RESUME_KEYS].join(", ")})`;
+      }
+      return null;
+    }
+    // R-017/R-018/R-020: scalar keys — no sub-paths allowed
+    if (seg1 === "heartbeat_timeout_ms" || seg1 === "capability_manifest_ttl_s" || seg1 === "allowed_tools") {
+      if (parts.length > 2) {
+        return `"defaults.${seg1}" is a scalar/list key — sub-key paths are not allowed`;
+      }
+      return null;
+    }
     // adversarial, review_workflow, skill_policy, reporting, auto_learn are scalars
     return null;
   }
@@ -375,7 +413,12 @@ const BOOLEAN_PATHS = new Set([
   "defaults.auto_learn",
   "defaults.wiki.autopromote",
   "defaults.cross_host.enabled",
+  "statusline",                              // R-009
+  "defaults.cross_host.fallback_to_claude", // R-015
   "defaults.index.enabled",
+  "defaults.resume.enabled",                // R-016
+  "mcp.stdio_available",                    // R-019
+  "mcp.http_available",                     // R-019
   "models.enabled",
   "models.recallBeforeRead",
   "models.structuredOutputRequired",
@@ -392,6 +435,8 @@ const INTEGER_PATHS = new Set([
   "defaults.index.links_edge_threshold",
   "defaults.index.runs_threshold",
   "defaults.index.wiki_file_threshold",
+  "defaults.retry.max_attempts",     // R-016
+  "defaults.heartbeat_timeout_ms",   // R-017
   "models.advisorRounds",
   "models.importanceGate",
   "models.thresholds.mid",
@@ -401,6 +446,7 @@ const INTEGER_PATHS = new Set([
 /** Paths that must be numbers (possibly non-integer). */
 const NUMBER_PATHS = new Set([
   "defaults.index.kg_size_threshold_mb",
+  "defaults.capability_manifest_ttl_s",    // R-018: positive number (seconds)
   "models.recallScoreThreshold",
   "models.ingestSimilarityGate",
 ]);
@@ -424,6 +470,7 @@ const VALID_VALUES: Record<string, Set<string>> = {
   "secrets_policy.fail_mode_telemetry": new Set(["open", "closed"]),
   "models.cacheTTL.coordinator": new Set(["1h", "5m", "off"]),
   "models.cacheTTL.leaf": new Set(["1h", "5m", "off"]),
+  "defaults.retry.backoff": new Set(["immediate", "linear", "exponential"]), // R-016
 };
 
 /**
@@ -641,9 +688,11 @@ function validateResolved(config: Record<string, unknown>, selfBuild = false): s
 // ---------------------------------------------------------------------------
 
 interface ParsedArgs {
-  subcommand: "set" | "show" | "validate" | "providers";
+  subcommand: "set" | "show" | "validate" | "providers" | "update-mcp-hashes";
   /** For subcommand=providers: the sub-verb (e.g. "detect"). */
   providersVerb?: string;
+  /** For subcommand=update-mcp-hashes: path to JSON file with tool-name→description map. */
+  toolsFile?: string;
   key?: string;
   rawValue?: string;
   scope?: "workspace" | "project" | "local";
@@ -662,13 +711,14 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
         "  set <key> <value> --scope workspace|project|local [--cwd <p>]\n" +
         "  show --sources [--cwd <p>]\n" +
         "  validate --effective [--cwd <p>]\n" +
-        "  providers detect [--cwd <p>]",
+        "  providers detect [--cwd <p>]\n" +
+        "  update-mcp-hashes --tools <json-file> --scope workspace|project|local [--cwd <p>]",
     };
   }
 
   const sub = args[0];
-  if (sub !== "set" && sub !== "show" && sub !== "validate" && sub !== "providers") {
-    return { error: `unknown subcommand "${sub}" — expected: set, show, validate, providers` };
+  if (sub !== "set" && sub !== "show" && sub !== "validate" && sub !== "providers" && sub !== "update-mcp-hashes") {
+    return { error: `unknown subcommand "${sub}" — expected: set, show, validate, providers, update-mcp-hashes` };
   }
 
   let key: string | undefined;
@@ -695,6 +745,7 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   // Parse flags from the rest of the args (skip the sub-verb for providers)
   const flagStart = sub === "providers" ? 2 : 1;
   const positionals: string[] = [];
+  let toolsFile: string | undefined;
   for (let i = flagStart; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--sources") {
@@ -719,6 +770,10 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
         return { error: `invalid --scope "${s}" — valid: workspace|project|local` };
       }
       scope = s;
+    } else if (arg === "--tools" && args[i + 1]) {
+      toolsFile = args[++i];
+    } else if (arg.startsWith("--tools=")) {
+      toolsFile = arg.slice("--tools=".length);
     } else if (!arg.startsWith("--")) {
       positionals.push(arg);
     }
@@ -734,9 +789,14 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     }
   }
 
+  if (sub === "update-mcp-hashes" && !scope) {
+    return { error: "update-mcp-hashes requires --scope workspace|project|local" };
+  }
+
   return {
     subcommand: sub,
     providersVerb,
+    toolsFile,
     key,
     rawValue,
     scope,
@@ -1000,6 +1060,164 @@ export function cmdProvidersDetect(cwd: string, probe?: ProbeEnv): number {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: update-mcp-hashes (R-005)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute SHA-256 hashes of MCP tool descriptions and write them into
+ * `mcp.tool_description_hashes` in the target settings file.
+ *
+ * Usage:
+ *   npx tsx scripts/config-cmd.ts update-mcp-hashes \
+ *     --tools <json-file> --scope project|workspace|local [--cwd <p>]
+ *
+ * <json-file> must contain a JSON object: { "<tool-name>": "<description>", ... }
+ * The tool-name is the Claude Code mcp__ form (e.g. "mcp__server__tool_name").
+ * Pass "-" as the file path to read from stdin.
+ *
+ * The command reads the file, hashes each description with SHA-256, and writes
+ * the { tool-name → hash } map into mcp.tool_description_hashes via a
+ * read-modify-write (preserving all other settings). Existing hashes for tools
+ * NOT present in the input are PRESERVED (merge semantics, not replace).
+ * Use --replace to overwrite the entire hash map from the input.
+ *
+ * READ-ONLY: the hash map is written to settings.json only — never to live Claude Code.
+ * The PreToolUse hook (hooks/pre-tool-use.ts → hooks/lib/security/mcp-hash-pin.ts)
+ * reads the persisted hashes and compares them at tool-call time.
+ *
+ * Exit codes: 0 success; 1 bad input / IO error; 2 bad --cwd.
+ */
+import * as crypto from "node:crypto";
+
+function sha256Hex(text: string): string {
+  return crypto.createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+export function cmdUpdateMcpHashes(
+  cwd: string,
+  scope: "workspace" | "project" | "local",
+  toolsFile: string | undefined,
+  replaceAll = false
+): number {
+  // 1. Read tools JSON (stdin or file)
+  let rawTools: string;
+  if (!toolsFile || toolsFile === "-") {
+    try {
+      rawTools = fs.readFileSync("/dev/stdin", "utf8");
+    } catch (e) {
+      process.stdout.write(
+        `[config-cmd] ERROR: could not read stdin — ${(e as Error).message}\n` +
+        `  Pass --tools <json-file> or pipe tool descriptions to stdin.\n`
+      );
+      return 1;
+    }
+  } else {
+    const resolvedPath = path.resolve(toolsFile);
+    if (!fs.existsSync(resolvedPath)) {
+      process.stdout.write(`[config-cmd] ERROR: --tools file not found: ${resolvedPath}\n`);
+      return 1;
+    }
+    try {
+      rawTools = fs.readFileSync(resolvedPath, "utf8");
+    } catch (e) {
+      process.stdout.write(`[config-cmd] ERROR: could not read --tools file: ${(e as Error).message}\n`);
+      return 1;
+    }
+  }
+
+  // 2. Parse { tool-name → description }
+  let toolDescriptions: Record<string, string>;
+  try {
+    toolDescriptions = JSON.parse(rawTools) as Record<string, string>;
+    if (typeof toolDescriptions !== "object" || toolDescriptions === null || Array.isArray(toolDescriptions)) {
+      throw new Error("expected a JSON object { \"tool-name\": \"description\", ... }");
+    }
+  } catch (e) {
+    process.stdout.write(`[config-cmd] ERROR: invalid JSON in tools input — ${(e as Error).message}\n`);
+    return 1;
+  }
+
+  // 3. Compute hashes: { tool-name → SHA-256(description) }
+  const newHashes: Record<string, string> = {};
+  for (const [name, desc] of Object.entries(toolDescriptions)) {
+    if (typeof desc !== "string") {
+      process.stdout.write(`[config-cmd] WARN: skipping "${name}" — description is not a string\n`);
+      continue;
+    }
+    newHashes[name] = sha256Hex(desc);
+  }
+
+  const toolCount = Object.keys(newHashes).length;
+  if (toolCount === 0) {
+    process.stdout.write(`[config-cmd] WARN: no tool descriptions to hash — settings file unchanged\n`);
+    return 0;
+  }
+
+  // 4. Resolve target file
+  let targetFile: string;
+  if (scope === "workspace") {
+    const wsRoot = discoverWorkspaceRoot(cwd);
+    if (!wsRoot) {
+      process.stdout.write(
+        `[config-cmd] ERROR: --scope workspace requires a workspace root ` +
+          `(found by checking ${cwd} and walking up for .guild/workspace.json with is_workspace:true)\n`
+      );
+      return 1;
+    }
+    targetFile = path.join(wsRoot, ".guild", "settings.json");
+  } else if (scope === "project") {
+    targetFile = path.join(cwd, ".guild", "settings.json");
+  } else {
+    targetFile = path.join(cwd, ".guild", "settings.local.json");
+  }
+
+  // 5. Read-modify-write: merge or replace mcp.tool_description_hashes
+  let existing: Record<string, unknown> = {};
+  if (fs.existsSync(targetFile)) {
+    const raw = fs.readFileSync(targetFile, "utf8");
+    try {
+      existing = JSON.parse(raw) as Record<string, unknown>;
+    } catch (e) {
+      process.stdout.write(
+        `[config-cmd] ERROR: cannot parse existing file ${targetFile} — ` +
+          `${(e as Error).message}. Fix the file manually before using update-mcp-hashes.\n`
+      );
+      return 1;
+    }
+  }
+
+  const existingMcp = (isPlainObject(existing["mcp"]) ? existing["mcp"] : {}) as Record<string, unknown>;
+  const existingHashes = (isPlainObject(existingMcp["tool_description_hashes"])
+    ? existingMcp["tool_description_hashes"]
+    : {}) as Record<string, string>;
+
+  const mergedHashes = replaceAll
+    ? newHashes
+    : { ...existingHashes, ...newHashes };
+
+  existing["mcp"] = { ...existingMcp, tool_description_hashes: mergedHashes };
+
+  const dir = path.dirname(targetFile);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(targetFile, JSON.stringify(existing, null, 2) + "\n", "utf8");
+
+  const totalHashes = Object.keys(mergedHashes).length;
+  process.stdout.write(
+    `[config-cmd] update-mcp-hashes: ${toolCount} tool(s) hashed + written\n` +
+    `  scope:  ${scope}\n` +
+    `  file:   ${targetFile}\n` +
+    `  total pinned hashes after update: ${totalHashes}\n`
+  );
+  if (toolCount > 0) {
+    process.stdout.write(`  tools:\n`);
+    for (const [name, hash] of Object.entries(newHashes)) {
+      process.stdout.write(`    ${name}: ${hash.slice(0, 12)}…\n`);
+    }
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Entrypoint
 // ---------------------------------------------------------------------------
 
@@ -1050,6 +1268,16 @@ function main(): void {
       // No probe is passed — production always uses defaultProbeEnv(cwd).
       // Probe injection is only possible via direct function import (tests).
       exitCode = cmdProvidersDetect(parsed.cwd);
+      break;
+    }
+
+    case "update-mcp-hashes": {
+      // R-005: compute SHA-256 of tool descriptions → write mcp.tool_description_hashes.
+      if (!parsed.scope) {
+        process.stdout.write("[config-cmd] ERROR: update-mcp-hashes requires --scope workspace|project|local\n");
+        process.exit(1);
+      }
+      exitCode = cmdUpdateMcpHashes(parsed.cwd, parsed.scope, parsed.toolsFile);
       break;
     }
 
