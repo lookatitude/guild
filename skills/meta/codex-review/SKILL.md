@@ -287,7 +287,7 @@ or the user force-passes. Use `--terminated false` for non-final rounds. The
 
 `codex_cap` resolves in this order (first wins):
 
-1. `--codex-cap=N` CLI flag
+1. `--codex-cap=N` CLI flag — **a supported power-user flag**, parsed by the `--codex-cap=` case in `scripts/read-guild-config.ts`'s arg-parse switch; clamped to `[1,10]`. It is **kept in v2** (not deleted/folded into `--rigor`), alongside its siblings `--loops` / `--loop-cap`.
 2. `.guild/settings.json` key `codex_cap`
 3. Default: `5`
 

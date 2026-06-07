@@ -261,7 +261,9 @@ loop/codex-review convention:
 
 Wait for an explicit choice before proceeding. Cap resolves: `--codex-cap=N` >
 `.guild/settings.json` `codex_cap` > default `5`; max `10` (clamped with a
-warning).
+warning). `--codex-cap=N` is a **supported power-user flag** (parsed by the
+`--codex-cap=` case in `scripts/read-guild-config.ts`'s arg-parse switch) — **kept in
+v2** alongside `--loops` / `--loop-cap`, not deleted or folded into `--rigor`.
 
 ## Relationship to codex-review
 
