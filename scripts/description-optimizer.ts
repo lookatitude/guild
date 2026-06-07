@@ -37,14 +37,21 @@ import * as path from "path";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface EvalCase {
-  id?: string;
-  prompt: string;
-}
+/**
+ * A single eval entry. The shipped evals corpus uses bare strings; the
+ * {prompt} object shape is also accepted (§F2 fix — both must be tolerated).
+ */
+type RawEvalItem = string | { id?: string; prompt: string };
 
 interface Evals {
-  should_trigger: EvalCase[];
-  should_not_trigger: EvalCase[];
+  should_trigger: RawEvalItem[];
+  should_not_trigger: RawEvalItem[];
+}
+
+/** Normalize an eval entry to its prompt string regardless of shape. */
+function normalizePrompt(item: RawEvalItem): string {
+  if (typeof item === "string") return item;
+  return item.prompt ?? "";
 }
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
@@ -120,8 +127,8 @@ function tokenFrequency(prompts: string[]): Map<string, number> {
 // ── Description building ───────────────────────────────────────────────────
 
 function buildDescription(slug: string, evals: Evals): string {
-  const posPrompts = evals.should_trigger.map((c) => c.prompt);
-  const negPrompts = evals.should_not_trigger.map((c) => c.prompt);
+  const posPrompts = evals.should_trigger.map(normalizePrompt);
+  const negPrompts = evals.should_not_trigger.map(normalizePrompt);
 
   const posFreq = tokenFrequency(posPrompts);
   const negFreq = tokenFrequency(negPrompts);

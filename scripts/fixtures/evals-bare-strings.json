@@ -1,0 +1,16 @@
+{
+  "should_trigger": [
+    "brainstorm feature ideas for the analytics dashboard",
+    "let's brainstorm approaches to the checkout problem",
+    "help me brainstorm naming options for this product",
+    "brainstorm architectural patterns for the new service",
+    "I need to brainstorm risks for the launch"
+  ],
+  "should_not_trigger": [
+    "implement the login form using React hooks",
+    "fix the failing unit test in auth.test.ts",
+    "deploy the staging environment",
+    "review the pull request for payments",
+    "write documentation for the API endpoint"
+  ]
+}

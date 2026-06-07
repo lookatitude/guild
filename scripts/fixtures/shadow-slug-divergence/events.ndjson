@@ -1,0 +1,5 @@
+{"ts":"2026-04-03T09:00:00.000Z","event":"UserPromptSubmit","tool":"","specialist":"","payload_digest":"u003","ok":true,"ms":0,"prompt":"list all wiki pages in the knowledge base"}
+{"ts":"2026-04-03T09:00:05.000Z","event":"PostToolUse","tool":"Read","specialist":"wiki-query-skill-helper","payload_digest":"r003","ok":true,"ms":120}
+{"ts":"2026-04-03T09:00:10.000Z","event":"SubagentStop","tool":"","specialist":"wiki-query-skill-helper","payload_digest":"s003","ok":true,"ms":4500}
+{"ts":"2026-04-03T09:00:15.000Z","event":"UserPromptSubmit","tool":"","specialist":"","payload_digest":"u004","ok":true,"ms":0,"prompt":"query the wiki for decision records"}
+{"ts":"2026-04-03T09:00:20.000Z","event":"SubagentStop","tool":"","specialist":"wiki-query-skill-helper","payload_digest":"s004","ok":true,"ms":4200}

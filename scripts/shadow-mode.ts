@@ -249,16 +249,24 @@ function evaluateRun(
   let divergences = 0;
 
   // Derive the "historical triggered this skill?" signal from the specialist:
-  // if the trace involves a specialist whose name contains the skill slug's
-  // last segment, we say historical "triggered".
-  const slugLastSegment = skillSlug.split(/[-:]/).pop()!.toLowerCase();
+  // if the trace involves a specialist whose name contains the full skill
+  // identity (namespace-stripped, e.g. "create-skill" from "guild:create-skill"),
+  // we say historical "triggered".
+  //
+  // §F3 fix: use the full non-namespace identity, NOT the last path segment.
+  // Splitting on [-:] and taking the last token (e.g. "skill" from
+  // "guild:create-skill") is too generic — it spuriously matches any specialist
+  // whose name happens to end in that fragment (e.g. "wiki-query-skill-helper"),
+  // making divergence a false upper-bound. Stripping only the "namespace:"
+  // prefix preserves the full identity ("create-skill") for an accurate match.
+  const slugIdentity = skillSlug.replace(/^[^:]+:/, "").toLowerCase();
 
   for (const p of prompts) {
     const wt = wouldTrigger(p, spec);
     if (wt) wouldTriggerCount++;
     else wouldSkipCount++;
 
-    const historicalTriggered = historicalSpecialist.toLowerCase().includes(slugLastSegment);
+    const historicalTriggered = historicalSpecialist.toLowerCase().includes(slugIdentity);
     if (wt !== historicalTriggered) divergences++;
   }
 
