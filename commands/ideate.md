@@ -48,7 +48,16 @@ pointer). `--rigor=deep` runs the clarify loop (semantics by pointer,
 
 ## Output artifact
 
-`.guild/spec/<idea-slug>.md`, optional `.guild/research/<idea-slug>.md`.
+`.guild/spec/<idea-slug>.md`, `.guild/runs/<run-id>/assumptions.md`,
+`.guild/runs/<run-id>/questions.md`,
+`.guild/runs/<run-id>/review/spec/*` (G-ideation broker trail), optional
+`.guild/research/<idea-slug>.md`.
+
+PCR-Ideation must-exist floor: `.guild/spec/<slug>.md`,
+`.guild/runs/<run-id>/assumptions.md`, `.guild/runs/<run-id>/questions.md`,
+`.guild/runs/<run-id>/review/spec/*`. Binding:
+`docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+CMD-005.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
 

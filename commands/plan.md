@@ -56,8 +56,16 @@ pointer).
 
 ## Output artifact
 
-`.guild/prd/<slug>.md`, `.guild/plan/<slug>.md`,
-`.guild/team/<slug>.<phase>.yaml` + `.guild/team/<slug>.current` pointer.
+`.guild/team/<slug>.<phase>.yaml` + `.guild/team/<slug>.current` pointer,
+`.guild/prd/<slug>.md`, `.guild/plan/<slug>.md`, per-lane autonomy-contract
+policy (the additive `autonomy_contract` block authored inside the plan),
+`.guild/runs/<run-id>/review/plan/*` (G-planning broker trail).
+
+PCR-Planning must-exist floor: `.guild/team/<slug>.<phase>.yaml`,
+`.guild/prd/<slug>.md`, `.guild/plan/<slug>.md`, the per-lane
+autonomy-contract policy, `.guild/runs/<run-id>/review/plan/*`. Binding:
+`docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+CMD-004.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
 

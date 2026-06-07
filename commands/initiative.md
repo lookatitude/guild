@@ -1,7 +1,7 @@
 ---
 name: initiative
 description: "Durable work — opt-in noun. Sub-verbs new|status|list|resume|update|archive|restore|close. A one-off /guild:guild run never creates an initiative; attachment is explicit only."
-argument-hint: "new|status|list|resume|update|archive|restore|close [id] [--add-goal \"…\"]"
+argument-hint: "new|status|list|resume|update|archive|restore|close [id] [--add-goal \"…\"] [--archived]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion
 ---
 
@@ -21,7 +21,7 @@ Canonical surface: `architecture/command-surface.md §3.4` (full set) + `§1`
 |---|---|---|---|
 | `new` | create a durable goal container | definition-ready gate **I** | `.guild/initiatives/active/<id>/initiative.yaml`, definition-ledger |
 | `status` | read initiative progress / work-items / release / doc-sync | **R** | prints state |
-| `list` | list all initiatives (active + archived) w/ cross-cut rollup | **R** | prints state |
+| `list` | list active initiatives (default) w/ cross-cut rollup; `--archived` shows all | **R** | prints state |
 | `resume` | re-enter at the next work-item | next gate **I** | continues initiative runs |
 | `update` | amend the definition-ledger (`--add-goal "…"`) | ledger-change confirm **I** | updated ledger |
 | `archive` | move to archived w/o close-gate release path (operational) | archive confirm **I** | `active/<id>/` → archived |
@@ -36,6 +36,25 @@ attached only when (a) the user runs `/guild:initiative …` explicitly,
 durable-goal signal — in which case `/guild:guild` *asks* "attach to an
 initiative? [new / existing / one-off]" rather than auto-attaching. One-off
 runs are first-class.
+
+## Run-start preflight (settings-control-and-tmux U3/U6)
+
+Before the initiative skill is invoked — and before run-trace start — run the
+preflight (`scripts/lib/runstart-preflight.ts`; canonical contract in
+`guild.md §Run-start preflight`):
+
+1. Call `runStartPreflight({ cwd, flags? })` — resolves the 7-source
+   inheritance chain + validates + probes tmux + detects providers
+   (full chain: see `/guild:guild §Run-start preflight`).
+2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
+   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   on NO continue with the resolved backend.
+3. Pass `result.snapshot` to `startRun` — U6 writes
+   `.guild/runs/<id>/resolved-settings.json` + `settings_ref` in `run.yaml`.
+4. Proceed to run-trace start.
+
+Ref: `docs/v2/03-lifecycle.md §Run-start preflight` — "before any phase work,
+every `/guild:*` command runs the preflight." DRIFT-ANALYSIS CMD-002.
 
 ## Run recording
 

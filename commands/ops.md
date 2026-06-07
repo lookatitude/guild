@@ -61,8 +61,15 @@ pointer). The mandatory pre-flight dry-run is a safety rail, independent of
 
 ## Output artifact
 
-`.guild/runs/<run-id>/ops/<run-id>.md` (frozen `guild.ops.v1`; +
-`guild.incident.v1` / `guild.release.v1` records by class).
+`.guild/runs/<run-id>/ops/<run-id>.md` (frozen `guild.ops.v1`),
+`guild.incident.v1` / `guild.release.v1` records by class,
+`review/ops/*` (G-operations broker trail).
+
+PCR-Operations must-exist floor: `.guild/runs/<run-id>/ops/<run-id>.md`,
+`guild.release.v1` evidence (release class), conditional `guild.incident.v1`
+evidence (incident class), `review/ops/*`. Binding:
+`docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+CMD-011.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
 

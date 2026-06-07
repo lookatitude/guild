@@ -1,7 +1,7 @@
 ---
 name: guild
 description: "Bare Guild entry — smart phase detection. /guild:guild [brief] inspects .guild/ state and surfaces the proposed lifecycle phase (init · ideate · plan · build · qa · ops), always confirmed never silent. Named phase verbs, nouns (wiki, initiative), and maintenance verbs (evolve, rollback, stats, audit, fix) are separate commands. Canonical: architecture/command-surface.md §1/§5.1; v1→v2: MIGRATION.md."
-argument-hint: "[brief] [--rigor=quick|standard|deep] [--auto-approve[=spec,plan,build,all]] [--review=local|cross|off] [--host=claude|codex|auto] [--initiative=<id>|new] [--dry-run]"
+argument-hint: "[brief] [--rigor=quick|standard|deep] [--auto-approve[=spec,plan,build,all]] [--review=local|cross|off] [--host=claude|codex|auto] [--initiative=<id>|new] [--model-tier=cheap|mid|powerful] [--dry-run]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
 
@@ -128,6 +128,15 @@ destructive/network/spend STILL ask even with `all`), `--review=local|cross|off`
 `builtin < workspace < workspace-local < project < project-local < rigor < CLI`
 (`command-surface.md §4.3`/§4.4; `config.md` inheritance chain; `rigor` is
 the `--rigor` profile expansion step between project-local and CLI).
+
+**`--model-tier=cheap|mid|powerful`** — top-precedence tiering override.
+Forces every specialist lane dispatched in this run to the given model tier,
+overriding per-lane `model_tier:` plan entries and the `settings.json
+models:` block. Precedence: `--model-tier` > per-lane plan override >
+`models:` block > built-in default. Tiering is orthogonal to the
+`agent_mode` backend ladder — they compose, never replace each other. Full
+tier semantics: `docs/v2/13-config-surfaces.md §5`. Ref: DRIFT-ANALYSIS
+CMD-008.
 
 **Tuning flags (v1 → v2).** `--loops`, `--loop-cap`, `--codex-cap` are
 **retained** — the CLI still accepts all three (the arg-parse switch in

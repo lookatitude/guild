@@ -58,8 +58,14 @@ pointer).
 
 ## Output artifact
 
-`.guild/runs/<run-id>/quality/<run-id>.md` (frozen `guild.quality.v1`;
-evidence under `quality/evidence/`).
+`.guild/runs/<run-id>/quality/<run-id>.md` (frozen `guild.quality.v1`),
+`quality/evidence/*` (per-class harness output), `review/quality/*`
+(G-quality broker trail).
+
+PCR-Quality must-exist floor: `.guild/runs/<run-id>/quality/<run-id>.md`,
+`quality/evidence/*`, `review/quality/*`. Binding:
+`docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+CMD-011.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
 

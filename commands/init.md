@@ -64,13 +64,20 @@ ask-before-deep-scan interactive gate is removed (D3).
 
 ## Output artifact
 
-`.guild/init/<slug>.md`, `.guild/wiki/**`, `.guild/raw/**`,
-`.guild/settings.json` (the project config surface, scaffolded
-fully-documented if absent — see below), and (brownfield, cheap scan tier =
-Init-DONE) `.guild/indexes/codebase-map.json` + confidence-tagged
+`.guild/project.yaml`, `.guild/init/<slug>.md`, `.guild/wiki/**`,
+`.guild/raw/**`, `.guild/settings.json` (the project config surface,
+scaffolded fully-documented if absent — see below), and (brownfield, cheap
+scan tier = Init-DONE) `.guild/indexes/codebase-map.json` + confidence-tagged
 `wiki/concepts/architecture-map.md` stub. `knowledge-graph.json` +
 `onboarding-tour.md` are **deferred** — lazy, produced only under `--learn` /
 `defaults.auto_learn` by the `learn-*` pipeline, never at Init by default.
+
+PCR-Init must-exist floor: `.guild/project.yaml`, `.guild/wiki/index.md`
+(scaffold), `.guild/raw/`, `.guild/settings.json` (scaffold),
+`.guild/init/<slug>.md`; brownfield: `.guild/indexes/codebase-map.json`,
+`.guild/wiki/architecture-map.md` stub. Binding:
+`docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+CMD-006.
 
 ### Config scaffold (`.guild/settings.json`)
 
