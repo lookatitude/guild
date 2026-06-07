@@ -1,0 +1,20 @@
+{
+  "should_trigger": [
+    "Create a new skill for API contract linting.",
+    "Write a new skill from scratch for changelog generation.",
+    "Mint a skill from this gap — phase-compose flagged a missing capability.",
+    "Team-compose surfaced a skill gap for dependency-graph analysis — auto-create it.",
+    "Incubate a proposed skill for accessibility-report formatting.",
+    "We keep re-doing this workflow by hand across runs — make it a first-class skill."
+  ],
+  "should_not_trigger": [
+    "Create a new Guild specialist for data-science.",
+    "Mint a frontend-engineer specialist.",
+    "Evolve guild:context-assemble — re-tune its description.",
+    "Run the evolve loop on guild:plan.",
+    "Compose a team for this spec.",
+    "Roll back guild:review to its previous version.",
+    "Review the specialist outputs from this run.",
+    "Fix a typo in the team-compose skill body."
+  ]
+}
