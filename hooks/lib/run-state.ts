@@ -44,6 +44,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { withStableLock } from "./v1.4/v1.4-lock.js";
+import { resolveGuildRoot } from "./guild-root.js";
 
 // ── Types (mirror the frozen guild.run_state.v1 body — ADR §"New contracts") ──
 
@@ -262,4 +263,148 @@ export function markLaneInProgress(
     attempt: opts.attempt,
     depends_on: opts.depends_on,
   });
+}
+
+// ── R-016c — per-lane resume checkpoint ──────────────────────────────────────
+//
+// When `defaults.resume.enabled` is true (the documented default), a lane that
+// exhausts its retry budget is marked `dead` in run-state AND a lightweight
+// resume checkpoint is written to `<runDir>/lanes/<laneId>/resume.json`. The
+// `/guild:resume` skill reads this file to know which dead lanes can be re-entered
+// rather than re-running the entire wave.
+//
+// When `defaults.resume.enabled` is false, only the `dead` status is set in
+// run-state — no checkpoint file is written (current behavior preserved; the
+// config gate keeps the two code paths byte-identical to today when disabled).
+//
+// BIND BY POINTER — `defaults.resume.enabled` schema + default (true) live in
+// `scripts/read-guild-config.ts` (DEFAULTS.resume.enabled). This tolerant reader
+// does NOT re-validate; it mirrors the same default so a missing/malformed
+// settings.json degrades gracefully to "enabled" rather than silently disabling
+// resume for all operators.
+
+/** Schema version for per-lane resume checkpoint files (guild.lane_resume.v1). */
+export const LANE_RESUME_SCHEMA_VERSION = "guild.lane_resume.v1" as const;
+
+/**
+ * Per-lane resume checkpoint written at `<runDir>/lanes/<laneId>/resume.json`
+ * when `defaults.resume.enabled` is true and a lane exhausts its retry budget.
+ * Read by `/guild:resume` to identify resumable dead lanes.
+ */
+export interface LaneResumeCheckpoint {
+  schema_version: typeof LANE_RESUME_SCHEMA_VERSION;
+  lane_id: string;
+  run_id: string;
+  /** Total attempts that were made before the budget was exhausted. */
+  attempts: number;
+  /** ISO-8601 timestamp of the final (exhausting) attempt. */
+  last_attempt_at: string;
+  /** Error summary from the last attempt (truncated to 500 chars). Optional. */
+  last_error?: string;
+  /** ISO-8601 timestamp at which the checkpoint was written. */
+  resumable_at: string;
+}
+
+/**
+ * The signal emitted by the retry-lane (R-016a) when all attempts are exhausted.
+ * Matches `scripts/lib/retry-lane.ts ExhaustionSignal` — kept in sync by contract.
+ */
+export interface LaneExhaustionSignal {
+  attempts: number;
+  lastAttemptAt: string;
+  lastError?: string;
+}
+
+/** Path helper: `<runDir>/lanes/<laneId>/resume.json`. */
+export function laneResumeCheckpointPath(runDir: string, laneId: string): string {
+  return path.join(runDir, "lanes", laneId, "resume.json");
+}
+
+/**
+ * Tolerant reader for `defaults.resume.enabled` from `<root>/.guild/settings.json`.
+ * Returns `true` (the documented default) on any failure — mirrors `heartbeat.ts`
+ * `readHeartbeatTimeoutMs` pattern: tolerant runtime reader, NOT the validator.
+ */
+export function readResumeEnabled(cwd: string): boolean {
+  const settingsPath = path.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  try {
+    const raw = fs.readFileSync(settingsPath, "utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const defs = parsed["defaults"];
+    if (typeof defs === "object" && defs !== null && !Array.isArray(defs)) {
+      const resume = (defs as Record<string, unknown>)["resume"];
+      if (typeof resume === "object" && resume !== null && !Array.isArray(resume)) {
+        const enabled = (resume as Record<string, unknown>)["enabled"];
+        if (typeof enabled === "boolean") return enabled;
+      }
+    }
+  } catch {
+    /* missing file or parse error → default */
+  }
+  return true; // default: enabled (matches DEFAULTS.resume.enabled in read-guild-config.ts)
+}
+
+/**
+ * Read a lane resume checkpoint if it exists. Returns null when absent or corrupt
+ * (non-fatal: the checkpoint is advisory; `/guild:resume` re-scans if absent).
+ */
+export function loadLaneResumeCheckpoint(
+  runDir: string,
+  laneId: string
+): LaneResumeCheckpoint | null {
+  try {
+    const raw = fs.readFileSync(laneResumeCheckpointPath(runDir, laneId), "utf8");
+    const parsed = JSON.parse(raw) as LaneResumeCheckpoint;
+    if (parsed?.schema_version !== LANE_RESUME_SCHEMA_VERSION) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mark a lane `dead` (retry budget exhausted) in the run-state checkpoint and,
+ * when `defaults.resume.enabled` is true, write a per-lane resume checkpoint so
+ * `/guild:resume` can re-enter this lane rather than re-running the whole wave.
+ *
+ * Called from the `onExhausted` callback in execute-plan's retry wrapper (R-016a/c
+ * bridge). The callback closes over `runDir`, `init`, `laneId`, and `cwd` so
+ * retry-lane.ts stays pure (no fs / config knowledge).
+ *
+ * @param runDir  Absolute path to `.guild/runs/<run-id>/`.
+ * @param init    Run identity (passed to upsertLane for seeding when absent).
+ * @param laneId  Task-id key matching `RunStateV1.lanes`.
+ * @param signal  Exhaustion signal from the retry loop (R-016a contract).
+ * @param cwd     Consuming-repo root — for reading `defaults.resume.enabled`.
+ */
+export function markLaneDead(
+  runDir: string,
+  init: RunStateInit,
+  laneId: string,
+  signal: LaneExhaustionSignal,
+  cwd: string
+): RunStateV1 {
+  // 1. Always update run-state with dead status + final attempt count (locked).
+  const state = upsertLane(runDir, init, laneId, {
+    status: "dead",
+    attempt: signal.attempts,
+  });
+
+  // 2. Write resume checkpoint only when defaults.resume.enabled is true.
+  if (readResumeEnabled(cwd)) {
+    const checkpoint: LaneResumeCheckpoint = {
+      schema_version: LANE_RESUME_SCHEMA_VERSION,
+      lane_id: laneId,
+      run_id: init.runId,
+      attempts: signal.attempts,
+      last_attempt_at: signal.lastAttemptAt,
+      resumable_at: new Date().toISOString(),
+      ...(typeof signal.lastError === "string" ? { last_error: signal.lastError } : {}),
+    };
+    const checkpointPath = laneResumeCheckpointPath(runDir, laneId);
+    fs.mkdirSync(path.dirname(checkpointPath), { recursive: true });
+    fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2) + "\n", "utf8");
+  }
+
+  return state;
 }

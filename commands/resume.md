@@ -48,11 +48,24 @@ Before locating the next pending gate — run the preflight
    `readResolvedSettingsSnapshot(runId, { cwd })` rather than overwriting it.
    The preflight result is used only for the tmux/provider check — it does not
    replace the locked-in snapshot for the resumed run.
-4. Proceed to gate continuation.
+4. **Re-enter resumable dead lanes (R-016).** Before locating the next pending
+   gate, list any resumable dead lanes for the active run:
+   `npx tsx ${PLUGIN_ROOT}/scripts/resume-lanes.ts <runDir> --json` (the
+   `--json` flag is required for the parseable bare array; without it the CLI
+   prints a human table — scans
+   `<runDir>/lanes/*/resume.json`, applies the `guild.lane_resume.v1` version
+   guard, honors `defaults.resume.enabled`). For each returned lane, re-enter it
+   via `guild:execute-plan`'s `## Resuming dead lanes (R-016)` path — a fresh
+   dispatch from the checkpoint with a fresh retry budget (prior attempts are
+   preserved in the checkpoint for audit, not subtracted). An empty list ⇒ skip
+   straight to the next step (exactly today's behavior).
+5. Proceed to gate continuation.
 
 ## Dispatch
 
-Thin orchestrator-continue entrypoint. Locate the next pending gate
-(filesystem scan, or the optional cache unless `--no-index`) and resume; on
-`--restart`, confirm, clear run state, and re-enter from Init/Ideation. Phase
-logic and `.guild/` writes live in the phase skill set.
+Thin orchestrator-continue entrypoint. **First** re-enter any resumable dead
+lanes (R-016, step 4 above) via `guild:execute-plan`'s `## Resuming dead lanes`
+path; **then** locate the next pending gate (filesystem scan, or the optional
+cache unless `--no-index`) and resume. On `--restart`, confirm, clear run state,
+and re-enter from Init/Ideation. Phase logic and `.guild/` writes live in the
+phase skill set.

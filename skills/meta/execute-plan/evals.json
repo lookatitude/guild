@@ -7,7 +7,9 @@
     "Kick off execution.",
     "Dispatch each lane at its lowest viable tier.",
     "This lane is stuck — escalate the sub-question to the advisor.",
-    "A cheap lane came back with suspiciously few tokens — check the short-output threshold and escalate to the advisor if it's configured."
+    "A cheap lane came back with suspiciously few tokens — check the short-output threshold and escalate to the advisor if it's configured.",
+    "A lane's handoff came back failed — retry it under the retry policy before aborting the run.",
+    "This lane exhausted all its retry attempts — mark it dead so /guild:resume can pick it up from its checkpoint."
   ],
   "should_not_trigger": [
     "Explain the plan to me.",

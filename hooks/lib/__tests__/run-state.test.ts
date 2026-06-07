@@ -14,11 +14,16 @@ import * as os from "os";
 import * as path from "path";
 import {
   RUN_STATE_SCHEMA_VERSION,
+  LANE_RESUME_SCHEMA_VERSION,
   loadRunState,
   runStatePath,
   writeRunStateAtomic,
   upsertLane,
   markLaneInProgress,
+  markLaneDead,
+  readResumeEnabled,
+  loadLaneResumeCheckpoint,
+  laneResumeCheckpointPath,
   RunStateV1,
 } from "../run-state";
 
@@ -189,6 +194,128 @@ describe("run-state.ts", () => {
       expect(lane.status).toBe("in_progress");
       expect(lane.tier).toBe("mid");
       expect(lane.depends_on).toEqual(["architect-001"]);
+    });
+  });
+
+  describe("markLaneDead + resume checkpoint (R-016c)", () => {
+    // Helper: write a minimal settings.json under tmpDir/.guild/
+    function writeSettings(content: unknown): void {
+      const guildDir = path.join(tmpDir, ".guild");
+      fs.mkdirSync(guildDir, { recursive: true });
+      // Plant a .git anchor so resolveGuildRoot stops at tmpDir.
+      fs.mkdirSync(path.join(tmpDir, ".git"), { recursive: true });
+      fs.writeFileSync(
+        path.join(guildDir, "settings.json"),
+        JSON.stringify(content),
+        "utf8"
+      );
+    }
+
+    it("resume.enabled=false → marks dead in run-state, NO checkpoint file written", () => {
+      writeSettings({ defaults: { resume: { enabled: false } } });
+      const signal = { attempts: 3, lastAttemptAt: "2026-06-07T10:00:00.000Z" };
+      const state = markLaneDead(
+        runDir,
+        { runId: "run-abc", planSlug: "auth" },
+        "backend-001",
+        signal,
+        tmpDir
+      );
+
+      // run-state.json: lane is dead
+      expect(state.lanes["backend-001"].status).toBe("dead");
+      expect(state.lanes["backend-001"].attempt).toBe(3);
+      // No checkpoint file
+      expect(fs.existsSync(laneResumeCheckpointPath(runDir, "backend-001"))).toBe(false);
+    });
+
+    it("resume.enabled=true → marks dead AND writes checkpoint with all fields", () => {
+      writeSettings({ defaults: { resume: { enabled: true } } });
+      const signal = {
+        attempts: 2,
+        lastAttemptAt: "2026-06-07T10:05:00.000Z",
+        lastError: "network timeout",
+      };
+      const state = markLaneDead(
+        runDir,
+        { runId: "run-abc", planSlug: "auth", waveIndex: 1 },
+        "backend-001",
+        signal,
+        tmpDir
+      );
+
+      // run-state.json: lane is dead
+      expect(state.lanes["backend-001"].status).toBe("dead");
+      expect(state.lanes["backend-001"].attempt).toBe(2);
+
+      // Checkpoint file exists and round-trips correctly
+      const cp = loadLaneResumeCheckpoint(runDir, "backend-001");
+      expect(cp).not.toBeNull();
+      expect(cp!.schema_version).toBe(LANE_RESUME_SCHEMA_VERSION);
+      expect(cp!.lane_id).toBe("backend-001");
+      expect(cp!.run_id).toBe("run-abc");
+      expect(cp!.attempts).toBe(2);
+      expect(cp!.last_attempt_at).toBe("2026-06-07T10:05:00.000Z");
+      expect(cp!.last_error).toBe("network timeout");
+      expect(typeof cp!.resumable_at).toBe("string");
+    });
+
+    it("resume.enabled=true, lastError absent → checkpoint written without last_error field", () => {
+      writeSettings({ defaults: { resume: { enabled: true } } });
+      markLaneDead(
+        runDir,
+        { runId: "run-abc" },
+        "qa-001",
+        { attempts: 1, lastAttemptAt: "2026-06-07T11:00:00.000Z" },
+        tmpDir
+      );
+      const cp = loadLaneResumeCheckpoint(runDir, "qa-001");
+      expect(cp).not.toBeNull();
+      expect(cp!.last_error).toBeUndefined();
+    });
+
+    it("settings.json absent → defaults to enabled=true (tolerant reader)", () => {
+      // No settings.json written — tmpDir has no .guild/settings.json
+      fs.mkdirSync(path.join(tmpDir, ".git"), { recursive: true });
+      const signal = { attempts: 1, lastAttemptAt: new Date().toISOString() };
+      markLaneDead(
+        runDir,
+        { runId: "run-abc" },
+        "backend-001",
+        signal,
+        tmpDir
+      );
+      // Should write checkpoint because default is true
+      expect(fs.existsSync(laneResumeCheckpointPath(runDir, "backend-001"))).toBe(true);
+    });
+
+    it("readResumeEnabled: returns true when key absent (default)", () => {
+      fs.mkdirSync(path.join(tmpDir, ".git"), { recursive: true });
+      expect(readResumeEnabled(tmpDir)).toBe(true);
+    });
+
+    it("readResumeEnabled: returns false when explicitly set to false", () => {
+      writeSettings({ defaults: { resume: { enabled: false } } });
+      expect(readResumeEnabled(tmpDir)).toBe(false);
+    });
+
+    it("readResumeEnabled: returns true when explicitly set to true", () => {
+      writeSettings({ defaults: { resume: { enabled: true } } });
+      expect(readResumeEnabled(tmpDir)).toBe(true);
+    });
+
+    it("loadLaneResumeCheckpoint: returns null when file absent", () => {
+      expect(loadLaneResumeCheckpoint(runDir, "nonexistent-lane")).toBeNull();
+    });
+
+    it("loadLaneResumeCheckpoint: returns null on wrong schema_version", () => {
+      const checkpointPath = laneResumeCheckpointPath(runDir, "bad-lane");
+      fs.mkdirSync(path.dirname(checkpointPath), { recursive: true });
+      fs.writeFileSync(
+        checkpointPath,
+        JSON.stringify({ schema_version: "guild.lane_resume.v0", lane_id: "bad-lane" })
+      );
+      expect(loadLaneResumeCheckpoint(runDir, "bad-lane")).toBeNull();
     });
   });
 

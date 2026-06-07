@@ -79,6 +79,10 @@ import { resolveAdapter } from "./lib/pane-adapter";
 import { planTeamRouting, RouteError, type RoutableHost } from "./lib/host-router";
 // U5: typed settings projection via the resolver (replaces direct settings slice reads)
 import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
+// R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
+import { runWithRetry, loadRetryOpts } from "./retry-lane";
+// R-016 bridge: on retry exhaustion, mark each remote lane dead via the shared writer.
+import { markLaneDead, type RunStateInit } from "../hooks/lib/run-state";
 
 const ADAPTER_VERSION = "1"; // CH-5 — PaneAdapter version recorded per pane.
 
@@ -570,7 +574,7 @@ function resolveAgentMode(explicit: AgentModeExplicit | null, dryRun: boolean): 
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
-function main(): void {
+async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   // ── P1-3 A2b: --reap path ──────────────────────────────────────────────────
@@ -878,20 +882,66 @@ function main(): void {
             resolveAdapter: resolveAdapter(),
           });
 
-          const remoteResult = remoteBackend.launch({
-            slug,
-            runId,
-            cwd,
-            specialists: remoteSpecialists,
-            targetName,
-            mode,
-            dryRun: args.dryRun,
-          });
+          // R-016a: wrap the ONE real TS-level dispatch call site in bounded retry.
+          // RemoteTeamBackend.launch() returns { ok:false } on transient SSH connection
+          // failure — exactly the retryable scenario. We throw on !ok inside the
+          // dispatchFn so runWithRetry re-attempts up to defaults.retry.max_attempts with
+          // backoff; dry-run never fails (ok:true), so it makes a single pass.
+          // On exhaustion, onExhausted marks every remote lane dead via the shared
+          // markLaneDead writer (same checkpoint the prose path writes via mark-lane-dead.ts).
+          const retryOpts = loadRetryOpts(cwd);
+          const runDir = path.join(cwd, ".guild", "runs", runId);
+          const init: RunStateInit = { runId, planSlug: slug, programId: null };
 
-          if (!remoteResult.ok) {
+          let remoteResult;
+          try {
+            const outcome = await runWithRetry(
+              () => {
+                const res = remoteBackend.launch({
+                  slug,
+                  runId,
+                  cwd,
+                  specialists: remoteSpecialists,
+                  targetName,
+                  mode,
+                  dryRun: args.dryRun,
+                });
+                if (!res.ok) {
+                  // Throw so runWithRetry retries; carry the notes for the final error.
+                  throw new Error(
+                    `remote dispatch failed — ${res.notes?.join("; ") ?? "unknown"}`
+                  );
+                }
+                return Promise.resolve(res);
+              },
+              {
+                ...retryOpts,
+                onExhausted: (signal) => {
+                  // Mark every remote lane dead + write resume.json (resume.enabled honored
+                  // inside markLaneDead). One writer for both SSH + prose paths (R-016 bridge).
+                  for (const spec of remoteSpecialists) {
+                    try {
+                      markLaneDead(runDir, init, spec.name, signal, cwd);
+                    } catch (e) {
+                      process.stderr.write(
+                        `[agent-team-launcher] WARN: could not mark lane "${spec.name}" dead — ${(e as Error).message}\n`
+                      );
+                    }
+                  }
+                },
+              }
+            );
+            remoteResult = outcome.result;
+            if (outcome.attempts > 1) {
+              process.stderr.write(
+                `[agent-team-launcher] remote dispatch succeeded on attempt ${outcome.attempts}/${retryOpts.maxAttempts}\n`
+              );
+            }
+          } catch (err) {
+            // Retry exhausted — lanes already marked dead by onExhausted.
             process.stderr.write(
-              `[agent-team-launcher] ERROR: remote dispatch failed — ` +
-                `${remoteResult.notes?.join("; ") ?? "unknown"}\n`
+              `[agent-team-launcher] ERROR: remote dispatch failed after ` +
+                `${retryOpts.maxAttempts} attempt(s) — ${(err as Error).message}\n`
             );
             process.exit(2);
           }
@@ -1099,4 +1149,7 @@ function main(): void {
   process.exit(attach.status ?? 0);
 }
 
-main();
+main().catch((err) => {
+  process.stderr.write(`[agent-team-launcher] FATAL: ${(err as Error).message}\n`);
+  process.exit(1);
+});

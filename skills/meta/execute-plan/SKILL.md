@@ -27,7 +27,7 @@ Four strict phases per lane. A lane does not advance until the previous phase ha
 1. **Context bundle.** Invoke `guild:context-assemble` for the lane; it writes `.guild/context/<run-id>/<specialist>-<task-id>.md` per §9.3. Read back the bundle's handoff receipt to confirm `bundle_path`, `token_estimate`, `layers_included`. A missing bundle blocks the dispatch — do not paper over with chat context.
 2. **Tier resolution.** Auto-score the lane and resolve its tier per `## Tier resolution` — print the score + chosen tier (never silent). The resolved tier becomes the Agent `model` param at dispatch.
 3. **Dispatch.** Spawn an **ephemeral one-agent-per-task** agent (see `## §task§agent lifecycle`) at the resolved tier, using the snapshot-resolved backend (`snapshot.effective.agent_mode`), passing the bundle path as the primary task brief. Before spawning, inject capability-scope env vars (`## Capability-scope env injection`) **and the canonical handoff protocol block** (`dispatch.md §"Handoff protocol"`) verbatim into the agent's prompt — substitute `<RECEIPT_PATH>` and `<TASK_ID>` for this lane before sending. The agent escalates via `## Advisor escalation` if it hits something above its tier. Routing rules, backend mechanics, env injection, and handoff protocol injection: `dispatch.md`.
-4. **Receipt.** Confirm the agent wrote its handoff receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` per §8.2, then **extract its `learnings[]` and dismiss the agent** (lifecycle below). A missing or malformed receipt (no `evidence:` field, no `files changed`) → treat the lane as errored, record the failure in the run log, and do not mark it complete.
+4. **Receipt.** Confirm the agent wrote its handoff receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` per §8.2, then **extract its `learnings[]` and dismiss the agent** (lifecycle below). A missing or malformed receipt (no `evidence:` field, no `files changed`) → treat the lane as **FAILED**: record the failure in the run log and route it into `## Lane retry + dead-lettering` (retry up to `defaults.retry.max_attempts`, then checkpoint as dead) rather than immediately halting the run.
 
 A specialist dispatched without a bundle violates the context contract (§9); one that completes without a receipt violates the handoff contract (§8.2). Either condition blocks `guild:review`.
 
@@ -265,6 +265,44 @@ must live where the orchestrator can reach it. If a mandate lands
 *before* the first lane dispatches, prefer re-running `guild:plan` with
 the new constraint — absorption is for after Wave 1 has begun.
 
+## Lane retry + dead-lettering (R-016)
+
+Implements the per-lane resilience contract (`docs/knowledge/decisions/v2-runtime-and-execution-model.md §retry`/`§resume`). Read the policy from the run's **resolved settings** (`readResolvedSettingsSnapshot` / `read-guild-config.ts` — never hard-code): `defaults.retry.max_attempts` (int ≥ 1, default **1** = no retry), `defaults.retry.backoff` (`immediate | linear | exponential`, default `exponential`), `defaults.resume.enabled` (bool, default **true**).
+
+A lane is **FAILED** when its receipt is missing/malformed (step 4) or the agent returns an error status. On failure:
+
+1. **Retry up to `max_attempts`.** Re-issue the lane's `Agent()` — a **fresh** ephemeral agent, same bundle + resolved tier — up to `defaults.retry.max_attempts` **total** attempts (attempt 1 + retries). Between attempts, pace per `defaults.retry.backoff` and fold **backoff guidance** into the retry brief (e.g. `prior attempt <n> failed: <last-error>; address it before proceeding`). With the default `max_attempts: 1` this is a **no-op** — one attempt, no retry — so default behavior is unchanged (transparent).
+2. **A passing receipt before exhaustion** → the lane is clean; continue normally and record the retry count in the dispatch trace.
+3. **On exhaustion** (all `max_attempts` attempts FAILED), mark the lane **dead via the bridge CLI** so the in-process / subagent path writes the **same checkpoint the SSH path does** — the single writer is hooks' `markLaneDead`:
+
+   ```
+   npx tsx ${PLUGIN_ROOT}/scripts/mark-lane-dead.ts <runDir> <laneId> \
+     --attempts N [--last-error "..."] [--run-id <run-id>] \
+     [--plan-slug <slug>] [--wave-index <n>] [--cwd <repo-root>]
+   ```
+
+   `<runDir>` = `.guild/runs/<run-id>/`; `<laneId>` = the lane's `task-id`; `--attempts N` = total attempts made; `${PLUGIN_ROOT}` = the plugin install root (the dir containing `scripts/`). This funnels to `markLaneDead` (`hooks/lib/run-state.ts`) → run-state `dead` + `resume.json` (the CLI writes the resume checkpoint **only when `defaults.resume.enabled` is true** — it reads that key tolerantly itself), so a later `/guild:resume` re-enters the dead lane from its checkpoint. **Do not write run-state directly** — the CLI is the only sanctioned funnel (parity with the SSH `runWithRetry` `onExhausted` path; both converge on `markLaneDead` for identical run-state + resume semantics).
+
+A dead lane is **not** a clean receipt — see `## Stop condition`.
+
+## Resuming dead lanes (R-016)
+
+The READ/re-enter half of dead-lettering (the WRITE half is `## Lane retry + dead-lettering`). When `/guild:resume` continues a run, **before** it locates the next pending gate it re-enters any checkpointed dead lane so a transient failure doesn't strand the run. (`/guild:resume`'s command `## Dispatch` invokes this section before gate location.)
+
+1. **List resumable dead lanes** via the read-side bridge CLI (the mirror of `mark-lane-dead.ts`) — the `--json` flag is **required** for parseable output (without it the CLI prints a human table):
+   ```
+   npx tsx ${PLUGIN_ROOT}/scripts/resume-lanes.ts <runDir> --json
+   ```
+   It scans `<runDir>/lanes/*/resume.json`, applies the **`guild.lane_resume.v1`** schema-version guard (skips foreign/older versions), honors `defaults.resume.enabled`, joins each lane's `tier` from run-state, sorts by `lane_id`, and writes a **bare JSON array** (one object per resumable dead lane) to stdout:
+   ```json
+   [{ "lane_id": "...", "run_id": "...", "attempts": N, "last_attempt_at": "...", "last_error": "...", "resumable_at": "...", "tier": "mid" }, …]
+   ```
+   **Consume the array directly — it is NOT wrapped in an object.** It is already version-guarded + `resume.enabled`-filtered + `lane_id`-sorted CLI-side. `tier` is present when run-state carried it (absent otherwise — default skill-side); `bundle_path` is **not** in the output — recover it skill-side (step 2). **An empty array `[]` ⇒ no resumable lanes ⇒ exactly today's resume behavior** (proceed straight to the next gate). `<runDir>` = `.guild/runs/<run-id>/`; an optional `--cwd <repo-root>` overrides the repo root for the `resume.enabled` read; `${PLUGIN_ROOT}` = the plugin install root.
+2. **Re-enter each resumable dead lane** through the normal dispatch path: spawn a **fresh** ephemeral `Agent()` against the lane's bundle, folding `last_error` in as backoff guidance. Use the entry's `tier` when present (else recover from run-state `lanes[<lane_id>].tier`, `hooks/lib/run-state.ts`); **recover/rebuild `bundle_path`** skill-side (the lane's `.guild/context/<run-id>/<specialist>-<task-id>.md`, or rebuild via `guild:context-assemble` if the bundle file is gone). This **resets the lane from `dead` back into `## Lane retry + dead-lettering`** — operator-initiated resume grants a **fresh retry budget** (`defaults.retry.max_attempts` again); the prior `attempts` count is preserved in the checkpoint for audit but does **not** subtract from the resumed budget (otherwise a lane already at `max_attempts` would re-dead immediately). Re-entry follows the same `## Per-lane flow` (bundle → tier → dispatch → receipt) as a first dispatch; a lane that re-fails past `max_attempts` on the resumed run is re-marked dead via the same `mark-lane-dead.ts` funnel.
+3. **Then continue** to the next pending gate as today.
+
+Gated + graceful: the whole step is a no-op when `resume-lanes.ts` emits an empty list (no checkpoints written, or `defaults.resume.enabled: false`). This closes the R-016 write↔read symmetry — `## Lane retry + dead-lettering` WRITES dead-lane checkpoints; this section READS + re-enters them.
+
 ## Stop condition
 
 Execution is complete when every lane has a non-error receipt under `handoffs/`:
@@ -273,7 +311,7 @@ Execution is complete when every lane has a non-error receipt under `handoffs/`:
 - every receipt has a populated `evidence:` field (§8.2 — never "looks good");
 - no receipt is blocked/errored without a matching error record in the run log.
 
-If any lane errored, halt and surface the failure to the user rather than forwarding to `guild:review` — review cannot compensate for a missing receipt. If every lane is clean, hand off to `guild:review`.
+If a lane FAILED, it first goes through `## Lane retry + dead-lettering`; a lane still failing after `defaults.retry.max_attempts` is marked **dead** (checkpointed for `/guild:resume`). Halt and surface any dead lane(s) to the user — name each dead lane, its attempt count, and that `/guild:resume` will re-enter it from its checkpoint — rather than forwarding to `guild:review` (review cannot compensate for a missing receipt). If every lane is clean, hand off to `guild:review`.
 
 ## Handoff
 
