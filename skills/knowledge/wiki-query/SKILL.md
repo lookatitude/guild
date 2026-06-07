@@ -29,9 +29,21 @@ If the caller passes an unknown category, reject the query with the list of vali
 Two paths, chosen by scale; pick one per invocation (no mid-query switching):
 
 - **Under ~200 pages — ripgrep + filesystem (default).** Search root = `.guild/wiki/<category>/` if `category` set, else `.guild/wiki/` (excluding `index.md`, `log.md`, `lint-*.md`). Full-text match via `Grep` (case-insensitive by default), `Glob` to enumerate when only filters are set. Extract the frontmatter block and filter on `owner`/`confidence`/`updated_since`/`tag` — never regex-parse YAML. Rank exact-phrase > bag-of-words > frontmatter-only, tie-break `updated_at` desc then `confidence` high→low. Cap 20 (raise via `limit`).
-- **Above ~200 pages — guild-memory MCP (optional, P6).** Delegate to its BM25 `search`; post-filter `confidence`/`updated_since` if unsupported; on unreachable MCP, fall back to ripgrep and note the degradation.
+- **Above ~200 pages — guild-memory MCP (optional, P6).** **First check `mcp.stdio_available`** (resolved config) — see `## MCP-availability gate`: when **false**, the MCP stdio transport is declared unavailable, so **do not attempt the MCP call**; route to `fsScan` instead. When true, delegate to its BM25 `search`; post-filter `confidence`/`updated_since` if unsupported; on an unreachable MCP despite `stdio_available: true`, fall back to `fsScan` (or ripgrep) and note the degradation.
 
-Check page count first (`§10.5`); over ~200 with no MCP, queries still run via ripgrep but suggest installing `guild-memory` in `followups:`. Full step-by-step, the `find` count command, and the result-list template: **`query-modes.md`** (this directory).
+Check page count first (`§10.5`); over ~200 with no MCP, queries still run via the filesystem (`fsScan` / ripgrep) but suggest installing `guild-memory` in `followups:`. Full step-by-step, the `find` count command, and the result-list template: **`query-modes.md`** (this directory).
+
+## MCP-availability gate (R-019)
+
+Implements the MCP degradation contract (`docs/knowledge/decisions/feature-degradation-contracts.md` FDC-13; resolved key `mcp.stdio_available`, default `true`). **Before any guild-memory MCP call** — the >200-page BM25 `search` above AND the federated `wiki_search`/`wiki_get`/`wiki_list` fan-out — read `mcp.stdio_available` from the resolved settings (`read-guild-config.ts`). When it is **false**, skip the MCP entirely and recall via the filesystem scanner `fsScan` (`scripts/lib/fs-scanner.ts`):
+
+**Consume contract (do not violate):**
+- Signature: `fsScan(query: string, guildRoot: string, opts?: { limit?, dirs?, extensions? }): FsScanResult | null`. `guildRoot` is the repo root (`.guild/` is resolved from it); default `dirs` are `["wiki","runs"]`.
+- Returns `FsScanResult = { source: "fs-scanner", hits: FsScanHit[], scannedDirs: string[] }`, where `FsScanHit = { path, title, snippet }` — **no rank field**.
+- `hits` is **PRE-SORTED** most-relevant-first. **Take hits in array order; never re-sort** (the internal score is deliberately not surfaced).
+- Returns **`null` when no `.guild` target dirs exist** — handle exactly like a wiki-recall null (empty result set; note the absence), never as an error.
+
+This config-gated fallback is distinct from the "MCP reachable but errored" runtime degradation. Record which path ran (MCP / fsScan / ripgrep) in the handoff `assumptions:`.
 
 ## Federated fan-out (workspace)
 
@@ -84,5 +96,5 @@ The handoff receipt must include:
 
 - `changed_files:` — `- none` (always; read-only).
 - `evidence:` — the query, the filter set, candidates walked, number returned (on a workspace: which sub-guilds were fanned out to and the per-source hit counts).
-- `assumptions:` — case-sensitivity choice, ambiguous filters defaulted, MCP vs ripgrep path used, and (on a workspace) whether the query fanned out across all sub-guilds or scoped to one named sub-guild.
+- `assumptions:` — case-sensitivity choice, ambiguous filters defaulted, which recall path ran (MCP vs `fsScan` vs ripgrep, incl. the `mcp.stdio_available` gate outcome), and (on a workspace) whether the query fanned out across all sub-guilds or scoped to one named sub-guild.
 - `followups:` — pages with broken frontmatter, missing raw metadata, contradictions, or a scale-transition suggestion if page count crossed ~200.

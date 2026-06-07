@@ -109,9 +109,20 @@ npx tsx plugin/scripts/lib/wiki-recall.ts --query "<task description>" --cwd <re
 
 This queries `wiki_fts` in `.guild/index.sqlite` via FTS5 BM25 — identical recall semantics to `guild-memory`, higher throughput at scale. The script handles the lazy-build trigger (D-PS-1): if `wiki_fts` is not yet populated it is built on first call, then fingerprint-gated on subsequent calls (no redundant re-index). Output is JSON: `{ source: "sqlite-wiki_fts", hits: [{path, title, rank, snippet}], dbPath }`. A `{ fallthrough: true }` response means the index was not available — proceed to the guild-memory path below.
 
-**guild-memory path (default / below threshold — unchanged):** When below threshold OR `defaults.index.enabled=false` (or the SQLite path returns `{fallthrough:true}`), recall the task description against the wiki via `guild-memory` BM25 (+ bounded `kg-query` for relationship-heavy queries, default 2 hops). This path is byte-identical to pre-ADR behavior. **The OFF path is a hard zero-cost regression guarantee — no new overhead, no `index.sqlite` ever written.**
+**guild-memory path (default / below threshold — unchanged):** When below threshold OR `defaults.index.enabled=false` (or the SQLite path returns `{fallthrough:true}`): **first check `mcp.stdio_available`** (resolved config — `read-guild-config.ts`; default `true`). When **false**, the guild-memory MCP stdio transport is declared unavailable, so **skip the MCP call** and recall via `fsScan` (`### MCP-availability fallback`). When true, recall the task description against the wiki via `guild-memory` BM25 (+ bounded `kg-query` for relationship-heavy queries, default 2 hops) — byte-identical to pre-ADR behavior. **The OFF path is a hard zero-cost regression guarantee — no new overhead, no `index.sqlite` ever written.**
 
-After recall (either path):
+### MCP-availability fallback (R-019)
+
+When `mcp.stdio_available` is **false** (FDC-13, `docs/knowledge/decisions/feature-degradation-contracts.md`), the guild-memory MCP recall is replaced by the filesystem scanner `fsScan` (`scripts/lib/fs-scanner.ts`) — a config-gated degradation, distinct from a runtime MCP error:
+
+- Call `fsScan(taskDescription, repoRoot, { limit })` → `FsScanResult | null`. `repoRoot` is the consuming repo root (`.guild/` resolved from it); default `dirs` are `["wiki","runs"]`.
+- `FsScanResult.hits` is `{ path, title, snippet }[]`, **PRE-SORTED most-relevant-first — consume in array order, never re-sort.** No rank/score field is exposed; do **not** synthesize one or map it onto the SQLite path's `rank`.
+- Because `fsScan` surfaces no numeric score, the `models.recallScoreThreshold` gate does not apply to its hits — the scanner already applied relevance ordering + `limit`, so take the returned hits in array order as the eligible recall chunks.
+- `null` ⇒ no `.guild` recall dirs exist — treat as **0 hits** (the full-read permission below then applies), never as an error.
+
+`fsScan` hits land in the task-dependent layer and pass through the same spotlighting (`## Spotlighting`), trust-tier wrapping, and overflow trimming as any other recall path.
+
+After recall (any path):
 
 - If recall returns ≥1 chunk with **score ≥ `models.recallScoreThreshold`** (default `0.4`, closed-key — ADR §10, bound by pointer), the agent receives the chunk(s) + the specific file references and **skips the full file read**.
 - **Full reads are permitted only** when recall returns 0 hits OR the task requires source-of-truth verification (e.g. `guild:verify-done`).
