@@ -132,6 +132,15 @@ export interface TeamLaunchRequest {
   targetName: string;
   mode: LaunchMode;
   dryRun: boolean;
+  /**
+   * C13 (G-PHASE-COMPOSE): the RESOLVED team-file path the orchestrator should
+   * read — sourced from resolveTeamFile (per-phase `<slug>.<phase>.yaml`, or the
+   * legacy `<slug>.yaml`). Threaded into the spawned orchestrator's prompt so the
+   * persisted reference carries the resolved path, never a reconstructed
+   * `.guild/team/<slug>.yaml` (plan §6.8). Optional: when absent, buildPrompt
+   * falls back to the legacy reconstruction for back-compat.
+   */
+  teamPath?: string;
 }
 
 /**
@@ -243,12 +252,16 @@ export function shellQuote(s: string): string {
 export function buildPrompt(
   slug: string,
   runId: string,
-  specialist: Specialist | null
+  specialist: Specialist | null,
+  teamPath?: string,
 ): string {
   if (!specialist) {
+    // C13: prefer the RESOLVED per-phase team path; fall back to the legacy
+    // reconstruction only when no resolved path was threaded (back-compat).
+    const teamRef = teamPath ?? `.guild/team/${slug}.yaml`;
     return (
       `You are the Guild orchestrator for team \`${slug}\`, run-id \`${runId}\`. ` +
-      `The spec is at \`.guild/spec/${slug}.md\`, the team at \`.guild/team/${slug}.yaml\`, ` +
+      `The spec is at \`.guild/spec/${slug}.md\`, the team at \`${teamRef}\`, ` +
       `and the approved plan at \`.guild/plan/${slug}.md\`. ` +
       `Per-specialist context bundles are under \`.guild/context/${runId}/<specialist>-<task-id>.md\` ` +
       `(build them via guild:context-assemble before dispatch). ` +
@@ -316,8 +329,10 @@ export function composeTmuxCommands(opts: {
    * host (CH-4: orchestrator = the starting host).
    */
   resolveAdapter?: AdapterResolver;
+  /** C13: resolved per-phase team path threaded into the orchestrator prompt. */
+  teamPath?: string;
 }): ParsedTmuxCommand[] {
-  const { mode, targetName, cwd, slug, runId, specialists, resolveAdapter } = opts;
+  const { mode, targetName, cwd, slug, runId, specialists, resolveAdapter, teamPath } = opts;
   const cmds: ParsedTmuxCommand[] = [];
 
   // Per-pane command builder. Default (no resolver) path is the legacy
@@ -326,7 +341,7 @@ export function composeTmuxCommands(opts: {
   // With a resolver, the pane's host_kind picks the adapter; the orchestrator
   // (spec === null) is pinned to claude regardless (CH-4).
   const commandFor = (spec: Specialist | null): string => {
-    const prompt = buildPrompt(slug, runId, spec);
+    const prompt = buildPrompt(slug, runId, spec, teamPath);
     if (!resolveAdapter) return paneCommand(prompt, runId);
     const hostKind: HostKind = spec?.host_kind ?? "claude";
     return resolveAdapter(hostKind).command({
@@ -486,6 +501,7 @@ export class TmuxTeamBackend implements TeamBackend {
       runId: req.runId,
       specialists: req.specialists,
       resolveAdapter: this.resolveAdapter,
+      teamPath: req.teamPath, // C13: resolved per-phase path → orchestrator prompt
     });
     return { mode: req.mode, targetName: req.targetName, commands };
   }
@@ -650,7 +666,7 @@ export function composeInProcessDispatch(
     subagentType: spec.name,
     model: null,
     env: { GUILD_RUN_ID: req.runId },
-    prompt: buildPrompt(req.slug, req.runId, spec),
+    prompt: buildPrompt(req.slug, req.runId, spec, req.teamPath), // C13: resolved per-phase path
   }));
 }
 
@@ -963,7 +979,7 @@ export class RemoteTeamBackend implements TeamBackend {
   /** Build the per-specialist command for a remote pane (orchestrator excluded). */
   private commandFor(spec: Specialist, req: TeamLaunchRequest): { paneSpec: PaneSpec; command: string } {
     const hostKind: HostKind = spec.host_kind ?? "claude";
-    const prompt = buildPrompt(req.slug, req.runId, spec);
+    const prompt = buildPrompt(req.slug, req.runId, spec, req.teamPath); // C13: resolved per-phase path
     const paneSpec: PaneSpec = {
       name: spec.name,
       scope: spec.scope,

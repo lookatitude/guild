@@ -1,22 +1,22 @@
 ---
 name: guild-plan
-description: Turns an approved `.guild/spec/<slug>.md` plus `.guild/team/<slug>.yaml` into a per-specialist lane plan at `.guild/plan/<slug>.md`. Each lane carries `task-id`, `owner`, `depends-on:`, `scope`, `success-criteria`, `autonomy-policy`, and a seed `complexity_score`+`tier` (re-scored at dispatch) so `guild:execute-plan` can dispatch parallel-where-possible subagents per `guild-plan.md §8`. FORKS `guild:plan` rather than referencing — writing-plans emits a generic linear implementation plan; `guild:plan` emits specialist lanes tied to a composed team and feeds Guild's dispatch/review loop. TRIGGER on "turn this spec into a plan", "break the work down by specialist", "what does each role do on this spec", "plan the lanes for this task", "we have a team — now plan the work". DO NOT TRIGGER for: writing the code itself (`guild:execute-plan`), brainstorming a new feature (`guild:brainstorm`), reviewing finished work (`guild:review`), or generic implementation plans outside the Guild lifecycle (use `guild:plan`).
-when_to_use: Third step of Guild lifecycle, after guild:team-compose has produced .guild/team/<slug>.yaml.
+description: Turns an approved `.guild/spec/<slug>.md` plus the per-phase team file `.guild/team/<slug>.<phase>.yaml` into a per-specialist lane plan at `.guild/plan/<slug>.md`. Each lane carries `task-id`, `owner`, `depends-on:`, `scope`, `success-criteria`, `autonomy-policy`, and a seed `complexity_score`+`tier` (re-scored at dispatch) so `guild:execute-plan` can dispatch parallel-where-possible subagents per `guild-plan.md §8`. FORKS `guild:plan` rather than referencing — writing-plans emits a generic linear implementation plan; `guild:plan` emits specialist lanes tied to a composed team and feeds Guild's dispatch/review loop. TRIGGER on "turn this spec into a plan", "break the work down by specialist", "plan the lanes for this task", "we have a team — now plan the work". DO NOT TRIGGER for: writing the code itself (`guild:execute-plan`), brainstorming a new feature (`guild:brainstorm`), reviewing finished work (`guild:review`), or generic implementation plans outside the Guild lifecycle (use `guild:plan`).
+when_to_use: Third step of Guild lifecycle, after guild:team-compose has produced the per-phase team file (.guild/team/<slug>.<phase>.yaml, resolved via resolveTeamFile).
 type: meta
 ---
 
 # guild:plan
 
-Implements `guild-plan.md §8` (task lifecycle — plan step). Runs after `guild:team-compose` has written `.guild/team/<slug>.yaml` and before `guild:context-assemble`. Output is an approved per-specialist lane plan that downstream context assembly and execute-plan dispatch consume verbatim.
+Implements `guild-plan.md §8` (task lifecycle — plan step). Runs after `guild:team-compose` has written the per-phase team file (`.guild/team/<slug>.<phase>.yaml`, resolved via `resolveTeamFile`) and before `guild:context-assemble`. Output is an approved per-specialist lane plan that downstream context assembly and execute-plan dispatch consume verbatim.
 
 ## Input
 
 Two files, both required:
 
 1. `.guild/spec/<slug>.md` — the approved spec from `guild:brainstorm`. Authoritative source for goal, audience, success criteria, non-goals, constraints, autonomy policy, and risks (`guild-plan.md §8.1`). Reject planning if any of those seven fields is missing — return control to `guild:brainstorm` instead of silently filling in.
-2. `.guild/team/<slug>.yaml` — the resolved team from `guild:team-compose`. Authoritative source for which specialists own which scope, inter-specialist dependencies, and execution backend (`subagent` vs `agent-team`).
+2. The resolved per-phase team file from `guild:team-compose` — **resolved via `resolveTeamFile(guildRoot, slug, readActivePhase(cwd))`** (`scripts/lib/team-file.ts`), which returns `.guild/team/<slug>.<phase>.yaml` (current world) or the legacy `.guild/team/<slug>.yaml` (read-only back-compat). Authoritative source for which specialists own which scope, inter-specialist dependencies, and execution backend (`subagent` vs `agent-team`). **On a `null` return** (no per-phase file and no legacy) → loop back to `guild:team-compose` to run the phase-composition pass; do **not** fabricate a path. **On a legacy hit** (per-phase absent) → emit the one-line deprecation notice once per run: *"single-file team.yaml is legacy; re-compose to adopt per-phase teams."*
 
-Do not infer lanes from chat history outside these two files. If the team.yaml says 4 specialists, you plan 4 lanes; if a user adds scope in chat, loop back to `guild:team-compose` or `guild:brainstorm` rather than expanding the plan unilaterally.
+Do not infer lanes from chat history outside these two files. If the resolved team file says 4 specialists, you plan 4 lanes; if a user adds scope in chat, loop back to `guild:team-compose` or `guild:brainstorm` rather than expanding the plan unilaterally.
 
 ## Output
 
@@ -26,8 +26,8 @@ Write `.guild/plan/<slug>.md`. One top-level heading per specialist lane. Each l
 ---
 type: plan
 spec: .guild/spec/<slug>.md
-team: .guild/team/<slug>.yaml
-backend: subagent  # or: agent-team — mirrors team.yaml
+team: .guild/team/<slug>.<phase>.yaml   # the RESOLVED path from resolveTeamFile — the per-phase file (or legacy <slug>.yaml on back-compat). NEVER a reconstructed <slug>.yaml (§6 assertion 8: persisted refs carry the resolved path).
+backend: subagent  # or: agent-team — mirrors the resolved team file's backend
 created_at: 2026-04-24
 approved: false
 ---

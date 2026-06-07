@@ -4,7 +4,10 @@
     "Who should work on the pricing calculator feature?",
     "Compose specialists — we have the spec ready.",
     "Reshape the team for this task.",
-    "Which Guild specialists fit this work?"
+    "Which Guild specialists fit this work?",
+    "Compose the team for the build phase.",
+    "We've entered qa — compose this phase's team and write the per-phase team file.",
+    "Re-compose the team now that we're in the ops phase."
   ],
   "should_not_trigger": [
     "Start writing the code.",

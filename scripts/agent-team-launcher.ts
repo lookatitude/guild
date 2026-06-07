@@ -83,6 +83,9 @@ import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
 import { runWithRetry, loadRetryOpts } from "./retry-lane";
 // R-016 bridge: on retry exhaustion, mark each remote lane dead via the shared writer.
 import { markLaneDead, type RunStateInit } from "../hooks/lib/run-state";
+// C4 (G-PHASE-COMPOSE): slugFromTeamPath now lives in team-file.ts (the inverse of
+// teamFilePath) so it tolerates the <slug>.<phase>.yaml basename + is unit-tested there.
+import { slugFromTeamPath } from "./lib/team-file";
 
 const ADAPTER_VERSION = "1"; // CH-5 — PaneAdapter version recorded per pane.
 
@@ -283,10 +286,10 @@ function parseFlowList(value: string): string[] {
 // `tmux` TmuxTeamBackend instance in main(). slugFromTeamPath stays here — it
 // is CLI-path parsing, not tmux behavior.
 
-function slugFromTeamPath(teamPath: string): string {
-  const base = path.basename(teamPath);
-  return base.replace(/\.ya?ml$/i, "");
-}
+// slugFromTeamPath moved to scripts/lib/team-file.ts (C4) — imported above. It is
+// the inverse of teamFilePath and tolerates the per-phase `<slug>.<phase>.yaml`
+// basename. Kept out of this file so it is unit-testable without the launcher's
+// hooks-heavy import chain (run-state's transitive .js imports break ts-jest).
 
 // ── Manifest write ─────────────────────────────────────────────────────────
 
@@ -905,6 +908,7 @@ async function main(): Promise<void> {
                   targetName,
                   mode,
                   dryRun: args.dryRun,
+                  teamPath: args.team, // C13: resolved per-phase path → orchestrator prompt
                 });
                 if (!res.ok) {
                   // Throw so runWithRetry retries; carry the notes for the final error.
@@ -1062,6 +1066,10 @@ async function main(): Promise<void> {
     runId,
     specialists: team.specialists,
     dryRun: args.dryRun,
+    // C13: the path the launcher was handed (--team, already resolved by the
+    // dispatch layer via resolveTeamFile) IS the resolved per-phase team file —
+    // thread it into the orchestrator prompt so the persisted reference matches.
+    teamPath: args.team,
   });
   const commands = plan.commands;
 

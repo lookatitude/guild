@@ -439,6 +439,94 @@ function flipRunStatus(env: RunLifecycleEnv, root: string, runId: string, status
   env.fs.writeFile(p, next);
 }
 
+// ── T0 (G-PHASE-COMPOSE): full-run phase recording ───────────────────────────
+//
+// The canonical lifecycle phase set. A token outside this set is REJECTED by
+// appendPhase (and the T1 team-file builders) so a bad phase can never become a
+// phases_log entry or a `<slug>.<phase>.yaml` filename segment. Shared constant —
+// every lane that touches a phase token imports it (G-plan MAJOR-3 / §6.9).
+export const CANONICAL_PHASES = ["init", "ideate", "plan", "build", "qa", "ops"] as const;
+export type CanonicalPhase = (typeof CANONICAL_PHASES)[number];
+
+/** True iff `p` is one of the six canonical lifecycle phases. */
+export function isCanonicalPhase(p: string): p is CanonicalPhase {
+  return (CANONICAL_PHASES as readonly string[]).includes(p);
+}
+
+/**
+ * Append a phase entry to run.yaml's `phases_log` AND rewrite the top-level
+ * `phase:` line, in place — the same atomic line-rewrite posture as flipRunStatus.
+ *
+ * ADDITIVE: `phase`/`phases_log` are not read by readStartFacts or closeRun, so
+ * this is side-effect-free for existing close logic — the fields THEY read are
+ * byte-unchanged. Validates `phase` against CANONICAL_PHASES; a non-canonical
+ * token is REJECTED (no write, returns false) — never silently filed. A missing/
+ * corrupt run.yaml is a no-op (returns false; never throws).
+ *
+ * @returns true iff a phase entry was recorded.
+ */
+export function appendPhase(
+  env: RunLifecycleEnv,
+  root: string,
+  runId: string,
+  phase: string,
+): boolean {
+  if (!isCanonicalPhase(phase)) return false; // reject — never write a bad token
+  const p = runYamlPath(root, runId);
+  const raw = env.fs.readFile(p);
+  if (raw === null) return false; // missing/corrupt → no-op
+  const at = env.now();
+
+  // 1. Rewrite the top-level `phase:` scalar (tolerate its absence on old manifests).
+  //    `^phase:` cannot match `phases_log:` ("phase" + ":" vs "phase" + "s") nor an
+  //    indented block item ("  - phase:") — anchored at column 0.
+  let next = /^phase:[ \t]*.*$/m.test(raw)
+    ? raw.replace(/^phase:[ \t]*.*$/m, `phase: ${phase}`)
+    : raw;
+
+  // 2. Append a { phase, at } entry to the phases_log block.
+  next = appendToPhasesLog(next, phase, at);
+  env.fs.writeFile(p, next);
+  return true;
+}
+
+/**
+ * Insert a `{ phase, at }` item into run.yaml's `phases_log` via targeted line
+ * surgery (no full YAML parse — preserves every other field byte-for-byte, same
+ * principle as flipRunStatus). Handles the empty-inline form (`phases_log: []`),
+ * the block form, and the (defensive) missing-key case.
+ */
+function appendToPhasesLog(raw: string, phase: string, at: string): string {
+  const lines = raw.split("\n");
+  const itemLines = [`  - phase: ${phase}`, `    at: ${at}`];
+  const idx = lines.findIndex((l) => /^phases_log:/.test(l));
+
+  if (idx === -1) {
+    // No phases_log key (older manifest) — append a fresh block before the trailing
+    // empty line the serializer leaves (raw ends with "\n").
+    const insertAt =
+      lines.length > 0 && lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+    lines.splice(insertAt, 0, "phases_log:", ...itemLines);
+    return lines.join("\n");
+  }
+
+  if (/^phases_log:[ \t]*\[\][ \t]*$/.test(lines[idx])) {
+    // Empty inline `[]` → convert to a block carrying the first item.
+    lines.splice(idx, 1, "phases_log:", ...itemLines);
+    return lines.join("\n");
+  }
+
+  // Block form: the array items are the indented, non-empty lines after the key.
+  // The block ends at the first column-0 line (next top-level key, e.g. settings_ref:)
+  // or a blank line (the serializer's trailing "") or EOF. Insert before that.
+  let end = idx + 1;
+  while (end < lines.length && /^\s/.test(lines[end]) && lines[end].trim() !== "") {
+    end++;
+  }
+  lines.splice(end, 0, ...itemLines);
+  return lines.join("\n");
+}
+
 // ── Factory ────────────────────────────────────────────────────────────────────
 
 /** Factory the entrypoints call; pass createRealEnv() for the real-fs default. */

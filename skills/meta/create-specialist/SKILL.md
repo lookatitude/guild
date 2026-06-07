@@ -38,7 +38,7 @@ Seven ordered steps, each gate passing before the next runs. Full procedure — 
 4. **Propose adjacent-boundary edits** — append a `DO NOT TRIGGER for: <new-domain>` clause to each adjacent specialist's `description` (`§12.1` step 4).
 5. **Gate boundary edits** — each edit runs through `guild:evolve-skill` paired evals (A = as-is, B = with the clause); a failing edit stops the workflow.
 6. **Gate new specialist** — paired evals (A = no-specialist baseline, B = proposed) + shadow-mode runs over `.guild/runs/*/`; both must pass (shadow mode is part of the gate, not advisory).
-7. **Register** — on both gates passing, move files live within `.guild/` (see DH-3 mint contract), commit the step-5 boundary edits, add the role to `guild:team-compose`'s candidate list.
+7. **Register** — on both gates passing, move files live within `.guild/` (see DH-3 mint contract), commit the step-5 boundary edits. The new agent file's **existence** at `.guild/agents/<role>.md` IS its registration — `guild:team-compose` enumerates the live `.guild/agents/*.md` directory automatically (ADR §4); there is no candidate list to append to.
 
 ## Extraction signals (§11.2.1)
 
@@ -52,7 +52,7 @@ If any gate fails, **stop and surface refinement options to the user** — do no
 
 Emit a `handoff` block naming the creation run and gate outcome:
 
-- On **success** (step 7 completes): confirm registration (live paths for `.guild/agents/<role>.md` and `.guild/skills/<role>-*/`), list the new specialist + the boundary edits applied to adjacent specialists, and note `guild:team-compose` now has the role as a candidate.
+- On **success** (step 7 completes): confirm registration (live paths for `.guild/agents/<role>.md` and `.guild/skills/<role>-*/`), list the new specialist + the boundary edits applied to adjacent specialists, and note `guild:team-compose` will enumerate the new agent from `.guild/agents/<role>.md` automatically (existence = registration; no candidate list).
 - On **failure** (any gate): write `.guild/evolve/<run-id>/proposed-<role>-rejected.md` with the gate outcomes and surface refinement options.
 
 Payload fields: `run_id`, `role`, `outcome` (`registered`/`rejected`), `gate_failed` (rejection only — one of `extraction-signals`, `boundary-edit`, `new-specialist`), `boundary_edits` (success only — adjacent-specialist paths that received `DO NOT TRIGGER` clauses), `proposed_path`/`live_path` (traceability), and `refinement_options` (rejection only).

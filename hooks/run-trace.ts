@@ -46,6 +46,7 @@ import { resolveGuildRoot } from "./lib/guild-root.js";
 import {
   defaultResolveHost,
   recordStatusLightweight,
+  recordPhase,
   startAndCloseRun,
   startRunOnly,
   writeSkippedFiles,
@@ -79,9 +80,10 @@ async function readStdin(): Promise<string> {
 }
 
 const USAGE =
-  "usage: run-trace.ts <start|status|skipped> [--cwd <root>] [--run-id <id>]\n" +
-  "  start   --command=/guild:learn [--run-class=full|lightweight] [--cwd <root>]\n" +
+  "usage: run-trace.ts <start|status|phase|skipped> [--cwd <root>] [--run-id <id>]\n" +
+  "  start   --command=/guild:plan [--phase=<p>] [--run-class=full|lightweight] [--cwd <root>]\n" +
   "  status  [--cwd <root>]   (alias: start --run-class=lightweight + OQ6 gate)\n" +
+  "  phase   --phase=<init|ideate|plan|build|qa|ops> [--run-id <id>] [--cwd <root>]\n" +
   "  skipped --run-id <id>    [--cwd <root>] < entries.json\n";
 
 async function main(): Promise<void> {
@@ -101,6 +103,8 @@ async function main(): Promise<void> {
     // run always records initiative:null and an --initiative-attached command is
     // stored as a one-off (retention one-off-90d), detached from its initiative.
     const initiative = flag(argv, "initiative") ?? null;
+    // T0: phase commands seed their phase when they START a full run.
+    const phase = flag(argv, "phase") ?? null;
 
     // Split by run-class:
     //   full (default) — start ONLY, leave run.yaml OPEN. The Stop hook
@@ -122,8 +126,25 @@ async function main(): Promise<void> {
             cwd,
             run_class: "full",
             initiative,
+            phase, // T0: seed run.yaml phase: + first phases_log entry (canonical-validated downstream)
           });
     if (runId) process.stdout.write(runId + "\n");
+    process.exit(0);
+  }
+
+  // ── phase — T0 join-an-open-run phase writer ────────────────────────────────
+  // A phase command that JOINS an already-open full run records its phase here
+  // (vs. seeding it via `start --phase`). Best-effort: prints nothing, exit 0.
+  if (sub === "phase") {
+    const phase = flag(argv, "phase");
+    if (!phase) {
+      process.stderr.write(
+        "[run-trace] usage: phase --phase=<init|ideate|plan|build|qa|ops> [--run-id <id>] [--cwd <root>]\n",
+      );
+      process.exit(1);
+    }
+    const runId = flag(argv, "run-id");
+    recordPhase(root, phase, runId ? { runId } : {});
     process.exit(0);
   }
 

@@ -22,6 +22,9 @@
 import * as path from "path";
 import {
   createRunLifecycle,
+  appendPhase,
+  isCanonicalPhase,
+  CANONICAL_PHASES,
   type RunLifecycleEnv,
   type StartRunOpts,
 } from "../lib/run-lifecycle";
@@ -398,5 +401,94 @@ describe("run-lifecycle — lightweight run_class (SC-B §5)", () => {
       mem.files.get(path.join(ROOT, ".guild", "runs", runId, "provenance.json")) as string
     );
     expect(prov.final_learning_checkpoint).toBe(".guild/runs/x/learning/reflection-x.yaml");
+  });
+});
+
+// ── T0 (G-PHASE-COMPOSE) — appendPhase + canonical-phase validation ───────────
+
+describe("run-lifecycle — appendPhase (T0 full-run phase recording)", () => {
+  /** Read a fresh run.yaml string for the active run. */
+  function readRunYaml(mem: MemFs, runId: string): string {
+    return mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
+  }
+
+  it("CANONICAL_PHASES is exactly the six lifecycle phases", () => {
+    expect([...CANONICAL_PHASES]).toEqual(["init", "ideate", "plan", "build", "qa", "ops"]);
+  });
+
+  it("isCanonicalPhase accepts the six and rejects anything else", () => {
+    for (const p of CANONICAL_PHASES) expect(isCanonicalPhase(p)).toBe(true);
+    expect(isCanonicalPhase("learn")).toBe(false);
+    expect(isCanonicalPhase("../etc/passwd")).toBe(false);
+    expect(isCanonicalPhase("")).toBe(false);
+  });
+
+  it("appends a phases_log entry + rewrites top-level phase: for a full run seeded null", () => {
+    const mem = memFs();
+    const env = makeEnv(mem, { now: "2026-06-07T10:00:00Z" });
+    const lc = createRunLifecycle(env);
+    // Full run seeded with phase null (the pre-T0 main-path shape).
+    const runId = lc.startRun(baseStartOpts({ phase: null, run_class: "full" }));
+
+    const env2 = makeEnv(mem, { now: "2026-06-07T11:00:00Z" });
+    const ok = appendPhase(env2, ROOT, runId, "plan");
+    expect(ok).toBe(true);
+
+    const yaml = readRunYaml(mem, runId);
+    // top-level phase: rewritten
+    expect(yaml).toMatch(/^phase: plan$/m);
+    // phases_log carries the appended entry with the env clock
+    expect(yaml).toContain("- phase: plan");
+    expect(yaml).toContain("at: 2026-06-07T11:00:00Z");
+  });
+
+  it("appends a SECOND phase to an existing block (plan → build) preserving order", () => {
+    const mem = memFs();
+    const lc = createRunLifecycle(makeEnv(mem, { now: "2026-06-07T10:00:00Z" }));
+    // Seed a full run that already records phase=plan in its block.
+    const runId = lc.startRun(baseStartOpts({ phase: "plan", run_class: "full" }));
+
+    const ok = appendPhase(makeEnv(mem, { now: "2026-06-07T12:00:00Z" }), ROOT, runId, "build");
+    expect(ok).toBe(true);
+
+    const yaml = readRunYaml(mem, runId);
+    expect(yaml).toMatch(/^phase: build$/m); // top-level reflects the latest
+    // both entries present, plan before build
+    const planIdx = yaml.indexOf("- phase: plan");
+    const buildIdx = yaml.indexOf("- phase: build");
+    expect(planIdx).toBeGreaterThanOrEqual(0);
+    expect(buildIdx).toBeGreaterThan(planIdx);
+  });
+
+  it("REJECTS a non-canonical token: returns false, writes nothing", () => {
+    const mem = memFs();
+    const lc = createRunLifecycle(makeEnv(mem));
+    const runId = lc.startRun(baseStartOpts({ phase: null, run_class: "full" }));
+    const before = readRunYaml(mem, runId);
+
+    const ok = appendPhase(makeEnv(mem), ROOT, runId, "deploy"); // not canonical
+    expect(ok).toBe(false);
+    expect(readRunYaml(mem, runId)).toBe(before); // byte-identical — no write
+  });
+
+  it("is a no-op (returns false) when run.yaml is absent", () => {
+    const mem = memFs();
+    const ok = appendPhase(makeEnv(mem), ROOT, "run-does-not-exist", "plan");
+    expect(ok).toBe(false);
+  });
+
+  it("is ADDITIVE: fields read by closeRun (status/run_class) are byte-unchanged after appendPhase", () => {
+    const mem = memFs();
+    const lc = createRunLifecycle(makeEnv(mem));
+    const runId = lc.startRun(baseStartOpts({ phase: null, run_class: "full" }));
+    const before = readRunYaml(mem, runId);
+    const statusBefore = before.match(/^status:.*$/m)?.[0];
+    const runClassBefore = before.match(/^run_class:.*$/m)?.[0];
+
+    appendPhase(makeEnv(mem), ROOT, runId, "qa");
+
+    const after = readRunYaml(mem, runId);
+    expect(after.match(/^status:.*$/m)?.[0]).toBe(statusBefore);
+    expect(after.match(/^run_class:.*$/m)?.[0]).toBe(runClassBefore);
   });
 });

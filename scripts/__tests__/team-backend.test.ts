@@ -352,6 +352,26 @@ describe("pure helpers", () => {
     expect(p).toContain(".guild/spec/demo.md");
   });
 
+  it("C13: buildPrompt interpolates the RESOLVED teamPath into the orchestrator prompt", () => {
+    const resolved = ".guild/team/demo.build.yaml";
+    const p = buildPrompt("demo", "run-1", null, resolved);
+    // The persisted reference must carry the resolved per-phase path…
+    expect(p).toContain(resolved);
+    // …and NOT the reconstructed legacy path.
+    expect(p).not.toContain(".guild/team/demo.yaml");
+  });
+
+  it("C13: buildPrompt falls back to legacy <slug>.yaml when no teamPath is threaded", () => {
+    const p = buildPrompt("demo", "run-1", null); // teamPath omitted (back-compat)
+    expect(p).toContain(".guild/team/demo.yaml");
+  });
+
+  it("C13: teamPath does not affect the teammate prompt (orchestrator-only reference)", () => {
+    const withPath = buildPrompt("demo", "run-1", { name: "backend", scope: "api", dependsOn: [] }, ".guild/team/demo.qa.yaml");
+    const without = buildPrompt("demo", "run-1", { name: "backend", scope: "api", dependsOn: [] });
+    expect(withPath).toBe(without); // teammate prompt never names the team file
+  });
+
   it("buildPrompt produces a teammate prompt naming the specialist + its scope", () => {
     const p = buildPrompt("demo", "run-1", { name: "backend", scope: "api", dependsOn: [] });
     expect(p).toContain("`backend`");

@@ -12,7 +12,9 @@ blockers. **No phase** — acts on the active run. Read-only **R**, writes no
 file.
 
 Canonical surface: `architecture/command-surface.md §3.2` (status row) +
-`§2` (3-daily tier). Also surfaces the active team (the v1 team-show path).
+`§2` (3-daily tier). Also surfaces the per-phase active team (resolved via
+`resolveTeamFile(root, slug, null)` — consults `.current` then legacy;
+reports "none for this phase" if absent).
 
 ## Args & local flags
 
@@ -73,4 +75,9 @@ internally via B3).
 Thin orchestrator-read entrypoint. Resolve run state by filesystem scan
 (or the optional `.guild/index.sqlite` read-through cache unless
 `--no-index`), then print furthest phase, next pending gate, blockers, and
-the active team. No `.guild/` data writes.
+the per-phase active team (resolved via `resolveTeamFile(root, slug, null)` —
+consults `.current` then legacy; reports "none for this phase" if absent).
+When the resolver returns a legacy `<slug>.yaml` (no per-phase file exists),
+surface once: *"single-file team.yaml is legacy; re-compose to adopt
+per-phase teams."* (status is read-only — surfaces the notice, never acts on
+it). No `.guild/` data writes.

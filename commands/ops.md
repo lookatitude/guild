@@ -91,6 +91,17 @@ node plugin/hooks/dist/run-trace.js start \
 # If --initiative=<id> was supplied by the user, add: --initiative=<id>
 ```
 
+Immediately after, record this command's phase token into run-state
+(T0, G-PHASE-COMPOSE; idempotent — best-effort, non-throwing, never blocks
+the lifecycle; `start` writes `current-run-id` synchronously so `phase`
+resolves the open run):
+
+```bash
+node plugin/hooks/dist/run-trace.js phase \
+  --phase=ops \
+  --cwd "$(pwd)"
+```
+
 `run-class` default (`full`). Records the run before the mandatory pre-flight
 dry-run so the complete session — runbook class selection, dry-run, and
 all safety-rail gates — is replayable from the entrypoint. `--initiative`

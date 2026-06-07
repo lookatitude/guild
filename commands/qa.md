@@ -88,6 +88,17 @@ node plugin/hooks/dist/run-trace.js start \
 # If --initiative=<id> was supplied by the user, add: --initiative=<id>
 ```
 
+Immediately after, record this command's phase token into run-state
+(T0, G-PHASE-COMPOSE; idempotent — best-effort, non-throwing, never blocks
+the lifecycle; `start` writes `current-run-id` synchronously so `phase`
+resolves the open run):
+
+```bash
+node plugin/hooks/dist/run-trace.js phase \
+  --phase=qa \
+  --cwd "$(pwd)"
+```
+
 `run-class` default (`full`). Records the run before the SignalScan so the
 complete session — class-matrix selection gate, harness execution, and
 release/blocker gate — is replayable from the entrypoint. Writes to

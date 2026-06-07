@@ -87,6 +87,17 @@ node plugin/hooks/dist/run-trace.js start \
 # If --initiative=<id> was supplied by the user, add: --initiative=<id>
 ```
 
+Immediately after, record this command's phase token into run-state
+(T0, G-PHASE-COMPOSE; idempotent — best-effort, non-throwing, never blocks
+the lifecycle; `start` writes `current-run-id` synchronously so `phase`
+resolves the open run):
+
+```bash
+node plugin/hooks/dist/run-trace.js phase \
+  --phase=build \
+  --cwd "$(pwd)"
+```
+
 `run-class` default (`full`). Records the run before any lane work so the
 complete session — context assembly, dispatch, and reviews — is replayable
 from the entrypoint. `--initiative` forwarded only when user-supplied
@@ -112,7 +123,9 @@ where `depends-on:` allows; `[lane-id]` re-runs one), invoke in order:
 `--rigor=deep` additionally runs **`guild:loop-implement`** (the L3 / L4 /
 security-review per-lane adversarial loop) around the lane's primary writer.
 
-Input gate: an approved `.guild/plan/<slug>.md` + `.guild/team/<slug>.yaml`.
+Input gate: an approved `.guild/plan/<slug>.md` + the current phase's
+`.guild/team/<slug>.<phase>.yaml` (legacy `<slug>.yaml` honored when no
+per-phase file exists).
 Output gate: handoff receipts, `assumptions.md`, `review.md`, changed files.
 Confirmation gates (from **Gates**): autonomy contract (set at plan approval)
 **A** · destructive / network ops **I always** (never relaxed by

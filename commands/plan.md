@@ -56,7 +56,8 @@ pointer).
 
 ## Output artifact
 
-`.guild/prd/<slug>.md`, `.guild/plan/<slug>.md`, `.guild/team/<slug>.yaml`.
+`.guild/prd/<slug>.md`, `.guild/plan/<slug>.md`,
+`.guild/team/<slug>.<phase>.yaml` + `.guild/team/<slug>.current` pointer.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
 
@@ -91,6 +92,17 @@ node plugin/hooks/dist/run-trace.js start \
 # If --initiative=<id> was supplied by the user, add: --initiative=<id>
 ```
 
+Immediately after, record this command's phase token into run-state
+(T0, G-PHASE-COMPOSE; idempotent — best-effort, non-throwing, never blocks
+the lifecycle; `start` writes `current-run-id` synchronously so `phase`
+resolves the open run):
+
+```bash
+node plugin/hooks/dist/run-trace.js phase \
+  --phase=plan \
+  --cwd "$(pwd)"
+```
+
 `run-class` default (`full`). Records the run before the team-approval gate
 so the complete session — team compose, plan, and all review loops — is
 replayable from the entrypoint. `--initiative` forwarded only when
@@ -102,7 +114,8 @@ Resolve `guild.phase_entry.v1` (pointer above), then drive the Planning phase
 by invoking, in order:
 
 1. **`guild:team-compose`** (`skills/meta/team-compose`) — the team-compose
-   sub-step (its own approval gate); writes `.guild/team/<slug>.yaml`.
+   sub-step (its own approval gate); writes `.guild/team/<slug>.<phase>.yaml`
+   + the `.guild/team/<slug>.current` phase pointer.
 2. **`guild:plan`** (`skills/meta/plan`) — turns the approved spec + team into
    the PRD and per-specialist lane plan with the additive per-lane autonomy
    contract; writes `.guild/prd/<slug>.md` + `.guild/plan/<slug>.md`.

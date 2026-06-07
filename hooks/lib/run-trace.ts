@@ -59,6 +59,8 @@ import {
   createRunLifecycle,
   createRealEnv,
   readRecordStatusRuns,
+  appendPhase,
+  isCanonicalPhase,
   type RunLifecycleEnv,
   type TargetKind,
 } from "../../scripts/lib/run-lifecycle.js";
@@ -305,6 +307,15 @@ export interface StartAndCloseOpts {
    * provenance.json.initiative only. Default null (one-off run).
    */
   initiative?: string | null;
+  /**
+   * T0 (G-PHASE-COMPOSE): entry phase token for a FULL run. When set to a
+   * canonical phase ({init,ideate,plan,build,qa,ops}), it seeds run.yaml's
+   * `phase:` + the first `phases_log` entry. For lightweight runs the phase is
+   * always the command token (unchanged); this field is honored on full runs only.
+   * A non-canonical token is ignored (seeded null) — validation is single-sourced
+   * to isCanonicalPhase. Default undefined → null seed (legacy behavior).
+   */
+  phase?: string | null;
 }
 
 /**
@@ -358,10 +369,15 @@ function buildStartRunOpts(
       : "default (full run)";
   const scanPolicy = runClass === "lightweight" ? "n/a (no scan)" : "default";
   const ignorePolicy = runClass === "lightweight" ? "n/a (no scan)" : "default";
+  // T0: full runs honor a passed canonical phase (seeds run.yaml phase: + the first
+  // phases_log entry); lightweight runs keep the command-token phase (unchanged).
+  // A non-canonical full-run token is ignored (null seed) — validation single-sourced.
   const phase =
     runClass === "lightweight"
       ? command.replace(/^\/guild:/, "") // e.g. "status", "stats", "wiki"
-      : null;
+      : opts.phase && isCanonicalPhase(opts.phase)
+        ? opts.phase
+        : null;
 
   return {
     command,
@@ -379,6 +395,37 @@ function buildStartRunOpts(
     phase,
     run_class: runClass,
   };
+}
+
+/**
+ * T0 (G-PHASE-COMPOSE): record the active phase for the current (or given) FULL
+ * run by appending a `phases_log` entry + rewriting run.yaml's top-level `phase:`.
+ * This is the "join an already-open run" writer — phase commands call it at intake
+ * when the run was started by an earlier command in the same session.
+ *
+ * Best-effort + non-throwing (same posture as the other run-trace writers): a
+ * missing run / non-canonical token / unreadable run.yaml simply yields null and
+ * records nothing. Validation (canonical-set) lives in appendPhase.
+ *
+ * @param root   The .guild/ owning repo root (resolveGuildRoot(cwd)).
+ * @param phase  Canonical phase token ({init,ideate,plan,build,qa,ops}).
+ * @param opts   runId override (else resolved from the current-run-id sentinel via
+ *               resolveRunIdForTrace) + an env seam for GUILD_RUN_ID (tests).
+ * @returns the runId whose phase was recorded, or null if nothing was recorded.
+ */
+export function recordPhase(
+  root: string,
+  phase: string,
+  opts: { runId?: string; env?: { GUILD_RUN_ID?: string } } = {},
+): string | null {
+  try {
+    const runId = opts.runId ?? resolveRunIdForTrace(root, opts.env ?? process.env);
+    if (!runId) return null;
+    const lifecycleEnv = createRealEnv(root, defaultResolveHost);
+    return appendPhase(lifecycleEnv, root, runId, phase) ? runId : null;
+  } catch {
+    return null; // best-effort: phase recording never breaks the lifecycle
+  }
 }
 
 /**
