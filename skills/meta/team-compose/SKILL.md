@@ -1,6 +1,6 @@
 ---
 name: guild-team-compose
-description: Match spec domains against BOTH Guild's shipping specialist roster AND the consuming repo's project-local `.guild/agents/*.md` (existing project specialists are reused, never re-created); present existing + gaps with A/B/C/D options (auto-create / skip / substitute / compose from scratch), enforce cap-6 and default 3–4 rules, assign each specialist a `default_tier` (cheap/mid/powerful) from the cost-aware role→tier table, derive an optional per-specialist `capability_scope:` (tool allow-list; absent ⇒ no scoping — additive) using the role→scope defaults table, resolve the execution backend via the agent_mode ladder (agent-team / tmux visible panes under tmux; subagent only as the no-tmux fallback), and write `.guild/team/<slug>.yaml`. TRIGGER on "propose a team", "who should work on this", "compose specialists for the spec". DO NOT TRIGGER for: writing the code (execute-plan), creating a new specialist TYPE for Guild itself (that's guild:create-specialist in P6), reviewing completed work (guild:review).
+description: Match spec domains against BOTH Guild's shipping specialist roster AND the consuming repo's project-local `.guild/agents/*.md` (existing project specialists are reused, never re-created); present existing + gaps with A/B/C/D options, enforce cap-6 and default 3–4 rules, assign each specialist a `default_tier` from its `model:` frontmatter (canonical roster ADR), derive an optional per-specialist `capability_scope:` (tool allow-list; absent ⇒ no scoping — additive) using the role→scope defaults table, resolve the execution backend via the agent_mode ladder (agent-team / tmux visible panes under tmux; subagent only as the no-tmux fallback), and write `.guild/team/<slug>.yaml`. TRIGGER on "propose a team", "who should work on this", "compose specialists for the spec". DO NOT TRIGGER for: writing the code (execute-plan), creating a new specialist TYPE for Guild itself (that's guild:create-specialist in P6), reviewing completed work (guild:review).
 when_to_use: Second step of the `/guild` lifecycle, after `guild:brainstorm` has produced `.guild/spec/<slug>.md`. Also fires when the user asks to reshape an existing team (e.g. "rework the team for this task", "swap the qa slot for security").
 type: meta
 ---
@@ -19,7 +19,7 @@ Five ordered steps (`guild-plan.md §7.1`). The gap-handling options and approva
 
 0. **Self-build check (first).** If the target repo IS the Guild plugin itself (editing `plugin/**` — skills, commands, hooks, scripts, agents, docs, manifests, tests), compose the team from the **dev-team agents under `.claude/agents/`** (`plugin-architect, skill-author, specialist-agent-writer, command-builder, hook-engineer, tooling-engineer, docs-writer, eval-engineer`), routed by changed path (see `CLAUDE.md §"Dev team"` for the path→agent table). Do **not** match against the 14 `guild:` product specialists — those build *user* products. Skip steps 1–3's product-roster matching and go to step 4 with the dev-team lanes. (Cap-6 / 3–4 default and backend choice still apply.)
 
-1. **Match.** (Non-self-build.) Match the spec's domains against the **available-specialist set** — the union of **(a)** the shipped roster (`§6.1–§6.3`: architect, researcher, backend, devops, qa, mobile, security, copywriter, technical-writer, social-media, seo, marketing, sales) **and (b)** the consuming repo's project-local specialists already minted under `.guild/agents/*.md` (the live tree only — the `.guild/agents/proposed/*` incubation tree is **never** a candidate, per `guild:create-specialist`'s incubation contract). A domain either source covers is a candidate match; a project-local specialist minted on a previous task is **reused here, never re-created**.
+1. **Match.** (Non-self-build.) Match the spec's domains against the **available-specialist set** — the union of **(a)** the shipped roster, **enumerated from `plugin/agents/*.md`** (the canonical source per `docs/knowledge/decisions/canonical-specialist-roster-groups-and-tiers.md` D4 — never a hand-maintained list; minus the augmenting non-roster types `advisor`/`developer`/`doc-writer`). As of this writing that is the **14 shipping specialists** (`§6.1–§6.3`): architect, researcher, backend, frontend, devops, qa, mobile, security, copywriter, technical-writer, social-media, seo, marketing, sales — but treat this as a derived snapshot of the files, not the authority. **And (b)** the consuming repo's project-local specialists already minted under `.guild/agents/*.md` (the live tree only — the `.guild/agents/proposed/*` incubation tree is **never** a candidate, per `guild:create-specialist`'s incubation contract). A domain either source covers is a candidate match; a project-local specialist minted on a previous task is **reused here, never re-created**.
 
 2. **Classify** every matched domain as either *existing* — covered by **either** the shipped roster **or** an already-minted `.guild/agents/*.md` project specialist (joins the team with **no creation step**) — or *gap* — covered by **neither** (gets a proposed role name + one-line description so the user sees exactly what option A would create).
 
@@ -68,7 +68,7 @@ specialists:
   - name: architect        # exact roster slug
     scope: "One-sentence bounded responsibility for THIS task."
     depends-on: []          # specialist slugs whose handoff this waits on
-    default_tier: powerful  # cheap|mid|powerful — from the §7 role→tier table (a default, NOT a pin)
+    default_tier: powerful  # cheap|mid|powerful — read from the agent model: frontmatter per the canonical roster ADR (a default, NOT a pin)
     implied-by: "multi-component"   # or omit if user-requested
     capability_scope:       # OPTIONAL — tool allow-list serialised as GUILD_CAPABILITY_SCOPE at dispatch
       - "Read"              # absent ⇒ no scoping (additive; current behaviour unchanged)
@@ -90,18 +90,21 @@ coverage_flags:
 
 ## Default tier per specialist
 
-Each composed specialist carries a **default model tier** (`cheap | mid | powerful`) — the starting cost band `guild:plan` then refines per lane and `guild:execute-plan` auto-scores at dispatch. Tiers are the host-agnostic vocabulary from the cost-aware-tiering ADR (`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §1`); the tier→model map is the closed-key `models.tiers` block (ADR §10 — bound by pointer, never re-spelled here). Assign each specialist's `default_tier` from the ADR role→tier table (`§7`):
+Each composed specialist carries a **default model tier** (`cheap | mid | powerful`). **Do not maintain a tier table here — enumerate it from source.** Canonical ADR: `docs/knowledge/decisions/canonical-specialist-roster-groups-and-tiers.md` (D4 enumeration rule, D2 default-tier table, D3 default-vs-dispatch split). The root cause of the prior drift (R-003) was three sources extrapolating disagreeing tier tables from a cost-aware ADR §7 that only tabulated 5 augmenting types — so this skill no longer keeps its own.
 
-| Role group | `default_tier` | Why (ADR §7) |
-|---|---|---|
-| architect | `powerful` | Shape systems, compare options, author ADRs — high-judgment, low frequency. |
-| backend, frontend, mobile, devops (build lanes) | `mid` | Implement a lane (draft/reason/build); escalate to advisor when above tier. |
-| researcher | `cheap`→`mid` | Reads/summarizes cheap; synthesizes mid. Pre-decision only. |
-| technical-writer, copywriter, doc-writer | `cheap`→`mid` | Cheap for mechanical edits, mid for synthesis from a settled decision. |
-| security, qa | `mid` | Default `mid`; correctness/security-sensitive lanes auto-score upward at dispatch (ADR §2 rubric) or pin `powerful` in the plan. |
-| seo, social-media, marketing, sales | `cheap`→`mid` | Template-guided generation cheap; positioning/strategy mid. |
+- **Default tier = the specialist's `model:` frontmatter**, mapped through the cost-aware-tiering §1 ladder (`opus`=powerful, `sonnet`=mid, `haiku`=cheap). Read `plugin/agents/<role>.md` (or the project-local `.guild/agents/<role>.md`) `model:` line **at compose time** — never a hand-maintained list. This structurally prevents the tier drift from recurring.
+- The tier→model host map is the closed-key `models.tiers` block (cost-aware ADR §10 — bound by pointer, never re-spelled here).
 
-A `cheap`→`mid` entry records the **lower bound** as `default_tier`; the work-type signal in the lane auto-scores the actual dispatch tier (ADR §2). The tier here is a **default**, not a pin — the §2 auto-score and the `--model-tier` / per-lane precedence ladder (ADR §10) decide the final dispatch tier. Self-build dev-team lanes inherit the same table by role analogy (`plugin-architect`→`powerful`, code/skill/hook/tooling lanes→`mid`, `docs-writer`→`cheap`→`mid`).
+Canonical default tiers for the 14 shipping specialists (the ADR D2 table — a **derived view** of the frontmatter; if it ever disagrees with the files, the files win):
+
+| Default tier | Specialists |
+|---|---|
+| `powerful` | architect, security |
+| `mid` | researcher, backend, frontend, mobile, devops, qa, copywriter, technical-writer, social-media, seo, marketing, sales |
+
+(Augmenting non-roster types, per cost-aware ADR §7: `advisor`=powerful, `developer`=mid, `doc-writer`=mid — they augment, never count toward the 14.)
+
+**Default tier ≠ per-lane dispatch tier (ADR D3).** The default above is the single tier the specialist runs at when dispatched as that type — not a pin. The actual dispatch tier is the cost-aware §2 auto-score computed **per lane**: it may lower a simple lane below its default (a pure read/summarize `researcher` lane, a mechanical `doc-writer` edit, template-guided content/commercial generation → `cheap`) or escalate a hard one (a security-critical lane → `powerful` via the §3 advisor). `--model-tier` / per-lane plan override / the §2 score decide the final dispatch tier (ADR §10 precedence). The old `cheap→mid` "default" notation is **retired** — a cheap floor for mechanical lanes is a property of the §2 scorer, not a dual-valued default. Self-build dev-team lanes inherit by the same frontmatter read (`plugin-architect`→powerful; code/skill/hook/tooling lanes→mid; `docs-writer`→mid, with the §2 cheap floor for mechanical edits).
 
 ## Capability scope defaults
 
