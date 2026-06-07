@@ -24,6 +24,7 @@ import { spawnSync } from "child_process";
 import {
   emitRunStarted,
   emitRunClosed,
+  recordPhase,
   recordStatusLightweight,
   startAndCloseRun,
   startRunOnly,
@@ -525,6 +526,125 @@ describe("run-trace lib (Lane B3)", () => {
     it("unknown sub-command exits 1", () => {
       const { exitCode } = runCli(["bogus"]);
       expect(exitCode).toBe(1);
+    });
+  });
+
+  // ── recordPhase (T0 — join-path phase writer) ───────────────────────────────
+  //
+  // F5 coverage: `recordPhase` in hooks/lib/run-trace.ts was uncovered.
+  // The moduleNameMapper in hooks/package.json already handles the
+  // ../../scripts/lib/run-lifecycle.js transitive import (^(\\.{1,2}/.*)\\.js$ → $1),
+  // so no resolver fix is needed — these tests exercise the function directly
+  // under ts-jest in the hooks jest project.
+
+  describe("recordPhase (T0 — join-path phase writer)", () => {
+    it("returns null when no run-id can be resolved (no sentinel, no env, no opts.runId)", () => {
+      // No GUILD_RUN_ID in env, no sentinel files in root → resolveRunIdForTrace
+      // returns null → recordPhase short-circuits and returns null.
+      const result = recordPhase(root, "plan", { env: {} });
+      expect(result).toBeNull();
+    });
+
+    it("is best-effort — returns null (does NOT throw) when root is completely bogus", () => {
+      // A non-existent root path — appendPhase can't read run.yaml → null, no throw.
+      expect(() => {
+        const r = recordPhase("/nonexistent-guild-root-xxxxxx", "build", {
+          runId: "run-bogus-001",
+        });
+        expect(r).toBeNull();
+      }).not.toThrow();
+    });
+
+    it("returns null for a non-canonical phase token even when the run exists and runId is supplied", () => {
+      // Start a real run so run.yaml exists. appendPhase validates the token
+      // and rejects non-canonical ones (returns false) → recordPhase → null.
+      const runId = startedRun(root, "full");
+      const result = recordPhase(root, "bogus-phase", { runId });
+      expect(result).toBeNull();
+      // run.yaml must NOT have the bogus token written.
+      const runYaml = fs.readFileSync(
+        path.join(root, ".guild", "runs", runId, "run.yaml"),
+        "utf8",
+      );
+      expect(runYaml).not.toMatch(/bogus-phase/);
+    });
+
+    it("records a canonical phase via opts.runId and returns the runId", () => {
+      const runId = startedRun(root, "full");
+      const result = recordPhase(root, "build", { runId });
+      // Returns the runId on success.
+      expect(result).toBe(runId);
+      // run.yaml carries the updated `phase:` scalar and a phases_log entry.
+      const runYaml = fs.readFileSync(
+        path.join(root, ".guild", "runs", runId, "run.yaml"),
+        "utf8",
+      );
+      expect(runYaml).toMatch(/^phase: build$/m);
+      expect(runYaml).toMatch(/phases_log:/);
+      expect(runYaml).toMatch(/phase: build/);
+    });
+
+    it("all six canonical phase tokens are accepted (init, ideate, plan, build, qa, ops)", () => {
+      // One run per canonical phase — each append should succeed.
+      for (const phase of ["init", "ideate", "plan", "build", "qa", "ops"]) {
+        const runId = startedRun(root, "full");
+        const result = recordPhase(root, phase, { runId });
+        expect(result).toBe(runId);
+        const runYaml = fs.readFileSync(
+          path.join(root, ".guild", "runs", runId, "run.yaml"),
+          "utf8",
+        );
+        expect(runYaml).toMatch(new RegExp(`^phase: ${phase}$`, "m"));
+      }
+    });
+
+    it("resolves runId from GUILD_RUN_ID env (opts.env seam) when no opts.runId supplied", () => {
+      const runId = startedRun(root, "full");
+      // Supply GUILD_RUN_ID via the opts.env seam — this exercises the
+      // resolveRunIdForTrace path inside recordPhase.
+      const result = recordPhase(root, "qa", { env: { GUILD_RUN_ID: runId } });
+      expect(result).toBe(runId);
+      const runYaml = fs.readFileSync(
+        path.join(root, ".guild", "runs", runId, "run.yaml"),
+        "utf8",
+      );
+      expect(runYaml).toMatch(/^phase: qa$/m);
+    });
+
+    it("resolves runId from .guild/runs/current-run-id legacy sentinel when no opts override", () => {
+      const runId = startedRun(root, "full");
+      // Write the legacy sentinel (written by scripts/new-run-id.ts).
+      const sentinelDir = path.join(root, ".guild", "runs");
+      fs.mkdirSync(sentinelDir, { recursive: true });
+      fs.writeFileSync(path.join(sentinelDir, "current-run-id"), runId, "utf8");
+
+      // No GUILD_RUN_ID in env, no opts.runId — must fall through to sentinel.
+      const result = recordPhase(root, "ops", { env: {} });
+      expect(result).toBe(runId);
+      const runYaml = fs.readFileSync(
+        path.join(root, ".guild", "runs", runId, "run.yaml"),
+        "utf8",
+      );
+      expect(runYaml).toMatch(/^phase: ops$/m);
+    });
+
+    it("resolves runId from .guild/current-run-id B2 sentinel (fallback after legacy)", () => {
+      const runId = startedRun(root, "full");
+      // Write ONLY the B2 sentinel (written by scripts/lib/run-lifecycle.ts startRun).
+      const guildDir = path.join(root, ".guild");
+      fs.mkdirSync(guildDir, { recursive: true });
+      fs.writeFileSync(path.join(guildDir, "current-run-id"), runId, "utf8");
+      // Make sure the legacy location does NOT exist so the B2 path is exercised.
+      const legacyPath = path.join(guildDir, "runs", "current-run-id");
+      if (fs.existsSync(legacyPath)) fs.unlinkSync(legacyPath);
+
+      const result = recordPhase(root, "ideate", { env: {} });
+      expect(result).toBe(runId);
+      const runYaml = fs.readFileSync(
+        path.join(root, ".guild", "runs", runId, "run.yaml"),
+        "utf8",
+      );
+      expect(runYaml).toMatch(/^phase: ideate$/m);
     });
   });
 });
