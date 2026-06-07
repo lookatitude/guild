@@ -2,15 +2,25 @@
 type: concept
 owner: architect
 confidence: high
-source_refs: ["plugin/guild-plan.md §13.1"]
+source_refs: ["docs/knowledge/MIGRATION.md"]
 created_at: 2026-05-17
-updated_at: 2026-05-26
+updated_at: 2026-06-07
 expires_at: null
 supersedes: "plugin/guild-plan.md §13.1"
 sensitivity: public
 applies_to: [plugin]
 related: [command-surface, v2-index, phase-entrypoints]
 ---
+
+<!-- GENERATED FILE — DO NOT EDIT BY HAND.
+     Source: docs/knowledge/MIGRATION.md (canonical).
+     Regenerate from the umbrella repo root: npx tsx plugin/scripts/sync-migration.ts   (drift-check: --check).
+     Only link-path prefixes differ from canonical (rewritten for plugin/). -->
+
+> **Generated copy — do not edit by hand.** Canonical source:
+> [`docs/knowledge/MIGRATION.md`](../docs/knowledge/MIGRATION.md). This package
+> copy is regenerated from it (only link paths are rewritten). Edit the
+> canonical, then regenerate.
 
 # Guild v1 → v2 Migration
 
@@ -20,10 +30,13 @@ related: [command-surface, v2-index, phase-entrypoints]
 > `plugin/`. The canonical, authoritative copy lives **here at
 > `docs/knowledge/MIGRATION.md`**; all cross-reference links in this file are
 > relative to this location (`architecture/…`, `lifecycle/…`) and resolve
-> from it. When v2 ships, any additional discoverable copies (e.g. a repo-root
-> or `plugin/docs/` copy) are *generated from this file with their links
-> rewritten for that location* — this file is the source of truth and its
-> own links are correct as-is.
+> from it. **This is the single source of truth — edit only this file.** The
+> two discoverable copies are *generated* from it and carry a "do not edit by
+> hand" banner: `plugin/MIGRATION.md` (the package copy — a full copy with
+> links rewritten to `../docs/knowledge/…`) and `./MIGRATION.md` (a repo-root
+> pointer stub whose 30-second digest is extracted from this file's §1). A
+> drift `--check` mode re-derives both and fails on any divergence, so they
+> cannot silently fall out of sync.
 
 This is the definitive v2 migration guide: it documents every removed/renamed
 command, the config and flag changes, and the new-in-v2 surfaces a v1 user
@@ -99,7 +112,7 @@ functional shim.
   v2 equivalent:  /guild:wiki <ingest|query|lint>
 
 Guild v2 keeps the `:` namespace; it drops the redundant `guild` prefix — every command is /guild:<verb>.
-Full mapping: MIGRATION.md  (repo root or plugin docs/).
+Full mapping: MIGRATION.md  (repo root or plugin/MIGRATION.md).
 ```
 
 Substitute the verb for each of the other generically-renamed commands:
@@ -407,8 +420,8 @@ lead, `guild.handoff.v2` schema, §task§agent lifecycle).
   `derived_from_template:` stamp) rather than anywhere under the plugin
   install dir; `create-specialist`, the factory, and `evolve-skill` write
   there. If a prior workflow wrote instances into plugin state, that is a v2
-  defect and those instances should be relocated under `.guild/`. **`/guild
-  audit` gains a static boundary-check section** that flags any Guild-owned
+  defect and those instances should be relocated under `.guild/`.
+  **`/guild:audit` gains a static boundary-check section** that flags any Guild-owned
   file written outside `.guild/`. Nothing else changes for a standard user —
   the default zero-config layout already satisfies the boundary.
 - **Optional `.guild/index.sqlite` read-through cache.** An optional,
