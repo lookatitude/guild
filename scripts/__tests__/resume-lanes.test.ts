@@ -55,6 +55,20 @@ function writeResumeCheckpoint(
   fs.writeFileSync(path.join(dir, "resume.json"), JSON.stringify(body, null, 2));
 }
 
+/** Write a `.guild/plan/<slug>.md` with the given owner/task-id lanes (R-016 r4). */
+function writePlan(
+  repo: string,
+  slug: string,
+  lanes: Array<{ owner: string; taskId: string }>,
+): void {
+  const dir = path.join(repo, ".guild", "plan");
+  fs.mkdirSync(dir, { recursive: true });
+  const blocks = lanes
+    .map((l) => `## Lane: ${l.owner}\n- task-id: ${l.taskId}\n- owner: ${l.owner}\n- scope: x.\n`)
+    .join("\n");
+  fs.writeFileSync(path.join(dir, `${slug}.md`), `# Plan: test\n\n${blocks}`);
+}
+
 /** Seed run-state.json so the CLI can join `tier` for a lane. */
 function writeRunStateWithTier(runDir: string, lanes: Record<string, { tier: string }>): void {
   const laneStates: Record<string, unknown> = {};
@@ -252,5 +266,63 @@ describe("resume-lanes CLI — human-readable output", () => {
     expect(r.stdout).toContain("backend-api");
     expect(r.stdout).toContain("powerful");
     expect(r.stdout).toContain("3");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. R-016 r4 — reader-side lane_id validation against plan task-ids (MAJOR A+B)
+// ---------------------------------------------------------------------------
+
+describe("resume-lanes CLI — lane_id validation against the plan (R-016 r4)", () => {
+  it("OMITS an orphan checkpoint whose lane_id is not a plan task-id", () => {
+    const { repo, runDir } = makeRepo({ resumeEnabled: true });
+    writePlan(repo, "myslug", [
+      { owner: "architect", taskId: "T1-architect" },
+      { owner: "backend", taskId: "T2-backend" },
+    ]);
+    // Valid (a real plan task-id) + orphan (a name-keyed/fallback checkpoint).
+    writeResumeCheckpoint(runDir, "T2-backend", validCheckpoint("T2-backend", 3));
+    writeResumeCheckpoint(runDir, "backend", validCheckpoint("backend", 2)); // orphan name-key
+
+    const r = runCli([runDir, "--json", "--cwd", repo, "--slug", "myslug"]);
+    expect(r.status).toBe(0);
+    const lanes = JSON.parse(r.stdout).map((c: { lane_id: string }) => c.lane_id);
+    expect(lanes).toContain("T2-backend"); // valid plan task-id → offered
+    expect(lanes).not.toContain("backend"); // orphan name-key → omitted
+  });
+
+  it("offers ONLY checkpoints whose lane_id is a real plan task-id", () => {
+    const { repo, runDir } = makeRepo({ resumeEnabled: true });
+    writePlan(repo, "myslug", [{ owner: "backend", taskId: "T2-backend" }]);
+    writeResumeCheckpoint(runDir, "T2-backend", validCheckpoint("T2-backend"));
+    writeResumeCheckpoint(runDir, "T9-ghost", validCheckpoint("T9-ghost")); // not in plan
+    writeResumeCheckpoint(runDir, "frontend", validCheckpoint("frontend")); // name-key orphan
+
+    const r = runCli([runDir, "--json", "--cwd", repo, "--slug", "myslug"]);
+    const lanes = JSON.parse(r.stdout).map((c: { lane_id: string }) => c.lane_id);
+    expect(lanes).toEqual(["T2-backend"]);
+  });
+
+  it("resolves the slug from run-state plan_slug when --slug is omitted", () => {
+    const { repo, runDir } = makeRepo({ resumeEnabled: true });
+    writePlan(repo, "p", [{ owner: "backend", taskId: "T2-backend" }]); // run-state plan_slug is "p"
+    writeRunStateWithTier(runDir, { "T2-backend": { tier: "mid" } }); // plan_slug: "p"
+    writeResumeCheckpoint(runDir, "T2-backend", validCheckpoint("T2-backend"));
+    writeResumeCheckpoint(runDir, "backend", validCheckpoint("backend")); // orphan
+
+    const r = runCli([runDir, "--json", "--cwd", repo]); // no --slug → use run-state plan_slug
+    const lanes = JSON.parse(r.stdout).map((c: { lane_id: string }) => c.lane_id);
+    expect(lanes).toContain("T2-backend");
+    expect(lanes).not.toContain("backend");
+  });
+
+  it("skips validation (emits all) when the plan is genuinely unresolvable", () => {
+    const { repo, runDir } = makeRepo({ resumeEnabled: true });
+    // No plan file, no --slug, run-state plan_slug points nowhere → cannot validate.
+    writeResumeCheckpoint(runDir, "some-lane", validCheckpoint("some-lane"));
+    const r = runCli([runDir, "--json", "--cwd", repo]);
+    const lanes = JSON.parse(r.stdout).map((c: { lane_id: string }) => c.lane_id);
+    // Degraded: can't validate → don't drop valid lanes (write-side join is the primary defense).
+    expect(lanes).toContain("some-lane");
   });
 });

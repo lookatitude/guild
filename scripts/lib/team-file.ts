@@ -255,29 +255,64 @@ export function readPlanOwnerTaskIds(guildRoot: string, slug: string): Map<strin
   try {
     raw = fs.readFileSync(path.join(guildRoot, ".guild", "plan", `${slug}.md`), "utf8");
   } catch {
-    return map; // no plan → empty map (caller falls back to the specialist name)
+    return map; // no plan → empty map (reader-side validation handles this)
   }
-  let pendingTaskId: string | null = null;
-  for (const line of raw.split("\n")) {
-    if (/^##\s+Lane:/.test(line)) {
-      pendingTaskId = null; // new lane block — reset
+
+  // BLOCK-SCOPED parse (hardened, MINOR-C): partition the plan at `## Lane:` headings
+  // (tolerating leading indentation), then within EACH block take the FIRST `- task-id:`
+  // and the FIRST `- owner:` regardless of their order. Block-scoping prevents
+  // cross-block mis-pairing; first-of-each prevents a stray later `- owner:`/`- task-id:`
+  // in the same block from grabbing the wrong partner. A block missing either field is
+  // skipped (can't form a pair). Per guild:plan's contract: task-id is unique per lane,
+  // owner is the exact specialist slug, one owner per lane.
+  const lines = raw.split("\n");
+  const blocks: string[][] = [];
+  let current: string[] | null = null;
+  for (const line of lines) {
+    if (/^\s*##\s+Lane:/.test(line)) {
+      current = [];
+      blocks.push(current);
       continue;
     }
-    const t = line.match(/^\s*-\s*task-id:\s*(\S+)/);
-    if (t) {
-      pendingTaskId = t[1];
-      continue;
+    if (current) current.push(line);
+  }
+
+  for (const block of blocks) {
+    let taskId: string | null = null;
+    let owner: string | null = null;
+    for (const line of block) {
+      if (taskId === null) {
+        const m = line.match(/^\s*-\s*task-id:\s*(\S+)/);
+        if (m) { taskId = m[1]; continue; }
+      }
+      if (owner === null) {
+        const m = line.match(/^\s*-\s*owner:\s*(\S+)/);
+        if (m) { owner = m[1]; continue; }
+      }
+      if (taskId !== null && owner !== null) break; // both found — done with this block
     }
-    const o = line.match(/^\s*-\s*owner:\s*(\S+)/);
-    if (o && pendingTaskId) {
-      const owner = o[1];
+    if (taskId && owner) {
       const arr = map.get(owner) ?? [];
-      arr.push(pendingTaskId);
+      arr.push(taskId);
       map.set(owner, arr);
-      pendingTaskId = null;
     }
   }
   return map;
+}
+
+/**
+ * The set of all task-ids declared in `.guild/plan/<slug>.md` — the authoritative
+ * lane-key universe. Used by resume-lanes.ts to validate that a checkpoint's
+ * `lane_id` is a REAL plan lane before offering it as resumable (orphan / fallback /
+ * name-keyed checkpoints are not in this set → not auto-resumable). Empty when the
+ * plan is absent/unreadable (caller decides how to treat "cannot validate").
+ */
+export function readPlanTaskIdSet(guildRoot: string, slug: string): Set<string> {
+  const ids = new Set<string>();
+  for (const taskIds of readPlanOwnerTaskIds(guildRoot, slug).values()) {
+    for (const id of taskIds) ids.add(id);
+  }
+  return ids;
 }
 
 /**

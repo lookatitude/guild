@@ -28,6 +28,7 @@ import {
   readCurrentPhasePointer,
   writeCurrentPhasePointer,
   readPlanOwnerTaskIds,
+  readPlanTaskIdSet,
   resolveDeadLaneKeys,
   CANONICAL_PHASES,
 } from "../lib/team-file";
@@ -402,5 +403,119 @@ describe("R-016 SSH lane-key write↔read agreement", () => {
     expect(sshKeys).toEqual(planTaskIdsForBackend);
     // And it is NOT the bare specialist name (the old, broken key).
     expect(sshKeys).not.toContain("backend");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. R-016 r4 — parser hardening (MINOR-C) + readPlanTaskIdSet
+// ---------------------------------------------------------------------------
+
+describe("readPlanOwnerTaskIds — hardened parsing (R-016 r4 MINOR-C)", () => {
+  /** Write a raw plan body verbatim (to exercise format variations). */
+  function writeRawPlan(root: string, slug: string, body: string): void {
+    const dir = path.join(root, ".guild", "plan");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${slug}.md`), body);
+  }
+
+  it("pairs correctly when owner appears BEFORE task-id within a block", () => {
+    const root = makeRoot();
+    writeRawPlan(
+      root,
+      "demo",
+      `# Plan\n## Lane: backend\n- owner: backend\n- task-id: T2-backend\n- scope: x\n`,
+    );
+    expect(readPlanOwnerTaskIds(root, "demo").get("backend")).toEqual(["T2-backend"]);
+  });
+
+  it("does NOT mis-pair across blocks (each block keeps its own task-id/owner)", () => {
+    const root = makeRoot();
+    writeRawPlan(
+      root,
+      "demo",
+      `# Plan
+## Lane: architect
+- task-id: T1-architect
+- owner: architect
+## Lane: backend
+- task-id: T2-backend
+- owner: backend
+`,
+    );
+    const m = readPlanOwnerTaskIds(root, "demo");
+    expect(m.get("architect")).toEqual(["T1-architect"]);
+    expect(m.get("backend")).toEqual(["T2-backend"]);
+  });
+
+  it("takes only the FIRST task-id/owner per block (ignores stray duplicates)", () => {
+    const root = makeRoot();
+    writeRawPlan(
+      root,
+      "demo",
+      `# Plan
+## Lane: backend
+- task-id: T2-backend
+- owner: backend
+- note: a stray "- owner: qa" mention should NOT re-pair
+`,
+    );
+    const m = readPlanOwnerTaskIds(root, "demo");
+    expect(m.get("backend")).toEqual(["T2-backend"]);
+    expect(m.has("qa")).toBe(false);
+  });
+
+  it("tolerates indented ## Lane: headings", () => {
+    const root = makeRoot();
+    writeRawPlan(
+      root,
+      "demo",
+      `# Plan\n  ## Lane: backend\n  - task-id: T2-backend\n  - owner: backend\n`,
+    );
+    expect(readPlanOwnerTaskIds(root, "demo").get("backend")).toEqual(["T2-backend"]);
+  });
+
+  it("skips a block missing either field (no false pair)", () => {
+    const root = makeRoot();
+    writeRawPlan(
+      root,
+      "demo",
+      `# Plan
+## Lane: backend
+- task-id: T2-backend
+## Lane: qa
+- owner: qa
+`,
+    );
+    const m = readPlanOwnerTaskIds(root, "demo");
+    // backend has task-id but no owner → no pair; qa has owner but no task-id → no pair.
+    expect(m.size).toBe(0);
+  });
+});
+
+describe("readPlanTaskIdSet (R-016 r4 reader-validation authority)", () => {
+  function writePlanLanes(root: string, slug: string, lanes: Array<{ owner: string; taskId: string }>): void {
+    const dir = path.join(root, ".guild", "plan");
+    fs.mkdirSync(dir, { recursive: true });
+    const blocks = lanes
+      .map((l) => `## Lane: ${l.owner}\n- task-id: ${l.taskId}\n- owner: ${l.owner}\n`)
+      .join("\n");
+    fs.writeFileSync(path.join(dir, `${slug}.md`), `# Plan\n\n${blocks}`);
+  }
+
+  it("returns the full set of plan task-ids", () => {
+    const root = makeRoot();
+    writePlanLanes(root, "demo", [
+      { owner: "architect", taskId: "T1-architect" },
+      { owner: "backend", taskId: "T2-backend" },
+    ]);
+    const set = readPlanTaskIdSet(root, "demo");
+    expect(set.has("T1-architect")).toBe(true);
+    expect(set.has("T2-backend")).toBe(true);
+    expect(set.has("backend")).toBe(false); // owner names are NOT task-ids
+  });
+
+  it("returns an empty set when the plan is absent", () => {
+    const root = makeRoot();
+    expect(readPlanTaskIdSet(root, "nope").size).toBe(0);
   });
 });
