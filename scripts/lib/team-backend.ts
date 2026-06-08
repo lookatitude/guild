@@ -145,7 +145,10 @@ export interface ParsedTmuxCommand {
   display: string;
 }
 
-export type TeamBackendKind = "tmux" | "in-process" | "remote";
+// TE-08/ARCH-5: extend union with the serial floor (Rung 4 of the D5 substrate
+// ladder). "serial" is always available — it is the universal floor that
+// guarantees dispatch never hard-fails for lack of a backend.
+export type TeamBackendKind = "tmux" | "in-process" | "remote" | "serial";
 
 /**
  * Backend-agnostic launch request. `mode` / `targetName` are tmux topology
@@ -229,6 +232,27 @@ export interface TeamLaunchResult {
    * — pre-existing tmux/remote results that omit it stay valid.
    */
   dispatchPlan?: GuildDispatchDescriptor[];
+  /**
+   * TE-08 (ARCH-5 Rung 4): serial-floor parallelism cap. When present and `1`,
+   * guild:execute-plan MUST issue Agent() calls strictly sequentially (await each
+   * before the next), ignoring depends-on parallelism. Absent ⇒ default parallel
+   * behavior (today's in-process and tmux paths). Set only by SerialBackend.
+   */
+  parallelism?: 1;
+  /**
+   * TE-08: substrate-degradation marker. Written when the serial floor (Rung 4)
+   * is selected instead of a higher rung. Execute-plan surfaces this to the user
+   * (like the launcher surfaces degradedRoutes for host routing). Distinct from
+   * the host router's `receipt.host.{degraded,independence}` marker (which tracks
+   * CROSS-HOST routing degradation, not substrate degradation).
+   */
+  substrateDegradation?: {
+    substrate: "serial";
+    /** The rung that was requested or auto-resolved before falling to Rung 4. */
+    degraded_from: string;
+    /** Human-readable reason (no tmux / no independent-agents / pin on incapable host). */
+    reason: string;
+  };
 }
 
 /**
@@ -744,6 +768,89 @@ export class InProcessTeamBackend implements TeamBackend {
           `result.dispatchPlan (team \`${req.slug}\`, run-id \`${req.runId}\`).`,
       ],
       dispatchPlan,
+    };
+  }
+}
+
+// ── SerialBackend — Rung 4, the universal serial floor (TE-08 / ARCH-5) ──────
+//
+// The 4th and final rung of the D5 substrate ladder. Extracted from
+// InProcessTeamBackend's always-available fallback into a named, observable
+// class so the floor is (a) named in code, not implicit; (b) produces an
+// on-disk substrate-degradation marker when selected; (c) serializes dispatch
+// (parallelism=1) — the ONLY behavioral difference from InProcessTeamBackend.
+//
+// REGRESSION INVARIANT: SerialBackend.launch() returns a dispatchPlan that is
+// BYTE-IDENTICAL to InProcessTeamBackend.launch() for the same request
+// (same composeInProcessDispatch call, same plannedCommands format). Only
+// the kind, parallelism=1, and substrateDegradation fields differ (additive).
+// A team that runs on the floor must dispatch identically — only concurrency
+// is lost. Never a silent skip of a phase/lane.
+
+/**
+ * TE-08/ARCH-5 — the serial floor (Rung 4).
+ *
+ * `isAvailable()` is unconditionally `true` — the entire point of Rung 4
+ * (docs/v2/08-dispatch-execution.md L174: "there is always a satisfiable
+ * substrate, so dispatch never hard-fails"). Never throws.
+ *
+ * The dispatchPlan is byte-identical to InProcessTeamBackend's — same
+ * composeInProcessDispatch() call. The ONLY behavioral difference is:
+ *  - `parallelism: 1` (execute-plan must issue Agent() calls sequentially)
+ *  - `substrateDegradation` (observable marker for the degraded substrate)
+ *
+ * D5 selection: the launcher selects SerialBackend when Rungs 1-3 are all
+ * unavailable (no tmux, no independent-agents, no SSH/remote target).
+ */
+export class SerialBackend implements TeamBackend {
+  readonly kind = "serial" as const;
+
+  /** Unconditionally true — every host can run ≥1 agent serially. */
+  isAvailable(): boolean {
+    return true;
+  }
+
+  /**
+   * Compose the declarative serial dispatch plan. The plan is byte-identical
+   * to InProcessTeamBackend (same composeInProcessDispatch call) — only the
+   * result fields parallelism and substrateDegradation differ.
+   *
+   * Never throws (the floor must not hard-fail — surface-and-degrade only).
+   */
+  launch(req: TeamLaunchRequest, opts?: { degraded_from?: string; reason?: string }): TeamLaunchResult {
+    const dispatchPlan = composeInProcessDispatch(req);
+    const plannedCommands = dispatchPlan.map(
+      (d) =>
+        `Agent({ subagent_type: ${shellQuote(d.subagentType)}, ` +
+        `model: ${d.model ?? "<auto-scored at dispatch>"}, ` +
+        `description: ${shellQuote(`${d.name} lane`)} })`
+    );
+    const head = req.dryRun
+      ? `dry-run: serial-floor backend — declarative plan only (parallelism=1, Rung 4).`
+      : `serial: ${dispatchPlan.length} specialist(s) planned for sequential Agent-tool ` +
+        `dispatch (Rung 4 / substrate degradation — parallelism=1).`;
+    return {
+      kind: this.kind,
+      ok: true,
+      plannedCommands,
+      orchestratorPaneId: null,
+      teammatePaneIds: {},
+      notes: [
+        `${head} guild:execute-plan issues Agent() calls sequentially ` +
+          `(team \`${req.slug}\`, run-id \`${req.runId}\`). ` +
+          `dispatch_rung=4 (GUILD_DISPATCH_RUNG=4 per HK-07 vocabulary).`,
+      ],
+      dispatchPlan,
+      // Rung 4: execute-plan MUST serialize (parallelism cap).
+      parallelism: 1,
+      // Substrate-degradation marker — observable by execute-plan / diagnostics.
+      substrateDegradation: {
+        substrate: "serial",
+        degraded_from: opts?.degraded_from ?? "auto",
+        reason:
+          opts?.reason ??
+          "no tmux / no independent-agents capability / serial floor selected (Rung 4)",
+      },
     };
   }
 }

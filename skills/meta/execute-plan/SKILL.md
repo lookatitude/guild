@@ -105,11 +105,17 @@ Implements the cost-aware-tiering ADR (`docs/knowledge/decisions/cost-aware-tier
 3. **Apply the precedence ladder (normative):** `--model-tier=` CLI escape hatch > per-lane plan `tier:` pin > `settings.json` `models.tiers`/`models.thresholds` > built-in default. A `--model-tier` value pins **every** lane in the run; a per-lane plan `tier:` pin overrides the auto-score for that one lane.
 4. **Resolve tier → model** through the host-agnostic `models.tiers` map (ADR §1/§10 — bound by pointer; within Claude `cheap=haiku`, `mid=sonnet`, `powerful=opus`). Within Claude this binds directly to the Agent tool `model:` param at dispatch.
 5. **Print + record.** Surface the dispatch line (`lane <task-id> · score N · tier <tier> · model <model>`) and write the score + resolved tier into the run record under `.guild/runs/<run-id>/` (never silent — spec Risk). When `models.enabled: false`, skip scoring and dispatch at the backend default.
-6. **Tier flow to the team backend — v2.0 routes at `default_tier`; re-score writeback is deferred to W2-A3.** Two backend paths, two tier sources in v2.0:
-   - **Model-driven path (subagent / in-process):** the dispatch-time **re-scored** tier (step 1) is applied **directly** via the Agent `model:` param at dispatch — the per-lane score is honored, no `team.yaml` round-trip needed.
-   - **Team-backend path (tmux panes):** panes route at the roster **`default_tier`** — the launcher reads each specialist's `tier ?? default_tier` (tooling's **ARCH-6 Part 1**) and threads it into `planTeamRouting`. In v2.0 `team.yaml` carries no per-lane re-scored `tier:`, so `default_tier` (the roster tier) is what flows. This is **sensible, not a regression** — Part 1 closed the prior `mid`-collapse drift.
+6. **Persist the re-scored tier into `team.yaml` (ARCH-6 Part 2 / W2-A3).** After auto-scoring a lane, write the scored tier back into the resolved per-phase `team.yaml`'s matching specialist entry via the **concurrent-safe writeback helper** — so the team-backend launcher's `tier ?? default_tier` (tooling's ARCH-6 Part 1) consumes the **re-scored** tier and tmux panes route at the per-lane score, not just the roster `default_tier`:
 
-   Persisting the dispatch-time **re-scored** `tier:` back into `team.yaml` so team panes route at the per-lane *score* (rather than `default_tier`) is **deferred to Wave-2 (W2-A3)**: it needs a **concurrent-safe `team.yaml` writeback helper** (multiple lanes resolving in parallel must not clobber the generated team-shape artifact), not an inline hot-path hand-edit. Until W2-A3 lands, do **not** mutate `team.yaml` here — the model-driven path already honors the re-score, and team panes correctly route at `default_tier`.
+   ```ts
+   import { writeBackScoredTier } from "../scripts/lib/write-back-scored-tier";
+   const result = writeBackScoredTier(resolvedTeamYamlPath, lane.owner, scoredTier);
+   if (!result.ok) console.warn(result.message);  // non-fatal — degrades to default_tier, observably
+   ```
+
+   The helper is **lock-based** (`O_EXCL` lock on `<team.yaml>.scoring.lock`, atomic temp+rename, idempotent, **never throws**, releases the lock even on error), so parallel lanes completing at the same instant cannot clobber the generated team-shape artifact — this is why a raw inline hand-edit was wrong and this helper is right. `result.ok` is the success check; on `false`, surface `result.message` as a warning — a writeback failure is **non-fatal**: the lane still dispatches and the team backend simply routes that specialist at `default_tier` (observable degradation, never silent, never a hard stop).
+
+   The two backend paths now both honor the score: the **model-driven path** (subagent / `agent` in-process) applies the re-scored tier directly via the Agent `model:` param at dispatch; the **team-backend path** (tmux panes) reads the just-written `tier:` from `team.yaml`. `resolvedTeamYamlPath` is the path resolved via `resolveTeamFile` (the per-phase file). Skip the writeback when `models.enabled: false` (no scoring ran).
 
 Config keys (`models.enabled`, `models.tiers`, `models.scoreWeights`, `models.thresholds`, …) are the closed-key `settings.json` `models:` block (ADR §10 — bound by pointer, never re-spelled).
 

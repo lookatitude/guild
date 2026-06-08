@@ -25,7 +25,9 @@ import {
   ensureKlIndex,
   ensureRunProvenanceIndex,
   ensureWikiFtsIndex,
+  ensureFederationWikiCache,
   type IndexBlock,
+  type FederationWikiHit,
 } from "../lib/index-cache";
 
 // ── Minimal node:sqlite stubs for verification ────────────────────────────
@@ -155,7 +157,7 @@ function track<T extends string>(dir: T): T {
 // ── 1. runMigrations ──────────────────────────────────────────────────────
 
 describe("runMigrations", () => {
-  test("creates schema v1 tables and sets PRAGMA user_version = 1", () => {
+  test("creates all schema tables and sets PRAGMA user_version = CURRENT_SCHEMA_VERSION", () => {
     const dir = track(mkTmpDir());
     const dbPath = path.join(dir, "index.sqlite");
 
@@ -168,10 +170,14 @@ describe("runMigrations", () => {
     const db = openDb(dbPath);
     const version = (db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version;
-    expect(version).toBe(1);
+    // TE-14: schema version is now 2 (federation_wiki_cache added).
+    expect(version).toBe(CURRENT_SCHEMA_VERSION);
 
-    // All expected tables exist
-    for (const tbl of ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "_fingerprints", "wiki_fts"]) {
+    // All expected tables exist (v1 tables + TE-14 v2 federation_wiki_cache)
+    for (const tbl of [
+      "kg_nodes", "kg_edges", "kl_edges", "run_provenance", "_fingerprints", "wiki_fts",
+      "federation_wiki_cache", // TE-14
+    ]) {
       const row = db
         .prepare("SELECT name FROM sqlite_master WHERE type IN ('table','shadow') AND name = ?")
         .get(tbl) as { name: string } | undefined;
@@ -524,5 +530,221 @@ describe("missing source files → null (graceful)", () => {
     const repo = track(mkFakeRepo());
     const result = ensureRunProvenanceIndex(repo, lowThresholdConfig());
     expect(result).toBeNull();
+  });
+});
+
+// ── 6. ensureFederationWikiCache (TE-14) ──────────────────────────────────
+
+/**
+ * Create a fake workspace root (has .guild/index.sqlite after first populate).
+ * Distinct from mkFakeRepo — the workspace root doesn't need wiki files.
+ */
+function mkWorkspaceRoot(): string {
+  const root = mkTmpDir();
+  fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+  return root;
+}
+
+/**
+ * Create a fake sub-guild root with N wiki markdown files.
+ * BOUNDARY: the workspace root must be DIFFERENT from this root.
+ */
+function mkSubGuildWithWiki(fileCount: number): string {
+  const root = mkTmpDir();
+  const wikiDir = path.join(root, ".guild", "wiki");
+  fs.mkdirSync(wikiDir, { recursive: true });
+  for (let i = 0; i < fileCount; i++) {
+    fs.writeFileSync(
+      path.join(wikiDir, `wiki-${i}.md`),
+      `# Sub-Guild Page ${i}\n\nContent for page ${i}.\n`,
+    );
+  }
+  return root;
+}
+
+/** Default hits factory — produces deterministic hits from a sub-guild path list. */
+function makeFetchHits(pages: { path: string; title: string; snippet: string }[]): () => FederationWikiHit[] {
+  return () => pages;
+}
+
+describe("ensureFederationWikiCache (TE-14)", () => {
+  const cfg: IndexBlock = { ...DEFAULT_INDEX_BLOCK, enabled: true };
+  const disabledCfg: IndexBlock = { ...DEFAULT_INDEX_BLOCK, enabled: false };
+
+  test("disabled config → status='disabled', no DB written", () => {
+    const workspace = track(mkWorkspaceRoot());
+    const subGuild = track(mkSubGuildWithWiki(1));
+    const fetchHits = jest.fn().mockReturnValue([]);
+
+    const result = ensureFederationWikiCache(workspace, subGuild, disabledCfg, fetchHits);
+
+    expect(result.status).toBe("disabled");
+    expect(result.hits).toBeUndefined();
+    expect(fetchHits).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(workspace, ".guild", "index.sqlite"))).toBe(false);
+  });
+
+  test("boundary violation (workspace === subGuild) → error, no DB written", () => {
+    const workspace = track(mkWorkspaceRoot());
+    const fetchHits = jest.fn().mockReturnValue([]);
+
+    const result = ensureFederationWikiCache(workspace, workspace, cfg, fetchHits);
+
+    expect(result.status).toBe("error");
+    expect(result.message).toMatch(/boundary/i);
+    expect(fetchHits).not.toHaveBeenCalled();
+  });
+
+  test("first call (no cache) → status='populated', fetchHits called once, hits returned", () => {
+    const workspace = track(mkWorkspaceRoot());
+    const subGuild = track(mkSubGuildWithWiki(2));
+    const expectedHits: FederationWikiHit[] = [
+      { path: "sub/a.md", title: "A", snippet: "content A" },
+      { path: "sub/b.md", title: "B", snippet: "content B" },
+    ];
+    const fetchHits = jest.fn().mockReturnValue(expectedHits);
+
+    const result = ensureFederationWikiCache(workspace, subGuild, cfg, fetchHits);
+
+    expect(result.status).toBe("populated");
+    expect(result.hits).toEqual(expectedHits);
+    expect(fetchHits).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(path.join(workspace, ".guild", "index.sqlite"))).toBe(true);
+  });
+
+  test("second call (same sub-guild wiki, unchanged) → cache-hit, fetchHits NOT called again", () => {
+    const workspace = track(mkWorkspaceRoot());
+    const subGuild = track(mkSubGuildWithWiki(2));
+    const hits: FederationWikiHit[] = [
+      { path: "sub/a.md", title: "A", snippet: "content A" },
+    ];
+    const fetchHits = jest.fn().mockReturnValue(hits);
+
+    const first = ensureFederationWikiCache(workspace, subGuild, cfg, fetchHits);
+    const second = ensureFederationWikiCache(workspace, subGuild, cfg, fetchHits);
+
+    expect(first.status).toBe("populated");
+    expect(second.status).toBe("cache-hit");
+    expect(fetchHits).toHaveBeenCalledTimes(1); // NOT called again on cache-hit
+    // Cache-hit results must equal the originally stored hits.
+    expect(second.hits).toEqual(hits);
+  });
+
+  test("cache-hit results equal direct-hit results (TE-14 contract)", () => {
+    const workspace = track(mkWorkspaceRoot());
+    const subGuild = track(mkSubGuildWithWiki(3));
+    const hits: FederationWikiHit[] = [
+      { path: "p1.md", title: "T1", snippet: "S1" },
+      { path: "p2.md", title: "T2", snippet: "S2" },
+      { path: "p3.md", title: null, snippet: null },
+    ];
+    const fetchHits = jest.fn().mockReturnValue(hits);
+
+    const populated = ensureFederationWikiCache(workspace, subGuild, cfg, fetchHits);
+    const cached = ensureFederationWikiCache(workspace, subGuild, cfg, fetchHits);
+
+    expect(populated.status).toBe("populated");
+    expect(cached.status).toBe("cache-hit");
+    // The cached hits must be structurally identical to what fetchHits() returned.
+    expect(cached.hits).toEqual(populated.hits);
+  });
+
+  test("sub-guild wiki changes → cache invalidated → fetchHits called again", () => {
+    const workspace = track(mkWorkspaceRoot());
+    const subGuild = track(mkSubGuildWithWiki(1));
+    const hitsV1: FederationWikiHit[] = [{ path: "old.md", title: "Old", snippet: "old" }];
+    const hitsV2: FederationWikiHit[] = [{ path: "new.md", title: "New", snippet: "new" }];
+    const fetchHits = jest.fn()
+      .mockReturnValueOnce(hitsV1)
+      .mockReturnValueOnce(hitsV2);
+
+    const r1 = ensureFederationWikiCache(workspace, subGuild, cfg, fetchHits);
+    expect(r1.status).toBe("populated");
+    expect(r1.hits).toEqual(hitsV1);
+
+    // Mutate the sub-guild wiki (triggers fingerprint invalidation on next call).
+    fs.writeFileSync(
+      path.join(subGuild, ".guild", "wiki", "new-page.md"),
+      "# New Page\n\nAdded content.\n",
+    );
+
+    const r2 = ensureFederationWikiCache(workspace, subGuild, cfg, fetchHits);
+    expect(r2.status).toBe("populated");
+    expect(r2.hits).toEqual(hitsV2);
+    expect(fetchHits).toHaveBeenCalledTimes(2); // re-fetched after wiki change
+  });
+
+  test("empty sub-guild wiki → populated with empty hits (zero rows), cache-hit on repeat", () => {
+    const workspace = track(mkWorkspaceRoot());
+    const subGuild = track(mkSubGuildWithWiki(0)); // no wiki files
+    const fetchHits = jest.fn().mockReturnValue([]);
+
+    const r1 = ensureFederationWikiCache(workspace, subGuild, cfg, fetchHits);
+    const r2 = ensureFederationWikiCache(workspace, subGuild, cfg, fetchHits);
+
+    expect(r1.status).toBe("populated");
+    expect(r1.hits).toEqual([]);
+    expect(r2.status).toBe("cache-hit");
+    expect(r2.hits).toEqual([]);
+    expect(fetchHits).toHaveBeenCalledTimes(1);
+  });
+
+  test("BOUNDARY: no write to subGuildRoot/.guild/ — workspace DB is in workspaceRoot only", () => {
+    const workspace = track(mkWorkspaceRoot());
+    const subGuild = track(mkSubGuildWithWiki(2));
+    const fetchHits = jest.fn().mockReturnValue([
+      { path: "x.md", title: "X", snippet: "x" },
+    ]);
+
+    ensureFederationWikiCache(workspace, subGuild, cfg, fetchHits);
+
+    // The sub-guild's .guild/ must not have an index.sqlite.
+    expect(fs.existsSync(path.join(subGuild, ".guild", "index.sqlite"))).toBe(false);
+    // The workspace's .guild/ must have one.
+    expect(fs.existsSync(path.join(workspace, ".guild", "index.sqlite"))).toBe(true);
+  });
+
+  test("multiple sub-guilds share one workspace DB without cross-contamination", () => {
+    const workspace = track(mkWorkspaceRoot());
+    const subA = track(mkSubGuildWithWiki(1));
+    const subB = track(mkSubGuildWithWiki(1));
+    const hitsA: FederationWikiHit[] = [{ path: "a.md", title: "A", snippet: "a" }];
+    const hitsB: FederationWikiHit[] = [{ path: "b.md", title: "B", snippet: "b" }];
+
+    const rA = ensureFederationWikiCache(workspace, subA, cfg, () => hitsA);
+    const rB = ensureFederationWikiCache(workspace, subB, cfg, () => hitsB);
+
+    expect(rA.status).toBe("populated");
+    expect(rB.status).toBe("populated");
+
+    // On cache-hit, each sub-guild only sees its own rows.
+    const cA = ensureFederationWikiCache(workspace, subA, cfg, () => hitsA);
+    const cB = ensureFederationWikiCache(workspace, subB, cfg, () => hitsB);
+
+    expect(cA.status).toBe("cache-hit");
+    expect(cB.status).toBe("cache-hit");
+    expect(cA.hits).toEqual(hitsA);
+    expect(cB.hits).toEqual(hitsB);
+    // No cross-contamination: A's hits don't contain B's path and vice versa.
+    expect(cA.hits!.find((h) => h.path === "b.md")).toBeUndefined();
+    expect(cB.hits!.find((h) => h.path === "a.md")).toBeUndefined();
+  });
+
+  test("fetchHits() throwing → status='error', DB left consistent", () => {
+    const workspace = track(mkWorkspaceRoot());
+    const subGuild = track(mkSubGuildWithWiki(1));
+    const fetchHits = jest.fn().mockImplementation(() => {
+      throw new Error("network unreachable");
+    });
+
+    const result = ensureFederationWikiCache(workspace, subGuild, cfg, fetchHits);
+
+    expect(result.status).toBe("error");
+    expect(result.message).toMatch(/fetchHits/i);
+    // A subsequent call with a working fetchHits must succeed (DB consistent).
+    const goodHits: FederationWikiHit[] = [{ path: "ok.md", title: "OK", snippet: "ok" }];
+    const retry = ensureFederationWikiCache(workspace, subGuild, cfg, () => goodHits);
+    expect(retry.status).toBe("populated");
+    expect(retry.hits).toEqual(goodHits);
   });
 });

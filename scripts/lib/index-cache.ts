@@ -16,7 +16,8 @@
  *
  * Usage:
  *   import { ensureKgIndex, ensureKlIndex,
- *            ensureRunProvenanceIndex, ensureWikiFtsIndex } from './lib/index-cache'
+ *            ensureRunProvenanceIndex, ensureWikiFtsIndex,
+ *            ensureFederationWikiCache } from './lib/index-cache'
  */
 
 import { execFileSync } from "node:child_process";
@@ -77,6 +78,32 @@ export interface CacheResult {
   /** Absolute path to index.sqlite (only on cache-hit / populated). */
   dbPath?: string;
   message?: string;
+}
+
+// ── TE-14 federation_wiki_cache types ─────────────────────────────────────
+
+/**
+ * One row from the federation_wiki_cache table.
+ * Mirrors the table schema: (sub_guild_root, path, title, snippet).
+ * `sub_guild_root` is omitted from hits — callers already know it.
+ */
+export interface FederationWikiHit {
+  path: string;
+  title: string | null;
+  snippet: string | null;
+}
+
+/**
+ * Return value from ensureFederationWikiCache().
+ * Extends CacheResult with the cached hits so callers do not need a
+ * separate DB query — the result carries both status AND data.
+ */
+export interface FederationWikiCacheResult {
+  status: "disabled" | "cache-hit" | "populated" | "error";
+  dbPath?: string;
+  message?: string;
+  /** The hits for this sub-guild (present on cache-hit + populated). */
+  hits?: FederationWikiHit[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -550,5 +577,133 @@ export function ensureWikiFtsIndex(cwd: string, config: IndexBlock): CacheResult
     return { status: "populated", dbPath };
   } catch (err) {
     return { status: "error", message: `ensureWikiFtsIndex error: ${(err as Error).message}` };
+  }
+}
+
+// ── TE-14: ensureFederationWikiCache ──────────────────────────────────────
+
+/**
+ * TE-14 — Lazy populate/invalidate flow for the `federation_wiki_cache` table.
+ *
+ * Follows the `ensureWikiFtsIndex` pattern exactly:
+ *  - Fingerprint key: `"federation_wiki_cache:<subGuildRoot>"` (per-sub-guild).
+ *  - If fingerprint matches → return `{ status:'cache-hit', hits: [...] }`.
+ *  - If stale or absent → call `fetchHits()`, replace rows for this sub-guild,
+ *    update fingerprint → return `{ status:'populated', hits: [...] }`.
+ *  - Never throws; returns `{ status:'error' }` on any failure.
+ *
+ * BOUNDARY INVARIANT: the DB lives at `workspaceRoot/.guild/index.sqlite`.
+ * This function NEVER writes to `subGuildRoot/.guild/` — any write there would
+ * violate the single-root constraint. Callers must pass distinct roots.
+ *
+ * @param workspaceRoot  Absolute path to the workspace's root (contains .guild/index.sqlite).
+ * @param subGuildRoot   Absolute path to the sub-guild being federated.
+ *                       Used as the fingerprint scope key and stored in rows.
+ *                       NEVER written to.
+ * @param config         Index config (enabled flag, thresholds).
+ * @param fetchHits      Callback that reads the sub-guild wiki and returns hits
+ *                       (e.g., via BM25 search or full-page extraction). Called
+ *                       only when the cache is stale or absent.
+ */
+export function ensureFederationWikiCache(
+  workspaceRoot: string,
+  subGuildRoot: string,
+  config: IndexBlock,
+  fetchHits: () => FederationWikiHit[],
+): FederationWikiCacheResult {
+  if (!config.enabled) return { status: "disabled" };
+
+  // BOUNDARY CHECK: silently refuse when workspaceRoot === subGuildRoot — that
+  // would write the sub-guild's own DB, violating the zero-write boundary.
+  if (path.resolve(workspaceRoot) === path.resolve(subGuildRoot)) {
+    return {
+      status: "error",
+      message: "ensureFederationWikiCache: workspaceRoot and subGuildRoot must differ (boundary violation guard)",
+    };
+  }
+
+  try {
+    const absWorkspace = path.resolve(workspaceRoot);
+    const absSubGuild = path.resolve(subGuildRoot);
+    const dbPath = path.join(absWorkspace, ".guild", "index.sqlite");
+
+    // Per-sub-guild fingerprint key (must be unique across sub-guilds).
+    const fingerprintKey = `federation_wiki_cache:${absSubGuild}`;
+
+    // Fingerprint = SHA-256 over the sub-guild's wiki markdown files.
+    // Computed whether or not there are any files (empty hash = no files).
+    const subGuildWikiDir = path.join(absSubGuild, ".guild", "wiki");
+    const mdFiles = collectMarkdownFiles(subGuildWikiDir);
+    const currentHash = mdFiles.length > 0 ? sha256Files(mdFiles) : "empty";
+
+    const db = openIndex(dbPath);
+    if (!db) {
+      return { status: "error", message: "ensureFederationWikiCache: failed to open index.sqlite" };
+    }
+
+    const stored = getFingerprint(db, fingerprintKey);
+    if (stored === currentHash) {
+      // Cache hit — read rows for this sub-guild.
+      const rows = db
+        .prepare(
+          "SELECT path, title, snippet FROM federation_wiki_cache WHERE sub_guild_root = ?",
+        )
+        .all(absSubGuild) as { path: string; title: string | null; snippet: string | null }[];
+      db.close();
+      return {
+        status: "cache-hit",
+        dbPath,
+        hits: rows.map((r) => ({ path: r.path, title: r.title, snippet: r.snippet })),
+      };
+    }
+
+    // Cache miss / stale — call fetchHits(), replace rows, update fingerprint.
+    let freshHits: FederationWikiHit[];
+    try {
+      freshHits = fetchHits();
+    } catch (err) {
+      db.close();
+      return {
+        status: "error",
+        message: `ensureFederationWikiCache: fetchHits() threw: ${(err as Error).message}`,
+      };
+    }
+
+    try {
+      db.exec("BEGIN IMMEDIATE");
+      // Delete all existing rows for this sub-guild (full invalidation).
+      db
+        .prepare("DELETE FROM federation_wiki_cache WHERE sub_guild_root = ?")
+        .run(absSubGuild);
+
+      const ins = db.prepare(
+        "INSERT INTO federation_wiki_cache (sub_guild_root, path, title, snippet) VALUES (?, ?, ?, ?)",
+      );
+      for (const hit of freshHits) {
+        ins.run(absSubGuild, hit.path, hit.title ?? null, hit.snippet ?? null);
+      }
+
+      setFingerprint(db, fingerprintKey, subGuildWikiDir, currentHash);
+      db.exec("COMMIT");
+    } catch (err) {
+      try {
+        db.exec("ROLLBACK");
+      } catch {
+        /* ignore rollback errors */
+      }
+      db.close();
+      return {
+        status: "error",
+        message: `ensureFederationWikiCache: rebuild failed: ${(err as Error).message}`,
+      };
+    }
+
+    db.close();
+    return { status: "populated", dbPath, hits: freshHits };
+  } catch (err) {
+    return {
+      status: "error",
+      message: `ensureFederationWikiCache error: ${(err as Error).message}`,
+    };
   }
 }

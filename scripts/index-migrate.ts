@@ -46,7 +46,8 @@ function openDatabase(dbPath: string): SqliteDb {
   return new DatabaseSync(dbPath);
 }
 
-export const CURRENT_SCHEMA_VERSION = 1;
+// TE-14: bump to 2 for federation_wiki_cache table.
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export interface MigrationResult {
   ok: boolean;
@@ -90,6 +91,7 @@ interface Migration {
 }
 
 const MIGRATIONS: Migration[] = [
+  // ── v1: core tables ───────────────────────────────────────────────────────
   {
     version: 1,
     tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
@@ -169,6 +171,31 @@ const MIGRATIONS: Migration[] = [
           );
         `);
       }
+    },
+  },
+
+  // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
+  //
+  // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
+  // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
+  // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
+  //
+  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite.
+  // ensureFederationWikiCache() NEVER writes to sub_guild_root/.guild/.
+  {
+    version: 2,
+    tables: ["federation_wiki_cache"],
+    up(db: SqliteDb): void {
+      db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
+      db.exec(`
+        CREATE TABLE federation_wiki_cache (
+          sub_guild_root TEXT NOT NULL,
+          path           TEXT NOT NULL,
+          title          TEXT,
+          snippet        TEXT,
+          PRIMARY KEY (sub_guild_root, path)
+        );
+      `);
     },
   },
 ];

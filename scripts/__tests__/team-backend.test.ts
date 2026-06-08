@@ -27,6 +27,7 @@ import {
   TmuxTeamBackend,
   InProcessTeamBackend,
   RemoteTeamBackend,
+  SerialBackend,
   composeTmuxCommands,
   composeInProcessDispatch,
   shellQuote,
@@ -92,6 +93,7 @@ describe("TeamBackend seam — interface conformance (RE-4)", () => {
     new TmuxTeamBackend({ run: makeFakeRun().run }),
     new InProcessTeamBackend(),
     new RemoteTeamBackend(),
+    new SerialBackend(), // TE-08/ARCH-5: Rung 4, the serial floor
   ];
 
   it("every backend exposes kind/isAvailable/launch", () => {
@@ -102,8 +104,8 @@ describe("TeamBackend seam — interface conformance (RE-4)", () => {
     }
   });
 
-  it("kinds are the three declared backend kinds", () => {
-    expect(backends.map((b) => b.kind).sort()).toEqual(["in-process", "remote", "tmux"]);
+  it("kinds are the four declared backend kinds (TE-08: serial added as Rung 4)", () => {
+    expect(backends.map((b) => b.kind).sort()).toEqual(["in-process", "remote", "serial", "tmux"]);
   });
 });
 
@@ -335,6 +337,104 @@ describe("RemoteTeamBackend — no-transport guard", () => {
 
   it("launch throws (no wire) pointing at the RE-4 contract", () => {
     expect(() => new RemoteTeamBackend().launch(req())).toThrow(/transport|RE-4/i);
+  });
+});
+
+describe("SerialBackend — serial floor (TE-08 / Rung 4)", () => {
+  // Per spec §6: isAvailable() is unconditionally true (the whole point of
+  // Rung 4 — there is ALWAYS a satisfiable substrate). dispatch plan is
+  // byte-identical to InProcessTeamBackend (same composeInProcessDispatch call).
+  // parallelism=1, substrateDegradation are ADDITIVE — not a behavior change.
+
+  it("kind is 'serial'", () => {
+    expect(new SerialBackend().kind).toBe("serial");
+  });
+
+  it("isAvailable() is unconditionally true — never false, even on a bare host", () => {
+    // Rung 4 is the floor: the dispatcher guarantees ≥1 satisfiable substrate.
+    expect(new SerialBackend().isAvailable()).toBe(true);
+    // Calling it twice must remain stable (no side effects)
+    expect(new SerialBackend().isAvailable()).toBe(true);
+  });
+
+  it("launch() returns ok:true and never throws", () => {
+    let result: ReturnType<SerialBackend["launch"]> | undefined;
+    expect(() => {
+      result = new SerialBackend().launch(req());
+    }).not.toThrow();
+    expect(result!.ok).toBe(true);
+    expect(result!.kind).toBe("serial");
+  });
+
+  it("dispatch plan is byte-identical to InProcessTeamBackend — regression anchor (TE-08 extraction invariant)", () => {
+    // The spec requires: SerialBackend's dispatchPlan === InProcessTeamBackend's
+    // dispatchPlan, byte-for-byte, for the same request. Extracting Rung 4 from
+    // InProcess's implicit fallback must NOT change the dispatch outcome.
+    const inProcess = new InProcessTeamBackend().launch(req()).dispatchPlan!;
+    const serial = new SerialBackend().launch(req()).dispatchPlan!;
+    expect(serial).toEqual(inProcess);
+  });
+
+  it("plannedCommands match InProcessTeamBackend for the same request", () => {
+    const inProcessCmds = new InProcessTeamBackend().launch(req()).plannedCommands;
+    const serialCmds = new SerialBackend().launch(req()).plannedCommands;
+    expect(serialCmds).toEqual(inProcessCmds);
+  });
+
+  it("parallelism is 1 — execute-plan must serialize (Rung 4 cap)", () => {
+    const result = new SerialBackend().launch(req());
+    expect(result.parallelism).toBe(1);
+  });
+
+  it("substrateDegradation marker is present with substrate='serial'", () => {
+    const result = new SerialBackend().launch(req());
+    expect(result.substrateDegradation).toBeDefined();
+    expect(result.substrateDegradation!.substrate).toBe("serial");
+    expect(typeof result.substrateDegradation!.degraded_from).toBe("string");
+    expect(typeof result.substrateDegradation!.reason).toBe("string");
+    expect(result.substrateDegradation!.reason.length).toBeGreaterThan(0);
+  });
+
+  it("substrateDegradation accepts caller-provided degraded_from + reason override", () => {
+    const result = new SerialBackend().launch(req(), {
+      degraded_from: "tmux",
+      reason: "tmux session spawn failed: ENOENT",
+    });
+    expect(result.substrateDegradation!.degraded_from).toBe("tmux");
+    expect(result.substrateDegradation!.reason).toBe("tmux session spawn failed: ENOENT");
+  });
+
+  it("no tmux commands in plannedCommands (not a tmux backend)", () => {
+    const result = new SerialBackend().launch(req());
+    expect(result.plannedCommands.every((c) => !c.startsWith("tmux"))).toBe(true);
+  });
+
+  it("orchestratorPaneId is null and teammatePaneIds is empty (no pane management)", () => {
+    const result = new SerialBackend().launch(req());
+    expect(result.orchestratorPaneId).toBeNull();
+    expect(result.teammatePaneIds).toEqual({});
+  });
+
+  it("notes array contains at least one entry describing dispatch_rung=4", () => {
+    const result = new SerialBackend().launch(req());
+    expect(result.notes.length).toBeGreaterThan(0);
+    const combined = result.notes.join(" ");
+    expect(combined).toMatch(/dispatch_rung=4|Rung 4/i);
+  });
+
+  it("dryRun=true vs dryRun=false: both succeed, dry-run note is different", () => {
+    const wet = new SerialBackend().launch(req({ dryRun: false }));
+    const dry = new SerialBackend().launch(req({ dryRun: true }));
+    expect(wet.ok).toBe(true);
+    expect(dry.ok).toBe(true);
+    // dry-run note should contain 'dry-run'
+    expect(dry.notes.join(" ").toLowerCase()).toContain("dry-run");
+  });
+
+  it("composeInProcessDispatch free function === serial backend dispatch plan (referential pure check)", () => {
+    const direct = composeInProcessDispatch(req());
+    const viaSerial = new SerialBackend().launch(req()).dispatchPlan!;
+    expect(viaSerial).toEqual(direct);
   });
 });
 
