@@ -113,18 +113,22 @@ schema). Consume it to sharpen the plan, not to replace judgement:
 If no graph index exists (greenfield, or deep tier never built), skip silently
 — do not block planning and do not fabricate a diff.
 
-## Codex adversarial review (when `codex_review: true`)
+## Adversarial review — G-plan (broker, when policy fires)
 
-If the run context has `codex_review: true`, invoke `guild:codex-review` after writing the plan with `approved: false` and **before** presenting the plan to the user for approval:
+G-plan is a **skill-internal gate** (`docs/v2/09-adversarial-review.md §Gate ownership`): it fires here inside `guild:plan` at the plan→approval boundary, not from a command — which is why it doesn't appear in `build`'s skill row. Wire the **review broker** at this boundary, **not** `guild:codex-review` directly: the broker is the host-agnostic front door, and `guild:codex-review` survives only as the internal Codex adapter the broker dispatches to (`docs/v2/09 §The review broker`).
+
+After writing the plan with `approved: false` and **before** presenting it to the user for approval, invoke `guild:review-broker`:
 
 ```
-Skill: guild-codex-review
-args: gate=G-plan artifact_path=.guild/plan/<slug>.md run_id=<run-id>
+Skill: guild-review-broker
+args: gate=G-plan artifact_path=.guild/plan/<slug>.md run_id=<run-id> author_host=<run author host>
 ```
 
-If `guild:codex-review` returns `status: "rework"`, revise the plan using Codex's findings before re-presenting to the user. If `status: "satisfied"`, `"skipped"`, or `"force_passed"`, proceed to the user-approval gate normally.
+The broker is **policy-gated** (`docs/v2/09 §The review broker`): it fires only when `risk ≥ high`, `review: cross` / `--review=cross` is set, or project config requires it — otherwise it resolves `status: "skipped"` and the gate passes with no reviewer. Self-build runs treat cross-host review as always-on. `author_host` is the host that produced the plan (resolved from the run-start preflight snapshot; `claude` on a Claude-hosted run).
 
-The Codex gate runs between plan write and user-approval. It does not replace user approval.
+If the broker returns `status: "rework"`, revise the plan using the findings before re-presenting to the user. On `"satisfied"`, `"skipped"`, or `"force_passed"`, proceed to the user-approval gate normally.
+
+The gate runs between plan write and user-approval. It does not replace user approval.
 
 ## Approval gate
 
@@ -141,6 +145,10 @@ If the user requests changes at the approval gate, edit the plan in place (not a
 ## Distinction from guild:plan
 
 Guild's `plan` skill deliberately shadows `guild:plan` and forks rather than references it. `guild:plan` produces a generic, specialist-agnostic implementation plan: a linear sequence of steps a single implementer would follow, optimized for a solo coding session. `guild:plan` produces a specialist-lane plan: one lane per role from the composed team, with explicit `depends-on:` edges that feed `guild:execute-plan`'s parallel dispatch, per-lane success criteria that feed `guild:review` and `guild:verify-done`, and per-lane autonomy policies that feed each subagent's permission contract. Use `guild:plan` for solo implementation work outside the Guild lifecycle; use `guild:plan` whenever a Guild team has been composed and the next step is dispatching specialists. Choosing wrong either wastes the team composition (solo plan ignores lanes) or over-structures a solo task (lanes without specialists are empty overhead).
+
+## Learning checkpoint (step 7.5 — advisory, no new gate)
+
+After the G-plan review + approval gate and before handoff, fire the per-phase LearningCheckpoint with `phase=planning` and `.guild/plan/<slug>.md` as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written plan/lanes into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
 
 ## Handoff
 

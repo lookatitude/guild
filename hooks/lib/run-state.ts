@@ -66,6 +66,24 @@ export interface LaneState {
   status: LaneStatus;
   /** Resolved tier (cost ADR §2). Optional — absent until dispatch resolves it. */
   tier?: LaneTier;
+  /**
+   * EDIT-1 / TE-03: persisted routing decision for this lane.
+   * Absent until dispatch routes the lane via `planTeamRouting`.
+   * Written by the agent-team launcher's `onDecision` callback; read by
+   * the receipt writer to confirm dual-persistence identity (TE-03 check (b)).
+   */
+  host?: {
+    /** host_id that was actually selected to run this lane. */
+    selected: string;
+    /** true when the router fell back from the requested host (capability miss). */
+    degraded: boolean;
+    /** "weak" when reviewer shares the producer host OR the route was degraded. */
+    independence: "strong" | "weak";
+    /** Per-lane tier actually routed (ARCH-6 — may differ from plan estimate). */
+    tier: LaneTier;
+    /** Concrete model resolved for the routed tier on the selected host. */
+    model: string;
+  };
   /** Current attempt (ADR-RE-2). Defaults to 1. */
   attempt: number;
   /** Gating mirror of the plan lane. May be empty. */
@@ -113,6 +131,17 @@ export interface RunStateInit {
 export interface LanePatch {
   status?: LaneStatus;
   tier?: LaneTier;
+  /**
+   * EDIT-1 / TE-03: routing decision block, mirroring `LaneState.host`.
+   * All-optional (absent = preserve prior; present = overwrite the whole block).
+   */
+  host?: {
+    selected: string;
+    degraded: boolean;
+    independence: "strong" | "weak";
+    tier: LaneTier;
+    model: string;
+  };
   attempt?: number;
   depends_on?: string[];
   /** Pass `null` to clear; omit to preserve the prior value. */
@@ -234,6 +263,9 @@ export function upsertLane(
     };
     const tier = patch.tier ?? prev?.tier;
     if (tier !== undefined) merged.tier = tier;
+    // EDIT-1 / TE-03: host block — patch wins; absent patch preserves prior.
+    const host = patch.host ?? prev?.host;
+    if (host !== undefined) merged.host = host;
 
     state.lanes[laneId] = merged;
     state.last_checkpoint_at = now;

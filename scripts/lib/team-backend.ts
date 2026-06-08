@@ -62,6 +62,33 @@ export interface Specialist {
    * Claude-only path. Consulted only when a PaneAdapter resolver is wired.
    */
   host_kind?: HostKind;
+  /**
+   * ARCH-6: per-lane scored tier from the cost auto-scorer, threaded in by the
+   * execute-plan dispatch path (or declared in team.yaml as `tier: cheap|mid|powerful`).
+   * When absent, `planTeamRouting` falls back to `opts.tier` (default "mid").
+   */
+  tier?: "cheap" | "mid" | "powerful";
+  /**
+   * ARCH-6 Part 1: authoring-time tier estimate written by guild:team-compose as
+   * `default_tier: cheap|mid|powerful`. Parsed separately from `tier` (the scored
+   * override written by execute-plan). Precedence at flush(): tier > default_tier > mid.
+   * When only `default_tier` is present (generated team.yaml, no scored override yet),
+   * this value propagates so the lane routes at its roster tier, not always mid.
+   */
+  default_tier?: "cheap" | "mid" | "powerful";
+  /**
+   * GAP-A1/ARCH-2: per-lane capability requirements parsed from team.yaml
+   * (`needs_parallel`, `needs_pr`, `needs_network`, `isolation`). Forwarded by
+   * planTeamRouting into route()'s capabilityGap() so the host intersection runs
+   * in production. Inline shape matches CapabilityRequirements from host-router.ts;
+   * kept as a local inline type to avoid a team-backend → host-router import cycle.
+   */
+  capabilityRequirements?: {
+    needs_pr?: boolean;
+    needs_parallel?: boolean;
+    needs_network?: boolean;
+    isolation?: "worktree" | "none";
+  };
 }
 
 // ── PaneAdapter seam (CH-2, cross-host ADR) ──────────────────────────────────

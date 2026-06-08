@@ -26,10 +26,75 @@ Four strict phases per lane. A lane does not advance until the previous phase ha
 
 1. **Context bundle.** Invoke `guild:context-assemble` for the lane; it writes `.guild/context/<run-id>/<specialist>-<task-id>.md` per §9.3. Read back the bundle's handoff receipt to confirm `bundle_path`, `token_estimate`, `layers_included`. A missing bundle blocks the dispatch — do not paper over with chat context.
 2. **Tier resolution.** Auto-score the lane and resolve its tier per `## Tier resolution` — print the score + chosen tier (never silent). The resolved tier becomes the Agent `model` param at dispatch.
-3. **Dispatch.** Spawn an **ephemeral one-agent-per-task** agent (see `## §task§agent lifecycle`) at the resolved tier, using the snapshot-resolved backend (`snapshot.effective.agent_mode`), passing the bundle path as the primary task brief. Before spawning, inject capability-scope env vars (`## Capability-scope env injection`) **and the canonical handoff protocol block** (`dispatch.md §"Handoff protocol"`) verbatim into the agent's prompt — substitute `<RECEIPT_PATH>` and `<TASK_ID>` for this lane before sending. The agent escalates via `## Advisor escalation` if it hits something above its tier. Routing rules, backend mechanics, env injection, and handoff protocol injection: `dispatch.md`.
-4. **Receipt.** Confirm the agent wrote its handoff receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` per §8.2, then **extract its `learnings[]` and dismiss the agent** (lifecycle below). A missing or malformed receipt (no `evidence:` field, no `files changed`) → treat the lane as **FAILED**: record the failure in the run log and route it into `## Lane retry + dead-lettering` (retry up to `defaults.retry.max_attempts`, then checkpoint as dead) rather than immediately halting the run.
+3. **Dispatch.** **First write the lane's `guild.task_run.v1` descriptor** (TE-01 — see `## Task-run descriptor + routing persistence`); then spawn an **ephemeral one-agent-per-task** agent (see `## §task§agent lifecycle`) at the resolved tier, using the snapshot-resolved backend (`snapshot.effective.agent_mode`), passing the bundle path as the primary task brief. Before spawning, inject capability-scope env vars (`## Capability-scope env injection`) **and the canonical handoff protocol block** (`dispatch.md §"Handoff protocol"`) verbatim into the agent's prompt — substitute `<RECEIPT_PATH>` and `<TASK_ID>` for this lane before sending. The agent escalates via `## Advisor escalation` if it hits something above its tier. Routing rules, backend mechanics, env injection, and handoff protocol injection: `dispatch.md`.
+4. **Receipt.** Confirm the agent wrote its handoff receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` per §8.2, **populate the receipt `host` block (`selected` / `degraded` / `independence`) from the lane's routing decision** (TE-03 — see `## Task-run descriptor + routing persistence`), then **extract its `learnings[]` and dismiss the agent** (lifecycle below). A missing or malformed receipt (no `evidence:` field, no `files changed`) → treat the lane as **FAILED**: record the failure in the run log and route it into `## Lane retry + dead-lettering` (retry up to `defaults.retry.max_attempts`, then checkpoint as dead) rather than immediately halting the run.
 
 A specialist dispatched without a bundle violates the context contract (§9); one that completes without a receipt violates the handoff contract (§8.2). Either condition blocks `guild:review`.
+
+## Task-run descriptor + routing persistence (TE-01 / TE-03)
+
+The snapshot-resolved backend selects **how** a lane is dispatched, but the
+**subagent / in-process (non-tmux) path runs through this skill** — the
+tmux/team launcher (`scripts/agent-team-launcher.ts`) covers only the team
+backend. So on the model-driven path the task-run write and routing persistence
+are done **here**, per lane.
+
+> **Ownership guard — do these ONLY when `snapshot.effective.agent_mode ∈
+> {`subagent`, `agent`}`** (the model-driven path; `agent` is the D5 **in-process**
+> rung — use the enum value, not the concept name). The resolved
+> `snapshot.effective.agent_mode` enum is `team | agent | subagent | auto`
+> (`scripts/lib/settings-resolver.ts`) — there is **no** `in-process` value; the
+> in-process backend's value is **`agent`**. When `agent_mode` resolves to `team`
+> (tmux/agent-team) **or** a remote backend, the **launcher owns the TE-01
+> task_run write + the routing-decision persistence**
+> (`scripts/agent-team-launcher.ts`, EDIT-2/3) — this skill **MUST NOT** also
+> write them, or the lane double-writes its `task_run.yaml` / receipt `host`
+> block. The two backends partition the work cleanly: launcher = team + remote;
+> this skill = `subagent` + `agent` (in-process). Test the snapshot's
+> `agent_mode` value against `{subagent, agent}` before the writer call below;
+> skip it on `team`/remote. (`auto` is resolved to a concrete value at intake, so
+> the snapshot never carries `auto` here.)
+
+**TE-01 — write the `guild.task_run.v1` descriptor BEFORE each dispatch attempt
+(model-driven path only — see the ownership guard above).** After tier
+resolution and before spawning, invoke the writer CLI (one file per attempt; a
+re-dispatch overwrites — the writer handles it):
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/write-task-run.ts \
+  --cwd <repo-root> --run-id <run-id> --task-id <task-id> \
+  --specialist <owner-role> \
+  --context-bundle .guild/context/<run-id>/<specialist>-<task-id>.md \
+  --depends-on <id,id,...> \
+  --max-tokens <scored-budget> --max-turns <scored-turns> \
+  [--needs-pr] [--needs-parallel] [--needs-network] \
+  --isolation <worktree|none> --host-requested <kind>
+```
+
+It writes `.guild/runs/<run-id>/task-runs/<task-id>.yaml` (top-level
+`task_run:` wrapper, `context_bundle`, `host.capability_requirements`). Derive
+`--max-tokens`/`--max-turns` from the lane's **scored tier** (step 2 — not a flat
+default) and the `--needs-*`/`--isolation`/`--host-requested` flags from the
+lane's `team.yaml` `host:` block + scope. The written
+`host.capability_requirements` is the **same object** the router reads as
+`LaneRequest.capabilityRequirements` in `route()` — writer→router round-trip
+identity.
+
+**TE-03 — persist the routing decision into the receipt `host` block** (model-driven
+path only — same ownership guard; on team/remote the launcher persists it). When the
+lane's handoff receipt is written, populate its `host` block from the
+`RoutingDecision` (`route()` return / launcher-surfaced) — `selected`
+(`RoutingDecision.host`), `degraded` (`RoutingDecision.degraded`), and
+`independence` (`"strong" | "weak"`), with values **equal to** the decision (and
+mirrored into run-state `LaneState.host` by the dispatch path).
+
+**Single-host independence rule (state it, never leave implicit).** On the
+single-host subagent path with no cross-host routing, set
+`selected: <local host>`, `degraded: false`, and **`independence: "weak"` whenever
+the reviewer shares the producer's host family** (the common no-cross-host case —
+a same-host review is weak independence, exactly as the review broker stamps it).
+`independence: "strong"` requires a genuinely different reviewer host family. A
+single-host run is therefore `weak`, recorded — never silently `strong`.
 
 ## Tier resolution
 
@@ -40,6 +105,11 @@ Implements the cost-aware-tiering ADR (`docs/knowledge/decisions/cost-aware-tier
 3. **Apply the precedence ladder (normative):** `--model-tier=` CLI escape hatch > per-lane plan `tier:` pin > `settings.json` `models.tiers`/`models.thresholds` > built-in default. A `--model-tier` value pins **every** lane in the run; a per-lane plan `tier:` pin overrides the auto-score for that one lane.
 4. **Resolve tier → model** through the host-agnostic `models.tiers` map (ADR §1/§10 — bound by pointer; within Claude `cheap=haiku`, `mid=sonnet`, `powerful=opus`). Within Claude this binds directly to the Agent tool `model:` param at dispatch.
 5. **Print + record.** Surface the dispatch line (`lane <task-id> · score N · tier <tier> · model <model>`) and write the score + resolved tier into the run record under `.guild/runs/<run-id>/` (never silent — spec Risk). When `models.enabled: false`, skip scoring and dispatch at the backend default.
+6. **Tier flow to the team backend — v2.0 routes at `default_tier`; re-score writeback is deferred to W2-A3.** Two backend paths, two tier sources in v2.0:
+   - **Model-driven path (subagent / in-process):** the dispatch-time **re-scored** tier (step 1) is applied **directly** via the Agent `model:` param at dispatch — the per-lane score is honored, no `team.yaml` round-trip needed.
+   - **Team-backend path (tmux panes):** panes route at the roster **`default_tier`** — the launcher reads each specialist's `tier ?? default_tier` (tooling's **ARCH-6 Part 1**) and threads it into `planTeamRouting`. In v2.0 `team.yaml` carries no per-lane re-scored `tier:`, so `default_tier` (the roster tier) is what flows. This is **sensible, not a regression** — Part 1 closed the prior `mid`-collapse drift.
+
+   Persisting the dispatch-time **re-scored** `tier:` back into `team.yaml` so team panes route at the per-lane *score* (rather than `default_tier`) is **deferred to Wave-2 (W2-A3)**: it needs a **concurrent-safe `team.yaml` writeback helper** (multiple lanes resolving in parallel must not clobber the generated team-shape artifact), not an inline hot-path hand-edit. Until W2-A3 lands, do **not** mutate `team.yaml` here — the model-driven path already honors the re-score, and team panes correctly route at `default_tier`.
 
 Config keys (`models.enabled`, `models.tiers`, `models.scoreWeights`, `models.thresholds`, …) are the closed-key `settings.json` `models:` block (ADR §10 — bound by pointer, never re-spelled).
 
@@ -92,16 +162,20 @@ The backend is **not** chosen here, and it is **not** chosen at `guild:team-comp
 
 Parallelism follows the DAG, not authoring order; scheduling rules and worktree isolation live in `dispatch.md`.
 
-## Codex adversarial review per lane (when `codex_review: true`)
+## Adversarial review per lane — G-lane (broker, when policy fires)
 
-If the run context has `codex_review: true`, invoke `guild:codex-review` after each lane's receipt is confirmed and before the next lane dispatches (or before `guild:review` for the final lane):
+G-lane is the **only command-visible gate** (`docs/v2/09-adversarial-review.md §Gate ownership`): it fires per-lane here during `build`, so `build`'s skill set owns the review step. Wire the **review broker** at the lane-receipt boundary, **not** `guild:codex-review` directly: the broker is the host-agnostic front door, and `guild:codex-review` survives only as the internal Codex adapter the broker dispatches to (`docs/v2/09 §The review broker`).
+
+After each lane's receipt is confirmed and before the next lane dispatches (or before `guild:review` for the final lane), invoke `guild:review-broker`:
 
 ```
-Skill: guild-codex-review
-args: gate=G-lane:<task-id> artifact_path=.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md run_id=<run-id>
+Skill: guild-review-broker
+args: gate=G-lane:<task-id> artifact_path=.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md run_id=<run-id> author_host=<run author host>
 ```
 
-Substitute `<task-id>` with the lane's task-id (e.g. `T2-backend`); run per-lane in series after the receipt is confirmed. On `status: "rework"`, the lane re-executes — clear its receipt and re-dispatch the specialist with Codex's findings as added context; the re-run counts against `counters.json` key `restart:<lane>` (shared with the L3/L4 cap). On `"satisfied"`, `"skipped"`, or `"force_passed"`, advance normally.
+Because the gate id is **per-lane** (`G-lane:<task-id>`, matching the frozen `G-lane:${string}` union), the broker's AC-9 review trail for the lane lands in a **per-lane subdirectory** — `.guild/runs/<run-id>/review/G-lane:<task-id>/` (packet / result / trail). This is the declared trail path; `build.md`'s AC-9 root declaration MUST read identically (`review/G-lane:<task-id>/`, not the lane-collapsed `review/G-lane/`) so the declared path equals the actual write path.
+
+Substitute `<task-id>` with the lane's task-id (e.g. `T2-backend`); run per-lane in series after the receipt is confirmed. The broker is **policy-gated** (`docs/v2/09 §The review broker`): it fires only when `risk ≥ high`, `review: cross` / `--review=cross` is set, or project config requires it — otherwise it resolves `status: "skipped"` and the lane advances with no reviewer. Self-build runs treat cross-host review as always-on. `author_host` is the host that produced the receipt (resolved from the run-start preflight snapshot; `claude` on a Claude-hosted run). On `status: "rework"`, the lane re-executes — clear its receipt and re-dispatch the specialist with the findings as added context; the re-run counts against `counters.json` key `restart:<lane>` (shared with the L3/L4 cap). On `"satisfied"`, `"skipped"`, or `"force_passed"`, advance normally.
 
 ## Receipt collection
 

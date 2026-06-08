@@ -112,9 +112,27 @@ validator, two callers).
 1. **Dispatch** the confirmed class to `guild:ops-<class>`; the playbook names
    its producer (per `lifecycle/lifecycle-overview.md §616–622`) and emits the
    outputs.
-2. **G-operations advisory.** Challengers `[security, architect]`,
-   cross-model-preferred; **≤4 active**; incident/rollback never exceed
-   **producer + challenger**.
+2. **G-operations review — two distinct, both-kept mechanisms**
+   (`docs/v2/09-adversarial-review.md §The gates`, §Loop control):
+   - **In-phase advisory panel (unchanged).** Challengers `[security,
+     architect]`, cross-model-preferred; **≤4 active**; incident/rollback never
+     exceed **producer + challenger**. Same-session review; non-blocking.
+   - **Cross-host G-operations gate via the broker (policy-gated).** *Separate*
+     from the panel: a **different host family** critiques the ops record /
+     runbook. After the playbook emits its outputs and before done-criteria,
+     invoke `guild-review-broker`:
+
+     ```
+     Skill: guild-review-broker
+     args: gate=G-operations artifact_path=<ops-record-or-runbook-path> run_id=<run-id> author_host=<run author host>
+     ```
+
+     Policy-gated (`docs/v2/09 §The review broker`): fires only on `risk ≥ high`
+     / `review: cross` / `--review=cross` / config — else `status: "skipped"`
+     and the boundary passes (self-build = always-on). On `"rework"`, resolve
+     before done-criteria. The broker gate is the cross-host layer; it does
+     **not** replace the advisory panel and does **not** touch the 4 safety
+     rails or the split autonomy posture — incident/rollback stay never-autonomous.
 3. **Done-criteria.** Terminal `outcome.status`; every hard-set step
    `autonomy: prompted_inline` (rail 3); `guild.ops.v1` (+ conditional
    incident/release) validates by pointer to `§639–729`.
@@ -138,6 +156,10 @@ closure** (unchanged). **Quality-consume refuse/proceed:** read
 `maintenance` / `incident` may proceed. **[v2]/[v2.x] split:** the D8 contract is
 frozen `[v2]`, its automation `[v2.x]` — P6 = **contract join only**, no
 automation task (DH-2 / GR-7).
+
+## learning-checkpoint (step 7.5 — advisory, no new gate)
+
+After done-criteria + the d8-join and before phase close, fire the per-phase LearningCheckpoint with `phase=operations` and the ops record / runbook as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written ops record (`guild.ops.v1`, conditional incident/release evidence) into the 12-target verdict, then emit via the hook — full call signature + `GUILD_PHASE` mapping canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; it does NOT touch the 4 safety rails or the split autonomy posture. Non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
 
 # Evidence requirements
 

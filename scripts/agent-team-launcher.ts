@@ -82,12 +82,19 @@ import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
 // R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
 import { runWithRetry, loadRetryOpts } from "./retry-lane";
 // R-016 bridge: on retry exhaustion, mark each remote lane dead via the shared writer.
-import { markLaneDead, type RunStateInit } from "../hooks/lib/run-state";
+// TE-03/EDIT-2: upsertLane persists per-lane routing decision into run-state.
+import { markLaneDead, upsertLane, type RunStateInit } from "../hooks/lib/run-state";
 // C4 (G-PHASE-COMPOSE): slugFromTeamPath now lives in team-file.ts (the inverse of
 // teamFilePath) so it tolerates the <slug>.<phase>.yaml basename + is unit-tested there.
 // resolveDeadLaneKeys (R-016 SSH lane-key fix): joins specialist→plan task-id so the
 // SSH dead-lane checkpoint is keyed identically to the resume reader + execute-plan.
-import { slugFromTeamPath, resolveDeadLaneKeys } from "./lib/team-file";
+// readPlanOwnerTaskIds (TE-03): used in onDecision to map specialist name → plan task-id(s)
+// without the name-key fallback that resolveDeadLaneKeys adds (that fallback is right for
+// SSH dead-lanes but violates the contract for run-state keying).
+import { slugFromTeamPath, resolveDeadLaneKeys, readPlanOwnerTaskIds } from "./lib/team-file";
+// TE-01 CONSOLIDATED (cluster-a-rev2-CONSOLIDATED.md): launcher owns EDIT-3 (tmux/remote);
+// execute-plan SKILL owns EDIT-4 (subagent/in-process) — mutually exclusive, no double-write.
+import { writeTaskRun } from "./write-task-run";
 
 const ADAPTER_VERSION = "1"; // CH-5 — PaneAdapter version recorded per pane.
 
@@ -182,6 +189,12 @@ function parseYaml(raw: string): TeamYaml {
         dependsOn: cur.dependsOn ?? [],
         backend: cur.backend,
         host_kind: cur.host_kind,
+        // ARCH-6 Part 1: tier precedence — scored `tier:` (Part 2, execute-plan) >
+        // authoring `default_tier:` (team-compose) > undefined (opts.tier mid fallback).
+        // This ensures generated teams (default_tier only) route at their roster tier,
+        // not collapse to mid. Scored tier wins when execute-plan writes it.
+        tier: cur.tier ?? cur.default_tier,
+        capabilityRequirements: cur.capabilityRequirements, // GAP-A1/ARCH-2 (may be undefined)
       });
     }
     cur = null;
@@ -259,6 +272,50 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
   else if (key === "host" || key === "host_kind") {
     const hk = parseHostKind(value);
     if (hk) target.host_kind = hk;
+  }
+  // ARCH-6: per-specialist scored tier — explicit `tier:` key written by
+  // execute-plan Part 2 (highest-scored override across the specialist's lanes).
+  else if (key === "tier") {
+    const t = stripQuotes(value).trim().toLowerCase();
+    if (t === "cheap" || t === "mid" || t === "powerful") {
+      target.tier = t as "cheap" | "mid" | "powerful";
+    }
+  }
+  // ARCH-6 Part 1: `default_tier:` is what guild:team-compose writes at authoring time.
+  // Parsed into a SEPARATE field so flush() can apply tier ?? default_tier precedence.
+  else if (key === "default_tier") {
+    const t = stripQuotes(value).trim().toLowerCase();
+    if (t === "cheap" || t === "mid" || t === "powerful") {
+      target.default_tier = t as "cheap" | "mid" | "powerful";
+    }
+  }
+  // GAP-A1/ARCH-2: capability requirements from team.yaml, forwarded by
+  // planTeamRouting into route()'s capabilityGap() intersection (true round-trip:
+  // same object feeds both the route decision AND the task_run writer).
+  else if (key === "needs_parallel" || key === "needs-parallel") {
+    target.capabilityRequirements = {
+      ...target.capabilityRequirements,
+      needs_parallel: stripQuotes(value).trim() === "true",
+    };
+  } else if (key === "needs_pr" || key === "needs-pr") {
+    target.capabilityRequirements = {
+      ...target.capabilityRequirements,
+      needs_pr: stripQuotes(value).trim() === "true",
+    };
+  } else if (key === "needs_network" || key === "needs-network") {
+    target.capabilityRequirements = {
+      ...target.capabilityRequirements,
+      needs_network: stripQuotes(value).trim() === "true",
+    };
+  } else if (key === "isolation" && !target.capabilityRequirements?.isolation) {
+    // Only parsed as capability requirement if not already set by `host:` parsing.
+    const iv = stripQuotes(value).trim().toLowerCase();
+    if (iv === "worktree" || iv === "none") {
+      target.capabilityRequirements = {
+        ...target.capabilityRequirements,
+        isolation: iv as "worktree" | "none",
+      };
+    }
   }
 }
 
@@ -839,7 +896,59 @@ async function main(): Promise<void> {
           fallbackToClaude: chConfig.fallback_to_claude,
           // R-018: pass defaults.capability_manifest_ttl_s → RouteOptions.manifestTtlS
           manifestTtlS: chConfig.capability_manifest_ttl_s,
+          // TE-03/EDIT-2: persist each routing decision (selected host + degraded +
+          // independence + per-lane tier + model) into run-state via upsertLane.
+          // Fires on BOTH the qualifying path (degraded:false) and the degrade-not-throw
+          // path (degraded:true) — host-router calls opts.onDecision in both branches.
+          //
+          // TE-03 fix: d.taskId = specialist NAME (planTeamRouting sets taskId=s.name).
+          // RunStateV1.lanes is task-id keyed. Fan-out upsertLane over the specialist's
+          // plan task-id(s) via resolveDeadLaneKeys — the SAME join the SSH dead-lane
+          // path already uses (L~1032). Skip when no plan task-ids are found (plan absent
+          // or specialist not in plan) — NO name-key fallback (that's the contract violation).
+          onDecision: (d) => {
+            // d.taskId is the specialist NAME (planTeamRouting sets taskId = s.name).
+            // RunStateV1.lanes is TASK-ID keyed. Map name → plan task-id(s) via the
+            // block-scoped plan parse (same join the SSH dead-lane path uses, minus the
+            // name-key fallback: resolveDeadLaneKeys returns [specName] when the plan is
+            // absent, which would reintroduce the contract violation here).
+            const ownerMap = readPlanOwnerTaskIds(cwd, slug);
+            const taskIds = ownerMap.get(d.taskId); // undefined when plan absent / not-in-plan
+            if (!taskIds || taskIds.length === 0) {
+              // No plan task-id — skip. Do NOT persist under the specialist name.
+              return;
+            }
+            const hostBlock = {
+              selected: d.host,
+              degraded: d.degraded,
+              independence: d.independence,
+              tier: d.tier,
+              model: d.model,
+            };
+            for (const taskId of taskIds) {
+              upsertLane(
+                path.join(cwd, ".guild", "runs", runId),
+                { runId, planSlug: slug, programId: null },
+                taskId,
+                { host: hostBlock }
+              );
+            }
+          },
         });
+        // EDIT-2: surface degraded routes in stderr — never silent (mirrors the
+        // remote-no-endpoint surfacing pattern above).
+        const degradedRoutes = routes.filter((r) => r.decision.degraded);
+        if (degradedRoutes.length > 0) {
+          const degradedLines = degradedRoutes
+            .map(
+              (r) =>
+                `    - ${r.specialist} → ${r.decision.host} (${r.hostKind}) [DEGRADED]: no fully-qualifying host; weak independence recorded (TE-02/TE-03)`
+            )
+            .join("\n");
+          process.stderr.write(
+            `[agent-team-launcher] WARN: ${degradedRoutes.length} lane(s) degraded — routing to least-bad host:\n${degradedLines}\n`
+          );
+        }
         const remote = routes.filter((r) => r.backend === "remote");
         if (remote.length > 0) {
           // chConfig already loaded above — reuse it.
@@ -902,6 +1011,33 @@ async function main(): Promise<void> {
           try {
             const outcome = await runWithRetry(
               () => {
+                // TE-01/EDIT-3 + TE-03: write guild.task_run.v1 BEFORE each remote dispatch
+                // attempt. Fan-out per plan task-id via readPlanOwnerTaskIds — the SAME join
+                // onDecision uses — so task_run FILENAME + ids.task_id are plan-task-id-keyed
+                // (not spec.name). Multi-task-id specialist → N files.
+                // TE-01 name-fallback: plan absent → write 1 file keyed by spec.name so
+                // every dispatch writes exactly one task_run (task-id-keyed when plan present;
+                // name-keyed for plan-less dry-runs). capabilityRequirements is specialist-level (ARCH-2).
+                const remoteOwnerMap = readPlanOwnerTaskIds(cwd, slug);
+                for (const spec of remoteSpecialists) {
+                  const taskIds = remoteOwnerMap.get(spec.name);
+                  const effectiveTaskIds =
+                    taskIds && taskIds.length > 0 ? taskIds : [spec.name];
+                  const cr = spec.capabilityRequirements;
+                  for (const taskId of effectiveTaskIds) {
+                    writeTaskRun(cwd, runId, taskId, {
+                      specialist: spec.name,
+                      host: cr ? {
+                        capabilityRequirements: {
+                          needsPr: cr.needs_pr,
+                          needsParallel: cr.needs_parallel,
+                          needsNetwork: cr.needs_network,
+                          isolation: cr.isolation,
+                        },
+                      } : undefined,
+                    });
+                  }
+                }
                 const res = remoteBackend.launch({
                   slug,
                   runId,
@@ -1094,6 +1230,34 @@ async function main(): Promise<void> {
     teamPath: args.team,
   });
   const commands = plan.commands;
+
+  // TE-01/EDIT-3 + TE-03: write guild.task_run.v1 for each local-tmux specialist BEFORE
+  // the panes spawn. Fan-out per plan task-id via readPlanOwnerTaskIds — the SAME join
+  // onDecision uses — so task_run FILENAME + ids.task_id are plan-task-id-keyed (not
+  // spec.name). Multi-task-id specialist → N files.
+  // TE-01 name-fallback: plan absent → write 1 file keyed by spec.name so every dispatch
+  // writes exactly one task_run (task-id-keyed when plan present; name-keyed otherwise).
+  // capabilityRequirements is specialist-level; per-lane capability is a Wave-2 refinement.
+  // Same object feeds capabilityGap() (ARCH-2 round-trip identity — single source).
+  const tmuxOwnerMap = readPlanOwnerTaskIds(cwd, slug);
+  for (const spec of team.specialists) {
+    const taskIds = tmuxOwnerMap.get(spec.name);
+    const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
+    const cr = spec.capabilityRequirements;
+    for (const taskId of effectiveTaskIds) {
+      writeTaskRun(cwd, runId, taskId, {
+        specialist: spec.name,
+        host: cr ? {
+          capabilityRequirements: {
+            needsPr: cr.needs_pr,
+            needsParallel: cr.needs_parallel,
+            needsNetwork: cr.needs_network,
+            isolation: cr.isolation,
+          },
+        } : undefined,
+      });
+    }
+  }
 
   if (args.dryRun) {
     process.stdout.write(

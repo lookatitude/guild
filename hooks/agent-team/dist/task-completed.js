@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // agent-team/task-completed.ts
-var fs3 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
 
 // lib/guild-root.ts
@@ -167,9 +167,41 @@ function extractHandoffEnvelope(content) {
   }
 }
 
+// lib/run-date.ts
+var fs2 = __toESM(require("fs"));
+var path2 = __toESM(require("path"));
+var POLICY_EFFECTIVE_DATE = /* @__PURE__ */ new Date("2026-06-03T00:00:00Z");
+function readRunStartedAt(runDir) {
+  const runYamlPath = path2.join(runDir, "run.yaml");
+  try {
+    if (!fs2.existsSync(runYamlPath)) return null;
+    const raw = fs2.readFileSync(runYamlPath, "utf8");
+    const m = raw.match(/^started_at:[ \t]*(.*)$/m);
+    if (!m || !m[1] || m[1].trim() === "") return null;
+    const d = new Date(m[1].trim());
+    return isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+}
+function isRunInScope(runDir, taskId) {
+  const runDate = readRunStartedAt(runDir);
+  if (runDate === null) {
+    return {
+      inscope: false,
+      reason: "indeterminate",
+      warn: `[task-completed] WARN: cannot determine run date for task "${taskId}" (no run.yaml or missing/unparseable started_at at ${runDir}/run.yaml) \u2014 fail-open to lenient (envelope optional for indeterminate-date runs).`
+    };
+  }
+  if (runDate >= POLICY_EFFECTIVE_DATE) {
+    return { inscope: true };
+  }
+  return { inscope: false, reason: "grandfathered" };
+}
+
 // lib/run-state.ts
-var fs2 = __toESM(require("node:fs"));
-var path2 = __toESM(require("node:path"));
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
 
 // lib/v1.4/v1.4-lock.ts
 var import_node_fs = require("node:fs");
@@ -181,11 +213,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path4 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path4), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path4)) return;
+  const path5 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path5), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path5)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path4, "wx");
+    const fd = (0, import_node_fs.openSync)(path5, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -240,12 +272,12 @@ function withStableLock(runDir, fn, opts = {}) {
 // lib/run-state.ts
 var RUN_STATE_SCHEMA_VERSION = "guild.run_state.v1";
 function runStatePath(runDir) {
-  return path2.join(runDir, "run-state.json");
+  return path3.join(runDir, "run-state.json");
 }
 function loadRunState(runDir) {
   let raw;
   try {
-    raw = fs2.readFileSync(runStatePath(runDir), "utf8");
+    raw = fs3.readFileSync(runStatePath(runDir), "utf8");
   } catch {
     return null;
   }
@@ -261,15 +293,15 @@ function loadRunState(runDir) {
   return parsed;
 }
 function writeRunStateAtomic(runDir, state) {
-  fs2.mkdirSync(runDir, { recursive: true });
+  fs3.mkdirSync(runDir, { recursive: true });
   const finalPath = runStatePath(runDir);
   const tmpPath = `${finalPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  fs2.writeFileSync(tmpPath, JSON.stringify(state, null, 2) + "\n", "utf8");
+  fs3.writeFileSync(tmpPath, JSON.stringify(state, null, 2) + "\n", "utf8");
   try {
-    fs2.renameSync(tmpPath, finalPath);
+    fs3.renameSync(tmpPath, finalPath);
   } catch (err) {
     try {
-      fs2.unlinkSync(tmpPath);
+      fs3.unlinkSync(tmpPath);
     } catch {
     }
     throw err;
@@ -300,6 +332,8 @@ function upsertLane(runDir, init, laneId, patch) {
     };
     const tier = patch.tier ?? prev?.tier;
     if (tier !== void 0) merged.tier = tier;
+    const host = patch.host ?? prev?.host;
+    if (host !== void 0) merged.host = host;
     state.lanes[laneId] = merged;
     state.last_checkpoint_at = now;
     writeRunStateAtomic(runDir, state);
@@ -324,10 +358,10 @@ function deriveRunId(sessionId) {
   return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
 }
 function receiptPath(guildRoot, runId, specialist, taskId) {
-  return path3.join(guildRoot, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
+  return path4.join(guildRoot, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
 }
 function learningsPath(guildRoot, runId, specialist, taskId) {
-  return path3.join(guildRoot, ".guild", "runs", runId, "learnings", `${specialist}-${taskId}.json`);
+  return path4.join(guildRoot, ".guild", "runs", runId, "learnings", `${specialist}-${taskId}.json`);
 }
 function missingFields(content) {
   return REQUIRED_FIELDS.filter((field) => {
@@ -345,9 +379,9 @@ function persistLearnings(envelope, outPath, specialist, taskId) {
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     learnings: envelope.learnings
   };
-  const dir = path3.dirname(outPath);
-  fs3.mkdirSync(dir, { recursive: true });
-  fs3.writeFileSync(outPath, JSON.stringify(record, null, 2) + "\n", "utf8");
+  const dir = path4.dirname(outPath);
+  fs4.mkdirSync(dir, { recursive: true });
+  fs4.writeFileSync(outPath, JSON.stringify(record, null, 2) + "\n", "utf8");
   process.stderr.write(`[task-completed] learnings persisted to ${outPath}
 `);
 }
@@ -375,7 +409,7 @@ function persistRunState(runDir, runId, specialist, taskId, status, tier, depend
   try {
     const patch = {
       status,
-      receipt_ref: path3.join("handoffs", `${specialist}-${taskId}.md`)
+      receipt_ref: path4.join("handoffs", `${specialist}-${taskId}.md`)
     };
     if (tier !== void 0) patch.tier = tier;
     if (dependsOn.length > 0) patch.depends_on = dependsOn;
@@ -392,7 +426,7 @@ function persistRunState(runDir, runId, specialist, taskId, status, tier, depend
   }
 }
 function runStatePathHint(runDir) {
-  return path3.join(runDir, "run-state.json");
+  return path4.join(runDir, "run-state.json");
 }
 async function main() {
   const agentTeamEnabled = process.env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] === "1";
@@ -417,15 +451,15 @@ async function main() {
   const cwd = payload.cwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
   const runId = deriveRunId(sessionId);
-  const runDir = path3.join(guildRoot, ".guild", "runs", runId);
+  const runDir = path4.join(guildRoot, ".guild", "runs", runId);
   const rPath = receiptPath(guildRoot, runId, specialist, taskId);
-  if (!fs3.existsSync(rPath)) {
+  if (!fs4.existsSync(rPath)) {
     die(
       `Task "${taskId}" (specialist: "${specialist}") has no handoff receipt. Expected at: ${rPath}
 Write the receipt with sections: ${REQUIRED_FIELDS.join(", ")} before marking complete.`
     );
   }
-  const content = fs3.readFileSync(rPath, "utf8");
+  const content = fs4.readFileSync(rPath, "utf8");
   const missing = missingFields(content);
   if (missing.length > 0) {
     die(
@@ -454,10 +488,25 @@ Validation errors (SC-7 lint):
 `
     );
   } else {
-    process.stderr.write(
-      `[task-completed] NOTE: no guild.handoff.v2 envelope found in receipt \u2014 validation skipped (envelope optional for legacy receipts).
+    const disc = isRunInScope(runDir, taskId);
+    if (disc.inscope) {
+      die(
+        `Task "${taskId}" receipt at "${rPath}" is missing a guild.handoff.v2 envelope.
+This run is in-scope for enforcement (run started_at >= policy_effective_date ${POLICY_EFFECTIVE_DATE.toISOString().slice(0, 10)}).
+Add a fenced \`\`\`guild.handoff.v2 { ... } \`\`\` JSON block to the receipt before marking complete. A frontmatter-only receipt is not a valid machine receipt (communication-format-policy.md \xA7"Handoff contract", OD-2).`
+      );
+    } else if (disc.reason === "indeterminate") {
+      process.stderr.write(disc.warn + "\n");
+      process.stderr.write(
+        `[task-completed] NOTE: no guild.handoff.v2 envelope found in receipt for task "${taskId}" \u2014 validation skipped (envelope optional for indeterminate-date runs).
 `
-    );
+      );
+    } else {
+      process.stderr.write(
+        `[task-completed] NOTE: no guild.handoff.v2 envelope found in receipt for task "${taskId}" \u2014 validation skipped (grandfathered legacy receipt, run pre-dates policy_effective_date ${POLICY_EFFECTIVE_DATE.toISOString().slice(0, 10)}).
+`
+      );
+    }
   }
   const laneStatus = laneStatusFor(envelopeStatus);
   const dependsOn = extractDependsOn(`${payload.task_subject ?? ""} ${payload.task_description ?? ""}`);

@@ -432,6 +432,9 @@ function buildSecurityEvent(input) {
   if (typeof input.permission_mode === "string" && input.permission_mode.length > 0) {
     rec.permission_mode = input.permission_mode;
   }
+  if (typeof input.dispatch_rung === "string" && input.dispatch_rung.length > 0) {
+    rec.dispatch_rung = input.dispatch_rung;
+  }
   return rec;
 }
 function appendSecurityEvent(runDir, record) {
@@ -628,6 +631,43 @@ function resolveRunId(cwd) {
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
   return readCurrentRunId(cwd);
 }
+function readHostCapability(cwd) {
+  try {
+    const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
+    const hostKind = rawHost === "codex" || rawHost === "gemini" || rawHost === "pi" ? rawHost : "claude";
+    const hostId = (process.env["GUILD_HOST_ID"] ?? "").trim() || hostKind;
+    const manifestPath = path4.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
+    const raw = fs4.readFileSync(manifestPath, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+function writeApprovalRequest(runDir, opts) {
+  try {
+    const approvalDir = path4.join(runDir, "agent-bus", "approvals");
+    fs4.mkdirSync(approvalDir, { recursive: true });
+    const ts = (/* @__PURE__ */ new Date()).toISOString();
+    const safeTs = ts.replace(/[:.]/g, "-");
+    const fileName = `${safeTs}-${opts.tool.toLowerCase()}.json`;
+    const record = {
+      schema_version: "guild.approval_request.v1",
+      ts,
+      run_id: opts.runId,
+      tool: opts.tool,
+      reason: opts.detail,
+      permission_mode: "degraded"
+    };
+    if (opts.laneId) record["lane_id"] = opts.laneId;
+    if (opts.dispatchRung) record["dispatch_rung"] = opts.dispatchRung;
+    fs4.writeFileSync(path4.join(approvalDir, fileName), JSON.stringify(record, null, 2) + "\n", "utf8");
+  } catch (err) {
+    process.stderr.write(
+      `warn: [pre-tool-use] approval_request write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+  }
+}
 var GUILD_NS_TOKEN = /guild\.[A-Za-z0-9_]+\.v\d+/;
 function hasGuildSignature(content) {
   if (typeof content !== "string" || content.length === 0) return false;
@@ -645,7 +685,7 @@ function hasGuildSignature(content) {
 function isInsideGuildDir(absPath) {
   return path4.resolve(absPath).split(path4.sep).includes(".guild");
 }
-function runBoundaryGuard(payload, cwd) {
+function runBoundaryGuard(payload, cwd, ctx) {
   const tool = payload.tool_name;
   if (tool !== "Write" && tool !== "Edit" && tool !== "MultiEdit") {
     return false;
@@ -669,14 +709,51 @@ ${e.new_string}`;
   if (!hasGuildSignature(content)) return false;
   const abs = path4.isAbsolute(filePath) ? filePath : path4.resolve(cwd, filePath);
   if (isInsideGuildDir(abs)) return false;
-  const decision = {
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "ask",
-      permissionDecisionReason: `Guild-owned-file boundary (P5-boundary-001): a Guild-signed artifact would be written OUTSIDE the consuming repo's .guild/ (${abs}). Guild-owned files belong under .guild/ (or .guild/agents/proposed/, .guild/skills/proposed-*). Confirm this write is intentional.`
+  const guardReason = `Guild-owned-file boundary (P5-boundary-001): a Guild-signed artifact would be written OUTSIDE the consuming repo's .guild/ (${abs}). Guild-owned files belong under .guild/ (or .guild/agents/proposed/, .guild/skills/proposed-*). Confirm this write is intentional.`;
+  const toolName = payload.tool_name ?? "";
+  if (ctx !== void 0 && !ctx.hostSupportsAsk) {
+    if (ctx.runId !== void 0 && ctx.runDir !== void 0) {
+      writeApprovalRequest(ctx.runDir, {
+        runId: ctx.runId,
+        laneId: ctx.laneId,
+        tool: toolName,
+        detail: guardReason,
+        dispatchRung: ctx.dispatchRung
+      });
+      appendSecurityEvent(
+        ctx.runDir,
+        buildSecurityEvent({
+          run_id: ctx.runId,
+          lane_id: ctx.laneId,
+          dispatch_rung: ctx.dispatchRung,
+          event_type: "capability_scope_degrade",
+          decision: "deny",
+          tool: toolName,
+          detail: `Host lacks PreToolUse ask \u2014 boundary-guard degraded to file-bus approval_request. ${guardReason}`,
+          permission_mode: "degraded"
+        })
+      );
     }
-  };
-  process.stdout.write(JSON.stringify(decision));
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: `Guild security (capability_scope_degrade): host lacks PreToolUse ask. Approval request written to agent-bus/approvals/ (permission_mode: degraded). Original: ${guardReason}`
+        }
+      })
+    );
+    return true;
+  }
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "ask",
+        permissionDecisionReason: guardReason
+      }
+    })
+  );
   return true;
 }
 function readMcpDescription(payload, runDir, toolName) {
@@ -705,6 +782,9 @@ function runSecurityEnforcement(payload, cwd) {
   const laneEnv = process.env["GUILD_LANE_ID"];
   const laneId = typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv) ? laneEnv : void 0;
   const permissionMode = payload.permission_mode;
+  const dispatchRung = (process.env["GUILD_DISPATCH_RUNG"] ?? "").trim() || void 0;
+  const hostCap = readHostCapability(cwd);
+  const hostSupportsAsk = hostCap?.tool_support?.pre_tool_use_ask !== false;
   const emit = (input) => {
     if (runId === void 0 || runDir === void 0) {
       process.stderr.write(
@@ -713,9 +793,43 @@ function runSecurityEnforcement(payload, cwd) {
       );
       return;
     }
-    appendSecurityEvent(runDir, buildSecurityEvent({ run_id: runId, lane_id: laneId, ...input }));
+    appendSecurityEvent(
+      runDir,
+      buildSecurityEvent({
+        run_id: runId,
+        lane_id: laneId,
+        dispatch_rung: dispatchRung,
+        ...input
+      })
+    );
   };
   const gate = (permissionDecision, eventType, reason) => {
+    if (permissionDecision === "ask" && !hostSupportsAsk && runId !== void 0 && runDir !== void 0) {
+      writeApprovalRequest(runDir, {
+        runId,
+        laneId,
+        tool: toolName,
+        detail: reason,
+        dispatchRung
+      });
+      emit({
+        event_type: "capability_scope_degrade",
+        decision: "deny",
+        tool: toolName,
+        detail: `Host lacks PreToolUse ask \u2014 degraded to file-bus approval_request. Original: ${reason}`,
+        permission_mode: "degraded"
+      });
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `Guild security (capability_scope_degrade): host lacks PreToolUse ask. Approval request written to agent-bus/approvals/ (permission_mode: degraded). Original: ${reason}`
+          }
+        })
+      );
+      return true;
+    }
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput: {
@@ -780,7 +894,23 @@ async function main() {
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   if (runSecurityEnforcement(payload, cwd)) return;
-  if (runBoundaryGuard(payload, cwd)) return;
+  {
+    const bgHostCap = readHostCapability(cwd);
+    const bgHostSupportsAsk = bgHostCap?.tool_support?.pre_tool_use_ask !== false;
+    const bgRunId = resolveRunId(cwd);
+    const bgRunDir = bgRunId !== void 0 ? process.env["GUILD_RUN_DIR"] ?? path4.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId) : void 0;
+    const bgLaneEnv = process.env["GUILD_LANE_ID"];
+    const bgLaneId = typeof bgLaneEnv === "string" && bgLaneEnv.length > 0 ? bgLaneEnv : void 0;
+    const bgDispatchRung = (process.env["GUILD_DISPATCH_RUNG"] ?? "").trim() || void 0;
+    if (runBoundaryGuard(payload, cwd, {
+      hostSupportsAsk: bgHostSupportsAsk,
+      runId: bgRunId,
+      runDir: bgRunDir,
+      laneId: bgLaneId,
+      dispatchRung: bgDispatchRung
+    }))
+      return;
+  }
   const runId = resolveRunId(cwd);
   if (typeof runId !== "string" || runId.length === 0) {
     process.stderr.write(

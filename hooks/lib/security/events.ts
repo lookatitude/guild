@@ -27,6 +27,7 @@ import type { BypassPolicy } from "./config.js";
 /** Why a security record was emitted. */
 export type SecurityEventType =
   | "capability_scope_violation"
+  | "capability_scope_degrade"
   | "bypass_permission_allowed"
   | "mcp_description_mismatch"
   | "mcp_description_unverifiable"
@@ -50,8 +51,14 @@ export interface SecurityEventV1 {
   detail: string;
   /** bypass_permissions_policy in force when this was a bypass decision. */
   policy?: BypassPolicy;
-  /** Claude Code permission mode at decision time (e.g. "default" | "bypassPermissions"). */
+  /** Claude Code permission mode at decision time (e.g. "default" | "bypassPermissions" | "degraded"). */
   permission_mode?: string;
+  /**
+   * HK-07: the dispatch substrate rung (1=team/tmux, 2=agent, 3=subagent, 4=serial)
+   * at the time of this security decision. Sourced from GUILD_DISPATCH_RUNG env
+   * (set by the orchestrator at specialist dispatch). Absent for lead-session calls.
+   */
+  dispatch_rung?: string;
 }
 
 /** The version token — single point of coupling to contract-map §B-post. */
@@ -80,6 +87,9 @@ export function buildSecurityEvent(input: SecurityEventInput): SecurityEventV1 {
   if (input.policy !== undefined) rec.policy = input.policy;
   if (typeof input.permission_mode === "string" && input.permission_mode.length > 0) {
     rec.permission_mode = input.permission_mode;
+  }
+  if (typeof input.dispatch_rung === "string" && input.dispatch_rung.length > 0) {
+    rec.dispatch_rung = input.dispatch_rung;
   }
   return rec;
 }

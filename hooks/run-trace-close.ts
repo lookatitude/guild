@@ -40,6 +40,54 @@ import * as path from "path";
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { defaultResolveHost, emitRunClosed, resolveRunIdForTrace } from "./lib/run-trace.js";
 
+// ── HK-09 — terminal learning checkpoint resolution ───────────────────────
+
+/**
+ * Find the terminal `guild.learning_checkpoint.v1` YAML for the given run.
+ *
+ * Preference order:
+ *   1. `reflection-<runId>.yaml` (the terminal phase) — preferred regardless
+ *      of mtime, as reflection is always the last phase in the lifecycle.
+ *   2. Last-modified `.yaml` file in the `learning/` directory — fallback
+ *      when no reflection-phase checkpoint was written (e.g. run stopped
+ *      mid-lifecycle).
+ *
+ * Returns `null` when:
+ *   - the `learning/` directory does not exist, or
+ *   - the `learning/` directory has no `.yaml` files.
+ *
+ * EXPORTED: consumed by tests (TDD) and callable by future tooling.
+ */
+export function findTerminalCheckpoint(runDir: string, runId: string): string | null {
+  const learningDir = path.join(runDir, "learning");
+  if (!fs.existsSync(learningDir)) return null;
+
+  // 1. Prefer the reflection-phase checkpoint (always the terminal phase).
+  const reflectionFile = path.join(learningDir, `reflection-${runId}.yaml`);
+  if (fs.existsSync(reflectionFile)) return reflectionFile;
+
+  // 2. Fall back to the last-modified .yaml file.
+  let yamlFiles: string[];
+  try {
+    yamlFiles = fs.readdirSync(learningDir).filter((f) => f.endsWith(".yaml"));
+  } catch {
+    return null;
+  }
+  if (yamlFiles.length === 0) return null;
+
+  const sorted = yamlFiles
+    .map((f) => path.join(learningDir, f))
+    .sort((a, b) => {
+      try {
+        return fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs;
+      } catch {
+        return 0;
+      }
+    });
+
+  return sorted[0] ?? null;
+}
+
 interface HookPayload {
   session_id?: string;
   cwd?: string;
@@ -77,7 +125,14 @@ async function main(): Promise<void> {
   // Already closed (provenance exists) — idempotent no-op.
   if (fs.existsSync(path.join(runDir, "provenance.json"))) process.exit(0);
 
-  emitRunClosed(root, runId, defaultResolveHost, { status: "closed" });
+  // HK-09: populate provenance.json.final_learning_checkpoint
+  const finalLearningCheckpoint = findTerminalCheckpoint(runDir, runId);
+  emitRunClosed(root, runId, defaultResolveHost, {
+    status: "closed",
+    ...(finalLearningCheckpoint !== null
+      ? { final_learning_checkpoint: finalLearningCheckpoint }
+      : {}),
+  });
   process.exit(0);
 }
 

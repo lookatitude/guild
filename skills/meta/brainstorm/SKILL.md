@@ -85,18 +85,26 @@ Per `guild-plan.md §15.2` ("user fatigue from Socratic brainstorm"), if the use
 
 Red flag: do **not** auto-fill missing fields from training-data priors. A missing field is either answered by the user in the consolidated follow-up, or recorded as an explicit assumption — never silently synthesized.
 
-## Codex adversarial review (when `codex_review: true`)
+## Adversarial review — G-spec (broker, when policy fires)
 
-If the run context has `review: cross` (set via `--review=cross` flag or `.guild/settings.json`), invoke `guild:codex-review` after writing the spec and **before** asking the user for approval:
+G-spec is a **skill-internal gate** (`docs/v2/09-adversarial-review.md §Gate ownership`): it fires here inside `guild:brainstorm` at the spec→approval boundary, not from a command — which is why it doesn't appear in `build`'s skill row. Wire the **review broker** at this boundary, **not** `guild:codex-review` directly: the broker is the host-agnostic front door, and `guild:codex-review` survives only as the internal Codex adapter the broker dispatches to (`docs/v2/09 §The review broker`).
+
+After writing the spec and **before** asking the user for approval, invoke `guild:review-broker`:
 
 ```
-Skill: guild-codex-review
-args: gate=G-spec artifact_path=.guild/spec/<slug>.md run_id=<run-id>
+Skill: guild-review-broker
+args: gate=G-spec artifact_path=.guild/spec/<slug>.md run_id=<run-id> author_host=<run author host>
 ```
 
-If `guild:codex-review` returns `status: "rework"`, loop back to the spec revision flow with Codex's findings as context. If `status: "satisfied"`, `"skipped"`, or `"force_passed"`, proceed to the user-approval question normally.
+The broker is **policy-gated** (`docs/v2/09 §The review broker`): it fires only when `risk ≥ high`, `review: cross` / `--review=cross` is set, or project config requires it — otherwise it resolves `status: "skipped"` and the gate passes with no reviewer. Self-build runs treat cross-host review as always-on. `author_host` is the host that produced the spec (resolved from the run-start preflight snapshot; `claude` on a Claude-hosted run).
 
-The Codex gate runs between spec write and user-approval. It does not replace user approval — both must complete before handoff to `guild:team-compose`.
+If the broker returns `status: "rework"`, loop back to the spec revision flow with the findings as context. On `"satisfied"`, `"skipped"`, or `"force_passed"`, proceed to the user-approval question normally.
+
+The gate runs between spec write and user-approval. It does not replace user approval — both must complete before handoff to `guild:team-compose`.
+
+## Learning checkpoint (step 7.5 — advisory, no new gate)
+
+After the G-spec review and before handoff, fire the per-phase LearningCheckpoint with `phase=ideation` and `.guild/spec/<slug>.md` as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written spec/assumptions into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
 
 ## Handoff
 

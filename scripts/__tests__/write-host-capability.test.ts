@@ -120,6 +120,40 @@ describe("write-host-capability — buildCapability (RE-5)", () => {
       buildCapability({ cwd: mkRoot(), host: "claude", env: { GUILD_INDEPENDENT_AGENTS_SUPPORTED: "off" }, probeTmux: () => false }).tool_support.independent_agents
     ).toBe(false);
   });
+
+  // HK-07: pre_tool_use_ask matrix — only claude gets true; all others degrade.
+  it("pre_tool_use_ask: claude→true, all other HostKind values→false", () => {
+    const mk = (host: Parameters<typeof buildCapability>[0]["host"]) =>
+      buildCapability({ cwd: mkRoot(), host, env: {}, probeTmux: () => false }).tool_support.pre_tool_use_ask;
+    expect(mk("claude")).toBe(true);
+    expect(mk("codex")).toBe(false);
+    expect(mk("gemini")).toBe(false);
+    expect(mk("pi")).toBe(false);
+    expect(mk("antigravity-2")).toBe(false);
+    expect(mk("claude-code-desktop")).toBe(false);
+    expect(mk("claude-code-web")).toBe(false);
+    expect(mk("codex-app")).toBe(false);
+    expect(mk("claude-ai-connector")).toBe(false);
+  });
+
+  it("pre_tool_use_ask: resolves via GUILD_HOST env (gemini→false, pi→false)", () => {
+    expect(
+      buildCapability({ cwd: mkRoot(), env: { GUILD_HOST: "gemini" }, probeTmux: () => false }).tool_support.pre_tool_use_ask
+    ).toBe(false);
+    expect(
+      buildCapability({ cwd: mkRoot(), env: { GUILD_HOST: "pi" }, probeTmux: () => false }).tool_support.pre_tool_use_ask
+    ).toBe(false);
+  });
+
+  it("resolves host_kind=gemini from --host arg and GUILD_HOST env", () => {
+    expect(buildCapability({ cwd: mkRoot(), host: "gemini", env: {}, probeTmux: () => false }).host_kind).toBe("gemini");
+    expect(buildCapability({ cwd: mkRoot(), env: { GUILD_HOST: "gemini" }, probeTmux: () => false }).host_kind).toBe("gemini");
+  });
+
+  it("resolves host_kind=pi from --host arg and GUILD_HOST env", () => {
+    expect(buildCapability({ cwd: mkRoot(), host: "pi", env: {}, probeTmux: () => false }).host_kind).toBe("pi");
+    expect(buildCapability({ cwd: mkRoot(), env: { GUILD_HOST: "pi" }, probeTmux: () => false }).host_kind).toBe("pi");
+  });
 });
 
 describe("write-host-capability — writeHostCapability (RE-5)", () => {

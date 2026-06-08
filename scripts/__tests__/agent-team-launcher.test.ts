@@ -152,6 +152,8 @@ function writeHostManifest(cwd: string, hostId: string, hostKind: "claude" | "co
       independent_agents: hostKind === "claude",
       tmux: hostKind === "claude",
       mcp: true,
+      // HK-07 (Cluster B): required field added by write-host-capability.ts
+      pre_tool_use_ask: hostKind === "claude",
     },
   };
   fs.writeFileSync(path.join(dir, "capability.json"), JSON.stringify(manifest, null, 2), "utf8");
@@ -923,4 +925,691 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).not.toMatch(/\[DISMISS\]/);
     });
   });
+
+  // ─────────────────────────────────────────────────────────────
+  // TE-03: onDecision keys run-state by plan task-id, not specialist name
+  // Uses GENERATED-team-shape fixture (default_tier + name-only, plan-joined task-ids)
+  // ─────────────────────────────────────────────────────────────
+  describe("TE-03: run-state AND task_run files keyed by plan task-id (not specialist name)", () => {
+    // Write a guild:plan-shaped plan file with the block-scoped ## Lane: format that
+    // readPlanOwnerTaskIds parses. `backend` owns TWO task-ids to prove no collision.
+    function writePlanFile(cwd: string, slug: string): void {
+      const planDir = path.join(cwd, ".guild", "plan");
+      fs.mkdirSync(planDir, { recursive: true });
+      const planContent = [
+        `# Plan: ${slug}`,
+        "",
+        "## Lane: T1-architect",
+        "- task-id: T1-architect",
+        "- owner: architect",
+        "- objective: Design system boundaries.",
+        "",
+        "## Lane: T2-backend",
+        "- task-id: T2-backend",
+        "- owner: backend",
+        "- objective: Implement REST contract.",
+        "",
+        "## Lane: T5-backend",
+        "- task-id: T5-backend",
+        "- owner: backend",
+        "- objective: Implement data layer.",
+        "",
+        "## Lane: T3-qa",
+        "- task-id: T3-qa",
+        "- owner: qa",
+        "- objective: Property-based tests.",
+      ].join("\n");
+      fs.writeFileSync(path.join(planDir, `${slug}.md`), planContent, "utf8");
+    }
+
+    function writeCrossHostSettingsTE03(
+      cwd: string,
+      opts: { enabled: boolean; hosts: Record<string, { address: string; user?: string }> }
+    ): void {
+      const dir = path.join(cwd, ".guild");
+      fs.mkdirSync(dir, { recursive: true });
+      const settings = {
+        defaults: { cross_host: { enabled: opts.enabled, hosts: opts.hosts } },
+      };
+      fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify(settings, null, 2), "utf8");
+    }
+
+    function findRunStateJson(cwd: string): string | null {
+      const runsDir = path.join(cwd, ".guild", "runs");
+      if (!fs.existsSync(runsDir)) return null;
+      for (const runId of fs.readdirSync(runsDir)) {
+        const candidate = path.join(runsDir, runId, "run-state.json");
+        if (fs.existsSync(candidate)) return candidate;
+      }
+      return null;
+    }
+
+    it("GENERATED-shape: multi-task-id specialist produces 2 task-id-keyed run-state entries, no name-key", () => {
+      // Use team-generated-shape.yaml (default_tier, no tier:) + plan that gives
+      // backend two task-ids (T2-backend, T5-backend). After routing, run-state must
+      // have T2-backend AND T5-backend as keys — NOT "backend" as a name-key.
+      const slug = "gen-slug";
+      const { teamPath } = setupConsumerRepo(tmpDir, slug, "team-generated-shape.yaml");
+      writePlanFile(tmpDir, slug);
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeCrossHostSettingsTE03(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
+      });
+
+      const { exitCode } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+
+      const rsPath = findRunStateJson(tmpDir);
+      expect(rsPath).not.toBeNull();
+      const state = JSON.parse(fs.readFileSync(rsPath!, "utf8"));
+      const lanes = Object.keys(state.lanes ?? {});
+
+      // backend owns T2-backend + T5-backend → 2 task-id-keyed entries
+      expect(lanes).toContain("T2-backend");
+      expect(lanes).toContain("T5-backend");
+      // Must NOT be keyed by the specialist name
+      expect(lanes).not.toContain("backend");
+
+      // Both entries have equal host blocks (same pane → same host decision)
+      const t2 = state.lanes["T2-backend"];
+      const t5 = state.lanes["T5-backend"];
+      expect(t2.host?.selected).toBe(t5.host?.selected);
+      expect(t2.host?.degraded).toBe(t5.host?.degraded);
+      expect(t2.host?.independence).toBe(t5.host?.independence);
+    });
+
+    it("GENERATED-shape: plan absent → no run-state entries written (no name-key fallback)", () => {
+      const slug = "no-plan-slug";
+      const { teamPath } = setupConsumerRepo(tmpDir, slug, "team-generated-shape.yaml");
+      // Do NOT write a plan file — readPlanOwnerTaskIds returns empty map → skip
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeCrossHostSettingsTE03(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "gpu-box.example.com" } },
+      });
+
+      const { exitCode } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+
+      const rsPath = findRunStateJson(tmpDir);
+      // Either no run-state.json at all, or lanes is empty (no name-key persisted)
+      if (rsPath !== null) {
+        const state = JSON.parse(fs.readFileSync(rsPath, "utf8"));
+        const lanes = Object.keys(state.lanes ?? {});
+        // No specialist names as lane keys
+        expect(lanes).not.toContain("architect");
+        expect(lanes).not.toContain("backend");
+        expect(lanes).not.toContain("qa");
+      }
+    });
+
+    it("GENERATED-shape: single-task-id specialist produces exactly 1 task-id-keyed entry", () => {
+      const slug = "gen-slug";
+      const { teamPath } = setupConsumerRepo(tmpDir, slug, "team-generated-shape.yaml");
+      writePlanFile(tmpDir, slug);
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeCrossHostSettingsTE03(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "gpu-box.example.com" } },
+      });
+
+      runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+
+      const rsPath = findRunStateJson(tmpDir);
+      expect(rsPath).not.toBeNull();
+      const state = JSON.parse(fs.readFileSync(rsPath!, "utf8"));
+
+      // architect owns exactly T1-architect (one task)
+      expect(state.lanes?.["T1-architect"]).toBeDefined();
+      expect(state.lanes?.["T1-architect"]?.host).toBeDefined();
+      expect(state.lanes?.["architect"]).toBeUndefined(); // name-key must not appear
+    });
+
+    // ── task_run file keying (writeTaskRun sites) ─────────────────────────────
+
+    function findTaskRunFiles(cwd: string): string[] {
+      const runsDir = path.join(cwd, ".guild", "runs");
+      if (!fs.existsSync(runsDir)) return [];
+      const files: string[] = [];
+      for (const runId of fs.readdirSync(runsDir)) {
+        const taskRunsDir = path.join(runsDir, runId, "task-runs");
+        if (!fs.existsSync(taskRunsDir)) continue;
+        for (const f of fs.readdirSync(taskRunsDir)) {
+          files.push(path.join(taskRunsDir, f));
+        }
+      }
+      return files;
+    }
+
+    it("GENERATED-shape: multi-task-id specialist (tmux path) produces T2-backend.yaml + T5-backend.yaml, not backend.yaml", () => {
+      // team-generated-shape.yaml + plan giving backend 2 task-ids → local tmux path writes
+      // one task_run file per plan task-id. Assert T2-backend.yaml + T5-backend.yaml exist
+      // and ids.task_id inside each matches the filename (not the specialist name).
+      const slug = "gen-slug";
+      const { teamPath } = setupConsumerRepo(tmpDir, slug, "team-generated-shape.yaml");
+      writePlanFile(tmpDir, slug);
+
+      const { exitCode } = runScript([
+        "--team", teamPath, "--cwd", tmpDir, "--dry-run",
+      ]);
+      expect(exitCode).toBe(0);
+
+      const files = findTaskRunFiles(tmpDir);
+      const fileNames = files.map((f) => path.basename(f));
+
+      // backend owns T2-backend + T5-backend → 2 files, NOT a single "backend.yaml"
+      expect(fileNames).toContain("T2-backend.yaml");
+      expect(fileNames).toContain("T5-backend.yaml");
+      expect(fileNames).not.toContain("backend.yaml");
+
+      // ids.task_id in each file must match the filename
+      for (const fname of ["T2-backend.yaml", "T5-backend.yaml"]) {
+        const fpath = files.find((f) => f.endsWith(fname))!;
+        const raw = fs.readFileSync(fpath, "utf8");
+        const expectedId = fname.replace(".yaml", "");
+        expect(raw).toContain(`task_id: ${expectedId}`);
+        // specialist field must still carry the specialist name (backend), not the task-id
+        expect(raw).toContain("specialist: backend");
+      }
+    });
+
+    it("GENERATED-shape: multi-task-id specialist (remote path) produces T2-backend.yaml + T5-backend.yaml, not backend.yaml", () => {
+      // team.yaml with backend having host: codex → routes via RemoteTeamBackend.
+      // plan gives backend T2-backend + T5-backend → remote writeTaskRun loop must
+      // fan-out to N files keyed by plan task-id, NOT one file keyed by specialist name.
+      // Mirrors the tmux multi-task-id test above but exercises site (b) (L1019).
+      const slug = "gen-slug";
+      const teamDir = path.join(tmpDir, ".guild", "team");
+      fs.mkdirSync(teamDir, { recursive: true });
+      const teamPath = path.join(teamDir, `${slug}.yaml`);
+      fs.writeFileSync(
+        teamPath,
+        [
+          "spec: .guild/spec/gen-slug.md",
+          "backend: agent-team",
+          "allow_larger: false",
+          "user_approved_agent_team: true",
+          "specialists:",
+          "  - name: architect",
+          '    scope: "System boundaries and component split."',
+          "    depends-on: []",
+          "    default_tier: powerful",
+          "  - name: backend",
+          '    scope: "REST contract and data layer."',
+          "    depends-on: [architect]",
+          "    default_tier: mid",
+          "    host: codex",
+        ].join("\n"),
+        "utf8"
+      );
+
+      writePlanFile(tmpDir, slug);
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeCrossHostSettingsTE03(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
+      });
+
+      const { exitCode } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+
+      const files = findTaskRunFiles(tmpDir);
+      const fileNames = files.map((f) => path.basename(f));
+
+      // backend (remote) owns T2-backend + T5-backend → 2 files, NOT a single "backend.yaml"
+      expect(fileNames).toContain("T2-backend.yaml");
+      expect(fileNames).toContain("T5-backend.yaml");
+      expect(fileNames).not.toContain("backend.yaml");
+
+      // ids.task_id in each file must match the filename stem
+      for (const fname of ["T2-backend.yaml", "T5-backend.yaml"]) {
+        const fpath = files.find((f) => f.endsWith(fname))!;
+        const raw = fs.readFileSync(fpath, "utf8");
+        const expectedId = fname.replace(".yaml", "");
+        expect(raw).toContain(`task_id: ${expectedId}`);
+        // specialist field must carry the specialist name (backend), not the task-id
+        expect(raw).toContain("specialist: backend");
+      }
+    });
+
+    it("GENERATED-shape: plan absent → 1 name-keyed task_run file per specialist (TE-01 name-fallback)", () => {
+      // No plan file → readPlanOwnerTaskIds returns empty map → name-fallback kicks in:
+      // effectiveTaskIds = [spec.name] → one file keyed by specialist name.
+      // Every dispatch writes exactly one task_run (plan-absent case uses spec.name as key).
+      // NOTE: run-state onDecision STILL skips on empty plan (no name-key in run-state).
+      const slug = "no-plan-slug2";
+      const teamDir = path.join(tmpDir, ".guild", "team");
+      fs.mkdirSync(teamDir, { recursive: true });
+      const teamPath = path.join(teamDir, `${slug}.yaml`);
+      fs.writeFileSync(teamPath, [
+        "backend: agent-team",
+        "specialists:",
+        "  - name: architect",
+        "    scope: test",
+        "    depends-on: []",
+        "    default_tier: mid",
+      ].join("\n"), "utf8");
+
+      const { exitCode } = runScript([
+        "--team", teamPath, "--cwd", tmpDir, "--dry-run",
+      ]);
+      expect(exitCode).toBe(0);
+
+      // Name-fallback: one file keyed by specialist name
+      const files = findTaskRunFiles(tmpDir);
+      const fileNames = files.map((f) => path.basename(f));
+      expect(fileNames).toContain("architect.yaml");
+      // task_id inside the file is the specialist name (not a plan task-id)
+      const archFile = files.find((f) => f.endsWith("architect.yaml"))!;
+      const raw = fs.readFileSync(archFile, "utf8");
+      expect(raw).toContain("task_id: architect");
+      expect(raw).toContain("specialist: architect");
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // ARCH-6 Part 1: default_tier parser — generated-team routes at roster tier
+  // Uses GENERATED-team-shape fixture (default_tier, not tier:)
+  // ─────────────────────────────────────────────────────────────
+  describe("ARCH-6 Part 1: default_tier — generated teams route at roster tier, not mid", () => {
+    function writeCrossHostSettingsArch6(
+      cwd: string,
+      opts: { enabled: boolean; hosts: Record<string, { address: string; user?: string }> }
+    ): void {
+      const dir = path.join(cwd, ".guild");
+      fs.mkdirSync(dir, { recursive: true });
+      const settings = {
+        defaults: { cross_host: { enabled: opts.enabled, hosts: opts.hosts } },
+      };
+      fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify(settings, null, 2), "utf8");
+    }
+
+    function findRunStateJson(cwd: string): string | null {
+      const runsDir = path.join(cwd, ".guild", "runs");
+      if (!fs.existsSync(runsDir)) return null;
+      for (const runId of fs.readdirSync(runsDir)) {
+        const candidate = path.join(runsDir, runId, "run-state.json");
+        if (fs.existsSync(candidate)) return candidate;
+      }
+      return null;
+    }
+
+    it("GENERATED-shape: default_tier: powerful routes architect at powerful/opus, not mid/sonnet", () => {
+      // team-generated-shape.yaml has architect with default_tier: powerful (no tier:).
+      // The fixture is GENERATED-shape — team-compose emits default_tier, not tier:.
+      const slug = "gen-slug";
+      const { teamPath } = setupConsumerRepo(tmpDir, slug, "team-generated-shape.yaml");
+      // Write plan so onDecision can persist
+      const planDir = path.join(tmpDir, ".guild", "plan");
+      fs.mkdirSync(planDir, { recursive: true });
+      fs.writeFileSync(path.join(planDir, `${slug}.md`), [
+        `# Plan: ${slug}`,
+        "## Lane: T1-architect",
+        "- task-id: T1-architect",
+        "- owner: architect",
+      ].join("\n"), "utf8");
+
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeCrossHostSettingsArch6(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
+      });
+
+      const { exitCode } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+
+      const rsPath = findRunStateJson(tmpDir);
+      expect(rsPath).not.toBeNull();
+      const state = JSON.parse(fs.readFileSync(rsPath!, "utf8"));
+
+      // architect: default_tier: powerful → LaneState.host.tier must be "powerful"
+      const arch = state.lanes?.["T1-architect"];
+      expect(arch).toBeDefined();
+      expect(arch?.host?.tier).toBe("powerful");
+      // Must NOT have collapsed to mid
+      expect(arch?.host?.tier).not.toBe("mid");
+    });
+
+    it("GENERATED-shape: scored tier: overrides default_tier when both present", () => {
+      // Write a team.yaml inline with BOTH default_tier: cheap AND tier: powerful.
+      // flush() precedence: tier ?? default_tier → must resolve to powerful.
+      const slug = "scored-slug";
+      const teamDir = path.join(tmpDir, ".guild", "team");
+      fs.mkdirSync(teamDir, { recursive: true });
+      const teamContent = [
+        "backend: agent-team",
+        "specialists:",
+        "  - name: architect",
+        "    scope: scored override test",
+        "    depends-on: []",
+        "    default_tier: cheap",
+        "    tier: powerful",
+      ].join("\n");
+      const teamPath = path.join(teamDir, `${slug}.yaml`);
+      fs.writeFileSync(teamPath, teamContent, "utf8");
+
+      const planDir = path.join(tmpDir, ".guild", "plan");
+      fs.mkdirSync(planDir, { recursive: true });
+      fs.writeFileSync(path.join(planDir, `${slug}.md`), [
+        `# Plan: ${slug}`,
+        "## Lane: T1-architect",
+        "- task-id: T1-architect",
+        "- owner: architect",
+      ].join("\n"), "utf8");
+
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeCrossHostSettingsArch6(tmpDir, { enabled: true, hosts: {} });
+
+      const { exitCode } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+
+      const rsPath = findRunStateJson(tmpDir);
+      expect(rsPath).not.toBeNull();
+      const state = JSON.parse(fs.readFileSync(rsPath!, "utf8"));
+
+      // scored `tier: powerful` must win over `default_tier: cheap`
+      const arch = state.lanes?.["T1-architect"];
+      expect(arch?.host?.tier).toBe("powerful");
+    });
+
+    it("GENERATED-shape: mixed default_tier team — each lane routes at its own tier, none collapse to mid", () => {
+      // team-generated-shape.yaml: architect=powerful, backend=mid, qa=cheap.
+      // None should collapse to mid (the old bug).
+      const slug = "gen-slug";
+      const { teamPath } = setupConsumerRepo(tmpDir, slug, "team-generated-shape.yaml");
+      const planDir = path.join(tmpDir, ".guild", "plan");
+      fs.mkdirSync(planDir, { recursive: true });
+      fs.writeFileSync(path.join(planDir, `${slug}.md`), [
+        `# Plan: ${slug}`,
+        "## Lane: T1-architect",
+        "- task-id: T1-architect",
+        "- owner: architect",
+        "## Lane: T2-backend",
+        "- task-id: T2-backend",
+        "- owner: backend",
+        "## Lane: T3-qa",
+        "- task-id: T3-qa",
+        "- owner: qa",
+      ].join("\n"), "utf8");
+
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeCrossHostSettingsArch6(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "gpu-box.example.com" } },
+      });
+
+      const { exitCode } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+
+      const rsPath = findRunStateJson(tmpDir);
+      expect(rsPath).not.toBeNull();
+      const state = JSON.parse(fs.readFileSync(rsPath!, "utf8"));
+
+      // architect → powerful (not mid)
+      expect(state.lanes?.["T1-architect"]?.host?.tier).toBe("powerful");
+      // backend → mid (correct, not collapsed)
+      expect(state.lanes?.["T2-backend"]?.host?.tier).toBe("mid");
+      // qa → cheap (not collapsed to mid)
+      expect(state.lanes?.["T3-qa"]?.host?.tier).toBe("cheap");
+    });
+
+    it("ARCH-2 launcher-seam: needs_parallel: true in team.yaml → parser → planTeamRouting → degraded=true when no host supports parallel", () => {
+      // Disconnected-seam proof: host-router.test.ts:549 constructs the specialist directly —
+      // this test drives needs_parallel through the LAUNCHER'S YAML PARSER → planTeamRouting
+      // → capabilityGap() → degraded decision persisted in run-state. Proves the live seam.
+      //
+      // planTeamRouting only runs when crossHostEnabled=true (L883 guard). Setup:
+      // - Custom claude manifest: agent_team:false + independent_agents:false (no parallel)
+      // - Standard codex manifest: also agent_team:false + independent_agents:false
+      // - Both hosts fail needs_parallel → qualifying=[] → degraded:true (degrade-not-throw)
+      const slug = "arch2-seam-slug";
+      const teamDir = path.join(tmpDir, ".guild", "team");
+      fs.mkdirSync(teamDir, { recursive: true });
+      const teamPath = path.join(teamDir, `${slug}.yaml`);
+      fs.writeFileSync(
+        teamPath,
+        [
+          "backend: agent-team",
+          "specialists:",
+          "  - name: writer",
+          '    scope: "Write content."',
+          "    depends-on: []",
+          "    default_tier: mid",
+          "    needs_parallel: true",
+        ].join("\n"),
+        "utf8"
+      );
+
+      // Plan so onDecision can write run-state keyed by plan task-id
+      const planDir = path.join(tmpDir, ".guild", "plan");
+      fs.mkdirSync(planDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(planDir, `${slug}.md`),
+        [
+          `# Plan: ${slug}`,
+          "",
+          "## Lane: T1-writer",
+          "- task-id: T1-writer",
+          "- owner: writer",
+          "- objective: Write content.",
+        ].join("\n"),
+        "utf8"
+      );
+
+      // Custom claude manifest: agent_team:false + independent_agents:false
+      // (standard writeHostManifest sets these true for claude — override here)
+      const claudeHostDir = path.join(tmpDir, ".guild", "hosts", "claude");
+      fs.mkdirSync(claudeHostDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(claudeHostDir, "capability.json"),
+        JSON.stringify({
+          schema_version: "guild.host_capability.v1",
+          host_id: "claude",
+          host_kind: "claude",
+          detected_at: new Date().toISOString(),
+          source: "test",
+          tiers: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+          models: ["haiku", "sonnet", "opus"],
+          tool_support: {
+            subagent: true,
+            agent_team: false,           // ← no parallel
+            independent_agents: false,   // ← no parallel
+            tmux: true,
+            mcp: true,
+            pre_tool_use_ask: true,
+          },
+        }, null, 2),
+        "utf8"
+      );
+      // Standard codex manifest also has agent_team:false + independent_agents:false
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeCrossHostSettingsArch6(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
+      });
+
+      const { exitCode } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+
+      const rsPath = findRunStateJson(tmpDir);
+      expect(rsPath).not.toBeNull();
+      const state = JSON.parse(fs.readFileSync(rsPath!, "utf8"));
+
+      // needs_parallel:true parsed from YAML → capabilityGap detects gap on ALL hosts
+      // → qualifying=[] → degraded:true (degrade-not-throw; least-bad selected)
+      const writerLane = state.lanes?.["T1-writer"];
+      expect(writerLane).toBeDefined();
+      expect(writerLane?.host?.degraded).toBe(true);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // EDIT-2 (TE-03): onDecision persists routing decision into run-state
+  // ─────────────────────────────────────────────────────────────
+  describe("EDIT-2 (TE-03): onDecision persists routing decision to run-state LaneState.host", () => {
+    function writeCrossHostSettings(
+      cwd: string,
+      opts: { enabled: boolean; hosts: Record<string, { address: string; user?: string }> }
+    ): void {
+      const dir = path.join(cwd, ".guild");
+      fs.mkdirSync(dir, { recursive: true });
+      const settings = {
+        defaults: { cross_host: { enabled: opts.enabled, hosts: opts.hosts } },
+      };
+      fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify(settings, null, 2), "utf8");
+    }
+
+    // TE-03: onDecision now uses readPlanOwnerTaskIds — must write a plan file
+    // so the name→task-id join succeeds and upsertLane fires. Lane keys are task-ids.
+    function writePlanForMixedHost(cwd: string, slug: string): void {
+      const planDir = path.join(cwd, ".guild", "plan");
+      fs.mkdirSync(planDir, { recursive: true });
+      fs.writeFileSync(path.join(planDir, `${slug}.md`), [
+        `# Plan: ${slug}`,
+        "",
+        "## Lane: T1-architect",
+        "- task-id: T1-architect",
+        "- owner: architect",
+        "",
+        "## Lane: T2-security",
+        "- task-id: T2-security",
+        "- owner: security",
+      ].join("\n"), "utf8");
+    }
+
+    function findRunStateJson(cwd: string): string | null {
+      const runsDir = path.join(cwd, ".guild", "runs");
+      if (!fs.existsSync(runsDir)) return null;
+      for (const runId of fs.readdirSync(runsDir)) {
+        const candidate = path.join(runsDir, runId, "run-state.json");
+        if (fs.existsSync(candidate)) return candidate;
+      }
+      return null;
+    }
+
+    it("persists LaneState.host with exact selected/degraded/independence/tier/model for a local claude lane", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      writePlanForMixedHost(tmpDir, "test-slug");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeCrossHostSettings(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
+      });
+
+      const { exitCode } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+
+      const rsPath = findRunStateJson(tmpDir);
+      expect(rsPath).not.toBeNull();
+      const state = JSON.parse(fs.readFileSync(rsPath!, "utf8"));
+
+      // architect routes to the local claude host — keyed by plan task-id T1-architect
+      const arch = state.lanes?.["T1-architect"];
+      expect(arch).toBeDefined();
+      expect(arch?.host).toBeDefined();
+      // Exact values — not just presence
+      expect(arch?.host?.selected).toBe("claude");
+      expect(arch?.host?.degraded).toBe(false);
+      expect(arch?.host?.independence).toBe("strong");
+      expect(["cheap", "mid", "powerful"]).toContain(arch?.host?.tier);
+      expect(typeof arch?.host?.model).toBe("string");
+      expect((arch?.host?.model as string).length).toBeGreaterThan(0);
+    });
+
+    it("persists LaneState.host with correct selected host for a remote codex lane", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      writePlanForMixedHost(tmpDir, "test-slug");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeCrossHostSettings(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
+      });
+
+      const { exitCode } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+
+      const rsPath = findRunStateJson(tmpDir);
+      expect(rsPath).not.toBeNull();
+      const state = JSON.parse(fs.readFileSync(rsPath!, "utf8"));
+
+      // security has host: codex → routes to codex-remote — keyed by plan task-id T2-security
+      const sec = state.lanes?.["T2-security"];
+      expect(sec).toBeDefined();
+      expect(sec?.host?.selected).toBe("codex-remote");
+      expect(sec?.host?.degraded).toBe(false);
+      expect(sec?.host?.independence).toBe("strong");
+      expect(["cheap", "mid", "powerful"]).toContain(sec?.host?.tier);
+    });
+
+    it("both lanes written in a single planTeamRouting call (run-state has two task-id-keyed lanes)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      writePlanForMixedHost(tmpDir, "test-slug");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeCrossHostSettings(tmpDir, {
+        enabled: true,
+        hosts: { "codex-remote": { address: "gpu-box.example.com" } },
+      });
+
+      runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+
+      const rsPath = findRunStateJson(tmpDir);
+      expect(rsPath).not.toBeNull();
+      const state = JSON.parse(fs.readFileSync(rsPath!, "utf8"));
+      const lanes = Object.keys(state.lanes ?? {});
+      // Both specialists should have host blocks, keyed by plan task-ids
+      expect(lanes.length).toBeGreaterThanOrEqual(2);
+      expect(lanes).toContain("T1-architect");
+      expect(lanes).toContain("T2-security");
+      for (const laneId of lanes) {
+        expect(state.lanes[laneId].host).toBeDefined();
+        expect(typeof state.lanes[laneId].host.selected).toBe("string");
+        expect(typeof state.lanes[laneId].host.degraded).toBe("boolean");
+        expect(["strong", "weak"]).toContain(state.lanes[laneId].host.independence);
+      }
+    });
+  });
+
 });

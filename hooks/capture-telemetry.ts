@@ -3,8 +3,16 @@
  * hooks/capture-telemetry.ts
  *
  * Events:  PostToolUse | SubagentStop | UserPromptSubmit
- * Purpose: Appends one NDJSON event line per invocation to
- *          .guild/runs/<run-id>/events.ndjson.
+ * Purpose: Appends one NDJSON event line per invocation.
+ *   Primary (canonical): .guild/runs/<run-id>/logs/v1.4-events.jsonl
+ *            This is the plugin↔benchmark contract boundary
+ *            (docs/v2/12-observability.md) and the trace source for
+ *            guild-telemetry MCP queries. HK-01/HK-02 route ALL telemetry
+ *            events (incl. SubagentStop, UserPromptSubmit, loop_round_start/
+ *            end, codex_review_round) here with trace_event.v2 additive fields.
+ *   Mirror (legacy fallback): .guild/runs/<run-id>/events.ndjson
+ *            Kept for backward-compatibility with tooling that reads the legacy
+ *            path. Receives identical event lines (best-effort, non-blocking).
  *
  * Event schema:
  * {
@@ -274,8 +282,12 @@ async function main(): Promise<void> {
       }
     }
   }
-  // loop_round_start / loop_round_end extra fields
-  if (eventName === "loop_round_start" || eventName === "loop_round_end") {
+  // loop_round_start / loop_round_end / codex_review_round extra fields
+  if (
+    eventName === "loop_round_start" ||
+    eventName === "loop_round_end" ||
+    eventName === "codex_review_round"
+  ) {
     if (typeof payload.loop_layer === "string") event.loop_layer = payload.loop_layer;
     if (typeof payload.loop_round === "number") event.loop_round = payload.loop_round;
     if (typeof payload.loop_gate === "string") event.loop_gate = payload.loop_gate;
@@ -339,19 +351,38 @@ async function main(): Promise<void> {
     ),
   );
 
-  // Write to .guild/runs/<run-id>/events.ndjson
-  const eventsFile = path.join(runsDir, "events.ndjson");
+  // ── HK-01/HK-02: route to CANONICAL logs/v1.4-events.jsonl (primary) ─────
+  // Per docs/v2/12-observability.md §"The canonical trace": the canonical sink
+  // is `logs/v1.4-events.jsonl` (the plugin↔benchmark contract boundary).
+  // `events.ndjson` becomes a LEGACY MIRROR ONLY — kept for backward compat
+  // with any consumer that hasn't migrated to the canonical path.
+  const eventLine = JSON.stringify(event) + "\n";
+  const logsDir = path.join(runsDir, "logs");
+  const canonicalFile = path.join(logsDir, "v1.4-events.jsonl");
+  const legacyFile = path.join(runsDir, "events.ndjson");
 
   try {
-    fs.mkdirSync(runsDir, { recursive: true });
-    fs.appendFileSync(eventsFile, JSON.stringify(event) + "\n", "utf8");
+    fs.mkdirSync(logsDir, { recursive: true });
+    fs.appendFileSync(canonicalFile, eventLine, "utf8");
   } catch (err) {
     process.stderr.write(
-      `[capture-telemetry] ERROR: failed to write event: ${
+      `[capture-telemetry] ERROR: failed to write to canonical log (${canonicalFile}): ${
         err instanceof Error ? err.message : String(err)
-      }\n`
+      }\n`,
     );
     // Still exit 0 — telemetry failures must not block tool execution
+  }
+
+  // Legacy mirror — best-effort; a mirror failure is informational only.
+  try {
+    fs.mkdirSync(runsDir, { recursive: true });
+    fs.appendFileSync(legacyFile, eventLine, "utf8");
+  } catch (err) {
+    process.stderr.write(
+      `[capture-telemetry] WARN: mirror write to events.ndjson failed: ${
+        err instanceof Error ? err.message : String(err)
+      }\n`,
+    );
   }
 }
 

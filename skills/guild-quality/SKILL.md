@@ -85,10 +85,30 @@ Budget = `defaults.quality.budget` **by pointer to `command-surface.md §4.4`**
 
 ## g-quality
 
-Advisory (non-blocking). Fixed producer `qa-test-strategy`; fixed challengers
-`[security, architect]`; cross-model-preferred (flag recorded). Findings resolve
-by rerun / added check / named owner-accepted risk — never itself blocks.
-Populate `challenger_trail` → `§616–623`.
+Two **distinct, both-kept** review mechanisms at this boundary (`docs/v2/09-adversarial-review.md §The gates`, §Loop control):
+
+1. **In-phase advisory panel (unchanged).** Advisory (non-blocking). Fixed
+   producer `qa-test-strategy`; fixed challengers `[security, architect]`;
+   cross-model-preferred (flag recorded). Findings resolve by rerun / added
+   check / named owner-accepted risk — never itself blocks. Populate
+   `challenger_trail` → `§616–623`.
+2. **Cross-host G-quality gate via the broker (policy-gated).** *Separate* from
+   the same-session panel above: this is the **cross-host** review where a
+   **different host family** critiques the quality report. After the report is
+   written and before `releasegate` computes, invoke `guild-review-broker`:
+
+   ```
+   Skill: guild-review-broker
+   args: gate=G-quality artifact_path=<quality-report-path> run_id=<run-id> author_host=<run author host>
+   ```
+
+   The broker is policy-gated (`docs/v2/09 §The review broker`): it fires only
+   when `risk ≥ high`, `review: cross` / `--review=cross`, or config requires it
+   — else it resolves `status: "skipped"` and the boundary passes with no
+   cross-host reviewer (self-build runs treat it as always-on). On `"rework"`,
+   resolve the findings before `releasegate`. The broker gate is the cross-host
+   layer; it does **not** replace the advisory panel and does **not** alter the
+   `releasegate` BLOCK semantics below.
 
 ## releasegate
 
@@ -103,6 +123,10 @@ RELEASE-READY**. Gate `[release] [block] [abort]`; `[release]` on a BLOCK is a
 `--auto-approve=all`, but a **BLOCK→release override is NEVER auto-passed**
 (asymmetry printed, never silent). Populate `release_decision` → `§624–628`.
 *Full truth-table: quality-mechanics.md.*
+
+## learning-checkpoint (step 7.5 — advisory, no new gate)
+
+After `releasegate` and before phase close, fire the per-phase LearningCheckpoint with `phase=quality` and the quality report as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written quality report (results, challenger trail, release decision) into the 12-target verdict, then emit via the hook — full call signature + `GUILD_PHASE` mapping canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; it does NOT touch the `releasegate` BLOCK semantics. Non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
 
 # Evidence requirements
 

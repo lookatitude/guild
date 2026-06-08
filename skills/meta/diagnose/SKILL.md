@@ -81,7 +81,14 @@ outside the repo and `.guild/` state.
    - validation command
    - rollback note
 
-## Codex Review
+## Adversarial review — G-diagnose (broker)
+
+G-diagnose is a **skill-internal gate** (`docs/v2/09-adversarial-review.md §Gate
+ownership`): it fires here inside the `fix`/`diagnose` flow at the
+diagnosis→approval boundary. Wire the **review broker** at this boundary,
+**not** `guild:codex-review` directly: the broker is the host-agnostic front
+door, and `guild:codex-review` survives only as the internal Codex adapter the
+broker dispatches to (`docs/v2/09 §The review broker`).
 
 If `--review=cross` is present, or project config resolves `codex_review: true`,
 review the diagnosis and fix plan before asking the user to approve edits.
@@ -92,17 +99,31 @@ Config resolution:
 npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/read-guild-config.ts [--cwd <repo-root>] [raw /guild:fix flags]
 ```
 
-If `codex_review` resolves true:
+When `codex_review` resolves true the G-diagnose review is **required**, so the
+broker obeys the SK-9 gate-pass rule (`skills/meta/review-broker/SKILL.md
+§"Gate-pass rule"`): a required review **never clean-`skipped`s**.
 
-1. Check Codex availability with `codex --version >/dev/null 2>&1`.
-2. If unavailable, record `codex_review: skipped-codex-unavailable` in the
-   diagnosis report and continue.
-3. If available, invoke `guild-codex-review` on the diagnosis report path:
-   `gate=G-diagnose artifact_path=<report-path> run_id=<diagnose-run-id>`.
-4. If Codex requests rework, revise the fix plan before the user approval gate.
+1. Invoke `guild-review-broker` on the diagnosis report path:
+   `gate=G-diagnose artifact_path=<report-path> run_id=<diagnose-run-id> author_host=<run author host>`.
+2. The broker resolves the reviewer host. When a **different-family** reviewer is
+   reachable, the review is STRONG. When **no cross-host reviewer** is available
+   (Codex absent / same-family / non-selectable), the broker **degrades to the
+   WEAK same-host path** — a fresh-context same-host subagent reviews,
+   `independence: weak`, recorded, and **still gated by the 5 conditions**. It
+   does **not** resolve `status: "skipped"`: a required review that found no
+   cross-host reviewer is a recorded weak review, never a clean skip (that would
+   be the gate-bypass killed in SK-9). `skipped` happens **only** when review is
+   not required (no `--review=cross` and config off → `review_required == false`).
+   `author_host` is the host that produced the diagnosis (resolved from the
+   run-start preflight snapshot; `claude` on a Claude-hosted run).
+3. If the broker returns `status: "rework"`, revise the fix plan before the user
+   approval gate. On `"satisfied"` (STRONG or WEAK) or `"force_passed"`, proceed
+   to the approval gate normally; a true `"skipped"` only occurs when review was
+   not required.
 
-Codex review is advisory for diagnosis. The user approval gate remains required
-whether Codex is satisfied, skipped, or unavailable.
+Adversarial review is advisory for diagnosis. The user approval gate remains
+required whether the broker is satisfied (STRONG or WEAK), force-passed, or — when
+review was not required — skipped.
 
 ## Report
 

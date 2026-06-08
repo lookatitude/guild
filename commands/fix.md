@@ -33,13 +33,16 @@ observed symptom; neither ⇒ inspect the most recent `.guild/runs/*`.
 ## Args & local flags
 
 - Args: `[run-id | "symptom"]`
-- `--review=cross` — request cross-host (Claude↔Codex) adversarial review of
-  the diagnosis / fix plan (replaces v1 `--codex-review`).
+- `--review=cross` — routes the G-diagnose gate through `guild:review-broker`
+  for cross-host (Claude↔Codex) adversarial review of the diagnosis / fix
+  plan (replaces v1 `--codex-review`). The broker is invoked inside
+  `guild:diagnose` (skill-internal gate — not the command layer).
 
 ## Gates
 
 - Explicit edit-approval **I** (no file is edited before approval)
-- `--review` for cross-host review
+- G-diagnose review **A** (when `--review=cross` active; skill-internal,
+  invoked inside `guild:diagnose` via `guild:review-broker`)
 
 ## Output
 

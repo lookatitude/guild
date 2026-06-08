@@ -1,7 +1,7 @@
 ---
 name: guild-review-broker
-description: Host-agnostic broker for cross-family adversarial review — one host drafts an artifact, a DIFFERENT host family critiques it (STRONG independence). Generalizes `guild:codex-review`; engaged by `review: cross` or `--review=cross` at the Guild gates G-spec/G-plan/G-lane/G-diagnose. Selects a reviewer host of a different family than the author, dispatches via its adapter, consumes the FROZEN `review_result.v1`, and loops to a satisfaction verdict (cap → force-pass/extend-cap/rework). v2.0 transport is co-located filesystem (`.guild/runs/<run-id>/review/`); remote HTTP/MCP pull is a post-v2 seam, not built. TRIGGER on "run a cross-family review", "broker an adversarial review", "review=cross", "pick a different host to critique this", "engage the review broker". DO NOT TRIGGER for: local same-host review (`review: local`/`off`), Guild's internal loops L1–L4 (`guild:loop-clarify`/`guild:loop-plan-review`/`guild:loop-implement`), two-stage handoff review (`guild:review`), or skill evolution (`guild:evolve-skill`).
-when_to_use: Engaged at any Guild lifecycle gate (G-spec / G-plan / G-lane / G-diagnose) when `review: cross` is set in `.guild/settings.json` or `--review=cross` is passed on `/guild`. The v2.0 lifecycle entry-point for cross-family adversarial review — supersedes `guild:codex-review`, which survives only as the internal Codex adapter the broker dispatches to. Also callable directly for a one-off cross-host critique of any artifact.
+description: Host-agnostic broker for cross-family adversarial review — one host drafts an artifact, a DIFFERENT host family critiques it (STRONG independence). Generalizes `guild:codex-review`; engaged by `review: cross` / `--review=cross` at the seven Guild gates G-init/G-spec/G-plan/G-lane/G-quality/G-operations/G-diagnose. Picks a different-family reviewer, dispatches via its adapter, consumes the FROZEN `review_result.v1`, and applies the SHA-256 checksum-bound 5-condition gate-pass before looping to a satisfaction verdict (cap → force-pass/extend-cap/rework). v2.0 transport is co-located filesystem; remote pull is a post-v2 seam. TRIGGER on "run a cross-family review", "broker an adversarial review", "review=cross", "pick a different host to critique this", "engage the review broker". DO NOT TRIGGER for: local same-host review (`review: local`/`off`), Guild's internal loops L1–L4 (`guild:loop-*`), two-stage handoff review (`guild:review`), or skill evolution (`guild:evolve-skill`).
+when_to_use: Engaged at any Guild lifecycle gate (G-init / G-spec / G-plan / G-lane / G-quality / G-operations / G-diagnose) when `review: cross` is set in `.guild/settings.json` or `--review=cross` is passed on `/guild`. The v2.0 lifecycle entry-point for cross-family adversarial review — supersedes `guild:codex-review`, which survives only as the internal Codex adapter the broker dispatches to. Also callable directly for a one-off cross-host critique of any artifact.
 type: meta
 ---
 
@@ -34,16 +34,31 @@ adversarial contract is broken.
   *different* family than the author) > `auto` (pick any available different
   family) > built-in default.
 
-**Degradation (never hard-block):** if no different-family reviewer is
-available (only one host installed/authenticated), emit to stdout
+**Degradation (never hard-block, never a clean skip when review is required):**
+if no different-family reviewer is available (only one host
+installed/authenticated, a same-family pin, or a non-selectable provider), emit
+to stdout
 
 ```
-warn: review-broker degraded — no cross-family reviewer available (gate: <gate>)
+warn: review-broker degraded — no cross-family reviewer (gate: <gate>); using WEAK same-host review
 ```
 
-and return `status: "skipped"`. The lifecycle continues without cross-family
-review, exactly as `codex-review` skips when Codex is absent. Graceful
-degradation is mandated by the ADR; do not stall the run.
+and **degrade to the WEAK same-host path** — a fresh-context same-host subagent
+reviews, stamped `independence: weak` and recorded (`docs/v2/09-adversarial-review.md
+§Sentinel hardening`: "cross-host unavailable → degrade to weak-independence
+same-host; never hard-block"). The weak review **still runs and is still gated**
+by the 5-condition rule — it relaxes *who* reviews, never *whether* the gate
+holds.
+
+**`skipped` is NOT a degradation route.** A `status: "skipped"` is resolved
+**only** when `review_required == false` (policy did not require review:
+`review=local`/`off`, risk below threshold, config off). When review **is**
+required (`review=cross` / `risk≥high` / config) but cross-host is
+unavailable/refused, the broker takes the weak same-host path above — it does
+**not** resolve `skipped`. Letting a required review clean-skip the gate is a
+gate-bypass; the only honest no-reviewer outcome under a required review is a
+recorded weak review (or, for `authorHost: unknown`, a recorded `degraded-local`
+that the gate evaluates — never a clean pass).
 
 ## Provider resolution — input from the resolved settings (Unit 4)
 
@@ -81,20 +96,41 @@ re-implement detection in a prompt):
 `selectReviewer` enforces the STRONG-independence rule as a **hard predicate**, so
 a same-family reviewer can never be returned as a sign-off:
 
-| Situation | `status` | `provider` |
+`selectReviewer` returns **WHO** may review (a provider-detect output); the
+**broker** then decides what to *do* with that under the gate's
+`review_required`. The two are separate — the table is the WHO; the mapping
+below is the broker action.
+
+| Situation | `selectReviewer.status` | `provider` |
 |---|---|---|
 | Selectable different-family reviewer available | `selected` | that provider |
-| `authorHost === "unknown"` (cannot prove independence) | `degraded-local` / `skipped` | `null` (**never selected**) |
-| Operator pins a **same-family** provider | `skipped` | `null` (refused — self-review) |
-| Operator pins a **non-selectable** provider (no adapter yet) | `skipped` | `null` (no silent substitution) |
+| `authorHost === "unknown"` (cannot prove independence) | `degraded-local` | `null` (**never selected**) |
+| Operator pins a **same-family** provider | `degraded-local` | `null` (cross-host refused — self-review) |
+| Operator pins a **non-selectable** provider (no adapter yet) | `degraded-local` | `null` (no silent substitution) |
 | Only same-family / detect-only reviewers present | `degraded-local` | `null` (weak/local, labelled, NOT adversarial) |
-| No reviewer at all + `review=cross` | `skipped` | `null` (reason given — **never a false signoff**) |
-| `review=local` / `review=off` | `degraded-local` / `skipped` | `null` |
+| No cross-host reviewer + `review=cross` | `degraded-local` | `null` (weak same-host floor — reason given) |
+| `review=local` / `review=off` (review_required==false) | `skipped` | `null` |
 
 There is **no code path** that returns `selected` with a same-family provider,
 and **no code path** that returns `selected` when `authorHost === "unknown"`.
-The broker MUST treat a `degraded-local` / `skipped` result as exactly that — a
-weak-or-absent review with a recorded reason — and never up-convert it to a pass.
+
+**Broker action by status (closes the gate-bypass — SK-9):**
+
+- `selected` → run the cross-host **STRONG** review.
+- `degraded-local` → run the **WEAK same-host** review (fresh-context subagent,
+  `independence: weak`, recorded) **and gate it by the 5-condition rule**. This
+  is the required-review-but-no-cross-host floor: review still happens, it is
+  never up-converted to a clean pass.
+- `skipped` → **only** when `review_required == false`; this is the lone clean
+  gate-skip. A required review (`review=cross` / `risk≥high` / config) **never**
+  resolves `skipped` — it takes the `degraded-local` weak path above. (This is
+  why every required-review row in the table now maps to `degraded-local`, not
+  `skipped`: a required review with no cross-host reviewer must degrade to a
+  recorded weak review, never vanish into a clean skip.)
+
+The broker MUST treat a `degraded-local` result as a real weak review subject to
+the gate, and a `skipped` result as a no-review clean pass that is **legal only
+under `review_required == false`** — never up-convert either to a STRONG pass.
 
 > **Security note.** The `authorHost: "unknown"` guard closes the hole where
 > `reviewer.family !== "unknown"` would be vacuously true for any provider,
@@ -155,31 +191,102 @@ contract. The broker reads (consume-only) at minimum:
 
 - `schema_version` — must be `review_result.v1`.
 - `verdict` — `satisfied` | `issues`.
-- `findings[]` — structured issues when `verdict: issues`.
+- `findings[]` — structured issues when `verdict: issues`. The
+  `blocking_findings` subset (severity-blocking) drives gate-pass condition 5.
 - `round` — the round this result answers.
 - `reviewer_host` — the host family that produced the critique (used to assert
   it differs from the author).
+- `packet_id` — the id of the packet this result answers (gate-pass condition 2;
+  must equal the packet the broker issued for the round).
+- `artifact_sha256_reviewed` — the SHA-256 of the artifact bytes the reviewer
+  actually read (gate-pass condition 3; computed after secret-scrubbing — see
+  [Gate-pass rule](#gate-pass-rule-checksum-bound-sk-9)).
 
 If a result fails to parse as `review_result.v1`, treat the round as
 non-terminated, log it to the trail, and continue (or escalate at cap).
 
 ## Gates
 
-Same load-bearing lifecycle artifacts as `codex-review`, now host-generalized
-(`guild-plan.md §8`):
+The broker addresses a **fixed seven-gate set** (`docs/v2/09-adversarial-review.md
+§The gates`), each firing inside its own producer skill at that phase's review
+boundary (`docs/v2/09 §Gate ownership`). Only **G-lane** is command-visible
+(it fires per-lane during `build`); the other six are **skill-internal**. The
+`G-spec / G-plan / G-lane` names are compatibility aliases for the v2 phase-named
+gates (`G-ideation` / `G-planning` / `G-development`).
 
-| Gate | When invoked | Artifact reviewed |
+| Gate | Producer skill + wiring | Artifact reviewed | Reviewer focus |
+|---|---|---|---|
+| **G-init** | `guild:init` — after the init artifact / wiki diff, before phase close | init artifact / wiki diff | missing context, unsupported facts, stale knowledge |
+| **G-spec** | `guild:brainstorm` — after `.guild/spec/<slug>.md`, before `guild:team-compose` | The spec | missing criteria, ambiguity, weak assumptions, untestable claims |
+| **G-plan** | `guild:plan` — after `.guild/plan/<slug>.md`, before the user-approval gate | The plan | lane-contract defects, unhandled dependencies, vague done criteria |
+| **G-lane** | `guild:execute-plan` — after each lane receipt, before the next lane dispatches (**command-visible**) | The lane receipt | missing evidence, incomplete scope, unresolved risk |
+| **G-quality** | `guild:quality` — after the quality report, before phase close | quality report | E2E gaps, release risk, weak coverage |
+| **G-operations** | `guild:operations` — after the ops record / runbook, before phase close | ops record / runbook | blast radius, rollback, observability gaps |
+| **G-diagnose** | `guild:fix` / `guild:diagnose` — after the diagnosis/fix plan, before the approval gate | The diagnosis | weak self-fix plan, unsafe edit proposal, missing evidence |
+
+Each producer skill wires the broker at its own review boundary by invoking
+`guild-review-broker` with the matching `gate=` value — exactly the pattern the
+spec/plan/lane/diagnose producers use. **The review *shape* differs per gate** —
+some gates pair the cross-host broker with an in-phase advisory panel, others are
+broker-only:
+
+| Gate | Cross-host broker gate | In-phase advisory panel (security + architect) |
 |---|---|---|
-| **G-spec** | After `guild:brainstorm` writes `.guild/spec/<slug>.md`, before `guild:team-compose` | The spec |
-| **G-plan** | After `guild:plan` writes `.guild/plan/<slug>.md`, before the user-approval gate | The plan |
-| **G-lane** | After each lane's handoff receipt is written, before the next lane dispatches | The lane receipt |
-| **G-diagnose** | After `guild:fix`/`guild:diagnose` writes a diagnosis/fix plan, before the approval gate | The diagnosis |
+| G-init | ✅ broker-only | ❌ none — Init's review is the broker gate over the init record / wiki diff |
+| G-spec / G-plan / G-lane / G-diagnose | ✅ | ❌ (lifecycle producer gates) |
+| G-quality | ✅ | ✅ `qa-test-strategy` producer vs `[security, architect]` |
+| G-operations | ✅ | ✅ `[security, architect]` challengers |
+
+Where an advisory panel exists (Quality, Operations) it is **distinct from** this
+gate-level cross-host broker review (`docs/v2/09 §Loop control`) — the two
+compose, they do not replace one another. **G-init has no advisory panel** — its
+review is the cross-host broker gate alone. This table is the broker-side gate
+registry; each gate's actual review shape is as shown.
+
+## Gate-pass rule (checksum-bound, SK-9)
+
+The broker writes the AC-9 `review/<gate>/` packet/result/trail set (above);
+**this section adds the integrity binding** that makes the gate-pass
+checksum-bound (`docs/v2/09 §Gate-pass rule`). The result binds to the reviewed
+artifact by **SHA-256**, computed over the artifact bytes **after
+secret-scrubbing** (the same SHA-256 that serves as the cross-host cache key on
+the artifact bus).
+
+A gate **passes iff all five conditions hold**:
+
+1. the `review_result` **parses** as `review_result.v1`, AND
+2. `result.packet_id` **matches** the packet id the broker issued for the round, AND
+3. `result.artifact_sha256_reviewed == sha256(current artifact bytes)` (recomputed
+   now, post-scrub), AND
+4. (`result.verdict == "satisfied"`) **OR** a human **`force_pass`**, AND
+5. **no blocking findings remain** (`blocking_findings` empty).
+
+`status: "skipped"` passes the gate **only** when `review_required == false` (the
+policy did not require review). It is **never** an up-conversion of a
+`degraded-local` / cap-hit / unsatisfied result — those are exactly what they say
+(`docs/v2/09 §AC-8`).
+
+**Artifact-changed-mid-review → reject + restart.** If the artifact's bytes
+changed during the round, condition 3 fails (the recomputed SHA-256 will not
+match `artifact_sha256_reviewed`): **reject the result and restart the round**
+against the new bytes — do not pass a verdict that critiqued stale content. This
+is the same checksum-mismatch rule the sentinel-hardening table enforces.
+
+**The weak path obeys the identical rule.** A same-host fresh-context review
+(other host unavailable) is stamped `independence: weak` and recorded, but it
+passes the gate **only** by satisfying the same five conditions — weak
+independence relaxes *who* may review, never *whether* the checksum/blocker gate
+holds.
+
+Compute the SHA-256 with `sha256(<scrubbed-artifact-bytes>)`; the broker records
+both `artifact_sha256_reviewed` (from the result) and the recomputed current
+hash in the trail so a reviewer-vs-current mismatch is auditable.
 
 ## Input shape
 
 ```typescript
 type ReviewBrokerInput = {
-  gate: "G-spec" | "G-plan" | "G-diagnose" | `G-lane:${string}`;
+  gate: "G-init" | "G-spec" | "G-plan" | "G-quality" | "G-operations" | "G-diagnose" | `G-lane:${string}`;
   artifact_path: string;          // repo-relative path to the artifact under review
   run_id: string;                 // .guild/runs/<run-id>/ scope
   author_host: "claude" | "codex" | string;   // host family that produced the artifact
@@ -196,12 +303,18 @@ type ReviewBrokerOutput = {
   status: "satisfied" | "skipped" | "cap_hit" | "force_passed" | "extended" | "rework";
   gate: string;
   author_host: string;
-  reviewer_host: string;          // asserted != author_host family on success
+  reviewer_host: string;          // == author_host family ONLY on the weak path (independence:"weak")
+  independence: "strong" | "weak";// "weak" whenever the same-host degraded path ran (recorded)
   rounds: number;                 // total rounds executed
   trail_path: string;             // .guild/runs/<run-id>/review/<gate>/trail.md
   satisfied_at_round?: number;    // present when status="satisfied"
 };
 ```
+
+`status: "skipped"` is emitted **only** when `review_required == false` (step 0
+of the round loop). A required review that found no cross-host reviewer returns a
+normal gate outcome (`satisfied` / `rework` / `cap_hit` / …) with
+`independence: "weak"` — it is never reported as `skipped`.
 
 ## Codex-skip sentinel gate-read (FU-E)
 
@@ -222,30 +335,59 @@ overdue, not which family runs it.
 
 For each round (1-indexed, up to the resolved cap):
 
+0. **Resolve `review_required`** from policy (`review=cross` / `risk≥high` /
+   config). If `review_required == false`, resolve `status: "skipped"` and pass
+   the gate **without** entering the round loop — this is the **only** clean
+   skip. Everything below runs only when review IS required.
 1. **Read the codex-skip sentinel** (see § above); under `block` enforcement
    with `blocked: true`, halt before resolving hosts.
-2. Resolve author/reviewer hosts; assert reviewer family ≠ author family (else
-   degrade → `skipped`).
+2. Resolve author/reviewer hosts; assert reviewer family ≠ author family. **No
+   cross-host reviewer (else-branch) → degrade to the WEAK same-host path**
+   (`independence: weak`, recorded) — **never `skipped`** (review is required;
+   `skipped` is reserved for step 0). The weak review runs the same packet/result
+   round and is gated identically below.
 3. Write the review packet to `.guild/runs/<run-id>/review/<gate>/packet-<round>.md`
-   (artifact + adversarial instructions + prior trail on rounds 2+).
+   (artifact + adversarial instructions + prior trail on rounds 2+), recording
+   the `packet_id` and the artifact's post-scrub SHA-256.
 4. Dispatch to the reviewer host via its adapter (RE-4/RE-5 transport; Codex
    adapter = the `codex:codex-rescue` path that works today).
 5. Read back `review_result.v1` from
    `.guild/runs/<run-id>/review/<gate>/result-<round>.json`.
-6. Append the round to the trail `.guild/runs/<run-id>/review/<gate>/trail.md`.
+6. Append the round to the trail `.guild/runs/<run-id>/review/<gate>/trail.md`
+   (including `artifact_sha256_reviewed` and the recomputed current hash).
 7. Emit a round telemetry event (see [Telemetry](#telemetry)).
-8. `verdict: satisfied` → return `status: "satisfied"`. Round == cap → escalate.
-   Otherwise continue, passing the trail forward.
+8. Apply the **5-condition checksum-bound gate-pass** (see
+   [Gate-pass rule](#gate-pass-rule-checksum-bound-sk-9)): all five hold →
+   return `status: "satisfied"`. **Checksum mismatch (condition 3 fails) → reject
+   the result and restart the round** against the current bytes (does not consume
+   the cap). Blockers / unsatisfied with checksum OK → rework; round == cap →
+   escalate. Otherwise continue, passing the trail forward.
 
 ## Termination
 
-A round terminates the loop when the reviewer returns
-`review_result.v1.verdict == "satisfied"`. For host adapters that emit a textual
-critique rather than a parsed envelope (today's Codex adapter), the satisfaction
-sentinel is `## SATISFIED` on its own trimmed line, exactly once, with no
-unresolved findings after it — identical to the `codex-review` contract. A
-malformed termination (sentinel inline / repeated / followed by open findings)
-is treated as non-terminated; continue or escalate at cap.
+A round terminates the loop when `review_result.v1.verdict == "satisfied"`
+**and the full 5-condition checksum-bound gate-pass holds** (see
+[Gate-pass rule](#gate-pass-rule-checksum-bound-sk-9)) — a `satisfied` verdict
+whose `artifact_sha256_reviewed` no longer matches the current artifact is
+**not** a termination (it critiqued stale bytes): reject and restart the round.
+**Textual-adapter outputs are normalized into `review_result.v1` BEFORE
+gate-pass — a bare textual critique never passes the gate.** Some host adapters
+(today's Codex adapter) emit a textual critique terminated by the `## SATISFIED`
+sentinel (on its own trimmed line, exactly once, with no unresolved findings
+after it) rather than a structured envelope directly. That text is **not** fed to
+the gate-pass as-is: the adapter **wraps it into a `review_result.v1` envelope**
+— `verdict` from the sentinel, `blocking_findings` from any open findings,
+`packet_id` from the issued packet, and `artifact_sha256_reviewed` from the bytes
+it read — and the **5-condition gate-pass evaluates that envelope** (`:255`).
+Conditions 1+2 (parses + `packet_id` match) and 3 (sha256) therefore always apply;
+a textual critique that cannot be normalized into a valid envelope (no parseable
+sentinel, missing `packet_id`/sha256) is an **envelope-missing malformed
+termination → one schema-repair retry** (`§Sentinel hardening`: "envelope missing
+→ mark malformed; one schema-repair retry"), and if it still fails it is
+non-terminated — continue or escalate at cap. There is **no path** where a bare
+textual critique alone clears the checksum-bound gate. Other malformed
+terminations (sentinel inline / repeated / followed by open findings) are likewise
+non-terminated.
 
 ## Cap handling
 
@@ -300,8 +442,13 @@ for eval-engineer.)
   Inventing fields forks the schema and breaks downstream consumers.
 - **Building the remote HTTP/MCP transport.** Out of scope for v2.0 — co-located
   FS only. The remote seam is bound by pointer, not built.
-- **Hard-blocking when no cross-family reviewer exists.** Degrade to `skipped`
-  with a warn; never stall the lifecycle on a missing host.
+- **Hard-blocking when no cross-family reviewer exists.** Degrade to the **WEAK
+  same-host** review (`independence: weak`, recorded) with a warn; never stall the
+  lifecycle on a missing host.
+- **Clean-skipping a *required* review.** `status: "skipped"` is legal **only**
+  when `review_required == false`. A required review with no cross-host reviewer
+  must degrade to the weak same-host path and be gated — never resolve `skipped`
+  (that is a silent gate-bypass).
 - **Re-implementing the RE-4/RE-5 transport here.** The broker owns logic, not
   the packet/result wire contract.
 - **Routing new lifecycle gates at `guild:codex-review`.** That is the deprecated

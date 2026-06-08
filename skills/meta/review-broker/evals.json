@@ -4,7 +4,9 @@
     "review=cross is set — broker the review for this lane.",
     "Pick a different host to critique this plan before approval.",
     "Engage the review broker at the G-plan gate.",
-    "Cross-host review the diagnosis report — Claude wrote it, have Codex critique it."
+    "Cross-host review the diagnosis report — Claude wrote it, have Codex critique it.",
+    "Broker the G-quality gate — have a different host critique the quality report with review=cross.",
+    "Run the cross-family review at the G-operations gate before the runbook closes."
   ],
   "should_not_trigger": [
     "Run a local same-host review — review is local for this run.",

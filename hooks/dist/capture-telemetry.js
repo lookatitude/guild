@@ -273,6 +273,9 @@ function buildSecurityEvent(input) {
   if (typeof input.permission_mode === "string" && input.permission_mode.length > 0) {
     rec.permission_mode = input.permission_mode;
   }
+  if (typeof input.dispatch_rung === "string" && input.dispatch_rung.length > 0) {
+    rec.dispatch_rung = input.dispatch_rung;
+  }
   return rec;
 }
 function appendSecurityEvent(runDir, record) {
@@ -500,7 +503,7 @@ async function main() {
       }
     }
   }
-  if (eventName === "loop_round_start" || eventName === "loop_round_end") {
+  if (eventName === "loop_round_start" || eventName === "loop_round_end" || eventName === "codex_review_round") {
     if (typeof payload.loop_layer === "string") event.loop_layer = payload.loop_layer;
     if (typeof payload.loop_round === "number") event.loop_round = payload.loop_round;
     if (typeof payload.loop_gate === "string") event.loop_gate = payload.loop_gate;
@@ -550,13 +553,25 @@ async function main() {
       })
     )
   );
-  const eventsFile = path5.join(runsDir, "events.ndjson");
+  const eventLine = JSON.stringify(event) + "\n";
+  const logsDir = path5.join(runsDir, "logs");
+  const canonicalFile = path5.join(logsDir, "v1.4-events.jsonl");
+  const legacyFile = path5.join(runsDir, "events.ndjson");
   try {
-    fs5.mkdirSync(runsDir, { recursive: true });
-    fs5.appendFileSync(eventsFile, JSON.stringify(event) + "\n", "utf8");
+    fs5.mkdirSync(logsDir, { recursive: true });
+    fs5.appendFileSync(canonicalFile, eventLine, "utf8");
   } catch (err) {
     process.stderr.write(
-      `[capture-telemetry] ERROR: failed to write event: ${err instanceof Error ? err.message : String(err)}
+      `[capture-telemetry] ERROR: failed to write to canonical log (${canonicalFile}): ${err instanceof Error ? err.message : String(err)}
+`
+    );
+  }
+  try {
+    fs5.mkdirSync(runsDir, { recursive: true });
+    fs5.appendFileSync(legacyFile, eventLine, "utf8");
+  } catch (err) {
+    process.stderr.write(
+      `[capture-telemetry] WARN: mirror write to events.ndjson failed: ${err instanceof Error ? err.message : String(err)}
 `
     );
   }

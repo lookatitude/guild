@@ -61,6 +61,10 @@ Keep `review.md` terse and grep-friendly — it's the compact artifact `guild:ve
 - **Stage 1 failure:** route the lane back to `guild:execute-plan` with a fix brief naming the failing check and the receipt field (e.g. "`changed_files` missing `<path>` required by scope"), carrying the same `run-id` so the re-dispatched lane writes a replacement receipt into the same `handoffs/`. Stage 1 failures are the only in-review loop-back.
 - **Stage 2 failure:** usually a `followups:` entry for the next task — the deliverable is present, only its evidence is weak. It escalates to a "re-run with evidence" loop-back only when the gap is severe enough that `guild:verify-done` can't stand up the deliverable at all. (Loop-back nuance detailed in `rubric.md`.)
 
+## Learning checkpoint (step 7.5 — advisory, no new gate)
+
+This is the **Development** phase's review boundary. After `review.md` is written and before handoff to `guild:verify-done`, fire the per-phase LearningCheckpoint with `phase=development` and `.guild/runs/<run-id>/review.md` (plus the lane receipts) as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written receipts + review into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`. (One development checkpoint per run, fired here — not in `guild:execute-plan`.)
+
 ## Handoff
 
 When every lane is ✓ at both stages (or Stage 2 follow-ups are acceptable and no ✗ blockers remain), hand off to `guild:verify-done` with:

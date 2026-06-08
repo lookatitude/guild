@@ -69,6 +69,14 @@ export interface HostCapabilityManifest {
     independent_agents: boolean;
     tmux: boolean;
     mcp: boolean;
+    /**
+     * HK-07 (D-OBS-1 / 11-security.md §enforcement): whether this host natively
+     * supports the `PreToolUse ask` permission primitive (Claude Code's
+     * permissionDecision:"ask" hook output). When false the pre-tool-use hook
+     * degrades to writing an `approval_request` file to the agent-bus and
+     * recording `permission_mode: degraded` in the security-event log.
+     */
+    pre_tool_use_ask: boolean;
   };
 }
 
@@ -92,11 +100,26 @@ export interface BuildCapabilityOpts {
   env?: NodeJS.ProcessEnv;
 }
 
+/** All 9 HostKind values from host-types.ts — kept in sync by type. */
+const ALL_HOST_KINDS: readonly HostKind[] = [
+  "claude",
+  "codex",
+  "gemini",
+  "pi",
+  "antigravity-2",
+  "claude-code-desktop",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+];
+
 function resolveHostKind(host: HostKind | undefined, env: NodeJS.ProcessEnv): HostKind {
-  if (host === "claude" || host === "codex") return host;
-  const raw = (env["GUILD_HOST"] ?? "").trim().toLowerCase();
-  if (raw === "codex") return "codex";
-  // "claude", "auto", unset, or anything unexpected → claude (the expected host).
+  // Explicit --host / programmatic override takes priority.
+  if (host !== undefined && (ALL_HOST_KINDS as string[]).includes(host)) return host;
+  // GUILD_HOST env var (set by bootstrap for non-claude runtimes).
+  const raw = (env["GUILD_HOST"] ?? "").trim().toLowerCase() as HostKind;
+  if ((ALL_HOST_KINDS as string[]).includes(raw)) return raw;
+  // "auto", unset, or unrecognized → claude (the reference impl / default host).
   return "claude";
 }
 
@@ -168,6 +191,9 @@ export function buildCapability(opts: BuildCapabilityOpts): HostCapabilityManife
       independent_agents: resolveIndependentAgents(hostKind, env),
       tmux,
       mcp: true, // Claude Code MCP loader is available on supported hosts.
+      // HK-07: Claude Code natively supports PreToolUse ask; other hosts
+      // (codex, gemini, pi) must degrade to the file-bus approval_request path.
+      pre_tool_use_ask: hostKind === "claude",
     },
   };
 }
@@ -200,8 +226,8 @@ function parseArgs(argv: string[]): {
     const a = argv[i];
     if (a === "--cwd" && argv[i + 1]) out.cwd = argv[++i];
     else if (a === "--host" && argv[i + 1]) {
-      const v = argv[++i];
-      if (v === "claude" || v === "codex") out.host = v;
+      const v = argv[++i] as HostKind;
+      if ((ALL_HOST_KINDS as string[]).includes(v)) out.host = v;
     } else if (a === "--host-id" && argv[i + 1]) out.hostId = argv[++i];
     else if (a === "--source" && argv[i + 1]) out.source = argv[++i];
   }

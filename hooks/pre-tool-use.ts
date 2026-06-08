@@ -132,6 +132,95 @@ function resolveRunId(cwd: string): string | undefined {
   return readCurrentRunId(cwd);
 }
 
+// ── HK-07: host-capability reader + approval_request writer ────────────────
+//
+// Implements docs/v2/11-security.md §enforcement degradation path:
+//   host lacks PreToolUse ask  →  write approval_request to file bus
+//                                  + record permission_mode: degraded
+//   host supports PreToolUse ask  →  normal ask decision (unchanged behavior)
+//
+// The capability manifest is written at SessionStart by bootstrap.sh →
+// scripts/write-host-capability.ts (RE-5).  We read it best-effort; absent
+// manifest = safe fallback to the existing ask path (no regression).
+
+/** Shape of tool_support in the guild.host_capability.v1 manifest (HK-07 slice). */
+interface HostToolSupport {
+  pre_tool_use_ask?: boolean;
+}
+interface HostCapabilitySlice {
+  host_id?: string;
+  host_kind?: string;
+  tool_support?: HostToolSupport;
+}
+
+/**
+ * Read the host capability manifest for the current host. Returns null when
+ * the manifest cannot be read (missing file, bad JSON) — callers treat null
+ * as "capabilities unknown; assume ask is supported" (safe fallback).
+ *
+ * Manifest path: <cwd>/.guild/hosts/<host-id>/capability.json where
+ * host-id = GUILD_HOST_ID env || GUILD_HOST env || "claude" (default).
+ */
+function readHostCapability(cwd: string): HostCapabilitySlice | null {
+  try {
+    const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
+    const hostKind = rawHost === "codex" || rawHost === "gemini" || rawHost === "pi"
+      ? rawHost
+      : "claude";
+    const hostId = (process.env["GUILD_HOST_ID"] ?? "").trim() || hostKind;
+    const manifestPath = path.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
+    const raw = fs.readFileSync(manifestPath, "utf8");
+    return JSON.parse(raw) as HostCapabilitySlice;
+  } catch {
+    return null; // absent or unreadable manifest — safe fallback
+  }
+}
+
+/**
+ * Write a guild.approval_request.v1 file to the agent-bus approvals directory.
+ * This is the file-bus mechanism used when the host lacks a native ask primitive
+ * (permission_mode: degraded). Best-effort — a write failure is logged to stderr
+ * but never changes the gate decision.
+ *
+ * Sink: <runDir>/agent-bus/approvals/<iso-id>.json
+ */
+function writeApprovalRequest(
+  runDir: string,
+  opts: {
+    runId: string;
+    laneId?: string;
+    tool: string;
+    detail: string;
+    dispatchRung?: string;
+  },
+): void {
+  try {
+    const approvalDir = path.join(runDir, "agent-bus", "approvals");
+    fs.mkdirSync(approvalDir, { recursive: true });
+    const ts = new Date().toISOString();
+    // Deterministic file name: <ts-safe>-<tool>.json
+    const safeTs = ts.replace(/[:.]/g, "-");
+    const fileName = `${safeTs}-${opts.tool.toLowerCase()}.json`;
+    const record: Record<string, unknown> = {
+      schema_version: "guild.approval_request.v1",
+      ts,
+      run_id: opts.runId,
+      tool: opts.tool,
+      reason: opts.detail,
+      permission_mode: "degraded",
+    };
+    if (opts.laneId) record["lane_id"] = opts.laneId;
+    if (opts.dispatchRung) record["dispatch_rung"] = opts.dispatchRung;
+    fs.writeFileSync(path.join(approvalDir, fileName), JSON.stringify(record, null, 2) + "\n", "utf8");
+  } catch (err) {
+    process.stderr.write(
+      `warn: [pre-tool-use] approval_request write failed: ${
+        err instanceof Error ? err.message : String(err)
+      }\n`,
+    );
+  }
+}
+
 // ── Guild-owned-file boundary guard (P5-boundary-001) ──────────────────────
 //
 // Behavioral contract: docs/knowledge/implementation/phases/
@@ -202,13 +291,33 @@ interface GuardToolInput {
 }
 
 /**
- * The guard. Returns true iff it surfaced the always-ask channel (caller then
- * returns without writing telemetry, keeping stdout = exactly the decision
- * JSON). The guard itself performs NO filesystem write.
+ * HK-07 degrade context threaded into the boundary guard so BOTH ask-emitting
+ * paths (gate-routed + boundary-guard) go through the same degrade check.
+ * All fields are optional: absent = no degrade context available (safe fallback).
+ */
+interface BoundaryDegradeCtx {
+  hostSupportsAsk: boolean;
+  runId: string | undefined;
+  runDir: string | undefined;
+  laneId: string | undefined;
+  dispatchRung: string | undefined;
+}
+
+/**
+ * The guard. Returns true iff it handled the event (caller then returns without
+ * writing telemetry, keeping stdout = exactly the decision JSON).
+ *
+ * When `ctx.hostSupportsAsk` is false the guard degrades its always-ask to the
+ * file-bus approval_request path (HK-07) exactly as the gate-routed path does:
+ *   1. Writes guild.approval_request.v1 (when runId is resolvable)
+ *   2. Logs a `capability_scope_degrade` security event (when runId is resolvable)
+ *   3. Emits `permissionDecision: "deny"` — NEVER bare `ask` on a host that
+ *      cannot honor it.
  */
 function runBoundaryGuard(
   payload: PreToolUsePayload,
   cwd: string,
+  ctx?: BoundaryDegradeCtx,
 ): boolean {
   const tool = payload.tool_name;
   if (tool !== "Write" && tool !== "Edit" && tool !== "MultiEdit") {
@@ -245,22 +354,65 @@ function runBoundaryGuard(
   // In-bounds (incl. the enumerated proposed/ staging carve-out) ⇒ no prompt.
   if (isInsideGuildDir(abs)) return false;
 
-  // Signature ∧ resolves-outside(.guild/) ⇒ surface the EXISTING always-ask
-  // sandbox prompt. No new gate, no new prompt copy. The guard never writes;
-  // atomic-write/validity rules are owned by target-architecture.md §467-494.
-  const decision = {
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "ask",
-      permissionDecisionReason:
-        `Guild-owned-file boundary (P5-boundary-001): a Guild-signed ` +
-        `artifact would be written OUTSIDE the consuming repo's .guild/ ` +
-        `(${abs}). Guild-owned files belong under .guild/ (or .guild/` +
-        `agents/proposed/, .guild/skills/proposed-*). Confirm this write is ` +
-        `intentional.`,
-    },
-  };
-  process.stdout.write(JSON.stringify(decision));
+  // Signature ∧ resolves-outside(.guild/) → gate.
+  const guardReason =
+    `Guild-owned-file boundary (P5-boundary-001): a Guild-signed ` +
+    `artifact would be written OUTSIDE the consuming repo's .guild/ ` +
+    `(${abs}). Guild-owned files belong under .guild/ (or .guild/` +
+    `agents/proposed/, .guild/skills/proposed-*). Confirm this write is ` +
+    `intentional.`;
+  const toolName = payload.tool_name ?? "";
+
+  // HK-07: degrade ask→deny when host lacks PreToolUse ask primitive.
+  // Covers BOTH ask-emitting paths so every degradation is observable on disk.
+  if (ctx !== undefined && !ctx.hostSupportsAsk) {
+    if (ctx.runId !== undefined && ctx.runDir !== undefined) {
+      writeApprovalRequest(ctx.runDir, {
+        runId: ctx.runId,
+        laneId: ctx.laneId,
+        tool: toolName,
+        detail: guardReason,
+        dispatchRung: ctx.dispatchRung,
+      });
+      appendSecurityEvent(
+        ctx.runDir,
+        buildSecurityEvent({
+          run_id: ctx.runId,
+          lane_id: ctx.laneId,
+          dispatch_rung: ctx.dispatchRung,
+          event_type: "capability_scope_degrade",
+          decision: "deny",
+          tool: toolName,
+          detail: `Host lacks PreToolUse ask — boundary-guard degraded to file-bus approval_request. ${guardReason}`,
+          permission_mode: "degraded",
+        }),
+      );
+    }
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            `Guild security (capability_scope_degrade): host lacks PreToolUse ask. ` +
+            `Approval request written to agent-bus/approvals/ (permission_mode: degraded). ` +
+            `Original: ${guardReason}`,
+        },
+      }),
+    );
+    return true;
+  }
+
+  // Normal path — host supports ask natively; surface the existing prompt.
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "ask",
+        permissionDecisionReason: guardReason,
+      },
+    }),
+  );
   return true;
 }
 
@@ -327,6 +479,14 @@ function runSecurityEnforcement(payload: PreToolUsePayload, cwd: string): boolea
   const laneId =
     typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv) ? laneEnv : undefined;
   const permissionMode = payload.permission_mode;
+  // HK-07: dispatch.rung from orchestrator env (set by specialist-dispatch wrapper).
+  const dispatchRung =
+    (process.env["GUILD_DISPATCH_RUNG"] ?? "").trim() || undefined;
+
+  // HK-07: read the host capability manifest (written at SessionStart by bootstrap.sh).
+  // Absent manifest = assume ask is supported (safe fallback, no regression).
+  const hostCap = readHostCapability(cwd);
+  const hostSupportsAsk = hostCap?.tool_support?.pre_tool_use_ask !== false;
 
   const emit = (input: Omit<SecurityEventInput, "run_id" | "lane_id">): void => {
     if (runId === undefined || runDir === undefined) {
@@ -335,10 +495,62 @@ function runSecurityEnforcement(payload: PreToolUsePayload, cwd: string): boolea
       );
       return;
     }
-    appendSecurityEvent(runDir, buildSecurityEvent({ run_id: runId, lane_id: laneId, ...input }));
+    appendSecurityEvent(
+      runDir,
+      buildSecurityEvent({
+        run_id: runId,
+        lane_id: laneId,
+        dispatch_rung: dispatchRung,
+        ...input,
+      }),
+    );
   };
 
+  /**
+   * Gate function — decides whether to use native ask or the degraded file-bus
+   * approval_request path, per HK-07 (docs/v2/11-security.md §enforcement).
+   *
+   * When `permissionDecision === "ask"` AND the host lacks `pre_tool_use_ask`,
+   * the gate degrades:
+   *   1. Writes guild.approval_request.v1 to agent-bus/approvals/
+   *   2. Logs a `capability_scope_degrade` security event with
+   *      `permission_mode: degraded` + `dispatch_rung` (if set)
+   *   3. Emits `permissionDecision: "deny"` (the tool must not run until the
+   *      lead approves via the file bus — the deny IS the observable pause)
+   * Otherwise emits the decision unchanged (native host behavior).
+   */
   const gate = (permissionDecision: "ask" | "deny", eventType: string, reason: string): boolean => {
+    if (permissionDecision === "ask" && !hostSupportsAsk && runId !== undefined && runDir !== undefined) {
+      // Degraded path — host lacks PreToolUse ask primitive.
+      writeApprovalRequest(runDir, {
+        runId,
+        laneId,
+        tool: toolName,
+        detail: reason,
+        dispatchRung,
+      });
+      emit({
+        event_type: "capability_scope_degrade",
+        decision: "deny",
+        tool: toolName,
+        detail: `Host lacks PreToolUse ask — degraded to file-bus approval_request. Original: ${reason}`,
+        permission_mode: "degraded",
+      });
+      // Emit deny so the tool call is blocked pending file-bus approval.
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason:
+              `Guild security (capability_scope_degrade): host lacks PreToolUse ask. ` +
+              `Approval request written to agent-bus/approvals/ (permission_mode: degraded). ` +
+              `Original: ${reason}`,
+          },
+        }),
+      );
+      return true;
+    }
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput: {
@@ -424,9 +636,35 @@ export async function main(): Promise<void> {
 
   // P5-boundary-001 — additive Guild-owned-file boundary guard. Runs for
   // EVERY Write/Edit regardless of the telemetry run-id gating below. If it
-  // surfaces the always-ask channel it owns stdout for this event; skip the
-  // sidecar write and return (the tool will re-evaluate after the prompt).
-  if (runBoundaryGuard(payload, cwd)) return;
+  // surfaces the always-ask/deny channel it owns stdout for this event; skip
+  // the sidecar write and return.
+  //
+  // HK-07: thread degrade context so the boundary-guard ask is also covered
+  // (both ask-emitting paths must degrade when the host lacks PreToolUse ask).
+  {
+    const bgHostCap = readHostCapability(cwd);
+    const bgHostSupportsAsk = bgHostCap?.tool_support?.pre_tool_use_ask !== false;
+    const bgRunId = resolveRunId(cwd);
+    const bgRunDir =
+      bgRunId !== undefined
+        ? (process.env["GUILD_RUN_DIR"] ??
+            path.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId))
+        : undefined;
+    const bgLaneEnv = process.env["GUILD_LANE_ID"];
+    const bgLaneId =
+      typeof bgLaneEnv === "string" && bgLaneEnv.length > 0 ? bgLaneEnv : undefined;
+    const bgDispatchRung = (process.env["GUILD_DISPATCH_RUNG"] ?? "").trim() || undefined;
+    if (
+      runBoundaryGuard(payload, cwd, {
+        hostSupportsAsk: bgHostSupportsAsk,
+        runId: bgRunId,
+        runDir: bgRunDir,
+        laneId: bgLaneId,
+        dispatchRung: bgDispatchRung,
+      })
+    )
+      return;
+  }
 
   const runId = resolveRunId(cwd);
   if (typeof runId !== "string" || runId.length === 0) {

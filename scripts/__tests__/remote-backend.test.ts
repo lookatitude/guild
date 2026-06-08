@@ -32,7 +32,7 @@ import {
   type TeamLaunchRequest,
 } from "../lib/team-backend";
 import { resolveAdapter } from "../lib/pane-adapter";
-import { planTeamRouting, RouteError, type RoutableHost } from "../lib/host-router";
+import { planTeamRouting, type RoutableHost } from "../lib/host-router";
 import type { HostCapabilityManifest } from "../write-host-capability";
 
 // ── shared fixtures ──────────────────────────────────────────────────────────
@@ -272,7 +272,7 @@ function host(overrides: Partial<RoutableHost> = {}): RoutableHost {
     source: "test",
     tiers: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
     models: ["haiku", "sonnet", "opus"],
-    tool_support: { subagent: true, agent_team: true, independent_agents: true, tmux: true, mcp: true },
+    tool_support: { subagent: true, agent_team: true, independent_agents: true, tmux: true, mcp: true, pre_tool_use_ask: true },
   };
   return { ...base, ...overrides } as RoutableHost;
 }
@@ -283,7 +283,7 @@ function codexRemote(overrides: Partial<RoutableHost> = {}): RoutableHost {
     host_kind: "codex",
     tiers: { cheap: "gpt-4o-mini", mid: "gpt-4o", powerful: "o3" },
     models: ["gpt-4o-mini", "gpt-4o", "o3"],
-    tool_support: { subagent: true, agent_team: false, independent_agents: false, tmux: false, mcp: true },
+    tool_support: { subagent: true, agent_team: false, independent_agents: false, tmux: false, mcp: true, pre_tool_use_ask: false },
     ...overrides,
   });
 }
@@ -331,14 +331,16 @@ describe("planTeamRouting — local tmux vs remote, via host-router", () => {
     expect(routes[0].backend).toBe("tmux");
   });
 
-  it("propagates RouteError when a lane cannot be satisfied", () => {
-    // team mode needs agent_team; only codex (no agent_team) present → no host.
-    expect(() =>
-      planTeamRouting(
-        [{ name: "x", scope: "", dependsOn: [] }],
-        [codexRemote()],
-        { localHostId: "claude", crossHostEnabled: true, mode: "team", now: NOW }
-      )
-    ).toThrow(RouteError);
+  it("TE-02: returns degraded decision when a lane cannot be fully satisfied", () => {
+    // team mode needs agent_team; only codex (no agent_team) present → degrade-not-throw.
+    const routes = planTeamRouting(
+      [{ name: "x", scope: "", dependsOn: [] }],
+      [codexRemote()],
+      { localHostId: "claude", crossHostEnabled: true, mode: "team", now: NOW }
+    );
+    expect(routes).toHaveLength(1);
+    expect(routes[0].decision.degraded).toBe(true);
+    expect(routes[0].decision.independence).toBe("weak");
+    expect(routes[0].decision.rejected.length).toBeGreaterThan(0);
   });
 });

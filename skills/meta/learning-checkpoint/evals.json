@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Run the per-phase learning checkpoint for the development phase.",
+    "Classify learnings for this phase — emit the 12-target verdict.",
+    "Did this phase produce any learnings? Run the learning checkpoint.",
+    "Emit the guild.learning_checkpoint.v1 verdict for the quality phase boundary.",
+    "Learning checkpoint for the planning phase — read the receipt and provenance and classify."
+  ],
+  "should_not_trigger": [
+    "Run post-task reflection on this run and write the reflections file.",
+    "Promote this wiki candidate into the canonical wiki.",
+    "Capture this architectural decision as an ADR.",
+    "Rebuild the KnowledgeGraph with a fresh deep scan of the repo.",
+    "Run guild:learn-map to inventory the codebase.",
+    "Ingest this external source into the wiki."
+  ]
+}

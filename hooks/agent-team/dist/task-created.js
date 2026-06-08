@@ -186,6 +186,8 @@ function upsertLane(runDir, init, laneId, patch) {
     };
     const tier = patch.tier ?? prev?.tier;
     if (tier !== void 0) merged.tier = tier;
+    const host = patch.host ?? prev?.host;
+    if (host !== void 0) merged.host = host;
     state.lanes[laneId] = merged;
     state.last_checkpoint_at = now;
     writeRunStateAtomic(runDir, state);

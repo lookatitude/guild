@@ -109,7 +109,32 @@ row 12, when later built) — never schema-copied here.
 6. Write the Init record and updated wiki index (record that the deep graph
    is deferred, not produced; on a workspace, record the manifest path + the
    federation verdict).
-7. Surface the G-init review (autonomous within an approved contract).
+7. Surface the **G-init review** (autonomous within an approved contract). The
+   cross-host G-init gate runs **via the broker** (`docs/v2/09-adversarial-review.md
+   §The gates`, §Gate ownership): after the Init record + wiki diff are written,
+   invoke `guild-review-broker` so a **different host family** critiques the init
+   artifact / wiki diff for missing context, unsupported facts, and stale
+   knowledge:
+
+   ```
+   Skill: guild-review-broker
+   args: gate=G-init artifact_path=<init-record-path> run_id=<run-id> author_host=<run author host>
+   ```
+
+   Policy-gated (`docs/v2/09 §The review broker`): fires only on `risk ≥ high` /
+   `review: cross` / `--review=cross` / config — else `status: "skipped"` and
+   Init closes with no cross-host reviewer (self-build = always-on). On
+   `"rework"`, revise the Init record / wiki before closing the phase.
+8. **Learning checkpoint (step 7.5 — advisory, no new gate).** After the G-init
+   review and before phase close, fire the per-phase LearningCheckpoint with
+   `phase=init` and the Init record as `evidence_ref`. Invoke
+   `guild:learning-checkpoint` to classify the already-written Init artifacts into
+   the 12-target verdict, then emit via the hook — full call signature + the
+   `GUILD_PHASE` mapping are canonical in
+   `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the
+   checkpoint"` (do not re-spell). It rides this existing boundary, defaults to
+   all-`none` (a near-zero-token no-op), asks no prompt, and introduces no new
+   gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
 
 # Evidence requirements
 

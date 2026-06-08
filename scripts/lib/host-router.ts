@@ -57,6 +57,35 @@ export type WorkType =
 export type BackendCapability = keyof HostCapabilityManifest["tool_support"];
 
 /**
+ * Capability requirements from `task_run.host.capability_requirements` (FROZEN
+ * target-architecture.md §task_run). Read by the router per TE-02/ARCH-2.
+ * All fields are optional — absent means "no requirement on this axis."
+ */
+export interface CapabilityRequirements {
+  /** Lane needs a host that can open/merge PRs (e.g. Codex cloud). */
+  needs_pr?: boolean;
+  /** Lane needs parallel execution (agent_team OR independent_agents). */
+  needs_parallel?: boolean;
+  /** Lane requires network access. */
+  needs_network?: boolean;
+  /** Lane requires worktree isolation. */
+  isolation?: "worktree" | "none";
+}
+
+/**
+ * A host's advertised capability set (forward-compatible extension on the
+ * manifest). The v2.0 writer does not yet emit this field, so its absence
+ * is lenient for all axes EXCEPT `needs_parallel`, which is derived from
+ * the already-present `tool_support` flags.
+ */
+export interface HostCapabilitySet {
+  needs_pr?: boolean;
+  needs_parallel?: boolean;
+  needs_network?: boolean;
+  isolation?: "worktree" | "none";
+}
+
+/**
  * A routable host = the real RE-5 manifest, plus OPTIONAL forward-compatible
  * extension fields the ADR names but the v2.0 writer does not yet emit. Honored
  * when present, lenient when absent.
@@ -68,6 +97,12 @@ export type RoutableHost = HostCapabilityManifest & {
   tool_permissions?: string[];
   /** ADR `advertised_at`. Absent ⇒ fall back to `detected_at` for freshness. */
   advertised_at?: string;
+  /**
+   * TE-02/ARCH-2: per-host capability advertisement (forward-compatible).
+   * Absent ⇒ lenient for needs_pr/needs_network/isolation; needs_parallel is
+   * derived from tool_support when capability_set is absent.
+   */
+  capability_set?: HostCapabilitySet;
 };
 
 export interface LaneRequest {
@@ -85,6 +120,12 @@ export interface LaneRequest {
   workType?: WorkType;
   /** Per-specialist `host:` from team.yaml — a strong preference, not a hard pin. */
   preferredHostKind?: HostKind;
+  /**
+   * TE-02/ARCH-2: capability requirements from `task_run.host.capability_requirements`.
+   * When set, the router intersects these requirements against each adapter's
+   * capability_set before routing. Absent = no extra capability gate.
+   */
+  capabilityRequirements?: CapabilityRequirements;
 }
 
 export interface RouteOptions {
@@ -132,6 +173,19 @@ export interface RejectedHost {
 /** The full logged routing decision (→ run-state.lanes[id].routing_decision). */
 export interface RoutingDecision extends RouteTarget {
   taskId: string;
+  /**
+   * TE-03: true when no fully-qualifying host was found and the router fell
+   * back to the least-bad candidate. Always false on the normal qualifying path.
+   * Persisted via onDecision into the lane's run-state entry + the receipt host block.
+   */
+  degraded: boolean;
+  /**
+   * TE-03: "strong" = reviewer on a DIFFERENT host than the producer (full
+   * cross-host adversarial independence). "weak" = reviewer on the SAME host
+   * (independence lost — the observable signal defined in docs/v2/07 + 08).
+   * Set to "weak" whenever degraded=true.
+   */
+  independence: "strong" | "weak";
   /** Ranked alternatives at the SAME tier (CR-3 — no silent downgrade). */
   fallbackChain: RouteTarget[];
   /** Rank score of the selected primary (CR-1 step 2 affinity input). */
@@ -274,6 +328,45 @@ function toolGap(host: RoutableHost, requiredTools: string[] | undefined): strin
 }
 
 /**
+ * TE-02/ARCH-2: capability-requirements intersection.
+ * Returns a list of unmet requirements (empty = no gap = host qualifies).
+ *
+ * Lenient-reader strategy:
+ * - `needs_parallel` is derived from `tool_support` when `capability_set` is
+ *   absent, because `tool_support` is ALREADY present in the v2.0 manifest.
+ * - All other requirements are only enforced when the host explicitly advertises
+ *   a `capability_set`. When absent, no gap is reported (no rejection).
+ */
+function capabilityGap(
+  host: RoutableHost,
+  reqs: CapabilityRequirements | undefined
+): string[] {
+  if (!reqs) return [];
+  const gaps: string[] = [];
+  const cs = host.capability_set;
+
+  // needs_parallel: derive from tool_support when capability_set absent
+  if (reqs.needs_parallel === true) {
+    const canParallel =
+      cs?.needs_parallel ??
+      Boolean(host.tool_support?.agent_team || host.tool_support?.independent_agents);
+    if (!canParallel) gaps.push("needs_parallel");
+  }
+
+  // The remaining requirements are only enforced when capability_set is present
+  // (absent = no advertised restriction = lenient-reader, same as tool_permissions).
+  if (cs) {
+    if (reqs.needs_pr === true && !cs.needs_pr) gaps.push("needs_pr");
+    if (reqs.needs_network === true && !cs.needs_network) gaps.push("needs_network");
+    if (reqs.isolation === "worktree" && cs.isolation !== "worktree") {
+      gaps.push("isolation:worktree");
+    }
+  }
+
+  return gaps;
+}
+
+/**
  * Null-slot fill (CR-1 step 4). Merge precedence:
  *   settings.json models.tiers[tier][host_kind]   (operator override)
  *     → host.tiers[tier]                           (RE-5 manifest fill)
@@ -361,11 +454,62 @@ export function route(
       tag(`missing required tools: ${gap.join(", ")}`);
       continue;
     }
+    // TE-02/ARCH-2: capability requirements intersection (task_run.host.capability_requirements).
+    const capGap = capabilityGap(host, lane.capabilityRequirements);
+    if (capGap.length > 0) {
+      tag(`capability requirements not met: ${capGap.join(", ")}`);
+      continue;
+    }
     qualifying.push(host);
   }
 
+  // TE-02: degrade-not-throw.
+  // When no host qualifies but at least one host manifest was supplied, route to
+  // the least-bad candidate (highest rank score from ALL supplied hosts). The
+  // cross-host filter is a qualifying rule but NOT a hard block for degradation:
+  // "fall to the nearest available adapter" (docs/v2/08 §2) means we use whatever
+  // is reachable, recording degraded:true + independence:weak. Only throw when
+  // the host list is truly empty — no candidate at all.
   if (qualifying.length === 0) {
-    throw new RouteError(lane.taskId, rejected);
+    if (hosts.length === 0) {
+      throw new RouteError(lane.taskId, rejected);
+    }
+
+    // Rank all supplied hosts (same scoring + tiebreak as the normal path).
+    const leastBad = [...hosts].sort((a, b) => {
+      const sa = rankScore(a, lane);
+      const sb = rankScore(b, lane);
+      if (sb !== sa) return sb - sa;
+      const ka = hostKindRank(a.host_kind);
+      const kb = hostKindRank(b.host_kind);
+      if (ka !== kb) return ka - kb;
+      return a.host_id < b.host_id ? -1 : a.host_id > b.host_id ? 1 : 0;
+    })[0];
+
+    const degradedDecision: RoutingDecision = {
+      taskId: lane.taskId,
+      host: leastBad.host_id,
+      hostKind: leastBad.host_kind,
+      tier: lane.tier,
+      model: resolveModel(lane.tier, leastBad, opts.settingsOverride),
+      fallbackChain: [],
+      affinityScore: rankScore(leastBad, lane),
+      degraded: true,
+      independence: "weak",
+      reason:
+        `DEGRADED: no host fully qualified for task "${lane.taskId}"; ` +
+        `routed to least-bad candidate ${leastBad.host_id}(${leastBad.host_kind}); ` +
+        `${rejected.length} rejection(s) recorded; ` +
+        `backend=${requiredBackend ?? "any"}; workType=${lane.workType ?? "none"}`,
+      rejected,
+      notes: [
+        "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub",
+        "degraded: true — no fully-qualifying host found; weak-independence recorded (doc 08 §2, TE-02/TE-03)",
+      ],
+    };
+
+    opts.onDecision?.(degradedDecision);
+    return degradedDecision;
   }
 
   // CR-1 step 2: rank by score, then deterministic tiebreak.
@@ -412,6 +556,8 @@ export function route(
     model: primary.model,
     fallbackChain,
     affinityScore: rankScore(primaryHost, lane),
+    degraded: false,
+    independence: "strong",
     reason:
       `primary=${primary.host}(${primary.hostKind}) tier=${primary.tier} ` +
       `model=${primary.model}; ${fallbackChain.length} fallback(s); ` +
@@ -460,18 +606,49 @@ export interface PlanTeamRoutingOpts extends RouteOptions {
  * (its `host:` brand becomes `preferredHostKind`) and calls `route()`; a
  * decision whose `host` equals `localHostId` runs as a local tmux pane,
  * otherwise it is a remote host (RemoteTeamBackend). Pure (delegates to the pure
- * `route()`); throws RouteError if any lane cannot be satisfied — the launcher
- * catches it and surfaces the reject trail.
+ * `route()`); returns degraded decisions (never throws) if any lane cannot be
+ * fully satisfied — the launcher reads `decision.degraded` to surface the trail.
+ *
+ * ARCH-6: each specialist may carry its own `tier` field (from the cost
+ * auto-scorer result, threaded in by the execute-plan dispatch path). When
+ * absent the specialist inherits `opts.tier` (default "mid").
  */
 export function planTeamRouting(
-  specialists: Array<Pick<Specialist, "name" | "scope" | "dependsOn"> & { host_kind?: HostKind }>,
+  specialists: Array<
+    Pick<Specialist, "name" | "scope" | "dependsOn"> & {
+      host_kind?: HostKind;
+      /**
+       * ARCH-6: per-specialist tier from the cost auto-scorer. Overrides the
+       * global `opts.tier` fallback for this lane only.
+       */
+      tier?: Tier;
+      /**
+       * GAP-A1/ARCH-2: per-lane capability requirements from team.yaml.
+       * Forwarded into route()'s LaneRequest.capabilityRequirements so that
+       * capabilityGap() runs in production. Absent ⇒ no capability constraint.
+       * The launcher populates this from the SAME team.yaml source that the
+       * task_run writer reads — ONE object feeds both the written descriptor
+       * and the intersection, making the round-trip true and non-driftable.
+       */
+      capabilityRequirements?: CapabilityRequirements;
+    }
+  >,
   hosts: RoutableHost[],
   opts: PlanTeamRoutingOpts
 ): SpecialistRoute[] {
   const { localHostId, tier = "mid", mode = "auto", ...routeOpts } = opts;
   return specialists.map((s) => {
+    const laneTier: Tier = s.tier ?? tier; // ARCH-6: per-specialist tier, else global default
     const decision = route(
-      { taskId: s.name, tier, mode, preferredHostKind: s.host_kind },
+      {
+        taskId: s.name,
+        tier: laneTier,
+        mode,
+        preferredHostKind: s.host_kind,
+        // GAP-A1/ARCH-2: forward capability requirements so capabilityGap()
+        // runs in the live path, not only in direct route() unit tests.
+        capabilityRequirements: s.capabilityRequirements,
+      },
       hosts,
       routeOpts
     );
