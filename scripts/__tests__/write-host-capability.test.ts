@@ -50,13 +50,16 @@ describe("write-host-capability — buildCapability (RE-5)", () => {
     const m = buildCapability({ cwd: mkRoot(), env: {}, probeTmux: () => false });
     expect(m.schema_version).toBe("guild.host_capability.v1");
     expect(m.host_kind).toBe("claude");
-    expect(m.tiers).toEqual({ cheap: "haiku", mid: "sonnet", powerful: "opus" });
+    // TE-07: canonical field names
+    expect(m.tier_models).toEqual({ cheap: "haiku", mid: "sonnet", powerful: "opus" });
+    expect(m.supported_tiers).toEqual(["cheap", "mid", "powerful"]);
     expect(m.host_id).toBe("claude");
   });
 
   it("has all required guild.host_capability.v1 top-level keys", () => {
     const m = buildCapability({ cwd: mkRoot(), env: {}, probeTmux: () => false }) as unknown as Record<string, unknown>;
-    for (const k of ["schema_version", "host_id", "host_kind", "detected_at", "source", "tiers", "models", "tool_support"]) {
+    // TE-07: canonical ADR field names (advertised_at, tier_models, supported_tiers)
+    for (const k of ["schema_version", "host_id", "host_kind", "advertised_at", "source", "tier_models", "supported_tiers", "models", "tool_support"]) {
       expect(m).toHaveProperty(k);
     }
   });
@@ -89,7 +92,8 @@ describe("write-host-capability — buildCapability (RE-5)", () => {
       })
     );
     const m = buildCapability({ cwd: root, env: {}, probeTmux: () => false });
-    expect(m.tiers).toEqual({ cheap: "haiku-3", mid: "sonnet-4", powerful: "opus-4" });
+    // TE-07: canonical field name tier_models
+    expect(m.tier_models).toEqual({ cheap: "haiku-3", mid: "sonnet-4", powerful: "opus-4" });
     expect(m.models).toContain("extra-model");
   });
 

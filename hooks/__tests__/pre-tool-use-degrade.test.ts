@@ -80,9 +80,11 @@ function writeCapabilityManifest(
     schema_version: "guild.host_capability.v1",
     host_id: hostId,
     host_kind: preToolUseAsk ? "claude" : "codex",
-    detected_at: new Date().toISOString(),
+    // TE-07: canonical ADR field names
+    advertised_at: new Date().toISOString(),
     source: "test",
-    tiers: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+    tier_models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+    supported_tiers: ["cheap", "mid", "powerful"],
     models: ["haiku", "sonnet", "opus"],
     tool_support: {
       subagent: true,

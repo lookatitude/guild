@@ -43,9 +43,12 @@ function host(overrides: Partial<RoutableHost> = {}): RoutableHost {
     schema_version: "guild.host_capability.v1",
     host_id: "claude",
     host_kind: "claude",
-    detected_at: FRESH,
+    // TE-07: canonical field name
+    advertised_at: FRESH,
     source: "test",
-    tiers: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+    // TE-07: canonical field name
+    tier_models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+    supported_tiers: ["cheap", "mid", "powerful"],
     models: ["haiku", "sonnet", "opus"],
     tool_support: {
       subagent: true,
@@ -63,7 +66,9 @@ function codexHost(overrides: Partial<RoutableHost> = {}): RoutableHost {
   return host({
     host_id: "codex",
     host_kind: "codex",
-    tiers: { cheap: "gpt-4o-mini", mid: "gpt-4o", powerful: "o3" },
+    // TE-07: canonical field name
+    tier_models: { cheap: "gpt-4o-mini", mid: "gpt-4o", powerful: "o3" },
+    supported_tiers: ["cheap", "mid", "powerful"],
     models: ["gpt-4o-mini", "gpt-4o", "o3"],
     tool_support: {
       subagent: true,
@@ -118,7 +123,8 @@ describe("resolveModel — null tier-slot fill merge precedence", () => {
     expect(m).toBe("gpt-4o-2026");
   });
   it("falls back to the built-in claude default when the manifest tier is empty", () => {
-    const h = codexHost({ tiers: { cheap: "", mid: "", powerful: "" } });
+    // TE-07: use canonical tier_models field
+    const h = codexHost({ tier_models: { cheap: "", mid: "", powerful: "" } });
     expect(resolveModel("powerful", h)).toBe("opus");
   });
 });
@@ -197,7 +203,8 @@ describe("route — capability pre-check (CR-1/CR-2)", () => {
   });
 
   it("rejects a host missing a tier (supported via empty model string)", () => {
-    const noPowerful = codexHost({ tiers: { cheap: "gpt-4o-mini", mid: "gpt-4o", powerful: "" } });
+    // TE-07: use canonical tier_models field; supported_tiers array must also be overridden to reflect gap
+    const noPowerful = codexHost({ tier_models: { cheap: "gpt-4o-mini", mid: "gpt-4o", powerful: "" }, supported_tiers: ["cheap", "mid"] });
     const d = route(lane({ tier: "powerful" }), [host(), noPowerful], opts);
     expect(d.hostKind).toBe("claude");
     expect(d.rejected.find((r) => r.hostKind === "codex")?.reason).toMatch(/tier "powerful"/);
@@ -256,21 +263,28 @@ describe("route — manifest freshness (CR-5)", () => {
   const opts = { ...baseOpts, crossHostEnabled: true };
 
   it("excludes a stale manifest from routing", () => {
-    const staleCodex = codexHost({ detected_at: STALE });
+    // TE-07: staleness is checked via advertised_at (canonical)
+    const staleCodex = codexHost({ advertised_at: STALE });
     const d = route(lane({ preferredHostKind: "codex" }), [host(), staleCodex], opts);
     expect(d.hostKind).toBe("claude");
     expect(d.rejected.find((r) => r.hostKind === "codex")?.reason).toMatch(/stale/);
   });
 
-  it("honors advertised_at when present (overrides detected_at)", () => {
-    const h = codexHost({ detected_at: STALE, advertised_at: FRESH });
-    const d = route(lane({ preferredHostKind: "codex" }), [host(), h], opts);
-    expect(d.hostKind).toBe("codex"); // fresh via advertised_at
+  it("honors advertised_at when present; lenient reader falls back to detected_at for legacy manifests", () => {
+    // advertised_at stale → rejected (canonical wins)
+    const hStale = codexHost({ advertised_at: STALE });
+    const d1 = route(lane({ preferredHostKind: "codex" }), [host(), hStale], opts);
+    expect(d1.hostKind).toBe("claude");
+    // Legacy: only detected_at present (advertised_at overridden to undefined) → lenient reader uses it
+    const hLegacy = codexHost({ detected_at: FRESH, advertised_at: undefined as unknown as string });
+    const d2 = route(lane({ preferredHostKind: "codex" }), [host(), hLegacy], opts);
+    expect(d2.hostKind).toBe("codex"); // fresh via detected_at fallback
   });
 
   it("treats a missing/unparseable timestamp as stale — TE-02: degrades instead of throwing", () => {
     // Single host with no parseable timestamp: stale → no qualifier → degrade to it.
-    const h = host({ detected_at: "" });
+    // TE-07: use canonical advertised_at field
+    const h = host({ advertised_at: "" });
     const d = route(lane(), [h], opts);
     expect(d.degraded).toBe(true);
     expect(d.independence).toBe("weak");
@@ -279,7 +293,8 @@ describe("route — manifest freshness (CR-5)", () => {
   });
 
   it("a custom TTL re-admits a manifest within the window", () => {
-    const h = codexHost({ detected_at: STALE });
+    // TE-07: use canonical advertised_at field
+    const h = codexHost({ advertised_at: STALE });
     const d = route(lane({ preferredHostKind: "codex" }), [h], {
       ...opts,
       manifestTtlS: 24 * 3600, // 24 h window
@@ -381,8 +396,9 @@ describe("route — TE-03: RoutingDecision.degraded + independence fields", () =
 
   it("cross-host enabled: picks the best-ranked candidate when all degrade", () => {
     // All stale — degradation picks highest-scored (claude tiebreaks over codex)
-    const staleC = host({ detected_at: STALE });
-    const staleK = codexHost({ detected_at: STALE });
+    // TE-07: use canonical advertised_at field
+    const staleC = host({ advertised_at: STALE });
+    const staleK = codexHost({ advertised_at: STALE });
     const d = route(lane(), [staleK, staleC], { ...baseOpts, crossHostEnabled: true });
     expect(d.degraded).toBe(true);
     expect(d.hostKind).toBe("claude"); // claude wins tiebreak

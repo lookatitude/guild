@@ -16,7 +16,9 @@ node_modules/
 
 # .guild/ — share-dot-guild policy (see docs/knowledge/decisions/guild-boundary-config-and-tracking.md Decision E)
 .guild
-!.guild/
+# Anchor to repo root: `!.guild/` (unanchored, no internal /) would re-include nested
+# dirs like hooks/.guild/ or scripts/.guild/. Leading / anchors to gitignore directory.
+!/.guild/
 !.guild/wiki/
 !.guild/wiki/**
 !.guild/initiatives/

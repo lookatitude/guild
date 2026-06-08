@@ -52,14 +52,29 @@ export interface HostCapabilityManifest {
   schema_version: "guild.host_capability.v1";
   host_id: string;
   host_kind: HostKind;
-  detected_at: string;
+  /**
+   * TE-07/DQ-5: canonical ADR name (`advertised_at`).
+   * Old manifests on disk still carry `detected_at` — the router's lenient
+   * reader handles both via `advertised_at ?? detected_at`.
+   */
+  advertised_at: string;
   source: string;
-  /** Stable tier → concrete model id (cost-aware tiering ladder). */
-  tiers: {
+  /**
+   * TE-07/DQ-5: canonical ADR name (`tier_models`).
+   * Old manifests on disk still carry `tiers` — the router's lenient reader
+   * handles both via `tier_models ?? tiers`.
+   */
+  tier_models: {
     cheap: string;
     mid: string;
     powerful: string;
   };
+  /**
+   * TE-07/DQ-5: canonical ADR field (`supported_tiers` array).
+   * Derived from the tier_models keys at write time. The router prefers this
+   * array for tier-support checks (supportsTier) when present.
+   */
+  supported_tiers: ("cheap" | "mid" | "powerful")[];
   /** Flat list of models this host can reach. */
   models: string[];
   /** Runtime feature support consulted by the cross-host router. */
@@ -81,7 +96,7 @@ export interface HostCapabilityManifest {
 }
 
 // Built-in tier ladder (host-agnostic default; see cost-aware-tiering ADR §1).
-const DEFAULT_TIERS: HostCapabilityManifest["tiers"] = {
+const DEFAULT_TIER_MODELS: HostCapabilityManifest["tier_models"] = {
   cheap: "haiku",
   mid: "sonnet",
   powerful: "opus",
@@ -136,16 +151,17 @@ function resolveIndependentAgents(hostKind: HostKind, env: NodeJS.ProcessEnv): b
 
 /** Best-effort read of `.guild/settings.json` models block. Never throws. */
 function readSettingsModels(cwd: string): {
-  tiers?: Partial<HostCapabilityManifest["tiers"]>;
+  tierModels?: Partial<HostCapabilityManifest["tier_models"]>;
   list?: string[];
 } {
   try {
     const raw = fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8");
     const parsed = JSON.parse(raw) as { models?: { tiers?: unknown; list?: unknown } };
     const models = parsed.models ?? {};
-    const out: { tiers?: Partial<HostCapabilityManifest["tiers"]>; list?: string[] } = {};
+    const out: { tierModels?: Partial<HostCapabilityManifest["tier_models"]>; list?: string[] } = {};
+    // settings.json still uses `models.tiers` key (settings schema is unchanged)
     if (models.tiers && typeof models.tiers === "object") {
-      out.tiers = models.tiers as Partial<HostCapabilityManifest["tiers"]>;
+      out.tierModels = models.tiers as Partial<HostCapabilityManifest["tier_models"]>;
     }
     if (Array.isArray(models.list)) {
       out.list = (models.list as unknown[]).filter((m): m is string => typeof m === "string");
@@ -164,15 +180,16 @@ export function buildCapability(opts: BuildCapabilityOpts): HostCapabilityManife
   const hostId = opts.hostId ?? env["GUILD_HOST_ID"] ?? hostKind;
 
   const settings = readSettingsModels(opts.cwd);
-  const tiers: HostCapabilityManifest["tiers"] = {
-    cheap: settings.tiers?.cheap ?? DEFAULT_TIERS.cheap,
-    mid: settings.tiers?.mid ?? DEFAULT_TIERS.mid,
-    powerful: settings.tiers?.powerful ?? DEFAULT_TIERS.powerful,
+  // TE-07/DQ-5: canonical field is `tier_models`; settings.json key is still `models.tiers`
+  const tierModels: HostCapabilityManifest["tier_models"] = {
+    cheap: settings.tierModels?.cheap ?? DEFAULT_TIER_MODELS.cheap,
+    mid: settings.tierModels?.mid ?? DEFAULT_TIER_MODELS.mid,
+    powerful: settings.tierModels?.powerful ?? DEFAULT_TIER_MODELS.powerful,
   };
   const models =
     settings.list && settings.list.length > 0
       ? settings.list
-      : Array.from(new Set([tiers.cheap, tiers.mid, tiers.powerful]));
+      : Array.from(new Set([tierModels.cheap, tierModels.mid, tierModels.powerful]));
 
   const probe = opts.probeTmux ?? (() => probeTmuxAvailable());
   const tmux = probe();
@@ -181,9 +198,11 @@ export function buildCapability(opts: BuildCapabilityOpts): HostCapabilityManife
     schema_version: "guild.host_capability.v1",
     host_id: hostId,
     host_kind: hostKind,
-    detected_at: new Date().toISOString(),
+    // TE-07/DQ-5: write canonical `advertised_at`; router lenient-reads `advertised_at ?? detected_at`
+    advertised_at: new Date().toISOString(),
     source: opts.source ?? "bootstrap",
-    tiers,
+    tier_models: tierModels,
+    supported_tiers: ["cheap", "mid", "powerful"],
     models,
     tool_support: {
       subagent: true, // always available — the universal fallback backend.

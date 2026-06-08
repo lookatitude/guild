@@ -19,12 +19,12 @@
  * call, no filesystem read, no clock read unless `opts.now` is omitted — so it
  * satisfies the CR-1 "< 5 ms" budget and is trivially testable.
  *
- * It reads the REAL manifest shape emitted by scripts/write-host-capability.ts
- * (`tiers` / `models` / `tool_support` / `detected_at`), NOT the idealized field
- * names in the ADR prose (`supported_tiers` / `tier_models` / `tool_permissions`
- * / `advertised_at`). Optional forward-compatible extension fields
- * (`supported_tiers`, `tool_permissions`, `advertised_at`) are honored when a
- * future manifest carries them, and treated leniently when absent.
+ * TE-07/DQ-5: the writer now emits canonical ADR field names (`advertised_at`,
+ * `tier_models`, `supported_tiers`). The router reads canonical names first and
+ * falls back to the pre-TE-07 names (`detected_at`, `tiers`) so that old
+ * manifests already on disk remain usable without a forced re-bootstrap.
+ * This lenient-reader pattern is the migration bridge — NOT the destination.
+ * `tool_support` / `tool_permissions` alignment is a Wave-3 item.
  *
  * Owned by tooling-engineer. RemoteTeamBackend (team-backend.ts) consumes this
  * function's decision when live cross-host dispatch lands a later wave; this
@@ -91,12 +91,18 @@ export interface HostCapabilitySet {
  * when present, lenient when absent.
  */
 export type RoutableHost = HostCapabilityManifest & {
-  /** ADR `supported_tiers`. Absent ⇒ derived from `tiers[tier]` truthiness. */
-  supported_tiers?: Tier[];
-  /** ADR `tool_permissions` allow-list (CR-2). Absent ⇒ no advertised restriction. */
+  /**
+   * ADR `tool_permissions` allow-list (CR-2). Absent ⇒ no advertised restriction.
+   * (Not yet emitted by write-host-capability.ts — Wave-3 alignment item.)
+   */
   tool_permissions?: string[];
-  /** ADR `advertised_at`. Absent ⇒ fall back to `detected_at` for freshness. */
-  advertised_at?: string;
+  /**
+   * TE-07 legacy fallback fields: pre-TE-07 manifests on disk still carry
+   * `detected_at` and `tiers`. The router reads canonical names first and falls
+   * back to these so old manifests remain usable without forced re-bootstrap.
+   */
+  detected_at?: string;
+  tiers?: { cheap?: string; mid?: string; powerful?: string };
   /**
    * TE-02/ARCH-2: per-host capability advertisement (forward-compatible).
    * Absent ⇒ lenient for needs_pr/needs_network/isolation; needs_parallel is
@@ -294,6 +300,8 @@ export function affinityBoost(workType: WorkType | undefined, hostKind: HostKind
 // ── Manifest helpers (read the REAL RE-5 shape, lenient on extensions) ────────
 
 function manifestTimestamp(host: RoutableHost): number | null {
+  // TE-07: read canonical `advertised_at`; fall back to legacy `detected_at`
+  // for manifests written before the TE-07 rename (migration bridge).
   const raw = host.advertised_at ?? host.detected_at;
   if (!raw) return null;
   const t = Date.parse(raw);
@@ -308,12 +316,12 @@ function isStale(host: RoutableHost, now: number, ttlS: number): boolean {
 }
 
 function supportsTier(host: RoutableHost, tier: Tier): boolean {
-  // Explicit ADR `supported_tiers` extension wins when present…
+  // TE-07: `supported_tiers` is now a primary field (emitted by updated writer).
   if (Array.isArray(host.supported_tiers)) {
     return host.supported_tiers.includes(tier);
   }
-  // …else a tier is supported iff the manifest carries a non-empty model for it.
-  const model = host.tiers?.[tier];
+  // Lenient fallback: derive from tier_models (canonical) or legacy tiers object.
+  const model = host.tier_models?.[tier] ?? host.tiers?.[tier];
   return typeof model === "string" && model.trim().length > 0;
 }
 
@@ -369,7 +377,8 @@ function capabilityGap(
 /**
  * Null-slot fill (CR-1 step 4). Merge precedence:
  *   settings.json models.tiers[tier][host_kind]   (operator override)
- *     → host.tiers[tier]                           (RE-5 manifest fill)
+ *     → host.tier_models[tier]                     (RE-5 manifest fill, canonical)
+ *     → host.tiers[tier]                           (legacy pre-TE-07 fallback)
  *     → built-in default                           (null ⇒ claude fallback)
  */
 export function resolveModel(
@@ -379,7 +388,8 @@ export function resolveModel(
 ): string {
   const override = settingsOverride?.[tier]?.[host.host_kind];
   if (typeof override === "string" && override.trim()) return override.trim();
-  const fromManifest = host.tiers?.[tier];
+  // TE-07: read canonical `tier_models`; fall back to legacy `tiers` for old manifests.
+  const fromManifest = host.tier_models?.[tier] ?? host.tiers?.[tier];
   if (typeof fromManifest === "string" && fromManifest.trim()) return fromManifest.trim();
   // PHASE-1-DISPATCH-WAVE-1: was BUILTIN_DEFAULT_TIERS[tier]; now routed through
   // the per-host registry function. Wave-1 values are identical (Claude defaults

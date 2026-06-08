@@ -268,9 +268,11 @@ function host(overrides: Partial<RoutableHost> = {}): RoutableHost {
     schema_version: "guild.host_capability.v1",
     host_id: "claude",
     host_kind: "claude",
-    detected_at: FRESH,
+    // TE-07: canonical field names
+    advertised_at: FRESH,
     source: "test",
-    tiers: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+    tier_models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+    supported_tiers: ["cheap", "mid", "powerful"],
     models: ["haiku", "sonnet", "opus"],
     tool_support: { subagent: true, agent_team: true, independent_agents: true, tmux: true, mcp: true, pre_tool_use_ask: true },
   };
@@ -281,7 +283,9 @@ function codexRemote(overrides: Partial<RoutableHost> = {}): RoutableHost {
   return host({
     host_id: "codex-remote",
     host_kind: "codex",
-    tiers: { cheap: "gpt-4o-mini", mid: "gpt-4o", powerful: "o3" },
+    // TE-07: canonical field names
+    tier_models: { cheap: "gpt-4o-mini", mid: "gpt-4o", powerful: "o3" },
+    supported_tiers: ["cheap", "mid", "powerful"],
     models: ["gpt-4o-mini", "gpt-4o", "o3"],
     tool_support: { subagent: true, agent_team: false, independent_agents: false, tmux: false, mcp: true, pre_tool_use_ask: false },
     ...overrides,

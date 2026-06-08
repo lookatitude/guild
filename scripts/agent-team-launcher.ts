@@ -94,7 +94,8 @@ import { markLaneDead, upsertLane, type RunStateInit } from "../hooks/lib/run-st
 import { slugFromTeamPath, resolveDeadLaneKeys, readPlanOwnerTaskIds } from "./lib/team-file";
 // TE-01 CONSOLIDATED (cluster-a-rev2-CONSOLIDATED.md): launcher owns EDIT-3 (tmux/remote);
 // execute-plan SKILL owns EDIT-4 (subagent/in-process) — mutually exclusive, no double-write.
-import { writeTaskRun } from "./write-task-run";
+import { writeTaskRun, readTaskRunCapReqs } from "./write-task-run";
+import { emitReadbackDegradation } from "./lib/emit-readback-degradation"; // W2-A2(d)
 
 const ADAPTER_VERSION = "1"; // CH-5 — PaneAdapter version recorded per pane.
 
@@ -870,6 +871,58 @@ async function main(): Promise<void> {
   // host block) so both remote + local tmux paths share the same run ID.
   const runId = makeRunId();
 
+  // ── W2-A2: pre-routing task_run writes (single-source for capability routing) ─
+  // Write ALL task_runs for ALL specialists BEFORE any routing decision. After
+  // writing, read back capability_requirements from disk and update each
+  // specialist in-place so planTeamRouting reads EXACTLY what was written.
+  // This makes the written task_run file the single source of truth:
+  //   team.yaml → parser → writer → disk → reader → planTeamRouting
+  // Any future drift between writer and router is a compile-time shape error,
+  // not a silent runtime divergence.
+  {
+    const preRoutingOwnerMap = readPlanOwnerTaskIds(cwd, slug);
+    for (const spec of team.specialists) {
+      const taskIds = preRoutingOwnerMap.get(spec.name);
+      const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
+      const cr = spec.capabilityRequirements;
+      for (const taskId of effectiveTaskIds) {
+        writeTaskRun(cwd, runId, taskId, {
+          specialist: spec.name,
+          host: cr ? {
+            capabilityRequirements: {
+              needsPr: cr.needs_pr,
+              needsParallel: cr.needs_parallel,
+              needsNetwork: cr.needs_network,
+              isolation: cr.isolation,
+            },
+          } : undefined,
+        });
+      }
+    }
+    // Read back from each specialist's representative task_run file and update the
+    // in-memory specialist object. planTeamRouting then routes from disk-sourced data.
+    //
+    // W2-A2(d): readback failure is benign (launcher is sole writer — fallback ==
+    // what was just written, so no routing drift is possible). BUT a silent fallback
+    // violates Guild's never-silent-degradation principle. On read-failure:
+    //   - fall back to spec.capabilityRequirements (the in-memory value we JUST wrote)
+    //   - emit a stderr warning + a NDJSON degradation record to v1.4-events.jsonl
+    // This converts "silent fail-open" to "observable benign fallback".
+    for (const spec of team.specialists) {
+      const taskIds = preRoutingOwnerMap.get(spec.name);
+      // All task-ids for this specialist share the same specialist-level CR.
+      // Use the first one as the representative file.
+      const repTaskId = (taskIds && taskIds.length > 0) ? taskIds[0] : spec.name;
+      const fromDisk = readTaskRunCapReqs(cwd, runId, repTaskId);
+      if (fromDisk !== undefined) {
+        spec.capabilityRequirements = fromDisk;
+      } else {
+        // W2-A2(d): observable benign fallback — emit degradation signal.
+        emitReadbackDegradation(cwd, runId, repTaskId, spec.name);
+      }
+    }
+  }
+
   // ── CH-1 routing: local tmux vs remote, via host-router ──────────────────
   // When cross-host is enabled (env OR defaults.cross_host.enabled in settings.json)
   // AND host-capability manifests exist, route each specialist THROUGH the CR-1
@@ -1011,33 +1064,9 @@ async function main(): Promise<void> {
           try {
             const outcome = await runWithRetry(
               () => {
-                // TE-01/EDIT-3 + TE-03: write guild.task_run.v1 BEFORE each remote dispatch
-                // attempt. Fan-out per plan task-id via readPlanOwnerTaskIds — the SAME join
-                // onDecision uses — so task_run FILENAME + ids.task_id are plan-task-id-keyed
-                // (not spec.name). Multi-task-id specialist → N files.
-                // TE-01 name-fallback: plan absent → write 1 file keyed by spec.name so
-                // every dispatch writes exactly one task_run (task-id-keyed when plan present;
-                // name-keyed for plan-less dry-runs). capabilityRequirements is specialist-level (ARCH-2).
-                const remoteOwnerMap = readPlanOwnerTaskIds(cwd, slug);
-                for (const spec of remoteSpecialists) {
-                  const taskIds = remoteOwnerMap.get(spec.name);
-                  const effectiveTaskIds =
-                    taskIds && taskIds.length > 0 ? taskIds : [spec.name];
-                  const cr = spec.capabilityRequirements;
-                  for (const taskId of effectiveTaskIds) {
-                    writeTaskRun(cwd, runId, taskId, {
-                      specialist: spec.name,
-                      host: cr ? {
-                        capabilityRequirements: {
-                          needsPr: cr.needs_pr,
-                          needsParallel: cr.needs_parallel,
-                          needsNetwork: cr.needs_network,
-                          isolation: cr.isolation,
-                        },
-                      } : undefined,
-                    });
-                  }
-                }
+                // W2-A2: task_runs for remote specialists are already written in the
+                // pre-routing block above (single-source: written file drives routing).
+                // Do NOT re-write here; on retry the existing files are correct.
                 const res = remoteBackend.launch({
                   slug,
                   runId,
@@ -1231,33 +1260,10 @@ async function main(): Promise<void> {
   });
   const commands = plan.commands;
 
-  // TE-01/EDIT-3 + TE-03: write guild.task_run.v1 for each local-tmux specialist BEFORE
-  // the panes spawn. Fan-out per plan task-id via readPlanOwnerTaskIds — the SAME join
-  // onDecision uses — so task_run FILENAME + ids.task_id are plan-task-id-keyed (not
-  // spec.name). Multi-task-id specialist → N files.
-  // TE-01 name-fallback: plan absent → write 1 file keyed by spec.name so every dispatch
-  // writes exactly one task_run (task-id-keyed when plan present; name-keyed otherwise).
-  // capabilityRequirements is specialist-level; per-lane capability is a Wave-2 refinement.
-  // Same object feeds capabilityGap() (ARCH-2 round-trip identity — single source).
-  const tmuxOwnerMap = readPlanOwnerTaskIds(cwd, slug);
-  for (const spec of team.specialists) {
-    const taskIds = tmuxOwnerMap.get(spec.name);
-    const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
-    const cr = spec.capabilityRequirements;
-    for (const taskId of effectiveTaskIds) {
-      writeTaskRun(cwd, runId, taskId, {
-        specialist: spec.name,
-        host: cr ? {
-          capabilityRequirements: {
-            needsPr: cr.needs_pr,
-            needsParallel: cr.needs_parallel,
-            needsNetwork: cr.needs_network,
-            isolation: cr.isolation,
-          },
-        } : undefined,
-      });
-    }
-  }
+  // W2-A2: task_runs for local specialists are already written in the pre-routing
+  // block above (single-source: written file drives routing). No re-write here.
+  // All task_run files — both remote-routed and local — are written ONCE, BEFORE
+  // routing, so the written descriptor is the authoritative capability source.
 
   if (args.dryRun) {
     process.stdout.write(

@@ -64,7 +64,8 @@ describe("bootstrap.sh — host-capability manifest (RE-5)", () => {
     expect(cap.schema_version).toBe("guild.host_capability.v1");
     expect(cap.source).toBe("session-start");
     expect(typeof cap.host_id).toBe("string");
-    expect(typeof cap.tiers).toBe("object");
+    // TE-07: canonical field name is tier_models
+    expect(typeof cap.tier_models).toBe("object");
   });
 
   it("exits 0 even when write-host-capability.ts is unavailable (non-fatal)", () => {

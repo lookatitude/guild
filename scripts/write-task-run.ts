@@ -189,6 +189,40 @@ export function taskRunPath(cwd: string, runId: string, taskId: string): string 
   return path.join(cwd, ".guild", "runs", runId, "task-runs", `${taskId}.yaml`);
 }
 
+// ── Read (W2-A2 single-source) ───────────────────────────────────────────────
+
+/**
+ * W2-A2: read back the `capability_requirements` block from a previously written
+ * task_run YAML file. Used by the launcher to seed `planTeamRouting` from the
+ * WRITTEN file rather than re-parsing team.yaml — makes the written task_run the
+ * single source of truth (writer↔router drift is structurally impossible).
+ *
+ * Returns undefined if the file does not exist, cannot be parsed, or has no
+ * `host.capability_requirements` block (fail-open: routing falls back to
+ * spec.capabilityRequirements parsed directly from team.yaml).
+ */
+export function readTaskRunCapReqs(
+  cwd: string,
+  runId: string,
+  taskId: string
+): TaskRunCapabilityRequirements | undefined {
+  try {
+    const p = taskRunPath(cwd, runId, taskId);
+    const raw = fs.readFileSync(p, "utf8");
+    const doc = yaml.load(raw) as TaskRunDocument | null;
+    const cr = doc?.task_run?.host?.capability_requirements;
+    if (!cr) return undefined;
+    return {
+      needs_pr: cr.needs_pr,
+      needs_parallel: cr.needs_parallel,
+      needs_network: cr.needs_network,
+      isolation: cr.isolation,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 // ── Write ────────────────────────────────────────────────────────────────────
 
 /**

@@ -134,7 +134,8 @@ function makeFakeMixedBin(
 function writeHostManifest(cwd: string, hostId: string, hostKind: "claude" | "codex"): void {
   const dir = path.join(cwd, ".guild", "hosts", hostId);
   fs.mkdirSync(dir, { recursive: true });
-  const tiers =
+  // TE-07: canonical field name is tier_models
+  const tierModels =
     hostKind === "codex"
       ? { cheap: "gpt-4o-mini", mid: "gpt-4o", powerful: "o3" }
       : { cheap: "haiku", mid: "sonnet", powerful: "opus" };
@@ -142,10 +143,12 @@ function writeHostManifest(cwd: string, hostId: string, hostKind: "claude" | "co
     schema_version: "guild.host_capability.v1",
     host_id: hostId,
     host_kind: hostKind,
-    detected_at: new Date().toISOString(),
+    // TE-07: canonical field name is advertised_at
+    advertised_at: new Date().toISOString(),
     source: "test",
-    tiers,
-    models: Object.values(tiers),
+    tier_models: tierModels,
+    supported_tiers: ["cheap", "mid", "powerful"],
+    models: Object.values(tierModels),
     tool_support: {
       subagent: true,
       agent_team: hostKind === "claude",
@@ -1434,9 +1437,11 @@ describe("agent-team-launcher.ts", () => {
           schema_version: "guild.host_capability.v1",
           host_id: "claude",
           host_kind: "claude",
-          detected_at: new Date().toISOString(),
+          // TE-07: canonical field names
+          advertised_at: new Date().toISOString(),
           source: "test",
-          tiers: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+          tier_models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+          supported_tiers: ["cheap", "mid", "powerful"],
           models: ["haiku", "sonnet", "opus"],
           tool_support: {
             subagent: true,
@@ -1471,6 +1476,109 @@ describe("agent-team-launcher.ts", () => {
       const writerLane = state.lanes?.["T1-writer"];
       expect(writerLane).toBeDefined();
       expect(writerLane?.host?.degraded).toBe(true);
+    });
+
+    it("W2-A2 single-source: task_run written BEFORE routing; routing decision agrees with written capability_requirements", () => {
+      // Prove the single-source contract: the launcher writes the task_run BEFORE
+      // calling planTeamRouting, and the routing decision (degraded=true) must be
+      // consistent with the needs_parallel:true captured in the written file.
+      // If the two sources ever drifted, either the file would be wrong or the
+      // decision would contradict it — this test catches both.
+      //
+      // Setup: same as ARCH-2 (needs_parallel:true, no qualifying host) so routing
+      // degrades. We then check: (a) task_run file exists with needs_parallel:true,
+      // (b) run-state lane has degraded:true — both sourced from the same write.
+      const slug = "w2a2-single-source-slug";
+      const teamDir = path.join(tmpDir, ".guild", "team");
+      fs.mkdirSync(teamDir, { recursive: true });
+      const teamPath = path.join(teamDir, `${slug}.yaml`);
+      fs.writeFileSync(
+        teamPath,
+        [
+          "backend: agent-team",
+          "specialists:",
+          "  - name: analyst",
+          '    scope: "Analyse data."',
+          "    depends-on: []",
+          "    default_tier: mid",
+          "    needs_parallel: true",
+        ].join("\n"),
+        "utf8"
+      );
+
+      // Plan so onDecision can write run-state keyed by plan task-id
+      const planDir = path.join(tmpDir, ".guild", "plan");
+      fs.mkdirSync(planDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(planDir, `${slug}.md`),
+        [
+          `# Plan: ${slug}`,
+          "",
+          "## Lane: T1-analyst",
+          "- task-id: T1-analyst",
+          "- owner: analyst",
+          "- objective: Analyse data.",
+        ].join("\n"),
+        "utf8"
+      );
+
+      // Both hosts incapable of parallel (no qualifying host → degraded routing)
+      const claudeDir = path.join(tmpDir, ".guild", "hosts", "claude-w2a2");
+      fs.mkdirSync(claudeDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(claudeDir, "capability.json"),
+        JSON.stringify({
+          schema_version: "guild.host_capability.v1",
+          host_id: "claude-w2a2",
+          host_kind: "claude",
+          advertised_at: new Date().toISOString(),
+          source: "test",
+          tier_models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+          supported_tiers: ["cheap", "mid", "powerful"],
+          models: ["haiku", "sonnet", "opus"],
+          tool_support: {
+            subagent: true,
+            agent_team: false,         // ← no parallel
+            independent_agents: false, // ← no parallel
+            tmux: true,
+            mcp: true,
+            pre_tool_use_ask: true,
+          },
+        }, null, 2),
+        "utf8"
+      );
+      writeHostManifest(tmpDir, "codex-w2a2", "codex"); // also agent_team:false
+      writeCrossHostSettingsArch6(tmpDir, {
+        enabled: true,
+        hosts: { "codex-w2a2": { address: "remote.example.com", user: "ci" } },
+      });
+
+      const { exitCode } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude-w2a2" }
+      );
+      expect(exitCode).toBe(0);
+
+      // (a) task_run file must exist and contain needs_parallel: true (written BEFORE routing)
+      const runsDir = path.join(tmpDir, ".guild", "runs");
+      expect(fs.existsSync(runsDir)).toBe(true);
+      let taskRunFile: string | null = null;
+      for (const runId of fs.readdirSync(runsDir)) {
+        const candidate = path.join(runsDir, runId, "task-runs", "T1-analyst.yaml");
+        if (fs.existsSync(candidate)) { taskRunFile = candidate; break; }
+      }
+      expect(taskRunFile).not.toBeNull();
+      const taskRunContent = fs.readFileSync(taskRunFile!, "utf8");
+      // The written file must capture needs_parallel: true (from the YAML parser source)
+      expect(taskRunContent).toContain("needs_parallel: true");
+
+      // (b) run-state lane must be degraded — routing used the same CR as the written file
+      const rsPath = findRunStateJson(tmpDir);
+      expect(rsPath).not.toBeNull();
+      const state = JSON.parse(fs.readFileSync(rsPath!, "utf8"));
+      const analystLane = state.lanes?.["T1-analyst"];
+      expect(analystLane).toBeDefined();
+      expect(analystLane?.host?.degraded).toBe(true); // single source drives both write + route
     });
   });
 
