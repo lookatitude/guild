@@ -2875,13 +2875,13 @@ function resolveGuildRoot(startCwd) {
 }
 
 // lib/run-trace.ts
-var fs3 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
+var fs6 = __toESM(require("fs"));
+var path7 = __toESM(require("path"));
 
 // ../scripts/lib/run-lifecycle.ts
-var crypto = __toESM(require("crypto"));
+var crypto2 = __toESM(require("crypto"));
 var fsNode = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var path6 = __toESM(require("path"));
 
 // ../scripts/lib/settings-resolver.ts
 var fs2 = __toESM(require("fs"));
@@ -3667,24 +3667,385 @@ function resolveSettings(opts) {
   return { config: assembled, sources };
 }
 
+// lib/security/scrubbed-write.ts
+var fs5 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
+var crypto = __toESM(require("node:crypto"));
+
+// lib/v1.4/redact-log.ts
+var TOKEN_REDACTED = "[REDACTED_TOKEN]";
+var PATH_REDACTED = "[REDACTED]";
+var KV_REDACTED = "[REDACTED]";
+var HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
+var TRUNCATION_SUFFIX = "... [TRUNCATED]";
+var FIELD_SIZE_CAP_BYTES = 4 * 1024;
+var TOKEN_SHAPE_PATTERNS = [
+  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
+  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
+  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
+  /\bghp_[A-Za-z0-9]{36}\b/g,
+  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
+  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
+  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
+];
+function redactTokenShapes(input) {
+  let out = input;
+  for (const re of TOKEN_SHAPE_PATTERNS) {
+    out = out.replace(new RegExp(re.source, re.flags), TOKEN_REDACTED);
+  }
+  return out;
+}
+var HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
+function redactHomeDirPaths(input) {
+  return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
+    return `${root}/${dir}/${PATH_REDACTED}`;
+  });
+}
+var KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bearer)(\s*[:=]\s*)(\S+)/gi;
+function redactKeyValueSecrets(input) {
+  return input.replace(
+    KV_SECRET_PATTERN,
+    (_match, key, sep3) => `${key}${sep3}${KV_REDACTED}`
+  );
+}
+function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
+  if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {
+    return true;
+  }
+  const lookBackStart = Math.max(0, matchIndex - 16);
+  const before = fullInput.slice(lookBackStart, matchIndex).toLowerCase();
+  if (/\b(commit|sha|tree|parent|head|merge|object|branch)\s*[:=]?\s*$/.test(before)) {
+    return true;
+  }
+  if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
+    return true;
+  }
+  return false;
+}
+var HIGH_ENTROPY_PATTERN = /[A-Za-z0-9+/=]{20,}/g;
+function redactHighEntropy(input) {
+  return input.replace(HIGH_ENTROPY_PATTERN, (match, offset) => {
+    if (isWhitelistedHighEntropy(match, input, offset)) {
+      return match;
+    }
+    return HIGH_ENTROPY_REDACTED;
+  });
+}
+function truncateToCap(input, cap = FIELD_SIZE_CAP_BYTES) {
+  const byteLen = Buffer.byteLength(input, "utf8");
+  if (byteLen <= cap) return input;
+  const buf = Buffer.from(input, "utf8");
+  const truncated = buf.slice(0, cap).toString("utf8");
+  const cleaned = truncated.replace(/\uFFFD+$/u, "");
+  return cleaned + TRUNCATION_SUFFIX;
+}
+function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
+  if (typeof input !== "string") return input;
+  let out = redactTokenShapes(input);
+  out = redactHomeDirPaths(out);
+  out = redactKeyValueSecrets(out);
+  out = redactHighEntropy(out);
+  out = truncateToCap(out, cap);
+  return out;
+}
+
+// lib/security/secrets.ts
+function applySecretsPolicy(value, policy) {
+  if (typeof value !== "string") {
+    return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
+  }
+  let out = redactField(value);
+  const failures = [];
+  for (const pat of policy.redaction_patterns) {
+    let re;
+    try {
+      re = new RegExp(pat, "g");
+    } catch (err) {
+      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
+      continue;
+    }
+    try {
+      out = out.replace(re, "[REDACTED]");
+    } catch (err) {
+      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return { value: out, ok: failures.length === 0, failures };
+}
+
+// lib/security/config.ts
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function securityDefaults() {
+  return {
+    bypass_permissions_policy: "audit",
+    secrets_policy: {
+      env_allowlist: [],
+      redaction_patterns: [],
+      fail_mode_durable: "closed",
+      fail_mode_telemetry: "open"
+    },
+    tool_description_hashes: {},
+    mcp_availability: {
+      stdio_available: true,
+      http_available: false,
+      bridge_package: null
+    },
+    allowed_tools: []
+  };
+}
+function isPlainObject2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function isStringArray(v) {
+  return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
+function parseSecurityConfig(parsed) {
+  const out = securityDefaults();
+  if (!isPlainObject2(parsed)) return out;
+  if (isPlainObject2(parsed["security"])) {
+    const bpp = parsed["security"]["bypass_permissions_policy"];
+    if (bpp === "deny" || bpp === "audit" || bpp === "allow") {
+      out.bypass_permissions_policy = bpp;
+    }
+  }
+  if (isPlainObject2(parsed["secrets_policy"])) {
+    const sp = parsed["secrets_policy"];
+    if (isStringArray(sp["env_allowlist"])) out.secrets_policy.env_allowlist = sp["env_allowlist"];
+    if (isStringArray(sp["redaction_patterns"])) {
+      out.secrets_policy.redaction_patterns = sp["redaction_patterns"];
+    }
+    if (sp["fail_mode_durable"] === "closed" || sp["fail_mode_durable"] === "open") {
+      out.secrets_policy.fail_mode_durable = sp["fail_mode_durable"];
+    }
+    if (sp["fail_mode_telemetry"] === "open" || sp["fail_mode_telemetry"] === "closed") {
+      out.secrets_policy.fail_mode_telemetry = sp["fail_mode_telemetry"];
+    }
+  }
+  if (isPlainObject2(parsed["defaults"])) {
+    const defs = parsed["defaults"];
+    if (isStringArray(defs["allowed_tools"])) {
+      out.allowed_tools = defs["allowed_tools"];
+    }
+  }
+  if (isPlainObject2(parsed["mcp"])) {
+    const mcp = parsed["mcp"];
+    if (isPlainObject2(mcp["tool_description_hashes"])) {
+      const hashes = {};
+      for (const [k, v] of Object.entries(mcp["tool_description_hashes"])) {
+        if (typeof v === "string") hashes[k] = v;
+      }
+      out.tool_description_hashes = hashes;
+    }
+    if (typeof mcp["stdio_available"] === "boolean") {
+      out.mcp_availability.stdio_available = mcp["stdio_available"];
+    }
+    if (typeof mcp["http_available"] === "boolean") {
+      out.mcp_availability.http_available = mcp["http_available"];
+    }
+    if (mcp["bridge_package"] === null || typeof mcp["bridge_package"] === "string") {
+      out.mcp_availability.bridge_package = mcp["bridge_package"];
+    }
+  }
+  return out;
+}
+function readSecurityConfig(cwd) {
+  const settingsPath = path3.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  let raw;
+  try {
+    raw = fs3.readFileSync(settingsPath, "utf8");
+  } catch {
+    return securityDefaults();
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return securityDefaults();
+  }
+  return parseSecurityConfig(parsed);
+}
+
+// lib/security/events.ts
+var fs4 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
+var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
+function buildSecurityEvent(input) {
+  const rec = {
+    schema_version: SECURITY_EVENT_SCHEMA_VERSION,
+    ts: (/* @__PURE__ */ new Date()).toISOString(),
+    run_id: input.run_id,
+    event_type: input.event_type,
+    decision: input.decision,
+    tool: input.tool,
+    detail: redactField(input.detail ?? "")
+  };
+  if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
+  if (input.policy !== void 0) rec.policy = input.policy;
+  if (typeof input.permission_mode === "string" && input.permission_mode.length > 0) {
+    rec.permission_mode = input.permission_mode;
+  }
+  if (typeof input.dispatch_rung === "string" && input.dispatch_rung.length > 0) {
+    rec.dispatch_rung = input.dispatch_rung;
+  }
+  return rec;
+}
+function appendSecurityEvent(runDir3, record) {
+  try {
+    const logsDir2 = path4.join(runDir3, "logs");
+    fs4.mkdirSync(logsDir2, { recursive: true });
+    fs4.appendFileSync(path4.join(logsDir2, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [security-events] write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+
+// lib/security/scrubbed-write.ts
+function guildRootFromRunDir(runDir3) {
+  return path5.resolve(runDir3, "../../..");
+}
+function writeScrubApprovalRequest(runDir3, runId, surface, outPath, laneId) {
+  try {
+    const approvalDir = path5.join(runDir3, "agent-bus", "approvals");
+    fs5.mkdirSync(approvalDir, { recursive: true });
+    const ts = (/* @__PURE__ */ new Date()).toISOString();
+    const safeTs = ts.replace(/[:.]/g, "-");
+    const fileName = `${safeTs}-scrub-blocked.json`;
+    const record = {
+      schema_version: "guild.approval_request.v1",
+      ts,
+      run_id: runId,
+      tool: "scrubbedWrite",
+      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path5.basename(outPath)}`,
+      permission_mode: "blocked",
+      surface
+    };
+    if (laneId) record["lane_id"] = laneId;
+    const rawContent = JSON.stringify(record, null, 2) + "\n";
+    let content = rawContent;
+    try {
+      const secConfig = readSecurityConfig(guildRootFromRunDir(runDir3));
+      const scrubResult = applySecretsPolicy(rawContent, secConfig.secrets_policy);
+      content = scrubResult.value;
+    } catch {
+    }
+    fs5.writeFileSync(path5.join(approvalDir, fileName), content, "utf8");
+  } catch {
+  }
+}
+function scrubbedWrite(outPath, content, opts) {
+  const guildRoot = guildRootFromRunDir(opts.runDir);
+  let policy;
+  try {
+    const secConfig = readSecurityConfig(guildRoot);
+    policy = secConfig.secrets_policy;
+  } catch {
+    policy = {
+      env_allowlist: [],
+      redaction_patterns: [],
+      fail_mode_durable: "closed",
+      fail_mode_telemetry: "open"
+    };
+  }
+  const scrubResult = applySecretsPolicy(content, policy);
+  const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
+  if (scrubResult.ok) {
+    try {
+      fs5.mkdirSync(path5.dirname(outPath), { recursive: true });
+      fs5.writeFileSync(outPath, scrubResult.value, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
+`
+      );
+      return { written: false, blocked: false };
+    }
+    const result = { written: true, blocked: false };
+    if (opts.surface === "bus") {
+      result.sha256 = crypto.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+    }
+    return result;
+  }
+  if (failMode === "open") {
+    process.stderr.write(
+      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path5.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
+`
+    );
+    try {
+      fs5.mkdirSync(path5.dirname(outPath), { recursive: true });
+      fs5.writeFileSync(outPath, scrubResult.value, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
+`
+      );
+      return { written: false, blocked: false };
+    }
+    try {
+      const evt = buildSecurityEvent({
+        run_id: opts.runId,
+        lane_id: opts.laneId,
+        event_type: "secret_scrub_blocked",
+        decision: "degraded",
+        tool: "scrubbedWrite",
+        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path5.basename(outPath)}. Built-in-redacted content written.`,
+        permission_mode: "degraded"
+      });
+      appendSecurityEvent(opts.runDir, evt);
+    } catch {
+    }
+    const result = { written: true, blocked: false };
+    if (opts.surface === "bus") {
+      result.sha256 = crypto.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+    }
+    return result;
+  }
+  process.stderr.write(
+    `[scrubbed-write] BLOCKED: secret scrub failed for durable surface "${opts.surface}" at ${outPath} \u2014 file NOT written. Failures: ${scrubResult.failures.join("; ")}
+`
+  );
+  try {
+    const evt = buildSecurityEvent({
+      run_id: opts.runId,
+      lane_id: opts.laneId,
+      event_type: "secret_scrub_blocked",
+      decision: "blocked",
+      tool: "scrubbedWrite",
+      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path5.basename(outPath)} \u2014 write blocked (fail-closed).`,
+      permission_mode: "blocked"
+    });
+    appendSecurityEvent(opts.runDir, evt);
+  } catch {
+  }
+  writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
+  return { written: false, blocked: true };
+}
+
 // ../scripts/lib/run-lifecycle.ts
 function runDir(root, runId) {
-  return path3.join(root, ".guild", "runs", runId);
+  return path6.join(root, ".guild", "runs", runId);
 }
 function runYamlPath(root, runId) {
-  return path3.join(runDir(root, runId), "run.yaml");
+  return path6.join(runDir(root, runId), "run.yaml");
 }
 function provenancePath(root, runId) {
-  return path3.join(runDir(root, runId), "provenance.json");
+  return path6.join(runDir(root, runId), "provenance.json");
 }
 function logsDir(root, runId) {
-  return path3.join(runDir(root, runId), "logs");
+  return path6.join(runDir(root, runId), "logs");
 }
 function resolvedSettingsPath(root, runId) {
-  return path3.join(runDir(root, runId), "resolved-settings.json");
+  return path6.join(runDir(root, runId), "resolved-settings.json");
 }
 function sentinelPath(root) {
-  return path3.join(root, ".guild", "runs", "current-run-id");
+  return path6.join(root, ".guild", "runs", "current-run-id");
 }
 function logRefFor(runId) {
   return `.guild/runs/${runId}/logs/v1.4-events.jsonl`;
@@ -3699,7 +4060,7 @@ function utcCompact(nowIso) {
 }
 function makeRunId(initiative, nowIso) {
   if (initiative) return `run-${initiative}-${utcCompact(nowIso)}`;
-  return `run-${crypto.randomUUID()}`;
+  return `run-${crypto2.randomUUID()}`;
 }
 function yamlScalar(v) {
   if (v === null) return "null";
@@ -3899,7 +4260,7 @@ function createRunLifecycle(env) {
       const now = env.now();
       const finalCheckpoint = runClass === "lightweight" ? null : opts.final_learning_checkpoint ?? null;
       const terminalTraceEvent = {
-        event_id: `evt-${crypto.randomUUID()}`,
+        event_id: `evt-${crypto2.randomUUID()}`,
         event_name: "run_closed",
         at: now,
         log_ref: logRefFor(runId)
@@ -3922,7 +4283,20 @@ function createRunLifecycle(env) {
         benchmark_eligible: opts.status === "closed"
       };
       if (opts.coverage) provenance.coverage = opts.coverage;
-      env.fs.writeFile(provenancePath(root, runId), JSON.stringify(provenance, null, 2) + "\n");
+      const provPath = provenancePath(root, runId);
+      const provenanceContent = JSON.stringify(provenance, null, 2) + "\n";
+      if (env.fs.scrubbedWriteDurable) {
+        const runDir3 = path6.join(root, ".guild", "runs", runId);
+        const result = env.fs.scrubbedWriteDurable(provPath, provenanceContent, "provenance", runDir3, runId);
+        if (result.blocked) {
+          process.stderr.write(
+            `[run-lifecycle] WARN: provenance.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
+`
+          );
+        }
+      } else {
+        env.fs.writeFile(provPath, provenanceContent);
+      }
       flipRunStatus(env, root, runId, opts.status);
     }
   };
@@ -3942,7 +4316,7 @@ function createRealEnv(root, resolveHost) {
         fsNode.mkdirSync(absPath, { recursive: true });
       },
       writeFile(absPath, contents) {
-        fsNode.mkdirSync(path3.dirname(absPath), { recursive: true });
+        fsNode.mkdirSync(path6.dirname(absPath), { recursive: true });
         fsNode.writeFileSync(absPath, contents, "utf8");
       },
       readFile(absPath) {
@@ -3954,6 +4328,10 @@ function createRealEnv(root, resolveHost) {
       },
       exists(absPath) {
         return fsNode.existsSync(absPath);
+      },
+      // HK-06: real scrubbedWrite wired for provenance.json (fail-CLOSED).
+      scrubbedWriteDurable(outPath, contents, surface, runDir3, runId) {
+        return scrubbedWrite(outPath, contents, { surface, runDir: runDir3, runId });
       }
     },
     resolveHost,
@@ -3972,9 +4350,9 @@ function validateRunId(runId) {
   return true;
 }
 function assertContained(target, base, label) {
-  const resolvedTarget = path3.resolve(target);
-  const resolvedBase = path3.resolve(base);
-  if (!resolvedTarget.startsWith(resolvedBase + path3.sep)) {
+  const resolvedTarget = path6.resolve(target);
+  const resolvedBase = path6.resolve(base);
+  if (!resolvedTarget.startsWith(resolvedBase + path6.sep)) {
     throw new Error(
       `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" escapes runs base "${resolvedBase}"`
     );
@@ -3983,7 +4361,7 @@ function assertContained(target, base, label) {
 function realProvenanceFsSeam() {
   return {
     writeFile(absPath, contents) {
-      fsNode.mkdirSync(path3.dirname(absPath), { recursive: true });
+      fsNode.mkdirSync(path6.dirname(absPath), { recursive: true });
       fsNode.writeFileSync(absPath, contents, "utf8");
     },
     readFile(absPath) {
@@ -3992,6 +4370,10 @@ function realProvenanceFsSeam() {
       } catch {
         return null;
       }
+    },
+    // HK-06: real scrubbed write wired for resolved-settings.json (fail-CLOSED).
+    scrubbedWriteDurable(outPath, contents, surface, runDir3, runId) {
+      return scrubbedWrite(outPath, contents, { surface, runDir: runDir3, runId });
     }
   };
 }
@@ -4002,15 +4384,27 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     );
   }
   const { cwd, fs: fsSeam, resolvedAtRef } = opts;
-  const fs4 = fsSeam ?? realProvenanceFsSeam();
+  const fs7 = fsSeam ?? realProvenanceFsSeam();
   const outPath = resolvedSettingsPath(cwd, runId);
-  const runsBase = path3.resolve(cwd, ".guild", "runs");
+  const runsBase = path6.resolve(cwd, ".guild", "runs");
   assertContained(outPath, runsBase, "writeResolvedSettingsSnapshot");
   const onDisk = {
     ...snapshot,
     resolved_at_ref: resolvedAtRef ?? runId
   };
-  fs4.writeFile(outPath, JSON.stringify(onDisk, null, 2) + "\n");
+  const serialized = JSON.stringify(onDisk, null, 2) + "\n";
+  if (fs7.scrubbedWriteDurable) {
+    const runDir3 = path6.join(cwd, ".guild", "runs", runId);
+    const result = fs7.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
+    if (result.blocked) {
+      process.stderr.write(
+        `[run-lifecycle] WARN: resolved-settings.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
+`
+      );
+    }
+  } else {
+    fs7.writeFile(outPath, serialized);
+  }
   return outPath;
 }
 function readRecordStatusRuns(root) {
@@ -4024,29 +4418,29 @@ function readRecordStatusRuns(root) {
 
 // lib/run-trace.ts
 function runDir2(root, runId) {
-  return path4.join(root, ".guild", "runs", runId);
+  return path7.join(root, ".guild", "runs", runId);
 }
 function liveLogPath(root, runId) {
-  return path4.join(runDir2(root, runId), "logs", "v1.4-events.jsonl");
+  return path7.join(runDir2(root, runId), "logs", "v1.4-events.jsonl");
 }
 function provenancePath2(root, runId) {
-  return path4.join(runDir2(root, runId), "provenance.json");
+  return path7.join(runDir2(root, runId), "provenance.json");
 }
 function skippedFilesPath(root, runId) {
-  return path4.join(runDir2(root, runId), "learn", "skipped-files.json");
+  return path7.join(runDir2(root, runId), "learn", "skipped-files.json");
 }
 function resolveRunIdForTrace(root, env) {
   const fromEnv = env.GUILD_RUN_ID;
   if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
-  const legacy = readSentinel(path4.join(root, ".guild", "runs", "current-run-id"));
+  const legacy = readSentinel(path7.join(root, ".guild", "runs", "current-run-id"));
   if (legacy) return legacy;
-  const b2 = readSentinel(path4.join(root, ".guild", "current-run-id"));
+  const b2 = readSentinel(path7.join(root, ".guild", "current-run-id"));
   if (b2) return b2;
   return null;
 }
 function readSentinel(p) {
   try {
-    const v = fs3.readFileSync(p, "utf8").trim();
+    const v = fs6.readFileSync(p, "utf8").trim();
     return v.length > 0 ? v : null;
   } catch {
     return null;
@@ -4058,8 +4452,8 @@ function defaultResolveHost(requested) {
   return { requested, resolved };
 }
 function appendTraceLine(file, event) {
-  fs3.mkdirSync(path4.dirname(file), { recursive: true });
-  fs3.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
+  fs6.mkdirSync(path7.dirname(file), { recursive: true });
+  fs6.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
 }
 function emitRunClosed(root, runId, resolveHost, opts = {}) {
   try {
@@ -4071,7 +4465,7 @@ function emitRunClosed(root, runId, resolveHost, opts = {}) {
       final_learning_checkpoint: opts.final_learning_checkpoint,
       artifacts: opts.artifacts
     });
-    const prov = JSON.parse(fs3.readFileSync(provenancePath2(root, runId), "utf8"));
+    const prov = JSON.parse(fs6.readFileSync(provenancePath2(root, runId), "utf8"));
     const pointer = prov.terminal_trace_event;
     if (!pointer || typeof pointer.event_id !== "string") {
       process.stderr.write(
@@ -4175,8 +4569,8 @@ function writeSkippedFiles(root, runId, entries) {
     skipped_count: entries.length,
     skipped: entries
   };
-  fs3.mkdirSync(path4.dirname(out), { recursive: true });
-  fs3.writeFileSync(out, JSON.stringify(body, null, 2) + "\n", "utf8");
+  fs6.mkdirSync(path7.dirname(out), { recursive: true });
+  fs6.writeFileSync(out, JSON.stringify(body, null, 2) + "\n", "utf8");
   return out;
 }
 
@@ -4190,11 +4584,11 @@ function flag(argv, name) {
 }
 async function readStdin() {
   if (process.stdin.isTTY) return "";
-  return new Promise((resolve4) => {
+  return new Promise((resolve5) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve4(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve4(""));
+    process.stdin.on("end", () => resolve5(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve5(""));
   });
 }
 var USAGE = "usage: run-trace.ts <start|status|phase|skipped> [--cwd <root>] [--run-id <id>]\n  start   --command=/guild:plan [--phase=<p>] [--run-class=full|lightweight] [--cwd <root>]\n  status  [--cwd <root>]   (alias: start --run-class=lightweight + OQ6 gate)\n  phase   --phase=<init|ideate|plan|build|qa|ops> [--run-id <id>] [--cwd <root>]\n  skipped --run-id <id>    [--cwd <root>] < entries.json\n";

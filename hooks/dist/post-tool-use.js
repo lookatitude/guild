@@ -33,8 +33,8 @@ __export(post_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(post_tool_use_exports);
-var fs2 = __toESM(require("node:fs"));
-var path2 = __toESM(require("node:path"));
+var fs5 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -102,7 +102,7 @@ var KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bear
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep) => `${key}${sep}${KV_REDACTED}`
+    (_match, key, sep2) => `${key}${sep2}${KV_REDACTED}`
   );
 }
 function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
@@ -173,11 +173,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path3 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path3), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path3)) return;
+  const path6 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path6), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path6)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path3, "wx");
+    const fd = (0, import_node_fs.openSync)(path6, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -351,9 +351,9 @@ function appendEvent(runDir, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId = opts.laneId ?? "global";
-    const path3 = laneFallbackPath(runDir, laneId);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path3), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path3, "a");
+    const path6 = laneFallbackPath(runDir, laneId);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path6), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path6, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -438,8 +438,8 @@ function sidecarKeyMatches(entry, key) {
   return true;
 }
 function consumeSidecarPre(runDir, matchOrCallId) {
-  const path3 = sidecarPath(runDir);
-  if (!(0, import_node_fs2.existsSync)(path3)) return null;
+  const path6 = sidecarPath(runDir);
+  if (!(0, import_node_fs2.existsSync)(path6)) return null;
   const apply = (text) => {
     const lines = text.split("\n");
     const parsedLines = [];
@@ -480,15 +480,15 @@ function consumeSidecarPre(runDir, matchOrCallId) {
     return { match, rest };
   };
   if (process.platform === "win32") {
-    const text = (0, import_node_fs2.readFileSync)(path3, "utf8");
+    const text = (0, import_node_fs2.readFileSync)(path6, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs2.writeFileSync)(path3, rest);
+    (0, import_node_fs2.writeFileSync)(path6, rest);
     return match;
   }
   return withStableLock(runDir, () => {
-    const text = (0, import_node_fs2.readFileSync)(path3, "utf8");
+    const text = (0, import_node_fs2.readFileSync)(path6, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs2.writeFileSync)(path3, rest);
+    (0, import_node_fs2.writeFileSync)(path6, rest);
     return match;
   });
 }
@@ -544,8 +544,8 @@ function buildToolCallFromPostOnly(opts) {
   return out;
 }
 function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 * 1e3) {
-  const path3 = sidecarPath(runDir);
-  if (!(0, import_node_fs2.existsSync)(path3)) return { orphans: [], events: [] };
+  const path6 = sidecarPath(runDir);
+  if (!(0, import_node_fs2.existsSync)(path6)) return { orphans: [], events: [] };
   const apply = (text) => {
     const lines = text.split("\n");
     const orphans2 = [];
@@ -569,15 +569,15 @@ function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 
   };
   let orphans;
   if (process.platform === "win32") {
-    const text = (0, import_node_fs2.readFileSync)(path3, "utf8");
+    const text = (0, import_node_fs2.readFileSync)(path6, "utf8");
     const out = apply(text);
-    (0, import_node_fs2.writeFileSync)(path3, out.rest);
+    (0, import_node_fs2.writeFileSync)(path6, out.rest);
     orphans = out.orphans;
   } else {
     orphans = withStableLock(runDir, () => {
-      const text = (0, import_node_fs2.readFileSync)(path3, "utf8");
+      const text = (0, import_node_fs2.readFileSync)(path6, "utf8");
       const out = apply(text);
-      (0, import_node_fs2.writeFileSync)(path3, out.rest);
+      (0, import_node_fs2.writeFileSync)(path6, out.rest);
       return out.orphans;
     });
   }
@@ -585,13 +585,295 @@ function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 
   return { orphans, events };
 }
 
+// lib/security/scrubbed-write.ts
+var fs4 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
+var crypto2 = __toESM(require("node:crypto"));
+
+// lib/security/secrets.ts
+function applySecretsPolicy(value, policy) {
+  if (typeof value !== "string") {
+    return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
+  }
+  let out = redactField(value);
+  const failures = [];
+  for (const pat of policy.redaction_patterns) {
+    let re;
+    try {
+      re = new RegExp(pat, "g");
+    } catch (err) {
+      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
+      continue;
+    }
+    try {
+      out = out.replace(re, "[REDACTED]");
+    } catch (err) {
+      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return { value: out, ok: failures.length === 0, failures };
+}
+
+// lib/security/config.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+function securityDefaults() {
+  return {
+    bypass_permissions_policy: "audit",
+    secrets_policy: {
+      env_allowlist: [],
+      redaction_patterns: [],
+      fail_mode_durable: "closed",
+      fail_mode_telemetry: "open"
+    },
+    tool_description_hashes: {},
+    mcp_availability: {
+      stdio_available: true,
+      http_available: false,
+      bridge_package: null
+    },
+    allowed_tools: []
+  };
+}
+function isPlainObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function isStringArray(v) {
+  return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
+function parseSecurityConfig(parsed) {
+  const out = securityDefaults();
+  if (!isPlainObject(parsed)) return out;
+  if (isPlainObject(parsed["security"])) {
+    const bpp = parsed["security"]["bypass_permissions_policy"];
+    if (bpp === "deny" || bpp === "audit" || bpp === "allow") {
+      out.bypass_permissions_policy = bpp;
+    }
+  }
+  if (isPlainObject(parsed["secrets_policy"])) {
+    const sp = parsed["secrets_policy"];
+    if (isStringArray(sp["env_allowlist"])) out.secrets_policy.env_allowlist = sp["env_allowlist"];
+    if (isStringArray(sp["redaction_patterns"])) {
+      out.secrets_policy.redaction_patterns = sp["redaction_patterns"];
+    }
+    if (sp["fail_mode_durable"] === "closed" || sp["fail_mode_durable"] === "open") {
+      out.secrets_policy.fail_mode_durable = sp["fail_mode_durable"];
+    }
+    if (sp["fail_mode_telemetry"] === "open" || sp["fail_mode_telemetry"] === "closed") {
+      out.secrets_policy.fail_mode_telemetry = sp["fail_mode_telemetry"];
+    }
+  }
+  if (isPlainObject(parsed["defaults"])) {
+    const defs = parsed["defaults"];
+    if (isStringArray(defs["allowed_tools"])) {
+      out.allowed_tools = defs["allowed_tools"];
+    }
+  }
+  if (isPlainObject(parsed["mcp"])) {
+    const mcp = parsed["mcp"];
+    if (isPlainObject(mcp["tool_description_hashes"])) {
+      const hashes = {};
+      for (const [k, v] of Object.entries(mcp["tool_description_hashes"])) {
+        if (typeof v === "string") hashes[k] = v;
+      }
+      out.tool_description_hashes = hashes;
+    }
+    if (typeof mcp["stdio_available"] === "boolean") {
+      out.mcp_availability.stdio_available = mcp["stdio_available"];
+    }
+    if (typeof mcp["http_available"] === "boolean") {
+      out.mcp_availability.http_available = mcp["http_available"];
+    }
+    if (mcp["bridge_package"] === null || typeof mcp["bridge_package"] === "string") {
+      out.mcp_availability.bridge_package = mcp["bridge_package"];
+    }
+  }
+  return out;
+}
+function readSecurityConfig(cwd) {
+  const settingsPath = path2.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  let raw;
+  try {
+    raw = fs2.readFileSync(settingsPath, "utf8");
+  } catch {
+    return securityDefaults();
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return securityDefaults();
+  }
+  return parseSecurityConfig(parsed);
+}
+
+// lib/security/events.ts
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
+function buildSecurityEvent(input) {
+  const rec = {
+    schema_version: SECURITY_EVENT_SCHEMA_VERSION,
+    ts: (/* @__PURE__ */ new Date()).toISOString(),
+    run_id: input.run_id,
+    event_type: input.event_type,
+    decision: input.decision,
+    tool: input.tool,
+    detail: redactField(input.detail ?? "")
+  };
+  if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
+  if (input.policy !== void 0) rec.policy = input.policy;
+  if (typeof input.permission_mode === "string" && input.permission_mode.length > 0) {
+    rec.permission_mode = input.permission_mode;
+  }
+  if (typeof input.dispatch_rung === "string" && input.dispatch_rung.length > 0) {
+    rec.dispatch_rung = input.dispatch_rung;
+  }
+  return rec;
+}
+function appendSecurityEvent(runDir, record) {
+  try {
+    const logsDir = path3.join(runDir, "logs");
+    fs3.mkdirSync(logsDir, { recursive: true });
+    fs3.appendFileSync(path3.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [security-events] write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+
+// lib/security/scrubbed-write.ts
+function guildRootFromRunDir(runDir) {
+  return path4.resolve(runDir, "../../..");
+}
+function writeScrubApprovalRequest(runDir, runId, surface, outPath, laneId) {
+  try {
+    const approvalDir = path4.join(runDir, "agent-bus", "approvals");
+    fs4.mkdirSync(approvalDir, { recursive: true });
+    const ts = (/* @__PURE__ */ new Date()).toISOString();
+    const safeTs = ts.replace(/[:.]/g, "-");
+    const fileName = `${safeTs}-scrub-blocked.json`;
+    const record = {
+      schema_version: "guild.approval_request.v1",
+      ts,
+      run_id: runId,
+      tool: "scrubbedWrite",
+      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path4.basename(outPath)}`,
+      permission_mode: "blocked",
+      surface
+    };
+    if (laneId) record["lane_id"] = laneId;
+    const rawContent = JSON.stringify(record, null, 2) + "\n";
+    let content = rawContent;
+    try {
+      const secConfig = readSecurityConfig(guildRootFromRunDir(runDir));
+      const scrubResult = applySecretsPolicy(rawContent, secConfig.secrets_policy);
+      content = scrubResult.value;
+    } catch {
+    }
+    fs4.writeFileSync(path4.join(approvalDir, fileName), content, "utf8");
+  } catch {
+  }
+}
+function scrubbedWrite(outPath, content, opts) {
+  const guildRoot = guildRootFromRunDir(opts.runDir);
+  let policy;
+  try {
+    const secConfig = readSecurityConfig(guildRoot);
+    policy = secConfig.secrets_policy;
+  } catch {
+    policy = {
+      env_allowlist: [],
+      redaction_patterns: [],
+      fail_mode_durable: "closed",
+      fail_mode_telemetry: "open"
+    };
+  }
+  const scrubResult = applySecretsPolicy(content, policy);
+  const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
+  if (scrubResult.ok) {
+    try {
+      fs4.mkdirSync(path4.dirname(outPath), { recursive: true });
+      fs4.writeFileSync(outPath, scrubResult.value, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
+`
+      );
+      return { written: false, blocked: false };
+    }
+    const result = { written: true, blocked: false };
+    if (opts.surface === "bus") {
+      result.sha256 = crypto2.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+    }
+    return result;
+  }
+  if (failMode === "open") {
+    process.stderr.write(
+      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path4.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
+`
+    );
+    try {
+      fs4.mkdirSync(path4.dirname(outPath), { recursive: true });
+      fs4.writeFileSync(outPath, scrubResult.value, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
+`
+      );
+      return { written: false, blocked: false };
+    }
+    try {
+      const evt = buildSecurityEvent({
+        run_id: opts.runId,
+        lane_id: opts.laneId,
+        event_type: "secret_scrub_blocked",
+        decision: "degraded",
+        tool: "scrubbedWrite",
+        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path4.basename(outPath)}. Built-in-redacted content written.`,
+        permission_mode: "degraded"
+      });
+      appendSecurityEvent(opts.runDir, evt);
+    } catch {
+    }
+    const result = { written: true, blocked: false };
+    if (opts.surface === "bus") {
+      result.sha256 = crypto2.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+    }
+    return result;
+  }
+  process.stderr.write(
+    `[scrubbed-write] BLOCKED: secret scrub failed for durable surface "${opts.surface}" at ${outPath} \u2014 file NOT written. Failures: ${scrubResult.failures.join("; ")}
+`
+  );
+  try {
+    const evt = buildSecurityEvent({
+      run_id: opts.runId,
+      lane_id: opts.laneId,
+      event_type: "secret_scrub_blocked",
+      decision: "blocked",
+      tool: "scrubbedWrite",
+      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path4.basename(outPath)} \u2014 write blocked (fail-closed).`,
+      permission_mode: "blocked"
+    });
+    appendSecurityEvent(opts.runDir, evt);
+  } catch {
+  }
+  writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
+  return { written: false, blocked: true };
+}
+
 // post-tool-use.ts
 async function readStdin() {
-  return new Promise((resolve2) => {
+  return new Promise((resolve4) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve2(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve2(""));
+    process.stdin.on("end", () => resolve4(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve4(""));
   });
 }
 function isKnownTool(name) {
@@ -618,10 +900,103 @@ function resultExcerpt(payload) {
     return "";
   }
 }
-function readCurrentRunId(guildRoot) {
-  const sentinelPath = path2.join(guildRoot, ".guild", "runs", "current-run-id");
+function classifyGuildScrubSurface(absPath, guildRoot) {
+  const rel = path5.relative(guildRoot, absPath);
+  const parts = rel.split(path5.sep);
+  if (parts[0] === ".guild" && parts[1] === "wiki") return "wiki";
+  if (parts[0] === ".guild" && parts[1] === "runs" && parts.length >= 4 && parts[3] === "review") {
+    return "review";
+  }
+  return null;
+}
+function runGuildArtifactScrub(payload, guildRoot, runDir, runId, laneId) {
+  const effectiveRunId = typeof runId === "string" && runId.length > 0 ? runId : "no-active-run";
+  const effectiveRunDir = typeof runDir === "string" && runDir.length > 0 ? runDir : path5.join(guildRoot, ".guild", "runs", effectiveRunId);
+  const toolName = payload.tool_name;
+  if (toolName !== "Write" && toolName !== "Edit") return;
+  const ti = payload.tool_input;
+  if (!ti || typeof ti !== "object") return;
+  const rawFilePath = ti["file_path"];
+  if (typeof rawFilePath !== "string" || rawFilePath.length === 0) return;
+  const absPath = path5.isAbsolute(rawFilePath) ? rawFilePath : path5.resolve(guildRoot, rawFilePath);
+  const surface = classifyGuildScrubSurface(absPath, guildRoot);
+  if (surface === null) return;
+  let diskContent;
   try {
-    const value = fs2.readFileSync(sentinelPath, "utf8").trim();
+    diskContent = fs5.readFileSync(absPath, "utf8");
+  } catch {
+    return;
+  }
+  const result = scrubbedWrite(absPath, diskContent, {
+    surface,
+    runDir: effectiveRunDir,
+    runId: effectiveRunId,
+    laneId
+  });
+  if (result.blocked) {
+    let quarantineDone = false;
+    try {
+      fs5.renameSync(absPath, absPath + ".quarantined");
+      quarantineDone = true;
+    } catch {
+    }
+    if (!quarantineDone) {
+      let canonicalRemoved = false;
+      try {
+        fs5.writeFileSync(
+          absPath,
+          `[SCRUB-BLOCKED: ${surface} file content removed by Guild HK-06 secret scrub \u2014 quarantine rename failed, raw destroyed at canonical path]
+`,
+          "utf8"
+        );
+        canonicalRemoved = true;
+      } catch {
+        try {
+          fs5.unlinkSync(absPath);
+          canonicalRemoved = true;
+        } catch {
+        }
+      }
+      if (!canonicalRemoved) {
+        process.stderr.write(
+          `[CRITICAL] [post-tool-use] HK-06: CANNOT remove raw secret from canonical path "${path5.basename(absPath)}" \u2014 quarantine AND canonical-removal (overwrite+unlink) both failed. Exiting non-zero. Manual remediation required.
+`
+        );
+        try {
+          const evt = buildSecurityEvent({
+            run_id: effectiveRunId,
+            lane_id: laneId,
+            event_type: "secret_scrub_blocked",
+            decision: "blocked",
+            tool: "post-tool-use/hk06-scrub",
+            detail: `CRITICAL: Cannot remove raw ${surface} write from canonical path "${path5.basename(absPath)}" \u2014 quarantine AND canonical-removal both failed. Raw secret may persist. Manual remediation required.`,
+            permission_mode: "blocked"
+          });
+          appendSecurityEvent(effectiveRunDir, evt);
+        } catch {
+        }
+        process.exit(1);
+      }
+      process.stderr.write(
+        `warn: [post-tool-use] HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path5.basename(absPath)}.
+`
+      );
+    }
+    process.stderr.write(
+      `warn: [post-tool-use] HK-06: ${surface} write BLOCKED by secret scrub at ${path5.basename(absPath)} \u2014 quarantined/removed. secret_scrub_blocked event emitted.
+`
+    );
+  } else if (result.written) {
+    process.stderr.write(
+      `info: [post-tool-use] HK-06: ${surface} file scrubbed in place: ${path5.basename(absPath)}.
+`
+    );
+  }
+}
+function readCurrentRunId(guildRoot) {
+  const sentinelPath = path5.join(guildRoot, ".guild", "runs", "current-run-id");
+  try {
+    const value = fs5.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -644,6 +1019,21 @@ async function main() {
   const toolName = payload.tool_name ?? "";
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
+  {
+    const earlyRunId = resolveRunId(guildRoot);
+    const earlyRunIdSafe = typeof earlyRunId === "string" && earlyRunId.length > 0 && isSafeRunId(earlyRunId) ? earlyRunId : void 0;
+    const earlyRunDir = earlyRunIdSafe ? process.env["GUILD_RUN_DIR"] ?? path5.join(guildRoot, ".guild", "runs", earlyRunIdSafe) : void 0;
+    const earlyRawLaneId = process.env["GUILD_LANE_ID"];
+    const earlyLaneId = typeof earlyRawLaneId === "string" && earlyRawLaneId.length > 0 && isSafeLaneId(earlyRawLaneId) ? earlyRawLaneId : void 0;
+    try {
+      runGuildArtifactScrub(payload, guildRoot, earlyRunDir, earlyRunIdSafe, earlyLaneId);
+    } catch (err) {
+      process.stderr.write(
+        `warn: [post-tool-use] HK-06 scrub threw (non-fatal): ${err instanceof Error ? err.message : String(err)}
+`
+      );
+    }
+  }
   const runId = resolveRunId(guildRoot);
   if (typeof runId !== "string" || runId.length === 0) {
     process.stderr.write(
@@ -657,7 +1047,7 @@ async function main() {
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path2.join(guildRoot, ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path5.join(guildRoot, ".guild", "runs", runId);
   const rawLaneId = process.env["GUILD_LANE_ID"];
   const laneId = typeof rawLaneId === "string" && rawLaneId.length > 0 && isSafeLaneId(rawLaneId) ? rawLaneId : void 0;
   if (typeof rawLaneId === "string" && rawLaneId.length > 0 && laneId === void 0) {

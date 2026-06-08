@@ -471,3 +471,68 @@ describe("u6 — runId validation (path-traversal containment)", () => {
     expect(readBack!.schema_version).toBe("guild.resolved_settings.v1");
   });
 });
+
+// ── HK-06 — resolved-settings.json fail-CLOSED via scrubbedWriteDurable seam ────
+//
+// Argument-identity invariant: when scrubbedWriteDurable returns blocked:true,
+// resolved-settings.json MUST NOT exist on disk. Assert the on-disk effect.
+//
+// Uses scrubbedWriteDurable (NOT scrubbedWriteFile) so the seam matches
+// RunLifecycleEnv.fs — the REAL start-run path that createRealEnv wires.
+
+describe("u6 — HK-06 resolved-settings.json scrubbed-write coverage", () => {
+  type ScrubResult = { written: boolean; blocked: boolean };
+  type ScrubSurface = "handoff" | "learnings" | "provenance" | "config" | "wiki" | "review" | "bus" | "telemetry";
+
+  /** Build a memFs whose env has a fake scrubbedWriteDurable seam. */
+  function memFsWithScrubWriteDurable(scrubResult: ScrubResult): MemFs {
+    const mem = memFs();
+    // mem.env is RunLifecycleEnv["fs"] which already declares scrubbedWriteDurable? —
+    // no cast needed.
+    mem.env.scrubbedWriteDurable = (
+      outPath: string,
+      contents: string,
+      _surface: ScrubSurface,
+      _runDir: string,
+      _runId: string,
+    ): ScrubResult => {
+      if (scrubResult.written) {
+        mem.files.set(outPath, contents);
+        mem.dirs.add(path.dirname(outPath));
+      }
+      return scrubResult;
+    };
+    return mem;
+  }
+
+  it("HK-06: resolved-settings.json NOT created when scrubbedWriteDurable returns blocked:true (fail-CLOSED)", () => {
+    const mem = memFsWithScrubWriteDurable({ written: false, blocked: true });
+    const snapshot = makeSnapshot();
+    writeResolvedSettingsSnapshot("run-scrub-blocked", snapshot, { cwd: ROOT, fs: mem.env });
+
+    const expectedPath = path.join(ROOT, ".guild", "runs", "run-scrub-blocked", "resolved-settings.json");
+    // Fail-CLOSED invariant: the file MUST NOT exist when scrub is blocked.
+    expect(mem.files.has(expectedPath)).toBe(false);
+  });
+
+  it("HK-06: resolved-settings.json IS created when scrubbedWriteDurable returns written:true (happy path)", () => {
+    const mem = memFsWithScrubWriteDurable({ written: true, blocked: false });
+    const snapshot = makeSnapshot();
+    writeResolvedSettingsSnapshot("run-scrub-ok", snapshot, { cwd: ROOT, fs: mem.env });
+
+    const expectedPath = path.join(ROOT, ".guild", "runs", "run-scrub-ok", "resolved-settings.json");
+    expect(mem.files.has(expectedPath)).toBe(true);
+  });
+
+  it("HK-06: backward compat — no scrubbedWriteDurable on seam → falls through to writeFile", () => {
+    // Standard memFs (no scrubbedWriteDurable) — resolved-settings.json written normally.
+    const mem = memFs();
+    const snapshot = makeSnapshot();
+    writeResolvedSettingsSnapshot("run-compat", snapshot, { cwd: ROOT, fs: mem.env });
+
+    const expectedPath = path.join(ROOT, ".guild", "runs", "run-compat", "resolved-settings.json");
+    expect(mem.files.has(expectedPath)).toBe(true);
+    const parsed = JSON.parse(mem.files.get(expectedPath) as string);
+    expect(parsed.schema_version).toBe("guild.resolved_settings.v1");
+  });
+});

@@ -66,6 +66,14 @@ import {
   LanePatch,
   RunStateInit,
 } from "../lib/run-state.js";
+import { classifyEnvelope, type InjectionClean } from "../lib/security/injection-guard.js";
+import {
+  buildSecurityEvent,
+  appendSecurityEvent,
+} from "../lib/security/events.js";
+import { scrubbedWrite, writeScrubApprovalRequest } from "../lib/security/scrubbed-write.js";
+import { applySecretsPolicy } from "../lib/security/secrets.js";
+import { readSecurityConfig } from "../lib/security/config.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -154,12 +162,19 @@ function missingFields(content: string): string[] {
 /**
  * Write learnings from a valid `guild.handoff.v2` envelope into the run record.
  * Silently skips if no learnings are present.
+ *
+ * HK-06: routes the write through `scrubbedWrite` (the D-SECRETS durable-write
+ * choke-point) instead of raw fs.writeFileSync. Surface: "learnings" → fail-CLOSED
+ * by default (on scrub failure the file does NOT land; secret_scrub_blocked event
+ * is emitted; approval_request written for human review).
  */
 function persistLearnings(
   envelope: HandoffV2,
   outPath: string,
   specialist: string,
-  taskId: string
+  taskId: string,
+  runDir: string,
+  runId: string,
 ): void {
   if (!envelope.learnings || envelope.learnings.length === 0) return;
 
@@ -172,10 +187,23 @@ function persistLearnings(
     learnings: envelope.learnings,
   };
 
-  const dir = path.dirname(outPath);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(outPath, JSON.stringify(record, null, 2) + "\n", "utf8");
-  process.stderr.write(`[task-completed] learnings persisted to ${outPath}\n`);
+  const content = JSON.stringify(record, null, 2) + "\n";
+  // HK-06: scrubbedWrite handles mkdirSync + scrub-then-write atomically.
+  // fail-CLOSED: on scrub failure the file does NOT land (fs.existsSync === false).
+  const writeResult = scrubbedWrite(outPath, content, {
+    surface: "learnings",
+    runDir,
+    runId,
+    laneId: specialist,
+  });
+  if (writeResult.written) {
+    process.stderr.write(`[task-completed] learnings persisted to ${outPath}\n`);
+  } else if (writeResult.blocked) {
+    process.stderr.write(
+      `[task-completed] WARN: learnings write BLOCKED by secret scrub (fail-CLOSED) ` +
+        `for specialist "${specialist}" task "${taskId}". Security event emitted.\n`,
+    );
+  }
 }
 
 /**
@@ -258,6 +286,192 @@ function runStatePathHint(runDir: string): string {
   return path.join(runDir, "run-state.json");
 }
 
+/**
+ * HK-06: Post-write scrub for the handoff receipt (the agent-authored file).
+ *
+ * The agent writes the receipt to disk; this hook reads it and applies
+ * applySecretsPolicy before any further processing. The scrub happens
+ * IN-PLACE at rPath:
+ *
+ *   ok=true  → rewrite rPath with scrubbed content; return scrubbed value.
+ *   ok=false → failure ladder (fail-CLOSED):
+ *     STEP 1: Best-effort quarantine — rename rPath → rPath+".quarantined"
+ *             (preserves content for human review).
+ *     STEP 2: If rename failed, MUST destroy raw at canonical path:
+ *             try overwrite with a redaction notice, then unlink.
+ *             INVARIANT: raw NEVER survives at the canonical path.
+ *     HARD:   If canonical removal also fails → die() immediately (critical).
+ *     STEP 3: Emit secret_scrub_blocked security event.
+ *     STEP 4: Write guild.approval_request.v1 to agent-bus (MAJOR 2 fix —
+ *             operator always-ask notification, same as durable scrubbedWrite).
+ *     Return blocked=true → caller die()s to block the lane.
+ *
+ * Non-throwing by contract (except the intentional HARD die() path).
+ */
+function scrubHandoffReceipt(
+  rPath: string,
+  content: string,
+  guildRoot: string,
+  runDir: string,
+  runId: string,
+  specialist: string,
+  taskId: string,
+): { content: string; blocked: boolean } {
+  const sec = readSecurityConfig(guildRoot);
+  const scrubResult = applySecretsPolicy(content, sec.secrets_policy);
+
+  if (scrubResult.ok) {
+    // Rewrite the receipt file in place with the scrubbed content.
+    let rewriteOk = false;
+    try {
+      fs.writeFileSync(rPath, scrubResult.value, "utf8");
+      rewriteOk = true;
+    } catch (err) {
+      process.stderr.write(
+        `[task-completed] WARN: handoff scrub rewrite failed — raw receipt still ` +
+          `at canonical path, falling into fail-CLOSED ladder: ` +
+          `${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    }
+    if (rewriteOk) {
+      return { content: scrubResult.value, blocked: false };
+    }
+    // Rewrite failed: raw content is still at rPath.
+    // Fall through to the fail-CLOSED ladder — raw MUST NOT survive at the
+    // canonical path regardless of whether the failure was scrub (ok=false)
+    // or a successful scrub whose rewrite landed an I/O error (ok=true here).
+  }
+
+  // ── ok=false OR ok=true + rewrite-failure: fail-CLOSED path ──────────────
+
+  // STEP 1: Best-effort quarantine (preserves content for human review).
+  const quarantinePath = rPath + ".quarantined";
+  let quarantineDone = false;
+  try {
+    fs.renameSync(rPath, quarantinePath);
+    quarantineDone = true;
+  } catch (err) {
+    process.stderr.write(
+      `[task-completed] WARN: handoff quarantine rename failed: ` +
+        `${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  }
+
+  // STEP 2: If quarantine rename failed, MUST remove raw from canonical path.
+  // INVARIANT: raw NEVER survives at the canonical path after fail-CLOSED.
+  if (!quarantineDone) {
+    let canonicalRemoved = false;
+    // Try overwrite with a safe redaction notice first.
+    try {
+      fs.writeFileSync(
+        rPath,
+        "[SCRUB-BLOCKED: handoff receipt removed by Guild HK-06 secret scrub " +
+          "— original content quarantine failed, raw destroyed at canonical path]\n",
+        "utf8",
+      );
+      canonicalRemoved = true;
+    } catch {
+      // Overwrite failed — try unlink as last resort.
+      try {
+        fs.unlinkSync(rPath);
+        canonicalRemoved = true;
+      } catch {
+        // All removal attempts exhausted.
+      }
+    }
+
+    if (!canonicalRemoved) {
+      // HARD FAILURE: raw secret persists at canonical path — critical breach.
+      // Emit critical event (best-effort), then die immediately.
+      try {
+        const evt = buildSecurityEvent({
+          run_id: runId,
+          lane_id: specialist,
+          event_type: "secret_scrub_blocked",
+          decision: "blocked",
+          tool: "task-completed/handoff-scrub",
+          detail:
+            `CRITICAL: Cannot remove raw handoff receipt "${path.basename(rPath)}" ` +
+            `from canonical path — quarantine AND overwrite/unlink both failed. ` +
+            `Raw secret may persist. Lane blocked. Manual remediation required.`,
+          permission_mode: "blocked",
+        });
+        appendSecurityEvent(runDir, evt);
+      } catch {}
+      die(
+        `CRITICAL HK-06 hard failure — raw handoff receipt from "${specialist}" ` +
+          `(task "${taskId}") cannot be removed from canonical path ` +
+          `(quarantine AND overwrite/unlink both failed). ` +
+          `Raw secret may persist at ${rPath}. Manual remediation required.`,
+      );
+    }
+
+    process.stderr.write(
+      `[task-completed] WARN: HK-06: quarantine rename failed but canonical ` +
+        `path overwritten/unlinked for ${path.basename(rPath)}.\n`,
+    );
+  }
+
+  // STEP 3: Emit blocked security event (best-effort).
+  try {
+    const evt = buildSecurityEvent({
+      run_id: runId,
+      lane_id: specialist,
+      event_type: "secret_scrub_blocked",
+      decision: "blocked",
+      tool: "task-completed/handoff-scrub",
+      detail:
+        `Secret scrub failed for handoff receipt from "${specialist}" ` +
+        `(task: "${taskId}") — receipt quarantined/removed, lane blocked.`,
+      permission_mode: "blocked",
+    });
+    appendSecurityEvent(runDir, evt);
+  } catch {
+    // best-effort
+  }
+
+  // STEP 4: Write approval_request to agent-bus (always-ask operator notification).
+  // Mirrors the durable scrubbedWrite fail-CLOSED path so operators get the same
+  // escalation channel regardless of which code path triggered the block.
+  writeScrubApprovalRequest(runDir, runId, "handoff", rPath, specialist);
+
+  return { content: "", blocked: true };
+}
+
+/**
+ * HK-08: Write one NDJSON line to injection-audit.jsonl recording the
+ * injection_clean classification for this task's envelope.
+ * Best-effort (non-fatal) — audit failures must never block task completion.
+ */
+function persistInjectionAudit(
+  runDir: string,
+  taskId: string,
+  specialist: string,
+  injectionClean: InjectionClean,
+): void {
+  try {
+    const logsDir = path.join(runDir, "logs");
+    fs.mkdirSync(logsDir, { recursive: true });
+    const record = {
+      schema_version: "guild.injection_audit.v1",
+      ts: new Date().toISOString(),
+      task_id: taskId,
+      specialist,
+      injection_clean: injectionClean,
+    };
+    fs.appendFileSync(
+      path.join(logsDir, "injection-audit.jsonl"),
+      JSON.stringify(record) + "\n",
+      "utf8",
+    );
+  } catch (err) {
+    process.stderr.write(
+      `[task-completed] WARN: injection-audit write failed (non-fatal): ` +
+        `${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  }
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -304,6 +518,8 @@ async function main(): Promise<void> {
   const content = fs.readFileSync(rPath, "utf8");
 
   // ── Check §8.2 required markdown fields ───────────────────────────────────
+  // Runs on the RAW content BEFORE scrub so structural validation (§8.2,
+  // SC-7 bloat checks, OD-4 envelope) is not confused by redaction sentinels.
   const missing = missingFields(content);
   if (missing.length > 0) {
     die(
@@ -332,12 +548,58 @@ async function main(): Promise<void> {
           errors.map((e) => `  - ${e}`).join("\n")
       );
     }
+    // ── HK-06: handoff receipt post-write scrub (D-SECRETS) ──────────────────
+    // Runs AFTER structural validation (§8.2, SC-7, OD-4) so bloat-rejection
+    // is not defeated by the high-entropy redactor. The validated envelope is
+    // already extracted in memory; the in-place scrub rewrites rPath on disk.
+    // ok=true → rPath is rewritten with scrubbed content; we continue using
+    //           the in-memory envelope (already valid, no re-parse needed).
+    // ok=false → rPath is quarantined and the lane is blocked (fail-CLOSED).
+    {
+      const { blocked: handoffBlocked } = scrubHandoffReceipt(
+        rPath, content, guildRoot, runDir, runId, specialist, taskId,
+      );
+      if (handoffBlocked) {
+        die(
+          `Task "${taskId}" handoff receipt from "${specialist}" failed secret scrub (fail-CLOSED) — ` +
+            `receipt quarantined to ${rPath}.quarantined. Security event emitted. ` +
+            `Remove secrets from the receipt and re-submit.`,
+        );
+      }
+    }
+    // ── end HK-06 handoff scrub ────────────────────────────────────────────────
+
     // Extract learnings into run record (§6 D3 Extract phase)
     const envelope = rawEnvelope as HandoffV2;
     envelopeStatus = envelope.status;
     laneTier = envelope.tier;
     const lPath = learningsPath(guildRoot, runId, specialist, taskId);
-    persistLearnings(envelope, lPath, specialist, taskId);
+    persistLearnings(envelope, lPath, specialist, taskId, runDir, runId);
+
+    // ── HK-08: injection_clean enforcement ────────────────────────────────
+    // Classify the envelope's free-text (summary + notes) for directive
+    // language. Advisory — never blocks task completion. Records result in
+    // injection-audit.jsonl; emits security event on flagged.
+    const rawObj = rawEnvelope as Record<string, unknown>;
+    const injectionClean: InjectionClean = classifyEnvelope(rawObj);
+    persistInjectionAudit(runDir, taskId, specialist, injectionClean);
+    if (injectionClean === "flagged") {
+      const secEvt = buildSecurityEvent({
+        run_id: runId,
+        lane_id: specialist,
+        event_type: "injection_attempt_detected",
+        decision: "pass", // advisory — we record and continue, not deny
+        tool: "",
+        detail: `Directive language detected in guild.handoff.v2 summary/notes from "${specialist}" (task: "${taskId}")`,
+        permission_mode: "advisory",
+      });
+      appendSecurityEvent(runDir, secEvt);
+      process.stderr.write(
+        `[task-completed] SECURITY: injection patterns detected in summary from ` +
+          `specialist "${specialist}" (task: "${taskId}"). Recorded in injection-audit.jsonl.\n`,
+      );
+    }
+    // ── end HK-08 ────────────────────────────────────────────────────────
 
     process.stderr.write(
       `[task-completed] OK: task "${taskId}" envelope validated (tier: ${envelope.tier}, ` +

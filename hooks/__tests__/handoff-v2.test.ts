@@ -244,10 +244,11 @@ describe("validateHandoffV2 — unknown-key rejection (strict v2)", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("ALLOWED_TOP_LEVEL_KEYS export matches spec §2", () => {
+  it("ALLOWED_TOP_LEVEL_KEYS export matches spec §2 (including HK-08 injection_clean)", () => {
     const expected = [
       "schema_version", "task_id", "tier", "status", "summary",
       "artifacts", "issues", "escalate_reason", "learnings", "notes",
+      "injection_clean", // HK-08 additive-optional
     ];
     for (const k of expected) {
       expect(ALLOWED_TOP_LEVEL_KEYS.has(k)).toBe(true);
@@ -267,5 +268,47 @@ describe("isHandoffV2 type guard", () => {
 
   it("returns false for null", () => {
     expect(isHandoffV2(null)).toBe(false);
+  });
+});
+
+// ── HK-08: injection_clean field (additive-optional) ─────────────────────────
+
+describe("validateHandoffV2 — injection_clean field (HK-08)", () => {
+  it("accepts injection_clean: clean", () => {
+    const result = validateHandoffV2({ ...VALID_BASE, injection_clean: "clean" });
+    expect(result.valid).toBe(true);
+  });
+
+  it("accepts injection_clean: flagged", () => {
+    const result = validateHandoffV2({ ...VALID_BASE, injection_clean: "flagged" });
+    expect(result.valid).toBe(true);
+  });
+
+  it("accepts injection_clean: unverified", () => {
+    const result = validateHandoffV2({ ...VALID_BASE, injection_clean: "unverified" });
+    expect(result.valid).toBe(true);
+  });
+
+  it("accepts envelope without injection_clean (field is optional)", () => {
+    const result = validateHandoffV2(VALID_BASE);
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects injection_clean with invalid value", () => {
+    const result = validateHandoffV2({
+      ...VALID_BASE,
+      injection_clean: "unknown_value" as never,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("injection_clean"))).toBe(true);
+  });
+
+  it("isHandoffV2 returns true for envelope with injection_clean: clean", () => {
+    expect(isHandoffV2({ ...VALID_BASE, injection_clean: "clean" })).toBe(true);
+  });
+
+  it("injection_clean is NOT rejected as an unknown key (HK-08 additive)", () => {
+    const result = validateHandoffV2({ ...VALID_BASE, injection_clean: "clean" });
+    expect(result.errors.some((e) => e.includes('unknown key "injection_clean"'))).toBe(false);
   });
 });

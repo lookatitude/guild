@@ -79,6 +79,14 @@ export interface HandoffV2 {
   learnings?: string[];
   /** Optional free-text annotation, capped at 200 chars (O-4). */
   notes?: string;
+  /**
+   * HK-08: injection safety classification for this envelope's free-text fields.
+   * Additive-optional (absent ⇒ read as "unverified").
+   *   - "clean"      → no directive language detected
+   *   - "flagged"    → directive language found; security event emitted by task-completed
+   *   - "unverified" → classification not run; task-completed will compute it
+   */
+  injection_clean?: "clean" | "flagged" | "unverified";
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -107,6 +115,7 @@ export const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
   "escalate_reason",
   "learnings",
   "notes",
+  "injection_clean", // HK-08 additive-optional
 ]);
 
 // ── Validation result ──────────────────────────────────────────────────────
@@ -240,6 +249,16 @@ export function validateHandoffV2(value: unknown): ValidationResult {
       errors.push(
         `notes exceeds ${NOTES_MAX_CHARS} char cap (O-4 binding resolution): ` +
           `got ${obj["notes"].length} chars`
+      );
+    }
+  }
+
+  // injection_clean — HK-08 additive-optional; absent ⇒ unverified (no error)
+  if (obj["injection_clean"] !== undefined) {
+    const validValues = new Set(["clean", "flagged", "unverified"]);
+    if (!validValues.has(obj["injection_clean"] as string)) {
+      errors.push(
+        `injection_clean must be one of clean|flagged|unverified; got ${JSON.stringify(obj["injection_clean"])}`
       );
     }
   }

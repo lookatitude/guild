@@ -56,6 +56,8 @@ import {
 // log, and MCP description hash-pin. Schema/settings bound BY POINTER — see
 // each lib header. (docs/knowledge/decisions/v2-security-and-untrusted-content.md)
 import { readSecurityConfig } from "./lib/security/config.js";
+// HK-06: bus surface — approval_request writes go through scrubbedWrite.
+import { scrubbedWrite } from "./lib/security/scrubbed-write.js";
 import {
   appendSecurityEvent,
   buildSecurityEvent,
@@ -211,7 +213,16 @@ function writeApprovalRequest(
     };
     if (opts.laneId) record["lane_id"] = opts.laneId;
     if (opts.dispatchRung) record["dispatch_rung"] = opts.dispatchRung;
-    fs.writeFileSync(path.join(approvalDir, fileName), JSON.stringify(record, null, 2) + "\n", "utf8");
+    // HK-06 (bus surface): route through scrubbedWrite so secrets in the
+    // approval_request content (e.g. leaked into the reason string) are
+    // scrubbed before the file lands. scrubbedWrite handles mkdirSync.
+    const content = JSON.stringify(record, null, 2) + "\n";
+    scrubbedWrite(path.join(approvalDir, fileName), content, {
+      surface: "bus",
+      runDir,
+      runId: opts.runId,
+      laneId: opts.laneId,
+    });
   } catch (err) {
     process.stderr.write(
       `warn: [pre-tool-use] approval_request write failed: ${

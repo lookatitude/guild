@@ -492,3 +492,89 @@ describe("run-lifecycle — appendPhase (T0 full-run phase recording)", () => {
     expect(after.match(/^run_class:.*$/m)?.[0]).toBe(runClassBefore);
   });
 });
+
+// ── HK-06 — provenance.json fail-CLOSED via scrubbedWriteDurable seam ──────────
+//
+// The injectable `scrubbedWriteDurable` seam lets tests verify the argument-identity
+// invariant: when scrub returns blocked:true, provenance.json MUST NOT exist on disk.
+// This asserts the ON-DISK EFFECT, not merely "a function was called."
+
+describe("run-lifecycle — HK-06 provenance.json scrubbed-write coverage", () => {
+  type ScrubResult = { written: boolean; blocked: boolean; sha256?: string };
+  type ScrubSurface = "handoff" | "learnings" | "provenance" | "config" | "wiki" | "review" | "bus" | "telemetry";
+
+  /** Build a memFs env with an optional fake scrubbedWriteDurable seam. */
+  function memFsWithScrub(opts: {
+    scrubResult?: ScrubResult;
+    captureArgs?: { calls: Array<{ outPath: string; contents: string; surface: ScrubSurface }> };
+  }): MemFs {
+    const mem = memFs();
+    if (opts.scrubResult !== undefined || opts.captureArgs !== undefined) {
+      const captured = opts.captureArgs;
+      const result = opts.scrubResult ?? { written: true, blocked: false };
+      mem.env.scrubbedWriteDurable = (
+        outPath: string,
+        contents: string,
+        surface: ScrubSurface,
+        _runDir: string,
+        _runId: string,
+      ): ScrubResult => {
+        if (captured) captured.calls.push({ outPath, contents, surface });
+        if (result.written) {
+          mem.files.set(outPath, contents);
+          mem.dirs.add(path.dirname(outPath));
+        }
+        return result;
+      };
+    }
+    return mem;
+  }
+
+  it("HK-06: provenance.json NOT created when scrubbedWriteDurable returns blocked:true (fail-CLOSED)", () => {
+    const mem = memFsWithScrub({ scrubResult: { written: false, blocked: true } });
+    const lc = createRunLifecycle(makeEnv(mem));
+    const runId = lc.startRun(baseStartOpts());
+    lc.closeRun(runId, { status: "closed" });
+
+    const provPath = path.join(ROOT, ".guild", "runs", runId, "provenance.json");
+    // Fail-CLOSED invariant: the file MUST NOT exist when scrub is blocked.
+    expect(mem.files.has(provPath)).toBe(false);
+  });
+
+  it("HK-06: provenance.json IS created when scrubbedWriteDurable returns written:true (happy path)", () => {
+    const mem = memFsWithScrub({ scrubResult: { written: true, blocked: false } });
+    const lc = createRunLifecycle(makeEnv(mem));
+    const runId = lc.startRun(baseStartOpts());
+    lc.closeRun(runId, { status: "closed" });
+
+    const provPath = path.join(ROOT, ".guild", "runs", runId, "provenance.json");
+    expect(mem.files.has(provPath)).toBe(true);
+    const prov = JSON.parse(mem.files.get(provPath) as string);
+    expect(prov.schema_version).toBe("guild.provenance.v1");
+  });
+
+  it("HK-06: scrubbedWriteDurable receives surface='provenance' for provenance.json", () => {
+    const captured: { calls: Array<{ outPath: string; contents: string; surface: ScrubSurface }> } =
+      { calls: [] };
+    const mem = memFsWithScrub({ scrubResult: { written: true, blocked: false }, captureArgs: captured });
+    const lc = createRunLifecycle(makeEnv(mem));
+    const runId = lc.startRun(baseStartOpts());
+    lc.closeRun(runId, { status: "closed" });
+
+    // Exactly one call, surface must be "provenance".
+    const provCalls = captured.calls.filter((c) => c.outPath.endsWith("provenance.json"));
+    expect(provCalls.length).toBe(1);
+    expect(provCalls[0].surface).toBe("provenance");
+  });
+
+  it("HK-06: existing tests still pass when scrubbedWriteDurable is absent (backward compat)", () => {
+    // No scrubbedWriteDurable on the env — closeRun falls back to env.fs.writeFile.
+    const mem = memFs();
+    const lc = createRunLifecycle(makeEnv(mem));
+    const runId = lc.startRun(baseStartOpts());
+    lc.closeRun(runId, { status: "closed" });
+
+    const provPath = path.join(ROOT, ".guild", "runs", runId, "provenance.json");
+    expect(mem.files.has(provPath)).toBe(true);
+  });
+});

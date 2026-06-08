@@ -43,6 +43,9 @@ import {
 // guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
 // lib/trace-v2.ts header + contract-map §B-post.
 import { normalizeTokens, resolveTraceV2Fields, type TraceTokens } from "./lib/trace-v2.js";
+// HK-06: wiki + review PostToolUse scrub-in-place (D-SECRETS).
+import { scrubbedWrite, type ScrubSurface } from "./lib/security/scrubbed-write.js";
+import { buildSecurityEvent, appendSecurityEvent } from "./lib/security/events.js";
 
 interface PostToolUsePayload {
   session_id?: string;
@@ -93,6 +96,173 @@ function resultExcerpt(payload: PostToolUsePayload): string {
   }
 }
 
+// ── HK-06: wiki + review PostToolUse scrub-in-place helpers ─────────────────
+
+/**
+ * Classify an absolute path as a scrub-target surface.
+ *   "wiki"   → .guild/wiki/**
+ *   "review" → .guild/runs/<id>/review/**
+ *   null     → not a target (no scrub)
+ */
+function classifyGuildScrubSurface(absPath: string, guildRoot: string): ScrubSurface | null {
+  const rel = path.relative(guildRoot, absPath);
+  const parts = rel.split(path.sep);
+  if (parts[0] === ".guild" && parts[1] === "wiki") return "wiki";
+  // .guild/runs/<runId>/review/**  (parts: [".guild", "runs", "<id>", "review", ...])
+  if (
+    parts[0] === ".guild" &&
+    parts[1] === "runs" &&
+    parts.length >= 4 &&
+    parts[3] === "review"
+  ) {
+    return "review";
+  }
+  return null;
+}
+
+/**
+ * HK-06: PostToolUse scrub-in-place for wiki + review surfaces.
+ *
+ * When Write|Edit completes against .guild/wiki/** or .guild/runs/<id>/review/**,
+ * read the on-disk file (already written by the tool) and route it through
+ * scrubbedWrite. The file is replaced with scrubbed content (ok) or quarantined
+ * (ok=false → fail-CLOSED: file renamed to path+".quarantined" and
+ * secret_scrub_blocked event emitted via scrubbedWrite).
+ *
+ * `runDir` and `runId` may be undefined when invoked before the run-id gate
+ * (e.g., wiki writes that have no active run). In those cases synthetic
+ * fallback values are used so security events still land and the scrub fires.
+ *
+ * Non-blocking: PostToolUse always exits 0; this function never throws.
+ * "Sub-second pre-commit window" — runs synchronously before exit.
+ */
+function runGuildArtifactScrub(
+  payload: PostToolUsePayload,
+  guildRoot: string,
+  runDir: string | undefined,
+  runId: string | undefined,
+  laneId: string | undefined,
+): void {
+  // Synthetic fallbacks for project-scoped writes (e.g. wiki) with no active run.
+  const effectiveRunId = typeof runId === "string" && runId.length > 0 ? runId : "no-active-run";
+  const effectiveRunDir =
+    typeof runDir === "string" && runDir.length > 0
+      ? runDir
+      : path.join(guildRoot, ".guild", "runs", effectiveRunId);
+  const toolName = payload.tool_name;
+  if (toolName !== "Write" && toolName !== "Edit") return;
+
+  const ti = payload.tool_input as Record<string, unknown> | null | undefined;
+  if (!ti || typeof ti !== "object") return;
+  const rawFilePath = ti["file_path"];
+  if (typeof rawFilePath !== "string" || rawFilePath.length === 0) return;
+
+  const absPath = path.isAbsolute(rawFilePath)
+    ? rawFilePath
+    : path.resolve(guildRoot, rawFilePath);
+
+  const surface = classifyGuildScrubSurface(absPath, guildRoot);
+  if (surface === null) return;
+
+  // Read the file as written by the tool (already on disk).
+  let diskContent: string;
+  try {
+    diskContent = fs.readFileSync(absPath, "utf8");
+  } catch {
+    return; // File missing/unreadable — nothing to scrub
+  }
+
+  // Route through scrubbedWrite: scrub-then-overwrite, or block-and-event.
+  const result = scrubbedWrite(absPath, diskContent, {
+    surface,
+    runDir: effectiveRunDir,
+    runId: effectiveRunId,
+    laneId,
+  });
+
+  if (result.blocked) {
+    // fail-CLOSED: scrubbedWrite did NOT overwrite. The original file still
+    // exists at absPath with unredacted content.
+    //
+    // Failure ladder — raw MUST NOT survive at the canonical path:
+    //   STEP 1: Best-effort quarantine rename (preserves content for human review).
+    //   STEP 2: If rename failed, MUST destroy raw at canonical: overwrite then unlink.
+    //   HARD:   If canonical removal also fails → critical event + process.exit(1).
+
+    let quarantineDone = false;
+    try {
+      fs.renameSync(absPath, absPath + ".quarantined");
+      quarantineDone = true;
+    } catch {
+      // Rename failed — proceed to canonical removal.
+    }
+
+    if (!quarantineDone) {
+      let canonicalRemoved = false;
+      // Try overwrite with a safe redaction notice first.
+      try {
+        fs.writeFileSync(
+          absPath,
+          `[SCRUB-BLOCKED: ${surface} file content removed by Guild HK-06 secret scrub ` +
+            `— quarantine rename failed, raw destroyed at canonical path]\n`,
+          "utf8",
+        );
+        canonicalRemoved = true;
+      } catch {
+        // Try unlink as last resort.
+        try {
+          fs.unlinkSync(absPath);
+          canonicalRemoved = true;
+        } catch {
+          // All removal attempts exhausted.
+        }
+      }
+
+      if (!canonicalRemoved) {
+        // HARD FAILURE: raw secret persists at canonical path — critical breach.
+        // Emit critical event (best-effort), then exit non-zero.
+        process.stderr.write(
+          `[CRITICAL] [post-tool-use] HK-06: CANNOT remove raw secret from canonical ` +
+            `path "${path.basename(absPath)}" — quarantine AND canonical-removal ` +
+            `(overwrite+unlink) both failed. Exiting non-zero. Manual remediation required.\n`,
+        );
+        try {
+          const evt = buildSecurityEvent({
+            run_id: effectiveRunId,
+            lane_id: laneId,
+            event_type: "secret_scrub_blocked",
+            decision: "blocked",
+            tool: "post-tool-use/hk06-scrub",
+            detail:
+              `CRITICAL: Cannot remove raw ${surface} write from canonical path ` +
+              `"${path.basename(absPath)}" — quarantine AND canonical-removal both failed. ` +
+              `Raw secret may persist. Manual remediation required.`,
+            permission_mode: "blocked",
+          });
+          appendSecurityEvent(effectiveRunDir, evt);
+        } catch {}
+        process.exit(1);
+      }
+
+      process.stderr.write(
+        `warn: [post-tool-use] HK-06: quarantine rename failed but canonical ` +
+          `path overwritten/unlinked for ${path.basename(absPath)}.\n`,
+      );
+    }
+
+    process.stderr.write(
+      `warn: [post-tool-use] HK-06: ${surface} write BLOCKED by secret scrub at ` +
+        `${path.basename(absPath)} — quarantined/removed. secret_scrub_blocked event emitted.\n`,
+    );
+  } else if (result.written) {
+    process.stderr.write(
+      `info: [post-tool-use] HK-06: ${surface} file scrubbed in place: ${path.basename(absPath)}.\n`,
+    );
+  }
+}
+
+// ── Run ID helpers ────────────────────────────────────────────────────────────
+
 function readCurrentRunId(guildRoot: string): string | undefined {
   const sentinelPath = path.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
@@ -124,6 +294,40 @@ export async function main(): Promise<void> {
   // Walk up from cwd to find the repo root — ensures .guild/ always lands at
   // the nearest .git / .guild ancestor, never in a subdirectory.
   const guildRoot = resolveGuildRoot(cwd);
+
+  // ── HK-06: wiki + review PostToolUse scrub-in-place ─────────────────────
+  // Placed BEFORE the run-id gate: wiki pages (.guild/wiki/**) are project-
+  // scoped and have NO run-id — gating on runId permanently bypasses the wiki
+  // surface. The scrub uses synthetic fallback values when runId is absent.
+  // Non-blocking: always exits 0. Non-throwing by contract.
+  {
+    const earlyRunId = resolveRunId(guildRoot);
+    const earlyRunIdSafe =
+      typeof earlyRunId === "string" && earlyRunId.length > 0 && isSafeRunId(earlyRunId)
+        ? earlyRunId
+        : undefined;
+    const earlyRunDir = earlyRunIdSafe
+      ? (process.env["GUILD_RUN_DIR"] ?? path.join(guildRoot, ".guild", "runs", earlyRunIdSafe))
+      : undefined;
+    const earlyRawLaneId = process.env["GUILD_LANE_ID"];
+    const earlyLaneId =
+      typeof earlyRawLaneId === "string" &&
+      earlyRawLaneId.length > 0 &&
+      isSafeLaneId(earlyRawLaneId)
+        ? earlyRawLaneId
+        : undefined;
+    try {
+      runGuildArtifactScrub(payload, guildRoot, earlyRunDir, earlyRunIdSafe, earlyLaneId);
+    } catch (err) {
+      process.stderr.write(
+        `warn: [post-tool-use] HK-06 scrub threw (non-fatal): ${
+          err instanceof Error ? err.message : String(err)
+        }\n`,
+      );
+    }
+  }
+  // ── end HK-06 ────────────────────────────────────────────────────────────
+
   const runId = resolveRunId(guildRoot);
   if (typeof runId !== "string" || runId.length === 0) {
     process.stderr.write(

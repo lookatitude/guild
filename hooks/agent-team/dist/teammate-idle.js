@@ -68,7 +68,9 @@ var ALLOWED_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
   "issues",
   "escalate_reason",
   "learnings",
-  "notes"
+  "notes",
+  "injection_clean"
+  // HK-08 additive-optional
 ]);
 function validateHandoffV2(value) {
   const errors = [];
@@ -151,6 +153,14 @@ function validateHandoffV2(value) {
     } else if (obj["notes"].length > NOTES_MAX_CHARS) {
       errors.push(
         `notes exceeds ${NOTES_MAX_CHARS} char cap (O-4 binding resolution): got ${obj["notes"].length} chars`
+      );
+    }
+  }
+  if (obj["injection_clean"] !== void 0) {
+    const validValues = /* @__PURE__ */ new Set(["clean", "flagged", "unverified"]);
+    if (!validValues.has(obj["injection_clean"])) {
+      errors.push(
+        `injection_clean must be one of clean|flagged|unverified; got ${JSON.stringify(obj["injection_clean"])}`
       );
     }
   }

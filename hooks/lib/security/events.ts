@@ -31,10 +31,18 @@ export type SecurityEventType =
   | "bypass_permission_allowed"
   | "mcp_description_mismatch"
   | "mcp_description_unverifiable"
-  | "secret_scrub_failure";
+  | "secret_scrub_failure"
+  /** HK-08: directive/injection language detected in guild.handoff.v2 free-text. */
+  | "injection_attempt_detected"
+  /** HK-06: a durable .guild/ write was blocked because the secret scrub failed (fail-CLOSED). */
+  | "secret_scrub_blocked";
 
 /** The action Guild took for the gated tool call. */
-export type SecurityDecision = "ask" | "deny" | "allow" | "pass";
+export type SecurityDecision = "ask" | "deny" | "allow" | "pass"
+  /** HK-06: write blocked by fail-CLOSED scrub policy. */
+  | "blocked"
+  /** HK-06: telemetry write continued with built-in-redacted content (fail-OPEN). */
+  | "degraded";
 
 /** Runtime shape of a `guild.security_event.v1` record (canonical: contract-map §B-post). */
 export interface SecurityEventV1 {

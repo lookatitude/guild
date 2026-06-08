@@ -2882,6 +2882,9 @@ var crypto = __toESM(require("crypto"));
 // ../scripts/lib/settings-resolver.ts
 var yaml = require_js_yaml2();
 
+// lib/v1.4/redact-log.ts
+var FIELD_SIZE_CAP_BYTES = 4 * 1024;
+
 // lib/run-trace.ts
 function runDir(root, runId) {
   return path2.join(root, ".guild", "runs", runId);

@@ -41,6 +41,8 @@ import * as path from "path";
 import type { HostKind } from "./host-types";
 import { resolveSettings } from "./settings-resolver";
 import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
+import { scrubbedWrite } from "../../hooks/lib/security/scrubbed-write";
+import type { ScrubbedWriteResult, ScrubSurface } from "../../hooks/lib/security/scrubbed-write";
 
 // ── Injected seams (B1 §4) ───────────────────────────────────────────────────
 
@@ -54,6 +56,21 @@ export interface RunLifecycleEnv {
     writeFile(absPath: string, contents: string): void;
     readFile(absPath: string): string | null;
     exists(absPath: string): boolean;
+    /**
+     * HK-06: scrub-then-write for the provenance.json durable surface.
+     * When present, `closeRun` uses this INSTEAD of `writeFile` for provenance.
+     * Fail-CLOSED: on scrub failure the file MUST NOT land on disk.
+     * Tests inject a fake (`{ written: false, blocked: true }` to force-fail).
+     * Real env: wired to `scrubbedWrite(surface:"provenance", ...)` from
+     * hooks/lib/security/scrubbed-write.
+     */
+    scrubbedWriteDurable?(
+      outPath: string,
+      contents: string,
+      surface: ScrubSurface,
+      runDir: string,
+      runId: string,
+    ): ScrubbedWriteResult;
   };
   /**
    * Resolves the host via the host-adapter contract — NEVER Claude-pinned.
@@ -603,7 +620,23 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       };
       if (opts.coverage) provenance.coverage = opts.coverage;
 
-      env.fs.writeFile(provenancePath(root, runId), JSON.stringify(provenance, null, 2) + "\n");
+      // HK-06: route provenance.json through scrubbedWrite (fail-CLOSED).
+      // When the seam is absent (legacy / test env without HK-06), fall through
+      // to the generic writeFile (backward compat — no existing test breaks).
+      const provPath = provenancePath(root, runId);
+      const provenanceContent = JSON.stringify(provenance, null, 2) + "\n";
+      if (env.fs.scrubbedWriteDurable) {
+        const runDir = path.join(root, ".guild", "runs", runId);
+        const result = env.fs.scrubbedWriteDurable(provPath, provenanceContent, "provenance", runDir, runId);
+        if (result.blocked) {
+          process.stderr.write(
+            `[run-lifecycle] WARN: provenance.json write BLOCKED by secret scrub ` +
+              `(fail-CLOSED) for run ${runId}. Security event emitted.\n`,
+          );
+        }
+      } else {
+        env.fs.writeFile(provPath, provenanceContent);
+      }
 
       // Flip run.yaml.status to the terminal value.
       flipRunStatus(env, root, runId, opts.status);
@@ -665,6 +698,16 @@ export function createRealEnv(
       exists(absPath: string): boolean {
         return fsNode.existsSync(absPath);
       },
+      // HK-06: real scrubbedWrite wired for provenance.json (fail-CLOSED).
+      scrubbedWriteDurable(
+        outPath: string,
+        contents: string,
+        surface: ScrubSurface,
+        runDir: string,
+        runId: string,
+      ): ScrubbedWriteResult {
+        return scrubbedWrite(outPath, contents, { surface, runDir, runId });
+      },
     },
     resolveHost,
     __rootHint: root,
@@ -714,10 +757,29 @@ function assertContained(target: string, base: string, label: string): void {
  * Minimal fs surface accepted by writeResolvedSettingsSnapshot and
  * readResolvedSettingsSnapshot. Callers may pass the RunLifecycleEnv.fs seam
  * (in-memory for tests) or omit it to use the real node fs.
+ *
+ * NOTE: mirrors the `scrubbedWriteDurable?` on RunLifecycleEnv.fs so that
+ * startRun can pass `env.fs` directly — createRealEnv wires that field, which
+ * means the resolved-settings.json write is scrubbed on the REAL start-run path.
  */
 export interface ProvenanceFsSeam {
   writeFile(absPath: string, contents: string): void;
   readFile(absPath: string): string | null;
+  /**
+   * HK-06: scrub-then-write for provenance-class files (resolved-settings.json).
+   * When present, `writeResolvedSettingsSnapshot` uses this INSTEAD of `writeFile`.
+   * Fail-CLOSED: on scrub failure the file MUST NOT land on disk.
+   * Signature mirrors RunLifecycleEnv.fs.scrubbedWriteDurable so startRun can
+   * pass env.fs directly (createRealEnv already wires this field).
+   * Tests inject a fake; real seam wires the real `scrubbedWrite`.
+   */
+  scrubbedWriteDurable?(
+    outPath: string,
+    contents: string,
+    surface: ScrubSurface,
+    runDir: string,
+    runId: string,
+  ): ScrubbedWriteResult;
 }
 
 /** Real-fs implementation of ProvenanceFsSeam (used when no seam is injected). */
@@ -733,6 +795,10 @@ function realProvenanceFsSeam(): ProvenanceFsSeam {
       } catch {
         return null;
       }
+    },
+    // HK-06: real scrubbed write wired for resolved-settings.json (fail-CLOSED).
+    scrubbedWriteDurable(outPath: string, contents: string, surface: ScrubSurface, runDir: string, runId: string): ScrubbedWriteResult {
+      return scrubbedWrite(outPath, contents, { surface, runDir, runId });
     },
   };
 }
@@ -791,7 +857,22 @@ export function writeResolvedSettingsSnapshot(
     resolved_at_ref: (resolvedAtRef ?? runId) as unknown as null,
   } satisfies ResolvedSettingsSnapshot;
 
-  fs.writeFile(outPath, JSON.stringify(onDisk, null, 2) + "\n");
+  const serialized = JSON.stringify(onDisk, null, 2) + "\n";
+  // HK-06: route resolved-settings.json through scrubbedWrite.
+  // Uses scrubbedWriteDurable (same seam as RunLifecycleEnv.fs + createRealEnv),
+  // so the real start-run path IS scrubbed — not just injected-seam tests.
+  if (fs.scrubbedWriteDurable) {
+    const runDir = path.join(cwd, ".guild", "runs", runId);
+    const result = fs.scrubbedWriteDurable(outPath, serialized, "config", runDir, runId);
+    if (result.blocked) {
+      process.stderr.write(
+        `[run-lifecycle] WARN: resolved-settings.json write BLOCKED by secret scrub ` +
+          `(fail-CLOSED) for run ${runId}. Security event emitted.\n`,
+      );
+    }
+  } else {
+    fs.writeFile(outPath, serialized);
+  }
   return outPath;
 }
 
