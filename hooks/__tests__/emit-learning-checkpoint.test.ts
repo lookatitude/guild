@@ -20,6 +20,7 @@
  * VC-K7 evidence: nothing auto-promotes; non-`none` only routes to reflections queue.
  */
 
+import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -29,9 +30,15 @@ import {
   ALL_NONE_DECISIONS,
   DECISION_TARGETS,
   VALID_PHASES,
+  VALID_EDGE_TYPES,
+  ALLOWED_NODE_PREFIXES,
+  FORBIDDEN_NODE_PREFIXES,
   type CheckpointPhase,
   type CheckpointDecisions,
+  type KnowledgeLink,
 } from "../emit-learning-checkpoint";
+
+const SCRIPT = path.resolve(__dirname, "../emit-learning-checkpoint.ts");
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -311,6 +318,288 @@ describe("emit-learning-checkpoint — HK-03", () => {
           ],
         }),
       ).toThrow();
+    });
+  });
+
+  // ── D-edge-batch: knowledge-links index append ────────────────────────────
+  // Verifies the new Wave-2 wire: links passed to writeCheckpoint are appended
+  // to `.guild/indexes/knowledge-links.json` (append-only, dedup, VC-K7).
+
+  describe("knowledge-links index append (D-edge-batch)", () => {
+    const LINK_A: KnowledgeLink = {
+      from: `task:${RUN}`,
+      to: "decision:adr-001",
+      type: "decided_by",
+      run_id: RUN,
+    };
+    const LINK_B: KnowledgeLink = {
+      from: "task:other",
+      to: "skill:guild:new-skill",
+      type: "produced",
+      run_id: RUN,
+    };
+
+    function indexPath(r: string): string {
+      return path.join(r, ".guild", "indexes", "knowledge-links.json");
+    }
+    function readIndex(r: string): { schema_version: string; links: KnowledgeLink[] } {
+      return JSON.parse(fs.readFileSync(indexPath(r), "utf8")) as {
+        schema_version: string;
+        links: KnowledgeLink[];
+      };
+    }
+
+    it("writes knowledge-links.json with guild.knowledge_links.v1 schema when links provided", () => {
+      writeCheckpoint({
+        runId: RUN, phase: "development", evidenceRef: "none",
+        guildRoot: root, knowledgeLinksBatch: [LINK_A],
+      });
+      expect(fs.existsSync(indexPath(root))).toBe(true);
+      const idx = readIndex(root);
+      expect(idx.schema_version).toBe("guild.knowledge_links.v1");
+      expect(idx.links).toHaveLength(1);
+      expect(idx.links[0]).toMatchObject({ from: LINK_A.from, to: LINK_A.to, type: LINK_A.type });
+    });
+
+    it("accumulates links across two writeCheckpoint calls (different phases)", () => {
+      writeCheckpoint({
+        runId: RUN, phase: "planning", evidenceRef: "none",
+        guildRoot: root, knowledgeLinksBatch: [LINK_A],
+      });
+      writeCheckpoint({
+        runId: RUN, phase: "development", evidenceRef: "none",
+        guildRoot: root, knowledgeLinksBatch: [LINK_B],
+      });
+      const idx = readIndex(root);
+      expect(idx.links).toHaveLength(2);
+    });
+
+    it("deduplicates by {from,to,type} — same edge in two phases counts once", () => {
+      writeCheckpoint({
+        runId: RUN, phase: "planning", evidenceRef: "none",
+        guildRoot: root, knowledgeLinksBatch: [LINK_A],
+      });
+      // Same {from,to,type}, different run_id — still a dup
+      const dupLink: KnowledgeLink = { ...LINK_A, run_id: "run-other" };
+      writeCheckpoint({
+        runId: RUN, phase: "development", evidenceRef: "none",
+        guildRoot: root, knowledgeLinksBatch: [dupLink],
+      });
+      const idx = readIndex(root);
+      expect(idx.links).toHaveLength(1);
+    });
+
+    it("does NOT create knowledge-links.json when batch is empty (empty no-op, VC-K7)", () => {
+      writeCheckpoint({
+        runId: RUN, phase: "development", evidenceRef: "none",
+        guildRoot: root,
+        // no knowledgeLinksBatch — defaults to []
+      });
+      expect(fs.existsSync(indexPath(root))).toBe(false);
+    });
+
+    it("rejects an edge with a wiki: node — cross-space guard (never-auto-promote, VC-K7)", () => {
+      expect(() =>
+        writeCheckpoint({
+          runId: RUN, phase: "development", evidenceRef: "none",
+          guildRoot: root,
+          knowledgeLinksBatch: [{ from: "task:1", to: "wiki:x", type: "touches", run_id: RUN }],
+        }),
+      ).toThrow();
+      // Index must NOT have been created (validation fires before any write)
+      expect(fs.existsSync(indexPath(root))).toBe(false);
+    });
+
+    it("VALID_EDGE_TYPES has exactly 9 closed entries", () => {
+      expect(VALID_EDGE_TYPES.length).toBe(9);
+    });
+
+    it("rejects an edge with an invalid type before touching the index (closed-9 gate)", () => {
+      expect(() =>
+        writeCheckpoint({
+          runId: RUN, phase: "development", evidenceRef: "none",
+          guildRoot: root,
+          knowledgeLinksBatch: [
+            { from: "a", to: "b", type: "not_a_valid_type" as never, run_id: RUN },
+          ],
+        }),
+      ).toThrow();
+      // Index must NOT have been created
+      expect(fs.existsSync(indexPath(root))).toBe(false);
+    });
+
+    // ── Node-space separation (assertNodePrefixes) ─────────────────────────────
+    // Edges whose from/to uses a forbidden cross-space prefix must be rejected
+    // BEFORE any index write (same closed-set discipline as assertEdgeTypes).
+
+    describe("node-space separation (assertNodePrefixes)", () => {
+      it("rejects an edge with file: prefix on to", () => {
+        expect(() =>
+          writeCheckpoint({
+            runId: RUN, phase: "development", evidenceRef: "none",
+            guildRoot: root,
+            knowledgeLinksBatch: [
+              { from: "task:1", to: "file:src/index.ts", type: "touches", run_id: RUN },
+            ],
+          }),
+        ).toThrow(/file:/);
+        expect(fs.existsSync(indexPath(root))).toBe(false);
+      });
+
+      it("rejects an edge with domain: prefix on to", () => {
+        expect(() =>
+          writeCheckpoint({
+            runId: RUN, phase: "development", evidenceRef: "none",
+            guildRoot: root,
+            knowledgeLinksBatch: [
+              { from: "task:1", to: "domain:auth", type: "touches", run_id: RUN },
+            ],
+          }),
+        ).toThrow(/domain:/);
+        expect(fs.existsSync(indexPath(root))).toBe(false);
+      });
+
+      it("rejects an edge with component: prefix on to", () => {
+        expect(() =>
+          writeCheckpoint({
+            runId: RUN, phase: "development", evidenceRef: "none",
+            guildRoot: root,
+            knowledgeLinksBatch: [
+              { from: "task:1", to: "component:scrubber", type: "touches", run_id: RUN },
+            ],
+          }),
+        ).toThrow(/component:/);
+        expect(fs.existsSync(indexPath(root))).toBe(false);
+      });
+
+      it("rejects an edge with forbidden prefix on from (not just to)", () => {
+        expect(() =>
+          writeCheckpoint({
+            runId: RUN, phase: "development", evidenceRef: "none",
+            guildRoot: root,
+            knowledgeLinksBatch: [
+              { from: "wiki:some-page", to: "decision:adr-001", type: "decided_by", run_id: RUN },
+            ],
+          }),
+        ).toThrow(/wiki:/);
+        expect(fs.existsSync(indexPath(root))).toBe(false);
+      });
+
+      it("rejects an edge with an unknown prefix on from (allowlist — not just denylist)", () => {
+        // "other:x" is not a forbidden prefix but is also not in ALLOWED_NODE_PREFIXES
+        expect(() =>
+          writeCheckpoint({
+            runId: RUN, phase: "development", evidenceRef: "none",
+            guildRoot: root,
+            knowledgeLinksBatch: [
+              { from: "other:x", to: "decision:adr-001", type: "decided_by", run_id: RUN },
+            ],
+          }),
+        ).toThrow();
+        expect(fs.existsSync(indexPath(root))).toBe(false);
+      });
+
+      it("rejects a bare no-prefix node id (allowlist gate)", () => {
+        expect(() =>
+          writeCheckpoint({
+            runId: RUN, phase: "development", evidenceRef: "none",
+            guildRoot: root,
+            knowledgeLinksBatch: [
+              { from: "bare-id", to: "decision:adr-001", type: "decided_by", run_id: RUN },
+            ],
+          }),
+        ).toThrow();
+        expect(fs.existsSync(indexPath(root))).toBe(false);
+      });
+
+      it("accepts edges with all 6 allowed node prefixes without throwing", () => {
+        const validLinks: KnowledgeLink[] = [
+          { from: "task:t1", to: "run:r1", type: "touches", run_id: RUN },
+          { from: "decision:d1", to: "skill:guild:new-skill", type: "decided_by", run_id: RUN },
+          { from: "agent:backend", to: "feature:auth", type: "produced", run_id: RUN },
+        ];
+        expect(() =>
+          writeCheckpoint({
+            runId: RUN, phase: "development", evidenceRef: "none",
+            guildRoot: root,
+            knowledgeLinksBatch: validLinks,
+          }),
+        ).not.toThrow();
+      });
+
+      it("FORBIDDEN_NODE_PREFIXES has exactly 4 entries", () => {
+        expect(FORBIDDEN_NODE_PREFIXES.length).toBe(4);
+      });
+
+      it("ALLOWED_NODE_PREFIXES has exactly 6 entries", () => {
+        expect(ALLOWED_NODE_PREFIXES.length).toBe(6);
+      });
+    });
+  });
+
+  // ── CLI — GUILD_CHECKPOINT_LINKS env wire ─────────────────────────────────
+
+  describe("CLI — GUILD_CHECKPOINT_LINKS wiring", () => {
+    function spawnCLI(
+      r: string,
+      extra: Record<string, string | undefined> = {},
+    ): { status: number | null; stdout: string; stderr: string } {
+      const res = spawnSync("npx", ["tsx", SCRIPT], {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GUILD_RUN_ID: RUN,
+          GUILD_PHASE: "development",
+          GUILD_EVIDENCE_REF: "none",
+          GUILD_CWD: r,
+          ...extra,
+        },
+        timeout: 30000,
+      });
+      return { status: res.status ?? 1, stdout: res.stdout ?? "", stderr: res.stderr ?? "" };
+    }
+
+    it("reads links from GUILD_CHECKPOINT_LINKS and serializes them in the checkpoint YAML", () => {
+      const linksFile = path.join(root, "links.json");
+      const links: KnowledgeLink[] = [
+        { from: `task:${RUN}`, to: "decision:adr-cli", type: "decided_by", run_id: RUN },
+      ];
+      fs.writeFileSync(linksFile, JSON.stringify(links), "utf8");
+
+      const { status } = spawnCLI(root, { GUILD_CHECKPOINT_LINKS: linksFile });
+      expect(status).toBe(0);
+
+      const yamlPath = path.join(root, ".guild", "runs", RUN, "learning", `development-${RUN}.yaml`);
+      const yaml = fs.readFileSync(yamlPath, "utf8");
+      expect(yaml).toContain("decided_by");
+      expect(yaml).not.toContain("knowledge_links_batch: []");
+    });
+
+    it("appends links to knowledge-links.json when GUILD_CHECKPOINT_LINKS is set", () => {
+      const linksFile = path.join(root, "links.json");
+      const links: KnowledgeLink[] = [
+        { from: "run:x", to: "decision:d1", type: "learned_from", run_id: RUN },
+      ];
+      fs.writeFileSync(linksFile, JSON.stringify(links), "utf8");
+
+      spawnCLI(root, { GUILD_CHECKPOINT_LINKS: linksFile });
+
+      const indexFile = path.join(root, ".guild", "indexes", "knowledge-links.json");
+      expect(fs.existsSync(indexFile)).toBe(true);
+      const idx = JSON.parse(fs.readFileSync(indexFile, "utf8")) as { links: KnowledgeLink[] };
+      expect(idx.links.some((l) => l.type === "learned_from")).toBe(true);
+    });
+
+    it("is a safe no-op when GUILD_CHECKPOINT_LINKS is absent (back-compat)", () => {
+      const { status } = spawnCLI(root); // no GUILD_CHECKPOINT_LINKS
+      expect(status).toBe(0);
+
+      const yamlPath = path.join(root, ".guild", "runs", RUN, "learning", `development-${RUN}.yaml`);
+      const yaml = fs.readFileSync(yamlPath, "utf8");
+      expect(yaml).toContain("knowledge_links_batch: []");
+
+      const indexFile = path.join(root, ".guild", "indexes", "knowledge-links.json");
+      expect(fs.existsSync(indexFile)).toBe(false);
     });
   });
 
