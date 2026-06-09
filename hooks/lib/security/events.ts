@@ -35,7 +35,15 @@ export type SecurityEventType =
   /** HK-08: directive/injection language detected in guild.handoff.v2 free-text. */
   | "injection_attempt_detected"
   /** HK-06: a durable .guild/ write was blocked because the secret scrub failed (fail-CLOSED). */
-  | "secret_scrub_blocked";
+  | "secret_scrub_blocked"
+  /**
+   * D-AUDIT / D-RECALL / D-PROBE-recall: a recalled chunk was flagged by the
+   * recall-probe defense and quarantined before reaching the agent context.
+   * Emitted by the recall-time probe path (producer: D-RECALL / D-PROBE-recall
+   * — being scoped by architect). The event type is registered here so the
+   * audit-event family is whole and the host: field (HK-05) is auto-stamped.
+   */
+  | "recall_quarantine";
 
 /** The action Guild took for the gated tool call. */
 export type SecurityDecision = "ask" | "deny" | "allow" | "pass"
@@ -159,4 +167,39 @@ export function appendSecurityEvent(runDir: string, record: SecurityEventV1): bo
 export function resolveRunDir(cwd: string, runId: string, explicitRunDir?: string): string {
   if (typeof explicitRunDir === "string" && explicitRunDir.length > 0) return explicitRunDir;
   return path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+}
+
+/**
+ * Emit a `recall_quarantine` security event to `<runDir>/logs/security-events.jsonl`.
+ * Called by the recall-probe defense path (D-RECALL / D-PROBE-recall) when a
+ * recalled chunk is flagged and quarantined before reaching the agent context.
+ *
+ * `host:` is auto-stamped by `buildSecurityEvent` (HK-05) — no caller action needed.
+ * Best-effort and non-throwing (same contract as `appendSecurityEvent`).
+ * Returns true on a successful write, false otherwise.
+ *
+ * @param runDir  Absolute path to the run directory (same as `appendSecurityEvent`).
+ * @param opts    Recall-quarantine context: run_id is required; others are optional.
+ */
+export function emitRecallQuarantine(
+  runDir: string,
+  opts: {
+    run_id: string;
+    lane_id?: string;
+    detail?: string;
+    dispatch_rung?: string;
+  },
+): boolean {
+  return appendSecurityEvent(
+    runDir,
+    buildSecurityEvent({
+      run_id: opts.run_id,
+      lane_id: opts.lane_id,
+      dispatch_rung: opts.dispatch_rung,
+      event_type: "recall_quarantine",
+      decision: "blocked",
+      tool: "",
+      detail: opts.detail ?? "recalled chunk flagged and quarantined by recall-probe defense.",
+    }),
+  );
 }

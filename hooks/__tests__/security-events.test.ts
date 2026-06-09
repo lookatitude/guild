@@ -10,6 +10,7 @@ import * as path from "path";
 import {
   appendSecurityEvent,
   buildSecurityEvent,
+  emitRecallQuarantine,
   resolveRunDir,
   SECURITY_EVENT_SCHEMA_VERSION,
 } from "../lib/security/events";
@@ -147,6 +148,54 @@ describe("buildSecurityEvent", () => {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
     });
+  });
+});
+
+describe("recall_quarantine event type (D-AUDIT/D-RECALL schema registration)", () => {
+  // Verifies that:
+  //   1. "recall_quarantine" is a valid SecurityEventType (TypeScript would fail to compile
+  //      if it were not — this test is the runtime complement).
+  //   2. `emitRecallQuarantine` writes a well-formed record with host: auto-stamped (HK-05).
+  //   3. The on-disk record carries event_type: "recall_quarantine" and decision: "blocked".
+  let tmp: string;
+  const ORIG_HOST_ID = process.env["GUILD_HOST_ID"];
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-secev-recall-"));
+    process.env["GUILD_HOST_ID"] = "recall-host-7";
+  });
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    if (ORIG_HOST_ID === undefined) delete process.env["GUILD_HOST_ID"];
+    else process.env["GUILD_HOST_ID"] = ORIG_HOST_ID;
+  });
+
+  it("serializes recall_quarantine with host: auto-stamped to disk", () => {
+    const ok = emitRecallQuarantine(tmp, {
+      run_id: "run-recall-1",
+      lane_id: "recall-lane",
+      detail: "chunk scored above injection threshold",
+    });
+    expect(ok).toBe(true);
+    const file = path.join(tmp, "logs", "security-events.jsonl");
+    expect(fs.existsSync(file)).toBe(true);
+    const rec = JSON.parse(fs.readFileSync(file, "utf8").trim()) as Record<string, unknown>;
+    expect(rec.schema_version).toBe("guild.security_event.v1");
+    expect(rec.event_type).toBe("recall_quarantine");
+    expect(rec.decision).toBe("blocked");
+    expect(rec.host).toBe("recall-host-7");
+    expect(rec.lane_id).toBe("recall-lane");
+    expect(typeof rec.detail).toBe("string");
+  });
+
+  it("uses the default detail when none supplied", () => {
+    emitRecallQuarantine(tmp, { run_id: "r" });
+    const rec = JSON.parse(
+      fs.readFileSync(path.join(tmp, "logs", "security-events.jsonl"), "utf8").trim(),
+    ) as Record<string, unknown>;
+    expect(rec.event_type).toBe("recall_quarantine");
+    expect(typeof rec.detail).toBe("string");
+    expect((rec.detail as string).length).toBeGreaterThan(0);
   });
 });
 
