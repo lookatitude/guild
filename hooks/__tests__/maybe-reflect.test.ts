@@ -183,6 +183,87 @@ describe("maybe-reflect.ts — heuristic gate", () => {
   });
 });
 
+// ── HK-04: canonical telemetry reader ────────────────────────────────────────
+// maybe-reflect.ts must read the CANONICAL logs/v1.4-events.jsonl first;
+// fall back to legacy events.ndjson ONLY when canonical is absent.
+describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
+  let tmpDir: string;
+  const stopPayload = JSON.stringify({
+    hook_event_name: "Stop",
+    session_id: "test-run",
+    cwd: "",
+  });
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-reflect-hk04-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"), { recursive: true });
+  });
+
+  afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  it("gate PASSES when events are in canonical logs/v1.4-events.jsonl (no legacy file)", () => {
+    const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
+    const logsDir = path.join(runDir, "logs");
+    fs.mkdirSync(logsDir, { recursive: true });
+    // Write events ONLY to canonical file — legacy events.ndjson absent
+    fs.writeFileSync(
+      path.join(logsDir, "v1.4-events.jsonl"),
+      [SPECIALIST_EVENT, FILE_EDIT_EVENT].join("\n") + "\n",
+      "utf8",
+    );
+
+    const { exitCode, stdout } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("GUILD_REFLECT");
+  });
+
+  it("gate PASSES when only legacy events.ndjson exists (canonical absent — fallback)", () => {
+    // makeRunDir writes to events.ndjson only
+    const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(runDir, "events.ndjson"),
+      [SPECIALIST_EVENT, FILE_EDIT_EVENT].join("\n") + "\n",
+      "utf8",
+    );
+
+    const { exitCode, stdout } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("GUILD_REFLECT");
+  });
+
+  it("canonical takes precedence — gate reads canonical even when legacy also present", () => {
+    const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
+    const logsDir = path.join(runDir, "logs");
+    fs.mkdirSync(logsDir, { recursive: true });
+    // Canonical has passing events; legacy has an error event that would fail the gate
+    fs.writeFileSync(
+      path.join(logsDir, "v1.4-events.jsonl"),
+      [SPECIALIST_EVENT, FILE_EDIT_EVENT].join("\n") + "\n",
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(runDir, "events.ndjson"),
+      [SPECIALIST_EVENT, FILE_EDIT_EVENT, ERROR_EVENT].join("\n") + "\n",
+      "utf8",
+    );
+
+    const { exitCode, stdout } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    // Gate passes because canonical (no error) is used, not legacy (has error)
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("GUILD_REFLECT");
+  });
+});
+
 // v1.3 — F12: maybe-reflect.ts widened to fire on dev-team SubagentStop
 // when all three guards hold:
 //   1. GUILD_ENABLE_DEVTEAM_REFLECT === "1"   (operator opt-in; default off)

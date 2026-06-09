@@ -64,7 +64,7 @@ import {
   resolveRunDir,
   type SecurityEventInput,
 } from "./lib/security/events.js";
-import { readScopeContext, resolveScopeDecision } from "./lib/security/enforce.js";
+import { readScopeContext, readScopeFile, resolveScopeDecision } from "./lib/security/enforce.js";
 import { isMcpTool, verifyMcpDescription } from "./lib/security/mcp-hash-pin.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -476,7 +476,27 @@ function runSecurityEnforcement(payload: PreToolUsePayload, cwd: string): boolea
   const toolName = payload.tool_name ?? "";
   // Pass defaults.allowed_tools as the project-wide capability baseline so
   // enforce.ts unions it with the per-lane GUILD_CAPABILITY_SCOPE (R-020).
-  const scope = readScopeContext(process.env, sec.allowed_tools);
+  let scope = readScopeContext(process.env, sec.allowed_tools);
+
+  // D-CAP file-fallback (belt-and-suspenders): when GUILD_CAPABILITY_SCOPE is
+  // absent from env but GUILD_TASK_ID + GUILD_RUN_ID are set, try to read the
+  // scope from the per-task file written by the orchestrator at dispatch time.
+  // The env-injection path (D-CAP primary) is always tried first; the file path
+  // is a secondary fallback for cross-host SSH or env-injection gaps.
+  if (scope === null) {
+    const envRunId = process.env["GUILD_RUN_ID"];
+    const envTaskId = process.env["GUILD_TASK_ID"];
+    if (
+      typeof envRunId === "string" && envRunId.length > 0 &&
+      typeof envTaskId === "string" && envTaskId.length > 0
+    ) {
+      const scopeFilePath = path.join(
+        resolveGuildRoot(cwd), ".guild", "runs", envRunId, "scope", `${envTaskId}.json`,
+      );
+      scope = readScopeFile(scopeFilePath, sec.allowed_tools);
+    }
+  }
+
   const mcpPinned = isMcpTool(toolName) && sec.tool_description_hashes[toolName] !== undefined;
 
   // Clean fall-through: not a scoped lane AND no pin for this tool ⇒ nothing

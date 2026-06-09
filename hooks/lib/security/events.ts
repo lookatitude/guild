@@ -67,19 +67,47 @@ export interface SecurityEventV1 {
    * (set by the orchestrator at specialist dispatch). Absent for lead-session calls.
    */
   dispatch_rung?: string;
+  /**
+   * HK-05 (D-AUDIT): execution host id for cross-host forensics.
+   * Auto-resolved by `buildSecurityEvent` from:
+   *   GUILD_HOST_ID env  >  GUILD_HOST env (normalised to kind)  >  "claude" (default).
+   * Carried on EVERY security event so audit consumers can correlate events
+   * across hosts (capability_scope_deviation, bypass, secret_scrub_blocked, etc.).
+   */
+  host: string;
 }
 
 /** The version token — single point of coupling to contract-map §B-post. */
 export const SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1" as const;
 
-/** Fields a caller supplies; the writer stamps schema_version + ts + redacts detail. */
-export type SecurityEventInput = Omit<SecurityEventV1, "schema_version" | "ts" | "detail"> & {
+/**
+ * Fields a caller supplies; the writer stamps schema_version, ts, redacts
+ * detail, and auto-resolves `host` from the environment.
+ * Callers may override `host` explicitly (e.g. in tests).
+ */
+export type SecurityEventInput = Omit<SecurityEventV1, "schema_version" | "ts" | "detail" | "host"> & {
   detail?: string;
+  /** Override the auto-resolved host id. Defaults to GUILD_HOST_ID / GUILD_HOST / "claude". */
+  host?: string;
 };
+
+/**
+ * Resolve the current execution host id for security-event attribution (HK-05).
+ * Resolution order: GUILD_HOST_ID env > GUILD_HOST env (normalised) > "claude".
+ * Mirrors the resolution in pre-tool-use.ts / readHostCapability().
+ */
+function resolveHostId(): string {
+  const explicit = (process.env["GUILD_HOST_ID"] ?? "").trim();
+  if (explicit.length > 0) return explicit;
+  const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
+  if (rawHost === "codex" || rawHost === "gemini" || rawHost === "pi") return rawHost;
+  return "claude";
+}
 
 /**
  * Build a fully-formed, redacted `guild.security_event.v1` record. Pure (no
  * I/O) so it is trivially unit-testable.
+ * `host` is auto-stamped from the environment (HK-05) unless overridden by the caller.
  */
 export function buildSecurityEvent(input: SecurityEventInput): SecurityEventV1 {
   const rec: SecurityEventV1 = {
@@ -90,6 +118,7 @@ export function buildSecurityEvent(input: SecurityEventInput): SecurityEventV1 {
     decision: input.decision,
     tool: input.tool,
     detail: redactField(input.detail ?? ""),
+    host: (typeof input.host === "string" && input.host.length > 0) ? input.host : resolveHostId(),
   };
   if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
   if (input.policy !== undefined) rec.policy = input.policy;

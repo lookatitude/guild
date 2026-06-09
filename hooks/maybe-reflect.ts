@@ -101,7 +101,7 @@ async function readStdin(): Promise<string> {
   });
 }
 
-/** Load and parse events.ndjson; returns empty array if missing or unparseable. */
+/** Load and parse an NDJSON telemetry file; returns empty array if missing or unparseable. */
 function loadEvents(eventsFile: string): TelemetryEvent[] {
   if (!fs.existsSync(eventsFile)) return [];
   const content = fs.readFileSync(eventsFile, "utf8");
@@ -472,8 +472,12 @@ async function main(): Promise<void> {
     process.env["GUILD_RUN_ID"] ??
     (sessionId ? `run-${sessionId}` : `run-session-${new Date().toISOString().slice(0, 10)}`);
 
-  // Load telemetry events — always read from the resolved root
-  const eventsFile = path.join(guildRoot, ".guild", "runs", runId, "events.ndjson");
+  // Load telemetry events — canonical logs/v1.4-events.jsonl first (HK-04);
+  // fall back to legacy events.ndjson only when canonical is absent.
+  const eventsRunDir = path.join(guildRoot, ".guild", "runs", runId);
+  const canonicalEventsFile = path.join(eventsRunDir, "logs", "v1.4-events.jsonl");
+  const legacyEventsFile = path.join(eventsRunDir, "events.ndjson");
+  const eventsFile = fs.existsSync(canonicalEventsFile) ? canonicalEventsFile : legacyEventsFile;
   const events = loadEvents(eventsFile);
 
   // v1.3 — F12: branch on hook_event_name. SubagentStop gets the dev-team

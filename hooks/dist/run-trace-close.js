@@ -3105,6 +3105,13 @@ function readSecurityConfig(cwd) {
 var fs3 = __toESM(require("node:fs"));
 var path3 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
+function resolveHostId() {
+  const explicit = (process.env["GUILD_HOST_ID"] ?? "").trim();
+  if (explicit.length > 0) return explicit;
+  const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
+  if (rawHost === "codex" || rawHost === "gemini" || rawHost === "pi") return rawHost;
+  return "claude";
+}
 function buildSecurityEvent(input) {
   const rec = {
     schema_version: SECURITY_EVENT_SCHEMA_VERSION,
@@ -3113,7 +3120,8 @@ function buildSecurityEvent(input) {
     event_type: input.event_type,
     decision: input.decision,
     tool: input.tool,
-    detail: redactField(input.detail ?? "")
+    detail: redactField(input.detail ?? ""),
+    host: typeof input.host === "string" && input.host.length > 0 ? input.host : resolveHostId()
   };
   if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
   if (input.policy !== void 0) rec.policy = input.policy;

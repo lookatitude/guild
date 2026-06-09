@@ -2,8 +2,12 @@
  * hooks/lib/security/enforce.ts
  *
  * PreToolUse capability-scope enforcement core (priority 1 of the v2 security
- * ADR hook-side work). Pure, I/O-free decision logic so the gate is trivially
- * unit-testable; the PreToolUse handler wires this to stdin/stdout + logging.
+ * ADR hook-side work). Decision logic (readScopeContext / resolveScopeDecision /
+ * isInScope etc.) is pure and I/O-free — trivially unit-testable. The one I/O
+ * function is `readScopeFile` (the D-CAP belt-and-suspenders file-fallback);
+ * it is sync, best-effort, and never throws — same discipline as every other
+ * best-effort read in the hook codebase.
+ * PreToolUse handler wires this to stdin/stdout + logging.
  *
  * Model
  * ─────
@@ -40,6 +44,7 @@
  *   bypass + allow    → proceed, log a bypass_permission_allowed record
  */
 
+import * as fs from "node:fs";
 import type { BypassPolicy } from "./config.js";
 import type { SecurityEventType, SecurityDecision } from "./events.js";
 
@@ -168,6 +173,57 @@ export function isInScope(scope: ScopeContext, toolName: string, toolInput: unkn
   if (!inEffectiveCapability) return false;
   if (scope.autonomy !== null && !anyRuleMatches(scope.autonomy, toolName, toolInput)) return false;
   return true;
+}
+
+// ── File-fallback scope reader (D-CAP belt-and-suspenders) ──────────────
+
+/** Expected JSON shape of a per-task scope file. */
+interface ScopeFileContent {
+  capability_scope?: unknown;
+  autonomy_contract?: unknown;
+}
+
+/**
+ * Read the scope context from the per-task scope file on disk. This is the
+ * D-CAP belt-and-suspenders fallback — engaged when `GUILD_CAPABILITY_SCOPE`
+ * is absent from the process env (e.g. cross-host SSH, or any environment
+ * where env-injection is unreliable). The primary path remains the env bag.
+ *
+ * File path (assembled by the caller):
+ *   `<guildRoot>/.guild/runs/<runId>/scope/<taskId>.json`
+ *
+ * Returns null when the file is absent, unreadable, or lacks a
+ * `capability_scope` key — identical fall-through contract as `readScopeContext`.
+ *
+ * @param filePath  Absolute path to the scope JSON file (computed by `pre-tool-use.ts`).
+ * @param baseline  Project-wide baseline allow-list from `defaults.allowed_tools` (R-020).
+ */
+export function readScopeFile(filePath: string, baseline: string[] = []): ScopeContext | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(filePath, "utf8");
+  } catch {
+    return null; // file absent or unreadable — clean fall-through (not a scoped lane)
+  }
+  let parsed: ScopeFileContent;
+  try {
+    parsed = JSON.parse(raw) as ScopeFileContent;
+  } catch {
+    // Malformed JSON in scope file → fail-closed (treat as invalid scope).
+    return { capability: [], autonomy: null, invalid: true, baseline };
+  }
+  if (!("capability_scope" in parsed)) return null; // key absent ⇒ no scoping
+  const capArr = parsed.capability_scope;
+  const capValid =
+    Array.isArray(capArr) && (capArr as unknown[]).every((x) => typeof x === "string");
+  const capability = capValid ? (capArr as string[]) : [];
+  const capInvalid = !capValid;
+  const autonomyArr = parsed.autonomy_contract;
+  const autonomyValid =
+    Array.isArray(autonomyArr) &&
+    (autonomyArr as unknown[]).every((x) => typeof x === "string");
+  const autonomy = autonomyValid ? (autonomyArr as string[]) : null;
+  return { capability, autonomy, invalid: capInvalid, baseline };
 }
 
 // ── Decision resolver ────────────────────────────────────────────────────

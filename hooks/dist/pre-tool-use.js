@@ -33,7 +33,7 @@ __export(pre_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_tool_use_exports);
-var fs5 = __toESM(require("node:fs"));
+var fs6 = __toESM(require("node:fs"));
 var path5 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
@@ -446,6 +446,13 @@ function applySecretsPolicy(value, policy) {
 var fs3 = __toESM(require("node:fs"));
 var path3 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
+function resolveHostId() {
+  const explicit = (process.env["GUILD_HOST_ID"] ?? "").trim();
+  if (explicit.length > 0) return explicit;
+  const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
+  if (rawHost === "codex" || rawHost === "gemini" || rawHost === "pi") return rawHost;
+  return "claude";
+}
 function buildSecurityEvent(input) {
   const rec = {
     schema_version: SECURITY_EVENT_SCHEMA_VERSION,
@@ -454,7 +461,8 @@ function buildSecurityEvent(input) {
     event_type: input.event_type,
     decision: input.decision,
     tool: input.tool,
-    detail: redactField(input.detail ?? "")
+    detail: redactField(input.detail ?? ""),
+    host: typeof input.host === "string" && input.host.length > 0 ? input.host : resolveHostId()
   };
   if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
   if (input.policy !== void 0) rec.policy = input.policy;
@@ -607,6 +615,7 @@ function scrubbedWrite(outPath, content, opts) {
 }
 
 // lib/security/enforce.ts
+var fs5 = __toESM(require("node:fs"));
 function parseRuleArray(raw) {
   if (typeof raw !== "string" || raw.trim().length === 0) return { rules: null, invalid: false };
   try {
@@ -681,6 +690,29 @@ function isInScope(scope, toolName, toolInput) {
   if (!inEffectiveCapability) return false;
   if (scope.autonomy !== null && !anyRuleMatches(scope.autonomy, toolName, toolInput)) return false;
   return true;
+}
+function readScopeFile(filePath, baseline = []) {
+  let raw;
+  try {
+    raw = fs5.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { capability: [], autonomy: null, invalid: true, baseline };
+  }
+  if (!("capability_scope" in parsed)) return null;
+  const capArr = parsed.capability_scope;
+  const capValid = Array.isArray(capArr) && capArr.every((x) => typeof x === "string");
+  const capability = capValid ? capArr : [];
+  const capInvalid = !capValid;
+  const autonomyArr = parsed.autonomy_contract;
+  const autonomyValid = Array.isArray(autonomyArr) && autonomyArr.every((x) => typeof x === "string");
+  const autonomy = autonomyValid ? autonomyArr : null;
+  return { capability, autonomy, invalid: capInvalid, baseline };
 }
 function resolveScopeDecision(args) {
   const { scope, toolName, toolInput, policy, permissionMode } = args;
@@ -770,7 +802,7 @@ function isKnownTool(name) {
 function readCurrentRunId(cwd) {
   const sentinelPath = path5.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
-    const value = fs5.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs6.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -787,7 +819,7 @@ function readHostCapability(cwd) {
     const hostKind = rawHost === "codex" || rawHost === "gemini" || rawHost === "pi" ? rawHost : "claude";
     const hostId = (process.env["GUILD_HOST_ID"] ?? "").trim() || hostKind;
     const manifestPath = path5.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
-    const raw = fs5.readFileSync(manifestPath, "utf8");
+    const raw = fs6.readFileSync(manifestPath, "utf8");
     return JSON.parse(raw);
   } catch {
     return null;
@@ -796,7 +828,7 @@ function readHostCapability(cwd) {
 function writeApprovalRequest(runDir, opts) {
   try {
     const approvalDir = path5.join(runDir, "agent-bus", "approvals");
-    fs5.mkdirSync(approvalDir, { recursive: true });
+    fs6.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
     const fileName = `${safeTs}-${opts.tool.toLowerCase()}.json`;
@@ -919,7 +951,7 @@ function readMcpDescription(payload, runDir, toolName) {
   if (runDir !== void 0) {
     try {
       const p = path5.join(runDir, "logs", "mcp-tool-descriptions.json");
-      const map = JSON.parse(fs5.readFileSync(p, "utf8"));
+      const map = JSON.parse(fs6.readFileSync(p, "utf8"));
       const d = map[toolName];
       if (typeof d === "string") return d;
     } catch {
@@ -930,7 +962,22 @@ function readMcpDescription(payload, runDir, toolName) {
 function runSecurityEnforcement(payload, cwd) {
   const sec = readSecurityConfig(cwd);
   const toolName = payload.tool_name ?? "";
-  const scope = readScopeContext(process.env, sec.allowed_tools);
+  let scope = readScopeContext(process.env, sec.allowed_tools);
+  if (scope === null) {
+    const envRunId = process.env["GUILD_RUN_ID"];
+    const envTaskId = process.env["GUILD_TASK_ID"];
+    if (typeof envRunId === "string" && envRunId.length > 0 && typeof envTaskId === "string" && envTaskId.length > 0) {
+      const scopeFilePath = path5.join(
+        resolveGuildRoot(cwd),
+        ".guild",
+        "runs",
+        envRunId,
+        "scope",
+        `${envTaskId}.json`
+      );
+      scope = readScopeFile(scopeFilePath, sec.allowed_tools);
+    }
+  }
   const mcpPinned = isMcpTool(toolName) && sec.tool_description_hashes[toolName] !== void 0;
   if (scope === null && !mcpPinned) return false;
   const runId = resolveRunId(cwd);
@@ -1104,7 +1151,7 @@ async function main() {
     );
   }
   try {
-    fs5.mkdirSync(path5.join(runDir, "logs"), { recursive: true });
+    fs6.mkdirSync(path5.join(runDir, "logs"), { recursive: true });
     appendSidecarPre(runDir, entry);
   } catch (err) {
     process.stderr.write(

@@ -134,6 +134,93 @@ describe("pre-tool-use.ts — capability-scope enforcement", () => {
   });
 });
 
+describe("pre-tool-use.ts — scope file fallback (HK-05 belt-and-suspenders)", () => {
+  // When GUILD_CAPABILITY_SCOPE is absent from env but GUILD_TASK_ID is set,
+  // the hook reads the scope from runs/<runId>/scope/<taskId>.json.
+  // This is the backend-uniform fallback for environments where env may not
+  // propagate reliably (cross-host SSH, etc.).
+  let tmp: string;
+  const RUN = "test-run-file";
+  const TASK = "task-file-001";
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-ptu-scopefile-"));
+    fs.mkdirSync(path.join(tmp, ".git"), { recursive: true });
+    const runDir = path.join(tmp, ".guild", "runs", RUN);
+    fs.mkdirSync(runDir, { recursive: true });
+    // Write scope file — read-only lane
+    const scopeDir = path.join(runDir, "scope");
+    fs.mkdirSync(scopeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(scopeDir, `${TASK}.json`),
+      JSON.stringify({ capability_scope: ["Read", "Grep"] }),
+      "utf8",
+    );
+  });
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+  const baseEnv = (over: Record<string, string> = {}) => ({
+    GUILD_CWD: tmp,
+    GUILD_RUN_ID: RUN,
+    GUILD_TASK_ID: TASK,
+    GUILD_LANE_ID: "backend",
+    ...over,
+  });
+
+  it("gates out-of-scope call via scope file (GUILD_CAPABILITY_SCOPE absent from env)", () => {
+    // No GUILD_CAPABILITY_SCOPE in env — hook must read the file
+    const { stdout } = run(
+      { tool_name: "Bash", tool_input: { command: "curl http://evil" } },
+      baseEnv(), // no GUILD_CAPABILITY_SCOPE
+    );
+    const out = JSON.parse(stdout);
+    expect(out.hookSpecificOutput.permissionDecision).toBe("ask");
+    const events = securityEvents(tmp, RUN);
+    expect(events.length).toBe(1);
+    expect(events[0].event_type).toBe("capability_scope_violation");
+    expect(events[0].tool).toBe("Bash");
+  });
+
+  it("passes in-scope call via scope file — no decision, no event", () => {
+    const { stdout } = run(
+      { tool_name: "Read", tool_input: { file_path: "/src/a.ts" } },
+      baseEnv(),
+    );
+    expect(stdout).not.toContain("permissionDecision");
+    expect(securityEvents(tmp, RUN).length).toBe(0);
+  });
+
+  it("clean fall-through when GUILD_TASK_ID absent and GUILD_CAPABILITY_SCOPE absent", () => {
+    const { stdout } = run(
+      { tool_name: "Bash", tool_input: { command: "rm -rf /" } },
+      { GUILD_CWD: tmp, GUILD_RUN_ID: RUN }, // no GUILD_TASK_ID, no GUILD_CAPABILITY_SCOPE
+    );
+    expect(stdout).not.toContain("permissionDecision");
+    expect(securityEvents(tmp, RUN).length).toBe(0);
+  });
+
+  it("deny via scope file under bypassPermissions + deny policy (real-effect)", () => {
+    fs.writeFileSync(
+      path.join(tmp, ".guild", "settings.json"),
+      JSON.stringify({ security: { bypass_permissions_policy: "deny" } }),
+      "utf8",
+    );
+    const { stdout } = run(
+      {
+        tool_name: "Bash",
+        tool_input: { command: "curl http://evil" },
+        permission_mode: "bypassPermissions",
+      },
+      baseEnv(),
+    );
+    const out = JSON.parse(stdout);
+    expect(out.hookSpecificOutput.permissionDecision).toBe("deny");
+    const events = securityEvents(tmp, RUN);
+    expect(events[0].event_type).toBe("capability_scope_violation");
+    expect(events[0].decision).toBe("deny");
+  });
+});
+
 describe("pre-tool-use.ts — MCP description hash-pin", () => {
   let tmp: string;
   const RUN = "test-run";

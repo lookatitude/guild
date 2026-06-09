@@ -72,6 +72,82 @@ describe("buildSecurityEvent", () => {
     expect(ev.policy).toBe("deny");
     expect(ev.permission_mode).toBe("bypassPermissions");
   });
+
+  // ── HK-05 (D-AUDIT): host attribution ─────────────────────────────────────
+
+  describe("HK-05: host field is auto-stamped on every security event", () => {
+    const ORIG_HOST_ID = process.env["GUILD_HOST_ID"];
+    const ORIG_HOST    = process.env["GUILD_HOST"];
+
+    afterEach(() => {
+      // Restore env so other tests are not affected
+      if (ORIG_HOST_ID === undefined) {
+        delete process.env["GUILD_HOST_ID"];
+      } else {
+        process.env["GUILD_HOST_ID"] = ORIG_HOST_ID;
+      }
+      if (ORIG_HOST === undefined) {
+        delete process.env["GUILD_HOST"];
+      } else {
+        process.env["GUILD_HOST"] = ORIG_HOST;
+      }
+    });
+
+    it("defaults host to 'claude' when no env vars set", () => {
+      delete process.env["GUILD_HOST_ID"];
+      delete process.env["GUILD_HOST"];
+      const ev = buildSecurityEvent({
+        run_id: "run-1",
+        event_type: "capability_scope_violation",
+        decision: "ask",
+        tool: "Bash",
+      });
+      expect(ev.host).toBe("claude");
+    });
+
+    it("uses GUILD_HOST_ID when set", () => {
+      process.env["GUILD_HOST_ID"] = "codex-host-42";
+      delete process.env["GUILD_HOST"];
+      const ev = buildSecurityEvent({
+        run_id: "run-1",
+        event_type: "secret_scrub_blocked",
+        decision: "blocked",
+        tool: "Write",
+      });
+      expect(ev.host).toBe("codex-host-42");
+    });
+
+    it("resolves GUILD_HOST=codex → host 'codex' when no GUILD_HOST_ID", () => {
+      delete process.env["GUILD_HOST_ID"];
+      process.env["GUILD_HOST"] = "codex";
+      const ev = buildSecurityEvent({
+        run_id: "run-1",
+        event_type: "injection_attempt_detected",
+        decision: "deny",
+        tool: "",
+      });
+      expect(ev.host).toBe("codex");
+    });
+
+    it("host is present on the on-disk JSON record", () => {
+      process.env["GUILD_HOST_ID"] = "test-host-99";
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-secev-host-"));
+      try {
+        const ev = buildSecurityEvent({
+          run_id: "r",
+          event_type: "capability_scope_violation",
+          decision: "ask",
+          tool: "Bash",
+        });
+        appendSecurityEvent(tmp, ev);
+        const line = fs.readFileSync(path.join(tmp, "logs", "security-events.jsonl"), "utf8").trim();
+        const rec = JSON.parse(line) as { host?: string };
+        expect(rec.host).toBe("test-host-99");
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    });
+  });
 });
 
 describe("appendSecurityEvent", () => {

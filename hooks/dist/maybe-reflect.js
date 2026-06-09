@@ -292,7 +292,10 @@ async function main() {
   }
   const sessionId = payload.session_id;
   const runId = process.env["GUILD_RUN_ID"] ?? (sessionId ? `run-${sessionId}` : `run-session-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`);
-  const eventsFile = path2.join(guildRoot, ".guild", "runs", runId, "events.ndjson");
+  const eventsRunDir = path2.join(guildRoot, ".guild", "runs", runId);
+  const canonicalEventsFile = path2.join(eventsRunDir, "logs", "v1.4-events.jsonl");
+  const legacyEventsFile = path2.join(eventsRunDir, "events.ndjson");
+  const eventsFile = fs2.existsSync(canonicalEventsFile) ? canonicalEventsFile : legacyEventsFile;
   const events = loadEvents(eventsFile);
   const hookEvent = payload.hook_event_name ?? "Stop";
   if (hookEvent === "SubagentStop") {
