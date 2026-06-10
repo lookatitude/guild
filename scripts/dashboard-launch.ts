@@ -79,13 +79,11 @@ import { spawn, spawnSync } from "node:child_process";
 export const BENCHMARK_PACKAGE_NAME = "@guild/benchmark";
 
 /**
- * Clone source for the REQUIRED-INSTALL instructions. PLACEHOLDER — the
- * benchmark currently ships as a directory of the guild repo, not a standalone
- * remote; the printed command clones the umbrella repo. Override per-machine
- * with GUILD_BENCHMARK_REPO_URL.
+ * Clone source for the REQUIRED-INSTALL instructions — the benchmark's
+ * standalone remote. Override per-machine with GUILD_BENCHMARK_REPO_URL.
  */
 export const BENCHMARK_REPO_URL_DEFAULT =
-  "https://github.com/lookatitude/guild.git";
+  "https://github.com/lookatitude/guild-benchmark.git";
 
 export const DEFAULT_PORT = 3055;
 /** How many sequential ports to try past the default before giving up. */
