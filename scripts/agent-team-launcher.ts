@@ -196,6 +196,9 @@ function parseYaml(raw: string): TeamYaml {
         // not collapse to mid. Scored tier wins when execute-plan writes it.
         tier: cur.tier ?? cur.default_tier,
         capabilityRequirements: cur.capabilityRequirements, // GAP-A1/ARCH-2 (may be undefined)
+        // D-CAP: thread capability_scope onto the Specialist — undefined when absent
+        // (no restrictions). Populated by applyMapEntry + block-list interceptor above.
+        capability_scope: cur.capability_scope,
       });
     }
     cur = null;
@@ -226,11 +229,27 @@ function parseYaml(raw: string): TeamYaml {
     if (!inSpecialists) continue;
 
     // List item opener:  "  - name: architect"
+    //
+    // D-CAP block-list intercept: if the current specialist has started
+    // collecting capability_scope items (sentinel = []) AND this dash-line
+    // carries a bare string (no key:value colon), it is a block list item for
+    // capability_scope — NOT the start of a new specialist. Append and continue.
+    //
+    // The distinction: "  - name: foo" (key:value) → new specialist.
+    //                  "      - "Read"" (bare string) → block list item.
+    // Guard: /^[A-Za-z0-9_-]+\s*:/ matches any valid YAML key followed by colon.
+    // Tool names like "Read", "Write", "Edit" never contain a colon, so they
+    // safely fall through to the block-list path.
     const itemMatch = /^\s+-\s+(.*)$/.exec(line);
     if (itemMatch) {
+      const rest = itemMatch[1];
+      if (cur && Array.isArray(cur.capability_scope) && !/^[A-Za-z0-9_-]+\s*:/.test(rest)) {
+        // Block list item for capability_scope — append, do NOT flush.
+        cur.capability_scope.push(stripQuotes(rest));
+        continue;
+      }
       flush();
       cur = {};
-      const rest = itemMatch[1];
       applyMapEntry(cur, rest);
       continue;
     }
@@ -318,6 +337,27 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
       };
     }
   }
+  // D-CAP (Wave-3): per-specialist tool allow-list. Supports both YAML shapes
+  // team-compose may emit:
+  //   Block list (team-compose/SKILL.md §"Capability scope defaults"):
+  //     capability_scope:
+  //       - "Read"
+  //       - "Write"
+  //   Flow list (inline):
+  //     capability_scope: ["Read", "Write"]
+  // Block list: this call sets the sentinel [] — the YAML block items (`- "Read"`)
+  // are appended by the block-list interceptor in parseYaml (they match the list-
+  // item opener regex before reaching the continuation handler, so applyMapEntry
+  // never sees them directly).
+  else if (key === "capability_scope") {
+    if (value.startsWith("[")) {
+      // Flow list: parse inline.
+      target.capability_scope = parseFlowList(value);
+    } else {
+      // Block list sentinel: items follow as `- "item"` lines, parsed by parseYaml.
+      target.capability_scope = [];
+    }
+  }
 }
 
 function parseHostKind(value: string): HostKind | undefined {
@@ -366,11 +406,17 @@ interface Manifest {
   // under the lenient-reader rule (no schema_version bump). Existing readers
   // ignore them; resume/telemetry read host_kind from here rather than
   // re-inferring the CLI brand.
+  // D-CAP: `capability_scope` is additive + optional (same lenient-reader rule).
+  // Absent ⇒ no tool restrictions. Populated from Specialist.capability_scope
+  // (parsed from team.yaml's `capability_scope:` block list). Used by the
+  // injection half (paneCommand / composeInProcessDispatch) pending the
+  // env-propagation spike (Wave-3 Step 2).
   teammate_panes: Array<{
     specialist: string;
     pane_id: string;
     host_kind: HostKind;
     adapter_version: string;
+    capability_scope?: string[];
   }>;
   env: Record<string, string>;
 }
@@ -403,6 +449,8 @@ function buildManifest(opts: {
         : realPaneIds?.teammates?.[s.name] ?? "(unknown)",
       host_kind: s.host_kind ?? "claude",
       adapter_version: ADAPTER_VERSION,
+      // D-CAP: capability_scope is additive+optional — undefined is omitted by JSON.stringify.
+      capability_scope: s.capability_scope,
     })),
     env: {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
@@ -899,6 +947,31 @@ async function main(): Promise<void> {
         });
       }
     }
+    // ── D-CAP scope-file writer: write per-task-id scope files BEFORE spawn ──
+    // Closes the "reader-without-writer" gap in the PreToolUse hook file-fallback:
+    // pre-tool-use.ts:488 reads <runDir>/scope/<taskId>.json when GUILD_CAPABILITY_SCOPE
+    // is absent from env (e.g. cross-host SSH or any env where injection is unreliable),
+    // but nothing previously wrote that file. Writing here (inside the pre-routing block,
+    // same task-id resolution as writeTaskRun) guarantees the file is on disk BEFORE any
+    // pane opens via tmux or SSH.  Absent capability_scope → no file (additive,
+    // byte-identical to unscoped behavior — the gate only fires if the file is present).
+    {
+      const runDir = path.join(cwd, ".guild", "runs", runId);
+      for (const spec of team.specialists) {
+        if (spec.capability_scope === undefined) continue;
+        const taskIds = preRoutingOwnerMap.get(spec.name);
+        const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
+        for (const taskId of effectiveTaskIds) {
+          const scopeDir = path.join(runDir, "scope");
+          fs.mkdirSync(scopeDir, { recursive: true });
+          fs.writeFileSync(
+            path.join(scopeDir, `${taskId}.json`),
+            JSON.stringify({ capability_scope: spec.capability_scope, autonomy_contract: null }),
+            "utf8",
+          );
+        }
+      }
+    }
     // Read back from each specialist's representative task_run file and update the
     // in-memory specialist object. planTeamRouting then routes from disk-sourced data.
     //
@@ -920,6 +993,10 @@ async function main(): Promise<void> {
         // W2-A2(d): observable benign fallback — emit degradation signal.
         emitReadbackDegradation(cwd, runId, repTaskId, spec.name);
       }
+      // D-CAP: populate spec.taskId with the representative plan task-id so
+      // composeTmuxCommands / composeInProcessDispatch / RemoteTeamBackend can inject
+      // GUILD_TASK_ID into every spawn env (scope-file locator for the hook fallback).
+      spec.taskId = repTaskId;
     }
   }
 

@@ -102,14 +102,20 @@ export class ClaudePaneAdapter implements PaneAdapter {
   }
 
   command(spec: PaneSpec): string {
-    // Byte-identical to the shipped Claude-only pane command.
-    return paneCommand(spec.prompt, spec.runId);
+    // D-CAP: pass taskId + capability_scope so paneCommand injects GUILD_TASK_ID
+    // (scope-file locator) and optionally GUILD_CAPABILITY_SCOPE (env fast-path).
+    return paneCommand(spec.prompt, spec.runId, spec.capability_scope, spec.taskId);
   }
 
   env(spec: PaneSpec): Record<string, string> {
     return {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
       GUILD_RUN_ID: spec.runId,
+      // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
+      ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
+      ...(spec.capability_scope !== undefined
+        ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
+        : {}),
     };
   }
 
@@ -190,15 +196,32 @@ export class CodexPaneAdapter implements PaneAdapter {
     // Self-contained: export the run id, run `codex exec` with the staging
     // prompt, then keep the pane alive so the operator can inspect handoffs.
     // NO CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS — Codex is not on the Claude bus.
+    // D-CAP: export GUILD_TASK_ID (scope-file locator) and optionally
+    // GUILD_CAPABILITY_SCOPE (env fast-path) so D-CAP enforces on Codex panes.
+    const taskFragment =
+      spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
+    const scopeFragment =
+      spec.capability_scope !== undefined
+        ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; `
+        : "";
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      taskFragment +
+      scopeFragment +
       `codex exec ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
     );
   }
 
   env(spec: PaneSpec): Record<string, string> {
-    return { GUILD_RUN_ID: spec.runId };
+    return {
+      GUILD_RUN_ID: spec.runId,
+      // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
+      ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
+      ...(spec.capability_scope !== undefined
+        ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
+        : {}),
+    };
   }
 
   expectedOutputs(): Array<"heartbeat" | "handoff_receipt" | "approval_request"> {

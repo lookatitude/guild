@@ -1720,4 +1720,228 @@ describe("agent-team-launcher.ts", () => {
     });
   });
 
+  // ─────────────────────────────────────────────────────────────
+  // D-CAP Wave-3: capability_scope block-list parsing
+  //
+  // Verifies that `capability_scope:` YAML block lists in team.yaml are parsed
+  // correctly onto each Specialist and threaded into session.json's teammate_panes.
+  // The gate (pre-tool-use.ts:479) reads GUILD_CAPABILITY_SCOPE; the injection
+  // half (paneCommand / composeInProcessDispatch) is HOLD pending the env-
+  // propagation spike. These tests cover the mechanism-INDEPENDENT threading step:
+  //   1. Parse block list → Specialist.capability_scope (string[]).
+  //   2. Thread onto session.json teammate_panes[*].capability_scope.
+  //   3. Absent field → undefined in manifest (no restrictions, backward-compat).
+  // ─────────────────────────────────────────────────────────────
+  describe("D-CAP: capability_scope block-list parsing (Wave-3)", () => {
+    it("parses capability_scope block lists from team.yaml into session.json teammate_panes", () => {
+      const { teamPath } = setupConsumerRepo(
+        tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
+      );
+      runScript([
+        "--team", teamPath,
+        "--session-name", "guild-dcap-001",
+        "--cwd", tmpDir,
+        "--dry-run",
+      ]);
+      const sessionJson = findSessionJson(tmpDir);
+      expect(sessionJson).not.toBeNull();
+      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+
+      const arch = manifest.teammate_panes.find(
+        (p: { specialist: string }) => p.specialist === "architect"
+      );
+      expect(arch).toBeDefined();
+      expect(arch.capability_scope).toEqual(["Read", "Glob", "Grep"]);
+
+      const back = manifest.teammate_panes.find(
+        (p: { specialist: string }) => p.specialist === "backend"
+      );
+      expect(back).toBeDefined();
+      expect(back.capability_scope).toEqual(["Read", "Write", "Edit", "Bash"]);
+    });
+
+    it("omits capability_scope from teammate_panes when not specified in team.yaml", () => {
+      const { teamPath } = setupConsumerRepo(
+        tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
+      );
+      runScript([
+        "--team", teamPath,
+        "--session-name", "guild-dcap-002",
+        "--cwd", tmpDir,
+        "--dry-run",
+      ]);
+      const sessionJson = findSessionJson(tmpDir);
+      expect(sessionJson).not.toBeNull();
+      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+
+      // qa specialist in the fixture has NO capability_scope → field must be absent
+      const qa = manifest.teammate_panes.find(
+        (p: { specialist: string }) => p.specialist === "qa"
+      );
+      expect(qa).toBeDefined();
+      expect(qa.capability_scope).toBeUndefined();
+    });
+
+    it("preserves other specialist fields (tier, depends-on) alongside capability_scope", () => {
+      const { teamPath } = setupConsumerRepo(
+        tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
+      );
+      runScript([
+        "--team", teamPath,
+        "--session-name", "guild-dcap-003",
+        "--cwd", tmpDir,
+        "--dry-run",
+      ]);
+      const sessionJson = findSessionJson(tmpDir);
+      expect(sessionJson).not.toBeNull();
+      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+
+      // All 3 specialists must appear in the manifest
+      const names = manifest.teammate_panes.map((p: { specialist: string }) => p.specialist);
+      expect(names).toContain("architect");
+      expect(names).toContain("backend");
+      expect(names).toContain("qa");
+      // Standard manifest fields still populated
+      expect(manifest.session_name).toBe("guild-dcap-003");
+      expect(manifest.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBe("1");
+    });
+
+    it("no regression: team.yaml without any capability_scope still parses all specialists", () => {
+      const { teamPath } = setupConsumerRepo(
+        tmpDir, "test-slug", "team-generated-shape.yaml"
+      );
+      runScript([
+        "--team", teamPath,
+        "--session-name", "guild-dcap-004",
+        "--cwd", tmpDir,
+        "--dry-run",
+      ]);
+      const sessionJson = findSessionJson(tmpDir);
+      expect(sessionJson).not.toBeNull();
+      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+
+      expect(manifest.teammate_panes.length).toBe(3);
+      // No capability_scope field on any pane when not present in team.yaml
+      for (const pane of manifest.teammate_panes as Array<{ capability_scope?: unknown }>) {
+        expect(pane.capability_scope).toBeUndefined();
+      }
+    });
+
+    // D-CAP injection: GUILD_CAPABILITY_SCOPE must appear in the dry-run tmux
+    // command output (stdout) for specialists that have capability_scope in team.yaml.
+    it("D-CAP inject: dry-run stdout contains GUILD_CAPABILITY_SCOPE for scoped specialists", () => {
+      const { teamPath } = setupConsumerRepo(
+        tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
+      );
+      const { stdout } = runScript([
+        "--team", teamPath,
+        "--session-name", "guild-dcap-inject-001",
+        "--cwd", tmpDir,
+        "--dry-run",
+      ]);
+      // architect has capability_scope: ["Read","Glob","Grep"] in the fixture
+      expect(stdout).toContain("GUILD_CAPABILITY_SCOPE");
+      expect(stdout).toContain(JSON.stringify(["Read", "Glob", "Grep"]));
+    });
+
+    it("D-CAP inject: dry-run stdout omits GUILD_CAPABILITY_SCOPE for unscoped team", () => {
+      const { teamPath } = setupConsumerRepo(
+        tmpDir, "test-slug", "team-generated-shape.yaml"
+      );
+      const { stdout } = runScript([
+        "--team", teamPath,
+        "--session-name", "guild-dcap-inject-002",
+        "--cwd", tmpDir,
+        "--dry-run",
+      ]);
+      // team-generated-shape.yaml has no capability_scope on any specialist
+      expect(stdout).not.toContain("GUILD_CAPABILITY_SCOPE");
+    });
+
+    // D-CAP scope-file writer: the launcher must write <runDir>/scope/<taskId>.json
+    // BEFORE any pane opens (even in dry-run).  This closes the "reader-without-writer"
+    // gap: pre-tool-use.ts:488 reads the file as the env-absent belt-and-suspenders
+    // fallback; absent ⇒ no file (additive no-scoping).
+
+    it("D-CAP scope-file: writes scope/<taskId>.json for each scoped specialist", () => {
+      const { teamPath } = setupConsumerRepo(
+        tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
+      );
+      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
+
+      const runsDir = path.join(tmpDir, ".guild", "runs");
+      const runIds = fs
+        .readdirSync(runsDir)
+        .filter((d) => fs.statSync(path.join(runsDir, d)).isDirectory());
+      expect(runIds.length).toBe(1);
+      const runDir = path.join(runsDir, runIds[0]);
+
+      // architect: capability_scope: ["Read","Glob","Grep"]
+      const archPath = path.join(runDir, "scope", "architect.json");
+      expect(fs.existsSync(archPath)).toBe(true);
+      expect(JSON.parse(fs.readFileSync(archPath, "utf8")).capability_scope).toEqual(
+        ["Read", "Glob", "Grep"],
+      );
+
+      // backend: capability_scope: ["Read","Write","Edit","Bash"]
+      const backPath = path.join(runDir, "scope", "backend.json");
+      expect(fs.existsSync(backPath)).toBe(true);
+      expect(JSON.parse(fs.readFileSync(backPath, "utf8")).capability_scope).toEqual(
+        ["Read", "Write", "Edit", "Bash"],
+      );
+    });
+
+    it("D-CAP scope-file: does NOT write scope file for specialist without capability_scope", () => {
+      const { teamPath } = setupConsumerRepo(
+        tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
+      );
+      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
+
+      const runsDir = path.join(tmpDir, ".guild", "runs");
+      const runIds = fs
+        .readdirSync(runsDir)
+        .filter((d) => fs.statSync(path.join(runsDir, d)).isDirectory());
+      const runDir = path.join(runsDir, runIds[0]);
+
+      // qa specialist has NO capability_scope in the fixture → no scope file
+      const qaPath = path.join(runDir, "scope", "qa.json");
+      expect(fs.existsSync(qaPath)).toBe(false);
+    });
+
+    it("D-CAP GUILD_TASK_ID: dry-run tmux command contains GUILD_TASK_ID for each specialist", () => {
+      const { teamPath } = setupConsumerRepo(
+        tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
+      );
+      const { stdout } = runScript([
+        "--team", teamPath,
+        "--cwd", tmpDir,
+        "--dry-run",
+      ]);
+      // Each specialist pane command must include GUILD_TASK_ID
+      // (task-id = spec.name fallback when no plan exists)
+      expect(stdout).toContain("GUILD_TASK_ID");
+    });
+
+    it("D-CAP scope-file: writes no scope/ dir for an entirely unscoped team", () => {
+      const { teamPath } = setupConsumerRepo(
+        tmpDir, "test-slug", "team-agent-team.yaml"
+      );
+      runScript([
+        "--team", teamPath,
+        "--session-name", "guild-dcap-scope-003",
+        "--cwd", tmpDir,
+        "--dry-run",
+      ]);
+
+      const runsDir = path.join(tmpDir, ".guild", "runs");
+      const runIds = fs
+        .readdirSync(runsDir)
+        .filter((d) => fs.statSync(path.join(runsDir, d)).isDirectory());
+      // There must be a run (session.json is written in dry-run)
+      expect(runIds.length).toBe(1);
+      const scopeDir = path.join(runsDir, runIds[0], "scope");
+      expect(fs.existsSync(scopeDir)).toBe(false);
+    });
+  });
+
 });

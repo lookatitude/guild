@@ -287,6 +287,47 @@ describe("InProcessTeamBackend — Agent-tool dispatch plan (RE-4 / VC-RE-4)", (
     }
   });
 
+  // D-CAP (Wave-3): GUILD_CAPABILITY_SCOPE injection into in-process descriptor env
+  it("D-CAP: composeInProcessDispatch injects GUILD_CAPABILITY_SCOPE when specialist has capability_scope", () => {
+    const scopedSpecialists = SPECIALISTS.map((s, i) =>
+      i === 0 ? { ...s, capability_scope: ["Read", "Glob"] } : s
+    );
+    const plan = composeInProcessDispatch(req({ specialists: scopedSpecialists }));
+    const scopedDesc = plan.find((d) => d.name === "architect")!;
+    expect(scopedDesc.env.GUILD_CAPABILITY_SCOPE).toBe(JSON.stringify(["Read", "Glob"]));
+    // Other specialists without capability_scope must NOT have the key
+    for (const d of plan.filter((d) => d.name !== "architect")) {
+      expect(d.env.GUILD_CAPABILITY_SCOPE).toBeUndefined();
+    }
+  });
+
+  it("D-CAP: composeInProcessDispatch omits GUILD_CAPABILITY_SCOPE when capability_scope is absent", () => {
+    const plan = composeInProcessDispatch(req());
+    for (const d of plan) {
+      expect(d.env.GUILD_CAPABILITY_SCOPE).toBeUndefined();
+    }
+  });
+
+  // D-CAP GUILD_TASK_ID in composeInProcessDispatch (scope-file locator)
+  it("D-CAP: composeInProcessDispatch injects GUILD_TASK_ID for every specialist", () => {
+    const specialists = SPECIALISTS.map((s, i) => ({ ...s, taskId: `T${i + 1}-${s.name}` }));
+    const plan = composeInProcessDispatch(req({ specialists }));
+    for (const spec of specialists) {
+      const d = plan.find((p) => p.name === spec.name)!;
+      expect(d.env.GUILD_TASK_ID).toBe(spec.taskId);
+    }
+  });
+
+  it("D-CAP: composeInProcessDispatch falls back to spec.name for GUILD_TASK_ID when taskId absent", () => {
+    // When no plan exists, W2-A2 sets taskId = spec.name; this test verifies
+    // the fallback (spec.taskId undefined → env gets spec.name).
+    const plan = composeInProcessDispatch(req()); // SPECIALISTS have no taskId
+    for (const spec of SPECIALISTS) {
+      const d = plan.find((p) => p.name === spec.name)!;
+      expect(d.env.GUILD_TASK_ID).toBe(spec.name);
+    }
+  });
+
   it("emits zero tmux commands / panes: orchestratorPaneId null, teammatePaneIds empty", () => {
     // The backend takes no RunFn — there is no subprocess seam to invoke, so it
     // structurally cannot shell out to tmux. plannedCommands describe Agent()
@@ -484,6 +525,50 @@ describe("pure helpers", () => {
     expect(c).toContain("export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1");
     expect(c).toContain("export GUILD_RUN_ID=run-1");
     expect(c).toContain("exec $SHELL");
+  });
+
+  // D-CAP (Wave-3): GUILD_CAPABILITY_SCOPE injection into tmux pane commands
+  it("D-CAP: paneCommand injects GUILD_CAPABILITY_SCOPE when capability_scope present", () => {
+    const c = paneCommand("hello", "run-1", ["Read", "Write", "Edit"]);
+    expect(c).toContain("GUILD_CAPABILITY_SCOPE");
+    expect(c).toContain(JSON.stringify(["Read", "Write", "Edit"]));
+    // Must come BEFORE the `claude` invocation so the shell sees it at launch
+    const scopeIdx = c.indexOf("GUILD_CAPABILITY_SCOPE");
+    const claudeIdx = c.indexOf("claude ");
+    expect(scopeIdx).toBeLessThan(claudeIdx);
+  });
+
+  it("D-CAP: paneCommand omits GUILD_CAPABILITY_SCOPE when capability_scope is absent", () => {
+    const c = paneCommand("hello", "run-1");
+    expect(c).not.toContain("GUILD_CAPABILITY_SCOPE");
+  });
+
+  // D-CAP GUILD_TASK_ID injection (scope-file locator for the hook file-fallback)
+  it("D-CAP: paneCommand injects GUILD_TASK_ID when taskId present", () => {
+    const c = paneCommand("hello", "run-1", undefined, "T2-backend");
+    expect(c).toContain("GUILD_TASK_ID=");
+    expect(c).toContain("T2-backend");
+    // Must come BEFORE the `claude` invocation
+    const taskIdx = c.indexOf("GUILD_TASK_ID");
+    const claudeIdx = c.indexOf("claude ");
+    expect(taskIdx).toBeLessThan(claudeIdx);
+  });
+
+  it("D-CAP: paneCommand omits GUILD_TASK_ID when taskId is absent", () => {
+    const c = paneCommand("hello", "run-1", ["Read"]);
+    expect(c).not.toContain("GUILD_TASK_ID");
+  });
+
+  it("D-CAP: paneCommand injects both GUILD_TASK_ID and GUILD_CAPABILITY_SCOPE when both present", () => {
+    const c = paneCommand("hello", "run-1", ["Read", "Write"], "T1-architect");
+    expect(c).toContain("GUILD_TASK_ID=");
+    expect(c).toContain("GUILD_CAPABILITY_SCOPE=");
+    // GUILD_TASK_ID must come before GUILD_CAPABILITY_SCOPE (and both before claude)
+    const taskIdx = c.indexOf("GUILD_TASK_ID");
+    const scopeIdx = c.indexOf("GUILD_CAPABILITY_SCOPE");
+    const claudeIdx = c.indexOf("claude ");
+    expect(taskIdx).toBeLessThan(claudeIdx);
+    expect(scopeIdx).toBeLessThan(claudeIdx);
   });
 
   it("composeTmuxCommands free function matches the backend plan output", () => {

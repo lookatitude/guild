@@ -89,6 +89,27 @@ export interface Specialist {
     needs_network?: boolean;
     isolation?: "worktree" | "none";
   };
+  /**
+   * D-CAP (Wave-3 security): per-specialist tool allow-list parsed from
+   * `capability_scope:` in team.yaml (team-compose already writes this field
+   * per SK-1). Injected as GUILD_CAPABILITY_SCOPE env var into the spawned
+   * agent's process; the PreToolUse hook gate (pre-tool-use.ts:479) enforces
+   * it iff the env var is present. Absent ⇒ no tool restrictions (default-open).
+   *
+   * The value from team.yaml is a YAML block list; the launcher parser converts
+   * it to a string[] (same shape as the JSON-serialised env var).
+   */
+  capability_scope?: string[];
+  /**
+   * D-CAP (Wave-3 security): representative plan task-id for this specialist,
+   * populated by the launcher's W2-A2 pre-routing block (same resolution as
+   * writeTaskRun: first plan task-id when the plan exists, spec.name otherwise).
+   * Injected as GUILD_TASK_ID into every spawn env so the PreToolUse hook
+   * file-fallback (pre-tool-use.ts:488-497) can locate the scope file at
+   * `<runDir>/scope/<taskId>.json` when GUILD_CAPABILITY_SCOPE is absent from env.
+   * Absent ⇒ no GUILD_TASK_ID injection (harmless; the file fallback won't fire).
+   */
+  taskId?: string;
 }
 
 // ── PaneAdapter seam (CH-2, cross-host ADR) ──────────────────────────────────
@@ -110,6 +131,18 @@ export interface PaneSpec {
   /** Pre-built staging prompt (from buildPrompt). */
   prompt: string;
   hostKind: HostKind;
+  /**
+   * D-CAP (Wave-3): representative plan task-id for this lane. Injected as
+   * GUILD_TASK_ID into the spawn env so the hook's scope-file fallback can
+   * locate `<runDir>/scope/<taskId>.json` when GUILD_CAPABILITY_SCOPE is absent.
+   */
+  taskId?: string;
+  /**
+   * D-CAP (Wave-3): per-lane tool allow-list. Injected as GUILD_CAPABILITY_SCOPE
+   * (the env fast-path) by adapters that support it. The scope-file fallback is
+   * the primary enforcement mechanism when env-injection is unreliable.
+   */
+  capability_scope?: string[];
 }
 
 /** Result of a pre-spawn binary/credential probe (CH-6 fail-fast). */
@@ -206,9 +239,11 @@ export interface GuildDispatchDescriptor {
    * same `.guild/runs/<run-id>/` path. Deliberately does NOT carry
    * `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`: that gate is tmux-team-spawn-specific;
    * the in-process Agent-tool path is the documented no-tmux dispatch route and
-   * needs no experimental team gate. `GUILD_CAPABILITY_SCOPE` /
-   * `GUILD_AUTONOMY_CONTRACT` are layered by execute-plan at dispatch (omitted
-   * when their source field is absent — dispatch.md §env).
+   * needs no experimental team gate.
+   * D-CAP (Wave-3): `GUILD_CAPABILITY_SCOPE` = JSON.stringify(spec.capability_scope)
+   * is injected HERE (composeInProcessDispatch) when the specialist has a
+   * capability_scope array; absent ⇒ key NOT set (additive no-scoping).
+   * `GUILD_AUTONOMY_CONTRACT` is omitted (pending Wave-3 Step 1 extension).
    */
   env: Record<string, string>;
   /** The staging prompt (from buildPrompt) the dispatched agent receives. */
@@ -333,7 +368,12 @@ export function buildPrompt(
   );
 }
 
-export function paneCommand(prompt: string, runId: string): string {
+export function paneCommand(
+  prompt: string,
+  runId: string,
+  capabilityScope?: string[],
+  taskId?: string,
+): string {
   // The agent-team env var must be exported in every pane (§7.3).
   // GUILD_RUN_ID is also exported so hooks inside the pane converge on the
   // launcher's session manifest path (unified run-id convention with
@@ -343,12 +383,29 @@ export function paneCommand(prompt: string, runId: string): string {
   // unless GUILD_STATUSLINE=1 is set, so specialist panes would otherwise
   // show no status output even when the orchestrator session has opted in.
   // We keep the pane alive after `claude` exits so the user can inspect handoffs.
+  // D-CAP (Wave-3): inject GUILD_TASK_ID so the PreToolUse hook's scope-file
+  // fallback (pre-tool-use.ts:488-497) can locate <runDir>/scope/<taskId>.json
+  // when GUILD_CAPABILITY_SCOPE is absent from env (cross-host SSH + adapter gap).
+  // Absent taskId ⇒ no export (additive; orchestrator pane has no per-lane id).
+  // D-CAP (Wave-3): inject GUILD_CAPABILITY_SCOPE when the specialist has a tool
+  // allow-list parsed from team.yaml. Absent capability_scope ⇒ env var NOT set
+  // (additive no-scoping — backward-compat; the gate always reads absent = open).
+  const taskFragment =
+    taskId !== undefined && taskId.length > 0
+      ? `export GUILD_TASK_ID=${shellQuote(taskId)}; `
+      : "";
   const statuslineFragment =
     process.env["GUILD_STATUSLINE"] === "1" ? `export GUILD_STATUSLINE=1; ` : "";
+  const scopeFragment =
+    capabilityScope !== undefined
+      ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(capabilityScope))}; `
+      : "";
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
     `export GUILD_RUN_ID=${shellQuote(runId)}; ` +
+    taskFragment +
     statuslineFragment +
+    scopeFragment +
     `claude ${shellQuote(prompt)}; ` +
     `exec $SHELL`
   );
@@ -393,7 +450,7 @@ export function composeTmuxCommands(opts: {
   // (spec === null) is pinned to claude regardless (CH-4).
   const commandFor = (spec: Specialist | null): string => {
     const prompt = buildPrompt(slug, runId, spec, teamPath);
-    if (!resolveAdapter) return paneCommand(prompt, runId);
+    if (!resolveAdapter) return paneCommand(prompt, runId, spec?.capability_scope, spec?.taskId);
     const hostKind: HostKind = spec?.host_kind ?? "claude";
     return resolveAdapter(hostKind).command({
       name: spec?.name ?? "orchestrator",
@@ -402,6 +459,10 @@ export function composeTmuxCommands(opts: {
       slug,
       prompt,
       hostKind,
+      // D-CAP: thread task-id + capability_scope so adapters can inject GUILD_TASK_ID
+      // (scope-file locator) and optionally GUILD_CAPABILITY_SCOPE (env fast-path).
+      taskId: spec?.taskId,
+      capability_scope: spec?.capability_scope,
     });
   };
 
@@ -716,7 +777,21 @@ export function composeInProcessDispatch(
     name: spec.name,
     subagentType: spec.name,
     model: null,
-    env: { GUILD_RUN_ID: req.runId },
+    env: {
+      GUILD_RUN_ID: req.runId,
+      // D-CAP (Wave-3): inject GUILD_TASK_ID so the PreToolUse hook's scope-file
+      // fallback can locate <runDir>/scope/<taskId>.json when GUILD_CAPABILITY_SCOPE
+      // is absent. taskId is the plan task-id threaded by the launcher W2-A2 block;
+      // falls back to spec.name when no plan exists (consistent with scope-file writer).
+      GUILD_TASK_ID: spec.taskId ?? spec.name,
+      // D-CAP (Wave-3): inject GUILD_CAPABILITY_SCOPE when the specialist has a
+      // tool allow-list parsed from team.yaml. Absent capability_scope ⇒ key NOT
+      // set (additive no-scoping, backward-compat — gate reads absent = open).
+      // Value = JSON-serialised string[] so the hook can parse with JSON.parse().
+      ...(spec.capability_scope !== undefined
+        ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
+        : {}),
+    },
     prompt: buildPrompt(req.slug, req.runId, spec, req.teamPath), // C13: resolved per-phase path
   }));
 }
@@ -1121,10 +1196,14 @@ export class RemoteTeamBackend implements TeamBackend {
       slug: req.slug,
       prompt,
       hostKind,
+      // D-CAP: thread task-id + capability_scope so adapters (and paneCommand) can
+      // inject GUILD_TASK_ID (scope-file locator) + GUILD_CAPABILITY_SCOPE (fast-path).
+      taskId: spec.taskId,
+      capability_scope: spec.capability_scope,
     };
     const command = this.resolveAdapter
       ? this.resolveAdapter(hostKind).command(paneSpec)
-      : paneCommand(prompt, req.runId);
+      : paneCommand(prompt, req.runId, spec.capability_scope, spec.taskId);
     return { paneSpec, command };
   }
 

@@ -136,14 +136,43 @@ Review/critic work folds into this advisor pass + the existing `guild:review`/`q
 
 ## Capability-scope env injection
 
-Implements the dispatch-side of the v2 security ADR (`docs/knowledge/decisions/v2-security-and-untrusted-content.md` — bound by pointer). Before spawning each lane's ephemeral agent, populate two env vars so the PreToolUse hook (`hooks/lib/security/enforce.ts`) can enforce tool-level isolation:
+Implements the dispatch-side of the v2 security ADR (`docs/knowledge/decisions/v2-security-and-untrusted-content.md` — bound by pointer). This is a **real orchestrator step, not aspirational scoping**: the scope IS published for the lane, the PreToolUse hook (`hooks/lib/security/enforce.ts`) reads it, and an out-of-scope tool call is **blocked**.
 
-- **`GUILD_CAPABILITY_SCOPE`** — Set to `JSON.stringify(lane.capability_scope)` where `lane.capability_scope` is the string array from `team.yaml` for this specialist. **Absent field ⇒ omit the env var entirely** (enforcement does not engage; current behaviour unchanged — no breaking change for existing team.yaml files without the field).
-- **`GUILD_AUTONOMY_CONTRACT`** — Set to a JSON string array of tool-permission rules derived from the plan lane's `autonomy-policy` `may act without asking` entries. These must be in Claude Code's permission-rule grammar (same syntax as `capability_scope` — e.g. `"Bash"`, `"Write"`, `"Read(*)"` — see `hooks/lib/security/enforce.ts` for rule syntax). **Omit when no machine-readable rules can be derived** from the natural-language entries (absent ⇒ no additional AND-masking).
+**Two delivery channels — env fast-path + file backstop (write BOTH).** The enforce hook resolves the lane's scope by reading the env var first (fast-path) and **falling back to a per-task scope file** when the env is absent. Because Agent-env propagation to the spawned hook is **not guaranteed on the subagent / in-process path**, the orchestrator MUST write the scope file too — it is the **backend-uniform** enforcement mechanism (env alone may not reach the hook there; the file always does). Write both; either one present ⇒ enforcement engages.
 
-Both env vars are set **only on the spawned lane agent**, never on the orchestrator process. Enforcement only engages when `GUILD_CAPABILITY_SCOPE` is present — an absent or empty var is a clean fall-through; orchestrator and non-Guild sessions are never affected.
+First, the **env vars**, injected **on the spawned lane agent only** (never the orchestrator process):
 
-Full env injection detail and backend-specific wiring: `dispatch.md §"Capability-scope env injection"`.
+- **`GUILD_CAPABILITY_SCOPE`** = `JSON.stringify(lane.capability_scope)` — the string array read from `team.yaml` for this specialist. **If the lane has no `capability_scope` field ⇒ DO NOT set the env var** (additive no-scoping — byte-identical to current behaviour; no breaking change for team.yaml files without the field).
+- **`GUILD_AUTONOMY_CONTRACT`** = a JSON string array of tool-permission rules derived from the plan lane's `autonomy-policy` `may act without asking` entries, in Claude Code permission-rule grammar (e.g. `"Bash"`, `"Write"`, `"Read(*)"` — syntax per `hooks/lib/security/enforce.ts`). **Omit when no machine-readable rules can be derived** (absent ⇒ no additional AND-masking).
+
+**Per-backend injection (concrete, code-backed):**
+
+- **Subagent / in-process (`agent`) — model-driven path, this skill spawns via `Agent()`:** **write the scope file, then** set the env vars in the spawn `env` map at call time:
+
+  ```ts
+  // (1) FILE BACKSTOP — write before the spawn (backend-uniform; the file path the hook reads).
+  if (lane.capability_scope) {
+    const scopeDir = path.join(runDir, "scope");          // runDir = .guild/runs/<run-id>
+    fs.mkdirSync(scopeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(scopeDir, `${lane.taskId}.json`),         // hook reads runs/<run-id>/scope/<task-id>.json
+      JSON.stringify({ capability_scope: lane.capability_scope, autonomy_contract: autonomyRules ?? null }),
+    );
+  }
+  // (2) ENV — inject on the spawn env. GUILD_RUN_ID + GUILD_TASK_ID are REQUIRED for the hook to
+  //     locate the scope file (it resolves the path from these); GUILD_CAPABILITY_SCOPE is the fast-path.
+  const env = { ...descriptorEnv };                       // carries GUILD_RUN_ID (in-process: descriptor.env)
+  env.GUILD_RUN_ID = runId;
+  env.GUILD_TASK_ID = lane.taskId;                        // ← without this the file backstop is unlocatable
+  if (lane.capability_scope) env.GUILD_CAPABILITY_SCOPE = JSON.stringify(lane.capability_scope);
+  if (autonomyRules?.length)  env.GUILD_AUTONOMY_CONTRACT = JSON.stringify(autonomyRules);
+  Agent({ subagent_type: lane.owner, model: resolvedModel, prompt, env });
+  ```
+
+  **Absent `capability_scope` ⇒ write no file AND set no `GUILD_CAPABILITY_SCOPE`** (additive no-scoping; byte-identical to current). Still set `GUILD_RUN_ID`/`GUILD_TASK_ID` (they're harmless run-context, not scope) — but with no file and no scope env, the hook's `scope === null` clean fall-through applies. Omit each scope env key / the `autonomy_contract` value whose source field is absent — never set an empty/`"undefined"` value. The scope file is keyed by the lane's **task-id**, matching the hook's read path `.guild/runs/<run-id>/scope/<task-id>.json` (`hooks/pre-tool-use.ts` — it resolves that path from `GUILD_RUN_ID` + `GUILD_TASK_ID`).
+- **Team / tmux (`team`) and remote:** the **launcher** (`scripts/agent-team-launcher.ts`) writes the **same scope file** + does the per-pane env injection (tooling-owned) — this skill does not touch pane env/file. Same path, same JSON shape; one contract across backends.
+
+Enforcement engages when **either** the env var **or** the scope file is present — both absent is a clean fall-through; the orchestrator and non-Guild sessions are never affected. Full backend-specific wiring: `dispatch.md §"Capability-scope env injection"` and `dispatch.md §"In-process dispatchPlan consumption"`.
 
 ## §task§agent lifecycle
 
