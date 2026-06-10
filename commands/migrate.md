@@ -49,6 +49,22 @@ classification=v1 action=migrated
 
 No `.guild/` artifacts are written in `dry-run` or `skip` mode.
 
+## Run-start preflight (settings-control-and-tmux U3/U6)
+
+Before the migration begins — and before run-trace start — run the preflight
+(`scripts/lib/runstart-preflight.ts`; canonical contract in
+`guild.md §Run-start preflight`):
+
+1. Call `runStartPreflight({ cwd, flags? })` — resolves the 7-source
+   inheritance chain + validates + probes tmux + detects providers
+   (full chain: see `/guild:guild §Run-start preflight`).
+2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
+   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   on NO continue with the resolved backend.
+3. Pass `result.snapshot` to `startRun` — U6 writes
+   `.guild/runs/<id>/resolved-settings.json` + `settings_ref` in `run.yaml`.
+4. Proceed to run-trace start.
+
 ## Run recording
 
 Before the converter is invoked, start a lightweight run (SC-B, §435):

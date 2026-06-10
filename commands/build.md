@@ -64,7 +64,8 @@ pointer).
 bundles), `.guild/runs/<run-id>/handoffs/*.md` (`guild.handoff_receipt.v1`),
 `.guild/runs/<run-id>/assumptions.md`, `.guild/runs/<run-id>/review.md`,
 `.guild/runs/<run-id>/review/G-lane:<task-id>/` (G-lane broker trail per lane),
-`.guild/runs/<run-id>/agent-bus/events.ndjson`, changed files.
+`.guild/runs/<run-id>/agent-bus/events.ndjson`,
+`.guild/runs/<run-id>/verify.md` (`guild:verify-done`), changed files.
 
 PCR-Development must-exist floor: `.guild/context/<run-id>/…`,
 `.guild/runs/<run-id>/handoffs/…`, `assumptions.md`, `review.md`,
@@ -160,10 +161,11 @@ security-review per-lane adversarial loop) around the lane's primary writer.
 Input gate: an approved `.guild/plan/<slug>.md` + the current phase's
 `.guild/team/<slug>.<phase>.yaml` (legacy `<slug>.yaml` honored when no
 per-phase file exists).
-Output gate: handoff receipts, `assumptions.md`, `review.md`, changed files.
+Output gate: handoff receipts, `assumptions.md`, `review.md`, `verify.md`,
+changed files.
 Confirmation gates (from **Gates**): autonomy contract (set at plan approval)
-**A** · destructive / network ops **I always** (never relaxed by
-`--auto-approve`).
+**A** · G-lane review **A** · destructive / network ops **I always** (never
+relaxed by `--auto-approve`).
 
 Thin phase entrypoint — phase logic and `.guild/` writes live in the phase
 skill set.
