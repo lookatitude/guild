@@ -121,6 +121,31 @@ describe("ClaudePaneAdapter", () => {
     expect(bad.ok).toBe(false);
     expect(bad.message).toMatch(/claude/);
   });
+
+  // D-CAP (Wave-3 security): GUILD_TASK_ID locates the scope file written by the launcher.
+  // The hook (pre-tool-use.ts:487-494) reads <runDir>/scope/<taskId>.json when
+  // GUILD_CAPABILITY_SCOPE is absent from env — it needs GUILD_TASK_ID to find the file.
+  it("D-CAP: command exports GUILD_TASK_ID when taskId is present", () => {
+    const c = adapter.command(spec({ taskId: "task-arch-001" }));
+    expect(c).toContain("export GUILD_TASK_ID=task-arch-001");
+    // GUILD_TASK_ID must appear BEFORE `claude` so it is set on entry
+    expect(c.indexOf("GUILD_TASK_ID")).toBeLessThan(c.indexOf("claude "));
+  });
+
+  it("D-CAP: command does not export GUILD_TASK_ID when taskId is absent", () => {
+    const c = adapter.command(spec()); // no taskId in spec()
+    expect(c).not.toContain("GUILD_TASK_ID");
+  });
+
+  it("D-CAP: env includes GUILD_TASK_ID when taskId is present (scope-file locatable)", () => {
+    const e = adapter.env(spec({ taskId: "task-arch-001" }));
+    expect(e["GUILD_TASK_ID"]).toBe("task-arch-001");
+  });
+
+  it("D-CAP: env does not include GUILD_TASK_ID when taskId is absent (regression anchor)", () => {
+    const e = adapter.env(spec()); // no taskId → no key
+    expect(e).not.toHaveProperty("GUILD_TASK_ID");
+  });
 });
 
 describe("CodexPaneAdapter", () => {
@@ -214,6 +239,35 @@ describe("CodexPaneAdapter", () => {
     }).preflight();
     expect(r.ok).toBe(true);
     expect(r.message).toContain("/custom/codex/auth.json");
+  });
+
+  // D-CAP (Wave-3 security): Codex panes need GUILD_TASK_ID so the hook file-fallback
+  // (pre-tool-use.ts:487-494) can locate <runDir>/scope/<taskId>.json.
+  it("D-CAP: command exports GUILD_TASK_ID when taskId is present", () => {
+    const adapter = new CodexPaneAdapter({ env: { OPENAI_API_KEY: "sk-x" } });
+    const c = adapter.command(spec({ hostKind: "codex", taskId: "task-sec-001" }));
+    expect(c).toContain("export GUILD_TASK_ID=task-sec-001");
+    // GUILD_TASK_ID must appear BEFORE `codex exec`
+    expect(c.indexOf("GUILD_TASK_ID")).toBeLessThan(c.indexOf("codex exec"));
+  });
+
+  it("D-CAP: command does not export GUILD_TASK_ID when taskId is absent", () => {
+    const adapter = new CodexPaneAdapter({ env: { OPENAI_API_KEY: "sk-x" } });
+    const c = adapter.command(spec({ hostKind: "codex" }));
+    expect(c).not.toContain("GUILD_TASK_ID");
+  });
+
+  it("D-CAP: env includes GUILD_TASK_ID when taskId is present (scope-file locatable)", () => {
+    const adapter = new CodexPaneAdapter({ env: {} });
+    const e = adapter.env(spec({ hostKind: "codex", taskId: "task-sec-001" }));
+    expect(e["GUILD_TASK_ID"]).toBe("task-sec-001");
+  });
+
+  it("D-CAP: env does not include GUILD_TASK_ID when taskId is absent (regression anchor)", () => {
+    const adapter = new CodexPaneAdapter({ env: {} });
+    const e = adapter.env(spec({ hostKind: "codex" })); // no taskId
+    expect(e).not.toHaveProperty("GUILD_TASK_ID");
+    expect(e).toEqual({ GUILD_RUN_ID: "run-001" });
   });
 });
 
