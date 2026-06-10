@@ -339,6 +339,7 @@ For each round (1-indexed, up to the resolved cap):
    config). If `review_required == false`, resolve `status: "skipped"` and pass
    the gate **without** entering the round loop — this is the **only** clean
    skip. Everything below runs only when review IS required.
+   > **`risk≥high` auto-engage (SK-11) — design trigger, signal-dependent in v2.0.** The `risk≥high` arm is part of the broker contract (`docs/v2/09 §The review broker`), but v2.0 ships **no automatic risk-scoring** — there is no `risk` key in resolved settings and no run-level risk computation. So `risk≥high` engages **only when a risk signal is explicitly supplied** (a spec/plan-declared risk level or an operator flag); absent that signal, the broker auto-engages via `review:cross` (which `--rigor=deep` implies) or project config. This is **accepted-as-is for v2.0** (low severity): the trigger is wired and honored *when a risk signal exists*; automatic risk-scoring that would make `risk≥high` fire on its own is a follow-up, not a v2.0 gap. Do not imply the broker auto-detects risk today.
 1. **Read the codex-skip sentinel** (see § above); under `block` enforcement
    with `blocked: true`, halt before resolving hosts.
 2. Resolve author/reviewer hosts; assert reviewer family ≠ author family. **No

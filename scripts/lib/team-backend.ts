@@ -1107,11 +1107,26 @@ export class SshRemoteTransport implements RemoteTransport {
   }
 
   /**
-   * Deliver the task brief to the pane's inbox on the remote host. §CH-3 is
-   * file-based, so this writes the payload (base64'd to dodge shell-quoting)
-   * into a transport-owned inbox keyed by the handle id. RESIDUAL: shared-FS
-   * mount vs ssh-push and the exact bus path are an operator/topology choice
-   * validated live.
+   * Deliver the task brief to the pane's inbox on the remote host.  §CH-3 is
+   * file-based: the payload (base64'd to dodge shell-quoting) is written to a
+   * transport-owned staging area on the remote machine.
+   *
+   * TE-10 ACCEPT — why `~/.guild/inbox/` rather than `.guild/runs/<id>/agent-bus/`:
+   *
+   *   The canonical agent-bus path requires a repo root to exist at a known path
+   *   on the remote host.  SSH targets may not have the same repo checked out at
+   *   the same absolute path, so any path that depends on `remoteRepoRoot` cannot
+   *   be assumed.  `~/.guild/inbox/` is a home-dir staging area that is writable
+   *   on any POSIX host regardless of repo topology.
+   *
+   *   `runId` is available in `RemoteTeamBackend.launch()` but threading it into
+   *   `send()` only makes sense once `remoteRepoRoot` is also known.
+   *
+   *   Enabling condition (migrate to canonical agent-bus path):
+   *     1. Add `remoteRepoRoot: string` to `SshRemoteTransportOpts` (operator config).
+   *     2. Store `runId` on `RemotePaneHandle` (threaded from `launch()`).
+   *     3. Switch inbox to `${remoteRepoRoot}/.guild/runs/${handle.runId}/agent-bus/`.
+   *     4. Gate on `remoteRepoRoot` being set; keep home-dir inbox as fallback.
    */
   send(handle: RemotePaneHandle, payload: string): void {
     const b64 = Buffer.from(payload, "utf8").toString("base64");

@@ -711,12 +711,38 @@ function readSecurityConfig(cwd) {
 var fs3 = __toESM(require("node:fs"));
 var path3 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
+var KNOWN_GUILD_HOST_KINDS = [
+  "claude",
+  // Claude Code (reference impl)
+  "codex",
+  // OpenAI Codex CLI
+  "gemini",
+  // Google Gemini CLI
+  "pi",
+  // Pi (Inflection AI)
+  "antigravity-2",
+  // Antigravity 2.0
+  "claude-code-desktop",
+  // Claude Code Desktop app
+  "claude-code-web",
+  // Claude Code Web (cloud VM)
+  "codex-app",
+  // Codex desktop app
+  "claude-ai-connector"
+  // claude.ai connector (remote MCP control plane)
+];
+function resolveHostResolution(env) {
+  const explicit = (env["GUILD_HOST_ID"] ?? "").trim();
+  if (explicit.length > 0) return { id: explicit, degraded: false, rawUnknown: "" };
+  const rawHost = (env["GUILD_HOST"] ?? "").trim().toLowerCase();
+  if (rawHost.length === 0) return { id: "claude", degraded: false, rawUnknown: "" };
+  if (KNOWN_GUILD_HOST_KINDS.includes(rawHost)) {
+    return { id: rawHost, degraded: false, rawUnknown: "" };
+  }
+  return { id: "claude", degraded: true, rawUnknown: rawHost };
+}
 function resolveHostId() {
-  const explicit = (process.env["GUILD_HOST_ID"] ?? "").trim();
-  if (explicit.length > 0) return explicit;
-  const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
-  if (rawHost === "codex" || rawHost === "gemini" || rawHost === "pi") return rawHost;
-  return "claude";
+  return resolveHostResolution(process.env).id;
 }
 function buildSecurityEvent(input) {
   const rec = {

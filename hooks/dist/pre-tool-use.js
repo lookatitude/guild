@@ -446,12 +446,38 @@ function applySecretsPolicy(value, policy) {
 var fs3 = __toESM(require("node:fs"));
 var path3 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
+var KNOWN_GUILD_HOST_KINDS = [
+  "claude",
+  // Claude Code (reference impl)
+  "codex",
+  // OpenAI Codex CLI
+  "gemini",
+  // Google Gemini CLI
+  "pi",
+  // Pi (Inflection AI)
+  "antigravity-2",
+  // Antigravity 2.0
+  "claude-code-desktop",
+  // Claude Code Desktop app
+  "claude-code-web",
+  // Claude Code Web (cloud VM)
+  "codex-app",
+  // Codex desktop app
+  "claude-ai-connector"
+  // claude.ai connector (remote MCP control plane)
+];
+function resolveHostResolution(env) {
+  const explicit = (env["GUILD_HOST_ID"] ?? "").trim();
+  if (explicit.length > 0) return { id: explicit, degraded: false, rawUnknown: "" };
+  const rawHost = (env["GUILD_HOST"] ?? "").trim().toLowerCase();
+  if (rawHost.length === 0) return { id: "claude", degraded: false, rawUnknown: "" };
+  if (KNOWN_GUILD_HOST_KINDS.includes(rawHost)) {
+    return { id: rawHost, degraded: false, rawUnknown: "" };
+  }
+  return { id: "claude", degraded: true, rawUnknown: rawHost };
+}
 function resolveHostId() {
-  const explicit = (process.env["GUILD_HOST_ID"] ?? "").trim();
-  if (explicit.length > 0) return explicit;
-  const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
-  if (rawHost === "codex" || rawHost === "gemini" || rawHost === "pi") return rawHost;
-  return "claude";
+  return resolveHostResolution(process.env).id;
 }
 function buildSecurityEvent(input) {
   const rec = {
@@ -1044,6 +1070,16 @@ function runSecurityEnforcement(payload, cwd) {
     );
     return true;
   };
+  const hostRes = resolveHostResolution(process.env);
+  if (hostRes.degraded) {
+    emit({
+      event_type: "capability_scope_degrade",
+      decision: "degraded",
+      tool: "",
+      detail: `Host resolution degraded (HK-10): GUILD_HOST="${hostRes.rawUnknown}" is not a recognized canonical host kind \u2014 defaulted to "claude". Security-event host: fields in this session may be misattributed. Set GUILD_HOST_ID or use a canonical GUILD_HOST value.`,
+      permission_mode: permissionMode
+    });
+  }
   if (scope !== null) {
     const d = resolveScopeDecision({
       scope,

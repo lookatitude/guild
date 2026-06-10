@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // agent-team/task-created.ts
-var fs3 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
 
 // lib/guild-root.ts
@@ -67,11 +67,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path4 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path4), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path4)) return;
+  const path5 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path5), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path5)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path4, "wx");
+    const fd = (0, import_node_fs.openSync)(path5, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -203,6 +203,45 @@ function markLaneInProgress(runDir, init, laneId, opts = {}) {
   });
 }
 
+// lib/bus-emit.ts
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+var BUS_EVENT_SCHEMA_VERSION = "guild.agent_bus_event.v1";
+function buildBusEvent(input) {
+  const rec = {
+    schema_version: BUS_EVENT_SCHEMA_VERSION,
+    ts: (/* @__PURE__ */ new Date()).toISOString(),
+    run_id: input.run_id,
+    event: input.event
+  };
+  if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
+  if (typeof input.task_id === "string" && input.task_id.length > 0) rec.task_id = input.task_id;
+  if (typeof input.team_name === "string" && input.team_name.length > 0) {
+    rec.team_name = input.team_name;
+  }
+  if (typeof input.detail === "string" && input.detail.length > 0) rec.detail = input.detail;
+  return rec;
+}
+function emitBusEvent(runDir, input) {
+  try {
+    const busDir = path3.join(runDir, "agent-bus");
+    fs3.mkdirSync(busDir, { recursive: true });
+    const record = buildBusEvent(input);
+    fs3.appendFileSync(
+      path3.join(busDir, "events.ndjson"),
+      JSON.stringify(record) + "\n",
+      "utf8"
+    );
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [bus-emit] write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+
 // agent-team/task-created.ts
 function die(reason) {
   process.stderr.write(`[task-created] BLOCKED: ${reason}
@@ -218,13 +257,13 @@ function extractDependsOn(text) {
   return Array.from(matches, (m) => m[1].trim());
 }
 function loadPlanTaskIds(cwd) {
-  const planDir = path3.join(resolveGuildRoot(cwd), ".guild", "plan");
-  if (!fs3.existsSync(planDir)) return null;
-  const files = fs3.readdirSync(planDir).filter((f) => f.endsWith(".md"));
+  const planDir = path4.join(resolveGuildRoot(cwd), ".guild", "plan");
+  if (!fs4.existsSync(planDir)) return null;
+  const files = fs4.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   if (files.length === 0) return null;
   const ids = /* @__PURE__ */ new Set();
   for (const file of files) {
-    const content = fs3.readFileSync(path3.join(planDir, file), "utf8");
+    const content = fs4.readFileSync(path4.join(planDir, file), "utf8");
     const patterns = [
       /\bid:\s*(task-[\w-]+)/gi,
       /^\s*[-*]\s*(task-[\w-]+):/gim,
@@ -277,7 +316,7 @@ async function main() {
     const planIds = loadPlanTaskIds(cwd);
     if (planIds === null) {
       warn(
-        `Task "${taskId}" has depends-on references [${deps.join(", ")}] but no plan file found at ${path3.join(resolveGuildRoot(cwd), ".guild/plan/")}. Skipping dependency check.`
+        `Task "${taskId}" has depends-on references [${deps.join(", ")}] but no plan file found at ${path4.join(resolveGuildRoot(cwd), ".guild/plan/")}. Skipping dependency check.`
       );
     } else {
       const missing = deps.filter((d) => !planIds.has(d.toLowerCase()));
@@ -289,11 +328,11 @@ async function main() {
     }
   }
   const runId = process.env["GUILD_RUN_ID"] || `run-${payload.session_id ?? "unknown"}`;
-  const runDir = path3.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runDir = path4.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   try {
     markLaneInProgress(runDir, { runId }, taskId);
     process.stderr.write(
-      `[task-created] run-state: lane "${taskId}" \u2192 in_progress (${path3.join(runDir, "run-state.json")}).
+      `[task-created] run-state: lane "${taskId}" \u2192 in_progress (${path4.join(runDir, "run-state.json")}).
 `
     );
   } catch (err) {
@@ -302,6 +341,13 @@ async function main() {
 `
     );
   }
+  emitBusEvent(runDir, {
+    run_id: runId,
+    event: "dispatched",
+    lane_id: owner,
+    task_id: taskId,
+    team_name: (payload.team_name ?? "").trim() || void 0
+  });
   process.stderr.write(
     `[task-created] OK: task "${taskId}" owned by "${owner}" passed all validations.
 `

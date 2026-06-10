@@ -61,6 +61,7 @@ import { scrubbedWrite } from "./lib/security/scrubbed-write.js";
 import {
   appendSecurityEvent,
   buildSecurityEvent,
+  resolveHostResolution,
   resolveRunDir,
   type SecurityEventInput,
 } from "./lib/security/events.js";
@@ -593,6 +594,26 @@ function runSecurityEnforcement(payload: PreToolUsePayload, cwd: string): boolea
     );
     return true;
   };
+
+  // HK-10: if the execution host is unrecognized, emit an observable degradation
+  // event NOW so the attribution gap is on disk. Fired at most once per
+  // security-enforcement session (only when enforcement is actually active, i.e.
+  // we didn't early-exit above). The tool call is NOT blocked — this is purely
+  // an audit signal.
+  const hostRes = resolveHostResolution(process.env);
+  if (hostRes.degraded) {
+    emit({
+      event_type: "capability_scope_degrade",
+      decision: "degraded",
+      tool: "",
+      detail:
+        `Host resolution degraded (HK-10): GUILD_HOST="${hostRes.rawUnknown}" is not a ` +
+        `recognized canonical host kind — defaulted to "claude". Security-event host: ` +
+        `fields in this session may be misattributed. Set GUILD_HOST_ID or use a ` +
+        `canonical GUILD_HOST value.`,
+      permission_mode: permissionMode,
+    });
+  }
 
   // 1. Capability-scope (only for a declared scoped lane).
   if (scope !== null) {

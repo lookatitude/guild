@@ -46,12 +46,15 @@ export type WaveStatus = "pending" | "active" | "completed" | "failed";
 export type ProgramStatus = "active" | "completed" | "paused" | "aborted";
 
 export interface Wave {
-  wave: number;
+  /** TE-04 canonical rename: `wave_index` (was `wave`). Reader: ARCH-8. */
+  wave_index: number;
   name: string;
   status: WaveStatus;
   run_id: string | null;
   started_at: string | null;
   completed_at: string | null;
+  /** Optional narrative handed off at wave boundary (skills/meta writes this). */
+  handoff_summary?: string | null;
 }
 
 export interface RunManifest {
@@ -66,14 +69,15 @@ export interface RunManifest {
   waves: Wave[];
 }
 
-/** Partial wave update accepted by upsertWave (only `wave` is required). */
+/** Partial wave update accepted by upsertWave (only `wave_index` is required). */
 export interface WavePatch {
-  wave: number;
+  wave_index: number;
   name?: string;
   status?: WaveStatus;
   run_id?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
+  handoff_summary?: string | null;
 }
 
 // ── Paths ──────────────────────────────────────────────────────────────────────
@@ -93,18 +97,18 @@ export function readRunManifest(cwd: string, slug: string): RunManifest | null {
   }
 }
 
-/** Recompute the resume point: lowest wave (by number) not yet completed. */
+/** Recompute the resume point: lowest wave_index not yet completed. */
 function computeCurrentWave(waves: Wave[]): number | null {
   if (waves.length === 0) return null;
-  const sorted = [...waves].sort((a, b) => a.wave - b.wave);
+  const sorted = [...waves].sort((a, b) => a.wave_index - b.wave_index);
   const pending = sorted.find((w) => w.status !== "completed");
   // All complete → point at the last wave (nothing left to resume, but stable).
-  return pending ? pending.wave : sorted[sorted.length - 1].wave;
+  return pending ? pending.wave_index : sorted[sorted.length - 1]!.wave_index;
 }
 
 export function writeRunManifest(cwd: string, manifest: RunManifest): string {
   // Keep waves sorted + current_wave consistent on every write.
-  manifest.waves.sort((a, b) => a.wave - b.wave);
+  manifest.waves.sort((a, b) => a.wave_index - b.wave_index);
   manifest.current_wave = computeCurrentWave(manifest.waves);
   const out = manifestPathFor(cwd, manifest.slug);
   fs.mkdirSync(path.dirname(out), { recursive: true });
@@ -153,15 +157,16 @@ export function initRunManifest(
 export function upsertWave(cwd: string, slug: string, patch: WavePatch): RunManifest {
   const manifest = readRunManifest(cwd, slug) ?? initRunManifest(cwd, slug);
   const now = new Date().toISOString();
-  let wave = manifest.waves.find((w) => w.wave === patch.wave);
+  let wave = manifest.waves.find((w) => w.wave_index === patch.wave_index);
   if (!wave) {
     wave = {
-      wave: patch.wave,
-      name: patch.name ?? `wave-${patch.wave}`,
+      wave_index: patch.wave_index,
+      name: patch.name ?? `wave-${patch.wave_index}`,
       status: patch.status ?? "pending",
       run_id: patch.run_id ?? null,
       started_at: patch.started_at ?? null,
       completed_at: patch.completed_at ?? null,
+      handoff_summary: patch.handoff_summary ?? null,
     };
     manifest.waves.push(wave);
   } else {
@@ -170,6 +175,7 @@ export function upsertWave(cwd: string, slug: string, patch: WavePatch): RunMani
     if (patch.run_id !== undefined) wave.run_id = patch.run_id;
     if (patch.started_at !== undefined) wave.started_at = patch.started_at;
     if (patch.completed_at !== undefined) wave.completed_at = patch.completed_at;
+    if (patch.handoff_summary !== undefined) wave.handoff_summary = patch.handoff_summary;
   }
 
   // Auto-stamp lifecycle timestamps (only when not explicitly supplied).
@@ -211,10 +217,12 @@ interface CliArgs {
   slug: string | null;
   init: boolean;
   title?: string;
+  /** Parsed from `--wave <n>`; stored as the `wave_index` value in the manifest. */
   wave?: number;
   waveName?: string;
   waveStatus?: WaveStatus;
   runId?: string;
+  handoffSummary?: string;
   status?: ProgramStatus;
   show: boolean;
 }
@@ -240,6 +248,7 @@ function parseArgs(argv: string[]): CliArgs {
       const v = argv[++i];
       if (WAVE_STATUSES.has(v as WaveStatus)) out.waveStatus = v as WaveStatus;
     } else if (a === "--run-id" && argv[i + 1]) out.runId = argv[++i];
+    else if (a === "--handoff-summary" && argv[i + 1]) out.handoffSummary = argv[++i];
     else if (a === "--status" && argv[i + 1]) {
       const v = argv[++i];
       if (PROGRAM_STATUSES.has(v as ProgramStatus)) out.status = v as ProgramStatus;
@@ -268,10 +277,11 @@ function main(): void {
     }
     if (args.wave !== undefined) {
       manifest = upsertWave(args.cwd, args.slug, {
-        wave: args.wave,
+        wave_index: args.wave,
         name: args.waveName,
         status: args.waveStatus,
         run_id: args.runId,
+        handoff_summary: args.handoffSummary,
       });
     }
     if (args.status !== undefined) {

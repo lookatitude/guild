@@ -262,6 +262,14 @@ function slugify(s: string): string {
  * FROM: .guild/wiki/[glob: md files]
  * Emits: decision : wiki page (learned_from), wiki page existence (for
  *        component/wiki edges to land in the same doc).
+ *
+ * Also re-derives 3 of the closed-9 edge types that the per-phase
+ * LearningCheckpoint appends incrementally (NN#8 — W3 builder coverage):
+ *   supersedes — decision page frontmatter `supersedes: <previous-slug>`
+ *   decided_by — decision page frontmatter `task: <task-id>` (a decision
+ *                was decided_by the task/run that captured it; complement
+ *                to the provenance-level derivation in collectRunEdges)
+ *   resolves   — decision page frontmatter `resolves: <open-question-id>`
  */
 function collectWikiEdges(root: string, runId: string): KnowledgeLink[] {
   const wikiDir = path.join(root, ".guild", "wiki");
@@ -281,6 +289,35 @@ function collectWikiEdges(root: string, runId: string): KnowledgeLink[] {
       const decSlug = yamlVal(raw, "slug") ?? slug;
       const decId = `decision:${decSlug}`;
       links.push({ from: decId, to: wikiId, type: "learned_from", run_id: runId });
+
+      // ── W3 edge re-derivation ──────────────────────────────────────────────
+
+      // supersedes: decision page supersedes a previous decision (NN#8 W3)
+      const supersedesVal = yamlVal(raw, "supersedes");
+      if (supersedesVal && supersedesVal !== "null") {
+        const supId = supersedesVal.startsWith("decision:")
+          ? supersedesVal
+          : `decision:${slugify(supersedesVal)}`;
+        links.push({ from: decId, to: supId, type: "supersedes", run_id: runId });
+      }
+
+      // decided_by: the task/run that captured this decision decided_by it (NN#8 W3)
+      // Canonical source: the decision page's `task:` frontmatter field.
+      const taskVal = yamlVal(raw, "task");
+      if (taskVal && taskVal !== "null") {
+        const taskId = taskVal.startsWith("task:") ? taskVal : `task:${taskVal}`;
+        links.push({ from: decId, to: taskId, type: "decided_by", run_id: runId });
+      }
+
+      // resolves: decision resolves a tracked open question (NN#8 W3)
+      // Canonical source: the decision page's `resolves:` frontmatter field.
+      const resolvesVal = yamlVal(raw, "resolves");
+      if (resolvesVal && resolvesVal !== "null") {
+        const oqId = resolvesVal.startsWith("open_question:")
+          ? resolvesVal
+          : `open_question:${resolvesVal}`;
+        links.push({ from: decId, to: oqId, type: "resolves", run_id: runId });
+      }
     }
   }
   return links;
@@ -496,9 +533,14 @@ function collectRunEdges(root: string, builderRunId: string): KnowledgeLink[] {
         }
 
         // decisions : run (constrains); decisions are refs (NN#1 — no bodies)
+        // Also: decision decided_by run — re-derives the `decided_by` closed-9
+        // edge type from provenance (NN#8 W3 builder coverage). The decision
+        // node was captured during this run, so the run is the canonical source
+        // for "who made this decision".
         for (const d of touched.decisions ?? []) {
           const decId = d.startsWith("decision:") ? d : `decision:${slugify(d)}`;
           links.push({ from: decId, to: runNodeId, type: "constrains", run_id: builderRunId });
+          links.push({ from: decId, to: runNodeId, type: "decided_by", run_id: builderRunId });
         }
 
         // run : components/features (touches)

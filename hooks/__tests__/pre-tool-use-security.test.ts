@@ -2,9 +2,12 @@
  * hooks/__tests__/pre-tool-use-security.test.ts
  *
  * Integration tests for the v2 security enforcement wired into pre-tool-use.ts.
- * Spawns the hook with a fixture PreToolUse payload on stdin + the scope env,
- * and asserts the emitted permission decision + the security-events.jsonl
- * sidecar.
+ * Spawns the COMPILED DIST (`dist/pre-tool-use.js`) — the same binary that
+ * hooks.json invokes at runtime — so these tests exercise the REAL execution
+ * path, not the TypeScript source (D-CAP-test-dist fix).
+ *
+ * The dist must be rebuilt (`npm run build` in hooks/) whenever source changes
+ * before running these tests. CI rebuilds first; locally, run `npm run build`.
  *
  * Proves each enforcement path FIRES end-to-end (verify-done evidence):
  *   - no capability scope ⇒ clean fall-through (no decision)
@@ -18,13 +21,15 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 
-const SCRIPT = path.resolve(__dirname, "../pre-tool-use.ts");
+// D-CAP-test-dist: point at the compiled dist — this is exactly what hooks.json invokes.
+// If this path doesn't exist, run `npm run build` in hooks/ first.
+const SCRIPT = path.resolve(__dirname, "../dist/pre-tool-use.js");
 
 function run(
   payload: object,
   env: Record<string, string>,
 ): { exitCode: number; stdout: string; stderr: string } {
-  const result = spawnSync("npx", ["tsx", SCRIPT], {
+  const result = spawnSync("node", [SCRIPT], {
     input: JSON.stringify(payload),
     encoding: "utf8",
     env: { ...process.env, ...env },
@@ -218,6 +223,59 @@ describe("pre-tool-use.ts — scope file fallback (HK-05 belt-and-suspenders)", 
     const events = securityEvents(tmp, RUN);
     expect(events[0].event_type).toBe("capability_scope_violation");
     expect(events[0].decision).toBe("deny");
+  });
+});
+
+describe("pre-tool-use.ts — HK-10 unknown-host degradation event", () => {
+  // When GUILD_HOST is set to a value outside the 9-host canonical set,
+  // a capability_scope_degrade event with decision: "degraded" must be
+  // written to disk so the attribution gap is observable in audit logs.
+  let tmp: string;
+  const RUN = "test-run-hk10";
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-ptu-hk10-"));
+    fs.mkdirSync(path.join(tmp, ".git"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, ".guild", "runs", RUN), { recursive: true });
+  });
+  afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+  it("emits capability_scope_degrade + decision:degraded when GUILD_HOST is unrecognized", () => {
+    const { stdout } = run(
+      { tool_name: "Bash", tool_input: { command: "curl http://x" } },
+      {
+        GUILD_CWD: tmp,
+        GUILD_RUN_ID: RUN,
+        GUILD_LANE_ID: "backend",
+        GUILD_CAPABILITY_SCOPE: '["Read"]',
+        GUILD_HOST: "unknown-ai-fork", // not in the 9-host canonical set
+      },
+    );
+    const out = JSON.parse(stdout);
+    // The out-of-scope call is still gated (the ask decision fires)
+    expect(out.hookSpecificOutput.permissionDecision).toBe("ask");
+    // A degradation event MUST also be on disk
+    const events = securityEvents(tmp, RUN);
+    const degrade = events.find((e) => e.event_type === "capability_scope_degrade" && e.decision === "degraded");
+    expect(degrade).toBeDefined();
+    expect(typeof degrade!.detail).toBe("string");
+    expect((degrade!.detail as string)).toContain("unknown-ai-fork");
+  });
+
+  it("does NOT emit a degradation event when GUILD_HOST is a known canonical kind", () => {
+    run(
+      { tool_name: "Bash", tool_input: { command: "curl http://x" } },
+      {
+        GUILD_CWD: tmp,
+        GUILD_RUN_ID: RUN,
+        GUILD_LANE_ID: "backend",
+        GUILD_CAPABILITY_SCOPE: '["Read"]',
+        GUILD_HOST: "codex", // canonical — no degradation
+      },
+    );
+    const events = securityEvents(tmp, RUN);
+    const degrade = events.find((e) => e.event_type === "capability_scope_degrade" && e.decision === "degraded");
+    expect(degrade).toBeUndefined();
   });
 });
 

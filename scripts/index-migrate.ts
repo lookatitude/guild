@@ -153,6 +153,29 @@ const MIGRATIONS: Migration[] = [
 
       // wiki_fts: attempt FTS5 (SQLite ≥ 3.9 + FTS5 extension); fall back
       // to a plain table if FTS5 is unavailable in the linked SQLite build.
+      //
+      // TE-16 ACCEPT — self-contained vs external-content FTS5:
+      //
+      //   This creates a SELF-CONTAINED FTS5 table: content is stored directly
+      //   inside the index.  The alternative, external-content FTS5
+      //   (`content='wiki_files'`), would store content in a separate backing
+      //   table and let `chunks_vec` (vector chunk embeddings) share that table
+      //   via rowid JOIN, enabling additive recall from a single content source.
+      //
+      //   External-content FTS5 is NOT needed until `chunks_vec` is introduced.
+      //   Self-contained FTS5 satisfies all current BM25 recall requirements and
+      //   requires no backing-table migration.  This is a deliberate deferral.
+      //
+      //   Enabling condition (migrate to external-content FTS5):
+      //     When `chunks_vec` is added (v2.x target), add a new migration version:
+      //     1. Create `wiki_files` backing table (path TEXT PK, title TEXT, content TEXT).
+      //     2. Migrate rows: INSERT INTO wiki_files SELECT path, title, content FROM wiki_fts.
+      //     3. DROP TABLE wiki_fts; then recreate as external-content:
+      //          CREATE VIRTUAL TABLE wiki_fts USING fts5(
+      //            content='wiki_files', content_rowid='rowid',
+      //            path UNINDEXED, title, content, tokenize='porter ascii'
+      //          );
+      //     4. `chunks_vec` can then JOIN on wiki_files.rowid.
       try {
         db.exec(`
           CREATE VIRTUAL TABLE wiki_fts USING fts5(

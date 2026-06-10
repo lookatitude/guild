@@ -100,16 +100,69 @@ export type SecurityEventInput = Omit<SecurityEventV1, "schema_version" | "ts" |
 };
 
 /**
- * Resolve the current execution host id for security-event attribution (HK-05).
- * Resolution order: GUILD_HOST_ID env > GUILD_HOST env (normalised) > "claude".
- * Mirrors the resolution in pre-tool-use.ts / readHostCapability().
+ * The 9 canonical host kinds Guild's host-adapter contract supports (HK-10).
+ * Mirrors `HostKind` in `scripts/lib/host-types.ts` — update both when adding
+ * a new host (extend the union there first, then add the string here).
+ */
+export const KNOWN_GUILD_HOST_KINDS = [
+  "claude",               // Claude Code (reference impl)
+  "codex",                // OpenAI Codex CLI
+  "gemini",               // Google Gemini CLI
+  "pi",                   // Pi (Inflection AI)
+  "antigravity-2",        // Antigravity 2.0
+  "claude-code-desktop",  // Claude Code Desktop app
+  "claude-code-web",      // Claude Code Web (cloud VM)
+  "codex-app",            // Codex desktop app
+  "claude-ai-connector",  // claude.ai connector (remote MCP control plane)
+] as const;
+
+/**
+ * Result of host-id resolution with degradation detection (HK-10).
+ * Callers that need to emit an observable degradation event check `degraded`.
+ */
+export interface HostResolution {
+  /** Resolved host id to stamp on the security event. Defaults to "claude". */
+  id: string;
+  /**
+   * True when GUILD_HOST was set to an unrecognized value (not in the 9-host
+   * canonical set). The `id` is still "claude" (safe default) but the mismatch
+   * should be observable on disk so audit consumers know the attribution may be
+   * wrong. Pre-tool-use.ts emits a `capability_scope_degrade` event when true.
+   */
+  degraded: boolean;
+  /** The unrecognized raw GUILD_HOST value. Non-empty only when degraded=true. */
+  rawUnknown: string;
+}
+
+/**
+ * Resolve the execution host from an env bag with full degradation detection.
+ * Resolution order:
+ *   1. GUILD_HOST_ID env (explicit, any string) → id=value, degraded=false
+ *   2. GUILD_HOST env matched against the 9-host canonical set → id=host, degraded=false
+ *   3. GUILD_HOST env set but NOT in canonical set → id="claude", degraded=true
+ *   4. GUILD_HOST absent/empty → id="claude", degraded=false
+ *
+ * Exported for callers that need to detect and emit degradation (HK-10).
+ * `buildSecurityEvent` uses this via the internal `resolveHostId()` wrapper.
+ */
+export function resolveHostResolution(env: NodeJS.ProcessEnv): HostResolution {
+  const explicit = (env["GUILD_HOST_ID"] ?? "").trim();
+  if (explicit.length > 0) return { id: explicit, degraded: false, rawUnknown: "" };
+  const rawHost = (env["GUILD_HOST"] ?? "").trim().toLowerCase();
+  if (rawHost.length === 0) return { id: "claude", degraded: false, rawUnknown: "" };
+  if ((KNOWN_GUILD_HOST_KINDS as readonly string[]).includes(rawHost)) {
+    return { id: rawHost, degraded: false, rawUnknown: "" };
+  }
+  // GUILD_HOST set but not a recognized canonical host kind → safe default + flag.
+  return { id: "claude", degraded: true, rawUnknown: rawHost };
+}
+
+/**
+ * Internal: resolve the host id for stamping onto a security event record.
+ * Wraps resolveHostResolution so buildSecurityEvent stays a one-liner.
  */
 function resolveHostId(): string {
-  const explicit = (process.env["GUILD_HOST_ID"] ?? "").trim();
-  if (explicit.length > 0) return explicit;
-  const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
-  if (rawHost === "codex" || rawHost === "gemini" || rawHost === "pi") return rawHost;
-  return "claude";
+  return resolveHostResolution(process.env).id;
 }
 
 /**

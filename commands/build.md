@@ -132,7 +132,12 @@ where `depends-on:` allows; `[lane-id]` re-runs one), invoke in order:
    specialist using the backend locked in at intake
    (`snapshot.effective.agent_mode` from `readResolvedSettingsSnapshot`) and
    collect the handoff receipt at
-   `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`.
+   `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`. Each lane runs as
+   an **ephemeral one-agent-per-task §task§agent** — spawn at the resolved tier
+   → work → extract `guild.handoff.v2` learnings → dismiss; no agent is shared
+   across tasks or left idle (orthogonal to the `agent_mode` backend ladder).
+   Full lifecycle bound by pointer to `execute-plan §"§task§agent lifecycle"`
+   (CMD-003).
 2b. **G-lane gate** (`guild:review-broker`, gate `G-lane`) — fires after
     `guild:execute-plan` writes each lane's handoff receipt and before the
     next lane dispatches (or before `guild:review` for the final lane).

@@ -55,6 +55,7 @@ import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
 import { validateHandoffV2, extractHandoffEnvelope } from "../lib/handoff-v2.js";
 import { assessLiveness, readHeartbeatTimeoutMs, Liveness } from "../lib/heartbeat.js";
+import { emitBusEvent } from "../lib/bus-emit.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -400,6 +401,17 @@ async function main(): Promise<void> {
 
   // Emit nudge to stdout (orchestrator consumes it)
   process.stdout.write(composeNudge(ctx));
+
+  // Emit idle bus event (SK-5 / CMD-007: agent-bus producer). Best-effort — never blocks.
+  emitBusEvent(runDir, {
+    run_id: runId,
+    event: "idle",
+    lane_id: teammate,
+    team_name: teamName !== "unknown" ? teamName : undefined,
+    detail: ctx.pendingTaskIds.length > 0
+      ? `pending tasks: [${ctx.pendingTaskIds.join(", ")}]`
+      : undefined,
+  });
 
   // Always exit 0 — no exit-code gating
   process.exit(0);

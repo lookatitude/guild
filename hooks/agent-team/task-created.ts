@@ -45,6 +45,7 @@ import * as path from "path";
 import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
 import { markLaneInProgress } from "../lib/run-state.js";
+import { emitBusEvent } from "../lib/bus-emit.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -196,7 +197,16 @@ async function main(): Promise<void> {
     );
   }
 
-  // All validations passed
+  // All validations passed — emit bus event (SK-5 / CMD-007: agent-bus producer).
+  // Best-effort: a write failure logs a warning and never blocks the task.
+  emitBusEvent(runDir, {
+    run_id: runId,
+    event: "dispatched",
+    lane_id: owner,
+    task_id: taskId,
+    team_name: (payload.team_name ?? "").trim() || undefined,
+  });
+
   process.stderr.write(
     `[task-created] OK: task "${taskId}" owned by "${owner}" passed all validations.\n`
   );

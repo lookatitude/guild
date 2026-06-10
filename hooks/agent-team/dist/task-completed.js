@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // agent-team/task-completed.ts
-var fs7 = __toESM(require("fs"));
-var path7 = __toESM(require("path"));
+var fs8 = __toESM(require("fs"));
+var path8 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
 
 // lib/guild-root.ts
@@ -223,11 +223,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path8 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path8), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path8)) return;
+  const path9 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path9), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path9)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path8, "wx");
+    const fd = (0, import_node_fs.openSync)(path9, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -529,12 +529,38 @@ function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
 
 // lib/security/events.ts
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
+var KNOWN_GUILD_HOST_KINDS = [
+  "claude",
+  // Claude Code (reference impl)
+  "codex",
+  // OpenAI Codex CLI
+  "gemini",
+  // Google Gemini CLI
+  "pi",
+  // Pi (Inflection AI)
+  "antigravity-2",
+  // Antigravity 2.0
+  "claude-code-desktop",
+  // Claude Code Desktop app
+  "claude-code-web",
+  // Claude Code Web (cloud VM)
+  "codex-app",
+  // Codex desktop app
+  "claude-ai-connector"
+  // claude.ai connector (remote MCP control plane)
+];
+function resolveHostResolution(env) {
+  const explicit = (env["GUILD_HOST_ID"] ?? "").trim();
+  if (explicit.length > 0) return { id: explicit, degraded: false, rawUnknown: "" };
+  const rawHost = (env["GUILD_HOST"] ?? "").trim().toLowerCase();
+  if (rawHost.length === 0) return { id: "claude", degraded: false, rawUnknown: "" };
+  if (KNOWN_GUILD_HOST_KINDS.includes(rawHost)) {
+    return { id: rawHost, degraded: false, rawUnknown: "" };
+  }
+  return { id: "claude", degraded: true, rawUnknown: rawHost };
+}
 function resolveHostId() {
-  const explicit = (process.env["GUILD_HOST_ID"] ?? "").trim();
-  if (explicit.length > 0) return explicit;
-  const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
-  if (rawHost === "codex" || rawHost === "gemini" || rawHost === "pi") return rawHost;
-  return "claude";
+  return resolveHostResolution(process.env).id;
 }
 function buildSecurityEvent(input) {
   const rec = {
@@ -815,6 +841,45 @@ function scrubbedWrite(outPath, content, opts) {
   return { written: false, blocked: true };
 }
 
+// lib/bus-emit.ts
+var fs7 = __toESM(require("node:fs"));
+var path7 = __toESM(require("node:path"));
+var BUS_EVENT_SCHEMA_VERSION = "guild.agent_bus_event.v1";
+function buildBusEvent(input) {
+  const rec = {
+    schema_version: BUS_EVENT_SCHEMA_VERSION,
+    ts: (/* @__PURE__ */ new Date()).toISOString(),
+    run_id: input.run_id,
+    event: input.event
+  };
+  if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
+  if (typeof input.task_id === "string" && input.task_id.length > 0) rec.task_id = input.task_id;
+  if (typeof input.team_name === "string" && input.team_name.length > 0) {
+    rec.team_name = input.team_name;
+  }
+  if (typeof input.detail === "string" && input.detail.length > 0) rec.detail = input.detail;
+  return rec;
+}
+function emitBusEvent(runDir, input) {
+  try {
+    const busDir = path7.join(runDir, "agent-bus");
+    fs7.mkdirSync(busDir, { recursive: true });
+    const record = buildBusEvent(input);
+    fs7.appendFileSync(
+      path7.join(busDir, "events.ndjson"),
+      JSON.stringify(record) + "\n",
+      "utf8"
+    );
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [bus-emit] write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+
 // agent-team/task-completed.ts
 var REQUIRED_FIELDS = [
   "changed_files",
@@ -832,10 +897,10 @@ function deriveRunId(sessionId) {
   return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
 }
 function receiptPath(guildRoot, runId, specialist, taskId) {
-  return path7.join(guildRoot, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
+  return path8.join(guildRoot, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
 }
 function learningsPath(guildRoot, runId, specialist, taskId) {
-  return path7.join(guildRoot, ".guild", "runs", runId, "learnings", `${specialist}-${taskId}.json`);
+  return path8.join(guildRoot, ".guild", "runs", runId, "learnings", `${specialist}-${taskId}.json`);
 }
 function missingFields(content) {
   return REQUIRED_FIELDS.filter((field) => {
@@ -894,7 +959,7 @@ function persistRunState(runDir, runId, specialist, taskId, status, tier, depend
   try {
     const patch = {
       status,
-      receipt_ref: path7.join("handoffs", `${specialist}-${taskId}.md`)
+      receipt_ref: path8.join("handoffs", `${specialist}-${taskId}.md`)
     };
     if (tier !== void 0) patch.tier = tier;
     if (dependsOn.length > 0) patch.depends_on = dependsOn;
@@ -911,7 +976,7 @@ function persistRunState(runDir, runId, specialist, taskId, status, tier, depend
   }
 }
 function runStatePathHint(runDir) {
-  return path7.join(runDir, "run-state.json");
+  return path8.join(runDir, "run-state.json");
 }
 function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialist, taskId) {
   const sec = readSecurityConfig(guildRoot);
@@ -919,7 +984,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
   if (scrubResult.ok) {
     let rewriteOk = false;
     try {
-      fs7.writeFileSync(rPath, scrubResult.value, "utf8");
+      fs8.writeFileSync(rPath, scrubResult.value, "utf8");
       rewriteOk = true;
     } catch (err) {
       process.stderr.write(
@@ -934,7 +999,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
   const quarantinePath = rPath + ".quarantined";
   let quarantineDone = false;
   try {
-    fs7.renameSync(rPath, quarantinePath);
+    fs8.renameSync(rPath, quarantinePath);
     quarantineDone = true;
   } catch (err) {
     process.stderr.write(
@@ -945,7 +1010,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
   if (!quarantineDone) {
     let canonicalRemoved = false;
     try {
-      fs7.writeFileSync(
+      fs8.writeFileSync(
         rPath,
         "[SCRUB-BLOCKED: handoff receipt removed by Guild HK-06 secret scrub \u2014 original content quarantine failed, raw destroyed at canonical path]\n",
         "utf8"
@@ -953,7 +1018,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
       canonicalRemoved = true;
     } catch {
       try {
-        fs7.unlinkSync(rPath);
+        fs8.unlinkSync(rPath);
         canonicalRemoved = true;
       } catch {
       }
@@ -966,7 +1031,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
           event_type: "secret_scrub_blocked",
           decision: "blocked",
           tool: "task-completed/handoff-scrub",
-          detail: `CRITICAL: Cannot remove raw handoff receipt "${path7.basename(rPath)}" from canonical path \u2014 quarantine AND overwrite/unlink both failed. Raw secret may persist. Lane blocked. Manual remediation required.`,
+          detail: `CRITICAL: Cannot remove raw handoff receipt "${path8.basename(rPath)}" from canonical path \u2014 quarantine AND overwrite/unlink both failed. Raw secret may persist. Lane blocked. Manual remediation required.`,
           permission_mode: "blocked"
         });
         appendSecurityEvent(runDir, evt);
@@ -977,7 +1042,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
       );
     }
     process.stderr.write(
-      `[task-completed] WARN: HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path7.basename(rPath)}.
+      `[task-completed] WARN: HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path8.basename(rPath)}.
 `
     );
   }
@@ -999,8 +1064,8 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
 }
 function persistInjectionAudit(runDir, taskId, specialist, injectionClean) {
   try {
-    const logsDir = path7.join(runDir, "logs");
-    fs7.mkdirSync(logsDir, { recursive: true });
+    const logsDir = path8.join(runDir, "logs");
+    fs8.mkdirSync(logsDir, { recursive: true });
     const record = {
       schema_version: "guild.injection_audit.v1",
       ts: (/* @__PURE__ */ new Date()).toISOString(),
@@ -1008,8 +1073,8 @@ function persistInjectionAudit(runDir, taskId, specialist, injectionClean) {
       specialist,
       injection_clean: injectionClean
     };
-    fs7.appendFileSync(
-      path7.join(logsDir, "injection-audit.jsonl"),
+    fs8.appendFileSync(
+      path8.join(logsDir, "injection-audit.jsonl"),
       JSON.stringify(record) + "\n",
       "utf8"
     );
@@ -1043,15 +1108,15 @@ async function main() {
   const cwd = payload.cwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
   const runId = deriveRunId(sessionId);
-  const runDir = path7.join(guildRoot, ".guild", "runs", runId);
+  const runDir = path8.join(guildRoot, ".guild", "runs", runId);
   const rPath = receiptPath(guildRoot, runId, specialist, taskId);
-  if (!fs7.existsSync(rPath)) {
+  if (!fs8.existsSync(rPath)) {
     die(
       `Task "${taskId}" (specialist: "${specialist}") has no handoff receipt. Expected at: ${rPath}
 Write the receipt with sections: ${REQUIRED_FIELDS.join(", ")} before marking complete.`
     );
   }
-  const content = fs7.readFileSync(rPath, "utf8");
+  const content = fs8.readFileSync(rPath, "utf8");
   const missing = missingFields(content);
   if (missing.length > 0) {
     die(
@@ -1139,6 +1204,14 @@ Add a fenced \`\`\`guild.handoff.v2 { ... } \`\`\` JSON block to the receipt bef
   const laneStatus = laneStatusFor(envelopeStatus);
   const dependsOn = extractDependsOn(`${payload.task_subject ?? ""} ${payload.task_description ?? ""}`);
   persistRunState(runDir, runId, specialist, taskId, laneStatus, laneTier, dependsOn);
+  emitBusEvent(runDir, {
+    run_id: runId,
+    event: laneStatus === "done" ? "completed" : "errored",
+    lane_id: specialist,
+    task_id: taskId,
+    team_name: (payload.team_name ?? "").trim() || void 0,
+    detail: laneStatus === "done" ? void 0 : `lane status: ${laneStatus}`
+  });
   process.stderr.write(
     `[task-completed] OK: task "${taskId}" receipt verified at "${rPath}". Agent dismissed.
 `

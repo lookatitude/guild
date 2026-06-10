@@ -74,6 +74,7 @@ import {
 import { scrubbedWrite, writeScrubApprovalRequest } from "../lib/security/scrubbed-write.js";
 import { applySecretsPolicy } from "../lib/security/secrets.js";
 import { readSecurityConfig } from "../lib/security/config.js";
+import { emitBusEvent } from "../lib/bus-emit.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -640,6 +641,17 @@ async function main(): Promise<void> {
   const laneStatus = laneStatusFor(envelopeStatus);
   const dependsOn = extractDependsOn(`${payload.task_subject ?? ""} ${payload.task_description ?? ""}`);
   persistRunState(runDir, runId, specialist, taskId, laneStatus, laneTier, dependsOn);
+
+  // Emit bus event (SK-5 / CMD-007: agent-bus producer). Best-effort — never blocks.
+  // laneStatus: "done" → "completed", anything else (failed) → "errored".
+  emitBusEvent(runDir, {
+    run_id: runId,
+    event: laneStatus === "done" ? "completed" : "errored",
+    lane_id: specialist,
+    task_id: taskId,
+    team_name: (payload.team_name ?? "").trim() || undefined,
+    detail: laneStatus === "done" ? undefined : `lane status: ${laneStatus}`,
+  });
 
   // §task§agent dismiss: agent terminates cleanly here (no idle, D3 §6).
   process.stderr.write(

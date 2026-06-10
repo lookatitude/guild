@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // agent-team/teammate-idle.ts
-var fs3 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
 
 // lib/guild-root.ts
@@ -264,24 +264,63 @@ function assessLiveness(runDir, specialist, timeoutMs, now = Date.now()) {
   }
 }
 
+// lib/bus-emit.ts
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+var BUS_EVENT_SCHEMA_VERSION = "guild.agent_bus_event.v1";
+function buildBusEvent(input) {
+  const rec = {
+    schema_version: BUS_EVENT_SCHEMA_VERSION,
+    ts: (/* @__PURE__ */ new Date()).toISOString(),
+    run_id: input.run_id,
+    event: input.event
+  };
+  if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
+  if (typeof input.task_id === "string" && input.task_id.length > 0) rec.task_id = input.task_id;
+  if (typeof input.team_name === "string" && input.team_name.length > 0) {
+    rec.team_name = input.team_name;
+  }
+  if (typeof input.detail === "string" && input.detail.length > 0) rec.detail = input.detail;
+  return rec;
+}
+function emitBusEvent(runDir, input) {
+  try {
+    const busDir = path3.join(runDir, "agent-bus");
+    fs3.mkdirSync(busDir, { recursive: true });
+    const record = buildBusEvent(input);
+    fs3.appendFileSync(
+      path3.join(busDir, "events.ndjson"),
+      JSON.stringify(record) + "\n",
+      "utf8"
+    );
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [bus-emit] write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+
 // agent-team/teammate-idle.ts
 function deriveRunId(sessionId) {
   return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
 }
 function assessReceipts(runDir, teammate) {
-  const handoffsDir = path3.join(runDir, "handoffs");
-  if (!fs3.existsSync(handoffsDir)) return [];
+  const handoffsDir = path4.join(runDir, "handoffs");
+  if (!fs4.existsSync(handoffsDir)) return [];
   const prefix = `${teammate}-`;
   const results = [];
-  const files = fs3.readdirSync(handoffsDir).filter((f) => f.startsWith(prefix) && f.endsWith(".md"));
+  const files = fs4.readdirSync(handoffsDir).filter((f) => f.startsWith(prefix) && f.endsWith(".md"));
   for (const file of files) {
     const taskId = file.slice(prefix.length, -".md".length);
-    const rPath = path3.join(handoffsDir, file);
+    const rPath = path4.join(handoffsDir, file);
     let envelopeValid = false;
     let envelopeErrors = [];
     let envelopeStatus;
     try {
-      const content = fs3.readFileSync(rPath, "utf8");
+      const content = fs4.readFileSync(rPath, "utf8");
       const rawEnvelope = extractHandoffEnvelope(content);
       if (rawEnvelope !== null) {
         const result = validateHandoffV2(rawEnvelope);
@@ -304,12 +343,12 @@ function assessReceipts(runDir, teammate) {
   return results;
 }
 function findAssignedTaskIds(cwd, teammate) {
-  const planDir = path3.join(resolveGuildRoot(cwd), ".guild", "plan");
-  if (!fs3.existsSync(planDir)) return [];
-  const files = fs3.readdirSync(planDir).filter((f) => f.endsWith(".md"));
+  const planDir = path4.join(resolveGuildRoot(cwd), ".guild", "plan");
+  if (!fs4.existsSync(planDir)) return [];
+  const files = fs4.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   const ids = [];
   for (const file of files) {
-    const content = fs3.readFileSync(path3.join(planDir, file), "utf8");
+    const content = fs4.readFileSync(path4.join(planDir, file), "utf8");
     const blocks = content.split(/\n(?=[-*#]|\w)/);
     for (const block of blocks) {
       const isAssigned = new RegExp(`(?:owner|assigned|teammate):\\s*${teammate}\\b`, "i").test(block);
@@ -417,7 +456,7 @@ async function main() {
   const teamName = (payload.team_name ?? "").trim() || "unknown";
   const cwd = payload.cwd ?? process.cwd();
   const runId = deriveRunId(sessionId);
-  const runDir = path3.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runDir = path4.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const receiptAssessments = assessReceipts(runDir, teammate);
   const validReceiptTaskIds = receiptAssessments.filter((r) => r.envelopeValid).map((r) => r.taskId);
   const invalidReceiptTaskIds = receiptAssessments.filter((r) => !r.envelopeValid).map((r) => r.taskId);
@@ -445,6 +484,13 @@ async function main() {
     runDir
   };
   process.stdout.write(composeNudge(ctx));
+  emitBusEvent(runDir, {
+    run_id: runId,
+    event: "idle",
+    lane_id: teammate,
+    team_name: teamName !== "unknown" ? teamName : void 0,
+    detail: ctx.pendingTaskIds.length > 0 ? `pending tasks: [${ctx.pendingTaskIds.join(", ")}]` : void 0
+  });
   process.exit(0);
 }
 main().catch((err) => {

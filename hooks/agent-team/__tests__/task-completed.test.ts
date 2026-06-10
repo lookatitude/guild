@@ -613,4 +613,79 @@ describe("task-completed.ts", () => {
       expect(stderr).toMatch(/indeterminate|undetermined|cannot.*date|fail.open|unknown.*date/i);
     });
   });
+
+  describe("SK-5 / CMD-007: agent-bus event producer", () => {
+    // Verifies that a TaskCompleted hook fire produces the required
+    // agent-bus/events.ndjson entry (must-exist artifact per build.md CMD-007).
+    function busLines(runId: string): Array<Record<string, unknown>> {
+      const file = path.join(tmpDir, ".guild", "runs", runId, "agent-bus", "events.ndjson");
+      if (!fs.existsSync(file)) return [];
+      return fs
+        .readFileSync(file, "utf8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => JSON.parse(l));
+    }
+
+    it("emits a 'completed' bus event to agent-bus/events.ndjson on clean lane finish", () => {
+      const runId = "run-sess-bus-done";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      createReceipt(runDir, "backend", "task-bus-001", FULL_RECEIPT_FIELDS, {
+        ...VALID_ENVELOPE,
+        task_id: "task-bus-001",
+      });
+
+      const { exitCode } = runScript(
+        {
+          session_id: "sess-bus-done",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-bus-001",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1", GUILD_RUN_ID: runId }
+      );
+      expect(exitCode).toBe(0);
+
+      const lines = busLines(runId);
+      expect(lines.length).toBe(1);
+      const rec = lines[0];
+      expect(rec.schema_version).toBe("guild.agent_bus_event.v1");
+      expect(rec.event).toBe("completed");
+      expect(rec.lane_id).toBe("backend");
+      expect(rec.task_id).toBe("task-bus-001");
+      expect(rec.team_name).toBe("guild-team");
+      expect(typeof rec.ts).toBe("string");
+    });
+
+    it("emits an 'errored' bus event when lane status is blocked/failed", () => {
+      const runId = "run-sess-bus-err";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      createReceipt(runDir, "backend", "task-bus-002", FULL_RECEIPT_FIELDS, {
+        ...VALID_ENVELOPE,
+        task_id: "task-bus-002",
+        status: "blocked",
+      });
+
+      const { exitCode } = runScript(
+        {
+          session_id: "sess-bus-err",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-bus-002",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1", GUILD_RUN_ID: runId }
+      );
+      expect(exitCode).toBe(0);
+
+      const lines = busLines(runId);
+      expect(lines.length).toBe(1);
+      expect(lines[0].event).toBe("errored");
+      expect(lines[0].lane_id).toBe("backend");
+    });
+  });
 });

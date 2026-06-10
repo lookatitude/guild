@@ -11,6 +11,8 @@ import {
   appendSecurityEvent,
   buildSecurityEvent,
   emitRecallQuarantine,
+  KNOWN_GUILD_HOST_KINDS,
+  resolveHostResolution,
   resolveRunDir,
   SECURITY_EVENT_SCHEMA_VERSION,
 } from "../lib/security/events";
@@ -148,6 +150,41 @@ describe("buildSecurityEvent", () => {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
     });
+  });
+});
+
+describe("HK-10: resolveHostResolution — 9-host canonical set + degradation flag", () => {
+  it("covers all 9 canonical hosts with no degradation", () => {
+    for (const kind of KNOWN_GUILD_HOST_KINDS) {
+      const r = resolveHostResolution({ GUILD_HOST: kind });
+      expect(r.id).toBe(kind);
+      expect(r.degraded).toBe(false);
+      expect(r.rawUnknown).toBe("");
+    }
+  });
+
+  it("returns id=GUILD_HOST_ID unchanged when explicitly set", () => {
+    const r = resolveHostResolution({ GUILD_HOST_ID: "my-custom-host-42", GUILD_HOST: "codex" });
+    expect(r.id).toBe("my-custom-host-42");
+    expect(r.degraded).toBe(false);
+  });
+
+  it("returns id='claude' + degraded=false when GUILD_HOST absent", () => {
+    const r = resolveHostResolution({});
+    expect(r.id).toBe("claude");
+    expect(r.degraded).toBe(false);
+    expect(r.rawUnknown).toBe("");
+  });
+
+  it("returns id='claude' + degraded=true + rawUnknown when GUILD_HOST is unrecognized", () => {
+    const r = resolveHostResolution({ GUILD_HOST: "unknown-ai-fork" });
+    expect(r.id).toBe("claude");
+    expect(r.degraded).toBe(true);
+    expect(r.rawUnknown).toBe("unknown-ai-fork");
+  });
+
+  it("KNOWN_GUILD_HOST_KINDS has exactly 9 entries", () => {
+    expect(KNOWN_GUILD_HOST_KINDS.length).toBe(9);
   });
 });
 

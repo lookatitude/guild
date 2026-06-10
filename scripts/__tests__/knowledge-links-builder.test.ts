@@ -551,3 +551,322 @@ describe("harvest-candidate source_refs compatibility (FU-A1-3)", () => {
     expect(classifyNodeKindExtended(evoCandidate.id)).toBe("reflection_evolution");
   });
 });
+
+// ── 7. W3 builder re-derivation of decided_by / supersedes / resolves ─────────
+//
+// TDD discipline: each test uses a real temp .guild/ directory with
+// on-disk canonical fixtures. The builder must re-derive the 3 edge types
+// from those canonical sources (provenance.json + wiki frontmatter) so they
+// survive a full rebuild (NN#8 — previously ephemeral-until-clobbered).
+
+describe("W3 builder re-derivation — decided_by, supersedes, resolves (NN#8)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    // Fresh tmp tree per test — avoids fixture bleed between tests.
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "kl-builder-w3-"));
+    const guildDir = path.join(tmpDir, ".guild");
+    fs.mkdirSync(path.join(guildDir, "indexes"), { recursive: true });
+    fs.mkdirSync(path.join(guildDir, "wiki", "decisions"), { recursive: true });
+    fs.mkdirSync(path.join(guildDir, "runs", "run-w3-test"), { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // ── decided_by ──────────────────────────────────────────────────────────────
+
+  test("decided_by — re-derived from provenance.touched.decisions: decision:X decided_by run:Y", () => {
+    // Canonical source: provenance.json with a touched.decisions entry.
+    // The builder must emit `decision:<slug> decided_by run:<run-id>`.
+    const guildDir = path.join(tmpDir, ".guild");
+    fs.writeFileSync(
+      path.join(guildDir, "runs", "run-w3-test", "provenance.json"),
+      JSON.stringify({
+        schema_version: "guild.provenance.v1",
+        run_id: "run-w3-test",
+        command: "/guild:build",
+        initiative: null,
+        status: "closed",
+        touched: {
+          tasks: [],
+          agents: [],
+          skills: [],
+          decisions: ["decision:arch-choice-postgres"],
+          features: [],
+          files: [],
+          runs: [],
+        },
+        artifacts: {},
+        benchmark_eligible: false,
+      }, null, 2),
+    );
+
+    const result = buildKnowledgeLinks({ root: tmpDir });
+    expect(result.ok).toBe(true);
+
+    const doc = JSON.parse(
+      fs.readFileSync(path.join(guildDir, "indexes", "knowledge-links.json"), "utf8"),
+    ) as KnowledgeLinkDoc;
+
+    // The decided_by edge must appear: decision:arch-choice-postgres decided_by run:run-w3-test
+    const decidedByEdge = doc.links.find(
+      (l) => l.from === "decision:arch-choice-postgres" &&
+             l.to === "run:run-w3-test" &&
+             l.type === "decided_by",
+    );
+    expect(decidedByEdge).toBeDefined();
+  });
+
+  test("decided_by — re-derived from wiki decision page task: frontmatter: decision:X decided_by task:Y", () => {
+    // Canonical source: wiki decision page with `task:` frontmatter field.
+    // The builder must emit `decision:<slug> decided_by task:<task-slug>`.
+    const guildDir = path.join(tmpDir, ".guild");
+    fs.writeFileSync(
+      path.join(guildDir, "wiki", "decisions", "frontend-routing-choice.md"),
+      [
+        "---",
+        "type: decision",
+        "slug: frontend-routing-choice",
+        "task: T4-frontend",
+        "supersedes: null",
+        "resolves: null",
+        "created_at: 2026-06-10",
+        "---",
+        "# frontend-routing-choice",
+        "Chose react-router over tanstack-router.",
+      ].join("\n") + "\n",
+    );
+
+    const result = buildKnowledgeLinks({ root: tmpDir });
+    expect(result.ok).toBe(true);
+
+    const doc = JSON.parse(
+      fs.readFileSync(path.join(guildDir, "indexes", "knowledge-links.json"), "utf8"),
+    ) as KnowledgeLinkDoc;
+
+    // The decided_by edge must appear: decision:frontend-routing-choice decided_by task:T4-frontend
+    const decidedByEdge = doc.links.find(
+      (l) => l.from === "decision:frontend-routing-choice" &&
+             l.to === "task:T4-frontend" &&
+             l.type === "decided_by",
+    );
+    expect(decidedByEdge).toBeDefined();
+  });
+
+  // ── supersedes ──────────────────────────────────────────────────────────────
+
+  test("supersedes — re-derived from wiki decision page supersedes: frontmatter: A supersedes B", () => {
+    // Canonical source: wiki decision page with a non-null `supersedes:` frontmatter value.
+    // The builder must emit `decision:<current> supersedes decision:<previous>`.
+    const guildDir = path.join(tmpDir, ".guild");
+
+    // The new decision supersedes the old one
+    fs.writeFileSync(
+      path.join(guildDir, "wiki", "decisions", "agent-mode-auto-v2.md"),
+      [
+        "---",
+        "type: decision",
+        "slug: agent-mode-auto-v2",
+        "supersedes: agent-mode-auto-v1",
+        "resolves: null",
+        "created_at: 2026-06-10",
+        "---",
+        "# agent-mode-auto-v2",
+        "Updated decision superseding the v1 agent-mode choice.",
+      ].join("\n") + "\n",
+    );
+
+    const result = buildKnowledgeLinks({ root: tmpDir });
+    expect(result.ok).toBe(true);
+
+    const doc = JSON.parse(
+      fs.readFileSync(path.join(guildDir, "indexes", "knowledge-links.json"), "utf8"),
+    ) as KnowledgeLinkDoc;
+
+    // The supersedes edge must appear: decision:agent-mode-auto-v2 supersedes decision:agent-mode-auto-v1
+    const supersEdge = doc.links.find(
+      (l) => l.from === "decision:agent-mode-auto-v2" &&
+             l.to === "decision:agent-mode-auto-v1" &&
+             l.type === "supersedes",
+    );
+    expect(supersEdge).toBeDefined();
+  });
+
+  test("supersedes — null supersedes: frontmatter emits NO supersedes edge", () => {
+    // When supersedes: is null (the common case), no supersedes edge must appear.
+    const guildDir = path.join(tmpDir, ".guild");
+    fs.writeFileSync(
+      path.join(guildDir, "wiki", "decisions", "standalone-decision.md"),
+      [
+        "---",
+        "type: decision",
+        "slug: standalone-decision",
+        "supersedes: null",
+        "created_at: 2026-06-10",
+        "---",
+        "# standalone-decision",
+      ].join("\n") + "\n",
+    );
+
+    buildKnowledgeLinks({ root: tmpDir });
+    const doc = JSON.parse(
+      fs.readFileSync(path.join(guildDir, "indexes", "knowledge-links.json"), "utf8"),
+    ) as KnowledgeLinkDoc;
+
+    const supersEdges = doc.links.filter(
+      (l) => l.from === "decision:standalone-decision" && l.type === "supersedes",
+    );
+    expect(supersEdges).toHaveLength(0);
+  });
+
+  // ── resolves ────────────────────────────────────────────────────────────────
+
+  test("resolves — re-derived from wiki decision page resolves: frontmatter: decision:X resolves open_question:Y", () => {
+    // Canonical source: wiki decision page with a `resolves:` frontmatter field
+    // referencing an open question id. The builder must emit
+    // `decision:<slug> resolves open_question:<oq-id>`.
+    const guildDir = path.join(tmpDir, ".guild");
+    fs.writeFileSync(
+      path.join(guildDir, "wiki", "decisions", "cache-strategy-choice.md"),
+      [
+        "---",
+        "type: decision",
+        "slug: cache-strategy-choice",
+        "supersedes: null",
+        "resolves: oq-cache-strategy",
+        "created_at: 2026-06-10",
+        "---",
+        "# cache-strategy-choice",
+        "Chose Redis over Memcached — resolves OQ: oq-cache-strategy.",
+      ].join("\n") + "\n",
+    );
+
+    const result = buildKnowledgeLinks({ root: tmpDir });
+    expect(result.ok).toBe(true);
+
+    const doc = JSON.parse(
+      fs.readFileSync(path.join(guildDir, "indexes", "knowledge-links.json"), "utf8"),
+    ) as KnowledgeLinkDoc;
+
+    // The resolves edge must appear: decision:cache-strategy-choice resolves open_question:oq-cache-strategy
+    const resolvesEdge = doc.links.find(
+      (l) => l.from === "decision:cache-strategy-choice" &&
+             l.to === "open_question:oq-cache-strategy" &&
+             l.type === "resolves",
+    );
+    expect(resolvesEdge).toBeDefined();
+  });
+
+  test("resolves — open_question: prefix in frontmatter is preserved as-is", () => {
+    // When the resolves: field already has the open_question: prefix, the
+    // builder must not double-prefix it.
+    const guildDir = path.join(tmpDir, ".guild");
+    fs.writeFileSync(
+      path.join(guildDir, "wiki", "decisions", "db-schema-choice.md"),
+      [
+        "---",
+        "type: decision",
+        "slug: db-schema-choice",
+        "supersedes: null",
+        "resolves: open_question:oq-schema-design",
+        "created_at: 2026-06-10",
+        "---",
+        "# db-schema-choice",
+      ].join("\n") + "\n",
+    );
+
+    buildKnowledgeLinks({ root: tmpDir });
+    const doc = JSON.parse(
+      fs.readFileSync(path.join(guildDir, "indexes", "knowledge-links.json"), "utf8"),
+    ) as KnowledgeLinkDoc;
+
+    const resolvesEdge = doc.links.find(
+      (l) => l.from === "decision:db-schema-choice" &&
+             l.to === "open_question:oq-schema-design" &&
+             l.type === "resolves",
+    );
+    expect(resolvesEdge).toBeDefined();
+    // Ensure no double-prefix: open_question:open_question: must not exist
+    const badEdge = doc.links.find((l) => l.to.startsWith("open_question:open_question:"));
+    expect(badEdge).toBeUndefined();
+  });
+
+  // ── NN#8: all 3 survive a full rebuild ──────────────────────────────────────
+
+  test("NN#8: all 3 edge types survive delete-index → full-rebuild cycle", () => {
+    // Plant ALL 3 canonical sources in a single tmp tree, then prove that
+    // deleting knowledge-links.json and rebuilding reproduces all 3 edge types.
+    const guildDir = path.join(tmpDir, ".guild");
+    const klPath = path.join(guildDir, "indexes", "knowledge-links.json");
+
+    // Canonical source for decided_by (provenance)
+    fs.writeFileSync(
+      path.join(guildDir, "runs", "run-w3-test", "provenance.json"),
+      JSON.stringify({
+        schema_version: "guild.provenance.v1",
+        run_id: "run-w3-test",
+        command: "/guild:build",
+        initiative: null,
+        status: "closed",
+        touched: {
+          tasks: [],
+          agents: [],
+          skills: [],
+          decisions: ["decision:nn8-decided"],
+          features: [],
+          files: [],
+          runs: [],
+        },
+        artifacts: {},
+        benchmark_eligible: false,
+      }, null, 2),
+    );
+
+    // Canonical source for supersedes + resolves (wiki decision page)
+    fs.writeFileSync(
+      path.join(guildDir, "wiki", "decisions", "nn8-full-coverage.md"),
+      [
+        "---",
+        "type: decision",
+        "slug: nn8-full-coverage",
+        "supersedes: nn8-old-decision",
+        "resolves: oq-nn8-open",
+        "created_at: 2026-06-10",
+        "---",
+        "# nn8-full-coverage",
+        "Decision that supersedes and resolves.",
+      ].join("\n") + "\n",
+    );
+
+    // First build
+    buildKnowledgeLinks({ root: tmpDir });
+    expect(fs.existsSync(klPath)).toBe(true);
+
+    // Delete the derived index (NN#8 proof step)
+    fs.rmSync(klPath);
+    expect(fs.existsSync(klPath)).toBe(false);
+
+    // Rebuild from canonical stores only
+    buildKnowledgeLinks({ root: tmpDir });
+    expect(fs.existsSync(klPath)).toBe(true);
+
+    const doc = JSON.parse(fs.readFileSync(klPath, "utf8")) as KnowledgeLinkDoc;
+
+    // decided_by survived
+    expect(doc.links.find(
+      (l) => l.from === "decision:nn8-decided" && l.to === "run:run-w3-test" && l.type === "decided_by",
+    )).toBeDefined();
+
+    // supersedes survived
+    expect(doc.links.find(
+      (l) => l.from === "decision:nn8-full-coverage" && l.type === "supersedes",
+    )).toBeDefined();
+
+    // resolves survived
+    expect(doc.links.find(
+      (l) => l.from === "decision:nn8-full-coverage" && l.type === "resolves",
+    )).toBeDefined();
+  });
+});
