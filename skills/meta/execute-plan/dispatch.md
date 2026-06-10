@@ -241,6 +241,16 @@ Then inject:
 | **Agent-team** (tmux pane) | Include block in the pane's initial system prompt; the launcher injects it at pane spawn before the task brief. |
 | **In-process** (`result.dispatchPlan`) | Append to each descriptor's `prompt` in `dispatchPlan`, same as subagent. |
 
+**Prompt-cache prefix discipline (shared-before-specific, G-19).** Provider prompt
+caches key on identical leading bytes, so brief assembly orders **shared content
+first, per-lane content last**: the agent definition (system prompt) and any
+run-constant preamble lead; the bundle follows its own layer order (Universal —
+byte-identical run-wide — then role-shared, then task-specific; see
+`context-assemble` §Output); the per-lane substitutions (`<RECEIPT_PATH>`,
+`<TASK_ID>`) and the task brief sit as late as the structure allows. Never
+interleave a lane-specific value into run-constant or role-constant text — one
+early differing byte forfeits the cached prefix for everything after it.
+
 The block must appear in every brief without modification. If you find yourself rewriting it per-brief, that is the F1/F2 drift pattern recurring — stop and use the canonical block verbatim.
 
 ## Self-build dev-team routing

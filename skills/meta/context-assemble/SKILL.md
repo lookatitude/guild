@@ -48,6 +48,21 @@ Per `guild-plan.md §9.3`: write the bundle to
 
 The bundle is a single markdown file. First section is frontmatter naming the run-id, specialist, task-id, spec path, plan path, and the source paths of every page included (for reproducibility per §9.4). Remaining sections are the three layers in order: Universal, Role-dependent, Task-dependent. `guild:execute-plan` passes this file path as the specialist's primary task brief; it is not merged back into chat before dispatch.
 
+**Prompt-cache prefix discipline (shared-before-specific, G-19).** Provider prompt
+caches key on identical leading bytes, so the assembly order is also a cost rule:
+
+- The **Universal layer is assembled ONCE per run and reused byte-identical** across
+  every lane's bundle (no per-lane interpolation inside it — lane-specific values
+  belong in frontmatter or the Task layer). Two same-run bundles MUST be
+  byte-identical through the end of the Universal section.
+- The **Role layer is reused byte-identical across lanes sharing a specialist role**
+  in the same run (assemble once per role, not once per lane).
+- Per-lane content (frontmatter values aside) appears only from the Task layer down —
+  shared-before-specific, never interleaved.
+
+This costs nothing to honor (the layers already exist) and lets every same-run /
+same-role dispatch hit the provider's cached prefix instead of re-paying it.
+
 ## Size budget
 
 Target ~3k tokens per bundle. Hard cap 6k tokens.
