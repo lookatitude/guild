@@ -46,6 +46,8 @@ import { normalizeTokens, resolveTraceV2Fields, type TraceTokens } from "./lib/t
 // HK-06: wiki + review PostToolUse scrub-in-place (D-SECRETS).
 import { scrubbedWrite, type ScrubSurface } from "./lib/security/scrubbed-write.js";
 import { buildSecurityEvent, appendSecurityEvent } from "./lib/security/events.js";
+// G-9 (SC-5): structured heartbeat WRITE side — backend-agnostic liveness.
+import { writeHeartbeatFromEnv } from "./lib/heartbeat-write.js";
 
 interface PostToolUsePayload {
   session_id?: string;
@@ -294,6 +296,24 @@ export async function main(): Promise<void> {
   // Walk up from cwd to find the repo root — ensures .guild/ always lands at
   // the nearest .git / .guild ancestor, never in a subdirectory.
   const guildRoot = resolveGuildRoot(cwd);
+
+  // ── G-9 (SC-5): structured heartbeat write ────────────────────────────────
+  // When GUILD_RUN_ID + GUILD_SPECIALIST are both exported (the dispatch path
+  // sets them per lane), every PostToolUse refreshes the lane's structured
+  // heartbeat at <runDir>/in-progress/<specialist>.json — the write side of
+  // ADR-RE-3 that makes stall detection backend-agnostic (not tmux-only).
+  // Fail-open by contract (writeHeartbeatFromEnv never throws) and near-zero
+  // cost when the env vars are absent. Placed BEFORE the run-id gate: the
+  // heartbeat keys off its own env contract, not the sentinel file.
+  {
+    const hb = writeHeartbeatFromEnv({ toolName: payload.tool_name, cwd });
+    if (!hb.written && hb.reason !== null && hb.reason !== "env-absent") {
+      process.stderr.write(
+        `warn: [post-tool-use] heartbeat write skipped (non-fatal): ${hb.reason}\n`,
+      );
+    }
+  }
+  // ── end G-9 ────────────────────────────────────────────────────────────────
 
   // ── HK-06: wiki + review PostToolUse scrub-in-place ─────────────────────
   // Placed BEFORE the run-id gate: wiki pages (.guild/wiki/**) are project-

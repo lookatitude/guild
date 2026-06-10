@@ -1474,3 +1474,98 @@ describe("G-lane MAJOR — initiativeIsWorkspaceScoped: path traversal preventio
     expect(sources.initiative_default).toBe("builtin");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-11 (SC-6) — the resolver STORES the models.tiers value union
+// (string | {model, effort?, verbosity?} | null) across layers without
+// unpacking it; resolveTierModel() in read-guild-config.ts is the only
+// unpack point.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("G-11 — models.tiers value union storage through the layer chain", () => {
+  test("project settings object-form tier value survives resolution; defaults stay strings", () => {
+    const root = mkTmp();
+    try {
+      mkGuildDir(root);
+      writeSettings(root, {
+        models: {
+          tiers: { powerful: { claude: { model: "opus", effort: "high", verbosity: "low" } } },
+        },
+      });
+      const { config } = resolveSettings({ cwd: root });
+      expect(config.models.tiers.powerful.claude).toEqual({
+        model: "opus",
+        effort: "high",
+        verbosity: "low",
+      });
+      // untouched tiers keep the built-in plain-string defaults
+      expect(config.models.tiers.mid.claude).toBe("sonnet");
+      expect(config.models.tiers.cheap.claude).toBe("haiku");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("project object form overrides a workspace string for the same slot", () => {
+    const ws = mkTmp();
+    try {
+      const child = path.join(ws, "child");
+      fs.mkdirSync(child, { recursive: true });
+      mkGuildDir(ws);
+      mkGuildDir(child);
+      writeJson(path.join(ws, ".guild", "workspace.json"), {
+        schema_version: "guild.workspace.v1",
+        is_workspace: true,
+        sub_guilds: [{ name: "child", path: "child", kind: "sub-guild" }],
+      });
+      writeSettings(ws, {
+        models: { tiers: { powerful: { claude: "opus" } } },
+      });
+      writeSettings(child, {
+        models: { tiers: { powerful: { claude: { model: "opus", effort: "high" } } } },
+      });
+      const { config } = resolveSettings({ cwd: child });
+      expect(config.models.tiers.powerful.claude).toEqual({ model: "opus", effort: "high" });
+    } finally {
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-lane rework — closed HOST-key set: the resolver strips unknown host keys
+// (e.g. "claudee") at sparse-parse time so they never merge through the layer
+// chain into the resolved config.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("G-lane rework — models.tiers unknown host keys stripped by the resolver", () => {
+  test("project settings.json typo host key is stripped; legal slots resolve", () => {
+    const root = mkTmp();
+    try {
+      mkGuildDir(root);
+      writeSettings(root, {
+        models: { tiers: { powerful: { claudee: "opus-typo", codex: "o3" } } },
+      });
+      const { config } = resolveSettings({ cwd: root });
+      expect(config.models.tiers.powerful).not.toHaveProperty("claudee");
+      expect(config.models.tiers.powerful.codex).toBe("o3");
+      expect(config.models.tiers.powerful.claude).toBe("opus"); // builtin default kept
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("settings.local.json typo host key is stripped too (parseLocalFile path)", () => {
+    const root = mkTmp();
+    try {
+      mkGuildDir(root);
+      writeSettings(root, { models: { tiers: { mid: { claude: "sonnet" } } } });
+      writeLocal(root, { models: { tiers: { mid: { claudee: "sonnet-typo" } } } });
+      const { config } = resolveSettings({ cwd: root });
+      expect(config.models.tiers.mid).not.toHaveProperty("claudee");
+      expect(config.models.tiers.mid.claude).toBe("sonnet");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

@@ -41,6 +41,10 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { probeTmuxAvailable } from "./lib/team-backend";
+// G-11 (SC-6): models.tiers values are a union (string | {model,effort?,verbosity?} | null);
+// resolveTierModel is the ONLY place the union is unpacked. It also tolerates the
+// legacy flat form (tiers.cheap = "model-name") this writer historically accepted.
+import { resolveTierModel } from "./read-guild-config";
 
 // ── Schema (guild.host_capability.v1) ────────────────────────────────────────
 
@@ -151,17 +155,22 @@ function resolveIndependentAgents(hostKind: HostKind, env: NodeJS.ProcessEnv): b
 
 /** Best-effort read of `.guild/settings.json` models block. Never throws. */
 function readSettingsModels(cwd: string): {
-  tierModels?: Partial<HostCapabilityManifest["tier_models"]>;
+  /**
+   * Raw `models.tiers` value — NOT unpacked here. The tier→host value union
+   * (G-11: string | {model,effort?,verbosity?} | null) plus the legacy flat
+   * form are normalized exclusively by resolveTierModel() in buildCapability.
+   */
+  tiers?: unknown;
   list?: string[];
 } {
   try {
     const raw = fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8");
     const parsed = JSON.parse(raw) as { models?: { tiers?: unknown; list?: unknown } };
     const models = parsed.models ?? {};
-    const out: { tierModels?: Partial<HostCapabilityManifest["tier_models"]>; list?: string[] } = {};
+    const out: { tiers?: unknown; list?: string[] } = {};
     // settings.json still uses `models.tiers` key (settings schema is unchanged)
     if (models.tiers && typeof models.tiers === "object") {
-      out.tierModels = models.tiers as Partial<HostCapabilityManifest["tier_models"]>;
+      out.tiers = models.tiers;
     }
     if (Array.isArray(models.list)) {
       out.list = (models.list as unknown[]).filter((m): m is string => typeof m === "string");
@@ -180,11 +189,16 @@ export function buildCapability(opts: BuildCapabilityOpts): HostCapabilityManife
   const hostId = opts.hostId ?? env["GUILD_HOST_ID"] ?? hostKind;
 
   const settings = readSettingsModels(opts.cwd);
-  // TE-07/DQ-5: canonical field is `tier_models`; settings.json key is still `models.tiers`
+  // TE-07/DQ-5: canonical field is `tier_models`; settings.json key is still `models.tiers`.
+  // G-11 (SC-6): unpack the tier value union through resolveTierModel — the ONLY unpack
+  // point. The manifest's tier_models stay plain strings (guild.host_capability.v1 is
+  // frozen); the object form contributes its `model` here, effort/verbosity are
+  // dispatch-time concerns. The legacy flat shape (tiers.cheap = "haiku-3") resolves
+  // byte-identically via the helper's flat-form tolerance.
   const tierModels: HostCapabilityManifest["tier_models"] = {
-    cheap: settings.tierModels?.cheap ?? DEFAULT_TIER_MODELS.cheap,
-    mid: settings.tierModels?.mid ?? DEFAULT_TIER_MODELS.mid,
-    powerful: settings.tierModels?.powerful ?? DEFAULT_TIER_MODELS.powerful,
+    cheap: resolveTierModel(settings.tiers, "cheap", hostKind).model ?? DEFAULT_TIER_MODELS.cheap,
+    mid: resolveTierModel(settings.tiers, "mid", hostKind).model ?? DEFAULT_TIER_MODELS.mid,
+    powerful: resolveTierModel(settings.tiers, "powerful", hostKind).model ?? DEFAULT_TIER_MODELS.powerful,
   };
   const models =
     settings.list && settings.list.length > 0

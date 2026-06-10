@@ -375,3 +375,94 @@ describe("score-tier.ts CLI", () => {
     expect(j.tier).toBe("mid");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-11 (SC-6) — models.tiers value union consumed via resolveTierModel():
+// string | {model, effort?, verbosity?} | null. String behavior byte-identical
+// (covered above); the object form surfaces model + effort/verbosity.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import * as fs from "fs";
+import * as os from "os";
+
+describe("scoreTier — G-11 object-form tier values", () => {
+  test("object form resolves model and surfaces effort/verbosity", () => {
+    const r = scoreTier(
+      { workType: "architect", sensitivity: true }, // score 3 → powerful
+      {
+        tiers: {
+          powerful: { claude: { model: "opus-4.5", effort: "high", verbosity: "low" } },
+        },
+      }
+    );
+    expect(r.tier).toBe("powerful");
+    expect(r.model).toBe("opus-4.5");
+    expect(r.effort).toBe("high");
+    expect(r.verbosity).toBe("low");
+  });
+
+  test("string form output is unchanged — no effort/verbosity keys appear", () => {
+    const r = scoreTier({ workType: "architect", sensitivity: true });
+    expect(r.model).toBe("opus");
+    expect(r).not.toHaveProperty("effort");
+    expect(r).not.toHaveProperty("verbosity");
+  });
+
+  test("object form without effort surfaces only model", () => {
+    const r = scoreTier(
+      { workType: "draft" }, // score 1 → mid
+      { tiers: { mid: { claude: { model: "sonnet-4" } } } }
+    );
+    expect(r.model).toBe("sonnet-4");
+    expect(r).not.toHaveProperty("effort");
+  });
+
+  test("enabled=false static-mid path unpacks the object form too", () => {
+    const r = scoreTier(
+      { workType: "architect", sensitivity: true },
+      {
+        enabled: false,
+        tiers: { mid: { claude: { model: "sonnet-4", effort: "medium" } } },
+      }
+    );
+    expect(r.tier).toBe("mid");
+    expect(r.model).toBe("sonnet-4");
+    expect(r.effort).toBe("medium");
+  });
+
+  test("null host slot still yields undefined model under the union", () => {
+    const r = scoreTier(
+      { workType: "draft" },
+      { tiers: { mid: { claude: null } } }
+    );
+    expect(r.model).toBeUndefined();
+  });
+
+  test("CLI: object form in .guild/settings.json reaches the scorer (real resolver path)", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-score-g11-"));
+    try {
+      fs.mkdirSync(path.join(dir, ".guild"), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, ".guild", "settings.json"),
+        JSON.stringify({
+          models: {
+            tiers: { powerful: { claude: { model: "opus-4.5", effort: "high" } } },
+          },
+        })
+      );
+      const { status, out } = runCli([
+        "--signals",
+        JSON.stringify({ workType: "architect", sensitivity: true }),
+        "--cwd",
+        dir,
+      ]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out.trim());
+      expect(j.tier).toBe("powerful");
+      expect(j.model).toBe("opus-4.5");
+      expect(j.effort).toBe("high");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

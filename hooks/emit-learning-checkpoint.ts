@@ -146,6 +146,15 @@ export interface WriteCheckpointOpts {
   observed?: string[];
   /** Optional knowledge links; empty by default. */
   knowledgeLinksBatch?: KnowledgeLink[];
+  /**
+   * G-7 (SC-3, additive): marks a checkpoint written by the Stop-hook
+   * BACKSTOP (hooks/learning-backstop.ts) rather than the per-phase
+   * emitter. When true, the YAML gains a trailing `backstop: true` line so
+   * analytics can distinguish a model-emitted checkpoint from the
+   * guaranteed-record no-op. Default false/absent — existing callers and
+   * existing YAML output are byte-identical.
+   */
+  backstop?: boolean;
 }
 
 // ── Validation ─────────────────────────────────────────────────────────────
@@ -237,6 +246,7 @@ function buildYaml(opts: {
   observed: string[];
   reflectionsPath: string;
   knowledgeLinksBatch: KnowledgeLink[];
+  backstop?: boolean;
 }): string {
   // Contract §1: top-level comment + nested `learning_checkpoint:` wrapper.
   // Field order matches contract exactly:
@@ -281,6 +291,12 @@ function buildYaml(opts: {
 
   lines.push(`  routed_to: ${yamlValue(opts.reflectionsPath)}`);
   lines.push(`  evidence_ref: ${yamlValue(opts.evidenceRef)}`);
+
+  // G-7 (additive): trailing backstop marker — emitted ONLY when true so
+  // every pre-existing checkpoint shape stays byte-identical.
+  if (opts.backstop === true) {
+    lines.push("  backstop: true");
+  }
 
   return lines.join("\n") + "\n";
 }
@@ -427,6 +443,7 @@ export function writeCheckpoint(opts: WriteCheckpointOpts): string {
     observed,
     reflectionsPath: reflectionsRelPath,
     knowledgeLinksBatch: links,
+    ...(opts.backstop === true ? { backstop: true } : {}),
   });
 
   fs.writeFileSync(checkpointFile, yaml, "utf8");
@@ -522,6 +539,14 @@ function main(): void {
   }
 }
 
-if (require.main === module) {
+// CLI gate — argv-based (same pattern as hooks/post-tool-use.ts), NOT
+// `require.main === module`: esbuild scope-hoists this module into bundles
+// that import writeCheckpoint (dist/learning-backstop.js), where `module`
+// IS require.main and the old guard would run main() at bundle load.
+if (
+  process.argv[1] !== undefined &&
+  (process.argv[1].endsWith("emit-learning-checkpoint.ts") ||
+    process.argv[1].endsWith("emit-learning-checkpoint.js"))
+) {
   main();
 }

@@ -102,15 +102,99 @@ interface WorkspaceBlock {
 // ── Host-agnostic model tier map (ADR §1, §10 — cost-aware-tiering-and-lean-context).
 // tiers: cheap|mid|powerful → {claude,codex,gemini}. codex/gemini are null now (no third host).
 // Defaults preserve zero-config behavior (cheaper learn, same routing otherwise).
+//
+// G-11 (SC-6, v2-gap-closure): each tier→host VALUE is a union —
+//   string                                  (plain model name; the historical form)
+//   { model, effort?, verbosity? }          (object form — pins a model plus the
+//                                            host's effort/verbosity axes, e.g. for
+//                                            frontier models that take a reasoning-
+//                                            effort knob)
+//   null                                    (no model for this tier on this host)
+// The union is unpacked in EXACTLY ONE place: resolveTierModel() below. Every
+// consumer of tier model strings (score-tier.ts, lib/settings-resolver.ts,
+// write-host-capability.ts, lib/host-router.ts) goes through it — never index
+// the map and assume a string.
+/** Object form of a tier→host model value (G-11). Closed key set: model, effort, verbosity. */
+export interface TierModelSpec {
+  /** Model name for this tier on this host (required in the object form). */
+  model: string;
+  /** Optional host effort axis (e.g. "low" | "medium" | "high" — host-defined). */
+  effort?: string;
+  /** Optional host verbosity axis (host-defined). */
+  verbosity?: string;
+}
+/** A tier→host value: plain model string, object form, or null (no model). */
+export type TierHostValue = string | TierModelSpec | null;
 interface TierHostMap {
-  claude: string | null;
-  codex: string | null;
-  gemini: string | null;
+  claude: TierHostValue;
+  codex: TierHostValue;
+  gemini: TierHostValue;
 }
 interface TiersBlock {
   cheap: TierHostMap;
   mid: TierHostMap;
   powerful: TierHostMap;
+}
+
+/** Normalized result of unpacking a TierHostValue (G-11). */
+export interface ResolvedTierModel {
+  /** Model name, or null when the slot is empty/absent/malformed. */
+  model: string | null;
+  /** Present only when the object form supplied it. */
+  effort?: string;
+  /** Present only when the object form supplied it. */
+  verbosity?: string;
+}
+
+/** Normalize one tier→host value (string | {model,effort?,verbosity?} | null). */
+function normalizeTierValue(v: unknown): ResolvedTierModel {
+  if (typeof v === "string") {
+    const t = v.trim();
+    return t ? { model: t } : { model: null };
+  }
+  if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+    const o = v as Record<string, unknown>;
+    if (typeof o["model"] === "string" && o["model"].trim()) {
+      const out: ResolvedTierModel = { model: (o["model"] as string).trim() };
+      if (typeof o["effort"] === "string") out.effort = o["effort"] as string;
+      if (typeof o["verbosity"] === "string") out.verbosity = o["verbosity"] as string;
+      return out;
+    }
+  }
+  return { model: null };
+}
+
+/**
+ * resolveTierModel — THE single place the models.tiers value union is unpacked
+ * (G-11 / SC-6; codex G-plan finding #1: every string-assuming consumer must
+ * migrate through this one helper).
+ *
+ * Accepts any tiers-shaped record (tolerant — undefined/partial/malformed input
+ * yields { model: null }, never throws):
+ *   - canonical host-map form:  tiers[tier][host] = string | {model,effort?,verbosity?} | null
+ *   - legacy flat form:         tiers[tier] = "model-name"  (host-agnostic; kept
+ *     byte-identical for write-host-capability.ts's historical settings shape)
+ *
+ * @param tiers  The models.tiers record (resolved settings, raw settings.json, or partial).
+ * @param tier   "cheap" | "mid" | "powerful".
+ * @param host   Host slot name (e.g. "claude" | "codex" | "gemini").
+ * @returns      { model: string|null, effort?, verbosity? } — model is null when
+ *               the slot is empty, the tier/host is absent, or the value is malformed.
+ */
+export function resolveTierModel(
+  tiers: unknown,
+  tier: "cheap" | "mid" | "powerful",
+  host: string
+): ResolvedTierModel {
+  if (typeof tiers !== "object" || tiers === null || Array.isArray(tiers)) {
+    return { model: null };
+  }
+  const entry = (tiers as Record<string, unknown>)[tier];
+  if (entry === null || entry === undefined) return { model: null };
+  // Legacy flat form: tiers.<tier> is itself the model string (host-agnostic).
+  if (typeof entry === "string") return normalizeTierValue(entry);
+  if (typeof entry !== "object" || Array.isArray(entry)) return { model: null };
+  return normalizeTierValue((entry as Record<string, unknown>)[host]);
 }
 interface CacheTTLBlock {
   coordinator: "1h" | "5m" | "off";
@@ -382,7 +466,10 @@ const DEFAULTS: GuildSettings = {
 // Self-documenting help block written into the scaffolded settings.json.
 const HELP: Record<string, string> = {
   rigor: "quick | standard | deep — profile knob; expands loops/caps/review depth",
-  auto_approve: "[] | [spec,plan,build] | [all] — opt-in autonomy; destructive/network/spend STILL ask",
+  auto_approve:
+    "[] | [spec,plan,build,qa] | [all] — opt-in autonomy; destructive/network/spend STILL ask. " +
+    "qa (G-14/SC-9): auto-proceed ONLY on a computed ReleaseGate PASS — a BLOCK-override and the " +
+    "always-ask hard set still prompt. No ops token (rails stay interactive by design).",
   review: "local | cross | off — cross engages the Claude<->Codex adversarial review broker",
   host: "claude | codex | auto — co-equal host adapter selection",
   initiative_default: "null | <initiative-id> — attach runs to a durable initiative",
@@ -415,7 +502,9 @@ const HELP: Record<string, string> = {
   "defaults.team.always_include": "[] | subset of the 14 specialists",
   "defaults.review_workflow": "standard | cross | minimal — default review depth",
   "defaults.skill_policy": "standard | conservative — default skill-usage",
-  "defaults.gates.auto_approve": "[] | [spec,plan,build,all] — default approval-gate posture (never qa/ops)",
+  "defaults.gates.auto_approve":
+    "[] | [spec,plan,build,qa,all] — default approval-gate posture. " +
+    "qa auto-proceeds ONLY on a computed ReleaseGate PASS (BLOCK-override still prompts); never ops",
   "defaults.wiki.share_mode": "team | private — wiki share mode (moved here from project.yaml)",
   "defaults.wiki.autopromote": "false ALWAYS (true REJECTED — agents emit candidates only)",
   "defaults.quality.budget.per_class_minutes": "int > 0 — per-check-class wall-clock cap",
@@ -426,8 +515,14 @@ const HELP: Record<string, string> = {
     "bool (default true) — master toggle for cost-tiering. false = all lanes run at mid (current v2 behavior).",
   "models.tiers":
     "{cheap|mid|powerful: {claude,codex,gemini}} — host-agnostic tier→model map (ADR §1). " +
+    "Each host value is string | {model, effort?, verbosity?} | null (G-11/SC-6). " +
+    "Object form pins a model PLUS the host's effort/verbosity axes, e.g. " +
+    "powerful: {claude: {model: \"opus\", effort: \"high\"}}. Closed sub-keys: only " +
+    "model/effort/verbosity are accepted inside the object form (validate rejects others). " +
     "null host slot = no model for that tier on that host (fall through to host mapping). " +
-    "Defaults: cheap=haiku, mid=sonnet, powerful=opus. codex/gemini are null (no third host yet).",
+    "Defaults: cheap=haiku, mid=sonnet, powerful=opus (plain strings). " +
+    "codex/gemini are null (no third host yet). " +
+    "Consumers unpack the union ONLY via resolveTierModel() (read-guild-config.ts).",
   "models.scoreWeights":
     "object (signal→int) — auto-score rubric weights (ADR §2). " +
     "Signals: workType, blastRadius, dependsOn, security, priorEscalation. Ship fixed; tunable per-repo.",
@@ -570,7 +665,11 @@ const VALID_LOOPS = new Set(["none", "spec", "plan", "implementation", "all"]);
 const VALID_RIGOR = new Set(["quick", "standard", "deep"]);
 const VALID_REVIEW = new Set(["local", "cross", "off"]);
 const VALID_HOST = new Set(["claude", "codex", "auto"]);
-const VALID_PHASES = new Set(["spec", "plan", "build", "all"]);
+// G-14 (SC-9): "qa" is a valid auto-approve token. Semantics: auto-proceed ONLY
+// on a computed ReleaseGate PASS — a BLOCK-override and the always-ask hard set
+// (destructive/network/spend) still prompt. There is still NO "ops" token (rails
+// stay interactive by design).
+const VALID_PHASES = new Set(["spec", "plan", "build", "qa", "all"]);
 const VALID_AGENT_MODE = new Set(["team", "agent", "subagent", "auto"]);
 const VALID_MODEL_TIER = new Set(["cheap", "mid", "powerful"]);
 const VALID_CACHE_TTL = new Set(["1h", "5m", "off"]);
@@ -582,6 +681,12 @@ const VALID_MODELS_KEYS = new Set([
   "structuredOutputRequired", "cacheTTL", "importanceGate", "ingestSimilarityGate",
   "shortOutputThreshold",
 ]);
+
+// Closed host-key set for models.tiers.<tier>.* (G-11 + G-lane rework): the
+// documented host map is {claude, codex, gemini}. Shared by validateModels
+// (reject) and the resolve-mode merge strip (unknown host keys never leak
+// into the resolved config — same regime as DEFAULTS_ALLOWED_KEYS).
+const VALID_TIER_HOST_KEYS = new Set(["claude", "codex", "gemini"]);
 
 // Closed-key set for security.* block (D-BYPASS).
 const VALID_SECURITY_KEYS = new Set(["bypass_permissions_policy"]);
@@ -812,6 +917,60 @@ export function validateModels(m: Record<string, unknown>): string[] {
   for (const k of Object.keys(m)) {
     if (!VALID_MODELS_KEYS.has(k)) {
       rejects.push(`unknown models key "${k}" (closed key set — check spelling against ADR §10)`);
+    }
+  }
+  // tiers value union (G-11/SC-6): each tier→host value must be
+  // string | null | {model: string, effort?: string, verbosity?: string}.
+  // The object form is a CLOSED key set — unknown sub-keys are rejected.
+  // G-lane rework: the host map itself is ALSO a closed key set
+  // ({claude, codex, gemini}) — a typo like "claudee" must surface, not merge.
+  if (isPlainObject(m["tiers"])) {
+    const rt = m["tiers"] as Record<string, unknown>;
+    const VALID_TIER_KEYS = new Set(["cheap", "mid", "powerful"]);
+    const VALID_TIER_SPEC_KEYS = new Set(["model", "effort", "verbosity"]);
+    for (const tk of Object.keys(rt)) {
+      if (!VALID_TIER_KEYS.has(tk)) {
+        rejects.push(`unknown models.tiers key "${tk}" (valid: cheap|mid|powerful)`);
+        continue;
+      }
+      if (!isPlainObject(rt[tk])) continue; // non-object tier entries handled by the merge (legacy flat form tolerated by resolveTierModel)
+      const hostMap = rt[tk] as Record<string, unknown>;
+      for (const [hk, hv] of Object.entries(hostMap)) {
+        if (!VALID_TIER_HOST_KEYS.has(hk)) {
+          rejects.push(
+            `unknown models.tiers.${tk} host key "${hk}" (closed key set — valid: claude, codex, gemini)`
+          );
+          continue;
+        }
+        if (hv === null || typeof hv === "string") continue; // both historical forms valid
+        if (isPlainObject(hv)) {
+          const spec = hv as Record<string, unknown>;
+          for (const sk of Object.keys(spec)) {
+            if (!VALID_TIER_SPEC_KEYS.has(sk)) {
+              rejects.push(
+                `unknown models.tiers.${tk}.${hk} key "${sk}" ` +
+                  `(object form is a closed key set — only model, effort, verbosity)`
+              );
+            }
+          }
+          if (typeof spec["model"] !== "string" || !(spec["model"] as string).trim()) {
+            rejects.push(
+              `models.tiers.${tk}.${hk}.model is required and must be a non-empty string in the object form`
+            );
+          }
+          if (spec["effort"] !== undefined && typeof spec["effort"] !== "string") {
+            rejects.push(`models.tiers.${tk}.${hk}.effort must be a string (got ${JSON.stringify(spec["effort"])})`);
+          }
+          if (spec["verbosity"] !== undefined && typeof spec["verbosity"] !== "string") {
+            rejects.push(`models.tiers.${tk}.${hk}.verbosity must be a string (got ${JSON.stringify(spec["verbosity"])})`);
+          }
+        } else {
+          rejects.push(
+            `models.tiers.${tk}.${hk} must be a string, null, or {model, effort?, verbosity?} ` +
+              `(got ${JSON.stringify(hv)})`
+          );
+        }
+      }
     }
   }
   // thresholds sub-keys
@@ -1190,7 +1349,17 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
         mergedModels.tiers = { ...DEFAULTS.models.tiers } as TiersBlock;
         for (const tier of ["cheap", "mid", "powerful"] as const) {
           if (isPlainObject(rt[tier])) {
-            mergedModels.tiers[tier] = { ...DEFAULTS.models.tiers[tier], ...(rt[tier] as Partial<TierHostMap>) };
+            // G-lane rework: strip unknown host keys BEFORE merging so they can
+            // never leak into the resolved config (--validate hard-rejects above;
+            // resolve mode must also not carry them — same pattern as defaults.*).
+            const rawHostMap = rt[tier] as Record<string, unknown>;
+            const knownHosts: Partial<TierHostMap> = {};
+            for (const hk of Object.keys(rawHostMap)) {
+              if (VALID_TIER_HOST_KEYS.has(hk)) {
+                (knownHosts as Record<string, unknown>)[hk] = rawHostMap[hk];
+              }
+            }
+            mergedModels.tiers[tier] = { ...DEFAULTS.models.tiers[tier], ...knownHosts };
           }
         }
       }

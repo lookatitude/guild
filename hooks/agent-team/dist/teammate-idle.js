@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // agent-team/teammate-idle.ts
-var fs4 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
+var fs5 = __toESM(require("fs"));
+var path5 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
 
 // lib/guild-root.ts
@@ -178,19 +178,58 @@ function extractHandoffEnvelope(content) {
 }
 
 // lib/heartbeat.ts
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+
+// lib/run-state.ts
 var fs2 = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
+var RUN_STATE_SCHEMA_VERSION = "guild.run_state.v1";
+function runStatePath(runDir) {
+  return path2.join(runDir, "run-state.json");
+}
+function loadRunState(runDir) {
+  let raw;
+  try {
+    raw = fs2.readFileSync(runStatePath(runDir), "utf8");
+  } catch {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed) || parsed["schema_version"] !== RUN_STATE_SCHEMA_VERSION) {
+    return null;
+  }
+  return parsed;
+}
+
+// lib/heartbeat.ts
 var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
+var TIER_HEARTBEAT_TIMEOUTS_MS = {
+  cheap: 18e4,
+  // 3 min
+  mid: 6e5,
+  // 10 min — equals DEFAULT_HEARTBEAT_TIMEOUT_MS
+  powerful: 12e5
+  // 20 min
+};
+function isLaneTier(t) {
+  return t === "cheap" || t === "mid" || t === "powerful";
+}
 function heartbeatPath(runDir, specialist) {
-  return path2.join(runDir, "in-progress", `${specialist}.json`);
+  return path3.join(runDir, "in-progress", `${specialist}.json`);
 }
 function legacyLogPath(runDir, specialist) {
-  return path2.join(runDir, "in-progress", `${specialist}.log`);
+  return path3.join(runDir, "in-progress", `${specialist}.log`);
 }
 function readHeartbeat(runDir, specialist) {
   let raw;
   try {
-    raw = fs2.readFileSync(heartbeatPath(runDir, specialist), "utf8");
+    raw = fs3.readFileSync(heartbeatPath(runDir, specialist), "utf8");
   } catch {
     return null;
   }
@@ -213,32 +252,52 @@ function readHeartbeat(runDir, specialist) {
   if (typeof obj["last_action"] === "string") hb.last_action = obj["last_action"];
   return hb;
 }
-function readHeartbeatTimeoutMs(cwd) {
-  const settingsPath = path2.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+function readExplicitHeartbeatTimeoutMs(cwd) {
+  const settingsPath = path3.join(resolveGuildRoot(cwd), ".guild", "settings.json");
   let raw;
   try {
-    raw = fs2.readFileSync(settingsPath, "utf8");
+    raw = fs3.readFileSync(settingsPath, "utf8");
   } catch {
-    return DEFAULT_HEARTBEAT_TIMEOUT_MS;
+    return null;
   }
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return DEFAULT_HEARTBEAT_TIMEOUT_MS;
+    return null;
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return DEFAULT_HEARTBEAT_TIMEOUT_MS;
+    return null;
   }
   const defaults = parsed["defaults"];
   if (typeof defaults !== "object" || defaults === null || Array.isArray(defaults)) {
-    return DEFAULT_HEARTBEAT_TIMEOUT_MS;
+    return null;
   }
   const val = defaults["heartbeat_timeout_ms"];
   if (typeof val === "number" && Number.isFinite(val) && val > 0) {
     return val;
   }
-  return DEFAULT_HEARTBEAT_TIMEOUT_MS;
+  return null;
+}
+function resolveLaneTier(runDir, specialist, assignedTaskIds = []) {
+  try {
+    const state = loadRunState(runDir);
+    if (state === null) return null;
+    for (const taskId of assignedTaskIds) {
+      const tier = state.lanes[taskId]?.tier;
+      if (isLaneTier(tier)) return tier;
+    }
+    const ownTier = state.lanes[specialist]?.tier;
+    if (isLaneTier(ownTier)) return ownTier;
+    return null;
+  } catch {
+    return null;
+  }
+}
+function resolveHeartbeatTimeoutMs(cwd, tier) {
+  const explicit = readExplicitHeartbeatTimeoutMs(cwd);
+  if (explicit !== null) return explicit;
+  return TIER_HEARTBEAT_TIMEOUTS_MS[isLaneTier(tier) ? tier : "mid"];
 }
 function assessLiveness(runDir, specialist, timeoutMs, now = Date.now()) {
   const hb = readHeartbeat(runDir, specialist);
@@ -256,7 +315,7 @@ function assessLiveness(runDir, specialist, timeoutMs, now = Date.now()) {
   }
   const logPath = legacyLogPath(runDir, specialist);
   try {
-    const stat = fs2.statSync(logPath);
+    const stat = fs3.statSync(logPath);
     const ageMs = Math.max(0, now - stat.mtimeMs);
     return { source: "mtime", fresh: ageMs < timeoutMs, ageMs };
   } catch {
@@ -265,8 +324,8 @@ function assessLiveness(runDir, specialist, timeoutMs, now = Date.now()) {
 }
 
 // lib/bus-emit.ts
-var fs3 = __toESM(require("node:fs"));
-var path3 = __toESM(require("node:path"));
+var fs4 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
 var BUS_EVENT_SCHEMA_VERSION = "guild.agent_bus_event.v1";
 function buildBusEvent(input) {
   const rec = {
@@ -285,11 +344,11 @@ function buildBusEvent(input) {
 }
 function emitBusEvent(runDir, input) {
   try {
-    const busDir = path3.join(runDir, "agent-bus");
-    fs3.mkdirSync(busDir, { recursive: true });
+    const busDir = path4.join(runDir, "agent-bus");
+    fs4.mkdirSync(busDir, { recursive: true });
     const record = buildBusEvent(input);
-    fs3.appendFileSync(
-      path3.join(busDir, "events.ndjson"),
+    fs4.appendFileSync(
+      path4.join(busDir, "events.ndjson"),
       JSON.stringify(record) + "\n",
       "utf8"
     );
@@ -308,19 +367,19 @@ function deriveRunId(sessionId) {
   return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
 }
 function assessReceipts(runDir, teammate) {
-  const handoffsDir = path4.join(runDir, "handoffs");
-  if (!fs4.existsSync(handoffsDir)) return [];
+  const handoffsDir = path5.join(runDir, "handoffs");
+  if (!fs5.existsSync(handoffsDir)) return [];
   const prefix = `${teammate}-`;
   const results = [];
-  const files = fs4.readdirSync(handoffsDir).filter((f) => f.startsWith(prefix) && f.endsWith(".md"));
+  const files = fs5.readdirSync(handoffsDir).filter((f) => f.startsWith(prefix) && f.endsWith(".md"));
   for (const file of files) {
     const taskId = file.slice(prefix.length, -".md".length);
-    const rPath = path4.join(handoffsDir, file);
+    const rPath = path5.join(handoffsDir, file);
     let envelopeValid = false;
     let envelopeErrors = [];
     let envelopeStatus;
     try {
-      const content = fs4.readFileSync(rPath, "utf8");
+      const content = fs5.readFileSync(rPath, "utf8");
       const rawEnvelope = extractHandoffEnvelope(content);
       if (rawEnvelope !== null) {
         const result = validateHandoffV2(rawEnvelope);
@@ -343,12 +402,12 @@ function assessReceipts(runDir, teammate) {
   return results;
 }
 function findAssignedTaskIds(cwd, teammate) {
-  const planDir = path4.join(resolveGuildRoot(cwd), ".guild", "plan");
-  if (!fs4.existsSync(planDir)) return [];
-  const files = fs4.readdirSync(planDir).filter((f) => f.endsWith(".md"));
+  const planDir = path5.join(resolveGuildRoot(cwd), ".guild", "plan");
+  if (!fs5.existsSync(planDir)) return [];
+  const files = fs5.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   const ids = [];
   for (const file of files) {
-    const content = fs4.readFileSync(path4.join(planDir, file), "utf8");
+    const content = fs5.readFileSync(path5.join(planDir, file), "utf8");
     const blocks = content.split(/\n(?=[-*#]|\w)/);
     for (const block of blocks) {
       const isAssigned = new RegExp(`(?:owner|assigned|teammate):\\s*${teammate}\\b`, "i").test(block);
@@ -456,7 +515,7 @@ async function main() {
   const teamName = (payload.team_name ?? "").trim() || "unknown";
   const cwd = payload.cwd ?? process.cwd();
   const runId = deriveRunId(sessionId);
-  const runDir = path4.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runDir = path5.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const receiptAssessments = assessReceipts(runDir, teammate);
   const validReceiptTaskIds = receiptAssessments.filter((r) => r.envelopeValid).map((r) => r.taskId);
   const invalidReceiptTaskIds = receiptAssessments.filter((r) => !r.envelopeValid).map((r) => r.taskId);
@@ -464,10 +523,11 @@ async function main() {
   const assignedIds = findAssignedTaskIds(cwd, teammate);
   const pendingTaskIds = assignedIds.filter((id) => !completedIds.has(id));
   const hasReceipt = receiptAssessments.length > 0;
-  const timeoutMs = readHeartbeatTimeoutMs(cwd);
+  const laneTier = resolveLaneTier(runDir, teammate, assignedIds);
+  const timeoutMs = resolveHeartbeatTimeoutMs(cwd, laneTier);
   const liveness = assessLiveness(runDir, teammate, timeoutMs);
   process.stderr.write(
-    `[teammate-idle] INFO: teammate="${teammate}" assigned=[${assignedIds.join(",")}] validReceipts=[${validReceiptTaskIds.join(",")}] invalidReceipts=[${invalidReceiptTaskIds.join(",")}] pending=[${pendingTaskIds.join(",")}] liveness=${liveness.source}/${liveness.fresh ? "fresh" : "stale"} ageMs=${liveness.ageMs ?? "n/a"} timeoutMs=${timeoutMs}
+    `[teammate-idle] INFO: teammate="${teammate}" assigned=[${assignedIds.join(",")}] validReceipts=[${validReceiptTaskIds.join(",")}] invalidReceipts=[${invalidReceiptTaskIds.join(",")}] pending=[${pendingTaskIds.join(",")}] liveness=${liveness.source}/${liveness.fresh ? "fresh" : "stale"} ageMs=${liveness.ageMs ?? "n/a"} timeoutMs=${timeoutMs} tier=${laneTier ?? "unresolved(mid-fallback)"}
 `
   );
   const validReceipts = receiptAssessments.filter((r) => r.envelopeValid);

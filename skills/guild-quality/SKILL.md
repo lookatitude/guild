@@ -119,9 +119,10 @@ iff a selected class is `fail`, or `inconclusive` no-owner, or a safety-relevant
 `gap` no-owner, or `gap`/`not_applicable` on a selected class no-owner; **else
 RELEASE-READY**. Gate `[release] [block] [abort]`; `[release]` on a BLOCK is a
 **HUMAN-ONLY** force-pass (name + rationale recorded). `--auto-approve` tokens
-`[spec, plan, build, all]` — **no `qa`/`ops`**: RELEASE-READY auto-passes under
-`--auto-approve=all`, but a **BLOCK→release override is NEVER auto-passed**
-(asymmetry printed, never silent). Populate `release_decision` → `§624–628`.
+`[spec, plan, build, qa, all]` — **no `ops`**: `qa` (and `all`) auto-passes a
+**RELEASE-READY** verdict ONLY; a **BLOCK→release override is NEVER
+auto-passed** under any token (asymmetry printed, never silent). Populate
+`release_decision` → `§624–628`.
 *Full truth-table: quality-mechanics.md.*
 
 ## learning-checkpoint (step 7.5 — advisory, no new gate)
@@ -139,7 +140,8 @@ After `releasegate` and before phase close, fire the per-phase LearningCheckpoin
 # Escalation rules
 
 - A BLOCK is never overridden by automation: `[release]` on a BLOCK escalates
-  to a **human** (name + rationale); no `qa` token exists in `--auto-approve`.
+  to a **human** (name + rationale); the `--auto-approve=qa` token is
+  PASS-only — it never touches a BLOCK.
 - G-quality findings escalate to the named owner (rerun / added check /
   owner-accepted risk) — G-quality itself never blocks.
 

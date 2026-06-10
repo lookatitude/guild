@@ -220,3 +220,69 @@ describe("write-host-capability — writeHostCapability (RE-5)", () => {
     expect(r.status).not.toBe(0);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-11 (SC-6) — settings models.tiers consumed via resolveTierModel(): the
+// canonical host-map shape and the object form both resolve to plain model
+// strings in the frozen guild.host_capability.v1 manifest. The legacy flat
+// shape (tiers.cheap = "haiku-3") stays byte-identical (covered above).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("write-host-capability — G-11 tier value union", () => {
+  const tmpDirs: string[] = [];
+  afterAll(() => tmpDirs.forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
+  const mkRoot = () => {
+    const d = mkTmp();
+    tmpDirs.push(d);
+    return d;
+  };
+
+  function writeModels(root: string, models: unknown): void {
+    fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+    fs.writeFileSync(path.join(root, ".guild", "settings.json"), JSON.stringify({ models }));
+  }
+
+  it("canonical host-map shape resolves the active host's string per tier", () => {
+    const root = mkRoot();
+    writeModels(root, {
+      tiers: {
+        cheap: { claude: "haiku-3.5", codex: null, gemini: null },
+        mid: { claude: "sonnet-4", codex: null, gemini: null },
+        powerful: { claude: "opus-4.5", codex: null, gemini: null },
+      },
+    });
+    const m = buildCapability({ cwd: root, env: {}, probeTmux: () => false });
+    expect(m.tier_models).toEqual({ cheap: "haiku-3.5", mid: "sonnet-4", powerful: "opus-4.5" });
+    expect(m.models.every((x) => typeof x === "string")).toBe(true);
+  });
+
+  it("object-form values contribute their model string (effort is dispatch-time, not manifest)", () => {
+    const root = mkRoot();
+    writeModels(root, {
+      tiers: {
+        powerful: { claude: { model: "opus-4.5", effort: "high" }, codex: null, gemini: null },
+      },
+    });
+    const m = buildCapability({ cwd: root, env: {}, probeTmux: () => false });
+    expect(m.tier_models.powerful).toBe("opus-4.5");
+    // tiers not present in settings fall back to the built-in ladder
+    expect(m.tier_models.cheap).toBe("haiku");
+    expect(m.tier_models.mid).toBe("sonnet");
+  });
+
+  it("null host slot for the active host falls back to the built-in ladder", () => {
+    const root = mkRoot();
+    writeModels(root, { tiers: { powerful: { claude: null, codex: "o3", gemini: null } } });
+    const m = buildCapability({ cwd: root, env: {}, probeTmux: () => false });
+    expect(m.tier_models.powerful).toBe("opus"); // claude slot null → default
+  });
+
+  it("codex host resolves its own slot from the host-map shape", () => {
+    const root = mkRoot();
+    writeModels(root, {
+      tiers: { powerful: { claude: "opus", codex: { model: "o3-pro", effort: "high" }, gemini: null } },
+    });
+    const m = buildCapability({ cwd: root, host: "codex", env: {}, probeTmux: () => false });
+    expect(m.tier_models.powerful).toBe("o3-pro");
+  });
+});

@@ -62,6 +62,14 @@ If a bundle exceeds the cap, summarize the lowest-weighted layer — in practice
 
 Record the final token estimate in the bundle's frontmatter so `guild:review` and eval harnesses can audit drift over time.
 
+**Mandatory post-write lint (deterministic — the cap is code-enforced, not model-judged).** Immediately after writing the bundle file, run the budget linter on it and consume its verdict:
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/lint-context-bundle.ts --bundle .guild/context/<run-id>/<specialist>-<task-id>.md
+```
+
+It estimates tokens deterministically (`ceil(chars/4)`, cross-checked against the frontmatter `token_estimate` when present) and prints `{ pass, est_tokens, graph_est_tokens, has_dropped_for_budget, frontmatter_token_estimate, reasons[] }` to stdout — exit `0` pass, `2` fail. It FAILs when the estimate exceeds the 6k hard cap, or when a knowledge-graph section exceeds the 1200-token sub-cap (`## Graph retrieval`) with no `dropped_for_budget:` line recording the drop. On fail: trim per the summarization rules above (graph nodes drop first, per `source_priority`), record a `dropped_for_budget:` line for what was cut, rewrite the bundle, and **re-run the linter until it passes**. A bundle that has not passed the lint MUST NOT be handed to `guild:execute-plan` for dispatch — the model never self-certifies the budget.
+
 ## Graph retrieval
 
 When a brownfield `KnowledgeGraph` index exists

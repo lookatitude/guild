@@ -86,10 +86,21 @@ interface DefaultsBlock {
 interface WorkspaceBlock {
   mode: "auto" | "on" | "off";
 }
+// G-11 (SC-6): tier→host values are a union — string | {model, effort?, verbosity?} | null.
+// This resolver only STORES the union (sparse parse + deep-merge across layers);
+// it never unpacks it. The ONLY unpack point is resolveTierModel() in
+// read-guild-config.ts — consumers (score-tier, write-host-capability,
+// host-router) import it from there.
+interface TierModelSpec {
+  model: string;
+  effort?: string;
+  verbosity?: string;
+}
+type TierHostValue = string | TierModelSpec | null;
 interface TierHostMap {
-  claude: string | null;
-  codex: string | null;
-  gemini: string | null;
+  claude: TierHostValue;
+  codex: TierHostValue;
+  gemini: TierHostValue;
 }
 interface TiersBlock {
   cheap: TierHostMap;
@@ -341,6 +352,26 @@ const NON_INHERITABLE_KEYS = new Set<string>([
 const PROTO_POISON_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 // ---------------------------------------------------------------------------
+// Closed host-key set for models.tiers.<tier>.* (G-11 + G-lane rework).
+// Mirrors VALID_TIER_HOST_KEYS in read-guild-config.ts: unknown host keys
+// (e.g. a "claudee" typo) are stripped at sparse-parse time so they never
+// merge through the layer chain into the resolved config. --validate (the
+// read-guild-config path) hard-rejects them; this resolver is tolerant by
+// design, so it strips instead of throwing.
+// ---------------------------------------------------------------------------
+
+const VALID_TIER_HOST_KEYS = new Set(["claude", "codex", "gemini"]);
+
+/** Sparse-copy a raw tier host map keeping ONLY the closed host-key set. */
+function sparseTierHostMap(raw: Record<string, unknown>): TierHostMap {
+  const out: Record<string, unknown> = {};
+  for (const hk of Object.keys(raw)) {
+    if (VALID_TIER_HOST_KEYS.has(hk)) out[hk] = raw[hk];
+  }
+  return out as unknown as TierHostMap;
+}
+
+// ---------------------------------------------------------------------------
 // Valid value sets (mirrors read-guild-config.ts)
 // ---------------------------------------------------------------------------
 
@@ -348,7 +379,8 @@ const VALID_LOOPS      = new Set(["none", "spec", "plan", "implementation", "all
 const VALID_RIGOR      = new Set(["quick", "standard", "deep"]);
 const VALID_REVIEW     = new Set(["local", "cross", "off"]);
 const VALID_HOST       = new Set(["claude", "codex", "auto"]);
-const VALID_PHASES     = new Set(["spec", "plan", "build", "all"]);
+// G-14 (SC-9): "qa" token — PASS-only auto-proceed (mirrors read-guild-config.ts).
+const VALID_PHASES     = new Set(["spec", "plan", "build", "qa", "all"]);
 const VALID_AGENT_MODE = new Set(["team", "agent", "subagent", "auto"]);
 const VALID_CACHE_TTL  = new Set(["1h", "5m", "off"]);
 
@@ -607,7 +639,8 @@ function parseSettingsFile(filePath: string): Partial<ResolvedConfig> {
       const sparseTiers: Partial<TiersBlock> = {};
       for (const tier of ["cheap", "mid", "powerful"] as const) {
         if (isPlainObject(rt[tier])) {
-          sparseTiers[tier] = rt[tier] as unknown as TierHostMap;
+          // G-lane rework: strip unknown host keys (closed set: claude|codex|gemini)
+          sparseTiers[tier] = sparseTierHostMap(rt[tier] as Record<string, unknown>);
         }
       }
       sparse.tiers = sparseTiers as TiersBlock;
@@ -772,7 +805,8 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
       const rt = rawModels["tiers"] as Record<string, unknown>;
       const sparseTiers: Partial<TiersBlock> = {};
       for (const tier of ["cheap", "mid", "powerful"] as const) {
-        if (isPlainObject(rt[tier])) sparseTiers[tier] = rt[tier] as unknown as TierHostMap;
+        // G-lane rework: strip unknown host keys (closed set: claude|codex|gemini)
+        if (isPlainObject(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier] as Record<string, unknown>);
       }
       sparse.tiers = sparseTiers as TiersBlock;
     }

@@ -1,0 +1,19 @@
+{
+  "should_trigger": [
+    "Open the dashboard for this project.",
+    "Visualize the runs in the browser UI.",
+    "Show me the knowledge graph.",
+    "Launch the benchmark UI against this repo's runs.",
+    "Run /guild:dashboard with --no-import.",
+    "I want to browse the wiki visually for this workspace."
+  ],
+  "should_not_trigger": [
+    "Show the usage and telemetry stats dashboard.",
+    "Run /guild:stats.",
+    "Add a new route to the benchmark server.",
+    "Fix the vitest coverage gate in the benchmark repo.",
+    "Import this one run directory into the benchmark by hand.",
+    "Score the latest benchmark run against the baseline.",
+    "Query the wiki for the release-discipline standard."
+  ]
+}

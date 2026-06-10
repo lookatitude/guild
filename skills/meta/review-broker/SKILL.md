@@ -278,9 +278,38 @@ passes the gate **only** by satisfying the same five conditions — weak
 independence relaxes *who* may review, never *whether* the checksum/blocker gate
 holds.
 
-Compute the SHA-256 with `sha256(<scrubbed-artifact-bytes>)`; the broker records
-both `artifact_sha256_reviewed` (from the result) and the recomputed current
-hash in the trail so a reviewer-vs-current mismatch is auditable.
+**The five conditions are evaluated by deterministic code, never by the model.**
+The broker MUST run the gate-pass verifier against the round's result and the
+current (post-scrub) artifact bytes, and consume its verdict:
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/verify-gate-pass.ts \
+  --result .guild/runs/<run-id>/review/<gate>/result-<round>.json \
+  --artifact <scrubbed-artifact-path> \
+  --packet-id <packet-id issued for this round> \
+  [--force-pass]   # ONLY after an explicit human force_pass choice (condition 4)
+```
+
+The script recomputes the SHA-256 itself (`node:crypto`, over the artifact
+bytes), parses the result as `review_result.v1` (lenient consume-only reader),
+evaluates all five conditions, and prints a verdict JSON to stdout — exit `0`
+pass, `2` fail:
+
+```json
+{ "pass": false,
+  "conditions": { "parses": true, "packet_id_match": true, "sha256_match": false,
+                  "satisfied": true, "no_blockers": true },
+  "recomputed_sha256": "<hex>", "reasons": ["…"] }
+```
+
+The broker decides pass/rework/restart from `pass` + `reasons` alone — it
+**never self-computes the hash or re-evaluates a condition in prose** (a
+model-side recompute is exactly the drift class this script closes; see the
+deterministic-code rule). `sha256_match: false` is the
+artifact-changed-mid-review case above → reject + restart the round. Record
+both `artifact_sha256_reviewed` (from the result) and the verdict's
+`recomputed_sha256` in the trail so a reviewer-vs-current mismatch is
+auditable.
 
 ## Input shape
 

@@ -33,6 +33,10 @@
 
 import type { HostCapabilityManifest, HostKind } from "../write-host-capability";
 import type { Specialist } from "./team-backend";
+// G-11 (SC-6): the settings models.tiers value union (string | {model,effort?,
+// verbosity?} | null) is unpacked ONLY via resolveTierModel — the router never
+// assumes the operator-override slot is a plain string.
+import { resolveTierModel, type TierHostValue } from "../read-guild-config";
 
 // ── Axes + request ────────────────────────────────────────────────────────────
 
@@ -149,8 +153,10 @@ export interface RouteOptions {
   /**
    * Operator model override: settings.json models.tiers[tier][host_kind].
    * Highest-precedence step of the null-slot fill. Passed in (router stays pure).
+   * G-11 (SC-6): values carry the full union — string | {model, effort?, verbosity?}
+   * | null — and are unpacked exclusively through resolveTierModel().
    */
-  settingsOverride?: Partial<Record<Tier, Partial<Record<HostKind, string>>>>;
+  settingsOverride?: Partial<Record<Tier, Partial<Record<HostKind, TierHostValue>>>>;
   /**
    * CR-6 telemetry spend stub. Invoked once with the final decision so actual
    * routing spend can be recorded now; the budget CAP itself is deferred
@@ -386,8 +392,12 @@ export function resolveModel(
   host: RoutableHost,
   settingsOverride?: RouteOptions["settingsOverride"]
 ): string {
-  const override = settingsOverride?.[tier]?.[host.host_kind];
-  if (typeof override === "string" && override.trim()) return override.trim();
+  // G-11 (SC-6): unpack the settings tier-value union (string | object form | null)
+  // through the single helper. Plain-string overrides resolve byte-identically;
+  // the object form contributes its `model` (effort/verbosity are dispatch-time
+  // concerns, not part of the frozen RouteTarget shape).
+  const override = resolveTierModel(settingsOverride, tier, host.host_kind).model;
+  if (override !== null) return override;
   // TE-07: read canonical `tier_models`; fall back to legacy `tiers` for old manifests.
   const fromManifest = host.tier_models?.[tier] ?? host.tiers?.[tier];
   if (typeof fromManifest === "string" && fromManifest.trim()) return fromManifest.trim();

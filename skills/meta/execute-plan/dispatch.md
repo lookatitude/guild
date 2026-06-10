@@ -50,6 +50,79 @@ Every lane is dispatched as an **ephemeral one-agent-per-task** agent (ADR §6) 
 
 The agent's **final action** in this lifecycle is writing its receipt file — see `## Handoff protocol` below for the single-channel protocol that every brief carries.
 
+## Brief shape by tier (G-12 / SC-7)
+
+The lane's **resolved tier decides the SHAPE of the task brief**, not just the model.
+Frontier models perform best when given the outcome and the verification and left to
+choose the method; cheap models perform best when every step is spelled out. Select
+the shape from the lane's resolved tier (after scoring + pins — the same tier that
+drives the `model` param above):
+
+| Resolved tier | Brief shape |
+|---|---|
+| `powerful` — or any lane whose resolved model the operator pinned as a frontier model (per-lane plan `tier:`/`model_tier:` pin or `--model-tier=powerful`) | **GOAL-MODE brief** (template A below): desired end-state + constraints + the exact verification, method left open. Do NOT decompose into numbered steps. |
+| `mid` | **Current default shape — unchanged.** The lane brief as composed today (scope, success-criteria, context bundle, autonomy policy). Neither template below applies. |
+| `cheap` | **Prescriptive checklist brief** (template B below): an explicit numbered step list; no open-ended method choices. |
+
+Whatever the shape, **the canonical handoff-protocol block (`## Handoff protocol`
+below) is injected verbatim into every brief for ALL tiers** — the brief shape varies,
+the receipt protocol never does.
+
+### Template A — GOAL-MODE brief (powerful / operator-pinned frontier lanes)
+
+Use verbatim, substituting the `<...>` placeholders. Four sections, in this order —
+do not add a step-by-step plan section:
+
+````
+GOAL
+<The desired end-state, stated as an outcome — what must be TRUE when this lane is
+done, not how to get there. Include the artifact(s) that must exist and the behavior
+they must exhibit.>
+
+CONSTRAINTS
+<Boundaries and invariants: file-ownership scope (write ONLY these paths), frozen
+contracts/schemas that must not change, behavior that must stay byte-identical,
+security/closed-key regimes, anything the plan's autonomy-policy forbids.>
+
+VERIFY
+<The exact command(s) or check(s) that prove the goal is met — e.g. the test command
+to run and the expected result ("cd <dir> && npx jest --silent — ALL green, including
+pre-existing tests"). The lane must run this itself before writing its receipt.>
+
+FREEDOM
+<Method is left open: choose your own decomposition, ordering, and implementation
+approach within CONSTRAINTS. If you deviate from any assumption stated in the plan,
+or discover the goal is better met another way, do it — and report every such
+deviation in the receipt's `notes`/`assumptions` so the lead can audit the path
+taken.>
+````
+
+### Template B — prescriptive checklist brief (cheap lanes)
+
+Use verbatim, substituting the `<...>` placeholders. Every step is concrete and
+self-contained; no step may require an open-ended judgment call:
+
+````
+TASK
+<one-sentence task statement>
+
+STEPS (do these in order, exactly):
+1. <concrete action — exact file path + exact change>
+2. <concrete action>
+3. <...>
+N. Run: <exact verification command> — expect: <exact expected output/result>.
+N+1. Write your handoff receipt (protocol block below).
+
+RULES
+- Do ONLY the steps above. If a step cannot be completed exactly as written, STOP
+  and emit `status: "escalate"` in your receipt with the blocking step number —
+  do not improvise a workaround.
+- Touch no file outside the paths named in the steps.
+````
+
+Mid-tier lanes keep the existing default brief composition documented in
+`guild:execute-plan` — this section intentionally specifies no template for them.
+
 ## Handoff protocol (canonical — inject verbatim into every agent brief)
 
 **Implements `docs/knowledge/implementation/agent-reliability-and-evolution-plan.md` §3 Track R (R1/R2/R3/R5) + A1/A3. Fixes flaws F1 (idle without handoff), F2 (dual-channel envelope), F4 (output-cap failure), F6 (cwd/path ambiguity).**

@@ -33,8 +33,8 @@ __export(post_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(post_tool_use_exports);
-var fs5 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
+var fs6 = __toESM(require("node:fs"));
+var path7 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -173,11 +173,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path6 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path6), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path6)) return;
+  const path8 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path8), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path8)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path6, "wx");
+    const fd = (0, import_node_fs.openSync)(path8, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -351,9 +351,9 @@ function appendEvent(runDir, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId = opts.laneId ?? "global";
-    const path6 = laneFallbackPath(runDir, laneId);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path6), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path6, "a");
+    const path8 = laneFallbackPath(runDir, laneId);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path8), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path8, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -438,8 +438,8 @@ function sidecarKeyMatches(entry, key) {
   return true;
 }
 function consumeSidecarPre(runDir, matchOrCallId) {
-  const path6 = sidecarPath(runDir);
-  if (!(0, import_node_fs2.existsSync)(path6)) return null;
+  const path8 = sidecarPath(runDir);
+  if (!(0, import_node_fs2.existsSync)(path8)) return null;
   const apply = (text) => {
     const lines = text.split("\n");
     const parsedLines = [];
@@ -480,15 +480,15 @@ function consumeSidecarPre(runDir, matchOrCallId) {
     return { match, rest };
   };
   if (process.platform === "win32") {
-    const text = (0, import_node_fs2.readFileSync)(path6, "utf8");
+    const text = (0, import_node_fs2.readFileSync)(path8, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs2.writeFileSync)(path6, rest);
+    (0, import_node_fs2.writeFileSync)(path8, rest);
     return match;
   }
   return withStableLock(runDir, () => {
-    const text = (0, import_node_fs2.readFileSync)(path6, "utf8");
+    const text = (0, import_node_fs2.readFileSync)(path8, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs2.writeFileSync)(path6, rest);
+    (0, import_node_fs2.writeFileSync)(path8, rest);
     return match;
   });
 }
@@ -544,8 +544,8 @@ function buildToolCallFromPostOnly(opts) {
   return out;
 }
 function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 * 1e3) {
-  const path6 = sidecarPath(runDir);
-  if (!(0, import_node_fs2.existsSync)(path6)) return { orphans: [], events: [] };
+  const path8 = sidecarPath(runDir);
+  if (!(0, import_node_fs2.existsSync)(path8)) return { orphans: [], events: [] };
   const apply = (text) => {
     const lines = text.split("\n");
     const orphans2 = [];
@@ -569,15 +569,15 @@ function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 
   };
   let orphans;
   if (process.platform === "win32") {
-    const text = (0, import_node_fs2.readFileSync)(path6, "utf8");
+    const text = (0, import_node_fs2.readFileSync)(path8, "utf8");
     const out = apply(text);
-    (0, import_node_fs2.writeFileSync)(path6, out.rest);
+    (0, import_node_fs2.writeFileSync)(path8, out.rest);
     orphans = out.orphans;
   } else {
     orphans = withStableLock(runDir, () => {
-      const text = (0, import_node_fs2.readFileSync)(path6, "utf8");
+      const text = (0, import_node_fs2.readFileSync)(path8, "utf8");
       const out = apply(text);
-      (0, import_node_fs2.writeFileSync)(path6, out.rest);
+      (0, import_node_fs2.writeFileSync)(path8, out.rest);
       return out.orphans;
     });
   }
@@ -901,6 +901,76 @@ function scrubbedWrite(outPath, content, opts) {
   return { written: false, blocked: true };
 }
 
+// lib/heartbeat-write.ts
+var fs5 = __toESM(require("node:fs"));
+var path6 = __toESM(require("node:path"));
+
+// lib/heartbeat.ts
+var path5 = __toESM(require("node:path"));
+var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
+function heartbeatPath(runDir, specialist) {
+  return path5.join(runDir, "in-progress", `${specialist}.json`);
+}
+
+// lib/heartbeat-write.ts
+var SAFE_PATH_COMPONENT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+function isSafePathComponent(id) {
+  return SAFE_PATH_COMPONENT_RE.test(id) && id !== "." && id !== "..";
+}
+function writeHeartbeat(runDir, specialist, record) {
+  const finalPath = heartbeatPath(runDir, specialist);
+  fs5.mkdirSync(path6.dirname(finalPath), { recursive: true });
+  const tmpPath = `${finalPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  fs5.writeFileSync(tmpPath, JSON.stringify(record, null, 2) + "\n", "utf8");
+  try {
+    fs5.renameSync(tmpPath, finalPath);
+  } catch (err) {
+    try {
+      fs5.unlinkSync(tmpPath);
+    } catch {
+    }
+    throw err;
+  }
+  return finalPath;
+}
+function writeHeartbeatFromEnv(opts = {}) {
+  try {
+    const env = opts.env ?? process.env;
+    const runId = env["GUILD_RUN_ID"];
+    const specialist = env["GUILD_SPECIALIST"];
+    if (typeof runId !== "string" || runId.length === 0) {
+      return { written: false, path: null, reason: "env-absent" };
+    }
+    if (typeof specialist !== "string" || specialist.length === 0) {
+      return { written: false, path: null, reason: "env-absent" };
+    }
+    if (!isSafePathComponent(runId) || !isSafePathComponent(specialist)) {
+      return { written: false, path: null, reason: "unsafe-id" };
+    }
+    const envRunDir = env["GUILD_RUN_DIR"];
+    const runDir = typeof envRunDir === "string" && envRunDir.length > 0 ? envRunDir : path6.join(
+      resolveGuildRoot(opts.cwd ?? process.cwd()),
+      ".guild",
+      "runs",
+      runId
+    );
+    const step = env["GUILD_STEP"];
+    const record = {
+      timestamp: opts.now ? opts.now() : (/* @__PURE__ */ new Date()).toISOString(),
+      step: typeof step === "string" && step.length > 0 ? step : null,
+      last_action: typeof opts.toolName === "string" && opts.toolName.length > 0 ? opts.toolName : null
+    };
+    const finalPath = writeHeartbeat(runDir, specialist, record);
+    return { written: true, path: finalPath, reason: null };
+  } catch (err) {
+    return {
+      written: false,
+      path: null,
+      reason: `write-failed: ${err instanceof Error ? err.message : String(err)}`
+    };
+  }
+}
+
 // post-tool-use.ts
 async function readStdin() {
   return new Promise((resolve4) => {
@@ -935,8 +1005,8 @@ function resultExcerpt(payload) {
   }
 }
 function classifyGuildScrubSurface(absPath, guildRoot) {
-  const rel = path5.relative(guildRoot, absPath);
-  const parts = rel.split(path5.sep);
+  const rel = path7.relative(guildRoot, absPath);
+  const parts = rel.split(path7.sep);
   if (parts[0] === ".guild" && parts[1] === "wiki") return "wiki";
   if (parts[0] === ".guild" && parts[1] === "runs" && parts.length >= 4 && parts[3] === "review") {
     return "review";
@@ -945,19 +1015,19 @@ function classifyGuildScrubSurface(absPath, guildRoot) {
 }
 function runGuildArtifactScrub(payload, guildRoot, runDir, runId, laneId) {
   const effectiveRunId = typeof runId === "string" && runId.length > 0 ? runId : "no-active-run";
-  const effectiveRunDir = typeof runDir === "string" && runDir.length > 0 ? runDir : path5.join(guildRoot, ".guild", "runs", effectiveRunId);
+  const effectiveRunDir = typeof runDir === "string" && runDir.length > 0 ? runDir : path7.join(guildRoot, ".guild", "runs", effectiveRunId);
   const toolName = payload.tool_name;
   if (toolName !== "Write" && toolName !== "Edit") return;
   const ti = payload.tool_input;
   if (!ti || typeof ti !== "object") return;
   const rawFilePath = ti["file_path"];
   if (typeof rawFilePath !== "string" || rawFilePath.length === 0) return;
-  const absPath = path5.isAbsolute(rawFilePath) ? rawFilePath : path5.resolve(guildRoot, rawFilePath);
+  const absPath = path7.isAbsolute(rawFilePath) ? rawFilePath : path7.resolve(guildRoot, rawFilePath);
   const surface = classifyGuildScrubSurface(absPath, guildRoot);
   if (surface === null) return;
   let diskContent;
   try {
-    diskContent = fs5.readFileSync(absPath, "utf8");
+    diskContent = fs6.readFileSync(absPath, "utf8");
   } catch {
     return;
   }
@@ -970,14 +1040,14 @@ function runGuildArtifactScrub(payload, guildRoot, runDir, runId, laneId) {
   if (result.blocked) {
     let quarantineDone = false;
     try {
-      fs5.renameSync(absPath, absPath + ".quarantined");
+      fs6.renameSync(absPath, absPath + ".quarantined");
       quarantineDone = true;
     } catch {
     }
     if (!quarantineDone) {
       let canonicalRemoved = false;
       try {
-        fs5.writeFileSync(
+        fs6.writeFileSync(
           absPath,
           `[SCRUB-BLOCKED: ${surface} file content removed by Guild HK-06 secret scrub \u2014 quarantine rename failed, raw destroyed at canonical path]
 `,
@@ -986,14 +1056,14 @@ function runGuildArtifactScrub(payload, guildRoot, runDir, runId, laneId) {
         canonicalRemoved = true;
       } catch {
         try {
-          fs5.unlinkSync(absPath);
+          fs6.unlinkSync(absPath);
           canonicalRemoved = true;
         } catch {
         }
       }
       if (!canonicalRemoved) {
         process.stderr.write(
-          `[CRITICAL] [post-tool-use] HK-06: CANNOT remove raw secret from canonical path "${path5.basename(absPath)}" \u2014 quarantine AND canonical-removal (overwrite+unlink) both failed. Exiting non-zero. Manual remediation required.
+          `[CRITICAL] [post-tool-use] HK-06: CANNOT remove raw secret from canonical path "${path7.basename(absPath)}" \u2014 quarantine AND canonical-removal (overwrite+unlink) both failed. Exiting non-zero. Manual remediation required.
 `
         );
         try {
@@ -1003,7 +1073,7 @@ function runGuildArtifactScrub(payload, guildRoot, runDir, runId, laneId) {
             event_type: "secret_scrub_blocked",
             decision: "blocked",
             tool: "post-tool-use/hk06-scrub",
-            detail: `CRITICAL: Cannot remove raw ${surface} write from canonical path "${path5.basename(absPath)}" \u2014 quarantine AND canonical-removal both failed. Raw secret may persist. Manual remediation required.`,
+            detail: `CRITICAL: Cannot remove raw ${surface} write from canonical path "${path7.basename(absPath)}" \u2014 quarantine AND canonical-removal both failed. Raw secret may persist. Manual remediation required.`,
             permission_mode: "blocked"
           });
           appendSecurityEvent(effectiveRunDir, evt);
@@ -1012,25 +1082,25 @@ function runGuildArtifactScrub(payload, guildRoot, runDir, runId, laneId) {
         process.exit(1);
       }
       process.stderr.write(
-        `warn: [post-tool-use] HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path5.basename(absPath)}.
+        `warn: [post-tool-use] HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path7.basename(absPath)}.
 `
       );
     }
     process.stderr.write(
-      `warn: [post-tool-use] HK-06: ${surface} write BLOCKED by secret scrub at ${path5.basename(absPath)} \u2014 quarantined/removed. secret_scrub_blocked event emitted.
+      `warn: [post-tool-use] HK-06: ${surface} write BLOCKED by secret scrub at ${path7.basename(absPath)} \u2014 quarantined/removed. secret_scrub_blocked event emitted.
 `
     );
   } else if (result.written) {
     process.stderr.write(
-      `info: [post-tool-use] HK-06: ${surface} file scrubbed in place: ${path5.basename(absPath)}.
+      `info: [post-tool-use] HK-06: ${surface} file scrubbed in place: ${path7.basename(absPath)}.
 `
     );
   }
 }
 function readCurrentRunId(guildRoot) {
-  const sentinelPath = path5.join(guildRoot, ".guild", "runs", "current-run-id");
+  const sentinelPath = path7.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
-    const value = fs5.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs6.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -1054,9 +1124,18 @@ async function main() {
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
   {
+    const hb = writeHeartbeatFromEnv({ toolName: payload.tool_name, cwd });
+    if (!hb.written && hb.reason !== null && hb.reason !== "env-absent") {
+      process.stderr.write(
+        `warn: [post-tool-use] heartbeat write skipped (non-fatal): ${hb.reason}
+`
+      );
+    }
+  }
+  {
     const earlyRunId = resolveRunId(guildRoot);
     const earlyRunIdSafe = typeof earlyRunId === "string" && earlyRunId.length > 0 && isSafeRunId(earlyRunId) ? earlyRunId : void 0;
-    const earlyRunDir = earlyRunIdSafe ? process.env["GUILD_RUN_DIR"] ?? path5.join(guildRoot, ".guild", "runs", earlyRunIdSafe) : void 0;
+    const earlyRunDir = earlyRunIdSafe ? process.env["GUILD_RUN_DIR"] ?? path7.join(guildRoot, ".guild", "runs", earlyRunIdSafe) : void 0;
     const earlyRawLaneId = process.env["GUILD_LANE_ID"];
     const earlyLaneId = typeof earlyRawLaneId === "string" && earlyRawLaneId.length > 0 && isSafeLaneId(earlyRawLaneId) ? earlyRawLaneId : void 0;
     try {
@@ -1081,7 +1160,7 @@ async function main() {
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path5.join(guildRoot, ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path7.join(guildRoot, ".guild", "runs", runId);
   const rawLaneId = process.env["GUILD_LANE_ID"];
   const laneId = typeof rawLaneId === "string" && rawLaneId.length > 0 && isSafeLaneId(rawLaneId) ? rawLaneId : void 0;
   if (typeof rawLaneId === "string" && rawLaneId.length > 0 && laneId === void 0) {

@@ -29,6 +29,9 @@
  */
 
 import { resolveSettings } from "./lib/settings-resolver";
+// G-11 (SC-6): the models.tiers value union (string | {model,effort?,verbosity?} | null)
+// is unpacked ONLY by resolveTierModel — never index the tier map and assume a string.
+import { resolveTierModel, type TierHostValue } from "./read-guild-config";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -73,11 +76,14 @@ export interface Thresholds {
 export interface ScorerOpts {
   scoreWeights?: Partial<ScoreWeights>;
   thresholds?: Partial<Thresholds>;
-  /** The host-agnostic tier→model map. When absent, model is not resolved. */
+  /**
+   * The host-agnostic tier→model map. When absent, model is not resolved.
+   * G-11 (SC-6): host values accept the full union string | {model,effort?,verbosity?} | null.
+   */
   tiers?: {
-    cheap?: { claude?: string | null; codex?: string | null; gemini?: string | null };
-    mid?:   { claude?: string | null; codex?: string | null; gemini?: string | null };
-    powerful?: { claude?: string | null; codex?: string | null; gemini?: string | null };
+    cheap?: { claude?: TierHostValue; codex?: TierHostValue; gemini?: TierHostValue };
+    mid?:   { claude?: TierHostValue; codex?: TierHostValue; gemini?: TierHostValue };
+    powerful?: { claude?: TierHostValue; codex?: TierHostValue; gemini?: TierHostValue };
   };
   /** Active host adapter. Default "claude". */
   host?: "claude" | "codex" | "gemini";
@@ -95,6 +101,10 @@ export interface TierResult {
   score: number;
   tier: Tier;
   model?: string; // resolved model name for the active host, or undefined if not in map
+  /** G-11: present only when the tier map's object form pinned an effort axis. */
+  effort?: string;
+  /** G-11: present only when the tier map's object form pinned a verbosity axis. */
+  verbosity?: string;
 }
 
 // ── Built-in defaults (mirrors DEFAULTS.models in read-guild-config.ts) ──────
@@ -155,13 +165,16 @@ export function scoreTier(signals: TierSignals, opts: ScorerOpts = {}): TierResu
   // This matches documented behavior: "false = all lanes run at mid (current v2 behavior)".
   // The modelTierPin still overrides even when enabled=false (explicit pin is always top).
   if (opts.enabled === false && opts.modelTierPin === undefined) {
-    const midEntry = tiers["mid"] as Record<string, string | null | undefined> | undefined;
-    const midModel = midEntry?.[host];
-    return {
+    // G-11: unpack the tier value union through the single helper (never assume string).
+    const mid = resolveTierModel(tiers, "mid", host);
+    const out: TierResult = {
       score: 0,
       tier: "mid",
-      model: (midModel != null) ? midModel : undefined,
+      model: mid.model ?? undefined,
     };
+    if (mid.effort !== undefined) out.effort = mid.effort;
+    if (mid.verbosity !== undefined) out.verbosity = mid.verbosity;
+    return out;
   }
 
   // Compute score
@@ -190,12 +203,14 @@ export function scoreTier(signals: TierSignals, opts: ScorerOpts = {}): TierResu
     // score is still the raw computed score — not modified by pin
   }
 
-  // Resolve model from tier map
-  const tierEntry = tiers[tier] as Record<string, string | null | undefined> | undefined;
-  const rawModel = tierEntry?.[host];
-  const model = (rawModel != null && rawModel !== undefined) ? rawModel : undefined;
+  // Resolve model from tier map — G-11: the value union (string | {model,effort?,
+  // verbosity?} | null) is unpacked ONLY via resolveTierModel.
+  const resolved = resolveTierModel(tiers, tier, host);
 
-  return { score, tier, model };
+  const result: TierResult = { score, tier, model: resolved.model ?? undefined };
+  if (resolved.effort !== undefined) result.effort = resolved.effort;
+  if (resolved.verbosity !== undefined) result.verbosity = resolved.verbosity;
+  return result;
 }
 
 // ── Config loader (uses settings-resolver — no subprocess, inherits workspace) ─

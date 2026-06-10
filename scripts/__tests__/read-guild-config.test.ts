@@ -1468,3 +1468,288 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
     });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-11 (SC-6) — models.tiers value union: string | {model, effort?, verbosity?} | null
+// Unpacked ONLY by resolveTierModel(). DEFAULTS stay plain strings.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { resolveTierModel } from "../read-guild-config";
+
+describe("G-11 — models.tiers value union (SC-6)", () => {
+  const repos: string[] = [];
+  afterAll(() => repos.forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
+  const repo = () => {
+    const d = mkRepo();
+    repos.push(d);
+    return d;
+  };
+
+  describe("--validate: both forms accepted, object form is a closed key set", () => {
+    test("accepts the plain-string form (historical)", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { tiers: { powerful: { claude: "opus", codex: null, gemini: null } } } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+
+    test("accepts the object form {model, effort?, verbosity?}", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        models: { tiers: { powerful: { claude: { model: "opus", effort: "high", verbosity: "low" } } } },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+
+    test("accepts a mixed map (string + object + null host slots)", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        models: {
+          tiers: {
+            cheap: { claude: "haiku", codex: null, gemini: null },
+            powerful: { claude: { model: "opus", effort: "high" }, codex: null, gemini: null },
+          },
+        },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).toMatch(/VALID/);
+    });
+
+    test("REJECTS an unknown sub-key inside the object form (closed: model/effort/verbosity)", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        models: { tiers: { powerful: { claude: { model: "opus", efort: "high" } } } },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).not.toBe(0);
+      expect(out).toMatch(/INVALID/);
+      expect(out).toMatch(/efort/);
+      expect(out).toMatch(/only model, effort, verbosity/);
+    });
+
+    test("REJECTS the object form when model is missing", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { tiers: { powerful: { claude: { effort: "high" } } } } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).not.toBe(0);
+      expect(out).toMatch(/model is required/);
+    });
+
+    test("REJECTS a non-union value (number) in a host slot", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { tiers: { mid: { claude: 42 } } } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).not.toBe(0);
+      expect(out).toMatch(/must be a string, null, or \{model, effort\?, verbosity\?\}/);
+    });
+
+    test("REJECTS non-string effort/verbosity in the object form", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { tiers: { mid: { claude: { model: "sonnet", effort: 3 } } } } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).not.toBe(0);
+      expect(out).toMatch(/effort must be a string/);
+    });
+
+    test("REJECTS an unknown tier key (closed: cheap|mid|powerful)", () => {
+      const dir = repo();
+      writeSettings(dir, { models: { tiers: { chea: { claude: "haiku" } } } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).not.toBe(0);
+      expect(out).toMatch(/unknown models\.tiers key "chea"/);
+    });
+  });
+
+  describe("resolve mode: union carried through unmodified", () => {
+    test("object-form value survives resolution; untouched tiers keep string defaults", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        models: { tiers: { powerful: { claude: { model: "opus", effort: "high" } } } },
+      });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.tiers.powerful.claude).toEqual({ model: "opus", effort: "high" });
+      expect(j.models.tiers.mid.claude).toBe("sonnet");   // default stays a plain string
+      expect(j.models.tiers.cheap.claude).toBe("haiku");  // default stays a plain string
+    });
+
+    test("--scaffold DEFAULTS stay plain strings + _help documents the object form", () => {
+      const { status, out } = run(["--scaffold"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.models.tiers.cheap.claude).toBe("haiku");
+      expect(j.models.tiers.mid.claude).toBe("sonnet");
+      expect(j.models.tiers.powerful.claude).toBe("opus");
+      expect(j._help["models.tiers"]).toMatch(/\{model, effort\?, verbosity\?\}/);
+      expect(j._help["models.tiers"]).toMatch(/effort: "high"/);
+      expect(j._help["models.tiers"]).toMatch(/resolveTierModel/);
+    });
+  });
+
+  describe("resolveTierModel — the single unpack point", () => {
+    const tiers = {
+      cheap: { claude: "haiku", codex: null, gemini: null },
+      mid: { claude: "  sonnet  ", codex: null, gemini: null },
+      powerful: { claude: { model: "opus", effort: "high", verbosity: "low" }, codex: null, gemini: null },
+    };
+
+    test("string form → {model} (trimmed), no effort/verbosity keys", () => {
+      const r = resolveTierModel(tiers, "mid", "claude");
+      expect(r).toEqual({ model: "sonnet" });
+    });
+
+    test("object form → {model, effort, verbosity}", () => {
+      const r = resolveTierModel(tiers, "powerful", "claude");
+      expect(r).toEqual({ model: "opus", effort: "high", verbosity: "low" });
+    });
+
+    test("null host slot → {model: null}", () => {
+      expect(resolveTierModel(tiers, "cheap", "codex")).toEqual({ model: null });
+    });
+
+    test("absent host / absent tier / malformed tiers → {model: null}", () => {
+      expect(resolveTierModel(tiers, "cheap", "gemini-x")).toEqual({ model: null });
+      expect(resolveTierModel({}, "mid", "claude")).toEqual({ model: null });
+      expect(resolveTierModel(undefined, "mid", "claude")).toEqual({ model: null });
+      expect(resolveTierModel("nope", "mid", "claude")).toEqual({ model: null });
+      expect(resolveTierModel({ mid: ["x"] }, "mid", "claude")).toEqual({ model: null });
+    });
+
+    test("object form without a model string → {model: null}", () => {
+      expect(resolveTierModel({ mid: { claude: { effort: "high" } } }, "mid", "claude")).toEqual({ model: null });
+      expect(resolveTierModel({ mid: { claude: { model: "  " } } }, "mid", "claude")).toEqual({ model: null });
+    });
+
+    test("legacy flat form (tier → string) resolves host-agnostically (write-host-capability shape)", () => {
+      const flat = { cheap: "haiku-3", mid: "sonnet-4", powerful: "opus-4" };
+      expect(resolveTierModel(flat, "powerful", "claude")).toEqual({ model: "opus-4" });
+      expect(resolveTierModel(flat, "powerful", "codex")).toEqual({ model: "opus-4" });
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-14 (SC-9) — `qa` auto-approve token: auto-proceed ONLY on a computed
+// ReleaseGate PASS; BLOCK-override + the always-ask hard set still prompt.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("G-14 — qa auto-approve token (SC-9)", () => {
+  const repos: string[] = [];
+  afterAll(() => repos.forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
+  const repo = () => {
+    const d = mkRepo();
+    repos.push(d);
+    return d;
+  };
+
+  test("--auto-approve=qa is accepted by the CLI parse", () => {
+    const dir = repo();
+    const { status, out } = run(["--cwd", dir, "--auto-approve=qa"]);
+    expect(status).toBe(0);
+    const j = JSON.parse(out);
+    expect(j.auto_approve).toEqual(["qa"]);
+  });
+
+  test("--auto-approve=spec,plan,build,qa keeps all four tokens", () => {
+    const dir = repo();
+    const { out } = run(["--cwd", dir, "--auto-approve=spec,plan,build,qa"]);
+    const j = JSON.parse(out);
+    expect(j.auto_approve).toEqual(["spec", "plan", "build", "qa"]);
+  });
+
+  test("invalid tokens are still filtered ('ops' has NO token — rails stay interactive)", () => {
+    const dir = repo();
+    const { out } = run(["--cwd", dir, "--auto-approve=qa,ops,bogus"]);
+    const j = JSON.parse(out);
+    expect(j.auto_approve).toEqual(["qa"]);
+  });
+
+  test("settings.json auto_approve: [\"qa\"] resolves through", () => {
+    const dir = repo();
+    writeSettings(dir, { auto_approve: ["qa"] });
+    const { status, out } = run(["--cwd", dir]);
+    expect(status).toBe(0);
+    expect(JSON.parse(out).auto_approve).toEqual(["qa"]);
+  });
+
+  test("_help documents qa PASS-only semantics (BLOCK-override still prompts)", () => {
+    const { out } = run(["--scaffold"]);
+    const j = JSON.parse(out);
+    expect(j._help.auto_approve).toMatch(/qa/);
+    expect(j._help.auto_approve).toMatch(/ReleaseGate PASS/);
+    expect(j._help.auto_approve).toMatch(/BLOCK-override/i);
+    expect(j._help["defaults.gates.auto_approve"]).toMatch(/qa/);
+    expect(j._help["defaults.gates.auto_approve"]).toMatch(/never ops/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-lane rework — closed HOST-key set under models.tiers.<tier>:
+// only {claude, codex, gemini}. A typo like "claudee" must be rejected by
+// --validate and must never merge into the resolved config.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("G-lane rework — models.tiers closed host-key set", () => {
+  const repos: string[] = [];
+  afterAll(() => repos.forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
+  const repo = () => {
+    const d = mkRepo();
+    repos.push(d);
+    return d;
+  };
+
+  test("--validate REJECTS an unknown host key (claudee typo), naming key + allowed set", () => {
+    const dir = repo();
+    writeSettings(dir, { models: { tiers: { powerful: { claudee: "opus" } } } });
+    const { status, out } = run(["--cwd", dir, "--validate"]);
+    expect(status).not.toBe(0);
+    expect(out).toMatch(/INVALID/);
+    expect(out).toMatch(/unknown models\.tiers\.powerful host key "claudee"/);
+    expect(out).toMatch(/valid: claude, codex, gemini/);
+  });
+
+  test("--validate REJECTS an unknown host key in the object form too", () => {
+    const dir = repo();
+    writeSettings(dir, { models: { tiers: { mid: { sonnet: { model: "sonnet-4" } } } } });
+    const { status, out } = run(["--cwd", dir, "--validate"]);
+    expect(status).not.toBe(0);
+    expect(out).toMatch(/unknown models\.tiers\.mid host key "sonnet"/);
+  });
+
+  test("all three legal hosts accepted in BOTH string and object form", () => {
+    const dir = repo();
+    writeSettings(dir, {
+      models: {
+        tiers: {
+          cheap: { claude: "haiku", codex: "gpt-4o-mini", gemini: "flash" },
+          powerful: {
+            claude: { model: "opus", effort: "high" },
+            codex: { model: "o3-pro", verbosity: "low" },
+            gemini: { model: "gemini-ultra" },
+          },
+        },
+      },
+    });
+    const { status, out } = run(["--cwd", dir, "--validate"]);
+    expect(status).toBe(0);
+    expect(out).toMatch(/VALID/);
+  });
+
+  test("resolve mode STRIPS the unknown host key — it never reaches the resolved config", () => {
+    const dir = repo();
+    writeSettings(dir, {
+      models: { tiers: { powerful: { claudee: "opus-typo", codex: "o3" } } },
+    });
+    const { status, out } = run(["--cwd", dir]);
+    expect(status).toBe(0);
+    const j = JSON.parse(out);
+    expect(j.models.tiers.powerful).not.toHaveProperty("claudee");
+    expect(j.models.tiers.powerful.codex).toBe("o3");      // legal key carried
+    expect(j.models.tiers.powerful.claude).toBe("opus");   // default slot untouched
+  });
+});

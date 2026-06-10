@@ -381,6 +381,19 @@ must live where the orchestrator can reach it. If a mandate lands
 *before* the first lane dispatches, prefer re-running `guild:plan` with
 the new constraint — absorption is for after Wave 1 has begun.
 
+## Lane liveness sweep (backend-agnostic watchdog)
+
+While lanes are in flight — parallel waves, or any wait on a lane's receipt — sweep liveness **each poll cycle** with the deterministic report tool; never eyeball heartbeat files or infer a stall from chat silence:
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/check-lane-liveness.ts --run-dir <abs path to .guild/runs/<run-id>>
+```
+
+It reads `run-state.json` (lenient — receipts-only when absent), the structured `in-progress/*.json` heartbeats, and `handoffs/*.md` receipts, and prints a per-lane report `{ lane, status, receipt_present, heartbeat_age_ms, stalled }` (stall threshold `GUILD_HEARTBEAT_TIMEOUT_MS`, default 600000; exit 0 always — it is a report, not a gate). This is the Rung-2/3 (subagent / in-process `agent`) watchdog complement to the team backend's pane-alive + `TeammateIdle` checks — same heartbeat records, one sweep across backends. On `stalled: true` for a lane:
+
+1. **Nudge once.** Re-prompt the lane's agent (or its pane) referencing its last heartbeat `step`, and record the nudge in the dispatch trace.
+2. **Still stalled on the next sweep** → treat the lane as FAILED and route it into `## Lane retry + dead-lettering` (retry up to `defaults.retry.max_attempts`, then the `mark-lane-dead.ts` funnel). Never leave a stalled lane spinning silently past two consecutive stalled sweeps.
+
 ## Lane retry + dead-lettering (R-016)
 
 Implements the per-lane resilience contract (`docs/knowledge/decisions/v2-runtime-and-execution-model.md §retry`/`§resume`). Read the policy from the run's **resolved settings** (`readResolvedSettingsSnapshot` / `read-guild-config.ts` — never hard-code): `defaults.retry.max_attempts` (int ≥ 1, default **1** = no retry), `defaults.retry.backoff` (`immediate | linear | exponential`, default `exponential`), `defaults.resume.enabled` (bool, default **true**).

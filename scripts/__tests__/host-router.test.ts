@@ -617,3 +617,42 @@ describe("planTeamRouting — GAP-A1/ARCH-2: capabilityRequirements end-to-end t
     expect(routes[1].decision.host).toBe("codex");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-11 (SC-6) — settingsOverride values carry the models.tiers union
+// (string | {model, effort?, verbosity?} | null), unpacked only via
+// resolveTierModel(). Plain strings resolve byte-identically (covered above).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("resolveModel — G-11 object-form settings override", () => {
+  it("object-form override contributes its model (highest precedence)", () => {
+    const m = resolveModel("mid", codexHost(), {
+      mid: { codex: { model: "gpt-6-codex", effort: "high" } },
+    });
+    expect(m).toBe("gpt-6-codex");
+  });
+
+  it("null override falls through to the manifest tier_models", () => {
+    const m = resolveModel("mid", codexHost(), { mid: { codex: null } });
+    expect(m).toBe("gpt-4o");
+  });
+
+  it("object form without a model string falls through (malformed → manifest)", () => {
+    const m = resolveModel(
+      "mid",
+      codexHost(),
+      { mid: { codex: { effort: "high" } as unknown as { model: string } } }
+    );
+    expect(m).toBe("gpt-4o");
+  });
+
+  it("route() decision.model resolves through the object-form override", () => {
+    const d = route(
+      lane({ tier: "powerful" }),
+      [host()],
+      { ...baseOpts, settingsOverride: { powerful: { claude: { model: "opus-4.5", effort: "high" } } } }
+    );
+    expect(d.model).toBe("opus-4.5");
+    expect(d.tier).toBe("powerful");
+  });
+});

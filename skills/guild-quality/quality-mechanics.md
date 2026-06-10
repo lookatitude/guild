@@ -115,10 +115,10 @@ g-quality section; `validation-matrix.md §A P6-quality-003`.*
 3. **3-choice gate.** `[release] [block] [abort]`. `[release]` on a **BLOCK**
    is a **HUMAN-ONLY force-pass** — the human name + rationale are recorded.
 4. **`--auto-approve` asymmetry (printed, not hidden).** Token set
-   `[spec, plan, build, all]` — **no `qa`/`ops` token**. A **RELEASE-READY**
-   recommendation **IS auto-passed** under `--auto-approve=all`. A
-   **BLOCK→release override is NEVER auto-passed** — it is human-gated, and the
-   asymmetry is **printed**, never silent.
+   `[spec, plan, build, qa, all]` — **no `ops` token**. A **RELEASE-READY**
+   recommendation **IS auto-passed** under `--auto-approve=qa` or `=all`. A
+   **BLOCK→release override is NEVER auto-passed** under any token — it is
+   human-gated, and the asymmetry is **printed**, never silent.
 5. **release_decision block.** Populate `guild.quality.v1.release_decision`
    **by pointer to `target-architecture.md §624–628`**.
 

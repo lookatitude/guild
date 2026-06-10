@@ -15,11 +15,14 @@
  *   Liveness ("is the agent still making progress?") is now read from a
  *   STRUCTURED heartbeat at .guild/runs/<run-id>/in-progress/<teammate>.json
  *   ({ timestamp, step, pct_complete, last_action }) — see hooks/lib/heartbeat.ts
- *   (decision bound by pointer). The verdict is `age(timestamp) < timeout`,
- *   where the timeout is the configurable `defaults.heartbeat_timeout_ms`
- *   (default 600000 = 10 min, preserving the prior threshold). BACKWARD-COMPAT:
- *   when the JSON record is absent, fall back to the legacy <teammate>.log
- *   mtime (no hard cutover).
+ *   (decision bound by pointer). The verdict is `age(timestamp) < timeout`.
+ *   G-10 (SC-5): the timeout is TIER-SCALED — the lane's tier from the
+ *   run-state lane record picks the built-in default (cheap 180000 / mid
+ *   600000 / powerful 1200000; unresolvable tier → mid, preserving the prior
+ *   600000 threshold). An EXPLICITLY-SET `defaults.heartbeat_timeout_ms`
+ *   always wins over the tier map (byte-identical for configs that set it).
+ *   BACKWARD-COMPAT: when the JSON record is absent, fall back to the legacy
+ *   <teammate>.log mtime (no hard cutover).
  *
  *   SCOPE BOUNDARY: this heartbeat is LIVENESS/stall detection only. It is NOT
  *   the deferred O-3 "anomalously short output" quality-escalation heuristic
@@ -54,7 +57,12 @@ import * as path from "path";
 import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
 import { validateHandoffV2, extractHandoffEnvelope } from "../lib/handoff-v2.js";
-import { assessLiveness, readHeartbeatTimeoutMs, Liveness } from "../lib/heartbeat.js";
+import {
+  assessLiveness,
+  resolveHeartbeatTimeoutMs,
+  resolveLaneTier,
+  Liveness,
+} from "../lib/heartbeat.js";
 import { emitBusEvent } from "../lib/bus-emit.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -372,7 +380,12 @@ async function main(): Promise<void> {
   const hasReceipt = receiptAssessments.length > 0;
 
   // Liveness via the structured heartbeat (ADR-RE-3), mtime fallback baked in.
-  const timeoutMs = readHeartbeatTimeoutMs(cwd);
+  // G-10 (SC-5): tier-scaled timeout — lane tier from the run-state lane
+  // record (cheap 3m / mid 10m / powerful 20m); an EXPLICIT
+  // defaults.heartbeat_timeout_ms in settings.json still wins when set, and
+  // an unresolvable tier falls back to mid (byte-identical to the old default).
+  const laneTier = resolveLaneTier(runDir, teammate, assignedIds);
+  const timeoutMs = resolveHeartbeatTimeoutMs(cwd, laneTier);
   const liveness = assessLiveness(runDir, teammate, timeoutMs);
 
   process.stderr.write(
@@ -381,7 +394,8 @@ async function main(): Promise<void> {
       `invalidReceipts=[${invalidReceiptTaskIds.join(",")}] ` +
       `pending=[${pendingTaskIds.join(",")}] ` +
       `liveness=${liveness.source}/${liveness.fresh ? "fresh" : "stale"} ` +
-      `ageMs=${liveness.ageMs ?? "n/a"} timeoutMs=${timeoutMs}\n`
+      `ageMs=${liveness.ageMs ?? "n/a"} timeoutMs=${timeoutMs} ` +
+      `tier=${laneTier ?? "unresolved(mid-fallback)"}\n`
   );
 
   const validReceipts = receiptAssessments.filter((r) => r.envelopeValid);
