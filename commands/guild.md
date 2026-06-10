@@ -1,7 +1,7 @@
 ---
 name: guild
 description: "Bare Guild entry — smart phase detection. /guild:guild [brief] inspects .guild/ state and surfaces the proposed lifecycle phase (init · ideate · plan · build · qa · ops), always confirmed never silent. Named phase verbs, nouns (wiki, initiative), and maintenance verbs (evolve, rollback, stats, audit, fix) are separate commands. Canonical: architecture/command-surface.md §1/§5.1; v1→v2: MIGRATION.md."
-argument-hint: "[brief] [--rigor=quick|standard|deep] [--auto-approve[=spec,plan,build,all]] [--review=local|cross|off] [--host=claude|codex|auto] [--initiative=<id>|new] [--model-tier=cheap|mid|powerful] [--dry-run]"
+argument-hint: "[brief] [--rigor=quick|standard|deep] [--auto-approve[=spec,plan,build,qa,all]] [--review=local|cross|off] [--host=claude|codex|auto] [--initiative=<id>|new] [--model-tier=cheap|mid|powerful] [--dry-run]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
 
@@ -121,7 +121,7 @@ order is the resume point. Restart is `/guild:resume --restart` (the v1
 
 The five surviving global flags (`command-surface.md §4.2`):
 `--rigor=quick|standard|deep` (the profile knob — expands loops/caps/review
-depth per §4.3), `--auto-approve[=spec,plan,build,all]` (opt-in autonomy;
+depth per §4.3), `--auto-approve[=spec,plan,build,qa,all]` (opt-in autonomy; `qa` auto-passes a RELEASE-READY verdict only;
 destructive/network/spend STILL ask even with `all`), `--review=local|cross|off`,
 `--host=claude|codex|auto`, `--initiative=<id>|new`, plus universal
 `--dry-run`. Resolution precedence (full 7-source chain, lowest to highest):

@@ -389,11 +389,11 @@ lead, `guild.handoff.v2` schema, §task§agent lifecycle).
   gate markers are unchanged; only the behavior behind them is promoted from
   deferred to shipped. Nothing in an existing v1 invocation changes.
 - **`--auto-approve` BLOCK-override asymmetry (printed, never hidden).**
-  `--auto-approve` collapses *soft* gates only. The frozen `--auto-approve`
-  token set is `[spec,plan,build,all]` — there is **no `qa` or `ops`
-  token**; Quality/Operations behavior is auto-passed **only under
-  `--auto-approve=all`**, never via a `qa`/`ops` flag value (those do not
-  exist). A Quality **BLOCK→release override is NOT a soft gate** (it
+  `--auto-approve` collapses *soft* gates only. The `--auto-approve`
+  token set is `[spec,plan,build,qa,all]` — the `qa` token (added in the
+  v2-gap-closure run, 2026-06-10) auto-passes a **RELEASE-READY** verdict
+  ONLY; there is **no `ops` token** (Operations rails stay interactive).
+  A Quality **BLOCK→release override is NOT a soft gate** (it
   overrides failing evidence) — it **stays human-gated even under
   `--auto-approve=all`**, exactly like the always-ask
   destructive/network/spend hard set. A RELEASE-READY recommendation *is*
