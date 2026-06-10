@@ -146,65 +146,14 @@ function loadAllPages(wikiRoot: string): WikiPage[] {
   return pages;
 }
 
-// ─── BM25 ranking ────────────────────────────────────────────────────────
-
-const TOKEN_RE = /[A-Za-z0-9]+/g;
-function tokenize(s: string): string[] {
-  const out: string[] = [];
-  const m = s.toLowerCase().match(TOKEN_RE);
-  if (!m) return out;
-  for (const tok of m) if (tok.length > 1) out.push(tok);
-  return out;
-}
+// ─── BM25 ranking (delegated to ./bm25.ts for testable re-use) ───────────────
+// Pure BM25 utilities live in ./bm25.ts so tests can import them without
+// starting the MCP server (index.ts executes main() at module load time).
+import { tokenize, bm25Score } from "./bm25";
 
 interface Scored {
   page: WikiPage;
   score: number;
-}
-
-function bm25Score(
-  queryTokens: string[],
-  docs: { tokens: string[] }[]
-): number[] {
-  // Classic BM25 (k1=1.5, b=0.75)
-  const k1 = 1.5;
-  const b = 0.75;
-  const N = docs.length;
-  if (N === 0) return [];
-  const avgdl = docs.reduce((s, d) => s + d.tokens.length, 0) / N;
-
-  // DF per query token
-  const df = new Map<string, number>();
-  for (const q of new Set(queryTokens)) {
-    let count = 0;
-    for (const d of docs) {
-      if (d.tokens.includes(q)) count++;
-    }
-    df.set(q, count);
-  }
-
-  const scores: number[] = new Array(N).fill(0);
-  for (let i = 0; i < N; i++) {
-    const doc = docs[i];
-    const dl = doc.tokens.length || 1;
-    // Term frequencies for this doc (once)
-    const tf = new Map<string, number>();
-    for (const t of doc.tokens) tf.set(t, (tf.get(t) ?? 0) + 1);
-
-    let s = 0;
-    for (const q of queryTokens) {
-      const f = tf.get(q) ?? 0;
-      if (f === 0) continue;
-      const n = df.get(q) ?? 0;
-      // IDF with +1 floor so zero-document-frequency never explodes negative
-      const idf = Math.log(1 + (N - n + 0.5) / (n + 0.5));
-      const num = f * (k1 + 1);
-      const den = f + k1 * (1 - b + b * (dl / avgdl));
-      s += idf * (num / den);
-    }
-    scores[i] = s;
-  }
-  return scores;
 }
 
 function rankPages(

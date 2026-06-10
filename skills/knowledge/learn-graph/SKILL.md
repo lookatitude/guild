@@ -87,7 +87,16 @@ script, do not re-read source"* (`codebase-understanding.md §"two-phase"`):
    Domain→Flow→Step scaffold (monotone `flow_step` weights), **persists the
    `domain` label**, and appends the initial `knowledge-links.json` projection
    batch. LLM (researcher+architect): name/narrate domains & flows; emit
-   `wiki/concepts/` page **candidates**.
+   `wiki/concepts/` page **candidates**. **Run the D-INGEST-GATE on each concept
+   candidate** before emitting it: call `scripts/lib/ingest-similarity.ts`
+   (`--category concepts`, candidate title+content) and consume `should_pause`
+   verbatim — on `should_pause: true` (BM25 `top_score ≥ models.ingestSimilarityGate`),
+   do **not** emit a fresh near-duplicate concept page; instead flag the collision
+   (`top_path`, `top_score`) for the operator to supersede / skip / accept-as-separate,
+   the same contract as `guild:wiki-ingest §"Ingest anomaly gate"` (bound by
+   pointer — do not re-spell). Candidates remain candidates (promotion still goes
+   through `guild:wiki-ingest`, which re-gates); this catches near-dup concept
+   spam at emission instead of letting it pile up.
 6. **Tour skeleton.** `build-tour.ts --cwd <root>` → dependency-BFS-ordered
    5–15-step `tour[]` skeleton in the graph. **Narration + `languageLesson` +
    the `onboarding-tour.md` artifact are produced by `guild:learn-onboard`** —
