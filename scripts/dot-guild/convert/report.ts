@@ -112,5 +112,39 @@ export function renderReport(child: ChildResult, mode: string, iso: string): str
     out += `will NOT auto-pick a winner, clobber the v2 value, or remove the v1 source.\n\n`;
   }
 
+  out += renderGradesSection(child, mode);
+
   return out + "\n";
+}
+
+/**
+ * The wiki importance-backfill review table — ALWAYS the LAST section of the
+ * report (the human gate's review surface). Lists every drafted grade + the
+ * accept instruction; skipped pages are summarized by reason.
+ */
+function renderGradesSection(child: ChildResult, mode: string): string {
+  const graded = child.grades.filter((g) => g.action === "graded");
+  if (graded.length === 0) return "";
+  const skipped = child.grades.filter((g) => g.action !== "graded");
+  const count = (a: string) => skipped.filter((g) => g.action === a).length;
+
+  let out = `## Drafted wiki importance grades — REVIEW REQUIRED (human gate)\n\n`;
+  out +=
+    mode === "dry-run"
+      ? `${graded.length} wiki page(s) WOULD be drafted a v2 \`importance:\` grade (dry-run — nothing was written):\n\n`
+      : `${graded.length} wiki page(s) were drafted a v2 \`importance:\` grade by deterministic heuristics.\n` +
+        `Each is marked \`importance_draft: true\` + \`graded_by: guild-migrate\` until you accept it:\n\n`;
+  out += `| Page | Drafted grade | Rule |\n|---|---|---|\n`;
+  for (const g of graded) {
+    out += `| \`${g.rel}\` | ${g.grade}${g.createdFrontmatter ? " (frontmatter created)" : ""} | ${g.rule} |\n`;
+  }
+  out += `\nSkipped: ${count("skipped-already-graded")} already graded (never touched), `;
+  out += `${count("skipped-provenance")} provenance/exploratory (confidence-graded only, never importance), `;
+  out += `${count("skipped-structural")} structural (index/README/log/lint).\n\n`;
+  out += `**Next step (the gate):** review each drafted grade — edit the \`importance:\` value\n`;
+  out += `in place where the heuristic is wrong — then accept:\n\n`;
+  out += `\`\`\`bash\nnpx tsx plugin/scripts/dot-guild/migrate-guild.ts --accept-grades --root=${child.root}\n\`\`\`\n\n`;
+  out += `\`--accept-grades\` strips the \`importance_draft\`/\`graded_by\` markers and keeps the\n`;
+  out += `grade. Until accepted, wiki lint flags these pages as a pending-review item.\n`;
+  return out;
 }

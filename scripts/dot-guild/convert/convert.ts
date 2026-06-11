@@ -19,7 +19,9 @@ import type {
   ArtifactRecord,
   KeyOutcome,
   UnmigratedEntry,
+  WikiGradeRecord,
 } from "./types";
+import { backfillWikiImportance } from "./wiki-importance";
 import { parseJson, parseYaml } from "./seams";
 import { v1KeysIn } from "./detect";
 import {
@@ -44,6 +46,14 @@ export interface ConvertOutput {
    * leaves the tree byte-identical to pre-migration. (P1 fix.)
    */
   generated: string[];
+  /**
+   * Wiki importance-backfill records (the "wiki importance backfill" row).
+   * Drafted grades carry `importance_draft: true` and await the human gate
+   * (`migrate-guild.ts --accept-grades`). Pages are modified IN PLACE (the
+   * snapshot holds the originals), so they appear in neither removed nor
+   * generated — the snapshot restore covers them.
+   */
+  grades: WikiGradeRecord[];
 }
 
 interface Ctx {
@@ -116,7 +126,7 @@ export function convert(
   dryRun: boolean,
   snapshotRef: string
 ): ConvertOutput {
-  const out: ConvertOutput = { artifacts: [], relocated: [], conflicts: [], removed: [], generated: [] };
+  const out: ConvertOutput = { artifacts: [], relocated: [], conflicts: [], removed: [], generated: [], grades: [] };
   const ctx: Ctx = { fs, clock, guildDir, dryRun, snapshotRef, out };
   const j = (r: string) => path.join(guildDir, r);
   // Deferred removals (P2 delete-before-write fix): v1 source files are collected
@@ -276,6 +286,25 @@ export function convert(
 
   // ── Row: runs/<id>/metadata.json (no run.yaml) → run.yaml + provenance.json
   convertLegacyRuns(ctx);
+
+  // ── Row: wiki importance backfill (drafted grades behind the human gate) ──
+  // In-place edits to wiki/**/*.md (snapshot already holds the originals).
+  // Pages with an existing `importance:` are never touched; provenance/
+  // exploratory + structural pages are skipped. dryRun lists every planned
+  // grade without writing. Accept path: migrate-guild.ts --accept-grades.
+  out.grades = backfillWikiImportance(fs, guildDir, dryRun);
+  {
+    const graded = out.grades.filter((g) => g.action === "graded");
+    if (graded.length > 0) {
+      out.artifacts.push({
+        rel: "wiki/",
+        disposition: "convert",
+        target: "wiki/ (importance backfill — drafted grades)",
+        note: `${graded.length} page(s) drafted an importance: grade (importance_draft: true) — REVIEW, then --accept-grades`,
+        removed: false,
+      });
+    }
+  }
 
   // ── Persist settings.json once (single write) ─────────────────────────────
   if (settingsMutated && !dryRun) {

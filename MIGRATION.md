@@ -273,6 +273,44 @@ What a v1 user needs to know for migration:
 
 ---
 
+## 3a. Wiki knowledge migration — importance backfill + review gate
+
+v1 wiki pages carry no v2 `importance:` frontmatter, which would make migrated
+knowledge second-class in v2 recall ranking and coverage reporting. When
+`/guild:migrate --mode=migrate` runs (snapshot-first, as always), the converter
+also **drafts** a grade onto every ungraded `.guild/wiki/` page by deterministic
+heuristics:
+
+| Page | Drafted grade |
+|---|---|
+| `standards/**`, architecture-map, `decisions/**` (or `type: decision`) | `high` |
+| provenance / exploratory pages (`research/`/`ideation/`/`sources/`, or frontmatter marking provenance\|exploratory\|source) | **skipped** — confidence-graded only, never importance |
+| structural pages (`index.md`, `README.md`, `log.md`, `lint-*`) | skipped |
+| everything else | `medium` |
+
+A page that already has `importance:` is **never touched**. Drafted pages get a
+frontmatter block if absent and are marked `importance_draft: true` +
+`graded_by: guild-migrate` — drafts are *proposals, not facts*.
+
+**The flow (the gate is the only human step):**
+
+1. `migrate` → the migration report **ends** with the drafted-grades review table.
+2. Review each grade; edit the `importance:` value in place where the heuristic
+   is wrong (the closed enum is `critical | high | medium | low`; marquee
+   features are `critical`, no exception).
+3. Accept: `npx tsx plugin/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo>`
+   — strips the `importance_draft`/`graded_by` markers, keeps the grade.
+4. Until you accept, wiki lint nags: `/guild:wiki lint` (check #9) and the
+   docs-hygiene scan (rule 7) flag every page still carrying
+   `importance_draft: true` as a pending-review item.
+
+`--mode=dry-run` lists every planned grade without writing anything. The
+snapshot taken before conversion holds the original ungraded pages, so the
+documented restore command rolls the wiki back along with everything else.
+Grading taxonomy: `docs/knowledge/decisions/knowledge-base-hygiene-and-grading.md`.
+
+---
+
 ## 4. Flag migration cheat-sheet
 
 | v1 flag | v2 |
@@ -389,11 +427,11 @@ lead, `guild.handoff.v2` schema, §task§agent lifecycle).
   gate markers are unchanged; only the behavior behind them is promoted from
   deferred to shipped. Nothing in an existing v1 invocation changes.
 - **`--auto-approve` BLOCK-override asymmetry (printed, never hidden).**
-  `--auto-approve` collapses *soft* gates only. The `--auto-approve`
-  token set is `[spec,plan,build,qa,all]` — the `qa` token (added in the
-  v2-gap-closure run, 2026-06-10) auto-passes a **RELEASE-READY** verdict
-  ONLY; there is **no `ops` token** (Operations rails stay interactive).
-  A Quality **BLOCK→release override is NOT a soft gate** (it
+  `--auto-approve` collapses *soft* gates only. The frozen `--auto-approve`
+  token set is `[spec,plan,build,all]` — there is **no `qa` or `ops`
+  token**; Quality/Operations behavior is auto-passed **only under
+  `--auto-approve=all`**, never via a `qa`/`ops` flag value (those do not
+  exist). A Quality **BLOCK→release override is NOT a soft gate** (it
   overrides failing evidence) — it **stays human-gated even under
   `--auto-approve=all`**, exactly like the always-ask
   destructive/network/spend hard set. A RELEASE-READY recommendation *is*

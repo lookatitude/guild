@@ -1,7 +1,7 @@
 ---
 name: migrate
-description: "v1→v2 .guild converter — detect, snapshot, and convert a v1 .guild/ directory to v2 layout. Default mode is dry-run (safe: prints plan, writes nothing). Dispatches to the migrate-guild.ts CLI."
-argument-hint: "[--root=<path>] [--mode=migrate|dry-run|skip] [--workspace]"
+description: "v1→v2 .guild converter — detect, snapshot, and convert a v1 .guild/ directory to v2 layout. Default mode is dry-run (safe: prints the plan; writes nothing except the migration report file — CF-W1c-1). Dispatches to the migrate-guild.ts CLI."
+argument-hint: "[--root=<path>] [--mode=migrate|dry-run|skip] [--workspace] [--accept-grades]"
 allowed-tools: Read, Write, Bash
 ---
 
@@ -21,6 +21,7 @@ and `§3.5` (the `/guild migrate` self-maintenance table row).
 /guild:migrate --mode=dry-run           explicit dry-run (same as default)
 /guild:migrate --mode=skip              detect + log intent; no snapshot, no convert
 /guild:migrate --workspace              fan-out over all child repos in a workspace
+/guild:migrate --accept-grades          accept reviewed wiki importance grades (the human gate)
 ```
 
 ## Args
@@ -31,6 +32,7 @@ and `§3.5` (the `/guild migrate` self-maintenance table row).
   - `migrate` — snapshot `.guild/` → convert to v2 layout → write report. The snapshot is sha256-verified before conversion proceeds; a verify-abort exits non-zero and leaves `.guild/` untouched.
   - `skip` — detect + report intent; no snapshot, no conversion.
 - `--workspace` — treat `--root` as a workspace root; fan-out per child `.guild/` (SC-5, depth fixed at 1).
+- `--accept-grades` — the human-gate accept verb for the wiki importance backfill (below). Strips the `importance_draft`/`graded_by` review markers from every drafted wiki page, **keeping** the (possibly operator-edited) `importance:` grade. No detect/convert runs; idempotent.
 
 ## Gates
 
@@ -48,6 +50,30 @@ classification=v1 action=migrated
 ```
 
 No `.guild/` artifacts are written in `dry-run` or `skip` mode.
+
+## Wiki importance backfill (review gate)
+
+v1 wiki pages carry no v2 `importance:` frontmatter, so migrated knowledge
+would rank second-class in v2 recall and coverage reporting. During `migrate`
+(after the snapshot) the converter drafts a grade onto every ungraded
+`.guild/wiki/` page by deterministic heuristics — `standards/**` /
+architecture-map / `decisions/**` → `high`, everything else → `medium`;
+provenance/exploratory pages are skipped (confidence-graded only, never
+importance), as are structural pages (`index.md`/`README`/`log.md`/`lint-*`).
+Pages that already carry `importance:` are never touched. Drafts are marked
+`importance_draft: true` + `graded_by: guild-migrate`.
+
+**The gate is the only human step:** the migration report ends with the
+drafted-grades review table. Review each grade (edit the `importance:` value
+in place where the heuristic is wrong), then accept:
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo>
+```
+
+Until accepted, wiki lint (`/guild:wiki lint` check #9 and the docs-hygiene
+scan rule 7) flags the pages as a pending-review item on every run. `dry-run`
+lists every planned grade without writing. Full flow: `MIGRATION.md §3a`.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
 

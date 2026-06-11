@@ -1,6 +1,6 @@
 # wiki-lint — rule catalog & report format
 
-Full procedures for the eight checks summarised in `SKILL.md`, plus the lint
+Full procedures for the nine checks summarised in `SKILL.md`, plus the lint
 report template and the per-finding schema. `SKILL.md` is the lean playbook;
 this file is the detail the auditor follows when running each check.
 
@@ -9,7 +9,7 @@ ADR-lite shape), `§10.5` (contradiction policy — `confidence` frontmatter and
 "newer wins unless older has `confidence: high`"), `§10.6` (cadence +
 advisory-only).
 
-Run all eight checks on every invocation. Each finding is tagged with a
+Run all nine checks on every invocation. Each finding is tagged with a
 **severity**: **blocking** (the page breaks a hard contract — ingest or
 decisions skill violated), **important** (contradicts plan guidance, likely
 needs human attention), or **nit** (small hygiene issue).
@@ -129,6 +129,27 @@ Any other subdirectory, or a `.md` file outside those categories at the wiki
 root (aside from `index.md`, `log.md`, `lint-*.md`), is a hygiene nit. The
 report records the stray path.
 
+## 9. Pending importance review — important
+
+A **deterministic frontmatter predicate** (no judgement involved): flag every
+page whose frontmatter contains `importance_draft: true`. These pages were
+drafted an `importance:` grade by the v1→v2 migration's wiki importance
+backfill (`/guild:migrate`, `graded_by: guild-migrate`) and the operator has
+**not yet reviewed/accepted** the grade — the page is sitting at the human
+gate. The finding records page path, the drafted grade, and the accept
+command:
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo-root>
+```
+
+Do not edit the grade yourself (the non-destructive rule applies) — the
+operator reviews/edits each `importance:` value, then `--accept-grades`
+strips the `importance_draft`/`graded_by` markers and keeps the grade. The
+flag repeats on every lint run until accepted. The same predicate runs
+deterministically in `scripts/docs-hygiene/scan.ts` (rule 7); flow reference:
+`plugin/MIGRATION.md §3a`.
+
 ## Report template
 
 Write `.guild/wiki/lint-<YYYY-MM-DDTHH:MM:SSZ>.md` using the current UTC
@@ -167,6 +188,9 @@ timestamp. The file uses this structure:
 ## 8. Directory hygiene
 ...
 
+## 9. Pending importance review
+...
+
 ## Summary
 <one-paragraph roll-up keyed to severity; names the top 3 blockers by page
 path and the recommended next step. Never names a specific fix — just
@@ -188,4 +212,4 @@ Every finding entry includes:
 
 If a check has zero findings, still include the section with a literal
 `No findings.` line — downstream tooling (`guild:review`, `guild:verify-done`)
-expects all eight sections to be present so the report is machine-readable.
+expects all nine sections to be present so the report is machine-readable.

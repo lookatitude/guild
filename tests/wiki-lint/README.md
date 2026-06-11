@@ -1,7 +1,8 @@
 # wiki-lint fixtures
 
-Static fixtures that exercise the eight checks performed by
-`guild:wiki-lint` (see `skills/knowledge/wiki-lint/SKILL.md`). The lint
+Static fixtures that exercise the nine checks performed by
+`guild:wiki-lint` (see `skills/knowledge/wiki-lint/SKILL.md`) plus the
+hygiene-scan floor rules. The lint
 runner itself is built in P6 by `tooling-engineer`; these fixtures are
 authored ahead of the runner so the harness can be driven as a
 fixture-walking assertion suite (TDD-first — the fixtures ARE the tests).
@@ -30,9 +31,10 @@ and so on) so no real-looking data can leak into a downstream ingest.
 
 ## Fixture index
 
-Thirteen fixtures: one canonical pass + eight per-check failures (original) +
-four new hygiene-rule failures added by the `docs-clean-up` initiative (SC-9
-floor, D-DOC-4). Each failure fixture is tuned so that **only** its target
+Fourteen fixtures: one canonical pass + eight per-check failures (original) +
+four hygiene-rule failures added by the `docs-clean-up` initiative (SC-9
+floor, D-DOC-4) + one migration-gate failure (v2 wiki importance backfill).
+Each failure fixture is tuned so that **only** its target
 check fails; all other checks should pass against the same tree.
 
 | Fixture path                                            | Target check                              | Expected outcome              |
@@ -50,6 +52,7 @@ check fails; all other checks should pass against the same tree.
 | `fixtures/fail-progress-messaging/`                     | #10 Progress-messaging patterns (important) | lint fails on #10 only       |
 | `fixtures/fail-dangling-related/`                       | #11 Dangling `related:` slugs (important) | lint fails on #11 only        |
 | `fixtures/fail-drift-markers/`                          | #12 v1/single-repo drift markers (important) | lint fails on #12 only     |
+| `fixtures/fail-pending-grade-review/`                   | #13 Pending grade review — `importance_draft: true` (important) | lint fails on #13 only |
 
 ### New checks (#9–#12) — docs-clean-up initiative (SC-9 floor)
 
@@ -69,6 +72,16 @@ Rule source: ADR `docs/knowledge/decisions/knowledge-base-hygiene-and-grading.md
 - **#12 drift-markers** — body text referencing v1 command forms (`/guild-*`),
   v1 `commands/guild-*.md` paths, or explicit single-repo assumptions that
   survived the v1→v2 migration. IMPORTANT — SC-1 compliance.
+
+### New check (#13) — v1→v2 migration gate (wiki importance backfill)
+
+- **#13 pending-grade-review** — a page whose frontmatter still carries
+  `importance_draft: true` was drafted an `importance:` grade by the v1→v2
+  migration (`/guild:migrate`, `graded_by: guild-migrate`) and the operator has
+  not yet reviewed/accepted it (`migrate-guild.ts --accept-grades`). IMPORTANT —
+  the page sits at the human gate; the flag repeats every run until accepted.
+  Implemented deterministically as `scan.ts` rule 7 AND as `guild:wiki-lint`
+  check #9 (the `/guild:wiki lint` surface). Flow: `plugin/MIGRATION.md §3a`.
 
 **CQ-3 deferred:** lifecycle-gate/hook wiring is a flagged followup for a
 future initiative. These checks are a pure lint floor runnable on demand.
@@ -101,6 +114,7 @@ This emits a flag list to `.guild/initiatives/active/docs-clean-up/artifacts/sca
 | 4 | **Dangling source_refs** | `source_refs:` path not found on disk | `.guild/**` paths (F-4: gitignored runtime state), `plugin/.guild/**` paths, `external-input/**` refs, research/ideation corpus |
 | 5 | **Missing importance:** | Canonical page (under `docs/knowledge/`, not research/ideation, not landing files) missing `importance: critical\|high\|medium\|low` | research/ + ideation/ + landing files (README.md, index.md, QUERY.md, TRANSFER-MANIFEST.md, MIGRATION.md) |
 | 6 | **Secrets grep** | API keys, tokens, PEM blocks, password= assignments | git SHA commit refs in context, code-block example hashes |
+| 7 | **Pending grade review** | `importance_draft: true` frontmatter — a migration-drafted `importance:` grade awaiting operator acceptance (`migrate-guild.ts --accept-grades`) | none (a draft marker is pending wherever it appears) |
 
 ### Recalibration history (2026-05-28)
 
@@ -125,10 +139,10 @@ When the lint runner lands in P6, a harness will walk each fixture:
    so `expires_at: 2025-01-01` in `fail-stale-claims/` is deterministically
    in the past.
 3. Assert the fixture's expected outcome:
-   - For `pass/`: every one of the eight sections in the generated report
+   - For `pass/`: every one of the nine sections in the generated report
      contains the literal `No findings.` line.
    - For `fail-<check>/`: exactly the target check section contains at
-     least one finding; the other seven sections contain `No findings.`
+     least one finding; every other section contains `No findings.`
 
 Fixtures are deterministic — no wall-clock, no network, no randomness.
 A fixture-driven test is stable across runs and machines.

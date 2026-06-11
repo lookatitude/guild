@@ -114,6 +114,29 @@ export interface UnmigratedEntry {
   reason: RelocateReason;
 }
 
+/** The closed v2 importance enum (knowledge-base-hygiene-and-grading.md §A.1). */
+export type ImportanceGrade = "critical" | "high" | "medium" | "low";
+
+/** Outcome of the wiki-importance-backfill row for one wiki page. */
+export type WikiGradeAction =
+  | "graded"
+  | "skipped-already-graded"
+  | "skipped-provenance"
+  | "skipped-structural";
+
+/** One wiki page's record from the importance-backfill row (drives the gate table). */
+export interface WikiGradeRecord {
+  /** Path relative to `.guild/` (e.g. "wiki/standards/foo.md"). */
+  rel: string;
+  action: WikiGradeAction;
+  /** Drafted grade — present iff action === "graded". */
+  grade?: ImportanceGrade;
+  /** The deterministic heuristic that fired (human-readable). */
+  rule: string;
+  /** True when the page had no frontmatter and a block was created. */
+  createdFrontmatter?: boolean;
+}
+
 /** Result of detect() — the §1.3 classification + evidence. */
 export interface DetectResult {
   classification: Classification;
@@ -159,6 +182,8 @@ export interface ChildResult {
   relocated: UnmigratedEntry[];
   /** Unresolved C4 conflicts (re-surfaced every open). */
   conflicts: KeyOutcome[];
+  /** Wiki importance-backfill records (drafted grades await the human gate). */
+  grades: WikiGradeRecord[];
   /** Absolute path of the report written (or that would be written). */
   reportPath: string;
   reportBody: string;

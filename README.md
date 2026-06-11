@@ -66,6 +66,22 @@ gate.
 
 ### Install
 
+The quickest path is the installer script (`install.sh` at this repo's root —
+detects your AI coding hosts, runs the marketplace commands below, never uses
+`sudo`, never edits shell profiles):
+
+```bash
+curl -fsSL https://guildstack.dev/install.sh | bash
+```
+
+Domain unavailable? The same script ships in this repo:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lookatitude/guild/main/install.sh | bash
+```
+
+Installing manually does exactly the same thing:
+
 ```bash
 claude plugin marketplace add lookatitude/guild
 claude plugin marketplace update guild

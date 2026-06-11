@@ -242,6 +242,10 @@ const ALLOWLIST = [
   path.join(PLUGIN_ROOT, "hooks/__tests__"),
   // Docs / history: document what was removed, not live code
   path.join(PLUGIN_ROOT, "MIGRATION.md"),
+  // Removal documentation (same class as MIGRATION.md): the changelog and
+  // release notes legitimately NAME removed v1 surfaces.
+  path.join(PLUGIN_ROOT, "CHANGELOG.md"),
+  path.join(PLUGIN_ROOT, "docs", "RELEASE-NOTES-2.0.0.md"),
   path.join(PLUGIN_ROOT, "CHANGELOG.md"),
   // .guild/ data: v1 on-disk artifacts legitimately contain v1 content (D14)
   path.join(PLUGIN_ROOT, ".guild"),

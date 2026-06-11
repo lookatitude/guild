@@ -9,18 +9,24 @@
  *
  * Usage:
  *   npx tsx plugin/scripts/dot-guild/migrate-guild.ts [--root=<path>] [--mode=migrate|dry-run|skip] [--workspace]
+ *   npx tsx plugin/scripts/dot-guild/migrate-guild.ts --accept-grades [--root=<path>]
  *
  * Defaults: --root=cwd, --mode=dry-run (safe default — writes nothing).
  *   --mode=dry-run   detect + print the plan + write the report only; NO mutation.
  *   --mode=migrate   snapshot → convert → report (the in-place migration).
  *   --mode=skip      detect + report intent; no snapshot, no convert.
  *   --workspace      treat --root as a workspace; fan out per child .guild/ (SC-5).
+ *   --accept-grades  THE HUMAN GATE accept verb for the wiki importance backfill:
+ *                    strips `importance_draft:` + `graded_by:` from every wiki page
+ *                    carrying a drafted grade, KEEPING the (possibly edited)
+ *                    `importance:` value. Run it after reviewing the drafted-grades
+ *                    table at the end of the migration report.
  *
  * Exit codes: 0 normal; 1 on a snapshot-verify abort or a child error.
  */
 
 import * as path from "path";
-import { runMigration } from "./convert";
+import { runMigration, acceptGrades, realFs } from "./convert";
 import type { Mode } from "./convert";
 
 function main(): void {
@@ -30,6 +36,20 @@ function main(): void {
   const workspace = args.includes("--workspace");
 
   const root = rootArg ? path.resolve(rootArg.split("=").slice(1).join("=")) : process.cwd();
+
+  // ── The gate accept verb (no detect/convert run; wiki-only, idempotent). ──
+  if (args.includes("--accept-grades")) {
+    const accepted = acceptGrades(realFs, path.join(root, ".guild"));
+    if (accepted.length === 0) {
+      process.stdout.write(`No drafted wiki importance grades pending — nothing to accept.\n`);
+    } else {
+      for (const a of accepted) {
+        process.stdout.write(`accepted: ${a.rel} (importance: ${a.grade})\n`);
+      }
+      process.stdout.write(`Accepted ${accepted.length} drafted grade(s) — importance_draft/graded_by stripped, grades kept.\n`);
+    }
+    process.exit(0);
+  }
   const rawMode = modeArg ? modeArg.split("=").slice(1).join("=") : "dry-run";
   if (rawMode !== "migrate" && rawMode !== "dry-run" && rawMode !== "skip") {
     process.stderr.write(`[migrate-guild] invalid --mode=${rawMode} (migrate|dry-run|skip)\n`);
@@ -56,6 +76,13 @@ function main(): void {
       process.stdout.write(`${tag}  relocated ${child.relocated.length} key(s) → .unmigrated-v1.json\n`);
     if (child.conflicts.length)
       process.stdout.write(`${tag}  CONFLICTS (C4, kept LIVE): ${child.conflicts.map((c) => c.key).join(", ")}\n`);
+    {
+      const graded = child.grades.filter((g) => g.action === "graded");
+      if (graded.length)
+        process.stdout.write(
+          `${tag}  drafted ${graded.length} wiki importance grade(s) — review the report table, then: --accept-grades\n`
+        );
+    }
     if (child.restoreCommand) process.stdout.write(`${tag}  restore: ${child.restoreCommand}\n`);
     if (child.action !== "none" && child.action !== "v2-noop")
       process.stdout.write(`${tag}  report: ${child.reportPath}\n`);

@@ -35,8 +35,16 @@ export { detect } from "./detect";
 export { snapshot } from "./snapshot";
 export { convert } from "./convert";
 export { renderReport, reportFileName } from "./report";
+export { realFs, realClock, fixedClock } from "./seams";
 export { SCHEMA_STAMP_RE } from "./detect";
 export { UNMIGRATED_STAMP } from "./keymap";
+export {
+  backfillWikiImportance,
+  acceptGrades,
+  listDraftGrades,
+  GRADED_BY_STAMP,
+} from "./wiki-importance";
+export type { AcceptedGrade } from "./wiki-importance";
 export * from "./types";
 
 export interface RunMigrationOptions {
@@ -75,6 +83,7 @@ export function runMigration(opts: RunMigrationOptions): MigrationResult {
         artifacts: [],
         relocated: [],
         conflicts: [],
+        grades: [],
         reportPath: path.join(guildDir, reportFileName(clock.stamp())),
         reportBody: "",
         error: (e as Error).message,
@@ -202,6 +211,7 @@ function processChild(fs: Fs, clock: Clock, root: string, mode: Mode): ChildResu
     artifacts: [],
     relocated: [],
     conflicts: [],
+    grades: [],
     reportPath,
     reportBody: "",
   };
@@ -250,6 +260,7 @@ function processChild(fs: Fs, clock: Clock, root: string, mode: Mode): ChildResu
     base.artifacts = out.artifacts;
     base.relocated = out.relocated;
     base.conflicts = out.conflicts;
+    base.grades = out.grades;
     base.reportBody = renderReport(base, mode, clock.iso());
     writeReport(fs, base); // dry-run STILL emits the report (it writes nothing else)
     return base;
@@ -270,6 +281,7 @@ function processChild(fs: Fs, clock: Clock, root: string, mode: Mode): ChildResu
   base.artifacts = out.artifacts;
   base.relocated = out.relocated;
   base.conflicts = out.conflicts;
+  base.grades = out.grades;
   base.restoreCommand = buildRestore(snap.destRel, out.removed, out.generated);
   base.reportBody = renderReport(base, mode, clock.iso());
   writeReport(fs, base);

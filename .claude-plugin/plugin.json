@@ -47,6 +47,7 @@
     "./commands/rollback.md",
     "./commands/stats.md",
     "./commands/audit.md",
+    "./commands/dashboard.md",
     "./commands/migrate.md"
   ],
   "agents": [

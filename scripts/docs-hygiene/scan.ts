@@ -13,6 +13,9 @@
  *   4. Dangling source_refs: paths — file path doesn't exist on disk (excludes .guild/ paths per F-4)
  *   5. Missing importance: — canonical pages (not research/ideation/landing files) missing importance:
  *   6. Secrets grep — API keys, tokens, PEM blocks, password= lines
+ *   7. Pending grade review — pages still carrying `importance_draft: true` (a
+ *      v1→v2 migration drafted the grade; the operator has not accepted it via
+ *      `migrate-guild.ts --accept-grades` yet — see plugin/MIGRATION.md)
  *
  * RECALIBRATION (2026-05-28, Lane D-validate, docs-clean-up initiative):
  *   Lane C revealed high false-positive rates in the original rules:
@@ -97,7 +100,7 @@ const LANDING_FILE_NAMES = new Set([
 // ---------------------------------------------------------------------------
 
 interface Flag {
-  category: "drift" | "progress-msg" | "dangling-related" | "dangling-source-refs" | "missing-importance" | "secrets";
+  category: "drift" | "progress-msg" | "dangling-related" | "dangling-source-refs" | "missing-importance" | "secrets" | "pending-grade-review";
   file: string;   // relative to WORKSPACE
   lines: string;  // "L42" or "L42-45" or "all"
   pattern: string;
@@ -726,6 +729,31 @@ function scanMissingImportance(corpus: string[]) {
   }
 }
 
+// ---- 7. Pending grade review (migration draft grades) -----------------------
+// The v1→v2 migration (`/guild:migrate` — plugin/scripts/dot-guild/convert/
+// wiki-importance.ts) drafts `importance:` grades onto ungraded wiki pages and
+// marks them `importance_draft: true` + `graded_by: guild-migrate` behind a
+// human review gate. Pages still carrying the draft marker have NOT been
+// reviewed/accepted (`migrate-guild.ts --accept-grades`) — flag them as a
+// pending-review item until the operator accepts. Deterministic frontmatter
+// predicate; no exemptions (a draft marker is pending wherever it appears).
+function scanPendingGradeReview(corpus: string[]) {
+  for (const fpath of corpus) {
+    const content = readFile(fpath);
+    const fm = parseFrontmatter(content);
+    if (!fm) continue;
+    if (fm["importance_draft"] === "true") {
+      addFlag({
+        category: "pending-grade-review",
+        file: relPath(fpath),
+        lines: "L1",
+        pattern: "importance_draft: true — migration-drafted grade awaiting operator review",
+        match: `importance: ${fm["importance"] || "??"} graded_by: ${fm["graded_by"] || "??"}`,
+      });
+    }
+  }
+}
+
 // ---- 6. Secrets grep -------------------------------------------------------
 export const SECRET_PATTERNS: Array<[RegExp, string]> = [
   // NOTE: labels deliberately drop the `=` so the redaction replacement
@@ -828,6 +856,9 @@ scanMissingImportance(docsKnowledgeFiles);
 console.error("Running secrets scan...");
 scanSecrets(allCorpus);
 
+console.error("Running pending-grade-review scan...");
+scanPendingGradeReview(allCorpus);
+
 // ---------------------------------------------------------------------------
 // Emit flag list
 // ---------------------------------------------------------------------------
@@ -839,6 +870,7 @@ const counts: Record<Flag["category"], number> = {
   "dangling-source-refs": 0,
   "missing-importance": 0,
   secrets: 0,
+  "pending-grade-review": 0,
 };
 for (const f of flags) counts[f.category]++;
 
@@ -882,6 +914,7 @@ Lane C consumes this as its worklist. **Flags are candidates, not auto-deletes**
 | Dangling source_refs: paths | ${counts["dangling-source-refs"]} |
 | Missing importance: on canonical page | ${counts["missing-importance"]} |
 | Secrets grep | ${counts["secrets"]} |
+| Pending grade review (importance_draft) | ${counts["pending-grade-review"]} |
 | **Total** | **${totalFlags}** |
 
 `;
@@ -892,6 +925,7 @@ output += renderSection("dangling-related", "3. Dangling related: slugs");
 output += renderSection("dangling-source-refs", "4. Dangling source_refs: paths");
 output += renderSection("missing-importance", "5. Missing importance: on canonical pages");
 output += renderSection("secrets", "6. Secrets grep");
+output += renderSection("pending-grade-review", "7. Pending grade review (migration draft grades)");
 
 output += `
 ---
@@ -904,6 +938,7 @@ output += `
 4. For each **dangling-source-refs** flag: verify the path is still at the declared location; correct or remove.
 5. For each **missing-importance** flag: apply the A.2 level definitions to assign \`importance: critical|high|medium|low\`. Marquee features default to \`critical\`.
 6. For each **secrets** flag: investigate; if genuine secret, rotate + remove immediately.
+7. For each **pending-grade-review** flag: the page carries a migration-drafted \`importance:\` grade (\`importance_draft: true\`). Review/edit the grade, then accept with \`npx tsx plugin/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo>\` (see \`plugin/MIGRATION.md\`).
 
 ---
 
@@ -920,5 +955,6 @@ console.error(`  dangling-related:  ${counts["dangling-related"]}`);
 console.error(`  dangling-source-refs: ${counts["dangling-source-refs"]}`);
 console.error(`  missing-importance: ${counts["missing-importance"]}`);
 console.error(`  secrets:           ${counts["secrets"]}`);
+console.error(`  pending-grade-review: ${counts["pending-grade-review"]}`);
 
 } // end if (require.main === module) — FU-A

@@ -23,6 +23,80 @@ from v1.0.0 onward.
   tag + GitHub Release. Pre-v1.4 releases backfilled retroactively
   (v1.1.0 / v1.2.0 / v1.3.0 tags + releases created 2026-04-27).
 
+## [2.0.0] — UNRELEASED (release/v2.0.0)
+
+Guild v2 — the full redesign: one state machine, six phases, specialist
+teams, durable knowledge, adversarial review, and a v1→v2 migrator. The
+canonical design set is `docs/v2/` in the workspace repo (18 docs,
+3-tier-audited 2026-06-11: coverage / completeness / code-conformance all
+adversarially gated).
+
+### Added
+
+- **Single-verb lifecycle**: `/guild:guild [brief]` plus phase commands
+  `init ideate plan build qa ops`, with `--rigor=quick|standard|deep`
+  profile expansion, 5 global flags, universal `--dry-run`.
+- **Specialist teams**: per-phase team composition (G-team gate, cap 6),
+  cost-tiered routing (`cheap|mid|powerful`), ephemeral per-task agents,
+  tmux team backend with liveness (tier-scaled idle timeouts,
+  heartbeats, failed→dead reaping).
+- **Knowledge & memory**: `.guild/wiki/` canonical store with BM25 recall,
+  importance grading, ingest similarity + injection probes, harvest →
+  reflect promotion path; `guild-memory` + `guild-telemetry` MCP servers.
+- **Adversarial review**: the cross-family review broker at seven gates
+  (G-init/G-spec/G-plan/G-lane/G-quality/G-operations/G-diagnose) with
+  STRONG/WEAK independence stamps, sentinel loops, checksum-bound
+  5-condition gate-pass; `--review=local|cross|off`.
+- **Quality & Operations phases**: computed release predicate (DI-2),
+  runbook classes + safety rails (DI-3), PASS-only `qa` auto-approve token.
+- **Initiatives** (opt-in): durable goals owning progress across runs,
+  4-axis status, D-gates with release evidence.
+- **Security**: capability AND-mask in PreToolUse, forced
+  bypassPermissions deny under autonomy modes, 3-stage secrets scrubbing
+  (incl. handoffs + provenance), trust-tier recall wrappers, fail-closed
+  ingest probe, MCP capability declarations + description pinning,
+  append-only security-events log, adversarial eval fixtures.
+- **Observability**: `guild.run.v1`/`guild.provenance.v1` run records,
+  v1.4 trace events, `/guild:status`, `/guild:stats`, `/guild:dashboard`
+  (benchmark UI against the live project), `/guild:audit`.
+- **v1→v2 migrator**: `/guild:migrate` (detect → snapshot → convert;
+  dry-run default; `--workspace` fan-out) + SessionStart v1 detection +
+  gated wiki importance backfill (`--accept-grades`).
+- **Codebase understanding**: `learn` pipeline (7-stage script→LLM),
+  codebase map, lazy knowledge graph, refresh classifier.
+- **Installer**: repo-hosted `install.sh` (host-detecting; primary
+  `guildstack.dev/install.sh`, fallback raw.githubusercontent — domain-
+  independent by design).
+
+### Changed
+
+- Commands renamed: `/guild:guild-x` → `/guild:x` (namespace stays;
+  redundant prefix dropped); `guild-diagnose` → `fix`; team-compose
+  folded into `plan`. Full map: `MIGRATION.md §2`.
+- Config: `config.yml` → `.guild/settings.json` (closed keys, 7-source
+  inheritance, `--validate` hard-rejects unknown keys).
+- Run records: `metadata.json` → `run.yaml` + `provenance.json` (the
+  dual-write shim shipped during migration and is retired).
+
+### Removed
+
+- v1 command names (removed names print a redirect and exit non-zero —
+  no executing shims; redirect stubs deleted in this release).
+- `defaults.agent_team` config alias (`agent_mode` is sole authority).
+- `config.yml` back-compat read shim (the migrator converts it instead).
+
+### Deferred to v2.x
+
+The honest deferral list (33 design deferrals + carried followups +
+known issues) is maintained in the workspace closeout register:
+`.guild/audits/gap-run-20260611/release/v2-closeout-register.md §2` and
+is embedded verbatim in the v2.0.0 release-PR body
+(`docs/RELEASE-NOTES-2.0.0.md`). Headlines: composite recall scoring +
+labels taxonomy, initiative ledger automation + enum validator, FDC
+degradation-signal trace emitters, trace replay tools, per-host
+packaging beyond Claude Code (Codex standalone, Gemini, Pi), KB
+snapshot/rollback (defense layer 5), SQLite state projections.
+
 ## [1.3.0] — 2026-04-27
 
 Closed 4 deferred items from `benchmark/FOLLOWUPS.md` + locked 3
