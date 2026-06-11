@@ -49,6 +49,12 @@ full disposition enum.
 
 # Required inputs
 
+- A **passing `.guild/runs/<run-id>/verify.md`** (the build phase's
+  `guild:verify-done` output). Quality runs *after* a passing verify-done,
+  never instead (invariant 4, `lifecycle-overview.md §"Ordering"`): absent or
+  failing ⇒ **route-back** to Development — do not proceed silently. An
+  explicit operator decision to proceed without it MUST be recorded (name +
+  reason) in the quality report.
 - `task_run` permission envelope + the immutable always-ask hard set
   (`contract-map.md §A` row 1 → `target-architecture.md §"task_run contract"`).
 - Canonical budget `defaults.quality.budget` **by pointer to
@@ -114,10 +120,13 @@ Two **distinct, both-kept** review mechanisms at this boundary (`docs/v2/09-adve
 
 **COMPUTED** (never asked), complete over `{pass | fail | inconclusive |
 not_applicable | gap}`, **CITED by pointer** to `§632–637` +
-`lifecycle-overview.md §472–503` — never re-derived/"extended" (GR-5). **BLOCK**
-iff a selected class is `fail`, or `inconclusive` no-owner, or a safety-relevant
-`gap` no-owner, or `gap`/`not_applicable` on a selected class no-owner; **else
-RELEASE-READY**. Gate `[release] [block] [abort]`; `[release]` on a BLOCK is a
+`lifecycle-overview.md §472–503` (the canonical predicate) — never
+re-derived/"extended" (GR-5). **BLOCK** iff any selected class is `fail`, OR
+`inconclusive` with no owner-accepted risk, OR a
+security/privacy/reliability-relevant `gap` with no owner-accepted risk;
+**else RELEASE-READY**. `not_applicable` and a **non-safety** `gap` **never
+block** (surfaced in the gate summary, release-ready by default).
+Gate `[release] [block] [abort]`; `[release]` on a BLOCK is a
 **HUMAN-ONLY** force-pass (name + rationale recorded). `--auto-approve` tokens
 `[spec, plan, build, qa, all]` — **no `ops`**: `qa` (and `all`) auto-passes a
 **RELEASE-READY** verdict ONLY; a **BLOCK→release override is NEVER
@@ -162,6 +171,8 @@ After `releasegate` and before phase close, fire the per-phase LearningCheckpoin
 3. **`inconclusive`, no owner** → `BLOCK`; with a named owner-accepted risk →
    not a block by that row.
 4. **Budget exhausted** → `inconclusive: budget exhausted` (never silent pass).
-5. **`not_applicable` on a non-selected class** → never blocks.
-6. **Class applicable, no harness** → `gap`; if safety-relevant and no owner →
-   `BLOCK`.
+5. **`not_applicable`** → never blocks (informational only — on any class,
+   selected or not).
+6. **Class applicable, no harness** → `gap`; if security/privacy/reliability-
+   relevant and no owner-accepted risk → `BLOCK`; a non-safety `gap` never
+   blocks (surfaced, release-ready by default).

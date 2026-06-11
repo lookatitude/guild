@@ -146,6 +146,24 @@ describe("ClaudePaneAdapter", () => {
     const e = adapter.env(spec()); // no taskId → no key
     expect(e).not.toHaveProperty("GUILD_TASK_ID");
   });
+
+  // G-9 / C2-D1 (heartbeat real-path wiring): lane panes export GUILD_SPECIALIST
+  // so the PostToolUse heartbeat writer (GUILD_RUN_ID ∧ GUILD_SPECIALIST) fires.
+  it("heartbeat: command exports GUILD_SPECIALIST when specialist is present", () => {
+    const c = adapter.command(spec({ specialist: "backend" }));
+    expect(c).toContain("export GUILD_SPECIALIST=backend");
+    expect(c.indexOf("GUILD_SPECIALIST")).toBeLessThan(c.indexOf("claude "));
+  });
+
+  it("heartbeat: command omits GUILD_SPECIALIST when specialist is absent (orchestrator)", () => {
+    const c = adapter.command(spec()); // no specialist in spec()
+    expect(c).not.toContain("GUILD_SPECIALIST");
+  });
+
+  it("heartbeat: env includes GUILD_SPECIALIST when specialist is present", () => {
+    const e = adapter.env(spec({ specialist: "backend" }));
+    expect(e["GUILD_SPECIALIST"]).toBe("backend");
+  });
 });
 
 describe("CodexPaneAdapter", () => {
@@ -161,6 +179,16 @@ describe("CodexPaneAdapter", () => {
   it("env reports only the run id (no team gate)", () => {
     const adapter = new CodexPaneAdapter({ env: {} });
     expect(adapter.env(spec({ hostKind: "codex" }))).toEqual({ GUILD_RUN_ID: "run-001" });
+  });
+
+  // G-9 / C2-D1: env parity — Codex lane panes also export GUILD_SPECIALIST.
+  it("heartbeat: command + env export GUILD_SPECIALIST when specialist is present", () => {
+    const adapter = new CodexPaneAdapter({ env: { OPENAI_API_KEY: "sk-x" } });
+    const s = spec({ hostKind: "codex", specialist: "backend" });
+    const c = adapter.command(s);
+    expect(c).toContain("export GUILD_SPECIALIST=backend");
+    expect(c.indexOf("GUILD_SPECIALIST")).toBeLessThan(c.indexOf("codex exec"));
+    expect(adapter.env(s)["GUILD_SPECIALIST"]).toBe("backend");
   });
 
   it("preflight passes when codex --version ok AND OPENAI_API_KEY present (no auth.json)", () => {

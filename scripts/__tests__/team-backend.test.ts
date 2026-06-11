@@ -328,6 +328,20 @@ describe("InProcessTeamBackend — Agent-tool dispatch plan (RE-4 / VC-RE-4)", (
     }
   });
 
+  // G-9 / C2-D1 (heartbeat real-path wiring): the PostToolUse heartbeat writer
+  // (hooks/lib/heartbeat-write.ts) fires only when GUILD_RUN_ID ∧
+  // GUILD_SPECIALIST are both in the dispatched lane's env. These tests assert
+  // on the ACTUAL env construction the dispatcher uses — not an injected seam.
+  it("heartbeat: composeInProcessDispatch exports GUILD_SPECIALIST=<spec.name> on every descriptor", () => {
+    const plan = composeInProcessDispatch(req());
+    for (const spec of SPECIALISTS) {
+      const d = plan.find((p) => p.name === spec.name)!;
+      expect(d.env.GUILD_SPECIALIST).toBe(spec.name);
+      // The writer's trigger contract needs BOTH vars — assert the pair.
+      expect(d.env.GUILD_RUN_ID).toBe("run-test-001");
+    }
+  });
+
   it("emits zero tmux commands / panes: orchestratorPaneId null, teammatePaneIds empty", () => {
     // The backend takes no RunFn — there is no subprocess seam to invoke, so it
     // structurally cannot shell out to tmux. plannedCommands describe Agent()
@@ -571,6 +585,21 @@ describe("pure helpers", () => {
     expect(scopeIdx).toBeLessThan(claudeIdx);
   });
 
+  // G-9 / C2-D1 (heartbeat real-path wiring): specialist panes must export
+  // GUILD_SPECIALIST so the PostToolUse heartbeat writer fires.
+  it("heartbeat: paneCommand exports GUILD_SPECIALIST when specialist present (before claude)", () => {
+    const c = paneCommand("hello", "run-1", undefined, "T2-backend", "backend");
+    expect(c).toContain("export GUILD_SPECIALIST=backend");
+    const specIdx = c.indexOf("GUILD_SPECIALIST");
+    const claudeIdx = c.indexOf("claude ");
+    expect(specIdx).toBeLessThan(claudeIdx);
+  });
+
+  it("heartbeat: paneCommand omits GUILD_SPECIALIST when specialist is absent (orchestrator pane)", () => {
+    const c = paneCommand("hello", "run-1", ["Read"], "T1");
+    expect(c).not.toContain("GUILD_SPECIALIST");
+  });
+
   it("composeTmuxCommands free function matches the backend plan output", () => {
     const direct = composeTmuxCommands({
       mode: "new-session",
@@ -582,6 +611,31 @@ describe("pure helpers", () => {
     });
     const viaBackend = new TmuxTeamBackend({ run: makeFakeRun().run }).plan(req()).commands;
     expect(viaBackend.map((c) => c.display)).toEqual(direct.map((c) => c.display));
+  });
+
+  // G-9 / C2-D1 real-path assertion: the ACTUAL tmux plan the backend composes
+  // carries GUILD_SPECIALIST in every specialist pane command and NOT in the
+  // orchestrator pane command.
+  it("heartbeat: the composed tmux plan exports GUILD_SPECIALIST per specialist pane only", () => {
+    const cmds = composeTmuxCommands({
+      mode: "new-session",
+      targetName: "guild-demo",
+      cwd: "/tmp/repo",
+      slug: "demo",
+      runId: "run-test-001",
+      specialists: SPECIALISTS,
+    });
+    const displays = cmds.map((c) => c.display);
+    for (const spec of SPECIALISTS) {
+      expect(
+        displays.some((d) => d.includes(`export GUILD_SPECIALIST=${spec.name}`)),
+      ).toBe(true);
+    }
+    // The orchestrator pane (the new-session command carrying the lead prompt)
+    // must NOT export GUILD_SPECIALIST.
+    const orchestrator = displays.find((d) => d.includes("new-session"));
+    expect(orchestrator).toBeDefined();
+    expect(orchestrator!).not.toContain("GUILD_SPECIALIST");
   });
 
   it("probeTmuxAvailable uses the injected runner", () => {

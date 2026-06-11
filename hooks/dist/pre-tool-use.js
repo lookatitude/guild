@@ -323,6 +323,12 @@ function capSidecarText(existing, incomingLine, maxBytes) {
 // lib/security/config.ts
 var fs2 = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
+function parseAutonomyMode(v) {
+  if (v === "interactive" || v === "autonomous_after_plan_approval" || v === "auto_approve") {
+    return v;
+  }
+  return null;
+}
 function securityDefaults() {
   return {
     bypass_permissions_policy: "audit",
@@ -411,6 +417,55 @@ function readSecurityConfig(cwd) {
     return securityDefaults();
   }
   return parseSecurityConfig(parsed);
+}
+var TASK_RUN_AUTONOMY_RE = /^\s*autonomy_policy:\s*["']?(interactive|autonomous_after_plan_approval|auto_approve)["']?\s*$/m;
+function readTaskRunAutonomyPolicy(filePath) {
+  try {
+    const raw = fs2.readFileSync(filePath, "utf8");
+    const m = TASK_RUN_AUTONOMY_RE.exec(raw);
+    return m ? parseAutonomyMode(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+function readSettingsAutoApprove(cwd) {
+  try {
+    const settingsPath = path2.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+    const parsed = JSON.parse(fs2.readFileSync(settingsPath, "utf8"));
+    if (!isPlainObject(parsed)) return [];
+    const defaults = parsed["defaults"];
+    if (!isPlainObject(defaults)) return [];
+    const gates = defaults["gates"];
+    if (!isPlainObject(gates)) return [];
+    const aa = gates["auto_approve"];
+    return isStringArray(aa) ? aa : [];
+  } catch {
+    return [];
+  }
+}
+function resolveRunAutonomyMode(opts) {
+  const env = opts.env ?? process.env;
+  const fromEnv = parseAutonomyMode(env["GUILD_AUTONOMY_POLICY"]);
+  if (fromEnv !== null) return fromEnv;
+  const runId = (env["GUILD_RUN_ID"] ?? "").trim();
+  const taskId = (env["GUILD_TASK_ID"] ?? "").trim();
+  if (runId.length > 0 && taskId.length > 0) {
+    const safe = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+    if (safe.test(runId) && safe.test(taskId)) {
+      const taskRunPath = path2.join(
+        resolveGuildRoot(opts.cwd),
+        ".guild",
+        "runs",
+        runId,
+        "task-runs",
+        `${taskId}.yaml`
+      );
+      const fromTaskRun = readTaskRunAutonomyPolicy(taskRunPath);
+      if (fromTaskRun !== null) return fromTaskRun;
+    }
+  }
+  if (readSettingsAutoApprove(opts.cwd).length > 0) return "auto_approve";
+  return "interactive";
 }
 
 // lib/security/scrubbed-write.ts
@@ -642,6 +697,12 @@ function scrubbedWrite(outPath, content, opts) {
 
 // lib/security/enforce.ts
 var fs5 = __toESM(require("node:fs"));
+function effectiveBypassPolicy(configured, autonomyMode) {
+  if (autonomyMode === "auto_approve" || autonomyMode === "autonomous_after_plan_approval") {
+    return { policy: "deny", forced: true, autonomyMode };
+  }
+  return { policy: configured, forced: false, autonomyMode };
+}
 function parseRuleArray(raw) {
   if (typeof raw !== "string" || raw.trim().length === 0) return { rules: null, invalid: false };
   try {
@@ -741,7 +802,7 @@ function readScopeFile(filePath, baseline = []) {
   return { capability, autonomy, invalid: capInvalid, baseline };
 }
 function resolveScopeDecision(args) {
-  const { scope, toolName, toolInput, policy, permissionMode } = args;
+  const { scope, toolName, toolInput, policy, permissionMode, policyForced } = args;
   if (isInScope(scope, toolName, toolInput)) {
     return { gate: false, recordedDecision: "pass", eventType: null, reason: "" };
   }
@@ -763,7 +824,7 @@ function resolveScopeDecision(args) {
         permissionDecision: "deny",
         recordedDecision: "deny",
         eventType: "capability_scope_violation",
-        reason: `${baseReason} bypass_permissions_policy=deny \u2014 hard-blocked under bypassPermissions.`
+        reason: policyForced === true ? `${baseReason} bypass_permissions_policy=deny (FORCED by non-interactive autonomy mode \u2014 docs/v2/11-security.md \xA7bypassPermissions governance) \u2014 hard-blocked under bypassPermissions.` : `${baseReason} bypass_permissions_policy=deny \u2014 hard-blocked under bypassPermissions.`
       };
     case "allow":
       return {
@@ -1081,12 +1142,18 @@ function runSecurityEnforcement(payload, cwd) {
     });
   }
   if (scope !== null) {
+    const underBypass = permissionMode === "bypassPermissions";
+    const bypass = underBypass ? effectiveBypassPolicy(
+      sec.bypass_permissions_policy,
+      resolveRunAutonomyMode({ cwd, env: process.env })
+    ) : { policy: sec.bypass_permissions_policy, forced: false };
     const d = resolveScopeDecision({
       scope,
       toolName,
       toolInput: payload.tool_input,
-      policy: sec.bypass_permissions_policy,
-      permissionMode
+      policy: bypass.policy,
+      permissionMode,
+      policyForced: bypass.forced
     });
     if (d.eventType !== null) {
       emit({
@@ -1094,7 +1161,7 @@ function runSecurityEnforcement(payload, cwd) {
         decision: d.recordedDecision,
         tool: toolName,
         detail: d.reason,
-        policy: permissionMode === "bypassPermissions" ? sec.bypass_permissions_policy : void 0,
+        policy: underBypass ? bypass.policy : void 0,
         permission_mode: permissionMode
       });
     }

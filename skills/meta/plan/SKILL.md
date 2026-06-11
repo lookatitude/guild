@@ -20,7 +20,7 @@ Do not infer lanes from chat history outside these two files. If the resolved te
 
 ## Output
 
-Write `.guild/plan/<slug>.md`. One top-level heading per specialist lane. Each lane is a structured block:
+Write `.guild/plan/<slug>.md`. It carries the right-sized `## PRD` section (or a pointer to the promoted standalone PRD — see `## PRD — always written, right-sized` below) followed by one top-level heading per specialist lane. Each lane is a structured block:
 
 ```markdown
 ---
@@ -84,6 +84,37 @@ Parallelism rules from `guild-plan.md §8`:
 - Content and commercial lanes run in parallel with engineering when they only depend on the spec.
 
 The DAG expressed in `depends-on:` is what `guild:execute-plan` reads to schedule parallel dispatches — authoring the edges wrong here leads to either serialized work that could have parallelized or dispatches that start before their inputs exist.
+
+## PRD — always written, right-sized (D-P1 / OQ8)
+
+The PRD is **always written, but right-sized** (accepted ADR
+`docs/knowledge/decisions/prd-right-sizing.md`; the right-sizing *behavior* is
+`[v2]`):
+
+- **Default: inline `## PRD` section** inside `.guild/plan/<slug>.md` — placed
+  after the frontmatter and before the first `## Lane:` heading. It carries the
+  decomposition rationale: the feature list, the user-facing success criteria
+  rolled up from the spec, and why the work splits into these lanes.
+- **Promote to a standalone `.guild/prd/<slug>.md`** when **any** right-size
+  trigger fires:
+  1. the plan covers **more than one feature**, OR
+  2. the run is **initiative-attached** (an `--initiative` / resolved
+     `initiative_default` binds this run to an initiative), OR
+  3. the spec's **success-criteria count is >5**.
+
+  On promotion the plan's `## PRD` section is replaced by a one-line pointer
+  (`PRD: .guild/prd/<slug>.md`) so downstream consumers always find the PRD
+  from the plan. Record which trigger fired in the standalone PRD's
+  frontmatter (`right_size_trigger: multi-feature | initiative-attached |
+  success-criteria-count`).
+- **No new gate.** The PRD — inline or standalone — is approved at the
+  existing plan/PRD-approval gate (folded in; there is **no separate G-prd
+  gate**). The user-facing gates remain: spec, team, plan/PRD.
+
+Evaluate the triggers deterministically from the approved spec + the run
+state — never ask the user whether to promote, and never write the standalone
+file when no trigger fires (an unconditional `.guild/prd/<slug>.md` is the
+gate-fatigue defect this ADR resolves).
 
 ## Plan-impact (DiffUnderstanding — brownfield, plug point P2)
 
@@ -154,4 +185,4 @@ After the G-plan review + approval gate and before handoff, fire the per-phase L
 
 Once the plan is written and **user-approved** (frontmatter `approved: true`), hand off to `guild:execute-plan`. Execute-plan creates the `<run-id>`, then invokes `guild:context-assemble` once per specialist lane to build the minimum-viable-context bundle (`guild-plan.md §9`) before dispatching the specialist subagent. Do not run context assembly yourself — that's `guild:execute-plan`'s responsibility during per-lane dispatch.
 
-Handoff receipt should list: `plan_path`, `lane_count`, `parallel_eligible_count` (lanes with empty `depends-on:`), `backend` (mirrored from team.yaml), and `approved_at` timestamp.
+Handoff receipt should list: `plan_path`, `prd_form` (`inline` | `standalone` — with `prd_path` when standalone), `lane_count`, `parallel_eligible_count` (lanes with empty `depends-on:`), `backend` (mirrored from team.yaml), and `approved_at` timestamp.

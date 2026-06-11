@@ -41,7 +41,7 @@ budgets are consumed by pointer from `defaults.quality.budget`
 /guild:qa run-2026-05-18-ab12
 ```
 
-All six global flags + `--dry-run` apply (`command-surface.md §4`, by
+All five global flags + `--dry-run` apply (`command-surface.md §4`, by
 pointer).
 
 ## Args & local flags
@@ -122,7 +122,16 @@ by invoking:
    RunChecks under the run sandbox + canonical budget → advisory G-quality
    challenger trail → the COMPUTED `ReleaseGate` recommendation.
 
-Input gate: build receipts present (`.guild/runs/<run-id>/handoffs/*.md`).
+Input gate: build receipts present (`.guild/runs/<run-id>/handoffs/*.md`)
+**AND a passing `.guild/runs/<run-id>/verify.md`** from the build phase's
+`guild:verify-done` gate (Quality↔verify-done invariant 4,
+`lifecycle/lifecycle-overview.md §"Ordering"`): Quality runs *after* a
+passing verify-done, never instead. `/guild:qa` with no passing `verify.md`
+for the run ⇒ **`route-back`** to the Development phase (surface the missing
+/ failing verify.md and the route-back — never proceed silently). The only
+exception is an explicit operator decision to proceed anyway, which MUST be
+recorded in the quality report (`release_decision` rationale names who chose
+to proceed without a passing verify.md and why).
 Output gate: `.guild/runs/<run-id>/quality/<run-id>.md` (frozen
 `guild.quality.v1`; evidence under `quality/evidence/`).
 Confirmation gates (from **Gates**): release / blocker gate **I** (a

@@ -924,6 +924,51 @@ function cmdShowSources(cwd: string): number {
 // Subcommand: validate --effective
 // ---------------------------------------------------------------------------
 
+/**
+ * Closed-key reject for unknown TOP-LEVEL keys (13-config-surfaces / D11).
+ *
+ * The post-inheritance resolver strips unknown keys, so the merged result can
+ * never carry them — a typo like {"rigour": "deep"} would otherwise pass
+ * `validate --effective` silently. This raw-file sweep checks every
+ * contributing settings file's top-level keys against the closed TIER1 set
+ * and reports each unknown key as a violation ("rejected, not silently
+ * ignored"). `_`-prefixed annotation keys (`_help`, `_docs`) are exempt.
+ */
+function collectUnknownTopLevelKeyViolations(cwd: string): string[] {
+  const violations: string[] = [];
+  const candidates: Array<{ label: string; file: string }> = [
+    { label: "project settings.json", file: path.join(cwd, ".guild", "settings.json") },
+    { label: "project settings.local.json", file: path.join(cwd, ".guild", "settings.local.json") },
+  ];
+  const wsRoot = discoverWorkspaceRoot(cwd);
+  if (wsRoot && path.resolve(wsRoot) !== path.resolve(cwd)) {
+    candidates.push(
+      { label: "workspace settings.json", file: path.join(wsRoot, ".guild", "settings.json") },
+      { label: "workspace settings.local.json", file: path.join(wsRoot, ".guild", "settings.local.json") }
+    );
+  }
+  for (const { label, file } of candidates) {
+    if (!fs.existsSync(file)) continue;
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    } catch {
+      continue; // parse errors are reported by the resolver path, not here
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) continue;
+    for (const k of Object.keys(parsed)) {
+      if (k.startsWith("_")) continue; // _help / _docs annotations
+      if (!TIER1_KEYS.has(k)) {
+        violations.push(
+          `unknown top-level key "${k}" in ${label} (${file}) — closed key set; ` +
+            `check spelling (known: ${[...TIER1_KEYS].join(", ")})`
+        );
+      }
+    }
+  }
+  return violations;
+}
+
 function cmdValidateEffective(cwd: string, selfBuild: boolean): number {
   let result: ReturnType<typeof resolveSettings>;
   try {
@@ -939,6 +984,9 @@ function cmdValidateEffective(cwd: string, selfBuild: boolean): number {
   const configObj = config as unknown as Record<string, unknown>;
 
   const violations = validateResolved(configObj, selfBuild);
+  // D11: unknown top-level keys are rejected, not silently ignored — the
+  // resolver strips them before the merge, so they must be swept raw-file-side.
+  violations.push(...collectUnknownTopLevelKeyViolations(cwd));
 
   if (violations.length === 0) {
     process.stdout.write(

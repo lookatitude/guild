@@ -14,10 +14,10 @@ node_modules/
 !tests/dot-guild/fixtures/**/.guild/
 !tests/dot-guild/fixtures/**/.guild/**
 
-# .guild/ — share-dot-guild policy (see docs/knowledge/decisions/guild-boundary-config-and-tracking.md Decision E)
-.guild
 # Anchor to repo root: `!.guild/` (unanchored, no internal /) would re-include nested
 # dirs like hooks/.guild/ or scripts/.guild/. Leading / anchors to gitignore directory.
+# .guild/ — share-dot-guild policy (see docs/knowledge/decisions/guild-boundary-config-and-tracking.md Decision E)
+.guild
 !/.guild/
 !.guild/wiki/
 !.guild/wiki/**

@@ -1,14 +1,16 @@
 ---
 name: ideate
-description: "Ideation — Socratic spec; opt-in --rigor=deep runs the clarify loop"
+description: "Ideation — Socratic spec; the L1 clarify loop runs whenever the resolved loops include spec (default --rigor=standard and deep; quick skips it)"
 argument-hint: "[brief] [--skip]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
 
 # /guild:ideate — phase: Ideation
 
-The **Ideation** phase entrypoint. Runs the Socratic spec flow; the opt-in
-`--rigor=deep` profile runs the clarify loop.
+The **Ideation** phase entrypoint. Runs the Socratic spec flow; the L1
+clarify loop runs whenever the resolved `loops` include `spec` — true under
+the default `--rigor=standard` profile (`loops: spec,plan`) and under
+`--rigor=deep` (`loops: all`); `--rigor=quick` (`loops: none`) skips it.
 
 Canonical surface: `architecture/command-surface.md §3.1` (Ideation row) and
 the verb↔phase edge in `§6` (D-14: `/guild:ideate` → Ideation). Phase concept
@@ -30,9 +32,11 @@ Before producer work begins, this phase **resolves the frozen
 /guild:ideate "realtime presence" --skip
 ```
 
-All six global flags + `--dry-run` apply (`command-surface.md §4`, by
-pointer). `--rigor=deep` runs the clarify loop (semantics by pointer,
-`command-surface.md §4.3`).
+All five global flags + `--dry-run` apply (`command-surface.md §4`, by
+pointer). The `--rigor` profile expansion (`rigorProfile()` in
+`scripts/read-guild-config.ts`; semantics by pointer, `command-surface.md
+§4.3`) decides the L1 loop: `standard` and `deep` both expand to a `loops`
+set containing `spec`; only `quick` turns it off.
 
 ## Args & local flags
 
@@ -109,9 +113,11 @@ by invoking:
 1. **`guild:brainstorm`** (`skills/meta/brainstorm`) — the Socratic spec
    producer; writes `.guild/spec/<idea-slug>.md`. `--skip` validates a
    supplied spec (flags gaps) instead of asking the full question set.
-2. **`guild:loop-clarify`** — **`--rigor=deep` only**: the L1 architect↔
-   researcher clarify loop runs BEFORE brainstorm writes the spec; its
-   findings feed brainstorm's Assumptions section.
+2. **`guild:loop-clarify`** — **when the resolved `loops` include `spec`**
+   (true under `--rigor=standard`, the default, and `--rigor=deep`; off only
+   under `--rigor=quick` / an explicit `--loops` excluding `spec`): the L1
+   architect↔researcher clarify loop runs BEFORE brainstorm writes the spec;
+   its findings feed brainstorm's Assumptions section.
 
 Input gate: an optional `[brief]`; Init artifacts present (or smart-detect).
 Output gate: `.guild/spec/<idea-slug>.md` (+ optional

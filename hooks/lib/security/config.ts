@@ -31,6 +31,28 @@ export type FailModeDurable = "closed" | "open";
 export type FailModeTelemetry = "open" | "closed";
 
 /**
+ * The run's autonomy posture (docs/v2/11-security.md §bypassPermissions
+ * governance). Closed triple — mirrors `AutonomyPolicy` in
+ * scripts/write-task-run.ts (guild.task_run.v1 `autonomy_policy`).
+ */
+export type AutonomyMode =
+  | "interactive"
+  | "autonomous_after_plan_approval"
+  | "auto_approve";
+
+/** Validate an unknown value against the closed AutonomyMode triple. */
+export function parseAutonomyMode(v: unknown): AutonomyMode | null {
+  if (
+    v === "interactive" ||
+    v === "autonomous_after_plan_approval" ||
+    v === "auto_approve"
+  ) {
+    return v;
+  }
+  return null;
+}
+
+/**
  * MCP transport availability flags (R-019 / FDC-13 / adapter docs).
  * Written to settings.json under the `mcp` block by operators or adapter
  * setup scripts; consumed by the runtime to decide whether to attempt
@@ -202,4 +224,101 @@ export function readSecurityConfig(cwd: string): SecurityConfig {
     return securityDefaults();
   }
   return parseSecurityConfig(parsed);
+}
+
+// ── Autonomy-mode resolution (D-BYPASS forcing input) ───────────────────────
+//
+// docs/v2/11-security.md §bypassPermissions governance: under the
+// non-interactive autonomy modes (`auto_approve`,
+// `autonomous_after_plan_approval`) `bypass_permissions_policy` is FORCED to
+// `deny` — a bypassPermissions attempt on an out-of-scope call must hard-block.
+// This resolver gives the PreToolUse hook a deterministic, code-readable view
+// of the run's autonomy mode from artifacts the hook already has access to.
+//
+// Resolution order (first hit wins; every read is best-effort, never throws):
+//   1. env GUILD_AUTONOMY_POLICY            — direct dispatcher export (closed triple).
+//   2. guild.task_run.v1 `autonomy_policy:` — `<root>/.guild/runs/<runId>/task-runs/
+//      <taskId>.yaml`, located via GUILD_RUN_ID + GUILD_TASK_ID (both already
+//      exported on every dispatch path — same locator as the D-CAP scope-file
+//      fallback). Parsed with a line regex, not a YAML library (hook-side
+//      zero-dependency discipline; the value set is a closed triple).
+//   3. settings `defaults.gates.auto_approve` non-empty ⇒ "auto_approve"
+//      (the persisted opt-in autonomy gates).
+//   4. default "interactive" (fail-open to the AUDITED posture — interactive
+//      keeps the always-ask channel + security event; it never silently allows).
+
+const TASK_RUN_AUTONOMY_RE =
+  /^\s*autonomy_policy:\s*["']?(interactive|autonomous_after_plan_approval|auto_approve)["']?\s*$/m;
+
+/** Read `autonomy_policy:` from a guild.task_run.v1 YAML file. Best-effort. */
+export function readTaskRunAutonomyPolicy(filePath: string): AutonomyMode | null {
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    const m = TASK_RUN_AUTONOMY_RE.exec(raw);
+    return m ? parseAutonomyMode(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Read `defaults.gates.auto_approve` (string[]) from settings.json. Best-effort. */
+export function readSettingsAutoApprove(cwd: string): string[] {
+  try {
+    const settingsPath = path.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+    const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as unknown;
+    if (!isPlainObject(parsed)) return [];
+    const defaults = parsed["defaults"];
+    if (!isPlainObject(defaults)) return [];
+    const gates = defaults["gates"];
+    if (!isPlainObject(gates)) return [];
+    const aa = gates["auto_approve"];
+    return isStringArray(aa) ? aa : [];
+  } catch {
+    return [];
+  }
+}
+
+export interface ResolveAutonomyModeOpts {
+  /** Starting cwd for guild-root resolution. */
+  cwd: string;
+  /** Env bag (default process.env) — test seam AND the primary channel. */
+  env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * Resolve the run's effective autonomy mode for D-BYPASS forcing. NEVER
+ * throws; every layer is best-effort. See the resolution-order comment above.
+ */
+export function resolveRunAutonomyMode(opts: ResolveAutonomyModeOpts): AutonomyMode {
+  const env = opts.env ?? process.env;
+
+  // 1. Direct dispatcher export.
+  const fromEnv = parseAutonomyMode(env["GUILD_AUTONOMY_POLICY"]);
+  if (fromEnv !== null) return fromEnv;
+
+  // 2. guild.task_run.v1 autonomy_policy (the per-attempt ground truth).
+  const runId = (env["GUILD_RUN_ID"] ?? "").trim();
+  const taskId = (env["GUILD_TASK_ID"] ?? "").trim();
+  if (runId.length > 0 && taskId.length > 0) {
+    // Same conservative path-component hygiene as the D-CAP scope-file fallback.
+    const safe = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+    if (safe.test(runId) && safe.test(taskId)) {
+      const taskRunPath = path.join(
+        resolveGuildRoot(opts.cwd),
+        ".guild",
+        "runs",
+        runId,
+        "task-runs",
+        `${taskId}.yaml`,
+      );
+      const fromTaskRun = readTaskRunAutonomyPolicy(taskRunPath);
+      if (fromTaskRun !== null) return fromTaskRun;
+    }
+  }
+
+  // 3. Persisted autonomy gates: defaults.gates.auto_approve non-empty.
+  if (readSettingsAutoApprove(opts.cwd).length > 0) return "auto_approve";
+
+  // 4. Default: interactive (audited + surfaced — never a silent allow).
+  return "interactive";
 }

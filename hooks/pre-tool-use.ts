@@ -55,7 +55,7 @@ import {
 // ── v2 security ADR (hook-side): capability-scope enforcement, security-event
 // log, and MCP description hash-pin. Schema/settings bound BY POINTER — see
 // each lib header. (docs/knowledge/decisions/v2-security-and-untrusted-content.md)
-import { readSecurityConfig } from "./lib/security/config.js";
+import { readSecurityConfig, resolveRunAutonomyMode } from "./lib/security/config.js";
 // HK-06: bus surface — approval_request writes go through scrubbedWrite.
 import { scrubbedWrite } from "./lib/security/scrubbed-write.js";
 import {
@@ -65,7 +65,12 @@ import {
   resolveRunDir,
   type SecurityEventInput,
 } from "./lib/security/events.js";
-import { readScopeContext, readScopeFile, resolveScopeDecision } from "./lib/security/enforce.js";
+import {
+  effectiveBypassPolicy,
+  readScopeContext,
+  readScopeFile,
+  resolveScopeDecision,
+} from "./lib/security/enforce.js";
 import { isMcpTool, verifyMcpDescription } from "./lib/security/mcp-hash-pin.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -617,12 +622,25 @@ function runSecurityEnforcement(payload: PreToolUsePayload, cwd: string): boolea
 
   // 1. Capability-scope (only for a declared scoped lane).
   if (scope !== null) {
+    // D-BYPASS autonomy-mode forcing (docs/v2/11-security.md §bypassPermissions
+    // governance): under a non-interactive autonomy mode the policy is FORCED
+    // to `deny`. Resolved ONLY when the call is actually under bypassPermissions
+    // (the policy is irrelevant otherwise — keeps the hot path free of extra
+    // fs reads).
+    const underBypass = permissionMode === "bypassPermissions";
+    const bypass = underBypass
+      ? effectiveBypassPolicy(
+          sec.bypass_permissions_policy,
+          resolveRunAutonomyMode({ cwd, env: process.env }),
+        )
+      : { policy: sec.bypass_permissions_policy, forced: false as const };
     const d = resolveScopeDecision({
       scope,
       toolName,
       toolInput: payload.tool_input,
-      policy: sec.bypass_permissions_policy,
+      policy: bypass.policy,
       permissionMode,
+      policyForced: bypass.forced,
     });
     if (d.eventType !== null) {
       emit({
@@ -630,7 +648,7 @@ function runSecurityEnforcement(payload: PreToolUsePayload, cwd: string): boolea
         decision: d.recordedDecision,
         tool: toolName,
         detail: d.reason,
-        policy: permissionMode === "bypassPermissions" ? sec.bypass_permissions_policy : undefined,
+        policy: underBypass ? bypass.policy : undefined,
         permission_mode: permissionMode,
       });
     }

@@ -104,13 +104,23 @@ export class ClaudePaneAdapter implements PaneAdapter {
   command(spec: PaneSpec): string {
     // D-CAP: pass taskId + capability_scope so paneCommand injects GUILD_TASK_ID
     // (scope-file locator) and optionally GUILD_CAPABILITY_SCOPE (env fast-path).
-    return paneCommand(spec.prompt, spec.runId, spec.capability_scope, spec.taskId);
+    // G-9 / C2-D1: pass specialist so lane panes export GUILD_SPECIALIST
+    // (the PostToolUse heartbeat writer's trigger).
+    return paneCommand(
+      spec.prompt,
+      spec.runId,
+      spec.capability_scope,
+      spec.taskId,
+      spec.specialist,
+    );
   }
 
   env(spec: PaneSpec): Record<string, string> {
     return {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
       GUILD_RUN_ID: spec.runId,
+      // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
+      ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
@@ -200,6 +210,11 @@ export class CodexPaneAdapter implements PaneAdapter {
     // GUILD_CAPABILITY_SCOPE (env fast-path) so D-CAP enforces on Codex panes.
     const taskFragment =
       spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
+    // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer
+    // (lane panes only; Codex panes run no Claude hooks today, but the env
+    // parity keeps the heartbeat contract uniform across adapters).
+    const specialistFragment =
+      spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
     const scopeFragment =
       spec.capability_scope !== undefined
         ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; `
@@ -207,6 +222,7 @@ export class CodexPaneAdapter implements PaneAdapter {
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       taskFragment +
+      specialistFragment +
       scopeFragment +
       `codex exec ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
@@ -216,6 +232,8 @@ export class CodexPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
+      ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined

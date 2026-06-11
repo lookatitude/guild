@@ -12,6 +12,13 @@
  * threshold (models.ingestSimilarityGate, default 0.80), and returns
  * `should_pause: true` when the top score meets or exceeds the threshold.
  *
+ * D-PROBE (ingest side, fail-closed — docs/v2/11-security.md §D-PROBE): the
+ * same call also runs the deterministic directive-language probe
+ * (hooks/lib/security/injection-guard.ts patterns) over the candidate. A probe
+ * HIT forces `should_pause: true` (`probe_hit: true`, `pause_reason`) — the
+ * page write is BLOCKED pending explicit operator confirmation through the
+ * same always-ask channel the similarity gate uses. Code, not model prose.
+ *
  * Contract:
  *  - Same BM25 algorithm as guild-memory/src/index.ts (k1=1.5, b=0.75,
  *    tokenize = /[A-Za-z0-9]+/g lowercase, length>1) — no re-implementation;
@@ -28,6 +35,10 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+// D-PROBE (ingest side): deterministic directive-language probe over the
+// candidate content. Same regex detector the recall/handoff paths use
+// (hooks/lib/security/injection-guard.ts, HK-08) — code, not model self-scan.
+import { sanitizeForInjection } from "../../hooks/lib/security/injection-guard.js";
 
 // ── Public types ──────────────────────────────────────────────────────────
 
@@ -57,10 +68,28 @@ export interface IngestSimilarityResult {
    */
   gate: number;
   /**
-   * True when top_score >= gate — the skill must pause and ask the operator.
-   * False when top_score < gate — ingest proceeds without a prompt.
+   * True when top_score >= gate OR probe_hit — the skill must pause and ask
+   * the operator (the page write is BLOCKED pending explicit confirmation —
+   * the same always-ask channel for both triggers).
+   * False otherwise — ingest proceeds without a prompt.
    */
   should_pause: boolean;
+  /**
+   * D-PROBE (ingest side, fail-closed): true when the deterministic
+   * directive-language probe (hooks/lib/security/injection-guard.ts patterns)
+   * matched agent-directed imperatives in the candidate content. A hit forces
+   * `should_pause: true` — the write is blocked pending explicit operator
+   * confirmation (docs/v2/11-security.md §D-PROBE: probe `yes` ⇒ flag +
+   * explicit user confirmation before write).
+   */
+  probe_hit: boolean;
+  /** Names of the directive patterns that matched (diagnostics; [] when clean). */
+  probe_patterns: string[];
+  /**
+   * Why the gate paused: "similarity" | "directive_probe" | "both" | null
+   * (null ⇔ should_pause === false).
+   */
+  pause_reason: "similarity" | "directive_probe" | "both" | null;
 }
 
 // ── BM25 implementation (mirrors guild-memory/src/index.ts, same constants) ──
@@ -242,19 +271,49 @@ export function ingestSimilarity(
 ): IngestSimilarityResult {
   const gate = readIngestGate(cwd);
 
+  // D-PROBE (ingest side, fail-closed): run the deterministic directive probe
+  // over the FULL candidate (title + content) FIRST — it is independent of the
+  // wiki state, so it must gate even when the category is empty or the
+  // candidate has no tokens. A hit forces should_pause:true (the same
+  // always-ask channel the similarity gate uses; never silent).
+  const probe = sanitizeForInjection(candidate.title + "\n" + candidate.content);
+  const probeHit = probe.result === "flagged";
+  const probePatterns = probe.matchedPatterns;
+
+  const compose = (topScore: number, topPath: string | null): IngestSimilarityResult => {
+    const similarityPause = topScore >= gate;
+    const shouldPause = similarityPause || probeHit;
+    const pauseReason: IngestSimilarityResult["pause_reason"] = !shouldPause
+      ? null
+      : similarityPause && probeHit
+        ? "both"
+        : similarityPause
+          ? "similarity"
+          : "directive_probe";
+    return {
+      top_score: topScore,
+      top_path: topPath,
+      gate,
+      should_pause: shouldPause,
+      probe_hit: probeHit,
+      probe_patterns: probePatterns,
+      pause_reason: pauseReason,
+    };
+  };
+
   // Build candidate tokens (title 2x weighted, same as guild-memory)
   const candidateTokens = tokenize(
     candidate.title + "\n" + candidate.title + "\n" + candidate.content,
   );
 
   if (candidateTokens.length === 0) {
-    return { top_score: 0, top_path: null, gate, should_pause: false };
+    return compose(0, null);
   }
 
   // Scan existing pages in the category
   const pages = scanCategoryPages(cwd, category);
   if (pages.length === 0) {
-    return { top_score: 0, top_path: null, gate, should_pause: false };
+    return compose(0, null);
   }
 
   // BM25: candidate query tokens vs. each existing page as a document
@@ -270,12 +329,7 @@ export function ingestSimilarity(
     }
   }
 
-  return {
-    top_score: topScore,
-    top_path: topPath,
-    gate,
-    should_pause: topScore >= gate,
-  };
+  return compose(topScore, topPath);
 }
 
 // ── CLI entry ─────────────────────────────────────────────────────────────────
@@ -286,7 +340,9 @@ export function ingestSimilarity(
 //     --cwd <repo-root> --category <target-category> \
 //     --title "<candidate title>" --content-file <path-to-candidate-text>
 //
-// Prints `{ top_score, top_path, gate, should_pause }` as JSON to stdout.
+// Prints `{ top_score, top_path, gate, should_pause, probe_hit, probe_patterns,
+// pause_reason }` as JSON to stdout (D-PROBE: a directive-probe hit forces
+// should_pause:true — fail-closed; the skill's pause channel blocks the write).
 // Exits 0 always (gate decision is surfaced in the JSON, not the exit code).
 // Guard: require.main === module so the library import path is unaffected.
 

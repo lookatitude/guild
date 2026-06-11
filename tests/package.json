@@ -19,7 +19,7 @@
       "^.+\\.tsx?$": ["ts-jest", { "tsconfig": { "module": "commonjs" } }]
     },
     "testMatch": [
-      "**/evolve/harness.test.ts",
+      "**/evolve/*.test.ts",
       "**/shadow/harness.test.ts",
       "**/workspace/*.test.ts",
       "**/integration/*.test.ts",

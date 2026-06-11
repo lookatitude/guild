@@ -1291,7 +1291,16 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     ]);
     for (const k of Object.keys(parsed)) {
       if (k.startsWith("_")) continue; // _help / _docs annotations
-      if (!TIER1.has(k)) process.stderr.write(`[read-guild-config] WARN: unknown top-level key "${k}" ignored\n`);
+      if (!TIER1.has(k)) {
+        // Closed-key reject (13-config-surfaces / D11): an unknown TOP-LEVEL key is
+        // REJECTED at --validate, never silently ignored — a typo ("rigour") must
+        // surface. loadFileConfig only feeds the --validate path; resolve mode goes
+        // through lib/settings-resolver.ts, which strips unknown keys.
+        rejects.push(
+          `unknown top-level key "${k}" (closed key set — check spelling; known: ${[...TIER1].join(", ")})`
+        );
+        process.stderr.write(`[read-guild-config] WARN: unknown top-level key "${k}" ignored\n`);
+      }
     }
     const out: Partial<GuildSettings> = {};
     if (VALID_RIGOR.has(parsed["rigor"] as string)) out.rigor = parsed["rigor"] as GuildSettings["rigor"];

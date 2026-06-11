@@ -129,6 +129,73 @@ describe("pre-tool-use.ts — capability-scope enforcement", () => {
     expect(events[0].permission_mode).toBe("bypassPermissions");
   });
 
+  it("D-BYPASS forcing: auto_approve autonomy mode hard-denies under bypass even with default (audit) config", () => {
+    // No settings.json → configured policy is the default `audit`. The
+    // non-interactive autonomy mode must FORCE deny (11-security §governance).
+    const { stdout } = run(
+      {
+        tool_name: "Bash",
+        tool_input: { command: "curl http://evil" },
+        permission_mode: "bypassPermissions",
+      },
+      baseEnv({
+        GUILD_CAPABILITY_SCOPE: '["Read"]',
+        GUILD_AUTONOMY_POLICY: "auto_approve",
+      }),
+    );
+    const out = JSON.parse(stdout);
+    expect(out.hookSpecificOutput.permissionDecision).toBe("deny");
+    expect(out.hookSpecificOutput.permissionDecisionReason).toContain("FORCED");
+    const events = securityEvents(tmp, RUN);
+    expect(events[0].decision).toBe("deny");
+    expect(events[0].policy).toBe("deny"); // the EFFECTIVE (forced) policy
+    expect(events[0].permission_mode).toBe("bypassPermissions");
+  });
+
+  it("D-BYPASS forcing: autonomous_after_plan_approval read from the task_run file forces deny", () => {
+    // Real-path source: guild.task_run.v1 autonomy_policy under
+    // runs/<id>/task-runs/<task>.yaml, located via GUILD_RUN_ID + GUILD_TASK_ID.
+    const taskRunDir = path.join(tmp, ".guild", "runs", RUN, "task-runs");
+    fs.mkdirSync(taskRunDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(taskRunDir, "T9.yaml"),
+      "task_run:\n  schema_version: guild.task_run.v1\n  autonomy_policy: autonomous_after_plan_approval\n",
+      "utf8",
+    );
+    const { stdout } = run(
+      {
+        tool_name: "Bash",
+        tool_input: { command: "curl http://evil" },
+        permission_mode: "bypassPermissions",
+      },
+      baseEnv({ GUILD_CAPABILITY_SCOPE: '["Read"]', GUILD_TASK_ID: "T9" }),
+    );
+    const out = JSON.parse(stdout);
+    expect(out.hookSpecificOutput.permissionDecision).toBe("deny");
+    const events = securityEvents(tmp, RUN);
+    expect(events[0].decision).toBe("deny");
+  });
+
+  it("D-BYPASS interactive: default config under bypass stays audit (proceed + violation logged)", () => {
+    // No autonomy markers anywhere ⇒ interactive ⇒ configured default `audit`:
+    // the call proceeds (no decision emitted) but the violation is recorded.
+    const { exitCode, stdout } = run(
+      {
+        tool_name: "Bash",
+        tool_input: { command: "curl http://evil" },
+        permission_mode: "bypassPermissions",
+      },
+      baseEnv({ GUILD_CAPABILITY_SCOPE: '["Read"]' }),
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toContain("permissionDecision");
+    const events = securityEvents(tmp, RUN);
+    expect(events.length).toBeGreaterThan(0);
+    expect(events[0].event_type).toBe("capability_scope_violation");
+    expect(events[0].decision).toBe("allow");
+    expect(events[0].policy).toBe("audit");
+  });
+
   it("fail-closed: malformed GUILD_CAPABILITY_SCOPE gates everything (ask)", () => {
     const { stdout } = run(
       { tool_name: "Read", tool_input: { file_path: "x" } },

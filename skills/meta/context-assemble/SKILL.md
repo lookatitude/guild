@@ -17,7 +17,7 @@ Per `guild-plan.md §9.1`: a specialist's authoritative task brief is the *union
 |---|---|---|
 | **Universal** | `guild:principles` + `wiki/context/project-overview.md` + `wiki/context/goals.md` | ~400 tokens |
 | **Role-dependent** | `wiki/standards/*.md` matching the role (per §9.2 mapping) + 2–4 most-relevant entity pages from `wiki/entities/` matching the task domain | ~800–1500 tokens |
-| **Task-dependent** | The specialist's lane block from `.guild/plan/<slug>.md` + named refs (concepts, decisions, products the spec/plan names) + upstream contracts pulled from each `depends-on:` task's completed output + active decisions from `wiki/decisions/` touching the task domain + (when a brownfield graph exists) a bounded KnowledgeGraph retrieval sub-source — see `## Graph retrieval` | ~800–1500 tokens |
+| **Task-dependent** | The specialist's lane block from `.guild/plan/<slug>.md` + named refs (concepts, decisions, products the spec/plan names) + upstream contracts pulled from each `depends-on:` task's completed output + active decisions from `wiki/decisions/` touching the task domain + (when a brownfield graph exists) a bounded KnowledgeGraph retrieval sub-source — see `## Graph retrieval` + (when the run is attached to an initiative) the **initiative-summary slot** — see `## Initiative-summary slot` | ~800–1500 tokens |
 
 Total target: ~3k tokens. Hard cap: 6k (enforced in `## Size budget`).
 
@@ -126,6 +126,23 @@ wiki and guild-memory"` (cited, never re-spelled here):
   federation; the raw guild-memory `cwd` override is for ad-hoc queries, not
   bundle recall). See `guild:wiki-query`'s `## Federated fan-out` section; no sub-guild knowledge is
   copied into the bundle, and the 6k hard cap is unchanged.
+
+## Initiative-summary slot
+
+When the run is attached to an active initiative (the run's `initiative_id` —
+from `--initiative` / the resolved `initiative_default`, recorded in
+`run.yaml`), the **task-dependent layer carries one initiative-summary slot**
+(`docs/v2/05-knowledge-memory.md §"The context bundle"`): a single paragraph
+summarizing the initiative — its goal, current status, and the work item this
+run advances — sourced from
+`.guild/initiatives/active/<id>/initiative.yaml`. One paragraph, nothing
+more: never inline the full definition ledger or work-item history (the lane
+can pull `.guild/initiatives/active/<id>/` on demand via the retained source
+path). The slot lives **inside** the task-dependent budget (no cap change),
+sheds with the rest of the task layer under pressure (after graph nodes,
+recorded in `dropped_for_budget:` like any other task content), and is
+**omitted silently** when the run has no initiative attached — never
+fabricate or stub it.
 
 ## Recall-before-read (per-agent context-pull)
 

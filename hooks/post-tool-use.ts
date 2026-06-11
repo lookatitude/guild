@@ -43,7 +43,7 @@ import {
 // guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
 // lib/trace-v2.ts header + contract-map §B-post.
 import { normalizeTokens, resolveTraceV2Fields, type TraceTokens } from "./lib/trace-v2.js";
-// HK-06: wiki + review PostToolUse scrub-in-place (D-SECRETS).
+// HK-06: durable-surface (wiki/review/handoffs/provenance) PostToolUse scrub-in-place (D-SECRETS).
 import { scrubbedWrite, type ScrubSurface } from "./lib/security/scrubbed-write.js";
 import { buildSecurityEvent, appendSecurityEvent } from "./lib/security/events.js";
 // G-9 (SC-5): structured heartbeat WRITE side — backend-agnostic liveness.
@@ -98,32 +98,35 @@ function resultExcerpt(payload: PostToolUsePayload): string {
   }
 }
 
-// ── HK-06: wiki + review PostToolUse scrub-in-place helpers ─────────────────
+// ── HK-06: durable-surface PostToolUse scrub-in-place helpers ────────────────
 
 /**
  * Classify an absolute path as a scrub-target surface.
- *   "wiki"   → .guild/wiki/**
- *   "review" → .guild/runs/<id>/review/**
- *   null     → not a target (no scrub)
+ *   "wiki"       → .guild/wiki/**
+ *   "review"     → .guild/runs/<id>/review/**
+ *   "handoff"    → .guild/runs/<id>/handoffs/**   (D-SECRETS coverage fix:
+ *                  model-written handoff receipts via the Write tool — the
+ *                  subagent/in-process backends — previously bypassed the
+ *                  in-place scrub; only the team-backend hook path
+ *                  (task-completed.ts) covered handoffs)
+ *   "provenance" → .guild/runs/<id>/provenance.json
+ *   null         → not a target (no scrub)
  */
 function classifyGuildScrubSurface(absPath: string, guildRoot: string): ScrubSurface | null {
   const rel = path.relative(guildRoot, absPath);
   const parts = rel.split(path.sep);
   if (parts[0] === ".guild" && parts[1] === "wiki") return "wiki";
-  // .guild/runs/<runId>/review/**  (parts: [".guild", "runs", "<id>", "review", ...])
-  if (
-    parts[0] === ".guild" &&
-    parts[1] === "runs" &&
-    parts.length >= 4 &&
-    parts[3] === "review"
-  ) {
-    return "review";
+  // .guild/runs/<runId>/<leaf>  (parts: [".guild", "runs", "<id>", <leaf>, ...])
+  if (parts[0] === ".guild" && parts[1] === "runs" && parts.length >= 4) {
+    if (parts[3] === "review") return "review";
+    if (parts[3] === "handoffs") return "handoff";
+    if (parts[3] === "provenance.json" && parts.length === 4) return "provenance";
   }
   return null;
 }
 
 /**
- * HK-06: PostToolUse scrub-in-place for wiki + review surfaces.
+ * HK-06: PostToolUse scrub-in-place for the durable surfaces (wiki, review, handoffs, provenance.json).
  *
  * When Write|Edit completes against .guild/wiki/** or .guild/runs/<id>/review/**,
  * read the on-disk file (already written by the tool) and route it through
@@ -315,7 +318,7 @@ export async function main(): Promise<void> {
   }
   // ── end G-9 ────────────────────────────────────────────────────────────────
 
-  // ── HK-06: wiki + review PostToolUse scrub-in-place ─────────────────────
+  // ── HK-06: durable-surface PostToolUse scrub-in-place ───────────────────
   // Placed BEFORE the run-id gate: wiki pages (.guild/wiki/**) are project-
   // scoped and have NO run-id — gating on runId permanently bypasses the wiki
   // surface. The scrub uses synthetic fallback values when runId is absent.

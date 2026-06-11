@@ -126,6 +126,22 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
     expect(out).toMatch(/VALID/);
   });
 
+  test("--validate rejects an unknown TOP-LEVEL key (closed-key, D11 — a typo must surface)", () => {
+    const dir = repo();
+    writeSettings(dir, { rigour: "deep" }); // typo of "rigor"
+    const { status, out } = run(["--cwd", dir, "--validate"]);
+    expect(status).toBe(1);
+    expect(out).toMatch(/unknown top-level key "rigour"/);
+  });
+
+  test("--validate ignores _-prefixed annotation keys at top level (still VALID)", () => {
+    const dir = repo();
+    writeSettings(dir, { rigor: "standard", _help: { rigor: "quick|standard|deep" }, _docs: "x" });
+    const { status, out } = run(["--cwd", dir, "--validate"]);
+    expect(status).toBe(0);
+    expect(out).toMatch(/VALID/);
+  });
+
   // ── --rigor profile expansion (command-surface.md §4.3 — the anti-soup mechanism).
   describe("--rigor profile expansion (§4.3)", () => {
     test("rigor=deep → loops=all + review=cross + _rigor_expanded present", () => {

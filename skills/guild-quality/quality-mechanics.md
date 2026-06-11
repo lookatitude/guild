@@ -103,11 +103,10 @@ g-quality section; `validation-matrix.md §A P6-quality-003`.*
    | Disposition condition (over a *selected* class unless noted) | Per §632–637 |
    |---|---|
    | a selected class is `fail` | **BLOCK** |
-   | `inconclusive` with **no owner** | **BLOCK** |
-   | a security/privacy/reliability-relevant `gap` with **no owner** | **BLOCK** |
-   | `gap` **or** `not_applicable` on a **selected** class with **no owner** | **BLOCK** |
+   | `inconclusive` with **no owner-accepted risk** | **BLOCK** |
+   | a security/privacy/reliability-relevant `gap` with **no owner-accepted risk** | **BLOCK** |
    | none of the above | **RELEASE-READY** |
-   | `not_applicable` (not on a selected class) / a **non-safety** `gap` | **never blocks** |
+   | `not_applicable` (any class) / a **non-safety** `gap` | **NEVER blocks** (surfaced in the gate summary; release-ready by default) |
 
    This table is a **pointer projection** of `§632–637` + `§472–503`; the
    canonical predicate lives there and is not re-derived here (a diff vs
@@ -125,7 +124,7 @@ g-quality section; `validation-matrix.md §A P6-quality-003`.*
 *pass_when (named-predicate "release predicate matches target-architecture.md
 §632-637", **P6 gating, feeds P7C**): the predicate is byte-faithful to
 §632–637 + §472–503 (BLOCK iff fail | inconclusive-no-owner |
-safety-gap-no-owner | gap/NA-on-selected-no-owner; else RELEASE-READY);
+safety-gap-no-owner; else RELEASE-READY; NA and non-safety gap NEVER block);
 BLOCK→release override never auto-passed under `--auto-approve=all`. Evidence: a
 pointer-cited truth-table whose rows quote section anchors (not copied schema);
 a diff vs §632–637 shows zero predicate drift; `validation-matrix.md §A

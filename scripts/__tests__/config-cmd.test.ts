@@ -463,6 +463,50 @@ describe("config validate --effective", () => {
 
     expect(result.status).toBe(0);
   });
+
+  // ── D11 (13-config-surfaces closed-key reject): unknown TOP-LEVEL keys are
+  // rejected at validate, never silently ignored — a typo must surface. The
+  // resolver strips unknown keys before the merge, so the check sweeps the
+  // raw contributing files.
+
+  test("validate --effective rejects an unknown top-level key in the project file (D11 — typo must surface)", () => {
+    const project = tmp(mkProject({ settings: { rigour: "deep" } }));
+
+    const result = run(["validate", "--effective", "--cwd", project]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.out).toMatch(/unknown top-level key "rigour"/);
+  });
+
+  test("validate --effective rejects an unknown top-level key in settings.local.json", () => {
+    const project = tmp(mkProject({ settings: { rigor: "standard" }, local: { reviw: "cross" } }));
+
+    const result = run(["validate", "--effective", "--cwd", project]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.out).toMatch(/unknown top-level key "reviw"/);
+  });
+
+  test("validate --effective rejects an unknown top-level key in the workspace file (inherited layer)", () => {
+    const ws = tmp(mkWorkspaceRoot({ settings: { agnet_mode: "team" } }));
+    const child = tmp(mkChildProject(ws, {}));
+
+    const result = run(["validate", "--effective", "--cwd", child]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.out).toMatch(/unknown top-level key "agnet_mode"/);
+  });
+
+  test("validate --effective still passes with known keys + _-prefixed annotations", () => {
+    const project = tmp(
+      mkProject({ settings: { rigor: "standard", _help: { rigor: "quick|standard|deep" } } })
+    );
+
+    const result = run(["validate", "--effective", "--cwd", project]);
+
+    expect(result.status).toBe(0);
+    expect(result.out).toMatch(/valid|pass|ok/i);
+  });
 });
 
 // ===========================================================================

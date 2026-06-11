@@ -2996,6 +2996,14 @@ var NON_INHERITABLE_KEYS = /* @__PURE__ */ new Set([
   // workspace.mode is root-detection-only
 ]);
 var PROTO_POISON_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
+var VALID_TIER_HOST_KEYS = /* @__PURE__ */ new Set(["claude", "codex", "gemini"]);
+function sparseTierHostMap(raw) {
+  const out = {};
+  for (const hk of Object.keys(raw)) {
+    if (VALID_TIER_HOST_KEYS.has(hk)) out[hk] = raw[hk];
+  }
+  return out;
+}
 var VALID_LOOPS = /* @__PURE__ */ new Set(["none", "spec", "plan", "implementation", "all"]);
 var VALID_RIGOR = /* @__PURE__ */ new Set(["quick", "standard", "deep"]);
 var VALID_REVIEW = /* @__PURE__ */ new Set(["local", "cross", "off"]);
@@ -3154,7 +3162,7 @@ function parseSettingsFile(filePath) {
       const sparseTiers = {};
       for (const tier of ["cheap", "mid", "powerful"]) {
         if (isPlainObject(rt[tier])) {
-          sparseTiers[tier] = rt[tier];
+          sparseTiers[tier] = sparseTierHostMap(rt[tier]);
         }
       }
       sparse.tiers = sparseTiers;
@@ -3294,7 +3302,7 @@ function parseSettingsFile_fromParsed(parsed) {
       const rt = rawModels["tiers"];
       const sparseTiers = {};
       for (const tier of ["cheap", "mid", "powerful"]) {
-        if (isPlainObject(rt[tier])) sparseTiers[tier] = rt[tier];
+        if (isPlainObject(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier]);
       }
       sparse.tiers = sparseTiers;
     }

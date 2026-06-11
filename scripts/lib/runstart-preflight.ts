@@ -62,6 +62,8 @@ import {
   validateDefaults,
 } from "../read-guild-config";
 import { execSync } from "child_process";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -79,6 +81,13 @@ export interface PreflightProbe {
    * Injected separately so provider tests can be reused across U3+U4.
    */
   providerProbe: ProbeEnv;
+  /**
+   * Incomplete-run detection (06-initiatives session intake, step zero).
+   * Returns the run id from .guild/runs/current-run-id when that run's dir
+   * exists and carries no verify.md (i.e. the previous run never reached
+   * verify-done); null otherwise. Best-effort + non-throwing.
+   */
+  incompleteRun(): { runId: string; runDir: string } | null;
 }
 
 /** Options for runStartPreflight. */
@@ -189,6 +198,18 @@ export interface PreflightResult {
      * This is always the U2 "HARD-SET" path — never a direct settings write.
      */
     persistCommand: string[];
+  } | null;
+  /**
+   * Incomplete-run intake (06-initiatives): present when .guild/runs/current-run-id
+   * names a run directory without a verify.md — the previous run never completed.
+   * Detection only; the consuming entrypoint surfaces the question BEFORE
+   * initiative classification. null when the prior run is closed or absent.
+   */
+  incompleteRun: {
+    runId: string;
+    runDir: string;
+    /** Operator-facing question (resume / restart / attach / ignore). */
+    question: string;
   } | null;
   /** Provider detection + recommendation + R-008 selection. */
   providers: {
@@ -411,6 +432,22 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
     resolved_at_ref: null,
   };
 
+  // ------------------------------------------------------------------
+  // Incomplete-run intake (06-initiatives) — deterministic detection only.
+  // Runs BEFORE initiative classification in the consuming entrypoint.
+  // ------------------------------------------------------------------
+  const incompleteHit = safeProbe(() => probe.incompleteRun(), null);
+  const incompleteRun = incompleteHit
+    ? {
+        runId: incompleteHit.runId,
+        runDir: incompleteHit.runDir,
+        question:
+          `Run ${incompleteHit.runId} is still open (no verify.md). ` +
+          `Resume it, restart the phase, attach this work to it, or ignore and start fresh? ` +
+          `[resume / restart / attach / ignore]`,
+      }
+    : null;
+
   return {
     resolved,
     sources,       // top-level convenience alias for resolved.sources (U6/U7 contract)
@@ -418,6 +455,7 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
     tmux,
     needsTmuxPrompt,
     tmuxPrompt,
+    incompleteRun,
     providers,
     snapshot,
   };
@@ -442,6 +480,17 @@ export function defaultPreflightProbe(cwd: string): PreflightProbe {
         return true;
       }, false),
     providerProbe: defaultProbeEnv(cwd),
+    incompleteRun: () =>
+      safeProbe(() => {
+        const idFile = join(cwd, ".guild", "runs", "current-run-id");
+        if (!existsSync(idFile)) return null;
+        const runId = readFileSync(idFile, "utf8").trim();
+        if (!runId) return null;
+        const runDir = join(cwd, ".guild", "runs", runId);
+        if (!existsSync(runDir)) return null;
+        if (existsSync(join(runDir, "verify.md"))) return null;
+        return { runId, runDir };
+      }, null),
   };
 }
 

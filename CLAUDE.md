@@ -30,7 +30,7 @@ wrappers in parens; no skill is re-spelled here.)
 | Phase verb | Skill(s) invoked, in order | Output artifact |
 |---|---|---|
 | `/guild:init` | `guild:init` (cheap by default: wiki + brownfield cheap-scan CodebaseMap + architecture-map stub) — full `learn-*` pipeline runs ONLY under `--learn` / `defaults.auto_learn` (D3) | `.guild/init/<slug>.md`, `.guild/wiki/**`, `codebase-map.json` + `architecture-map.md` stub |
-| `/guild:ideate` | `guild:brainstorm` (deep: wrapped by `guild:loop-clarify`) | `.guild/spec/<slug>.md` |
+| `/guild:ideate` | `guild:brainstorm` (standard+deep: wrapped by `guild:loop-clarify`) | `.guild/spec/<slug>.md` |
 | `/guild:plan` | `guild:team-compose` → `guild:plan` (deep: + `guild:loop-plan-review`) | `.guild/team/<slug>.yaml`, `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` |
 | `/guild:build` | per lane: `guild:context-assemble` → `guild:execute-plan` → `guild:review` (deep: + `guild:loop-implement`) | handoff receipts, `assumptions.md`, `review.md` |
 | `/guild:qa` | `guild:quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |

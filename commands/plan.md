@@ -38,8 +38,11 @@ optional per-lane `autonomy_contract` is authored here and approved at the
 /guild:plan --team-size=8
 ```
 
-All six global flags + `--dry-run` apply (`command-surface.md §4`, by
-pointer).
+All five global flags + `--dry-run` apply (`command-surface.md §4`, by
+pointer). The `--rigor` profile expansion (`rigorProfile()` in
+`scripts/read-guild-config.ts`; `command-surface.md §4.3`) decides the L2
+loop: `standard` (the default) and `deep` both expand to a `loops` set
+containing `plan`; only `quick` turns it off.
 
 ## Args & local flags
 
@@ -57,13 +60,21 @@ pointer).
 ## Output artifact
 
 `.guild/team/<slug>.<phase>.yaml` + `.guild/team/<slug>.current` pointer,
-`.guild/prd/<slug>.md`, `.guild/plan/<slug>.md`, per-lane autonomy-contract
-policy (the additive `autonomy_contract` block authored inside the plan),
-`.guild/runs/<run-id>/review/plan/*` (G-planning broker trail).
+the PRD (**right-sized** — inline `## PRD` section in `.guild/plan/<slug>.md`
+by default; promoted to a standalone `.guild/prd/<slug>.md` only when a
+right-size trigger fires: **>1 feature** OR **initiative-attached** OR
+**success-criteria count >5** — ADR `decisions/prd-right-sizing.md`, folded
+into the plan/PRD gate, no separate G-prd gate), `.guild/plan/<slug>.md`,
+per-lane autonomy-contract policy (the additive `autonomy_contract` block
+authored inside the plan), `.guild/runs/<run-id>/review/plan/*` (G-planning
+broker trail).
 
 PCR-Planning must-exist floor: `.guild/team/<slug>.<phase>.yaml`,
-`.guild/prd/<slug>.md`, `.guild/plan/<slug>.md`, the per-lane
-autonomy-contract policy, `.guild/runs/<run-id>/review/plan/*`. Binding:
+`.guild/plan/<slug>.md` (carrying the inline `## PRD` section **or** a
+pointer to the promoted standalone `.guild/prd/<slug>.md` — the standalone
+file is conditional on the right-size triggers above, per the 03-lifecycle
+PCR note), the per-lane autonomy-contract policy,
+`.guild/runs/<run-id>/review/plan/*`. Binding:
 `docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
 CMD-004.
 
@@ -125,11 +136,16 @@ by invoking, in order:
    sub-step (its own approval gate); writes `.guild/team/<slug>.<phase>.yaml`
    + the `.guild/team/<slug>.current` phase pointer.
 2. **`guild:plan`** (`skills/meta/plan`) — turns the approved spec + team into
-   the PRD and per-specialist lane plan with the additive per-lane autonomy
-   contract; writes `.guild/prd/<slug>.md` + `.guild/plan/<slug>.md`.
-3. **`guild:loop-plan-review`** — **`--rigor=deep` only**: the L2 architect↔
-   security plan-defect loop runs AFTER `guild:plan` writes the plan and
-   BEFORE the plan-approval gate.
+   the right-sized PRD and per-specialist lane plan with the additive
+   per-lane autonomy contract; writes `.guild/plan/<slug>.md` with an inline
+   `## PRD` section, promoted to a standalone `.guild/prd/<slug>.md` only
+   when a right-size trigger fires (>1 feature / initiative-attached /
+   success-criteria >5 — `decisions/prd-right-sizing.md`).
+3. **`guild:loop-plan-review`** — **when the resolved `loops` include `plan`**
+   (true under `--rigor=standard`, the default, and `--rigor=deep`; off only
+   under `--rigor=quick` / an explicit `--loops` excluding `plan`): the L2
+   architect↔security plan-defect loop runs AFTER `guild:plan` writes the
+   plan and BEFORE the plan-approval gate.
 
 Input gate: an approved `.guild/spec/<slug>.md`.
 Output gate: the **Output artifact** set above is written; the plan carries

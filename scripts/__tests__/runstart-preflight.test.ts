@@ -87,6 +87,7 @@ function makeWorkspaceWithChild(
 // ---------------------------------------------------------------------------
 
 interface FakeWorld {
+  incompleteRun?: { runId: string; runDir: string } | null;
   tmuxOnPath?: boolean;
   providerWorld?: {
     onPath?: string[];
@@ -117,6 +118,7 @@ function makeProbe(world: FakeWorld): PreflightProbe {
   return {
     tmuxOnPath: () => world.tmuxOnPath === true,
     providerProbe: makeProbeEnv(world.providerWorld ?? {}),
+    incompleteRun: () => world.incompleteRun ?? null,
   };
 }
 
@@ -674,6 +676,7 @@ describe("unknown authorHost — no selected reviewer synthesized", () => {
     return {
       tmuxOnPath: () => tmuxOnPath,
       providerProbe: crashingProviderProbe,
+      incompleteRun: () => { throw new Error("simulated crash"); },
     };
   }
 
@@ -748,6 +751,7 @@ describe("unknown authorHost — no selected reviewer synthesized", () => {
     // detectProviders runs any of its logic.
     const preflightProbeWithThrowingGetter: PreflightProbe = {
       tmuxOnPath: () => false,
+      incompleteRun: () => null,
       get providerProbe(): ProbeEnv {
         throw new Error("providerProbe getter: simulated total probe failure");
       },
@@ -871,5 +875,40 @@ describe("R-008 — adversarial_review_provider pin is honored", () => {
     // selectReviewer: mode=local → degraded-local, not selected — pin is irrelevant for local mode.
     expect(result.providers.selected).toBeUndefined();
     expect(result.snapshot.providers.selected).toBeUndefined();
+  });
+});
+
+describe("incomplete-run intake (06-initiatives, deterministic probe)", () => {
+  it("returns the intake question when the current run has no verify.md", () => {
+    const res = runStartPreflight({
+      cwd: "/tmp/x",
+      probe: makeProbe({
+        tmuxOnPath: false,
+        incompleteRun: { runId: "run-abc", runDir: "/tmp/x/.guild/runs/run-abc" },
+      }),
+    });
+    expect(res.incompleteRun).not.toBeNull();
+    expect(res.incompleteRun!.runId).toBe("run-abc");
+    expect(res.incompleteRun!.question).toMatch(/resume \/ restart \/ attach \/ ignore/);
+  });
+
+  it("is null when the prior run closed (probe returns null)", () => {
+    const res = runStartPreflight({
+      cwd: "/tmp/x",
+      probe: makeProbe({ tmuxOnPath: false, incompleteRun: null }),
+    });
+    expect(res.incompleteRun).toBeNull();
+  });
+
+  it("is null (never throws) when the probe crashes", () => {
+    const res = runStartPreflight({
+      cwd: "/tmp/x",
+      probe: {
+        tmuxOnPath: () => false,
+        providerProbe: makeProbeEnv({}),
+        incompleteRun: () => { throw new Error("boom"); },
+      },
+    });
+    expect(res.incompleteRun).toBeNull();
   });
 });

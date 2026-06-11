@@ -41,7 +41,7 @@ Not re-spelled.
 /guild:ops release
 ```
 
-All six global flags + `--dry-run` apply (`command-surface.md §4`, by
+All five global flags + `--dry-run` apply (`command-surface.md §4`, by
 pointer). The mandatory pre-flight dry-run is a safety rail, independent of
 `--dry-run`.
 

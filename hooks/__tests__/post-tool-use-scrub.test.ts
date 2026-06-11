@@ -213,6 +213,84 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
     });
   });
 
+  // ── Handoff surface (C3 fix 3: model-written receipts via Write tool) ──────
+  // The subagent/in-process backends write handoff receipts with the Write
+  // tool — no TaskCompleted hook fires there, so the PostToolUse scrub-in-place
+  // is the ONLY deterministic secrets pass on that path.
+
+  describe("handoff surface (.guild/runs/<id>/handoffs/**)", () => {
+    it("on-disk handoff receipt does NOT contain the raw secret after the hook (ok path)", () => {
+      const handoffDir = path.join(runDir, "handoffs");
+      fs.mkdirSync(handoffDir, { recursive: true });
+      const handoffPath = path.join(handoffDir, "backend-T1.md");
+      fs.writeFileSync(
+        handoffPath,
+        `schema_version: guild.handoff.v2\nsummary: done\nevidence: Token ${FAKE_SECRET}\n`,
+        "utf8",
+      );
+
+      const { exitCode } = spawnHook(tmp, "Write", handoffPath);
+      expect(exitCode).toBe(0);
+
+      const onDisk = fs.readFileSync(handoffPath, "utf8");
+      expect(onDisk).not.toContain(FAKE_SECRET);
+    });
+
+    it("quarantines the handoff receipt on forced ok=false (fail-closed durable surface)", () => {
+      writeSettings(tmp, {
+        secrets_policy: {
+          redaction_patterns: [INVALID_REGEX],
+          fail_mode_durable: "closed",
+        },
+      });
+      const handoffDir = path.join(runDir, "handoffs");
+      fs.mkdirSync(handoffDir, { recursive: true });
+      const handoffPath = path.join(handoffDir, "backend-T2.md");
+      fs.writeFileSync(handoffPath, "summary: content\n", "utf8");
+
+      spawnHook(tmp, "Write", handoffPath);
+
+      expect(fs.existsSync(handoffPath)).toBe(false);
+      expect(fs.existsSync(handoffPath + ".quarantined")).toBe(true);
+      const events = securityEvents(runDir);
+      expect(
+        events.some(
+          (e) => e["event_type"] === "secret_scrub_blocked" && e["decision"] === "blocked",
+        ),
+      ).toBe(true);
+    });
+  });
+
+  // ── Provenance surface (.guild/runs/<id>/provenance.json) ──────────────────
+
+  describe("provenance surface (.guild/runs/<id>/provenance.json)", () => {
+    it("on-disk provenance.json does NOT contain the raw secret after the hook", () => {
+      const provenancePath = path.join(runDir, "provenance.json");
+      fs.writeFileSync(
+        provenancePath,
+        JSON.stringify({ run_id: RUN, note: `Token ${FAKE_SECRET}` }),
+        "utf8",
+      );
+
+      spawnHook(tmp, "Write", provenancePath);
+
+      const onDisk = fs.readFileSync(provenancePath, "utf8");
+      expect(onDisk).not.toContain(FAKE_SECRET);
+    });
+
+    it("a nested file merely NAMED provenance.json deeper in the run dir is not classified", () => {
+      const nested = path.join(runDir, "logs", "provenance.json");
+      fs.mkdirSync(path.dirname(nested), { recursive: true });
+      const content = `{"token":"${FAKE_SECRET}"}`;
+      fs.writeFileSync(nested, content, "utf8");
+
+      spawnHook(tmp, "Write", nested);
+
+      // Only the run-root provenance.json is the provenance surface.
+      expect(fs.readFileSync(nested, "utf8")).toBe(content);
+    });
+  });
+
   // ── MAJOR 1: quarantine-rename-failure ladder (wiki) ───────────────────────
   // When the quarantine rename fails, the hook MUST still remove the raw content
   // from the canonical path. PostToolUse always exits 0 for normal scrub failures,

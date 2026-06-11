@@ -143,6 +143,15 @@ export interface PaneSpec {
    * the primary enforcement mechanism when env-injection is unreliable.
    */
   capability_scope?: string[];
+  /**
+   * G-9 / C2-D1 (heartbeat real-path wiring): the specialist name for a LANE
+   * pane — injected as GUILD_SPECIALIST so the PostToolUse heartbeat writer
+   * (hooks/lib/heartbeat-write.ts, trigger = GUILD_RUN_ID ∧ GUILD_SPECIALIST)
+   * fires on every tool call. UNSET for the orchestrator pane (the lead is not
+   * a lane and writes no `in-progress/<specialist>.json` heartbeat). Distinct
+   * from `name`, which is "orchestrator" for the lead pane.
+   */
+  specialist?: string;
 }
 
 /** Result of a pre-spawn binary/credential probe (CH-6 fail-fast). */
@@ -373,6 +382,7 @@ export function paneCommand(
   runId: string,
   capabilityScope?: string[],
   taskId?: string,
+  specialist?: string,
 ): string {
   // The agent-team env var must be exported in every pane (§7.3).
   // GUILD_RUN_ID is also exported so hooks inside the pane converge on the
@@ -390,9 +400,18 @@ export function paneCommand(
   // D-CAP (Wave-3): inject GUILD_CAPABILITY_SCOPE when the specialist has a tool
   // allow-list parsed from team.yaml. Absent capability_scope ⇒ env var NOT set
   // (additive no-scoping — backward-compat; the gate always reads absent = open).
+  // G-9 / C2-D1 (heartbeat real-path wiring): export GUILD_SPECIALIST for
+  // specialist panes so the PostToolUse heartbeat writer
+  // (hooks/lib/heartbeat-write.ts) fires on every tool call — its trigger
+  // contract requires GUILD_RUN_ID AND GUILD_SPECIALIST. Absent specialist
+  // (the orchestrator pane) ⇒ no export — the lead writes no lane heartbeat.
   const taskFragment =
     taskId !== undefined && taskId.length > 0
       ? `export GUILD_TASK_ID=${shellQuote(taskId)}; `
+      : "";
+  const specialistFragment =
+    specialist !== undefined && specialist.length > 0
+      ? `export GUILD_SPECIALIST=${shellQuote(specialist)}; `
       : "";
   const statuslineFragment =
     process.env["GUILD_STATUSLINE"] === "1" ? `export GUILD_STATUSLINE=1; ` : "";
@@ -404,6 +423,7 @@ export function paneCommand(
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
     `export GUILD_RUN_ID=${shellQuote(runId)}; ` +
     taskFragment +
+    specialistFragment +
     statuslineFragment +
     scopeFragment +
     `claude ${shellQuote(prompt)}; ` +
@@ -450,7 +470,8 @@ export function composeTmuxCommands(opts: {
   // (spec === null) is pinned to claude regardless (CH-4).
   const commandFor = (spec: Specialist | null): string => {
     const prompt = buildPrompt(slug, runId, spec, teamPath);
-    if (!resolveAdapter) return paneCommand(prompt, runId, spec?.capability_scope, spec?.taskId);
+    if (!resolveAdapter)
+      return paneCommand(prompt, runId, spec?.capability_scope, spec?.taskId, spec?.name);
     const hostKind: HostKind = spec?.host_kind ?? "claude";
     return resolveAdapter(hostKind).command({
       name: spec?.name ?? "orchestrator",
@@ -463,6 +484,9 @@ export function composeTmuxCommands(opts: {
       // (scope-file locator) and optionally GUILD_CAPABILITY_SCOPE (env fast-path).
       taskId: spec?.taskId,
       capability_scope: spec?.capability_scope,
+      // G-9 / C2-D1: lane panes carry the specialist name so adapters export
+      // GUILD_SPECIALIST (heartbeat trigger). Orchestrator pane: undefined.
+      specialist: spec?.name,
     });
   };
 
@@ -779,6 +803,11 @@ export function composeInProcessDispatch(
     model: null,
     env: {
       GUILD_RUN_ID: req.runId,
+      // G-9 / C2-D1 (heartbeat real-path wiring): every in-process descriptor IS
+      // a specialist lane (the orchestrator gets no descriptor), so always export
+      // GUILD_SPECIALIST — the PostToolUse heartbeat writer's trigger contract
+      // (hooks/lib/heartbeat-write.ts) requires GUILD_RUN_ID ∧ GUILD_SPECIALIST.
+      GUILD_SPECIALIST: spec.name,
       // D-CAP (Wave-3): inject GUILD_TASK_ID so the PreToolUse hook's scope-file
       // fallback can locate <runDir>/scope/<taskId>.json when GUILD_CAPABILITY_SCOPE
       // is absent. taskId is the plan task-id threaded by the launcher W2-A2 block;
@@ -1215,10 +1244,12 @@ export class RemoteTeamBackend implements TeamBackend {
       // inject GUILD_TASK_ID (scope-file locator) + GUILD_CAPABILITY_SCOPE (fast-path).
       taskId: spec.taskId,
       capability_scope: spec.capability_scope,
+      // G-9 / C2-D1: remote lane panes also export GUILD_SPECIALIST (heartbeat trigger).
+      specialist: spec.name,
     };
     const command = this.resolveAdapter
       ? this.resolveAdapter(hostKind).command(paneSpec)
-      : paneCommand(prompt, req.runId, spec.capability_scope, spec.taskId);
+      : paneCommand(prompt, req.runId, spec.capability_scope, spec.taskId, spec.name);
     return { paneSpec, command };
   }
 

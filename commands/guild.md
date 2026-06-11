@@ -1,6 +1,6 @@
 ---
 name: guild
-description: "Bare Guild entry — smart phase detection. /guild:guild [brief] inspects .guild/ state and surfaces the proposed lifecycle phase (init · ideate · plan · build · qa · ops), always confirmed never silent. Named phase verbs, nouns (wiki, initiative), and maintenance verbs (evolve, rollback, stats, audit, fix) are separate commands. Canonical: architecture/command-surface.md §1/§5.1; v1→v2: MIGRATION.md."
+description: "Bare Guild entry — smart phase detection. /guild:guild [brief] inspects .guild/ state and surfaces the proposed lifecycle phase (init · ideate · plan · build · qa · ops), always confirmed never silent. Named phase verbs, nouns (wiki, initiative), maintenance verbs (evolve, rollback, stats, audit, fix), and observability (dashboard) are separate commands. Canonical: architecture/command-surface.md §1/§5.1; v1→v2: MIGRATION.md."
 argument-hint: "[brief] [--rigor=quick|standard|deep] [--auto-approve[=spec,plan,build,qa,all]] [--review=local|cross|off] [--host=claude|codex|auto] [--initiative=<id>|new] [--model-tier=cheap|mid|powerful] [--dry-run]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
@@ -12,9 +12,10 @@ orchestrator behavior (not a skill) that inspects `.guild/` state for the
 active slug and **surfaces the proposed next phase, always confirmed, never
 silent** (`architecture/command-surface.md §5.1`). Named phases
 (`/guild:init|ideate|plan|build|qa|ops`), nouns (`/guild:wiki`,
-`/guild:initiative`), and maintenance verbs
-(`/guild:evolve|rollback|stats|audit|fix`) are their own commands; this file
-only does detection + delegation. No lifecycle logic is re-spelled here —
+`/guild:initiative`), maintenance verbs
+(`/guild:evolve|rollback|stats|audit|fix`), and the observability surface
+(`/guild:dashboard` — the local runs/knowledge web dashboard, WI-3) are
+their own commands; this file only does detection + delegation. No lifecycle logic is re-spelled here —
 each phase command owns its phase; all state lives in `.guild/`.
 
 ```
@@ -144,8 +145,8 @@ CMD-008.
 cases), and they're also settable in `.guild/settings.json`
 (`loops:`/`loop_cap:`/`codex_cap:` keys) as the persistent form. The
 `--rigor` profiles set all three in bulk, so most users reach for one of
-three `--rigor` words instead of the individual flags. `--codex-review` is
-**replaced** by `--review=cross`. The full v1→v2 flag map is
+three `--rigor` words instead of the individual flags. The v1 per-host
+review flag is **replaced** by `--review=cross`. The full v1→v2 flag map is
 `MIGRATION.md §3`; the closed-key
 `defaults:` config schema is `command-surface.md §4.4` (cited, not
 re-spelled).

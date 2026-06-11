@@ -1008,8 +1008,10 @@ function classifyGuildScrubSurface(absPath, guildRoot) {
   const rel = path7.relative(guildRoot, absPath);
   const parts = rel.split(path7.sep);
   if (parts[0] === ".guild" && parts[1] === "wiki") return "wiki";
-  if (parts[0] === ".guild" && parts[1] === "runs" && parts.length >= 4 && parts[3] === "review") {
-    return "review";
+  if (parts[0] === ".guild" && parts[1] === "runs" && parts.length >= 4) {
+    if (parts[3] === "review") return "review";
+    if (parts[3] === "handoffs") return "handoff";
+    if (parts[3] === "provenance.json" && parts.length === 4) return "provenance";
   }
   return null;
 }

@@ -42,11 +42,47 @@
  *   bypass + deny     → deny     (hard block — bypass cannot override Guild scope)
  *   bypass + audit    → proceed  (no block) but log the violation  [DEFAULT]
  *   bypass + allow    → proceed, log a bypass_permission_allowed record
+ *
+ * AUTONOMY-MODE FORCING (docs/v2/11-security.md §bypassPermissions governance):
+ * under the non-interactive autonomy modes (`auto_approve`,
+ * `autonomous_after_plan_approval`) the policy is FORCED to `deny` via
+ * `effectiveBypassPolicy()` — the configured value is overridden, the bypass
+ * attempt hard-blocks, and the security event records the forcing. Interactive
+ * mode keeps the configured policy (audited + surfaced).
  */
 
 import * as fs from "node:fs";
-import type { BypassPolicy } from "./config.js";
+import type { AutonomyMode, BypassPolicy } from "./config.js";
 import type { SecurityEventType, SecurityDecision } from "./events.js";
+
+// ── D-BYPASS autonomy-mode forcing ──────────────────────────────────────────
+
+export interface EffectiveBypassPolicy {
+  policy: BypassPolicy;
+  /** True when the policy was FORCED to deny by a non-interactive autonomy mode. */
+  forced: boolean;
+  /** The autonomy mode that drove the decision (diagnostic). */
+  autonomyMode: AutonomyMode;
+}
+
+/**
+ * docs/v2/11-security.md §bypassPermissions governance: under
+ * `auto_approve` / `autonomous_after_plan_approval` the
+ * `bypass_permissions_policy` is FORCED to `deny` — a bypassPermissions
+ * attempt must hard-block (abort the tool call + security event), regardless
+ * of the configured policy. Interactive keeps the configured policy
+ * (default `audit`: proceed + log + always-ask surface when not under bypass).
+ * Pure — trivially unit-testable.
+ */
+export function effectiveBypassPolicy(
+  configured: BypassPolicy,
+  autonomyMode: AutonomyMode,
+): EffectiveBypassPolicy {
+  if (autonomyMode === "auto_approve" || autonomyMode === "autonomous_after_plan_approval") {
+    return { policy: "deny", forced: true, autonomyMode };
+  }
+  return { policy: configured, forced: false, autonomyMode };
+}
 
 // ── Scope context ────────────────────────────────────────────────────────
 
@@ -248,13 +284,18 @@ export interface ResolveArgs {
   policy: BypassPolicy;
   /** Claude Code permission mode at call time. */
   permissionMode?: string;
+  /**
+   * True when `policy` was forced to `deny` by a non-interactive autonomy
+   * mode (effectiveBypassPolicy). Only affects the recorded reason text.
+   */
+  policyForced?: boolean;
 }
 
 /**
  * Resolve the capability-scope decision for one tool call. Pure.
  */
 export function resolveScopeDecision(args: ResolveArgs): ScopeDecision {
-  const { scope, toolName, toolInput, policy, permissionMode } = args;
+  const { scope, toolName, toolInput, policy, permissionMode, policyForced } = args;
 
   if (isInScope(scope, toolName, toolInput)) {
     return { gate: false, recordedDecision: "pass", eventType: null, reason: "" };
@@ -282,7 +323,11 @@ export function resolveScopeDecision(args: ResolveArgs): ScopeDecision {
         permissionDecision: "deny",
         recordedDecision: "deny",
         eventType: "capability_scope_violation",
-        reason: `${baseReason} bypass_permissions_policy=deny — hard-blocked under bypassPermissions.`,
+        reason: policyForced === true
+          ? `${baseReason} bypass_permissions_policy=deny (FORCED by non-interactive autonomy ` +
+            `mode — docs/v2/11-security.md §bypassPermissions governance) — hard-blocked ` +
+            `under bypassPermissions.`
+          : `${baseReason} bypass_permissions_policy=deny — hard-blocked under bypassPermissions.`,
       };
     case "allow":
       return {

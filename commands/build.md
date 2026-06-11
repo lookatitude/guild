@@ -37,7 +37,7 @@ at plan approval; **no new gate**).
 /guild:build lane-backend-001
 ```
 
-All six global flags + `--dry-run` apply (`command-surface.md §4`, by
+All five global flags + `--dry-run` apply (`command-surface.md §4`, by
 pointer).
 
 ## Args & local flags

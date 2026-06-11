@@ -1,7 +1,7 @@
 ---
 name: config
-description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table. CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Canonical schema: architecture/command-surface.md §4.4."
-argument-hint: "<init|set|show|validate|providers> [--cwd <repo-root>] [--force]"
+description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Canonical schema: architecture/command-surface.md §4.4."
+argument-hint: "<init|set|show|validate|providers|update-mcp-hashes> [--cwd <repo-root>] [--force]"
 allowed-tools: Read, Write, Bash
 ---
 
@@ -213,6 +213,37 @@ group and `detect` is its sub-verb.
 same detection automatically at run-start and records results in
 `.guild/runs/<id>/resolved-settings.json`. `providers detect` is the
 operator-facing CLI surface to inspect provider state on demand.
+
+## `update-mcp-hashes` — re-pin MCP tool-description hashes (D-MCP)
+
+The operator-facing **re-pin path** for MCP description pinning
+(`docs/v2/11-security.md §D-MCP`): compute the SHA-256 of each MCP tool's
+description string and write the `{tool-name → hash}` map into
+`mcp.tool_description_hashes` in the target settings file. The PreToolUse
+hook (`hooks/pre-tool-use.ts` → `hooks/lib/security/mcp-hash-pin.ts`)
+compares the pinned hashes at tool-call time; a drifted description warns
+and gates on approval. Run this after a deliberate MCP server upgrade to
+accept the new descriptions.
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts update-mcp-hashes \
+  --tools <json-file> --scope workspace|project|local [--cwd <p>]
+```
+
+- `--tools <json-file>` — a JSON object `{ "<tool-name>": "<description>", … }`
+  (tool names in the Claude Code `mcp__server__tool` form). Pass `-` (or omit
+  the flag) to read the map from stdin.
+- `--scope` — required; same scope semantics as `config set` (workspace /
+  project / local target file).
+- **Merge semantics:** hashes for tools NOT present in the input are
+  preserved; the input's tools are (re-)pinned. The write is a
+  read-modify-write that preserves `_help` and all unrelated keys, and fails
+  closed on a malformed existing file.
+- Like `config set`, this is a HARD-SET settings write — it always asks under
+  any `auto_approve` posture.
+
+Exit codes: `0` success (prints scope, file, and the per-tool hash prefixes);
+`1` bad input / IO error; `2` bad `--cwd`.
 
 ## Notes
 

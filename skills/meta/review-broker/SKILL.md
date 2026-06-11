@@ -105,8 +105,8 @@ below is the broker action.
 |---|---|---|
 | Selectable different-family reviewer available | `selected` | that provider |
 | `authorHost === "unknown"` (cannot prove independence) | `degraded-local` | `null` (**never selected**) |
-| Operator pins a **same-family** provider | `degraded-local` | `null` (cross-host refused — self-review) |
-| Operator pins a **non-selectable** provider (no adapter yet) | `degraded-local` | `null` (no silent substitution) |
+| Operator pins a **same-family** provider | `skipped` (reason: same-family self-review cannot satisfy cross) | `null` (cross-host refused — self-review) |
+| Operator pins a **non-selectable** provider (no adapter yet / unknown id) | `skipped` (reason: refusing to silently substitute) | `null` (no silent substitution) |
 | Only same-family / detect-only reviewers present | `degraded-local` | `null` (weak/local, labelled, NOT adversarial) |
 | No cross-host reviewer + `review=cross` | `degraded-local` | `null` (weak same-host floor — reason given) |
 | `review=local` / `review=off` (review_required==false) | `skipped` | `null` |
@@ -121,12 +121,17 @@ and **no code path** that returns `selected` when `authorHost === "unknown"`.
   `independence: weak`, recorded) **and gate it by the 5-condition rule**. This
   is the required-review-but-no-cross-host floor: review still happens, it is
   never up-converted to a clean pass.
-- `skipped` → **only** when `review_required == false`; this is the lone clean
-  gate-skip. A required review (`review=cross` / `risk≥high` / config) **never**
-  resolves `skipped` — it takes the `degraded-local` weak path above. (This is
-  why every required-review row in the table now maps to `degraded-local`, not
-  `skipped`: a required review with no cross-host reviewer must degrade to a
-  recorded weak review, never vanish into a clean skip.)
+- `skipped` (the broker **outcome**) → **only** when `review_required ==
+  false`; this is the lone clean gate-skip. A required review (`review=cross`
+  / `risk≥high` / config) **never** resolves the broker outcome `skipped`.
+  Note the layer split: `selectReviewer` MAY return a WHO-layer
+  `status: "skipped"` **with a refusal reason** even under a required review
+  (a refused same-family pin, a non-selectable pin, or no reviewer present at
+  all — see the table; `provider-detect.ts` is the source of these statuses).
+  The broker maps any such no-reviewer WHO result under a required review to
+  the **WEAK same-host** path (`independence: weak`, recorded, gated by the
+  5-condition rule) — a required review with no cross-host reviewer degrades
+  to a recorded weak review, never vanishes into a clean skip.
 
 The broker MUST treat a `degraded-local` result as a real weak review subject to
 the gate, and a `skipped` result as a no-review clean pass that is **legal only
@@ -211,8 +216,11 @@ The broker addresses a **fixed seven-gate set** (`docs/v2/09-adversarial-review.
 §The gates`), each firing inside its own producer skill at that phase's review
 boundary (`docs/v2/09 §Gate ownership`). Only **G-lane** is command-visible
 (it fires per-lane during `build`); the other six are **skill-internal**. The
-`G-spec / G-plan / G-lane` names are compatibility aliases for the v2 phase-named
-gates (`G-ideation` / `G-planning` / `G-development`).
+`G-spec` / `G-plan` / `G-lane` tokens are the **canonical and operative** gate
+names (`docs/v2/09` owns the binding token set; every path and `gate=` argument
+uses them); the v2 phase-named forms (`G-ideation` / `G-planning` /
+`G-development`) are **informational aliases only** — never used in paths,
+args, or trail records.
 
 | Gate | Producer skill + wiring | Artifact reviewed | Reviewer focus |
 |---|---|---|---|
@@ -383,8 +391,17 @@ For each round (1-indexed, up to the resolved cap):
    adapter = the `codex:codex-rescue` path that works today).
 5. Read back `review_result.v1` from
    `.guild/runs/<run-id>/review/<gate>/result-<round>.json`.
-6. Append the round to the trail `.guild/runs/<run-id>/review/<gate>/trail.md`
-   (including `artifact_sha256_reviewed` and the recomputed current hash).
+6. Append the round to the trail `.guild/runs/<run-id>/review/<gate>/trail.md`.
+   **Every trail entry MUST carry five fields** (`docs/v2/09 §Required
+   trail-entry shape`):
+   1. the **reviewer host** (`claude-code | codex-local | codex-cloud`);
+   2. the **`independence` stamp** (`strong`/`weak` — always marked);
+   3. the **packet/result refs** (the AC-9
+      `review/<gate>/packet-<round>.md` / `result-<round>.json` paths);
+   4. the **post-sentinel-scan outcome** (clean vs malformed termination);
+   5. the **checksum-binding outcome** — both `artifact_sha256_reviewed`
+      (from the result) and the verifier's recomputed hash, so a
+      reviewer-vs-current mismatch is auditable.
 7. Emit a round telemetry event (see [Telemetry](#telemetry)).
 8. Apply the **5-condition checksum-bound gate-pass** (see
    [Gate-pass rule](#gate-pass-rule-checksum-bound-sk-9)): all five hold →
