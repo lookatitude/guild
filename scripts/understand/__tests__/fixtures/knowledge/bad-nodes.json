@@ -1,0 +1,92 @@
+{
+  "_doc": "Negative fixtures for the L0f knowledge corpus. Each entry is an INVALID node (or a malformed sub-graph) tagged with the check that must reject it and the expected rejection. Consumed by: L0 validator negative tests (validateGraphV2), L8 wiki-lint (SC-6 lint half), and L9 per-SC negative evals. These nodes are deliberately NOT part of expected-graph.v2.json (which is the all-valid corpus projection). repoRoot for anchor resolution is the corpus dir (this file's directory).",
+  "rejected_by_validator": {
+    "_doc": "validateGraphV2({...}, {repoRoot: <corpusDir>}) must DROP each of these (node absent from result.data.nodes) or return fatal when it is the only node.",
+    "out_of_enum_category": {
+      "owner_checks": ["SC-6"],
+      "expect": "dropped — category not in NODE_CATEGORIES (issue category: invalid-category)",
+      "node": {
+        "id": "wiki_page:docs/overview.md",
+        "type": "wiki_page",
+        "name": "Overview",
+        "category": "not-a-real-category",
+        "importance": "high",
+        "source_refs": ["docs/overview.md#overview"],
+        "confidence": "high"
+      }
+    },
+    "topic_missing_importance_score": {
+      "owner_checks": ["SC-2"],
+      "expect": "dropped — topic nodes require numeric importance_score (issue category: missing-importance-score)",
+      "node": {
+        "id": "topic:deadbeef",
+        "type": "topic",
+        "name": "No Score Topic",
+        "category": "concept",
+        "importance": "high",
+        "topic_path": ["no-score"],
+        "source_refs": ["docs/overview.md#overview"],
+        "confidence": "high"
+      }
+    },
+    "topic_below_min_importance": {
+      "owner_checks": ["SC-2"],
+      "expect": "dropped — importance_score 0.2 < minTopicImportance 0.4 (issue category: below-importance-threshold)",
+      "node": {
+        "id": "topic:lowimp01",
+        "type": "topic",
+        "name": "Folded Subtopic",
+        "category": "concept",
+        "importance": "low",
+        "importance_score": 0.2,
+        "topic_path": ["event-pipeline", "folded"],
+        "source_refs": ["docs/overview.md#overview"],
+        "confidence": "low"
+      }
+    },
+    "unresolvable_anchor": {
+      "owner_checks": ["SC-12"],
+      "expect": "dropped — anchor does not resolve at repoRoot (issue category: unresolvable-anchor)",
+      "node": {
+        "id": "claim:docs/ghost.md#missing:00000000",
+        "type": "claim",
+        "name": "A claim with a dangling anchor.",
+        "category": "claim",
+        "source_refs": ["docs/ghost.md#missing"],
+        "confidence": "low"
+      }
+    }
+  },
+  "flagged_by_wiki_lint": {
+    "_doc": "These nodes PASS the v2 validator's hard invariants but must be FLAGGED by wiki-lint (L8). The string `importance` field (high|medium|low) is lint-enforced, not validator-enforced — wiki_page/knowledge nodes missing it are valid-but-lintable.",
+    "wiki_page_missing_importance": {
+      "owner_checks": ["SC-6"],
+      "expect": "wiki-lint flags: knowledge node missing `importance`",
+      "node": {
+        "id": "wiki_page:docs/storage.md",
+        "type": "wiki_page",
+        "name": "Storage",
+        "category": "guide",
+        "labels": ["storage"],
+        "source_refs": ["docs/storage.md#storage"],
+        "confidence": "high"
+      }
+    }
+  },
+  "rejected_subgraphs": {
+    "_doc": "Malformed subtopic_of / evidenced_by sub-graphs the validator must reject as FATAL. Provide these nodes + edges as a full graph (add version/project/etc.) to validateGraphV2.",
+    "subtopic_cycle": {
+      "owner_checks": ["SC-2"],
+      "expect": "fatal — subtopic_of cycle detected",
+      "edges": [
+        { "source": "topic:cyc0a000", "target": "topic:cyc0b000", "type": "subtopic_of", "direction": "out", "weight": 1.0 },
+        { "source": "topic:cyc0b000", "target": "topic:cyc0a000", "type": "subtopic_of", "direction": "out", "weight": 1.0 }
+      ]
+    },
+    "dangling_evidenced_by_target": {
+      "owner_checks": ["SC-4"],
+      "expect": "dropped/fatal — evidenced_by target not in nodes (issue category: invalid-reference, SC-4)",
+      "edge": { "source": "claim:docs/ingestion.md#ingestion:0ee19523", "target": "function:src/nonexistent.ts:ghost", "type": "evidenced_by", "direction": "out", "weight": 0.9 }
+    }
+  }
+}

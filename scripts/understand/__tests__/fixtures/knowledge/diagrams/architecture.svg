@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="80" viewBox="0 0 360 80">
+  <title>Event Pipeline Architecture</title>
+  <desc>Three-stage flow: ingest, validate, store.</desc>
+  <rect id="ingest-box" x="10" y="20" width="90" height="40" fill="#cde" stroke="#333"/>
+  <text x="55" y="45" text-anchor="middle">Ingest</text>
+  <rect id="validate-box" x="135" y="20" width="90" height="40" fill="#cde" stroke="#333"/>
+  <text x="180" y="45" text-anchor="middle">Validate</text>
+  <rect id="store-box" x="260" y="20" width="90" height="40" fill="#cde" stroke="#333"/>
+  <text x="305" y="45" text-anchor="middle">Store</text>
+</svg>
