@@ -660,7 +660,7 @@ function anchorFragment(anchor: string): string | undefined {
  * Assumption (documented in ValidateGraphV2Options.repoRoot): resolution is
  * against the working tree — caller must ensure it matches generated_from_commit.
  */
-function resolveAnchor(repoRoot: string, anchor: string): boolean {
+export function resolveAnchor(repoRoot: string, anchor: string): boolean {
   if (!anchor || typeof anchor !== "string") return false;
   const relPath = anchorToPath(anchor);
   if (!relPath) return false;
