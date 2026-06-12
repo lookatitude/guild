@@ -15,6 +15,8 @@
  *       deterministic stage (LLM field)
  *   E — diagram node IDs are fully deterministic (assert exactly per
  *       notes_for_lane_owners.L3_diagram_analyze)
+ *   F — parser robustness: hyphenated + quoted mermaid IDs; namespaced +
+ *       attributed SVG title forms (L3-hardening, codex G-lane follow-up)
  *
  * field_contract rules applied throughout:
  *   • node.id         — HARD for diagram nodes (assert exactly)
@@ -31,9 +33,11 @@
 import * as path from "path";
 import type { GraphNode } from "../understand/lib/schema";
 
-// ── Import under test (fails at RED state — module does not exist yet) ──────
+// ── Import under test ─────────────────────────────────────────────────────────
 import {
   analyzeDiagrams,
+  parseMermaidBlock,
+  parseSvgFile,
 } from "../understand/diagram-analyze";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -331,5 +335,123 @@ describe("E — diagram IDs are fully deterministic (SC-11 / SC-12)", () => {
     expect(target).toBeDefined();
     // source_refs anchor must resolve: docs/ingestion.md#mermaid-0
     expect(target!.source_refs).toContain("docs/ingestion.md#mermaid-0");
+  });
+});
+
+// ── F: parser robustness (L3-hardening follow-up) ────────────────────────────
+//
+// Inline unit tests against parseMermaidBlock / parseSvgFile directly (same
+// pattern as kg-query-ranking.test.ts unit tests against exported helpers).
+// No disk I/O — raw strings passed straight to the parsers.
+
+describe("F.1 — mermaid: hyphenated node IDs", () => {
+  test("nodes with hyphens (my-service, data-store, event-bus) are extracted correctly", () => {
+    const block = `graph LR
+  my-service[My Service] --> data-store[Data Store]
+  data-store --> event-bus
+`;
+    const { nodes, edges } = parseMermaidBlock(block);
+    expect(nodes).toEqual(expect.arrayContaining(["my-service", "data-store", "event-bus"]));
+    expect(nodes.length).toBe(3);
+  });
+
+  test("edges with hyphenated node IDs use node IDs (not labels)", () => {
+    const block = `graph LR
+  my-service[My Service] --> data-store[Data Store]
+  data-store --> event-bus
+`;
+    const { edges } = parseMermaidBlock(block);
+    expect(edges).toEqual(expect.arrayContaining([
+      { from: "my-service", to: "data-store" },
+      { from: "data-store", to: "event-bus" },
+    ]));
+    expect(edges.length).toBe(2);
+  });
+
+  test("hyphenated node IDs are not split on the hyphen", () => {
+    const block = `graph TD
+  api-gateway --> auth-service
+  auth-service --> user-db
+`;
+    const { nodes } = parseMermaidBlock(block);
+    // Must preserve the full hyphenated id, not split at '-'
+    expect(nodes).toContain("api-gateway");
+    expect(nodes).toContain("auth-service");
+    expect(nodes).toContain("user-db");
+    expect(nodes).not.toContain("api");
+    expect(nodes).not.toContain("gateway");
+  });
+});
+
+describe("F.2 — mermaid: quoted node IDs", () => {
+  test("quoted node IDs in edges are extracted with spaces preserved", () => {
+    const block = `graph LR
+  "my service" --> "data store"
+`;
+    const { nodes, edges } = parseMermaidBlock(block);
+    expect(nodes).toEqual(expect.arrayContaining(["my service", "data store"]));
+    expect(edges).toEqual(expect.arrayContaining([
+      { from: "my service", to: "data store" },
+    ]));
+  });
+
+  test("quoted id with shape specifier: \"node-id\"[Label] extracts the id only", () => {
+    const block = `graph LR
+  "my node"[Box Label] --> target
+`;
+    const { nodes, edges } = parseMermaidBlock(block);
+    expect(nodes).toContain("my node");
+    expect(nodes).toContain("target");
+    expect(edges).toEqual(expect.arrayContaining([
+      { from: "my node", to: "target" },
+    ]));
+  });
+});
+
+describe("F.3 — SVG: namespaced title tag", () => {
+  test("<svg:title> is extracted as svg_title", () => {
+    const svgContent = `<svg xmlns:svg="http://www.w3.org/2000/svg" width="100" height="100">
+  <svg:title>Namespaced Pipeline</svg:title>
+  <text x="10" y="20">Service A</text>
+</svg>`;
+    const { title, labels } = parseSvgFile(svgContent);
+    expect(title).toBe("Namespaced Pipeline");
+    expect(labels).toContain("Service A");
+  });
+
+  test("namespace prefix is irrelevant: any <ns:title> form is accepted", () => {
+    const svgContent = `<svg>
+  <xlink:title>Xlink Title</xlink:title>
+</svg>`;
+    const { title } = parseSvgFile(svgContent);
+    expect(title).toBe("Xlink Title");
+  });
+});
+
+describe("F.4 — SVG: title with attributes", () => {
+  test("<title id='x'>text</title> extracts the text content", () => {
+    const svgContent = `<svg>
+  <title id="main-title">Attributed Title</title>
+  <text>Bar</text>
+</svg>`;
+    const { title } = parseSvgFile(svgContent);
+    expect(title).toBe("Attributed Title");
+  });
+
+  test("<title class='x' lang='en'>text</title> extracts the text content", () => {
+    const svgContent = `<svg>
+  <title class="diagram-title" lang="en">Multi-Attr Title</title>
+</svg>`;
+    const { title } = parseSvgFile(svgContent);
+    expect(title).toBe("Multi-Attr Title");
+  });
+
+  test("plain <title> still works after regex widening (regression guard)", () => {
+    // Existing fixture format must still resolve
+    const svgContent = `<svg>
+  <title>Event Pipeline Architecture</title>
+</svg>`;
+    const { title } = parseSvgFile(svgContent);
+    expect(title).toBe("Event Pipeline Architecture");
   });
 });

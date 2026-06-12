@@ -78,17 +78,43 @@ function extractMermaidBlocks(markdownContent: string): string[] {
 }
 
 /**
- * Parse a mermaid block body (excluding the opening ```mermaid line).
+ * Extract a mermaid node ID from a raw token (the part before/after an arrow).
+ *
+ * Handles:
+ *   - Quoted IDs: `"my service"`, `"my-service"` — returns inner text verbatim.
+ *   - Bare IDs: `NodeId`, `my-service`, `api-gateway`, `node_1` — starts with
+ *     alnum/underscore; hyphens are allowed after the first character (very
+ *     common in real-world diagrams, e.g. k8s service names).
+ *   - Shape specifiers are ignored: `NodeId[Label]`, `"id"[Box]` → ID only.
+ *
+ * Deterministic: regex-based, no LLM.
+ * Exported for direct unit testing (same pattern as kg-query-ranking helpers).
+ */
+export function extractMermaidNodeId(token: string): string | null {
+  const t = token.trim();
+  // Quoted node ID: "some text" optionally followed by a shape specifier
+  const quotedMatch = t.match(/^"([^"]+)"/);
+  if (quotedMatch) return quotedMatch[1];
+  // Bare node ID: must start with alnum/underscore; hyphens allowed after the first char
+  const bareMatch = t.match(/^([A-Za-z0-9_][A-Za-z0-9_-]*)/);
+  return bareMatch ? bareMatch[1] : null;
+}
+
+/**
+ * Parse a mermaid block body (the full content inside the fenced block,
+ * including the opening `graph LR` / `flowchart LR` directive line).
  * Handles: `graph LR/TD/RL/BT`, `flowchart LR/TD/RL/BT` with `-->` edges.
  *
  * Returns:
- *   nodes — array of node IDs (alphanumeric/underscore identifiers), in
- *           first-seen order, deduplicated.
+ *   nodes — array of node IDs (in first-seen order, deduplicated).
+ *           Supports bare (`NodeId`), hyphenated (`my-service`), and
+ *           quoted (`"my service"`) IDs.
  *   edges — `{ from, to }` pairs using node IDs (not display labels).
  *
  * Deterministic: same input → same output; no LLM calls.
+ * Exported for direct unit testing (same pattern as kg-query-ranking helpers).
  */
-function parseMermaidBlock(blockBody: string): {
+export function parseMermaidBlock(blockBody: string): {
   nodes: string[];
   edges: Array<{ from: string; to: string }>;
 } {
@@ -100,8 +126,9 @@ function parseMermaidBlock(blockBody: string): {
     const line = raw.trim();
     if (!line) continue;
     if (line.startsWith("%%") || line.startsWith("//")) continue;
-    // Skip subgraph / end / style / class directives
-    if (/^(?:sub)?graph\b/i.test(line) || line === "end") continue;
+    // Skip graph header, subgraph, end, style, class, linkStyle, direction
+    if (/^(?:sub)?graph\b/i.test(line) || /^flowchart\b/i.test(line)) continue;
+    if (line === "end") continue;
     if (/^(?:style|classDef|class|linkStyle|direction)\b/i.test(line)) continue;
 
     // Strip pipe-label text: A -->|label| B → A --> B
@@ -109,18 +136,13 @@ function parseMermaidBlock(blockBody: string): {
 
     // Try to match an edge line: fromToken ARROW toToken
     // ARROW covers: -->, ---, -.-, ==>, --o, --x, o--, x--
-    // The lazy (.+?) matches the from-token; (.+) greedily the rest.
+    // Lazy (.+?) matches the from-token up to the first arrow; (.+) greedily the rest.
     const edgeMatch = normalized.match(
       /^(.+?)\s*(?:-->|---|==>|-\.->|--o|--x|o--|x--)\s*(.+)$/
     );
     if (edgeMatch) {
-      const extractId = (s: string): string | null => {
-        // Node ID is the leading alphanumeric/underscore sequence
-        const idMatch = s.trim().match(/^([A-Za-z0-9_]+)/);
-        return idMatch ? idMatch[1] : null;
-      };
-      const from = extractId(edgeMatch[1]);
-      const to = extractId(edgeMatch[2]);
+      const from = extractMermaidNodeId(edgeMatch[1]);
+      const to = extractMermaidNodeId(edgeMatch[2]);
       if (from && to) {
         nodeSet.add(from);
         nodeSet.add(to);
@@ -129,12 +151,15 @@ function parseMermaidBlock(blockBody: string): {
       }
     }
 
-    // Standalone node definition: NodeId[Label] or NodeId(Label) etc.
-    const nodeMatch = line.match(
-      /^([A-Za-z0-9_]+)(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?$/
+    // Standalone node definition: bare/hyphenated/quoted ID, optionally followed
+    // by a shape specifier ([Label], (Label), {Label}).
+    // Examples: NodeId[Label], my-service, "quoted id", "my node"[Box]
+    const standaloneMatch = line.match(
+      /^(?:"([^"]+)"|([A-Za-z0-9_][A-Za-z0-9_-]*))(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?$/
     );
-    if (nodeMatch) {
-      nodeSet.add(nodeMatch[1]);
+    if (standaloneMatch) {
+      // Group 1 = quoted content; group 2 = bare/hyphenated id
+      nodeSet.add(standaloneMatch[1] ?? standaloneMatch[2]);
     }
   }
 
@@ -147,30 +172,45 @@ function parseMermaidBlock(blockBody: string): {
 
 /**
  * Parse an SVG file for deterministic metadata:
- *   title      — content of the first <title> element
- *   labels     — content of all <text> elements (trimmed, non-empty)
+ *   title      — content of the first <title> (or namespaced <ns:title>) element
+ *   labels     — content of all <text> (or <ns:text>) elements, trimmed
  *   elementIds — values of all id= attributes in the SVG content
+ *
+ * Tolerates:
+ *   - Namespaced tags: `<svg:title>`, `<xlink:title>`, `<svg:text>`
+ *   - Attributed tags: `<title id="main-title">`, `<title class="x" lang="en">`
+ *   - Nested inline tags inside `<text>`: `<tspan>` content is merged with a
+ *     single space and redundant whitespace collapsed.
  *
  * Deterministic: regex-based, no LLM.
  * svg_description (the semantic description) is NOT extracted here — it is
  * an LLM-judged field populated by a later LLM stage, per SC-9.
+ *
+ * Exported for direct unit testing (same pattern as kg-query-ranking helpers).
  */
-function parseSvgFile(content: string): {
+export function parseSvgFile(content: string): {
   title?: string;
   labels: string[];
   elementIds: string[];
 } {
-  // Title: first <title>...</title>
-  const titleMatch = content.match(/<title>([^<]*)<\/title>/i);
+  // Title: <title>, <ns:title> (any namespace prefix), with or without attributes.
+  // Pattern: <(ns:)?title(optional attrs)>content</(ns:)?title>
+  const titleMatch = content.match(
+    /<(?:\w+:)?title(?:\s[^>]*)?>([^<]*)<\/(?:\w+:)?title>/i
+  );
   const title = titleMatch ? titleMatch[1].trim() || undefined : undefined;
 
-  // Text labels: all <text ...>content</text> (may be multi-line)
-  const textRe = /<text\b[^>]*>([\s\S]*?)<\/text>/gi;
+  // Text labels: <text>, <ns:text> with optional attributes.
+  // Replace nested inline tags (e.g. <tspan>) with a space to avoid
+  // concatenation without separator; then collapse whitespace.
+  const textRe = /<(?:\w+:)?text\b[^>]*>([\s\S]*?)<\/(?:\w+:)?text>/gi;
   const labels: string[] = [];
   let tm: RegExpExecArray | null;
   while ((tm = textRe.exec(content)) !== null) {
-    // Strip any nested tags (e.g. <tspan>) and trim
-    const raw = tm[1].replace(/<[^>]*>/g, "").trim();
+    const raw = tm[1]
+      .replace(/<[^>]*>/g, " ")   // inline tags → space
+      .replace(/\s+/g, " ")       // collapse runs of whitespace
+      .trim();
     if (raw) labels.push(raw);
   }
 
