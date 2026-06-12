@@ -70,23 +70,7 @@ import {
 } from "./wiki-index";
 
 import { detectLanguage, isCodeLanguage } from "./lib/languages";
-
-/**
- * Directory names never descended into during discovery (BUG-1). `.guild` is
- * excluded because the derived indexes live there — a self-include would feed the
- * graph's own output back into K1/K3. Build/dependency/VCS dirs carry no
- * first-party knowledge. Any hidden dir (name starting with ".") is also skipped.
- * Declared at module top-level so it is initialized before the CLI block (which
- * runs at module load) calls discoverFilePaths — avoids a const TDZ error.
- */
-const DISCOVERY_EXCLUDED_DIRS = new Set([
-  "node_modules",
-  ".git",
-  "dist",
-  "build",
-  "coverage",
-  ".guild",
-]);
+import { createIgnoreFilter } from "./lib/ignore";
 
 import {
   buildTaxonomy,
@@ -1043,16 +1027,26 @@ if (require.main === module) {
  * layouts. On the plugin corpus this produced ZERO code files → no functions → no
  * clusters → no topics/domains/subtopic_of, and a degenerate all-claim→claim graph.
  *
+ * BLOCKER-2 fix (L13-fix): directory/file exclusion now reuses the SHARED
+ * cost-gate corpus policy (`createIgnoreFilter` from lib/ignore.ts — the same
+ * policy walkRepo/scanCorpusFiles honor) instead of a hand-rolled, narrower dir
+ * list. The old list missed `vendor/`, `out/`, `__tests__/fixtures/**`, generated
+ * files → it admitted them as graph nodes AND diverged from the cost estimate.
+ * Now discovered corpus == cost-gated corpus by construction.
+ *
  * Discovery rules (all lists sorted for SC-8/SC-9 determinism):
  *   - code: any file whose extension maps (via detectLanguage + isCodeLanguage)
  *     to a language `analyzeSource`/`computeClustersDeterministic` actually parse
  *     — derived from the source of truth, not a hardcoded extension list — minus
- *     `.test.`/`.spec.` files.
- *   - docs: every `.md` (claims/entities/mermaid come from prose).
- *   - svg:  every `.svg` (K3 diagram nodes).
+ *     `.test.`/`.spec.` files, minus anything the shared ignore policy excludes.
+ *   - docs: every non-ignored `.md` (claims/entities/mermaid come from prose).
+ *   - svg:  every `.svg` under a NON-ignored directory. `.svg` is file-ignored by
+ *     the shared policy (excluded from cost-gate TOKEN counting) but MUST still be
+ *     discovered for K3 diagrams — the directory gate already excluded svgs under
+ *     node_modules/vendor/out/fixtures, so only indexed-dir svgs reach the graph.
  *   - wikiDir: defaults to `<repoRoot>/.guild/wiki`.
  *
- * `.guild` is excluded from code/docs/svg so the wiki (indexed separately as
+ * `.guild` is excluded by the shared policy so the wiki (indexed separately as
  * wikiDir) and the derived indexes are never double-scanned as content.
  *
  * Exported for red/green real-path tests (the L12 gate proved injected-seam
@@ -1062,6 +1056,16 @@ export function discoverFilePaths(repoRoot: string): KnowledgeFilePaths {
   const codeRelPaths: string[] = [];
   const docRelPaths: string[] = [];
   const svgRelPaths: string[] = [];
+
+  // BLOCKER-2 fix: discovery MUST share the cost-gate's corpus policy. The
+  // cost-gate counts via walkRepo → createIgnoreFilter (lib/ignore.ts: honors
+  // node_modules/.git/dist/build/out/vendor/coverage/__pycache__/target/obj,
+  // `.guild`, lockfiles, generated files, AND test fixtures). The previous
+  // hand-rolled DISCOVERY_EXCLUDED_DIRS was narrower → it admitted vendor/, out/,
+  // and `__tests__/fixtures/**`, polluting the graph and diverging from the
+  // cost estimate. Reusing the shared filter makes the discovered corpus ==
+  // the cost-gated corpus by construction (no second policy to drift).
+  const filter = createIgnoreFilter(repoRoot);
 
   const walk = (dir: string, relBase: string) => {
     let entries: fs.Dirent[];
@@ -1073,19 +1077,30 @@ export function discoverFilePaths(repoRoot: string): KnowledgeFilePaths {
     // NI-2: sort for cross-filesystem determinism of discovered order.
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const e of entries) {
-      // Skip hidden entries + excluded dirs (covers `.guild`, node_modules, …).
-      if (e.name.startsWith(".") || DISCOVERY_EXCLUDED_DIRS.has(e.name)) continue;
       const rel = relBase ? `${relBase}/${e.name}` : e.name;
       if (e.isDirectory()) {
+        // Shared DIRECTORY exclusion (cost-gate parity).
+        if (filter.isIgnored(rel) || filter.isIgnored(rel + "/")) continue;
         walk(path.join(dir, e.name), rel);
         continue;
       }
       if (!e.isFile()) continue;
       const lower = e.name.toLowerCase();
+      // CRITICAL NUANCE: `.svg` is file-ignored by the shared policy (it is
+      // excluded from cost-gate TOKEN counting, not from discovery). It MUST
+      // still be collected for K3 diagrams. The svg's parent directory already
+      // passed the shared DIRECTORY gate above, so an svg under node_modules/
+      // vendor/ out/ fixtures/ is never reached here — only svgs under indexed
+      // dirs are collected.
+      if (lower.endsWith(".svg")) {
+        svgRelPaths.push(rel);
+        continue;
+      }
+      // Every other file honors the shared file-level policy so discovery ==
+      // cost-gate corpus (fixtures/generated/lockfiles all excluded identically).
+      if (filter.isIgnored(rel)) continue;
       if (lower.endsWith(".md")) {
         docRelPaths.push(rel);
-      } else if (lower.endsWith(".svg")) {
-        svgRelPaths.push(rel);
       } else if (
         isCodeLanguage(detectLanguage(e.name)) &&
         !/\.test\.|\.spec\./.test(e.name)

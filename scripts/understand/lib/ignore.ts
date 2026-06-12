@@ -21,6 +21,11 @@ export const DEFAULT_IGNORE_PATTERNS: string[] = [
   ".guild/",
   "dist/", "build/", "out/", "coverage/", ".next/", ".cache/", ".turbo/",
   "target/", "obj/",
+  // Test fixtures / generated test corpora are not first-party knowledge — they
+  // must be excluded from the cost-gate corpus AND from knowledge discovery so the
+  // two share one policy (L13-fix BLOCKER 2). A `fixtures/` corpus would otherwise
+  // pollute the graph as diagram/claim nodes (e.g. __tests__/fixtures/**).
+  "fixtures/", "testdata/", "__fixtures__/",
   "*.lock", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
   "*.png", "*.jpg", "*.jpeg", "*.gif", "*.svg", "*.ico", "*.woff", "*.woff2",
   "*.ttf", "*.eot", "*.mp3", "*.mp4", "*.pdf", "*.zip", "*.tar", "*.gz",

@@ -395,14 +395,25 @@ export async function indexWiki(
 if (require.main === module) {
   const argv = process.argv.slice(2);
   const wikiDir = argv[0];
-  if (!wikiDir) {
-    process.stderr.write("Usage: npx tsx wiki-index.ts <wikiDir> [--print]\n");
+  if (!wikiDir || wikiDir.startsWith("--")) {
+    process.stderr.write(
+      "Usage: npx tsx wiki-index.ts <wikiDir> [--cwd <repoRoot>] [--print]\n",
+    );
     process.exit(1);
   }
 
-  const absWikiDir = path.resolve(wikiDir);
+  // BUG-3 real-path fix: resolve repoRoot from --cwd (default: process.cwd()) and
+  // thread it to indexWiki so wiki_page ids + source_ref anchors are repoRoot-
+  // relative (`.guild/wiki/foo.md#slug`) and resolve at repoRoot. Without this the
+  // CLI emitted wikiDir-relative ids (`foo.md#slug`) that validateGraphV2 cannot
+  // resolve → every wiki_page node dropped. The header advertised --cwd; now it
+  // is honored. Mirrors the orchestrator finalize caller (knowledge-orchestrator).
+  const cwdIdx = argv.indexOf("--cwd");
+  const cwdArg = cwdIdx >= 0 ? argv[cwdIdx + 1] : undefined;
+  const repoRoot = path.resolve(cwdArg ?? process.cwd());
+  const absWikiDir = path.resolve(repoRoot, wikiDir);
 
-  indexWiki(absWikiDir)
+  indexWiki(absWikiDir, { repoRoot })
     .then(({ nodes, edges }) => {
       const wikiPages = nodes.filter((n) => n.type === "wiki_page");
       const related = edges.filter((e) => e.type === "related");

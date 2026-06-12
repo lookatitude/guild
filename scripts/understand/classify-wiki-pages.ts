@@ -283,12 +283,21 @@ if (require.main === module) {
   const wikiDir = argv[0];
   const printPrompt = argv.includes("--print-prompt");
 
-  if (!wikiDir) {
+  if (!wikiDir || wikiDir.startsWith("--")) {
     process.stderr.write(
-      "Usage: npx tsx scripts/understand/classify-wiki-pages.ts <wikiDir> [--print-prompt]\n",
+      "Usage: npx tsx scripts/understand/classify-wiki-pages.ts <wikiDir> [--cwd <repoRoot>] [--print-prompt]\n",
     );
     process.exit(1);
   }
+
+  // BUG-3 real-path fix: resolve repoRoot from --cwd (default: process.cwd()) and
+  // thread it to indexWiki so wiki_page ids/anchors are repoRoot-relative and
+  // resolve at repoRoot (mirrors wiki-index.ts CLI + the orchestrator finalize
+  // caller). Without it the CLI emitted unresolvable wikiDir-relative ids.
+  const cwdIdx = argv.indexOf("--cwd");
+  const cwdArg = cwdIdx >= 0 ? argv[cwdIdx + 1] : undefined;
+  const repoRoot = path.resolve(cwdArg ?? process.cwd());
+  const absWikiDir = path.resolve(repoRoot, wikiDir);
 
   // Dynamic import of indexWiki to avoid circular dep at module load time.
   // This is only used in CLI mode.
@@ -303,7 +312,7 @@ if (require.main === module) {
         return defaultFallbackClassifier(pages);
       };
 
-      return indexWiki(path.resolve(wikiDir), { classifier: demoClassifier }).then(
+      return indexWiki(absWikiDir, { classifier: demoClassifier, repoRoot }).then(
         ({ nodes }) => {
           const wikiPages = nodes.filter((n) => n.type === "wiki_page");
           process.stdout.write(
