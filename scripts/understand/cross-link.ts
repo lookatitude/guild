@@ -11,9 +11,12 @@
  *   Rule 3 — ≥2 distinct claim key-terms (\b<term>\b) appear in function source file
  *   Rule 4 — entity name (\b<name>\b, case-insensitive) in function source file
  *   Rule 5 — entity↔topic by name-token prefix overlap (≥4 shared leading chars)
- *   Rule 6 — wiki_page↔topic by ≥2 distinct shared key-terms across modalities:
- *            a topic-identity term in the wiki BODY, or a wiki-identity term in
- *            the topic SOURCE file → `topic --evidenced_by--> wiki_page` (SC-3).
+ *   Rule 6 — wiki_page↔topic DISCRIMINATING membership → `topic
+ *            --evidenced_by--> wiki_page` (SC-3). Requires identity involvement
+ *            (≥1 shared topic-identity↔wiki-identity term) + DF-filtered ≥2
+ *            distinct terms, ranked per-wiki top-k, with an SC-3 fallback so no
+ *            wiki page is ever left with 0 topics. (L16: replaced the prior
+ *            body-co-occurrence predicate that over-linked on boilerplate.)
  *
  * SC coverage: SC-3 (every wiki_page gets ≥1 topic membership edge — Rule 6;
  *                    without it every wiki_page is an orphan: topics anchor to
@@ -469,7 +472,7 @@ export function proposeCandidates(
     }
   }
 
-  // ---- Rule 6: wiki_page↔topic shared-term membership (SC-3) --------------
+  // ---- Rule 6: wiki_page↔topic DISCRIMINATING membership (SC-3) -----------
   //
   // Topics anchor to CODE (e.g. `hooks/lib/bus-emit.ts#L1-L2`); wiki pages
   // anchor to `.guild/wiki/` & `docs/knowledge/` markdown. Rules 1-5 never
@@ -478,31 +481,61 @@ export function proposeCandidates(
   // entity (Rules 3/5). Result: every wiki_page is an ORPHAN. SC-3 requires
   // EACH wiki page to carry ≥1 topic membership edge, so we add the bridge.
   //
-  // Deterministic PROPOSE (SC-9): for each (topic, wiki_page) pair, union the
-  // distinct key-terms that connect the two modalities in EITHER direction —
-  //   • a topic-identity term (name + topic_path) found word-boundary in the
-  //     wiki page BODY, OR
-  //   • a wiki-identity term (name + headings + labels) found word-boundary in
-  //     the topic's SOURCE file content.
-  // ≥2 distinct shared terms → propose `topic --evidenced_by--> wiki_page`
-  // (SC-4: a wiki page is doc-evidence FOR the topic; the edge IS the topic
-  // membership edge SC-3 names). Same ≥2-distinct-term rigor + `\b` word-
-  // boundary matching as Rule 3 — NEVER includes(). Matching is case-insensitive
-  // ("i") because identity terms are case-folded but bodies/sources are not.
-  // Over-generates by design; the LLM half confirms + scores in k5-judgments,
-  // and the candidateKeys guard in buildCrossLinks drops any fabricated key.
+  // ⚠ L16 lesson — the prior predicate ("≥2 distinct shared terms in EITHER
+  // direction") OVER-LINKED on project-wide boilerplate: on a real run three
+  // topics each linked to ALL 10 wiki pages (near-complete bipartite) because
+  // common domain vocabulary ("guild", "lifecycle", domain names) co-occurs in
+  // every wiki body. Mere body co-occurrence of common words is NOT membership.
+  //
+  // The discriminating predicate now requires, for `topic --evidenced_by-->
+  // wiki_page` (SC-4: wiki is doc-evidence FOR the topic; the edge IS SC-3's
+  // membership edge):
+  //   1. IDENTITY INVOLVEMENT — ≥1 term shared between the topic's IDENTITY
+  //      (name + OWN topic_path leaf, never the cumulative ancestor breadcrumb)
+  //      and the wiki page's IDENTITY (name + headings + labels). A body-only
+  //      co-occurrence can never bridge alone.
+  //   2. CORPUS-FREQUENCY (DF) FILTERING — a term that occurs across MOST of the
+  //      corpus (project-wide boilerplate / domain names) is dropped from the
+  //      bridging set, computed deterministically per term:
+  //        • idDf       — # of topic+wiki identities carrying the term
+  //        • wikiBodyDf — # of wiki bodies the term \b-matches (direction A)
+  //        • topicSrcDf — # of topic sources the term \b-matches (direction B)
+  //      A term is boilerplate iff df ≥ DF_MIN_ABS AND df > DF_RATIO·corpus
+  //      (the absolute floor keeps tiny corpora — 1 topic / 1 wiki — intact).
+  //   3. ≥2 DISTINCT DISCRIMINATING TERMS total (identity ∪ DF-clean dirA/dirB).
+  //   4. PER-WIKI TOP-K — a wiki keeps only its K highest-scoring topics
+  //      (score weights identity overlap above body corroboration), bounding the
+  //      wiki→topics axis so no page links to every topic.
+  // Matching is `\b` word-boundary (NEVER includes()), case-insensitive ("i")
+  // because identity terms are case-folded but bodies/sources are not.
+  //
+  // SC-3 FALLBACK — discrimination must NOT leave a wiki page with 0 topics.
+  // Any page with no discriminating candidate falls back to its single
+  // highest-RAW-overlap topic (pre-DF, so a choice always exists), with ties
+  // broken by least fallback-load then lowest id — this distributes orphan
+  // pages instead of dumping them all on one topic (which would re-create the
+  // bipartite saturation). Over-generates by design; the LLM half confirms +
+  // scores, and the candidateKeys guard in buildCrossLinks drops fabrications.
 
   // Precompute per-topic identity terms + concatenated source-file content
   // (one read per topic, not per pair).
-  const topicTermIndex = topics.map((t) => ({
-    id: t.id,
-    idTerms: distinctLowerKeyTerms(
-      `${t.name ?? ""} ${(t.topic_path ?? []).join(" ")}`
-    ),
-    sourceContent: (t.source_refs ?? [])
-      .map((r) => safeReadFile(repoRoot, fileFromSourceRef(r)) ?? "")
-      .join("\n"),
-  }));
+  //
+  // ⚠ L16: a topic's IDENTITY is its own name + its OWN topic_path leaf slug —
+  // NOT the cumulative ancestor breadcrumb. topic_path accumulates parent slugs
+  // (e.g. a deep "Handoff-v2" topic carries "guild-root", "emit-learning-…"),
+  // which injected project-wide ancestor vocabulary into the identity term-set
+  // and drove the over-linking. Use the leaf only.
+  const topicTermIndex = topics.map((t) => {
+    const tp = t.topic_path ?? [];
+    const ownLeaf = tp.length > 0 ? tp[tp.length - 1] : "";
+    return {
+      id: t.id,
+      idTerms: distinctLowerKeyTerms(`${t.name ?? ""} ${ownLeaf}`),
+      sourceContent: (t.source_refs ?? [])
+        .map((r) => safeReadFile(repoRoot, fileFromSourceRef(r)) ?? "")
+        .join("\n"),
+    };
+  });
 
   // Precompute per-wiki_page identity terms + body content (one read per page).
   const wikiTermIndex = wikiPages.map((w) => {
@@ -520,24 +553,161 @@ export function proposeCandidates(
     };
   });
 
-  for (const t of topicTermIndex) {
+  if (topicTermIndex.length > 0 && wikiTermIndex.length > 0) {
+    const T = topicTermIndex.length;
+    const W = wikiTermIndex.length;
+    const N = T + W;
+    const DF_RATIO = 0.5; // boilerplate if a term spans > half the corpus …
+    const DF_MIN_ABS = 3; // … AND at least this many docs (tiny-corpus floor)
+    const TOP_K = 3; // max discriminating topics per wiki page
+
+    const inText = (term: string, text: string): boolean =>
+      wordBoundaryRegex(term, "i").test(text);
+
+    // Document frequencies — all order-independent (deterministic).
+    const idDf = new Map<string, number>();
+    for (const t of topicTermIndex)
+      for (const term of t.idTerms) idDf.set(term, (idDf.get(term) ?? 0) + 1);
+    for (const w of wikiTermIndex)
+      for (const term of w.idTerms) idDf.set(term, (idDf.get(term) ?? 0) + 1);
+
+    const wikiBodyDf = new Map<string, number>(); // topic-id term → #wiki bodies
+    for (const t of topicTermIndex) {
+      for (const term of t.idTerms) {
+        if (wikiBodyDf.has(term)) continue;
+        let c = 0;
+        for (const w of wikiTermIndex) if (inText(term, w.body)) c++;
+        wikiBodyDf.set(term, c);
+      }
+    }
+
+    const topicSrcDf = new Map<string, number>(); // wiki-id term → #topic sources
     for (const w of wikiTermIndex) {
-      const shared = new Set<string>();
-      // Direction A: topic-identity term appears in the wiki page body.
-      for (const tt of t.idTerms) {
-        if (wordBoundaryRegex(tt, "i").test(w.body)) shared.add(tt);
+      for (const term of w.idTerms) {
+        if (topicSrcDf.has(term)) continue;
+        let c = 0;
+        for (const t of topicTermIndex) if (inText(term, t.sourceContent)) c++;
+        topicSrcDf.set(term, c);
       }
-      // Direction B: wiki-identity term appears in the topic's source file(s).
-      for (const ww of w.idTerms) {
-        if (wordBoundaryRegex(ww, "i").test(t.sourceContent)) shared.add(ww);
+    }
+
+    const isBoilerplate = (
+      df: Map<string, number>,
+      term: string,
+      corpus: number
+    ): boolean => {
+      const d = df.get(term) ?? 0;
+      return d >= DF_MIN_ABS && d > corpus * DF_RATIO;
+    };
+
+    // Per-wiki discriminating candidates, ranked + top-k.
+    const wikiHasDiscriminative = new Set<string>();
+
+    for (const w of wikiTermIndex) {
+      const wikiIdSet = new Set(w.idTerms);
+      const scored: Array<{ topicId: string; score: number }> = [];
+
+      for (const t of topicTermIndex) {
+        const bridge = new Set<string>();
+        let idSharedCount = 0;
+
+        // (1) identity ∩ identity — discriminating, DF-clean.
+        for (const tt of t.idTerms) {
+          if (wikiIdSet.has(tt) && !isBoilerplate(idDf, tt, N)) {
+            bridge.add(tt);
+            idSharedCount++;
+          }
+        }
+        // (A) topic-identity term in the wiki body — DF-clean.
+        for (const tt of t.idTerms) {
+          if (!isBoilerplate(wikiBodyDf, tt, W) && inText(tt, w.body)) {
+            bridge.add(tt);
+          }
+        }
+        // (B) wiki-identity term in the topic source — DF-clean.
+        for (const ww of w.idTerms) {
+          if (!isBoilerplate(topicSrcDf, ww, T) && inText(ww, t.sourceContent)) {
+            bridge.add(ww);
+          }
+        }
+
+        // Identity involvement (≥1 shared identity term) AND ≥2 distinct terms.
+        if (idSharedCount >= 1 && bridge.size >= 2) {
+          // Weight identity overlap above body corroboration.
+          scored.push({ topicId: t.id, score: idSharedCount * 100 + bridge.size });
+        }
       }
-      if (shared.size >= 2) {
+
+      scored.sort((a, b) =>
+        b.score !== a.score
+          ? b.score - a.score
+          : a.topicId < b.topicId
+          ? -1
+          : a.topicId > b.topicId
+          ? 1
+          : 0
+      );
+
+      if (scored.length > 0) {
+        wikiHasDiscriminative.add(w.id);
+        for (const s of scored.slice(0, TOP_K)) {
+          addIfNew({
+            source: s.topicId,
+            target: w.id,
+            type: "evidenced_by",
+            reason: "wiki_topic_term_overlap",
+          });
+        }
+      }
+    }
+
+    // SC-3 fallback — every orphaned wiki page gets exactly one topic edge.
+    const fallbackLoad = new Map<string, number>();
+    for (const t of topicTermIndex) fallbackLoad.set(t.id, 0);
+
+    const topicsById = [...topicTermIndex].sort((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+    );
+    const orphanWikis = wikiTermIndex
+      .filter((w) => !wikiHasDiscriminative.has(w.id))
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+    for (const w of orphanWikis) {
+      const wikiIdSet = new Set(w.idTerms);
+      let best: { topicId: string; raw: number } | null = null;
+
+      for (const t of topicsById) {
+        const raw = new Set<string>();
+        for (const tt of t.idTerms) {
+          if (wikiIdSet.has(tt)) raw.add(tt);
+          if (inText(tt, w.body)) raw.add(tt);
+        }
+        for (const ww of w.idTerms) {
+          if (inText(ww, t.sourceContent)) raw.add(ww);
+        }
+        const rawSize = raw.size;
+
+        if (best === null) {
+          best = { topicId: t.id, raw: rawSize };
+          continue;
+        }
+        // Prefer higher raw overlap (quality), then lower fallback-load
+        // (distribute), then lower id (topicsById is already id-ascending).
+        const curLoad = fallbackLoad.get(t.id) ?? 0;
+        const bestLoad = fallbackLoad.get(best.topicId) ?? 0;
+        if (rawSize > best.raw || (rawSize === best.raw && curLoad < bestLoad)) {
+          best = { topicId: t.id, raw: rawSize };
+        }
+      }
+
+      if (best) {
         addIfNew({
-          source: t.id,
+          source: best.topicId,
           target: w.id,
           type: "evidenced_by",
           reason: "wiki_topic_term_overlap",
         });
+        fallbackLoad.set(best.topicId, (fallbackLoad.get(best.topicId) ?? 0) + 1);
       }
     }
   }
