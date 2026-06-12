@@ -71,6 +71,7 @@ import {
 
 import { detectLanguage, isCodeLanguage } from "./lib/languages";
 import { createIgnoreFilter } from "./lib/ignore";
+import { headSha } from "./lib/git";
 
 import {
   buildTaxonomy,
@@ -991,9 +992,16 @@ if (require.main === module) {
       );
     } else if (phase === "finalize") {
       const seams = buildFileBackedSeams(judgmentDir);
+      // SC-12 provenance: derive generated_from_commit from HEAD at the CLI
+      // boundary (keeps runKnowledgeStages a pure function of inputs — FIX 1).
+      // headSha() returns a deterministic "unknown" when repoRoot is not a git
+      // repo / git errors, so SC-8 byte-identity holds: within one commit every
+      // run derives the same value, and a non-git fixture repo yields the same
+      // constant "unknown" across all triggers.
       const result = await runKnowledgeStages(repoRoot, filePaths, seams, {
         runId,
         generatedAt,
+        generatedFromCommit: headSha(repoRoot),
       });
       process.stdout.write(
         JSON.stringify(
