@@ -770,13 +770,25 @@ async function runKnowledgeStagesK1ToK4(
   allNodes.push(...k3Result.nodes);
   // k3Result.edges is always [] (cross-modal edges live in K5)
 
-  // ── K2: wiki-index (always runs when wiki dir exists) ──────────────────────
-  const resolvedWikiDir = wikiDir ?? path.join(repoRoot, ".guild", "wiki");
-  if (fs.existsSync(resolvedWikiDir)) {
-    const k2Opts = seams.classifyPage ? { classifier: seams.classifyPage } : {};
-    const k2Result = await indexWiki(resolvedWikiDir, k2Opts);
-    allNodes.push(...k2Result.nodes);
-    allEdges.push(...k2Result.edges);
+  // ── K2: wiki-index (always runs; scans BOTH roots — mirrors emitRound1Candidates) ─
+  //
+  // SC-3 real-path fix: finalize MUST index the same roots as emitRound1Candidates.
+  // Previously this only indexed wikiDir (.guild/wiki/), so docs/knowledge/ pages
+  // received k2-candidates + model judgments in round1 but no wiki_page nodes were
+  // ever produced in the final graph — SC-3 violation.
+  //
+  // Both roots match the candidate emitter at lines ~585-594 exactly.
+  const k2Roots: string[] = [
+    wikiDir ?? path.join(repoRoot, ".guild", "wiki"),
+    path.join(repoRoot, "docs", "knowledge"),
+  ];
+  const k2Opts = seams.classifyPage ? { classifier: seams.classifyPage } : {};
+  for (const k2Dir of k2Roots) {
+    if (fs.existsSync(k2Dir)) {
+      const k2Result = await indexWiki(k2Dir, k2Opts);
+      allNodes.push(...k2Result.nodes);
+      allEdges.push(...k2Result.edges);
+    }
   }
 
   // ── K4: taxonomy-build (always runs) ────────────────────────────────────────

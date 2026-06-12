@@ -988,3 +988,61 @@ describe("H — B4 (drop unclassified wiki_pages) + NI-2 (deterministic candidat
     30000
   );
 });
+
+// ---------------------------------------------------------------------------
+// Section I — SC-3 K2 dual-dir: finalize indexes BOTH .guild/wiki/ AND docs/knowledge/
+// ---------------------------------------------------------------------------
+// Regression guard for the SC-3 real-path gap: previously runKnowledgeStagesK1ToK4
+// only called indexWiki for wikiDir (.guild/wiki/), so docs/knowledge/ pages appeared
+// in k2-candidates (round1) but produced no wiki_page nodes in the final graph.
+
+describe("I — SC-3 K2 dual-dir: finalize indexes both .guild/wiki/ and docs/knowledge/", () => {
+  test(
+    "I1 (SC-3): wiki_page nodes from BOTH .guild/wiki/ and docs/knowledge/ appear in knowledge-graph.json",
+    async () => {
+      const dir = mkTmpRepo();
+
+      // ── First root: .guild/wiki/ (default wikiDir) ──────────────────────────
+      const wikiDir = path.join(dir, ".guild", "wiki");
+      fs.mkdirSync(wikiDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(wikiDir, "wikidoc.md"),
+        "# WikiDoc\n\nA wiki page.\n"
+      );
+      // SC-12 anchor shadow: relpath "wikidoc.md" resolves against repoRoot.
+      // The file must exist at path.resolve(dir, "wikidoc.md") for anchor validation.
+      fs.writeFileSync(path.join(dir, "wikidoc.md"), "# WikiDoc\n\nA wiki page.\n");
+
+      // ── Second root: docs/knowledge/ (previously not indexed in finalize) ────
+      const kbDir = path.join(dir, "docs", "knowledge");
+      fs.mkdirSync(kbDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(kbDir, "kbdoc.md"),
+        "# KBDoc\n\nA knowledge base page.\n"
+      );
+      // SC-12 anchor shadow: relpath "kbdoc.md" resolves against repoRoot.
+      fs.writeFileSync(path.join(dir, "kbdoc.md"), "# KBDoc\n\nA knowledge base page.\n");
+
+      // NOOP_SEAMS classifies ALL pages → no B4 drops → both nodes survive validate.
+      await runKnowledgeStages(
+        dir,
+        { codeRelPaths: [], docRelPaths: [] }, // wikiDir defaults to .guild/wiki
+        NOOP_SEAMS,
+        {}
+      );
+
+      const graph = JSON.parse(
+        fs.readFileSync(path.join(dir, ".guild", "indexes", "knowledge-graph.json"), "utf8")
+      );
+      const wikiNodes = (graph.nodes as any[]).filter((n: any) => n.type === "wiki_page");
+      const wikiNodeIds = new Set(wikiNodes.map((n: any) => n.id as string));
+
+      // First root (.guild/wiki/) — should already be present before fix
+      expect(wikiNodeIds.has("wiki_page:wikidoc.md")).toBe(true);
+
+      // Second root (docs/knowledge/) — was MISSING before the SC-3 fix
+      expect(wikiNodeIds.has("wiki_page:kbdoc.md")).toBe(true);
+    },
+    30000
+  );
+});
