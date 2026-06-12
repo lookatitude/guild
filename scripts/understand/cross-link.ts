@@ -14,8 +14,11 @@
  *   Rule 6 — wiki_page↔topic DISCRIMINATING membership → `topic
  *            --evidenced_by--> wiki_page` (SC-3). Requires identity involvement
  *            (≥1 shared topic-identity↔wiki-identity term) + DF-filtered ≥2
- *            distinct terms, ranked per-wiki top-k, with an SC-3 fallback so no
- *            wiki page is ever left with 0 topics. (L16: replaced the prior
+ *            distinct terms, ranked per-wiki top-k AND per-topic-capped (L19:
+ *            no topic is the evidence for more than ~half the corpus). The cap
+ *            is captivity-aware and shared by the SC-3 fallback, so a page is
+ *            never orphaned to enforce it (a captive page's sole topic exceeds
+ *            the cap rather than dropping the page). (L16: replaced the prior
  *            body-co-occurrence predicate that over-linked on boilerplate.)
  *
  * SC coverage: SC-3 (every wiki_page gets ≥1 topic membership edge — Rule 6;
@@ -506,16 +509,33 @@ export function proposeCandidates(
   //   4. PER-WIKI TOP-K — a wiki keeps only its K highest-scoring topics
   //      (score weights identity overlap above body corroboration), bounding the
   //      wiki→topics axis so no page links to every topic.
+  //   5. PER-TOPIC CAP (L19) — a topic is the evidence for at most TOP_K_TOPIC =
+  //      max(TOP_K, ceil(W/2)) wiki pages (≈ half the corpus, floored at the
+  //      per-wiki K so tiny corpora are untouched). Per-wiki top-k alone left
+  //      the per-TOPIC axis uncapped: on the real L12 run one broad-term topic
+  //      ("Jsonl Telemetry Logging") was a genuine discriminating match for
+  //      8/10 pages, re-creating a hub. The cap is CAPTIVITY-AWARE — an over-cap
+  //      topic sheds its weakest edges (lowest score; ties keep lowest-id pages)
+  //      but ONLY to pages that still have another topic edge. A page whose only
+  //      discriminating topic is the over-cap one is never shed, so SC-3 holds
+  //      and that topic may legitimately exceed the cap rather than orphaning a
+  //      captive page (e.g. the wiki index/log pages, which match the telemetry
+  //      topic and nothing narrower).
   // Matching is `\b` word-boundary (NEVER includes()), case-insensitive ("i")
   // because identity terms are case-folded but bodies/sources are not.
   //
   // SC-3 FALLBACK — discrimination must NOT leave a wiki page with 0 topics.
-  // Any page with no discriminating candidate falls back to its single
-  // highest-RAW-overlap topic (pre-DF, so a choice always exists), with ties
-  // broken by least fallback-load then lowest id — this distributes orphan
-  // pages instead of dumping them all on one topic (which would re-create the
-  // bipartite saturation). Over-generates by design; the LLM half confirms +
-  // scores, and the candidateKeys guard in buildCrossLinks drops fabrications.
+  // Two SC-3 safety nets:
+  //   • CAPTIVITY GUARD (Phase 2b, above) — the per-topic cap never sheds an
+  //     edge to a page that would be left with 0 topics, so a page that HAS a
+  //     discriminating candidate always keeps ≥1 (the cap yields to SC-3).
+  //   • RAW-OVERLAP FALLBACK (below) — a page with NO discriminating candidate
+  //     at all falls back to its single highest-RAW-overlap topic (pre-DF, so a
+  //     choice always exists), ties broken by least fallback-load then lowest id
+  //     — distributing orphan pages instead of dumping them on one topic (which
+  //     would re-create the bipartite saturation).
+  // Over-generates by design; the LLM half confirms + scores, and the
+  // candidateKeys guard in buildCrossLinks drops fabrications.
 
   // Precompute per-topic identity terms + concatenated source-file content
   // (one read per topic, not per pair).
@@ -600,8 +620,29 @@ export function proposeCandidates(
       return d >= DF_MIN_ABS && d > corpus * DF_RATIO;
     };
 
-    // Per-wiki discriminating candidates, ranked + top-k.
+    // L19: per-topic fan-out cap. Even with per-wiki top-k, ONE broad-term
+    // topic can be a genuine discriminating match for most pages (on the real
+    // L12 run one topic linked to 8/10), re-introducing a near-bipartite hub.
+    // We bound the per-TOPIC axis to TOP_K_TOPIC — at most half the corpus,
+    // floored at the per-wiki K so tiny corpora are untouched (cap ≥ W ⇒ no
+    // capping).
+    //
+    // The cap is CAPTIVITY-AWARE so SC-3 is never violated: an over-cap topic
+    // sheds its weakest edges, but ONLY to pages that still have ≥1 other edge.
+    // A page whose ONLY discriminating topic is the over-cap one (a "captive"
+    // page — e.g. the wiki index/log, which match the telemetry topic and
+    // nothing narrower) is never shed, so its topic legitimately exceeds the cap
+    // rather than orphaning the page. This subsumes the "restore" step: we never
+    // orphan in the first place, so there is nothing to restore.
+    const TOP_K_TOPIC = Math.max(TOP_K, Math.ceil(W / 2));
+
+    // ── Phase 1: per-wiki top-k discriminating edges (ranked, NOT yet emitted).
     const wikiHasDiscriminative = new Set<string>();
+    // wikiId → its ranked, top-k-sliced [{topicId, score}] (best first).
+    const perWikiRanked = new Map<
+      string,
+      Array<{ topicId: string; score: number }>
+    >();
 
     for (const w of wikiTermIndex) {
       const wikiIdSet = new Set(w.idTerms);
@@ -650,20 +691,100 @@ export function proposeCandidates(
 
       if (scored.length > 0) {
         wikiHasDiscriminative.add(w.id);
-        for (const s of scored.slice(0, TOP_K)) {
-          addIfNew({
-            source: s.topicId,
-            target: w.id,
-            type: "evidenced_by",
-            reason: "wiki_topic_term_overlap",
-          });
+        perWikiRanked.set(w.id, scored.slice(0, TOP_K));
+      }
+    }
+
+    // ── Phase 2a: materialise the intended per-wiki top-k edge set, tracking
+    // per-page degree (how many topics target each page) and per-topic load.
+    interface IntendedEdge {
+      topicId: string;
+      wikiId: string;
+      score: number;
+    }
+    const intended = new Map<string, IntendedEdge>(); // `topic→wiki` → edge
+    const pageDegree = new Map<string, number>(); // wikiId → #topic edges
+    const topicLoad = new Map<string, number>(); // topicId → #wiki edges
+    for (const [wikiId, ranked] of perWikiRanked) {
+      for (const r of ranked) {
+        const key = `${r.topicId}→${wikiId}`;
+        if (intended.has(key)) continue;
+        intended.set(key, { topicId: r.topicId, wikiId, score: r.score });
+        pageDegree.set(wikiId, (pageDegree.get(wikiId) ?? 0) + 1);
+        topicLoad.set(r.topicId, (topicLoad.get(r.topicId) ?? 0) + 1);
+      }
+    }
+
+    // ── Phase 2b: captivity-aware per-topic cap. For each over-cap topic (in id
+    // order), shed its weakest edges (lowest score first, ties by HIGHER wiki id
+    // so the strongest/lowest-id pages are kept) — but ONLY edges whose target
+    // page still has another edge (pageDegree > 1). Stop when at the cap or when
+    // every remaining edge is to a captive page (shedding it would orphan SC-3).
+    const dropped = new Set<string>(); // `topic→wiki`
+    const overCapTopics = [...topicLoad.keys()]
+      .filter((t) => (topicLoad.get(t) ?? 0) > TOP_K_TOPIC)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    for (const topicId of overCapTopics) {
+      const edges = [...intended.values()]
+        .filter(
+          (e) => e.topicId === topicId && !dropped.has(`${topicId}→${e.wikiId}`)
+        )
+        .sort((a, b) =>
+          a.score !== b.score
+            ? a.score - b.score // weakest first
+            : a.wikiId < b.wikiId
+            ? 1 // higher wiki id shed first (keep lowest-id pages)
+            : a.wikiId > b.wikiId
+            ? -1
+            : 0
+        );
+      for (const e of edges) {
+        if ((topicLoad.get(topicId) ?? 0) <= TOP_K_TOPIC) break;
+        if ((pageDegree.get(e.wikiId) ?? 0) > 1) {
+          dropped.add(`${topicId}→${e.wikiId}`);
+          pageDegree.set(e.wikiId, (pageDegree.get(e.wikiId) ?? 0) - 1);
+          topicLoad.set(topicId, (topicLoad.get(topicId) ?? 0) - 1);
         }
       }
     }
 
-    // SC-3 fallback — every orphaned wiki page gets exactly one topic edge.
-    const fallbackLoad = new Map<string, number>();
-    for (const t of topicTermIndex) fallbackLoad.set(t.id, 0);
+    // ── Phase 2c: emit the surviving (non-dropped) discriminating edges.
+    // Every original page retains ≥1 edge (captivity guard), so no SC-3 restore
+    // is needed for the discriminating set. The final proposeCandidates sort
+    // makes emission order irrelevant.
+    for (const [key, e] of intended) {
+      if (dropped.has(key)) continue;
+      addIfNew({
+        source: e.topicId,
+        target: e.wikiId,
+        type: "evidenced_by",
+        reason: "wiki_topic_term_overlap",
+      });
+    }
+
+    // SC-3 fallback (CAP-AWARE) — every wiki with NO discriminating candidate
+    // gets a topic by RAW overlap (pre-DF, so a choice always exists). The
+    // per-topic cap is SHARED with the discriminative path via `emittedTopicLoad`
+    // (surviving discriminative edges seed the load), so the fallback steers
+    // orphan pages AWAY from already-saturated topics. This is what actually
+    // tames the real-run hub: meta pages (the wiki index/log, broad decision
+    // notes) raw-overlap MANY topics, and quality-first selection used to dump
+    // them ALL on the single broadest topic (the telemetry topic linked 8/10
+    // pages). The cap fans them across their other raw matches instead.
+    //
+    // Selection per orphan page (deterministic):
+    //   (1) highest-raw topic still UNDER the cap (ties: lower load, lower id);
+    //   (2) if every raw>0 topic is saturated → captive page: take the best by
+    //       preference, overriding the cap (SC-3 wins, never orphan);
+    //   (3) no overlap anywhere → spread by least load, then lowest id.
+    const emittedTopicLoad = new Map<string, number>();
+    for (const [key, e] of intended) {
+      if (dropped.has(key)) continue;
+      emittedTopicLoad.set(
+        e.topicId,
+        (emittedTopicLoad.get(e.topicId) ?? 0) + 1
+      );
+    }
 
     const topicsById = [...topicTermIndex].sort((a, b) =>
       a.id < b.id ? -1 : a.id > b.id ? 1 : 0
@@ -672,11 +793,25 @@ export function proposeCandidates(
       .filter((w) => !wikiHasDiscriminative.has(w.id))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
+    const loadOf = (id: string): number => emittedTopicLoad.get(id) ?? 0;
+    const byPreference = (
+      a: { topicId: string; raw: number },
+      b: { topicId: string; raw: number }
+    ): number =>
+      b.raw !== a.raw
+        ? b.raw - a.raw
+        : loadOf(a.topicId) !== loadOf(b.topicId)
+        ? loadOf(a.topicId) - loadOf(b.topicId)
+        : a.topicId < b.topicId
+        ? -1
+        : a.topicId > b.topicId
+        ? 1
+        : 0;
+
     for (const w of orphanWikis) {
       const wikiIdSet = new Set(w.idTerms);
-      let best: { topicId: string; raw: number } | null = null;
 
-      for (const t of topicsById) {
+      const ranked = topicsById.map((t) => {
         const raw = new Set<string>();
         for (const tt of t.idTerms) {
           if (wikiIdSet.has(tt)) raw.add(tt);
@@ -685,29 +820,35 @@ export function proposeCandidates(
         for (const ww of w.idTerms) {
           if (inText(ww, t.sourceContent)) raw.add(ww);
         }
-        const rawSize = raw.size;
+        return { topicId: t.id, raw: raw.size };
+      });
 
-        if (best === null) {
-          best = { topicId: t.id, raw: rawSize };
-          continue;
-        }
-        // Prefer higher raw overlap (quality), then lower fallback-load
-        // (distribute), then lower id (topicsById is already id-ascending).
-        const curLoad = fallbackLoad.get(t.id) ?? 0;
-        const bestLoad = fallbackLoad.get(best.topicId) ?? 0;
-        if (rawSize > best.raw || (rawSize === best.raw && curLoad < bestLoad)) {
-          best = { topicId: t.id, raw: rawSize };
+      const positives = ranked.filter((r) => r.raw > 0).sort(byPreference);
+
+      let chosen: string | null = null;
+      // (1) best raw>0 topic still under the per-topic cap.
+      for (const r of positives) {
+        if (loadOf(r.topicId) < TOP_K_TOPIC) {
+          chosen = r.topicId;
+          break;
         }
       }
+      // (2) every raw>0 topic saturated → captive page; cap yields to SC-3.
+      if (!chosen && positives.length > 0) chosen = positives[0].topicId;
+      // (3) no overlap anywhere → spread by least load, then lowest id.
+      if (!chosen) {
+        const spread = [...ranked].sort(byPreference);
+        chosen = spread.length > 0 ? spread[0].topicId : null;
+      }
 
-      if (best) {
+      if (chosen) {
         addIfNew({
-          source: best.topicId,
+          source: chosen,
           target: w.id,
           type: "evidenced_by",
           reason: "wiki_topic_term_overlap",
         });
-        fallbackLoad.set(best.topicId, (fallbackLoad.get(best.topicId) ?? 0) + 1);
+        emittedTopicLoad.set(chosen, loadOf(chosen) + 1);
       }
     }
   }

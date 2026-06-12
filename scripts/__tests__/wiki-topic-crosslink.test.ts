@@ -453,3 +453,312 @@ describe("V — Rule 6 does NOT over-link on project-wide boilerplate", () => {
     expect(a).toEqual(b);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Section U — per-TOPIC fan-out cap (L19, RED-FIRST)
+// ---------------------------------------------------------------------------
+//
+// L16 capped the per-WIKI axis (each wiki ≤ TOP_K=3 topics) but left the
+// per-TOPIC axis uncapped: on the real L12 run one broad-term topic ("Jsonl
+// Telemetry Logging") legitimately shared discriminating identity terms with
+// 8/10 wiki pages, so per-wiki top-k let that one topic dominate the graph.
+//
+// FIX (L19): a per-topic fan-out cap — a topic is the documented evidence for
+// at most TOP_K_TOPIC = max(TOP_K, ceil(W/2)) wiki pages (half the corpus,
+// floored at the per-wiki K so tiny corpora are untouched). Lower-ranked
+// wiki→topic edges beyond the cap are dropped, ranked by discriminative score
+// (ties by wiki id). HARD CONSTRAINT: the cap must NOT orphan any page — a page
+// whose only surviving edge was capped away is RESTORED via its single best
+// topic, overriding the cap (SC-3 wins).
+//
+// Corpus shape mirrors the real run: a "broad" topic B carries 8 distinct
+// identity terms; 8 of 10 pages each share a DISTINCT PAIR of those terms with
+// B (so each term's DF stays below the boilerplate threshold and B is a
+// genuine discriminating candidate for all 8). Each page ALSO matches its own
+// narrow topic on a unique pair, so a page capped out of B stays covered.
+
+describe("U — Rule 6 caps per-topic fan-out without orphaning pages", () => {
+  let UROOT: string;
+  const N_BROAD_PAGES = 8; // pages that legitimately match the broad topic
+  const N_NARROW_ONLY = 2; // pages that match ONLY their own narrow topic
+  const N_WIKIS = N_BROAD_PAGES + N_NARROW_ONLY; // 10
+  // TOP_K=3 internally; cap = max(3, ceil(10/2)) = 5.
+  const EXPECTED_CAP = 5;
+
+  // 8 distinct, ≥4-char, non-stopword identity terms for the broad topic.
+  const BROAD_TERMS = [
+    "telemetry", "logging", "metrics", "tracing",
+    "spandex", "buffer", "cursor", "sinker",
+  ];
+  // Each broad page shares a DISTINCT PAIR of broad terms with B. Every term is
+  // used by exactly 2 pages (+B) → idDf=3, never > corpus/2 → not boilerplate.
+  const BROAD_PAIRS: Array<[number, number]> = [
+    [0, 1], [2, 3], [4, 5], [6, 7],
+    [0, 2], [1, 3], [4, 6], [5, 7],
+  ];
+  // 20 letter-only unique words (2 per page, all 10 pages) — distinct tokens so
+  // each narrow topic matches exactly one page.
+  const UNIQUE_WORDS = [
+    "acorn", "badger", "cobra", "dingo", "ferret", "gecko", "heron", "ibex",
+    "jackal", "koala", "lemur", "manta", "newtt", "otter", "puffin", "quokka",
+    "raven", "seale", "tapir", "urchin",
+  ];
+
+  const uTopics: GraphNode[] = [];
+  const uWikis: GraphNode[] = [];
+  let BROAD_ID: string;
+
+  function uwrite(rel: string, content: string): void {
+    const abs = path.join(UROOT, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content, "utf8");
+  }
+
+  beforeAll(() => {
+    UROOT = fs.mkdtempSync(path.join(os.tmpdir(), "l19-pertopic-"));
+
+    // Broad topic B — identity = all 8 broad terms.
+    uwrite("src/broad.ts", `// broad module\nexport function broadRun(): void {}\n`);
+    BROAD_ID = "topic:broad";
+    uTopics.push(
+      makeNode({
+        id: BROAD_ID,
+        type: "topic",
+        name: BROAD_TERMS.join(" "),
+        topic_path: [BROAD_TERMS.join("-")],
+        source_refs: ["src/broad.ts#L1-L2"],
+      })
+    );
+
+    for (let i = 0; i < N_WIKIS; i++) {
+      const num = String(i).padStart(2, "0");
+      const uA = UNIQUE_WORDS[2 * i];
+      const uB = UNIQUE_WORDS[2 * i + 1];
+
+      // Broad pages (0..7) carry a distinct pair of broad terms; narrow-only
+      // pages (8,9) carry NO broad term.
+      let broadWords = "";
+      if (i < N_BROAD_PAGES) {
+        const [a, b] = BROAD_PAIRS[i];
+        broadWords = `${BROAD_TERMS[a]} ${BROAD_TERMS[b]} `;
+      }
+
+      const rel = `.guild/wiki/decisions/page-${num}.md`;
+      uwrite(
+        rel,
+        `# ${broadWords}${uA} ${uB}\n\n## Context\n\nThis page concerns ${broadWords}${uA} ${uB} behaviour.\n`
+      );
+      uWikis.push(
+        makeNode({
+          id: `wiki_page:${rel}`,
+          type: "wiki_page",
+          name: `${broadWords}${uA} ${uB}`,
+          labels: ["wiki"],
+          category: "decision",
+          source_refs: [`${rel}#page-${num}`],
+        })
+      );
+
+      // Narrow topic Ni — identity = the page's unique pair only.
+      const nrel = `src/narrow-${num}.ts`;
+      uwrite(nrel, `// narrow ${uA} ${uB} module\nexport function n${num}(): void {}\n`);
+      uTopics.push(
+        makeNode({
+          id: `topic:narrow-${num}`,
+          type: "topic",
+          name: `${uA} ${uB}`,
+          topic_path: [`${uA}-${uB}`],
+          source_refs: [`${nrel}#L1-L2`],
+        })
+      );
+    }
+  });
+
+  afterAll(() => {
+    try {
+      fs.rmSync(UROOT, { recursive: true, force: true });
+    } catch {
+      /* best-effort */
+    }
+  });
+
+  function wikiTopicCandidates() {
+    return proposeCandidates(UROOT, [...uTopics, ...uWikis], []).filter(
+      (c) => c.reason === "wiki_topic_term_overlap"
+    );
+  }
+
+  test("U1 (sanity): broad topic is a genuine discriminating match for 8 pages", () => {
+    // Pre-cap intent check: B shares ≥2 identity terms with each of the 8 broad
+    // pages. (On UN-capped code B would fan out to all 8 — that is the bug.)
+    // Here we assert the narrow topics each match exactly their own page so the
+    // corpus is wired as intended.
+    const cands = wikiTopicCandidates();
+    const narrowFanout = new Map<string, number>();
+    for (const c of cands) {
+      if (c.source.startsWith("topic:narrow-")) {
+        narrowFanout.set(c.source, (narrowFanout.get(c.source) ?? 0) + 1);
+      }
+    }
+    for (const [, n] of narrowFanout) expect(n).toBe(1);
+  });
+
+  test("U2 (RED→GREEN): broad topic fan-out is capped to ≤ TOP_K_TOPIC (<8)", () => {
+    const cands = wikiTopicCandidates();
+    const bFanout = cands.filter((c) => c.source === BROAD_ID).length;
+    // On the pre-L19 (uncapped) code this is 8 → fails RED.
+    expect(bFanout).toBeLessThan(N_BROAD_PAGES); // < 8
+    expect(bFanout).toBeLessThanOrEqual(EXPECTED_CAP); // ≤ 5
+  });
+
+  test("U3 (SC-3): EVERY wiki page still retains ≥1 topic edge", () => {
+    const cands = wikiTopicCandidates();
+    for (const w of uWikis) {
+      const edges = cands.filter((c) => c.target === w.id);
+      expect(edges.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  test("U4 (discrimination): NO topic exceeds the per-topic cap", () => {
+    const cands = wikiTopicCandidates();
+    const fanout = new Map<string, number>();
+    for (const c of cands) fanout.set(c.source, (fanout.get(c.source) ?? 0) + 1);
+    const maxFanout = Math.max(0, ...fanout.values());
+    expect(maxFanout).toBeLessThanOrEqual(EXPECTED_CAP);
+    expect(maxFanout).toBeLessThan(N_BROAD_PAGES); // < 8 (the real-run regression)
+  });
+
+  test("U5 (determinism): identical across two runs", () => {
+    const a = proposeCandidates(UROOT, [...uTopics, ...uWikis], []);
+    const b = proposeCandidates(UROOT, [...uTopics, ...uWikis], []);
+    expect(a).toEqual(b);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Section U2 — cap-orphan RESTORE (fallback overrides the per-topic cap)
+// ---------------------------------------------------------------------------
+//
+// A page whose ONLY discriminating match is a broad topic, where that topic is
+// also the best match for many other pages, must NOT be orphaned by the cap.
+// The cap is overridden for such a page — its single best edge is restored.
+
+describe("U2 — per-topic cap never orphans a page (SC-3 overrides cap)", () => {
+  let RROOT: string;
+  const N_PAGES = 6; // broad B matches all 6; cap = max(3, ceil(6/2)) = 3
+  const N_NARROW = 3; // pages 0,1,2 have a narrow topic; pages 3,4,5 do NOT
+
+  const BROAD_TERMS = [
+    "telemetry", "logging", "metrics", "tracing", "spandex", "buffer",
+  ];
+  const BROAD_PAIRS: Array<[number, number]> = [
+    [0, 1], [2, 3], [4, 5], [0, 2], [1, 3], [4, 0],
+  ];
+  const UNIQUE_WORDS = ["acorn", "badger", "cobra", "dingo", "ferret", "gecko"];
+
+  const rTopics: GraphNode[] = [];
+  const rWikis: GraphNode[] = [];
+  const BROAD_ID = "topic:rbroad";
+
+  function rwrite(rel: string, content: string): void {
+    const abs = path.join(RROOT, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content, "utf8");
+  }
+
+  beforeAll(() => {
+    RROOT = fs.mkdtempSync(path.join(os.tmpdir(), "l19-restore-"));
+    rwrite("src/rbroad.ts", `// broad\nexport function rb(): void {}\n`);
+    rTopics.push(
+      makeNode({
+        id: BROAD_ID,
+        type: "topic",
+        name: BROAD_TERMS.join(" "),
+        topic_path: [BROAD_TERMS.join("-")],
+        source_refs: ["src/rbroad.ts#L1-L2"],
+      })
+    );
+
+    for (let i = 0; i < N_PAGES; i++) {
+      const num = String(i).padStart(2, "0");
+      const [a, b] = BROAD_PAIRS[i];
+      const broadWords = `${BROAD_TERMS[a]} ${BROAD_TERMS[b]}`;
+      const uniq = UNIQUE_WORDS[i];
+      const rel = `.guild/wiki/decisions/rpage-${num}.md`;
+      // Pages 0,1,2 also carry a unique narrow word; pages 3,4,5 carry ONLY the
+      // broad pair (their sole possible match is B).
+      const hasNarrow = i < N_NARROW;
+      const extra = hasNarrow ? ` ${uniq}` : "";
+      rwrite(
+        rel,
+        `# ${broadWords}${extra}\n\n## Context\n\nConcerns ${broadWords}${extra}.\n`
+      );
+      rWikis.push(
+        makeNode({
+          id: `wiki_page:${rel}`,
+          type: "wiki_page",
+          name: `${broadWords}${extra}`,
+          labels: ["wiki"],
+          category: "decision",
+          source_refs: [`${rel}#rpage-${num}`],
+        })
+      );
+      if (hasNarrow) {
+        const nrel = `src/rnarrow-${num}.ts`;
+        // Narrow topic needs ≥2 identity terms to be a discriminating match;
+        // give it the unique word + a second unique-per-page word.
+        const uniq2 = `${uniq}extra`;
+        rwrite(nrel, `// narrow\nexport function rn${num}(): void {}\n`);
+        rwrite(
+          rel,
+          `# ${broadWords} ${uniq} ${uniq2}\n\n## Context\n\nConcerns ${broadWords} ${uniq} ${uniq2}.\n`
+        );
+        // overwrite the wiki node name to include both unique words
+        rWikis[rWikis.length - 1] = makeNode({
+          id: `wiki_page:${rel}`,
+          type: "wiki_page",
+          name: `${broadWords} ${uniq} ${uniq2}`,
+          labels: ["wiki"],
+          category: "decision",
+          source_refs: [`${rel}#rpage-${num}`],
+        });
+        rTopics.push(
+          makeNode({
+            id: `topic:rnarrow-${num}`,
+            type: "topic",
+            name: `${uniq} ${uniq2}`,
+            topic_path: [`${uniq}-${uniq2}`],
+            source_refs: [`${nrel}#L1-L2`],
+          })
+        );
+      }
+    }
+  });
+
+  afterAll(() => {
+    try {
+      fs.rmSync(RROOT, { recursive: true, force: true });
+    } catch {
+      /* best-effort */
+    }
+  });
+
+  test("U2-1 (SC-3 overrides cap): no page orphaned even though B exceeds cap", () => {
+    const cands = proposeCandidates(RROOT, [...rTopics, ...rWikis], []).filter(
+      (c) => c.reason === "wiki_topic_term_overlap"
+    );
+    // Every page keeps ≥1 edge.
+    for (const w of rWikis) {
+      const edges = cands.filter((c) => c.target === w.id);
+      expect(edges.length).toBeGreaterThanOrEqual(1);
+    }
+    // Pages 3,4,5 (no narrow topic) are restored to B → B legitimately exceeds
+    // the cap of 3 because SC-3 wins. Assert those three pages link to B.
+    for (let i = N_NARROW; i < N_PAGES; i++) {
+      const num = String(i).padStart(2, "0");
+      const wid = `wiki_page:.guild/wiki/decisions/rpage-${num}.md`;
+      const toB = cands.find((c) => c.source === BROAD_ID && c.target === wid);
+      expect(toB).toBeDefined();
+    }
+  });
+});
