@@ -75,6 +75,10 @@ import { scrubbedWrite, writeScrubApprovalRequest } from "../lib/security/scrubb
 import { applySecretsPolicy } from "../lib/security/secrets.js";
 import { readSecurityConfig } from "../lib/security/config.js";
 import { emitBusEvent } from "../lib/bus-emit.js";
+import {
+  evaluateContextCompliance,
+  recordContextCompliance,
+} from "../lib/context-compliance.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -652,6 +656,52 @@ async function main(): Promise<void> {
     team_name: (payload.team_name ?? "").trim() || undefined,
     detail: laneStatus === "done" ? undefined : `lane status: ${laneStatus}`,
   });
+
+  // ── Context-assemble compliance (deterministic enforcement) ───────────────
+  // Closes the recurring `all-lanes/no-assemble` gap (evolve run-5e445ca4
+  // gate.json: a COMPLIANCE failure, not a content gap → enforce in code).
+  // By the lane's completion the run MUST contain EITHER a context-assemble
+  // bundle (.guild/context/<run-id>/<specialist>-<task-id>.md) OR an inline
+  // dispatch-trace.md entry naming this lane + its file-listed working set
+  // (the audit trail is MANDATORY even under the valid --auto-approve=all
+  // inline shortcut — guild:execute-plan §"Audit trail when inlining"). Emit a
+  // per-lane context_mode marker (assemble|inline|MISSING) into telemetry so
+  // `no-assemble` is a RECORDED, distinguishable signal, not a null gap.
+  //
+  // Non-blocking: the lane is already complete, so a MISSING is a loud
+  // warn-and-record (never a hard fail of finished work). Best-effort: a check
+  // failure is swallowed so it can never block a clean completion.
+  try {
+    const compliance = evaluateContextCompliance({
+      guildRoot,
+      runDir,
+      runId,
+      specialist,
+      taskId,
+    });
+    recordContextCompliance(runDir, runId, specialist, taskId, compliance);
+    if (compliance.context_mode === "MISSING") {
+      process.stderr.write(
+        `[task-completed] ⚠ CONTEXT-COMPLIANCE VIOLATION: lane "${taskId}" ` +
+          `(specialist "${specialist}") completed with NEITHER a context-assemble ` +
+          `bundle (${compliance.bundle_path}) NOR an inline dispatch-trace.md entry ` +
+          `naming the lane with a file-listed working set. ${compliance.reason}. ` +
+          `Recorded context_mode=MISSING in telemetry — the inline-shortcut audit ` +
+          `trail is MANDATORY even under --auto-approve=all ` +
+          `(guild:execute-plan §"Audit trail when inlining").\n`,
+      );
+    } else {
+      process.stderr.write(
+        `[task-completed] context-compliance OK: lane "${taskId}" ` +
+          `context_mode=${compliance.context_mode}.\n`,
+      );
+    }
+  } catch (err) {
+    process.stderr.write(
+      `[task-completed] WARN: context-compliance check failed (non-fatal): ` +
+        `${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  }
 
   // §task§agent dismiss: agent terminates cleanly here (no idle, D3 §6).
   process.stderr.write(

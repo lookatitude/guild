@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // agent-team/task-completed.ts
-var fs8 = __toESM(require("fs"));
-var path8 = __toESM(require("path"));
+var fs9 = __toESM(require("fs"));
+var path9 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
 
 // lib/guild-root.ts
@@ -223,11 +223,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path9 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path9), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path9)) return;
+  const path10 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path10), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path10)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path9, "wx");
+    const fd = (0, import_node_fs.openSync)(path10, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -524,6 +524,23 @@ function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
   out = redactKeyValueSecrets(out);
   out = redactHighEntropy(out);
   out = truncateToCap(out, cap);
+  return out;
+}
+var REDACTABLE_FIELDS = /* @__PURE__ */ new Set([
+  "command_redacted",
+  "result_excerpt_redacted",
+  "payload_excerpt_redacted",
+  "prompt_excerpt",
+  "assumption_text",
+  "result"
+]);
+function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
+  const out = { ...event };
+  for (const [k, v] of Object.entries(out)) {
+    if (REDACTABLE_FIELDS.has(k) && typeof v === "string") {
+      out[k] = redactField(v, cap);
+    }
+  }
   return out;
 }
 
@@ -880,6 +897,302 @@ function emitBusEvent(runDir, input) {
   }
 }
 
+// lib/context-compliance.ts
+var fs8 = __toESM(require("node:fs"));
+var path8 = __toESM(require("node:path"));
+
+// lib/v1.4/log-jsonl.ts
+var import_node_fs2 = require("node:fs");
+var import_node_path2 = require("node:path");
+var import_node_zlib = require("node:zlib");
+
+// lib/trace-v2.ts
+var SIDECAR_MAX_BYTES = 16 * 1024;
+function pruneUndefined(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== void 0) out[k] = v;
+  }
+  return out;
+}
+
+// lib/v1.4/log-jsonl.ts
+function liveLogPath(runDir) {
+  return (0, import_node_path2.join)(runDir, "logs", "v1.4-events.jsonl");
+}
+function archiveDir(runDir) {
+  return (0, import_node_path2.join)(runDir, "logs", "archive");
+}
+function archivePath(runDir, n) {
+  return (0, import_node_path2.join)(archiveDir(runDir), `v1.4-events.${n}.jsonl.gz`);
+}
+function laneFallbackPath(runDir, laneId) {
+  assertSafeLaneId(laneId);
+  return (0, import_node_path2.join)(runDir, "logs", `lane-${laneId}-events.jsonl`);
+}
+var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+function isSafeRunId(id) {
+  return RUN_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function isSafeLaneId(id) {
+  return LANE_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function assertSafeRunId(id) {
+  if (!isSafeRunId(id)) {
+    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id)}`);
+  }
+}
+function assertSafeLaneId(id) {
+  if (!isSafeLaneId(id)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id)}`);
+  }
+}
+function validateEventIds(event) {
+  assertSafeRunId(event.run_id);
+  if ("lane_id" in event && event.lane_id !== void 0) {
+    assertSafeLaneId(event.lane_id);
+  }
+}
+var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+function appendEvent(runDir, event, opts = {}) {
+  validateEventIds(event);
+  const cap = opts.fieldCap;
+  const redacted = redactEventFields(event, cap);
+  const withV2 = opts.traceV2 !== void 0 ? { ...redacted, ...pruneUndefined(opts.traceV2) } : redacted;
+  const line = JSON.stringify(withV2) + "\n";
+  if (opts.forceFallback || process.platform === "win32") {
+    const laneId = opts.laneId ?? "global";
+    const path10 = laneFallbackPath(runDir, laneId);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path10), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path10, "a");
+    try {
+      (0, import_node_fs2.writeSync)(fd, line);
+    } finally {
+      (0, import_node_fs2.closeSync)(fd);
+    }
+    return;
+  }
+  const live = liveLogPath(runDir);
+  (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(live), { recursive: true });
+  withStableLock(runDir, () => {
+    const fd = (0, import_node_fs2.openSync)(live, "a");
+    try {
+      (0, import_node_fs2.writeSync)(fd, line);
+    } finally {
+      (0, import_node_fs2.closeSync)(fd);
+    }
+    maybeRotateLocked(runDir, opts.rotationThresholdBytes ?? ROTATION_THRESHOLD_BYTES);
+  });
+}
+function nextRotationIndex(runDir) {
+  const dir = archiveDir(runDir);
+  if (!(0, import_node_fs2.existsSync)(dir)) return 1;
+  let max = 0;
+  for (const entry of (0, import_node_fs2.readdirSync)(dir)) {
+    const m = /^v1\.4-events\.(\d+)\.jsonl\.gz$/.exec(entry);
+    if (m && m[1] !== void 0) {
+      const n = Number.parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+  }
+  return max + 1;
+}
+function maybeRotateLocked(runDir, thresholdBytes) {
+  const live = liveLogPath(runDir);
+  if (!(0, import_node_fs2.existsSync)(live)) return;
+  const size = (0, import_node_fs2.statSync)(live).size;
+  if (size < thresholdBytes) return;
+  rotateLocked(runDir);
+}
+function rotateLocked(runDir) {
+  const live = liveLogPath(runDir);
+  const archive = archiveDir(runDir);
+  (0, import_node_fs2.mkdirSync)(archive, { recursive: true });
+  const n = nextRotationIndex(runDir);
+  const stagingPath = (0, import_node_path2.join)(archive, `v1.4-events.${n}.jsonl`);
+  const finalArchive = archivePath(runDir, n);
+  (0, import_node_fs2.renameSync)(live, stagingPath);
+  const raw = (0, import_node_fs2.readFileSync)(stagingPath);
+  const gzipped = (0, import_node_zlib.gzipSync)(raw);
+  (0, import_node_fs2.writeFileSync)(finalArchive, gzipped);
+  (0, import_node_fs2.unlinkSync)(stagingPath);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const fd = (0, import_node_fs2.openSync)(live, "wx");
+      (0, import_node_fs2.closeSync)(fd);
+      return;
+    } catch (err) {
+      const code = err?.code;
+      if (code !== "EEXIST") throw err;
+      try {
+        (0, import_node_fs2.unlinkSync)(live);
+      } catch {
+      }
+    }
+  }
+  throw new Error(
+    `log-jsonl: failed to recreate live log at ${live} with O_EXCL after 5 retries`
+  );
+}
+var SIDECAR_MAX_BYTES2 = 1024 * 1024;
+
+// lib/context-compliance.ts
+var CONTEXT_COMPLIANCE_SCHEMA = "guild.context_compliance.v1";
+function bundleRelPath(runId, specialist, taskId) {
+  return path8.join(".guild", "context", runId, `${specialist}-${taskId}.md`);
+}
+function bundleAbsPath(guildRoot, runId, specialist, taskId) {
+  return path8.join(guildRoot, bundleRelPath(runId, specialist, taskId));
+}
+function dispatchTraceAbsPath(runDir) {
+  return path8.join(runDir, "dispatch-trace.md");
+}
+var FILE_TOKEN_RE = /\b[\w@~+./-]*[\w@~+-]\.[A-Za-z][A-Za-z0-9]{0,8}\b/;
+function laneTokens(specialist, taskId) {
+  const tokens = /* @__PURE__ */ new Set();
+  const t = taskId.trim().toLowerCase();
+  const s = specialist.trim().toLowerCase();
+  if (t) tokens.add(t);
+  if (s && t) tokens.add(`${s}-${t}`);
+  return Array.from(tokens);
+}
+function traceLineMentionsLane(line, specialist, taskId) {
+  const hay = line.toLowerCase();
+  return laneTokens(specialist, taskId).some((tok) => hay.includes(tok));
+}
+function hasInlineTraceEntry(content, specialist, taskId) {
+  if (!content) return false;
+  const lines = content.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (!traceLineMentionsLane(lines[i], specialist, taskId)) continue;
+    let block = lines[i];
+    for (let j = i + 1; j < lines.length; j++) {
+      const l = lines[j];
+      if (l.trim() === "") break;
+      if (/^#{1,6}\s/.test(l)) break;
+      block += "\n" + l;
+    }
+    if (FILE_TOKEN_RE.test(block)) return true;
+  }
+  return false;
+}
+function classifyContextMode(opts) {
+  const tracePresent = opts.traceContent !== null;
+  if (opts.bundleExists) {
+    return {
+      context_mode: "assemble",
+      bundle_present: true,
+      trace_present: tracePresent,
+      trace_entry_found: false,
+      bundle_path: "",
+      reason: "context-assemble bundle present",
+      gap: false
+    };
+  }
+  const entryFound = tracePresent && hasInlineTraceEntry(opts.traceContent, opts.specialist, opts.taskId);
+  if (entryFound) {
+    return {
+      context_mode: "inline",
+      bundle_present: false,
+      trace_present: true,
+      trace_entry_found: true,
+      bundle_path: "",
+      reason: "no context-assemble bundle, but a dispatch-trace.md entry names this lane with a file-listed working set",
+      gap: false
+    };
+  }
+  const reason = !tracePresent ? "no context-assemble bundle and no dispatch-trace.md in the run" : "no context-assemble bundle and no dispatch-trace.md entry names this lane with a file-listed working set";
+  return {
+    context_mode: "MISSING",
+    bundle_present: false,
+    trace_present: tracePresent,
+    trace_entry_found: false,
+    bundle_path: "",
+    reason,
+    gap: true
+  };
+}
+function evaluateContextCompliance(opts) {
+  const { guildRoot, runDir, runId, specialist, taskId } = opts;
+  let bundleExists = false;
+  try {
+    const abs = bundleAbsPath(guildRoot, runId, specialist, taskId);
+    bundleExists = fs8.existsSync(abs) && fs8.statSync(abs).size > 0;
+  } catch {
+    bundleExists = false;
+  }
+  let traceContent = null;
+  try {
+    const tracePath = dispatchTraceAbsPath(runDir);
+    if (fs8.existsSync(tracePath)) traceContent = fs8.readFileSync(tracePath, "utf8");
+  } catch {
+    traceContent = null;
+  }
+  const result = classifyContextMode({ bundleExists, traceContent, specialist, taskId });
+  result.bundle_path = bundleRelPath(runId, specialist, taskId);
+  return result;
+}
+function appendComplianceLog(runDir, runId, specialist, taskId, result) {
+  try {
+    fs8.mkdirSync(runDir, { recursive: true });
+    const rec = {
+      schema_version: CONTEXT_COMPLIANCE_SCHEMA,
+      ts: (/* @__PURE__ */ new Date()).toISOString(),
+      run_id: runId,
+      lane_id: taskId,
+      specialist,
+      task_id: taskId,
+      context_mode: result.context_mode,
+      bundle_present: result.bundle_present,
+      trace_present: result.trace_present,
+      trace_entry_found: result.trace_entry_found,
+      bundle_path: result.bundle_path,
+      gap: result.gap,
+      reason: result.reason
+    };
+    fs8.appendFileSync(
+      path8.join(runDir, "context-compliance.jsonl"),
+      JSON.stringify(rec) + "\n",
+      "utf8"
+    );
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [context-compliance] compliance-log write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+function emitContextModeEvent(runDir, runId, specialist, taskId, result) {
+  try {
+    if (!isSafeRunId(runId)) return false;
+    const laneSafe = isSafeLaneId(taskId);
+    appendEvent(runDir, {
+      ts: (/* @__PURE__ */ new Date()).toISOString(),
+      event: "hook_event",
+      run_id: runId,
+      ...laneSafe ? { lane_id: taskId } : {},
+      hook_name: "TaskCompleted",
+      payload_excerpt_redacted: `context_mode=${result.context_mode} specialist=${specialist} task=${taskId}`,
+      latency_ms: 0,
+      status: result.context_mode === "MISSING" ? "err" : "ok"
+    });
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [context-compliance] v1.4 hook_event emit failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+function recordContextCompliance(runDir, runId, specialist, taskId, result) {
+  appendComplianceLog(runDir, runId, specialist, taskId, result);
+  emitContextModeEvent(runDir, runId, specialist, taskId, result);
+}
+
 // agent-team/task-completed.ts
 var REQUIRED_FIELDS = [
   "changed_files",
@@ -897,10 +1210,10 @@ function deriveRunId(sessionId) {
   return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
 }
 function receiptPath(guildRoot, runId, specialist, taskId) {
-  return path8.join(guildRoot, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
+  return path9.join(guildRoot, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
 }
 function learningsPath(guildRoot, runId, specialist, taskId) {
-  return path8.join(guildRoot, ".guild", "runs", runId, "learnings", `${specialist}-${taskId}.json`);
+  return path9.join(guildRoot, ".guild", "runs", runId, "learnings", `${specialist}-${taskId}.json`);
 }
 function missingFields(content) {
   return REQUIRED_FIELDS.filter((field) => {
@@ -959,7 +1272,7 @@ function persistRunState(runDir, runId, specialist, taskId, status, tier, depend
   try {
     const patch = {
       status,
-      receipt_ref: path8.join("handoffs", `${specialist}-${taskId}.md`)
+      receipt_ref: path9.join("handoffs", `${specialist}-${taskId}.md`)
     };
     if (tier !== void 0) patch.tier = tier;
     if (dependsOn.length > 0) patch.depends_on = dependsOn;
@@ -976,7 +1289,7 @@ function persistRunState(runDir, runId, specialist, taskId, status, tier, depend
   }
 }
 function runStatePathHint(runDir) {
-  return path8.join(runDir, "run-state.json");
+  return path9.join(runDir, "run-state.json");
 }
 function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialist, taskId) {
   const sec = readSecurityConfig(guildRoot);
@@ -984,7 +1297,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
   if (scrubResult.ok) {
     let rewriteOk = false;
     try {
-      fs8.writeFileSync(rPath, scrubResult.value, "utf8");
+      fs9.writeFileSync(rPath, scrubResult.value, "utf8");
       rewriteOk = true;
     } catch (err) {
       process.stderr.write(
@@ -999,7 +1312,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
   const quarantinePath = rPath + ".quarantined";
   let quarantineDone = false;
   try {
-    fs8.renameSync(rPath, quarantinePath);
+    fs9.renameSync(rPath, quarantinePath);
     quarantineDone = true;
   } catch (err) {
     process.stderr.write(
@@ -1010,7 +1323,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
   if (!quarantineDone) {
     let canonicalRemoved = false;
     try {
-      fs8.writeFileSync(
+      fs9.writeFileSync(
         rPath,
         "[SCRUB-BLOCKED: handoff receipt removed by Guild HK-06 secret scrub \u2014 original content quarantine failed, raw destroyed at canonical path]\n",
         "utf8"
@@ -1018,7 +1331,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
       canonicalRemoved = true;
     } catch {
       try {
-        fs8.unlinkSync(rPath);
+        fs9.unlinkSync(rPath);
         canonicalRemoved = true;
       } catch {
       }
@@ -1031,7 +1344,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
           event_type: "secret_scrub_blocked",
           decision: "blocked",
           tool: "task-completed/handoff-scrub",
-          detail: `CRITICAL: Cannot remove raw handoff receipt "${path8.basename(rPath)}" from canonical path \u2014 quarantine AND overwrite/unlink both failed. Raw secret may persist. Lane blocked. Manual remediation required.`,
+          detail: `CRITICAL: Cannot remove raw handoff receipt "${path9.basename(rPath)}" from canonical path \u2014 quarantine AND overwrite/unlink both failed. Raw secret may persist. Lane blocked. Manual remediation required.`,
           permission_mode: "blocked"
         });
         appendSecurityEvent(runDir, evt);
@@ -1042,7 +1355,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
       );
     }
     process.stderr.write(
-      `[task-completed] WARN: HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path8.basename(rPath)}.
+      `[task-completed] WARN: HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path9.basename(rPath)}.
 `
     );
   }
@@ -1064,8 +1377,8 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
 }
 function persistInjectionAudit(runDir, taskId, specialist, injectionClean) {
   try {
-    const logsDir = path8.join(runDir, "logs");
-    fs8.mkdirSync(logsDir, { recursive: true });
+    const logsDir = path9.join(runDir, "logs");
+    fs9.mkdirSync(logsDir, { recursive: true });
     const record = {
       schema_version: "guild.injection_audit.v1",
       ts: (/* @__PURE__ */ new Date()).toISOString(),
@@ -1073,8 +1386,8 @@ function persistInjectionAudit(runDir, taskId, specialist, injectionClean) {
       specialist,
       injection_clean: injectionClean
     };
-    fs8.appendFileSync(
-      path8.join(logsDir, "injection-audit.jsonl"),
+    fs9.appendFileSync(
+      path9.join(logsDir, "injection-audit.jsonl"),
       JSON.stringify(record) + "\n",
       "utf8"
     );
@@ -1108,15 +1421,15 @@ async function main() {
   const cwd = payload.cwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
   const runId = deriveRunId(sessionId);
-  const runDir = path8.join(guildRoot, ".guild", "runs", runId);
+  const runDir = path9.join(guildRoot, ".guild", "runs", runId);
   const rPath = receiptPath(guildRoot, runId, specialist, taskId);
-  if (!fs8.existsSync(rPath)) {
+  if (!fs9.existsSync(rPath)) {
     die(
       `Task "${taskId}" (specialist: "${specialist}") has no handoff receipt. Expected at: ${rPath}
 Write the receipt with sections: ${REQUIRED_FIELDS.join(", ")} before marking complete.`
     );
   }
-  const content = fs8.readFileSync(rPath, "utf8");
+  const content = fs9.readFileSync(rPath, "utf8");
   const missing = missingFields(content);
   if (missing.length > 0) {
     die(
@@ -1212,6 +1525,32 @@ Add a fenced \`\`\`guild.handoff.v2 { ... } \`\`\` JSON block to the receipt bef
     team_name: (payload.team_name ?? "").trim() || void 0,
     detail: laneStatus === "done" ? void 0 : `lane status: ${laneStatus}`
   });
+  try {
+    const compliance = evaluateContextCompliance({
+      guildRoot,
+      runDir,
+      runId,
+      specialist,
+      taskId
+    });
+    recordContextCompliance(runDir, runId, specialist, taskId, compliance);
+    if (compliance.context_mode === "MISSING") {
+      process.stderr.write(
+        `[task-completed] \u26A0 CONTEXT-COMPLIANCE VIOLATION: lane "${taskId}" (specialist "${specialist}") completed with NEITHER a context-assemble bundle (${compliance.bundle_path}) NOR an inline dispatch-trace.md entry naming the lane with a file-listed working set. ${compliance.reason}. Recorded context_mode=MISSING in telemetry \u2014 the inline-shortcut audit trail is MANDATORY even under --auto-approve=all (guild:execute-plan \xA7"Audit trail when inlining").
+`
+      );
+    } else {
+      process.stderr.write(
+        `[task-completed] context-compliance OK: lane "${taskId}" context_mode=${compliance.context_mode}.
+`
+      );
+    }
+  } catch (err) {
+    process.stderr.write(
+      `[task-completed] WARN: context-compliance check failed (non-fatal): ${err instanceof Error ? err.message : String(err)}
+`
+    );
+  }
   process.stderr.write(
     `[task-completed] OK: task "${taskId}" receipt verified at "${rPath}". Agent dismissed.
 `
