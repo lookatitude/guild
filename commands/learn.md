@@ -34,6 +34,7 @@ v2x-command-surface-dispatch-and-internalization.md` D3.
 /guild:learn map                          CodebaseMap + architecture overview only
 /guild:learn graph                        Deep semantic KnowledgeGraph only
 /guild:learn graph --rigor=deep           Deep graph, highest fidelity
+/guild:learn knowledge                    Deep multi-modal knowledge tier (topics + wiki/diagram index + cross-modal links)
 /guild:learn onboard                      Guided architecture tour only
 /guild:learn diff                         Change analysis vs HEAD only
 /guild:learn diff src/auth/               Change analysis scoped to path
@@ -126,21 +127,30 @@ Proceed with deep graph? [proceed / skip-graph / explain]
 |---|---|---|---|
 | `map` | CodebaseMap + architecture overview (cheap-scan tier; fast) | `guild:learn-map` | `.guild/indexes/codebase-map.json`, `wiki/concepts/architecture-map.md` |
 | `graph` | Deep semantic KnowledgeGraph (full NLP/heuristic parse; slow) | `guild:learn-graph` | `.guild/indexes/knowledge-graph.json` |
+| `knowledge` | Deep multi-modal knowledge tier (K1–K6): topic→subtopic taxonomy + classified/labeled `wiki_page` nodes + cross-modal `evidenced_by` edges (`guild.knowledge_graph.v2`); lazy + cost-gated, slow | `guild:learn-knowledge` | `.guild/indexes/knowledge-graph.json` (v2) + `.guild/indexes/knowledge-links.json` + `wiki/concepts/*` candidates |
 | `onboard` | Guided 5–15 step learning tour through architecture + key concepts | `guild:learn-onboard` | `.guild/indexes/onboarding-tour.md` |
 | `diff` | Change analysis — what changed, blast-radius, dependents impacted | `guild:learn-diff` | `.guild/runs/<run-id>/learn/diff-<ts>.md` |
 | `explain` | Deep-dive explanation of a file, module, symbol, or concept | `guild:learn-explain` | printed explanation (no file by default) |
+
+The `knowledge` tier consumes the structural `knowledge-graph.json` and enriches
+it into `guild.knowledge_graph.v2` — topic taxonomy, classified `wiki_page` /
+`diagram` nodes, and cross-modal `evidenced_by` edges. Canonical:
+[`architecture/codebase-understanding.md §"The knowledge tier"`](../../docs/knowledge/architecture/codebase-understanding.md)
++ [`architecture/knowledge-classification-schema.md`](../../docs/knowledge/architecture/knowledge-classification-schema.md).
+Same one-implementation/two-triggers contract (D3): the tier runs identically
+under `/guild:learn knowledge`, full `/guild:learn`, and `/guild:init --learn`.
 
 ---
 
 ## Args & local flags
 
-- Args: `[map|graph|onboard|diff|explain]` — **optional** first positional.
+- Args: `[map|graph|knowledge|onboard|diff|explain]` — **optional** first positional.
   - **Absent** → smart full learn-all (detection + confirmation + full pipeline). See above.
   - **Present** → scoped sub-verb; unknown value ⇒ print usage help, invoke no skill.
 - `[target]` — optional second positional; interpreted by each skill:
   - `diff`: a path, commit ref, or branch (defaults to HEAD vs previous).
   - `explain`: a file path, symbol name, or free-text concept.
-  - `map` / `graph` / `onboard`: ignored (always whole-repo).
+  - `map` / `graph` / `knowledge` / `onboard`: ignored (always whole-repo).
 - Local flags: — (no sub-verb-specific local flags beyond global set)
 
 ---
@@ -149,6 +159,7 @@ Proceed with deep graph? [proceed / skip-graph / explain]
 
 - **No-arg (smart full learn-all):** detection surface + confirmation **before** any scan (never silent, §5.1 pattern). Deep-graph cost estimate + confirm (OQ1 non-negotiable).
 - `graph` sub-verb: cost estimate + confirmation **I** (deep graph is slow; surface estimated duration before starting, confirm or `[skip]`).
+- `knowledge` sub-verb: lazy + cost-gated **I** (SC-15) — a **deterministic** cost gate (a tooling script the skill calls, not model-prose) fires **before** the deep knowledge pass: it surfaces a `models.knowledge.{maxFiles:3000, maxTokens:1_000_000, batchSize:20}` estimate and aborts/escalates past those bounds. Never a silent multi-hour run.
 - All other sub-verbs: **A** / **R** (fast enough not to gate).
 
 ---
@@ -162,9 +173,10 @@ Proceed with deep graph? [proceed / skip-graph / explain]
 | `.guild/runs/<run-id>/learn/skipped-files.json` | learn scan (every full or map pass) |
 | `.guild/indexes/codebase-map.json` | `map` / full pipeline |
 | `wiki/concepts/architecture-map.md` | `map` / full pipeline |
-| `.guild/indexes/knowledge-graph.json` | `graph` / full pipeline |
+| `.guild/indexes/knowledge-graph.json` | `graph` (v1 structural) / `knowledge` (enriches to v2) / full pipeline |
+| `.guild/indexes/knowledge-links.json` | `knowledge` / full pipeline |
+| `wiki/concepts/*` (knowledge-node candidates, human-gated) | `knowledge` / full pipeline |
 | `.guild/indexes/onboarding-tour.md` | `onboard` / full pipeline |
-| `.guild/indexes/knowledge-links.json` | full pipeline |
 | `.guild/runs/<run-id>/learn/diff-<ts>.md` | `diff` |
 | `.guild/runs/<run-id>/learn/explain-<ts>.md` | `explain --save` only |
 
@@ -208,17 +220,19 @@ path runs, not whether a run is started.
 
 ## Dispatch
 
-Parse `$ARGUMENTS`. If the first token is one of `map`, `graph`, `onboard`,
-`diff`, `explain` — start a run (see above), then route to the corresponding
-scoped sub-verb. All further tokens are forwarded as `args` to the skill.
+Parse `$ARGUMENTS`. If the first token is one of `map`, `graph`, `knowledge`,
+`onboard`, `diff`, `explain` — start a run (see above), then route to the
+corresponding scoped sub-verb. All further tokens are forwarded as `args` to
+the skill.
 
 ```
-(absent)  → run-trace.js start; detect target; surface + confirm; Skill: guild:learn (smart-learn mode)
-map       → run-trace.js start; Skill: guild:learn-map     args: $REMAINING_ARGS
-graph     → run-trace.js start; Skill: guild:learn-graph   args: $REMAINING_ARGS
-onboard   → run-trace.js start; Skill: guild:learn-onboard args: $REMAINING_ARGS
-diff      → run-trace.js start; Skill: guild:learn-diff    args: $REMAINING_ARGS
-explain   → run-trace.js start; Skill: guild:learn-explain args: $REMAINING_ARGS
+(absent)   → run-trace.js start; detect target; surface + confirm; Skill: guild:learn (smart-learn mode)
+map        → run-trace.js start; Skill: guild:learn-map       args: $REMAINING_ARGS
+graph      → run-trace.js start; Skill: guild:learn-graph     args: $REMAINING_ARGS
+knowledge  → run-trace.js start; Skill: guild:learn-knowledge args: $REMAINING_ARGS
+onboard    → run-trace.js start; Skill: guild:learn-onboard   args: $REMAINING_ARGS
+diff       → run-trace.js start; Skill: guild:learn-diff      args: $REMAINING_ARGS
+explain    → run-trace.js start; Skill: guild:learn-explain   args: $REMAINING_ARGS
 ```
 
 Unknown sub-verb ⇒ print usage help and stop; invoke no skill, write no files:
@@ -228,6 +242,7 @@ Usage:
   /guild:learn                           Smart full learn-all (detect + confirm + pipeline)
   /guild:learn map                       CodebaseMap + architecture overview
   /guild:learn graph [--rigor=deep]      Deep semantic KnowledgeGraph (slow)
+  /guild:learn knowledge                 Deep multi-modal knowledge tier (topics + wiki/diagram + cross-modal)
   /guild:learn onboard                   Guided architecture tour
   /guild:learn diff [path|ref]           Change analysis + blast-radius
   /guild:learn explain <path|concept>    Deep-dive explanation
@@ -248,12 +263,19 @@ implementation** (D3). When Init's full pipeline fires, it calls these same
 
 1. `guild:learn-map` (CodebaseMap + architecture stub)
 2. `guild:learn-graph` (deep KnowledgeGraph)
-3. `guild:learn-onboard` (onboarding tour)
+3. `guild:learn-knowledge` (knowledge tier — K1–K6; lazy + cost-gated)
+4. `guild:learn-onboard` (onboarding tour)
+
+The `knowledge` tier honors the **one-implementation/two-triggers** contract
+(SC-8): the same shared K1–K6 entrypoint runs byte-identically under
+`/guild:learn knowledge`, the full no-arg `/guild:learn`, and `init --learn` /
+`defaults.auto_learn`. It stays **lazy + cost-gated** in all three (not auto-run
+by plain `init`).
 
 `/guild:learn diff` and `/guild:learn explain` are not called by Init (they
 are change-analysis and query-time skills, not bootstrap artifacts). The
-`/guild:learn` command can call all five sub-verbs at user discretion. The
-no-arg smart full learn-all runs all five phases plus knowledge candidate
+`/guild:learn` command can call all six sub-verbs at user discretion. The
+no-arg smart full learn-all runs all phases plus knowledge candidate
 extraction, which Init's scoped pipeline does not do.
 
 ---
@@ -269,5 +291,11 @@ extraction, which Init's scoped pipeline does not do.
   clean-room re-implementations of the former `understand-engine` /
   `understand-onboard` concepts (D3/D4). One implementation; this command
   dispatches to them; `init --learn` also dispatches to them.
+- `skill-author` (`learn-knowledge-tier` L6): author the `guild:learn-knowledge`
+  skill body (`plugin/skills/knowledge/learn-knowledge/SKILL.md`) running the
+  shared K1–K6 entrypoint (SC-8 byte-identical across the three triggers), the
+  cost gate (SC-15), and per-K-stage staleness (SC-14). This command's
+  `knowledge` dispatch row above is the docs-side cross-ref (L10); L6 owns the
+  canonical skill name/path — reconcile if it differs.
 - `docs-writer`: update `architecture/command-surface.md §5.1` with the
   bare-`/guild:guild` spike result (see OPEN VERIFICATION in the D1 ADR).
