@@ -361,7 +361,12 @@ export async function indexWiki(
   const edges: GraphEdge[] = [];
 
   for (const desc of pageDescriptors) {
-    const cls = classifications.get(desc.id) ?? { category: "note", importance: "low", labels: [] };
+    // B4 / SC-9: if the classifier returned no entry for this page, skip it.
+    // A missing entry means the model didn't classify it (not that it should be
+    // silently defaulted to "note"). The defaultClassifier always populates every
+    // entry, so dry-run / no-classifier callers are unaffected.
+    const cls = classifications.get(desc.id);
+    if (!cls) continue;
 
     // Compute source_ref anchor: relpath#h1-heading-slug
     // If H1 is missing, fall back to the bare relpath (edge case).
