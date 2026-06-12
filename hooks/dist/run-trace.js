@@ -2886,6 +2886,119 @@ var path6 = __toESM(require("path"));
 // ../scripts/lib/settings-resolver.ts
 var fs2 = __toESM(require("fs"));
 var path2 = __toESM(require("path"));
+
+// ../scripts/understand/lib/schema.ts
+var NODE_TYPES = /* @__PURE__ */ new Set([
+  "file",
+  "function",
+  "class",
+  "module",
+  "concept",
+  "config",
+  "document",
+  "service",
+  "table",
+  "endpoint",
+  "pipeline",
+  "schema",
+  "resource",
+  "domain",
+  "flow",
+  "step",
+  "article",
+  "entity",
+  "topic",
+  "claim",
+  "source"
+]);
+var NODE_TYPES_V2 = /* @__PURE__ */ new Set([
+  ...NODE_TYPES,
+  "wiki_page",
+  // first-class in v2; v1 aliased this to article — alias removed
+  "diagram"
+  // new in v2: fenced mermaid blocks, .svg files
+]);
+var EDGE_TYPES = /* @__PURE__ */ new Set([
+  // Structural
+  "imports",
+  "exports",
+  "contains",
+  "inherits",
+  "implements",
+  "implemented_by",
+  // Behavioral
+  "calls",
+  "subscribes",
+  "publishes",
+  "middleware",
+  // Data flow
+  "reads_from",
+  "writes_to",
+  "transforms",
+  "validates",
+  // Dependencies
+  "depends_on",
+  "tested_by",
+  "configures",
+  // Semantic
+  "related",
+  "similar_to",
+  // Infrastructure
+  "deploys",
+  "serves",
+  "provisions",
+  "triggers",
+  // Schema/Data
+  "migrates",
+  "documents",
+  "routes",
+  "defines_schema",
+  // Domain
+  "contains_flow",
+  "flow_step",
+  "cross_domain",
+  // Knowledge
+  "cites",
+  "contradicts",
+  "builds_on",
+  "exemplifies",
+  "categorized_under",
+  "authored_by"
+]);
+var EDGE_TYPES_V2 = /* @__PURE__ */ new Set([
+  ...EDGE_TYPES,
+  "subtopic_of",
+  // hierarchy; acyclic, tree (single-parent), depth-monotone (SC-2)
+  "relates_to",
+  // weighted, LLM-judged (SC-3)
+  "evidenced_by",
+  // knowledge→artifact, cross-modal (SC-4)
+  "belongs_to_domain",
+  // topic→domain membership (SC-5)
+  "mentions",
+  // modality bridge (SC-3)
+  "defines"
+  // modality bridge (first-class v2 — NOT aliased to defines_schema)
+  // NOTE: "related" is already in v1 EDGE_TYPES (wikilink edges use it)
+]);
+var KNOWLEDGE_CONFIG_DEFAULTS = {
+  maxDepth: 8,
+  // hard ceiling on subtopic_of tree depth
+  maxBranching: 12,
+  // per-node subtopic_of fan-out limit
+  minTopicImportance: 0.4,
+  // numeric importance_score threshold; below → fold into parent
+  relMinConf: 0.5,
+  // min confidence for LLM-judged relates_to/evidenced_by edges
+  maxFiles: 3e3,
+  // cost gate: max files per K-stage run
+  maxTokens: 1e6,
+  // cost gate: max LLM output tokens per run
+  batchSize: 20
+  // files per LLM batch
+};
+
+// ../scripts/lib/settings-resolver.ts
 var yaml = require_js_yaml2();
 var DEFAULT_ESCALATION_MARKERS = [
   "I'm not sure",
@@ -2930,7 +3043,8 @@ var DEFAULTS = {
     cacheTTL: { coordinator: "1h", leaf: "5m" },
     importanceGate: 3,
     ingestSimilarityGate: 0.8,
-    shortOutputThreshold: {}
+    shortOutputThreshold: {},
+    knowledge: { ...KNOWLEDGE_CONFIG_DEFAULTS }
   },
   security: {
     bypass_permissions_policy: "audit"
@@ -3206,6 +3320,25 @@ function parseSettingsFile(filePath) {
       }
       sparse.shortOutputThreshold = sotMerged;
     }
+    if (isPlainObject(rawModels["knowledge"])) {
+      const rawK = rawModels["knowledge"];
+      const sparseK = {};
+      if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
+        sparseK.maxDepth = Math.floor(rawK["maxDepth"]);
+      if (typeof rawK["maxBranching"] === "number" && rawK["maxBranching"] >= 1)
+        sparseK.maxBranching = Math.floor(rawK["maxBranching"]);
+      if (typeof rawK["minTopicImportance"] === "number" && rawK["minTopicImportance"] >= 0 && rawK["minTopicImportance"] <= 1)
+        sparseK.minTopicImportance = rawK["minTopicImportance"];
+      if (typeof rawK["relMinConf"] === "number" && rawK["relMinConf"] >= 0 && rawK["relMinConf"] <= 1)
+        sparseK.relMinConf = rawK["relMinConf"];
+      if (typeof rawK["maxFiles"] === "number" && rawK["maxFiles"] >= 1)
+        sparseK.maxFiles = Math.floor(rawK["maxFiles"]);
+      if (typeof rawK["maxTokens"] === "number" && rawK["maxTokens"] >= 1)
+        sparseK.maxTokens = Math.floor(rawK["maxTokens"]);
+      if (typeof rawK["batchSize"] === "number" && rawK["batchSize"] >= 1)
+        sparseK.batchSize = Math.floor(rawK["batchSize"]);
+      sparse.knowledge = sparseK;
+    }
     out.models = sparse;
   }
   if (isPlainObject(parsed["security"])) {
@@ -3338,6 +3471,25 @@ function parseSettingsFile_fromParsed(parsed) {
         if (Object.keys(innerMerged).length > 0) sotMerged[taskType] = innerMerged;
       }
       sparse.shortOutputThreshold = sotMerged;
+    }
+    if (isPlainObject(rawModels["knowledge"])) {
+      const rawK = rawModels["knowledge"];
+      const sparseK = {};
+      if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
+        sparseK.maxDepth = Math.floor(rawK["maxDepth"]);
+      if (typeof rawK["maxBranching"] === "number" && rawK["maxBranching"] >= 1)
+        sparseK.maxBranching = Math.floor(rawK["maxBranching"]);
+      if (typeof rawK["minTopicImportance"] === "number" && rawK["minTopicImportance"] >= 0 && rawK["minTopicImportance"] <= 1)
+        sparseK.minTopicImportance = rawK["minTopicImportance"];
+      if (typeof rawK["relMinConf"] === "number" && rawK["relMinConf"] >= 0 && rawK["relMinConf"] <= 1)
+        sparseK.relMinConf = rawK["relMinConf"];
+      if (typeof rawK["maxFiles"] === "number" && rawK["maxFiles"] >= 1)
+        sparseK.maxFiles = Math.floor(rawK["maxFiles"]);
+      if (typeof rawK["maxTokens"] === "number" && rawK["maxTokens"] >= 1)
+        sparseK.maxTokens = Math.floor(rawK["maxTokens"]);
+      if (typeof rawK["batchSize"] === "number" && rawK["batchSize"] >= 1)
+        sparseK.batchSize = Math.floor(rawK["batchSize"]);
+      sparse.knowledge = sparseK;
     }
     out.models = sparse;
   }

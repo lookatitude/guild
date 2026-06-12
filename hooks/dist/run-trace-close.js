@@ -2897,8 +2897,222 @@ var crypto2 = __toESM(require("crypto"));
 var fsNode = __toESM(require("fs"));
 var path5 = __toESM(require("path"));
 
+// ../scripts/understand/lib/schema.ts
+var NODE_TYPES = /* @__PURE__ */ new Set([
+  "file",
+  "function",
+  "class",
+  "module",
+  "concept",
+  "config",
+  "document",
+  "service",
+  "table",
+  "endpoint",
+  "pipeline",
+  "schema",
+  "resource",
+  "domain",
+  "flow",
+  "step",
+  "article",
+  "entity",
+  "topic",
+  "claim",
+  "source"
+]);
+var NODE_TYPES_V2 = /* @__PURE__ */ new Set([
+  ...NODE_TYPES,
+  "wiki_page",
+  // first-class in v2; v1 aliased this to article — alias removed
+  "diagram"
+  // new in v2: fenced mermaid blocks, .svg files
+]);
+var EDGE_TYPES = /* @__PURE__ */ new Set([
+  // Structural
+  "imports",
+  "exports",
+  "contains",
+  "inherits",
+  "implements",
+  "implemented_by",
+  // Behavioral
+  "calls",
+  "subscribes",
+  "publishes",
+  "middleware",
+  // Data flow
+  "reads_from",
+  "writes_to",
+  "transforms",
+  "validates",
+  // Dependencies
+  "depends_on",
+  "tested_by",
+  "configures",
+  // Semantic
+  "related",
+  "similar_to",
+  // Infrastructure
+  "deploys",
+  "serves",
+  "provisions",
+  "triggers",
+  // Schema/Data
+  "migrates",
+  "documents",
+  "routes",
+  "defines_schema",
+  // Domain
+  "contains_flow",
+  "flow_step",
+  "cross_domain",
+  // Knowledge
+  "cites",
+  "contradicts",
+  "builds_on",
+  "exemplifies",
+  "categorized_under",
+  "authored_by"
+]);
+var EDGE_TYPES_V2 = /* @__PURE__ */ new Set([
+  ...EDGE_TYPES,
+  "subtopic_of",
+  // hierarchy; acyclic, tree (single-parent), depth-monotone (SC-2)
+  "relates_to",
+  // weighted, LLM-judged (SC-3)
+  "evidenced_by",
+  // knowledge→artifact, cross-modal (SC-4)
+  "belongs_to_domain",
+  // topic→domain membership (SC-5)
+  "mentions",
+  // modality bridge (SC-3)
+  "defines"
+  // modality bridge (first-class v2 — NOT aliased to defines_schema)
+  // NOTE: "related" is already in v1 EDGE_TYPES (wikilink edges use it)
+]);
+var KNOWLEDGE_CONFIG_DEFAULTS = {
+  maxDepth: 8,
+  // hard ceiling on subtopic_of tree depth
+  maxBranching: 12,
+  // per-node subtopic_of fan-out limit
+  minTopicImportance: 0.4,
+  // numeric importance_score threshold; below → fold into parent
+  relMinConf: 0.5,
+  // min confidence for LLM-judged relates_to/evidenced_by edges
+  maxFiles: 3e3,
+  // cost gate: max files per K-stage run
+  maxTokens: 1e6,
+  // cost gate: max LLM output tokens per run
+  batchSize: 20
+  // files per LLM batch
+};
+
 // ../scripts/lib/settings-resolver.ts
 var yaml = require_js_yaml2();
+var DEFAULT_ESCALATION_MARKERS = [
+  "I'm not sure",
+  "unclear",
+  "cannot determine",
+  "I don't know",
+  "ambiguous",
+  "uncertain",
+  "not enough information"
+];
+var DEFAULTS = {
+  rigor: "standard",
+  auto_approve: [],
+  review: "local",
+  host: "auto",
+  initiative_default: null,
+  index: "auto",
+  record_status_runs: true,
+  codex_skip_enforcement: "warn",
+  agent_mode: "auto",
+  workspace: { mode: "auto" },
+  models: {
+    enabled: true,
+    tiers: {
+      cheap: { claude: "haiku", codex: null, gemini: null },
+      mid: { claude: "sonnet", codex: null, gemini: null },
+      powerful: { claude: "opus", codex: null, gemini: null }
+    },
+    scoreWeights: {
+      workType: 0,
+      blastRadius: 1,
+      dependsOn: 1,
+      security: 1,
+      priorEscalation: 1
+    },
+    thresholds: { mid: 1, powerful: 3 },
+    advisorRounds: 2,
+    escalationMarkers: DEFAULT_ESCALATION_MARKERS,
+    recallBeforeRead: true,
+    recallScoreThreshold: 0.4,
+    structuredOutputRequired: true,
+    cacheTTL: { coordinator: "1h", leaf: "5m" },
+    importanceGate: 3,
+    ingestSimilarityGate: 0.8,
+    shortOutputThreshold: {},
+    knowledge: { ...KNOWLEDGE_CONFIG_DEFAULTS }
+  },
+  security: {
+    bypass_permissions_policy: "audit"
+  },
+  secrets_policy: {
+    env_allowlist: [],
+    redaction_patterns: [],
+    fail_mode_durable: "closed",
+    fail_mode_telemetry: "open"
+  },
+  mcp: {
+    tool_description_hashes: {},
+    stdio_available: true,
+    // R-019
+    http_available: false,
+    // R-019
+    bridge_package: null
+    // R-019
+  },
+  statusline: false,
+  // R-009
+  loops: null,
+  loop_cap: 16,
+  codex_cap: 5,
+  defaults: {
+    auto_learn: false,
+    adversarial: "on",
+    team: { size: null, always_include: [] },
+    review_workflow: "standard",
+    skill_policy: "standard",
+    gates: { auto_approve: [] },
+    wiki: { share_mode: "team", autopromote: false },
+    quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
+    reporting: "standard",
+    index: {
+      enabled: true,
+      kg_node_threshold: 2e3,
+      kg_size_threshold_mb: 1,
+      links_edge_threshold: 2e3,
+      runs_threshold: 20,
+      wiki_file_threshold: 500
+    },
+    cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
+    // R-015
+    retry: { max_attempts: 1, backoff: "exponential" },
+    // R-016
+    resume: { enabled: true },
+    // R-016
+    heartbeat_timeout_ms: 6e5,
+    // R-017: 10 min — matches hooks/lib/heartbeat.ts DEFAULT_HEARTBEAT_TIMEOUT_MS
+    capability_manifest_ttl_s: 3600,
+    // R-018: 1 hour per ADR CR-5
+    allowed_tools: []
+    // R-020: no restriction by default
+  },
+  adversarial_review_provider: "auto"
+  // R-008
+};
 
 // lib/security/scrubbed-write.ts
 var fs4 = __toESM(require("node:fs"));
