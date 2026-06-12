@@ -6,6 +6,9 @@
  * compliance gap (evolve run-5e445ca4 gate.json: COMPLIANCE failure, not a
  * content gap → enforce in code, not skill prose).
  *
+ * Known scope boundaries are tracked in `context-compliance.FOLLOWUPS.md`
+ * (FU-1: model-driven-path parity; FU-2: reflect reads `context_mode`).
+ *
  * ── The invariant (deterministic) ────────────────────────────────────────────
  * For every dispatched specialist lane, by the lane's completion the run MUST
  * contain EITHER:
@@ -113,10 +116,28 @@ function laneTokens(specialist: string, taskId: string): string[] {
   return Array.from(tokens);
 }
 
-/** Does a single dispatch-trace line mention this lane by id or specialist-id? */
+/** Escape a string for safe use as a RegExp literal. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Does a single dispatch-trace line mention this lane by id or specialist-id?
+ *
+ * The lane id is matched as a WHOLE hyphen-inclusive token — delimited by a
+ * non-`[\w-]` char (or line start/end) on each side — NOT a substring. A bare
+ * `hay.includes(tok)` (the original) falsely matched a prefix-colliding sibling:
+ * `"backend-task-010".includes("task-01")` is true, so a trace entry for a
+ * DIFFERENT lane (`task-010`) would satisfy `task-01` and record a false
+ * `context_mode=inline`. Treating `-` as part of the token (excluded from the
+ * boundary class) rejects `task-010` for `task-01` while still accepting the
+ * specialist-prefixed form `backend-task-01` via its own lane token.
+ */
 export function traceLineMentionsLane(line: string, specialist: string, taskId: string): boolean {
   const hay = line.toLowerCase();
-  return laneTokens(specialist, taskId).some((tok) => hay.includes(tok));
+  return laneTokens(specialist, taskId).some((tok) =>
+    new RegExp(`(^|[^\\w-])${escapeRegExp(tok)}([^\\w-]|$)`).test(hay),
+  );
 }
 
 /**

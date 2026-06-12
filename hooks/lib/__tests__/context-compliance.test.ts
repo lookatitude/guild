@@ -109,6 +109,19 @@ describe("traceLineMentionsLane", () => {
   it("does not match a different lane", () => {
     expect(traceLineMentionsLane("- task-999 dispatched", "backend", "task-001")).toBe(false);
   });
+  // G-lane regression (codex): substring matching let a prefix-colliding sibling
+  // satisfy the current lane — "backend-task-010".includes("task-01") is true.
+  it("does NOT match a prefix-colliding sibling lane (task-01 vs task-010)", () => {
+    expect(traceLineMentionsLane("backend-task-010 ... src/other.ts", "backend", "task-01")).toBe(false);
+    expect(traceLineMentionsLane("- task-0100 dispatched", "backend", "task-01")).toBe(false);
+    // …but still matches the SAME lane named with its specialist prefix:
+    expect(traceLineMentionsLane("backend-task-01 ... src/x.ts", "backend", "task-01")).toBe(true);
+  });
+  it("full-stack regression: hasInlineTraceEntry rejects a sibling-lane block (→ MISSING)", () => {
+    const trace = "## Lane backend-task-010\n- working set: `src/other.ts`\n";
+    expect(hasInlineTraceEntry(trace, "backend", "task-01")).toBe(false); // sibling, not this lane
+    expect(hasInlineTraceEntry(trace, "backend", "task-010")).toBe(true); // the real lane
+  });
 });
 
 describe("hasInlineTraceEntry (file-listed working set requirement)", () => {

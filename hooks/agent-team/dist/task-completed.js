@@ -1057,9 +1057,14 @@ function laneTokens(specialist, taskId) {
   if (s && t) tokens.add(`${s}-${t}`);
   return Array.from(tokens);
 }
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function traceLineMentionsLane(line, specialist, taskId) {
   const hay = line.toLowerCase();
-  return laneTokens(specialist, taskId).some((tok) => hay.includes(tok));
+  return laneTokens(specialist, taskId).some(
+    (tok) => new RegExp(`(^|[^\\w-])${escapeRegExp(tok)}([^\\w-]|$)`).test(hay)
+  );
 }
 function hasInlineTraceEntry(content, specialist, taskId) {
   if (!content) return false;
