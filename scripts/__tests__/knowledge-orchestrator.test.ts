@@ -527,16 +527,20 @@ describe("B — emitRound1Candidates", () => {
 
     const doc = JSON.parse(fs.readFileSync(path.join(candidateDir, "k2-candidates.json"), "utf8"));
     for (const page of doc.pages) {
-      // candidate_key must equal id which is "wiki_page:relpath"
+      // candidate_key must equal id which is "wiki_page:<repoRoot-relpath>"
       expect(page.candidate_key).toBe(page.id);
       expect(page.id).toMatch(/^wiki_page:/);
       expect(typeof page.relpath).toBe("string");
       expect(typeof page.name).toBe("string");
       expect(Array.isArray(page.headings)).toBe(true);
     }
-    // Verify specific page names
-    const authPage = doc.pages.find((p: any) => p.relpath === "auth.md");
+    // BUG-3 fix: round1 candidate id/relpath are repoRoot-relative (".guild/wiki/…")
+    // — NOT wikiDir-relative ("auth.md") — so they equal finalize's indexWiki id and
+    // resolve at repoRoot in validateGraphV2. The old "auth.md" assertion contradicted
+    // SC-3/SC-12 (every wiki_page anchor must resolve at repoRoot).
+    const authPage = doc.pages.find((p: any) => p.relpath === ".guild/wiki/auth.md");
     expect(authPage).toBeDefined();
+    expect(authPage.id).toBe("wiki_page:.guild/wiki/auth.md");
     expect(authPage.name).toBe("Authentication");
     expect(authPage.headings).toContain("Authentication");
     expect(authPage.wikilinks).toContain("storage"); // [[storage]] extracted
@@ -1002,6 +1006,13 @@ describe("I — SC-3 K2 dual-dir: finalize indexes both .guild/wiki/ and docs/kn
     async () => {
       const dir = mkTmpRepo();
 
+      // BUG-3 fix: wiki_page ids/anchors are now repoRoot-relative, so the anchor
+      // resolves against the REAL page under .guild/wiki/ — no repoRoot "shadow"
+      // copy needed. The old shadow files (dir/wikidoc.md) were masking BUG-3:
+      // they made the wikiDir-relative anchor "wikidoc.md#…" resolve, hiding that
+      // the production path produced unresolvable anchors that validateGraphV2
+      // dropped. Removing them verifies the REAL path.
+
       // ── First root: .guild/wiki/ (default wikiDir) ──────────────────────────
       const wikiDir = path.join(dir, ".guild", "wiki");
       fs.mkdirSync(wikiDir, { recursive: true });
@@ -1009,9 +1020,6 @@ describe("I — SC-3 K2 dual-dir: finalize indexes both .guild/wiki/ and docs/kn
         path.join(wikiDir, "wikidoc.md"),
         "# WikiDoc\n\nA wiki page.\n"
       );
-      // SC-12 anchor shadow: relpath "wikidoc.md" resolves against repoRoot.
-      // The file must exist at path.resolve(dir, "wikidoc.md") for anchor validation.
-      fs.writeFileSync(path.join(dir, "wikidoc.md"), "# WikiDoc\n\nA wiki page.\n");
 
       // ── Second root: docs/knowledge/ (previously not indexed in finalize) ────
       const kbDir = path.join(dir, "docs", "knowledge");
@@ -1020,8 +1028,6 @@ describe("I — SC-3 K2 dual-dir: finalize indexes both .guild/wiki/ and docs/kn
         path.join(kbDir, "kbdoc.md"),
         "# KBDoc\n\nA knowledge base page.\n"
       );
-      // SC-12 anchor shadow: relpath "kbdoc.md" resolves against repoRoot.
-      fs.writeFileSync(path.join(dir, "kbdoc.md"), "# KBDoc\n\nA knowledge base page.\n");
 
       // NOOP_SEAMS classifies ALL pages → no B4 drops → both nodes survive validate.
       await runKnowledgeStages(
@@ -1037,11 +1043,17 @@ describe("I — SC-3 K2 dual-dir: finalize indexes both .guild/wiki/ and docs/kn
       const wikiNodes = (graph.nodes as any[]).filter((n: any) => n.type === "wiki_page");
       const wikiNodeIds = new Set(wikiNodes.map((n: any) => n.id as string));
 
-      // First root (.guild/wiki/) — should already be present before fix
-      expect(wikiNodeIds.has("wiki_page:wikidoc.md")).toBe(true);
+      // First root (.guild/wiki/) — repoRoot-relative id (BUG-3)
+      expect(wikiNodeIds.has("wiki_page:.guild/wiki/wikidoc.md")).toBe(true);
 
-      // Second root (docs/knowledge/) — was MISSING before the SC-3 fix
-      expect(wikiNodeIds.has("wiki_page:kbdoc.md")).toBe(true);
+      // Second root (docs/knowledge/) — repoRoot-relative id; was MISSING before SC-3 fix
+      expect(wikiNodeIds.has("wiki_page:docs/knowledge/kbdoc.md")).toBe(true);
+
+      // BUG-3 real-path guard: anchors actually resolve at repoRoot (no drop).
+      const wikidocNode = wikiNodes.find(
+        (n: any) => n.id === "wiki_page:.guild/wiki/wikidoc.md"
+      );
+      expect(wikidocNode.source_refs[0]).toBe(".guild/wiki/wikidoc.md#wikidoc");
     },
     30000
   );

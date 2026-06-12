@@ -149,15 +149,32 @@ function extractWikilinks(content: string): string[] {
 // Internal: file scanner
 // ---------------------------------------------------------------------------
 
+/** Markdown meta files that are repo meta, not wiki content pages. */
+const EXCLUDED_WIKI_NAMES = new Set([
+  "README.md",
+  "CHANGELOG.md",
+  "CONTRIBUTING.md",
+  "LICENSE.md",
+]);
+
 /**
- * Recursively walk `dir` and collect all `.md` files.
- * Returns paths relative to `dir`, sorted for determinism.
+ * Recursively walk `wikiDir` and collect EVERY `.md` content page.
+ * Returns paths relative to `wikiDir`, sorted for determinism.
  *
- * Excludes common meta files (README.md, CHANGELOG.md, CONTRIBUTING.md)
- * which are repo meta, not wiki content pages.
+ * BUG-2 fix (SC-3): page-set discovery is a single shared routine used by BOTH
+ * round1 candidate emission (knowledge-orchestrator.collectWikiPageCandidates)
+ * and finalize (indexWiki). The retired `collectViaIndex` BFS-from-`index.md`
+ * gate dropped any page not reachable by a `[[wikilink]]` — so pages the model
+ * classified in round1 vanished in finalize. SC-3 is explicit: EVERY `.guild/wiki/`
+ * and `docs/knowledge/` page becomes a `wiki_page` node (fixture page count ==
+ * wiki_page node count). `[[wikilinks]]` are `related` EDGES only — never a
+ * membership filter. `index.md` is just another page; ordering is fine, the
+ * reachability membership gate is the bug.
+ *
+ * Excludes common meta files (README.md, CHANGELOG.md, …) and hidden dirs.
+ * Exported so round1 and finalize cannot drift.
  */
-function collectMarkdownFilesRecursive(dir: string): string[] {
-  const EXCLUDED_NAMES = new Set(["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE.md"]);
+export function collectWikiPageRelpaths(wikiDir: string): string[] {
   const results: string[] = [];
 
   function walk(current: string, rel: string): void {
@@ -169,88 +186,27 @@ function collectMarkdownFilesRecursive(dir: string): string[] {
     }
     for (const entry of entries) {
       const name = entry.name;
-      // Skip hidden dirs and common non-content dirs
+      // Skip hidden dirs/files
       if (name.startsWith(".")) continue;
       const relChild = rel ? `${rel}/${name}` : name;
       if (entry.isDirectory()) {
         walk(path.join(current, name), relChild);
       } else if (entry.isFile() && name.toLowerCase().endsWith(".md")) {
-        if (!EXCLUDED_NAMES.has(name)) {
+        if (!EXCLUDED_WIKI_NAMES.has(name)) {
           results.push(relChild);
         }
       }
     }
   }
 
-  walk(dir, "");
-  // Deterministic sort: consistent order regardless of filesystem
+  walk(wikiDir, "");
+  // Deterministic sort: consistent order regardless of filesystem.
   return results.sort();
 }
 
-/**
- * Karpathy-style wiki scan: start from `index.md` and BFS-collect all pages
- * reachable via `[[wikilinks]]`. This correctly excludes meta files (README.md)
- * that are not part of the wiki content graph.
- *
- * Returns relpaths relative to `wikiDir`, in BFS order (deterministic given
- * a deterministic basename resolution).
- */
-function collectViaIndex(wikiDir: string): string[] {
-  const indexPath = path.join(wikiDir, "index.md");
-  let indexContent: string;
-  try {
-    indexContent = fs.readFileSync(indexPath, "utf8");
-  } catch {
-    return collectMarkdownFilesRecursive(wikiDir);
-  }
-
-  // Build the full basename → relpath map first (need all files to resolve links)
-  const allFiles = collectMarkdownFilesRecursive(wikiDir);
-  const basenameMap = buildBasenameMapFromList(allFiles);
-
-  // BFS from index.md
-  const visited = new Set<string>(["index.md"]);
-  const queue: string[] = ["index.md"];
-  const ordered: string[] = ["index.md"];
-
-  let head = 0;
-  while (head < queue.length) {
-    const current = queue[head++];
-    const absPath = path.join(wikiDir, current);
-    let content: string;
-    try {
-      content = fs.readFileSync(absPath, "utf8");
-    } catch {
-      continue;
-    }
-    for (const basename of extractWikilinks(content)) {
-      const targetRelpath = basenameMap.get(basename);
-      if (targetRelpath && !visited.has(targetRelpath)) {
-        visited.add(targetRelpath);
-        queue.push(targetRelpath);
-        ordered.push(targetRelpath);
-      }
-    }
-  }
-
-  return ordered;
-}
-
-/**
- * Collect markdown files for a wiki directory.
- *
- * Strategy:
- *   - If `index.md` exists → Karpathy-style: BFS from index.md (only
- *     reachable pages, no meta files like README.md included).
- *   - Otherwise → full recursive scan (docs/knowledge/ style, no index.md
- *     required), excluding common meta files.
- */
-function collectMarkdownFiles(wikiDir: string): string[] {
-  const indexPath = path.join(wikiDir, "index.md");
-  if (fs.existsSync(indexPath)) {
-    return collectViaIndex(wikiDir);
-  }
-  return collectMarkdownFilesRecursive(wikiDir);
+/** Convert an OS-native relative path to POSIX (forward-slash) form. */
+function toPosixRel(p: string): string {
+  return p.split(path.sep).join("/");
 }
 
 // ---------------------------------------------------------------------------
@@ -315,46 +271,67 @@ const defaultClassifier: ClassifyPageFn = async (pages) => {
  *                         Defaults to the no-op fallback that assigns "note"/"low".
  * @param opts.config      Knowledge config overrides (unused in K2 but accepted
  *                         so the caller can pass through the full config block).
+ * @param opts.repoRoot    BUG-3 fix (SC-3/SC-12): when provided, every `wiki_page`
+ *                         id + anchor is made **repoRoot-relative** (e.g.
+ *                         `wiki_page:.guild/wiki/index.md`, anchor
+ *                         `.guild/wiki/index.md#slug`). validateGraphV2 resolves
+ *                         anchors at repoRoot, so wikiDir-relative ids ("index.md")
+ *                         were unresolvable → every wiki_page node was dropped, and
+ *                         two roots both with "index.md" collided on id. When
+ *                         absent, ids stay wikiDir-relative (back-compat for direct
+ *                         wiki-index callers/tests). The round1 candidate_key
+ *                         (`wiki_page:<repoRoot-relpath>`) MUST equal this id.
  */
 export async function indexWiki(
   wikiDir: string,
   opts?: {
     classifier?: ClassifyPageFn;
     config?: Record<string, unknown>;
+    repoRoot?: string;
   },
 ): Promise<WikiIndexResult> {
   const classifier = opts?.classifier ?? defaultClassifier;
 
-  // 1. Collect all markdown files (deterministic)
-  const relpaths = collectMarkdownFiles(wikiDir);
+  // BUG-3: compute the wikiDir's repoRoot-relative prefix. When repoRoot is the
+  // wikiDir itself (or absent), relBase is "" and ids stay wikiDir-relative.
+  const relBase =
+    opts?.repoRoot !== undefined
+      ? toPosixRel(path.relative(opts.repoRoot, wikiDir))
+      : "";
+  const toRepoRel = (fileRel: string): string =>
+    relBase ? `${relBase}/${fileRel}` : fileRel;
 
-  // 2. Parse each file: H1, headings, wikilinks, content
+  // 1. Collect EVERY markdown page (BUG-2: shared recursive routine, no BFS gate)
+  const fileRelpaths = collectWikiPageRelpaths(wikiDir);
+
+  // 2. Parse each file: H1, headings, wikilinks, content. The id + anchor use the
+  //    repoRoot-relative path; the filesystem read uses the wikiDir-relative path.
   const pageDescriptors: WikiPageDescriptor[] = [];
-  const pageContents = new Map<string, string>(); // relpath → content
 
-  for (const relpath of relpaths) {
-    const absPath = path.join(wikiDir, relpath);
+  for (const fileRel of fileRelpaths) {
+    const absPath = path.join(wikiDir, fileRel);
     let content: string;
     try {
       content = fs.readFileSync(absPath, "utf8");
     } catch {
       continue; // skip unreadable files
     }
-    pageContents.set(relpath, content);
 
+    const repoRel = toRepoRel(fileRel);
     const h1 = extractH1(content);
     const headings = extractHeadings(content);
     const wikilinks = extractWikilinks(content);
-    const id = makeWikiPageId(relpath);
+    const id = makeWikiPageId(repoRel);
 
-    pageDescriptors.push({ id, relpath, name: h1, headings, content, wikilinks });
+    pageDescriptors.push({ id, relpath: repoRel, name: h1, headings, content, wikilinks });
   }
 
   // 3. Classify (LLM-judged)
   const classifications = await classifier(pageDescriptors);
 
-  // 4. Build basename → relpath resolution map (deterministic)
-  const basenameMap = buildBasenameMap(relpaths);
+  // 4. Build basename → repoRoot-relative-relpath resolution map (deterministic).
+  //    Wikilink basenames resolve to the same repoRoot-relative ids the nodes use.
+  const basenameMap = buildBasenameMap(pageDescriptors.map((d) => d.relpath));
 
   // 5. Emit wiki_page nodes + related edges
   const nodes: GraphNode[] = [];

@@ -63,10 +63,30 @@ import { analyzeDiagrams } from "./diagram-analyze";
 
 import {
   indexWiki,
+  collectWikiPageRelpaths,
   type WikiPageDescriptor,
   type WikiPageClassification,
   type ClassifyPageFn,
 } from "./wiki-index";
+
+import { detectLanguage, isCodeLanguage } from "./lib/languages";
+
+/**
+ * Directory names never descended into during discovery (BUG-1). `.guild` is
+ * excluded because the derived indexes live there — a self-include would feed the
+ * graph's own output back into K1/K3. Build/dependency/VCS dirs carry no
+ * first-party knowledge. Any hidden dir (name starting with ".") is also skipped.
+ * Declared at module top-level so it is initialized before the CLI block (which
+ * runs at module load) calls discoverFilePaths — avoids a const TDZ error.
+ */
+const DISCOVERY_EXCLUDED_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  "coverage",
+  ".guild",
+]);
 
 import {
   buildTaxonomy,
@@ -448,13 +468,27 @@ export function buildFileBackedSeams(judgmentDir: string): KnowledgeLLMSeams {
 // ---------------------------------------------------------------------------
 
 /**
- * Walk `wikiAbsDir` and collect deterministic WikiPage descriptors.
- * Mirrors indexWiki's deterministic page discovery — gives the model the
- * AUTHORITATIVE wiki_page id + heading set to classify in k2-judgments.json.
+ * Collect deterministic WikiPage descriptors for one wiki root — gives the model
+ * the AUTHORITATIVE wiki_page id + heading set to classify in k2-judgments.json.
+ *
+ * BUG-2: page discovery uses the SHARED `collectWikiPageRelpaths` routine that
+ * finalize (indexWiki) also uses, so the round1 candidate page set and the
+ * finalize page set CANNOT drift (the retired index.md-BFS membership gate
+ * dropped pages in finalize that round1 had classified — SC-3 violation).
+ *
+ * BUG-3: the candidate `id` / `candidate_key` / `relpath` are **repoRoot-relative**
+ * (e.g. `wiki_page:.guild/wiki/index.md`) so they equal finalize's indexWiki id
+ * exactly, and so the node's anchor resolves at repoRoot in validateGraphV2.
  *
  * Not using indexWiki directly to keep emitRound1Candidates synchronous.
+ *
+ * @param wikiAbsDir  Absolute path to the wiki root.
+ * @param repoRoot    Absolute repo root — used to prefix ids to repoRoot-relative.
  */
-function collectWikiPageCandidates(wikiAbsDir: string): Array<{
+function collectWikiPageCandidates(
+  wikiAbsDir: string,
+  repoRoot: string
+): Array<{
   candidate_key: string;
   id: string;
   relpath: string;
@@ -464,44 +498,36 @@ function collectWikiPageCandidates(wikiAbsDir: string): Array<{
 }> {
   const results: ReturnType<typeof collectWikiPageCandidates> = [];
 
-  /** Recursively collect .md files under dir, relative to wikiAbsDir. */
-  function walk(dir: string, relBase: string): void {
-    let entries: fs.Dirent[];
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
-    catch { return; }
-    // NI-2: sort for cross-filesystem byte-identity of candidate files
-    entries.sort((a, b) => a.name.localeCompare(b.name));
-    for (const e of entries) {
-      if (e.name.startsWith(".")) continue;
-      const abs = path.join(dir, e.name);
-      const rel = relBase ? `${relBase}/${e.name}` : e.name;
-      if (e.isDirectory()) {
-        walk(abs, rel);
-      } else if (e.name.endsWith(".md")) {
-        let content: string;
-        try { content = fs.readFileSync(abs, "utf8"); }
-        catch { continue; }
-        // H1 (name)
-        const h1Match = content.match(/^#\s+(.+)$/m);
-        const name = h1Match ? h1Match[1].trim() : path.basename(e.name, ".md");
-        // All headings
-        const headings: string[] = [];
-        const headingRe = /^#{1,6}\s+(.+)$/gm;
-        let m: RegExpExecArray | null;
-        while ((m = headingRe.exec(content)) !== null) headings.push(m[1].trim());
-        // [[wikilinks]]
-        const wikilinks: string[] = [];
-        const wlRe = /\[\[([^\]]+)\]\]/g;
-        while ((m = wlRe.exec(content)) !== null) {
-          wikilinks.push(m[1].split("|")[0].trim()); // strip aliases
-        }
-        const id = makeWikiPageId(rel);
-        results.push({ candidate_key: id, id, relpath: rel, name, headings, wikilinks });
-      }
+  const rawRelBase = path.relative(repoRoot, wikiAbsDir).split(path.sep).join("/");
+  const toRepoRel = (fileRel: string): string =>
+    rawRelBase ? `${rawRelBase}/${fileRel}` : fileRel;
+
+  // BUG-2: identical page set as finalize (shared routine, recursive, all .md,
+  // EXCLUDED_WIKI_NAMES meta exclusion, hidden-dir skip, sorted).
+  for (const fileRel of collectWikiPageRelpaths(wikiAbsDir)) {
+    const abs = path.join(wikiAbsDir, fileRel);
+    let content: string;
+    try { content = fs.readFileSync(abs, "utf8"); }
+    catch { continue; }
+    // H1 (name)
+    const h1Match = content.match(/^#\s+(.+)$/m);
+    const name = h1Match ? h1Match[1].trim() : path.basename(fileRel, ".md");
+    // All headings
+    const headings: string[] = [];
+    const headingRe = /^#{1,6}\s+(.+)$/gm;
+    let m: RegExpExecArray | null;
+    while ((m = headingRe.exec(content)) !== null) headings.push(m[1].trim());
+    // [[wikilinks]]
+    const wikilinks: string[] = [];
+    const wlRe = /\[\[([^\]]+)\]\]/g;
+    while ((m = wlRe.exec(content)) !== null) {
+      wikilinks.push(m[1].split("|")[0].trim()); // strip aliases
     }
+    const repoRel = toRepoRel(fileRel);
+    const id = makeWikiPageId(repoRel);
+    results.push({ candidate_key: id, id, relpath: repoRel, name, headings, wikilinks });
   }
 
-  walk(wikiAbsDir, "");
   return results;
 }
 
@@ -589,7 +615,7 @@ export function emitRound1Candidates(
   const k2Pages: ReturnType<typeof collectWikiPageCandidates> = [];
   for (const dir of wikiAbsDirs) {
     if (fs.existsSync(dir)) {
-      k2Pages.push(...collectWikiPageCandidates(dir));
+      k2Pages.push(...collectWikiPageCandidates(dir, repoRoot));
     }
   }
   const k2Doc = {
@@ -782,7 +808,11 @@ async function runKnowledgeStagesK1ToK4(
     wikiDir ?? path.join(repoRoot, ".guild", "wiki"),
     path.join(repoRoot, "docs", "knowledge"),
   ];
-  const k2Opts = seams.classifyPage ? { classifier: seams.classifyPage } : {};
+  // BUG-3: pass repoRoot so wiki_page ids/anchors are repoRoot-relative and
+  // resolve in validateGraphV2 (wikiDir-relative ids were unresolvable → every
+  // wiki_page node dropped). round1 candidate_key == this id (both repoRoot-rel).
+  const k2Opts: { classifier?: ClassifyPageFn; repoRoot: string } = { repoRoot };
+  if (seams.classifyPage) k2Opts.classifier = seams.classifyPage;
   for (const k2Dir of k2Roots) {
     if (fs.existsSync(k2Dir)) {
       const k2Result = await indexWiki(k2Dir, k2Opts);
@@ -1001,12 +1031,37 @@ if (require.main === module) {
 }
 
 // ---------------------------------------------------------------------------
-// discoverFilePaths — heuristic file discovery for CLI use
+// discoverFilePaths — GENERIC repo-wide file discovery for CLI use (BUG-1)
 // ---------------------------------------------------------------------------
 
-function discoverFilePaths(repoRoot: string): KnowledgeFilePaths {
+/**
+ * Discover the corpus file sets GENERICALLY by walking `repoRoot` ONCE.
+ *
+ * BUG-1 fix: the previous implementation hardcoded code dirs `["src","lib"]` and
+ * doc dir `["docs"]` and never returned `svgRelPaths`/`wikiDir`. Guild's own code
+ * lives under `scripts/`, `hooks/`, `mcp-servers/`; arbitrary repos use arbitrary
+ * layouts. On the plugin corpus this produced ZERO code files → no functions → no
+ * clusters → no topics/domains/subtopic_of, and a degenerate all-claim→claim graph.
+ *
+ * Discovery rules (all lists sorted for SC-8/SC-9 determinism):
+ *   - code: any file whose extension maps (via detectLanguage + isCodeLanguage)
+ *     to a language `analyzeSource`/`computeClustersDeterministic` actually parse
+ *     — derived from the source of truth, not a hardcoded extension list — minus
+ *     `.test.`/`.spec.` files.
+ *   - docs: every `.md` (claims/entities/mermaid come from prose).
+ *   - svg:  every `.svg` (K3 diagram nodes).
+ *   - wikiDir: defaults to `<repoRoot>/.guild/wiki`.
+ *
+ * `.guild` is excluded from code/docs/svg so the wiki (indexed separately as
+ * wikiDir) and the derived indexes are never double-scanned as content.
+ *
+ * Exported for red/green real-path tests (the L12 gate proved injected-seam
+ * tests masked this — verify the REAL discovery path, not a fixture helper).
+ */
+export function discoverFilePaths(repoRoot: string): KnowledgeFilePaths {
   const codeRelPaths: string[] = [];
   const docRelPaths: string[] = [];
+  const svgRelPaths: string[] = [];
 
   const walk = (dir: string, relBase: string) => {
     let entries: fs.Dirent[];
@@ -1015,29 +1070,43 @@ function discoverFilePaths(repoRoot: string): KnowledgeFilePaths {
     } catch {
       return;
     }
-    // NI-2: sort for cross-filesystem determinism of codeRelPaths/docRelPaths order
+    // NI-2: sort for cross-filesystem determinism of discovered order.
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const e of entries) {
-      if (e.name.startsWith(".") || e.name === "node_modules") continue;
-      const rel = path.join(relBase, e.name);
+      // Skip hidden entries + excluded dirs (covers `.guild`, node_modules, …).
+      if (e.name.startsWith(".") || DISCOVERY_EXCLUDED_DIRS.has(e.name)) continue;
+      const rel = relBase ? `${relBase}/${e.name}` : e.name;
       if (e.isDirectory()) {
         walk(path.join(dir, e.name), rel);
-      } else if (/\.(ts|js)$/.test(e.name) && !/\.test\.|\.spec\./.test(e.name)) {
-        codeRelPaths.push(rel);
-      } else if (e.name.endsWith(".md")) {
+        continue;
+      }
+      if (!e.isFile()) continue;
+      const lower = e.name.toLowerCase();
+      if (lower.endsWith(".md")) {
         docRelPaths.push(rel);
+      } else if (lower.endsWith(".svg")) {
+        svgRelPaths.push(rel);
+      } else if (
+        isCodeLanguage(detectLanguage(e.name)) &&
+        !/\.test\.|\.spec\./.test(e.name)
+      ) {
+        codeRelPaths.push(rel);
       }
     }
   };
 
-  for (const srcDir of ["src", "lib"]) {
-    const abs = path.join(repoRoot, srcDir);
-    if (fs.existsSync(abs)) walk(abs, srcDir);
-  }
-  for (const docDir of ["docs"]) {
-    const abs = path.join(repoRoot, docDir);
-    if (fs.existsSync(abs)) walk(abs, docDir);
-  }
+  walk(repoRoot, "");
 
-  return { codeRelPaths, docRelPaths };
+  // Sort each list independently (walk already visits in sorted order, but a
+  // final sort makes the contract explicit and robust to future walk changes).
+  codeRelPaths.sort();
+  docRelPaths.sort();
+  svgRelPaths.sort();
+
+  return {
+    codeRelPaths,
+    docRelPaths,
+    svgRelPaths,
+    wikiDir: path.join(repoRoot, ".guild", "wiki"),
+  };
 }
