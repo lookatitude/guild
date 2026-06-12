@@ -11,8 +11,14 @@
  *   Rule 3 — ≥2 distinct claim key-terms (\b<term>\b) appear in function source file
  *   Rule 4 — entity name (\b<name>\b, case-insensitive) in function source file
  *   Rule 5 — entity↔topic by name-token prefix overlap (≥4 shared leading chars)
+ *   Rule 6 — wiki_page↔topic by ≥2 distinct shared key-terms across modalities:
+ *            a topic-identity term in the wiki BODY, or a wiki-identity term in
+ *            the topic SOURCE file → `topic --evidenced_by--> wiki_page` (SC-3).
  *
- * SC coverage: SC-4 (evidenced_by, target anchors, ≤2-hop claim→code),
+ * SC coverage: SC-3 (every wiki_page gets ≥1 topic membership edge — Rule 6;
+ *                    without it every wiki_page is an orphan: topics anchor to
+ *                    code, wiki pages to .guild/wiki/ — Rules 1-5 never bridge),
+ *              SC-4 (evidenced_by, target anchors, ≤2-hop claim→code),
  *              SC-9/SC-11 (determinism — all candidate IDs from input nodes;
  *                          candidates sorted before LLM call; LLM-invented
  *                          edges not in candidate set are discarded),
@@ -40,7 +46,8 @@ export interface CrossLinkCandidate {
     | "func_in_doc"
     | "claim_term_in_code"
     | "entity_in_code"
-    | "name_token_overlap";
+    | "name_token_overlap"
+    | "wiki_topic_term_overlap";
 }
 
 /**
@@ -239,6 +246,27 @@ const STOPWORDS = new Set([
   "list",
   "node",
   "file",
+  // Structural / pronoun fillers — too common to discriminate a wiki↔topic link
+  // (Rule 6). Added per L14: "module" appears in every auto-named topic ("X
+  // Module"), "wiki"/"page" in every wiki node, and the pronoun set survives the
+  // 4-char floor without carrying signal.
+  "module",
+  "modules",
+  "wiki",
+  "page",
+  "pages",
+  "they",
+  "them",
+  "their",
+  "there",
+  "then",
+  "than",
+  "here",
+  "such",
+  "into",
+  "your",
+  "our",
+  "also",
 ]);
 
 /**
@@ -251,6 +279,32 @@ export function extractKeyTerms(text: string): string[] {
     .replace(/[^a-zA-Z\s]/g, " ")
     .split(/\s+/)
     .filter((w) => w.length >= 4 && !STOPWORDS.has(w.toLowerCase()));
+}
+
+/**
+ * Lowercased, de-duplicated key-terms for a node's identity string (Rule 6).
+ * Wraps extractKeyTerms so topic/wiki identity term-sets compare case-folded.
+ *
+ * @example
+ *   distinctLowerKeyTerms("Telemetry Module")  // → ["telemetry"]  ("module" is a stopword)
+ */
+export function distinctLowerKeyTerms(text: string): string[] {
+  return [...new Set(extractKeyTerms(text).map((w) => w.toLowerCase()))];
+}
+
+/**
+ * Extract the raw text of every markdown heading (`#`..`######`) in `content`.
+ * Used to build a wiki_page's identity term-set for Rule 6.
+ *
+ * @example
+ *   extractHeadingTexts("# Title\n## Section A\nbody")  // → ["Title", "Section A"]
+ */
+export function extractHeadingTexts(content: string): string[] {
+  const out: string[] = [];
+  const headingRe = /^#{1,6}\s+(.+)$/gm;
+  let m: RegExpExecArray | null;
+  while ((m = headingRe.exec(content)) !== null) out.push(m[1].trim());
+  return out;
 }
 
 /** Read a file relative to repoRoot; returns null on any error. */
@@ -410,6 +464,79 @@ export function proposeCandidates(
           target: topic.id,
           type: "relates_to",
           reason: "name_token_overlap",
+        });
+      }
+    }
+  }
+
+  // ---- Rule 6: wiki_page↔topic shared-term membership (SC-3) --------------
+  //
+  // Topics anchor to CODE (e.g. `hooks/lib/bus-emit.ts#L1-L2`); wiki pages
+  // anchor to `.guild/wiki/` & `docs/knowledge/` markdown. Rules 1-5 never
+  // bridge them — no shared file (Rule 1), a topic's identity is a code-module
+  // slug not a function name (Rules 2/4), and a wiki page is neither claim nor
+  // entity (Rules 3/5). Result: every wiki_page is an ORPHAN. SC-3 requires
+  // EACH wiki page to carry ≥1 topic membership edge, so we add the bridge.
+  //
+  // Deterministic PROPOSE (SC-9): for each (topic, wiki_page) pair, union the
+  // distinct key-terms that connect the two modalities in EITHER direction —
+  //   • a topic-identity term (name + topic_path) found word-boundary in the
+  //     wiki page BODY, OR
+  //   • a wiki-identity term (name + headings + labels) found word-boundary in
+  //     the topic's SOURCE file content.
+  // ≥2 distinct shared terms → propose `topic --evidenced_by--> wiki_page`
+  // (SC-4: a wiki page is doc-evidence FOR the topic; the edge IS the topic
+  // membership edge SC-3 names). Same ≥2-distinct-term rigor + `\b` word-
+  // boundary matching as Rule 3 — NEVER includes(). Matching is case-insensitive
+  // ("i") because identity terms are case-folded but bodies/sources are not.
+  // Over-generates by design; the LLM half confirms + scores in k5-judgments,
+  // and the candidateKeys guard in buildCrossLinks drops any fabricated key.
+
+  // Precompute per-topic identity terms + concatenated source-file content
+  // (one read per topic, not per pair).
+  const topicTermIndex = topics.map((t) => ({
+    id: t.id,
+    idTerms: distinctLowerKeyTerms(
+      `${t.name ?? ""} ${(t.topic_path ?? []).join(" ")}`
+    ),
+    sourceContent: (t.source_refs ?? [])
+      .map((r) => safeReadFile(repoRoot, fileFromSourceRef(r)) ?? "")
+      .join("\n"),
+  }));
+
+  // Precompute per-wiki_page identity terms + body content (one read per page).
+  const wikiTermIndex = wikiPages.map((w) => {
+    const bodyRef = (w.source_refs ?? [])[0];
+    const body = bodyRef
+      ? safeReadFile(repoRoot, fileFromSourceRef(bodyRef)) ?? ""
+      : "";
+    const headings = extractHeadingTexts(body);
+    return {
+      id: w.id,
+      idTerms: distinctLowerKeyTerms(
+        `${w.name ?? ""} ${headings.join(" ")} ${(w.labels ?? []).join(" ")}`
+      ),
+      body,
+    };
+  });
+
+  for (const t of topicTermIndex) {
+    for (const w of wikiTermIndex) {
+      const shared = new Set<string>();
+      // Direction A: topic-identity term appears in the wiki page body.
+      for (const tt of t.idTerms) {
+        if (wordBoundaryRegex(tt, "i").test(w.body)) shared.add(tt);
+      }
+      // Direction B: wiki-identity term appears in the topic's source file(s).
+      for (const ww of w.idTerms) {
+        if (wordBoundaryRegex(ww, "i").test(t.sourceContent)) shared.add(ww);
+      }
+      if (shared.size >= 2) {
+        addIfNew({
+          source: t.id,
+          target: w.id,
+          type: "evidenced_by",
+          reason: "wiki_topic_term_overlap",
         });
       }
     }
