@@ -1568,4 +1568,73 @@ describe("G-lane rework — models.tiers unknown host keys stripped by the resol
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // models.knowledge.* (L6-support: settings-resolver wiring for SC-14/SC-15)
+  // ---------------------------------------------------------------------------
+
+  test("models.knowledge defaults to KNOWLEDGE_CONFIG_DEFAULTS when no settings.json", () => {
+    const root = mkTmp();
+    try {
+      mkGuildDir(root);
+      const { config } = resolveSettings({ cwd: root });
+      expect(config.models.knowledge).toEqual({
+        maxDepth: 8,
+        maxBranching: 12,
+        minTopicImportance: 0.4,
+        relMinConf: 0.5,
+        maxFiles: 3000,
+        maxTokens: 1_000_000,
+        batchSize: 20,
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("models.knowledge partial override in settings.json merges with defaults", () => {
+    const root = mkTmp();
+    try {
+      mkGuildDir(root);
+      writeSettings(root, { models: { knowledge: { maxDepth: 5, batchSize: 50 } } });
+      const { config } = resolveSettings({ cwd: root });
+      expect(config.models.knowledge.maxDepth).toBe(5);        // overridden
+      expect(config.models.knowledge.batchSize).toBe(50);      // overridden
+      expect(config.models.knowledge.maxBranching).toBe(12);   // default kept
+      expect(config.models.knowledge.minTopicImportance).toBe(0.4); // default kept
+      expect(config.models.knowledge.maxFiles).toBe(3000);     // default kept
+      expect(config.models.knowledge.maxTokens).toBe(1_000_000); // default kept
+      expect(config.models.knowledge.relMinConf).toBe(0.5);    // default kept
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("models.knowledge invalid values (out of range) are silently dropped — defaults kept", () => {
+    const root = mkTmp();
+    try {
+      mkGuildDir(root);
+      // maxDepth: 0 is below min (1), so dropped; minTopicImportance: 1.5 is above max (1), so dropped
+      writeSettings(root, { models: { knowledge: { maxDepth: 0, minTopicImportance: 1.5 } } });
+      const { config } = resolveSettings({ cwd: root });
+      expect(config.models.knowledge.maxDepth).toBe(8);              // default — 0 was rejected
+      expect(config.models.knowledge.minTopicImportance).toBe(0.4);  // default — 1.5 was rejected
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("models.knowledge settings.local.json override wins over settings.json value", () => {
+    const root = mkTmp();
+    try {
+      mkGuildDir(root);
+      writeSettings(root, { models: { knowledge: { maxDepth: 5 } } });
+      writeLocal(root, { models: { knowledge: { maxDepth: 3 } } });
+      const { config } = resolveSettings({ cwd: root });
+      expect(config.models.knowledge.maxDepth).toBe(3); // local wins
+      expect(config.models.knowledge.maxBranching).toBe(12); // default kept
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

@@ -45,6 +45,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { resolveSettings } from "./lib/settings-resolver";
+import { KNOWLEDGE_CONFIG_DEFAULTS } from "./understand/lib/schema";
 
 // ── Schema (Tier-1 + Tier-2 defaults). Canonical body: command-surface.md §4.4.
 interface QualityBudget {
@@ -232,6 +233,18 @@ interface ModelsBlock {
    * Values are proposed by `benchmark/src/calibrate-o3-cli.ts`; operator reviews + lands.
    */
   shortOutputThreshold: Record<string, Record<string, number>>;
+  /** Knowledge-graph analysis tuning params (SC-14/SC-15 / cost-aware-tiering ADR §10). */
+  knowledge: KnowledgeConfigBlock;
+}
+/** Mutable numeric mirror of KNOWLEDGE_CONFIG_DEFAULTS — enables per-project overrides. */
+interface KnowledgeConfigBlock {
+  maxDepth: number;
+  maxBranching: number;
+  minTopicImportance: number;
+  relMinConf: number;
+  maxFiles: number;
+  maxTokens: number;
+  batchSize: number;
 }
 
 // ── Security block (v2-security-and-untrusted-content ADR — D-BYPASS).
@@ -414,6 +427,7 @@ const DEFAULTS: GuildSettings = {
     importanceGate: 3,
     ingestSimilarityGate: 0.80,
     shortOutputThreshold: {},
+    knowledge: { ...KNOWLEDGE_CONFIG_DEFAULTS },
   },
   security: {
     bypass_permissions_policy: "audit",
@@ -679,7 +693,7 @@ const VALID_MODELS_KEYS = new Set([
   "enabled", "tiers", "scoreWeights", "thresholds", "advisorRounds",
   "escalationMarkers", "recallBeforeRead", "recallScoreThreshold",
   "structuredOutputRequired", "cacheTTL", "importanceGate", "ingestSimilarityGate",
-  "shortOutputThreshold",
+  "shortOutputThreshold", "knowledge",
 ]);
 
 // Closed host-key set for models.tiers.<tier>.* (G-11 + G-lane rework): the
@@ -1420,6 +1434,26 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
           if (Object.keys(innerMerged).length > 0) merged[taskType] = innerMerged;
         }
         mergedModels.shortOutputThreshold = merged;
+      }
+      // knowledge: per-project K-stage tuning params (SC-14/SC-15, cost-aware-tiering ADR §10).
+      if (isPlainObject(rawModels["knowledge"])) {
+        const rawK = rawModels["knowledge"] as Record<string, unknown>;
+        const mergedK: KnowledgeConfigBlock = { ...DEFAULTS.models.knowledge };
+        if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
+          mergedK.maxDepth = Math.floor(rawK["maxDepth"] as number);
+        if (typeof rawK["maxBranching"] === "number" && rawK["maxBranching"] >= 1)
+          mergedK.maxBranching = Math.floor(rawK["maxBranching"] as number);
+        if (typeof rawK["minTopicImportance"] === "number" && rawK["minTopicImportance"] >= 0 && rawK["minTopicImportance"] <= 1)
+          mergedK.minTopicImportance = rawK["minTopicImportance"] as number;
+        if (typeof rawK["relMinConf"] === "number" && rawK["relMinConf"] >= 0 && rawK["relMinConf"] <= 1)
+          mergedK.relMinConf = rawK["relMinConf"] as number;
+        if (typeof rawK["maxFiles"] === "number" && rawK["maxFiles"] >= 1)
+          mergedK.maxFiles = Math.floor(rawK["maxFiles"] as number);
+        if (typeof rawK["maxTokens"] === "number" && rawK["maxTokens"] >= 1)
+          mergedK.maxTokens = Math.floor(rawK["maxTokens"] as number);
+        if (typeof rawK["batchSize"] === "number" && rawK["batchSize"] >= 1)
+          mergedK.batchSize = Math.floor(rawK["batchSize"] as number);
+        mergedModels.knowledge = mergedK;
       }
       out.models = mergedModels;
     }

@@ -41,6 +41,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { KNOWLEDGE_CONFIG_DEFAULTS } from "../understand/lib/schema";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const yaml = require("js-yaml") as { load: (src: string) => unknown };
 
@@ -111,6 +112,18 @@ interface CacheTTLBlock {
   coordinator: "1h" | "5m" | "off";
   leaf: "1h" | "5m" | "off";
 }
+/** Mutable numeric version of KNOWLEDGE_CONFIG_DEFAULTS — lets settings layers
+ *  override individual fields without being locked to the exact literal types
+ *  of the schema's `as const` export. */
+interface KnowledgeConfigBlock {
+  maxDepth: number;
+  maxBranching: number;
+  minTopicImportance: number;
+  relMinConf: number;
+  maxFiles: number;
+  maxTokens: number;
+  batchSize: number;
+}
 interface ModelsBlock {
   enabled: boolean;
   tiers: TiersBlock;
@@ -125,6 +138,7 @@ interface ModelsBlock {
   importanceGate: number;
   ingestSimilarityGate: number;
   shortOutputThreshold: Record<string, Record<string, number>>;
+  knowledge: KnowledgeConfigBlock;
 }
 interface SecurityBlock {
   bypass_permissions_policy: "deny" | "audit" | "allow";
@@ -283,6 +297,7 @@ const DEFAULTS: ResolvedConfig = {
     importanceGate: 3,
     ingestSimilarityGate: 0.80,
     shortOutputThreshold: {},
+    knowledge: { ...KNOWLEDGE_CONFIG_DEFAULTS },
   },
   security: {
     bypass_permissions_policy: "audit",
@@ -388,7 +403,7 @@ const VALID_MODELS_KEYS = new Set([
   "enabled", "tiers", "scoreWeights", "thresholds", "advisorRounds",
   "escalationMarkers", "recallBeforeRead", "recallScoreThreshold",
   "structuredOutputRequired", "cacheTTL", "importanceGate", "ingestSimilarityGate",
-  "shortOutputThreshold",
+  "shortOutputThreshold", "knowledge",
 ]);
 const VALID_SECURITY_KEYS       = new Set(["bypass_permissions_policy"]);
 const VALID_SECRETS_POLICY_KEYS = new Set([
@@ -684,6 +699,25 @@ function parseSettingsFile(filePath: string): Partial<ResolvedConfig> {
       }
       sparse.shortOutputThreshold = sotMerged;
     }
+    if (isPlainObject(rawModels["knowledge"])) {
+      const rawK = rawModels["knowledge"] as Record<string, unknown>;
+      const sparseK: Partial<KnowledgeConfigBlock> = {};
+      if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
+        sparseK.maxDepth = Math.floor(rawK["maxDepth"] as number);
+      if (typeof rawK["maxBranching"] === "number" && rawK["maxBranching"] >= 1)
+        sparseK.maxBranching = Math.floor(rawK["maxBranching"] as number);
+      if (typeof rawK["minTopicImportance"] === "number" && rawK["minTopicImportance"] >= 0 && rawK["minTopicImportance"] <= 1)
+        sparseK.minTopicImportance = rawK["minTopicImportance"] as number;
+      if (typeof rawK["relMinConf"] === "number" && rawK["relMinConf"] >= 0 && rawK["relMinConf"] <= 1)
+        sparseK.relMinConf = rawK["relMinConf"] as number;
+      if (typeof rawK["maxFiles"] === "number" && rawK["maxFiles"] >= 1)
+        sparseK.maxFiles = Math.floor(rawK["maxFiles"] as number);
+      if (typeof rawK["maxTokens"] === "number" && rawK["maxTokens"] >= 1)
+        sparseK.maxTokens = Math.floor(rawK["maxTokens"] as number);
+      if (typeof rawK["batchSize"] === "number" && rawK["batchSize"] >= 1)
+        sparseK.batchSize = Math.floor(rawK["batchSize"] as number);
+      sparse.knowledge = sparseK as KnowledgeConfigBlock;
+    }
     out.models = sparse as ModelsBlock;
   }
   if (isPlainObject(parsed["security"])) {
@@ -842,6 +876,25 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
         if (Object.keys(innerMerged).length > 0) sotMerged[taskType] = innerMerged;
       }
       sparse.shortOutputThreshold = sotMerged;
+    }
+    if (isPlainObject(rawModels["knowledge"])) {
+      const rawK = rawModels["knowledge"] as Record<string, unknown>;
+      const sparseK: Partial<KnowledgeConfigBlock> = {};
+      if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
+        sparseK.maxDepth = Math.floor(rawK["maxDepth"] as number);
+      if (typeof rawK["maxBranching"] === "number" && rawK["maxBranching"] >= 1)
+        sparseK.maxBranching = Math.floor(rawK["maxBranching"] as number);
+      if (typeof rawK["minTopicImportance"] === "number" && rawK["minTopicImportance"] >= 0 && rawK["minTopicImportance"] <= 1)
+        sparseK.minTopicImportance = rawK["minTopicImportance"] as number;
+      if (typeof rawK["relMinConf"] === "number" && rawK["relMinConf"] >= 0 && rawK["relMinConf"] <= 1)
+        sparseK.relMinConf = rawK["relMinConf"] as number;
+      if (typeof rawK["maxFiles"] === "number" && rawK["maxFiles"] >= 1)
+        sparseK.maxFiles = Math.floor(rawK["maxFiles"] as number);
+      if (typeof rawK["maxTokens"] === "number" && rawK["maxTokens"] >= 1)
+        sparseK.maxTokens = Math.floor(rawK["maxTokens"] as number);
+      if (typeof rawK["batchSize"] === "number" && rawK["batchSize"] >= 1)
+        sparseK.batchSize = Math.floor(rawK["batchSize"] as number);
+      sparse.knowledge = sparseK as KnowledgeConfigBlock;
     }
     out.models = sparse as ModelsBlock;
   }
