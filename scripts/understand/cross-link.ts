@@ -1,0 +1,504 @@
+/**
+ * K5 cross-modal-link — `buildCrossLinks`
+ *
+ * Proposes candidate evidenced_by / relates_to / mentions edges across
+ * code ↔ topic ↔ wiki ↔ diagram boundaries via deterministic file-read
+ * rules, then calls an injected LLM seam to confirm + score each edge.
+ *
+ * Deterministic candidate rules:
+ *   Rule 1 — shared file-level anchor between any two nodes' source_refs
+ *   Rule 2 — function name (\b<funcName>\b) appears in doc/claim/topic file
+ *   Rule 3 — ≥2 distinct claim key-terms (\b<term>\b) appear in function source file
+ *   Rule 4 — entity name (\b<name>\b, case-insensitive) in function source file
+ *   Rule 5 — entity↔topic by name-token prefix overlap (≥4 shared leading chars)
+ *
+ * SC coverage: SC-4 (evidenced_by, target anchors, ≤2-hop claim→code),
+ *              SC-9/SC-11 (determinism — all candidate IDs from input nodes;
+ *                          candidates sorted before LLM call; LLM-invented
+ *                          edges not in candidate set are discarded),
+ *              SC-12 (anchor resolution for evidenced_by targets).
+ *
+ * Usage:
+ *   const { edges } = await buildCrossLinks(repoRoot, { nodes, edges }, opts)
+ */
+
+import * as fs from "fs";
+import * as path from "path";
+import type { GraphNode, GraphEdge } from "./lib/schema";
+import { resolveAnchor } from "./lib/schema";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface CrossLinkCandidate {
+  source: string; // source node ID
+  target: string; // target node ID
+  type: "evidenced_by" | "relates_to" | "mentions";
+  reason:
+    | "shared_file"
+    | "func_in_doc"
+    | "claim_term_in_code"
+    | "entity_in_code"
+    | "name_token_overlap";
+}
+
+/**
+ * LLM seam — injected; fail-loud if absent.
+ *
+ * Receives the full node list + deterministic candidates (sorted). Returns
+ * GraphEdge[] — only edges whose (source, target, type) triple is present in
+ * the candidate set are accepted; others are silently discarded (SC-9 guard).
+ */
+export type ConfirmCrossLinksFn = (
+  nodes: GraphNode[],
+  candidates: CrossLinkCandidate[],
+  context: { relMinConf: number }
+) => Promise<GraphEdge[]>;
+
+export interface CrossLinkOptions {
+  /** LLM seam — required. Throws with "LLM adapter … confirmCrossLinks" if absent. */
+  confirmCrossLinks: ConfirmCrossLinksFn;
+  /** Minimum confidence weight for emitting an edge. Default: 0.5 */
+  relMinConf?: number;
+}
+
+export interface CrossLinkResult {
+  edges: GraphEdge[];
+}
+
+// ---------------------------------------------------------------------------
+// Pure helpers (exported for unit tests)
+// ---------------------------------------------------------------------------
+
+/**
+ * Strip the fragment from a source_ref, returning the bare file path.
+ *
+ * @example
+ *   fileFromSourceRef("docs/ingestion.md#ingestion")  // → "docs/ingestion.md"
+ *   fileFromSourceRef("src/validate.ts#L16-L20")       // → "src/validate.ts"
+ */
+export function fileFromSourceRef(ref: string): string {
+  const hashIdx = ref.indexOf("#");
+  return hashIdx === -1 ? ref : ref.slice(0, hashIdx);
+}
+
+/**
+ * Extract the function name from a function node ID.
+ * "function:src/validate.ts:validateEvent" → "validateEvent"
+ * Returns null for non-function node IDs.
+ */
+export function funcNameFromId(nodeId: string): string | null {
+  if (!nodeId.startsWith("function:")) return null;
+  const parts = nodeId.split(":");
+  return parts.length >= 3 ? parts[parts.length - 1] : null;
+}
+
+/**
+ * Escape a string for use in a RegExp constructor.
+ */
+export function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Build a word-boundary regex for a term.
+ *
+ * ⚠ L1 lesson: always use `\b<escaped>\b`, never `includes()`.
+ * `wordBoundaryRegex("store")` does NOT match "stored" or "storeEvent".
+ *
+ * @param flags  Optional flags string (e.g. 'i' for case-insensitive).
+ */
+export function wordBoundaryRegex(term: string, flags: string = ""): RegExp {
+  return new RegExp(`\\b${escapeRegex(term)}\\b`, flags);
+}
+
+/**
+ * Split a name into lowercase slug tokens for prefix-overlap comparison.
+ *
+ * @example
+ *   nameSlugTokens("Event Store")  // → ["event", "store"]
+ *   nameSlugTokens("event-pipeline") // → ["event", "pipeline"]
+ */
+export function nameSlugTokens(name: string): string[] {
+  return name
+    .toLowerCase()
+    .split(/[\s\-_]+/)
+    .filter((t) => t.length > 0);
+}
+
+/**
+ * Length of the longest common prefix of two lowercase strings.
+ *
+ * @example
+ *   sharedPrefixLen("store", "storage")    // → 4  ("stor")
+ *   sharedPrefixLen("validator", "validation") // → 7 ("validat")
+ *   sharedPrefixLen("event", "ingestion")   // → 0
+ */
+export function sharedPrefixLen(a: string, b: string): number {
+  const min = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < min && a[i] === b[i]) i++;
+  return i;
+}
+
+/**
+ * Stop-words excluded from claim term extraction (Rule 3).
+ * Includes both linguistic stop-words and common generic tech terms that
+ * appear in nearly every codebase and provide no discriminative signal.
+ */
+const STOPWORDS = new Set([
+  // Linguistic stop-words
+  "a",
+  "an",
+  "the",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "it",
+  "its",
+  "of",
+  "in",
+  "to",
+  "for",
+  "on",
+  "at",
+  "by",
+  "and",
+  "or",
+  "not",
+  "so",
+  "no",
+  "never",
+  "every",
+  "all",
+  "any",
+  "each",
+  "that",
+  "this",
+  "these",
+  "those",
+  "has",
+  "have",
+  "had",
+  "do",
+  "does",
+  "did",
+  "will",
+  "would",
+  "could",
+  "should",
+  "may",
+  "might",
+  "must",
+  "can",
+  "with",
+  "from",
+  "before",
+  "after",
+  "once",
+  "which",
+  "what",
+  "when",
+  "where",
+  "who",
+  "how",
+  "as",
+  "only",
+  // Generic tech terms — too common to be a discriminative signal
+  "event",
+  "events",
+  "data",
+  "type",
+  "types",
+  "valid",
+  "check",
+  "error",
+  "value",
+  "object",
+  "input",
+  "output",
+  "result",
+  "handle",
+  "create",
+  "update",
+  "delete",
+  "process",
+  "service",
+  "request",
+  "response",
+  "method",
+  "class",
+  "function",
+  "return",
+  "param",
+  "item",
+  "list",
+  "node",
+  "file",
+]);
+
+/**
+ * Extract key terms from a claim's text: strip punctuation, split on
+ * whitespace, filter stop-words and generic tech terms, and require
+ * minimum length of 4 characters.
+ */
+export function extractKeyTerms(text: string): string[] {
+  return text
+    .replace(/[^a-zA-Z\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !STOPWORDS.has(w.toLowerCase()));
+}
+
+/** Read a file relative to repoRoot; returns null on any error. */
+function safeReadFile(repoRoot: string, relPath: string): string | null {
+  try {
+    return fs.readFileSync(path.join(repoRoot, relPath), "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic candidate proposal
+// ---------------------------------------------------------------------------
+
+/**
+ * Propose cross-modal link candidates by deterministic file-read rules.
+ * Over-generates by design — the LLM seam prunes to semantically valid edges.
+ * The returned list is sorted by (source, target, type) for SC-11 determinism.
+ *
+ * SC-11: no LLM-invented IDs; all candidate source/target IDs come from the
+ * nodes array provided by earlier K-stages.
+ */
+export function proposeCandidates(
+  repoRoot: string,
+  nodes: GraphNode[],
+  _existingEdges: GraphEdge[] // reserved for future dedup; unused in proposal
+): CrossLinkCandidate[] {
+  const seen = new Set<string>();
+  const unsorted: CrossLinkCandidate[] = [];
+
+  function addIfNew(c: CrossLinkCandidate): void {
+    const key = `${c.source}→${c.target}:${c.type}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      unsorted.push(c);
+    }
+  }
+
+  const claims = nodes.filter((n) => n.type === "claim");
+  const functions = nodes.filter((n) => n.type === "function");
+  const topics = nodes.filter((n) => n.type === "topic");
+  const entities = nodes.filter((n) => n.type === "entity");
+  const wikiPages = nodes.filter((n) => n.type === "wiki_page");
+
+  // ---- Rule 1: Shared file path between any two nodes' source_refs --------
+  //
+  // Generates both directions so the LLM can choose the canonical one.
+
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i];
+      const b = nodes[j];
+      const filesA = (a.source_refs ?? []).map(fileFromSourceRef);
+      const filesB = (b.source_refs ?? []).map(fileFromSourceRef);
+      const sharesFile = filesA.some((f) => f && filesB.includes(f));
+      if (sharesFile) {
+        addIfNew({ source: a.id, target: b.id, type: "evidenced_by", reason: "shared_file" });
+        addIfNew({ source: b.id, target: a.id, type: "evidenced_by", reason: "shared_file" });
+      }
+    }
+  }
+
+  // ---- Rule 2: Function name in doc/claim/topic/wiki_page file ------------
+  //
+  // ⚠ Uses exact word-boundary regex — never naive includes().
+
+  for (const fn of functions) {
+    const fnName = funcNameFromId(fn.id);
+    if (!fnName) continue;
+    const fnRe = wordBoundaryRegex(fnName, ""); // case-sensitive (camelCase)
+
+    for (const doc of [...claims, ...topics, ...wikiPages]) {
+      const ref = (doc.source_refs ?? [])[0];
+      if (!ref) continue;
+      const content = safeReadFile(repoRoot, fileFromSourceRef(ref));
+      if (content && fnRe.test(content)) {
+        addIfNew({ source: doc.id, target: fn.id, type: "evidenced_by", reason: "func_in_doc" });
+      }
+    }
+  }
+
+  // ---- Rule 3: ≥2 distinct claim key-terms in function source file --------
+  //
+  // Requires at least 2 non-stopword, non-generic-tech terms to match
+  // word-boundary in the function file — a single common word (e.g. "event",
+  // "data") is not a strong enough signal and floods the LLM with noise.
+
+  for (const claim of claims) {
+    const terms = extractKeyTerms(claim.name ?? "");
+    if (terms.length === 0) continue;
+
+    for (const fn of functions) {
+      const ref = (fn.source_refs ?? [])[0];
+      if (!ref) continue;
+      const content = safeReadFile(repoRoot, fileFromSourceRef(ref));
+      if (!content) continue;
+      // Require ≥2 distinct matching terms (not just any single one).
+      const matchCount = terms.filter((t) => wordBoundaryRegex(t, "").test(content)).length;
+      if (matchCount >= 2) {
+        addIfNew({
+          source: claim.id,
+          target: fn.id,
+          type: "evidenced_by",
+          reason: "claim_term_in_code",
+        });
+      }
+    }
+  }
+
+  // ---- Rule 4: Entity name (case-insensitive word-boundary) in function file
+
+  for (const fn of functions) {
+    const ref = (fn.source_refs ?? [])[0];
+    if (!ref) continue;
+    const content = safeReadFile(repoRoot, fileFromSourceRef(ref));
+    if (!content) continue;
+
+    for (const entity of entities) {
+      const entityName = (entity.name ?? "").trim();
+      if (!entityName) continue;
+      if (wordBoundaryRegex(entityName, "i").test(content)) {
+        addIfNew({
+          source: fn.id,
+          target: entity.id,
+          type: "mentions",
+          reason: "entity_in_code",
+        });
+      }
+    }
+  }
+
+  // ---- Rule 5: Entity↔topic by name-token prefix overlap (≥4 chars) ------
+  //
+  // "Validator" and "Validation" share prefix "validat" (7 chars) ✓
+  // "Event Store" token "store" and "Storage" share prefix "stor" (4 chars) ✓
+  // "Event" and "Ingestion" share no prefix ✗
+  //
+  // SC-9: entity/topic IDs come from the nodes array — the LLM never invents
+  // new IDs; it only scores (source,target,type) triples proposed here.
+
+  for (const entity of entities) {
+    const entityTokens = nameSlugTokens(entity.name ?? "");
+    if (entityTokens.length === 0) continue;
+
+    for (const topic of topics) {
+      const topicTokens = nameSlugTokens(topic.name ?? "");
+      if (topicTokens.length === 0) continue;
+
+      const hasOverlap = entityTokens.some((et) =>
+        topicTokens.some((tt) => sharedPrefixLen(et, tt) >= 4)
+      );
+
+      if (hasOverlap) {
+        addIfNew({
+          source: entity.id,
+          target: topic.id,
+          type: "relates_to",
+          reason: "name_token_overlap",
+        });
+      }
+    }
+  }
+
+  // Sort by (source, target, type) for SC-11 determinism — candidate order is
+  // independent of nodes-array traversal order.
+  return unsorted.sort((a, b) => {
+    if (a.source !== b.source) return a.source < b.source ? -1 : 1;
+    if (a.target !== b.target) return a.target < b.target ? -1 : 1;
+    return a.type < b.type ? -1 : 1;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Main entry point
+// ---------------------------------------------------------------------------
+
+/**
+ * Build cross-modal links for a knowledge graph.
+ *
+ * @param repoRoot   Absolute path to the repository root (for anchor resolution).
+ * @param input      Graph nodes + existing edges (from prior K-stages).
+ * @param opts       Must include `confirmCrossLinks` (LLM seam). Throws if absent.
+ */
+export async function buildCrossLinks(
+  repoRoot: string,
+  input: { nodes: GraphNode[]; edges: GraphEdge[] },
+  opts: CrossLinkOptions
+): Promise<CrossLinkResult> {
+  // FAIL-LOUD — missing LLM adapter is a programmer error, not a runtime one.
+  if (!opts || !opts.confirmCrossLinks) {
+    throw new Error(
+      "cross-link: LLM adapter (confirmCrossLinks) is required but was not provided. " +
+        "Inject a ConfirmCrossLinksFn via opts.confirmCrossLinks."
+    );
+  }
+
+  const relMinConf = opts.relMinConf ?? 0.5;
+
+  // Step 1: Propose candidates deterministically (sorted for SC-11).
+  const candidates = proposeCandidates(repoRoot, input.nodes, input.edges);
+
+  // Step 2: Build candidate key set for the SC-9 guard (B1).
+  // Only edges whose (source,target,type) were proposed deterministically
+  // are accepted from the LLM — invented pairs are silently discarded.
+  const candidateKeys = new Set<string>(
+    candidates.map((c) => `${c.source}→${c.target}:${c.type}`)
+  );
+
+  // Step 3: Call LLM seam — confirm + score; candidates are already sorted.
+  const rawEdges = await opts.confirmCrossLinks(input.nodes, candidates, { relMinConf });
+
+  // Step 4: Build existing-edge key set for dedup.
+  const existingKeys = new Set<string>(
+    input.edges.map((e) => `${e.source}→${e.target}:${e.type}`)
+  );
+
+  // Step 5: Build a node-by-id map for anchor resolution.
+  const nodeById = new Map<string, GraphNode>(input.nodes.map((n) => [n.id, n]));
+
+  // Step 6: Filter, validate, dedup.
+  const result: GraphEdge[] = [];
+
+  for (const edge of rawEdges) {
+    // SC-9 guard (B1): discard LLM-invented edges not in the deterministic
+    // candidate set. Same pattern as L4's validTopicIds guard.
+    const edgeKey = `${edge.source}→${edge.target}:${edge.type}`;
+    if (!candidateKeys.has(edgeKey)) continue;
+
+    // Weight filter.
+    if (edge.weight < relMinConf) continue;
+
+    // Dedup against existing edges.
+    if (existingKeys.has(edgeKey)) continue;
+
+    // SC-12: For evidenced_by edges, validate the target node's anchor.
+    if (edge.type === "evidenced_by") {
+      const targetNode = nodeById.get(edge.target);
+      if (!targetNode) continue; // target node unknown — drop
+      const refs = targetNode.source_refs ?? [];
+      const anyResolves = refs.some((r) => resolveAnchor(repoRoot, r));
+      if (!anyResolves) continue; // anchor does not resolve — drop
+    }
+
+    // Accept edge and register to prevent duplicates within this batch.
+    result.push(edge);
+    existingKeys.add(edgeKey);
+  }
+
+  return { edges: result };
+}
