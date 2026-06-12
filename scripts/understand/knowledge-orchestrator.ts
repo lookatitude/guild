@@ -173,6 +173,111 @@ export interface RunKnowledgeResult {
   provenancePath: string;
   nodeCount: number;
   edgeCount: number;
+  /**
+   * Defense-in-depth (SC-3 machine check): wiki_page node ids in the VALIDATED
+   * graph that have NO topic-membership edge (evidenced_by from a topic). The
+   * deterministic fallback root topic guarantees this is `[]` for any topic-less
+   * corpus; a non-empty value is a tripwire (logged to stderr, never a hard
+   * reject). NOT part of the SC-8 byte-set — lives only on the in-memory result.
+   */
+  sc3OrphanWikiPageIds: string[];
+}
+
+// ---------------------------------------------------------------------------
+// SC-3 fallback root topic (deterministic) — see guild-plan.md §L20
+// ---------------------------------------------------------------------------
+
+/**
+ * Deterministic seed fed to makeTopicId for the SC-3 fallback root topic id.
+ * Constant (not corpus-derived) so the id is stable across every topic-less run.
+ */
+export const FALLBACK_ROOT_TOPIC_SEED = "project-knowledge";
+/** Display name of the SC-3 fallback root topic. */
+export const FALLBACK_ROOT_TOPIC_NAME = "Project Knowledge";
+
+/**
+ * SC-3 unconditional guarantee: when the assembled graph has ≥1 `wiki_page` but
+ * 0 `topic` nodes (a topic-less corpus — wiki/docs pages but no code, so K4
+ * emits 0 topics and cross-link Rule 6 cannot fire), synthesize ONE deterministic
+ * fallback root `topic` and link EVERY wiki_page to it via `evidenced_by`
+ * (topic→wiki_page). Returns `null` (no-op) when there are 0 wiki_page nodes OR
+ * ≥1 topic already exists — so the normal multi-topic path (incl. the real
+ * 16-topic plugin graph) is BYTE-IDENTICAL (synthesis never fires there).
+ *
+ * Determinism (SC-8): the id is `makeTopicId([SEED])` (constant), the anchor is
+ * the lexicographically-first wiki_page's bare repoRoot-relative path (an
+ * existing on-disk artifact → resolves at repoRoot for SC-12, fragment-free so
+ * it is robust regardless of headings), and edges are emitted in sorted target
+ * order. No Date/random.
+ *
+ * @param nodes     The assembled node set (post K1→K5, pre validateGraphV2).
+ * @param _repoRoot Reserved (anchor resolution is checked downstream by validateGraphV2).
+ */
+export function maybeSynthesizeFallbackRootTopic(
+  nodes: GraphNode[],
+  _repoRoot: string
+): { topicNode: GraphNode; edges: GraphEdge[] } | null {
+  const wikiPages = nodes.filter((n) => n.type === "wiki_page");
+  if (wikiPages.length === 0) return null;
+  if (nodes.some((n) => n.type === "topic")) return null;
+
+  // Anchor to a REAL artifact: the lexicographically-first wiki_page's bare
+  // relpath (derived from its id `wiki_page:<relpath>`). indexWiki only emits a
+  // node for an existing file, so this bare path resolves at repoRoot (SC-12)
+  // independent of any heading fragment.
+  const sortedWikis = [...wikiPages].sort((a, b) => a.id.localeCompare(b.id));
+  const firstRelpath = sortedWikis[0].id.slice("wiki_page:".length);
+
+  const topicId = makeTopicId([FALLBACK_ROOT_TOPIC_SEED]);
+  const topicNode: GraphNode = {
+    id: topicId,
+    type: "topic",
+    name: FALLBACK_ROOT_TOPIC_NAME,
+    category: "concept",
+    source_refs: [firstRelpath],
+    confidence: "high",
+    importance: "high",
+    importance_score: 1.0,
+    topic_path: [FALLBACK_ROOT_TOPIC_SEED],
+  };
+
+  const edges: GraphEdge[] = sortedWikis.map((w) => ({
+    direction: "out",
+    source: topicId,
+    target: w.id,
+    type: "evidenced_by",
+    weight: 1.0,
+  }));
+
+  return { topicNode, edges };
+}
+
+/**
+ * SC-3 machine check: wiki_page ids in `graph` with NO topic-membership edge
+ * (an `evidenced_by` edge whose source is a topic and whose target is the page).
+ * Deterministic (sorted). Empty when there are no wiki_page nodes.
+ */
+function findOrphanWikiPages(graph: {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}): string[] {
+  const wikiIds = graph.nodes.filter((n) => n.type === "wiki_page").map((n) => n.id);
+  if (wikiIds.length === 0) return [];
+  const topicIds = new Set(
+    graph.nodes.filter((n) => n.type === "topic").map((n) => n.id)
+  );
+  const covered = new Set<string>();
+  for (const e of graph.edges) {
+    if (
+      e.type === "evidenced_by" &&
+      topicIds.has(e.source) &&
+      typeof e.target === "string" &&
+      e.target.startsWith("wiki_page:")
+    ) {
+      covered.add(e.target);
+    }
+  }
+  return wikiIds.filter((id) => !covered.has(id)).sort();
 }
 
 // ---------------------------------------------------------------------------
@@ -862,6 +967,20 @@ export async function runKnowledgeStages(
   );
   allEdges.push(...k5Result.edges);
 
+  // ── SC-3 fallback root topic (deterministic) ──────────────────────────────
+  // Guarantees EVERY wiki_page has ≥1 topic-membership edge even when K4 emits
+  // 0 topics (topic-less corpus → cross-link Rule 6 cannot fire). No-op when
+  // ≥1 topic already exists (Rule 6 owns coverage) or there are 0 wiki_page
+  // nodes — so the real multi-topic plugin graph is byte-identical (synthesis
+  // never fires there). This is the REAL guarantee behind the SC-3 machine
+  // check below. Placed AFTER K5 + BEFORE validateGraphV2 so it sees both the
+  // final topic set and the final wiki_page set (per guild-plan.md §L20).
+  const fallback = maybeSynthesizeFallbackRootTopic(allNodes, repoRoot);
+  if (fallback) {
+    allNodes.push(fallback.topicNode);
+    allEdges.push(...fallback.edges);
+  }
+
   // ── Assemble KnowledgeGraph v2 ─────────────────────────────────────────────
   const graphRaw: KnowledgeGraph = {
     version: "guild.knowledge_graph.v2",
@@ -907,6 +1026,24 @@ export async function runKnowledgeStages(
   );
   const graph: KnowledgeGraph = { ...validated, nodes: canonNodes, edges: canonEdges };
 
+  // ── Defense-in-depth: SC-3 machine check on the VALIDATED graph ────────────
+  // The orphan codex found passed SILENTLY because nothing enforced SC-3.
+  // We assert here (the least-invasive spot that sees the final validated graph)
+  // that every wiki_page has ≥1 topic-membership edge. With the fallback root in
+  // place this is always clean; a non-empty result is a tripwire — logged to
+  // stderr, surfaced on the result, but NEVER a hard reject (legit runs must not
+  // break). It is deliberately NOT inside validateGraphV2: the L0f reference
+  // corpus models SC-3 via wiki↔wiki `related` edges and carries 0 topic edges,
+  // so a validator-level reject would regress the knowledge-tier eval suite.
+  const sc3OrphanWikiPageIds = findOrphanWikiPages(graph);
+  if (sc3OrphanWikiPageIds.length > 0) {
+    process.stderr.write(
+      `[knowledge] SC-3 WARNING: ${sc3OrphanWikiPageIds.length} wiki_page node(s) ` +
+        `have no topic-membership edge after validation: ` +
+        `${sc3OrphanWikiPageIds.join(", ")}\n`
+    );
+  }
+
   // ── Write knowledge-graph.json (v2, H1-canonicalized) ─────────────────────
   const indexesDir = path.join(repoRoot, ".guild", "indexes");
   fs.mkdirSync(indexesDir, { recursive: true });
@@ -932,6 +1069,7 @@ export async function runKnowledgeStages(
     provenancePath: linksResult.provenancePath,
     nodeCount: graph.nodes.length,
     edgeCount: graph.edges.length,
+    sc3OrphanWikiPageIds,
   };
 }
 
