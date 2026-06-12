@@ -6,9 +6,9 @@
  * Covers:
  *   A — buildFileBackedSeams: reads judgment files by candidate_key (hermetic)
  *   B — emitRound1Candidates: writes k1/k2/k3/k4 candidate files with candidate_keys
- *   C — SC-8: runKnowledgeStages same judgments → byte-identical knowledge-links.json
+ *   C — SC-8: runKnowledgeStages same judgments → byte-identical knowledge-recall.json
  *   D — Stage ordering: K3 runs before K5 (diagram nodes in final graph)
- *   E — Artifacts: knowledge-graph.json + knowledge-links.json + provenance all written
+ *   E — Artifacts: knowledge-graph.json + knowledge-recall.json + provenance all written
  *   F — CLI phase routing: --phase flag dispatches correctly (smoke test)
  */
 
@@ -631,10 +631,10 @@ describe("B — emitRound1Candidates", () => {
 // Section C — SC-8: runKnowledgeStages byte-identical output
 // ---------------------------------------------------------------------------
 
-describe("C — SC-8: runKnowledgeStages same seams → byte-identical knowledge-links.json", () => {
+describe("C — SC-8: runKnowledgeStages same seams → byte-identical knowledge-recall.json", () => {
   // Note: this test is necessarily slower (real file I/O + K1/K3/K4/K5 pipeline)
   test(
-    "C1 (SC-8 core): two runs with NOOP seams + different runIds → byte-identical knowledge-links.json",
+    "C1 (SC-8 core): two runs with NOOP seams + different runIds → byte-identical knowledge-recall.json",
     async () => {
       const dir1 = mkTmpRepo();
       const dir2 = mkTmpRepo();
@@ -646,15 +646,15 @@ describe("C — SC-8: runKnowledgeStages same seams → byte-identical knowledge
       await runKnowledgeStages(dir1, filePaths, NOOP_SEAMS, { runId: "run-aaa", generatedAt: "2026-06-12T10:00:00.000Z" });
       await runKnowledgeStages(dir2, filePaths, NOOP_SEAMS, { runId: "run-bbb", generatedAt: "2026-06-12T11:00:00.000Z" });
 
-      const links1 = fs.readFileSync(path.join(dir1, ".guild", "indexes", "knowledge-links.json"), "utf8");
-      const links2 = fs.readFileSync(path.join(dir2, ".guild", "indexes", "knowledge-links.json"), "utf8");
+      const links1 = fs.readFileSync(path.join(dir1, ".guild", "indexes", "knowledge-recall.json"), "utf8");
+      const links2 = fs.readFileSync(path.join(dir2, ".guild", "indexes", "knowledge-recall.json"), "utf8");
 
       // SC-8 core: byte-identical regardless of runId + timestamp
       expect(links1).toBe(links2);
 
       // Sidecar must differ (it carries run_id)
-      const prov1 = fs.readFileSync(path.join(dir1, ".guild", "indexes", "knowledge-links-provenance.json"), "utf8");
-      const prov2 = fs.readFileSync(path.join(dir2, ".guild", "indexes", "knowledge-links-provenance.json"), "utf8");
+      const prov1 = fs.readFileSync(path.join(dir1, ".guild", "indexes", "knowledge-recall-provenance.json"), "utf8");
+      const prov2 = fs.readFileSync(path.join(dir2, ".guild", "indexes", "knowledge-recall-provenance.json"), "utf8");
       expect(prov1).not.toBe(prov2);
       expect(prov1).toContain("run-aaa");
       expect(prov2).toContain("run-bbb");
@@ -675,7 +675,7 @@ describe("C — SC-8: runKnowledgeStages same seams → byte-identical knowledge
         path.join(dir, ".guild", "indexes", "knowledge-graph.json"), "utf8"
       );
       const links1 = fs.readFileSync(
-        path.join(dir, ".guild", "indexes", "knowledge-links.json"), "utf8"
+        path.join(dir, ".guild", "indexes", "knowledge-recall.json"), "utf8"
       );
 
       // Run 2: prior knowledge-graph.json is now present (from run 1).
@@ -686,7 +686,7 @@ describe("C — SC-8: runKnowledgeStages same seams → byte-identical knowledge
         path.join(dir, ".guild", "indexes", "knowledge-graph.json"), "utf8"
       );
       const links2 = fs.readFileSync(
-        path.join(dir, ".guild", "indexes", "knowledge-links.json"), "utf8"
+        path.join(dir, ".guild", "indexes", "knowledge-recall.json"), "utf8"
       );
 
       // Both SC-8 byte-set members must be byte-identical across warm/cold runs
@@ -696,7 +696,7 @@ describe("C — SC-8: runKnowledgeStages same seams → byte-identical knowledge
     30000
   );
 
-  test("C2: knowledge-links.json contains NO run_id field", async () => {
+  test("C2: knowledge-recall.json contains NO run_id field", async () => {
     const dir = mkTmpRepo();
     scaffoldFixtureRepo(dir);
 
@@ -707,7 +707,7 @@ describe("C — SC-8: runKnowledgeStages same seams → byte-identical knowledge
       { runId: "run-nonce-check" }
     );
 
-    const raw = fs.readFileSync(path.join(dir, ".guild", "indexes", "knowledge-links.json"), "utf8");
+    const raw = fs.readFileSync(path.join(dir, ".guild", "indexes", "knowledge-recall.json"), "utf8");
     expect(raw).not.toContain("run-nonce-check");
     expect(raw).not.toMatch(/"run_id"\s*:/);
   }, 30000);
@@ -767,7 +767,7 @@ describe("E — artifacts written by runKnowledgeStages", () => {
     expect(result.graphPath).toBe(path.join(dir, ".guild", "indexes", "knowledge-graph.json"));
   }, 30000);
 
-  test("E2: knowledge-links.json created at .guild/indexes/", async () => {
+  test("E2: knowledge-recall.json created at .guild/indexes/", async () => {
     const dir = mkTmpRepo();
     scaffoldFixtureRepo(dir);
 
@@ -776,10 +776,10 @@ describe("E — artifacts written by runKnowledgeStages", () => {
     );
 
     expect(fs.existsSync(result.linksPath)).toBe(true);
-    expect(result.linksPath).toBe(path.join(dir, ".guild", "indexes", "knowledge-links.json"));
+    expect(result.linksPath).toBe(path.join(dir, ".guild", "indexes", "knowledge-recall.json"));
   }, 30000);
 
-  test("E3: knowledge-links-provenance.json created at .guild/indexes/", async () => {
+  test("E3: knowledge-recall-provenance.json created at .guild/indexes/", async () => {
     const dir = mkTmpRepo();
     scaffoldFixtureRepo(dir);
 
@@ -907,11 +907,11 @@ describe("G — All stages always run (pure finalize, FIX 1)", () => {
 
     await runKnowledgeStages(dir, { codeRelPaths: CODE_PATHS, docRelPaths: DOC_PATHS }, NOOP_SEAMS, {});
     const graph1 = fs.readFileSync(path.join(dir, ".guild", "indexes", "knowledge-graph.json"), "utf8");
-    const links1 = fs.readFileSync(path.join(dir, ".guild", "indexes", "knowledge-links.json"), "utf8");
+    const links1 = fs.readFileSync(path.join(dir, ".guild", "indexes", "knowledge-recall.json"), "utf8");
 
     await runKnowledgeStages(dir, { codeRelPaths: CODE_PATHS, docRelPaths: DOC_PATHS }, NOOP_SEAMS, {});
     const graph2 = fs.readFileSync(path.join(dir, ".guild", "indexes", "knowledge-graph.json"), "utf8");
-    const links2 = fs.readFileSync(path.join(dir, ".guild", "indexes", "knowledge-links.json"), "utf8");
+    const links2 = fs.readFileSync(path.join(dir, ".guild", "indexes", "knowledge-recall.json"), "utf8");
 
     expect(graph2).toBe(graph1);
     expect(links2).toBe(links1);

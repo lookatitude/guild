@@ -920,7 +920,7 @@ describe("SC-15 — cost-gate CLI: over-maxFiles aborts, under-budget passes", (
 // Drives the REAL committed CLI 3-phase flow (round1 → frozen judgments → round2 → frozen
 // judgments → finalize) under 3 distinct trigger invocations (different run-id + generated-at,
 // identical frozen judgments). The LLM layer is FROZEN; only the trigger path varies. Byte-diffs
-// BOTH SC-8 members (knowledge-graph.json + knowledge-links.json); the provenance sidecar is excluded.
+// BOTH SC-8 members (knowledge-graph.json + knowledge-recall.json); the provenance sidecar is excluded.
 // ===========================================================================
 
 describe("SC-8 — byte-identical projection across all 3 triggers (real orchestrator CLI)", () => {
@@ -986,8 +986,8 @@ describe("SC-8 — byte-identical projection across all 3 triggers (real orchest
       return {
         runId,
         graph: fs.readFileSync(path.join(idx, "knowledge-graph.json"), "utf8"),
-        links: fs.readFileSync(path.join(idx, "knowledge-links.json"), "utf8"),
-        prov: fs.readFileSync(path.join(idx, "knowledge-links-provenance.json"), "utf8"),
+        links: fs.readFileSync(path.join(idx, "knowledge-recall.json"), "utf8"),
+        prov: fs.readFileSync(path.join(idx, "knowledge-recall-provenance.json"), "utf8"),
       };
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -1010,7 +1010,7 @@ describe("SC-8 — byte-identical projection across all 3 triggers (real orchest
     expect(runs[2].graph).toBe(runs[0].graph);
   });
 
-  it("knowledge-links.json is byte-identical across all 3 trigger invocations", () => {
+  it("knowledge-recall.json is byte-identical across all 3 trigger invocations", () => {
     expect(runs[1].links).toBe(runs[0].links);
     expect(runs[2].links).toBe(runs[0].links);
   });

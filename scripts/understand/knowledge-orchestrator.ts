@@ -29,9 +29,9 @@
  * For programmatic use (skill entrypoint):
  *   import { runKnowledgeStages, buildFileBackedSeams, emitRound1Candidates } from "./knowledge-orchestrator";
  *
- * SC-8 byte-set: knowledge-graph.json (v2) + knowledge-links.json
+ * SC-8 byte-set: knowledge-graph.json (v2) + knowledge-recall.json
  *   - both byte-identical across all 3 triggers when seams return the same judgments
- *   - provenance sidecar (knowledge-links-provenance.json) is excluded from SC-8
+ *   - provenance sidecar (knowledge-recall-provenance.json) is excluded from SC-8
  *
  * SC-9: LLM seams only CONFIRM deterministic candidates — they never invent IDs,
  *   edges, or node fields that are not in the pre-computed candidate set.
@@ -143,7 +143,7 @@ export interface KnowledgeLLMSeams {
 
 /** Optional configuration for runKnowledgeStages. */
 export interface RunKnowledgeOptions {
-  /** Written to provenance sidecar ONLY — never in knowledge-links.json (SC-8) */
+  /** Written to provenance sidecar ONLY — never in knowledge-recall.json (SC-8) */
   runId?: string;
   /** ISO 8601 — written to provenance sidecar ONLY */
   generatedAt?: string;
@@ -162,9 +162,9 @@ export interface RunKnowledgeResult {
   graph: KnowledgeGraph;
   /** Absolute path to .guild/indexes/knowledge-graph.json */
   graphPath: string;
-  /** Absolute path to .guild/indexes/knowledge-links.json (nonce-free, SC-8 member) */
+  /** Absolute path to .guild/indexes/knowledge-recall.json (nonce-free, SC-8 member) */
   linksPath: string;
-  /** Absolute path to .guild/indexes/knowledge-links-provenance.json */
+  /** Absolute path to .guild/indexes/knowledge-recall-provenance.json */
   provenancePath: string;
   nodeCount: number;
   edgeCount: number;
@@ -810,7 +810,7 @@ async function runKnowledgeStagesK1ToK4(
  *
  * SC-8: this is the ONLY function all 3 triggers call. No per-trigger branches
  * that change output. Same inputs + same seams → byte-identical knowledge-graph.json
- * and knowledge-links.json (the SC-8 byte-set).
+ * and knowledge-recall.json (the SC-8 byte-set).
  *
  * Stage order:
  *   K1 (content-analyze)  — concept/claim/entity nodes + clusters
@@ -819,7 +819,7 @@ async function runKnowledgeStagesK1ToK4(
  *   K4 (taxonomy-build)   — topic nodes (from K1 clusters)
  *   K5 (cross-modal-link) — cross-modal edges (needs ALL of K1/K2/K3/K4 nodes)
  *   validateGraphV2       — enforce invariants
- *   write-knowledge-links — knowledge-graph.json + knowledge-links.json + sidecar
+ *   write-knowledge-links — knowledge-graph.json + knowledge-recall.json + sidecar
  *
  * @param repoRoot   Absolute path to repo root
  * @param filePaths  File path sets (relative to repoRoot)
@@ -882,7 +882,7 @@ export async function runKnowledgeStages(
   // called the pipeline. validateGraphV2 sorts arrays but does NOT fix per-
   // object key order — the canonicalizer pass is required.
   //
-  // SC-8 byte-set member 2 (knowledge-links.json): handled by writeKnowledgeLinks
+  // SC-8 byte-set member 2 (knowledge-recall.json): handled by writeKnowledgeLinks
   // which also calls canonicalizeNode/canonicalizeEdge internally.
   const canonNodes = validated.nodes.map(
     (n) => canonicalizeNode(n) as unknown as GraphNode
@@ -901,7 +901,7 @@ export async function runKnowledgeStages(
   // ── K6: write-knowledge-links (nonce-free, SC-8 member 2) ─────────────────
   // Pass canonicalized nodes/edges — writeKnowledgeLinks re-canonicalizes
   // internally (idempotent), so no double-canonicalize risk.
-  // FIX 5: knowledge-links-provenance.json carries run_id/generated_at and is
+  // FIX 5: knowledge-recall-provenance.json carries run_id/generated_at and is
   // INTENTIONALLY excluded from the 2-file SC-8 byte-set (sidecar only).
   const linksResult = writeKnowledgeLinks({
     graph: { nodes: graph.nodes, edges: graph.edges },

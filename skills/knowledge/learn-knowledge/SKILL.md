@@ -67,12 +67,12 @@ commit:
 | Artifact | Path | Contract |
 |---|---|---|
 | KnowledgeGraph v2 | `.guild/indexes/knowledge-graph.json` | `guild.knowledge_graph.v2` (canonical-sorted by `validateGraphV2`; `generated_from_commit` IN — deterministic given the commit) |
-| recall projection | `.guild/indexes/knowledge-links.json` | nonce-free, pure fn of `(graph, config)` — canonical-sorted, dedup-keyed, **no `run_id`/timestamp** |
+| recall projection | `.guild/indexes/knowledge-recall.json` | nonce-free, pure fn of `(graph, config)` — canonical-sorted, dedup-keyed, **no `run_id`/timestamp** |
 
 Plus **excluded-from-byte-compare** side outputs (control-flow / provenance,
 never part of SC-8):
 
-- `.guild/indexes/knowledge-links-provenance.json` — the `run_id`/timestamp
+- `.guild/indexes/knowledge-recall-provenance.json` — the `run_id`/timestamp
   sidecar (where per-run provenance lives so the projection stays nonce-free).
 - `.guild/wiki/concepts/*` page **candidates** for named topics/domains
   (human-gated; promotion stays with `guild:wiki-ingest` / `guild:decisions`).
@@ -183,8 +183,8 @@ byte-identity unconditional.
    applies all judgments by key, runs K1→K3→K2→K4→K5→K6 + `validateGraphV2`
    (canonical-sort + dedup + all v2 invariants + H1 fixed key order), and writes
    **all three** artifacts: `knowledge-graph.json` (v2, byte-set member 1),
-   `knowledge-links.json` (nonce-free, member 2), and
-   `knowledge-links-provenance.json` (sidecar — `run_id`/`generated_at` here
+   `knowledge-recall.json` (nonce-free, member 2), and
+   `knowledge-recall-provenance.json` (sidecar — `run_id`/`generated_at` here
    only). **This skill writes none of these.**
 
 7. **Emit `wiki/concepts/*` candidates** (this skill's job; human-gated). For each
@@ -234,13 +234,13 @@ sub-question, not a wholesale re-run.
 
 **Recall-before-read (ADR §4).** Before a seam reads source, query the
 knowledge base first (`guild-memory` BM25 over `.guild/wiki/` + `kg-query` over
-`knowledge-links.json`). If recall returns ≥1 chunk scoring **≥
+`knowledge-recall.json`). If recall returns ≥1 chunk scoring **≥
 `models.recallScoreThreshold`** (default `0.4`; pointer to ADR §10), use the
 recalled chunk(s) + references and skip the full read. Script halves are
 unaffected.
 
 **One-pass three-store update (candidates only).** A knowledge-tier run updates
-**memory + wiki + KG in one pass** — the KG nodes/edges + `knowledge-links.json`
+**memory + wiki + KG in one pass** — the KG nodes/edges + `knowledge-recall.json`
 projection + `wiki/concepts/*` candidates, each claim carrying `source_refs`.
 All are **candidates only**; promotion stays with `guild:wiki-ingest` /
 `guild:decisions` (ADR §8 non-goal). No auto-promotion.
@@ -291,7 +291,7 @@ the topic tree / cross-modal edges is the benchmark UI's job, not this skill's.
   classified+labeled `wiki_page`, ≥1 cross-modal `evidenced_by` doc/wiki→code edge.
 - **SC-8** — the same fixture under all three triggers (`/guild:learn knowledge`,
   full `/guild:learn`, `init --learn`) with the LLM layer held constant produces
-  **byte-identical** `knowledge-graph.json` + `knowledge-links.json`; `run_id` appears
+  **byte-identical** `knowledge-graph.json` + `knowledge-recall.json`; `run_id` appears
   only in the provenance sidecar.
 - **SC-15** — synthetic input exceeding `maxFiles` → cost-gate `abort` (exit 1) + `reason`;
   the deep pass does not run silently. Under-budget → `pass`, runs.

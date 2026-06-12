@@ -3,16 +3,16 @@
  *
  * K6 nonce-free projection writer (SC-8).
  *
- * Writes `.guild/indexes/knowledge-links.json` — a byte-stable recall projection
+ * Writes `.guild/indexes/knowledge-recall.json` — a byte-stable recall projection
  * that is a PURE function of (graph, config). No run_id, no timestamp, no
  * wall-clock in the compared artifact.
  *
  * SC-8 byte-set (must be identical across /guild:learn knowledge, full
  * /guild:learn, and init --learn):
  *   • knowledge-graph.json  (v2, written by K1-K5 stages)
- *   • knowledge-links.json  (v2, written by this module)
+ *   • knowledge-recall.json  (v2, written by this module)
  *
- * run_id / provenance → separate sidecar `knowledge-links-provenance.json`.
+ * run_id / provenance → separate sidecar `knowledge-recall-provenance.json`.
  * SC-8 excludes the sidecar from byte-identity checks.
  *
  * H1 key constraint: FIXED per-type key order on every node/edge object
@@ -58,18 +58,18 @@ export interface WriteKnowledgeLinksOptions {
   repoRoot: string;
   /**
    * Run ID — written to the provenance SIDECAR ONLY.
-   * NEVER written to knowledge-links.json (SC-8 nonce-free).
+   * NEVER written to knowledge-recall.json (SC-8 nonce-free).
    */
   runId?: string;
   /**
    * ISO 8601 timestamp — written to the provenance SIDECAR ONLY.
-   * NEVER written to knowledge-links.json (SC-8 nonce-free).
+   * NEVER written to knowledge-recall.json (SC-8 nonce-free).
    */
   generatedAt?: string;
 }
 
 export interface WriteKnowledgeLinksResult {
-  /** Absolute path to the nonce-free knowledge-links.json */
+  /** Absolute path to the nonce-free knowledge-recall.json */
   linksPath: string;
   /** Absolute path to the provenance sidecar */
   provenancePath: string;
@@ -200,13 +200,13 @@ export function sortNodesByRecall(nodes: GraphNode[]): GraphNode[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Write the nonce-free knowledge-links.json recall projection and its
+ * Write the nonce-free knowledge-recall.json recall projection and its
  * provenance sidecar.
  *
  * Idempotent: calling twice with the same graph + repoRoot overwrites the
  * previous output with byte-identical content.
  *
- * SC-8: knowledge-links.json is a pure function of (graph, config).
+ * SC-8: knowledge-recall.json is a pure function of (graph, config).
  *   run_id / generatedAt go to the provenance sidecar ONLY.
  */
 export function writeKnowledgeLinks(opts: WriteKnowledgeLinksOptions): WriteKnowledgeLinksResult {
@@ -248,7 +248,7 @@ export function writeKnowledgeLinks(opts: WriteKnowledgeLinksOptions): WriteKnow
   const indexesDir = path.join(repoRoot, ".guild", "indexes");
   fs.mkdirSync(indexesDir, { recursive: true });
 
-  const linksPath = path.join(indexesDir, "knowledge-links.json");
+  const linksPath = path.join(indexesDir, "knowledge-recall.json");
   fs.writeFileSync(linksPath, JSON.stringify(linksDoc, null, 2) + "\n", "utf8");
 
   // ── Step 7: write provenance sidecar (run_id + timestamps go HERE only) ──
@@ -260,7 +260,7 @@ export function writeKnowledgeLinks(opts: WriteKnowledgeLinksOptions): WriteKnow
     edge_count: dedupedEdges.length,
   };
 
-  const provenancePath = path.join(indexesDir, "knowledge-links-provenance.json");
+  const provenancePath = path.join(indexesDir, "knowledge-recall-provenance.json");
   fs.writeFileSync(provenancePath, JSON.stringify(provenanceDoc, null, 2) + "\n", "utf8");
 
   return {

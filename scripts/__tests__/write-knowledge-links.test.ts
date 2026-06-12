@@ -9,7 +9,7 @@
  *   B — canonicalizeEdge: fixed per-type key order
  *   C — sortNodesByRecall: importance_score desc → confidence desc → id asc
  *   D — writeKnowledgeLinks output shape
- *   E — SC-8 nonce-free proof: two runIds → byte-identical knowledge-links.json
+ *   E — SC-8 nonce-free proof: two runIds → byte-identical knowledge-recall.json
  *   F — Provenance sidecar: contains run_id; main file does NOT
  *   G — L0 convention: JSON.stringify(.,null,2)+"\n"
  *   H — Empty graph handled without error
@@ -270,17 +270,17 @@ describe("C — sortNodesByRecall", () => {
 // ---------------------------------------------------------------------------
 
 describe("D — writeKnowledgeLinks output shape", () => {
-  test("D1: creates knowledge-links.json at .guild/indexes/", () => {
+  test("D1: creates knowledge-recall.json at .guild/indexes/", () => {
     const repo = mkTmpRepo();
     const result = writeKnowledgeLinks({
       graph: { nodes: [makeNode({ id: "topic:a" })], edges: [] },
       repoRoot: repo,
     });
     expect(fs.existsSync(result.linksPath)).toBe(true);
-    expect(result.linksPath).toBe(path.join(repo, ".guild", "indexes", "knowledge-links.json"));
+    expect(result.linksPath).toBe(path.join(repo, ".guild", "indexes", "knowledge-recall.json"));
   });
 
-  test("D2: creates knowledge-links-provenance.json at .guild/indexes/", () => {
+  test("D2: creates knowledge-recall-provenance.json at .guild/indexes/", () => {
     const repo = mkTmpRepo();
     const result = writeKnowledgeLinks({
       graph: { nodes: [], edges: [] },
@@ -288,15 +288,15 @@ describe("D — writeKnowledgeLinks output shape", () => {
     });
     expect(fs.existsSync(result.provenancePath)).toBe(true);
     expect(result.provenancePath).toBe(
-      path.join(repo, ".guild", "indexes", "knowledge-links-provenance.json"),
+      path.join(repo, ".guild", "indexes", "knowledge-recall-provenance.json"),
     );
   });
 
-  test("D3: knowledge-links.json has correct schema_version", () => {
+  test("D3: knowledge-recall.json has correct schema_version", () => {
     const repo = mkTmpRepo();
     writeKnowledgeLinks({ graph: { nodes: [], edges: [] }, repoRoot: repo });
     const doc = JSON.parse(
-      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links.json"), "utf8"),
+      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall.json"), "utf8"),
     ) as KnowledgeLinksDoc;
     expect(doc.schema_version).toBe(KNOWLEDGE_LINKS_SCHEMA_VERSION);
   });
@@ -332,7 +332,7 @@ describe("D — writeKnowledgeLinks output shape", () => {
       repoRoot: repo,
     });
     const doc = JSON.parse(
-      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links.json"), "utf8"),
+      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall.json"), "utf8"),
     ) as KnowledgeLinksDoc;
     expect(doc.edges[0].source).toBe("topic:a");
     expect(doc.edges[1].source).toBe("topic:b");
@@ -352,7 +352,7 @@ describe("D — writeKnowledgeLinks output shape", () => {
       repoRoot: repo,
     });
     const doc = JSON.parse(
-      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links.json"), "utf8"),
+      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall.json"), "utf8"),
     ) as KnowledgeLinksDoc;
     expect(doc.nodes[0].id).toBe("topic:high");
     expect(doc.nodes[1].id).toBe("topic:low");
@@ -363,7 +363,7 @@ describe("D — writeKnowledgeLinks output shape", () => {
 // Section E — SC-8 nonce-free proof
 // ---------------------------------------------------------------------------
 
-describe("E — SC-8 nonce-free proof: different runIds → byte-identical knowledge-links.json", () => {
+describe("E — SC-8 nonce-free proof: different runIds → byte-identical knowledge-recall.json", () => {
   const GRAPH = {
     nodes: [
       makeNode({ id: "topic:auth", name: "Authentication", importance_score: 0.8, confidence: "high" }),
@@ -374,7 +374,7 @@ describe("E — SC-8 nonce-free proof: different runIds → byte-identical knowl
     ],
   };
 
-  test("E1 (SC-8 core): two invocations with different runIds produce byte-identical knowledge-links.json", () => {
+  test("E1 (SC-8 core): two invocations with different runIds produce byte-identical knowledge-recall.json", () => {
     const repo1 = mkTmpRepo();
     const repo2 = mkTmpRepo();
 
@@ -393,17 +393,17 @@ describe("E — SC-8 nonce-free proof: different runIds → byte-identical knowl
     });
 
     const links1 = fs.readFileSync(
-      path.join(repo1, ".guild", "indexes", "knowledge-links.json"), "utf8",
+      path.join(repo1, ".guild", "indexes", "knowledge-recall.json"), "utf8",
     );
     const links2 = fs.readFileSync(
-      path.join(repo2, ".guild", "indexes", "knowledge-links.json"), "utf8",
+      path.join(repo2, ".guild", "indexes", "knowledge-recall.json"), "utf8",
     );
 
     // Byte-identical — the core SC-8 assertion
     expect(links1).toBe(links2);
   });
 
-  test("E2 (SC-8): knowledge-links.json contains NO run_id field at any nesting level", () => {
+  test("E2 (SC-8): knowledge-recall.json contains NO run_id field at any nesting level", () => {
     const repo = mkTmpRepo();
     writeKnowledgeLinks({
       graph: GRAPH,
@@ -411,7 +411,7 @@ describe("E — SC-8 nonce-free proof: different runIds → byte-identical knowl
       runId: "run-secret-run-id",
     });
     const raw = fs.readFileSync(
-      path.join(repo, ".guild", "indexes", "knowledge-links.json"), "utf8",
+      path.join(repo, ".guild", "indexes", "knowledge-recall.json"), "utf8",
     );
     // The literal string "run-secret-run-id" must not appear in the main file
     expect(raw).not.toContain("run-secret-run-id");
@@ -419,7 +419,7 @@ describe("E — SC-8 nonce-free proof: different runIds → byte-identical knowl
     expect(raw).not.toMatch(/"run_id"\s*:/);
   });
 
-  test("E3 (SC-8): knowledge-links.json contains NO timestamp / generatedAt / generated_at field", () => {
+  test("E3 (SC-8): knowledge-recall.json contains NO timestamp / generatedAt / generated_at field", () => {
     const repo = mkTmpRepo();
     writeKnowledgeLinks({
       graph: GRAPH,
@@ -427,7 +427,7 @@ describe("E — SC-8 nonce-free proof: different runIds → byte-identical knowl
       generatedAt: "2026-06-12T10:00:00.000Z",
     });
     const raw = fs.readFileSync(
-      path.join(repo, ".guild", "indexes", "knowledge-links.json"), "utf8",
+      path.join(repo, ".guild", "indexes", "knowledge-recall.json"), "utf8",
     );
     expect(raw).not.toContain("2026-06-12T10:00:00.000Z");
     expect(raw).not.toMatch(/"generated_at"\s*:/);
@@ -441,8 +441,8 @@ describe("E — SC-8 nonce-free proof: different runIds → byte-identical knowl
     writeKnowledgeLinks({ graph: GRAPH, repoRoot: repo1 });
     writeKnowledgeLinks({ graph: GRAPH, repoRoot: repo2 });
 
-    const links1 = fs.readFileSync(path.join(repo1, ".guild", "indexes", "knowledge-links.json"), "utf8");
-    const links2 = fs.readFileSync(path.join(repo2, ".guild", "indexes", "knowledge-links.json"), "utf8");
+    const links1 = fs.readFileSync(path.join(repo1, ".guild", "indexes", "knowledge-recall.json"), "utf8");
+    const links2 = fs.readFileSync(path.join(repo2, ".guild", "indexes", "knowledge-recall.json"), "utf8");
     expect(links1).toBe(links2);
   });
 
@@ -454,10 +454,10 @@ describe("E — SC-8 nonce-free proof: different runIds → byte-identical knowl
     writeKnowledgeLinks({ graph: GRAPH, repoRoot: repo2, runId: "run-bbb" });
 
     const prov1 = fs.readFileSync(
-      path.join(repo1, ".guild", "indexes", "knowledge-links-provenance.json"), "utf8",
+      path.join(repo1, ".guild", "indexes", "knowledge-recall-provenance.json"), "utf8",
     );
     const prov2 = fs.readFileSync(
-      path.join(repo2, ".guild", "indexes", "knowledge-links-provenance.json"), "utf8",
+      path.join(repo2, ".guild", "indexes", "knowledge-recall-provenance.json"), "utf8",
     );
     // Provenance files differ — they carry the run_id
     expect(prov1).not.toBe(prov2);
@@ -475,7 +475,7 @@ describe("F — provenance sidecar", () => {
     const repo = mkTmpRepo();
     writeKnowledgeLinks({ graph: { nodes: [], edges: [] }, repoRoot: repo, runId: "run-test" });
     const prov = JSON.parse(
-      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links-provenance.json"), "utf8"),
+      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall-provenance.json"), "utf8"),
     );
     expect(prov.schema_version).toBe(KNOWLEDGE_LINKS_PROVENANCE_SCHEMA_VERSION);
   });
@@ -484,7 +484,7 @@ describe("F — provenance sidecar", () => {
     const repo = mkTmpRepo();
     writeKnowledgeLinks({ graph: { nodes: [], edges: [] }, repoRoot: repo, runId: "run-xyz" });
     const prov = JSON.parse(
-      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links-provenance.json"), "utf8"),
+      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall-provenance.json"), "utf8"),
     );
     expect(prov.run_id).toBe("run-xyz");
   });
@@ -497,7 +497,7 @@ describe("F — provenance sidecar", () => {
       generatedAt: "2026-06-12T12:00:00.000Z",
     });
     const prov = JSON.parse(
-      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links-provenance.json"), "utf8"),
+      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall-provenance.json"), "utf8"),
     );
     expect(prov.generated_at).toBe("2026-06-12T12:00:00.000Z");
   });
@@ -512,7 +512,7 @@ describe("F — provenance sidecar", () => {
       repoRoot: repo,
     });
     const prov = JSON.parse(
-      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links-provenance.json"), "utf8"),
+      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall-provenance.json"), "utf8"),
     );
     expect(prov.node_count).toBe(2);
     expect(prov.edge_count).toBe(1);
@@ -522,7 +522,7 @@ describe("F — provenance sidecar", () => {
     const repo = mkTmpRepo();
     writeKnowledgeLinks({ graph: { nodes: [], edges: [] }, repoRoot: repo });
     const prov = JSON.parse(
-      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links-provenance.json"), "utf8"),
+      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall-provenance.json"), "utf8"),
     );
     expect(prov.run_id).toBeNull();
   });
@@ -533,29 +533,29 @@ describe("F — provenance sidecar", () => {
 // ---------------------------------------------------------------------------
 
 describe("G — L0 JSON convention", () => {
-  test("G1: knowledge-links.json ends with exactly one newline", () => {
+  test("G1: knowledge-recall.json ends with exactly one newline", () => {
     const repo = mkTmpRepo();
     writeKnowledgeLinks({ graph: { nodes: [makeNode({ id: "topic:a" })], edges: [] }, repoRoot: repo });
-    const raw = fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links.json"), "utf8");
+    const raw = fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall.json"), "utf8");
     expect(raw.endsWith("\n")).toBe(true);
     expect(raw.endsWith("\n\n")).toBe(false);
   });
 
-  test("G2: knowledge-links.json uses 2-space indentation", () => {
+  test("G2: knowledge-recall.json uses 2-space indentation", () => {
     const repo = mkTmpRepo();
     writeKnowledgeLinks({ graph: { nodes: [makeNode({ id: "topic:a" })], edges: [] }, repoRoot: repo });
-    const raw = fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links.json"), "utf8");
+    const raw = fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall.json"), "utf8");
     // Check that lines inside the JSON use 2-space indent (not 4-space, not tab)
     const lines = raw.split("\n");
     const indentedLines = lines.filter(l => l.startsWith("  ") && !l.startsWith("    "));
     expect(indentedLines.length).toBeGreaterThan(0);
   });
 
-  test("G3: knowledge-links-provenance.json also ends with exactly one newline", () => {
+  test("G3: knowledge-recall-provenance.json also ends with exactly one newline", () => {
     const repo = mkTmpRepo();
     writeKnowledgeLinks({ graph: { nodes: [], edges: [] }, repoRoot: repo });
     const raw = fs.readFileSync(
-      path.join(repo, ".guild", "indexes", "knowledge-links-provenance.json"), "utf8",
+      path.join(repo, ".guild", "indexes", "knowledge-recall-provenance.json"), "utf8",
     );
     expect(raw.endsWith("\n")).toBe(true);
     expect(raw.endsWith("\n\n")).toBe(false);
@@ -578,7 +578,7 @@ describe("H — empty graph", () => {
     const repo = mkTmpRepo();
     writeKnowledgeLinks({ graph: { nodes: [], edges: [] }, repoRoot: repo });
     const doc = JSON.parse(
-      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links.json"), "utf8"),
+      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall.json"), "utf8"),
     ) as KnowledgeLinksDoc;
     expect(doc.nodes).toEqual([]);
     expect(doc.edges).toEqual([]);
@@ -589,7 +589,7 @@ describe("H — empty graph", () => {
     // Deliberately do NOT pre-create .guild/indexes/
     expect(fs.existsSync(path.join(repo, ".guild", "indexes"))).toBe(false);
     writeKnowledgeLinks({ graph: { nodes: [], edges: [] }, repoRoot: repo });
-    expect(fs.existsSync(path.join(repo, ".guild", "indexes", "knowledge-links.json"))).toBe(true);
+    expect(fs.existsSync(path.join(repo, ".guild", "indexes", "knowledge-recall.json"))).toBe(true);
   });
 });
 
@@ -611,7 +611,7 @@ describe("I — duplicate edge dedup", () => {
       repoRoot: repo,
     });
     const doc = JSON.parse(
-      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links.json"), "utf8"),
+      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall.json"), "utf8"),
     ) as KnowledgeLinksDoc;
     const dedup = doc.edges.filter(
       e => e.source === "topic:a" && e.target === "topic:b" && e.type === "related",
@@ -634,7 +634,7 @@ describe("I — duplicate edge dedup", () => {
       repoRoot: repo,
     });
     const doc = JSON.parse(
-      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-links.json"), "utf8"),
+      fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall.json"), "utf8"),
     ) as KnowledgeLinksDoc;
     expect(doc.edges).toHaveLength(2);
   });
