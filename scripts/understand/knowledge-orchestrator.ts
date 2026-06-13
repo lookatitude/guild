@@ -278,7 +278,7 @@ export function maybeSynthesizeFallbackRootTopic(
  * (an `evidenced_by` edge whose source is a topic and whose target is the page).
  * Deterministic (sorted). Empty when there are no wiki_page nodes.
  */
-function findOrphanWikiPages(graph: {
+export function findOrphanWikiPages(graph: {
   nodes: GraphNode[];
   edges: GraphEdge[];
 }): string[] {
@@ -1047,21 +1047,28 @@ export async function runKnowledgeStages(
   );
   const graph: KnowledgeGraph = { ...validated, nodes: canonNodes, edges: canonEdges };
 
-  // ── Defense-in-depth: SC-3 machine check on the VALIDATED graph ────────────
+  // ── HARD SC-3 enforcement: every wiki_page must have ≥1 topic membership ───
   // The orphan codex found passed SILENTLY because nothing enforced SC-3.
-  // We assert here (the least-invasive spot that sees the final validated graph)
-  // that every wiki_page has ≥1 topic-membership edge. With the fallback root in
-  // place this is always clean; a non-empty result is a tripwire — logged to
-  // stderr, surfaced on the result, but NEVER a hard reject (legit runs must not
-  // break). It is deliberately NOT inside validateGraphV2: the L0f reference
-  // corpus models SC-3 via wiki↔wiki `related` edges and carries 0 topic edges,
-  // so a validator-level reject would regress the knowledge-tier eval suite.
+  // In the REAL generation path the fallback root topic (topic-less corpus) and
+  // cross-link Rule 6 (topic-bearing corpus) together guarantee every wiki_page
+  // gets a topic→wiki_page `evidenced_by` edge — so a non-empty result here is a
+  // genuine SC-3 regression, not a legitimate state. Hard-fail the finalize
+  // BEFORE writing the graph rather than emit a stderr warning a generator
+  // ignores (followup, 2026-06-13: was a soft warning).
+  //
+  // Still deliberately NOT inside validateGraphV2: the L0f reference fixture
+  // (`__tests__/fixtures/knowledge/expected-graph.v2.json`) is loaded straight
+  // into the validator and models SC-3 via wiki↔wiki `related` edges with 0
+  // topic edges — a validator-level reject would regress that frozen eval
+  // corpus. finalize is the real generation path, which never produces that
+  // shape, so enforcing here is safe.
   const sc3OrphanWikiPageIds = findOrphanWikiPages(graph);
   if (sc3OrphanWikiPageIds.length > 0) {
-    process.stderr.write(
-      `[knowledge] SC-3 WARNING: ${sc3OrphanWikiPageIds.length} wiki_page node(s) ` +
-        `have no topic-membership edge after validation: ` +
-        `${sc3OrphanWikiPageIds.join(", ")}\n`
+    throw new Error(
+      `[knowledge] SC-3 VIOLATION: ${sc3OrphanWikiPageIds.length} wiki_page node(s) ` +
+        `have no topic-membership edge after finalize — the fallback root topic ` +
+        `and cross-link Rule 6 both failed to cover: ` +
+        `${sc3OrphanWikiPageIds.join(", ")}. Refusing to write an SC-3-violating graph.`
     );
   }
 

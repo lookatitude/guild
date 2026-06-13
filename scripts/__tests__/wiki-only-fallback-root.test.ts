@@ -29,6 +29,7 @@ import {
   runKnowledgeStages,
   maybeSynthesizeFallbackRootTopic,
   deriveFallbackRootTopicName,
+  findOrphanWikiPages,
   FALLBACK_ROOT_TOPIC_SEED,
   FALLBACK_ROOT_TOPIC_NAME,
   type KnowledgeLLMSeams,
@@ -37,6 +38,7 @@ import {
   makeTopicId,
   makeWikiPageId,
   type GraphNode,
+  type GraphEdge,
 } from "../understand/lib/schema";
 import { proposeCandidates } from "../understand/cross-link";
 
@@ -255,5 +257,37 @@ describe("deriveFallbackRootTopicName — repo-derived display name (followup)",
   });
   test("deterministic — pure function of repoRoot (SC-8)", () => {
     expect(deriveFallbackRootTopicName("/a/b/guild")).toBe(deriveFallbackRootTopicName("/a/b/guild"));
+  });
+});
+
+describe("findOrphanWikiPages — SC-3 hard-enforcement detector (followup)", () => {
+  const wiki = (id: string): GraphNode => ({
+    id: `wiki_page:${id}`, type: "wiki_page", name: id, category: "reference",
+    source_refs: [id], confidence: "high",
+  } as GraphNode);
+  const topic: GraphNode = {
+    id: "topic:t1", type: "topic", name: "T1", category: "concept",
+    source_refs: ["src/a.ts#L1-L1"], confidence: "high", importance_score: 0.9, topic_path: ["t1"],
+  } as GraphNode;
+  const cover = (t: string, w: string): GraphEdge =>
+    ({ source: t, target: `wiki_page:${w}`, type: "evidenced_by", direction: "out", weight: 0.8 } as GraphEdge);
+
+  test("covered wiki_page (topic→wiki evidenced_by) is NOT an orphan", () => {
+    const graph = { nodes: [topic, wiki("a.md")], edges: [cover("topic:t1", "a.md")] };
+    expect(findOrphanWikiPages(graph)).toEqual([]);
+  });
+  test("wiki_page with no topic membership IS reported (sorted)", () => {
+    const graph = { nodes: [topic, wiki("b.md"), wiki("a.md")], edges: [cover("topic:t1", "a.md")] };
+    expect(findOrphanWikiPages(graph)).toEqual(["wiki_page:b.md"]);
+  });
+  test("a wiki↔wiki `related` edge does NOT satisfy SC-3 (only topic membership does)", () => {
+    const graph = {
+      nodes: [wiki("a.md"), wiki("b.md")],
+      edges: [{ source: "wiki_page:a.md", target: "wiki_page:b.md", type: "related", direction: "out", weight: 0.6 } as GraphEdge],
+    };
+    expect(findOrphanWikiPages(graph)).toEqual(["wiki_page:a.md", "wiki_page:b.md"]);
+  });
+  test("no wiki_page nodes → no orphans", () => {
+    expect(findOrphanWikiPages({ nodes: [topic], edges: [] })).toEqual([]);
   });
 });
