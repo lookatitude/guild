@@ -33,7 +33,93 @@ import {
 import { lintKnowledgeNodes } from "./understand/wiki-lint-knowledge";
 import type { GraphNode } from "./understand/lib/schema";
 
-interface Finding { check: "pending-grade-review" | "missing-importance" | "invalid-category"; file: string; detail: string }
+const yaml = require("js-yaml") as { load: (src: string) => unknown };
+
+interface Finding {
+  check:
+    | "pending-grade-review"
+    | "missing-importance"
+    | "invalid-category"
+    | "label-coverage"
+    | "label-unknown";
+  file: string;
+  detail: string;
+}
+
+// ── Wiki label taxonomy (docs/v2/05-knowledge-memory.md §Label Schema, item 5) ──
+//
+// The closed label sets live in `.guild/project.yaml → label_taxonomy:` (authored
+// at Init, evolvable only via the human-gated promotion path). The label-coverage
+// check is INERT until that block exists — so a repo that has not opted into the
+// taxonomy gets zero new findings. The canonical 9-value `concern` enum is the
+// default scaffold below; `domain` + `status` sets are repo-authored.
+export const DEFAULT_CONCERN_ENUM = [
+  "architecture", "security", "performance", "reliability", "data",
+  "api", "ux", "build", "ops",
+] as const;
+
+export interface LabelTaxonomy {
+  domain: Set<string>;
+  concern: Set<string>;
+  status: Set<string>;
+}
+
+/** Read `.guild/project.yaml → label_taxonomy`. Returns null when absent/empty. */
+export function readLabelTaxonomy(root: string): LabelTaxonomy | null {
+  const p = path.join(root, ".guild", "project.yaml");
+  if (!fs.existsSync(p)) return null;
+  let parsed: unknown;
+  try { parsed = yaml.load(fs.readFileSync(p, "utf8")); } catch { return null; }
+  const lt = (parsed as { label_taxonomy?: Record<string, unknown> } | null)?.label_taxonomy;
+  if (!lt || typeof lt !== "object") return null;
+  const toSet = (v: unknown): Set<string> =>
+    new Set((Array.isArray(v) ? v : []).map((x) => String(x).toLowerCase()));
+  const tax: LabelTaxonomy = {
+    domain: toSet(lt["domain"]),
+    concern: toSet(lt["concern"]),
+    status: toSet(lt["status"]),
+  };
+  // A taxonomy with no closed sets at all is treated as absent (inert).
+  if (tax.domain.size === 0 && tax.concern.size === 0 && tax.status.size === 0) return null;
+  return tax;
+}
+
+/** Normalize a frontmatter label value (scalar | list) to a lowercased string[]. */
+function labelValues(v: unknown): string[] {
+  if (v === undefined || v === null) return [];
+  return (Array.isArray(v) ? v : [v]).map((x) => String(x).toLowerCase()).filter(Boolean);
+}
+
+/**
+ * Label-coverage + resolution findings for one durable page, against the taxonomy.
+ * Mechanical only: coverage (labels block present with non-empty domain + concern
+ * + status) and resolution (every value ∈ the closed set). "Stale label after a
+ * feature change" is semantic and stays with the wiki-lint skill (model).
+ */
+function lintLabels(rel: string, fmText: string, tax: LabelTaxonomy): Finding[] {
+  const out: Finding[] = [];
+  let fm: Record<string, unknown> = {};
+  try { fm = (yaml.load(fmText) as Record<string, unknown>) ?? {}; } catch { /* malformed → treated as no labels */ }
+  const labels = (fm["labels"] as Record<string, unknown> | undefined) ?? undefined;
+  const axes: Array<keyof LabelTaxonomy> = ["domain", "concern", "status"];
+  const missing: string[] = [];
+  for (const axis of axes) {
+    const vals = labelValues(labels?.[axis]);
+    if (vals.length === 0) { missing.push(axis); continue; }
+    const closed = tax[axis];
+    if (closed.size > 0) {
+      for (const v of vals) {
+        if (!closed.has(v)) {
+          out.push({ check: "label-unknown", file: rel, detail: `labels.${axis} value "${v}" not in project.yaml label_taxonomy.${axis}` });
+        }
+      }
+    }
+  }
+  if (missing.length > 0) {
+    out.push({ check: "label-coverage", file: rel, detail: `durable page missing non-empty labels: ${missing.join(", ")}` });
+  }
+  return out;
+}
 
 function parseArgs(argv: string[]): { root: string; json: boolean } {
   let root = process.cwd();
@@ -49,6 +135,8 @@ function parseArgs(argv: string[]): { root: string; json: boolean } {
 export function lintWiki(root: string): Finding[] {
   const wiki = path.join(root, ".guild", "wiki");
   const findings: Finding[] = [];
+  // Label taxonomy: null ⇒ the label-coverage check is inert (item 5 opt-in).
+  const taxonomy = readLabelTaxonomy(root);
 
   // ── Wiki file lint (M1 pending-grade-review · M2 missing-importance) ─────
   // Guarded: only runs when .guild/wiki exists. These are the markdown-file
@@ -66,17 +154,23 @@ export function lintWiki(root: string): Finding[] {
       if (base.startsWith("lint-")) continue; // prior lint reports
       const { fmLines } = splitFrontmatter(fs.readFileSync(f, "utf8"));
       const importance = fmValue(fmLines, "importance");
+      const durable = !STRUCTURAL_BASENAMES.has(base) && !isProvenance(relInWiki, fmLines);
       if (fmValue(fmLines, "importance_draft") === "true") {
         findings.push({
           check: "pending-grade-review",
           file: rel,
           detail: `importance: ${importance || "??"} (graded_by: ${fmValue(fmLines, "graded_by") || "??"}) — review, edit if needed, then run migrate-guild.ts --accept-grades`,
         });
-      } else if (!importance && !STRUCTURAL_BASENAMES.has(base) && !isProvenance(relInWiki, fmLines)) {
+      } else if (!importance && durable) {
         // EXACT same skip predicate as the migration grader (wiki-importance.ts):
         // structural basenames + provenance/exploratory by path segment or
         // type:/category: frontmatter — imported, so the two can never drift.
         findings.push({ check: "missing-importance", file: rel, detail: "consumable page without importance: frontmatter" });
+      }
+      // Label coverage (item 5): durable pages only, and only when a taxonomy
+      // is authored (inert otherwise → no findings on un-opted-in repos).
+      if (taxonomy && durable) {
+        findings.push(...lintLabels(rel, fmLines.join("\n"), taxonomy));
       }
     }
   }
