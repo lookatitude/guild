@@ -54,6 +54,16 @@ export interface KnowledgeLink {
   to: string;
   type: string;
   run_id: string;
+  /**
+   * Tombstone-never-delete (docs/v2/05 §Invalidation, item 8). A superseded
+   * decision or deleted artifact MARKS its edge tombstoned instead of removing
+   * it — active recall skips it (see activeLinks), but the history is preserved.
+   */
+  tombstoned?: boolean;
+  /** ISO-8601 stamp passed by the caller when the edge was tombstoned. */
+  tombstoned_at?: string;
+  /** Why it was tombstoned (e.g. "superseded by decision:x", "artifact deleted"). */
+  tombstoned_reason?: string;
 }
 export interface KnowledgeLinksDoc {
   version: string;
@@ -103,6 +113,43 @@ export function appendBatch(file: string, batch: KnowledgeLink[]): { added: numb
   return { added, total: doc.links.length };
 }
 
+/** Active (non-tombstoned) links — what every recall/traversal path should use. */
+export function activeLinks(doc: KnowledgeLinksDoc): KnowledgeLink[] {
+  return doc.links.filter((l) => !l.tombstoned);
+}
+
+/**
+ * Tombstone-never-delete (item 8). Marks every link matching `match`
+ * (from/to/type — any subset) as tombstoned IN PLACE — it is never removed, so
+ * the edge history survives and re-runs stay idempotent (a second tombstone is a
+ * no-op). Returns how many links were newly tombstoned. Used when a decision is
+ * superseded or an artifact is deleted, instead of pruning the edge.
+ */
+export function tombstoneLinks(
+  file: string,
+  match: { from?: string; to?: string; type?: string },
+  reason: string,
+  tombstonedAt: string,
+): { tombstoned: number } {
+  const doc = loadKnowledgeLinks(file);
+  let n = 0;
+  for (const l of doc.links) {
+    if (l.tombstoned) continue;
+    if (match.from !== undefined && l.from !== match.from) continue;
+    if (match.to !== undefined && l.to !== match.to) continue;
+    if (match.type !== undefined && l.type !== match.type) continue;
+    l.tombstoned = true;
+    l.tombstoned_at = tombstonedAt;
+    l.tombstoned_reason = reason;
+    n++;
+  }
+  if (n > 0) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(doc, null, 2) + "\n", "utf8");
+  }
+  return { tombstoned: n };
+}
+
 /** True iff every link type is a member of the closed edge-type set. */
 export function allEdgesClosed(doc: KnowledgeLinksDoc): boolean {
   return doc.links.every((l) => CLOSED_EDGE_TYPES.has(l.type));
@@ -124,7 +171,9 @@ export function reachableKinds(doc: KnowledgeLinksDoc, start: string): Set<NodeK
     if (!adj.has(a)) adj.set(a, new Set());
     adj.get(a)!.add(b);
   };
-  for (const l of doc.links) {
+  // Active recall skips tombstoned edges (item 8) — a superseded/deleted edge
+  // no longer keeps its endpoints connected, but stays in the file as history.
+  for (const l of activeLinks(doc)) {
     link(l.from, l.to);
     link(l.to, l.from);
   }
