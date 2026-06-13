@@ -163,3 +163,38 @@ export function blockingUnresolved(items: DefinitionItem[]): DefinitionItem[] {
 export function ledgerReady(items: DefinitionItem[]): boolean {
   return blockingUnresolved(items).length === 0;
 }
+
+// ── D8 close gate (item 16) ───────────────────────────────────────────────────
+
+/** Inputs to the three-leg D8 close gate. */
+export interface D8Input {
+  /** verify.md PASS for the contributing runs (exec leg evidence). */
+  execVerified: boolean;
+  execution_status: ExecutionStatus;
+  release_status: ReleaseStatus;
+  documentation_status: DocumentationStatus;
+}
+export interface D8Result {
+  canClose: boolean;
+  legs: { exec: boolean; release: boolean; docs: boolean };
+  blockers: string[];
+}
+
+/**
+ * The D8 close gate (06-initiatives.md §The D8 close gate). An initiative cannot
+ * close until THREE separate legs resolve — release and docs are never collapsed:
+ *   1. exec    — verify.md PASS + execution_status done.
+ *   2. release — release_status released (rollback_required does NOT close).
+ *   3. docs    — documentation_status resolved (updated | no_update_required).
+ * Pure function; the sub-verb supplies the run evidence.
+ */
+export function d8CloseGate(i: D8Input): D8Result {
+  const exec = i.execVerified && i.execution_status === "done";
+  const release = i.release_status === "released";
+  const docs = i.documentation_status === "updated" || i.documentation_status === "no_update_required";
+  const blockers: string[] = [];
+  if (!exec) blockers.push("exec leg unresolved: contributing runs not verify.md-PASS or execution_status != done");
+  if (!release) blockers.push("release leg unresolved: release_status is not 'released'");
+  if (!docs) blockers.push("docs leg unresolved: documentation_status not 'updated'/'no_update_required'");
+  return { canClose: exec && release && docs, legs: { exec, release, docs }, blockers };
+}
