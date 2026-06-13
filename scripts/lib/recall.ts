@@ -104,6 +104,99 @@ export interface RecallOpts {
    * Use in tests that verify wiki-only results and don't want KG interference.
    */
   _kgDisabled?: boolean;
+  /**
+   * Composite recall scoring + importance gate (items 6/7, docs/v2/05 §Recall).
+   * Absent → shipped BM25-only ranking (byte-identical default). Present →
+   * wiki ranking becomes `relevance(BM25) × recency(exp-decay) × importance(1–5)`
+   * and pages scoring below `importanceGate` are filtered from routine recall.
+   * Resolved from `models.compositeRecall` + `models.importanceGate` by the CLI.
+   */
+  composite?: CompositeConfig;
+}
+
+// ── Composite recall scoring (docs/v2/05-knowledge-memory.md §Recall scoring) ──
+
+/** Config for the composite recall re-ranker + importance gate. */
+export interface CompositeConfig {
+  /** 1–5 floor; wiki pages scoring below this are dropped from routine recall. */
+  importanceGate: number;
+  /** Recency exponential-decay half-life in days. */
+  halfLifeDays: number;
+  /** TEST SEAM: fixed "now" in ms for deterministic recency. Defaults to Date.now(). */
+  nowMs?: number;
+}
+
+/**
+ * Write-time importance score (1–5) for a wiki page, by its category — the
+ * machine-facing recall weight from the ADR→5 / contract→4 / summary→3 /
+ * context→2 design table (docs/v2/05 §Importance-at-ingest), mapped onto Guild's
+ * wiki category convention (`.guild/wiki/<category>/`). Pure + deterministic.
+ */
+export function ingestImportanceScore(category: string | undefined): number {
+  switch ((category ?? "").toLowerCase()) {
+    case "decisions": case "decision": case "adr":
+      return 5;
+    case "standards": case "standard": case "contracts": case "contract":
+      return 4;
+    case "recipes": case "recipe": case "concepts": case "concept": case "guides": case "guide":
+      return 3;
+    case "context": case "notes": case "note": case "log": case "changelog": case "index":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+/** Exponential recency decay in (0,1]: 1.0 at age 0, 0.5 at one half-life. */
+export function recencyDecay(ageMs: number, halfLifeDays: number): number {
+  if (!(halfLifeDays > 0)) return 1;
+  const ageDays = Math.max(0, ageMs) / 86_400_000;
+  return Math.pow(0.5, ageDays / halfLifeDays);
+}
+
+/** Composite recall score = relevance(BM25) × recency × (importance/5). */
+export function compositeScore(
+  relevance: number,
+  importance1to5: number,
+  ageMs: number,
+  halfLifeDays: number,
+): number {
+  return relevance * recencyDecay(ageMs, halfLifeDays) * (importance1to5 / 5);
+}
+
+/** Wiki category from an absolute path under `<wikiBase>/<category>/…`. */
+function categoryFromWikiPath(absPath: string, wikiBase: string): string | undefined {
+  const segs = path.relative(wikiBase, absPath).split(path.sep);
+  return segs.length > 1 ? segs[0] : undefined;
+}
+
+/**
+ * Rank scored wiki docs. Default (no composite): BM25 desc, score>0, capped.
+ * Composite: re-rank by `compositeScore` and drop pages whose 1–5 importance is
+ * below the gate (lower pages stay reachable by an explicit category query).
+ */
+function rankWikiDocs(
+  docs: { path: string; content: string; score: number }[],
+  wikiBase: string,
+  limit: number,
+  composite: CompositeConfig | undefined,
+): { path: string; content: string }[] {
+  const scoring = docs.filter((d) => d.score > 0);
+  if (!composite) {
+    return scoring.sort((a, b) => b.score - a.score).slice(0, limit);
+  }
+  const now = composite.nowMs ?? Date.now();
+  return scoring
+    .map((d) => {
+      const importance = ingestImportanceScore(categoryFromWikiPath(d.path, wikiBase));
+      let ageMs = 0;
+      try { ageMs = now - fs.statSync(d.path).mtimeMs; } catch { /* unstattable → age 0 */ }
+      return { d, importance, comp: compositeScore(d.score, importance, ageMs, composite.halfLifeDays) };
+    })
+    .filter((x) => x.importance >= composite.importanceGate)
+    .sort((a, b) => b.comp - a.comp)
+    .slice(0, limit)
+    .map((x) => x.d);
 }
 
 // ── Internal: recursive .md file walker ──────────────────────────────────────
@@ -187,6 +280,7 @@ function fileBm25Branch(
   limit: number,
   runDir?: string,
   runId?: string,
+  composite?: CompositeConfig,
 ): RecallResult | null {
   const wikiBase = path.join(cwd, ".guild", "wiki");
   const scanDir = category ? path.join(wikiBase, category) : wikiBase;
@@ -206,12 +300,13 @@ function fileBm25Branch(
 
   const scores = bm25Score(queryTokens, docs);
 
-  // Sort by score, keep only scoring docs, cap at limit
-  const ranked = docs
-    .map((d, i) => ({ ...d, score: scores[i] ?? 0 }))
-    .filter((d) => d.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+  // BM25 desc by default; composite re-rank + importance gate when configured.
+  const ranked = rankWikiDocs(
+    docs.map((d, i) => ({ path: d.path, content: d.content, score: scores[i] ?? 0 })),
+    wikiBase,
+    limit,
+    composite,
+  );
 
   if (ranked.length === 0) return null;
 
@@ -370,6 +465,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
     _indexConfig,
     _bm25Disabled = false,
     _kgDisabled = false,
+    composite,
   } = opts;
 
   // Derive runDir from cwd + runId when not given explicitly.
@@ -379,12 +475,16 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   const indexConfig: IndexBlock = { ...DEFAULT_INDEX_BLOCK, ..._indexConfig };
 
   // ── Wiki waterfall: A → B → C (first non-null wins for wiki content) ────────
-  const sqlite = sqliteBranch(query, cwd, indexConfig, limit, runDir, runId);
+  // Composite mode bypasses the sqlite-FTS cache: re-ranking by recency ×
+  // importance + the gate is applied in the file-BM25 branch, which owns the
+  // raw relevance score. (The sqlite cache returns pre-ranked chunks without
+  // exposed scores.) Default mode is unchanged → byte-identical.
+  const sqlite = composite ? null : sqliteBranch(query, cwd, indexConfig, limit, runDir, runId);
   const bm25wiki = sqlite
     ? null
     : _bm25Disabled
       ? null
-      : fileBm25Branch(query, cwd, category, limit, runDir, runId);
+      : fileBm25Branch(query, cwd, category, limit, runDir, runId, composite);
   const wikiResult: RecallResult =
     sqlite ?? bm25wiki ?? fsScanBranch(query, cwd, category, limit, runDir, runId);
 
@@ -461,12 +561,25 @@ if (require.main === module) {
     _indexConfig.wiki_file_threshold = thresholdOverride;
   }
 
+  // Resolve composite recall config from settings (models.compositeRecall +
+  // models.importanceGate). Kept out of the pure recall() fn — passed in.
+  let composite: CompositeConfig | undefined;
+  try {
+    // Lazy require so the pure library path never loads the settings resolver.
+    const { resolveSettings } = require("./settings-resolver") as typeof import("./settings-resolver");
+    const models = (resolveSettings({ cwd }).config as { models?: { compositeRecall?: boolean; importanceGate?: number } }).models;
+    if (models?.compositeRecall) {
+      composite = { importanceGate: models.importanceGate ?? 3, halfLifeDays: 90 };
+    }
+  } catch { /* settings unreadable → BM25-only default */ }
+
   const result = recall(query, {
     cwd,
     category,
     limit,
     ...(runId ? { runId } : {}),
     ...(runDir ? { runDir } : {}),
+    ...(composite ? { composite } : {}),
     ...(_indexConfig.enabled !== undefined || _indexConfig.wiki_file_threshold !== undefined
       ? { _indexConfig }
       : {}),

@@ -224,6 +224,12 @@ interface ModelsBlock {
   cacheTTL: CacheTTLBlock;
   /** Min wiki importance level (1–5) for routine recall (ADR §6). Default 3. */
   importanceGate: number;
+  /**
+   * Composite recall scoring (docs/v2/05 §Recall scoring). false (default) =
+   * shipped BM25-only ranking. true = wiki recall ranks by relevance × recency ×
+   * importance and filters pages below `importanceGate`.
+   */
+  compositeRecall: boolean;
   /** BM25 top-1 similarity threshold for the ingest anomaly gate (D-INGEST-GATE). Default 0.80. */
   ingestSimilarityGate: number;
   /**
@@ -425,6 +431,7 @@ const DEFAULTS: GuildSettings = {
     structuredOutputRequired: true,
     cacheTTL: { coordinator: "1h", leaf: "5m" },
     importanceGate: 3,
+    compositeRecall: false,
     ingestSimilarityGate: 0.80,
     shortOutputThreshold: {},
     knowledge: { ...KNOWLEDGE_CONFIG_DEFAULTS },
@@ -560,6 +567,10 @@ const HELP: Record<string, string> = {
     "\"1h\" | \"5m\" | \"off\" (default \"5m\") — leaf-agent prompt-cache TTL hint (ADR §9).",
   "models.importanceGate":
     "int 1–5 (default 3) — min wiki importance level for routine recall (ADR §6).",
+  "models.compositeRecall":
+    "bool (default false) — composite recall scoring (docs/v2/05 §Recall scoring). " +
+    "false = shipped BM25-only ranking. true = wiki recall ranks by relevance × recency × importance " +
+    "and filters pages scoring below models.importanceGate.",
   "models.ingestSimilarityGate":
     "float 0–1 (default 0.80) — BM25 top-1 similarity threshold for the wiki ingest anomaly gate (D-INGEST-GATE). " +
     "If a candidate page scores ≥ this against existing pages, guild:wiki-ingest pauses: supersede / skip / proceed — never silently overwrites.",
@@ -692,7 +703,7 @@ const VALID_CACHE_TTL = new Set(["1h", "5m", "off"]);
 const VALID_MODELS_KEYS = new Set([
   "enabled", "tiers", "scoreWeights", "thresholds", "advisorRounds",
   "escalationMarkers", "recallBeforeRead", "recallScoreThreshold",
-  "structuredOutputRequired", "cacheTTL", "importanceGate", "ingestSimilarityGate",
+  "structuredOutputRequired", "cacheTTL", "importanceGate", "compositeRecall", "ingestSimilarityGate",
   "shortOutputThreshold", "knowledge",
 ]);
 
@@ -1017,6 +1028,10 @@ export function validateModels(m: Record<string, unknown>): string[] {
     if (typeof ig !== "number" || ig < 1 || ig > 5 || !Number.isInteger(ig)) {
       rejects.push(`models.importanceGate must be an integer 1–5 (got ${JSON.stringify(ig)})`);
     }
+  }
+  // compositeRecall is a boolean
+  if (m["compositeRecall"] !== undefined && typeof m["compositeRecall"] !== "boolean") {
+    rejects.push(`models.compositeRecall must be a boolean (got ${JSON.stringify(m["compositeRecall"])})`);
   }
   // advisorRounds > 0
   if (m["advisorRounds"] !== undefined) {

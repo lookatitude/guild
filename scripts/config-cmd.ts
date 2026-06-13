@@ -126,6 +126,7 @@ const MODELS_KEYS = new Set([
   "structuredOutputRequired",
   "cacheTTL",
   "importanceGate",
+  "compositeRecall",
   "ingestSimilarityGate",
   "shortOutputThreshold",
 ]);
