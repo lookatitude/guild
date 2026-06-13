@@ -192,8 +192,27 @@ export interface RunKnowledgeResult {
  * Constant (not corpus-derived) so the id is stable across every topic-less run.
  */
 export const FALLBACK_ROOT_TOPIC_SEED = "project-knowledge";
-/** Display name of the SC-3 fallback root topic. */
+/** Generic display name — used only when the repo root yields no usable basename. */
 export const FALLBACK_ROOT_TOPIC_NAME = "Project Knowledge";
+
+/**
+ * Display name for the SC-3 fallback root topic, derived from the repo root so
+ * the topic-less corpus reads as e.g. "Guild Knowledge" rather than the generic
+ * "Project Knowledge". Pure function of `repoRoot` (no Date/random) → SC-8 holds
+ * (byte-identical across triggers for a given repo). The topic ID stays the
+ * constant FALLBACK_ROOT_TOPIC_SEED, so only the human-facing name varies.
+ * Falls back to FALLBACK_ROOT_TOPIC_NAME when the basename is empty/degenerate.
+ */
+export function deriveFallbackRootTopicName(repoRoot: string): string {
+  const base = path.basename((repoRoot ?? "").replace(/[/\\]+$/, "")).trim();
+  if (!base || base === "." || base === "..") return FALLBACK_ROOT_TOPIC_NAME;
+  const titled = base
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+  return titled ? `${titled} Knowledge` : FALLBACK_ROOT_TOPIC_NAME;
+}
 
 /**
  * SC-3 unconditional guarantee: when the assembled graph has ≥1 `wiki_page` but
@@ -211,11 +230,13 @@ export const FALLBACK_ROOT_TOPIC_NAME = "Project Knowledge";
  * order. No Date/random.
  *
  * @param nodes     The assembled node set (post K1→K5, pre validateGraphV2).
- * @param _repoRoot Reserved (anchor resolution is checked downstream by validateGraphV2).
+ * @param repoRoot  Repo root — supplies the derived display name (see
+ *                  deriveFallbackRootTopicName); anchor resolution itself is
+ *                  checked downstream by validateGraphV2.
  */
 export function maybeSynthesizeFallbackRootTopic(
   nodes: GraphNode[],
-  _repoRoot: string
+  repoRoot: string
 ): { topicNode: GraphNode; edges: GraphEdge[] } | null {
   const wikiPages = nodes.filter((n) => n.type === "wiki_page");
   if (wikiPages.length === 0) return null;
@@ -232,7 +253,7 @@ export function maybeSynthesizeFallbackRootTopic(
   const topicNode: GraphNode = {
     id: topicId,
     type: "topic",
-    name: FALLBACK_ROOT_TOPIC_NAME,
+    name: deriveFallbackRootTopicName(repoRoot),
     category: "concept",
     source_refs: [firstRelpath],
     confidence: "high",

@@ -28,6 +28,7 @@ import * as path from "path";
 import {
   runKnowledgeStages,
   maybeSynthesizeFallbackRootTopic,
+  deriveFallbackRootTopicName,
   FALLBACK_ROOT_TOPIC_SEED,
   FALLBACK_ROOT_TOPIC_NAME,
   type KnowledgeLLMSeams,
@@ -138,7 +139,9 @@ describe("AFTER — wiki-only corpus gets a deterministic fallback root topic (S
     expect(wikis.length).toBe(3);
     // Exactly ONE topic — the synthesized root.
     expect(topics.map((t) => t.id)).toEqual([ROOT_TOPIC_ID]);
-    expect(topics[0].name).toBe(FALLBACK_ROOT_TOPIC_NAME);
+    // Name is now repo-derived (followup: was the generic "Project Knowledge").
+    expect(topics[0].name).toBe(deriveFallbackRootTopicName(repo));
+    expect(topics[0].name).toMatch(/ Knowledge$/);
     // No wiki_page orphaned.
     expect(orphans).toEqual([]);
     // Defense-in-depth machine check reports clean.
@@ -165,19 +168,18 @@ describe("AFTER — wiki-only corpus gets a deterministic fallback root topic (S
     expect(fs.existsSync(path.join(repo, anchor.split("#")[0]))).toBe(true);
   }, 30000);
 
-  test("SC-8: two finalize runs of a wiki-only corpus → byte-identical knowledge-graph.json", async () => {
-    const make = () => {
-      const repo = mkTmpRepo("guild-sc8wiki-");
-      write(repo, ".guild/wiki/index.md", "# Index\n\nSee [[alpha]].\n");
-      write(repo, ".guild/wiki/alpha.md", "# Alpha\n\nProse.\n");
-      return repo;
-    };
-    const r1 = make();
-    const r2 = make();
-    await runKnowledgeStages(r1, { codeRelPaths: [], docRelPaths: [] }, SEAMS, { runId: "a" });
-    await runKnowledgeStages(r2, { codeRelPaths: [], docRelPaths: [] }, SEAMS, { runId: "b" });
-    const g1 = fs.readFileSync(path.join(r1, ".guild", "indexes", "knowledge-graph.json"), "utf8");
-    const g2 = fs.readFileSync(path.join(r2, ".guild", "indexes", "knowledge-graph.json"), "utf8");
+  test("SC-8/SC-11: re-running a wiki-only corpus (varying runId) → byte-identical knowledge-graph.json", async () => {
+    // Same repo, two finalize runs with different runIds: SC-8 byte-identity
+    // means the runId reaches only the provenance sidecar, never the graph.
+    // (Uses one repo so the repo-derived root-topic name is held constant —
+    //  the name legitimately varies by repo root, not by run.)
+    const repo = mkTmpRepo("guild-sc8wiki-");
+    write(repo, ".guild/wiki/index.md", "# Index\n\nSee [[alpha]].\n");
+    write(repo, ".guild/wiki/alpha.md", "# Alpha\n\nProse.\n");
+    await runKnowledgeStages(repo, { codeRelPaths: [], docRelPaths: [] }, SEAMS, { runId: "a" });
+    const g1 = fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-graph.json"), "utf8");
+    await runKnowledgeStages(repo, { codeRelPaths: [], docRelPaths: [] }, SEAMS, { runId: "b" });
+    const g2 = fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-graph.json"), "utf8");
     expect(g1).toBe(g2);
   }, 30000);
 });
@@ -236,5 +238,22 @@ describe("GUARD — maybeSynthesizeFallbackRootTopic fires only when needed", ()
     const a = maybeSynthesizeFallbackRootTopic([wiki], "/tmp");
     const b = maybeSynthesizeFallbackRootTopic([wiki], "/tmp");
     expect(a).toEqual(b);
+  });
+});
+
+describe("deriveFallbackRootTopicName — repo-derived display name (followup)", () => {
+  test("title-cases the repo basename + appends ' Knowledge'", () => {
+    expect(deriveFallbackRootTopicName("/Users/x/Projects/guild")).toBe("Guild Knowledge");
+    expect(deriveFallbackRootTopicName("/tmp/my-cool_repo")).toBe("My Cool Repo Knowledge");
+  });
+  test("trailing slashes are ignored", () => {
+    expect(deriveFallbackRootTopicName("/srv/acme/")).toBe("Acme Knowledge");
+  });
+  test("degenerate roots fall back to the generic name", () => {
+    expect(deriveFallbackRootTopicName("/")).toBe(FALLBACK_ROOT_TOPIC_NAME);
+    expect(deriveFallbackRootTopicName("")).toBe(FALLBACK_ROOT_TOPIC_NAME);
+  });
+  test("deterministic — pure function of repoRoot (SC-8)", () => {
+    expect(deriveFallbackRootTopicName("/a/b/guild")).toBe(deriveFallbackRootTopicName("/a/b/guild"));
   });
 });
