@@ -195,6 +195,12 @@ function addFlag(f: Flag) {
 // `supersedes:` / `source_refs:` frontmatter and any line containing
 // "supersedes <path>" are LEGITIMATE v2-cites-v1 references — not drift.
 // Only body-prose lines that assume single-repo or v1 command forms are flagged.
+//
+// RECALIBRATED (2026-06-13): the `single-repo` pattern also exempts
+// workspace-AWARE lines (those naming `is_workspace` / the `workspace` concept)
+// via isWorkspaceAwareLine — prose describing the workspace-vs-non-workspace
+// distinction is not a surviving v1 assumption. Scoped to the single-repo
+// pattern only (covered by docs-hygiene-drift-workspace-aware.test.ts).
 const DRIFT_PATTERNS: Array<[RegExp, string]> = [
   // v1 command prefix in user-visible text (not in quoted code that's documenting v1→v2 migration)
   [/\/guild-(?:wiki|init|ideate|plan|build|qa|ops|evolve|rollback|stats|audit|fix|status|resume|config|initiative|learn)\b/, "v1 /guild-* command reference"],
@@ -220,6 +226,27 @@ function isSupersessionBookkeeping(line: string): boolean {
   if (/^\s*-\s+/.test(t) && /supersedes|source_refs/.test(t)) return true;
   // Prose "supersedes <path>" — legitimate v2-cites-v1 reference in ADR body
   if (/\bsupersedes\b/.test(t)) return true;
+  return false;
+}
+
+/**
+ * Returns true if a line is WORKSPACE-AWARE — it references the v2 workspace
+ * data model rather than assuming a lone repo. Recalibrated 2026-06-13.
+ *
+ * The `single-repo` drift pattern over-matches legitimate v2 prose that
+ * DESCRIBES the workspace-vs-non-workspace distinction — e.g.
+ *   "Always present; `is_workspace:false` for single-repo."
+ *   "Human label, e.g. `guild (workspace root)` or a single repo name."
+ *   "**Single-repo (`is_workspace: false`):** both keys are inert."
+ * A line that names the `is_workspace` field or the `workspace` concept is by
+ * construction workspace-aware (it handles both cases), not a surviving v1
+ * single-repo assumption. Scoped to the "single-repo assumption" pattern only
+ * (see the drift loop) — v1 command/path patterns are never exempted by this.
+ */
+function isWorkspaceAwareLine(line: string): boolean {
+  const t = line.trim();
+  if (/\bis_workspace\b/i.test(t)) return true;
+  if (/\bworkspace\b/i.test(t)) return true;
   return false;
 }
 
@@ -367,6 +394,12 @@ function scanDrift(corpus: string[], excludeResearch = true) {
         // Skip multi-line bullet continuations where the marker is on a prior
         // line of the same bullet (3-line lookback handles typical 2-3 line items).
         if (hasLineagePrior(contentLines, i, 3)) continue;
+
+        // Skip "single-repo assumption" hits on workspace-AWARE lines — prose
+        // that references the `is_workspace` field or the `workspace` concept is
+        // documenting the workspace-vs-non-workspace distinction, not assuming a
+        // lone repo. Scoped to this pattern only. Recalibrated 2026-06-13.
+        if (label === "single-repo assumption" && isWorkspaceAwareLine(line)) continue;
 
         addFlag({
           category: "drift",
