@@ -2,7 +2,9 @@
   "name": "guild-scripts",
   "private": true,
   "scripts": {
-    "test": "npx jest --testPathPattern=__tests__ --no-coverage"
+    "test": "npx jest --testPathPattern=__tests__ --no-coverage",
+    "build:inventory": "npx tsx build-inventory.ts",
+    "build:hosts": "npx tsx build-host-packages.ts"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"

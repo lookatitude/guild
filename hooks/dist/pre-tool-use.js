@@ -864,8 +864,8 @@ function verifyMcpDescription(toolName, liveDescription, pins) {
   };
 }
 
-// pre-tool-use.ts
-async function readStdin() {
+// lib/guild-hook-event.ts
+async function readHookStdin() {
   return new Promise((resolve4) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
@@ -873,6 +873,15 @@ async function readStdin() {
     process.stdin.on("error", () => resolve4(""));
   });
 }
+function emitClaudeHookEvent(raw) {
+  const parsed = JSON.parse(raw.trim());
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return parsed;
+  }
+  return { ...parsed, host: "claude" };
+}
+
+// pre-tool-use.ts
 function renderCommand(toolName, toolInput) {
   if (toolInput === void 0 || toolInput === null) return toolName;
   if (typeof toolInput === "string") return `${toolName} ${toolInput}`;
@@ -1190,10 +1199,10 @@ function runSecurityEnforcement(payload, cwd) {
   return false;
 }
 async function main() {
-  const raw = await readStdin();
+  const raw = await readHookStdin();
   let payload = {};
   try {
-    payload = JSON.parse(raw.trim());
+    payload = emitClaudeHookEvent(raw);
   } catch {
     process.stderr.write("warn: [pre-tool-use] invalid JSON on stdin; skipping.\n");
     return;

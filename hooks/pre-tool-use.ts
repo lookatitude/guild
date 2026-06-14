@@ -72,31 +72,16 @@ import {
   resolveScopeDecision,
 } from "./lib/security/enforce.js";
 import { isMcpTool, verifyMcpDescription } from "./lib/security/mcp-hash-pin.js";
-
-// ── Types ──────────────────────────────────────────────────────────────────
-
-interface PreToolUsePayload {
-  session_id?: string;
-  cwd?: string;
-  hook_event_name?: string;
-  tool_name?: string;
-  tool_input?: unknown;
-  /** Claude Code permission mode: "default" | "plan" | "acceptEdits" | "bypassPermissions". */
-  permission_mode?: string;
-  /** Live MCP tool description, when the host provides it on the payload (forward-compatible). */
-  tool_description?: string;
-}
+// L5a: host-neutral hook payload + Claude emitter. PreToolUsePayload is now the
+// shared `GuildHookEvent`; for Claude the emitter mapping is the identity, so the
+// PreToolUse security behavior is preserved byte-for-byte.
+import {
+  emitClaudeHookEvent,
+  readHookStdin,
+  type GuildHookEvent,
+} from "./lib/guild-hook-event.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-async function readStdin(): Promise<string> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = [];
-    process.stdin.on("data", (c: Buffer) => chunks.push(c));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve(""));
-  });
-}
 
 /**
  * Render a tool_input payload as a single redaction-friendly command
@@ -332,7 +317,7 @@ interface BoundaryDegradeCtx {
  *      cannot honor it.
  */
 function runBoundaryGuard(
-  payload: PreToolUsePayload,
+  payload: GuildHookEvent,
   cwd: string,
   ctx?: BoundaryDegradeCtx,
 ): boolean {
@@ -448,7 +433,7 @@ function runBoundaryGuard(
 
 /** Obtain a live MCP tool description: payload field, else session sidecar. */
 function readMcpDescription(
-  payload: PreToolUsePayload,
+  payload: GuildHookEvent,
   runDir: string | undefined,
   toolName: string,
 ): string | undefined {
@@ -473,7 +458,7 @@ function readMcpDescription(
  * it emitted a PreToolUse permission decision (the caller then owns nothing
  * further and must return). Returns false to let the rest of the hook proceed.
  */
-function runSecurityEnforcement(payload: PreToolUsePayload, cwd: string): boolean {
+function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
   // Read settings first — sec.allowed_tools feeds the scope baseline (R-020)
   // and sec.tool_description_hashes feeds the MCP pin check. Both are needed
   // before the early-exit below, so the read is unconditional (the file is
@@ -688,10 +673,10 @@ function runSecurityEnforcement(payload: PreToolUsePayload, cwd: string): boolea
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export async function main(): Promise<void> {
-  const raw = await readStdin();
-  let payload: PreToolUsePayload = {};
+  const raw = await readHookStdin();
+  let payload: GuildHookEvent = {};
   try {
-    payload = JSON.parse(raw.trim()) as PreToolUsePayload;
+    payload = emitClaudeHookEvent(raw);
   } catch {
     process.stderr.write("warn: [pre-tool-use] invalid JSON on stdin; skipping.\n");
     return;

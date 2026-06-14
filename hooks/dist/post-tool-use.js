@@ -971,8 +971,8 @@ function writeHeartbeatFromEnv(opts = {}) {
   }
 }
 
-// post-tool-use.ts
-async function readStdin() {
+// lib/guild-hook-event.ts
+async function readHookStdin() {
   return new Promise((resolve4) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
@@ -980,6 +980,15 @@ async function readStdin() {
     process.stdin.on("error", () => resolve4(""));
   });
 }
+function emitClaudeHookEvent(raw) {
+  const parsed = JSON.parse(raw.trim());
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return parsed;
+  }
+  return { ...parsed, host: "claude" };
+}
+
+// post-tool-use.ts
 function isKnownTool(name) {
   if (typeof name !== "string") return false;
   return TOOL_CALL_TOOL_VALUES.includes(name);
@@ -1114,10 +1123,10 @@ function resolveRunId(guildRoot) {
   return readCurrentRunId(guildRoot);
 }
 async function main() {
-  const raw = await readStdin();
+  const raw = await readHookStdin();
   let payload = {};
   try {
-    payload = JSON.parse(raw.trim());
+    payload = emitClaudeHookEvent(raw);
   } catch {
     process.stderr.write("warn: [post-tool-use] invalid JSON on stdin; skipping pairing.\n");
     return;

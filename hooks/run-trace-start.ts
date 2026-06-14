@@ -27,27 +27,20 @@
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { emitRunStarted, resolveRunIdForTrace } from "./lib/run-trace.js";
-
-interface HookPayload {
-  session_id?: string;
-  cwd?: string;
-  hook_event_name?: string;
-}
-
-async function readStdin(): Promise<string> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = [];
-    process.stdin.on("data", (c: Buffer) => chunks.push(c));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve(""));
-  });
-}
+// L5a: host-neutral hook payload + Claude emitter. The local HookPayload is now
+// the shared `GuildHookEvent`; for Claude the emitter mapping is the identity, so
+// the run_started trace behavior is preserved byte-for-byte.
+import {
+  emitClaudeHookEvent,
+  readHookStdin,
+  type GuildHookEvent,
+} from "./lib/guild-hook-event.js";
 
 async function main(): Promise<void> {
-  const raw = await readStdin();
-  let payload: HookPayload = {};
+  const raw = await readHookStdin();
+  let payload: GuildHookEvent = {};
   try {
-    payload = JSON.parse(raw.trim()) as HookPayload;
+    payload = emitClaudeHookEvent(raw);
   } catch {
     process.exit(0); // no payload → nothing to do
   }

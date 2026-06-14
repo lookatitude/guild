@@ -1,0 +1,24 @@
+{
+  "should_trigger": [
+    "Review this implementation plan adversarially before we commit to it.",
+    "Can you scope and plan this new billing feature for me?",
+    "Let's build the notifications service — pull in whatever specialists we need.",
+    "Something's wrong with the deploy pipeline and I can't figure out why; help me root-cause it.",
+    "We're about to cut a release — walk me through it and roll back if it goes sideways.",
+    "Ingest these architecture docs into the project knowledge base so we can query them later.",
+    "I want to redesign the onboarding flow but haven't thought it through — where do we start?",
+    "This is a multi-part refactor touching the API, the workers, and the migrations — coordinate it.",
+    "Find the holes in this system design.",
+    "Where am I in this task and what's the next step?"
+  ],
+  "should_not_trigger": [
+    "Fix the typo on line 42 of README.md.",
+    "Rename the variable `total` to `subtotal` in checkout.ts.",
+    "What's the value of MAX_RETRIES in config.ts?",
+    "Add a trailing newline to package.json.",
+    "Run the existing test suite and tell me if it passes.",
+    "Format this file with prettier.",
+    "You are the backend specialist — implement the endpoint described in your context bundle.",
+    "Bump the version field in plugin.json to 2.0.1."
+  ]
+}

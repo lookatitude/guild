@@ -79,6 +79,11 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import { resolveGuildRoot } from "./lib/guild-root.js";
+import {
+  emitClaudeHookEvent,
+  readHookStdin,
+  type GuildHookEvent,
+} from "./lib/guild-hook-event.js";
 
 // ── v2 security ADR (D-SECRETS): scrub the one raw free-text field that lands
 // in telemetry (the UserPromptSubmit prompt) through the built-in redaction +
@@ -104,27 +109,10 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface HookPayload {
-  session_id?: string;
-  cwd?: string;
-  hook_event_name?: string;
-  tool_name?: string;
-  tool_input?: unknown;
-  tool_response?: { success?: boolean; error?: string } | unknown;
-  agent_name?: string;
-  stop_reason?: string;
-  duration_ms?: number;
-  prompt?: string;
-  model?: string;
-  // loop_round fields — emitted by loop skill scripts via emit-loop-event.ts
-  loop_layer?: string;
-  loop_round?: number;
-  loop_gate?: string;
-  loop_terminated?: boolean;
-  // D-OBS-1: provider token/usage object, present on LLM-call events only.
-  tokens?: unknown;
-  usage?: unknown;
-}
+// HookPayload is now the host-neutral `GuildHookEvent` (lib/guild-hook-event.ts):
+// one normalized shape the telemetry/security/trace hooks share, produced by the
+// per-host emitter. For Claude the mapping is the identity, so behavior is
+// preserved byte-for-byte.
 
 interface TelemetryEvent {
   ts: string;
@@ -161,7 +149,7 @@ function digest(value: unknown): string {
  * Determine if the tool response signals an error.
  * Treats explicit success:false or presence of error field as not-ok.
  */
-function isOk(payload: HookPayload): boolean {
+function isOk(payload: GuildHookEvent): boolean {
   const resp = payload.tool_response;
   if (resp === null || resp === undefined) return true;
   if (typeof resp === "object") {
@@ -170,16 +158,6 @@ function isOk(payload: HookPayload): boolean {
     if (typeof r["error"] === "string" && r["error"].length > 0) return false;
   }
   return true;
-}
-
-/** Read all stdin into a string. */
-async function readStdin(): Promise<string> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = [];
-    process.stdin.on("data", (c: Buffer) => chunks.push(c));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve(""));
-  });
 }
 
 function readCurrentRunId(cwd: string): string | undefined {
@@ -192,7 +170,7 @@ function readCurrentRunId(cwd: string): string | undefined {
   }
 }
 
-function resolveRunId(cwd: string, payload: HookPayload): string {
+function resolveRunId(cwd: string, payload: GuildHookEvent): string {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
   const currentRunId = readCurrentRunId(cwd);
@@ -205,11 +183,11 @@ function resolveRunId(cwd: string, payload: HookPayload): string {
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const raw = await readStdin();
+  const raw = await readHookStdin();
 
-  let payload: HookPayload = {};
+  let payload: GuildHookEvent = {};
   try {
-    payload = JSON.parse(raw.trim()) as HookPayload;
+    payload = emitClaudeHookEvent(raw);
   } catch {
     // Invalid JSON — log to stderr and exit 0 (must not block)
     process.stderr.write("[capture-telemetry] WARN: invalid JSON on stdin; skipping.\n");

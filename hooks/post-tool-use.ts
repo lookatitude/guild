@@ -48,35 +48,21 @@ import { scrubbedWrite, type ScrubSurface } from "./lib/security/scrubbed-write.
 import { buildSecurityEvent, appendSecurityEvent } from "./lib/security/events.js";
 // G-9 (SC-5): structured heartbeat WRITE side — backend-agnostic liveness.
 import { writeHeartbeatFromEnv } from "./lib/heartbeat-write.js";
-
-interface PostToolUsePayload {
-  session_id?: string;
-  cwd?: string;
-  hook_event_name?: string;
-  tool_name?: string;
-  tool_input?: unknown;
-  tool_response?: { success?: boolean; error?: string } | unknown;
-  duration_ms?: number;
-  // D-OBS-1: token usage — only meaningful for LLM-call tools (Agent/Skill).
-  tokens?: unknown;
-  usage?: unknown;
-}
-
-async function readStdin(): Promise<string> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = [];
-    process.stdin.on("data", (c: Buffer) => chunks.push(c));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve(""));
-  });
-}
+// L5a: host-neutral hook payload + Claude emitter. PostToolUsePayload is now the
+// shared `GuildHookEvent`; for Claude the emitter mapping is the identity, so the
+// PostToolUse behavior is preserved byte-for-byte.
+import {
+  emitClaudeHookEvent,
+  readHookStdin,
+  type GuildHookEvent,
+} from "./lib/guild-hook-event.js";
 
 function isKnownTool(name: string | undefined): name is ToolCallTool {
   if (typeof name !== "string") return false;
   return (TOOL_CALL_TOOL_VALUES as readonly string[]).includes(name);
 }
 
-function isOk(payload: PostToolUsePayload): "ok" | "err" {
+function isOk(payload: GuildHookEvent): "ok" | "err" {
   const resp = payload.tool_response;
   if (resp === null || resp === undefined) return "ok";
   if (typeof resp === "object") {
@@ -87,7 +73,7 @@ function isOk(payload: PostToolUsePayload): "ok" | "err" {
   return "ok";
 }
 
-function resultExcerpt(payload: PostToolUsePayload): string {
+function resultExcerpt(payload: GuildHookEvent): string {
   const resp = payload.tool_response;
   if (resp === null || resp === undefined) return "";
   if (typeof resp === "string") return resp;
@@ -142,7 +128,7 @@ function classifyGuildScrubSurface(absPath: string, guildRoot: string): ScrubSur
  * "Sub-second pre-commit window" — runs synchronously before exit.
  */
 function runGuildArtifactScrub(
-  payload: PostToolUsePayload,
+  payload: GuildHookEvent,
   guildRoot: string,
   runDir: string | undefined,
   runId: string | undefined,
@@ -285,10 +271,10 @@ function resolveRunId(guildRoot: string): string | undefined {
 }
 
 export async function main(): Promise<void> {
-  const raw = await readStdin();
-  let payload: PostToolUsePayload = {};
+  const raw = await readHookStdin();
+  let payload: GuildHookEvent = {};
   try {
-    payload = JSON.parse(raw.trim()) as PostToolUsePayload;
+    payload = emitClaudeHookEvent(raw);
   } catch {
     process.stderr.write("warn: [post-tool-use] invalid JSON on stdin; skipping pairing.\n");
     return;

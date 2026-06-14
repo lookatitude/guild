@@ -396,6 +396,73 @@ export function renderCodexPluginJson(
 }
 
 // ---------------------------------------------------------------------------
+// renderClaudePluginPackage — the Claude .claude-plugin/plugin.json manifest
+// ---------------------------------------------------------------------------
+
+/**
+ * The rendered .claude-plugin/plugin.json manifest object. Claude is the
+ * CANONICAL host format, so this mirrors the committed plugin.json EXACTLY —
+ * metadata + the skill DIRECTORY globs + the command/agent file-path lists. No
+ * provenance fields are emitted (the committed reference carries none), keeping
+ * the generated manifest byte-faithful so SC-2 equivalence holds without relying
+ * on provenance-stripping. MCP servers and hooks live in .mcp.json / hooks.json
+ * respectively (NOT inline in plugin.json), so they are not part of this object —
+ * matching the committed manifest.
+ */
+export interface ClaudePluginJson {
+  name: string;
+  version: string;
+  description: string;
+  homepage?: string;
+  repository?: string;
+  author?: { name: string; email?: string };
+  license?: string;
+  keywords?: string[];
+  /** Skill directory globs, e.g. "./skills/core/". */
+  skills?: string[];
+  /** Command file paths, e.g. "./commands/plan.md". */
+  commands?: string[];
+  /** Agent file paths, e.g. "./agents/architect.md". */
+  agents?: string[];
+}
+
+/**
+ * Render the Claude plugin manifest (.claude-plugin/plugin.json) from a neutral
+ * GuildPluginManifest. The file-tree body (command/skill/agent/hook contents) is
+ * copied by the I/O caller (build-host-packages.ts); this PURE renderer produces
+ * only the manifest object.
+ *
+ * The neutral input carries the Claude-shaped surface lists: `skills` as
+ * directory globs, `commands`/`agents` as file paths (the caller derives these
+ * from guild.inventory.v1). Arrays are emitted in sorted order for deterministic
+ * output; the SC-2 normalizer also sorts these manifest arrays, so either side's
+ * ordering is non-semantic.
+ *
+ * @param manifest - The neutral Guild plugin manifest.
+ * @param opts - Render options (renderedAt accepted for interface parity; the
+ *               Claude manifest intentionally emits no provenance field).
+ */
+export function renderClaudePluginPackage(
+  manifest: GuildPluginManifest,
+  _opts: RenderOptions
+): ClaudePluginJson {
+  const result: ClaudePluginJson = {
+    name: manifest.name,
+    version: manifest.version,
+    description: manifest.description,
+  };
+  if (manifest.homepage !== undefined) result.homepage = manifest.homepage;
+  if (manifest.repository !== undefined) result.repository = manifest.repository;
+  if (manifest.author !== undefined) result.author = manifest.author;
+  if (manifest.license !== undefined) result.license = manifest.license;
+  if (manifest.keywords && manifest.keywords.length > 0) result.keywords = manifest.keywords;
+  if (manifest.skills && manifest.skills.length > 0) result.skills = [...manifest.skills].sort();
+  if (manifest.commands && manifest.commands.length > 0) result.commands = [...manifest.commands].sort();
+  if (manifest.agents && manifest.agents.length > 0) result.agents = [...manifest.agents].sort();
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // renderGeminiToml — minimal TOML serializer (subset sufficient for Gemini)
 // ---------------------------------------------------------------------------
 

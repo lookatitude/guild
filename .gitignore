@@ -2,6 +2,11 @@
 node_modules/
 *.log
 
+# Host-package staging output (build:hosts → dist/{claude-code,codex}); regenerated,
+# never committed. Anchored to repo root so it does NOT match the tracked hooks/dist/
+# or mcp-servers/*/dist build artifacts. (universal-host-p0 L2; FU-3 resolved.)
+/dist/
+
 # Fixture .guild/ dirs must be tracked (they are static test fixtures, not live runtime state).
 # These exemptions are non-negotiable — preserved verbatim per share-dot-guild constraints.
 # Keep this list in sync with FIXTURE_EXEMPT_PATTERNS in plugin/scripts/dot-guild/audit.ts (FU-F).

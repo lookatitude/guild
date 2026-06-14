@@ -3924,6 +3924,23 @@ function emitRunClosed(root, runId, resolveHost, opts = {}) {
   }
 }
 
+// lib/guild-hook-event.ts
+async function readHookStdin() {
+  return new Promise((resolve4) => {
+    const chunks = [];
+    process.stdin.on("data", (c) => chunks.push(c));
+    process.stdin.on("end", () => resolve4(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve4(""));
+  });
+}
+function emitClaudeHookEvent(raw) {
+  const parsed = JSON.parse(raw.trim());
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return parsed;
+  }
+  return { ...parsed, host: "claude" };
+}
+
 // run-trace-close.ts
 function findTerminalCheckpoint(runDir3, runId) {
   const learningDir = path7.join(runDir3, "learning");
@@ -3946,19 +3963,11 @@ function findTerminalCheckpoint(runDir3, runId) {
   });
   return sorted[0] ?? null;
 }
-async function readStdin() {
-  return new Promise((resolve4) => {
-    const chunks = [];
-    process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve4(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve4(""));
-  });
-}
 async function main() {
-  const raw = await readStdin();
+  const raw = await readHookStdin();
   let payload = {};
   try {
-    payload = JSON.parse(raw.trim());
+    payload = emitClaudeHookEvent(raw);
   } catch {
     process.exit(0);
   }

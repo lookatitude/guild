@@ -53,6 +53,23 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
+// lib/guild-hook-event.ts
+async function readHookStdin() {
+  return new Promise((resolve2) => {
+    const chunks = [];
+    process.stdin.on("data", (c) => chunks.push(c));
+    process.stdin.on("end", () => resolve2(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve2(""));
+  });
+}
+function emitClaudeHookEvent(raw) {
+  const parsed = JSON.parse(raw.trim());
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return parsed;
+  }
+  return { ...parsed, host: "claude" };
+}
+
 // lib/security/config.ts
 var fs2 = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
@@ -457,14 +474,6 @@ function isOk(payload) {
   }
   return true;
 }
-async function readStdin() {
-  return new Promise((resolve2) => {
-    const chunks = [];
-    process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve2(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve2(""));
-  });
-}
 function readCurrentRunId(cwd) {
   const sentinelPath = path5.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
@@ -482,10 +491,10 @@ function resolveRunId(cwd, payload) {
   return payload.session_id ? `run-${payload.session_id}` : `run-session-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`;
 }
 async function main() {
-  const raw = await readStdin();
+  const raw = await readHookStdin();
   let payload = {};
   try {
-    payload = JSON.parse(raw.trim());
+    payload = emitClaudeHookEvent(raw);
   } catch {
     process.stderr.write("[capture-telemetry] WARN: invalid JSON on stdin; skipping.\n");
     process.exit(0);

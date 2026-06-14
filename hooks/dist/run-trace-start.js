@@ -3153,8 +3153,8 @@ function emitRunStarted(root, runId, opts = {}) {
   }
 }
 
-// run-trace-start.ts
-async function readStdin() {
+// lib/guild-hook-event.ts
+async function readHookStdin() {
   return new Promise((resolve2) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
@@ -3162,11 +3162,20 @@ async function readStdin() {
     process.stdin.on("error", () => resolve2(""));
   });
 }
+function emitClaudeHookEvent(raw) {
+  const parsed = JSON.parse(raw.trim());
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return parsed;
+  }
+  return { ...parsed, host: "claude" };
+}
+
+// run-trace-start.ts
 async function main() {
-  const raw = await readStdin();
+  const raw = await readHookStdin();
   let payload = {};
   try {
-    payload = JSON.parse(raw.trim());
+    payload = emitClaudeHookEvent(raw);
   } catch {
     process.exit(0);
   }

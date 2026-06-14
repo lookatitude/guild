@@ -23,7 +23,8 @@
       "**/shadow/harness.test.ts",
       "**/workspace/*.test.ts",
       "**/integration/*.test.ts",
-      "**/dot-guild/*.test.ts"
+      "**/dot-guild/*.test.ts",
+      "**/universal-host/*.test.ts"
     ],
     "testTimeout": 60000
   }
