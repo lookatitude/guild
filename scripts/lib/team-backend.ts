@@ -1117,10 +1117,19 @@ export class SshRemoteTransport implements RemoteTransport {
   }
 
   /**
-   * `ssh <endpoint> <command>`. RESIDUAL: a live launch must background the
-   * remote process (the pane outlives the ssh call) and likely allocate a PTY
-   * (`ssh -t`); the exact detach/PTY shape is validated against real hardware,
-   * not in CI. Command CONSTRUCTION is unit-tested via the injected RunFn.
+   * `ssh <endpoint> <command>`. A live launch backgrounds the remote process so
+   * the pane outlives the ssh call — validated 2026-06-14 against a real Linux
+   * host: a detached `tmux new-session -d` survives the ssh disconnect and runs
+   * to completion (see __tests__/remote-backend-live.test.ts, gated on
+   * GUILD_SSH_LIVE_TARGET). Command CONSTRUCTION is unit-tested via the injected
+   * RunFn.
+   *
+   * PATH CAVEAT (real-host finding): a plain non-interactive `ssh host <cmd>`
+   * does NOT source the login shell, so a CLI installed off the default PATH
+   * (e.g. codex under linuxbrew, ~/.local/bin) is NOT found. claude-on-PATH
+   * works as-is; a codex (or other off-PATH brand) pane command must run under a
+   * login shell (`zsh -lic '<cmd>'`) or use the resolved absolute path. The
+   * PaneAdapter that builds the brand command owns this.
    */
   spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle {
     this.run("ssh", [host.endpoint, command]);
