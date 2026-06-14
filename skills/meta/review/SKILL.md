@@ -11,7 +11,7 @@ Implements `guild-plan.md §8` (review step). Runs after `guild:execute-plan` co
 
 Do not rehydrate full specialist conversations. The §8.2 receipt contract exists so review is compact and auditable; pulling the transcript back in defeats the design and inflates token cost.
 
-When a receipt is consumed, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). Read the §8.2 fields below (`changed_files`, `opens_for`, `assumptions`, `evidence`, `followups`) from that one embedded envelope — a frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
+When a receipt is consumed, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (see §"Handoff contract" of the communication format policy). Read the §8.2 fields below (`changed_files`, `opens_for`, `assumptions`, `evidence`, `followups`) from that one embedded envelope — a frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
 
 ## Input
 

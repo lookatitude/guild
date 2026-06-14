@@ -41,9 +41,10 @@ type:
   frontmatter field set here — bind both by pointer:
     - canonical emitter prompt: skills/meta/execute-plan/dispatch.md
       §"Handoff protocol" (inject its canonical block verbatim — never reword it);
-    - the standard: docs/knowledge/decisions/communication-format-policy.md
-      §"Handoff contract";
-    - v2 envelope schema: docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5.
+    - the standard: the communication-format-policy ADR §"Handoff contract"
+      (internal decision record);
+    - v2 envelope schema: the cost-aware-tiering-and-lean-context ADR §5
+      (internal decision record).
 -->
 
 

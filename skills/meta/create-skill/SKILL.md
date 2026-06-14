@@ -36,7 +36,7 @@ Everything this skill writes lands in the **consuming repo's `.guild/`** — **n
 - **Incubate** → files stay under `proposed-<name>/` until both gates pass. The orchestrator and `guild:team-compose` resolve live skills only; `.guild/skills/proposed-*/` is **never** a routable candidate.
 - **Register** → a **move within `.guild/`**: `.guild/skills/proposed-<name>/` → `.guild/skills/<name>/`. Register is a move, not a rewrite — the `derived_from_template` stamp is preserved unchanged. Writing into `plugin/skills/**` at runtime is the explicit **v2 DH-3 defect** and is never done here.
 
-**Same-session constraint** — ADR: `docs/knowledge/decisions/new-specialist-same-session-constraint.md` (normative; applies to skills by the same mechanism). Claude Code loads plugin/project skills at session start; a skill registered mid-session is **not** discoverable via the Skill tool's available-skills list in that session.
+**Same-session constraint** (normative; applies to skills by the same mechanism as specialists): Claude Code loads plugin/project skills at session start; a skill registered mid-session is **not** discoverable via the Skill tool's available-skills list in that session.
 
 - **Default (defer to next session):** after step 7, tell the user: _"New skill registered at `.guild/skills/<name>/`. Restart Claude Code for it to become routable."_
 - **Degraded same-session path (opt-in only):** if the user explicitly acknowledges the constraint and requests immediate use, inject the skill's `SKILL.md` body path directly into the dispatched agent's task prompt (no `Skill`-tool routing). Log this as `degraded: true` in the step-7 handoff and in `.guild/evolve/<run-id>/proposed-<name>-registered.md`. Consequence: TRIGGER/DO NOT TRIGGER routing is bypassed.

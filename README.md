@@ -54,7 +54,7 @@ gate.
   See the Guild docs site → `https://guildstack.dev/docs/configuration` (`defaults.index.*`).
 - **O-3 short-output advisor** — fires when a lane's output token count falls
   below calibrated p10 floors (`models.shortOutputThreshold`). Calibrate with
-  `npx tsx benchmark/src/calibrate-o3-cli.ts`.
+  the `calibrate-o3-cli` tool in the separate `guild-benchmark` repo.
   See the Guild docs site → `https://guildstack.dev/docs/configuration`.
 - **Security + observability** — `security.bypass_permissions_policy`
   (capability-scope enforcement), 3-stage secrets redaction
@@ -159,21 +159,11 @@ coordinate directly:
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 ```
 
-Benchmark live runs are also opt-in:
-
-```bash
-cd benchmark
-npm run benchmark -- run --case demo-url-shortener-build --dry-run
-GUILD_BENCHMARK_LIVE=1 npm run benchmark -- run --case demo-url-shortener-build
-```
-
-Current benchmark import boundary: the importer scores `run.json`,
-`events.ndjson`, and captured `artifacts/.guild/`. When v1.3 `events.ndjson` is
-absent, it can import v1.4 hook audit logs from
-`logs/v1.4-events.jsonl` or captured
-`artifacts/.guild/runs/<run-id>/logs/v1.4-events.jsonl` and map the supported
-phase, gate, specialist, tool-error, and escalation events into benchmark
-metrics.
+Benchmark live runs require the separate `guild-benchmark` repo. Set
+`GUILD_BENCHMARK_LIVE=1` only after a dry run confirms the case is
+correct; absent, the benchmark runner refuses to spawn the real `claude`
+CLI. See the `guild-benchmark` repo for setup instructions and
+`/guild:dashboard` to launch the benchmark UI against the live project.
 
 ### Optional MCP servers
 
@@ -231,8 +221,9 @@ currently requires each file's frontmatter to include `final_status: satisfied` 
 
 ## Documentation
 
-The canonical docs live at the **Guild docs site** (decision D-WEB-2 — website is the docs home).
-Base URL: `https://guildstack.dev` — see `docs/DOCS-SITE.md` for the placeholder note; operator replaces once the website repo move + Pages domain are finalised.
+**Documentation: https://guildstack.dev/docs**
+
+The canonical docs live at the **Guild docs site** (`https://guildstack.dev`).
 
 - `https://guildstack.dev/docs/getting-started` — install, first run, and basic configuration.
 - `https://guildstack.dev/docs/architecture` — shipped plugin architecture, directory layout, 7-step lifecycle, hook inventory, backend options.

@@ -25,13 +25,11 @@ binding: `lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
 ## Contract binding (by pointer — never re-spelled)
 
 Before producer work begins, this phase **resolves the frozen
-`guild.phase_entry.v1` contract** — bound by pointer through
-`docs/knowledge/implementation/contract-map.md §A` row 6 →
+`guild.phase_entry.v1` contract** — bound by pointer to
 `architecture/target-architecture.md §"phase_entry contract"`. The Operations
 record is the frozen `guild.ops.v1` contract — bound by pointer to
-`contract-map.md §A` row 8 → `target-architecture.md §639–705` (safety_rails
-§667–672); by class it also writes `guild.incident.v1` (`contract-map.md §A`
-row 9) / `guild.release.v1` (`contract-map.md §A` row 10, D8 join §731–745).
+`target-architecture.md §639–705` (safety_rails §667–672); by class it also
+writes `guild.incident.v1` and `guild.release.v1` (D8 join §731–745).
 Not re-spelled.
 
 ## Usage

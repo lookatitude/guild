@@ -31,8 +31,7 @@ This skill is scoped to **one named target** at a time.
 - The target identifier — a path, `path#Lx-Ly`, a symbol name, or a module.
 - `.guild/indexes/knowledge-graph.json` (`guild.knowledge_graph.v1`) from
   `guild:learn-graph` when present (preferred grounding). The output-locations
-  table is owned by `guild:learn-map`; contracts bound by pointer
-  (`contract-map.md §A` row 12).
+  table is owned by `guild:learn-map`.
 - If the graph is absent or does not cover the target, the
   **ask-before-deep-scan** gate applies before any bounded targeted scan of
   just that target's file(s) — never a full deep scan to answer one explain.
@@ -68,15 +67,13 @@ source.
 
 This skill is graph-grounded synthesis of one named target, so its LLM half runs
 at **`mid`** (per the shared per-stage table owned by `guild:learn-map`
-`§"Cost tiering"`; tier vocabulary, host→model map, and `models.*` keys bound by
-pointer to
-`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md` §1/§8/§10 —
-never re-spelled). A bounded targeted read of just the named target's file(s)
-(step 2) is the **`cheap`** I/O half. **`powerful` is invoked ONLY** when the
-`mid` synthesis flags `escalate` in its typed `guild.handoff.v2` output — e.g. a
-cross-cutting architectural question the single target cannot answer — getting
-one `powerful` sub-answer for that question only, never a wholesale re-run
-(ADR §3/§8).
+`§"Cost tiering"`; tier vocabulary, host→model map, and `models.*` keys
+configured via `.guild/settings.json` — never re-spelled). A bounded targeted
+read of just the named target's file(s) (step 2) is the **`cheap`** I/O half.
+**`powerful` is invoked ONLY** when the `mid` synthesis flags `escalate` in its
+typed `guild.handoff.v2` output — e.g. a cross-cutting architectural question
+the single target cannot answer — getting one `powerful` sub-answer for that
+question only, never a wholesale re-run.
 
 **Recall-before-read (ADR §4) — the load-bearing case here.** This skill is the
 clearest expression of recall-before-read: it **resolves the target against the
@@ -121,8 +118,7 @@ target file is described, never executed. Read-only over the codebase; any
 optional wiki candidate is confined to `.guild/` at the **main** repo root
 (worktree-safe); never `.understand-anything/`; never plugin install state
 (DH-3). No network egress, no new MCP, no embeddings. **No interactive web
-dashboard** (the v2 exclusion;
-`docs/knowledge/implementation/dashboard-deferral.md`).
+dashboard** — this skill produces a text explanation only.
 
 # Eval cases
 

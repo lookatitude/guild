@@ -33,7 +33,7 @@ guide to getting set up, understanding the repo layout, and submitting changes.
    (cd mcp-servers/guild-telemetry && npx jest --no-coverage)
    ```
 
-   All 165 tests should pass on a clean checkout.
+   All tests should pass on a clean checkout.
 
 ## Repo layout
 
@@ -41,18 +41,18 @@ guide to getting set up, understanding the repo layout, and submitting changes.
   command, hook, script, and doc cites it. If you're adding behavior that
   isn't in §1–§16, open a discussion first.
 - `.claude-plugin/` — plugin + marketplace manifests.
-- `skills/` — 67 skills in five tiers (`core`, `meta`, `knowledge`,
-  `fallback`, `specialists`).
-- `agents/` — the 13 shipping specialist subagent definitions.
-- `commands/` — the 7 slash command files.
+- `skills/` — 77 skills across six tiers (`core`, `meta`, `knowledge`,
+  `specialists`, `guild-operations`, `guild-quality`).
+- `agents/` — the 14 shipping specialist subagent definitions.
+- `commands/` — the v2 flat-token command files (`/guild:<verb>`).
 - `hooks/` — Claude Code hook scripts + manifest.
 - `scripts/` — tooling (evolve loop, flip report, shadow mode,
   description optimizer, rollback walker, trace summarizer,
-  agent-team launcher).
+  agent-team launcher, docs-hygiene scanner, dot-guild migrator).
 - `mcp-servers/` — two optional stdio MCP servers.
 - `tests/` — cross-cutting harness tests (evolve + shadow).
-- `docs/` — user-facing docs + phase-gate history + diagrams.
-- `.claude/agents/` — the **dev-team** of 8 Claude Code subagent
+- `docs/` — user-facing docs, diagrams, and release notes.
+- `.claude/agents/` — the **dev-team** of 10 Claude Code subagent
   definitions that built Guild itself (not the shipping specialists).
   Separate from `agents/` at the repo root.
 
@@ -75,7 +75,7 @@ the same spirit:
 
 ### Adding a new skill
 
-- Author under the correct tier: `skills/{core,meta,knowledge,fallback,specialists}/<slug>/`.
+- Author under the correct tier: `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/<slug>/`.
 - Required files: `SKILL.md` + `evals.json`.
 - `SKILL.md` frontmatter: `name`, `description` (≤ 1024 chars, with
   `TRIGGER` and `DO NOT TRIGGER` clauses), `when_to_use`, and `type`
@@ -111,7 +111,7 @@ Guild ships with a disciplined review discipline: significant changes
 should pass a **code-reviewer** pass before merge. In a consuming
 Claude Code session you can use `/ultrareview <PR#>` — locally,
 read your diff aloud and ask whether each change would survive
-[the v1 final review](docs/phase-gates/P7.md) flow.
+the final review gate (§15 of `guild-plan.md`).
 
 ## Release flow
 

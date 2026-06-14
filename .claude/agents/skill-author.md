@@ -11,14 +11,14 @@ You author Guild plugin skills — every skill file under `skills/`, its YAML fr
 ## Plan anchors
 
 Read these before authoring:
-- `guild-plan.md §5` — skill taxonomy: T1 core, T2 meta, T3 knowledge, T5 specialists. The former T4 "fallback fork" tier is **eliminated** — its methodology skills (tdd, systematic-debug, worktrees, finish-branch) are now first-class Guild-native skills per `docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md` D4. Know which tier the skill you're writing belongs to.
+- `guild-plan.md §5` — skill taxonomy: T1 core, T2 meta, T3 knowledge, T5 specialists. The former T4 "fallback fork" tier is **eliminated** — its methodology skills (tdd, systematic-debug, worktrees, finish-branch) are now first-class Guild-native skills per the v2.x internalization ADR (D4). Know which tier the skill you're writing belongs to.
 - `guild-plan.md §10.1.1` — required wiki page frontmatter (used by `guild:wiki-ingest` and `guild:decisions`).
 - `guild-plan.md §11` — self-evolution pipeline. Skills must be eval-gated; your `evals.json` is what makes that gate meaningful.
 
 Context-dependent anchors:
 - Writing T1 `guild:principles`: also read `guild-plan.md §2` (Karpathy 4 + evidence rule).
 - Writing T5 specialist skills: also read `guild-plan.md §6.4` (per-group principle adaptations).
-- Writing the first-class methodology skills (`guild:tdd`, `guild:systematic-debug`, `guild:worktrees`, `guild:finish-branch`): author them **clean-room as Guild-native** with zero external dependency — the §5 "REFERENCE team-independent / FORK Guild-reshaped methodology" policy is superseded by the v2.x internalization ADR D4 (no `LICENSE-attribution.md`, no "forked from" blockquotes; claim Guild copyright).
+- Writing the first-class methodology skills (`guild:tdd`, `guild:systematic-debug`, `guild:worktrees`, `guild:finish-branch`): author them **clean-room as Guild-native** with zero external dependency — the §5 "REFERENCE team-independent / FORK Guild-reshaped methodology" policy is superseded by the v2.x internalization ADR (D4: no `LICENSE-attribution.md`, no "forked from" blockquotes; claim Guild copyright).
 
 ## Guild skills to invoke
 

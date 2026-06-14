@@ -26,10 +26,9 @@ from v1.0.0 onward.
 ## [2.0.0] — UNRELEASED (release/v2.0.0)
 
 Guild v2 — the full redesign: one state machine, six phases, specialist
-teams, durable knowledge, adversarial review, and a v1→v2 migrator. The
-canonical design set is `docs/v2/` in the workspace repo (18 docs,
-3-tier-audited 2026-06-11: coverage / completeness / code-conformance all
-adversarially gated).
+teams, durable knowledge, adversarial review, and a v1→v2 migrator.
+The design set is 18 docs, 3-tier-audited 2026-06-11: coverage /
+completeness / code-conformance all adversarially gated.
 
 ### Added
 
@@ -88,9 +87,7 @@ adversarially gated).
 ### Deferred to v2.x
 
 The honest deferral list (33 design deferrals + carried followups +
-known issues) is maintained in the workspace closeout register:
-`.guild/audits/gap-run-20260611/release/v2-closeout-register.md §2` and
-is embedded verbatim in the v2.0.0 release-PR body
+known issues) is embedded in the v2.0.0 release-PR body
 (`docs/RELEASE-NOTES-2.0.0.md`). Headlines: composite recall scoring +
 labels taxonomy, initiative ledger automation + enum validator, FDC
 degradation-signal trace emitters, trace replay tools, per-host
@@ -227,6 +224,11 @@ Closed 6 deferred items from v1.1's `benchmark/FOLLOWUPS.md`.
 
 ## [1.1.0] — 2026-04-27
 
+> Note: v1.x included a `benchmark/` sub-project (autoresearch-pattern
+> benchmark factory) directly in this repo. It has since been extracted
+> to the separate `guild-benchmark` repo. The entries below reference
+> paths under `benchmark/` as they existed at the time.
+
 Live operator smoke against v1.0.1 surfaced 5 real bugs that the
 static audit + 357-test suite missed. v1.1 closes all of them, adds
 9 polish-round gaps, lands ADR-006 for the claude v2.x argv pivot,
@@ -332,9 +334,9 @@ live autonomous end-to-end run.
 
 - **Project contact email** — `guild@lookatitude.com` recorded in
   `plugin.json.author` and `marketplace.json` (owner + plugin author).
-- **End-to-end demo story doc** at `docs/demo/E2E-DEMO-STORY.md` —
-  source material for the website demo section: brief, 3-layer
-  harness, install-time fixes, 9-stage live run with full receipts.
+- **End-to-end demo story doc** — source material for the website demo
+  section: brief, 3-layer harness, install-time fixes, 9-stage live
+  run with full receipts.
 - **5 forked T4 fallback methodology skills** — `guild:tdd`,
   `guild:systematic-debug`, `guild:worktrees`, `guild:request-review`,
   `guild:finish-branch` under `skills/fallback/`. Each is forked
@@ -345,14 +347,14 @@ live autonomous end-to-end run.
   Guild now ships self-contained — the superpowers plugin is no
   longer a runtime dependency. Implements the original §5 forking
   intent that v1.0.0-beta1 deferred.
-- **Self-audit report** at `docs/audit/2026-04-25.md` — first run
-  of the static-analysis checks documented in `commands/guild-audit.md`.
-  Verdict: PASS, zero blockers.
+- **Self-audit report** — first run of the static-analysis checks
+  documented in `commands/guild-audit.md`. Verdict: PASS, zero
+  blockers.
 - **Landing-page social/SEO assets** — Open Graph + Twitter Card meta
   tags, canonical URL, theme color, and a full favicon/manifest set
   (`og-image.png`, `twitter-card.png`, `apple-touch-icon.png`,
   `favicon.svg`, `favicon-32.png`, `favicon-64.png`, `site.webmanifest`,
-  source SVGs) under `docs/website/assets/`.
+  source SVGs) under `docs/assets/`.
 - **Marketplace listing copy** at `docs/plugin-marketplace-copy.md` —
   plugin description + example use cases for the community-listing
   submission.
@@ -423,9 +425,9 @@ live autonomous end-to-end run.
   (separate workspace, symlinks `.claude/plugins/guild` → the Guild repo).
   14 checks across 3 layers: plugin manifest resolution, hook-script smoke,
   MCP-server JSON-RPC handshake. Full green on first run.
-- **E2E test report** at `docs/phase-gates/E2E-TEST-REPORT.md` — what the
-  harness covers, what it doesn't (live `/guild` dispatch still requires
-  a user-initiated Claude Code session), how to reproduce.
+- **E2E test report** — what the harness covers, what it doesn't
+  (live `/guild` dispatch still requires a user-initiated Claude Code
+  session), how to reproduce.
 
 ### Fixed
 
@@ -452,9 +454,9 @@ Validator + loader bugs surfaced by a real `/plugin install`:
   `run-<iso-timestamp>` and exports it as `GUILD_RUN_ID` into each tmux
   pane so hooks inside the spawned Claude Code instances converge on the
   launcher's session-manifest path.
-- **`team.yaml` schema alignment.** The dogfood `team.yaml` under
-  `docs/phase-gates/dogfood/team/` now matches the canonical shape
-  documented in `skills/meta/team-compose/SKILL.md` and parsed by
+- **`team.yaml` schema alignment.** The dogfood `team.yaml` now
+  matches the canonical shape documented in
+  `skills/meta/team-compose/SKILL.md` and parsed by
   `scripts/agent-team-launcher.ts` (`- name:`, `depends-on:`,
   `implied-by:`). The launcher rejected the earlier out-of-schema file.
 - **Agent-team launcher prompts enriched.** Orchestrator pane now
@@ -500,14 +502,12 @@ First public beta. Structurally complete across all 7 plan phases.
   `guild-plan.md` as the single source of truth.
 - **165 tests** across 5 suites (hooks 31 + scripts 76 + tests 32 +
   guild-memory 13 + guild-telemetry 13).
-- **8 phase gates** (P0–P7) with audit receipts under
-  `docs/phase-gates/`.
+- **8 phase gates** (P0–P7) with audit receipts.
 
 ### Known limitations
 
 - A live `/guild` end-to-end run against a real consuming repo
-  has not been performed. Contract-level dogfood trail lives under
-  `docs/phase-gates/dogfood/`.
+  has not been performed.
 - MCP servers require a one-time `npm install` per server
   (documented in README and bootstrap banner).
 - Windows support is untested; macOS + Linux expected to work.

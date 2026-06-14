@@ -4,7 +4,7 @@ Target check: New check #9 — missing `importance:` on canonical page.
 
 Expected outcome: lint fails on check #9 only. Existing checks #1–#8 pass.
 
-Rule source: ADR `docs/knowledge/decisions/knowledge-base-hygiene-and-grading.md §A.3`.
+Rule source: the knowledge-base hygiene and grading ADR §A.3.
 
 Minimum page count: 2 canonical pages (plus `index.md` and `log.md`) — one
 with `importance:` (passes) and one without (fails).

@@ -2,8 +2,8 @@
 
 Detail for SKILL.md §"Termination contract", §"Workflow", §"Cap-hit escalation
 copy", §"Backwards-compat fallback", §"Per-lane counter", and §"JSONL events".
-Verbatim from the binding contract
-(`../benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 1").
+Verbatim from the binding contract (§"Skill 1" in the loop-skill-contracts spec,
+part of the separate guild-benchmark repo).
 
 ## Termination contract — verbatim from the binding contract
 
@@ -98,8 +98,7 @@ verbatim:
 - **`extend-cap`** — "Extend the cap by N rounds (you'll be asked for N)."
 - **`rework`** — "Abort the current loop; return control to the producing skill with the unresolved questions."
 
-Helper functions in `../benchmark/src/loop-escalation.ts` build the payload
-(`buildEscalationPayload`, `buildExtendCapPayload`).
+Helper functions `buildEscalationPayload` and `buildExtendCapPayload` build the payload; these are implemented in the separate guild-benchmark repo (`src/loop-escalation.ts`).
 
 ## Backwards-compat fallback
 
@@ -113,8 +112,7 @@ non-interactive `claude --print`), fall back to the v1.3 free-text stdin path:
 4. Log the choice to `escalation.user_choice` identically to the AskUserQuestion
    path.
 
-`formatFallbackPrompt(...)` and `parseFallbackChoice(...)` in
-`../benchmark/src/loop-escalation.ts` provide the prompt + parser.
+`formatFallbackPrompt(...)` and `parseFallbackChoice(...)` (in the separate guild-benchmark repo's `src/loop-escalation.ts`) provide the prompt + parser.
 
 ## Per-lane counter
 
@@ -127,7 +125,7 @@ Restart semantics are NOT applicable to L1 — restart is L3/L4/security-only (s
 
 ## JSONL events emitted
 
-Per `../benchmark/plans/v1.4-jsonl-schema.md` §5/§6/§11:
+Per the v1.4-jsonl-schema spec (§5/§6/§11) in the separate guild-benchmark repo:
 
 - `loop_round_start` — per round; `lane_id: "phase:brainstorm"`, `loop_layer: "L1"`.
 - `loop_round_end` — per round; same `lane_id`/`loop_layer`/`round_number` pair.

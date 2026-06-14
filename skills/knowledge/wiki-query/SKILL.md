@@ -35,7 +35,7 @@ Check page count first (`§10.5`); over ~200 with no MCP, queries still run via 
 
 ## MCP-availability gate (R-019)
 
-Implements the MCP degradation contract (`docs/knowledge/decisions/feature-degradation-contracts.md` FDC-13; resolved key `mcp.stdio_available`, default `true`). **Before any guild-memory MCP call** — the >200-page BM25 `search` above AND the federated `wiki_search`/`wiki_get`/`wiki_list` fan-out — read `mcp.stdio_available` from the resolved settings (`read-guild-config.ts`). When it is **false**, skip the MCP entirely and recall via the filesystem scanner `fsScan` (`scripts/lib/fs-scanner.ts`):
+Implements the MCP degradation contract (FDC-13; resolved key `mcp.stdio_available`, default `true`). **Before any guild-memory MCP call** — the >200-page BM25 `search` above AND the federated `wiki_search`/`wiki_get`/`wiki_list` fan-out — read `mcp.stdio_available` from the resolved settings (`read-guild-config.ts`). When it is **false**, skip the MCP entirely and recall via the filesystem scanner `fsScan` (`scripts/lib/fs-scanner.ts`):
 
 **Consume contract (do not violate):**
 - Signature: `fsScan(query: string, guildRoot: string, opts?: { limit?, dirs?, extensions? }): FsScanResult | null`. `guildRoot` is the repo root (`.guild/` is resolved from it); default `dirs` are `["wiki","runs"]`.
@@ -48,10 +48,7 @@ This config-gated fallback is distinct from the "MCP reachable but errored" runt
 ## Federated fan-out (workspace)
 
 When the consuming root carries a `.guild/workspace.json`
-(`guild.workspace.v1` — bound by pointer to the contract map,
-`docs/knowledge/implementation/contract-map.md §A` row `guild.workspace.v1`;
-canonical body in `docs/knowledge/decisions/workspace-aware-init-and-federation.md`),
-a workspace-level query does **not** read the workspace's own (often empty)
+(`guild.workspace.v1`), a workspace-level query does **not** read the workspace's own (often empty)
 wiki as the whole answer. It **fans out** across every registered sub-guild and
 merges the results — no sub-guild knowledge is ever copied up. Use the manifest's
 own `query_recipe` block (the recipe is self-documented in the manifest):

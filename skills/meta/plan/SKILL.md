@@ -73,7 +73,7 @@ Per-lane field rules:
 - **scope** — one-to-two sentences. Bounded responsibility for *this* task only; do not restate the specialist's full remit.
 - **success-criteria** — measurable, testable bullets. Vague criteria ("improves code quality") are rejected; a reviewer must be able to say "met" or "not met" at `guild:verify-done`.
 - **autonomy-policy** — three sub-bullets (may act / requires confirmation / forbidden) derived from the spec's autonomy policy, narrowed to this lane's scope. This becomes the subagent's permission contract during `guild:execute-plan`.
-- **complexity_score** — the deterministic auto-score for this lane per the cost-aware-tiering rubric (`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §2`): sum the signal weights (work-type verb 0/+1/+2, blast-radius/file-count, presence of an upstream `depends-on:` contract, security/correctness sensitivity, prior-attempt escalation +1). Seed it here from the team.yaml `default_tier` and the lane's scope; `guild:execute-plan` **re-scores deterministically at dispatch** (same inputs → same tier), so this value is an authoring estimate the dispatch trace either confirms or supersedes — never a silent pin.
+- **complexity_score** — the deterministic auto-score for this lane per the cost-aware-tiering rubric (ADR §2): sum the signal weights (work-type verb 0/+1/+2, blast-radius/file-count, presence of an upstream `depends-on:` contract, security/correctness sensitivity, prior-attempt escalation +1). Seed it here from the team.yaml `default_tier` and the lane's scope; `guild:execute-plan` **re-scores deterministically at dispatch** (same inputs → same tier), so this value is an authoring estimate the dispatch trace either confirms or supersedes — never a silent pin.
 - **tier** — the chosen model tier (`cheap | mid | powerful`) the score maps to via the band cutoffs (`models.thresholds`, default `{mid:1, powerful:3}` — ADR §10, bound by pointer). The author MAY pin a tier upward when the auto-score will under-call a security/correctness-sensitive lane (`tier: powerful` with a one-line rationale in `scope`); this is the **per-lane override**, second in the precedence ladder below the `--model-tier` CLI escape hatch (ADR §2/§10). Leaving `tier` to track `complexity_score` is the default — the band map is authoritative unless the author explicitly pins.
 
 Parallelism rules from `guild-plan.md §8`:
@@ -87,9 +87,7 @@ The DAG expressed in `depends-on:` is what `guild:execute-plan` reads to schedul
 
 ## PRD — always written, right-sized (D-P1 / OQ8)
 
-The PRD is **always written, but right-sized** (accepted ADR
-`docs/knowledge/decisions/prd-right-sizing.md`; the right-sizing *behavior* is
-`[v2]`):
+The PRD is **always written, but right-sized** (accepted PRD right-sizing ADR):
 
 - **Default: inline `## PRD` section** inside `.guild/plan/<slug>.md` — placed
   after the frontmatter and before the first `## Lane:` heading. It carries the
@@ -120,8 +118,7 @@ gate-fatigue defect this ADR resolves).
 
 When a brownfield `KnowledgeGraph` index exists
 (`.guild/indexes/knowledge-graph.json`), run the **P2 plan-impact** producer
-before finalizing lanes (`docs/knowledge/architecture/codebase-understanding.md
-§"Where it sits"` plug point P2):
+before finalizing lanes (codebase-understanding spec §"Where it sits" plug point P2):
 
 ```
 npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/understand/diff-understanding.ts --cwd <repo-root> \
@@ -129,9 +126,7 @@ npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/understand/diff-understanding.ts --cwd <re
 ```
 
 This writes `.guild/runs/<run-id>/diff-understanding.json`
-(`guild.diff_understanding.v1` — bound by pointer:
-`docs/knowledge/implementation/contract-map.md §A` row 13; never re-spell the
-schema). Consume it to sharpen the plan, not to replace judgement:
+(`guild.diff_understanding.v1` — bound by pointer to the implementation contract map, row 13; never re-spell the schema). Consume it to sharpen the plan, not to replace judgement:
 
 - `affected_layers` / `affected_nodes` → which specialist lanes the change
   actually touches; scope each lane to its blast radius.
@@ -146,7 +141,7 @@ If no graph index exists (greenfield, or deep tier never built), skip silently
 
 ## Adversarial review — G-plan (broker, when policy fires)
 
-G-plan is a **skill-internal gate** (`docs/v2/09-adversarial-review.md §Gate ownership`): it fires here inside `guild:plan` at the plan→approval boundary, not from a command — which is why it doesn't appear in `build`'s skill row. Wire the **review broker** at this boundary, **not** `guild:codex-review` directly: the broker is the host-agnostic front door, and `guild:codex-review` survives only as the internal Codex adapter the broker dispatches to (`docs/v2/09 §The review broker`).
+G-plan is a **skill-internal gate** (adversarial-review spec §Gate ownership): it fires here inside `guild:plan` at the plan→approval boundary, not from a command — which is why it doesn't appear in `build`'s skill row. Wire the **review broker** at this boundary, **not** `guild:codex-review` directly: the broker is the host-agnostic front door, and `guild:codex-review` survives only as the internal Codex adapter the broker dispatches to (adversarial-review spec §The review broker).
 
 After writing the plan with `approved: false` and **before** presenting it to the user for approval, invoke `guild:review-broker`:
 
@@ -155,7 +150,7 @@ Skill: guild-review-broker
 args: gate=G-plan artifact_path=.guild/plan/<slug>.md run_id=<run-id> author_host=<run author host>
 ```
 
-The broker is **policy-gated** (`docs/v2/09 §The review broker`): it fires only when `risk ≥ high`, `review: cross` / `--review=cross` is set, or project config requires it — otherwise it resolves `status: "skipped"` and the gate passes with no reviewer. Self-build runs treat cross-host review as always-on. `author_host` is the host that produced the plan (resolved from the run-start preflight snapshot; `claude` on a Claude-hosted run).
+The broker is **policy-gated** (adversarial-review spec §The review broker): it fires only when `risk ≥ high`, `review: cross` / `--review=cross` is set, or project config requires it — otherwise it resolves `status: "skipped"` and the gate passes with no reviewer. Self-build runs treat cross-host review as always-on. `author_host` is the host that produced the plan (resolved from the run-start preflight snapshot; `claude` on a Claude-hosted run).
 
 If the broker returns `status: "rework"`, revise the plan using the findings before re-presenting to the user. On `"satisfied"`, `"skipped"`, or `"force_passed"`, proceed to the user-approval gate normally.
 

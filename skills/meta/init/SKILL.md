@@ -15,8 +15,7 @@ smart-detect proposing Init because no `.guild/wiki` / `.guild/init` exists
 (`architecture/command-surface.md §6` D-14: `no wiki/init → /guild:init`).
 Two paths: **brownfield** (onboard an existing repo) and **new-product**
 (scaffold knowledge from a Socratic intake). Resolves the frozen
-`guild.phase_entry.v1` contract before any producer work (pointer:
-`docs/knowledge/implementation/contract-map.md §A` row 6).
+`guild.phase_entry.v1` contract before any producer work (bound by pointer to the implementation contract map, row 6).
 
 # When not to use it
 
@@ -41,9 +40,7 @@ first, never auto-skipped.
 
 On a **workspace** root (detected per the step below): `.guild/workspace.json`
 (`guild.workspace.v1` — bound by pointer to the contract map, never
-schema-copied here: `docs/knowledge/implementation/contract-map.md §A` row
-`guild.workspace.v1` → its canonical body in the federation ADR
-`docs/knowledge/decisions/workspace-aware-init-and-federation.md`). It is
+schema-copied here; canonical body defined in the workspace-aware-init-and-federation ADR). It is
 written by the Lane-B script, not hand-built: `npx tsx
 ${CLAUDE_PLUGIN_ROOT}/scripts/workspace/write-manifest.ts --cwd <workspace-root>`. A workspace builds
 its **own** `.guild/wiki/**` **only if** `root_wiki` is true (D-OQ2 — the
@@ -66,9 +63,7 @@ That pair **is Init-DONE**. The deep semantic `knowledge-graph.json` +
 and gated by `--learn` / `defaults.auto_learn`, built by `guild:learn-graph`
 when the first plan needing P2 plan-impact / P3 scope-check is created (or on
 an explicit refresh; the full `learn-*` pipeline also runs at Init under
-`--learn` / `defaults.auto_learn`). The CodebaseMap conforms to its frozen contract by pointer
-(`docs/knowledge/implementation/contract-map.md §A` row 11; KnowledgeGraph =
-row 12, when later built) — never schema-copied here.
+`--learn` / `defaults.auto_learn`). The CodebaseMap conforms to its frozen contract by pointer (implementation contract map row 11; KnowledgeGraph = row 12, when later built) — never schema-copied here.
 
 # Workflow steps
 
@@ -110,8 +105,7 @@ row 12, when later built) — never schema-copied here.
    is deferred, not produced; on a workspace, record the manifest path + the
    federation verdict).
 7. Surface the **G-init review** (autonomous within an approved contract). The
-   cross-host G-init gate runs **via the broker** (`docs/v2/09-adversarial-review.md
-   §The gates`, §Gate ownership): after the Init record + wiki diff are written,
+   cross-host G-init gate runs **via the broker** (adversarial-review spec §The gates, §Gate ownership): after the Init record + wiki diff are written,
    invoke `guild-review-broker` so a **different host family** critiques the init
    artifact / wiki diff for missing context, unsupported facts, and stale
    knowledge:
@@ -121,7 +115,7 @@ row 12, when later built) — never schema-copied here.
    args: gate=G-init artifact_path=<init-record-path> run_id=<run-id> author_host=<run author host>
    ```
 
-   Policy-gated (`docs/v2/09 §The review broker`): fires only on `risk ≥ high` /
+   Policy-gated (adversarial-review spec §The review broker): fires only on `risk ≥ high` /
    `review: cross` / `--review=cross` / config — else `status: "skipped"` and
    Init closes with no cross-host reviewer (self-build = always-on). On
    `"rework"`, revise the Init record / wiki before closing the phase.

@@ -11,10 +11,9 @@ derived_from_template: guild.skill_template.v1
 # When to use it
 
 Use to produce the **cheap-scan tier** of the brownfield derived indexes
-defined in `docs/knowledge/architecture/codebase-understanding.md` (the
-authoritative 7-stage spec) and to anchor the rest of the `learn-*` family.
-This skill is invoked two ways, running the **same implementation** (D3,
-`docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md`):
+(the authoritative 7-stage spec is implemented in `scripts/understand/`) and to
+anchor the rest of the `learn-*` family.
+This skill is invoked two ways, running the **same implementation** (D3):
 
 - **`/guild:init` (default).** Stage 1 only → `CodebaseMap` + a
   confidence-tagged `architecture-map.md` stub. **This is Init-DONE.** The deep
@@ -42,9 +41,8 @@ rebuildable and deletable with zero data loss.
 - The consuming repo root (resolved worktree-safe to the **main** repo root;
   the scripts' `lib/paths.ts` redirects ephemeral worktrees).
 - The frozen contracts are bound **by pointer only**, never re-spelled:
-  `docs/knowledge/implementation/contract-map.md §A` row 11
-  (`guild.codebase_map.v1`) → its canonical body in
-  `docs/knowledge/architecture/codebase-understanding.md`.
+  `guild.codebase_map.v1` (schema canonical in `scripts/understand/lib/schema.ts`;
+  do not re-spell field names or version strings).
 
 # Output format
 
@@ -77,7 +75,7 @@ copy a schema into a skill body. The architecture-map stub is emitted as a
 Each stage = a deterministic **script half** (shipped under
 `plugin/scripts/understand/`, run via `npx tsx … --cwd <repo-root>`) followed
 by an **LLM semantic half** under the strict *"trust the script, do not re-read
-source"* constraint (`codebase-understanding.md §"two-phase"`).
+source"* constraint.
 
 0. **Check children first (workspace detection, before any scan).** Run `npx
    tsx ${CLAUDE_PLUGIN_ROOT}/scripts/workspace/detect.ts --cwd <root>` — a bounded `.git/`/`.guild/`
@@ -120,10 +118,8 @@ Only the **LLM semantic halves** carry a tier; this skill owns the canonical
 per-stage tier table that the rest of the family references (other `learn-*`
 skills bind back to it, never re-spell it). The tier vocabulary, the host→model
 map, the auto-score rubric, the precedence ladder, and every `models.*` config
-key are **bound by pointer** to
-`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md` (§1 tier
-ladder, §2 auto-score, §8 learn tiering, §10 config keys) — this skill never
-re-spells the tier→model map or the config schema (SC-1).
+key are configured via `.guild/settings.json` (`models.*` block) — this skill
+never re-spells the tier→model map or the config schema (SC-1).
 
 | Learn stage (LLM half) | Tier | Why (cited) |
 |---|---|---|
@@ -135,7 +131,7 @@ re-spells the tier→model map or the config schema (SC-1).
 
 **`powerful` is invoked ONLY** when an edge-candidate count exceeds the
 configurable threshold OR a `mid` stage flags `escalate` in its typed
-`guild.handoff.v2` output (`contract-map.md §B-post` row 2; ADR §3/§8). For the cheap-scan tier this skill
+`guild.handoff.v2` output. For the cheap-scan tier this skill
 produces (stage 1 + the architecture-map stub), **every LLM half is `cheap`**
 and **zero `powerful` calls** are made — a plain `/guild:init` cheap-scan never
 escalates (SC-1, VC-1). The deep stages that can reach `mid`/`powerful` live in
@@ -194,11 +190,11 @@ state (DH-3). On a **workspace**, all writes land under the *workspace's*
 `.guild/` only — child detection/registration is **read-only** on every
 sub-guild's `.guild/`, and no sub-guild's pages are ever copied up into the
 workspace `.guild/` (federation, not duplication). No new MCP, no embeddings, no always-on auto-mutating hook, no
-network egress beyond user-approved scope. **Deliberate v2 exclusion — the
+network egress beyond user-approved scope. **Deliberate exclusion — the
 interactive web dashboard is NOT built** (heavy; violates "skills short,
-artifacts filesystem-based"); deferred to the benchmark repo per the operator's
-scope decision (`docs/knowledge/implementation/dashboard-deferral.md`). Do not
-scaffold any web/Vite/React dashboard from this family.
+artifacts filesystem-based"); dashboard rendering belongs in the separate
+guild-benchmark repo. Do not scaffold any web/Vite/React dashboard from this
+family.
 
 # Eval cases
 

@@ -1,8 +1,8 @@
 # Termination + restart-from-security (loop-implement detail)
 
 Detail for SKILL.md §"Termination contract per layer", §"Restart-from-security",
-and §"Restart cap = 3". Verbatim from the binding contract
-(`../benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 3").
+and §"Restart cap = 3". Verbatim from the binding contract (§"Skill 3" in the
+loop-skill-contracts spec, part of the separate guild-benchmark repo).
 
 ## Termination contract per layer
 
@@ -94,8 +94,7 @@ YAML bullet fields. Test fixtures must use the YAML-bullet format.
 2. **Cross-reference.** Each prior receipt gains a frontmatter field
    `superseded_by: <new-receipt-path>` (relative path). This cross-reference is
    the audit trail; `summary.md` regen reads both old and new chains.
-   `injectSupersededBy(...)` in `../benchmark/src/loop-implement-restart.ts`
-   is the pure transform.
+   `injectSupersededBy(...)` (in the separate guild-benchmark repo's `src/loop-implement-restart.ts`) is the pure transform.
 3. **Reset L3/L4/security counters for this lane.** Per spec §"Cap reset
    boundaries", a security restart resets L3/L4/security counters to 0 for this
    lane. Does NOT affect other lanes (per-lane isolation). Use

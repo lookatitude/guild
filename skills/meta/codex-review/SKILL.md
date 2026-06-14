@@ -8,7 +8,7 @@ type: meta
 # guild:codex-review
 
 > **⚠️ DEPRECATED as a lifecycle entry-point (ADR D-BR-A,
-> `docs/knowledge/decisions/v2-review-broker-and-artifact-bus.md`).**
+> the v2-review-broker-and-artifact-bus ADR).**
 > This skill is now the **internal Codex adapter** invoked by
 > `guild:review-broker`. All lifecycle gate wiring (`--review=cross`,
 > `review: cross`) routes through the broker. Direct invocation is
@@ -280,8 +280,7 @@ npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/emit-loop-event.ts \
 
 Use `--terminated satisfied` on the final round when `## SATISFIED` is emitted
 or the user force-passes. Use `--terminated false` for non-final rounds. The
-`codex_review_round` event type is defined in
-`guild-benchmark/plans/v1.4-jsonl-schema.md §12`; do not append these rows directly.
+`codex_review_round` event type is defined in the v1.4-jsonl-schema spec (§12) in the separate guild-benchmark repo; do not append these rows directly.
 
 ## Config resolution
 

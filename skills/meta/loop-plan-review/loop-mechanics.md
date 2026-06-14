@@ -2,8 +2,8 @@
 
 Detail for SKILL.md §"Termination contract", §"Workflow", §"Cap-hit escalation
 copy", §"Backwards-compat fallback", §"Per-lane counter", and §"JSONL events".
-Verbatim from the binding contract
-(`../benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 2").
+Verbatim from the binding contract (§"Skill 2" in the loop-skill-contracts spec,
+part of the separate guild-benchmark repo).
 
 ## Termination contract — verbatim from the binding contract
 
@@ -97,8 +97,7 @@ verbatim:
 - **`extend-cap`** — "Extend the cap by N rounds (you'll be asked for N)."
 - **`rework`** — "Abort the current loop; return control to the producing skill with the unresolved questions."
 
-Helper functions in `../benchmark/src/loop-escalation.ts` build the payload
-(`buildEscalationPayload`, `buildExtendCapPayload`).
+Helper functions `buildEscalationPayload` and `buildExtendCapPayload` build the payload; these are implemented in the separate guild-benchmark repo (`src/loop-escalation.ts`).
 
 ## Backwards-compat fallback
 
@@ -122,7 +121,7 @@ Restart semantics are NOT applicable to L2 — restart is L3/L4/security-only (s
 
 ## JSONL events emitted
 
-Per `../benchmark/plans/v1.4-jsonl-schema.md`:
+Per the v1.4-jsonl-schema spec in the separate guild-benchmark repo:
 
 - `loop_round_start` — per round; `lane_id: "phase:plan"`, `loop_layer: "L2"`.
 - `loop_round_end` — per round.

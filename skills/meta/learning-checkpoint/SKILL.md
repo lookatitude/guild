@@ -8,12 +8,10 @@ type: meta
 # guild:learning-checkpoint
 
 Implements `guild-plan.md §11` (self-evolution pipeline) and the per-phase
-learning loop of `docs/v2/05-knowledge-memory.md §"The per-phase
-LearningCheckpoint"`. The schema, the 12-target enum, the per-target signature
+learning loop (the per-phase LearningCheckpoint). The schema, the 12-target enum, the per-target signature
 table, the closed edge-type set, and the three invariants are **frozen** in the
 contract `.guild/initiatives/active/drift-remediation/contracts/learning-checkpoint.v1.md`
-and its canonical ADR
-`docs/knowledge/decisions/continuous-knowledge-and-learning-loop.md §CR-C`.
+and its canonical ADR (the continuous-knowledge-and-learning-loop §CR-C).
 **Bind both by pointer; on any conflict the ADR wins. Never re-spell the frozen
 signature table inline** — this skill owns the *classification discipline*, not a
 duplicate of the table.
@@ -29,7 +27,7 @@ consumer of that same queue. The two compose; they never both own the same write
 - It is a **classification verdict, not an analysis pass.** It reads facts
   **already present** in the phase's receipt / review / `provenance.json` and
   classifies them. It runs **no fresh scan, no extra evidence-gathering, no new
-  prompt** (`docs/v2/05 §The per-phase LearningCheckpoint`).
+  prompt** (see §The per-phase LearningCheckpoint).
 - It is **conservative by design.** Each of the 12 targets stays `none` **unless
   its deterministic signature fired this phase.** Absence ⇒ `none`. The
   all-`none` result is the **common, near-zero-token no-op** and verdict rates
@@ -61,8 +59,7 @@ the 12 targets, emit `none` **unless** that target's signature fired *this
 phase*, in which case emit its terminal verdict form. **All 12 keys are always
 present**, each set to a terminal verdict; all-`none` is valid and common.
 
-The 12 targets group into one loop fired per phase (three formerly-separate
-loops unified — `docs/v2/05`):
+The 12 targets group into one loop fired per phase (three formerly-separate loops unified):
 
 - **Knowledge loop:** `memory · wiki · knowledge_graph · domain_model` **plus**
   the `knowledge_links_batch` edge-batch.
@@ -197,7 +194,7 @@ zero edges.
    `skill:`, `agent:`, `feature:` (the `classifyNodeKindExtended` convention). The
    checkpoint **never** emits `wiki:` / `file:` / `domain:` / `component:` nodes —
    those are KnowledgeGraph / wiki node-space (the builder's `collectWikiEdges`
-   owns them). This holds the **node-space-separation invariant** (`docs/v2/05-knowledge-memory.md §"Node-space separation"`): the checkpoint edge-layer and the code/wiki graph must not overlap.
+   owns them). This holds the **node-space-separation invariant** (§"Node-space separation"): the checkpoint edge-layer and the code/wiki graph must not overlap.
 
 **Verdict → edge mapping (conservative; emit only when the verdict names a
 work/decision node):**

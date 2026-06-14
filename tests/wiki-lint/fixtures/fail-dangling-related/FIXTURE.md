@@ -4,7 +4,7 @@ Target check: New check #11 — dangling `related:` slugs (slug not found as a p
 
 Expected outcome: lint fails on check #11 only. Existing checks #1–#10 pass.
 
-Rule source: ADR `docs/knowledge/decisions/knowledge-base-hygiene-and-grading.md §D.2`
+Rule source: the knowledge-base hygiene and grading ADR §D.2
 (SC-4 — no dangling `related:`/`source_refs:`).
 
 Minimum page count: 1 canonical page (plus `index.md` and `log.md`).

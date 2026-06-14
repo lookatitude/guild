@@ -7,8 +7,7 @@ type: meta
 
 # guild:loop-plan-review
 
-Implements `../benchmark/plans/adr-009-v1.4-adversarial-loops-and-plugin-restructure.md` §SC2 (F-2) and the binding
-contract `../benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 2".
+Implements ADR-009 §SC2 (F-2) and the binding contract §"Skill 2" from the loop-skill-contracts spec in the separate guild-benchmark repo.
 
 This skill **wraps** `guild:plan`; it does not replace it. The loop runs AFTER
 `guild:plan` writes the plan and BEFORE Gate 3 (user-approval). Security's job is
@@ -46,7 +45,7 @@ exactly once, with no inline/bullet decoration. The driver then runs the three
 post-sentinel regex patterns against the substring AFTER the sentinel; any match
 → `malformed_termination` + one extra round.
 
-When a round emission is consumed as a receipt, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
+When a round emission is consumed as a receipt, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (see §"Handoff contract" of the communication format policy). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
 
 The removed
 `/concern|issue|gap|missing|undefined/i` keyword set must NOT be re-introduced.

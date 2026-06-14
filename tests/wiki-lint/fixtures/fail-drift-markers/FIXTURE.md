@@ -4,7 +4,7 @@ Target check: New check #12 — v1/single-repo drift markers in canonical page b
 
 Expected outcome: lint fails on check #12 only. Existing checks #1–#11 pass.
 
-Rule source: ADR `docs/knowledge/decisions/knowledge-base-hygiene-and-grading.md §Decision A`
+Rule source: the knowledge-base hygiene and grading ADR §Decision A
 (SC-1 — v1→v2/single-repo drift purged).
 
 Minimum page count: 1 canonical page (plus `index.md` and `log.md`).

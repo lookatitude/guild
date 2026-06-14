@@ -21,15 +21,13 @@ binding: `lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
 ## Contract binding (by pointer — never re-spelled)
 
 Before producer work begins, this phase **resolves the frozen
-`guild.phase_entry.v1` contract** — bound by pointer through
-`docs/knowledge/implementation/contract-map.md §A` row 6 →
+`guild.phase_entry.v1` contract** — bound by pointer to
 `architecture/target-architecture.md §"phase_entry contract"`. The additive
 optional per-lane `autonomy_contract` is authored here and approved at the
 **existing** plan gate — **no new gate** (bound by pointer:
-`command-surface.md §5.2`; `contract-map.md §B` row 1 →
-`target-architecture.md §"autonomy_policy / autonomy_contract"`). The Tier-2
-`defaults:` config folded at intake is bound by pointer to
-`command-surface.md §4.4` (`P1-config-001`).
+`command-surface.md §5.2`; `target-architecture.md §"autonomy_policy /
+autonomy_contract"`). The Tier-2 `defaults:` config folded at intake is
+bound by pointer to `command-surface.md §4.4` (`P1-config-001`).
 
 ## Usage
 

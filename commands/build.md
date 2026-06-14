@@ -22,13 +22,11 @@ concept binding: `lifecycle/phase-entrypoints.md` ·
 ## Contract binding (by pointer — never re-spelled)
 
 Before producer work begins, this phase **resolves the frozen
-`guild.phase_entry.v1` contract** — bound by pointer through
-`docs/knowledge/implementation/contract-map.md §A` row 6 →
+`guild.phase_entry.v1` contract** — bound by pointer to
 `architecture/target-architecture.md §"phase_entry contract"`. The run
 executes under the `task_run.autonomy_policy` recorded in the approved plan —
-bound by pointer to `contract-map.md §A` row 1 →
-`target-architecture.md §"task_run contract"` (the autonomy contract was set
-at plan approval; **no new gate**).
+bound by pointer to `target-architecture.md §"task_run contract"` (the
+autonomy contract was set at plan approval; **no new gate**).
 
 ## Usage
 

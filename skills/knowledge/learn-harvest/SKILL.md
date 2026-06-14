@@ -17,7 +17,7 @@ classifier itself (which stays cheap and deterministic).
 
 Inputs are lifecycle artifacts, not raw source code:
 - phase receipts
-- handoff receipts (`guild.handoff_receipt.v1`) — when a receipt is consumed, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
+- handoff receipts (`guild.handoff_receipt.v1`) — when a receipt is consumed, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only. A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
 - review outputs (`.guild/runs/<run-id>/review.md`)
 - verify reports (`.guild/runs/<run-id>/verify.md`)
 - run traces (`logs/v1.4-events.jsonl`)
@@ -282,9 +282,8 @@ synthesis, moderate judgment). The schema validation and write steps are
 deterministic. Escalation to `powerful` only when the `mid` half flags
 `escalate` on a cross-cutting architectural claim that requires the full graph
 context — one `powerful` advisor sub-answer for that question only, never
-a wholesale re-run (ADR §3/§8). Cost vocabulary and config keys bound by
-pointer to
-`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md` §1/§8/§10.
+a wholesale re-run (ADR §3/§8). Cost vocabulary and config keys are configured via `.guild/settings.json`
+(`models.*` block).
 
 # Evidence requirements
 

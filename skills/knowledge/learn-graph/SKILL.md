@@ -12,7 +12,7 @@ derived_from_template: guild.skill_template.v1
 
 Use to build the **deep semantic `KnowledgeGraph`** + `OnboardingTour`
 skeleton + reverse-spec — stages 2–7 of the authoritative 7-stage spec
-(`docs/knowledge/architecture/codebase-understanding.md`). This is the **deep
+(see `scripts/understand/` for the implementation). This is the **deep
 tier** of the learn-* family: lazy and **ask-before-deep-scan gated**, built
 when the first plan that needs **P2 plan-impact** or **P3 scope-check** is
 created, or on an explicit user/reflection refresh after the staleness
@@ -35,13 +35,12 @@ the bounded `kg-query` retrieval path (wired into `guild:context-assemble`) /
   `guild:learn-map` stage 1.
 - The **ask-before-deep-scan consent gate** (skip only with an explicit
   `--learn` / approved autonomy policy).
-- Frozen contracts bound **by pointer only**:
-  `docs/knowledge/implementation/contract-map.md §A` row 12
-  (`guild.knowledge_graph.v1`) → its canonical body in
-  `codebase-understanding.md`. The output-locations table is owned by
+- Frozen contracts bound **by pointer only**: `guild.knowledge_graph.v1`
+  (schema canonical in `scripts/understand/lib/schema.ts`; do not re-spell
+  field names or version strings). The output-locations table is owned by
   `guild:learn-map` (referenced, not re-spelled). `OnboardingTour` is the 4th
-  artifact (Markdown, no JSON schema) — `codebase-understanding.md
-  §"OnboardingTour"`.
+  artifact (Markdown, no JSON schema) — shape defined in the skill body of
+  `guild:learn-onboard`.
 
 # Output format
 
@@ -64,8 +63,8 @@ never copy a schema into this body.
 # Workflow steps
 
 Each stage = deterministic **script half** (`plugin/scripts/understand/`, run
-`npx tsx … --cwd <root>`) then an **LLM semantic half** under *"trust the
-script, do not re-read source"* (`codebase-understanding.md §"two-phase"`):
+`npx tsx … --cwd <root>`) then an **LLM semantic half** under the strict
+*"trust the script, do not re-read source"* constraint:
 
 2. **Analyze.** `analyze-structural.ts --cwd <root>` →
    `understand-partial-graph.json` (file/function/class nodes +
@@ -113,11 +112,10 @@ scripts and re-checked here.
 
 The deterministic **script halves stay LLM-free** (unchanged). Only the LLM
 semantic halves carry a tier. The tier vocabulary, host→model map, auto-score,
-precedence ladder, and `models.*` config keys are **bound by pointer** to
-`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md` (§1 ladder,
-§8 learn tiering, §10 config) and to the shared per-stage table owned by
-`guild:learn-map` (`§"Cost tiering"`) — never re-spelled here. Stage→tier for
-this skill's deep halves:
+precedence ladder, and `models.*` config keys are configured via
+`.guild/settings.json` (`models.*` block) and the shared per-stage table owned
+by `guild:learn-map` (`§"Cost tiering"`) — never re-spelled here.
+Stage→tier for this skill's deep halves:
 
 | Stage (LLM half) | Tier | Why (ADR §8, cited) |
 |---|---|---|
@@ -129,10 +127,10 @@ this skill's deep halves:
 
 **`powerful` is invoked ONLY** when the stage-2 edge-candidate count exceeds the
 configurable threshold (the cross-document graph-schema/topology check) OR a
-`mid` stage flags `escalate` in its typed `guild.handoff.v2` output
-(`contract-map.md §B-post` row 2; ADR §3/§8). A `mid` stage that hits something above its tier escalates for **one
-`powerful` sub-answer for that sub-question only** — it is not re-run wholesale
-(ADR §3 advisor pattern).
+`mid` stage flags `escalate` in its typed `guild.handoff.v2` output. A `mid`
+stage that hits something above its tier escalates for **one `powerful`
+sub-answer for that sub-question only** — it is not re-run wholesale
+(advisor pattern).
 
 **Recall-before-read (ADR §4).** Before the LLM half of any stage reads source,
 query the knowledge base first (`guild-memory` BM25 over `.guild/wiki/` +
@@ -179,9 +177,8 @@ stored as quarantined evidence with `source_refs`, never executed. All writes
 confined to `.guild/` at the **main** repo root (worktree-safe); never
 `.understand-anything/`; never plugin install state (DH-3). No new MCP, no
 embeddings, no always-on auto-mutating hook, no network egress beyond
-user-approved scope. **No interactive web dashboard** (the single deliberate v2
-exclusion; `docs/knowledge/implementation/dashboard-deferral.md`) — do not
-scaffold one from this skill.
+user-approved scope. **No interactive web dashboard** — this skill produces filesystem artifacts
+only; do not scaffold a web UI from this skill.
 
 # Eval cases
 

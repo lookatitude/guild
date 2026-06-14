@@ -10,8 +10,7 @@ type: meta
 The host-agnostic abstraction over **cross-family adversarial review**: one host
 drafts an artifact, a *different* host family critiques it, so the critique is
 genuinely independent rather than a model grading its own homework. Implements
-the **D-BR cluster** decided in
-`docs/knowledge/decisions/v2-review-broker-and-artifact-bus.md` and sits in the
+the **D-BR cluster** (the v2 review-broker and artifact-bus ADR) and sits in the
 T2 meta tier (`guild-plan.md §5`). Engaged by `review: cross` /
 `--review=cross`; runs at the lifecycle gates defined in `guild-plan.md §8`.
 
@@ -44,9 +43,7 @@ warn: review-broker degraded — no cross-family reviewer (gate: <gate>); using 
 ```
 
 and **degrade to the WEAK same-host path** — a fresh-context same-host subagent
-reviews, stamped `independence: weak` and recorded (`docs/v2/09-adversarial-review.md
-§Sentinel hardening`: "cross-host unavailable → degrade to weak-independence
-same-host; never hard-block"). The weak review **still runs and is still gated**
+reviews, stamped `independence: weak` and recorded (sentinel hardening rule: "cross-host unavailable → degrade to weak-independence same-host; never hard-block"). The weak review **still runs and is still gated**
 by the 5-condition rule — it relaxes *who* reviews, never *whether* the gate
 holds.
 
@@ -212,12 +209,11 @@ non-terminated, log it to the trail, and continue (or escalate at cap).
 
 ## Gates
 
-The broker addresses a **fixed seven-gate set** (`docs/v2/09-adversarial-review.md
-§The gates`), each firing inside its own producer skill at that phase's review
-boundary (`docs/v2/09 §Gate ownership`). Only **G-lane** is command-visible
+The broker addresses a **fixed seven-gate set** (the adversarial-review spec §The gates), each firing inside its own producer skill at that phase's review
+boundary (§Gate ownership). Only **G-lane** is command-visible
 (it fires per-lane during `build`); the other six are **skill-internal**. The
 `G-spec` / `G-plan` / `G-lane` tokens are the **canonical and operative** gate
-names (`docs/v2/09` owns the binding token set; every path and `gate=` argument
+names (the adversarial-review spec owns the binding token set; every path and `gate=` argument
 uses them); the v2 phase-named forms (`G-ideation` / `G-planning` /
 `G-development`) are **informational aliases only** — never used in paths,
 args, or trail records.
@@ -246,7 +242,7 @@ broker-only:
 | G-operations | ✅ | ✅ `[security, architect]` challengers |
 
 Where an advisory panel exists (Quality, Operations) it is **distinct from** this
-gate-level cross-host broker review (`docs/v2/09 §Loop control`) — the two
+gate-level cross-host broker review (adversarial-review spec §Loop control) — the two
 compose, they do not replace one another. **G-init has no advisory panel** — its
 review is the cross-host broker gate alone. This table is the broker-side gate
 registry; each gate's actual review shape is as shown.
@@ -255,7 +251,7 @@ registry; each gate's actual review shape is as shown.
 
 The broker writes the AC-9 `review/<gate>/` packet/result/trail set (above);
 **this section adds the integrity binding** that makes the gate-pass
-checksum-bound (`docs/v2/09 §Gate-pass rule`). The result binds to the reviewed
+checksum-bound (adversarial-review spec §Gate-pass rule). The result binds to the reviewed
 artifact by **SHA-256**, computed over the artifact bytes **after
 secret-scrubbing** (the same SHA-256 that serves as the cross-host cache key on
 the artifact bus).
@@ -272,7 +268,7 @@ A gate **passes iff all five conditions hold**:
 `status: "skipped"` passes the gate **only** when `review_required == false` (the
 policy did not require review). It is **never** an up-conversion of a
 `degraded-local` / cap-hit / unsatisfied result — those are exactly what they say
-(`docs/v2/09 §AC-8`).
+(adversarial-review spec §AC-8).
 
 **Artifact-changed-mid-review → reject + restart.** If the artifact's bytes
 changed during the round, condition 3 fails (the recomputed SHA-256 will not
@@ -376,7 +372,7 @@ For each round (1-indexed, up to the resolved cap):
    config). If `review_required == false`, resolve `status: "skipped"` and pass
    the gate **without** entering the round loop — this is the **only** clean
    skip. Everything below runs only when review IS required.
-   > **`risk≥high` auto-engage (SK-11) — design trigger, signal-dependent in v2.0.** The `risk≥high` arm is part of the broker contract (`docs/v2/09 §The review broker`), but v2.0 ships **no automatic risk-scoring** — there is no `risk` key in resolved settings and no run-level risk computation. So `risk≥high` engages **only when a risk signal is explicitly supplied** (a spec/plan-declared risk level or an operator flag); absent that signal, the broker auto-engages via `review:cross` (which `--rigor=deep` implies) or project config. This is **accepted-as-is for v2.0** (low severity): the trigger is wired and honored *when a risk signal exists*; automatic risk-scoring that would make `risk≥high` fire on its own is a follow-up, not a v2.0 gap. Do not imply the broker auto-detects risk today.
+   > **`risk≥high` auto-engage (SK-11) — design trigger, signal-dependent in v2.0.** The `risk≥high` arm is part of the broker contract (adversarial-review spec §The review broker), but v2.0 ships **no automatic risk-scoring** — there is no `risk` key in resolved settings and no run-level risk computation. So `risk≥high` engages **only when a risk signal is explicitly supplied** (a spec/plan-declared risk level or an operator flag); absent that signal, the broker auto-engages via `review:cross` (which `--rigor=deep` implies) or project config. This is **accepted-as-is for v2.0** (low severity): the trigger is wired and honored *when a risk signal exists*; automatic risk-scoring that would make `risk≥high` fire on its own is a follow-up, not a v2.0 gap. Do not imply the broker auto-detects risk today.
 1. **Read the codex-skip sentinel** (see § above); under `block` enforcement
    with `blocked: true`, halt before resolving hosts.
 2. Resolve author/reviewer hosts; assert reviewer family ≠ author family. **No
@@ -392,8 +388,7 @@ For each round (1-indexed, up to the resolved cap):
 5. Read back `review_result.v1` from
    `.guild/runs/<run-id>/review/<gate>/result-<round>.json`.
 6. Append the round to the trail `.guild/runs/<run-id>/review/<gate>/trail.md`.
-   **Every trail entry MUST carry five fields** (`docs/v2/09 §Required
-   trail-entry shape`):
+   **Every trail entry MUST carry five fields** (adversarial-review spec §Required trail-entry shape):
    1. the **reviewer host** (`claude-code | codex-local | codex-cloud`);
    2. the **`independence` stamp** (`strong`/`weak` — always marked);
    3. the **packet/result refs** (the AC-9

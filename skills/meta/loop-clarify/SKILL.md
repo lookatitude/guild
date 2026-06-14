@@ -7,8 +7,7 @@ type: meta
 
 # guild:loop-clarify
 
-Implements `../benchmark/plans/adr-009-v1.4-adversarial-loops-and-plugin-restructure.md` §SC1 (F-1) and the binding
-contract `../benchmark/plans/v1.4-loop-skill-contracts.md` §"Skill 1".
+Implements ADR-009 §SC1 (F-1) and the binding contract §"Skill 1" from the loop-skill-contracts spec in the separate guild-benchmark repo.
 
 This skill **wraps** `guild:brainstorm`; it does not replace it. The loop runs
 BEFORE `guild:brainstorm` writes the spec. Researcher fact-checking runs

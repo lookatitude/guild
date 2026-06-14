@@ -7,17 +7,16 @@ Guild is a Claude Code plugin that ships a team of 14 domain specialists plus a 
 ## Where things live
 
 - `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` — plugin + marketplace manifests.
-- `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/` — skill taxonomy (`guild-plan.md §5`). The former `fallback/` tier no longer exists — its skills were promoted into `meta/` (`tdd`, `systematic-debug`, `worktrees`, `finish-branch`) or folded into `guild:review` per `docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md §D`.
+- `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/` — skill taxonomy (`guild-plan.md §5`). The former `fallback/` tier no longer exists — its skills were promoted into `meta/` (`tdd`, `systematic-debug`, `worktrees`, `finish-branch`) or folded into `guild:review` (v2 command-surface internalization decision D).
 - `agents/*.md` — 14 shipping specialists (`guild-plan.md §6` + `frontend` graduated 2026-04-26 via §12). Populated and authored.
-- `commands/*.md` — the v2 **flat-token** command surface (`/guild:<verb>`; the `:` plugin namespace stays — Claude Code requires it — v2 only drops the redundant `guild-` command prefix; sub-verbs are positional ARGUMENTS, never separate files or namespaces; filenames are the source of truth — D1): bare `/guild:guild [brief]` · 6 phase (init ideate plan build qa ops) · `learn` (NEW — owns understand-everything, D3) · `status` `resume` `wiki` `config` `initiative` · maintenance (fix evolve rollback stats audit migrate). The 7 removed v1 command files — the 6 redirect stubs (`guild-wiki/evolve/rollback/stats/audit/diagnose`) + `guild-team` (removed outright, no redirect) — are **deleted in v2.0** (no v2.1 sunset window). **Skills are model-invoked, never `/`-typed** (D2): the command is `/guild:<token>`, the skill is `guild:<token>` — distinct surfaces that share a stem (`plan`/`init`/`audit` collisions are intentional). Canonical: architecture/command-surface.md §2; flat-token + de-listing + dispatch ladder: `docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md`; v1→v2: MIGRATION.md.
+- `commands/*.md` — the v2 **flat-token** command surface (`/guild:<verb>`; the `:` plugin namespace stays — Claude Code requires it — v2 only drops the redundant `guild-` command prefix; sub-verbs are positional ARGUMENTS, never separate files or namespaces; filenames are the source of truth — D1): bare `/guild:guild [brief]` · 6 phase (init ideate plan build qa ops) · `learn` (NEW — owns understand-everything, D3) · `status` `resume` `wiki` `config` `initiative` · maintenance (fix evolve rollback stats audit migrate). The 7 removed v1 command files — the 6 redirect stubs (`guild-wiki/evolve/rollback/stats/audit/diagnose`) + `guild-team` (removed outright, no redirect) — are **deleted in v2.0** (no v2.1 sunset window). **Skills are model-invoked, never `/`-typed** (D2): the command is `/guild:<token>`, the skill is `guild:<token>` — distinct surfaces that share a stem (`plan`/`init`/`audit` collisions are intentional). v1→v2: MIGRATION.md.
 - `hooks/hooks.json` — native Claude Code hooks (`guild-plan.md §13.2`).
 - `scripts/`, `mcp-servers/` — evolve loop, telemetry, optional MCP servers (`guild-plan.md §13.3`). Two newer script families:
-  - `scripts/docs-hygiene/` — `scan.ts` (drift / progress-messaging / dangling refs / missing-`importance:` / secrets) + `memory-check.ts` (memory-vs-reality). The recalibrated patterns are documented in the file header. Entry-point ADR: `docs/knowledge/decisions/knowledge-base-hygiene-and-grading.md` (initiative `docs-clean-up`).
-  - `scripts/dot-guild/` — `scrub.ts` (per-policy operator-path + tilde-Claude-path + secrets redaction) + `audit.ts` (`scrub --dry-run` + per-repo report — the SC-7 risk-gate input) + `migrate.ts` (sha256-verified mover). The share-policy ADR: `docs/knowledge/decisions/guild-boundary-config-and-tracking.md` Decisions E–M (initiative `share-dot-guild`).
+  - `scripts/docs-hygiene/` — `scan.ts` (drift / progress-messaging / dangling refs / missing-`importance:` / secrets) + `memory-check.ts` (memory-vs-reality). The recalibrated patterns are documented in the file header (initiative `docs-clean-up`).
+  - `scripts/dot-guild/` — `scrub.ts` (per-policy operator-path + tilde-Claude-path + secrets redaction) + `audit.ts` (`scrub --dry-run` + per-repo report — the SC-7 risk-gate input) + `migrate.ts` (sha256-verified mover) (initiative `share-dot-guild`).
 - `tests/` — skill evals and wiki-lint fixtures.
 - `templates/{skills,agents}/` — authoring scaffolds.
-- `docs/phase-gates/` — phase-by-phase integration logs.
-- `benchmark/` — sibling autoresearch-pattern benchmark factory; v1.1 ships 2026-04-27.
+- `docs/` — user-facing docs, diagrams, release notes, and assets.
 
 ## v2 phase → skill dispatch
 
@@ -100,7 +99,7 @@ For cross-tree truths (operator preferences that survive *outside* this working 
 
 ## Backend default — the `agent_mode` dispatch ladder
 
-`agent_mode: team | agent | subagent | auto` (`.guild/settings.json`, default `auto`) governs the execution backend for every `/guild` lifecycle run. It **supersedes** the old binary `defaults.agent_team` and resolves the prior `guild-plan.md §7.3` (subagent-default) ↔ this file (agent-team-default) contradiction in favor of one deterministic ladder (ADR D5: `docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md`).
+`agent_mode: team | agent | subagent | auto` (`.guild/settings.json`, default `auto`) governs the execution backend for every `/guild` lifecycle run. It **supersedes** the old binary `defaults.agent_team` and resolves the prior `guild-plan.md §7.3` (subagent-default) ↔ this file (agent-team-default) contradiction in favor of one deterministic ladder (ADR D5 — see `https://guildstack.dev/docs/architecture`).
 
 **On `auto`, resolve in order — team and independent agents are PRIMARY; subagent is the documented last resort:**
 
@@ -119,10 +118,10 @@ This satisfies the §7.3 user-approval requirement for the agent-team backend �
 
 ## Model tiering + §task§agent lifecycle
 
-> **Canonical ADR: `docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md`**
+> This section is an orientation note; normative detail on tiering is at
+> `https://guildstack.dev/docs/cost-and-tiering`
 > (§1 tier ladder · §2 auto-score · §3 advisor · §4 lean lead + recall · §5
-> handoff schema · §6 lifecycle · §8 learn tiering · §10 config keys). This
-> section is an orientation note; all normative detail lives in that ADR.
+> handoff schema · §6 lifecycle · §8 learn tiering · §10 config keys).
 
 **Tier ladder (host-agnostic).** Three stable tiers: `cheap` (haiku) for
 read/summarize/classify; `mid` (sonnet, default task-agent tier) for
@@ -163,8 +162,9 @@ frozen receipt; the two do not compete.
 except cheaper `learn-*` (the built-in tier-map biases cheap). Scaffold
 and inspect the block with `/guild:config init` / `/guild:config show`.
 O-3 short-output advisor floors land in `models.shortOutputThreshold` after
-running `npx tsx benchmark/src/calibrate-o3-cli.ts` — nothing auto-writes
-this key. Full config reference: Guild docs site → `https://guildstack.dev/docs/configuration`.
+running the calibration tool from the `guild-benchmark` repo — nothing
+auto-writes this key. Full config reference: Guild docs site →
+`https://guildstack.dev/docs/configuration`.
 
 ## Codex adversarial review
 

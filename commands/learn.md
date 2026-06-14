@@ -22,8 +22,7 @@ byte-identical to what `/guild:init --learn` and `defaults.auto_learn: true`
 invoke. There is no separate codebase-understanding engine.
 
 Canonical surface: `architecture/command-surface.md §1` (sub-verbs as
-positional ARGUMENTS) + `docs/knowledge/decisions/
-v2x-command-surface-dispatch-and-internalization.md` D3.
+positional ARGUMENTS; D3 — one implementation, two triggers).
 
 ---
 
@@ -134,9 +133,8 @@ Proceed with deep graph? [proceed / skip-graph / explain]
 
 The `knowledge` tier consumes the structural `knowledge-graph.json` and enriches
 it into `guild.knowledge_graph.v2` — topic taxonomy, classified `wiki_page` /
-`diagram` nodes, and cross-modal `evidenced_by` edges. Canonical:
-[`architecture/codebase-understanding.md §"The knowledge tier"`](../../docs/knowledge/architecture/codebase-understanding.md)
-+ [`architecture/knowledge-classification-schema.md`](../../docs/knowledge/architecture/knowledge-classification-schema.md).
+`diagram` nodes, and cross-modal `evidenced_by` edges. Architecture details:
+[https://guildstack.dev/docs/architecture](https://guildstack.dev/docs/architecture).
 Same one-implementation/two-triggers contract (D3): the tier runs identically
 under `/guild:learn knowledge`, full `/guild:learn`, and `/guild:init --learn`.
 

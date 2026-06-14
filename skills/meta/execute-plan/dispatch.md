@@ -9,7 +9,7 @@ Guild supports three execution backends. The choice is **resolved by the `agent_
 | Backend | Selected when (`agent_mode` resolves to…) | Tradeoff |
 |---|---|---|
 | **Agent teams (tmux panes)** | `team` — `auto` + tmux available (the common case on a dev machine) **or** an explicit `team` pin. One **visible pane per specialist**. | Experimental; requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; one team per session; no nested teams; higher token cost. **PRIMARY under tmux.** |
-| **In-process / Independent agents** | `agent` — D5 rung 3: host supports independent agents, no tmux. `InProcessTeamBackend.launch()` returns `ok:true` with `dispatchPlan: GuildDispatchDescriptor[]` (one descriptor per specialist: `name / subagentType / model=null / env / prompt`); `orchestratorPaneId: null`, `teammatePaneIds: {}`. `guild:execute-plan` issues one `Agent()` call per descriptor in `result.dispatchPlan`, applying tier + model at dispatch (`model: null` from backend — tiering is orthogonal; execute-plan scores and resolves). ADR: `/Users/miguelp/Projects/guild/docs/knowledge/decisions/v2-runtime-and-execution-model.md` §RE-4 / VC-RE-4. | No tmux; fully implemented (VC-RE-4). Declarative plan from launcher → `Agent()` calls in execute-plan. Not a fallback stub. |
+| **In-process / Independent agents** | `agent` — D5 rung 3: host supports independent agents, no tmux. `InProcessTeamBackend.launch()` returns `ok:true` with `dispatchPlan: GuildDispatchDescriptor[]` (one descriptor per specialist: `name / subagentType / model=null / env / prompt`); `orchestratorPaneId: null`, `teammatePaneIds: {}`. `guild:execute-plan` issues one `Agent()` call per descriptor in `result.dispatchPlan`, applying tier + model at dispatch (`model: null` from backend — tiering is orthogonal; execute-plan scores and resolves). (ADR §RE-4 / VC-RE-4.) | No tmux; fully implemented (VC-RE-4). Declarative plan from launcher → `Agent()` calls in execute-plan. Not a fallback stub. |
 | **Subagents via Agent tool** | `subagent` — the **fallback**: no tmux + no independent-agent support (CI, fresh installs), or an explicit `subagent` pin. | Lower cost, simplest cleanup; runs in the background, only the final artifact returns. The documented last resort. |
 
 Two hard constraints:
@@ -19,7 +19,7 @@ Two hard constraints:
 
 ### In-process dispatchPlan consumption
 
-When the snapshot-resolved backend is `in-process` (D5 `agent` rung — `/Users/miguelp/Projects/guild/docs/knowledge/decisions/v2-runtime-and-execution-model.md` §RE-4 / VC-RE-4), the launcher (`InProcessTeamBackend.launch()`) returns `ok:true` with a declarative `dispatchPlan: GuildDispatchDescriptor[]` — one descriptor per specialist. A `TeamBackend` is a plain TypeScript class; it **cannot** call the Agent tool. `guild:execute-plan` consumes `result.dispatchPlan` and issues the Agent tool calls itself:
+When the snapshot-resolved backend is `in-process` (D5 `agent` rung — §RE-4 / VC-RE-4 of the runtime and execution model ADR), the launcher (`InProcessTeamBackend.launch()`) returns `ok:true` with a declarative `dispatchPlan: GuildDispatchDescriptor[]` — one descriptor per specialist. A `TeamBackend` is a plain TypeScript class; it **cannot** call the Agent tool. `guild:execute-plan` consumes `result.dispatchPlan` and issues the Agent tool calls itself:
 
 1. **For each descriptor in `result.dispatchPlan`** (in DAG order per `## Parallelism rules`):
    - Resolve tier + model via tier resolution (`model: null` from backend — tiering is orthogonal to backend choice; execute-plan scores and resolves).
@@ -125,13 +125,13 @@ Mid-tier lanes keep the existing default brief composition documented in
 
 ## Handoff protocol (canonical — inject verbatim into every agent brief)
 
-**Implements `docs/knowledge/implementation/agent-reliability-and-evolution-plan.md` §3 Track R (R1/R2/R3/R5) + A1/A3. Fixes flaws F1 (idle without handoff), F2 (dual-channel envelope), F4 (output-cap failure), F6 (cwd/path ambiguity).**
+**Implements the agent-reliability plan §3 Track R (R1/R2/R3/R5) + A1/A3. Fixes flaws F1 (idle without handoff), F2 (dual-channel envelope), F4 (output-cap failure), F6 (cwd/path ambiguity).**
 
 The file-based handoff design is correct; this section makes it **enforced and single-channel on every backend**. Every §task§agent writes its receipt — a `guild.handoff_receipt.v1` Markdown wrapper embedding exactly ONE fenced `guild.handoff.v2` JSON block — to a receipt file as its final action — never to chat, never to SendMessage body. The lead reads receipt files (deterministic); SendMessage is a liveness ping only.
 
 ### Protocol rules (normative)
 
-- **R1 — Receipt file is the single source of truth, every backend.** Every §task§agent — whether dispatched via agent-team (tmux pane), in-process Agent(), or subagent — writes its receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` as its **final action**: a `guild.handoff_receipt.v1` Markdown wrapper that **embeds exactly ONE** fenced ```` ```guild.handoff.v2 ```` JSON block. Envelope schema: `docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5` (bound by pointer — never re-spelled here). One format, one location, always. When the lead consumes a receipt, that single embedded `guild.handoff.v2` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt, and a receipt carrying two or more `guild.handoff.v2` blocks is rejected as a duplicate-block defect.
+- **R1 — Receipt file is the single source of truth, every backend.** Every §task§agent — whether dispatched via agent-team (tmux pane), in-process Agent(), or subagent — writes its receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` as its **final action**: a `guild.handoff_receipt.v1` Markdown wrapper that **embeds exactly ONE** fenced ```` ```guild.handoff.v2 ```` JSON block. The envelope schema is the `guild.handoff.v2` contract (bound by pointer — never re-spelled here). One format, one location, always. When the lead consumes a receipt, that single embedded `guild.handoff.v2` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (see §"Handoff contract" of the communication format policy). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt, and a receipt carrying two or more `guild.handoff.v2` blocks is rejected as a duplicate-block defect.
 - **R2 — SendMessage is a one-line pointer; pasting the envelope is forbidden.** In team/pane mode: after the receipt file is written, send exactly one line via SendMessage: `done · <task-id> · status:<done|blocked|escalate> · receipt:<absolute-path>`. Nothing else. **Pasting the envelope text into chat or into the SendMessage body is explicitly forbidden** — this is the dual-channel defect (F2): two copies in two shapes, neither authoritative. The lead never reads handoff content from chat.
 - **R3 — The lead reads receipt files; it never parses chat.** The orchestrator collects handoffs by reading receipt files (deterministic). SendMessage is a liveness signal; the lead checks the file, not the message body. This removes the "did it send the envelope?" non-determinism (F1).
 
@@ -152,8 +152,7 @@ the validator. There is exactly ONE accepted shape, shown below.
 
 THE RECEIPT IS A guild.handoff_receipt.v1 MARKDOWN WRAPPER (human-review context)
 that EMBEDS EXACTLY ONE fenced ```guild.handoff.v2``` JSON block (the machine
-contract). Standard: docs/knowledge/decisions/communication-format-policy.md
-§"Handoff contract". Three hard rules, checked by validator + lint enforcement:
+contract). Standard: the communication format policy §"Handoff contract". Three hard rules, checked by validator + lint enforcement:
   1. The embedded JSON block is the machine truth — NOT the YAML frontmatter.
   2. EXACTLY ONE such block. Zero blocks (frontmatter-only) is REJECTED by the
      validator; two or more guild.handoff.v2 blocks is REJECTED as a
@@ -164,9 +163,8 @@ contract). Standard: docs/knowledge/decisions/communication-format-policy.md
 Write the receipt file with ALL THREE parts, in this order:
 
 PART A — guild.handoff_receipt.v1 YAML frontmatter wrapper (the frozen v1 field
-set — human/review metadata only; bind by pointer, do NOT invent fields:
-docs/knowledge/architecture/target-architecture.md §"handoff_receipt contract"
-+ the policy doc §"Handoff contract"):
+set — human/review metadata only; bind by pointer, do NOT invent fields —
+see the target-architecture §"handoff_receipt contract" and the communication format policy §"Handoff contract"):
 
 ---
 schema_version: guild.handoff_receipt.v1
@@ -280,7 +278,7 @@ npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/agent-team-launcher.ts --team <resolved-te
 
 ## Capability-scope env injection
 
-Implements the dispatch-side of the v2 security ADR (`docs/knowledge/decisions/v2-security-and-untrusted-content.md` — bound by pointer). The Wave-3 PreToolUse hook (`hooks/lib/security/enforce.ts`) reads `GUILD_CAPABILITY_SCOPE` and `GUILD_AUTONOMY_CONTRACT` from the spawned agent's environment to gate tool calls. This section specifies exactly how and when to populate them.
+Implements the dispatch-side of the v2 security policy (bound by pointer). The Wave-3 PreToolUse hook (`hooks/lib/security/enforce.ts`) reads `GUILD_CAPABILITY_SCOPE` and `GUILD_AUTONOMY_CONTRACT` from the spawned agent's environment to gate tool calls. This section specifies exactly how and when to populate them.
 
 ### When to inject
 

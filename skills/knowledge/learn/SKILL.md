@@ -220,9 +220,8 @@ The script halves are LLM-free. This skill's coordination layer is `mid`
 (detection, classification, gate management, workspace plan assembly). Deep
 extraction is delegated to the specialist learn-* skills at their own tiers.
 The workspace aggregate cost estimate is a deterministic file-count stat (no
-LLM token cost). Cost vocabulary and config keys bound by pointer to
-`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md` §1/§8/§10
-— never re-spelled here.
+LLM token cost). Cost vocabulary and config keys are configured via `.guild/settings.json`
+(`models.*` block) — never re-spelled here.
 
 # Evidence requirements
 

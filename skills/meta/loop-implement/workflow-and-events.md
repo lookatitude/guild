@@ -74,8 +74,7 @@ At every site the orchestrator dispatches `AskUserQuestion` with
 - **`extend-cap`** — "Extend the cap by N rounds (you'll be asked for N)."
 - **`rework`** — "Abort the current loop; return control to the producing skill with the unresolved questions."
 
-`buildEscalationPayload(...)` in `../benchmark/src/loop-escalation.ts` builds
-the payload.
+`buildEscalationPayload(...)` (in the separate guild-benchmark repo's `src/loop-escalation.ts`) builds the payload.
 
 ## Backwards-compat fallback
 
@@ -91,7 +90,7 @@ Tests pin both branches at every escalation site.
 
 ## JSONL events emitted
 
-Per `../benchmark/plans/v1.4-jsonl-schema.md`:
+Per the v1.4-jsonl-schema spec in the separate guild-benchmark repo:
 
 - `loop_round_start` — per round per layer per lane.
 - `loop_round_end` — per round per layer per lane.

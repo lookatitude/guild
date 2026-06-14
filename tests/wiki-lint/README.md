@@ -57,9 +57,9 @@ check fails; all other checks should pass against the same tree.
 ### New checks (#9–#12) — docs-clean-up initiative (SC-9 floor)
 
 Added by Lane D-build (`docs-clean-up`, `eval-engineer`, 2026-05-28).
-Rule source: ADR `docs/knowledge/decisions/knowledge-base-hygiene-and-grading.md`.
+Rule source: the knowledge-base hygiene and grading ADR (internal).
 
-- **#9 missing-importance** — every canonical page (under `docs/knowledge/`,
+- **#9 missing-importance** — every canonical page (under the wiki canonical dirs,
   excluding `research/`+`ideation/`, excluding landing files per ADR §A.3/§A.4)
   must carry `importance: critical|high|medium|low`. BLOCKS on missing or
   invalid value.
@@ -68,7 +68,7 @@ Rule source: ADR `docs/knowledge/decisions/knowledge-base-hygiene-and-grading.md
   bodies). IMPORTANT — flags are candidates, not auto-deletes (Lane C applies
   the C.2 keep-vs-delete test).
 - **#11 dangling-related** — a `related:` slug in frontmatter that does not map
-  to any page filename in the corpus. IMPORTANT — stale cross-links break SC-4.
+  to any page filename in the wiki corpus. IMPORTANT — stale cross-links break SC-4.
 - **#12 drift-markers** — body text referencing v1 command forms (`/guild-*`),
   v1 `commands/guild-*.md` paths, or explicit single-repo assumptions that
   survived the v1→v2 migration. IMPORTANT — SC-1 compliance.
@@ -108,11 +108,11 @@ This emits a flag list to `.guild/initiatives/active/docs-clean-up/artifacts/sca
 
 | Rule # | Category | What it catches | False-positive exemptions |
 |---|---|---|---|
-| 1 | **Drift markers** | v1 `/guild-*` command refs, single-repo assumptions, v1 `commands/guild-*.md` paths in body prose | frontmatter (source_refs/supersedes), research/ideation corpus, implementation/phases/ docs, plugin/docs/superpowers|audit/phase-gates, lines containing "supersedes" (v2-cites-v1 bookkeeping) |
-| 2 | **Progress messaging** | Session/changelog narrative requiring date-stamp co-occurrence, progress emoji with sprint signals, Wave-N ordinals with status verbs | research/ideation corpus, implementation/phases/ docs, plugin/docs/phase-gates/superpowers/audit, the hygiene ADR itself (meta-definition) |
-| 3 | **Dangling related: slugs** | `related:` slug in frontmatter not matching any page in `docs/knowledge/` | research/ideation corpus (deferred to v2.1 when those pages are promoted) |
+| 1 | **Drift markers** | v1 `/guild-*` command refs, single-repo assumptions, v1 `commands/guild-*.md` paths in body prose | frontmatter (source_refs/supersedes), research/ideation corpus, implementation/phases/ docs, lines containing "supersedes" (v2-cites-v1 bookkeeping) |
+| 2 | **Progress messaging** | Session/changelog narrative requiring date-stamp co-occurrence, progress emoji with sprint signals, Wave-N ordinals with status verbs | research/ideation corpus, implementation/phases/ docs, the hygiene ADR itself (meta-definition) |
+| 3 | **Dangling related: slugs** | `related:` slug in frontmatter not matching any page in the wiki corpus | research/ideation corpus (deferred to v2.1 when those pages are promoted) |
 | 4 | **Dangling source_refs** | `source_refs:` path not found on disk | `.guild/**` paths (F-4: gitignored runtime state), `plugin/.guild/**` paths, `external-input/**` refs, research/ideation corpus |
-| 5 | **Missing importance:** | Canonical page (under `docs/knowledge/`, not research/ideation, not landing files) missing `importance: critical\|high\|medium\|low` | research/ + ideation/ + landing files (README.md, index.md, QUERY.md, TRANSFER-MANIFEST.md, MIGRATION.md) |
+| 5 | **Missing importance:** | Canonical page (under wiki canonical dirs, not research/ideation, not landing files) missing `importance: critical\|high\|medium\|low` | research/ + ideation/ + landing files (README.md, index.md, QUERY.md, TRANSFER-MANIFEST.md, MIGRATION.md) |
 | 6 | **Secrets grep** | API keys, tokens, PEM blocks, password= assignments | git SHA commit refs in context, code-block example hashes |
 | 7 | **Pending grade review** | `importance_draft: true` frontmatter — a migration-drafted `importance:` grade awaiting operator acceptance (`migrate-guild.ts --accept-grades`) | none (a draft marker is pending wherever it appears) |
 

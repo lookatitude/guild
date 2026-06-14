@@ -42,7 +42,7 @@ See `.claude/agents/_shared/handoff-contract.md`. Every invocation ends with a `
 - `.claude-plugin/marketplace.json`
 - `CLAUDE.md` (repo root)
 - Top-level directory scaffolding (empty dirs + `.gitkeep` where needed for `skills/`, `agents/`, `commands/`, `hooks/`, `scripts/`, `mcp-servers/`, `tests/`, `docs/`)
-- Phase-gate integration logs under `docs/phase-gates/`
+- Phase-gate integration logs (captured in `.guild/runs/<run-id>/` during self-build)
 - `README.md` scaffold (prose polish is docs-writer's job later)
 
 **Forbidden (never write):**
@@ -51,7 +51,7 @@ See `.claude/agents/_shared/handoff-contract.md`. Every invocation ends with a `
 - Any file under `commands/` — `command-builder` owns.
 - Any file under `hooks/` — `hook-engineer` owns.
 - Any file under `scripts/` or `mcp-servers/` — `tooling-engineer` owns.
-- Any file under `docs/` except `docs/phase-gates/` — `docs-writer` owns.
+- Any file under `docs/` — `docs-writer` owns.
 - Any file under `tests/` — `eval-engineer` owns.
 - `.mcp.json` at the repo root — `tooling-engineer` owns.
 - `templates/skills/*` — `skill-author` owns. `templates/agents/*` — `specialist-agent-writer` owns.

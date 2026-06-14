@@ -4,7 +4,7 @@ Target check: New check #10 — progress-messaging patterns in canonical page bo
 
 Expected outcome: lint fails on check #10 only. Existing checks #1–#9 pass.
 
-Rule source: ADR `docs/knowledge/decisions/knowledge-base-hygiene-and-grading.md §C.3`.
+Rule source: the knowledge-base hygiene and grading ADR §C.3.
 
 Minimum page count: 1 canonical page (plus `index.md` and `log.md`).
 

@@ -14,7 +14,7 @@ Use to build the **deep multi-modal knowledge tier** on top of the structural
 `KnowledgeGraph` — the `guild.knowledge_graph.v2` enrichment that the
 code-structure half (`guild:learn-graph` stages 2–7) does not produce: a
 topic→subtopic **taxonomy**, **classified + labeled** `wiki_page` nodes for
-every `.guild/wiki/` and `docs/knowledge/` page, **diagram** nodes from mermaid
+every `.guild/wiki/` page, **diagram** nodes from mermaid
 blocks and `.svg` files, and **cross-modal** `evidenced_by` / `relates_to`
 edges that make any knowledge node reachable from any related one. Implements
 the K-stage pipeline in `.guild/spec/learn-knowledge-tier.md §Design` (SC-1…SC-15).
@@ -53,9 +53,8 @@ the cheap-scan tier; this is lazy + gated like the deep graph).
   verdict (SC-14) — both are deterministic scripts (below); the skill calls
   them and consumes their JSON verbatim, never re-deriving the decision.
 - Frozen contracts bound **by pointer only**: `guild.knowledge_graph.v2`
-  (`scripts/understand/lib/schema.ts`; conform-by-pointer to
-  `docs/knowledge/architecture/codebase-understanding.md` +
-  `docs/knowledge/implementation/contract-map.md`). The output-locations table
+  (`scripts/understand/lib/schema.ts`; schema is canonical in
+  the source — do not re-spell field names or version strings). The output-locations table
   is owned by `guild:learn-map` — referenced, never re-spelled.
 
 # Output format
@@ -135,8 +134,7 @@ byte-identity unconditional.
    (doc-comment / claim-section / heading candidates, keyed by anchor),
    `k2-candidates.json` (the **authoritative** wiki_page descriptor set —
    `candidate_key` (= `wiki_page:<relpath>`), `id`, `relpath`, `name`,
-   `headings`, `wikilinks` — scanned from both `.guild/wiki/` and
-   `docs/knowledge/`), `k3-nodes.json` (**final** diagram nodes — K3 is fully
+   `headings`, `wikilinks` — scanned from `.guild/wiki/`), `k3-nodes.json` (**final** diagram nodes — K3 is fully
    deterministic, no judgment), and `k4-candidates.json` which carries **both**
    `topic_inputs[]` (keyed by `topicId`) and `domain_candidates[]` (a **bounded
    domain vocabulary**, each keyed `domain:<topicId>`). Each candidate carries
@@ -214,10 +212,9 @@ shared-term) then **LLM-confirmed** — never invented by the model from nothing
 
 Deterministic **script halves are LLM-free** (unchanged). Only the LLM seams
 carry a tier. The tier vocabulary, host→model map, auto-score, precedence
-ladder, and every `models.*` key are **bound by pointer** to
-`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md` (§1/§8/§10)
-and the shared per-stage table owned by `guild:learn-map` `§"Cost tiering"` —
-never re-spelled here. Seam→tier for this skill:
+ladder, and every `models.*` key are configured via `.guild/settings.json`
+(`models.*` block) and the shared per-stage table owned by `guild:learn-map`
+`§"Cost tiering"` — never re-spelled here. Seam→tier for this skill:
 
 | K-stage (LLM seam) | Tier | Why (ADR §8, cited) |
 |---|---|---|
@@ -280,9 +277,9 @@ never executed. All writes confined to `.guild/` at the **main** repo root
 state (DH-3). On a workspace, writes land under the workspace's `.guild/` only;
 child `.guild/` is read-only (federation, not duplication). No network egress,
 no new MCP, no embeddings (BM25 + graph remains the recall substrate). **No
-interactive web dashboard** — the single deliberate v2 exclusion
-(`docs/knowledge/implementation/dashboard-deferral.md`) applies here; rendering
-the topic tree / cross-modal edges is the benchmark UI's job, not this skill's.
+interactive web dashboard** — this skill's deliverable is filesystem artifacts,
+not a UI. Rendering the topic tree / cross-modal edges as a dashboard is out of
+scope; use the separate guild-benchmark repo for that.
 
 # Eval cases
 

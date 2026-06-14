@@ -26,13 +26,12 @@ Promotion behaviour is canonical in `architecture/command-surface.md §3.1`
 ## Contract binding (by pointer — never re-spelled)
 
 Before producer work begins, this phase **resolves the frozen
-`guild.phase_entry.v1` contract** — bound by pointer through
-`docs/knowledge/implementation/contract-map.md §A` row 6 →
+`guild.phase_entry.v1` contract** — bound by pointer to
 `architecture/target-architecture.md §"phase_entry contract"`. The Quality
 result is the frozen `guild.quality.v1` contract — bound by pointer to
-`contract-map.md §A` row 7 → `target-architecture.md §588–637`. Quality
-budgets are consumed by pointer from `defaults.quality.budget`
-(`command-surface.md §4.4`, `P1-config-001`) — not re-spelled.
+`target-architecture.md §588–637`. Quality budgets are consumed by pointer
+from `defaults.quality.budget` (`command-surface.md §4.4`, `P1-config-001`)
+— not re-spelled.
 
 ## Usage
 

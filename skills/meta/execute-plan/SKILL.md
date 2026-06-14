@@ -98,7 +98,7 @@ single-host run is therefore `weak`, recorded — never silently `strong`.
 
 ## Tier resolution
 
-Implements the cost-aware-tiering ADR (`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §2`). Each lane is dispatched at the **lowest viable tier** — the default biases cheap; a `powerful` invocation must be justified by the score, an explicit override, or an advisor request.
+Implements the cost-aware-tiering ADR (§2). Each lane is dispatched at the **lowest viable tier** — the default biases cheap; a `powerful` invocation must be justified by the score, an explicit override, or an advisor request.
 
 1. **Auto-score (deterministic, via `scripts/score-tier.ts`).** Invoke the pure, LLM-free scorer — `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/score-tier.ts --signals '<json>' --cwd <repo-root> [--model-tier <pin>]` → `{score, tier, model}` — passing the lane's signals (work-type verb read/summarize=0, draft/extract=+1, architect/review/schema=+2; blast-radius / file count; presence of an upstream `depends-on:` contract; security/correctness sensitivity; prior-attempt escalation on this lane +1, sticky for the run). The scorer is deterministic and costs **zero tokens** (a script call, not an LLM judgment) — so the dispatch trace is reproducible (SC-5). It applies steps 2–4 below internally and returns `score`+`tier`+`model` in one call. The plan's `complexity_score`/`tier` are the authoring estimate; the scorer confirms or supersedes them.
 2. **Map score → tier** via the band cutoffs `models.thresholds` (default `{mid:1, powerful:3}`): `0 → cheap`, `1–2 → mid`, `≥3 → powerful`.
@@ -124,9 +124,9 @@ Config keys (`models.enabled`, `models.tiers`, `models.scoreWeights`, `models.th
 Implements ADR §3. When a low-tier agent hits something above its tier it gets **one powerful sub-answer for that sub-question only**, then continues — it is **not** re-run wholesale on the expensive model.
 
 1. **Trigger.** Any of three conditions independently triggers an advisor escalation:
-   - **`status: "escalate"`** — the agent emits `status: "escalate"` + an `escalate_reason` in its `guild.handoff.v2` envelope (in-flight dispatch envelope — canonical body at `docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5`, bound by pointer; distinct from and never superseding the frozen `guild.handoff_receipt.v1`).
+   - **`status: "escalate"`** — the agent emits `status: "escalate"` + an `escalate_reason` in its `guild.handoff.v2` envelope (in-flight dispatch envelope — canonical body at cost-aware-tiering ADR §5, bound by pointer; distinct from and never superseding the frozen `guild.handoff_receipt.v1`).
    - **Uncertainty markers** — the agent's output contains a phrase from `models.escalationMarkers` (e.g. "I'm not sure", "unclear", "cannot determine").
-   - **Anomalously short output** (O-3; enabled by D-OBS-3 — bound by pointer at `docs/knowledge/decisions/v2-observability-and-replay.md §D-OBS-3`) — the lane's output-token count falls below `models.shortOutputThreshold[task_type][tier]` in `settings.json`. **This trigger activates only when the threshold key exists** for the `(task_type, tier)` bucket; when absent, the trigger is silent and only the two deterministic triggers above govern. The benchmark analyzer derives and writes the threshold after ≥30 samples per bucket; the coordinator **reads `settings.json` only — no JSONL scanning at dispatch**.
+   - **Anomalously short output** (O-3; enabled by D-OBS-3 — the lane's output-token count falls below `models.shortOutputThreshold[task_type][tier]` in `settings.json`. **This trigger activates only when the threshold key exists** for the `(task_type, tier)` bucket; when absent, the trigger is silent and only the two deterministic triggers above govern. The benchmark analyzer derives and writes the threshold after ≥30 samples per bucket; the coordinator **reads `settings.json` only — no JSONL scanning at dispatch**.
 2. **Advisor answers the sub-question only.** Spawn a `powerful` **advisor** agent that sees the **draft + the question + a compact critique instruction (~50 tokens)** and **never the raw file context** — this is what keeps the expensive call cheap.
 3. **Fold + continue.** The advisor returns via the same `guild.handoff.v2` envelope; the original cheap agent continues with the advisor's answer folded in. No wholesale re-run.
 4. **Round cap.** `models.advisorRounds` (default `2`) caps advisor consults per lane — mirrors the `codex_cap`/`loop_cap` discipline. On exhaustion, record the lane `inconclusive: advisor budget exhausted` rather than silently escalating cost.
@@ -136,7 +136,7 @@ Review/critic work folds into this advisor pass + the existing `guild:review`/`q
 
 ## Capability-scope env injection
 
-Implements the dispatch-side of the v2 security ADR (`docs/knowledge/decisions/v2-security-and-untrusted-content.md` — bound by pointer). This is a **real orchestrator step, not aspirational scoping**: the scope IS published for the lane, the PreToolUse hook (`hooks/lib/security/enforce.ts`) reads it, and an out-of-scope tool call is **blocked**.
+Implements the dispatch-side of the v2 security ADR (bound by pointer). This is a **real orchestrator step, not aspirational scoping**: the scope IS published for the lane, the PreToolUse hook (`hooks/lib/security/enforce.ts`) reads it, and an out-of-scope tool call is **blocked**.
 
 **Two delivery channels — env fast-path + file backstop (write BOTH).** The enforce hook resolves the lane's scope by reading the env var first (fast-path) and **falling back to a per-task scope file** when the env is absent. Because Agent-env propagation to the spawned hook is **not guaranteed on the subagent / in-process path**, the orchestrator MUST write the scope file too — it is the **backend-uniform** enforcement mechanism (env alone may not reach the hook there; the file always does). Write both; either one present ⇒ enforcement engages.
 
@@ -199,7 +199,7 @@ Parallelism follows the DAG, not authoring order; scheduling rules and worktree 
 
 ## Adversarial review per lane — G-lane (broker, when policy fires)
 
-G-lane is the **only command-visible gate** (`docs/v2/09-adversarial-review.md §Gate ownership`): it fires per-lane here during `build`, so `build`'s skill set owns the review step. Wire the **review broker** at the lane-receipt boundary, **not** `guild:codex-review` directly: the broker is the host-agnostic front door, and `guild:codex-review` survives only as the internal Codex adapter the broker dispatches to (`docs/v2/09 §The review broker`).
+G-lane is the **only command-visible gate** (adversarial-review spec §Gate ownership): it fires per-lane here during `build`, so `build`'s skill set owns the review step. Wire the **review broker** at the lane-receipt boundary, **not** `guild:codex-review` directly: the broker is the host-agnostic front door, and `guild:codex-review` survives only as the internal Codex adapter the broker dispatches to (adversarial-review spec §The review broker).
 
 After each lane's receipt is confirmed and before the next lane dispatches (or before `guild:review` for the final lane), invoke `guild:review-broker`:
 
@@ -210,7 +210,7 @@ args: gate=G-lane:<task-id> artifact_path=.guild/runs/<run-id>/handoffs/<special
 
 Because the gate id is **per-lane** (`G-lane:<task-id>`, matching the frozen `G-lane:${string}` union), the broker's AC-9 review trail for the lane lands in a **per-lane subdirectory** — `.guild/runs/<run-id>/review/G-lane:<task-id>/` (packet / result / trail). This is the declared trail path; `build.md`'s AC-9 root declaration MUST read identically (`review/G-lane:<task-id>/`, not the lane-collapsed `review/G-lane/`) so the declared path equals the actual write path.
 
-Substitute `<task-id>` with the lane's task-id (e.g. `T2-backend`); run per-lane in series after the receipt is confirmed. The broker is **policy-gated** (`docs/v2/09 §The review broker`): it fires only when `risk ≥ high`, `review: cross` / `--review=cross` is set, or project config requires it — otherwise it resolves `status: "skipped"` and the lane advances with no reviewer. Self-build runs treat cross-host review as always-on. `author_host` is the host that produced the receipt (resolved from the run-start preflight snapshot; `claude` on a Claude-hosted run). On `status: "rework"`, the lane re-executes — clear its receipt and re-dispatch the specialist with the findings as added context; the re-run counts against `counters.json` key `restart:<lane>` (shared with the L3/L4 cap). On `"satisfied"`, `"skipped"`, or `"force_passed"`, advance normally.
+Substitute `<task-id>` with the lane's task-id (e.g. `T2-backend`); run per-lane in series after the receipt is confirmed. The broker is **policy-gated** (adversarial-review spec §The review broker): it fires only when `risk ≥ high`, `review: cross` / `--review=cross` is set, or project config requires it — otherwise it resolves `status: "skipped"` and the lane advances with no reviewer. Self-build runs treat cross-host review as always-on. `author_host` is the host that produced the receipt (resolved from the run-start preflight snapshot; `claude` on a Claude-hosted run). On `status: "rework"`, the lane re-executes — clear its receipt and re-dispatch the specialist with the findings as added context; the re-run counts against `counters.json` key `restart:<lane>` (shared with the L3/L4 cap). On `"satisfied"`, `"skipped"`, or `"force_passed"`, advance normally.
 
 ## Receipt collection
 
@@ -218,10 +218,10 @@ This skill does not author receipts — it confirms each exists at `.guild/runs/
 
 **Single-channel invariant.** The receipt file is the **authoritative handoff source across all backends** (team / in-process / subagent). The lead never reads handoff content from chat text or SendMessage body — it reads the file. A missing or malformed receipt is an errored lane regardless of what the agent said in chat. Full protocol: `dispatch.md §"Handoff protocol"`.
 
-**Agent-bus event log (SK-5 — concept #4, the single-channel coordination substrate).** Beyond the per-lane receipt, the dispatch path emits **inter-lane lifecycle events** (lane dispatched, lane completed, lane errored/retried) to the canonical agent-bus event log `.guild/runs/<run-id>/agent-bus/events.ndjson` (`docs/v2/08-dispatch-execution.md §"Agent bus"` — the host-neutral channel for events / approvals / questions / heartbeats; FDC-4, **critical**). This is a **PCR-Development must-exist artifact** (`build.md` output floor), so the dispatch path MUST produce it:
+**Agent-bus event log (SK-5 — concept #4, the single-channel coordination substrate).** Beyond the per-lane receipt, the dispatch path emits **inter-lane lifecycle events** (lane dispatched, lane completed, lane errored/retried) to the canonical agent-bus event log `.guild/runs/<run-id>/agent-bus/events.ndjson` (the host-neutral channel for events / approvals / questions / heartbeats; FDC-4, **critical**). This is a **PCR-Development must-exist artifact** (`build.md` output floor), so the dispatch path MUST produce it:
 
 - **Team backend:** the agent-team lifecycle hooks (`TaskCreated` / `TaskCompleted` / `TeammateIdle`, hook-engineer-owned) emit the bus events.
-- **Model-driven (subagent / in-process `agent`):** there are no agent-team hooks, so **the orchestrator emits the bus event itself** at each lane boundary — append one event per lane-dispatched / lane-completed transition. Use the tooling bus-emit helper (atomic temp-write + rename + the `.guild/.lock` single-writer lock per `docs/v2/08 §Concurrency & locking` — concurrent lanes must not tear the log); never hand-append without the atomic-rename discipline.
+- **Model-driven (subagent / in-process `agent`):** there are no agent-team hooks, so **the orchestrator emits the bus event itself** at each lane boundary — append one event per lane-dispatched / lane-completed transition. Use the tooling bus-emit helper (atomic temp-write + rename + the `.guild/.lock` single-writer lock — concurrent lanes must not tear the log); never hand-append without the atomic-rename discipline.
 
 The receipt remains the **truth** (single-channel handoff); the bus event log is the **event stream** a `resume`/replay reads to reconstruct lane timing without host memory — they compose, the bus never substitutes for the receipt. *(The bus-emit helper + the team-backend hook emission are tooling/hook-owned; this skill states the seam + the model-driven orchestrator's emit obligation so the must-exist artifact is actually produced.)*
 
@@ -396,7 +396,7 @@ It reads `run-state.json` (lenient — receipts-only when absent), the structure
 
 ## Lane retry + dead-lettering (R-016)
 
-Implements the per-lane resilience contract (`docs/knowledge/decisions/v2-runtime-and-execution-model.md §retry`/`§resume`). Read the policy from the run's **resolved settings** (`readResolvedSettingsSnapshot` / `read-guild-config.ts` — never hard-code): `defaults.retry.max_attempts` (int ≥ 1, default **1** = no retry), `defaults.retry.backoff` (`immediate | linear | exponential`, default `exponential`), `defaults.resume.enabled` (bool, default **true**).
+Implements the per-lane resilience contract (v2 runtime and execution model ADR §retry/§resume). Read the policy from the run's **resolved settings** (`readResolvedSettingsSnapshot` / `read-guild-config.ts` — never hard-code): `defaults.retry.max_attempts` (int ≥ 1, default **1** = no retry), `defaults.retry.backoff` (`immediate | linear | exponential`, default `exponential`), `defaults.resume.enabled` (bool, default **true**).
 
 A lane is **FAILED** when its receipt is missing/malformed (step 4) or the agent returns an error status. On failure:
 

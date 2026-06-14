@@ -89,11 +89,9 @@ It estimates tokens deterministically (`ceil(chars/4)`, cross-checked against th
 
 When a brownfield `KnowledgeGraph` index exists
 (`.guild/indexes/knowledge-graph.json`, `guild.knowledge_graph.v1` — bound by
-pointer: `docs/knowledge/implementation/contract-map.md §A` row 12; built by
+pointer to the KnowledgeGraph contract (row 12 of the implementation contract map); built by
 `guild:learn-graph`), the **task-dependent** layer MAY include a
-bounded graph sub-source. Rules are fixed by
-`docs/knowledge/architecture/codebase-understanding.md §"Relationship to the
-wiki and guild-memory"` (cited, never re-spelled here):
+bounded graph sub-source. Rules are fixed by the codebase-understanding spec §"Relationship to the wiki and guild-memory" (cited, never re-spelled here):
 
 - **Graph nodes enter the bundle ONLY through `recall.ts`, never via a direct
   `kg-query.ts` call.** The unified recall entry-point (`## Recall-before-read`)
@@ -131,8 +129,7 @@ wiki and guild-memory"` (cited, never re-spelled here):
 
 When the run is attached to an active initiative (the run's `initiative_id` —
 from `--initiative` / the resolved `initiative_default`, recorded in
-`run.yaml`), the **task-dependent layer carries one initiative-summary slot**
-(`docs/v2/05-knowledge-memory.md §"The context bundle"`): a single paragraph
+`run.yaml`), the **task-dependent layer carries one initiative-summary slot** (see the knowledge-memory spec §"The context bundle"): a single paragraph
 summarizing the initiative — its goal, current status, and the work item this
 run advances — sourced from
 `.guild/initiatives/active/<id>/initiative.yaml`. One paragraph, nothing
@@ -146,7 +143,7 @@ fabricate or stub it.
 
 ## Recall-before-read (per-agent context-pull)
 
-Implements the cost-aware-tiering ADR (`docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §4`) + D-PS-2 of `docs/knowledge/decisions/v2-persistence-and-sqlite-index.md`. Each agent assembles its **own** task-scoped context by querying the knowledge base for **exactly its task** — not a broadcast of the whole project. This is a pull discipline layered onto the three-layer rule above; the **~3k target / 6k hard cap is unchanged** (`## Size budget` — bound by pointer, never re-spelled).
+Implements the cost-aware-tiering ADR (§4) and the persistence/SQLite-index policy (D-PS-2). Each agent assembles its **own** task-scoped context by querying the knowledge base for **exactly its task** — not a broadcast of the whole project. This is a pull discipline layered onto the three-layer rule above; the **~3k target / 6k hard cap is unchanged** (`## Size budget` — bound by pointer, never re-spelled).
 
 The **recall-before-read rule** (`cost-techniques.md §3`, surfaced in ADR §4 + D-PS-2): before an agent reads a file, recall the task description against the wiki — through the **single config-aware recall entry-point** `scripts/lib/recall.ts`. There is **one** bundle-recall call; the CLI picks the mechanism internally and protects every chunk intrinsically.
 
@@ -173,7 +170,7 @@ Recall content lands in the **task-dependent** layer and is subject to the same 
 
 ## Lead context (lean lead — compaction, not summarization)
 
-Implements ADR §4 (SC-3). The coordinator stays lean by **dispatching by pointer** and consuming only compact `guild.handoff.v2` envelopes (canonical body at ADR §5, bound by pointer — distinct from the frozen `guild.handoff_receipt.v1`), **never** full specialist transcripts (which remain in `.guild/runs/` for audit and never enter lead context). When a receipt is consumed (here, or as an upstream `depends-on:` contract in the task-dependent layer above), the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (`docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"`). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt. The lead holds:
+Implements ADR §4 (SC-3). The coordinator stays lean by **dispatching by pointer** and consuming only compact `guild.handoff.v2` envelopes (canonical body at ADR §5, bound by pointer — distinct from the frozen `guild.handoff_receipt.v1`), **never** full specialist transcripts (which remain in `.guild/runs/` for audit and never enter lead context). When a receipt is consumed (here, or as an upstream `depends-on:` contract in the task-dependent layer above), the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (see §"Handoff contract" of the communication format policy). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt. The lead holds:
 
 - **Last-N envelopes in full** (default last-N = 5) + a **rolling summary** of older work.
 - **Recompute at a capacity threshold** (~70% of context capacity; `cost-techniques.md §4`).
@@ -182,7 +179,7 @@ Implements ADR §4 (SC-3). The coordinator stays lean by **dispatching by pointe
 
 ## Spotlighting (D-RECALL)
 
-Implements the prompt-injection defence for recalled content — bound by pointer to `docs/knowledge/decisions/v2-security-and-untrusted-content.md` (D-RECALL). This is the **highest-severity injection boundary** (untrusted KB content entering a specialist prompt), so the wrapping is **deterministic, not model-judged**.
+Implements the prompt-injection defence for recalled content — bound by the v2 security and untrusted-content policy (D-RECALL). This is the **highest-severity injection boundary** (untrusted KB content entering a specialist prompt), so the wrapping is **deterministic, not model-judged**.
 
 **One deterministic recall entry-point — the protection is intrinsic, not a model step.** All bundle recall goes through the single `scripts/lib/recall.ts` CLI (`## Recall-before-read`), which unifies all four sources (wiki SQLite-FTS / wiki file-BM25 / `fsScan` / `knowledge_graph` traversal). Whatever source it draws from, it runs the hits through `protect-chunks` (probe → quarantine → classify → trust-tier wrap) **before returning** — so the protected `chunks[]` are produced by construction, with no raw branch the model could take.
 

@@ -16,7 +16,7 @@ re-implementing the launcher's logic in prose.
 The cross-repo API contract (serve flags, project routes, lifecycle import,
 127.0.0.1 bind) is PINNED in `.guild/spec/v2-gap-closure.md §"The cross-repo
 dashboard contract"` — consume it, never redefine it. Integration with the
-benchmark is process + localhost-HTTP only; zero code imports either direction
+separate guild-benchmark repo is process + localhost-HTTP only; zero code imports either direction
 (telemetry split).
 
 ## Workflow
@@ -46,9 +46,8 @@ next free port when bound), `--no-import` (skip the lifecycle bulk import),
 `--dry-run` (print the full plan — resolved checkout, port, run-dir count,
 exact serve command — and execute nothing), `--stop` (managed shutdown, §2b).
 
-The launcher is deterministic: it resolves the benchmark checkout in order
-(1) workspace sibling `<root>/../benchmark`, (1b) in-repo `<root>/benchmark`,
-(2) cached clone `<root>/.guild/cache/benchmark`; starts
+The launcher is deterministic: it resolves the guild-benchmark checkout in order
+(1) workspace sibling `<root>/../guild-benchmark`, (1b) cached clone `<root>/.guild/cache/benchmark`; starts
 `npm run benchmark -- serve --port <p> --project-root <root>` detached (the
 server must outlive the launcher so the user can browse) but **managed, never
 a fire-and-forget daemon**: server stdout/stderr go to

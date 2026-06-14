@@ -14,8 +14,7 @@ Guild is a Claude Code plugin that ships a team of 14 domain specialists plus a 
 - `scripts/`, `mcp-servers/` — evolve loop, telemetry, optional MCP servers (`guild-plan.md §13.3`).
 - `tests/` — skill evals and wiki-lint fixtures.
 - `templates/{skills,agents}/` — authoring scaffolds.
-- `docs/phase-gates/` — phase-by-phase integration logs.
-- `benchmark/` — sibling autoresearch-pattern benchmark factory; v1.1 ships 2026-04-27.
+- `docs/` — user-facing docs, diagrams, and release notes.
 
 ## Dev team (`.claude/agents/`)
 

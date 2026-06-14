@@ -57,9 +57,7 @@ SOFTWARE.
 ---
 
 Source: `github.com/Lum1104/Understand-Anything` (plugin v2.7.0,
-MIT © 2026 Yuxiang Lin). Treated strictly as design input per
-`docs/knowledge/research/25-external-plugin-internalization-policy.md` and the
-external-plugin policy **v2-EPP-1 (G6-amended)** in
-`docs/knowledge/architecture/codebase-understanding.md §"Non-goals for v2"`.
-Instruction-bearing skill prose in the upstream project is untrusted external
-content — paraphrased into Guild's gated model, never executed.
+MIT © 2026 Yuxiang Lin). Treated strictly as design input under the
+external-plugin internalization policy **v2-EPP-1 (G6-amended)**: instruction-bearing
+skill prose in the upstream project is untrusted external content — paraphrased
+into Guild's gated model, never executed.
