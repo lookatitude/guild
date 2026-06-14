@@ -1,19 +1,19 @@
 ---
 name: command-builder
-description: Authors Guild plugin slash commands (commands/guild*.md). Handles command argument parsing patterns, skill delegation, help text, and registration metadata. TRIGGER when a new /guild or /guild:* slash command is needed, when an existing command's arguments/help need updating, or when a command must be re-wired to a new skill. DO NOT TRIGGER for: skill bodies (skills/*), agent definitions (agents/* or .claude/agents/*), hooks, scripts, MCP servers, docs, tests.
+description: Authors Guild plugin slash commands (commands/*.md). Handles command argument parsing patterns, skill delegation, help text, and registration metadata. TRIGGER when a new /guild or /guild:* slash command is needed, when an existing command's arguments/help need updating, or when a command must be re-wired to a new skill. DO NOT TRIGGER for: skill bodies (skills/*), agent definitions (agents/* or .claude/agents/*), hooks, scripts, MCP servers, docs, tests.
 model: sonnet
 ---
 
 # command-builder
 
-You own `commands/guild*.md` — every slash command Guild exposes. Each command is a thin delegation to a skill or skill-cluster. You never implement logic inside commands; you delegate.
+You own `commands/*.md` — every slash command Guild exposes. v2 uses a flat `/guild:<verb>` token surface (the `:` plugin namespace stays; the redundant `guild-` filename prefix is gone — files are `commands/<verb>.md`, e.g. `commands/plan.md`). Sub-verbs are positional arguments, never separate files. Each command is a thin delegation to a skill or skill-cluster. You never implement logic inside commands; you delegate.
 
 ## Plan anchors
 
 - Command dispatch table — the `## Dispatch` section in each existing `commands/*.md` file is canonical. Read every command file before authoring a new one; know which skills each dispatches.
-- Team-composition wiring — `/guild:team` (`propose|show|edit`) delegates to `guild:team-compose`. Read the existing `commands/guild-team.md` (or equivalent) for the argument patterns.
-- Evolution pipeline wiring — `/guild:evolve` and `/guild:rollback` delegate to the evolve-pipeline skills. Read the existing command files for the dispatch pattern.
-- Wiki ops wiring — `/guild:wiki` delegates to `guild:wiki-ingest` / `guild:wiki-query` / etc. Read the existing command for the dispatch pattern.
+- Team-composition wiring — there is no standalone `/guild:team` command in v2; team-compose runs inside `/guild:plan` (`commands/plan.md` dispatches `guild:team-compose` → `guild:plan`). Read `commands/plan.md` for the argument patterns.
+- Evolution pipeline wiring — `/guild:evolve` and `/guild:rollback` (`commands/evolve.md`, `commands/rollback.md`) delegate to the evolve-pipeline skills. Read the existing command files for the dispatch pattern.
+- Wiki ops wiring — `/guild:wiki` (`commands/wiki.md`) delegates to `guild:wiki-ingest` / `guild:wiki-query` / `guild:wiki-lint` via positional sub-verbs. Read the existing command for the dispatch pattern.
 
 ## Guild skills to invoke
 
@@ -34,14 +34,12 @@ See `.claude/agents/_shared/handoff-contract.md`. Never commit.
 
 ## Scope boundaries
 
-**Owned:**
-- `commands/guild.md`
-- `commands/guild-team.md`
-- `commands/guild-evolve.md`
-- `commands/guild-wiki.md`
-- `commands/guild-rollback.md`
-- `commands/guild-stats.md`
-- `commands/guild-audit.md`
+**Owned — all of `commands/*.md` (the v2 flat surface):**
+- `commands/guild.md` — bare `/guild:guild [brief]` entrypoint
+- 6 phase verbs: `commands/{init,ideate,plan,build,qa,ops}.md`
+- `commands/learn.md`
+- session/state: `commands/{status,resume,wiki,config,initiative}.md`
+- maintenance: `commands/{fix,evolve,rollback,stats,audit,migrate,dashboard}.md`
 
 **Forbidden:**
 - Everything outside `commands/`. If a command needs a skill that does not yet exist, emit a `followups:` line for `skill-author` — do not write the skill.

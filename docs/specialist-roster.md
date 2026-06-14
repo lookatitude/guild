@@ -16,7 +16,7 @@ the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
 **escalation to the `advisor`** (ADR §3), never a self-promotion. See the
 **Tiered-worker roster** section below.
 
-## Engineering group (8 specialists · 26 authored T5 skills)
+## Engineering group (8 specialists · 30 authored T5 skills)
 
 ### architect — `agents/architect.md`
 
@@ -93,7 +93,7 @@ the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
 Engineering-group principles: TDD-first, surgical diffs, evidence = passing tests
 plus diff trace.
 
-## Content & communication group (4 specialists · 16 skills)
+## Content & communication group (5 specialists · 20 skills)
 
 ### copywriter — `agents/copywriter.md`
 
@@ -113,8 +113,7 @@ plus diff trace.
   (technical-writer); blog posts, microcopy, email, voice guides (copywriter);
   social posts (social-media); SEO mechanics (seo).
 - **Skills:** `doc-writer-readme`, `doc-writer-product-guide`,
-  `doc-writer-doc-site`, `doc-writer-onboarding-doc`
-  *(needs authoring — followup for `skill-author`)*.
+  `doc-writer-doc-site`, `doc-writer-onboarding-doc`.
 - **Default tier:** `cheap`→`mid` (sonnet).
 
 ### technical-writer — `agents/technical-writer.md`
