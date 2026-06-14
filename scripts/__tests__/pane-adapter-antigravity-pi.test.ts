@@ -61,10 +61,9 @@ describe("AntigravityPaneAdapter (agy)", () => {
 });
 
 describe("PiPaneAdapter", () => {
-  it("preflight: missing binary → fail; binary ok + no key → fail; + key → ok", () => {
-    expect(new PiPaneAdapter({ run: runner({}), env: {} }).preflight().ok).toBe(false);
-    expect(new PiPaneAdapter({ run: runner({ pi: OK }), env: {} }).preflight().ok).toBe(false);
-    expect(new PiPaneAdapter({ run: runner({ pi: OK }), env: { PI_API_KEY: "k" } }).preflight().ok).toBe(true);
+  it("preflight gates on the binary only (pi is multi-provider, resolves its own auth)", () => {
+    expect(new PiPaneAdapter({ run: runner({}) }).preflight().ok).toBe(false);   // missing binary
+    expect(new PiPaneAdapter({ run: runner({ pi: OK }) }).preflight().ok).toBe(true); // binary present
   });
   it("command emits `pi -p` with the run env + keep-alive", () => {
     const cmd = new PiPaneAdapter().command(spec({ hostKind: "pi", prompt: "go", taskId: "t1" }));
@@ -72,7 +71,27 @@ describe("PiPaneAdapter", () => {
     expect(cmd).toContain("export GUILD_TASK_ID=t1");
     expect(cmd).toContain("exec $SHELL");
   });
-  it("expectedOutputs excludes heartbeat (no MCP, no Claude hooks)", () => {
+  it("expectedOutputs excludes heartbeat (no Claude hooks)", () => {
     expect(new PiPaneAdapter().expectedOutputs()).toEqual(["handoff_receipt", "approval_request"]);
   });
+});
+
+// ── LIVE validation (gated) ───────────────────────────────────────────────────
+// Runs the REAL agy/pi one-shot invocations the adapters construct. Gated on
+// GUILD_ADAPTER_LIVE=1 (skips in normal CI). Validated 2026-06-14: agy 1.0.8 +
+// pi 0.79.3 both returned the expected token from `<bin> -p '<prompt>'`.
+//   GUILD_ADAPTER_LIVE=1 npx jest __tests__/pane-adapter-antigravity-pi.test.ts
+import { execSync } from "child_process";
+const LIVE = process.env["GUILD_ADAPTER_LIVE"] === "1";
+(LIVE ? describe : describe.skip)("LIVE — real agy + pi one-shot invocations", () => {
+  it("agy --version + `agy -p` round-trips", () => {
+    expect(execSync("agy --version", { encoding: "utf8" })).toMatch(/\d+\.\d+/);
+    const out = execSync(`agy -p 'reply with exactly: AGY_OK'`, { encoding: "utf8", timeout: 90000 });
+    expect(out).toContain("AGY_OK");
+  }, 100000);
+  it("pi --version + `pi -p` round-trips", () => {
+    expect(execSync("pi --version", { encoding: "utf8" })).toMatch(/\d+\.\d+/);
+    const out = execSync(`pi -p 'reply with exactly: PI_OK'`, { encoding: "utf8", timeout: 90000 });
+    expect(out).toContain("PI_OK");
+  }, 100000);
 });

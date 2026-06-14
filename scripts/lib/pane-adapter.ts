@@ -256,14 +256,14 @@ export class CodexPaneAdapter implements PaneAdapter {
  * coordination only (no Claude agent-team gate, no Claude hooks → no heartbeat).
  * Gemini was discarded 2026-06-14 (sunset in favour of Antigravity).
  *
- * STATUS: [v2-contract-only], invocation UNVERIFIED. The `agy` command name is
- * operator-confirmed, but the one-shot prompt flag below (`-p`) is a documented
- * PLACEHOLDER — `agy` was not locatable on the test host (192.168.10.21), so the
- * exact flag (and preflight version string) could NOT be discovered live. The
- * `PROMPT_FLAG` constant is the single change point: confirm it against
- * `agy --help` once the binary is on PATH, then live-validate.
+ * STATUS: LIVE-VALIDATED 2026-06-14 against agy 1.0.8 — `agy --help` confirms
+ * `-p` is the short alias for `--print` ("Run a single prompt non-interactively
+ * and print the response"); `agy -p '<prompt>'` returned the expected output
+ * end-to-end. (For fully-autonomous panes, agy also offers
+ * `--dangerously-skip-permissions`; left off here — Guild's capability_scope +
+ * the host permission model govern autonomy, not a blanket bypass.)
  */
-const AGY_PROMPT_FLAG = "-p"; // UNVERIFIED placeholder — confirm against `agy --help`
+const AGY_PROMPT_FLAG = "-p"; // agy --print (verified, agy 1.0.8)
 
 export class AntigravityPaneAdapter implements PaneAdapter {
   readonly hostKind = "antigravity-2" as const;
@@ -321,25 +321,27 @@ export class AntigravityPaneAdapter implements PaneAdapter {
 // ── PiPaneAdapter ─────────────────────────────────────────────────────────────
 
 /**
- * Pi (Inflection) CLI pane (Rung-1 tmux substrate). Emits `pi -p '<prompt>'`
- * then keeps the pane alive. Pi core lacks MCP, so recall degrades to the
- * filesystem/BM25 reader (host-adapter Surface 7 §Host-render-or-degrade) — no
- * MCP transport is assumed here. File-bus coordination only.
+ * Pi CLI pane (Rung-1 tmux substrate). `pi` is a multi-provider AI coding
+ * assistant (read/bash/edit/write tools; default provider google) — NOT
+ * Inflection's Pi. Emits `pi -p '<prompt>'` (non-interactive print mode) then
+ * keeps the pane alive. File-bus coordination only (no Claude hooks → no
+ * heartbeat).
  *
- * STATUS: [v2-contract-only]. The exact Pi CLI prompt flag is the documented
- * residual — command construction is unit-tested via the injected RunFn, but the
- * `-p` one-shot flag MUST be confirmed against the installed Pi CLI before live
- * use (overridable here as the single change point). Preflight: `pi --version`.
+ * STATUS: LIVE-VALIDATED 2026-06-14 against pi 0.79.3 — `pi --help` confirms
+ * `--print, -p` is "Non-interactive mode: process prompt and exit"; `pi -p
+ * '<prompt>'` returned the expected output end-to-end. Auth is multi-provider
+ * and resolved by pi itself (`--api-key` defaults to provider env vars / pi
+ * config), so preflight gates ONLY on the binary — hard-gating a single API-key
+ * env var would be wrong for a multi-provider CLI (CH-6 fail-fast applies to the
+ * binary; the provider key is pi's own concern and errors at call time if absent).
  */
 export class PiPaneAdapter implements PaneAdapter {
   readonly hostKind = "pi" as const;
   readonly adapterVersion = ADAPTER_VERSION;
   private run: RunFn;
-  private env_: NodeJS.ProcessEnv;
 
   constructor(opts: AdapterOpts = {}) {
     this.run = opts.run ?? defaultRun;
-    this.env_ = opts.env ?? process.env;
   }
 
   preflight(): PreflightResult {
@@ -352,14 +354,7 @@ export class PiPaneAdapter implements PaneAdapter {
           "Install the Pi CLI and ensure it is on PATH.",
       };
     }
-    const key = (this.env_["PI_API_KEY"] ?? this.env_["INFLECTION_API_KEY"] ?? "").trim();
-    if (!key) {
-      return {
-        ok: false,
-        message: "no PI_API_KEY/INFLECTION_API_KEY — set a Pi API key (CH-6 fail-fast).",
-      };
-    }
-    return { ok: true, message: "pi --version ok; API key present" };
+    return { ok: true, message: "pi --version ok (multi-provider; pi resolves its own auth)" };
   }
 
   command(spec: PaneSpec): string {
