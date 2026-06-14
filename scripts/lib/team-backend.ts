@@ -1046,10 +1046,24 @@ export interface RemotePaneHandle {
  * per §CH-3 (no event bus). RemoteTeamBackend drives every member; the concrete
  * wire (ssh / mock) lives in the implementation.
  */
+/** Which of the requested binaries are installed on a remote host. */
+export interface RemoteProbeResult {
+  present: string[];
+  missing: string[];
+}
+
 export interface RemoteTransport {
   readonly kind: string;
   /** Establish / probe the connection to one remote host. Idempotent per host. */
   connect(host: RemoteHostTarget): RemoteConnectResult;
+  /**
+   * Capability probe: which of `binaries` are installed + runnable on the remote
+   * host, checked BEFORE any spawn (fail-fast — never dispatch to a host that
+   * lacks the required brand CLI). Uses the host's login shell when set so a
+   * binary off the non-interactive PATH (codex/linuxbrew, agy/~/.local/bin) is
+   * still found.
+   */
+  probe(host: RemoteHostTarget, binaries: string[]): RemoteProbeResult;
   /** Start ONE remote agent process for `spec`, executing `command`. */
   spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle;
   /** Hand the initial task brief to a spawned pane (file-based, §CH-3). */
@@ -1058,11 +1072,24 @@ export interface RemoteTransport {
   teardown(): void;
 }
 
+/** Map a host kind to the CLI binary its tmux pane invokes (CH-2 adapters). */
+export function binaryForHostKind(hostKind: HostKind): string {
+  switch (hostKind) {
+    case "codex": return "codex";
+    case "gemini": return "gemini";
+    case "pi": return "pi";
+    case "antigravity-2": return "agy";
+    default: return "claude"; // claude + the desktop/web/app variants drive `claude`
+  }
+}
+
 // ── MockTransport — in-memory test double ────────────────────────────────────
 
 export interface MockTransportOpts {
   /** Return ok:false from connect() for hosts matching this predicate (outage sim). */
   failConnectFor?: (host: RemoteHostTarget) => boolean;
+  /** Report these binaries as MISSING from probe() for a host (missing-tool sim). */
+  missingBinaries?: (host: RemoteHostTarget) => string[];
 }
 
 /**
@@ -1076,11 +1103,14 @@ export class MockTransport implements RemoteTransport {
   readonly spawns: Array<{ host: RemoteHostTarget; spec: PaneSpec; command: string }> = [];
   readonly sends: Array<{ handle: RemotePaneHandle; payload: string }> = [];
   teardowns = 0;
+  readonly probes: Array<{ host: RemoteHostTarget; binaries: string[] }> = [];
   private failConnectFor?: (host: RemoteHostTarget) => boolean;
+  private missingBinaries?: (host: RemoteHostTarget) => string[];
   private counter = 0;
 
   constructor(opts: MockTransportOpts = {}) {
     this.failConnectFor = opts.failConnectFor;
+    this.missingBinaries = opts.missingBinaries;
   }
 
   connect(host: RemoteHostTarget): RemoteConnectResult {
@@ -1089,6 +1119,15 @@ export class MockTransport implements RemoteTransport {
       return { ok: false, message: `mock: connect refused for ${host.hostId} (${host.endpoint})` };
     }
     return { ok: true, message: `mock: connected ${host.hostId} (${host.endpoint})` };
+  }
+
+  probe(host: RemoteHostTarget, binaries: string[]): RemoteProbeResult {
+    this.probes.push({ host, binaries });
+    const missingSet = new Set(this.missingBinaries?.(host) ?? []);
+    return {
+      present: binaries.filter((b) => !missingSet.has(b)),
+      missing: binaries.filter((b) => missingSet.has(b)),
+    };
   }
 
   spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle {
@@ -1136,6 +1175,34 @@ export class SshRemoteTransport implements RemoteTransport {
     return {
       ok: false,
       message: `ssh: cannot reach ${host.endpoint} (exit ${r.status ?? "null"}): ${r.stderr.trim()}`,
+    };
+  }
+
+  /**
+   * Capability probe over ssh: for each binary, run `command -v <bin>` on the
+   * remote and report present/missing — BEFORE any spawn. Wrapped in the host's
+   * login shell (when `host.loginShell` is set) so a binary off the
+   * non-interactive PATH (codex/linuxbrew, agy/~/.local/bin) is still found.
+   * One ssh round-trip for the whole set. A binary that errors → reported missing.
+   */
+  probe(host: RemoteHostTarget, binaries: string[]): RemoteProbeResult {
+    if (binaries.length === 0) return { present: [], missing: [] };
+    // Emit one line per FOUND binary: "PRESENT <bin>".
+    const inner =
+      `for b in ${binaries.map((b) => shellQuote(b)).join(" ")}; do ` +
+      `command -v "$b" >/dev/null 2>&1 && echo "PRESENT $b"; done`;
+    const remoteCmd = host.loginShell ? wrapLoginShell(inner, host.loginShell) : inner;
+    const r = this.run("ssh", ["-o", "BatchMode=yes", host.endpoint, remoteCmd]);
+    const found = new Set(
+      (r.stdout ?? "")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith("PRESENT "))
+        .map((l) => l.slice("PRESENT ".length).trim()),
+    );
+    return {
+      present: binaries.filter((b) => found.has(b)),
+      missing: binaries.filter((b) => !found.has(b)),
     };
   }
 
@@ -1348,6 +1415,38 @@ export class RemoteTeamBackend implements TeamBackend {
           orchestratorPaneId: null,
           teammatePaneIds: {},
           notes: [`remote connect failed: ${target.hostId} (${target.endpoint}): ${c.message}`],
+        };
+      }
+    }
+
+    // Phase 1.5 — capability probe: confirm each host has the brand CLI(s) it
+    // needs BEFORE spawning anything, so a missing remote tool fails fast with a
+    // clear message instead of a command-not-found inside a half-spawned team.
+    // Required binaries per host = the brand binary of each specialist routed
+    // there (+ tmux, the Rung-1 substrate). Nothing spawned until every host is
+    // capable.
+    const neededByHost = new Map<string, { target: RemoteHostTarget; binaries: Set<string> }>();
+    for (const p of planned) {
+      const entry = neededByHost.get(p.target.hostId) ?? { target: p.target, binaries: new Set<string>(["tmux"]) };
+      entry.binaries.add(binaryForHostKind(p.target.hostKind));
+      neededByHost.set(p.target.hostId, entry);
+    }
+    for (const { target, binaries } of neededByHost.values()) {
+      const probeResult = transport.probe(target, [...binaries]);
+      if (probeResult.missing.length > 0) {
+        transport.teardown(); // nothing spawned yet
+        return {
+          kind: this.kind,
+          ok: false,
+          plannedCommands,
+          orchestratorPaneId: null,
+          teammatePaneIds: {},
+          notes: [
+            `remote host "${target.hostId}" (${target.endpoint}) is missing required ` +
+              `tool(s): ${probeResult.missing.join(", ")}. Install them on the remote ` +
+              `(or set defaults.cross_host.hosts.${target.hostId}.login_shell if they are ` +
+              `off the non-interactive PATH). No panes spawned.`,
+          ],
         };
       }
     }

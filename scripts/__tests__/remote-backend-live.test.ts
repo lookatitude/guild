@@ -92,6 +92,22 @@ d("SshRemoteTransport — LIVE cross-host (item 41)", () => {
     expect(remote(`cat ~/Projects/tests/${nonce}.codex`)).toMatch(/codex/i);
   });
 
+  test("capability probe reports the host's real installed tools over ssh", () => {
+    // The box has claude + codex + tmux; agy + pi are NOT installed there.
+    const r = t.probe(host, ["claude", "tmux", "codex", "agy", "pi"]);
+    expect(r.present).toContain("claude");
+    expect(r.present).toContain("tmux");
+    expect(r.missing).toContain("agy");
+    expect(r.missing).toContain("pi");
+  });
+
+  test("codex resolves in the probe ONLY with a login shell (off non-interactive PATH)", () => {
+    // Bare probe: codex (linuxbrew) is off the non-interactive PATH → missing.
+    expect(t.probe(host, ["codex"]).missing).toContain("codex");
+    // Login-shell probe: codex resolves → present.
+    expect(t.probe({ ...host, loginShell: "zsh" }, ["codex"]).present).toContain("codex");
+  });
+
   test("teardown — runs cleanly over the wire", () => {
     expect(() => t.teardown()).not.toThrow();
   });
