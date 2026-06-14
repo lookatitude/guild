@@ -7,7 +7,7 @@ type: meta
 
 # guild:team-compose
 
-Implements `guild-plan.md §7` (team composition) **and the phase-aware composition loop** of the canonical-specialist-roster ADR's sibling `dynamic-team-composition.md` §1/§5 (G-PHASE-COMPOSE). Composition is **re-evaluated at each phase boundary**, not once per slug: each phase writes its own `.guild/team/<slug>.<phase>.yaml`. Output is a resolved per-phase team file downstream planning and execution consume verbatim (resolved via `resolveTeamFile`).
+Implements team composition **and the phase-aware composition loop** (G-PHASE-COMPOSE) from the canonical-specialist-roster ADR's sibling `dynamic-team-composition.md`. Composition is **re-evaluated at each phase boundary**, not once per slug: each phase writes its own `.guild/team/<slug>.<phase>.yaml`. Output is a resolved per-phase team file downstream planning and execution consume verbatim (resolved via `resolveTeamFile`).
 
 ## Phase-aware composition (per phase)
 
@@ -44,7 +44,7 @@ writeCurrentPhasePointer(guildRoot, slug, phase_P)  # .guild/team/<slug>.current
 
 ## Workflow
 
-Five ordered steps (`guild-plan.md §7.1`), run **per phase** against `topic_P` (see `## Phase-aware composition`). The gap-handling options and approval shapes are detailed in `gap-handling.md`:
+Five ordered steps, run **per phase** against `topic_P` (see `## Phase-aware composition`). The gap-handling options and approval shapes are detailed in `gap-handling.md`:
 
 0. **Self-build check (first).** If the target repo IS the Guild plugin itself (editing `plugin/**` — skills, commands, hooks, scripts, agents, docs, manifests, tests), compose the team from the **dev-team agents enumerated from `.claude/agents/*.md`** — the filesystem IS the dev-team roster; the composer reads that live directory, **never a hand-maintained list** (same net rule as `§1` for the shipped roster). Route by changed path (see `CLAUDE.md §"Dev team"` for the path→agent table). *(Illustrative only, not authoritative — as of this writing `.claude/agents/` holds `plugin-architect, skill-author, specialist-agent-writer, command-builder, hook-engineer, tooling-engineer, docs-writer, eval-engineer` plus `research-digester`/`security-auditor`; enumerate the directory live, do not trust this snapshot.)* Do **not** match against the `guild:` product specialists — those build *user* products. Skip steps 1–3's product-roster matching and go to step 4 with the dev-team lanes. (Cap-6 / 3–4 default and backend choice still apply.)
 
@@ -60,7 +60,7 @@ Five ordered steps (`guild-plan.md §7.1`), run **per phase** against `topic_P` 
 
 ## Hard rules
 
-From `guild-plan.md §7.2`. Non-negotiable; if a user request conflicts, raise it before writing `team.yaml`:
+Non-negotiable; if a user request conflicts, raise it before writing `team.yaml`:
 
 - **Cap at 6 specialists PER PHASE** (ADR §1 driver 5; OQ3). The cap bounds the **union of concurrently-active** specialists — **sequential phases each get a fresh ≤6 budget**; the lifecycle's total distinct specialists across phases is unbounded. Overlapping phases (e.g. `qa` spun up before `build` closes) share one cap. The only override is an explicit `/guild:plan --team-size=N` / `allow_larger: true` — context fragmentation destroys coherence above six.
 - **Recommended default: 3–4** (per phase). Six is the ceiling, not the norm. Widen only when the phase has genuinely independent lanes that benefit from parallel specialists.
@@ -160,4 +160,4 @@ Self-build dev-team lanes inherit by analogy: `plugin-architect`→`architect` s
 
 ## Handoff
 
-Hand off to `guild:plan` with the **resolved per-phase team-file path** as its argument (the `teamFilePath(...)` result just written, e.g. `.guild/team/<slug>.build.yaml` — not a reconstructed `<slug>.yaml`). Do not proceed into planning yourself — `guild:plan` is a separate skill (`guild-plan.md §8`). Handoff receipt lists: `team_path` (the per-phase path), `phase`, `specialist_count`, `backend`, `gaps_resolved` count (incl. any A→`create-specialist`/`create-skill` mints and their gate outcome), whether any `implied-by` rule fired, and the per-specialist `default_tier` assignments (so `guild:plan` can carry them onto each lane's `complexity_score` + chosen tier).
+Hand off to `guild:plan` with the **resolved per-phase team-file path** as its argument (the `teamFilePath(...)` result just written, e.g. `.guild/team/<slug>.build.yaml` — not a reconstructed `<slug>.yaml`). Do not proceed into planning yourself — `guild:plan` is a separate skill. Handoff receipt lists: `team_path` (the per-phase path), `phase`, `specialist_count`, `backend`, `gaps_resolved` count (incl. any A→`create-specialist`/`create-skill` mints and their gate outcome), whether any `implied-by` rule fired, and the per-specialist `default_tier` assignments (so `guild:plan` can carry them onto each lane's `complexity_score` + chosen tier).

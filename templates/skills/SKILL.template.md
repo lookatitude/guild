@@ -18,9 +18,8 @@ type:
   template file itself is the canonical base, NOT an instance, so it carries
   no `derived_from_template`). A runtime write to plugin template state is a
   v2 defect.
-  Boundary + version string canonical in:
-    architecture/target-architecture.md §"Canonical template-version strings
-    + derived_from_template invariant" (cited, never re-spelled).
+  Boundary + version string canonical in the agent/skill factory design
+    (see https://guildstack.dev/docs/architecture — cited, never re-spelled here).
   Contractual/minimal (VC-F7 no-rigidity guard): the headings below are the
   required section-heading SET only — labels, never templated body prose.
   Instantiation-source citers (VC-F1): `create-specialist` (mints instances

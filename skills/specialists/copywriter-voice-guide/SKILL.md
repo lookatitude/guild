@@ -7,7 +7,7 @@ type: specialist
 
 # copywriter-voice-guide
 
-Implements `guild-plan.md §6.2` (copywriter · voice-guide) under `§6.4` writing principles: evidence = concrete before/after samples a writer can imitate, not adjectives that sound good in a slide.
+Evidence = concrete before/after samples a writer can imitate, not adjectives that sound good in a slide.
 
 ## What you do
 

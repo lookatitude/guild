@@ -5,9 +5,7 @@ procedure + `metadata.json` schema, the `§10.1.1` frontmatter spec + field
 rules, the minimal page body template, and the per-category definitions.
 `SKILL.md` is the lean playbook; this file is the format spec it points to.
 
-Plan anchors: `guild-plan.md §10.1` (raw lives beside, not inside, the wiki),
-`§10.1.1` (required frontmatter), `§10.2` (category definitions), `§10.4`
-(ingest ownership).
+Rules: raw sources live beside (not inside) the wiki under `.guild/raw/sources/`; every page must carry the required frontmatter; categories are defined by the wiki structure; any specialist or the orchestrator may ingest.
 
 ## Raw capture
 

@@ -10,9 +10,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Skill
 The daily-tier knowledge noun. Thin dispatcher to the three knowledge skills;
 no `.guild/` writes are made by this command directly.
 
-Canonical surface: `architecture/command-surface.md §3.3` (wiki rows) + `§2`
-(3-daily tier). Grammar: colon namespace
-(`command-surface.md §1` ruling #1).
+Grammar: colon namespace (`:` plugin namespace; sub-verbs are positional arguments).
 
 ## Sub-verbs (cited — `command-surface.md §3.3`)
 

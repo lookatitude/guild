@@ -7,7 +7,7 @@ type: specialist
 
 # mobile-android-kotlin
 
-Implements `guild-plan.md §6.1` (mobile · android-kotlin) under `§6.4` engineering principles: idiomatic Kotlin, structured concurrency via scoped coroutines, lifecycle-aware flows.
+Idiomatic Kotlin, structured concurrency via scoped coroutines, lifecycle-aware flows.
 
 ## What you do
 

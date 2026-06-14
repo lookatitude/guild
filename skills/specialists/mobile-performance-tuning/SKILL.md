@@ -7,7 +7,7 @@ type: specialist
 
 # mobile-performance-tuning
 
-Implements `guild-plan.md §6.1` (mobile · performance-tuning) under `§6.4` engineering principles: measure first, optimize second; any speed-up without a before/after number is folklore.
+Measure first, optimize second; any speed-up without a before/after number is folklore.
 
 ## What you do
 

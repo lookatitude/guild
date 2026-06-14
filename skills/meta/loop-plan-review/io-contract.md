@@ -49,7 +49,7 @@ this skill does not invoke `guild:plan` itself).
 
 ## Handoff receipt
 
-Per `guild-plan.md §8.2`. Required fields:
+Required fields:
 
 - `loop_id: loop-plan-review`
 - `lane_id: phase:plan`

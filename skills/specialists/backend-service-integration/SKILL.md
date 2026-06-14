@@ -7,7 +7,7 @@ type: specialist
 
 # backend-service-integration
 
-Implements `guild-plan.md §6.1` (backend · service-integration) under `§6.4` engineering principles: evidence is a test matrix — happy path, timeout, 5xx retry, 4xx no-retry, circuit-open behavior — plus a sampled trace.
+Evidence is a test matrix — happy path, timeout, 5xx retry, 4xx no-retry, circuit-open behavior — plus a sampled trace.
 
 ## What you do
 

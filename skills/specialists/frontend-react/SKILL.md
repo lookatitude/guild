@@ -7,7 +7,7 @@ type: specialist
 
 # frontend-react
 
-Implements `guild-plan.md §6.1` (frontend · react) under `§6.4` engineering principles: a component is correct when its render output is a pure function of props and state, and the cheapest version that passes its component test ships.
+A component is correct when its render output is a pure function of props and state, and the cheapest version that passes its component test ships.
 
 ## What you do
 

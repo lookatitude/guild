@@ -7,7 +7,7 @@ type: specialist
 
 # seo-internal-linking
 
-Implements `guild-plan.md §6.2` (seo · internal-linking) under `§6.4` commercial principles: hypothesis-first (which pages should rank, which should route?), success = measurable (orphan count, avg links-per-priority-page, crawl depth), evidence = a cited graph, not anecdotes.
+Hypothesis-first (which pages should rank, which should route?), success = measurable (orphan count, avg links-per-priority-page, crawl depth), evidence = a cited graph, not anecdotes.
 
 ## What you do
 

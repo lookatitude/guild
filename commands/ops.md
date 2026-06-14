@@ -17,20 +17,17 @@ interactive; the always-ask hard set is unconditional; a pre-flight dry-run
 is mandatory. Producer `devops-*` vs `security+architect` G-operations
 challenger. Consumes Quality, feeds the D8 release leg.
 
-Promotion behaviour is canonical in `architecture/command-surface.md §3.1`
-(Operations `[v2]` row) — bound by pointer, not re-spelled. Verb↔phase edge:
-`§6` (D-14: `/guild:ops` → Operations; node id `OPS`). Phase concept
-binding: `lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
+This is the Operations phase entrypoint `[v2]`. Verb↔phase edge:
+`/guild:ops` → Operations (node id `OPS`). Phase concept binding:
+`lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
 
-## Contract binding (by pointer — never re-spelled)
+## Contract binding
 
 Before producer work begins, this phase **resolves the frozen
-`guild.phase_entry.v1` contract** — bound by pointer to
-`architecture/target-architecture.md §"phase_entry contract"`. The Operations
-record is the frozen `guild.ops.v1` contract — bound by pointer to
-`target-architecture.md §639–705` (safety_rails §667–672); by class it also
-writes `guild.incident.v1` and `guild.release.v1` (D8 join §731–745).
-Not re-spelled.
+`guild.phase_entry.v1` contract**. The Operations record is the frozen
+`guild.ops.v1` contract (safety_rails included); by class it also writes
+`guild.incident.v1` and `guild.release.v1` (D8 join).
+Full contract detail: [https://guildstack.dev/docs](https://guildstack.dev/docs).
 
 ## Usage
 
@@ -39,9 +36,8 @@ Not re-spelled.
 /guild:ops release
 ```
 
-All five global flags + `--dry-run` apply (`command-surface.md §4`, by
-pointer). The mandatory pre-flight dry-run is a safety rail, independent of
-`--dry-run`.
+All five global flags + `--dry-run` apply. The mandatory pre-flight dry-run
+is a safety rail, independent of `--dry-run`.
 
 ## Args & local flags
 
@@ -53,8 +49,7 @@ pointer). The mandatory pre-flight dry-run is a safety rail, independent of
 
 - Risky / destructive **I always** (a `release`, destructive, `incident`, or
   `rollback` action always prompts even under `--auto-approve=all` and even
-  inside an `approved:true` autonomous runbook; `MIGRATION.md §6`, by
-  pointer)
+  inside an `approved:true` autonomous runbook)
 - **G-operations** review **A**
 
 ## Output artifact

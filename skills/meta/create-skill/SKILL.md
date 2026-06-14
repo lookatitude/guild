@@ -7,7 +7,7 @@ type: meta
 
 # guild:create-skill
 
-Implements the **G-CREATE-SKILL** capability from the phase-aware-composition ADR (`dynamic-team-composition.md` OD-3 §2) — a first-class `create-skill` meta-skill parallel to `guild:create-specialist` (`guild-plan.md §12`). It mints a **new skill** the way `create-specialist` mints a new agent, reusing the same `§11.2` paired-evals + shadow-mode gate and the same DH-3 incubation discipline. It fills the gap the ADR names: dynamic composition could mint a missing *role* but had no gated path to acquire a missing *capability*.
+Implements the **G-CREATE-SKILL** capability from the phase-aware-composition ADR (`dynamic-team-composition.md` OD-3 §2) — a first-class `create-skill` meta-skill parallel to `guild:create-specialist`. It mints a **new skill** the way `create-specialist` mints a new agent, reusing the same paired-evals + shadow-mode gate and the same DH-3 incubation discipline. It fills the gap the ADR names: dynamic composition could mint a missing *role* but had no gated path to acquire a missing *capability*.
 
 The dividing line:
 - **Missing role** (a new domain owner that routes by `subagent_type`) → `guild:create-specialist`.
@@ -23,7 +23,7 @@ Captured via the step-1 interview (ask until all are captured; do not guess). Fi
 - **skill name** — the `name:` slug (`guild-<verb-or-noun>`), single hyphenated token.
 - **description** — one-paragraph `description:` (≤1024 chars) with **≥3 trigger phrasings** plus a TRIGGER + DO NOT TRIGGER clause (the skill-authoring contract — routable at draft time).
 - **when_to_use** — the routing precondition (one or two sentences).
-- **tier placement** — which taxonomy tier (`core` / `meta` / `knowledge` / `specialists`) the skill belongs in (`guild-plan.md §5`); decides the proposed register path.
+- **tier placement** — which taxonomy tier (`core` / `meta` / `knowledge` / `specialists`) the skill belongs in; decides the proposed register path.
 - **typical prompts** — 3–5 routing utterances → the `should_trigger` evals.
 - **example outputs** — 1–3 concrete artifacts/body outline the skill produces → the body + `should_not_trigger` boundary cases.
 - **adjacent skills** — skills whose triggers overlap (seeds the step-3 boundary scan and the step-4 `DO NOT TRIGGER` edits).

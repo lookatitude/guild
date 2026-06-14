@@ -7,7 +7,7 @@ type: specialist
 
 # researcher-paper-digest
 
-Implements `guild-plan.md §6.1` (researcher · paper-digest) under `§6.4` engineering principles: evidence is a digest the team can read in 10 minutes and cite with confidence — not a paraphrase of the abstract.
+Evidence is a digest the team can read in 10 minutes and cite with confidence — not a paraphrase of the abstract.
 
 ## What you do
 

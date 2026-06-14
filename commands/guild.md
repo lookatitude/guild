@@ -1,6 +1,6 @@
 ---
 name: guild
-description: "Bare Guild entry — smart phase detection. /guild:guild [brief] inspects .guild/ state and surfaces the proposed lifecycle phase (init · ideate · plan · build · qa · ops), always confirmed never silent. Named phase verbs, nouns (wiki, initiative), maintenance verbs (evolve, rollback, stats, audit, fix), and observability (dashboard) are separate commands. Canonical: architecture/command-surface.md §1/§5.1; v1→v2: MIGRATION.md."
+description: "Bare Guild entry — smart phase detection. /guild:guild [brief] inspects .guild/ state and surfaces the proposed lifecycle phase (init · ideate · plan · build · qa · ops), always confirmed never silent. Named phase verbs, nouns (wiki, initiative), maintenance verbs (evolve, rollback, stats, audit, fix), and observability (dashboard) are separate commands. v1→v2: https://guildstack.dev/docs/migration-v1-to-v2"
 argument-hint: "[brief] [--rigor=quick|standard|deep] [--auto-approve[=spec,plan,build,qa,all]] [--review=local|cross|off] [--host=claude|codex|auto] [--initiative=<id>|new] [--model-tier=cheap|mid|powerful] [--dry-run]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
@@ -10,7 +10,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestio
 `/guild:guild [brief]` with no phase verb runs **phase detection** — an
 orchestrator behavior (not a skill) that inspects `.guild/` state for the
 active slug and **surfaces the proposed next phase, always confirmed, never
-silent** (`architecture/command-surface.md §5.1`). Named phases
+silent**. Named phases
 (`/guild:init|ideate|plan|build|qa|ops`), nouns (`/guild:wiki`,
 `/guild:initiative`), maintenance verbs
 (`/guild:evolve|rollback|stats|audit|fix`), and the observability surface
@@ -120,15 +120,15 @@ order is the resume point. Restart is `/guild:resume --restart` (the v1
 
 ## Flags
 
-The five surviving global flags (`command-surface.md §4.2`):
+The five surviving global flags:
 `--rigor=quick|standard|deep` (the profile knob — expands loops/caps/review
-depth per §4.3), `--auto-approve[=spec,plan,build,qa,all]` (opt-in autonomy; `qa` auto-passes a RELEASE-READY verdict only;
+depth), `--auto-approve[=spec,plan,build,qa,all]` (opt-in autonomy; `qa` auto-passes a RELEASE-READY verdict only;
 destructive/network/spend STILL ask even with `all`), `--review=local|cross|off`,
 `--host=claude|codex|auto`, `--initiative=<id>|new`, plus universal
 `--dry-run`. Resolution precedence (full 7-source chain, lowest to highest):
 `builtin < workspace < workspace-local < project < project-local < rigor < CLI`
-(`command-surface.md §4.3`/§4.4; `config.md` inheritance chain; `rigor` is
-the `--rigor` profile expansion step between project-local and CLI).
+(`config.md` inheritance chain; `rigor` is the `--rigor` profile expansion
+step between project-local and CLI).
 
 **`--model-tier=cheap|mid|powerful`** — top-precedence tiering override.
 Forces every specialist lane dispatched in this run to the given model tier,
@@ -146,20 +146,18 @@ cases), and they're also settable in `.guild/settings.json`
 (`loops:`/`loop_cap:`/`codex_cap:` keys) as the persistent form. The
 `--rigor` profiles set all three in bulk, so most users reach for one of
 three `--rigor` words instead of the individual flags. The v1 per-host
-review flag is **replaced** by `--review=cross`. The full v1→v2 flag map is
-`MIGRATION.md §3`; the closed-key
-`defaults:` config schema is `command-surface.md §4.4` (cited, not
-re-spelled).
+review flag is **replaced** by `--review=cross`. Full v1→v2 flag map:
+[https://guildstack.dev/docs/migration-v1-to-v2](https://guildstack.dev/docs/migration-v1-to-v2).
+The closed-key `defaults:` config schema is in `/guild:config` and
+`https://guildstack.dev/docs/configuration`.
 
 ---
 
 ## Non-interactive / CI behaviour (OQ11)
 
 This contract wires the OQ11 non-interactive hard-fail into the bare-`/guild:guild`
-entry path (`decisions/command-clean-slate.md #7`; `MIGRATION.md §7` CI
-ergonomics note; `architecture/command-surface.md §5.1`/§5.4). It introduces
-**no new gate** — it reuses the existing gate machinery's non-interactive
-branch.
+entry path (`decisions/command-clean-slate.md #7`). It introduces **no new
+gate** — it reuses the existing gate machinery's non-interactive branch.
 
 **Trigger (all of):** an interactive gate is reached **AND** the context is
 non-interactive (CI / no TTY) **AND** no `--auto-approve=` covers that gate

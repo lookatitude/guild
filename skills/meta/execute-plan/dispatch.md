@@ -1,6 +1,6 @@
 # Backend choice, routing & parallelism
 
-Detail for `guild:execute-plan`'s `## Backend + routing (summary)` and parallelism scheduling. Per `guild-plan.md §7.3` and §8.
+Detail for `guild:execute-plan`'s `## Backend + routing (summary)` and parallelism scheduling.
 
 ## Backend choice
 
@@ -322,7 +322,7 @@ Record the injected values alongside the lane's tier trace in the run record (`.
 
 ## Parallelism rules
 
-Read the DAG encoded by each lane's `depends-on:` and schedule dispatches accordingly, per `guild-plan.md §8`:
+Read the DAG encoded by each lane's `depends-on:` and schedule dispatches accordingly:
 
 - **Architect first when present.** If a lane is owned by `architect`, it is typically a common dependency — most downstream lanes list its `task-id` in `depends-on`. Dispatch architect before any lane that depends on it, and hold the dependents until architect's receipt is written.
 - **Backend → QA.** QA's integration work depends on backend deliverables. Never dispatch QA before backend's receipt is present.

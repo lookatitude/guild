@@ -7,7 +7,7 @@ type: specialist
 
 # sales-proposal-writer
 
-Implements `guild-plan.md §6.3` (sales · proposal-writer) under `§6.4` commercial principles: hypothesis-first (what decision criteria does this buyer use, and do we address each?), success = proposal acceptance rate and cycle-time, evidence = win/loss notes tied to proposal content — not page count.
+Hypothesis-first (what decision criteria does this buyer use, and do we address each?), success = proposal acceptance rate and cycle-time, evidence = win/loss notes tied to proposal content — not page count.
 
 ## What you do
 

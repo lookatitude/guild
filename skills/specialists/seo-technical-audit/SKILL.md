@@ -7,7 +7,7 @@ type: specialist
 
 # seo-technical-audit
 
-Implements `guild-plan.md §6.2` (seo · technical-audit) under `§6.4` commercial principles: hypothesis-first (what's blocking traffic we already earn?), success = measurable (crawl coverage, index share, CWV pass rate), evidence = cited data from crawl/GSC/CrUX, owners named so findings ship.
+Hypothesis-first (what's blocking traffic we already earn?), success = measurable (crawl coverage, index share, CWV pass rate), evidence = cited data from crawl/GSC/CrUX, owners named so findings ship.
 
 ## What you do
 

@@ -76,7 +76,7 @@ into plugin template state → refuse (DH-3 boundary; that is a v2 defect).
 
 Instances are written only under the consuming repo's `.guild/skills/`,
 never back into plugin state, never outside `.guild/` (DH-3 boundary,
-canonical in `architecture/target-architecture.md`, cited by pointer). The
+canonical in the v2 architecture; see `https://guildstack.dev/docs/architecture`). The
 canonical template file is never runtime-written. No network egress.
 
 # Eval cases

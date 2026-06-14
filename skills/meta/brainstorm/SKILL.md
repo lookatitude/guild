@@ -1,13 +1,13 @@
 ---
 name: guild-brainstorm
-description: Socratic clustered-question flow that turns a vague user brief into an approved `.guild/spec/<slug>.md`. Captures the seven planning-contract fields from `guild-plan.md §8.1` — goal, audience, success criteria, non-goals, constraints, autonomy policy, and known risks/rollback — plus an eighth assumptions-vs-blocking-unknowns roll-up. TRIGGER on "let's plan X", "help me scope this feature", "what are we actually building", "start a new Guild task", "I have a vague idea for …", or any `/guild` invocation with a brief shorter than the §8.1 checklist. Supports a `--skip` escape hatch (per §15.2 user-fatigue mitigation) for users who already have a clear spec; in that mode the skill validates the supplied spec and flags gaps instead of asking the full question set. DO NOT TRIGGER for implementation requests (hand off to `guild:execute-plan`), team composition (hand off to `guild:team-compose`), direct code or file edits, or micro-tasks like typo fixes and branch pushes.
-when_to_use: First step of the `/guild` lifecycle (`guild-plan.md §8`). Fires when a user invokes `/guild` with a vague brief, or when a specialist downstream needs the user's intent clarified before `guild:team-compose` can run.
+description: Socratic clustered-question flow that turns a vague user brief into an approved `.guild/spec/<slug>.md`. Captures the seven planning-contract fields — goal, audience, success criteria, non-goals, constraints, autonomy policy, and known risks/rollback — plus an eighth assumptions-vs-blocking-unknowns roll-up. TRIGGER on "let's plan X", "help me scope this feature", "what are we actually building", "start a new Guild task", "I have a vague idea for …", or any `/guild` invocation with a brief shorter than the planning-contract checklist. Supports a `--skip` escape hatch (for users who already have a clear spec); in that mode the skill validates the supplied spec and flags gaps instead of asking the full question set. DO NOT TRIGGER for implementation requests (hand off to `guild:execute-plan`), team composition (hand off to `guild:team-compose`), direct code or file edits, or micro-tasks like typo fixes and branch pushes.
+when_to_use: First step of the `/guild` lifecycle. Fires when a user invokes `/guild` with a vague brief, or when a specialist downstream needs the user's intent clarified before `guild:team-compose` can run.
 type: meta
 ---
 
 # guild:brainstorm
 
-Implements `guild-plan.md §8` (task lifecycle) and `guild-plan.md §8.1` (planning contract). This is the first step of every `/guild` task — ambiguity is front-loaded here so downstream specialists work from a single, approved spec instead of re-asking the user across every handoff.
+This is the first step of every `/guild` task — ambiguity is front-loaded here so downstream specialists work from a single, approved spec instead of re-asking the user across every handoff. The spec produced here is the planning contract all downstream skills consume.
 
 ## What you do
 
@@ -76,7 +76,7 @@ Blocking unknowns: if the user explicitly chooses to convert a blocking unknown 
 
 ## --skip escape hatch
 
-Per `guild-plan.md §15.2` ("user fatigue from Socratic brainstorm"), if the user invokes `/guild ... --skip` *and* supplies a spec (pasted text or a path), **do not run the Socratic flow**. Instead:
+If the user invokes `/guild ... --skip` *and* supplies a spec (pasted text or a path), **do not run the Socratic flow**. Instead:
 
 1. Parse the supplied spec.
 2. Check each of the 8 capture items above. Missing items are listed back to the user in a single consolidated question — not a new full question flow.
@@ -108,6 +108,6 @@ After the G-spec review and before handoff, fire the per-phase LearningCheckpoin
 
 ## Handoff
 
-Once the spec is written **and the user has explicitly approved it** (not just "looks fine" — the word "approved" or an equivalent affirmative), invoke `guild:team-compose` with the spec path as its argument. Do not continue into team composition on your own; `guild:team-compose` is a separate skill with its own responsibilities (`guild-plan.md §7`).
+Once the spec is written **and the user has explicitly approved it** (not just "looks fine" — the word "approved" or an equivalent affirmative), invoke `guild:team-compose` with the spec path as its argument. Do not continue into team composition on your own; `guild:team-compose` is a separate skill with its own responsibilities.
 
 Handoff receipt should list: `spec_path`, `assumptions_count`, `blocking_unknowns_converted` (boolean), and `confidence` from the spec frontmatter.

@@ -7,7 +7,7 @@ type: specialist
 
 # marketing-positioning
 
-Implements `guild-plan.md §6.3` (marketing · positioning) under `§6.4` commercial principles: hypothesis-first (which ICP + category bet are we making?), success = measurable outcome (conversion, segment win rate), evidence = customer quotes, win/loss data, category analysis — not adjectives.
+Hypothesis-first (which ICP + category bet are we making?), success = measurable outcome (conversion, segment win rate), evidence = customer quotes, win/loss data, category analysis — not adjectives.
 
 ## What you do
 

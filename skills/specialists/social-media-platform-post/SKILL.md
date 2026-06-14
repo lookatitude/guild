@@ -7,7 +7,7 @@ type: specialist
 
 # social-media-platform-post
 
-Implements `guild-plan.md §6.2` (social-media · platform-post) under `§6.4` writing principles: match the platform's native voice and the brand voice simultaneously, don't rewrite other channels, evidence = a post that reads right to someone who only uses that platform.
+Match the platform's native voice and the brand voice simultaneously, don't rewrite other channels, evidence = a post that reads right to someone who only uses that platform.
 
 ## What you do
 

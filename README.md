@@ -15,23 +15,22 @@ gate.
 
 ## What v2 ships
 
-- **14 specialists** across three groups — engineering (architect, researcher,
-  backend, frontend, devops, qa, mobile, security), content & communication (copywriter,
-  technical-writer, social-media, seo), commercial (marketing, sales). One
-  `agents/*.md` per specialist.
-- **77 skills** across five tiers — 1 core (`guild-principles`), 18 meta
+- **17 registered agents** — 14 product specialists across three groups
+  (engineering: architect, researcher, backend, frontend, devops, qa, mobile,
+  security; content & communication: copywriter, doc-writer, technical-writer,
+  social-media, seo; commercial: marketing, sales) plus three execution/tiered
+  roles (advisor, developer, doc-writer). One `agents/*.md` per agent.
+- **106 skills** across six tiers — 1 core (`guild-principles`), meta
   (the workflow spine + decisions + reflect + evolve + create-specialist +
-  rollback + audit + diagnose + v1.4 loop/review helpers), 3 knowledge (wiki ingest / query / lint), **5 fallback**
-  (TDD, systematic-debug, worktrees, request-review, finish-branch — forked
-  from `superpowers:*` v5.0.7 under MIT, attribution preserved), and 50 authored
-  specialist skills.
+  rollback + audit + diagnose + v1.4 loop/review helpers), 3 knowledge (wiki ingest / query / lint),
+  and specialist skills (2–5 per specialist).
 - **The v2 command surface** — `/guild:guild [brief]` plus the phase verbs
   `/guild:init|ideate|plan|build|qa|ops`, helpers `/guild:status|resume`,
   nouns `/guild:wiki|initiative`, and maintenance
   `/guild:evolve|rollback|stats|audit|fix|migrate`. The `:` plugin namespace
   **stays** (Claude Code requires it) — v2 drops only the redundant `guild-`
   command prefix (v1 `/guild:guild-wiki` → v2 `/guild:wiki`); every command is
-  `/guild:<verb>` (v1→v2: MIGRATION.md).
+  `/guild:<verb>` (v1→v2: `https://guildstack.dev/docs/migration-v1-to-v2`).
 - **10 hook events wired** — `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
   `PostToolUse`, `PreCompact`, `SubagentStop`, `Stop`, `TaskCreated`,
   `TaskCompleted`, `TeammateIdle`.
@@ -227,19 +226,18 @@ The canonical docs live at the **Guild docs site** (`https://guildstack.dev`).
 
 - `https://guildstack.dev/docs/getting-started` — install, first run, and basic configuration.
 - `https://guildstack.dev/docs/architecture` — shipped plugin architecture, directory layout, 7-step lifecycle, hook inventory, backend options.
-- `https://guildstack.dev/docs/specialist-roster` — the 14 specialists, their triggers, DO NOT TRIGGER boundaries, and owned skills.
+- `https://guildstack.dev/docs/specialist-roster` — the 17 registered agents (14 product specialists + advisor, developer, doc-writer), their triggers, DO NOT TRIGGER boundaries, and owned skills.
 - `https://guildstack.dev/docs/context-assembly` — three-layer context contract, role mapping, ambient-context caveat.
 - `https://guildstack.dev/docs/wiki-pattern` — categorized project memory, raw vs synthesized, decision capture, scale transition.
 - `https://guildstack.dev/docs/self-evolution` — the two triggers, the 10-step pipeline, promotion gate, versioning + rollback.
 - `https://guildstack.dev/docs/configuration` — complete `settings.json` reference: `agent_mode`, model tiering, SQLite index, security / secrets policy, O-3 calibration, cross-host dispatch.
-- [guild-plan.md](guild-plan.md) — the single source of truth that all docs derive from.
 
 ## Architecture at a glance
 
 ![Guild plugin architecture](docs/diagrams/01-architecture.svg)
 
 Four layers: the orchestrator session, the installed plugin (skills, agents,
-commands, hooks, scripts, MCPs), 14 specialist subagents in worktree isolation,
+commands, hooks, scripts, MCPs), 17 registered agents in worktree isolation,
 and project-local state under `.guild/`.
 
 ## Lifecycle

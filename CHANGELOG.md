@@ -71,7 +71,7 @@ completeness / code-conformance all adversarially gated.
 
 - Commands renamed: `/guild:guild-x` → `/guild:x` (namespace stays;
   redundant prefix dropped); `guild-diagnose` → `fix`; team-compose
-  folded into `plan`. Full map: `MIGRATION.md §2`.
+  folded into `plan`. Full map: `https://guildstack.dev/docs/migration-v1-to-v2`.
 - Config: `config.yml` → `.guild/settings.json` (closed keys, 7-source
   inheritance, `--validate` hard-rejects unknown keys).
 - Run records: `metadata.json` → `run.yaml` + `provenance.json` (the
@@ -87,8 +87,7 @@ completeness / code-conformance all adversarially gated.
 ### Deferred to v2.x
 
 The honest deferral list (33 design deferrals + carried followups +
-known issues) is embedded in the v2.0.0 release-PR body
-(`docs/RELEASE-NOTES-2.0.0.md`). Headlines: composite recall scoring +
+known issues) was included in the v2.0.0 release-PR body. Headlines: composite recall scoring +
 labels taxonomy, initiative ledger automation + enum validator, FDC
 degradation-signal trace emitters, trace replay tools, per-host
 packaging beyond Claude Code (Codex standalone, Gemini, Pi), KB
@@ -361,8 +360,7 @@ live autonomous end-to-end run.
 
 ### Changed
 
-- **§5 forking policy flipped** from REFERENCE to FORK in
-  `guild-plan.md`. Updated `docs/architecture.md` T4 description.
+- **§5 forking policy flipped** from REFERENCE to FORK. Updated skill taxonomy T4 description.
 - **Skill count** in README: was 67 (1 + 13 + 3 + 0 + 50), now
   **72** (1 + 13 + 3 + **5** + 50).
 - **90 citation rewrites** across 21 files: every `superpowers:*`
@@ -498,8 +496,7 @@ First public beta. Structurally complete across all 7 plan phases.
 - **2 optional stdio MCP servers** — `mcp-servers/guild-memory/`
   (BM25 wiki search for 200+ pages) and
   `mcp-servers/guild-telemetry/` (trace query over `.guild/runs/`).
-- **5 user-facing docs** under `docs/` plus README and
-  `guild-plan.md` as the single source of truth.
+- **5 user-facing docs** under `docs/` plus README.
 - **165 tests** across 5 suites (hooks 31 + scripts 76 + tests 32 +
   guild-memory 13 + guild-telemetry 13).
 - **8 phase gates** (P0–P7) with audit receipts.

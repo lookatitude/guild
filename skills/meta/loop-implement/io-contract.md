@@ -36,7 +36,7 @@ type LoopImplementOutput = {
 
 ## Handoff receipt
 
-Per `guild-plan.md §8.2`. Required fields:
+Required fields:
 
 - `loop_id: loop-implement`
 - `lane_id: <lane>`

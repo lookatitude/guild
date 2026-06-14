@@ -120,6 +120,6 @@ On `status="satisfied"` (or force-pass-as-satisfied): write the
 
 ## Handoff receipt
 
-Per `guild-plan.md §8.2`: `loop_id`, `lane_id: phase:plan`, `rounds`, `status`,
+Handoff fields: `loop_id`, `lane_id: phase:plan`, `rounds`, `status`,
 `next`, and `evidence:` (round handoffs + manifest + JSONL path + dismissed
 questions). Full field list → **`io-contract.md`**.

@@ -44,7 +44,7 @@ On `rework`: return control to the user; do not invoke `guild:brainstorm`.
 
 ## Handoff receipt
 
-Per `guild-plan.md §8.2`. Required fields:
+Required fields:
 
 - `loop_id: loop-clarify`
 - `lane_id: phase:brainstorm`

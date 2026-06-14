@@ -21,8 +21,8 @@ dispatcher over the `learn-*` skill family (`guild:learn-map`, `learn-graph`,
 byte-identical to what `/guild:init --learn` and `defaults.auto_learn: true`
 invoke. There is no separate codebase-understanding engine.
 
-Canonical surface: `architecture/command-surface.md §1` (sub-verbs as
-positional ARGUMENTS; D3 — one implementation, two triggers).
+Sub-verbs are positional ARGUMENTS (D3 — one implementation, two triggers).
+Full command reference: [https://guildstack.dev/docs](https://guildstack.dev/docs).
 
 ---
 
@@ -41,8 +41,7 @@ positional ARGUMENTS; D3 — one implementation, two triggers).
 /guild:learn explain "how does the auth flow work"
 ```
 
-All five global flags + `--dry-run` apply (`command-surface.md §4`, by
-pointer). `--rigor=deep` runs the highest-fidelity graph/analysis pass.
+All five global flags + `--dry-run` apply. `--rigor=deep` runs the highest-fidelity graph/analysis pass.
 
 ---
 
@@ -295,5 +294,5 @@ extraction, which Init's scoped pipeline does not do.
   cost gate (SC-15), and per-K-stage staleness (SC-14). This command's
   `knowledge` dispatch row above is the docs-side cross-ref (L10); L6 owns the
   canonical skill name/path — reconcile if it differs.
-- `docs-writer`: update `architecture/command-surface.md §5.1` with the
-  bare-`/guild:guild` spike result (see OPEN VERIFICATION in the D1 ADR).
+- `docs-writer`: update the bare-`/guild:guild` surfaced-confirm documentation
+  with the spike result (see OPEN VERIFICATION in the D1 ADR).

@@ -7,7 +7,7 @@ type: specialist
 
 # security-threat-modeling
 
-Implements `guild-plan.md §6.1` (security · threat-modeling) under `§6.4` engineering principles: the threat model is evidence that risk was reasoned about; each threat exits the doc as a ticket with an owner, not a line item in a PDF.
+The threat model is evidence that risk was reasoned about; each threat exits the doc as a ticket with an owner, not a line item in a PDF.
 
 ## What you do
 

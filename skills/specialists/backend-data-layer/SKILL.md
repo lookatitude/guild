@@ -7,7 +7,7 @@ type: specialist
 
 # backend-data-layer
 
-Implements `guild-plan.md §6.1` (backend · data-layer) under `§6.4` engineering principles: the schema is the contract with the DB; the evidence is an `EXPLAIN` plan or a query count matching the expected access pattern.
+The schema is the contract with the DB; the evidence is an `EXPLAIN` plan or a query count matching the expected access pattern.
 
 ## What you do
 

@@ -7,7 +7,7 @@ type: specialist
 
 # backend-migration-writer
 
-Implements `guild-plan.md §6.1` (backend · migration-writer) under `§6.4` engineering principles: the evidence is a migration that runs green in staging, rolls back cleanly, and holds locks for less than the app's health-check budget.
+The evidence is a migration that runs green in staging, rolls back cleanly, and holds locks for less than the app's health-check budget.
 
 ## What you do
 

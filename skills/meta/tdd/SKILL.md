@@ -13,8 +13,8 @@ right thing** — a test that passed the moment you wrote it proves nothing.
 
 This is a first-class Guild engineering discipline, not an optional add-on:
 the red-green-refactor loop is how a specialist lane produces the concrete,
-re-runnable `evidence:` its handoff receipt must carry (`guild-plan.md §2`,
-the Evidence-over-claims principle). A lane that claims "done" without a test
+re-runnable `evidence:` its handoff receipt must carry (the Evidence-over-claims
+principle). A lane that claims "done" without a test
 that first failed has no evidence, and `guild:review` / `guild:verify-done`
 will treat the claim as unsupported.
 

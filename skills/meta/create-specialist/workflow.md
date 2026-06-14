@@ -1,6 +1,6 @@
 # 7-step workflow, boundary scan & extraction signals — full procedure
 
-Detail for `guild:create-specialist`. Implements `guild-plan.md §12` gated by `§11.2.1`. The SKILL.md carries the summary + DH-3 mint contract; this file carries the step-by-step procedure.
+Detail for `guild:create-specialist`. The SKILL.md carries the summary + DH-3 mint contract; this file carries the step-by-step procedure.
 
 ## Input fields (step-1 interview)
 

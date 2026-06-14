@@ -7,7 +7,7 @@ type: specialist
 
 # copywriter-product-microcopy
 
-Implements `guild-plan.md §6.2` (copywriter · product-microcopy) under `§6.4` writing principles: match the existing product voice, never rewrite adjacent strings the brief didn't ask about, evidence = the string table a PM can scan and approve in one pass.
+Match the existing product voice, never rewrite adjacent strings the brief didn't ask about, evidence = the string table a PM can scan and approve in one pass.
 
 ## What you do
 

@@ -10,15 +10,14 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestio
 Continues the active run from the next pending gate. **No phase** — acts on
 the active run.
 
-Canonical surface: `architecture/command-surface.md §3.2` (resume row) +
-`§4.1`. `--restart` replaces the v1 first-word `$ARGUMENTS` `--restart` hack.
+`--restart` replaces the v1 first-word `$ARGUMENTS` `--restart` hack.
 
 ## Args & local flags
 
 - Args: — (no positional)
 - `--no-index` — per-invocation filesystem-scan bypass of the optional
-  read-through cache (Invariant FS-CANONICAL, by pointer
-  `command-surface.md §5.3`).
+  read-through cache (Invariant FS-CANONICAL: filesystem is always the
+  authoritative source).
 - `--restart` — clears run state and re-runs from Init/Ideation
   (**confirm-before-clear I**).
 

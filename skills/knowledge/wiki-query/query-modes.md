@@ -4,9 +4,7 @@ Full detail for the two search paths summarised in `SKILL.md`, the page-count
 scale transition, and the result + conflict output templates. `SKILL.md` is the
 lean playbook; this file is the procedure it points to.
 
-Plan anchors: `guild-plan.md §10.2` (load-by-role categorization), `§10.5`
-(scale transition — rg/filesystem under ~200 pages, guild-memory MCP above;
-contradiction rule), `§10.5.1` (read side of the memory write path).
+Rules: categories map roles to the relevant wiki subdirectory; under ~200 pages use ripgrep/filesystem, above that delegate to the guild-memory MCP; when two pages conflict, "newer wins unless older has `confidence: high`"; this skill is the read side of the memory write path all specialists depend on.
 
 ## Under ~200 pages — ripgrep + filesystem (default)
 

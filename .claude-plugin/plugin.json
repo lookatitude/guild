@@ -64,6 +64,9 @@
     "./agents/social-media.md",
     "./agents/seo.md",
     "./agents/marketing.md",
-    "./agents/sales.md"
+    "./agents/sales.md",
+    "./agents/doc-writer.md",
+    "./agents/advisor.md",
+    "./agents/developer.md"
   ]
 }

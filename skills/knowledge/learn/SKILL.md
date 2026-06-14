@@ -12,8 +12,7 @@ derived_from_template: guild.skill_template.v1
 
 Use when `/guild:learn` is called **with no sub-verb** — the "learn this
 project completely" intent. Implements the `§"Smart /guild:learn Behavior"`
-contract from `learn-knowledge-run-convergence.md` (SC-A) and
-`guild-plan.md §5`.
+contract from `learn-knowledge-run-convergence.md` (SC-A).
 
 Explicit sub-verbs (`map`, `graph`, `onboard`, `diff`, `explain`) bypass this
 skill entirely and route directly to their specialist skill. This skill owns

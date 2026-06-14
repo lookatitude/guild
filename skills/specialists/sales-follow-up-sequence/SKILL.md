@@ -7,7 +7,7 @@ type: specialist
 
 # sales-follow-up-sequence
 
-Implements `guild-plan.md §6.3` (sales · follow-up-sequence) under `§6.4` commercial principles: hypothesis-first (why will this touch move the deal?), success = reply rate and deal-stage advancement, evidence = cadence-level outcome data — not send volume.
+Hypothesis-first (why will this touch move the deal?), success = reply rate and deal-stage advancement, evidence = cadence-level outcome data — not send volume.
 
 ## What you do
 

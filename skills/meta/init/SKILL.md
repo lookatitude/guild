@@ -12,7 +12,7 @@ derived_from_template: guild.skill_template.v1
 
 Use when the Init phase is entered — `/guild:init`, or bare `/guild`
 smart-detect proposing Init because no `.guild/wiki` / `.guild/init` exists
-(`architecture/command-surface.md §6` D-14: `no wiki/init → /guild:init`).
+(D-14: `no wiki/init → /guild:init`).
 Two paths: **brownfield** (onboard an existing repo) and **new-product**
 (scaffold knowledge from a Socratic intake). Resolves the frozen
 `guild.phase_entry.v1` contract before any producer work (bound by pointer to the implementation contract map, row 6).
@@ -31,8 +31,7 @@ first, never auto-skipped.
 - The consuming repo root and the `guild.phase_entry.v1` resolution (pointer
   only — never re-spell the schema).
 - Init mode signal: brownfield (repo present) vs `--new` (force new-product).
-- Tier-2 `defaults:` config folded at intake (pointer:
-  `architecture/command-surface.md §4.4`).
+- Tier-2 `defaults:` config folded at intake (see the Guild docs site → `https://guildstack.dev/docs/configuration`).
 - Learn-pipeline trigger: the `--learn` flag or `defaults.auto_learn: true`
   (else cheap-scan tier only — no ask-before-deep-scan gate, per D3).
 

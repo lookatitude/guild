@@ -3,12 +3,12 @@
 ## Purpose
 
 These fixtures and harness tests target the **evolve pipeline** implemented by
-`scripts/flip-report.ts` (guild-plan.md §11.2 step 6). They provide held-out
+`scripts/flip-report.ts` (evolve pipeline step 6). They provide held-out
 regression scenarios that **the per-script fixtures under `scripts/fixtures/`
 do not cover** — specifically, the boundary between promote-eligible and
 reject-eligible grading outcomes, and malformed-input handling.
 
-The risk addressed is guild-plan.md §15.2 row 4: "Evolution loop overfits to
+The risk addressed is: "Evolution loop overfits to
 its own evals." Held-out fixtures with realistic but fake task/tool/specialist
 names catch regressions that only appear when the full promote/reject decision
 is exercised end-to-end.

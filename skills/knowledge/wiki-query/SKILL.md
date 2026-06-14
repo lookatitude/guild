@@ -7,7 +7,7 @@ type: knowledge
 
 # guild:wiki-query
 
-Implements `guild-plan.md §10`/`§10.1`/`§10.1.1` (wiki structure + filterable frontmatter), `§10.2` (load-by-role categorization), `§10.5` (scale transition — rg/filesystem under ~200 pages, guild-memory MCP above), and `§10.5.1` (read side of the memory write path that all specialists depend on).
+Implements the knowledge layer query contract: wiki structure + filterable frontmatter, load-by-role categorization, scale-transition (rg/filesystem under ~200 pages, guild-memory MCP above), and the read side of the memory write path that all specialists depend on.
 
 Read-only counterpart to `guild:wiki-ingest`. Every page that skill writes carries a `source_refs: [<slug>]` back-citation into `.guild/raw/sources/<slug>/`; this skill honors it so "where does this come from" always returns the original URL or file path, not just the LLM summary.
 

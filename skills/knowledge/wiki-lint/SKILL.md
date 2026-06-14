@@ -1,13 +1,13 @@
 ---
 name: guild-wiki-lint
 description: Audits .guild/wiki/ for contradictions between pages, stale claims (expires_at passed), missing §10.1.1 frontmatter fields, orphan pages (not linked from index.md), concepts referenced ≥3x without a page, missing source_refs resolution to .guild/raw/sources/<slug>/, and decision pages not in ADR-lite shape. Produces .guild/wiki/lint-<timestamp>.md. NEVER auto-edits — findings are for the user to act on. TRIGGER for "run wiki-lint", "audit the wiki for contradictions", "check wiki health", "find orphan pages", "any stale wiki pages", "which wiki pages have broken source_refs". DO NOT TRIGGER for: ingesting a new source (guild:wiki-ingest), searching or querying wiki content (guild:wiki-query), capturing a Q&A decision (guild:decisions), or editing a specific wiki page directly.
-when_to_use: Weekly schedule per `guild-plan.md §10.6`, after any batch of 5+ ingests in a session, or on explicit `/guild:wiki lint` invocation.
+when_to_use: Weekly schedule, after any batch of 5+ ingests in a session, or on explicit `/guild:wiki lint` invocation.
 type: knowledge
 ---
 
 # guild:wiki-lint
 
-Implements `guild-plan.md §10` (knowledge layer), `§10.1`/`§10.1.1` (wiki structure + required frontmatter), `§10.3` (decision ADR-lite shape), `§10.5` (contradiction policy — "newer wins unless older has `confidence: high`"), `§10.5.1` (lint audits AFTER `guild:wiki-ingest` and `guild:decisions` write), and `§10.6` (cadence; health report only; never auto-edits).
+Implements the knowledge layer audit contract: wiki structure + required frontmatter, decision ADR-lite shape, contradiction policy ("newer wins unless older has `confidence: high`"), and the lint-after-write discipline (runs after `guild:wiki-ingest` and `guild:decisions` write). Cadence: weekly + batch threshold + explicit invocation. Health report only; never auto-edits.
 
 Read-only auditor. Complements `guild:wiki-ingest` (write) and `guild:wiki-query` (read) by checking both contracts hold across the whole wiki tree. Finds structural drift; never repairs it.
 
@@ -61,7 +61,7 @@ Full report template + per-finding schema: **`lint-rules.md`**.
 
 ## Cadence
 
-Per `guild-plan.md §10.6`, three triggers: (1) **weekly schedule** — a host-side scheduler/hook kicks lint on the default cadence; (2) **batch threshold** — after 5+ ingests in a session (`guild:wiki-ingest` flags this in its `followups:` once the counter crosses 5); (3) **explicit invocation** — `/guild:wiki lint` or any wiki-audit request.
+Three triggers: (1) **weekly schedule** — a host-side scheduler/hook kicks lint on the default cadence; (2) **batch threshold** — after 5+ ingests in a session (`guild:wiki-ingest` flags this in its `followups:` once the counter crosses 5); (3) **explicit invocation** — `/guild:wiki lint` or any wiki-audit request.
 
 Do not self-trigger between runs. Lint is idempotent: two runs produce two reports and change nothing else.
 

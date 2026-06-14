@@ -7,11 +7,11 @@ type: meta
 
 # guild:context-assemble
 
-Implements `guild-plan.md §9` (context assembly — minimum viable context per specialist). Runs after `guild:plan` has produced an approved `.guild/plan/<slug>.md`, invoked per-lane by `guild:execute-plan` immediately before each specialist dispatch. One bundle per specialist per run.
+Implements the context-assembly contract (minimum viable context per specialist). Runs after `guild:plan` has produced an approved `.guild/plan/<slug>.md`, invoked per-lane by `guild:execute-plan` immediately before each specialist dispatch. One bundle per specialist per run.
 
 ## The rule
 
-Per `guild-plan.md §9.1`: a specialist's authoritative task brief is the *union* of three layers — nothing more. No project-wide dumps. No sibling-specialist lanes unless the plan declares an upstream contract via `depends-on:`.
+A specialist's authoritative task brief is the *union* of three layers — nothing more. No project-wide dumps. No sibling-specialist lanes unless the plan declares an upstream contract via `depends-on:`.
 
 | Layer | Content | Size target |
 |---|---|---|
@@ -23,7 +23,7 @@ Total target: ~3k tokens. Hard cap: 6k (enforced in `## Size budget`).
 
 ## Role mapping
 
-Per `guild-plan.md §9.2`. Select standards and typical products by the specialist's role group:
+Select standards and typical products by the specialist's role group:
 
 | Role group | Standards loaded | Typical products loaded |
 |---|---|---|
@@ -36,7 +36,7 @@ If a standards file listed for a role group does not exist in `wiki/standards/`,
 
 ## Output path
 
-Per `guild-plan.md §9.3`: write the bundle to
+Write the bundle to
 
 ```
 .guild/context/<run-id>/<specialist>-<task-id>.md
@@ -221,7 +221,7 @@ When the bundle includes no wrapped recall content (all-operator-tier or zero hi
 
 ## Ambient context caveat
 
-Per `guild-plan.md §9.1`: Claude Code may still load the user's normal `CLAUDE.md`, enabled skills, MCP servers, and auto memory depending on the execution backend (subagent vs agent-team teammate) and user settings. The bundle is therefore a **context contract**, not a hard isolation boundary.
+Claude Code may still load the user's normal `CLAUDE.md`, enabled skills, MCP servers, and auto memory depending on the execution backend (subagent vs agent-team teammate) and user settings. The bundle is therefore a **context contract**, not a hard isolation boundary.
 
 The specialist prompt must instruct the specialist to privilege the bundle over any ambient context it happens to see. When two sources conflict — e.g. an ambient `CLAUDE.md` standard contradicts `wiki/standards/coding-standards.md` — the bundle wins, and the conflict goes into the specialist's handoff receipt as a `followups:` entry so `guild:wiki-ingest` can reconcile on the next knowledge pass.
 

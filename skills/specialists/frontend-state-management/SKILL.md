@@ -7,7 +7,7 @@ type: specialist
 
 # frontend-state-management
 
-Implements `guild-plan.md §6.1` (frontend · state-management) under `§6.4` engineering principles: the right state lives in exactly one place, and the test pins which boundary owns it.
+The right state lives in exactly one place, and the test pins which boundary owns it.
 
 ## What you do
 

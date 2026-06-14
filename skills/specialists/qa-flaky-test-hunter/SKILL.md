@@ -7,7 +7,7 @@ type: specialist
 
 # qa-flaky-test-hunter
 
-Implements `guild-plan.md §6.1` (qa · flaky-test-hunter) under `§6.4` engineering principles: flaky tests rot the signal of the whole suite; diagnosis-before-fix prevents both silent data loss and hidden bugs.
+Flaky tests rot the signal of the whole suite; diagnosis-before-fix prevents both silent data loss and hidden bugs.
 
 ## What you do
 

@@ -1,19 +1,19 @@
 ---
 name: guild-plan
-description: Turns an approved `.guild/spec/<slug>.md` plus the per-phase team file `.guild/team/<slug>.<phase>.yaml` into a per-specialist lane plan at `.guild/plan/<slug>.md`. Each lane carries `task-id`, `owner`, `depends-on:`, `scope`, `success-criteria`, `autonomy-policy`, and a seed `complexity_score`+`tier` (re-scored at dispatch) so `guild:execute-plan` can dispatch parallel-where-possible subagents per `guild-plan.md §8`. FORKS `guild:plan` rather than referencing — writing-plans emits a generic linear implementation plan; `guild:plan` emits specialist lanes tied to a composed team and feeds Guild's dispatch/review loop. TRIGGER on "turn this spec into a plan", "break the work down by specialist", "plan the lanes for this task", "we have a team — now plan the work". DO NOT TRIGGER for: writing the code itself (`guild:execute-plan`), brainstorming a new feature (`guild:brainstorm`), reviewing finished work (`guild:review`), or generic implementation plans outside the Guild lifecycle (use `guild:plan`).
+description: Turns an approved `.guild/spec/<slug>.md` plus the per-phase team file `.guild/team/<slug>.<phase>.yaml` into a per-specialist lane plan at `.guild/plan/<slug>.md`. Each lane carries `task-id`, `owner`, `depends-on:`, `scope`, `success-criteria`, `autonomy-policy`, and a seed `complexity_score`+`tier` (re-scored at dispatch) so `guild:execute-plan` can dispatch parallel-where-possible subagents. FORKS `guild:plan` rather than referencing — writing-plans emits a generic linear implementation plan; `guild:plan` emits specialist lanes tied to a composed team and feeds Guild's dispatch/review loop. TRIGGER on "turn this spec into a plan", "break the work down by specialist", "plan the lanes for this task", "we have a team — now plan the work". DO NOT TRIGGER for: writing the code itself (`guild:execute-plan`), brainstorming a new feature (`guild:brainstorm`), reviewing finished work (`guild:review`), or generic implementation plans outside the Guild lifecycle (use `guild:plan`).
 when_to_use: Third step of Guild lifecycle, after guild:team-compose has produced the per-phase team file (.guild/team/<slug>.<phase>.yaml, resolved via resolveTeamFile).
 type: meta
 ---
 
 # guild:plan
 
-Implements `guild-plan.md §8` (task lifecycle — plan step). Runs after `guild:team-compose` has written the per-phase team file (`.guild/team/<slug>.<phase>.yaml`, resolved via `resolveTeamFile`) and before `guild:context-assemble`. Output is an approved per-specialist lane plan that downstream context assembly and execute-plan dispatch consume verbatim.
+Implements the task lifecycle plan step. Runs after `guild:team-compose` has written the per-phase team file (`.guild/team/<slug>.<phase>.yaml`, resolved via `resolveTeamFile`) and before `guild:context-assemble`. Output is an approved per-specialist lane plan that downstream context assembly and execute-plan dispatch consume verbatim.
 
 ## Input
 
 Two files, both required:
 
-1. `.guild/spec/<slug>.md` — the approved spec from `guild:brainstorm`. Authoritative source for goal, audience, success criteria, non-goals, constraints, autonomy policy, and risks (`guild-plan.md §8.1`). Reject planning if any of those seven fields is missing — return control to `guild:brainstorm` instead of silently filling in.
+1. `.guild/spec/<slug>.md` — the approved spec from `guild:brainstorm`. Authoritative source for goal, audience, success criteria, non-goals, constraints, autonomy policy, and risks. Reject planning if any of those seven fields is missing — return control to `guild:brainstorm` instead of silently filling in.
 2. The resolved per-phase team file from `guild:team-compose` — **resolved via `resolveTeamFile(guildRoot, slug, readActivePhase(cwd))`** (`scripts/lib/team-file.ts`), which returns `.guild/team/<slug>.<phase>.yaml` (current world) or the legacy `.guild/team/<slug>.yaml` (read-only back-compat). Authoritative source for which specialists own which scope, inter-specialist dependencies, and execution backend (`subagent` vs `agent-team`). **On a `null` return** (no per-phase file and no legacy) → loop back to `guild:team-compose` to run the phase-composition pass; do **not** fabricate a path. **On a legacy hit** (per-phase absent) → emit the one-line deprecation notice once per run: *"single-file team.yaml is legacy; re-compose to adopt per-phase teams."*
 
 Do not infer lanes from chat history outside these two files. If the resolved team file says 4 specialists, you plan 4 lanes; if a user adds scope in chat, loop back to `guild:team-compose` or `guild:brainstorm` rather than expanding the plan unilaterally.
@@ -67,7 +67,7 @@ approved: false
 
 Per-lane field rules:
 
-- **task-id** — unique within this plan. Convention: `T<ordinal>-<specialist>`. Downstream receipts (`guild-plan.md §8.2`) reference it.
+- **task-id** — unique within this plan. Convention: `T<ordinal>-<specialist>`. Downstream handoff receipts reference it.
 - **owner** — exact specialist slug from `team.yaml`. One owner per lane; no shared ownership.
 - **depends-on** — list of upstream `task-id`s this lane must wait for. Empty list means the lane is eligible for parallel dispatch from run-start. Dependencies must be a strict DAG — no cycles — and must be consistent with `team.yaml`'s `depends-on:` between specialists.
 - **scope** — one-to-two sentences. Bounded responsibility for *this* task only; do not restate the specialist's full remit.
@@ -76,7 +76,7 @@ Per-lane field rules:
 - **complexity_score** — the deterministic auto-score for this lane per the cost-aware-tiering rubric (ADR §2): sum the signal weights (work-type verb 0/+1/+2, blast-radius/file-count, presence of an upstream `depends-on:` contract, security/correctness sensitivity, prior-attempt escalation +1). Seed it here from the team.yaml `default_tier` and the lane's scope; `guild:execute-plan` **re-scores deterministically at dispatch** (same inputs → same tier), so this value is an authoring estimate the dispatch trace either confirms or supersedes — never a silent pin.
 - **tier** — the chosen model tier (`cheap | mid | powerful`) the score maps to via the band cutoffs (`models.thresholds`, default `{mid:1, powerful:3}` — ADR §10, bound by pointer). The author MAY pin a tier upward when the auto-score will under-call a security/correctness-sensitive lane (`tier: powerful` with a one-line rationale in `scope`); this is the **per-lane override**, second in the precedence ladder below the `--model-tier` CLI escape hatch (ADR §2/§10). Leaving `tier` to track `complexity_score` is the default — the band map is authoritative unless the author explicitly pins.
 
-Parallelism rules from `guild-plan.md §8`:
+Parallelism rules:
 
 - Architect first when present — downstream lanes typically list the architect's task-id in `depends-on`.
 - Backend → QA: QA depends on backend's task-id.
@@ -178,6 +178,6 @@ After the G-plan review + approval gate and before handoff, fire the per-phase L
 
 ## Handoff
 
-Once the plan is written and **user-approved** (frontmatter `approved: true`), hand off to `guild:execute-plan`. Execute-plan creates the `<run-id>`, then invokes `guild:context-assemble` once per specialist lane to build the minimum-viable-context bundle (`guild-plan.md §9`) before dispatching the specialist subagent. Do not run context assembly yourself — that's `guild:execute-plan`'s responsibility during per-lane dispatch.
+Once the plan is written and **user-approved** (frontmatter `approved: true`), hand off to `guild:execute-plan`. Execute-plan creates the `<run-id>`, then invokes `guild:context-assemble` once per specialist lane to build the minimum-viable-context bundle before dispatching the specialist subagent. Do not run context assembly yourself — that's `guild:execute-plan`'s responsibility during per-lane dispatch.
 
 Handoff receipt should list: `plan_path`, `prd_form` (`inline` | `standalone` — with `prd_path` when standalone), `lane_count`, `parallel_eligible_count` (lanes with empty `depends-on:`), `backend` (mirrored from team.yaml), and `approved_at` timestamp.

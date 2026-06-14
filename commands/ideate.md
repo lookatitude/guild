@@ -12,17 +12,14 @@ clarify loop runs whenever the resolved `loops` include `spec` — true under
 the default `--rigor=standard` profile (`loops: spec,plan`) and under
 `--rigor=deep` (`loops: all`); `--rigor=quick` (`loops: none`) skips it.
 
-Canonical surface: `architecture/command-surface.md §3.1` (Ideation row) and
-the verb↔phase edge in `§6` (D-14: `/guild:ideate` → Ideation). Phase concept
-binding: `lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
+Verb↔phase edge: `/guild:ideate` → Ideation. Phase concept binding:
+`lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
 
-## Contract binding (by pointer — never re-spelled)
+## Contract binding
 
 Before producer work begins, this phase **resolves the frozen
-`guild.phase_entry.v1` contract** — bound by pointer to
-`architecture/target-architecture.md §"phase_entry contract"`. The Tier-2
-`defaults:` config folded at intake is bound by pointer to
-`architecture/command-surface.md §4.4` (`P1-config-001`).
+`guild.phase_entry.v1` contract**. The Tier-2 `defaults:` config folded at
+intake is controlled by `P1-config-001` — see `/guild:config` for the schema.
 
 ## Usage
 
@@ -31,11 +28,10 @@ Before producer work begins, this phase **resolves the frozen
 /guild:ideate "realtime presence" --skip
 ```
 
-All five global flags + `--dry-run` apply (`command-surface.md §4`, by
-pointer). The `--rigor` profile expansion (`rigorProfile()` in
-`scripts/read-guild-config.ts`; semantics by pointer, `command-surface.md
-§4.3`) decides the L1 loop: `standard` and `deep` both expand to a `loops`
-set containing `spec`; only `quick` turns it off.
+All five global flags + `--dry-run` apply. The `--rigor` profile expansion
+(`rigorProfile()` in `scripts/read-guild-config.ts`) decides the L1 loop:
+`standard` and `deep` both expand to a `loops` set containing `spec`; only
+`quick` turns it off.
 
 ## Args & local flags
 

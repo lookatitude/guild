@@ -1,6 +1,6 @@
 ---
 name: config
-description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Canonical schema: architecture/command-surface.md §4.4."
+description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
 argument-hint: "<init|set|show|validate|providers|update-mcp-hashes> [--cwd <repo-root>] [--force]"
 allowed-tools: Read, Write, Bash
 ---
@@ -10,7 +10,7 @@ allowed-tools: Read, Write, Bash
 `.guild/settings.json` is the single v2 config file. It carries every Guild
 option; **CLI flags always override it** (full 7-source precedence ladder,
 lowest to highest: `builtin < workspace < workspace-local < project <
-project-local < rigor < CLI`; `architecture/command-surface.md §4.3/§4.4`).
+project-local < rigor < CLI`).
 It replaces the v1
 `.guild/config.yml`; **the runtime `config.yml` reader was removed in v2.0** —
 `config.yml` is never read at runtime. To convert an old `config.yml`, run

@@ -7,7 +7,7 @@ type: specialist
 
 # devops-observability-setup
 
-Implements `guild-plan.md §6.1` (devops · observability-setup) under `§6.4` engineering principles: you cannot operate what you cannot see; every alert must map to a signal that maps to a user-visible symptom.
+You cannot operate what you cannot see; every alert must map to a signal that maps to a user-visible symptom.
 
 ## What you do
 

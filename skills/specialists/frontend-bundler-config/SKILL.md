@@ -7,7 +7,7 @@ type: specialist
 
 # frontend-bundler-config
 
-Implements `guild-plan.md §6.1` (frontend · bundler-config) under `§6.4` engineering principles: every config change ships with a measurement — bundle bytes, build seconds, or dev-server start — proving it helped.
+Every config change ships with a measurement — bundle bytes, build seconds, or dev-server start — proving it helped.
 
 ## What you do
 

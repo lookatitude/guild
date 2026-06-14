@@ -7,7 +7,7 @@ type: meta
 
 # guild:evolve-skill
 
-Implements `guild-plan.md §11.2` (self-evolution pipeline — 10 steps) and the two `§11.1` triggers (automatic ≥3-reflection threshold + explicit `/guild:evolve <skill>`). Runs paired-subagent evals in the skill-creator style with an AgentDevel-style flip-centered promotion gate, then commits the edit only if the gate passes. Rejected attempts are archived under `.guild/evolve/<run-id>/archived/` per `§11.3` (no destructive operations — rollbacks themselves snapshot as new versions).
+Implements the self-evolution pipeline (10 steps) with two triggers: automatic when ≥3 reflections accumulate for a skill, and explicit via `/guild:evolve <skill>`. Runs paired-subagent evals in the skill-creator style with an AgentDevel-style flip-centered promotion gate, then commits the edit only if the gate passes. Rejected attempts are archived under `.guild/evolve/<run-id>/archived/` (no destructive operations — rollbacks themselves snapshot as new versions).
 
 This skill is a **gatekeeper**, not a free-form editor. It refuses to mutate a live skill file without a passed promotion gate. If the gate fails, it stops and surfaces the flip report + shadow-mode output so the user can decide.
 

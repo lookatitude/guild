@@ -10,15 +10,14 @@ allowed-tools: Read, Grep, Glob, Bash, Skill
 Prints the usage / telemetry dashboard. Telemetry read — **R**, never
 writes.
 
-Canonical surface: `architecture/command-surface.md §3.5` (stats row).
 
 ## Args & local flags
 
 - Args: — (no positional)
 - `--rebuild-index` — drops + rebuilds the optional read-through cache.
-- `--no-index` — forces a one-shot filesystem scan (Invariant FS-CANONICAL,
-  by pointer `command-surface.md §5.3`). The filesystem stays canonical; the
-  index is never authoritative and never required.
+- `--no-index` — forces a one-shot filesystem scan (Invariant FS-CANONICAL:
+  the filesystem stays canonical; the index is never authoritative and never
+  required).
 
 ## Gates
 

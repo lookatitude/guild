@@ -16,19 +16,16 @@ deep semantic `KnowledgeGraph` + onboarding tour are **lazy**, gated by the
 `learn-*` pipeline (same skills as `/guild:learn`), **not** produced at Init
 by default.
 
-Canonical surface: `architecture/command-surface.md §3.1` (Init row) and the
-verb↔phase edge in `§6` (D-14: `/guild:init` → Init). Phase concept binding:
+Verb↔phase edge: `/guild:init` → Init. Phase concept binding:
 `lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md` (one
 state machine, six phase entrypoints).
 
-## Contract binding (by pointer — never re-spelled)
+## Contract binding
 
 Before any producer work begins, this phase **resolves the frozen
-`guild.phase_entry.v1` contract** — bound by pointer to
-`architecture/target-architecture.md §"phase_entry contract"`
-(`review.learning_checkpoint: true`). The Tier-2 `defaults:` config folded at
-intake is bound by pointer to `architecture/command-surface.md §4.4`
-(`P1-config-001`) — not re-spelled here.
+`guild.phase_entry.v1` contract** (`review.learning_checkpoint: true`).
+The Tier-2 `defaults:` config folded at intake is controlled by
+`P1-config-001` — see `/guild:config` for the schema.
 
 ## Usage
 
@@ -38,8 +35,7 @@ intake is bound by pointer to `architecture/command-surface.md §4.4`
 /guild:init --new
 ```
 
-All five global flags + `--dry-run` apply (`command-surface.md §4`, by
-pointer).
+All five global flags + `--dry-run` apply.
 
 ## Args & local flags
 

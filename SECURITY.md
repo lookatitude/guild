@@ -25,8 +25,8 @@ This document explains the trust model and how we handle security.
 
 - No network access is made by default. Only the `researcher` shipping
   specialist (`agents/researcher.md`) declares `WebFetch` / `WebSearch`
-  in its `tools:` frontmatter. All meta-skills are filesystem-only per
-  `guild-plan.md §15.1 #12`.
+  in its `tools:` frontmatter. All meta-skills are filesystem-only by
+  policy — any change must be flagged and justified in a PR.
 - No credentials are read, stored, or transmitted.
 - No data is sent to telemetry endpoints. `.guild/runs/` and
   `.guild/wiki/` are **project-local** and never leave your machine.
@@ -36,7 +36,7 @@ This document explains the trust model and how we handle security.
 ### The `/guild audit` command
 
 Guild ships a built-in security audit at
-[commands/guild-audit.md](commands/guild-audit.md) that delegates to
+[commands/audit.md](commands/audit.md) that delegates to
 [skills/meta/audit/SKILL.md](skills/meta/audit/SKILL.md). Run it
 whenever you install or update a Guild fork:
 
@@ -83,9 +83,9 @@ a public GitHub issue. Instead:
 We'll acknowledge receipt within 3 business days and aim to ship a fix
 or mitigation within 14 days of confirmation.
 
-## Known risk categories (from `guild-plan.md §15.2`)
+## Known risk categories
 
-These are mitigations that ship in v1. Any future contribution that
+These are mitigations that ship in v2. Any future contribution that
 weakens one of them should be explicitly called out in its PR.
 
 | Risk | Mitigation |
@@ -94,7 +94,7 @@ weakens one of them should be explicitly called out in its PR.
 | Stop hook fires on non-task sessions → spurious reflections | Heuristic gate in `hooks/maybe-reflect.ts` (≥1 specialist + ≥1 edit + no error) |
 | Evolution loop overfits to its own evals | Versioned skill snapshots + held-out evals + shadow-mode |
 | Arbitrary code in installed skills | `/guild audit` (this command) + the trust-source guidance above |
-| Meta-skills gaining network access | `§15.1 #12` policy: meta-skills are filesystem-restricted by convention; any change must be flagged and justified |
+| Meta-skills gaining network access | Meta-skills are filesystem-restricted by convention; any change must be flagged and justified in a PR |
 
 ## Version support
 

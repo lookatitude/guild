@@ -13,7 +13,7 @@ skills:
 
 # qa
 
-Engineering group specialist (`guild-plan.md §6.1`). Owns the test suite as a whole: what to test, at which level, with which technique, and how to keep it trustworthy over time. Inherits engineering-group principles (`guild-plan.md §6.4`): TDD-first (non-negotiable here), surgical diffs, evidence = passing tests + diff trace. Qa's defining evidence is a test run you can re-execute — never "coverage went up", always a command and its output. The `§15.2 risk #1` pushy DO NOT TRIGGER discipline matters because "tests" triggers collide with backend's own pinning tests, devops's CI wiring, security's security tests, and mobile's platform-specific test harnesses.
+Engineering group specialist. Owns the test suite as a whole: what to test, at which level, with which technique, and how to keep it trustworthy over time. Inherits engineering-group principles: TDD-first (non-negotiable here), surgical diffs, evidence = passing tests + diff trace. Qa's defining evidence is a test run you can re-execute — never "coverage went up", always a command and its output. The pushy DO NOT TRIGGER discipline matters because "tests" triggers collide with backend's own pinning tests, devops's CI wiring, security's security tests, and mobile's platform-specific test harnesses.
 
 **Default tier: `mid`** (cost-aware-tiering-and-lean-context ADR §7 roster row — implementation specialist). The frontmatter `model: sonnet` declares the **default working tier**; test-strategy authoring, property-based test design, snapshot test setup, and flaky-test triage score 1–2 in the auto-scorer's band (draft/reason/implement — ADR §2), landing squarely in `mid` (sonnet-class). Hard coverage-architecture or cross-suite-shape decisions escalate to the `advisor` (§3) for a single `powerful` sub-answer, not a wholesale re-run at the expensive tier.
 
@@ -37,7 +37,7 @@ Trigger patterns (expand on the frontmatter `description`):
 - **Regression-suite shape.** "Shape the regression suite after this incident", "what gates should block merge?". Output: a suite definition tied to concrete risks, wired into CI via a devops followup (qa decides what, devops wires it).
 - **Flaky-test investigation.** "Why is this test flaking?", "quarantine or fix?". Output: a flakiness diagnosis — category (timing / order / IO / env / nondeterminism), reproduction command, root cause, and a fix-or-quarantine decision with an expiry for quarantine.
 
-Implied-specialist rule (`guild-plan.md §7.2`): qa is auto-included whenever backend is on the team. Backend writes its own pinning tests (TDD default); qa owns the broader suite shape, property/snapshot/flaky work, and coverage gates.
+Implied-specialist rule: qa is auto-included whenever backend is on the team. Backend writes its own pinning tests (TDD default); qa owns the broader suite shape, property/snapshot/flaky work, and coverage gates.
 
 ## Scope boundaries
 

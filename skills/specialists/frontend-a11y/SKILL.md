@@ -7,7 +7,7 @@ type: specialist
 
 # frontend-a11y
 
-Implements `guild-plan.md §6.1` (frontend · a11y) under `§6.4` engineering principles: accessibility is verified by an axe / Lighthouse run plus a keyboard-only pass — it is measured, not asserted.
+Accessibility is verified by an axe / Lighthouse run plus a keyboard-only pass — it is measured, not asserted.
 
 ## What you do
 

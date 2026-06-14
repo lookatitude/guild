@@ -1,18 +1,20 @@
 # Plan Anchor Index
 
-Each dev agent must read these `guild-plan.md` sections before starting work. Quote anchors; do not paraphrase.
+Each dev agent must read and apply the design contracts for its scope before starting work.
+These contracts are captured in the dev-team agents' own bodies and in the skills they invoke;
+the authoritative public architecture and design documentation lives at **https://guildstack.dev/docs**.
 
-| Agent | Primary anchors | Secondary anchors |
+| Agent | Primary knowledge areas | Secondary areas |
 |---|---|---|
-| plugin-architect | §3 (architecture), §4 (repo layout), §13.1 (commands registration) | §14 (roadmap phase gates), §15 (gaps/risks) |
-| skill-author | §5 (skill taxonomy), §10.1.1 (wiki page frontmatter), §11 (self-evolution pipeline) | §2 (Karpathy principles — for core skill), §6.4 (per-group principle adaptations — for specialist skills) |
-| specialist-agent-writer | §6 (specialist roster), §12 (specialist creation) | §6.4 (principle adaptations), §15.2 (boundary-collision risk) |
-| command-builder | §13.1 (slash commands) | §7 (team composition — /guild:team), §11 (evolution — /guild:evolve, /guild:rollback) |
-| hook-engineer | §13.2 (hooks) | §8 (task lifecycle — what hooks observe), §11 (evolution — what telemetry feeds) |
-| tooling-engineer | §11.2 (evolve pipeline steps), §12 (create-specialist), §13.3 (MCP servers) | §10.5 (wiki scale — guild-memory trigger), §10.5.1 (memory write path) |
-| docs-writer | §3 (architecture), §6 (specialists), §9 (context assembly), §10 (knowledge layer), §11 (evolution) | §14 (roadmap — what ships in which phase), §16 (TL;DR for README polish) |
-| eval-engineer | §11.2 (eval loop + flip reports), §15.2 (risks — trigger collisions, decision noise, overfit evals) | §5 (taxonomy — eval structure per tier), §12 (boundary gates) |
+| plugin-architect | Architecture (four layers; Claude Code primitive mapping), repo layout, command registration | Roadmap phase gates, gaps/risks surfaced by integration |
+| skill-author | Skill taxonomy (T1 core, T2 meta, T3 knowledge, T5 specialists), wiki-page frontmatter schema, self-evolution pipeline | Karpathy principles (for core skill), per-group principle adaptations (for specialist skills) |
+| specialist-agent-writer | Specialist roster (17 shipping agents, group assignments), specialist creation workflow | Per-group principle adaptations, cross-group trigger-collision risk |
+| command-builder | Slash-command table (which skills each command dispatches), team-composition wiring | Evolution pipeline wiring (`/guild:evolve`, `/guild:rollback`), wiki ops wiring |
+| hook-engineer | Authoritative hook list (`SessionStart`, `UserPromptSubmit`, `PostToolUse`, `SubagentStop`, `Stop`, agent-team hooks) | Task lifecycle context (what hooks observe at each phase), how `maybe-reflect.ts` feeds the evolve pipeline |
+| tooling-engineer | Evolve pipeline steps (eval loop, paired-subagent dispatch, flip report, benchmark + flip detection, promotion gate), specialist creation workflow scripts, optional MCP servers scope | Wiki scale / guild-memory trigger point, memory write path |
+| docs-writer | Architecture (canonical: `https://guildstack.dev/docs/architecture`), specialist roster (canonical: `https://guildstack.dev/docs/specialist-roster`), context assembly, knowledge layer, self-evolution | Roadmap phase being documented, README TL;DR shape |
+| eval-engineer | Evolve pipeline (paired-subagent dispatch, grader output, flip reports, description optimizer), risks to catch (trigger collisions, decision noise, overfit evals, stop-hook false positives) | Tier structure (eval organization per tier), specialist creation boundary gates |
 
 ## Audit rule
 
-When `guild-plan.md` version bumps (check first line: `**Status:** ...`), re-read this index and every agent file it references. Any agent whose anchors moved must be updated before it runs again.
+When the plugin architecture changes significantly (command surface, specialist roster, hook list), re-read the relevant agent bodies and the Guild docs site at `https://guildstack.dev/docs`. Any agent whose scope moved must be updated before it runs again.

@@ -12,8 +12,8 @@ operating_style:
 # personality — bounded CLOSED enum (N2): exactly the three axes below,
 # PLUS one optional short flavor line (length-capped, never trigger-bearing).
 # Free-text persona paragraphs are BANNED (prompt-bloat / routing-ambiguity).
-# Canonical enum: architecture/target-architecture.md §"Agent personality
-# (binding)" + DECISIONS-LOCKED.md N2 (cited, never re-spelled).
+# Canonical enum: see https://guildstack.dev/docs/architecture (agent personality
+# binding — cited, never re-spelled here).
 personality:
   terseness:
   pushback_posture:
@@ -29,9 +29,9 @@ personality:
   and carries `derived_from_template: guild.agent_template.v1` in its
   frontmatter. `create-specialist` / `evolve-skill` / any factory write
   targets .guild/{agents,skills}/ — a runtime write to plugin template state
-  is a v2 defect. Boundary + version + personality enum canonical in:
-    architecture/target-architecture.md §"Canonical template-version strings
-    + derived_from_template invariant" (cited, never re-spelled).
+  is a v2 defect. Boundary + version + personality enum canonical in the
+  agent/skill factory design (see https://guildstack.dev/docs/architecture
+  — cited, never re-spelled here).
   Contractual/minimal (VC-F7 no-rigidity guard): the headings below are the
   required-heading SET only (the 8 Persona-Structure items —
   factory/agent-and-skill-factory.md §"Canonical Agent Template", cited by

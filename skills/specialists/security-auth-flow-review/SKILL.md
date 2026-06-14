@@ -7,7 +7,7 @@ type: specialist
 
 # security-auth-flow-review
 
-Implements `guild-plan.md §6.1` (security · auth-flow-review) under `§6.4` engineering principles: the auth flow is the door; step through it like an attacker, not like a user.
+The auth flow is the door; step through it like an attacker, not like a user.
 
 ## What you do
 

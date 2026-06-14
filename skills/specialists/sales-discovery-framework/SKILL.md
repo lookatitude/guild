@@ -7,7 +7,7 @@ type: specialist
 
 # sales-discovery-framework
 
-Implements `guild-plan.md §6.3` (sales · discovery-framework) under `§6.4` commercial principles: hypothesis-first (what must be true for this deal to close?), success = qualified-pipeline rate and disqualify rate, evidence = call notes citing specific answers — not rep gut feel.
+Hypothesis-first (what must be true for this deal to close?), success = qualified-pipeline rate and disqualify rate, evidence = call notes citing specific answers — not rep gut feel.
 
 ## What you do
 

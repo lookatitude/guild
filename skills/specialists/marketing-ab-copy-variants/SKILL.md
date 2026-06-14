@@ -7,7 +7,7 @@ type: specialist
 
 # marketing-ab-copy-variants
 
-Implements `guild-plan.md §6.3` (marketing · ab-copy-variants) under `§6.4` commercial principles: hypothesis-first (what belief are we testing, and what would falsify it?), success = pre-registered metric with sufficient power, evidence = a readout that separates signal from noise — not "variant B felt stronger."
+Hypothesis-first (what belief are we testing, and what would falsify it?), success = pre-registered metric with sufficient power, evidence = a readout that separates signal from noise — not "variant B felt stronger."
 
 ## What you do
 

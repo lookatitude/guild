@@ -7,7 +7,7 @@ type: specialist
 
 # security-secrets-scan
 
-Implements `guild-plan.md §6.1` (security · secrets-scan) under `§6.4` engineering principles: a leaked secret in git history is live until rotated — scanning without rotating is theater.
+A leaked secret in git history is live until rotated — scanning without rotating is theater.
 
 ## What you do
 

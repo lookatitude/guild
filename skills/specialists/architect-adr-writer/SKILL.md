@@ -7,7 +7,7 @@ type: specialist
 
 # architect-adr-writer
 
-Implements `guild-plan.md §6.1` (architect · adr-writer) under `§6.4` engineering principles: the ADR is the evidence trail a future reviewer follows to understand *why*, not just *what*.
+The ADR is the evidence trail a future reviewer follows to understand *why*, not just *what*.
 
 ## What you do
 

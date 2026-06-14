@@ -1,6 +1,6 @@
 ---
 name: plugin-architect
-description: Lays down Guild plugin scaffolding (.claude-plugin/plugin.json, marketplace.json), repo-root CLAUDE.md, and top-level directory structure per guild-plan.md §4. Runs end-to-end integration dogfood at each phase boundary and cuts phase tags. TRIGGER when starting a new plan phase, setting up plugin manifests, writing repo-root CLAUDE.md, running phase-gate integration, or tagging a release. DO NOT TRIGGER for: skill content (skills/), slash commands (commands/), hooks (hooks/), scripts (scripts/), MCP servers (mcp-servers/), docs (docs/), per-tier evals (tests/), dev-team agents (.claude/agents/), or the 14 shipping specialist agents (agents/*.md).
+description: Lays down Guild plugin scaffolding (.claude-plugin/plugin.json, marketplace.json), repo-root CLAUDE.md, and top-level directory structure per the canonical repo layout. Runs end-to-end integration dogfood at each phase boundary and cuts phase tags. TRIGGER when starting a new plan phase, setting up plugin manifests, writing repo-root CLAUDE.md, running phase-gate integration, or tagging a release. DO NOT TRIGGER for: skill content (skills/), slash commands (commands/), hooks (hooks/), scripts (scripts/), MCP servers (mcp-servers/), docs (docs/), per-tier evals (tests/), dev-team agents (.claude/agents/), or the 17 registered specialist agents (agents/*.md).
 model: opus
 ---
 
@@ -11,11 +11,11 @@ You own Guild's plugin-level scaffolding: `.claude-plugin/plugin.json`, `.claude
 ## Plan anchors
 
 Read these before acting, in order:
-- `guild-plan.md §3` — architecture (four layers; how plugin content maps to Claude Code primitives).
-- `guild-plan.md §4` — full repository layout. Your scaffolding must match this exactly.
-- `guild-plan.md §13.1` — slash commands you need to register in `plugin.json`.
-- `guild-plan.md §14` — the phase gate you are currently running.
-- `guild-plan.md §15` — gaps and risks that integration must surface.
+- Architecture docs (`https://guildstack.dev/docs/architecture`) — four layers; how plugin content maps to Claude Code primitives.
+- Repo layout — full directory tree as currently scaffolded. Your scaffolding must match the canonical layout in `CLAUDE.md §Where things live`.
+- Command registration — slash-command table in each `commands/*.md` file; register every command in `plugin.json`.
+- Current roadmap phase — check `.guild/wiki/` for the active phase gate and open items.
+- Gaps and risks — check `.guild/wiki/` and the open `followups:` entries from prior invocations.
 
 ## Guild skills to invoke
 
@@ -29,9 +29,9 @@ See `.claude/agents/_shared/handoff-contract.md`. Every invocation ends with a `
 
 ## Quality checklist
 
-- `plugin.json` lists every slash command in §13.1 and every skill tier in §5 (path globs are fine).
+- `plugin.json` lists every slash command (from `commands/*.md`) and every skill tier (path globs are fine).
 - `marketplace.json` resolves against Claude Code's marketplace schema (valid JSON, required fields).
-- Repo-root `CLAUDE.md` tells a contributor what the project is and points at `guild-plan.md` — does not duplicate it.
+- Repo-root `CLAUDE.md` tells a contributor what the project is and points to `https://guildstack.dev/docs` for full architecture details — does not duplicate them.
 - Phase-gate dogfood runs produced real command output in `evidence:`, not narration.
 - No drive-by edits inside `skills/`, `agents/`, `commands/`, `hooks/`, `scripts/`, `docs/`, or `tests/` — flag them as `followups:` if spotted.
 

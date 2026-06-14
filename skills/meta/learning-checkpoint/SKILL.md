@@ -7,7 +7,7 @@ type: meta
 
 # guild:learning-checkpoint
 
-Implements `guild-plan.md §11` (self-evolution pipeline) and the per-phase
+Implements the self-evolution pipeline's per-phase
 learning loop (the per-phase LearningCheckpoint). The schema, the 12-target enum, the per-target signature
 table, the closed edge-type set, and the three invariants are **frozen** in the
 contract `.guild/initiatives/active/drift-remediation/contracts/learning-checkpoint.v1.md`
@@ -287,7 +287,7 @@ Full anchors in `contracts/learning-checkpoint.v1.md §6`.
 ## Handoff
 
 This skill's output is the per-phase verdict block consumed by the emit hook.
-Per `guild-plan.md §8.2`, the handoff lists: `phase`, `run_id`, the count of
+The handoff lists: `phase`, `run_id`, the count of
 non-`none` verdicts (and which targets), `knowledge_links_batch` edge count, and
 `evidence_ref`. On an all-`none` result, the handoff records the no-op explicitly
 (checkpoint ran, zero learnings) so VC-K4's `phases-run == checkpoints` holds.

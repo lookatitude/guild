@@ -1,6 +1,9 @@
 # Specialist Roster
 
-Implements `guild-plan.md §6`. 15 shipping specialists across 3 groups (doc-writer promoted to first-class in v2.0; previously reconciled onto technical-writer per §7 tiered-worker roster).
+17 registered agents across 3 groups plus tiered-worker roles (doc-writer promoted to
+first-class in v2.0; advisor and developer added as tiered-worker roles). See
+`https://guildstack.dev/docs/specialist-roster` for the full roster with trigger examples
+and DO NOT TRIGGER boundaries.
 
 Every specialist inherits `guild-principles` (T1) as a mandatory first load: the
 Karpathy 4 plus Guild's evidence rule. Per-specialist T5 skills live under
@@ -173,7 +176,7 @@ evidence = data citation (search volume, A/B result, benchmark).
 
 ## Tiered-worker roster (cost-aware-tiering-and-lean-context ADR §7)
 
-A thin **tiered-worker** layer **augments** the 14 shipping specialists and the
+A thin **tiered-worker** layer **augments** the 14 product specialists and the
 dev-team agents (it does not replace either). Each role carries a **default
 tier**. Per the ADR's reconciliation rule, where an equivalent already ships, the
 existing specialist is **retiered** rather than duplicated; only genuinely-new
@@ -206,14 +209,14 @@ Notes:
   (which keeps API reference / manuals / changelogs / release notes) by the boundary
   in `doc-writer.md §Scope boundaries`. The §7 tiered-worker row is updated from
   "reconciled onto technical-writer" to "PROMOTED `agents/doc-writer.md`".
-- **All 14 shipping specialists are now tiered** — every agent file carries an
+- **All 17 registered agents are now tiered** — every agent file carries an
   explicit `model:` plus a `**Default tier:**` note, not just the §7 roster rows.
   `architect` and `security` are `powerful` (`opus`); every other engineering /
   content / commercial specialist defaults to `mid` (`sonnet`), with `researcher`
   and `technical-writer` running a `cheap` sub-pass for pure read/summarize and
   mechanical-edit work. The complete map is below.
 
-### Complete default-tier map (all 16 dispatchable roles)
+### Complete default-tier map (all 17 registered agents)
 
 Every role the orchestrator can dispatch, with its default tier and frontmatter
 `model:`. The auto-scorer (ADR §2) may drop a routine single-item lane below the
@@ -240,7 +243,7 @@ default to `cheap`, or escalate one sub-question to the `powerful` `advisor`
 | `marketing` | commercial | `mid` | `sonnet` |
 | `sales` | commercial | `mid` | `sonnet` |
 
-15 shipping specialists + the 2 NEW tiered-worker roles (`advisor`, `developer`)
+14 product specialists + the 3 tiered-worker roles (`advisor`, `developer`, `doc-writer`)
 = 17. `powerful` is reserved for the three high-stakes / low-frequency roles
 (`architect`, `security`, `advisor`); no implementer or content/commercial role
 defaults to `powerful`.
@@ -256,8 +259,6 @@ is `haiku`.
 
 ## Team composition rules
 
-From `guild-plan.md §7.2`:
-
 - **Recommended default: 3–4 specialists.** Hard cap of 6. Context fragmentation
   kills coherence above that. `/guild plan --team-size=N` lifts the cap.
 - **Implied specialists:** architect on any multi-component build; security on
@@ -266,13 +267,12 @@ From `guild-plan.md §7.2`:
 - **Orchestrator is implicit** — the top-level session plays coordinator, not a
   separate specialist slot.
 - **Gap handling:** when team-compose surfaces a role with no matching specialist,
-  the user picks auto-create (`guild-create-specialist`), skip, substitute, or
+  the user picks auto-create (`guild:create-specialist`), skip, substitute, or
   compose-from-scratch. New specialists must pass the evolve gate before joining
-  the live team — see `self-evolution.md`.
+  the live team.
 
 ## See also
 
-- `guild-plan.md §6` — full roster rationale and trigger examples.
-- `guild-plan.md §7` — team composition flow.
-- `architecture.md` — where specialists sit in the layered system.
+- `https://guildstack.dev/docs/specialist-roster` — full roster rationale and trigger examples.
+- `https://guildstack.dev/docs/architecture` — where specialists sit in the layered system.
 - `agents/*.md` — the live trigger / DO-NOT-TRIGGER blocks and skill pulls.

@@ -7,7 +7,7 @@ type: specialist
 
 # mobile-ios-swift
 
-Implements `guild-plan.md §6.1` (mobile · ios-swift) under `§6.4` engineering principles: idiomatic Swift, compiler-enforced safety, and concurrency that the language actually tracks.
+Idiomatic Swift, compiler-enforced safety, and concurrency that the language actually tracks.
 
 ## What you do
 

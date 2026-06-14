@@ -7,9 +7,9 @@ type: meta
 
 # guild:create-specialist
 
-Implements `guild-plan.md §12` (specialist creation with adjacent-boundary updates, 7-step workflow) gated by the `§11.2.1` extraction signals. This is the meta-skill that mints new shipping specialists — what `guild:team-compose`'s option A (auto-create) delegates to when a spec surfaces a gap.
+Implements the specialist creation workflow (7 steps, with adjacent-boundary updates) gated by extraction signals. This is the meta-skill that mints new shipping specialists — what `guild:team-compose`'s option A (auto-create) delegates to when a spec surfaces a gap.
 
-Specialists are not minted on a hunch. The `§11.2.1` extraction signals must **ALL** agree before this skill proceeds past step 2, and even then the role must pass **two gates** — boundary evals via `guild:evolve-skill`, then its own paired evals + shadow mode — before moving from `.guild/agents/proposed/` to live `.guild/agents/`.
+Specialists are not minted on a hunch. The extraction signals (recurring gap across ≥3 runs, distinct triggers, sufficient context isolation, enough eval cases) must **ALL** agree before this skill proceeds past step 2, and even then the role must pass **two gates** — boundary evals via `guild:evolve-skill`, then its own paired evals + shadow mode — before moving from `.guild/agents/proposed/` to live `.guild/agents/`.
 
 ## Input
 

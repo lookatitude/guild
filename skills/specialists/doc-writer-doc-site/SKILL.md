@@ -7,7 +7,7 @@ type: specialist
 
 # doc-writer-doc-site
 
-Implements `guild-plan.md §6.2` (doc-writer · doc-site) under `§6.4` writing principles: match the existing doc-site generator, theme, and editorial conventions; don't restructure pages the user didn't scope; evidence = a navigable page the reader can skim in one pass.
+Match the existing doc-site generator, theme, and editorial conventions; don't restructure pages the user didn't scope; evidence = a navigable page the reader can skim in one pass.
 
 ## What you do
 

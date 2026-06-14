@@ -7,7 +7,7 @@ type: specialist
 
 # devops-incident-runbook
 
-Implements `guild-plan.md §6.1` (devops · incident-runbook) under `§6.4` engineering principles: the runbook is the evidence that operational knowledge is transferable; a new on-call should be able to follow it at 3am without context.
+The runbook is the evidence that operational knowledge is transferable; a new on-call should be able to follow it at 3am without context.
 
 ## What you do
 

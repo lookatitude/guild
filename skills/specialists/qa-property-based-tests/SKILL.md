@@ -7,7 +7,7 @@ type: specialist
 
 # qa-property-based-tests
 
-Implements `guild-plan.md §6.1` (qa · property-based-tests) under `§6.4` engineering principles: the property is the spec; a failing shrink is a minimal counterexample the author cannot hand-wave.
+The property is the spec; a failing shrink is a minimal counterexample the author cannot hand-wave.
 
 ## What you do
 

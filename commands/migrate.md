@@ -9,8 +9,6 @@ allowed-tools: Read, Write, Bash
 
 Detects, snapshots, and converts a v1 `.guild/` directory to the v2 layout.
 
-Canonical surface: `architecture/command-surface.md §2` (maintenance-verb list)
-and `§3.5` (the `/guild migrate` self-maintenance table row).
 
 ## Usage
 
@@ -73,7 +71,8 @@ npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/dot-guild/migrate-guild.ts --accept-grades
 
 Until accepted, wiki lint (`/guild:wiki lint` check #9 and the docs-hygiene
 scan rule 7) flags the pages as a pending-review item on every run. `dry-run`
-lists every planned grade without writing. Full flow: `MIGRATION.md §3a`.
+lists every planned grade without writing. Full migration guide:
+[https://guildstack.dev/docs/migration-v1-to-v2](https://guildstack.dev/docs/migration-v1-to-v2).
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
 

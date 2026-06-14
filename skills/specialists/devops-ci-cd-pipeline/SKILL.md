@@ -7,7 +7,7 @@ type: specialist
 
 # devops-ci-cd-pipeline
 
-Implements `guild-plan.md §6.1` (devops · ci-cd-pipeline) under `§6.4` engineering principles: the pipeline is the test harness for release, and every merge is evidence the gates work.
+The pipeline is the test harness for release, and every merge is evidence the gates work.
 
 ## What you do
 

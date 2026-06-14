@@ -7,7 +7,7 @@ type: specialist
 
 # doc-writer-readme
 
-Implements `guild-plan.md §6.2` (doc-writer · readme) under `§6.4` writing principles: match existing README style and repo conventions before imposing a new structure, calibrate depth to the project type (library, CLI, SaaS, monorepo), and produce a page the reader can skim in one pass.
+Match existing README style and repo conventions before imposing a new structure, calibrate depth to the project type (library, CLI, SaaS, monorepo), and produce a page the reader can skim in one pass.
 
 ## What you do
 

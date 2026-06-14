@@ -7,7 +7,7 @@ type: specialist
 
 # security-dependency-audit
 
-Implements `guild-plan.md §6.1` (security · dependency-audit) under `§6.4` engineering principles: the lockfile is the attack surface; an audit is only worth it if it ends in patches.
+The lockfile is the attack surface; an audit is only worth it if it ends in patches.
 
 ## What you do
 

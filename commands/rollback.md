@@ -11,7 +11,6 @@ Reverts a skill to a previous version. Maps to skill
 `guild:rollback-skill`. The rollback is itself a versioned artifact —
 non-destructive (snapshots current state as vN+1, restores vN or vN-n).
 
-Canonical surface: `architecture/command-surface.md §3.5` (rollback row).
 
 ## Usage
 

@@ -164,7 +164,7 @@ The sentinel is **hook-maintained**, so the durable clear is to make the hook re
 
 Coordinate with the hook semantics: the hook counts **consecutive** skips and re-derives the streak every Stop, so the gate-read trusts the hook-maintained `blocked` flag rather than maintaining its own counter.
 
-> **NOTE (followup — config schema):** `codex_skip_enforcement` (`warn` | `block`, default `warn`) is REFERENCED here but not yet registered in the `.guild/settings.json` schema. Registering the key + its closed-value validation is owned by tooling-engineer / `guild:config` (`architecture/command-surface.md §4.4`). See `followups:` in the handoff.
+> **NOTE (followup — config schema):** `codex_skip_enforcement` (`warn` | `block`, default `warn`) is REFERENCED here but not yet registered in the `.guild/settings.json` schema. Registering the key + its closed-value validation is owned by tooling-engineer / `guild:config` (see the Guild docs site → `https://guildstack.dev/docs/configuration`). See `followups:` in the handoff.
 
 ## Dispatch
 

@@ -7,7 +7,7 @@ type: specialist
 
 # marketing-campaign-brief
 
-Implements `guild-plan.md §6.3` (marketing · campaign-brief) under `§6.4` commercial principles: hypothesis-first (what belief about the audience does this campaign test?), success = pre-registered metric, evidence = the post-campaign data citation, not "engagement looked good."
+Hypothesis-first (what belief about the audience does this campaign test?), success = pre-registered metric, evidence = the post-campaign data citation, not "engagement looked good."
 
 ## What you do
 

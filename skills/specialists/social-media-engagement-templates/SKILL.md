@@ -7,7 +7,7 @@ type: specialist
 
 # social-media-engagement-templates
 
-Implements `guild-plan.md §6.2` (social-media · engagement-templates) under `§6.4` writing principles: match brand voice exactly (templates scale voice — good or bad), don't rewrite outbound copy, evidence = a CM can respond to 10 representative inbound messages using the library without sounding like a robot.
+Match brand voice exactly (templates scale voice — good or bad), don't rewrite outbound copy, evidence = a CM can respond to 10 representative inbound messages using the library without sounding like a robot.
 
 ## What you do
 

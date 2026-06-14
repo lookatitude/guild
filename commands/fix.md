@@ -12,11 +12,9 @@ applying gated fixes. This is the **renamed v2 surface of the v1 diagnose
 command** — verb rename diagnose→`fix`; flag-migrated
 `--codex-review` → `--review=cross`. The `guild:diagnose` skill is retained
 internally; only the command verb changed (`command-clean-slate.md #5`). The
-exact v1→v2 mapping and the byte-exact redirect string for the removed v1
-name live in `MIGRATION.md §2.1/§2.2`.
+v1→v2 mapping details are in the [migration guide](https://guildstack.dev/docs/migration-v1-to-v2).
 
-Canonical surface: `architecture/command-surface.md §3.3` (fix row). Maps to
-skill `guild:diagnose`.
+Maps to skill `guild:diagnose`.
 
 ## Usage
 

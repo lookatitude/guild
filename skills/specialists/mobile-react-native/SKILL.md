@@ -7,7 +7,7 @@ type: specialist
 
 # mobile-react-native
 
-Implements `guild-plan.md §6.1` (mobile · react-native) under `§6.4` engineering principles: the JS thread is a scarce resource, and every bridge hop is paid in frames.
+The JS thread is a scarce resource, and every bridge hop is paid in frames.
 
 ## What you do
 

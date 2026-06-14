@@ -7,7 +7,7 @@ type: core
 
 # guild:principles
 
-Implements `guild-plan.md §2` (Karpathy 4 + Guild evidence rule) and `guild-plan.md §6.4` (per-group adaptations).
+Implements the Karpathy 4 + Guild evidence rule, with per-group adaptations for engineering, writing, and commercial specialists.
 
 These five lines are the system-prompt preamble for every Guild specialist — code *and* non-code. The skill body is the role-adapted detail: how each principle cashes out in an engineering, writing, or commercial context.
 

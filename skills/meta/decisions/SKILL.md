@@ -1,19 +1,17 @@
 ---
 name: guild-decisions
-description: Captures Q&A during specialist work as structured ADR-lite decisions under .guild/wiki/decisions/<slug>.md per `guild-plan.md §10.3`. Required when a specialist reaches uncertainty (principle #1 "ask") and the answer is non-trivial — user supplies the answer, this skill writes the decision file, updates `wiki/index.md`, and appends a dated entry to `wiki/log.md`. Has a significance threshold (low → keep in the run transcript only; medium/high → persist to `wiki/decisions/`) to prevent the trivial-question flood called out in §15.2. TRIGGER for phrasings like "capture this decision", "record this as an ADR", "log why we chose X over Y", "write up this architectural decision", "persist this as a decision". DO NOT TRIGGER for: ingesting a source (hand off to `guild:wiki-ingest`); a specialist asking a clarifying question and getting an immediate answer with low significance (keep it in the run transcript — only escalate medium+ to this skill); routine status updates; wiki search or lint.
+description: Captures Q&A during specialist work as structured ADR-lite decisions under .guild/wiki/decisions/<slug>.md. Required when a specialist reaches uncertainty (principle #1 "ask") and the answer is non-trivial — user supplies the answer, this skill writes the decision file, updates `wiki/index.md`, and appends a dated entry to `wiki/log.md`. Has a significance threshold (low → keep in the run transcript only; medium/high → persist to `wiki/decisions/`) to prevent the trivial-question flood. TRIGGER for phrasings like "capture this decision", "record this as an ADR", "log why we chose X over Y", "write up this architectural decision", "persist this as a decision". DO NOT TRIGGER for: ingesting a source (hand off to `guild:wiki-ingest`); a specialist asking a clarifying question and getting an immediate answer with low significance (keep it in the run transcript — only escalate medium+ to this skill); routine status updates; wiki search or lint.
 when_to_use: Any specialist or orchestrator that reaches medium+ significance uncertainty during task execution. Also fires when a user explicitly asks to record a past decision for the project wiki.
 type: meta
 ---
 
 # guild:decisions
 
-Implements `guild-plan.md §10.3` (decision capture workflow). This skill turns ad-hoc Q&A during specialist work into structured, queryable knowledge under `.guild/wiki/decisions/`. It is a workflow (T2 meta) skill — it WRITES into the knowledge layer, but it is not itself a knowledge skill.
+Implements the decision capture workflow. This skill turns ad-hoc Q&A during specialist work into structured, queryable knowledge under `.guild/wiki/decisions/`. It is a workflow (T2 meta) skill — it WRITES into the knowledge layer, but it is not itself a knowledge skill.
 
-Companion references: `§10.1` (wiki directory layout; `decisions/` is the append-only subdir), `§10.1.1` (base wiki frontmatter shape), `§15.2` risk row "Decision capture noise — trivial questions flood wiki/decisions/" (motivates the significance threshold below), `§8.2` (specialist handoff contract — assumptions surfaced there are decision candidates).
+The wiki directory `decisions/` is an append-only subdir of `.guild/wiki/`. The significance threshold prevents the trivial-questions flood; assumptions surfaced in specialist handoff receipts are decision candidates.
 
 ## Flow
-
-Per `guild-plan.md §10.3`:
 
 1. **Specialist reaches uncertainty.** Karpathy principle #1 ("ask, don't guess") says stop and ask. Before asking in free text, invoke this skill.
 2. **Specialist invokes `guild:decisions`** with three structured fields:

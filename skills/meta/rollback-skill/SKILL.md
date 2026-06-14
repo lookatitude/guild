@@ -7,7 +7,7 @@ type: meta
 
 # guild:rollback-skill
 
-Implements `guild-plan.md §11.3` (versioning and rollback). Every skill edit is a versioned artifact under `.guild/skill-versions/<skill>/v<N>/`, and this skill walks that stack back. Per `§11.3`, **rollbacks themselves snapshot as new versions — no destructive operations**. The folder only grows.
+Implements the versioning and rollback policy. Every skill edit is a versioned artifact under `.guild/skill-versions/<skill>/v<N>/`, and this skill walks that stack back. **Rollbacks themselves snapshot as new versions — no destructive operations.** The folder only grows.
 
 This skill is the counterpart to `guild:evolve-skill`: evolve writes forward vN+1 on promote, rollback writes forward vN+1 sourced from an older vX. There is exactly one writer (this skill) and one gate (`guild:evolve-skill`) for skill content; neither ever deletes.
 

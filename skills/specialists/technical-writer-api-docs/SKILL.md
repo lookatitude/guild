@@ -7,7 +7,7 @@ type: specialist
 
 # technical-writer-api-docs
 
-Implements `guild-plan.md §6.2` (technical-writer · api-docs) under `§6.4` writing principles: match the contract exactly, don't rewrite adjacent endpoints that weren't asked for, evidence = a reference page a developer can curl through without guessing.
+Match the contract exactly, don't rewrite adjacent endpoints that weren't asked for, evidence = a reference page a developer can curl through without guessing.
 
 ## What you do
 

@@ -14,19 +14,15 @@ intake via the run-start preflight snapshot — it is not selected per-phase.
 dispatch; `execute-plan` reads it from the locked-in snapshot rather than
 re-resolving. An optional positional `[lane-id]` re-runs a single lane.
 
-Canonical surface: `architecture/command-surface.md §3.1` (Development row)
-and the verb↔phase edge in `§6` (D-14: `/guild:build` → Development). Phase
-concept binding: `lifecycle/phase-entrypoints.md` ·
-`lifecycle/lifecycle-overview.md`.
+Verb↔phase edge: `/guild:build` → Development. Phase concept binding:
+`lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
 
-## Contract binding (by pointer — never re-spelled)
+## Contract binding
 
 Before producer work begins, this phase **resolves the frozen
-`guild.phase_entry.v1` contract** — bound by pointer to
-`architecture/target-architecture.md §"phase_entry contract"`. The run
-executes under the `task_run.autonomy_policy` recorded in the approved plan —
-bound by pointer to `target-architecture.md §"task_run contract"` (the
-autonomy contract was set at plan approval; **no new gate**).
+`guild.phase_entry.v1` contract**. The run executes under the
+`task_run.autonomy_policy` recorded in the approved plan (the autonomy
+contract was set at plan approval; **no new gate**).
 
 ## Usage
 
@@ -35,8 +31,7 @@ autonomy contract was set at plan approval; **no new gate**).
 /guild:build lane-backend-001
 ```
 
-All five global flags + `--dry-run` apply (`command-surface.md §4`, by
-pointer).
+All five global flags + `--dry-run` apply.
 
 ## Args & local flags
 
@@ -54,7 +49,7 @@ pointer).
 - G-lane review **A** (per lane, via `guild:review-broker`; policy-gated —
   fires when `risk ≥ high` OR `--review=cross` OR project config requires it)
 - Destructive / network ops **I always** (immutable always-ask hard set —
-  never relaxed by `--auto-approve`; `command-surface.md §5.2`, by pointer)
+  never relaxed by `--auto-approve`)
 
 ## Output artifact
 

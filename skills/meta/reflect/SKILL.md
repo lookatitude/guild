@@ -7,9 +7,9 @@ type: meta
 
 # guild:reflect
 
-Implements `guild-plan.md §11` (self-evolution pipeline) and the reflect-specific half of `§10.5.1` (memory write path). Runs last in the `/guild` lifecycle, after `guild:verify-done` writes `verify.md` with pass status. Gated by `hooks/maybe-reflect.ts` per `§13.2`: the Stop hook only fires this skill when the run actually did meaningful work (at least one specialist dispatched, at least one file edited, no hard error). Skills that triggered but no-oped do not earn a reflection.
+Implements the self-evolution pipeline's reflect step and the memory write path's proposal side. Runs last in the `/guild` lifecycle, after `guild:verify-done` writes `verify.md` with pass status. Gated by `hooks/maybe-reflect.ts`: the Stop hook only fires this skill when the run actually did meaningful work (at least one specialist dispatched, at least one file edited, no hard error). Skills that triggered but no-oped do not earn a reflection.
 
-This skill is a **proposer**, not a writer. Per `§10.5.1`, durable memory lives under `.guild/wiki/` and only `guild:wiki-ingest` and `guild:decisions` are allowed to promote content there. This skill writes a single proposal file per run and stops.
+This skill is a **proposer**, not a writer. Durable memory lives under `.guild/wiki/` and only `guild:wiki-ingest` and `guild:decisions` are allowed to promote content there. This skill writes a single proposal file per run and stops.
 
 ## Input
 
@@ -71,7 +71,7 @@ Tier the reflection before writing the frontmatter so the significance field is 
 
 ## Codex-review marker (self-build runs)
 
-Implements the reflect half of the FU-E codex-skip discipline contract (`plugin/CLAUDE.md` §"Codex adversarial review"; `guild-plan.md §11` self-evolution gate). On **self-build runs** (developing the Guild plugin itself — `plugin/CLAUDE.md` is present), every reflection's frontmatter MUST carry a canonical machine-readable field:
+Implements the reflect half of the FU-E codex-skip discipline contract (`plugin/CLAUDE.md` §"Codex adversarial review"; self-evolution gate). On **self-build runs** (developing the Guild plugin itself — `plugin/CLAUDE.md` is present), every reflection's frontmatter MUST carry a canonical machine-readable field:
 
 ```yaml
 codex_review: RAN        # codex adversarial review actually ran at this run's gates

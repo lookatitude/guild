@@ -7,7 +7,7 @@ type: specialist
 
 # technical-writer-release-notes
 
-Implements `guild-plan.md §6.2` (technical-writer · release-notes) under `§6.4` writing principles: match commit/PR facts exactly, don't rewrite adjacent versions' notes, evidence = a changelog a user on the previous version can upgrade from without surprise.
+Match commit/PR facts exactly, don't rewrite adjacent versions' notes, evidence = a changelog a user on the previous version can upgrade from without surprise.
 
 ## What you do
 

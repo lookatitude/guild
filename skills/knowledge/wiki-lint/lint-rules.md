@@ -4,10 +4,7 @@ Full procedures for the nine checks summarised in `SKILL.md`, plus the lint
 report template and the per-finding schema. `SKILL.md` is the lean playbook;
 this file is the detail the auditor follows when running each check.
 
-Plan anchors: `guild-plan.md §10.1.1` (required frontmatter), `§10.3` (decision
-ADR-lite shape), `§10.5` (contradiction policy — `confidence` frontmatter and
-"newer wins unless older has `confidence: high`"), `§10.6` (cadence +
-advisory-only).
+Rules: every wiki page must carry the required frontmatter (type, owner, confidence, source_refs, created_at, updated_at); decision pages must follow the ADR-lite shape; the contradiction policy is "newer wins unless older has `confidence: high`"; lint runs on a weekly cadence and is advisory-only (never auto-edits).
 
 Run all nine checks on every invocation. Each finding is tagged with a
 **severity**: **blocking** (the page breaks a hard contract — ingest or
@@ -148,7 +145,7 @@ operator reviews/edits each `importance:` value, then `--accept-grades`
 strips the `importance_draft`/`graded_by` markers and keeps the grade. The
 flag repeats on every lint run until accepted. The same predicate runs
 deterministically in `scripts/docs-hygiene/scan.ts` (rule 7); flow reference:
-`plugin/MIGRATION.md §3a`.
+See the migration guide at `https://guildstack.dev/docs/migration-v1-to-v2`.
 
 ## Report template
 

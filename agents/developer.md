@@ -14,7 +14,7 @@ skills:
 
 Tiered-worker role from the cost-aware-tiering-and-lean-context ADR **§7 roster** (default tier **`mid`** = sonnet). The §7 row reads: *"Implement a task lane (draft/reason/build); escalates to advisor when above tier."* This is the **generic** implementation worker — the one a plan dispatches when a lane is real implementation work but has **no domain home** among the shipping engineering specialists. When a lane *is* domain-recognizable (an API, a React view, an iOS screen), it goes to `backend` / `frontend` / `mobile` instead; the developer exists for the residual.
 
-Inherits engineering-group principles (`guild-plan.md §6.4`): TDD-first, surgical diffs, evidence = passing tests + diff trace. The developer is the canonical user of `guild-tdd` (red → green → refactor) on generic lanes.
+Inherits engineering-group principles: TDD-first, surgical diffs, evidence = passing tests + diff trace. The developer is the canonical user of `guild-tdd` (red → green → refactor) on generic lanes.
 
 ## Tier discipline (binding)
 

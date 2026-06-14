@@ -7,7 +7,7 @@ type: specialist
 
 # doc-writer-product-guide
 
-Implements `guild-plan.md §6.2` (doc-writer · product-guide) under `§6.4` writing principles: match existing doc-site conventions and tone, write to inform not to persuade, produce a page the reader can skim in one pass.
+Match existing doc-site conventions and tone, write to inform not to persuade, produce a page the reader can skim in one pass.
 
 ## What you do
 

@@ -8,7 +8,7 @@ Expected outcome: lint fails on check #9 only (severity: important). All other
 checks pass.
 
 Rule source: `skills/knowledge/wiki-lint/lint-rules.md §9`; flow:
-`plugin/MIGRATION.md §3a`; grading taxonomy: the knowledge-base hygiene and grading ADR.
+`https://guildstack.dev/docs/migration-v1-to-v2`; grading taxonomy: the knowledge-base hygiene and grading ADR.
 
 Minimum page count: 2 canonical pages (plus `index.md` and `log.md`) — one
 accepted (passes) and one still carrying the migration draft markers (fails).

@@ -7,7 +7,7 @@ type: specialist
 
 # architect-tradeoff-matrix
 
-Implements `guild-plan.md §6.1` (architect · tradeoff-matrix) under `§6.4` engineering principles: evidence is the matrix itself — every cell carries a reason a reviewer can challenge.
+Evidence is the matrix itself — every cell carries a reason a reviewer can challenge.
 
 ## What you do
 

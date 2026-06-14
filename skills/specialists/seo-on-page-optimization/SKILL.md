@@ -7,7 +7,7 @@ type: specialist
 
 # seo-on-page-optimization
 
-Implements `guild-plan.md §6.2` (seo · on-page-optimization) under `§6.4` commercial principles: hypothesis-first (what does the SERP reward this page for?), success = measurable (rank, CTR, conversion), evidence = before/after with cited data, not cargo-cult tweaks.
+Hypothesis-first (what does the SERP reward this page for?), success = measurable (rank, CTR, conversion), evidence = before/after with cited data, not cargo-cult tweaks.
 
 ## What you do
 

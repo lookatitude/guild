@@ -14,20 +14,16 @@ contract. **Team composition is a sub-step strictly inside this command**
 via `/guild:status`, edit via the `[edit]` response at the plan/team approval
 gate, raise the cap with `--team-size=N`.
 
-Canonical surface: `architecture/command-surface.md §3.1` (Planning row) and
-the verb↔phase edge in `§6` (D-14: `/guild:plan` → Planning). Phase concept
-binding: `lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
+Verb↔phase edge: `/guild:plan` → Planning. Phase concept binding:
+`lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
 
-## Contract binding (by pointer — never re-spelled)
+## Contract binding
 
 Before producer work begins, this phase **resolves the frozen
-`guild.phase_entry.v1` contract** — bound by pointer to
-`architecture/target-architecture.md §"phase_entry contract"`. The additive
-optional per-lane `autonomy_contract` is authored here and approved at the
-**existing** plan gate — **no new gate** (bound by pointer:
-`command-surface.md §5.2`; `target-architecture.md §"autonomy_policy /
-autonomy_contract"`). The Tier-2 `defaults:` config folded at intake is
-bound by pointer to `command-surface.md §4.4` (`P1-config-001`).
+`guild.phase_entry.v1` contract**. The additive optional per-lane
+`autonomy_contract` is authored here and approved at the **existing** plan
+gate — **no new gate**. The Tier-2 `defaults:` config folded at intake
+is controlled by `P1-config-001` — see `/guild:config` for the schema.
 
 ## Usage
 
@@ -36,18 +32,16 @@ bound by pointer to `command-surface.md §4.4` (`P1-config-001`).
 /guild:plan --team-size=8
 ```
 
-All five global flags + `--dry-run` apply (`command-surface.md §4`, by
-pointer). The `--rigor` profile expansion (`rigorProfile()` in
-`scripts/read-guild-config.ts`; `command-surface.md §4.3`) decides the L2
-loop: `standard` (the default) and `deep` both expand to a `loops` set
-containing `plan`; only `quick` turns it off.
+All five global flags + `--dry-run` apply. The `--rigor` profile expansion
+(`rigorProfile()` in `scripts/read-guild-config.ts`) decides the L2 loop:
+`standard` (the default) and `deep` both expand to a `loops` set containing
+`plan`; only `quick` turns it off.
 
 ## Args & local flags
 
 - Args: — (no positional)
 - Local flags:
-  - `--team-size=N` — cap-6 override; `>6` prints the `guild-plan.md §7.2`
-    cap warning.
+  - `--team-size=N` — cap-6 override; `>6` prints a cap warning.
 
 ## Gates (default)
 

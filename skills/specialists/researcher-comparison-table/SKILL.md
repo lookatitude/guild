@@ -7,7 +7,7 @@ type: specialist
 
 # researcher-comparison-table
 
-Implements `guild-plan.md §6.1` (researcher · comparison-table) under `§6.4` engineering principles: evidence is a table whose every cell cites a source — no opinion cells, no unsourced "best" claims.
+Evidence is a table whose every cell cites a source — no opinion cells, no unsourced "best" claims.
 
 ## What you do
 

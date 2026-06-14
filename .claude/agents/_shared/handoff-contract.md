@@ -1,6 +1,6 @@
 # Handoff Contract
 
-Every dev agent closes its invocation with a structured receipt, mirroring the shape of `guild-plan.md §8.2` (specialist handoff contract). Main session consumes these to decide what to dispatch next.
+Every dev agent closes its invocation with a structured receipt that mirrors the specialist handoff contract shape. Main session consumes these to decide what to dispatch next.
 
 ## Schema
 

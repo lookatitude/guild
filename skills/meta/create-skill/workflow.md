@@ -1,6 +1,6 @@
 # create-skill — full procedure, boundary scan & extraction signals
 
-Detail for `guild:create-skill`. Implements the **G-CREATE-SKILL** capability from `dynamic-team-composition.md` OD-3 §2, mirroring `guild:create-specialist` (`guild-plan.md §12`) and reusing the `§11.2` evolve/shadow gate. The SKILL.md carries the summary + DH-3 mint contract; this file carries the step-by-step procedure.
+Detail for `guild:create-skill`. Implements the **G-CREATE-SKILL** capability from `dynamic-team-composition.md` OD-3 §2, mirroring `guild:create-specialist` and reusing the evolve/shadow gate. The SKILL.md carries the summary + DH-3 mint contract; this file carries the step-by-step procedure.
 
 ## Input fields (step-1 interview)
 
@@ -9,7 +9,7 @@ Capture all fields before drafting (ask the user until complete; do not guess �
 1. **skill name** — the `name:` slug, single hyphenated token (`guild-<verb-or-noun>`, e.g. `guild-api-contract-lint`). Decides the proposed directory `proposed-<name>/`.
 2. **description** — one-paragraph `description:` (≤1024 chars) carrying **≥3 distinct trigger phrasings** + a `TRIGGER` clause + a `DO NOT TRIGGER` clause. This is the routing contract; it must be drafted to the same standard skill-author applies to every shipped skill.
 3. **when_to_use** — the routing precondition (when in a workflow/lifecycle this skill should fire).
-4. **tier placement** — `core` / `meta` / `knowledge` / `specialists` (`guild-plan.md §5`). Determines the live register path and the surrounding conventions to imitate.
+4. **tier placement** — `core` / `meta` / `knowledge` / `specialists`. Determines the live register path and the surrounding conventions to imitate.
 5. **typical prompts** — 3–5 user/orchestrator utterances that should route here → the `should_trigger` side of the new skill's paired evals.
 6. **example outputs** — 1–3 concrete artifacts or a body outline the skill produces → feeds the body and the `should_not_trigger` boundary cases.
 7. **adjacent skills** — skills whose triggers plausibly overlap → seeds the step-3 boundary scan and the step-4 `DO NOT TRIGGER` edits.

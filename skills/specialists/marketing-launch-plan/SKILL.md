@@ -7,7 +7,7 @@ type: specialist
 
 # marketing-launch-plan
 
-Implements `guild-plan.md §6.3` (marketing · launch-plan) under `§6.4` commercial principles: hypothesis-first (what does "this launch worked" mean before we ship?), success = pre-registered metrics, evidence = channel-level data after the fact — never "felt like a good launch."
+Hypothesis-first (what does "this launch worked" mean before we ship?), success = pre-registered metrics, evidence = channel-level data after the fact — never "felt like a good launch."
 
 ## What you do
 

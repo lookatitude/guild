@@ -7,7 +7,7 @@ type: specialist
 
 # researcher-deep-dive
 
-Implements `guild-plan.md §6.1` (researcher · deep-dive) under `§6.4` engineering principles: evidence is the source list — every non-trivial claim cites a source with a URL and a confidence label.
+Evidence is the source list — every non-trivial claim cites a source with a URL and a confidence label.
 
 ## What you do
 

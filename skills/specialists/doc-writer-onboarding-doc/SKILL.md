@@ -7,7 +7,7 @@ type: specialist
 
 # doc-writer-onboarding-doc
 
-Implements `guild-plan.md §6.2` (doc-writer · onboarding-doc) under `§6.4` writing principles: match the existing repo conventions, calibrate to the target reader (end-user vs. contributor vs. developer), and produce a page the reader can follow to a working result without leaving it.
+Match the existing repo conventions, calibrate to the target reader (end-user vs. contributor vs. developer), and produce a page the reader can follow to a working result without leaving it.
 
 ## What you do
 

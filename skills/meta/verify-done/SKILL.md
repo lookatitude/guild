@@ -7,7 +7,7 @@ type: meta
 
 # guild:verify-done
 
-Implements `guild-plan.md §8` (verify step) and the planning contract's success-criteria rule in `§8.1`. Runs after `guild:review` has produced `.guild/runs/<run-id>/review.md` with no outstanding Stage 1 or Stage 2 blockers, and is the final checkpoint before a Guild task is allowed to close. It is a gate, not a re-implementation: it reads artifacts and says pass or fail, it does not re-do specialist work.
+The final checkpoint before a Guild task is allowed to close. Runs after `guild:review` has produced `.guild/runs/<run-id>/review.md` with no outstanding Stage 1 or Stage 2 blockers. Enforces the planning contract's success-criteria rule: every criterion from the spec must be demonstrably met. It is a gate, not a re-implementation: it reads artifacts and says pass or fail, it does not re-do specialist work.
 
 ## Input
 

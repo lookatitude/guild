@@ -7,7 +7,7 @@ type: specialist
 
 # copywriter-email-sequences
 
-Implements `guild-plan.md §6.2` (copywriter · email-sequences) under `§6.4` writing principles: match existing voice, don't rewrite adjacent campaigns, evidence = a sequence a lifecycle PM can read top-to-bottom and approve.
+Match existing voice, don't rewrite adjacent campaigns, evidence = a sequence a lifecycle PM can read top-to-bottom and approve.
 
 ## What you do
 

@@ -11,8 +11,7 @@ Reads the active run state: current run, furthest phase, next gate, and
 blockers. **No phase** — acts on the active run. Read-only **R**, writes no
 file.
 
-Canonical surface: `architecture/command-surface.md §3.2` (status row) +
-`§2` (3-daily tier). Also surfaces the per-phase active team (resolved via
+Also surfaces the per-phase active team (resolved via
 `resolveTeamFile(root, slug, null)` — consults `.current` then legacy;
 reports "none for this phase" if absent).
 
@@ -20,9 +19,8 @@ reports "none for this phase" if absent).
 
 - Args: — (no positional)
 - `--no-index` — per-invocation bypass of the optional read-through cache,
-  forcing a one-shot filesystem scan (Invariant FS-CANONICAL, by pointer
-  `command-surface.md §5.3`). The filesystem stays canonical; the index is
-  never authoritative and never required.
+  forcing a one-shot filesystem scan (Invariant FS-CANONICAL: the filesystem
+  stays canonical; the index is never authoritative and never required).
 
 ## Gates
 

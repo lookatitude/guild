@@ -7,7 +7,7 @@ type: specialist
 
 # sales-cold-outreach
 
-Implements `guild-plan.md §6.3` (sales · cold-outreach) under `§6.3`/`§6.4` commercial principles: hypothesis-first (what trigger/pain/value-claim are we betting on per touch?), success = reply rate and qualified meeting rate, evidence = cadence-level data — not "we sent 500 emails."
+Hypothesis-first (what trigger/pain/value-claim are we betting on per touch?), success = reply rate and qualified meeting rate, evidence = cadence-level data — not "we sent 500 emails."
 
 ## What you do
 

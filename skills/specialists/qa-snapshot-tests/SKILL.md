@@ -7,7 +7,7 @@ type: specialist
 
 # qa-snapshot-tests
 
-Implements `guild-plan.md §6.1` (qa · snapshot-tests) under `§6.4` engineering principles: the snapshot is a cheap spec, but only if every update is reviewed — auto-accepting diffs turns tests into rubber stamps.
+The snapshot is a cheap spec, but only if every update is reviewed — auto-accepting diffs turns tests into rubber stamps.
 
 ## What you do
 

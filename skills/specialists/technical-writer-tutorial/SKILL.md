@@ -7,7 +7,7 @@ type: specialist
 
 # technical-writer-tutorial
 
-Implements `guild-plan.md §6.2` (technical-writer · tutorial) under `§6.4` writing principles: match the product's actual install/run steps (verify them), don't rewrite adjacent docs, evidence = a reader who follows the tutorial reaches the working end-state without detours.
+Match the product's actual install/run steps (verify them), don't rewrite adjacent docs, evidence = a reader who follows the tutorial reaches the working end-state without detours.
 
 ## What you do
 

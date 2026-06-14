@@ -7,7 +7,7 @@ type: specialist
 
 # copywriter-long-form
 
-Implements `guild-plan.md §6.2` (copywriter · long-form) under `§6.4` writing principles: match existing voice, don't rewrite adjacent prose, evidence = a scannable sample the user can skim in under a minute.
+Match existing voice, don't rewrite adjacent prose, evidence = a scannable sample the user can skim in under a minute.
 
 ## What you do
 

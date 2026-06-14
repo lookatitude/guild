@@ -7,7 +7,7 @@ type: meta
 
 # guild:audit
 
-Implements `guild-plan.md §15.1 #12` (privacy + egress — meta-skills restricted to filesystem; only researcher has web access by default; `/guild:audit` surfaces script hashes) and the `§15.2` "Arbitrary code in installed skills" risk (the plugin is only as safe as its installed-from source — install from trusted sources per Anthropic's guidance).
+Audits Guild plugin scripts for privacy and egress compliance: meta-skills are restricted to the filesystem; only the researcher has web access by default; `/guild:audit` surfaces script hashes. The plugin is only as safe as its installed-from source — install from trusted sources per Anthropic's guidance.
 
 The audit is **static** — it reads source files, computes hashes, greps for egress and filesystem patterns, and writes a dated report. It does not execute any script under audit.
 

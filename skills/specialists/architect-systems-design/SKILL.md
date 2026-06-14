@@ -7,7 +7,7 @@ type: specialist
 
 # architect-systems-design
 
-Implements `guild-plan.md §6.1` (architect specialist · systems-design skill) under the engineering group per `§6.4` (TDD-first, surgical diffs, evidence = a design doc the reviewer can trace line by line).
+Engineering specialist operating under the principles of TDD-first, surgical diffs; evidence = a design doc the reviewer can trace line by line.
 
 ## What you do
 

@@ -7,7 +7,7 @@ type: specialist
 
 # social-media-thread
 
-Implements `guild-plan.md §6.2` (social-media · thread) under `§6.4` writing principles: match platform norms for serial content, don't rewrite adjacent single posts, evidence = a thread whose first post earns the read and last post pays it off.
+Match platform norms for serial content, don't rewrite adjacent single posts, evidence = a thread whose first post earns the read and last post pays it off.
 
 ## What you do
 

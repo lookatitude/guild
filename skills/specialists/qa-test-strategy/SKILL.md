@@ -7,7 +7,7 @@ type: specialist
 
 # qa-test-strategy
 
-Implements `guild-plan.md §6.1` (qa · test-strategy) under `§6.4` engineering principles: tests are the contract; the strategy names which contracts a given feature is accountable for, and what shape the proof takes.
+Tests are the contract; the strategy names which contracts a given feature is accountable for, and what shape the proof takes.
 
 ## What you do
 

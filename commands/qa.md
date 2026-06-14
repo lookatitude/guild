@@ -18,20 +18,16 @@ harnesses under the run sandbox + budgets. Producer `qa-test-strategy` vs
 auto-entered, never silently skipped** (`command-surface.md §6` edge-label
 caveat).
 
-Promotion behaviour is canonical in `architecture/command-surface.md §3.1`
-(Quality `[v2]` row) — bound by pointer, not re-spelled. Verb↔phase edge:
-`§6` (D-14: `/guild:qa` → Quality). Phase concept binding:
+This is the Quality phase entrypoint `[v2]`. Verb↔phase edge:
+`/guild:qa` → Quality. Phase concept binding:
 `lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md`.
 
-## Contract binding (by pointer — never re-spelled)
+## Contract binding
 
 Before producer work begins, this phase **resolves the frozen
-`guild.phase_entry.v1` contract** — bound by pointer to
-`architecture/target-architecture.md §"phase_entry contract"`. The Quality
-result is the frozen `guild.quality.v1` contract — bound by pointer to
-`target-architecture.md §588–637`. Quality budgets are consumed by pointer
-from `defaults.quality.budget` (`command-surface.md §4.4`, `P1-config-001`)
-— not re-spelled.
+`guild.phase_entry.v1` contract**. The Quality result is the frozen
+`guild.quality.v1` contract. Quality budgets are consumed from
+`defaults.quality.budget` (set in `.guild/settings.json`; `P1-config-001`).
 
 ## Usage
 
@@ -40,8 +36,7 @@ from `defaults.quality.budget` (`command-surface.md §4.4`, `P1-config-001`)
 /guild:qa run-2026-05-18-ab12
 ```
 
-All five global flags + `--dry-run` apply (`command-surface.md §4`, by
-pointer).
+All five global flags + `--dry-run` apply.
 
 ## Args & local flags
 
@@ -51,8 +46,7 @@ pointer).
 ## Gates (default)
 
 - Release / blocker gate **I** (a BLOCK→release override is **not** a soft
-  gate — it stays human-gated even under `--auto-approve=all`;
-  `MIGRATION.md §6`, by pointer)
+  gate — it stays human-gated even under `--auto-approve=all`)
 - G-quality review **A**
 
 ## Output artifact

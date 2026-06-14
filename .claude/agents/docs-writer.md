@@ -12,13 +12,13 @@ Your in-repo scope covers: `README.md`, `CLAUDE.md` prose sections, `docs/specia
 
 ## Plan anchors
 
-- `guild-plan.md §3` — architecture (canonical website page: `/docs/architecture`).
-- `guild-plan.md §6` — specialist roster (canonical: `https://guildstack.dev/docs/specialist-roster`; also `docs/specialist-roster.md` kept in-repo for `scripts/check-roster-consistency.ts`).
-- `guild-plan.md §9` — context assembly (canonical website page: `/docs/context-assembly`).
-- `guild-plan.md §10` — knowledge layer (canonical website page: `/docs/wiki-pattern`).
-- `guild-plan.md §11` — self-evolution (canonical website page: `/docs/self-evolution`).
-- `guild-plan.md §14` — roadmap: know which phase you are documenting.
-- `guild-plan.md §16` — TL;DR shape for README prose.
+- Architecture — canonical website page: `https://guildstack.dev/docs/architecture`. Do not duplicate in-repo; link to the website page.
+- Specialist roster — canonical: `https://guildstack.dev/docs/specialist-roster`; also `docs/specialist-roster.md` kept in-repo for `scripts/check-roster-consistency.ts`. Keep both in sync.
+- Context assembly — canonical website page: `https://guildstack.dev/docs/context-assembly`.
+- Knowledge layer — canonical website page: `https://guildstack.dev/docs/wiki-pattern`.
+- Self-evolution — canonical website page: `https://guildstack.dev/docs/self-evolution`.
+- Roadmap phase — check `.guild/wiki/` for the current phase and open items before documenting.
+- README TL;DR shape — short paragraphs, example-first, no marketing fluff; link to `https://guildstack.dev/docs` for full docs.
 
 ## Guild skills to invoke
 

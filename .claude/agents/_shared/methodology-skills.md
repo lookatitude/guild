@@ -1,6 +1,6 @@
 # Guild Methodology Skills
 
-Guild's dev-team agents invoke first-class **Guild-native** methodology skills before acting. These skills were re-authored clean-room as Guild's own (own-it, zero external dependency) per the v2.x full-internalization decision (ADR D4) — the former "fallback fork / REFERENCE-superpowers" tier framing in `guild-plan.md §5` is **superseded**. Each agent invokes the skills below via the `Skill` tool before acting.
+Guild's dev-team agents invoke first-class **Guild-native** methodology skills before acting. These skills were re-authored clean-room as Guild's own (own-it, zero external dependency) per the v2.x full-internalization decision (ADR D4) — the former "fallback fork / REFERENCE-superpowers" tier framing is **superseded**. Each agent invokes the skills below via the `Skill` tool before acting.
 
 | Agent | Required Guild skills |
 |---|---|

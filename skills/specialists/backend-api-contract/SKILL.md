@@ -7,7 +7,7 @@ type: specialist
 
 # backend-api-contract
 
-Implements `guild-plan.md §6.1` (backend · api-contract) under `§6.4` engineering principles: the contract is the test; the implementation is green when a generated client can exercise every endpoint.
+The contract is the test; the implementation is green when a generated client can exercise every endpoint.
 
 ## What you do
 

@@ -1,9 +1,8 @@
 # guild-telemetry
 
 Optional Guild MCP server that exposes structured queries over a consuming
-repo's `.guild/runs/`. Per `guild-plan.md` §13.3 this is optional; Guild works
-end-to-end without it via `scripts/trace-summarize.ts` and plain filesystem
-reads.
+repo's `.guild/runs/`. This server is optional; Guild works end-to-end without
+it via `scripts/trace-summarize.ts` and plain filesystem reads.
 
 ## Why it exists
 

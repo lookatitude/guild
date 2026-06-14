@@ -7,7 +7,7 @@ type: specialist
 
 # seo-keyword-research
 
-Implements `guild-plan.md §6.2` (seo · keyword-research) under `§6.4` commercial principles: hypothesis-first (what are we betting ranks and converts?), success = measurable outcome (ranking + traffic + conversion), evidence = cited volume/difficulty/intent data, not vibes.
+Hypothesis-first (what are we betting ranks and converts?), success = measurable outcome (ranking + traffic + conversion), evidence = cited volume/difficulty/intent data, not vibes.
 
 ## What you do
 

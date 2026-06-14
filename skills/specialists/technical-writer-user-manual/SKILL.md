@@ -7,7 +7,7 @@ type: specialist
 
 # technical-writer-user-manual
 
-Implements `guild-plan.md §6.2` (technical-writer · user-manual) under `§6.4` writing principles: match the product's UI labels exactly, don't rewrite adjacent pages that weren't asked about, evidence = a page a user can complete the task from without opening support.
+Match the product's UI labels exactly, don't rewrite adjacent pages that weren't asked about, evidence = a page a user can complete the task from without opening support.
 
 ## What you do
 

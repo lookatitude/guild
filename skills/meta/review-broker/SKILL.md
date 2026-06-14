@@ -11,8 +11,8 @@ The host-agnostic abstraction over **cross-family adversarial review**: one host
 drafts an artifact, a *different* host family critiques it, so the critique is
 genuinely independent rather than a model grading its own homework. Implements
 the **D-BR cluster** (the v2 review-broker and artifact-bus ADR) and sits in the
-T2 meta tier (`guild-plan.md §5`). Engaged by `review: cross` /
-`--review=cross`; runs at the lifecycle gates defined in `guild-plan.md §8`.
+T2 meta tier. Engaged by `review: cross` /
+`--review=cross`; runs at the Guild lifecycle gates (G-init, G-spec, G-plan, G-lane, G-quality, G-operations, G-diagnose).
 
 This skill is the **generalization of `guild:codex-review`**. Where
 `codex-review` hard-wired Claude-author → Codex-reviewer, the broker is
@@ -498,7 +498,7 @@ for eval-engineer.)
 
 ## Handoff receipt
 
-Per `guild-plan.md §8.2`: `gate`, `author_host`, `reviewer_host`, `rounds`,
+Handoff fields: `gate`, `author_host`, `reviewer_host`, `rounds`,
 `status`, `trail_path`, and `evidence:` (packet/result paths + JSONL round
 events). On `status: "rework"` the broker returns control to the prior lifecycle
 step; on `satisfied` / `force_passed` it clears the gate.

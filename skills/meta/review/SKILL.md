@@ -7,7 +7,7 @@ type: meta
 
 # guild:review
 
-Implements `guild-plan.md §8` (review step). Runs after `guild:execute-plan` collects one handoff receipt per lane under `.guild/runs/<run-id>/handoffs/` and before `guild:verify-done`. Performs a **two-stage review — spec compliance first, then quality** — against the §8.2 receipts (fields `changed_files`, `opens_for`, `assumptions`, `evidence`, `followups`), read verbatim.
+Implements the task lifecycle review step. Runs after `guild:execute-plan` collects one handoff receipt per lane under `.guild/runs/<run-id>/handoffs/` and before `guild:verify-done`. Performs a **two-stage review — spec compliance first, then quality** — against the receipts (fields `changed_files`, `opens_for`, `assumptions`, `evidence`, `followups`), read verbatim.
 
 Do not rehydrate full specialist conversations. The §8.2 receipt contract exists so review is compact and auditable; pulling the transcript back in defeats the design and inflates token cost.
 
@@ -37,7 +37,7 @@ Output per lane: ✓ pass or ✗ fail with the failing check named. A ✗ means 
 
 Only lanes that passed Stage 1 (full criteria in `rubric.md`):
 
-1. **Does `evidence` demonstrate the claim?** Per `guild-plan.md §2` (evidence rule) + §8.2 the field must be concrete — a test command + outcome, sample output, grep count, validator pass. "Looks good" / "should work" / a bare tool name with no output fail.
+1. **Does `evidence` demonstrate the claim?** The field must be concrete — a test command + outcome, sample output, grep count, validator pass. "Looks good" / "should work" / a bare tool name with no output fail.
 2. **Any concerns the lane raised?** Flag risks surfaced under `assumptions`/`followups` even if Stage 1 passed — they inform `guild:verify-done` and the next plan.
 
 Output per lane: ✓ pass, ✗ fail, or → follow-up.

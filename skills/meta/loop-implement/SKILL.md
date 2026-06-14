@@ -135,6 +135,6 @@ T3c's `log-jsonl.ts`. Schema reference → **`workflow-and-events.md`**.
 
 ## Handoff receipt
 
-Per `guild-plan.md §8.2`: `loop_id`, `lane_id`, `loops_applicable`, `layers_run`,
+Handoff fields: `loop_id`, `lane_id`, `loops_applicable`, `layers_run`,
 `rounds_per_layer`, `restart_count`, `superseded_receipts`, `status`, `next`, and
 `evidence:`. Full field list → **`io-contract.md`**.

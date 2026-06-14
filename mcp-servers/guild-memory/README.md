@@ -3,10 +3,9 @@
 Optional Guild MCP server that exposes BM25 search, read, and list operations
 over a consuming repo's `.guild/wiki/`.
 
-Per `guild-plan.md` §13.3 this server is optional. Under 200 wiki pages,
-plain ripgrep/filesystem search is faster to set up and sufficient; above that
-threshold (§10.5) the BM25 ranking here delivers better precision without
-requiring embeddings.
+This server is optional. Under 200 wiki pages, plain ripgrep/filesystem search
+is faster to set up and sufficient; above that threshold the BM25 ranking here
+delivers better precision without requiring embeddings.
 
 ## Why it exists
 

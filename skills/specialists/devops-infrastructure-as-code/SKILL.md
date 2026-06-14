@@ -7,7 +7,7 @@ type: specialist
 
 # devops-infrastructure-as-code
 
-Implements `guild-plan.md §6.1` (devops · infrastructure-as-code) under `§6.4` engineering principles: the code is the source of truth, `plan` is the review, drift is a bug.
+The code is the source of truth, `plan` is the review, drift is a bug.
 
 ## What you do
 

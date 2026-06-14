@@ -11,11 +11,9 @@ The opt-in durable-goal container. `new|status|resume|update|close` are the
 primary user-facing lifecycle sub-verbs; `list|archive|restore` are
 operational sub-verbs on the same noun.
 
-Canonical surface: `architecture/command-surface.md §3.4` (full set) + `§1`
-(noun grammar). Full lifecycle:
-`initiatives/initiative-and-phase-workflows.md`.
+Full lifecycle: `initiatives/initiative-and-phase-workflows.md`.
 
-## Sub-verbs (cited — `command-surface.md §3.4`)
+## Sub-verbs
 
 | Sub-verb | Drives | Gates | Output |
 |---|---|---|---|
@@ -28,7 +26,7 @@ Canonical surface: `architecture/command-surface.md §3.4` (full set) + `§1`
 | `restore` | restore archived → active (operational) | restore confirm **I** | archived → `active/<id>/` |
 | `close` | requires release evidence + doc-sync reconciliation (D8) | release-readiness + doc-sync gate **I** | `active/<id>/release/**` → archived |
 
-## Opt-in attachment binding (cited — `command-surface.md §3.4`)
+## Opt-in attachment binding
 
 A one-off `/guild:guild` run does **not** create an initiative. An initiative is
 attached only when (a) the user runs `/guild:initiative …` explicitly,

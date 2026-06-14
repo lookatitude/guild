@@ -11,8 +11,6 @@ Static security audit of installed Guild scripts. Maps to skill
 `guild:audit`. **R** static analysis — includes the static
 **boundary-check** section.
 
-Canonical surface: `architecture/command-surface.md §3.5` (audit row + the
-boundary-check description).
 
 ## Gates
 

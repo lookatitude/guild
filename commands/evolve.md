@@ -9,12 +9,9 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestio
 
 Kicks off skill evolution. Maps to skill `guild:evolve-skill`.
 
-Canonical surface: `architecture/command-surface.md §3.5` (evolve row + the
-canonical grammar block). Migration semantics bound by pointer to
-`command-surface.md §3.5` + `decisions/templates-and-migration.md` — not
-re-spelled.
+Migration semantics: `decisions/templates-and-migration.md`.
 
-## Canonical grammar (verbatim — `command-surface.md §3.5`)
+## Canonical grammar
 
 ```
 /guild:evolve [<id>] [--auto] [--to-template=vN]

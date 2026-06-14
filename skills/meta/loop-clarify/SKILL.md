@@ -25,7 +25,7 @@ reached, or two consecutive malformed terminations escalate.
 
 The driver is a pure state machine — it does not synthesise content. Architect
 and researcher are dispatched as Agent-tool subagents with their own context
-bundles per `guild-plan.md §9.3`; this skill only owns the round-counter, the
+bundles (see `guild:context-assemble`); this skill only owns the round-counter, the
 sentinel detector, and the escalation gate.
 
 ## Input shape
@@ -113,6 +113,6 @@ invoke `guild:brainstorm`. Full steps → **`io-contract.md`**.
 
 ## Handoff receipt
 
-Per `guild-plan.md §8.2`: `loop_id`, `lane_id: phase:brainstorm`, `rounds`,
+Handoff fields: `loop_id`, `lane_id: phase:brainstorm`, `rounds`,
 `status`, `next`, and `evidence:` (round handoffs + manifest + JSONL path). Full
 field list → **`io-contract.md`**.

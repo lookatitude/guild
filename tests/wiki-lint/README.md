@@ -81,7 +81,7 @@ Rule source: the knowledge-base hygiene and grading ADR (internal).
   not yet reviewed/accepted it (`migrate-guild.ts --accept-grades`). IMPORTANT —
   the page sits at the human gate; the flag repeats every run until accepted.
   Implemented deterministically as `scan.ts` rule 7 AND as `guild:wiki-lint`
-  check #9 (the `/guild:wiki lint` surface). Flow: `plugin/MIGRATION.md §3a`.
+  check #9 (the `/guild:wiki lint` surface). Flow: `https://guildstack.dev/docs/migration-v1-to-v2`.
 
 **CQ-3 deferred:** lifecycle-gate/hook wiring is a flagged followup for a
 future initiative. These checks are a pure lint floor runnable on demand.
@@ -112,7 +112,7 @@ This emits a flag list to `.guild/initiatives/active/docs-clean-up/artifacts/sca
 | 2 | **Progress messaging** | Session/changelog narrative requiring date-stamp co-occurrence, progress emoji with sprint signals, Wave-N ordinals with status verbs | research/ideation corpus, implementation/phases/ docs, the hygiene ADR itself (meta-definition) |
 | 3 | **Dangling related: slugs** | `related:` slug in frontmatter not matching any page in the wiki corpus | research/ideation corpus (deferred to v2.1 when those pages are promoted) |
 | 4 | **Dangling source_refs** | `source_refs:` path not found on disk | `.guild/**` paths (F-4: gitignored runtime state), `plugin/.guild/**` paths, `external-input/**` refs, research/ideation corpus |
-| 5 | **Missing importance:** | Canonical page (under wiki canonical dirs, not research/ideation, not landing files) missing `importance: critical\|high\|medium\|low` | research/ + ideation/ + landing files (README.md, index.md, QUERY.md, TRANSFER-MANIFEST.md, MIGRATION.md) |
+| 5 | **Missing importance:** | Canonical page (under wiki canonical dirs, not research/ideation, not landing files) missing `importance: critical\|high\|medium\|low` | research/ + ideation/ + landing files (README.md, index.md, QUERY.md, TRANSFER-MANIFEST.md) |
 | 6 | **Secrets grep** | API keys, tokens, PEM blocks, password= assignments | git SHA commit refs in context, code-block example hashes |
 | 7 | **Pending grade review** | `importance_draft: true` frontmatter — a migration-drafted `importance:` grade awaiting operator acceptance (`migrate-guild.ts --accept-grades`) | none (a draft marker is pending wherever it appears) |
 

@@ -7,7 +7,7 @@ type: specialist
 
 # social-media-content-calendar
 
-Implements `guild-plan.md §6.2` (social-media · content-calendar) under `§6.4` writing principles: match existing cadence and voice, don't rewrite in-flight content, evidence = a calendar a CM can work from Monday morning without asking follow-ups.
+Match existing cadence and voice, don't rewrite in-flight content, evidence = a calendar a CM can work from Monday morning without asking follow-ups.
 
 ## What you do
 
