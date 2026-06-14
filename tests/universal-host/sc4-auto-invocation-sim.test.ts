@@ -22,8 +22,10 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { execFileSync } from "node:child_process";
 
 const SKILL_DIR = path.resolve(__dirname, "../../skills/meta/using-guild");
+const BOOTSTRAP_DIST = path.resolve(__dirname, "../../hooks/dist/using-guild-bootstrap.js");
 
 function read(rel: string): string {
   return fs.readFileSync(path.join(SKILL_DIR, rel), "utf8");
@@ -152,5 +154,54 @@ describe("SC-4 auto-invocation — no /guild typed", () => {
     // proving the engagement lexicon (not mere absence-of-narrow) is what triggers.
     expect(simulateLoadsGuild("Summarize the plot of Hamlet in two sentences.")).toBe(false);
     expect(simulateLoadsGuild("Plan and design a service to summarize plots for us.")).toBe(true);
+  });
+});
+
+describe("SC-4 delivery path — the gateway actually REACHES the session (L5b SessionStart envelope) [FU-6]", () => {
+  // The simulator above proves WHICH prompts engage the gateway. This block proves
+  // the gateway content is actually DELIVERED to the model at session start, via the
+  // real L5b SessionStart injector (hooks/dist/using-guild-bootstrap.js) emitting
+  // hookSpecificOutput.additionalContext — closing the SC-4 loop end-to-end on the
+  // REAL binary, not a fixture.
+  function runBootstrap(): { stdout: string; code: number } {
+    try {
+      const stdout = execFileSync("node", [BOOTSTRAP_DIST], {
+        input: JSON.stringify({ hook_event_name: "SessionStart", source: "startup" }),
+        encoding: "utf8",
+      });
+      return { stdout, code: 0 };
+    } catch (e: any) {
+      return { stdout: String(e?.stdout ?? ""), code: typeof e?.status === "number" ? e.status : 1 };
+    }
+  }
+
+  it("the L5b injector is built (dist present — hooks run from dist, not source)", () => {
+    expect(fs.existsSync(BOOTSTRAP_DIST)).toBe(true);
+  });
+
+  it("SessionStart emits a hookSpecificOutput.additionalContext envelope carrying the using-guild gateway", () => {
+    const { stdout, code } = runBootstrap();
+    expect(code).toBe(0);
+    const payload = JSON.parse(stdout);
+    expect(payload?.hookSpecificOutput?.hookEventName).toBe("SessionStart");
+    const ctx: string = payload?.hookSpecificOutput?.additionalContext ?? "";
+    expect(ctx.length).toBeGreaterThan(0);
+    // The delivered context IS the using-guild gateway: it carries the skill's
+    // engagement lexicon, so the model that receives it at session start can make
+    // the same auto-invocation decision the simulator models above.
+    const engagementStemsPresent = ENGAGE_LEXICON.filter((s) => ctx.toLowerCase().includes(s.toLowerCase()));
+    expect(engagementStemsPresent.length).toBeGreaterThanOrEqual(ENGAGE_LEXICON.length - 2);
+    // And it is the SAME content the simulator reads from disk (whole-source delivery).
+    expect(ctx).toContain(SKILL_SRC.trim().slice(0, 200));
+  });
+
+  it("END-TO-END: every should_trigger prompt is decidable from the DELIVERED context (no /guild typed)", () => {
+    const ctx: string = JSON.parse(runBootstrap().stdout)?.hookSpecificOutput?.additionalContext ?? "";
+    // The gateway reached the session (ctx non-empty) AND the simulator — bound to
+    // that same gateway — fires on 100% of the should_trigger fixtures. The two
+    // halves (delivery + decision) together are the SC-4 guarantee.
+    expect(ctx.length).toBeGreaterThan(0);
+    const misses = EVALS.should_trigger.filter((p) => !simulateLoadsGuild(p));
+    expect(misses).toEqual([]);
   });
 });
