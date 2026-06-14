@@ -247,23 +247,186 @@ export class CodexPaneAdapter implements PaneAdapter {
   }
 }
 
+// ── GeminiPaneAdapter ─────────────────────────────────────────────────────────
+
+/**
+ * Gemini CLI pane (Rung-1 tmux substrate). Emits `gemini -p '<prompt>'` — the
+ * CLI's non-interactive one-shot prompt mode — then keeps the pane alive.
+ * Coordinates via the file bus only (no Claude agent-team gate, no Claude hooks
+ * → no heartbeat). Preflight: `gemini --version` AND usable auth (GEMINI_API_KEY
+ * | GOOGLE_API_KEY | an oauth creds file under ${GEMINI_HOME:-~/.gemini}).
+ *
+ * STATUS: command construction is unit-tested via the injected RunFn (same
+ * pattern as Codex); LIVE validation against a real Gemini CLI is the documented
+ * residual (host-adapter status ladder: detect-only → [v2-contract-only]).
+ */
+export class GeminiPaneAdapter implements PaneAdapter {
+  readonly hostKind = "gemini" as const;
+  readonly adapterVersion = ADAPTER_VERSION;
+  private run: RunFn;
+  private env_: NodeJS.ProcessEnv;
+  private fs_: FsSeam;
+
+  constructor(opts: AdapterOpts = {}) {
+    this.run = opts.run ?? defaultRun;
+    this.env_ = opts.env ?? process.env;
+    this.fs_ = opts.fs ?? nodefs;
+  }
+
+  private oauthPath(): string {
+    const home = (this.env_["GEMINI_HOME"] ?? "").trim() || nodepath.join(os.homedir(), ".gemini");
+    return nodepath.join(home, "oauth_creds.json");
+  }
+  private hasOauth(): boolean {
+    try { return this.fs_.existsSync(this.oauthPath()) && this.fs_.statSync(this.oauthPath()).size > 0; }
+    catch { return false; }
+  }
+
+  preflight(): PreflightResult {
+    const r = this.run("gemini", ["--version"]);
+    if (r.status !== 0) {
+      return {
+        ok: false,
+        message:
+          "`gemini` binary not found or not runnable (gemini --version failed). " +
+          "Install the Gemini CLI and ensure it is on PATH.",
+      };
+    }
+    const key = (this.env_["GEMINI_API_KEY"] ?? this.env_["GOOGLE_API_KEY"] ?? "").trim();
+    if (!key && !this.hasOauth()) {
+      return {
+        ok: false,
+        message:
+          `no GEMINI_API_KEY/GOOGLE_API_KEY and no oauth creds at ${this.oauthPath()} — ` +
+          "run `gemini` once to authenticate or set an API key (CH-6 fail-fast).",
+      };
+    }
+    return { ok: true, message: `gemini --version ok; ${key ? "API key present" : "oauth creds present"}` };
+  }
+
+  command(spec: PaneSpec): string {
+    const taskFragment = spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
+    const specialistFragment = spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
+    const scopeFragment = spec.capability_scope !== undefined
+      ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
+    return (
+      `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      taskFragment + specialistFragment + scopeFragment +
+      `gemini -p ${shellQuote(spec.prompt)}; ` +
+      `exec $SHELL`
+    );
+  }
+
+  env(spec: PaneSpec): Record<string, string> {
+    return {
+      GUILD_RUN_ID: spec.runId,
+      ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
+      ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
+      ...(spec.capability_scope !== undefined
+        ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}),
+    };
+  }
+
+  /** No Claude PostToolUse hook → no heartbeat; file-bus receipts + approvals only. */
+  expectedOutputs(): Array<"heartbeat" | "handoff_receipt" | "approval_request"> {
+    return ["handoff_receipt", "approval_request"];
+  }
+}
+
+// ── PiPaneAdapter ─────────────────────────────────────────────────────────────
+
+/**
+ * Pi (Inflection) CLI pane (Rung-1 tmux substrate). Emits `pi -p '<prompt>'`
+ * then keeps the pane alive. Pi core lacks MCP, so recall degrades to the
+ * filesystem/BM25 reader (host-adapter Surface 7 §Host-render-or-degrade) — no
+ * MCP transport is assumed here. File-bus coordination only.
+ *
+ * STATUS: [v2-contract-only]. The exact Pi CLI prompt flag is the documented
+ * residual — command construction is unit-tested via the injected RunFn, but the
+ * `-p` one-shot flag MUST be confirmed against the installed Pi CLI before live
+ * use (overridable here as the single change point). Preflight: `pi --version`.
+ */
+export class PiPaneAdapter implements PaneAdapter {
+  readonly hostKind = "pi" as const;
+  readonly adapterVersion = ADAPTER_VERSION;
+  private run: RunFn;
+  private env_: NodeJS.ProcessEnv;
+
+  constructor(opts: AdapterOpts = {}) {
+    this.run = opts.run ?? defaultRun;
+    this.env_ = opts.env ?? process.env;
+  }
+
+  preflight(): PreflightResult {
+    const r = this.run("pi", ["--version"]);
+    if (r.status !== 0) {
+      return {
+        ok: false,
+        message:
+          "`pi` binary not found or not runnable (pi --version failed). " +
+          "Install the Pi CLI and ensure it is on PATH.",
+      };
+    }
+    const key = (this.env_["PI_API_KEY"] ?? this.env_["INFLECTION_API_KEY"] ?? "").trim();
+    if (!key) {
+      return {
+        ok: false,
+        message: "no PI_API_KEY/INFLECTION_API_KEY — set a Pi API key (CH-6 fail-fast).",
+      };
+    }
+    return { ok: true, message: "pi --version ok; API key present" };
+  }
+
+  command(spec: PaneSpec): string {
+    const taskFragment = spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
+    const specialistFragment = spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
+    const scopeFragment = spec.capability_scope !== undefined
+      ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
+    return (
+      `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      taskFragment + specialistFragment + scopeFragment +
+      `pi -p ${shellQuote(spec.prompt)}; ` +
+      `exec $SHELL`
+    );
+  }
+
+  env(spec: PaneSpec): Record<string, string> {
+    return {
+      GUILD_RUN_ID: spec.runId,
+      ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
+      ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
+      ...(spec.capability_scope !== undefined
+        ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}),
+    };
+  }
+
+  /** Pi core lacks MCP + Claude hooks → file-bus receipts + approvals only. */
+  expectedOutputs(): Array<"heartbeat" | "handoff_receipt" | "approval_request"> {
+    return ["handoff_receipt", "approval_request"];
+  }
+}
+
 // ── Adapter registry + resolver ───────────────────────────────────────────────
 
 /**
  * Build the `host_kind` → adapter map. Constructed per call so test seams (run /
  * env overrides) propagate to every adapter. A future host adds one row here.
  *
- * PHASE-1-DISPATCH-WAVE-1: return type widened from
- * `Record<HostKind, PaneAdapter>` to `Partial<Record<HostKind, PaneAdapter>>`
- * because HostKind widened from 2 to 9 hosts in Wave-1; only claude + codex
- * are wired up today. `resolveAdapter` below already throws on an unknown
- * key, so the runtime semantics are unchanged. Per-host adapter
- * implementations land in their own downstream initiatives.
+ * Return type is `Partial<Record<HostKind, PaneAdapter>>` (HostKind has 9 hosts).
+ * Wired Rung-1 (tmux CLI pane) adapters: claude + codex (reference, live-validated)
+ * and gemini + pi ([v2-contract-only] — command construction unit-tested, live
+ * validation pending the runtime). The remaining HostKinds are NOT Rung-1 tmux
+ * panes — antigravity-2 (Rung-2 host-native agents), claude-code-desktop/web,
+ * codex-app, and the claude.ai connector use different substrate/dispatch
+ * surfaces (see host-adapter-contract.md Surface 8 ladder), so they are not
+ * PaneAdapters. `resolveAdapter` throws on an unregistered key.
  */
 export function buildAdapters(opts: AdapterOpts = {}): Partial<Record<HostKind, PaneAdapter>> {
   return {
     claude: new ClaudePaneAdapter(opts),
     codex: new CodexPaneAdapter(opts),
+    gemini: new GeminiPaneAdapter(opts),
+    pi: new PiPaneAdapter(opts),
   };
 }
 
