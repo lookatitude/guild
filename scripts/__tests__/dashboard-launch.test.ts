@@ -39,6 +39,7 @@ import {
   resolveBenchmarkCheckout,
   resolveProjectRoot,
   stopDashboard,
+  updateBenchmarkCacheToLatest,
   type DashboardArgs,
   type DashboardRecord,
   type ExecCall,
@@ -79,6 +80,8 @@ function makeFakeEnv(files: Record<string, string | null>, opts?: {
   fetchImpl?: LaunchEnv["fetchFn"];
   /** PIDs reported alive by the isProcessAlive seam (default: none). */
   alivePids?: number[];
+  /** stdout returned by execCapture (e.g. git tag listing) keyed by the arg join. */
+  captureImpl?: (cmd: string, args: string[]) => { code: number; stdout: string };
 }): FakeEnv {
   const dirs = new Set<string>();
   const fileMap = new Map<string, string>();
@@ -145,6 +148,10 @@ function makeFakeEnv(files: Record<string, string | null>, opts?: {
     execSync: (cmd, args, o) => {
       env.execCalls.push({ cmd, args, ...(o.cwd ? { cwd: o.cwd } : {}) });
       return 0;
+    },
+    execCapture: (cmd, args, o) => {
+      env.execCalls.push({ cmd, args, ...(o.cwd ? { cwd: o.cwd } : {}) });
+      return opts?.captureImpl?.(cmd, args) ?? { code: 0, stdout: "" };
     },
     spawnDetached: (cmd, args, o) => {
       env.spawnCalls.push({ cmd, args, cwd: o.cwd });
@@ -285,12 +292,17 @@ describe("REQUIRED-INSTALL (default path performs no clone/install)", () => {
     );
 
     expect(outcome.exitCode).toBe(EXIT_OK);
-    expect(env.execCalls.map((c) => c.cmd)).toEqual(["git", "npm"]);
-    expect(env.execCalls[0].args[0]).toBe("clone");
-    expect(env.execCalls[0].args[2]).toBe(
-      path.join("/ws/myproject", ".guild", "cache", "benchmark"),
-    );
-    expect(env.execCalls[1].args).toEqual(["ci"]);
+    // git clone FIRST (to the cache dir) → then the cache is updated to the
+    // latest version (git fetch …) → npm ci LAST. (Post-clone, the checkout is a
+    // `cache` kind so step 2c refreshes it to the latest benchmark version.)
+    const first = env.execCalls[0];
+    expect(first.cmd).toBe("git");
+    expect(first.args[0]).toBe("clone");
+    expect(first.args[2]).toBe(path.join("/ws/myproject", ".guild", "cache", "benchmark"));
+    expect(env.execCalls.some((c) => c.cmd === "git" && c.args.includes("fetch"))).toBe(true);
+    const last = env.execCalls[env.execCalls.length - 1];
+    expect(last.cmd).toBe("npm");
+    expect(last.args).toEqual(["ci"]);
   });
 
   test("--dry-run executes nothing even when install would be required", async () => {
@@ -384,6 +396,18 @@ describe("sibling-resolve happy path", () => {
     );
     expect(resolveProjectRoot("/elsewhere", env)).toBeNull();
   });
+
+  test("resolveProjectRoot prefers a parent workspace over a child .guild", () => {
+    const env = makeFakeEnv({
+      "/ws/.guild/workspace.json": JSON.stringify({
+        schema_version: "guild.workspace.v1",
+        is_workspace: true,
+        sub_guilds: [{ name: "plugin", path: "plugin" }],
+      }),
+      "/ws/plugin/.guild/": null,
+    });
+    expect(resolveProjectRoot("/ws/plugin/scripts/deep", env)).toBe(path.normalize("/ws"));
+  });
 });
 
 // ── 3. Import loop ───────────────────────────────────────────────────────────
@@ -458,6 +482,26 @@ describe("lifecycle import loop", () => {
     );
     expect(outcome2.exitCode).toBe(EXIT_OK);
     expect(env2.fetchCalls.filter((c) => c.method === "POST")).toHaveLength(0);
+  });
+
+  test("discoverRunDirs federates workspace root and sub-guild run dirs", () => {
+    const env = makeFakeEnv({
+      "/ws/.guild/workspace.json": JSON.stringify({
+        schema_version: "guild.workspace.v1",
+        is_workspace: true,
+        sub_guilds: [
+          { name: "plugin", path: "plugin" },
+          { name: "escape", path: "../escape" },
+        ],
+      }),
+      "/ws/.guild/runs/run-root/logs/v1.4-events.jsonl": "{}",
+      "/ws/plugin/.guild/runs/run-plugin/logs/v1.4-events.jsonl": "{}",
+      "/escape/.guild/runs/run-escape/logs/v1.4-events.jsonl": "{}",
+    });
+    expect(discoverRunDirs("/ws", env)).toEqual([
+      path.normalize("/ws/.guild/runs/run-root"),
+      path.normalize("/ws/plugin/.guild/runs/run-plugin"),
+    ]);
   });
 });
 
@@ -824,5 +868,39 @@ describe("--stop terminates the real process group (real env, no seams)", () => 
 
     // The test runner's own process (and group) survived the group SIGTERM.
     expect(() => process.kill(process.pid, 0)).not.toThrow();
+  });
+});
+
+describe("updateBenchmarkCacheToLatest — fetch + checkout latest version", () => {
+  const DIR = "/ws/p/.guild/cache/benchmark";
+
+  it("fetches tags then checks out the highest version tag", () => {
+    const env = makeFakeEnv({ [`${DIR}/`]: null }, {
+      captureImpl: (cmd, args) =>
+        args.includes("tag") ? { code: 0, stdout: "v1.3.0\nv1.2.0\nv1.0.0\n" } : { code: 0, stdout: "" },
+    });
+    const res = updateBenchmarkCacheToLatest(DIR, env);
+    expect(res).toEqual({ ref: "v1.3.0" });
+    const seq = env.execCalls.map((c) => c.args.join(" "));
+    expect(seq.some((s) => s.includes("fetch --tags"))).toBe(true);
+    expect(seq.some((s) => s.includes("checkout --quiet v1.3.0"))).toBe(true);
+  });
+
+  it("falls back to the default branch fast-forward when there are no tags", () => {
+    const env = makeFakeEnv({ [`${DIR}/`]: null }, {
+      captureImpl: (cmd, args) =>
+        args.includes("rev-parse") ? { code: 0, stdout: "origin/main\n" } : { code: 0, stdout: "" }, // no tags
+    });
+    const res = updateBenchmarkCacheToLatest(DIR, env);
+    expect(res).toEqual({ ref: "main (latest)" });
+    const seq = env.execCalls.map((c) => c.args.join(" "));
+    expect(seq.some((s) => s.includes("checkout --quiet main"))).toBe(true);
+    expect(seq.some((s) => s.includes("merge --ff-only --quiet origin/main"))).toBe(true);
+  });
+
+  it("returns an error (non-fatal) when git fetch fails", () => {
+    const env = makeFakeEnv({ [`${DIR}/`]: null });
+    env.execSync = () => 1; // fetch fails
+    expect(updateBenchmarkCacheToLatest(DIR, env)).toEqual({ error: "git fetch failed" });
   });
 });

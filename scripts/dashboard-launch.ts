@@ -133,6 +133,12 @@ export interface LaunchEnv {
    */
   execSync(cmd: string, args: string[], opts: { cwd?: string }): number;
   /**
+   * Run a foreground command capturing stdout (used to read the latest benchmark
+   * git tag when updating the cache to the latest version). Returns the exit code
+   * + captured stdout. Network/install-gated like execSync.
+   */
+  execCapture(cmd: string, args: string[], opts: { cwd?: string }): { code: number; stdout: string };
+  /**
    * Spawn the server: detached from this process's lifetime (so the launcher
    * can exit and the operator can browse) but MANAGED — stdout/stderr are
    * appended to `logPath`, and the caller records the PID durably so `--stop`
@@ -214,6 +220,10 @@ export function createRealEnv(): LaunchEnv {
         stdio: "inherit",
       });
       return res.status ?? 1;
+    },
+    execCapture: (cmd, args, opts) => {
+      const res = spawnSync(cmd, args, { cwd: opts.cwd, encoding: "utf-8" });
+      return { code: res.status ?? 1, stdout: (res.stdout as string | null) ?? "" };
     },
     spawnDetached: (cmd, args, opts) => {
       const fd = fs.openSync(opts.logPath, "a");
@@ -300,17 +310,35 @@ export function parseDashboardArgs(
 // ── Project-root resolution ──────────────────────────────────────────────────
 
 /**
- * Nearest ancestor of `cwd` (inclusive) containing a `.guild/` directory;
- * `null` when none — the caller errors out (the dashboard is meaningless
- * without a `.guild/` tree to read).
+ * Root of the Guild project/workspace for `cwd`.
+ *
+ * A child repo inside an umbrella workspace has its own `.guild/`, but the
+ * dashboard should use the workspace root when an ancestor has
+ * `.guild/workspace.json` with `is_workspace: true`. If no workspace ancestor
+ * exists, fall back to the nearest `.guild/` ancestor.
  */
 export function resolveProjectRoot(cwd: string, env: LaunchEnv): string | null {
   let dir = path.resolve(cwd);
+  let nearestGuild: string | null = null;
   for (;;) {
-    if (env.isDirectory(path.join(dir, ".guild"))) return dir;
+    if (env.isDirectory(path.join(dir, ".guild"))) {
+      nearestGuild ??= dir;
+      if (isWorkspaceRoot(dir, env)) return dir;
+    }
     const parent = path.dirname(dir);
-    if (parent === dir) return null;
+    if (parent === dir) return nearestGuild;
     dir = parent;
+  }
+}
+
+function isWorkspaceRoot(root: string, env: LaunchEnv): boolean {
+  const workspacePath = path.join(root, ".guild", "workspace.json");
+  if (!env.exists(workspacePath)) return false;
+  try {
+    const parsed = JSON.parse(env.readFile(workspacePath)) as { is_workspace?: unknown };
+    return parsed.is_workspace === true;
+  } catch {
+    return false;
   }
 }
 
@@ -466,6 +494,46 @@ export function requiredInstallCommands(
   return [`cd ${resolution.dir} && npm ci`];
 }
 
+// ── Cache update: fetch + checkout the latest benchmark version ───────────────
+
+export type BenchmarkUpdate = { ref: string } | { error: string };
+
+/**
+ * Update the Guild-managed cache clone of the benchmark to the LATEST version:
+ * `git fetch` the tags, check out the highest version tag (or the default branch
+ * when the repo has no tags). Network I/O — the CALLER gates this behind
+ * `--install` (the always-ask network class). Non-fatal: on any git failure the
+ * caller logs a warning and launches the current cached checkout.
+ *
+ * Only ever called for the `cache` checkout (Guild owns it). A `sibling`/`in-repo`
+ * checkout is the operator's own working copy and is NEVER auto-updated.
+ */
+export function updateBenchmarkCacheToLatest(dir: string, env: LaunchEnv): BenchmarkUpdate {
+  if (env.execSync("git", ["-C", dir, "fetch", "--tags", "--force", "--quiet", "origin"], {}) !== 0) {
+    return { error: "git fetch failed" };
+  }
+  const tags = env.execCapture("git", ["-C", dir, "tag", "--list", "--sort=-version:refname"], {});
+  const latestTag = tags.code === 0
+    ? (tags.stdout.split("\n").map((s) => s.trim()).filter(Boolean)[0] ?? "")
+    : "";
+  if (latestTag) {
+    if (env.execSync("git", ["-C", dir, "checkout", "--quiet", latestTag], {}) !== 0) {
+      return { error: `git checkout ${latestTag} failed` };
+    }
+    return { ref: latestTag };
+  }
+  // No tags → track the remote default branch and fast-forward to its latest.
+  const head = env.execCapture("git", ["-C", dir, "rev-parse", "--abbrev-ref", "origin/HEAD"], {});
+  const branch = (head.stdout.trim().split("/").pop() || "main");
+  if (env.execSync("git", ["-C", dir, "checkout", "--quiet", branch], {}) !== 0) {
+    return { error: `git checkout ${branch} failed` };
+  }
+  if (env.execSync("git", ["-C", dir, "merge", "--ff-only", "--quiet", `origin/${branch}`], {}) !== 0) {
+    return { error: `git fast-forward ${branch} failed` };
+  }
+  return { ref: `${branch} (latest)` };
+}
+
 // ── Port selection ───────────────────────────────────────────────────────────
 
 /** `preferred` if free, else the next free port within PORT_SCAN_SPAN. */
@@ -482,21 +550,54 @@ export async function pickPort(
 // ── Run-dir discovery ────────────────────────────────────────────────────────
 
 /**
- * Absolute paths of `<project-root>/.guild/runs/<id>` dirs that contain
- * `logs/v1.4-events.jsonl` (the lifecycle-import contract input). Sorted for
+ * Absolute paths of `.guild/runs/<id>` dirs that contain logs/v1.4-events.jsonl
+ * (the lifecycle-import contract input). In workspace mode this federates the
+ * root plus sub_guild paths from `.guild/workspace.json`. Sorted for
  * deterministic output. Real-path covered by a temp-fixture test.
  */
 export function discoverRunDirs(projectRoot: string, env: LaunchEnv): string[] {
-  const runsRoot = path.join(projectRoot, ".guild", "runs");
+  const roots = discoverRunRoots(projectRoot, env);
   const out: string[] = [];
-  for (const name of env.readDir(runsRoot)) {
-    const runDir = path.join(runsRoot, name);
-    if (!env.isDirectory(runDir)) continue;
-    if (env.exists(path.join(runDir, "logs", "v1.4-events.jsonl"))) {
-      out.push(runDir);
+  for (const root of roots) {
+    const runsRoot = path.join(root, ".guild", "runs");
+    for (const name of env.readDir(runsRoot)) {
+      const runDir = path.join(runsRoot, name);
+      if (!env.isDirectory(runDir)) continue;
+      if (env.exists(path.join(runDir, "logs", "v1.4-events.jsonl"))) {
+        out.push(runDir);
+      }
     }
   }
   return out.sort();
+}
+
+function discoverRunRoots(projectRoot: string, env: LaunchEnv): string[] {
+  const root = path.resolve(projectRoot);
+  const roots = [root];
+  const workspacePath = path.join(root, ".guild", "workspace.json");
+  if (!env.exists(workspacePath)) return roots;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(env.readFile(workspacePath));
+  } catch {
+    return roots;
+  }
+  const subGuilds =
+    parsed !== null &&
+    typeof parsed === "object" &&
+    Array.isArray((parsed as { sub_guilds?: unknown }).sub_guilds)
+      ? (parsed as { sub_guilds: unknown[] }).sub_guilds
+      : [];
+  for (const entry of subGuilds) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const childPath = (entry as { path?: unknown }).path;
+    if (typeof childPath !== "string") continue;
+    const childRoot = path.resolve(root, childPath);
+    const rel = path.relative(root, childRoot);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) continue;
+    roots.push(childRoot);
+  }
+  return roots;
 }
 
 // ── Readiness poll ───────────────────────────────────────────────────────────
@@ -697,8 +798,29 @@ export async function launchDashboard(
     return { exitCode: EXIT_REQUIRED_INSTALL };
   }
 
+  // 2c. Cache freshness — always launch the LATEST benchmark version. For the
+  // Guild-managed cache clone, fetch + checkout the latest tag before launch
+  // (network ⇒ install-gated). A sibling/in-repo checkout is the operator's own
+  // working copy and is left untouched. Non-fatal: a failed update logs a warning
+  // and launches the current cached checkout.
+  let depsMayBeStale = false;
+  if (resolution.kind === "cache" && !args.dryRun) {
+    if (args.install) {
+      env.log("[dashboard-launch] checking the benchmark repo for a newer version…");
+      const upd = updateBenchmarkCacheToLatest(resolution.dir, env);
+      if ("error" in upd) {
+        env.log(`[dashboard-launch] WARN: benchmark update skipped (${upd.error}); launching the cached version`);
+      } else {
+        env.log(`[dashboard-launch] benchmark cache is at the latest version: ${upd.ref}`);
+        depsMayBeStale = true; // a version change can move package-lock → re-run npm ci
+      }
+    } else {
+      env.log("[dashboard-launch] using the cached benchmark; re-run with --install to fetch the latest version");
+    }
+  }
+
   // 2b. Dependencies — npm ci is also install-gated (no network by default).
-  if (resolution.needsInstall && !args.dryRun) {
+  if ((resolution.needsInstall || depsMayBeStale) && !args.dryRun) {
     if (args.install) {
       env.log(`[dashboard-launch] installing dependencies in ${resolution.dir}`);
       const ciCode = env.execSync("npm", ["ci"], { cwd: resolution.dir });
