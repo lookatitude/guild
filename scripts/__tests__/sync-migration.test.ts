@@ -55,111 +55,6 @@ describe("sync-migration.ts", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  // ── Write-mode: plugin/ full copy ──────────────────────────────────────────
-
-  describe("plugin/ full copy (write mode)", () => {
-    it("exits 0", () => {
-      seedRepo(tmpDir);
-      const { exitCode } = runScript(["--cwd", tmpDir]);
-      expect(exitCode).toBe(0);
-    });
-
-    it("creates plugin/MIGRATION.md", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      expect(fs.existsSync(path.join(tmpDir, "plugin", "MIGRATION.md"))).toBe(true);
-    });
-
-    it("injects HTML banner comment", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      const content = fs.readFileSync(path.join(tmpDir, "plugin", "MIGRATION.md"), "utf8");
-      expect(content).toContain("<!-- GENERATED FILE — DO NOT EDIT BY HAND.");
-      // Banner must use the umbrella-repo-root path, not the script-relative one.
-      expect(content).toContain("npx tsx plugin/scripts/sync-migration.ts");
-    });
-
-    it("injects blockquote after banner", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      const content = fs.readFileSync(path.join(tmpDir, "plugin", "MIGRATION.md"), "utf8");
-      expect(content).toContain("> **Generated copy — do not edit by hand.**");
-    });
-
-    it("rewrites architecture/ links for plugin/ location", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      const content = fs.readFileSync(path.join(tmpDir, "plugin", "MIGRATION.md"), "utf8");
-      // Original: ](architecture/command-surface.md)
-      // Expected: ](../docs/knowledge/architecture/command-surface.md)
-      expect(content).toContain("](../docs/knowledge/architecture/command-surface.md)");
-      expect(content).not.toMatch(/\]\(architecture\//);
-    });
-
-    it("rewrites lifecycle/ links for plugin/ location", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      const content = fs.readFileSync(path.join(tmpDir, "plugin", "MIGRATION.md"), "utf8");
-      expect(content).toContain("](../docs/knowledge/lifecycle/phase-entrypoints.md)");
-      expect(content).not.toMatch(/\]\(lifecycle\//);
-    });
-
-    it("rewrites decisions/ links for plugin/ location", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      const content = fs.readFileSync(path.join(tmpDir, "plugin", "MIGRATION.md"), "utf8");
-      expect(content).toContain("](../docs/knowledge/decisions/");
-      expect(content).not.toMatch(/\]\(decisions\//);
-    });
-
-    it("strips STUB-DIGEST:START fence marker", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      const content = fs.readFileSync(path.join(tmpDir, "plugin", "MIGRATION.md"), "utf8");
-      expect(content).not.toContain("<!-- STUB-DIGEST:START -->");
-    });
-
-    it("strips STUB-DIGEST:END fence marker", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      const content = fs.readFileSync(path.join(tmpDir, "plugin", "MIGRATION.md"), "utf8");
-      expect(content).not.toContain("<!-- STUB-DIGEST:END -->");
-    });
-
-    it("preserves digest content (between fence markers) in plugin/ body", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      const content = fs.readFileSync(path.join(tmpDir, "plugin", "MIGRATION.md"), "utf8");
-      // The digest content should appear (link-rewritten) in the plugin/ body
-      expect(content).toContain("Commands keep the `:` namespace");
-    });
-
-    it("overrides source_refs in front-matter", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      const content = fs.readFileSync(path.join(tmpDir, "plugin", "MIGRATION.md"), "utf8");
-      expect(content).toContain('source_refs: ["docs/knowledge/MIGRATION.md"]');
-      // Must not carry the original value
-      expect(content).not.toContain("plugin/guild-plan.md §13.1");
-    });
-
-    it("preserves other front-matter fields verbatim", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      const content = fs.readFileSync(path.join(tmpDir, "plugin", "MIGRATION.md"), "utf8");
-      expect(content).toContain("type: concept");
-      expect(content).toContain("owner: architect");
-    });
-
-    it("preserves body content beyond the digest", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      const content = fs.readFileSync(path.join(tmpDir, "plugin", "MIGRATION.md"), "utf8");
-      // "Full details" section is after the digest fences
-      expect(content).toContain("## Full details");
-    });
-  });
-
   // ── Write-mode: root stub ─────────────────────────────────────────────────
 
   describe("root stub (write mode)", () => {
@@ -319,15 +214,6 @@ describe("sync-migration.ts", () => {
       expect(exitCode).toBe(0);
     });
 
-    it("exits 1 when plugin/MIGRATION.md is stale", () => {
-      seedRepo(tmpDir);
-      runScript(["--cwd", tmpDir]);
-      // Mutate the plugin target to make it stale
-      const pluginPath = path.join(tmpDir, "plugin", "MIGRATION.md");
-      fs.appendFileSync(pluginPath, "\n<!-- stale line appended for test -->\n", "utf8");
-      const { exitCode } = runScript(["--check", "--cwd", tmpDir]);
-      expect(exitCode).toBe(1);
-    });
 
     it("exits 1 when root MIGRATION.md is stale", () => {
       seedRepo(tmpDir);
@@ -342,8 +228,8 @@ describe("sync-migration.ts", () => {
     it("reports which files are stale on stderr", () => {
       seedRepo(tmpDir);
       runScript(["--cwd", tmpDir]);
-      const pluginPath = path.join(tmpDir, "plugin", "MIGRATION.md");
-      fs.appendFileSync(pluginPath, "\n<!-- stale -->\n", "utf8");
+      const rootPath = path.join(tmpDir, "MIGRATION.md");
+      fs.appendFileSync(rootPath, "\n<!-- stale -->\n", "utf8");
       const { stderr } = runScript(["--check", "--cwd", tmpDir]);
       expect(stderr).toMatch(/stale|mismatch|out.of.sync/i);
     });

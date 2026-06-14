@@ -277,11 +277,13 @@ function main(): void {
 
   const canonical = fs.readFileSync(canonicalPath, "utf8");
 
-  // Validate fences up-front (before writing anything).
-  let pluginContent: string;
+  // Validate fences up-front (before writing anything). The migration GUIDE for
+  // end users lives on the website (guildstack.dev/docs/migration-v1-to-v2); the
+  // PUBLIC PLUGIN repo no longer carries a MIGRATION.md (progress/transitional
+  // tracking is workspace-only). This generator now maintains only the
+  // workspace-root pointer stub from the workspace canonical.
   let rootContent: string;
   try {
-    pluginContent = generatePluginCopy(canonical);
     rootContent = generateRootStub(canonical);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -290,7 +292,6 @@ function main(): void {
     return;
   }
 
-  const pluginTarget = path.join(cwd, PLUGIN_TARGET_REL);
   const rootTarget = path.join(cwd, ROOT_TARGET_REL);
 
   if (check) {
@@ -308,7 +309,6 @@ function main(): void {
       }
     };
 
-    checkFile(pluginTarget, pluginContent, PLUGIN_TARGET_REL);
     checkFile(rootTarget, rootContent, ROOT_TARGET_REL);
 
     if (stale.length > 0) {
@@ -323,16 +323,11 @@ function main(): void {
     process.stderr.write(`[sync-migration] OK: all targets in-sync with canonical.\n`);
     process.exit(0);
   } else {
-    // ── Write mode: regenerate both targets ───────────────────────────────
-    fs.mkdirSync(path.dirname(pluginTarget), { recursive: true });
+    // ── Write mode: regenerate the workspace-root pointer stub ────────────
     fs.mkdirSync(path.dirname(rootTarget), { recursive: true });
-
-    fs.writeFileSync(pluginTarget, pluginContent, "utf8");
     fs.writeFileSync(rootTarget, rootContent, "utf8");
 
-    process.stderr.write(
-      `[sync-migration] wrote:\n  ${pluginTarget}\n  ${rootTarget}\n`
-    );
+    process.stderr.write(`[sync-migration] wrote:\n  ${rootTarget}\n`);
     process.exit(0);
   }
 }
