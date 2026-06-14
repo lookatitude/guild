@@ -315,6 +315,13 @@ interface CrossHostEndpointEntry {
   port?: number;
   /** SSH username (optional). Produces `user@address` endpoint. No passwords stored here. */
   user?: string;
+  /**
+   * Remote login shell (optional, e.g. "zsh" | "bash"). When set, the cross-host
+   * spawn command is wrapped `<login_shell> -lic '<cmd>'` so a CLI off the
+   * default non-interactive ssh PATH (e.g. codex under linuxbrew) is found.
+   * Absent ⇒ no wrap (claude-on-PATH needs none). NOT a secret.
+   */
+  login_shell?: string;
 }
 interface CrossHostBlock {
   /** Master toggle. false (default) ⇒ single-host behavior byte-identical to today. */
@@ -1146,7 +1153,7 @@ export function validateCrossHostBlock(ch: Record<string, unknown>): string[] {
       rejects.push(`defaults.cross_host.hosts must be an object { host_id: { address, port?, user? } }`);
     } else {
       const hosts = ch["hosts"] as Record<string, unknown>;
-      const ALLOWED_ENTRY = new Set(["address", "port", "user"]);
+      const ALLOWED_ENTRY = new Set(["address", "port", "user", "login_shell"]);
       for (const [hostId, entry] of Object.entries(hosts)) {
         if (!isPlainObject(entry)) {
           rejects.push(`defaults.cross_host.hosts["${hostId}"] must be an object { address, port?, user? }`);
@@ -1180,6 +1187,12 @@ export function validateCrossHostBlock(ch: Record<string, unknown>): string[] {
           rejects.push(
             `defaults.cross_host.hosts["${hostId}"].user must be a string ` +
               `(got ${JSON.stringify(e["user"])})`
+          );
+        }
+        if (e["login_shell"] !== undefined && typeof e["login_shell"] !== "string") {
+          rejects.push(
+            `defaults.cross_host.hosts["${hostId}"].login_shell must be a string ` +
+              `(got ${JSON.stringify(e["login_shell"])})`
           );
         }
       }

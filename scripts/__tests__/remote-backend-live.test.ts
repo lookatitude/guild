@@ -74,6 +74,24 @@ d("SshRemoteTransport — LIVE cross-host (item 41)", () => {
     expect(remote(`cat ~/Projects/tests/${nonce}.pane`)).toBe("lived");
   }, 30000);
 
+  test("login-shell wrap resolves an off-PATH brand (codex) where bare ssh cannot", () => {
+    // Skip gracefully if codex isn't installed on the target at all.
+    const hasCodex = remote(`zsh -lic 'command -v codex' >/dev/null 2>&1 && echo yes || echo no`);
+    if (hasCodex !== "yes") {
+      console.warn("[live] codex not on target — skipping login-shell brand check");
+      return;
+    }
+    // Bare non-interactive ssh does NOT find codex (off-PATH, e.g. linuxbrew)...
+    const bare = remote("command -v codex >/dev/null 2>&1 && echo found || echo missing");
+    expect(bare).toBe("missing");
+
+    // ...but a login-shell-wrapped spawn DOES — wire it via host.loginShell.
+    const shellHost: RemoteHostTarget = { ...host, hostKind: "codex", loginShell: "zsh" };
+    const marker = `~/Projects/tests/${nonce}.codex`;
+    t.spawn(shellHost, { name: "codex-agent" } as PaneSpec, `mkdir -p ~/Projects/tests && codex --version > ${marker} 2>&1`);
+    expect(remote(`cat ~/Projects/tests/${nonce}.codex`)).toMatch(/codex/i);
+  });
+
   test("teardown — runs cleanly over the wire", () => {
     expect(() => t.teardown()).not.toThrow();
   });

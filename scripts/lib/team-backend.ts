@@ -344,6 +344,20 @@ export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
+/**
+ * Wrap a command so it runs under the remote LOGIN shell (`<shell> -lic '<cmd>'`).
+ * A plain non-interactive `ssh host <cmd>` runs `<shell> -c` and does NOT source
+ * the login/interactive rc files — so a CLI on a PATH added there (codex under
+ * linuxbrew, ~/.local/bin, nvm, etc.) is not found. `-l` (login) + `-i`
+ * (interactive) sources the rc that exports that PATH; `-c` runs the command.
+ * Validated 2026-06-14: `zsh -lic 'codex …'` resolves codex over ssh where a bare
+ * `ssh host 'codex …'` reports command-not-found. Used by SshRemoteTransport.spawn
+ * when the host target carries a `loginShell`.
+ */
+export function wrapLoginShell(command: string, loginShell: string): string {
+  return `${loginShell} -lic ${shellQuote(command)}`;
+}
+
 export function buildPrompt(
   slug: string,
   runId: string,
@@ -1000,6 +1014,15 @@ export interface RemoteHostTarget {
    * is a followup (see the RemoteTeamBackend docstring).
    */
   endpoint: string;
+  /**
+   * Optional remote login shell (e.g. `zsh`, `bash`). When set, SshRemoteTransport
+   * wraps the spawn command as `<loginShell> -lic '<command>'` so a CLI installed
+   * off the default non-interactive PATH (e.g. codex under linuxbrew, ~/.local/bin)
+   * is found — a plain `ssh host <cmd>` does NOT source the login shell. Absent →
+   * no wrap (a brand already on the default PATH, like claude, needs none).
+   * Sourced from `defaults.cross_host.hosts.<id>.login_shell`.
+   */
+  loginShell?: string;
 }
 
 export interface RemoteConnectResult {
@@ -1132,7 +1155,8 @@ export class SshRemoteTransport implements RemoteTransport {
    * PaneAdapter that builds the brand command owns this.
    */
   spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle {
-    this.run("ssh", [host.endpoint, command]);
+    const wired = host.loginShell ? wrapLoginShell(command, host.loginShell) : command;
+    this.run("ssh", [host.endpoint, wired]);
     const handle: RemotePaneHandle = {
       specialist: spec.name,
       hostId: host.hostId,

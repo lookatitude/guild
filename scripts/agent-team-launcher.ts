@@ -512,6 +512,8 @@ interface CrossHostEndpointCfg {
   address: string;
   port?: number;
   user?: string;
+  /** Remote login shell — wraps the spawn cmd so off-PATH brands (codex) resolve. */
+  login_shell?: string;
 }
 interface CrossHostConfig {
   enabled: boolean;
@@ -1117,7 +1119,15 @@ async function main(): Promise<void> {
             const endpoint = entry.user
               ? `${entry.user}@${entry.address}`
               : entry.address;
-            return { hostId: r.decision.host, hostKind: r.hostKind, endpoint };
+            // login_shell wraps the remote spawn cmd (`<shell> -lic '<cmd>'`) so a
+            // brand off the default non-interactive ssh PATH (codex/linuxbrew) is
+            // found; absent ⇒ no wrap (claude is on PATH). See SshRemoteTransport.spawn.
+            return {
+              hostId: r.decision.host,
+              hostKind: r.hostKind,
+              endpoint,
+              ...(entry.login_shell ? { loginShell: entry.login_shell } : {}),
+            };
           };
 
           const remoteBackend = new RemoteTeamBackend({
