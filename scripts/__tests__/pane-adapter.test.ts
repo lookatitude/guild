@@ -89,8 +89,8 @@ describe("resolveAdapter — selection by host_kind", () => {
 
   it("throws on an unregistered host_kind (programming error, not a fallback)", () => {
     const r = resolveAdapter();
-    // antigravity-2 is a Rung-2 host-native-agents brand, not a tmux PaneAdapter.
-    expect(() => r("antigravity-2" as never)).toThrow(/No PaneAdapter registered/);
+    // gemini was discarded 2026-06-14 (sunset → Antigravity); unregistered now.
+    expect(() => r("gemini" as never)).toThrow(/No PaneAdapter registered/);
   });
 });
 

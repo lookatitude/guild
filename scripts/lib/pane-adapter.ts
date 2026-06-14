@@ -247,61 +247,46 @@ export class CodexPaneAdapter implements PaneAdapter {
   }
 }
 
-// ── GeminiPaneAdapter ─────────────────────────────────────────────────────────
+// ── AntigravityPaneAdapter ────────────────────────────────────────────────────
 
 /**
- * Gemini CLI pane (Rung-1 tmux substrate). Emits `gemini -p '<prompt>'` — the
- * CLI's non-interactive one-shot prompt mode — then keeps the pane alive.
- * Coordinates via the file bus only (no Claude agent-team gate, no Claude hooks
- * → no heartbeat). Preflight: `gemini --version` AND usable auth (GEMINI_API_KEY
- * | GOOGLE_API_KEY | an oauth creds file under ${GEMINI_HOME:-~/.gemini}).
+ * Antigravity CLI pane (Rung-1 tmux substrate), invoked via the `agy` command
+ * (the headless CLI; the bare `antigravity` binary is the Electron IDE GUI and
+ * cannot run headless in a pane). Keeps the pane alive after the run. File-bus
+ * coordination only (no Claude agent-team gate, no Claude hooks → no heartbeat).
+ * Gemini was discarded 2026-06-14 (sunset in favour of Antigravity).
  *
- * STATUS: command construction is unit-tested via the injected RunFn (same
- * pattern as Codex); LIVE validation against a real Gemini CLI is the documented
- * residual (host-adapter status ladder: detect-only → [v2-contract-only]).
+ * STATUS: [v2-contract-only], invocation UNVERIFIED. The `agy` command name is
+ * operator-confirmed, but the one-shot prompt flag below (`-p`) is a documented
+ * PLACEHOLDER — `agy` was not locatable on the test host (192.168.10.21), so the
+ * exact flag (and preflight version string) could NOT be discovered live. The
+ * `PROMPT_FLAG` constant is the single change point: confirm it against
+ * `agy --help` once the binary is on PATH, then live-validate.
  */
-export class GeminiPaneAdapter implements PaneAdapter {
-  readonly hostKind = "gemini" as const;
+const AGY_PROMPT_FLAG = "-p"; // UNVERIFIED placeholder — confirm against `agy --help`
+
+export class AntigravityPaneAdapter implements PaneAdapter {
+  readonly hostKind = "antigravity-2" as const;
   readonly adapterVersion = ADAPTER_VERSION;
   private run: RunFn;
   private env_: NodeJS.ProcessEnv;
-  private fs_: FsSeam;
 
   constructor(opts: AdapterOpts = {}) {
     this.run = opts.run ?? defaultRun;
     this.env_ = opts.env ?? process.env;
-    this.fs_ = opts.fs ?? nodefs;
-  }
-
-  private oauthPath(): string {
-    const home = (this.env_["GEMINI_HOME"] ?? "").trim() || nodepath.join(os.homedir(), ".gemini");
-    return nodepath.join(home, "oauth_creds.json");
-  }
-  private hasOauth(): boolean {
-    try { return this.fs_.existsSync(this.oauthPath()) && this.fs_.statSync(this.oauthPath()).size > 0; }
-    catch { return false; }
   }
 
   preflight(): PreflightResult {
-    const r = this.run("gemini", ["--version"]);
+    const r = this.run("agy", ["--version"]);
     if (r.status !== 0) {
       return {
         ok: false,
         message:
-          "`gemini` binary not found or not runnable (gemini --version failed). " +
-          "Install the Gemini CLI and ensure it is on PATH.",
+          "`agy` (Antigravity CLI) not found or not runnable (agy --version failed). " +
+          "Install the Antigravity CLI and ensure `agy` is on PATH (the GUI `antigravity` binary is not headless).",
       };
     }
-    const key = (this.env_["GEMINI_API_KEY"] ?? this.env_["GOOGLE_API_KEY"] ?? "").trim();
-    if (!key && !this.hasOauth()) {
-      return {
-        ok: false,
-        message:
-          `no GEMINI_API_KEY/GOOGLE_API_KEY and no oauth creds at ${this.oauthPath()} — ` +
-          "run `gemini` once to authenticate or set an API key (CH-6 fail-fast).",
-      };
-    }
-    return { ok: true, message: `gemini --version ok; ${key ? "API key present" : "oauth creds present"}` };
+    return { ok: true, message: "agy --version ok" };
   }
 
   command(spec: PaneSpec): string {
@@ -312,7 +297,7 @@ export class GeminiPaneAdapter implements PaneAdapter {
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       taskFragment + specialistFragment + scopeFragment +
-      `gemini -p ${shellQuote(spec.prompt)}; ` +
+      `agy ${AGY_PROMPT_FLAG} ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
     );
   }
@@ -414,18 +399,18 @@ export class PiPaneAdapter implements PaneAdapter {
  *
  * Return type is `Partial<Record<HostKind, PaneAdapter>>` (HostKind has 9 hosts).
  * Wired Rung-1 (tmux CLI pane) adapters: claude + codex (reference, live-validated)
- * and gemini + pi ([v2-contract-only] — command construction unit-tested, live
- * validation pending the runtime). The remaining HostKinds are NOT Rung-1 tmux
- * panes — antigravity-2 (Rung-2 host-native agents), claude-code-desktop/web,
- * codex-app, and the claude.ai connector use different substrate/dispatch
- * surfaces (see host-adapter-contract.md Surface 8 ladder), so they are not
- * PaneAdapters. `resolveAdapter` throws on an unregistered key.
+ * and antigravity-2 (the `agy` CLI) + pi ([v2-contract-only] — command construction
+ * unit-tested, live validation + exact prompt-flag pending the runtime). Gemini was
+ * discarded 2026-06-14 (sunset in favour of Antigravity). The remaining HostKinds
+ * are NOT Rung-1 tmux panes — claude-code-desktop/web, codex-app, and the claude.ai
+ * connector use different substrate/dispatch surfaces (host-adapter-contract.md
+ * Surface 8 ladder). `resolveAdapter` throws on an unregistered key.
  */
 export function buildAdapters(opts: AdapterOpts = {}): Partial<Record<HostKind, PaneAdapter>> {
   return {
     claude: new ClaudePaneAdapter(opts),
     codex: new CodexPaneAdapter(opts),
-    gemini: new GeminiPaneAdapter(opts),
+    "antigravity-2": new AntigravityPaneAdapter(opts),
     pi: new PiPaneAdapter(opts),
   };
 }
