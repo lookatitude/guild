@@ -629,10 +629,14 @@ const HELP: Record<string, string> = {
     "Below threshold, guild-memory BM25 grep path is used unchanged.",
   // ── defaults.cross_host: block (v2-cross-host-orchestration ADR — CR-1/CH-1)
   "defaults.cross_host.enabled":
-    "bool (default false) — master toggle for mixed-host routing/teams " +
-    "(v2-cross-host-orchestration ADR CR-1/CH-1). false ⇒ single-host behavior byte-identical " +
-    "to today. Env override: GUILD_CROSS_HOST_ENABLED=1 (mirrors this key; env wins when set). " +
-    "SECURITY: enables SSH dispatch — ensure ssh keys/agent are configured; no passwords.",
+    "bool (default false) — THE local-vs-remote switch. false (default) ⇒ EVERYTHING " +
+    "RUNS LOCALLY (single-host, byte-identical to today; no SSH, ever). true ⇒ a specialist " +
+    "may run on a remote host, but ONLY when ALL of: (1) this is true, (2) the specialist is " +
+    "routed to a remote host (team.yaml `host:` / capability routing), (3) that host has an " +
+    "endpoint in defaults.cross_host.hosts, and (4) the pre-dispatch capability probe confirms " +
+    "the host has the brand CLI + tmux (missing ⇒ fail-fast, nothing spawned). Otherwise the " +
+    "lane stays local (or falls back to Claude per fallback_to_claude). Env override: " +
+    "GUILD_CROSS_HOST_ENABLED=1 (env wins). SECURITY: enables SSH dispatch — ssh keys/agent only, no passwords.",
   "defaults.cross_host.hosts":
     "object { <host_id>: { address: string, port?: number, user?: string } } — " +
     "SSH endpoint config keyed by guild.host_capability.v1 host_id. " +
