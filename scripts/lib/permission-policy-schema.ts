@@ -48,8 +48,15 @@ export type Phase = (typeof PHASES)[number];
 export const GATE_TYPES = ["plan", "qa", "release", "ops", "security", "destructive"] as const;
 export type GateType = (typeof GATE_TYPES)[number];
 
-/** Bypass-permissions policy (today's `security.bypass_permissions_policy`). */
-export const BYPASS_POLICIES = ["audit", "honor", "deny"] as const;
+/**
+ * Bypass-permissions policy (today's `security.bypass_permissions_policy`). The enum
+ * MUST match the live config surface verified in source: `"deny" | "audit" | "allow"`
+ * (read-guild-config.ts:259 / settings-resolver.ts:144, validated read-guild-config.ts:1081).
+ * `"audit"` is the default (audited-not-honored ⇒ no gate skipped); `"allow"` is the
+ * only value that actually honors a host bypass. (P1-L0 audit fix: was "honor", the
+ * real value is "allow" — flagged by the security-auditor's independent verification.)
+ */
+export const BYPASS_POLICIES = ["audit", "allow", "deny"] as const;
 export type BypassPolicy = (typeof BYPASS_POLICIES)[number];
 
 // ---------------------------------------------------------------------------
@@ -212,7 +219,7 @@ export function evaluateSafetyRails(
 export interface BaselineConfig {
   /** Phases (or gate types) the user pre-approved. Default []. */
   auto_approve: string[];
-  /** "audit" (default) | "honor" | "deny". */
+  /** "deny" | "audit" (default) | "allow" — matches the live config enum. */
   bypass_permissions_policy: BypassPolicy;
 }
 
