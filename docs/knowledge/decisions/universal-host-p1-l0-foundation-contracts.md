@@ -121,6 +121,34 @@ unconditional; (4) mandatory pre-flight dry-run.
   424–536), serialized via `canonicalJSON` (recursively sorted keys) and compared
   `deepEqualCanonical`. L7's SC-4 A/B snapshots both pre/post-registry for Claude+Codex.
 
+## Namespace reconciliation (legacy `HostKind` ↔ registry `HostId`)
+
+Cleared while P1-L7 was in flight (was an L0 followup). The two id namespaces diverge:
+legacy `HostKind` (`host-types.ts`) has 9 surfaces incl. `antigravity-2`, `gemini`, and
+the claude-* desktop/web/connector variants; the registry `HostId` namespace is
+`claude|codex|.agents|pi|antigravity` (adds `.agents`, renames to `antigravity`, drops
+`gemini`). `host-id-namespace.ts` makes the mapping a single importable contract so L7
+does not re-derive it:
+
+| legacy `HostKind` | registry `HostId` | note |
+|---|---|---|
+| `claude`, `claude-code-desktop`, `claude-code-web`, `claude-ai-connector` | `claude` | claude family surfaces |
+| `codex`, `codex-app` | `codex` | codex family surfaces |
+| `pi` | `pi` | |
+| `antigravity-2` | `antigravity` | id rename |
+| `gemini` | `null` | DROPPED (D10) — no registry row |
+| (none) | `.agents` | emission target only — not a `HostKind` |
+
+**Behavior-preserving (load-bearing):** `hostKindToRegistryId`'s family collapse is
+byte-aligned with the existing `resolveAuthorHost()` (provider-detect.ts:229–236) —
+`antigravity*→antigravity`, `claude*→claude`, `codex*→codex` — verified equal for every
+`HostKind`. So a host that resolves family X today resolves the same family via its
+registry id; the SC-4 A/B over Claude/Codex is unaffected. `gemini→null` matches today's
+reality (gemini is detect-only / not selectable, `hasAdapter:false`). `.agents` has no
+`HostKind`, so it never enters `route()`/`selectReviewer()` (claude+codex only) — it is an
+L6 emission target, not a dispatch host. Unknown hosts map to `null` (degrade/record,
+never a false capability).
+
 ## Verification (TDD posture)
 
 Every module ships a `validate*()` returning `{valid, errors}` (never throws). At
