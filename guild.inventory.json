@@ -1758,5 +1758,10 @@
       "validator_kind": "lenient"
     }
   ],
-  "docs": []
+  "docs": [
+    {
+      "id": "docs/specialist-roster",
+      "source_path": "docs/specialist-roster.md"
+    }
+  ]
 }

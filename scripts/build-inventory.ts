@@ -311,16 +311,21 @@ function discoverScripts(root: string): ScriptEntry[] {
 }
 
 /**
- * Docs: docs/knowledge/decisions/*.md (Phase-1 scope = the decisions surface).
- * Absent in a clean plugin checkout → []. Non-enforced (no SC-7 fail-fixture).
+ * Docs: the FULL docs/ tree (docs/​**​/*.md), recursive. id = repo-relative path
+ * minus the .md extension (unique across the tree; basename alone would collide
+ * across subdirs). Absent docs/ dir → []. Still non-enforced (no SC-7 fail-fixture)
+ * — docs are a coverage/curation surface, not a load-bearing package input, so a
+ * missing doc must not hard-fail the build. (FU-5: broadened from the Phase-1
+ * decisions-only surface to the full docs/ tree.)
  */
 function discoverDocs(root: string): DocEntry[] {
-  const dir = path.join(root, "docs", "knowledge", "decisions");
-  return listMdFiles(dir)
-    .map((file): DocEntry => {
-      const id = file.replace(/\.md$/i, "");
-      const title = frontmatterField(readFile(path.join(dir, file)), "title");
-      const e: DocEntry = { id, source_path: `docs/knowledge/decisions/${file}` };
+  const files: string[] = [];
+  walkFiles(root, "docs", (_rel, name) => name.endsWith(".md"), files);
+  return files
+    .map((rel): DocEntry => {
+      const id = rel.replace(/\.md$/i, "");
+      const title = frontmatterField(readFile(path.join(root, rel)), "title");
+      const e: DocEntry = { id, source_path: rel };
       if (title) e.title = title;
       return e;
     })

@@ -115,10 +115,10 @@ export const DISCOVERY_RULES: DiscoveryRule[] = [
   },
   {
     category: "docs",
-    globs: ["docs/knowledge/decisions/*.md"],
-    id_rule: "doc slug = basename without .md, scoped to the decisions surface for Phase 1",
+    globs: ["docs/**/*.md"],
+    id_rule: "doc slug = repo-relative path without .md (unique across the full docs/ tree)",
     enforced: false,
-    note: "Full docs/ tree coverage is out of Phase-1 scope; only the decisions surface is inventoried. Not an SC-7 fail-fixture category.",
+    note: "Full docs/ tree is inventoried (FU-5). Still non-enforced: docs are a coverage/curation surface, not a load-bearing package input, so a missing doc is not an SC-7 fail-fixture.",
   },
 ];
 
