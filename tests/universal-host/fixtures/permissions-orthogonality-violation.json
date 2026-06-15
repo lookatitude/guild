@@ -1,0 +1,18 @@
+{
+  "schema_version": "guild.permissions_orthogonality_violation.v1",
+  "description": "host_mode=bypass_all + guild_gates=ask on a release gate MUST STILL require the Guild gate. host autonomy never implies gate autonomy (orthogonality invariant, ADR ~1348/1602). A resolver that returns gate_required=false here FAILS the invariant.",
+  "scenario": {
+    "phase": "ops",
+    "gate_type": "release",
+    "host_mode": "bypass_all",
+    "guild_gates": "ask"
+  },
+  "expected": {
+    "gate_required": true,
+    "reason": "host bypass (bypass_all) never skips a Guild gate unless guild_gates explicitly permits that gate type; guild_gates=ask permits nothing"
+  },
+  "proof": {
+    "gate_required_actual": true,
+    "safety_rails_ok": true
+  }
+}

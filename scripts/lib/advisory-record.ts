@@ -55,6 +55,28 @@ export const ADVISORY_BACKENDS = [
 ] as const;
 export type AdvisoryBackend = (typeof ADVISORY_BACKENDS)[number];
 
+/**
+ * Advisory SUBSTRATE — the role-resolved advisory HOST that gives the advice
+ * (universal-host P1-L0, contract C1). This is a DISTINCT axis from `backend`:
+ *   - `backend`   = the dispatch MECHANISM (tmux_team | host_subagents | single_agent)
+ *   - `substrate` = WHICH host produces the advice (the resolved roles.advisory)
+ * Do NOT overload `backend` with the provider. Additive + back-compatible: the field
+ * is optional and an ABSENT `substrate` means the default local advisor — `"claude"`.
+ * The routing change (populate from roles.advisory) lands in P1-L8; the schema field
+ * is the P1-L0 additive migration.
+ */
+export const ADVISORY_SUBSTRATES = [
+  "claude",
+  "codex",
+  ".agents",
+  "pi",
+  "antigravity",
+] as const;
+export type AdvisorySubstrate = (typeof ADVISORY_SUBSTRATES)[number];
+
+/** Default advisory substrate when none is recorded (back-compat: absent ⇒ claude). */
+export const DEFAULT_ADVISORY_SUBSTRATE: AdvisorySubstrate = "claude";
+
 /** Overall (and per-advisor) confidence scale. */
 export const ADVISORY_CONFIDENCE = ["high", "medium", "low"] as const;
 export type AdvisoryConfidence = (typeof ADVISORY_CONFIDENCE)[number];
@@ -106,8 +128,14 @@ export interface AdvisoryRecord {
   initiative_id: string | null;
   /** Lifecycle phase in which the panel ran. */
   phase: string;
-  /** Backend that executed the panel. */
+  /** Backend that executed the panel (dispatch mechanism — NOT the provider). */
   backend: AdvisoryBackend;
+  /**
+   * Role-resolved advisory substrate — WHICH host gave the advice (C1). Optional +
+   * back-compatible: when absent, consumers treat it as the default local advisor
+   * (`DEFAULT_ADVISORY_SUBSTRATE` = "claude"). Distinct from `backend`.
+   */
+  substrate?: AdvisorySubstrate;
   /** The question the panel was asked. */
   question: string;
   /** Participants (ordered). */
@@ -131,6 +159,7 @@ export interface AdvisoryRecord {
 const BACKEND_SET = new Set<string>(ADVISORY_BACKENDS);
 const CONFIDENCE_SET = new Set<string>(ADVISORY_CONFIDENCE);
 const MODEL_TIER_SET = new Set<string>(["cheap", "mid", "powerful"]);
+const SUBSTRATE_SET = new Set<string>(ADVISORY_SUBSTRATES);
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
@@ -158,6 +187,8 @@ export function makeAdvisoryRecord(input: {
   initiative_id?: string | null;
   unresolved_questions?: string[];
   decision_link?: string;
+  /** C1: role-resolved advisory substrate. Omitted ⇒ absent ⇒ default "claude". */
+  substrate?: AdvisorySubstrate;
 }): AdvisoryRecord {
   const rec: AdvisoryRecord = {
     schema_version: ADVISORY_RECORD_SCHEMA,
@@ -177,6 +208,11 @@ export function makeAdvisoryRecord(input: {
   };
   if (input.decision_link !== undefined) {
     rec.decision_link = input.decision_link;
+  }
+  // C1: include substrate only when supplied — keeps existing records byte-identical
+  // (absent ⇒ default "claude" semantics), so old fixtures still validate unchanged.
+  if (input.substrate !== undefined) {
+    rec.substrate = input.substrate;
   }
   return rec;
 }
@@ -229,6 +265,14 @@ export function validateAdvisoryRecord(x: unknown): { valid: boolean; errors: st
   if (!BACKEND_SET.has(r["backend"] as string)) {
     errors.push(
       `"backend" must be one of ${ADVISORY_BACKENDS.join(" | ")} (got ${JSON.stringify(r["backend"])})`
+    );
+  }
+
+  // substrate (C1) — OPTIONAL; when present must be a known substrate. Absent is
+  // valid + means the default "claude" (back-compat: pre-P1 records have no substrate).
+  if (r["substrate"] !== undefined && !SUBSTRATE_SET.has(r["substrate"] as string)) {
+    errors.push(
+      `"substrate" (when present) must be one of ${ADVISORY_SUBSTRATES.join(" | ")} (got ${JSON.stringify(r["substrate"])})`
     );
   }
 
