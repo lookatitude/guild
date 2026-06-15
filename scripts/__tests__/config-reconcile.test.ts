@@ -119,6 +119,71 @@ describe("P1-L9 reconcile — repair coerces malformed reconciled values, keeps 
     expect(out.host).toBe(123); // user+malformed ⇒ KEPT (never-clobber wins over repair)
   });
 
+  it("F4: repair of a malformed RECONCILED security value fails CLOSED to most_restrictive (not default, not security-hold)", () => {
+    // A reconciled (provenance != user) bypass value that is malformed (invalid enum).
+    const seed = {
+      [SETTINGS]: JSON.stringify({ security: { bypass_permissions_policy: "yolo" } }, null, 2) + "\n",
+      [PROV]:
+        JSON.stringify(
+          { "security.bypass_permissions_policy": { provenance: "reconciled", last_reconciled_at: NOW } },
+          null,
+          2
+        ) + "\n",
+    };
+    const { io, store } = memIO(seed);
+    const r = reconcileConfig({ cwd: "/repo", mode: "repair", now: "2026-07-01T00:00:00Z", io });
+    const out = JSON.parse(store.get(SETTINGS) as string);
+    // fail-closed: coerced to "deny" (most_restrictive), NOT the permissive default "audit".
+    expect(out.security.bypass_permissions_policy).toBe("deny");
+    const finding = r.findings.find((f) => f.key === "security.bypass_permissions_policy");
+    expect(finding?.action).toBe("repair-most-restrictive");
+  });
+
+  it("F4: a malformed USER security value is NEVER clobbered (never-clobber beats fail-closed)", () => {
+    // wrong-type bypass with NO sidecar ⇒ user-provenance ⇒ immutable.
+    const seed = {
+      [SETTINGS]: JSON.stringify({ security: { bypass_permissions_policy: 123 } }, null, 2) + "\n",
+    };
+    const { io, store } = memIO(seed);
+    const r = reconcileConfig({ cwd: "/repo", mode: "repair", now: NOW, io });
+    const out = JSON.parse(store.get(SETTINGS) as string);
+    expect(out.security.bypass_permissions_policy).toBe(123); // user value kept, not coerced to deny
+    expect(r.findings.find((f) => f.key === "security.bypass_permissions_policy")?.status).toBe(
+      "user-override-kept"
+    );
+  });
+
+  it("F4: a malformed RECONCILED autonomy array fails CLOSED to [] (not security-hold)", () => {
+    // auto_approve corrupted to a string; reconciled provenance.
+    const seed = {
+      [SETTINGS]: JSON.stringify({ auto_approve: "all" }, null, 2) + "\n",
+      [PROV]:
+        JSON.stringify({ auto_approve: { provenance: "reconciled", last_reconciled_at: NOW } }, null, 2) +
+        "\n",
+    };
+    const { io, store } = memIO(seed);
+    const r = reconcileConfig({ cwd: "/repo", mode: "repair", now: NOW, io });
+    const out = JSON.parse(store.get(SETTINGS) as string);
+    expect(out.auto_approve).toEqual([]); // actively repaired to the no-autonomy floor
+    expect(r.findings.find((f) => f.key === "auto_approve")?.action).toBe("repair-most-restrictive");
+  });
+
+  it("F4: a VALID reconciled security enum is left as-is (not repaired)", () => {
+    const seed = {
+      [SETTINGS]: JSON.stringify({ security: { bypass_permissions_policy: "allow" } }, null, 2) + "\n",
+      [PROV]:
+        JSON.stringify(
+          { "security.bypass_permissions_policy": { provenance: "reconciled", last_reconciled_at: NOW } },
+          null,
+          2
+        ) + "\n",
+    };
+    const { io, store } = memIO(seed);
+    reconcileConfig({ cwd: "/repo", mode: "repair", now: NOW, io });
+    const out = JSON.parse(store.get(SETTINGS) as string);
+    expect(out.security.bypass_permissions_policy).toBe("allow"); // valid enum ⇒ not malformed ⇒ kept
+  });
+
   it("sync does NOT repair a malformed reconciled value (only repair mode does)", () => {
     const seed = {
       [SETTINGS]: JSON.stringify({ loop_cap: "oops" }, null, 2) + "\n",

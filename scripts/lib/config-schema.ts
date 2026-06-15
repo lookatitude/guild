@@ -109,25 +109,70 @@ function inferType(value: unknown): ConfigValueType {
 }
 
 /**
+ * F4 (Lsec) — security-sensitive ENUM fields declare `most_restrictive` (+ explicit
+ * `enum_values`) so that `repair` of a MALFORMED reconciled value fails CLOSED: it
+ * coerces to the safest value rather than the permissive `default` ("repair-default")
+ * or the passive "security-hold". Order is most-restrictive → least. Marking these as
+ * `enum` (vs the value-inferred "string") also makes an INVALID enum value — not just a
+ * wrong type — count as malformed, so the fail-closed repair actually fires.
+ *
+ * NOTE: a value that EQUALS its default (e.g. a fresh `sync`) is always valid, and a
+ * `user`-provenance value is never touched — so this only changes the malformed
+ * RECONCILED-security path, exactly per the F4 finding.
+ */
+interface SecurityEnumOverride {
+  enum_values: readonly string[];
+  most_restrictive: string;
+}
+const SECURITY_ENUM_OVERRIDES: Record<string, SecurityEnumOverride> = {
+  "security.bypass_permissions_policy": { enum_values: ["deny", "audit", "allow"], most_restrictive: "deny" },
+  codex_skip_enforcement: { enum_values: ["warn", "block"], most_restrictive: "block" },
+  "secrets_policy.fail_mode_durable": { enum_values: ["closed", "open"], most_restrictive: "closed" },
+  "secrets_policy.fail_mode_telemetry": { enum_values: ["open", "closed"], most_restrictive: "closed" },
+};
+
+/**
+ * F4 (Lsec) — security-sensitive NON-enum fields whose most-restrictive value isn't an
+ * enum member. The autonomy allow-lists fail closed to `[]` (no auto-approval = the
+ * safest posture): a MALFORMED reconciled value (e.g. a string/object instead of an
+ * array) is actively repaired to `[]` rather than left corrupt via "security-hold".
+ * Type stays value-inferred ("array"); only `most_restrictive` is added.
+ */
+const SECURITY_MOST_RESTRICTIVE_NONENUM: Record<string, unknown> = {
+  auto_approve: [],
+  "defaults.gates.auto_approve": [],
+};
+
+/**
  * The `guild.config_schema.v1` field registry, derived from the canonical DEFAULTS
  * tree. One ConfigFieldSpec per flattened leaf; `default` is the canonical value
  * (single source ⇒ no drift). Scope is "project" (today's settings.json target).
  *
- * NOTE: enum/null typing is intentionally lenient here — the schema drives the
- * reconciler's MISSING-fill + never-clobber decisions, where structural type validity
- * (string/number/boolean/array/object) is sufficient. Rich enum validation stays in
- * read-guild-config's closed-key validators (validateDefaults), which the reconciler
- * does not replace.
+ * Type is value-inferred (lenient — structural validity drives MISSING-fill +
+ * never-clobber), EXCEPT the security-sensitive enum fields in SECURITY_ENUM_OVERRIDES,
+ * which carry explicit enum_values + most_restrictive for the F4 fail-closed repair.
+ * Rich enum validation for the other keys stays in read-guild-config's closed-key
+ * validators (validateDefaults), which the reconciler does not replace.
  */
 export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
   const flat = flattenSettings(DEFAULTS as unknown as Record<string, unknown>);
-  return Object.entries(flat).map(([key, def]) => ({
-    key,
-    type: inferType(def),
-    default: def,
-    scope: "project" as const,
-    security_sensitive: isSecuritySensitiveKey(key),
-  }));
+  return Object.entries(flat).map(([key, def]) => {
+    const override = SECURITY_ENUM_OVERRIDES[key];
+    const spec: ConfigFieldSpec = {
+      key,
+      type: override ? "enum" : inferType(def),
+      default: def,
+      scope: "project",
+      security_sensitive: isSecuritySensitiveKey(key),
+    };
+    if (override) {
+      spec.enum_values = override.enum_values;
+      spec.most_restrictive = override.most_restrictive;
+    } else if (key in SECURITY_MOST_RESTRICTIVE_NONENUM) {
+      spec.most_restrictive = SECURITY_MOST_RESTRICTIVE_NONENUM[key];
+    }
+    return spec;
+  });
 })();
 
 /** Lookup a field spec by dotted key. */
