@@ -48,10 +48,14 @@ const SCHEMA: ConfigFieldSpec[] = [
   {
     key: "security.bypass_permissions_policy",
     type: "enum",
-    enum_values: ["audit", "honor", "deny"],
+    // F5 fix: the live enum is deny|audit|allow (read-guild-config.ts:259). The stale
+    // "honor" replica deemed real "allow" malformed and accepted dead "honor".
+    enum_values: ["audit", "allow", "deny"],
     default: "audit",
     scope: "workspace",
     security_sensitive: true,
+    // F4: most-restrictive value — repair of a malformed security value fails closed to THIS.
+    most_restrictive: "deny",
   },
 ];
 
@@ -184,6 +188,39 @@ describe("P1 SC-6 — never-clobber applies to security_sensitive keys", () => {
     const sec = SCHEMA.find((s) => s.key === "security.bypass_permissions_policy")!;
     expect(sec.security_sensitive).toBe(true);
     expect(validateConfigFieldSpec(sec).valid).toBe(true);
+  });
+
+  it('accepts the real enum value "allow" (F5 — the stale "honor" replica wrongly deemed it malformed)', () => {
+    const current = {
+      "security.bypass_permissions_policy": field(
+        "security.bypass_permissions_policy",
+        "allow",
+        "reconciled"
+      ),
+    };
+    const res = reconcile(SCHEMA, current, "repair", NOW);
+    const sec = res.findings.find(
+      (f) => f.key === "security.bypass_permissions_policy"
+    )!;
+    expect(sec.status).toBe("ok"); // "allow" is a real enum value, not malformed
+    expect(sec.resolved_value).toBe("allow");
+  });
+
+  it("repair of a MALFORMED reconciled security value fails closed to most_restrictive, never down to the permissive default (F4)", () => {
+    const current = {
+      "security.bypass_permissions_policy": field(
+        "security.bypass_permissions_policy",
+        "BOGUS", // malformed, provenance reconciled (NOT user — never-clobber doesn't apply)
+        "reconciled"
+      ),
+    };
+    const res = reconcile(SCHEMA, current, "repair", NOW);
+    const sec = res.findings.find(
+      (f) => f.key === "security.bypass_permissions_policy"
+    )!;
+    expect(sec.action).toBe("repair-most-restrictive");
+    expect(sec.resolved_value).toBe("deny"); // most-restrictive
+    expect(sec.resolved_value).not.toBe("audit"); // NOT silently weakened to the default
   });
 });
 
