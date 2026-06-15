@@ -1165,6 +1165,11 @@
       "kind": "cli"
     },
     {
+      "id": "lib/adapter-fallback-ladders",
+      "source_path": "scripts/lib/adapter-fallback-ladders.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/advisory-record",
       "source_path": "scripts/lib/advisory-record.ts",
       "kind": "lib"
@@ -1177,6 +1182,21 @@
     {
       "id": "lib/cloud-task-packet",
       "source_path": "scripts/lib/cloud-task-packet.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/config-reconcile",
+      "source_path": "scripts/lib/config-reconcile.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/config-reconcile-contract",
+      "source_path": "scripts/lib/config-reconcile-contract.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/config-schema",
+      "source_path": "scripts/lib/config-schema.ts",
       "kind": "lib"
     },
     {
@@ -1217,6 +1237,21 @@
     {
       "id": "lib/host-capabilities-schema",
       "source_path": "scripts/lib/host-capabilities-schema.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-id-namespace",
+      "source_path": "scripts/lib/host-id-namespace.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-registry",
+      "source_path": "scripts/lib/host-registry.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-registry-schema",
+      "source_path": "scripts/lib/host-registry-schema.ts",
       "kind": "lib"
     },
     {
@@ -1325,6 +1360,16 @@
       "kind": "lib"
     },
     {
+      "id": "lib/permission-policy",
+      "source_path": "scripts/lib/permission-policy.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/permission-policy-schema",
+      "source_path": "scripts/lib/permission-policy-schema.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/protect-chunks",
       "source_path": "scripts/lib/protect-chunks.ts",
       "kind": "lib"
@@ -1370,6 +1415,21 @@
       "kind": "lib"
     },
     {
+      "id": "lib/role-model-schema",
+      "source_path": "scripts/lib/role-model-schema.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/role-resolver",
+      "source_path": "scripts/lib/role-resolver.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/routing-ab-contract",
+      "source_path": "scripts/lib/routing-ab-contract.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/run-lifecycle",
       "source_path": "scripts/lib/run-lifecycle.ts",
       "kind": "lib"
@@ -1382,6 +1442,11 @@
     {
       "id": "lib/runstart-preflight",
       "source_path": "scripts/lib/runstart-preflight.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/runtime-adapters",
+      "source_path": "scripts/lib/runtime-adapters.ts",
       "kind": "lib"
     },
     {
@@ -1437,6 +1502,11 @@
     {
       "id": "oq11-gate-check",
       "source_path": "scripts/oq11-gate-check.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "permission-policy",
+      "source_path": "scripts/permission-policy.ts",
       "kind": "cli"
     },
     {
@@ -1759,6 +1829,10 @@
     }
   ],
   "docs": [
+    {
+      "id": "docs/knowledge/decisions/universal-host-p1-l0-foundation-contracts",
+      "source_path": "docs/knowledge/decisions/universal-host-p1-l0-foundation-contracts.md"
+    },
     {
       "id": "docs/specialist-roster",
       "source_path": "docs/specialist-roster.md"
