@@ -115,6 +115,13 @@ export function gateRequired(
   // host_mode is deliberately unused — that IS the invariant. Referenced + voided so
   // any future code that tries to consult it is a visible, reviewable change.
   void _host_mode;
+  // Defense-in-depth (security-auditor F1): the always-ask hard set is enforced HERE,
+  // by construction — NOT only in evaluateSafetyRails (rail 3). A gate in the hard set
+  // is ALWAYS required regardless of what gatesPermittedToSkip returns, so the
+  // orthogonality invariant survives any future widening of `auto-safe` (the schema
+  // explicitly invites L10 to widen it) without L10 having to remember to re-subtract
+  // the hard set. Enforce in code, not prose.
+  if (ALWAYS_ASK_HARD_SET.has(gate_type)) return true;
   return !gatesPermittedToSkip(guild_gates).has(gate_type);
 }
 
@@ -156,9 +163,14 @@ export interface SafetyRailEvaluation {
 export function evaluateSafetyRails(
   gate_type: GateType,
   guild_gates: GuildGate,
-  ctx: { first_run: boolean; dry_run_done: boolean }
+  ctx: { first_run: boolean; dry_run_done: boolean },
+  actualWouldSkip?: boolean
 ): SafetyRailEvaluation {
-  const wouldSkip = !gateRequired("ask", guild_gates, gate_type); // host_mode irrelevant
+  // F3 (security-auditor): when L10 supplies its ACTUAL skip decision, validate THAT — do not
+  // rubber-stamp a re-derivation from the conservative predicate (a skip taken via a path the
+  // predicate doesn't reflect would otherwise compute wouldSkip=false and pass). Fall back to the
+  // predicate only when no actual decision is supplied (pure contract tests).
+  const wouldSkip = actualWouldSkip ?? !gateRequired("ask", guild_gates, gate_type); // host_mode irrelevant
 
   const rails: SafetyRailEvaluation["rails"] = [];
 
@@ -251,10 +263,18 @@ export function resolveBaselineGolden(
 ): Record<string, PermissionDecision> {
   const out: Record<string, PermissionDecision> = {};
   const approved = new Set(config.auto_approve);
+  // Live `autoApproveCovers` (oq11-gate-check.ts:46) is `includes("all") || includes(token)`.
+  // Honor "all" here (security-auditor F2) so a non-default `auto_approve:["all"]` flips every
+  // soft gate instead of silently matching no phase and dropping the user's config.
+  // NOTE (L10 contract boundary): the production resolver owns the auto_approve TOKEN vocabulary
+  // (the live tokens are gate/soft-gate names — `spec|plan|build` — NOT lifecycle phases) and the
+  // `spec`→phase migration. This reference keys the per-phase flip purely as an illustration of the
+  // baseline + the "all" sentinel; the DEFAULT (`[]`) — the load-bearing C2 golden — is exact.
+  const allApproved = approved.has("all");
   for (const phase of PHASES) {
     for (const gate of GATE_TYPES) {
-      // Baseline: a phase is auto-approved only if explicitly listed (default: none).
-      const phaseApproved = approved.has(phase);
+      // Baseline: a phase is auto-approved only if "all" or the phase is explicitly listed (default: none).
+      const phaseApproved = allApproved || approved.has(phase);
       // Even when a phase is auto-approved, the always-ask hard set never flips.
       const guild_gates: GuildGate =
         phaseApproved && !ALWAYS_ASK_HARD_SET.has(gate) ? "auto-safe" : "ask";

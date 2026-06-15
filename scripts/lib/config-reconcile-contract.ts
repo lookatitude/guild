@@ -69,10 +69,19 @@ export interface ConfigFieldSpec {
   scope: ConfigScope;
   /**
    * Security-sensitive flag. The never-clobber invariant applies to ALL keys, but
-   * this flag lets Lsec assert that security keys are explicitly covered (no silent
-   * weakening of a permission/bypass default on reconcile).
+   * for a security-sensitive key `repair` must FAIL CLOSED: it may never coerce a
+   * malformed value DOWN to the permissive `default` (security-auditor F4 — e.g.
+   * `bypass_permissions_policy` default `"audit"` is less restrictive than `"deny"`).
    */
   security_sensitive: boolean;
+  /**
+   * The most-restrictive value for a security-sensitive key (e.g. `"deny"` for
+   * `bypass_permissions_policy`). When set, `repair` of a malformed security value
+   * coerces to THIS (fail-closed), never to `default`. When absent, `repair` leaves
+   * a malformed security value untouched for explicit user resolution — it is NEVER
+   * silently weakened. Ignored for non-security keys.
+   */
+  most_restrictive?: unknown;
 }
 
 /**
@@ -113,8 +122,12 @@ export interface ReconcileFinding {
   key: string;
   /** "missing" | "malformed" | "ok" | "user-override-kept". */
   status: "missing" | "malformed" | "ok" | "user-override-kept";
-  /** The action the mode took (or would take, for `check`). */
-  action: "none" | "fill-default" | "repair-default";
+  /**
+   * The action the mode took (or would take, for `check`).
+   * - "repair-most-restrictive": a malformed SECURITY value coerced to `most_restrictive` (fail-closed, F4).
+   * - "security-hold": a malformed SECURITY value left untouched (no `most_restrictive` set) — never weakened (F4).
+   */
+  action: "none" | "fill-default" | "repair-default" | "repair-most-restrictive" | "security-hold";
   /** The value AFTER reconcile (unchanged for `check` / kept user values). */
   resolved_value: unknown;
   resolved_provenance: FieldProvenance;
@@ -188,7 +201,29 @@ export function reconcile(
 
     // Present + default/reconciled ⇒ repair only if malformed AND mode === repair.
     const valid = isValidValue(spec, cur.value);
-    if (!valid && mode === "repair") {
+    if (!valid && mode === "repair" && spec.security_sensitive) {
+      // F4 (security-auditor): NEVER coerce a malformed security value down to the
+      // permissive `default`. Fail closed: coerce to `most_restrictive` if declared,
+      // else leave it untouched for explicit user resolution.
+      if (spec.most_restrictive !== undefined) {
+        findings.push({
+          key: spec.key,
+          status: "malformed",
+          action: "repair-most-restrictive",
+          resolved_value: spec.most_restrictive,
+          resolved_provenance: "reconciled",
+        });
+        wrote = true;
+      } else {
+        findings.push({
+          key: spec.key,
+          status: "malformed",
+          action: "security-hold",
+          resolved_value: cur.value,
+          resolved_provenance: cur.provenance,
+        });
+      }
+    } else if (!valid && mode === "repair") {
       findings.push({
         key: spec.key,
         status: "malformed",
