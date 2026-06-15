@@ -53,6 +53,10 @@ import {
   type HostFamily,
   type ProbeEnv,
 } from "./provider-detect";
+// P1-L8: resolve the three per-run roles (host/advisory/adversarial) from the live
+// detection and record them in the snapshot (capability-matrix-driven, not host-name).
+import { resolveRolesForRun } from "./role-resolver";
+import type { RoleResolutionSet } from "./role-model-schema";
 import {
   validateModels,
   validateSecurity,
@@ -136,6 +140,13 @@ export interface ResolvedSettingsSnapshot {
     /** The operator-selected provider id, if chosen before run-trace start. */
     selected?: string;
   };
+  /**
+   * P1-L8: the resolved per-run role set (host/advisory/adversarial), capability-matrix
+   * driven. Default Claude+Codex ⇒ host=claude, advisory=claude (local advisor),
+   * adversarial=codex (different family, strong). Recorded so execute-plan can route
+   * advisory advice and the review path can pick the adversarial substrate.
+   */
+  roles: RoleResolutionSet;
   /**
    * The review communication contract version. UNCHANGED per AC-9.
    * All providers communicate through packet/result/trail under
@@ -396,6 +407,19 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
   const selectedProvider: string | undefined =
     selResult.status === "selected" ? (selResult.provider ?? undefined) : undefined;
 
+  // P1-L8: resolve the three per-run roles from the live detection (pure; reads the
+  // registry capability columns, never the host name). Defensive fallback mirrors the
+  // detection-failure posture: no substrate, weak — never a false `strong`.
+  const roles: RoleResolutionSet = safeProbe(
+    () => resolveRolesForRun(detection),
+    {
+      schema_version: "guild.role_resolution.v1",
+      host: { role: "host", substrate: null, strength: "weak", reason: "role resolution failed" },
+      advisory: { role: "advisory", substrate: null, strength: "weak", reason: "role resolution failed" },
+      adversarial: { role: "adversarial", substrate: null, strength: "weak", reason: "role resolution failed" },
+    }
+  );
+
   const providers: PreflightResult["providers"] = {
     authorHost: detection.authorHost,
     detected: detection.providers,
@@ -428,6 +452,7 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
       // can read the actual provider-to-dispatch from resolved-settings.json.
       ...(selectedProvider !== undefined ? { selected: selectedProvider } : {}),
     },
+    roles,
     communication_contract: "review_result.v1",
     resolved_at_ref: null,
   };
