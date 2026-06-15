@@ -52,6 +52,13 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+// P1-L7: the single source of truth for whether a cross-review adapter exists for a
+// host family. `hasAdapter` below is no longer a hand-maintained literal — it is the
+// `result_adapter` independent column read off `guild.host_registry.v1`. The family
+// collapse the registry uses is byte-aligned with resolveAuthorHost() (proven in
+// host-id-namespace.ts), so the selectable/detail outputs are unchanged for every
+// family (claude → false, codex → true, gemini/pi/antigravity → false). SC-4 A/B.
+import { resultAdapterForFamily } from "./host-registry";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -184,6 +191,10 @@ interface ProviderSpec {
    * Whether a real cross-review adapter exists for this provider TODAY. When
    * false, the provider is detect-only — `selectable` is forced false regardless
    * of detection/auth (OD-6 gemini/pi/antigravity).
+   *
+   * P1-L7: sourced from the `result_adapter` independent column on
+   * `guild.host_registry.v1` (via `resultAdapterForFamily`), NOT a hand-kept
+   * literal. The registry is the SoT; this conflated-flag field is the consumer.
    */
   hasAdapter: boolean;
   /** Whether selectability additionally requires a passing auth probe. */
@@ -193,18 +204,23 @@ interface ProviderSpec {
 /**
  * Registry order is the ranker's base preference within a family:
  * native plugin adapter BEFORE the raw CLI (codex-plugin > codex-cli).
+ *
+ * P1-L7: each entry's `hasAdapter` is read from the host registry's `result_adapter`
+ * column by family — claude→false, codex→true, gemini/pi/antigravity→false — so the
+ * detect-only posture is owned in ONE place (the registry rows) instead of being
+ * duplicated as literals here. Behavior is byte-identical (SC-4 A/B).
  */
 const PROVIDER_REGISTRY: ProviderSpec[] = [
   // The author host itself — always "detected on the host", never a cross reviewer
   // for a same-family author (the AC-8 guard handles that).
-  { id: "claude", kind: "host", family: "claude", hasAdapter: false, requiresAuth: false },
+  { id: "claude", kind: "host", family: "claude", hasAdapter: resultAdapterForFamily("claude"), requiresAuth: false },
   // Codex reference adapters (the only selectable cross reviewers today).
-  { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: true, requiresAuth: true },
-  { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: true, requiresAuth: true },
-  // Detect-only until adapters ship (OD-6).
-  { id: "gemini-cli", kind: "cli", family: "gemini", bin: "gemini", hasAdapter: false, requiresAuth: false },
-  { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: false, requiresAuth: false },
-  { id: "antigravity", kind: "cli", family: "antigravity", bin: "antigravity", hasAdapter: false, requiresAuth: false },
+  { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+  { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+  // Detect-only until adapters ship (OD-6) — no registry row for gemini (D10); pi/antigravity rows carry result_adapter:false.
+  { id: "gemini-cli", kind: "cli", family: "gemini", bin: "gemini", hasAdapter: resultAdapterForFamily("gemini"), requiresAuth: false },
+  { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
+  { id: "antigravity", kind: "cli", family: "antigravity", bin: "antigravity", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false },
 ];
 
 // ---------------------------------------------------------------------------

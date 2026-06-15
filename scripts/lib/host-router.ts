@@ -37,6 +37,13 @@ import type { Specialist } from "./team-backend";
 // verbosity?} | null) is unpacked ONLY via resolveTierModel — the router never
 // assumes the operator-override slot is a plain string.
 import { resolveTierModel, type TierHostValue } from "../read-guild-config";
+// P1-L7: the host registry is the SoT for host IDENTITY. The router reads "is this
+// the claude/codex reference host" THROUGH the registry (via the HostKind→registry
+// id bridge) instead of comparing the raw HostKind literal from a parallel source.
+// The bridge collapses each HostKind to its registry family id (claude-* → claude,
+// codex-app → codex, antigravity-2 → antigravity), which is byte-aligned with
+// resolveAuthorHost() — so Claude/Codex routing is byte-identical (SC-4 214/214 A/B).
+import { hostKindToRegistryId } from "./host-registry";
 
 // ── Axes + request ────────────────────────────────────────────────────────────
 
@@ -276,6 +283,18 @@ export function backendForMode(mode: AgentMode): BackendCapability | null {
 
 const AFFINITY_BOOST = 10;
 
+// ── Registry-sourced host-identity predicates (P1-L7) ─────────────────────────
+// The registry (via the HostKind→registry id bridge) is the single authority for
+// "is this the claude/codex reference host". Replaces scattered `=== "claude"` /
+// `=== "codex"` literals that read identity from a parallel source. Family-collapsed
+// (claude-* → claude, codex-app → codex) — byte-aligned with resolveAuthorHost().
+function isClaudeHost(hostKind: HostKind): boolean {
+  return hostKindToRegistryId(hostKind) === "claude";
+}
+function isCodexHost(hostKind: HostKind): boolean {
+  return hostKindToRegistryId(hostKind) === "codex";
+}
+
 /**
  * Soft re-ranking signal (CR-4). Returns a non-negative boost for a host_kind
  * given the work type. It NEVER hard-selects — capability pre-check (CR-2) and
@@ -285,16 +304,16 @@ export function affinityBoost(workType: WorkType | undefined, hostKind: HostKind
   switch (workType) {
     case "interactive_lifecycle":
       // Hooks are Claude Code-specific.
-      return hostKind === "claude" ? AFFINITY_BOOST : 0;
+      return isClaudeHost(hostKind) ? AFFINITY_BOOST : 0;
     case "adversarial_review":
       // Independence from the creator host → prefer a NON-claude host.
-      return hostKind !== "claude" ? AFFINITY_BOOST : 0;
+      return !isClaudeHost(hostKind) ? AFFINITY_BOOST : 0;
     case "background_implementation":
       // Detached headless execution → codex.
-      return hostKind === "codex" ? AFFINITY_BOOST : 0;
+      return isCodexHost(hostKind) ? AFFINITY_BOOST : 0;
     case "parallel_local_lanes":
       // Native tmux team backend → claude.
-      return hostKind === "claude" ? AFFINITY_BOOST : 0;
+      return isClaudeHost(hostKind) ? AFFINITY_BOOST : 0;
     case "graph_extraction":
     case undefined:
     default:
@@ -419,8 +438,9 @@ function rankScore(host: RoutableHost, lane: LaneRequest): number {
 }
 
 // Deterministic tiebreak after score: claude before codex, then host_id asc.
+// P1-L7: "is claude" resolved through the registry bridge, not a raw literal.
 function hostKindRank(hostKind: HostKind): number {
-  return hostKind === "claude" ? 0 : 1;
+  return isClaudeHost(hostKind) ? 0 : 1;
 }
 
 // ── route() — CR-1 ─────────────────────────────────────────────────────────────
@@ -449,7 +469,8 @@ export function route(
       rejected.push({ hostId: host.host_id, hostKind: host.host_kind, reason });
 
     // cross_host.enabled=false ⇒ Claude-only (single-host behavior).
-    if (!crossHostEnabled && host.host_kind !== "claude") {
+    // P1-L7: claude-identity via the registry bridge (SoT), not a raw literal.
+    if (!crossHostEnabled && !isClaudeHost(host.host_kind)) {
       tag("cross-host disabled (defaults.cross_host.enabled=false)");
       continue;
     }
@@ -561,7 +582,8 @@ export function route(
   const rest = ranked.slice(1);
   let fallbackChain: RouteTarget[] = rest.map(toTarget);
   if (fallbackToClaude) {
-    const claudeIdx = fallbackChain.findIndex((t) => t.hostKind === "claude");
+    // P1-L7: claude-identity via the registry bridge (SoT), not a raw literal.
+    const claudeIdx = fallbackChain.findIndex((t) => isClaudeHost(t.hostKind));
     if (claudeIdx >= 0) {
       const [claudeLast] = fallbackChain.splice(claudeIdx, 1);
       fallbackChain.push(claudeLast); // demote to last-resort

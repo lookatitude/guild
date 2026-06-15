@@ -49,6 +49,9 @@ import { spawnSync } from "child_process";
 // canonical module is sibling to this one so no import cycle exists.
 import type { HostKind } from "./host-types";
 export type { HostKind };
+// P1-L7: the host registry is the SoT for host identity/launch-binary. team-backend
+// reads it via the HostKind→registry bridge instead of a parallel literal switch.
+import { hostKindToRegistryId, getRegistryEntry } from "./host-registry";
 
 export interface Specialist {
   name: string;
@@ -1072,15 +1075,29 @@ export interface RemoteTransport {
   teardown(): void;
 }
 
-/** Map a host kind to the CLI binary its tmux pane invokes (CH-2 adapters). */
+/**
+ * Map a host kind to the CLI binary its tmux pane invokes (CH-2 adapters).
+ *
+ * P1-L7: the host registry (`host-registry.ts` → `detection.bin`) is the read SOURCE
+ * for the launch binary; `hostKindToRegistryId` is the HostKind→registry bridge.
+ * THREE deliberate divergences from the registry are preserved as explicit overrides
+ * so behavior is byte-identical across all 9 HostKinds (verified by the L7 expanded
+ * A/B, fixtures/routing-expanded-golden.json):
+ *   - `antigravity-2` → "agy": the tmux pane launcher binary differs from the
+ *     registry's detection-probe bin ("antigravity").
+ *   - `gemini` → "gemini": dropped from the registry (D10) but still a launchable
+ *     pane HostKind until its adapter is retired.
+ *   - `codex-app` → "claude": preserves the pre-existing default-fallthrough
+ *     (codex-app was never an explicit case; it fell to `default: "claude"`). A
+ *     latent quirk kept verbatim — see the L7 followup to reconcile it to "codex".
+ */
 export function binaryForHostKind(hostKind: HostKind): string {
-  switch (hostKind) {
-    case "codex": return "codex";
-    case "gemini": return "gemini";
-    case "pi": return "pi";
-    case "antigravity-2": return "agy";
-    default: return "claude"; // claude + the desktop/web/app variants drive `claude`
-  }
+  if (hostKind === "antigravity-2") return "agy";
+  if (hostKind === "gemini") return "gemini";
+  if (hostKind === "codex-app") return "claude";
+  const id = hostKindToRegistryId(hostKind);
+  const bin = id ? getRegistryEntry(id)?.detection.bin : null;
+  return bin ?? "claude"; // claude + the desktop/web variants drive `claude`
 }
 
 // ── MockTransport — in-memory test double ────────────────────────────────────
