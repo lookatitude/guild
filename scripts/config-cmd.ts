@@ -44,6 +44,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { resolveSettings, Source } from "./lib/settings-resolver";
+// P1-L9: the config reconciler (`config init` → `reconcile sync`).
+import { reconcileConfig, summarizeReconcile } from "./lib/config-reconcile";
+import { RECONCILE_MODES, type ReconcileMode } from "./lib/config-reconcile-contract";
 // Import the real validators from read-guild-config.ts (single source of truth).
 // These are purely additive exports — the resolve path is unchanged.
 import {
@@ -689,9 +692,11 @@ function validateResolved(config: Record<string, unknown>, selfBuild = false): s
 // ---------------------------------------------------------------------------
 
 interface ParsedArgs {
-  subcommand: "set" | "show" | "validate" | "providers" | "update-mcp-hashes";
+  subcommand: "set" | "show" | "validate" | "providers" | "update-mcp-hashes" | "reconcile";
   /** For subcommand=providers: the sub-verb (e.g. "detect"). */
   providersVerb?: string;
+  /** For subcommand=reconcile: the mode (check|sync|repair). */
+  reconcileMode?: ReconcileMode;
   /** For subcommand=update-mcp-hashes: path to JSON file with tool-name→description map. */
   toolsFile?: string;
   key?: string;
@@ -713,13 +718,24 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
         "  show --sources [--cwd <p>]\n" +
         "  validate --effective [--cwd <p>]\n" +
         "  providers detect [--cwd <p>]\n" +
-        "  update-mcp-hashes --tools <json-file> --scope workspace|project|local [--cwd <p>]",
+        "  update-mcp-hashes --tools <json-file> --scope workspace|project|local [--cwd <p>]\n" +
+        "  reconcile <check|sync|repair> [--cwd <p>]   (config init = reconcile sync)",
     };
   }
 
   const sub = args[0];
-  if (sub !== "set" && sub !== "show" && sub !== "validate" && sub !== "providers" && sub !== "update-mcp-hashes") {
-    return { error: `unknown subcommand "${sub}" — expected: set, show, validate, providers, update-mcp-hashes` };
+  if (sub !== "set" && sub !== "show" && sub !== "validate" && sub !== "providers" && sub !== "update-mcp-hashes" && sub !== "reconcile") {
+    return { error: `unknown subcommand "${sub}" — expected: set, show, validate, providers, update-mcp-hashes, reconcile` };
+  }
+
+  // P1-L9: reconcile takes a required mode positional (check|sync|repair).
+  let reconcileMode: ReconcileMode | undefined;
+  if (sub === "reconcile") {
+    const m = args[1];
+    if (!m || m.startsWith("--") || !(RECONCILE_MODES as readonly string[]).includes(m)) {
+      return { error: `reconcile requires a mode — expected: ${RECONCILE_MODES.join("|")} (e.g. reconcile sync [--cwd <p>])` };
+    }
+    reconcileMode = m as ReconcileMode;
   }
 
   let key: string | undefined;
@@ -743,8 +759,8 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     }
   }
 
-  // Parse flags from the rest of the args (skip the sub-verb for providers)
-  const flagStart = sub === "providers" ? 2 : 1;
+  // Parse flags from the rest of the args (skip the sub-verb/mode for providers/reconcile)
+  const flagStart = sub === "providers" || sub === "reconcile" ? 2 : 1;
   const positionals: string[] = [];
   let toolsFile: string | undefined;
   for (let i = flagStart; i < args.length; i++) {
@@ -797,6 +813,7 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   return {
     subcommand: sub,
     providersVerb,
+    reconcileMode,
     toolsFile,
     key,
     rawValue,
@@ -1267,6 +1284,30 @@ export function cmdUpdateMcpHashes(
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: reconcile (P1-L9) — `config init` becomes `reconcile sync`
+// ---------------------------------------------------------------------------
+
+/**
+ * Run a config reconcile pass. `check` is read-only (drift report); `sync` fills
+ * missing keys to default; `repair` additionally coerces malformed default/reconciled
+ * values. NEVER overwrites a user value (any mode, any key — security included).
+ * On a fresh repo, `reconcile sync` writes a settings.json byte-identical to today's
+ * `config init` output.
+ */
+function cmdReconcile(mode: ReconcileMode, cwd: string): number {
+  const now = new Date().toISOString();
+  const result = reconcileConfig({ cwd, mode, now });
+  process.stdout.write(`[config-cmd] ${summarizeReconcile(result)}\n`);
+  const notable = result.findings.filter(
+    (f) => f.status !== "ok" && f.status !== "user-override-kept"
+  );
+  for (const f of notable) {
+    process.stdout.write(`  ${f.key}: ${f.status} → ${f.action}\n`);
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Entrypoint
 // ---------------------------------------------------------------------------
 
@@ -1327,6 +1368,17 @@ function main(): void {
         process.exit(1);
       }
       exitCode = cmdUpdateMcpHashes(parsed.cwd, parsed.scope, parsed.toolsFile);
+      break;
+    }
+
+    case "reconcile": {
+      if (!parsed.reconcileMode) {
+        process.stdout.write(
+          `[config-cmd] ERROR: reconcile requires a mode — ${RECONCILE_MODES.join("|")}\n`
+        );
+        process.exit(1);
+      }
+      exitCode = cmdReconcile(parsed.reconcileMode, parsed.cwd);
       break;
     }
 

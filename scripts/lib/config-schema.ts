@@ -1,0 +1,136 @@
+/**
+ * scripts/lib/config-schema.ts
+ *
+ * P1-L9 — the typed config-schema SoT (`guild.config_schema.v1`), built against the
+ * L0 `config-reconcile-contract.ts` shape. It is DERIVED from the single canonical
+ * default tree (`read-guild-config.ts` DEFAULTS) by deep-flattening to dotted keys —
+ * so the schema can never drift from the values `scaffold()` emits, and `reconcile
+ * sync` on a fresh repo is byte-identical to today's `config init` (SC-6).
+ *
+ * Flattening rule: recurse into plain NON-empty objects; treat primitives, arrays, and
+ * EMPTY objects as terminal leaves (one ConfigFieldSpec each). So `models.tiers.cheap.
+ * claude` is a field, while `mcp.tool_description_hashes` ({}) and
+ * `defaults.team.always_include` ([]) are single object/array leaves.
+ *
+ * CONTRACT: pure. No I/O, no clock. Owned by tooling-engineer (P1-L9); consumed by
+ * config-reconcile.ts (impl), Lsec (security-key coverage), Ltest (SC-6 fixtures).
+ */
+
+import {
+  type ConfigFieldSpec,
+  type ConfigValueType,
+} from "./config-reconcile-contract";
+import { DEFAULTS } from "../read-guild-config";
+
+// ---------------------------------------------------------------------------
+// Security-sensitive key classification (load-bearing — Lsec asserts coverage)
+// ---------------------------------------------------------------------------
+
+/**
+ * A dotted key is security-sensitive when it governs autonomy, permission/bypass
+ * posture, secrets handling, remote dispatch, or MCP trust pinning. The never-clobber
+ * invariant applies to ALL keys; this flag lets Lsec assert security keys are covered
+ * (no silent weakening of a permission default on reconcile).
+ */
+export function isSecuritySensitiveKey(key: string): boolean {
+  return (
+    key === "auto_approve" ||
+    key === "defaults.gates.auto_approve" ||
+    key === "codex_skip_enforcement" ||
+    key.startsWith("security.") ||
+    key.startsWith("secrets_policy.") ||
+    key.startsWith("defaults.cross_host") ||
+    key === "mcp.tool_description_hashes"
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Flatten / unflatten (dotted-key projection of the nested settings tree)
+// ---------------------------------------------------------------------------
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/** True for a value that is a flattening LEAF (primitive | array | empty object). */
+function isLeaf(v: unknown): boolean {
+  if (!isPlainObject(v)) return true; // primitive or array
+  return Object.keys(v).length === 0; // empty object is a terminal leaf
+}
+
+/**
+ * Deep-flatten a settings object to a dotted-key → leaf-value map, preserving the
+ * source key order (so an unflatten round-trip reproduces the original ordering).
+ * `_help` is never flattened (it is presentation, not a config field).
+ */
+export function flattenSettings(obj: Record<string, unknown>, prefix = ""): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (prefix === "" && k === "_help") continue;
+    const key = prefix ? `${prefix}.${k}` : k;
+    if (isLeaf(v)) out[key] = v;
+    else Object.assign(out, flattenSettings(v as Record<string, unknown>, key));
+  }
+  return out;
+}
+
+/**
+ * Rebuild a nested object from a dotted-key map. Used by the reconciler to overlay
+ * kept user values onto a clone of the default tree without disturbing key order.
+ */
+export function setDotted(target: Record<string, unknown>, dottedKey: string, value: unknown): void {
+  const parts = dottedKey.split(".");
+  let node = target;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const p = parts[i];
+    if (!isPlainObject(node[p])) node[p] = {};
+    node = node[p] as Record<string, unknown>;
+  }
+  node[parts[parts.length - 1]] = value;
+}
+
+// ---------------------------------------------------------------------------
+// Type inference + schema construction
+// ---------------------------------------------------------------------------
+
+function inferType(value: unknown): ConfigValueType {
+  if (Array.isArray(value)) return "array";
+  if (value === null) return "object"; // null leaves (initiative_default, loops, bridge_package) — nullable; structural validity is lenient
+  switch (typeof value) {
+    case "string":
+      return "string";
+    case "number":
+      return "number";
+    case "boolean":
+      return "boolean";
+    default:
+      return "object";
+  }
+}
+
+/**
+ * The `guild.config_schema.v1` field registry, derived from the canonical DEFAULTS
+ * tree. One ConfigFieldSpec per flattened leaf; `default` is the canonical value
+ * (single source ⇒ no drift). Scope is "project" (today's settings.json target).
+ *
+ * NOTE: enum/null typing is intentionally lenient here — the schema drives the
+ * reconciler's MISSING-fill + never-clobber decisions, where structural type validity
+ * (string/number/boolean/array/object) is sufficient. Rich enum validation stays in
+ * read-guild-config's closed-key validators (validateDefaults), which the reconciler
+ * does not replace.
+ */
+export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
+  const flat = flattenSettings(DEFAULTS as unknown as Record<string, unknown>);
+  return Object.entries(flat).map(([key, def]) => ({
+    key,
+    type: inferType(def),
+    default: def,
+    scope: "project" as const,
+    security_sensitive: isSecuritySensitiveKey(key),
+  }));
+})();
+
+/** Lookup a field spec by dotted key. */
+export function getFieldSpec(key: string): ConfigFieldSpec | undefined {
+  return CONFIG_SCHEMA.find((s) => s.key === key);
+}

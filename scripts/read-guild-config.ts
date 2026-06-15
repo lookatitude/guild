@@ -405,7 +405,10 @@ const DEFAULT_ESCALATION_MARKERS: string[] = [
   "not enough information",
 ];
 
-const DEFAULTS: GuildSettings = {
+// P1-L9: exported (additive — no behavior change) so config-schema.ts derives its
+// typed field registry from this single canonical source and the reconciler
+// materializes from it, guaranteeing `reconcile sync` is byte-identical to scaffold().
+export const DEFAULTS: GuildSettings = {
   rigor: "standard",
   auto_approve: [],
   review: "local",
@@ -492,7 +495,8 @@ const DEFAULTS: GuildSettings = {
 };
 
 // Self-documenting help block written into the scaffolded settings.json.
-const HELP: Record<string, string> = {
+// P1-L9: exported (additive) so the reconciler reproduces scaffold() byte-identically.
+export const HELP: Record<string, string> = {
   rigor: "quick | standard | deep — profile knob; expands loops/caps/review depth",
   auto_approve:
     "[] | [spec,plan,build,qa] | [all] — opt-in autonomy; destructive/network/spend STILL ask. " +
@@ -1566,7 +1570,10 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
   return { config: {}, rejects: [], source: "none" };
 }
 
-function scaffold(): string {
+// P1-L9: exported (additive) — the canonical `config init` output generator. The
+// reconciler reuses {...DEFAULTS, _help: HELP} so `reconcile sync` on a fresh repo is
+// byte-identical to this.
+export function scaffold(): string {
   return JSON.stringify({ ...DEFAULTS, _help: HELP }, null, 2) + "\n";
 }
 
