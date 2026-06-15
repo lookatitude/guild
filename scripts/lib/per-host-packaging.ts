@@ -690,3 +690,190 @@ export function renderPiManifest(
 
   return result;
 }
+
+// ---------------------------------------------------------------------------
+// renderAntigravityManifest (P1-L6) — INFERRED host, installability: target
+// ---------------------------------------------------------------------------
+
+/** The rendered Antigravity package manifest. Mirrors PiManifest (extension shape). */
+export interface AntigravityManifest {
+  schema_version: "antigravity-manifest.v1";
+  name: string;
+  version: string;
+  description: string;
+  homepage?: string;
+  repository?: string;
+  author?: { name: string; email?: string };
+  license?: string;
+  keywords?: string[];
+  commands?: PiCommandEntry[];
+  skills?: string[];
+  _unsupported?: UnsupportedField[];
+  _rendered_at: string;
+  _source_version: string;
+  /** P1-L6: the antigravity capability row is INFERRED until live-host verification. */
+  _inferred: true;
+}
+
+/**
+ * Render an Antigravity package manifest from a neutral GuildPluginManifest.
+ *
+ * Antigravity (registry id `antigravity`, family `antigravity`) is an INFERRED P1 host
+ * (`installability: target`, `provenance: inferred`). Its package shape is modeled on the
+ * extension surface (commands as descriptors, skill dirs passed through). Native agents /
+ * hooks / MCP are flagged in `_unsupported` (render-or-degrade) until the live host
+ * confirms its surfaces. Browser is native on antigravity (ladder C3) but that is a
+ * RUNTIME-adapter concern (L11), not a package-manifest field.
+ */
+export function renderAntigravityManifest(
+  manifest: GuildPluginManifest,
+  opts: RenderOptions
+): AntigravityManifest {
+  const unsupported: UnsupportedField[] = [];
+
+  const commands: PiCommandEntry[] = (manifest.commands ?? []).map((cmdPath) => ({
+    name: commandNameFromPath(cmdPath),
+    source_path: cmdPath,
+  }));
+  const skills = manifest.skills ?? [];
+
+  if (manifest.mcpServers && manifest.mcpServers.length > 0) {
+    for (const srv of manifest.mcpServers) {
+      unsupported.push({
+        field: `mcpServers[${srv.id}]`,
+        reason:
+          "Antigravity MCP support is INFERRED off-box; this server must be bridged via a " +
+          "package-provided shim until the live host confirms an MCP transport (verify at SC-3).",
+      });
+    }
+  }
+  if (manifest.agents && manifest.agents.length > 0) {
+    unsupported.push({
+      field: "agents",
+      reason: "Antigravity has no confirmed agent-definition equivalent (INFERRED) — agents omitted.",
+    });
+  }
+  if (manifest.hooks && manifest.hooks.length > 0) {
+    unsupported.push({
+      field: "hooks",
+      reason: "Antigravity hook semantics are INFERRED off-box — hooks require a dedicated emitter (not rendered here).",
+    });
+  }
+
+  const result: AntigravityManifest = {
+    schema_version: "antigravity-manifest.v1",
+    name: manifest.name,
+    version: manifest.version,
+    description: manifest.description,
+    _rendered_at: opts.renderedAt,
+    _source_version: manifest.version,
+    _inferred: true,
+  };
+  if (manifest.homepage !== undefined) result.homepage = manifest.homepage;
+  if (manifest.repository !== undefined) result.repository = manifest.repository;
+  if (manifest.author !== undefined) result.author = manifest.author;
+  if (manifest.license !== undefined) result.license = manifest.license;
+  if (manifest.keywords && manifest.keywords.length > 0) result.keywords = manifest.keywords;
+  if (commands.length > 0) result.commands = commands;
+  if (skills.length > 0) result.skills = skills;
+  if (unsupported.length > 0) result._unsupported = unsupported;
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// renderAgentsPackage (P1-L6) — the universal AGENTS.md instruction-file target
+// ---------------------------------------------------------------------------
+
+/**
+ * The rendered universal `.agents` package: a single AGENTS.md instruction file
+ * (context injection = instruction_file) plus the list of skills/commands exposed under
+ * `.agents/skills/guild/**`. This is the host-AGNOSTIC fallback any AGENTS.md-consuming
+ * host can install. `.agents` is a FILE surface (registry surface_kind:"file",
+ * detection.bin:null) — NOT a CLI plugin manifest.
+ */
+export interface AgentsPackage {
+  schema_version: "agents-package.v1";
+  /** The AGENTS.md instruction-file content (markdown) the host reads at session start. */
+  agents_md: string;
+  /** Skill source paths exposed under .agents/skills/guild/** (for the subset gate). */
+  skills: string[];
+  /** Command names exposed (referenced from AGENTS.md). */
+  commands: string[];
+  _unsupported?: UnsupportedField[];
+  _rendered_at: string;
+  _source_version: string;
+}
+
+/**
+ * Render the universal `.agents` package. The AGENTS.md bootstraps the `using-guild`
+ * skill and points the host at the bundled Guild skill tree. Native commands / agents /
+ * hooks / MCP have no AGENTS.md equivalent — they degrade to "drive Guild through the
+ * skill tree", recorded in `_unsupported`.
+ */
+export function renderAgentsPackage(
+  manifest: GuildPluginManifest,
+  opts: RenderOptions
+): AgentsPackage {
+  const unsupported: UnsupportedField[] = [];
+  const skills = manifest.skills ?? [];
+  const commands = (manifest.commands ?? []).map(commandNameFromPath);
+
+  if (manifest.agents && manifest.agents.length > 0) {
+    unsupported.push({
+      field: "agents",
+      reason: "AGENTS.md has no native agent-definition mechanism; specialists are dispatched through the Guild skill tree instead.",
+    });
+  }
+  if (manifest.hooks && manifest.hooks.length > 0) {
+    unsupported.push({
+      field: "hooks",
+      reason: "AGENTS.md hosts have no native hook event surface; lifecycle steps run as explicit skill invocations.",
+    });
+  }
+  if (manifest.mcpServers && manifest.mcpServers.length > 0) {
+    unsupported.push({
+      field: "mcpServers",
+      reason: "MCP availability is host-dependent for AGENTS.md targets; the bundled stdio MCP servers are reachable only when the host provides an MCP transport.",
+    });
+  }
+
+  const agents_md = [
+    `# AGENTS.md — ${manifest.name} (universal Guild package)`,
+    ``,
+    manifest.description,
+    ``,
+    `This repository ships **Guild** as a universal AGENTS.md package. Guild is a`,
+    `self-evolving specialist-team workflow engine. Its skills are bundled under`,
+    "`.agents/skills/guild/**`.",
+    ``,
+    `## Start here`,
+    `Read the **using-guild** skill first (\`.agents/skills/guild/meta/using-guild/SKILL.md\`)`,
+    `— it is the gateway that tells you when to reach for Guild's lifecycle`,
+    `(init → ideate → plan → build → qa → ops), specialists, adversarial review, and`,
+    `knowledge ingestion.`,
+    ``,
+    `## How to drive Guild here`,
+    `This host has no native slash-command or agent surface, so invoke Guild by READING`,
+    `the relevant skill from the bundled tree and following it. The lifecycle skills live`,
+    `under \`.agents/skills/guild/meta/\`; specialist skills under`,
+    "`.agents/skills/guild/specialists/`.",
+    ``,
+    `## Run the Guild CLI`,
+    `A \`guild-run\` launcher is bundled at \`bin/guild-run\` (forwards to the bundled`,
+    "`scripts/guild-run.ts`).",
+    ``,
+    `<!-- rendered_at: ${opts.renderedAt} · source_version: ${manifest.version} -->`,
+    ``,
+  ].join("\n");
+
+  const result: AgentsPackage = {
+    schema_version: "agents-package.v1",
+    agents_md,
+    skills,
+    commands,
+    _rendered_at: opts.renderedAt,
+    _source_version: manifest.version,
+  };
+  if (unsupported.length > 0) result._unsupported = unsupported;
+  return result;
+}

@@ -54,6 +54,9 @@ import {
 import {
   renderClaudePluginPackage,
   renderCodexPluginJson,
+  renderPiManifest,
+  renderAntigravityManifest,
+  renderAgentsPackage,
   type GuildPluginManifest,
   type McpServerEntry as NeutralMcpServerEntry,
   type HookEntry as NeutralHookEntry,
@@ -285,6 +288,74 @@ export function writeCodexTree(
 }
 
 // ---------------------------------------------------------------------------
+// P1-L6 — new-host trees (.agents universal, Pi, Antigravity)
+// ---------------------------------------------------------------------------
+
+/**
+ * Shared exposure for the AGENTS.md-family hosts: the Guild skill tree under
+ * `.agents/skills/guild/**` (incl. the using-guild bootstrap) + the bundled guild-run
+ * CLI (scripts/) + the stdio MCP runtime. Identical to the Codex skill/script exposure.
+ */
+function exposeGuildSkillTree(root: string, inv: GuildInventoryV1, dest: string): void {
+  for (const s of inv.skills) {
+    const underSkills = s.source_path.replace(/^skills\//, "");
+    copyFileEnsured(path.join(root, s.source_path), path.join(dest, ".agents", "skills", "guild", underSkills));
+  }
+  for (const s of inv.scripts) {
+    copyFileEnsured(path.join(root, s.source_path), path.join(dest, s.source_path));
+  }
+  copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+}
+
+/** Emit the universal `.agents` package: AGENTS.md + skill tree + CLI + launcher. */
+export function writeAgentsTree(
+  root: string,
+  inv: GuildInventoryV1,
+  distRoot: string,
+  generatedAt: string
+): string {
+  const dest = path.join(distRoot, "agents");
+  rmrf(dest);
+  const pkg = renderAgentsPackage(toNeutralManifest(inv), { renderedAt: generatedAt });
+  writeFileEnsured(path.join(dest, "AGENTS.md"), pkg.agents_md);
+  exposeGuildSkillTree(root, inv, dest);
+  writeLauncher(dest, "agents");
+  return dest;
+}
+
+/** Emit the Pi package: pi manifest + skill tree + CLI + launcher. */
+export function writePiTree(
+  root: string,
+  inv: GuildInventoryV1,
+  distRoot: string,
+  generatedAt: string
+): string {
+  const dest = path.join(distRoot, "pi");
+  rmrf(dest);
+  const manifest = renderPiManifest(toNeutralManifest(inv), { renderedAt: generatedAt });
+  writeFileEnsured(path.join(dest, "pi-manifest.json"), stableJson(manifest));
+  exposeGuildSkillTree(root, inv, dest);
+  writeLauncher(dest, "pi");
+  return dest;
+}
+
+/** Emit the Antigravity package: antigravity manifest + skill tree + CLI + launcher. */
+export function writeAntigravityTree(
+  root: string,
+  inv: GuildInventoryV1,
+  distRoot: string,
+  generatedAt: string
+): string {
+  const dest = path.join(distRoot, "antigravity");
+  rmrf(dest);
+  const manifest = renderAntigravityManifest(toNeutralManifest(inv), { renderedAt: generatedAt });
+  writeFileEnsured(path.join(dest, "antigravity-manifest.json"), stableJson(manifest));
+  exposeGuildSkillTree(root, inv, dest);
+  writeLauncher(dest, "antigravity");
+  return dest;
+}
+
+// ---------------------------------------------------------------------------
 // Gate references
 // ---------------------------------------------------------------------------
 
@@ -324,8 +395,43 @@ function codexPackageRefs(
 export interface BuildResult {
   claudeDir: string;
   codexDir: string;
+  /** P1-L6: the new-host trees (.agents universal, Pi, Antigravity). */
+  agentsDir: string;
+  piDir: string;
+  antigravityDir: string;
   gateOk: boolean;
   reasons: string[];
+}
+
+/**
+ * P1-L6: subset-gate references for an AGENTS.md-family host. Refs are derived from the
+ * RENDERED package (the command NAMES the renderer emitted via commandNameFromPath, same
+ * as codexPackageRefs), NOT from raw inventory ids — so the subset check verifies what is
+ * actually rendered (codex G-lane fix). Skills are exposed under .agents/skills/guild/**
+ * (every inventory skill); agents/hooks/mcp are degraded (render-or-degrade), none
+ * referenced. checkSubset asserts every rendered reference exists in the inventory (SC-2
+ * parity per new host).
+ */
+function newHostPackageRefs(
+  host: string,
+  inv: GuildInventoryV1,
+  renderedCommandNames: string[]
+): PackageReferences {
+  return {
+    host,
+    command_ids: renderedCommandNames,
+    skill_ids: inv.skills.map((s) => s.id),
+    agent_ids: [],
+    mcp_server_ids: [],
+    // The new-host trees bundle the full scripts/ tree via exposeGuildSkillTree (incl.
+    // the `guild-run` CLI the launcher invokes), so declare every bundled script id —
+    // matching claudePackageRefs (the other all-scripts-copier). This makes the subset
+    // gate verify the launcher's `guild-run` dependency exists in the inventory rather
+    // than silently omitting it (codex G-lane R2 fix).
+    script_ids: inv.scripts.map((s) => s.id),
+    hook_ids: [],
+    schema_versions: [],
+  };
 }
 
 /**
@@ -357,6 +463,10 @@ export function buildHostPackages(opts: {
 
   const claudeDir = writeClaudeTree(opts.root, inv, opts.distRoot, opts.generatedAt);
   const codexDir = writeCodexTree(opts.root, inv, opts.distRoot, opts.generatedAt);
+  // P1-L6: new-host trees (INFERRED capability rows, installability: target).
+  const agentsDir = writeAgentsTree(opts.root, inv, opts.distRoot, opts.generatedAt);
+  const piDir = writePiTree(opts.root, inv, opts.distRoot, opts.generatedAt);
+  const antigravityDir = writeAntigravityTree(opts.root, inv, opts.distRoot, opts.generatedAt);
 
   const reasons: string[] = [];
   if (opts.gates) {
@@ -366,15 +476,33 @@ export function buildHostPackages(opts: {
     const eq = checkClaudeEquivalence(committed, generated, expectedSurfaces(inv));
     if (!eq.ok) reasons.push(...eq.reasons);
 
-    // SC-7b — subset: every rendered reference exists in the inventory.
-    const codexJson = renderCodexPluginJson(toNeutralManifest(inv), { renderedAt: opts.generatedAt });
-    const claudeSubset = checkSubset(claudePackageRefs(inv), inv);
-    const codexSubset = checkSubset(codexPackageRefs(inv, codexJson), inv);
-    if (!claudeSubset.ok) reasons.push(...claudeSubset.reasons);
-    if (!codexSubset.ok) reasons.push(...codexSubset.reasons);
+    // SC-7b / SC-2-per-new-host — subset: every rendered reference exists in the inventory.
+    // New-host refs are derived from the RENDERED package output (command names), matching
+    // codexPackageRefs (codex G-lane fix) — not from raw inventory ids.
+    const neutral = toNeutralManifest(inv);
+    const codexJson = renderCodexPluginJson(neutral, { renderedAt: opts.generatedAt });
+    const agentsPkg = renderAgentsPackage(neutral, { renderedAt: opts.generatedAt });
+    const piManifest = renderPiManifest(neutral, { renderedAt: opts.generatedAt });
+    const antigravityManifest = renderAntigravityManifest(neutral, { renderedAt: opts.generatedAt });
+    const subsets = [
+      checkSubset(claudePackageRefs(inv), inv),
+      checkSubset(codexPackageRefs(inv, codexJson), inv),
+      checkSubset(newHostPackageRefs("agents", inv, agentsPkg.commands), inv),
+      checkSubset(newHostPackageRefs("pi", inv, (piManifest.commands ?? []).map((c) => c.name)), inv),
+      checkSubset(newHostPackageRefs("antigravity", inv, (antigravityManifest.commands ?? []).map((c) => c.name)), inv),
+    ];
+    for (const s of subsets) if (!s.ok) reasons.push(...s.reasons);
   }
 
-  return { claudeDir, codexDir, gateOk: reasons.length === 0, reasons };
+  return {
+    claudeDir,
+    codexDir,
+    agentsDir,
+    piDir,
+    antigravityDir,
+    gateOk: reasons.length === 0,
+    reasons,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +554,9 @@ function main(): number {
     return 1;
   }
 
-  process.stdout.write(`build:hosts: wrote ${result.claudeDir}\nbuild:hosts: wrote ${result.codexDir}\n`);
+  for (const d of [result.claudeDir, result.codexDir, result.agentsDir, result.piDir, result.antigravityDir]) {
+    process.stdout.write(`build:hosts: wrote ${d}\n`);
+  }
   if (!result.gateOk) {
     process.stderr.write(
       "build:hosts: GATE FAILURE (SC-2 equivalence / SC-7b subset):\n  " +
