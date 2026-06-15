@@ -1,0 +1,32 @@
+{
+  "claude-author + codex-plugin + cross/auto ⇒ selected codex-plugin": {
+    "provider": "codex-plugin",
+    "reason": "auto-selected 'codex-plugin' — highest-ranked selectable codex-family reviewer",
+    "status": "selected"
+  },
+  "review=off ⇒ skipped": {
+    "provider": null,
+    "reason": "review.mode=off — no review requested",
+    "status": "skipped"
+  },
+  "review=local ⇒ degraded-local": {
+    "provider": null,
+    "reason": "review.mode=local — same-host review only (not adversarial cross-family)",
+    "status": "degraded-local"
+  },
+  "cross + pin gemini-cli (no adapter) ⇒ skipped (honor-or-refuse)": {
+    "provider": null,
+    "reason": "pinned provider 'gemini-cli' is detected but NOT selectable for review=cross (no usable adapter yet / auth incomplete) — refusing to silently substitute another provider",
+    "status": "skipped"
+  },
+  "cross + pin claude (same family as author) ⇒ skipped (no self-review)": {
+    "provider": null,
+    "reason": "pinned provider 'claude' is the same family (claude) as the author host — a same-family reviewer cannot satisfy review=cross (self-review)",
+    "status": "skipped"
+  },
+  "cross/auto + empty world ⇒ skipped (no cross reviewer)": {
+    "provider": null,
+    "reason": "no reviewer available and review=cross — skipped with reason (NOT a sign-off). Install/authenticate a different-family reviewer (e.g. the Codex plugin) to satisfy the cross gate",
+    "status": "skipped"
+  }
+}

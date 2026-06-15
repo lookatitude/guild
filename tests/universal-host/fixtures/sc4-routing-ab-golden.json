@@ -1,0 +1,91 @@
+{
+  "claude-only/mid/team (cross disabled — today's default)": {
+    "affinityScore": 0,
+    "degraded": false,
+    "fallbackChain": [],
+    "host": "claude",
+    "hostKind": "claude",
+    "independence": "strong",
+    "model": "sonnet",
+    "notes": [
+      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
+    ],
+    "reason": "primary=claude(claude) tier=mid model=sonnet; 0 fallback(s); backend=agent_team; workType=none",
+    "rejected": [
+      {
+        "hostId": "codex",
+        "hostKind": "codex",
+        "reason": "cross-host disabled (defaults.cross_host.enabled=false)"
+      }
+    ],
+    "taskId": "L-mid-team",
+    "tier": "mid"
+  },
+  "cross-enabled/adversarial-review/powerful": {
+    "affinityScore": 10,
+    "degraded": false,
+    "fallbackChain": [
+      {
+        "host": "claude",
+        "hostKind": "claude",
+        "model": "opus",
+        "tier": "powerful"
+      }
+    ],
+    "host": "codex",
+    "hostKind": "codex",
+    "independence": "strong",
+    "model": "o3",
+    "notes": [
+      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
+    ],
+    "reason": "primary=codex(codex) tier=powerful model=o3; 1 fallback(s); backend=subagent; workType=adversarial_review",
+    "rejected": [],
+    "taskId": "L-adv-powerful",
+    "tier": "powerful"
+  },
+  "cross-enabled/cheap/agent": {
+    "affinityScore": 0,
+    "degraded": false,
+    "fallbackChain": [],
+    "host": "claude",
+    "hostKind": "claude",
+    "independence": "strong",
+    "model": "haiku",
+    "notes": [
+      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
+    ],
+    "reason": "primary=claude(claude) tier=cheap model=haiku; 0 fallback(s); backend=independent_agents; workType=none",
+    "rejected": [
+      {
+        "hostId": "codex",
+        "hostKind": "codex",
+        "reason": "backend \"independent_agents\" not supported"
+      }
+    ],
+    "taskId": "L-cheap-agent",
+    "tier": "cheap"
+  },
+  "codex preferred but team-backend required ⇒ claude (capability filter)": {
+    "affinityScore": 0,
+    "degraded": false,
+    "fallbackChain": [],
+    "host": "claude",
+    "hostKind": "claude",
+    "independence": "strong",
+    "model": "sonnet",
+    "notes": [
+      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
+    ],
+    "reason": "primary=claude(claude) tier=mid model=sonnet; 0 fallback(s); backend=agent_team; workType=none",
+    "rejected": [
+      {
+        "hostId": "codex",
+        "hostKind": "codex",
+        "reason": "backend \"agent_team\" not supported"
+      }
+    ],
+    "taskId": "L-pref-codex-team",
+    "tier": "mid"
+  }
+}
