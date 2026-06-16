@@ -220,7 +220,8 @@ const PROVIDER_REGISTRY: ProviderSpec[] = [
   // Detect-only until adapters ship (OD-6) — no registry row for gemini (D10); pi/antigravity rows carry result_adapter:false.
   { id: "gemini-cli", kind: "cli", family: "gemini", bin: "gemini", hasAdapter: resultAdapterForFamily("gemini"), requiresAuth: false },
   { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
-  { id: "antigravity", kind: "cli", family: "antigravity", bin: "antigravity", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false },
+  // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
+  { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false },
 ];
 
 // ---------------------------------------------------------------------------

@@ -256,12 +256,17 @@ const PI_ENTRY: HostRegistryEntry = {
   host_id: "pi",
   family: "pi",
   surface_kind: "cli",
-  detection: { bin: "pi", requires_auth: false, auth_probe: "none" }, // INFERRED
-  installability: "target",
-  result_adapter: false, // INFERRED — detect-only today (provider-detect.ts:206).
-  dispatch_selectable: true, // INFERRED
-  capabilities: inferredCaps("pi", "pi"),
-  provenance: "inferred",
+  detection: { bin: "pi", requires_auth: false, auth_probe: "none" }, // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
+  installability: "target", // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
+  result_adapter: false, // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
+  dispatch_selectable: true, // VERIFIED: pi is a CLI process a lane can run on.
+  capabilities: {
+    ...inferredCaps("pi", "pi"),
+    // VERIFIED on-host (pi --help, 0.79.3):
+    sessions: { continue: true, resume_by_id: true, fork: true }, // --continue/-c, --resume/-r + --session-id, --fork
+    structured_output: { native_json: true, schema_validation: false, repair_prompt: true }, // --mode json
+  },
+  provenance: "verified", // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
 };
 
 const ANTIGRAVITY_ENTRY: HostRegistryEntry = {
@@ -269,12 +274,22 @@ const ANTIGRAVITY_ENTRY: HostRegistryEntry = {
   host_id: "antigravity",
   family: "antigravity",
   surface_kind: "cli",
-  detection: { bin: "antigravity", requires_auth: false, auth_probe: "none" }, // INFERRED
-  installability: "target",
-  result_adapter: false, // INFERRED — detect-only today (provider-detect.ts:207).
-  dispatch_selectable: true, // INFERRED
-  capabilities: inferredCaps("antigravity", "antigravity"),
-  provenance: "inferred",
+  // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
+  detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
+  installability: "target", // VERIFIED-as-target: CLI present; Guild-package install unproven.
+  result_adapter: false, // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
+  dispatch_selectable: true, // VERIFIED: agy is a CLI process a lane can run on.
+  capabilities: {
+    ...inferredCaps("antigravity", "antigravity"),
+    // VERIFIED on-host (agy --help, 1.0.8):
+    sessions: { continue: true, resume_by_id: true, fork: false }, // --continue/-c, --conversation <id>; no fork flag
+    permissions: {
+      ...inferredCaps("antigravity", "antigravity").permissions,
+      bypass_prompts: true, // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
+      launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
+    },
+  },
+  provenance: "verified", // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
 };
 
 /** The Phase-1 registry rows, keyed by host_id. The single design-time SoT for L7. */

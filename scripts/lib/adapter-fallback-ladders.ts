@@ -50,36 +50,40 @@ export const FALLBACK_LADDER_TABLE: Record<AdapterSurface, Record<HostId, Rung>>
     claude: "native", // AskUserQuestion
     codex: "wrapped", // CLI prompt
     ".agents": "bridged", // file-bus ⓘ
-    pi: "wrapped", // pi -p ⓘ
-    antigravity: "wrapped", // ⓘ
+    pi: "wrapped", // VERIFIED on-host 2026-06-16: pi -p / --print
+    antigravity: "wrapped", // VERIFIED on-host 2026-06-16: agy -p / --print
   },
   session: {
     claude: "native", // session id/resume
     codex: "wrapped", // run-dir state
     ".agents": "emulated", // re-bootstrap ⓘ
-    pi: "emulated", // ⓘ
-    antigravity: "emulated", // ⓘ
+    pi: "native", // VERIFIED on-host 2026-06-16: --resume/-r + --session-id + --fork (full session id/resume)
+    antigravity: "wrapped", // VERIFIED on-host 2026-06-16: --continue/-c + --conversation <id> (resume by id; no fork)
   },
   semantic_tool: {
     claude: "native", // tool names
     codex: "bridged", // name map
     ".agents": "bridged", // name map ⓘ
-    pi: "emulated", // shell equiv ⓘ
+    pi: "bridged", // VERIFIED on-host 2026-06-16: native read/bash/edit/write tools + --tools allowlist (Guild→pi name map)
     antigravity: "bridged", // ⓘ
   },
   browser: {
     claude: "bridged", // chrome-devtools MCP
     codex: "bridged", // MCP
     ".agents": "degraded", // none ⓘ
-    pi: "degraded", // ⓘ
-    antigravity: "native", // agy browser ⓘ
+    pi: "degraded", // VERIFIED on-host 2026-06-16: no browser tool in pi --help
+    antigravity: "native", // agy browser ⓘ — NOT confirmed from agy --help; keeps pi/antigravity in INFERRED_HOSTS
   },
 };
 
 /**
- * The (surface, host) cells whose rung is INFERRED (not live-verified). L11 / live-host
- * verification confirm these. Every `.agents`/pi/antigravity cell is INFERRED; claude
- * and codex cells are concrete.
+ * The hosts with at least one still-INFERRED rung (not fully live-verified). claude and
+ * codex cells are concrete. `.agents` is fully INFERRED (no live host yet). As of the
+ * 2026-06-16 on-host verification, pi/antigravity interaction+session+semantic_tool cells
+ * are VERIFIED (see inline comments) — they remain in this set ONLY because their `browser`
+ * rung is still unconfirmed (pi=degraded confirmed; antigravity=native NOT confirmed from
+ * agy --help). This is a coarse per-host flag; per-cell verified state lives in the inline
+ * comments above. Remove a host here once ALL its cells are live-verified.
  */
 export const INFERRED_HOSTS = new Set<HostId>([".agents", "pi", "antigravity"]);
 

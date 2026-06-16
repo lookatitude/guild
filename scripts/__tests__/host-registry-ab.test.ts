@@ -86,8 +86,10 @@ const PROBE_SCENARIOS: Record<string, ProbeFacts> = {
     pluginAdapters: { "codex-plugin": false },
   },
   detectOnlyTrio: {
-    onPath: { gemini: true, pi: true, antigravity: true },
-    versionOk: { gemini: true, pi: true, antigravity: true },
+    // Antigravity's CLI is `agy` (verified on-host 2026-06-16), not `antigravity` — the
+    // detector probes `agy`, so the fake PATH must expose `agy` for detection to fire.
+    onPath: { gemini: true, pi: true, agy: true },
+    versionOk: { gemini: true, pi: true, agy: true },
   },
   empty: {},
 };
