@@ -497,7 +497,7 @@ describe("SC-5 — semantic domains, not directory names", () => {
     expect(domains.length).toBeGreaterThanOrEqual(1);
     for (const d of domains) {
       expect(topLevelDirs).not.toContain(d.name);
-      expect(topLevelDirs).not.toContain(d.id.replace(/^domain:/, ""));
+      expect(topLevelDirs).not.toContain(d.id.startsWith("domain:") ? d.id.slice(7) : d.id);
     }
   });
 
@@ -604,7 +604,7 @@ describe("SC-2 + SC-5 production — real buildTaxonomy", () => {
     expect(domains().length).toBeGreaterThanOrEqual(1);
     for (const d of domains()) {
       expect(dirs).not.toContain(d.name.toLowerCase());
-      expect(dirs).not.toContain(d.id.replace(/^domain:/, ""));
+      expect(dirs).not.toContain(d.id.startsWith("domain:") ? d.id.slice(7) : d.id);
     }
   });
 

@@ -220,7 +220,7 @@ describe("B — deriveDomainId (pure, deterministic)", () => {
 
   it("B5: id always starts with 'domain:'", () => {
     for (const name of ["Foo", "Bar Baz", "A B C"]) {
-      expect(deriveDomainId(name)).toMatch(/^domain:/);
+      expect(deriveDomainId(name).startsWith("domain:")).toBe(true);
     }
   });
 });
@@ -488,7 +488,7 @@ describe("G — SC-5: domain dir-name anti-pattern", () => {
     for (const e of btdEdges) {
       expect(e.direction).toBe("out");
       expect(e.weight).toBe(1.0);
-      expect(e.target).toMatch(/^domain:/);
+      expect(e.target.startsWith("domain:")).toBe(true);
     }
   });
 
@@ -665,7 +665,7 @@ describe("I — buildTaxonomy integration (oracle-backed SC-2 + SC-5)", () => {
     const topLevelDirs = ["docs", "src", "diagrams"];
     const domainNodes = result.nodes.filter((n) => n.type === "domain");
     for (const d of domainNodes) {
-      const normalizedName = d.id.replace(/^domain:/, "");
+      const normalizedName = d.id.startsWith("domain:") ? d.id.slice(7) : d.id;
       expect(topLevelDirs).not.toContain(normalizedName);
     }
   });

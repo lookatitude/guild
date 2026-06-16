@@ -18,6 +18,7 @@ import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import { readFrontmatterField } from "../lib/frontmatter";
 
 const SCRIPT = path.resolve(__dirname, "../sync-migration.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
@@ -187,7 +188,7 @@ describe("sync-migration.ts", () => {
       seedRepo(tmpDir);
       runScript(["--cwd", tmpDir]);
       const content = fs.readFileSync(path.join(tmpDir, "MIGRATION.md"), "utf8");
-      expect(content).toMatch(/^supersedes: null$/m);
+      expect(readFrontmatterField(content, "supersedes")).toBeNull();
     });
 
     it("trailing text matches golden (full-sentence, link to canonical)", () => {

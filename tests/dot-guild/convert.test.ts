@@ -28,6 +28,7 @@ import {
 } from "../../scripts/dot-guild/convert/index";
 import { fixedClock } from "../../scripts/dot-guild/convert/seams";
 import type { Fs, Clock } from "../../scripts/dot-guild/convert/types";
+import { hasTopLevelKey } from "../../scripts/lib/frontmatter";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // In-memory filesystem helpers
@@ -1405,7 +1406,7 @@ describe("REGRESSION P2-canonical: canonical run fields — metadata created_at/
     expect(runYaml).toContain("started_at:");
     expect(runYaml).not.toContain("created_at:");
     expect(runYaml).toContain("initiative_attachment:");
-    expect(runYaml).not.toMatch(/^initiative:/m);
+    expect(hasTopLevelKey(runYaml, "initiative")).toBe(false);
   });
 
   test("status consistent: both run.yaml AND provenance.json use same derived status (closed default)", () => {

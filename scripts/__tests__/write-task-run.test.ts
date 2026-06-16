@@ -227,8 +227,8 @@ describe("write-task-run — writeTaskRun (TE-01/ARCH-1)", () => {
     const root = mkRoot();
     writeTaskRun(root, "run-001", "backend-api-001", BASE_PARAMS);
     const raw = fs.readFileSync(taskRunPath(root, "run-001", "backend-api-001"), "utf8");
-    // YAML format: must start with `task_run:`, not `{`
-    expect(raw.trimStart()).toMatch(/^task_run:/);
+    // YAML format: the trimmed document must START with the task_run key, not JSON `{`.
+    expect(raw.trimStart().startsWith("task_run:")).toBe(true);
   });
 });
 

@@ -33,6 +33,7 @@ import {
   type ParsedProvenance,
   type ParsedTraceEvent,
 } from "../lib/sqlite-projections";
+import { parseYaml } from "../lib/frontmatter";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -642,9 +643,14 @@ describe("Full round-trip via temp-dir filesystem", () => {
 
     // Parse inputs (mirrors CLI read path)
     const rawYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
+    // Migrated to the shared js-yaml parser (OD-3). String()-coerce non-string
+    // scalars so the return shape matches the old per-field regex reader exactly:
+    // `initiative_attachment: null` still yields the string "null"; absent → null.
+    const runDoc = parseYaml(rawYaml) as Record<string, unknown> | null;
     const getYaml = (key: string): string | null => {
-      const m = rawYaml.match(new RegExp(`^${key}:[ \\t]*(.*)$`, "m"));
-      return m ? m[1].trim() : null;
+      const v = runDoc?.[key];
+      if (v === undefined) return null;
+      return typeof v === "string" ? v : String(v);
     };
     const runYaml: ParsedRunYaml = {
       run_id: getYaml("run_id") ?? undefined,
@@ -677,5 +683,49 @@ describe("Full round-trip via temp-dir filesystem", () => {
 
     expect(filesTouched).toHaveLength(2);
     expect(filesTouched.map((f) => f.path).sort()).toEqual(["src/index.ts", "src/types.ts"].sort());
+  });
+});
+
+// ── Behavior-preserving pin: shared-parser run.yaml reader (comms-format L2) ──
+//
+// Pins that the js-yaml-backed `getYaml` (used by the CLI-read-path test above)
+// returns byte-identical values to the old per-field anchored-key regex reader,
+// including the subtle case where `initiative_attachment: null` must still come
+// back as the STRING "null" (the old regex captured the literal text "null"),
+// and an absent key returns null.
+describe("run.yaml shared-parser reader — behavior-preserving (OD-3, SC-2)", () => {
+  const rawYaml =
+    [
+      "schema_version: guild.run.v1",
+      "run_id: run-abc123",
+      "status: open",
+      "phase: build",
+      "run_class: full",
+      "command: /guild:build",
+      "initiative_attachment: null",
+      "started_at: 2026-06-01T10:00:00Z",
+    ].join("\n") + "\n";
+
+  const runDoc = parseYaml(rawYaml) as Record<string, unknown> | null;
+  const getYaml = (key: string): string | null => {
+    const v = runDoc?.[key];
+    if (v === undefined) return null;
+    return typeof v === "string" ? v : String(v);
+  };
+
+  test("scalar fields come back as the same trimmed strings as the regex reader", () => {
+    expect(getYaml("schema_version")).toBe("guild.run.v1");
+    expect(getYaml("run_id")).toBe("run-abc123");
+    expect(getYaml("status")).toBe("open");
+    expect(getYaml("phase")).toBe("build");
+    expect(getYaml("run_class")).toBe("full");
+    expect(getYaml("command")).toBe("/guild:build");
+    // started_at stays a STRING (JSON_SCHEMA — no native Date coercion).
+    expect(getYaml("started_at")).toBe("2026-06-01T10:00:00Z");
+  });
+
+  test("`null` value yields the string \"null\" and absent keys yield null", () => {
+    expect(getYaml("initiative_attachment")).toBe("null");
+    expect(getYaml("nonexistent_key")).toBeNull();
   });
 });

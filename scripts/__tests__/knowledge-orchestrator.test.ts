@@ -529,7 +529,7 @@ describe("B — emitRound1Candidates", () => {
     for (const page of doc.pages) {
       // candidate_key must equal id which is "wiki_page:<repoRoot-relpath>"
       expect(page.candidate_key).toBe(page.id);
-      expect(page.id).toMatch(/^wiki_page:/);
+      expect(page.id.startsWith("wiki_page:")).toBe(true);
       expect(typeof page.relpath).toBe("string");
       expect(typeof page.name).toBe("string");
       expect(Array.isArray(page.headings)).toBe(true);
@@ -571,7 +571,7 @@ describe("B — emitRound1Candidates", () => {
     // Every domain candidate must have a valid candidate_key of form "domain:topic:..."
     for (const dc of doc.domain_candidates as any[]) {
       expect(typeof dc.candidate_key).toBe("string");
-      expect(dc.candidate_key).toMatch(/^domain:topic:/);
+      expect(dc.candidate_key.startsWith("domain:topic:")).toBe(true);
       expect(typeof dc.primary_topicId).toBe("string");
       // primary_topicId must be the matching topic candidate_key (sans "domain:" prefix)
       expect(dc.candidate_key).toBe(`domain:${dc.primary_topicId}`);

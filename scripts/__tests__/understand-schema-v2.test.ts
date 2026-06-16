@@ -418,7 +418,8 @@ describe("SC-12: deterministic node ID helpers (Fix 3 — hash inside)", () => {
     const id1 = makeTopicId(members);
     const id2 = makeTopicId([...members].reverse()); // reversed order
     expect(id1).toBe(id2); // sort inside ensures order-independence
-    expect(id1).toMatch(/^topic:[0-9a-f]{8}$/);
+    expect(id1.startsWith("topic:")).toBe(true);
+    expect(id1.slice("topic:".length)).toMatch(/^[0-9a-f]{8}$/);
   });
 
   test("makeTopicId: different member sets produce different IDs", () => {
@@ -436,7 +437,11 @@ describe("SC-12: deterministic node ID helpers (Fix 3 — hash inside)", () => {
     const id1 = makeClaimId("docs/spec.md#intro", "the claim text");
     const id2 = makeClaimId("docs/spec.md#intro", "the claim text");
     expect(id1).toBe(id2);
-    expect(id1).toMatch(/^claim:docs\/spec\.md#intro:[0-9a-f]{8}$/);
+    {
+      const prefix = "claim:docs/spec.md#intro:";
+      expect(id1.startsWith(prefix)).toBe(true);
+      expect(id1.slice(prefix.length)).toMatch(/^[0-9a-f]{8}$/);
+    }
   });
 
   test("makeClaimId: same anchor different text → different IDs (no collision)", () => {
@@ -450,7 +455,11 @@ describe("SC-12: deterministic node ID helpers (Fix 3 — hash inside)", () => {
     const id1 = makeConceptId("src/index.ts#L10-L20", "the concept");
     const id2 = makeConceptId("src/index.ts#L10-L20", "the concept");
     expect(id1).toBe(id2);
-    expect(id1).toMatch(/^concept:src\/index\.ts#L10-L20:[0-9a-f]{8}$/);
+    {
+      const prefix = "concept:src/index.ts#L10-L20:";
+      expect(id1.startsWith(prefix)).toBe(true);
+      expect(id1.slice(prefix.length)).toMatch(/^[0-9a-f]{8}$/);
+    }
   });
 
   test("makeConceptId: same anchor different text → different IDs (no collision)", () => {

@@ -28,22 +28,21 @@ import {
   type DiscoveredSurfaces,
   type PackageReferences,
 } from "../../scripts/lib/parity-contract";
+import { readScalarField } from "../../scripts/lib/frontmatter";
 import type { InventoryCategory } from "../../scripts/lib/inventory-schema";
 import { realDiscovery, realInventory, PLUGIN_ROOT } from "./_helpers";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-/** Read a single-line frontmatter scalar (independent of build-inventory's reader). */
+/**
+ * Read the frontmatter `name:` scalar via the shared sibling-tolerant reader
+ * (OD-3). `readScalarField` does a single-field line read — it does NOT YAML-parse
+ * the whole block, so a skill/agent file whose unquoted multi-colon `description:`
+ * sibling is YAML-hostile (invalid YAML as a whole) still yields `name:` robustly.
+ * (whole-block `readFrontmatterString` returns undefined on those files.)
+ */
 function frontmatterName(absPath: string): string | undefined {
-  const content = fs.readFileSync(absPath, "utf8");
-  if (!content.startsWith("---")) return undefined;
-  const end = content.indexOf("\n---", 3);
-  const block = end === -1 ? content : content.slice(0, end);
-  const m = /^name\s*:\s*(.+?)\s*$/m.exec(block);
-  if (!m) return undefined;
-  let v = m[1].trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
-  return v;
+  return readScalarField(fs.readFileSync(absPath, "utf8"), "name");
 }
 
 // A package whose references are a genuine subset of the real inventory (one id

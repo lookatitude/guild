@@ -12,6 +12,7 @@ import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import { readFrontmatterField } from "../lib/frontmatter";
 
 const SCRIPT = path.resolve(__dirname, "../shadow-mode.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
@@ -235,7 +236,7 @@ describe("shadow-mode.ts", () => {
         "utf8"
       );
       // Front-matter: total_divergences: 0
-      expect(report).toMatch(/^total_divergences:\s*0$/m);
+      expect(readFrontmatterField(report, "total_divergences")).toBe(0);
     });
 
     it("divergences are 0 when historical specialist matches full skill identity", () => {
@@ -272,7 +273,7 @@ describe("shadow-mode.ts", () => {
         "utf8"
       );
       // Both proposed triggered AND historical triggered → no divergence
-      expect(report).toMatch(/^total_divergences:\s*0$/m);
+      expect(readFrontmatterField(report, "total_divergences")).toBe(0);
     });
   });
 

@@ -29,6 +29,15 @@ import {
   type StartRunOpts,
 } from "../lib/run-lifecycle";
 import type { HostKind } from "../lib/host-types";
+import { parseYaml } from "../lib/frontmatter";
+
+/** Parse a run.yaml document and read one top-level scalar via the shared parser (OD-3). */
+function runField(rawYaml: string, key: string): unknown {
+  const doc = parseYaml(rawYaml);
+  return doc && typeof doc === "object" && !Array.isArray(doc)
+    ? (doc as Record<string, unknown>)[key]
+    : undefined;
+}
 
 // ── In-memory fs seam (deterministic; no disk) ───────────────────────────────
 
@@ -436,7 +445,7 @@ describe("run-lifecycle — appendPhase (T0 full-run phase recording)", () => {
 
     const yaml = readRunYaml(mem, runId);
     // top-level phase: rewritten
-    expect(yaml).toMatch(/^phase: plan$/m);
+    expect(runField(yaml, "phase")).toBe("plan");
     // phases_log carries the appended entry with the env clock
     expect(yaml).toContain("- phase: plan");
     expect(yaml).toContain("at: 2026-06-07T11:00:00Z");
@@ -452,7 +461,7 @@ describe("run-lifecycle — appendPhase (T0 full-run phase recording)", () => {
     expect(ok).toBe(true);
 
     const yaml = readRunYaml(mem, runId);
-    expect(yaml).toMatch(/^phase: build$/m); // top-level reflects the latest
+    expect(runField(yaml, "phase")).toBe("build"); // top-level reflects the latest
     // both entries present, plan before build
     const planIdx = yaml.indexOf("- phase: plan");
     const buildIdx = yaml.indexOf("- phase: build");
@@ -482,14 +491,14 @@ describe("run-lifecycle — appendPhase (T0 full-run phase recording)", () => {
     const lc = createRunLifecycle(makeEnv(mem));
     const runId = lc.startRun(baseStartOpts({ phase: null, run_class: "full" }));
     const before = readRunYaml(mem, runId);
-    const statusBefore = before.match(/^status:.*$/m)?.[0];
-    const runClassBefore = before.match(/^run_class:.*$/m)?.[0];
+    const statusBefore = runField(before, "status");
+    const runClassBefore = runField(before, "run_class");
 
     appendPhase(makeEnv(mem), ROOT, runId, "qa");
 
     const after = readRunYaml(mem, runId);
-    expect(after.match(/^status:.*$/m)?.[0]).toBe(statusBefore);
-    expect(after.match(/^run_class:.*$/m)?.[0]).toBe(runClassBefore);
+    expect(runField(after, "status")).toBe(statusBefore);
+    expect(runField(after, "run_class")).toBe(runClassBefore);
   });
 });
 

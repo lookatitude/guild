@@ -28,6 +28,7 @@ import {
 } from "../../scripts/dot-guild/convert/index";
 import { fixedClock } from "../../scripts/dot-guild/convert/seams";
 import type { Fs, Clock } from "../../scripts/dot-guild/convert/types";
+import { readFrontmatterString, readFrontmatterField } from "../../scripts/lib/frontmatter";
 
 // ── In-memory Fs (trimmed copy of the convert.test.ts helper) ────────────────
 
@@ -139,11 +140,11 @@ describe("wiki importance backfill — grading heuristics", () => {
     expect(r?.action).toBe("graded");
     expect(r?.grade).toBe("high");
     const out = fs.readFileSync(p);
-    expect(out).toMatch(/^importance: high$/m);
-    expect(out).toMatch(/^importance_draft: true$/m);
-    expect(out).toMatch(/^graded_by: guild-migrate$/m);
+    expect(readFrontmatterString(out, "importance")).toBe("high");
+    expect(readFrontmatterField(out, "importance_draft")).toBe(true);
+    expect(readFrontmatterString(out, "graded_by")).toBe("guild-migrate");
     // Existing frontmatter keys + body survive intact.
-    expect(out).toMatch(/^confidence: high$/m);
+    expect(readFrontmatterString(out, "confidence")).toBe("high");
     expect(out).toContain("# Page\n\nBody text.");
   });
 
@@ -267,11 +268,11 @@ describe("the human gate — acceptGrades + listDraftGrades", () => {
     const accepted = acceptGrades(fs, GUILD);
     expect(accepted).toEqual([{ rel: "wiki/standards/a.md", grade: "high" }]);
     const out = fs.readFileSync(p);
-    expect(out).toMatch(/^importance: high$/m);
+    expect(readFrontmatterString(out, "importance")).toBe("high");
     expect(out).not.toContain("importance_draft");
     expect(out).not.toContain("graded_by");
     // Original frontmatter + body intact.
-    expect(out).toMatch(/^confidence: high$/m);
+    expect(readFrontmatterString(out, "confidence")).toBe("high");
     expect(out).toContain("# Page\n\nBody text.");
     // Gate cleared: nothing pending, second accept is a no-op.
     expect(listDraftGrades(fs, GUILD)).toEqual([]);
@@ -286,7 +287,7 @@ describe("the human gate — acceptGrades + listDraftGrades", () => {
     fs.writeFileSync(p, fs.readFileSync(p).replace("importance: medium", "importance: critical"));
     const accepted = acceptGrades(fs, GUILD);
     expect(accepted).toEqual([{ rel: "wiki/context/page.md", grade: "critical" }]);
-    expect(fs.readFileSync(p)).toMatch(/^importance: critical$/m);
+    expect(readFrontmatterString(fs.readFileSync(p), "importance")).toBe("critical");
   });
 
   test("acceptGrades never touches pages without the draft marker", () => {

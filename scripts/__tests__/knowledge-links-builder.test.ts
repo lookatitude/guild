@@ -539,7 +539,7 @@ describe("harvest-candidate source_refs compatibility (FU-A1-3)", () => {
       expect(link.from).toBe("reflection:refl-harvest-1");
       expect(link.type).toBe("references");
       // to is a reference path, not an inline body
-      expect(link.to).toMatch(/^raw_source:/);
+      expect(link.to.startsWith("raw_source:")).toBe(true);
     }
 
     // classifyNodeKindExtended on the reflection candidate id returns the right kind

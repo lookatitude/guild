@@ -90,7 +90,7 @@ describe("BLOCKER 1 — wiki-index.ts CLI threads --cwd → repoRoot (real spawn
     expect(wikiPages.length).toBe(2);
     for (const node of wikiPages) {
       // id is repoRoot-relative: wiki_page:.guild/wiki/<file>
-      expect(node.id).toMatch(/^wiki_page:\.guild\/wiki\//);
+      expect(node.id.startsWith("wiki_page:.guild/wiki/")).toBe(true);
       // source_ref is repoRoot-relative AND resolves at repoRoot.
       const ref = node.source_refs[0];
       expect(ref.startsWith(".guild/wiki/")).toBe(true);

@@ -22,6 +22,7 @@ import * as path from "path";
 import { execSync } from "child_process";
 import { runMigration } from "../../scripts/dot-guild/convert/index";
 import { fixedClock } from "../../scripts/dot-guild/convert/seams";
+import { readFrontmatterString, readFrontmatterField } from "../../scripts/lib/frontmatter";
 
 const ISO = "2026-06-11T09:00:00.000Z";
 const STAMP = "20260611T090000Z";
@@ -162,11 +163,11 @@ describe("v1→v2 migration rehearsal (real fs, full pipeline, human gate)", () 
 
     // Wiki grades drafted (the gate is now armed).
     const std = read(root, ".guild/wiki/standards/test-standard.md");
-    expect(std).toMatch(/^importance: high$/m);
-    expect(std).toMatch(/^importance_draft: true$/m);
-    expect(std).toMatch(/^graded_by: guild-migrate$/m);
+    expect(readFrontmatterString(std, "importance")).toBe("high");
+    expect(readFrontmatterField(std, "importance_draft")).toBe(true);
+    expect(readFrontmatterString(std, "graded_by")).toBe("guild-migrate");
     const ctx = read(root, ".guild/wiki/context/example-context.md");
-    expect(ctx).toMatch(/^importance: medium$/m);
+    expect(readFrontmatterString(ctx, "importance")).toBe("medium");
     const bare = read(root, ".guild/wiki/concepts/bare-concept.md");
     expect(bare.startsWith("---\nimportance: medium\nimportance_draft: true\ngraded_by: guild-migrate\n---\n")).toBe(true);
     // Already-graded + provenance pages untouched.
@@ -204,13 +205,13 @@ describe("v1→v2 migration rehearsal (real fs, full pipeline, human gate)", () 
       ".guild/wiki/concepts/bare-concept.md",
     ]) {
       const page = read(root, rel);
-      expect(page).toMatch(/^importance: (high|medium)$/m);
+      expect(["high", "medium"]).toContain(readFrontmatterString(page, "importance"));
       expect(page).not.toContain("importance_draft");
       expect(page).not.toContain("graded_by");
     }
     // Body + base frontmatter survived the whole pipeline.
     expect(read(root, ".guild/wiki/standards/test-standard.md")).toContain("# Test Standard\n\nFake body.");
-    expect(read(root, ".guild/wiki/standards/test-standard.md")).toMatch(/^confidence: high$/m);
+    expect(readFrontmatterString(read(root, ".guild/wiki/standards/test-standard.md"), "confidence")).toBe("high");
 
     // Idempotent: a second accept finds nothing pending.
     const again = execSync(`npx tsx ${JSON.stringify(MIGRATE_CLI)} --accept-grades --root=${JSON.stringify(root)}`, {

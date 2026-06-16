@@ -426,7 +426,7 @@ describe("appendAdvisoryRecord — injectable fs seam", () => {
     expect(result.written).toBe(false);
     expect(result.error).toMatch(/rename failed/);
     // cleanup: unlink should have been attempted on the temp file
-    expect(tmpWritten).toMatch(/^unlinked:/);
+    expect(tmpWritten.startsWith("unlinked:")).toBe(true);
   });
 
   test("in-memory seam: verifies written content shape", () => {
