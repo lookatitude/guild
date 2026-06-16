@@ -88,6 +88,44 @@ re-implement detection in a prompt):
   ranker prefers a **native plugin adapter over an authed CLI** (`codex-plugin` >
   `codex-cli`).
 
+### Reviewer = the resolved `adversarial` role (universal-host C1, SC-5)
+
+The reviewer host the broker selects **is the run's resolved `adversarial` role**
+— `snapshot.roles.adversarial.substrate` (`RoleResolutionSet`, computed by
+`runStartPreflight` / `resolveRolesForRun`, `scripts/lib/role-resolver.ts`). This
+is the capability-matrix-driven, different-family-for-`strong` resolution that the
+STRONG-independence rule below requires, decided **once at preflight** rather than
+re-guessed per gate. The DEFAULT Claude+Codex box resolves `adversarial = codex`
+(`strength: "strong"`, different family from the `claude` host) — **byte-identical
+to today's hard-wired Claude-author → Codex-reviewer** path.
+
+Consume the resolved role; do **not** re-derive the reviewer from the host name:
+
+- `snapshot.roles.adversarial.substrate` is the **WHO** — the reviewer host family
+  to dispatch through its adapter. It already satisfies the different-family
+  constraint when `strength == "strong"`.
+- `snapshot.roles.adversarial.strength == "weak"` means preflight could **not**
+  resolve a different-family adversarial substrate (only the host family is
+  available) — this is exactly the **degraded WEAK same-host path** in the STRONG
+  independence rule below (`independence: weak`, recorded, still gated by the
+  5-condition rule). A `null` substrate is the same weak/degraded-local case.
+- An explicit `reviewer_host:` pin in the input still applies via the precedence
+  ladder (next section); `selectReviewer` remains the **AC-8 hard predicate** that
+  enforces the result is never a same-family sign-off. The resolved
+  `roles.adversarial` is the default WHO the broker feeds that predicate — the role
+  resolution and `selectReviewer` agree on a default box (both resolve to the Codex
+  family), and `selectReviewer` is the authority that rejects a same-family
+  substitution.
+
+> **HostId vs provider id — map, never pass literally.** `roles.adversarial.substrate`
+> is a registry **`HostId`** (`claude | codex | .agents | pi | antigravity`), the
+> *family*. It is **not** a `selectReviewer` provider id — the Codex family resolves
+> to the concrete adapter ids `codex-plugin` / `codex-cli` (ranked native-plugin >
+> authed-CLI, per the section above). Do **not** pass the `HostId` directly as a
+> `review.adversarial.provider` pin (`codex` the HostId ≠ a provider id — an unknown-id lookup
+> would fail). The substrate names the *family*; `selectReviewer` resolves that family
+> to its available adapter and is the authority on the concrete provider.
+
 ### AC-8 — same-family review NEVER satisfies `review=cross`
 
 `selectReviewer` enforces the STRONG-independence rule as a **hard predicate**, so

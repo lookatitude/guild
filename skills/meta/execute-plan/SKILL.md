@@ -127,10 +127,20 @@ Implements ADR §3. When a low-tier agent hits something above its tier it gets 
    - **`status: "escalate"`** — the agent emits `status: "escalate"` + an `escalate_reason` in its `guild.handoff.v2` envelope (in-flight dispatch envelope — canonical body at cost-aware-tiering ADR §5, bound by pointer; distinct from and never superseding the frozen `guild.handoff_receipt.v1`).
    - **Uncertainty markers** — the agent's output contains a phrase from `models.escalationMarkers` (e.g. "I'm not sure", "unclear", "cannot determine").
    - **Anomalously short output** (O-3; enabled by D-OBS-3 — the lane's output-token count falls below `models.shortOutputThreshold[task_type][tier]` in `settings.json`. **This trigger activates only when the threshold key exists** for the `(task_type, tier)` bucket; when absent, the trigger is silent and only the two deterministic triggers above govern. The benchmark analyzer derives and writes the threshold after ≥30 samples per bucket; the coordinator **reads `settings.json` only — no JSONL scanning at dispatch**.
-2. **Advisor answers the sub-question only.** Spawn a `powerful` **advisor** agent that sees the **draft + the question + a compact critique instruction (~50 tokens)** and **never the raw file context** — this is what keeps the expensive call cheap.
+2. **Advisor answers the sub-question only.** Spawn a `powerful` **advisor** agent that sees the **draft + the question + a compact critique instruction (~50 tokens)** and **never the raw file context** — this is what keeps the expensive call cheap. **Route the advisor to the resolved advisory substrate (universal-host C1).** Read the per-run advisory role from the snapshot — `snapshot.roles.advisory.substrate` (`RoleResolutionSet`, recorded by `runStartPreflight`) — and dispatch the advisor on that host. The DEFAULT Claude+Codex box resolves `advisory = claude` (the local advisor), so this is **byte-identical to today** on a default box; a box whose advisory role resolved to a different substrate routes the consult there. Never re-resolve the substrate here or guess from the host name — consume the snapshot's `roles.advisory` (capability-matrix-driven at preflight).
 3. **Fold + continue.** The advisor returns via the same `guild.handoff.v2` envelope; the original cheap agent continues with the advisor's answer folded in. No wholesale re-run.
 4. **Round cap.** `models.advisorRounds` (default `2`) caps advisor consults per lane — mirrors the `codex_cap`/`loop_cap` discipline. On exhaustion, record the lane `inconclusive: advisor budget exhausted` rather than silently escalating cost.
-5. **Trail.** Record the escalation trail (trigger, sub-question, advisor tier, result ref, round count) in the run record under `.guild/runs/<run-id>/` alongside the dispatch trace, so SC-6 is verifiable.
+5. **Trail.** Record the escalation trail (trigger, sub-question, advisor tier, result ref, round count) in the run record under `.guild/runs/<run-id>/` alongside the dispatch trace, so SC-6 is verifiable. **When the escalation is persisted as a durable `guild.advisory.v1` AdvisoryRecord** (`scripts/lib/advisory-record.ts` `makeAdvisoryRecord`), **stamp the C1 `substrate` field from the resolved advisory role** — pass `advisorySubstrateFromRoles(snapshot.roles)` (`scripts/lib/role-resolver.ts`) as the `substrate:` input so the record carries `substrate == roles.advisory`:
+
+   ```ts
+   import { advisorySubstrateFromRoles } from "../scripts/lib/role-resolver";
+   const rec = makeAdvisoryRecord({
+     /* …id, recorded_at, phase, backend, question, advisors, … */
+     substrate: advisorySubstrateFromRoles(snapshot.roles),  // C1: routed advisory host
+   });
+   ```
+
+   `advisorySubstrateFromRoles` returns `undefined` when the role's substrate is absent/unknown — and an **absent `substrate` means the default local advisor (`"claude"`)** per advisory-record back-compat, so a default Claude box records `substrate: "claude"` (equivalently absent). This is the C1 routing change L8 deferred to this call-site (SC-5): advisory advice now ROUTES to and is RECORDED with the resolved substrate, not just resolved in preflight.
 
 Review/critic work folds into this advisor pass + the existing `guild:review`/`qa` lanes — there is **no standalone reviewer agent type** (ADR O-1 resolution).
 
