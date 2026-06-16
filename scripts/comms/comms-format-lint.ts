@@ -571,7 +571,14 @@ const HAND_ROLLED_PATTERNS: Array<{ pattern: RegExp; label: string }> =
  * architectural declaration, not a coverage gap — any GENUINELY new reader in a
  * different file is still caught.
  */
-const SELF_EXEMPT_SUFFIX = "scripts/comms/comms-format-lint.ts";
+// The detector's own source (contains the idiom PATTERNS it searches for) and its
+// test (feeds INTENTIONAL hand-rolled-idiom examples to assert the detector flags them)
+// are both self-exempt — their idioms are the detector's own machinery / test data,
+// not real readers. Any GENUINELY new reader in a different file is still caught.
+const SELF_EXEMPT_SUFFIXES = [
+  "scripts/comms/comms-format-lint.ts",
+  "scripts/comms/__tests__/comms-format-lint.test.ts",
+];
 
 function checkNewHandRolledYaml(
   filePath: string,
@@ -587,7 +594,7 @@ function checkNewHandRolledYaml(
   // A js-yaml import does NOT grant exemption — a new reader that imports
   // js-yaml but still uses hand-rolled YAML patterns is still flagged.
   const normalised = normalisePath(filePath);
-  if (normalised.endsWith(SELF_EXEMPT_SUFFIX)) return [];
+  if (SELF_EXEMPT_SUFFIXES.some((s) => normalised.endsWith(s))) return [];
   for (const inventoried of allowList) {
     if (normalised.endsWith(inventoried) || normalised.includes(inventoried)) return [];
   }
