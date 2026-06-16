@@ -142,7 +142,9 @@ export function writeScrubApprovalRequest(
     let content = rawContent;
     try {
       const secConfig = readSecurityConfig(guildRootFromRunDir(runDir));
-      const scrubResult = applySecretsPolicy(rawContent, secConfig.secrets_policy);
+      // noTruncate: this is a whole-DOCUMENT scrub (approval-request inline) — redact
+      // secrets but never apply the 4 KiB trace-field cap to the document body.
+      const scrubResult = applySecretsPolicy(rawContent, secConfig.secrets_policy, { noTruncate: true });
       // Always use the scrubbed value (built-ins always run; ok or not).
       content = scrubResult.value;
     } catch {
@@ -195,7 +197,10 @@ export function scrubbedWrite(
   }
 
   // ── 2. Apply scrubber ─────────────────────────────────────────────────────
-  const scrubResult = applySecretsPolicy(content, policy);
+  // noTruncate: scrubbedWrite scrubs whole DURABLE-SURFACE FILES (handoff / wiki /
+  // review / provenance) — redact secrets but never clip the document at the 4 KiB
+  // trace-field cap (that was silently truncating handoffs at 4111 bytes).
+  const scrubResult = applySecretsPolicy(content, policy, { noTruncate: true });
 
   // ── 3. Decide fail mode ───────────────────────────────────────────────────
   const failMode =

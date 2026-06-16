@@ -3467,11 +3467,11 @@ var path6 = __toESM(require("node:path"));
 var crypto = __toESM(require("node:crypto"));
 
 // lib/security/secrets.ts
-function applySecretsPolicy(value, policy) {
+function applySecretsPolicy(value, policy, opts) {
   if (typeof value !== "string") {
     return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
   }
-  let out = redactField(value);
+  let out = redactField(value, opts?.noTruncate ? Number.POSITIVE_INFINITY : void 0);
   const failures = [];
   for (const pat of policy.redaction_patterns) {
     let re;
@@ -3608,7 +3608,7 @@ function writeScrubApprovalRequest(runDir, runId, surface, outPath, laneId) {
     let content = rawContent;
     try {
       const secConfig = readSecurityConfig(guildRootFromRunDir(runDir));
-      const scrubResult = applySecretsPolicy(rawContent, secConfig.secrets_policy);
+      const scrubResult = applySecretsPolicy(rawContent, secConfig.secrets_policy, { noTruncate: true });
       content = scrubResult.value;
     } catch {
     }
@@ -3630,7 +3630,7 @@ function scrubbedWrite(outPath, content, opts) {
       fail_mode_telemetry: "open"
     };
   }
-  const scrubResult = applySecretsPolicy(content, policy);
+  const scrubResult = applySecretsPolicy(content, policy, { noTruncate: true });
   const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
   if (scrubResult.ok) {
     try {
@@ -4144,7 +4144,7 @@ function runStatePathHint(runDir) {
 }
 function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialist, taskId) {
   const sec = readSecurityConfig(guildRoot);
-  const scrubResult = applySecretsPolicy(content, sec.secrets_policy);
+  const scrubResult = applySecretsPolicy(content, sec.secrets_policy, { noTruncate: true });
   if (scrubResult.ok) {
     let rewriteOk = false;
     try {

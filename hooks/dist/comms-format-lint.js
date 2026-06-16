@@ -3128,12 +3128,15 @@ var HAND_ROLLED_PATTERNS = HAND_ROLLED_PATTERN_SOURCES.map(({ src, label }) => (
   pattern: new RegExp(src),
   label
 }));
-var SELF_EXEMPT_SUFFIX = "scripts/comms/comms-format-lint.ts";
+var SELF_EXEMPT_SUFFIXES = [
+  "scripts/comms/comms-format-lint.ts",
+  "scripts/comms/__tests__/comms-format-lint.test.ts"
+];
 function checkNewHandRolledYaml(filePath, content, allowList) {
   const ext = path.extname(filePath).toLowerCase();
   if (![".ts", ".js", ".tsx", ".jsx"].includes(ext)) return [];
   const normalised = normalisePath(filePath);
-  if (normalised.endsWith(SELF_EXEMPT_SUFFIX)) return [];
+  if (SELF_EXEMPT_SUFFIXES.some((s) => normalised.endsWith(s))) return [];
   for (const inventoried of allowList) {
     if (normalised.endsWith(inventoried) || normalised.includes(inventoried)) return [];
   }

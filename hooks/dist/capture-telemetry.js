@@ -243,11 +243,11 @@ function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
 }
 
 // lib/security/secrets.ts
-function applySecretsPolicy(value, policy) {
+function applySecretsPolicy(value, policy, opts) {
   if (typeof value !== "string") {
     return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
   }
-  let out = redactField(value);
+  let out = redactField(value, opts?.noTruncate ? Number.POSITIVE_INFINITY : void 0);
   const failures = [];
   for (const pat of policy.redaction_patterns) {
     let re;

@@ -39,12 +39,20 @@ export interface ScrubResult {
  * Pure. Invalid custom regexes are skipped (recorded in `failures`, ok=false)
  * so a bad pattern degrades to built-in-only scrubbing instead of throwing.
  */
-export function applySecretsPolicy(value: unknown, policy: SecretsPolicy): ScrubResult {
+export function applySecretsPolicy(
+  value: unknown,
+  policy: SecretsPolicy,
+  opts?: { noTruncate?: boolean }
+): ScrubResult {
   if (typeof value !== "string") {
     return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
   }
-  // Group 1-5: built-in redaction always runs first.
-  let out = redactField(value);
+  // Group 1-5: built-in redaction always runs first. `redactField`'s default cap
+  // (FIELD_SIZE_CAP_BYTES = 4 KiB) is for TRACE-LOG FIELDS — it must NOT clip a whole
+  // DOCUMENT (handoff / wiki / review). Document-scrub callers pass noTruncate so the
+  // secret-redaction still runs but the 4 KiB truncation is skipped (was silently
+  // clipping handoffs at 4111 bytes = 4096 + "... [TRUNCATED]").
+  let out = redactField(value, opts?.noTruncate ? Number.POSITIVE_INFINITY : undefined);
   const failures: string[] = [];
   for (const pat of policy.redaction_patterns) {
     let re: RegExp;

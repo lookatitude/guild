@@ -323,7 +323,9 @@ function scrubHandoffReceipt(
   taskId: string,
 ): { content: string; blocked: boolean } {
   const sec = readSecurityConfig(guildRoot);
-  const scrubResult = applySecretsPolicy(content, sec.secrets_policy);
+  // noTruncate: this scrubs the whole handoff DOCUMENT — redact secrets but never
+  // apply the 4 KiB trace-field cap (was clipping handoffs at 4111 bytes).
+  const scrubResult = applySecretsPolicy(content, sec.secrets_policy, { noTruncate: true });
 
   if (scrubResult.ok) {
     // Rewrite the receipt file in place with the scrubbed content.
