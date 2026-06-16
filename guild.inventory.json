@@ -1220,6 +1220,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/frontmatter",
+      "source_path": "scripts/lib/frontmatter.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/fs-scanner",
       "source_path": "scripts/lib/fs-scanner.ts",
       "kind": "lib"
