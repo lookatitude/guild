@@ -30,7 +30,7 @@ const WORKSPACE_ROOT_MARKER = "<workspace-root>";
 const TILDE_CLAUDE_PROJECT_RE = /~\/\.claude\/projects\/-Users-[^/\s]+-Projects-[^/\s]+/g;
 const OPERATOR_MEMORY_ROOT_MARKER = "<operator-memory-root>";
 
-const SHARED_SCRUBBED_NAMES = new Set(["verify.md", "review.md", "provenance.json", "summary.md", "run.yaml"]);
+const SHARED_SCRUBBED_NAMES = new Set(["verify.md", "review.md", "provenance.json", "summary.md", "run.yaml", "run-state.json"]);
 
 function isHandoffFile(rel: string): boolean {
   return rel.startsWith("handoffs" + path.sep) && rel.endsWith(".md");

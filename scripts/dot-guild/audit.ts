@@ -119,8 +119,11 @@ function findScrubCoverageGaps(repoPath: string): FileFlag[] {
 const FIXTURE_EXEMPT_PATTERNS = [
   /\/benchmark\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
   /\/mcp-servers\/guild-telemetry\/fixtures(?:-v14)?\/(?:[^/]+\/)*\.guild(\/|$)/,
-  /\/plugin\/tests\/dot-guild\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
-  /\/plugin\/tests\/wiki-lint\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
+  // `/plugin` is OPTIONAL: matches both the workspace layout (.../plugin/tests/...)
+  // and the plugin-repo-root CI checkout (.../tests/..., no /plugin/ segment) — the
+  // exemptions must hold regardless of where the plugin tree is rooted.
+  /(?:\/plugin)?\/tests\/dot-guild\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
+  /(?:\/plugin)?\/tests\/wiki-lint\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
 ];
 
 // FU-F: ONE .guild/ per project (= git repo) root. Walk the workspace, classify
