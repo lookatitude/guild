@@ -33,7 +33,7 @@ interface FileFlag { runId: string; file: string; kind: "operator-path" | "secre
 // git-trackable (would be committed/shared) but OUTSIDE this set never reaches
 // a redaction pass and silently escapes the SC-7 leak gate. The check below
 // flags exactly those files.
-const SCRUB_SHARED_NAMES = new Set(["verify.md", "review.md", "provenance.json", "summary.md", "run.yaml"]);
+const SCRUB_SHARED_NAMES = new Set(["verify.md", "review.md", "provenance.json", "summary.md", "run.yaml", "run-state.json"]);
 // Control/meta files that are intentionally git-trackable but NOT redacted by
 // scrub (they carry no operator content). share-payloads.flag is the per-run
 // opt-in sentinel; .gitignore itself is allow-list config. Exempt so they do
