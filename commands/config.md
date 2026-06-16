@@ -1,7 +1,7 @@
 ---
 name: config
-description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
-argument-hint: "<init|set|show|validate|providers|update-mcp-hashes> [--cwd <repo-root>] [--force]"
+description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
+argument-hint: "<init|set|show|validate|providers|update-mcp-hashes|reconcile> [reconcile: <check|sync|repair>] [--cwd <repo-root>] [--force]"
 allowed-tools: Read, Write, Bash
 ---
 
@@ -19,27 +19,31 @@ rejected so a typo surfaces.
 
 The sub-verb is the first positional argument.
 
-## `init` — scaffold `.guild/settings.json`
+## `init` — scaffold `.guild/settings.json` (= `reconcile sync`)
 
-Generate the config with **every** key set to its default plus a self-documenting
-`_help` block (allowed values per key). Do not clobber an existing file unless
-`--force`.
+**`config init` is now a wrapper around `reconcile sync`** (P1-L9). It materializes the
+config with **every** key set to its schema default plus a self-documenting `_help` block,
+but goes through the reconciler so it is **never-clobber + provenance-aware**: on a FRESH
+repo the output is **byte-identical** to the legacy scaffold (golden-tested, default==today);
+on a repo that already has `.guild/settings.json` it **fills only missing keys**, never
+overwrites a user-set value, and records provenance + a `last_reconciled_at` timestamp.
 
 ```bash
-# only write if absent (idempotent); use --force to overwrite
-test -f .guild/settings.json && [ "$1" != "--force" ] && echo "exists; pass --force to overwrite" || \
-  npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/read-guild-config.ts --scaffold > .guild/settings.json
+# config init == reconcile sync (never-clobber; fills missing keys to defaults)
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts reconcile sync --cwd "$(pwd)"
 ```
 
 Steps:
 1. Ensure `.guild/` exists.
-2. If `.guild/settings.json` exists and `--force` was not passed, print its path
-   and stop (never silently overwrite operator config).
-3. Otherwise run `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/read-guild-config.ts --scaffold` and write the
-   output to `.guild/settings.json`.
-4. If a legacy `.guild/config.yml` is present, tell the operator to run
+2. Run `config-cmd.ts reconcile sync` — it writes/updates `.guild/settings.json`,
+   filling missing keys to their defaults **without clobbering** any user-set value
+   (no `--force` needed; the never-clobber guard replaces it), and stamps provenance +
+   `last_reconciled_at`. On a fresh repo this equals the old `--scaffold` output byte-for-byte.
+3. If a legacy `.guild/config.yml` is present, tell the operator to run
    `/guild:migrate` to convert it to `settings.json` — `config.yml` is **not**
    read at runtime in v2 (the back-compat reader was removed in v2.0).
+
+(The other reconcile modes — `check` / `repair` — are documented under `## reconcile` below.)
 
 ## `set` — scoped hard-set write
 
@@ -244,6 +248,27 @@ npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts update-mcp-hashes \
 
 Exit codes: `0` success (prints scope, file, and the per-tool hash prefixes);
 `1` bad input / IO error; `2` bad `--cwd`.
+
+## `reconcile <check|sync|repair>` — materialize config against the typed schema (P1-L9)
+
+Reconciles `.guild/settings.json` against the typed config-schema SoT. **Never clobbers a
+user-set value** (provenance-gated: only `default`/`reconciled` values are writable); records
+per-key provenance + a `last_reconciled_at` timestamp. The mode is a required positional:
+
+- **`check`** — report drift only; writes **nothing** (read-only diagnostic).
+- **`sync`** — fill **missing** keys to their schema default (provenance → `reconciled`); keep
+  every user value. This is what **`config init`** runs (byte-identical to the legacy scaffold
+  on a fresh repo). Run on install / update / `init`.
+- **`repair`** — additionally coerce a **malformed** `default`/`reconciled` value back to a
+  schema-valid one; still never clobbers a valid user choice. **Security-sensitive keys fail
+  closed** — a malformed `security.*` value is coerced to its most-restrictive value or held,
+  never silently weakened to the permissive default.
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts reconcile <check|sync|repair> --cwd "$(pwd)"
+```
+
+Exit codes: `0` success; `1` bad input / IO error; `2` bad `--cwd`.
 
 ## Notes
 
