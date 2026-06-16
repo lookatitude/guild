@@ -9,26 +9,26 @@
  * (and any future hook that needs the discriminator) share ONE reader rather
  * than each inlining a regex.
  *
- * ## YAML-reader classification (U4 inventory)
+ * ## YAML-reader classification (shared-parser / reuse)
  *
- * This file is a **bounded-legacy** hooks-side YAML reader:
- *   - `js-yaml` is not in the hooks package dependencies (and cannot easily be
- *     added without a separate bundling pass); the hook scripts run via `npx tsx`
- *     and the build uses per-file `esbuild`.
- *   - The read is intentionally narrow: a single top-level scalar field
- *     (`started_at`) from `run.yaml`, which is machine-authored by
- *     `scripts/lib/run-lifecycle.ts` in a known, stable format.
- *   - The pattern (`/^started_at:[ \t]*(.*)$/m`) mirrors the approach used in
- *     `scripts/lib/run-lifecycle.ts:readStartFacts()` (the authoritative reader
- *     on the scripts side — also bounded; not exported so hooks cannot reuse it
- *     directly).
- *   - This is NOT a general YAML parser. It reads exactly one field from one
- *     known file shape.
- *
- * If `js-yaml` is ever added to the hooks package (or `readStartFacts` is
- * exported from `scripts/lib/run-lifecycle.ts`), migrate this reader to reuse
- * that instead, and reclassify the inventory entry from `bounded-legacy` to
- * `shared-parser` / `reuse`.
+ * This file uses the ONE shared js-yaml-backed parser
+ * (`scripts/lib/frontmatter.ts`, the comms-format OD-3 compliant reader) to read
+ * `started_at` from `run.yaml`:
+ *   - The hooks build is `esbuild --bundle`, which inlines the cross-package
+ *     import of `../../scripts/lib/frontmatter` and resolves `js-yaml` from
+ *     `scripts/node_modules`, so the parser ships in the bundled hook dist with
+ *     no hooks-side dependency change.
+ *   - `run.yaml` is a fence-less pure-YAML document (no `---` frontmatter
+ *     block), and `started_at` is a single top-level scalar, so it is read with
+ *     `readScalarField` — the shared ROBUST single-line reader — rather than a
+ *     whole-document `parseYaml`. `readScalarField` reads the first column-0
+ *     `started_at:` line, trims, and strips one pair of surrounding quotes —
+ *     byte-for-byte the shape the prior line-anchored `started_at` regex reader
+ *     returned (and which `new Date()` then consumes).
+ *   - Because it never `yaml.load`s the surrounding block, it is sibling-
+ *     tolerant: a hypothetically YAML-hostile neighbouring field does not
+ *     prevent the `started_at` read — preserving the prior single-line reader's
+ *     behaviour exactly, with no whole-doc-parse delta.
  *
  * ## Policy anchor
  *
@@ -44,6 +44,8 @@
 
 import * as fs from "fs";
 import * as path from "path";
+
+import { readScalarField } from "../../scripts/lib/frontmatter";
 
 // ── Policy constant ────────────────────────────────────────────────────────
 
@@ -76,11 +78,11 @@ export const POLICY_EFFECTIVE_DATE = new Date("2026-06-03T00:00:00Z");
  * Callers MUST treat a `null` return as **indeterminate / fail-open**:
  * never enforce the policy on a run whose date cannot be confirmed.
  *
- * YAML-reader note: uses a targeted field-extraction regex identical to
- * `scripts/lib/run-lifecycle.ts:readStartFacts()`. This is a bounded scalar
- * read — NOT a general YAML parser — justified by the absence of js-yaml in
- * the hooks package deps and the narrow, stable shape of run.yaml. See file
- * header for the full classification rationale.
+ * YAML-reader note: reads the top-level `started_at` scalar from `run.yaml` (a
+ * fence-less pure-YAML document) with the shared ROBUST single-line reader
+ * `readScalarField` — line-anchored, trimmed, quote-stripped, sibling-tolerant —
+ * the same value the prior line-anchored `started_at` regex fed to `new Date()`.
+ * See file header for the full classification rationale.
  *
  * @param runDir  Absolute path to the run directory
  *                (e.g. `/path/to/.guild/runs/run-<id>/`).
@@ -90,12 +92,12 @@ export function readRunStartedAt(runDir: string): Date | null {
   try {
     if (!fs.existsSync(runYamlPath)) return null;
     const raw = fs.readFileSync(runYamlPath, "utf8");
-    // Targeted field extraction — mirrors run-lifecycle.ts readStartFacts().
-    // Matches a bare top-level `started_at: <value>` line (the run-lifecycle
-    // writer always emits this as a bare YAML scalar on its own line).
-    const m = raw.match(/^started_at:[ \t]*(.*)$/m);
-    if (!m || !m[1] || m[1].trim() === "") return null;
-    const d = new Date(m[1].trim());
+    // run.yaml is a whole YAML document (no `---` frontmatter fences) and
+    // started_at is a single top-level scalar — read it robustly (sibling-
+    // tolerant, no whole-block parse). Returns undefined when absent/empty.
+    const value = readScalarField(raw, "started_at");
+    if (value === undefined) return null;
+    const d = new Date(value);
     return isNaN(d.getTime()) ? null : d;
   } catch {
     return null;

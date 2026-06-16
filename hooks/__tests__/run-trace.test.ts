@@ -40,6 +40,14 @@ import {
   readRecordStatusRuns,
 } from "../../scripts/lib/run-lifecycle";
 
+// Shared js-yaml frontmatter parser (OD-3 compliant) — read run.yaml fields by
+// parsing the document instead of hand-rolled line-anchored regex assertions.
+import { parseYaml } from "../../scripts/lib/frontmatter";
+
+/** Parse a run.yaml document to its top-level fields (fail-loud null on parse error). */
+const runYamlFields = (text: string) =>
+  parseYaml(text) as Record<string, unknown> | null;
+
 // A deterministic resolveHost stub (host-neutral; never claude-pinned in logic).
 const resolveHost = (requested: string) => ({
   requested,
@@ -140,7 +148,7 @@ describe("run-trace lib (Lane B3)", () => {
         path.join(root, ".guild", "runs", runId, "run.yaml"),
         "utf8",
       );
-      expect(runYaml).toMatch(/^status: closed$/m);
+      expect(runYamlFields(runYaml)).toMatchObject({ status: "closed" });
     });
   });
 
@@ -322,7 +330,7 @@ describe("run-trace lib (Lane B3)", () => {
       const runDir = path.join(root, ".guild", "runs", runId as string);
 
       const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
-      expect(runYaml).toMatch(/^initiative_attachment: foo$/m);
+      expect(runYamlFields(runYaml)).toMatchObject({ initiative_attachment: "foo" });
 
       const prov = JSON.parse(
         fs.readFileSync(path.join(runDir, "provenance.json"), "utf8"),
@@ -350,7 +358,7 @@ describe("run-trace lib (Lane B3)", () => {
 
       // run.yaml exists and is OPEN — not flipped to closed.
       const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
-      expect(runYaml).toMatch(/^status: open$/m);
+      expect(runYamlFields(runYaml)).toMatchObject({ status: "open" });
 
       // NO provenance.json — the Stop hook (emitRunClosed) writes it at close.
       expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(false);
@@ -372,7 +380,7 @@ describe("run-trace lib (Lane B3)", () => {
       const runDir = path.join(root, ".guild", "runs", runId);
       expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(true);
       const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
-      expect(runYaml).toMatch(/^status: closed$/m);
+      expect(runYamlFields(runYaml)).toMatchObject({ status: "closed" });
     });
 
     it("threads --initiative scalar with NO initiatives/ dir (NN#5)", () => {
@@ -385,7 +393,7 @@ describe("run-trace lib (Lane B3)", () => {
         path.join(root, ".guild", "runs", runId, "run.yaml"),
         "utf8",
       );
-      expect(runYaml).toMatch(/^initiative_attachment: foo$/m);
+      expect(runYamlFields(runYaml)).toMatchObject({ initiative_attachment: "foo" });
       expect(fs.existsSync(path.join(root, ".guild", "initiatives"))).toBe(false);
     });
   });
@@ -438,7 +446,7 @@ describe("run-trace lib (Lane B3)", () => {
       const runDir = path.join(cliRoot, ".guild", "runs", runId);
       // run.yaml written + OPEN (close deferred to the Stop hook).
       const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
-      expect(runYaml).toMatch(/^status: open$/m);
+      expect(runYamlFields(runYaml)).toMatchObject({ status: "open" });
       // P1: full start must NOT close inline — no provenance.json yet.
       expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(false);
     });
@@ -457,7 +465,7 @@ describe("run-trace lib (Lane B3)", () => {
         path.join(cliRoot, ".guild", "runs", runId, "run.yaml"),
         "utf8",
       );
-      expect(runYaml).toMatch(/^initiative_attachment: foo$/m);
+      expect(runYamlFields(runYaml)).toMatchObject({ initiative_attachment: "foo" });
       // NN#5: scalar attachment never creates a .guild/initiatives/ dir.
       expect(fs.existsSync(path.join(cliRoot, ".guild", "initiatives"))).toBe(false);
     });
@@ -492,7 +500,7 @@ describe("run-trace lib (Lane B3)", () => {
       for (const runId of [r1.stdout.trim(), r2.stdout.trim()]) {
         const runDir = path.join(cliRoot, ".guild", "runs", runId);
         const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
-        expect(runYaml).toMatch(/^run_class: full$/m);
+        expect(runYamlFields(runYaml)).toMatchObject({ run_class: "full" });
         // P1: full start defers close to the Stop hook — no inline provenance.json.
         expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(false);
       }
@@ -579,7 +587,7 @@ describe("run-trace lib (Lane B3)", () => {
         path.join(root, ".guild", "runs", runId, "run.yaml"),
         "utf8",
       );
-      expect(runYaml).toMatch(/^phase: build$/m);
+      expect(runYamlFields(runYaml)).toMatchObject({ phase: "build" });
       expect(runYaml).toMatch(/phases_log:/);
       expect(runYaml).toMatch(/phase: build/);
     });
@@ -594,7 +602,7 @@ describe("run-trace lib (Lane B3)", () => {
           path.join(root, ".guild", "runs", runId, "run.yaml"),
           "utf8",
         );
-        expect(runYaml).toMatch(new RegExp(`^phase: ${phase}$`, "m"));
+        expect(runYamlFields(runYaml)).toMatchObject({ phase });
       }
     });
 
@@ -608,7 +616,7 @@ describe("run-trace lib (Lane B3)", () => {
         path.join(root, ".guild", "runs", runId, "run.yaml"),
         "utf8",
       );
-      expect(runYaml).toMatch(/^phase: qa$/m);
+      expect(runYamlFields(runYaml)).toMatchObject({ phase: "qa" });
     });
 
     it("resolves runId from .guild/runs/current-run-id legacy sentinel when no opts override", () => {
@@ -625,7 +633,7 @@ describe("run-trace lib (Lane B3)", () => {
         path.join(root, ".guild", "runs", runId, "run.yaml"),
         "utf8",
       );
-      expect(runYaml).toMatch(/^phase: ops$/m);
+      expect(runYamlFields(runYaml)).toMatchObject({ phase: "ops" });
     });
 
     it("resolves runId from .guild/current-run-id B2 sentinel (fallback after legacy)", () => {
@@ -644,7 +652,7 @@ describe("run-trace lib (Lane B3)", () => {
         path.join(root, ".guild", "runs", runId, "run.yaml"),
         "utf8",
       );
-      expect(runYaml).toMatch(/^phase: ideate$/m);
+      expect(runYamlFields(runYaml)).toMatchObject({ phase: "ideate" });
     });
   });
 });

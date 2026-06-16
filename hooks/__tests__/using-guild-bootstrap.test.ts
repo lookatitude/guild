@@ -24,6 +24,9 @@ import {
   buildSessionStartInjection,
   gatewayContext,
 } from "../using-guild-bootstrap";
+// Shared js-yaml frontmatter parser (OD-3 compliant) — detect the leading
+// frontmatter block via the parser's splitter, not a hand-rolled startsWith('---').
+import { splitFrontmatter } from "../../scripts/lib/frontmatter";
 
 const DIST_JS = path.resolve(__dirname, "../dist/using-guild-bootstrap.js");
 const FIXTURE = path.resolve(__dirname, "../fixtures/session-start.json");
@@ -69,8 +72,11 @@ describe("using-guild-bootstrap.ts (L5b SessionStart injection)", () => {
     const parsed = JSON.parse(stdout);
     const expected = gatewayContext(fs.readFileSync(SKILL_SRC, "utf8"));
     expect(parsed.hookSpecificOutput.additionalContext).toBe(expected);
-    // Frontmatter (the richest WHEN-to-engage trigger signals) IS injected.
-    expect(parsed.hookSpecificOutput.additionalContext.startsWith("---")).toBe(true);
+    // Frontmatter (the richest WHEN-to-engage trigger signals) IS injected:
+    // the injected context opens with a well-formed `---`-fenced frontmatter block.
+    expect(
+      splitFrontmatter(parsed.hookSpecificOutput.additionalContext).frontmatter,
+    ).not.toBeNull();
     expect(parsed.hookSpecificOutput.additionalContext).toContain("when_to_use:");
     expect(parsed.hookSpecificOutput.additionalContext).toContain("description:");
     // …and the gateway body too.

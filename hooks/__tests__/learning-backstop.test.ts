@@ -33,6 +33,9 @@ import {
   writeCheckpoint,
   DECISION_TARGETS,
 } from "../emit-learning-checkpoint";
+// Shared js-yaml frontmatter parser (OD-3 compliant) — parse the checkpoint and
+// read the nested decision verdicts instead of a hand-rolled dynamic RegExp.
+import { parseYaml } from "../../scripts/lib/frontmatter";
 
 const ENTRY = path.resolve(__dirname, "../learning-backstop.ts");
 const RUN_ID = "run-7ad5dbfd-6c0a-4167-95d7-6d99cfd42320";
@@ -159,9 +162,13 @@ describe("runLearningBackstop", () => {
     expect(content).toContain("version: guild.learning_checkpoint.v1");
     expect(content).toContain("phase: development");
     expect(content).toContain(`run_id: ${RUN_ID}`);
-    // all-`none` 12-target verdict
+    // all-`none` 12-target verdict (nested under learning_checkpoint.decisions)
+    const checkpoint = parseYaml(content) as {
+      learning_checkpoint?: { decisions?: Record<string, unknown> };
+    } | null;
+    const decisions = checkpoint?.learning_checkpoint?.decisions ?? {};
     for (const target of DECISION_TARGETS) {
-      expect(content).toMatch(new RegExp(`^    ${target}: none$`, "m"));
+      expect(decisions[target]).toBe("none");
     }
     // the backstop marker
     expect(content).toMatch(/^  backstop: true$/m);

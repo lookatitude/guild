@@ -2885,6 +2885,13 @@ function isLegacyExempt(filePath) {
   const normalised = normalisePath(filePath);
   return normalised.includes("legacy-example") || normalised.includes("fixtures/legacy-example");
 }
+function isBuildArtifactExempt(filePath) {
+  return normalisePath(filePath).includes("/dist/");
+}
+function isHandoffFixtureExempt(filePath) {
+  const normalised = normalisePath(filePath);
+  return normalised.includes("/fixtures/") && normalised.includes("/handoffs/");
+}
 function extractAllHandoffEnvelopes(content) {
   const results = [];
   const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/g;
@@ -3233,6 +3240,7 @@ function lintCommsFormat(opts = {}) {
   }
   for (const filePath of inScopePaths) {
     if (isLegacyExempt(filePath)) continue;
+    if (isBuildArtifactExempt(filePath)) continue;
     let content;
     try {
       if (!fs.existsSync(filePath)) continue;
@@ -3240,7 +3248,9 @@ function lintCommsFormat(opts = {}) {
     } catch {
       continue;
     }
-    findings.push(...checkAmbiguousReceipt(filePath, content));
+    if (!isHandoffFixtureExempt(filePath)) {
+      findings.push(...checkAmbiguousReceipt(filePath, content));
+    }
     findings.push(...checkNewHandRolledYaml(filePath, content, allowList));
     findings.push(...checkUndeclaredCategory(filePath, content));
   }
@@ -3262,7 +3272,9 @@ function lintCommsFormat(opts = {}) {
           } catch {
             continue;
           }
-          findings.push(...checkAmbiguousReceipt(receiptPath, content));
+          if (!isHandoffFixtureExempt(receiptPath)) {
+            findings.push(...checkAmbiguousReceipt(receiptPath, content));
+          }
         }
       }
     } catch {

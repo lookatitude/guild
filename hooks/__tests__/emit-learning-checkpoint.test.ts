@@ -37,6 +37,9 @@ import {
   type CheckpointDecisions,
   type KnowledgeLink,
 } from "../emit-learning-checkpoint";
+// Shared js-yaml frontmatter parser (OD-3 compliant) — assert the absence of a
+// top-level field by parsing, not a hand-rolled line-anchored key regex.
+import { parseYaml } from "../../scripts/lib/frontmatter";
 
 const SCRIPT = path.resolve(__dirname, "../emit-learning-checkpoint.ts");
 
@@ -123,7 +126,9 @@ describe("emit-learning-checkpoint — HK-03", () => {
       // Must have top-level learning_checkpoint: key
       expect(content).toContain("learning_checkpoint:");
       // Must NOT have schema_version at top level (only nested version: field)
-      expect(content).not.toMatch(/^schema_version:/m);
+      expect(parseYaml(content) as Record<string, unknown>).not.toHaveProperty(
+        "schema_version",
+      );
     });
 
     it("writes top-level comment # guild.learning_checkpoint.v1", () => {

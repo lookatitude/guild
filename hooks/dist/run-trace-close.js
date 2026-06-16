@@ -2235,7 +2235,7 @@ var require_loader = __commonJS({
         iterator(documents[index]);
       }
     }
-    function load(input, options) {
+    function load2(input, options) {
       var documents = loadDocuments(input, options);
       if (documents.length === 0) {
         return void 0;
@@ -2252,10 +2252,10 @@ var require_loader = __commonJS({
       return loadAll(input, iterator, common.extend({ schema: DEFAULT_SAFE_SCHEMA }, options));
     }
     function safeLoad(input, options) {
-      return load(input, common.extend({ schema: DEFAULT_SAFE_SCHEMA }, options));
+      return load2(input, common.extend({ schema: DEFAULT_SAFE_SCHEMA }, options));
     }
     module2.exports.loadAll = loadAll;
-    module2.exports.load = load;
+    module2.exports.load = load2;
     module2.exports.safeLoadAll = safeLoadAll;
     module2.exports.safeLoad = safeLoad;
   }
@@ -2848,8 +2848,8 @@ var require_js_yaml = __commonJS({
 var require_js_yaml2 = __commonJS({
   "../scripts/node_modules/js-yaml/index.js"(exports2, module2) {
     "use strict";
-    var yaml2 = require_js_yaml();
-    module2.exports = yaml2;
+    var yaml3 = require_js_yaml();
+    module2.exports = yaml3;
   }
 });
 
@@ -3113,6 +3113,34 @@ var DEFAULTS = {
   adversarial_review_provider: "auto"
   // R-008
 };
+
+// ../scripts/lib/frontmatter.ts
+var yaml2 = __toESM(require_js_yaml2());
+function parseYaml(text, opts = {}) {
+  try {
+    const value = yaml2.load(text, { schema: opts.schema ?? yaml2.JSON_SCHEMA });
+    return value === void 0 ? null : value;
+  } catch {
+    return null;
+  }
+}
+function topLevelKeyLineIndex(lines, key) {
+  const prefix = key + ":";
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i];
+    if (/^[ \t]/.test(ln)) continue;
+    if (ln.startsWith(prefix)) return i;
+  }
+  return -1;
+}
+function replaceTopLevelLine(text, key, replacementLine) {
+  const lines = text.split("\n");
+  const i = topLevelKeyLineIndex(lines, key);
+  if (i === -1) return { text, replaced: false };
+  const hadCr = lines[i].endsWith("\r");
+  lines[i] = hadCr ? replacementLine + "\r" : replacementLine;
+  return { text: lines.join("\n"), replaced: true };
+}
 
 // lib/security/scrubbed-write.ts
 var fs4 = __toESM(require("node:fs"));
@@ -3660,9 +3688,11 @@ function readStartFacts(env, root, runId) {
       `[run-lifecycle] closeRun("${runId}"): no run.yaml at ${runYamlPath(root, runId)} \u2014 cannot close a run that was never started.`
     );
   }
+  const doc = parseYaml(raw);
+  const obj = doc !== null && typeof doc === "object" && !Array.isArray(doc) ? doc : {};
   const get = (key) => {
-    const m = raw.match(new RegExp(`^${key}:[ \\t]*(.*)$`, "m"));
-    return m ? m[1].trim() : null;
+    const v = obj[key];
+    return v === void 0 || v === null ? null : String(v);
   };
   const command = get("command") ?? "";
   const initRaw = get("initiative_attachment");
@@ -3670,14 +3700,14 @@ function readStartFacts(env, root, runId) {
   const runClassRaw = get("run_class");
   const run_class = runClassRaw === "lightweight" ? "lightweight" : "full";
   const started_at = get("started_at") ?? "";
-  const self_build = /^[\s\S]*self_build:[ \t]*true/m.test(raw);
+  const self_build = obj["self_build"] === true;
   return { command, initiative, run_class, started_at, self_build };
 }
 function flipRunStatus(env, root, runId, status) {
   const p = runYamlPath(root, runId);
   const raw = env.fs.readFile(p);
   if (raw === null) return;
-  const next = raw.replace(/^status:[ \t]*.*$/m, `status: ${status}`);
+  const next = replaceTopLevelLine(raw, "status", `status: ${status}`).text;
   env.fs.writeFile(p, next);
 }
 function createRunLifecycle(env) {

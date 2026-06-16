@@ -2230,7 +2230,7 @@ var require_loader = __commonJS({
         iterator(documents[index]);
       }
     }
-    function load(input, options) {
+    function load2(input, options) {
       var documents = loadDocuments(input, options);
       if (documents.length === 0) {
         return void 0;
@@ -2247,10 +2247,10 @@ var require_loader = __commonJS({
       return loadAll(input, iterator, common.extend({ schema: DEFAULT_SAFE_SCHEMA }, options));
     }
     function safeLoad(input, options) {
-      return load(input, common.extend({ schema: DEFAULT_SAFE_SCHEMA }, options));
+      return load2(input, common.extend({ schema: DEFAULT_SAFE_SCHEMA }, options));
     }
     module2.exports.loadAll = loadAll;
-    module2.exports.load = load;
+    module2.exports.load = load2;
     module2.exports.safeLoadAll = safeLoadAll;
     module2.exports.safeLoad = safeLoad;
   }
@@ -2843,8 +2843,8 @@ var require_js_yaml = __commonJS({
 var require_js_yaml2 = __commonJS({
   "../scripts/node_modules/js-yaml/index.js"(exports2, module2) {
     "use strict";
-    var yaml2 = require_js_yaml();
-    module2.exports = yaml2;
+    var yaml3 = require_js_yaml();
+    module2.exports = yaml3;
   }
 });
 
@@ -3095,6 +3095,9 @@ var DEFAULTS = {
   adversarial_review_provider: "auto"
   // R-008
 };
+
+// ../scripts/lib/frontmatter.ts
+var yaml2 = __toESM(require_js_yaml2());
 
 // lib/v1.4/redact-log.ts
 var FIELD_SIZE_CAP_BYTES = 4 * 1024;
