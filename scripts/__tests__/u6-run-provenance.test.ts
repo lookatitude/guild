@@ -129,6 +129,14 @@ function makeSnapshot(over: Partial<ResolvedSettingsSnapshot> = {}): ResolvedSet
       recommended: "codex-plugin",
     },
     communication_contract: "review_result.v1",
+    // P1-L8: roles is a required field on ResolvedSettingsSnapshot — minimal valid set
+    // (host substrate = claude; advisory/adversarial resolve to the same family here).
+    roles: {
+      schema_version: "guild.role_resolution.v1",
+      host: { role: "host", substrate: "claude", strength: "strong", reason: "author host" },
+      advisory: { role: "advisory", substrate: "claude", strength: "weak", reason: "same-family fallback" },
+      adversarial: { role: "adversarial", substrate: "codex", strength: "strong", reason: "cross-family" },
+    },
     resolved_at_ref: null,
     ...over,
   };

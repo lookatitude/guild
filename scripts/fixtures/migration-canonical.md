@@ -17,6 +17,8 @@ applies_to: [plugin]
 <!-- STUB-DIGEST:START -->
 - Commands keep the `:` namespace — `/guild:<verb>` (e.g. `/guild:plan`).
 - Phase subcommands: `init ideate plan build qa ops`.
+- Phase entry points: see [phase entry contract](lifecycle/phase-entrypoints.md).
+- Command-surface rationale: [v2x command surface](decisions/v2x-command-surface.md).
 - Full migration guide: `https://guildstack.dev/docs/migration-v1-to-v2`
 <!-- STUB-DIGEST:END -->
 

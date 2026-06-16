@@ -11,7 +11,13 @@ const EMIT_LOOP_EVENT = path.resolve(__dirname, "../emit-loop-event.ts");
 // assertions reflect ONLY the spawned script's own output. The scripts
 // under test write to stderr exclusively on error; they are silent on
 // success.
+// emit-loop-event resolves runId as `--run-id ?? GUILD_RUN_ID ?? sentinel`. This test
+// exercises the SENTINEL path, so it must NOT inherit an ambient GUILD_RUN_ID/GUILD_CWD
+// (set whenever the suite runs inside a live Guild run) — those would override the
+// sentinel and route the write to the real run's dir, ENOENT-ing the expected path.
 const SPAWN_ENV = { ...process.env, NODE_NO_WARNINGS: "1" };
+delete (SPAWN_ENV as Record<string, string | undefined>)["GUILD_RUN_ID"];
+delete (SPAWN_ENV as Record<string, string | undefined>)["GUILD_CWD"];
 
 describe("run scoping and loop event helpers", () => {
   let tmpDir: string;
