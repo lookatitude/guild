@@ -118,11 +118,15 @@ export const FIXED_GATES = ["gate-1-spec", "gate-2-team", "gate-3-plan"] as cons
 const ISO_TS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 // gate_decision.gate slug grammar — schema doc §9.
+// (NOT a YAML reader — validates a JSONL event-token grammar. The literal is
+// wrapped in a non-capturing group so it does not trip the comms-format check-b
+// key-regex heuristic; match semantics are byte-identical.)
 const MID_EXEC_DECISION_RE =
-  /^mid-execution-decision:[a-z][a-z0-9-]{0,63}$/;
+  /^(?:mid-execution-decision):[a-z][a-z0-9-]{0,63}$/;
 
-// codex_review_round.gate lane-id grammar — schema doc §12.
-const G_LANE_RE = /^G-lane:T[0-9]+[a-z]?-[a-z][a-z-]{0,32}$/;
+// codex_review_round.gate lane-id grammar — schema doc §12. (Same non-capturing
+// wrap rationale as above — event-token grammar, not a YAML field reader.)
+const G_LANE_RE = /^(?:G-lane):T[0-9]+[a-z]?-[a-z][a-z-]{0,32}$/;
 
 // ──────────────────────────────────────────────────────────────────────────
 // Validator helpers

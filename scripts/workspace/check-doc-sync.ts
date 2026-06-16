@@ -61,6 +61,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { execFileSync } from "child_process";
+import { readScalarField } from "../lib/frontmatter";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -114,40 +115,18 @@ function isRootDocFile(filePath: string): boolean {
 }
 
 /**
- * Parse YAML frontmatter (the block between the first two `---` lines).
- * Returns a plain object of key: value pairs. Handles simple scalar values.
- * Values have surrounding quotes stripped (handles both "true" and 'true' — Finding #7).
- */
-function parseFrontmatter(contents: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  const match = contents.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) return result;
-  const block = match[1];
-  for (const line of block.split(/\r?\n/)) {
-    const colonIdx = line.indexOf(":");
-    if (colonIdx < 0) continue;
-    const key = line.slice(0, colonIdx).trim();
-    let value = line.slice(colonIdx + 1).trim();
-    // Finding #7: strip surrounding quotes (" or ') so "true" and 'true' both match true
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1).trim();
-    }
-    if (key) result[key] = value;
-  }
-  return result;
-}
-
-/**
  * Returns true iff a SKILL.md file's frontmatter has `user_facing: true`.
  * Pure function — receives the file path (for context) and contents (for parsing).
  * Handles both unquoted (true) and quoted ("true", 'true') forms (Finding #7).
+ *
+ * Uses the shared ROBUST single-line reader (OD-3), NOT a whole-block YAML parse:
+ * skill pages routinely carry a YAML-hostile unquoted `description:` (colons/
+ * parens) that makes `yaml.load` of the whole block throw — which would silently
+ * misclassify every such skill as non-user-facing. `readScalarField` reads the
+ * `user_facing` line directly (quote-stripped), tolerating those siblings.
  */
 export function isUserFacingSkill(_skillMdPath: string, contents: string): boolean {
-  const fm = parseFrontmatter(contents);
-  return fm["user_facing"]?.toLowerCase() === "true";
+  return readScalarField(contents, "user_facing")?.toLowerCase() === "true";
 }
 
 /**

@@ -30,6 +30,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { parseFrontmatter } from "./lib/frontmatter";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -164,20 +165,20 @@ export function parseAgentFrontmatter(
   content: string,
   fileBasename: string
 ): AgentFrontmatter | null {
-  // YAML frontmatter: starts at top, bounded by --- ... ---
-  const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
-  if (!fmMatch) return null;
+  // YAML frontmatter parsed via the shared js-yaml parser (OD-3). `model:` is
+  // required (null when absent); `name:` falls back to the filename stem.
+  const fm = parseFrontmatter(content);
+  if (fm === null) return null;
 
-  const yaml = fmMatch[1];
+  const modelRaw = fm["model"];
+  if (modelRaw === undefined || modelRaw === null) return null;
 
-  const modelMatch = yaml.match(/^model:\s*(.+)$/m);
-  if (!modelMatch) return null;
-
-  const nameMatch = yaml.match(/^name:\s*(.+)$/m);
-  const name = nameMatch
-    ? nameMatch[1].trim()
-    : path.basename(fileBasename, ".md");
-  const model = modelMatch[1].trim();
+  const nameRaw = fm["name"];
+  const name =
+    nameRaw !== undefined && nameRaw !== null
+      ? String(nameRaw)
+      : path.basename(fileBasename, ".md");
+  const model = String(modelRaw);
 
   return { name, model };
 }

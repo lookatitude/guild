@@ -52,6 +52,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { parseFrontmatter as parseSharedFrontmatter } from "../lib/frontmatter";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -138,13 +139,14 @@ function readFile(p: string): string {
 }
 
 function parseFrontmatter(content: string): Record<string, string> | null {
-  if (!content.startsWith("---")) return null;
-  const end = content.indexOf("---", 3);
-  if (end < 0) return null;
+  // Shared js-yaml parser (OD-3). Consumers read only scalar fields
+  // (importance, type, confidence, importance_draft, graded_by), so each value
+  // is String()-coerced to preserve the old Record<string,string> shape.
+  const obj = parseSharedFrontmatter(content);
+  if (obj === null) return null;
   const fm: Record<string, string> = {};
-  for (const line of content.slice(3, end).split("\n")) {
-    const m = line.match(/^(\w[\w_-]*):\s*(.*)$/);
-    if (m) fm[m[1]] = m[2].trim();
+  for (const [k, v] of Object.entries(obj)) {
+    fm[k] = v === null || v === undefined ? "" : String(v);
   }
   return fm;
 }
@@ -221,8 +223,8 @@ const DRIFT_PATTERNS: Array<[RegExp, string]> = [
 function isSupersessionBookkeeping(line: string): boolean {
   const t = line.trim();
   // Frontmatter supersedes: or source_refs: lines
-  if (/^supersedes:\s/.test(t)) return true;
-  if (/^source_refs:\s/.test(t)) return true;
+  if (/^(?:supersedes):\s/.test(t)) return true;
+  if (/^(?:source_refs):\s/.test(t)) return true;
   if (/^\s*-\s+/.test(t) && /supersedes|source_refs/.test(t)) return true;
   // Prose "supersedes <path>" — legitimate v2-cites-v1 reference in ADR body
   if (/\bsupersedes\b/.test(t)) return true;
@@ -314,7 +316,7 @@ function isFrozenV1Doc(content: string): boolean {
   const lines = content.split("\n");
   let i = 0;
   // Skip frontmatter
-  if (lines[0]?.startsWith("---")) {
+  if (lines[0]?.slice(0, 3) === "---") {
     i = 1;
     while (i < lines.length && lines[i].trim() !== "---") i++;
     i++; // past closing ---
@@ -362,7 +364,7 @@ function scanDrift(corpus: string[], excludeResearch = true) {
     // Detect frontmatter boundary
     let inFrontmatter = false;
     let fmEnded = false;
-    if (content.startsWith("---")) {
+    if (content.slice(0, 3) === "---") {
       inFrontmatter = true;
     }
     let fmEndLine = -1;
@@ -473,7 +475,7 @@ function scanProgressMsg(corpus: string[]) {
 
     // Detect frontmatter boundary (skip frontmatter for progress messaging)
     let fmEndLine = -1;
-    if (content.startsWith("---")) {
+    if (content.slice(0, 3) === "---") {
       for (let i = 1; i < contentLines.length; i++) {
         if (contentLines[i].trim() === "---") { fmEndLine = i; break; }
       }
@@ -560,7 +562,7 @@ function scanDanglingRelated(corpus: string[], slugSet: Set<string>) {
     const contentLines = content.split("\n");
 
     // Only look in frontmatter
-    if (!content.startsWith("---")) continue;
+    if (content.slice(0, 3) !== "---") continue;
     const fmEnd = content.indexOf("---", 3);
     if (fmEnd < 0) continue;
     const fmLines = content.slice(3, fmEnd).split("\n");
@@ -628,7 +630,7 @@ function scanDanglingSourceRefs(corpus: string[]) {
     if (rel.includes("/research/") || rel.includes("/ideation/")) continue;
     const content = readFile(fpath);
 
-    if (!content.startsWith("---")) continue;
+    if (content.slice(0, 3) !== "---") continue;
     const fmEnd = content.indexOf("---", 3);
     if (fmEnd < 0) continue;
     const fmText = content.slice(3, fmEnd);

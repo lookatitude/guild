@@ -591,6 +591,8 @@ if (require.main === module) {
   const fs = require("fs") as typeof import("fs");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const path = require("path") as typeof import("path");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { parseYaml } = require("./frontmatter") as typeof import("./frontmatter");
 
   const argv = process.argv.slice(2);
   let runId = "";
@@ -612,11 +614,19 @@ if (require.main === module) {
 
   let runYaml: ParsedRunYaml = {};
   try {
-    // Minimal YAML scalar extractor (mirrors run-lifecycle.ts readStartFacts pattern)
+    // Parse run.yaml via the shared js-yaml parser (OD-3). `get` returns each
+    // scalar String()-coerced (null when absent), matching the old raw-text
+    // shape; the consumer (toRunRow) already normalises null/"null" and
+    // String()-wraps every field, so the type coercion is absorbed.
     const raw = fs.readFileSync(runYamlPath, "utf8");
+    const doc = parseYaml(raw);
+    const obj =
+      doc !== null && typeof doc === "object" && !Array.isArray(doc)
+        ? (doc as Record<string, unknown>)
+        : {};
     const get = (key: string): string | null => {
-      const m = raw.match(new RegExp(`^${key}:[ \\t]*(.*)$`, "m"));
-      return m ? m[1].trim() : null;
+      const v = obj[key];
+      return v === undefined || v === null ? null : String(v);
     };
     runYaml = {
       run_id: get("run_id") ?? undefined,

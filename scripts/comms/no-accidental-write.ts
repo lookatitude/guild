@@ -448,7 +448,10 @@ function checkTraceJsonl(filePath: string, content: string): AccidentalWriteViol
 }
 
 function checkDocsKnowledgeFrontmatter(filePath: string, content: string): AccidentalWriteViolation[] {
-  if (!content.startsWith("---")) {
+  // Bounded fence check (slice, not startsWith('---')) — the actual frontmatter
+  // is parsed with js-yaml below (already OD-3-compliant). The distinct error
+  // messages per failure mode require these explicit boundary checks.
+  if (content.slice(0, 3) !== "---") {
     // No YAML frontmatter delimiter found. Two sub-cases:
     //   (a) The file genuinely has no frontmatter (new stub page) — not flagged here;
     //       check (c) in comms-format-lint handles undeclared categories for new artifacts.

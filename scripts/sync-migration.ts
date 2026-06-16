@@ -31,6 +31,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { hasTopLevelKey, replaceTopLevelLine } from "./lib/frontmatter";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -96,8 +97,9 @@ function parseFrontMatter(content: string): { fmRaw: string; body: string } {
  */
 function overrideSourceRefs(fmRaw: string): string {
   const replacement = `source_refs: ["docs/knowledge/MIGRATION.md"]`;
-  if (/^source_refs:/m.test(fmRaw)) {
-    return fmRaw.replace(/^source_refs:.*$/m, replacement);
+  // Byte-preserving top-level line swap via the shared helper (OD-3).
+  if (hasTopLevelKey(fmRaw, "source_refs")) {
+    return replaceTopLevelLine(fmRaw, "source_refs", replacement).text;
   }
   // No source_refs present — insert before the closing ---
   return fmRaw.replace(/\n---$/, `\n${replacement}\n---`);
@@ -223,9 +225,9 @@ const ROOT_POINTER_BLOCKQUOTE = `> **This is a pointer.** The canonical, maintai
  */
 function deriveRootFrontMatter(fmRaw: string): string {
   let fm = overrideSourceRefs(fmRaw);
-  // Override supersedes: null regardless of canonical value.
-  if (/^supersedes:/m.test(fm)) {
-    fm = fm.replace(/^supersedes:.*$/m, `supersedes: null`);
+  // Override supersedes: null regardless of canonical value (byte-preserving).
+  if (hasTopLevelKey(fm, "supersedes")) {
+    fm = replaceTopLevelLine(fm, "supersedes", `supersedes: null`).text;
   } else {
     fm = fm.replace(/\n---$/, `\nsupersedes: null\n---`);
   }

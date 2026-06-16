@@ -58,6 +58,7 @@ import type {
   InventoryManifest,
 } from "./lib/inventory-schema";
 import { validateInventoryV1 } from "./lib/inventory-schema";
+import { readScalarField } from "./lib/frontmatter";
 import {
   COVERAGE_ENFORCED_CATEGORIES,
   checkCoverage,
@@ -135,20 +136,16 @@ function readFile(abs: string): string {
   return fs.readFileSync(abs, "utf8");
 }
 
-/** Read a single-line YAML frontmatter scalar field, or undefined. */
+/**
+ * Read a single-line YAML frontmatter scalar field, or undefined.
+ * Uses the shared ROBUST single-line reader (OD-3) rather than a whole-block
+ * YAML parse: skill pages routinely carry a YAML-hostile unquoted `description:`
+ * (colons/parens), which would make a whole-block `yaml.load` throw and hide a
+ * perfectly readable `name:`. `readScalarField` reads the field line directly
+ * (quote-stripped), tolerating such siblings. Empty/absent → undefined.
+ */
 function frontmatterField(content: string, field: string): string | undefined {
-  if (!content.startsWith("---")) return undefined;
-  const end = content.indexOf("\n---", 3);
-  const block = end === -1 ? content : content.slice(0, end);
-  const re = new RegExp(`^${field}\\s*:\\s*(.+?)\\s*$`, "m");
-  const m = re.exec(block);
-  if (!m) return undefined;
-  let v = m[1].trim();
-  // strip surrounding quotes if present
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-    v = v.slice(1, -1);
-  }
-  return v === "" ? undefined : v;
+  return readScalarField(content, field);
 }
 
 // ---------------------------------------------------------------------------

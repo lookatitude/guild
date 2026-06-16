@@ -27,6 +27,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 // HK-08: pure regex directive-language detector (no I/O).
 import { sanitizeForInjection } from "../../hooks/lib/security/injection-guard";
+import { parseFrontmatter as parseSharedFrontmatter } from "./frontmatter";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -123,44 +124,20 @@ interface WikiFrontmatter {
 
 function parseFrontmatter(content: string): WikiFrontmatter {
   const fm: WikiFrontmatter = {};
-  if (!content.startsWith("---")) return fm;
-  const end = content.indexOf("\n---", 3);
-  if (end === -1) return fm;
-  const block = content.slice(3, end).trim();
+  const obj = parseSharedFrontmatter(content); // shared js-yaml parser (OD-3)
+  if (obj === null) return fm;
 
-  let collectingSourceRefs = false;
-  for (const rawLine of block.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) { collectingSourceRefs = false; continue; }
-
-    if (collectingSourceRefs && line.startsWith("- ")) {
-      const item = line.slice(2).replace(/^["']|["']$/g, "").trim();
-      if (item) (fm.source_refs ??= []).push(item);
-      continue;
-    }
-    collectingSourceRefs = false;
-
-    const m = /^([a-z_]+)\s*:\s*(.*)$/.exec(line);
-    if (!m) continue;
-    const [, key, val] = m;
-    const v = val.trim().replace(/^["']|["']$/g, "");
-    if (key === "title") fm.title = v;
-    else if (key === "confidence") fm.confidence = v.toLowerCase();
-    else if (key === "owner") fm.owner = v.toLowerCase();
-    else if (key === "synthesized") fm.synthesized = v === "true";
-    else if (key === "source_refs") {
-      if (!v || v === "[]") {
-        fm.source_refs ??= [];
-        collectingSourceRefs = true;
-      } else if (v.startsWith("[")) {
-        fm.source_refs = v
-          .slice(1, -1)
-          .split(",")
-          .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-          .filter(Boolean);
-      }
-    }
-  }
+  if (obj["title"] != null) fm.title = String(obj["title"]);
+  if (obj["confidence"] != null) fm.confidence = String(obj["confidence"]).toLowerCase();
+  if (obj["owner"] != null) fm.owner = String(obj["owner"]).toLowerCase();
+  // synthesized: js-yaml yields a real boolean; preserve the old `=== "true"`
+  // truthiness for any string form too (quoted "true").
+  if (typeof obj["synthesized"] === "boolean") fm.synthesized = obj["synthesized"];
+  else if (obj["synthesized"] != null) fm.synthesized = String(obj["synthesized"]) === "true";
+  // source_refs: js-yaml parses block lists, inline `[a, b]`, and `[]` natively
+  // to arrays — the three forms the old hand-rolled scanner special-cased.
+  const refs = obj["source_refs"];
+  if (Array.isArray(refs)) fm.source_refs = refs.map((r) => String(r));
   return fm;
 }
 

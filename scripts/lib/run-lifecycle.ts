@@ -40,6 +40,7 @@ import * as fsNode from "fs";
 import * as path from "path";
 import type { HostKind } from "./host-types";
 import { resolveSettings } from "./settings-resolver";
+import { parseYaml, replaceTopLevelLine } from "./frontmatter";
 import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
 import { scrubbedWrite } from "../../hooks/lib/security/scrubbed-write";
 import type { ScrubbedWriteResult, ScrubSurface } from "../../hooks/lib/security/scrubbed-write";
@@ -432,10 +433,18 @@ function readStartFacts(env: RunLifecycleEnv, root: string, runId: string): Star
         `cannot close a run that was never started.`
     );
   }
+  // Parse run.yaml via the shared js-yaml parser (OD-3). `get` String()-coerces
+  // each top-level scalar (null when absent), matching the old raw-text shape;
+  // the normalisation below (initiative_attachment "null"→null, run_class
+  // default) is unchanged and absorbs js-yaml's typing.
+  const doc = parseYaml(raw);
+  const obj =
+    doc !== null && typeof doc === "object" && !Array.isArray(doc)
+      ? (doc as Record<string, unknown>)
+      : {};
   const get = (key: string): string | null => {
-    // Match a top-level `key: value` line (bare scalar; the start writer's shape).
-    const m = raw.match(new RegExp(`^${key}:[ \\t]*(.*)$`, "m"));
-    return m ? m[1].trim() : null;
+    const v = obj[key];
+    return v === undefined || v === null ? null : String(v);
   };
   const command = get("command") ?? "";
   const initRaw = get("initiative_attachment");
@@ -443,7 +452,7 @@ function readStartFacts(env: RunLifecycleEnv, root: string, runId: string): Star
   const runClassRaw = get("run_class");
   const run_class: RunClass = runClassRaw === "lightweight" ? "lightweight" : "full";
   const started_at = get("started_at") ?? "";
-  const self_build = /^[\s\S]*self_build:[ \t]*true/m.test(raw);
+  const self_build = obj["self_build"] === true;
   return { command, initiative, run_class, started_at, self_build };
 }
 
@@ -452,7 +461,9 @@ function flipRunStatus(env: RunLifecycleEnv, root: string, runId: string, status
   const p = runYamlPath(root, runId);
   const raw = env.fs.readFile(p);
   if (raw === null) return;
-  const next = raw.replace(/^status:[ \t]*.*$/m, `status: ${status}`);
+  // Byte-preserving single-line rewrite via the shared helper (OD-3) — swaps
+  // only the top-level `status:` line, every other byte untouched.
+  const next = replaceTopLevelLine(raw, "status", `status: ${status}`).text;
   env.fs.writeFile(p, next);
 }
 
@@ -494,12 +505,11 @@ export function appendPhase(
   if (raw === null) return false; // missing/corrupt → no-op
   const at = env.now();
 
-  // 1. Rewrite the top-level `phase:` scalar (tolerate its absence on old manifests).
-  //    `^phase:` cannot match `phases_log:` ("phase" + ":" vs "phase" + "s") nor an
-  //    indented block item ("  - phase:") — anchored at column 0.
-  let next = /^phase:[ \t]*.*$/m.test(raw)
-    ? raw.replace(/^phase:[ \t]*.*$/m, `phase: ${phase}`)
-    : raw;
+  // 1. Rewrite the top-level `phase:` scalar (tolerate its absence on old
+  //    manifests). The shared helper matches `phase:` at column 0 only — it
+  //    cannot match `phases_log:` ("phase:" ≠ "phases…") nor an indented block
+  //    item ("  - phase:"). A no-op (returns the text unchanged) when absent.
+  let next = replaceTopLevelLine(raw, "phase", `phase: ${phase}`).text;
 
   // 2. Append a { phase, at } entry to the phases_log block.
   next = appendToPhasesLog(next, phase, at);
@@ -516,7 +526,9 @@ export function appendPhase(
 function appendToPhasesLog(raw: string, phase: string, at: string): string {
   const lines = raw.split("\n");
   const itemLines = [`  - phase: ${phase}`, `    at: ${at}`];
-  const idx = lines.findIndex((l) => /^phases_log:/.test(l));
+  // Column-0 `phases_log:` key (startsWith excludes indented block items, same
+  // as the old `^phases_log:` anchor — no OD-3 key-regex literal).
+  const idx = lines.findIndex((l) => l.startsWith("phases_log:"));
 
   if (idx === -1) {
     // No phases_log key (older manifest) — append a fresh block before the trailing
@@ -527,7 +539,7 @@ function appendToPhasesLog(raw: string, phase: string, at: string): string {
     return lines.join("\n");
   }
 
-  if (/^phases_log:[ \t]*\[\][ \t]*$/.test(lines[idx])) {
+  if (lines[idx].slice("phases_log:".length).trim() === "[]") {
     // Empty inline `[]` → convert to a block carrying the first item.
     lines.splice(idx, 1, "phases_log:", ...itemLines);
     return lines.join("\n");
@@ -1007,8 +1019,14 @@ export function readRunStartedAt(
   const p = path.join(runDir, "run.yaml");
   const raw = readFile(p);
   if (raw === null) return null;
-  // Mirror of the readStartFacts top-level scalar extractor:
-  // Match `started_at: <value>` as a bare scalar (the start writer's shape).
-  const m = raw.match(/^started_at:[ \t]*(.*)$/m);
-  return m ? m[1].trim() || null : null;
+  // Parse via the shared js-yaml parser (OD-3); `started_at` stays a string
+  // under the default JSON schema. Empty/absent → null (unchanged contract).
+  const doc = parseYaml(raw);
+  const obj =
+    doc !== null && typeof doc === "object" && !Array.isArray(doc)
+      ? (doc as Record<string, unknown>)
+      : {};
+  const v = obj["started_at"];
+  if (v === undefined || v === null) return null;
+  return String(v).trim() || null;
 }

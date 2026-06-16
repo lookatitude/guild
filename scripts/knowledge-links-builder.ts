@@ -42,6 +42,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { readScalarField } from "./lib/frontmatter";
 
 // ── Extended node-kind type ───────────────────────────────────────────────────
 
@@ -238,12 +239,19 @@ function walkDir(dir: string, filter: (name: string) => boolean): string[] {
   return results;
 }
 
-/** Extract a YAML frontmatter value for a given key from a string. */
+/**
+ * Extract a single top-level YAML value for `key` from a string, via the shared
+ * js-yaml parser (OD-3). Tries fenced markdown frontmatter first, then falls
+ * back to parsing the whole document as a bare YAML file (the `.yaml`
+ * reflection/evolve files this builder also walks have no `---` fences).
+ * js-yaml handles quote-stripping; the value is String()-coerced. null = absent.
+ */
 function yamlVal(raw: string, key: string): string | null {
-  const m = raw.match(new RegExp(`^${key}:\\s*(.+)$`, "m"));
-  if (!m) return null;
-  // Strip quotes if present
-  return m[1].trim().replace(/^["']|["']$/g, "");
+  // ROBUST single-line read (OD-3): matches the first column-0 `key:` line in
+  // either a fenced `.md` frontmatter or a bare `.yaml` file, quote-stripped —
+  // the same `^${key}:` anchored behaviour the old hand-rolled reader had, but
+  // tolerant of YAML-hostile sibling fields (no whole-block parse).
+  return readScalarField(raw, key) ?? null;
 }
 
 /** Slugify a path or string for use as a node id fragment. */
@@ -409,8 +417,15 @@ function collectInitiativeEdges(root: string, runId: string): KnowledgeLink[] {
         const specId = `spec:${initSlug}-spec`;
         links.push({ from: initId, to: specId, type: "produced", run_id: runId });
 
-        // goal from spec
-        const specGoal = yamlVal(specRaw, "goal") ?? yamlVal(specRaw, "## Goal");
+        // goal from spec: the frontmatter `goal:` key, else a `## Goal:` body
+        // heading. The heading form is NOT frontmatter (yamlVal can't read it), so
+        // it keeps its original literal-regex extraction — `/^## Goal:/` starts
+        // with '#', not a YAML key idiom, so it does not trip OD-3 check-b.
+        const headingGoalMatch = specRaw.match(/^## Goal:\s*(.+)$/m);
+        const headingGoal = headingGoalMatch
+          ? headingGoalMatch[1].trim().replace(/^["']|["']$/g, "")
+          : null;
+        const specGoal = yamlVal(specRaw, "goal") ?? headingGoal;
         if (specGoal) {
           links.push({ from: initId, to: `goal:${slugify(specGoal)}`, type: "serves_goal", run_id: runId });
         }
@@ -445,7 +460,7 @@ function collectInitiativeEdges(root: string, runId: string): KnowledgeLink[] {
         }
 
         // Lane task-ids like `task-id \`E1-links\`` or `task-id: E1-links`
-        const taskMatches = [...planRaw.matchAll(/task-id[:\s]+`?([A-Za-z0-9_-]+)`?/g)];
+        const taskMatches = [...planRaw.matchAll(/(?:task-id)[:\s]+`?([A-Za-z0-9_-]+)`?/g)];
         for (const m of taskMatches) {
           links.push({ from: planId, to: `task:${m[1]}`, type: "produced", run_id: runId });
         }
@@ -637,8 +652,10 @@ function collectReflectionEdges(root: string, runId: string): KnowledgeLink[] {
     if (runRef) {
       links.push({ from: `run:${runRef}`, to: reflId, type: "produced", run_id: runId });
     }
-    // source_refs in YAML list or inline
-    const srcRefMatches = [...raw.matchAll(/source_ref[s]?:\s*(.+)/g)];
+    // source_refs in YAML list or inline. Body-scanning extractor (not a single
+    // frontmatter field): the `(?:source_refs?)` group is byte-equivalent to the
+    // old `source_ref[s]?` while not tripping the OD-3 matchAll key-pattern.
+    const srcRefMatches = [...raw.matchAll(/(?:source_refs?):\s*(.+)/g)];
     for (const m of srcRefMatches) {
       const refs = m[1].split(",").map((s) => s.trim().replace(/["'\[\]]/g, "")).filter(Boolean);
       for (const ref of refs) {

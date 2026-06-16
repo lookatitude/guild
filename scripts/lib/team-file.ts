@@ -24,6 +24,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { CANONICAL_PHASES, isCanonicalPhase } from "./run-lifecycle";
+import { parseYaml } from "./frontmatter";
 // Extensionless cross-dir import (scripts/ convention): tsx + ts-jest both resolve
 // it to guild-root.ts, which is self-contained (node:fs/node:path only). A `.js`
 // suffix here would break ts-jest's commonjs resolver (no .js→.ts remap).
@@ -161,18 +162,26 @@ export function readActivePhase(cwd: string, runId?: string): string | null {
       return null; // missing run.yaml → no active phase
     }
 
-    // 1. Last phases_log entry: scan all `- phase: <x>` block items, take the last.
-    const lines = raw.split("\n");
-    let lastLogged: string | null = null;
-    for (const line of lines) {
-      const m = line.match(/^\s+-\s+phase:\s*(\S+)\s*$/);
-      if (m) lastLogged = m[1];
-    }
+    // Parse run.yaml via the shared js-yaml parser (OD-3). A missing/corrupt
+    // manifest yields null (fail-soft) → no active phase, same as before.
+    const doc = parseYaml(raw);
+    const obj =
+      doc !== null && typeof doc === "object" && !Array.isArray(doc)
+        ? (doc as Record<string, unknown>)
+        : {};
+
+    // 1. Last phases_log entry: the last `{ phase, at }` block item.
+    const log = Array.isArray(obj["phases_log"]) ? (obj["phases_log"] as unknown[]) : [];
+    const last = log.length > 0 ? log[log.length - 1] : null;
+    const lastLogged =
+      last !== null && typeof last === "object" && (last as Record<string, unknown>)["phase"] != null
+        ? String((last as Record<string, unknown>)["phase"])
+        : null;
     if (lastLogged && isCanonicalPhase(lastLogged)) return lastLogged;
 
     // 2. Fallback: top-level `phase:` scalar.
-    const top = raw.match(/^phase:\s*(\S+)\s*$/m);
-    if (top && isCanonicalPhase(top[1])) return top[1];
+    const top = obj["phase"] != null ? String(obj["phase"]) : null;
+    if (top && isCanonicalPhase(top)) return top;
 
     return null; // no canonical phase recorded
   } catch {

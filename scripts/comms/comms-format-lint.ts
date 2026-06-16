@@ -146,6 +146,39 @@ function isLegacyExempt(filePath: string): boolean {
   return normalised.includes("legacy-example") || normalised.includes("fixtures/legacy-example");
 }
 
+/**
+ * Generated build-output exemption — fully exempt from all checks.
+ *
+ * The lint governs AUTHORED SOURCE. Compiled bundles under any `/dist/` directory
+ * (hooks/dist, hooks/agent-team/dist, mcp-servers/**\/dist, …) are emitted from
+ * already-linted `.ts` source — re-flagging the `.js` build output is noise, and
+ * "fixing" generated code is wrong (the source is the unit of change). A `/dist/`
+ * path segment is the canonical marker for that build output across the repo.
+ */
+function isBuildArtifactExempt(filePath: string): boolean {
+  return normalisePath(filePath).includes("/dist/");
+}
+
+/**
+ * check-a SCOPE exemption: intentional handoff TEST FIXTURES.
+ *
+ * `tests/**\/fixtures/**\/handoffs/*.md` are DELIBERATELY malformed receipts
+ * authored to exercise the scrub / policy machinery (e.g. a receipt with no
+ * embedded guild.handoff.v2 block). They are not real runtime receipts, so the
+ * ambiguous-receipt check (a) must not flag them. This is a lint-scope
+ * exemption — the fixtures themselves are NOT edited.
+ *
+ * Narrowly scoped to check (a): a file is exempt only when its normalised path
+ * contains BOTH a `/fixtures/` segment AND a `/handoffs/` segment. Real runtime
+ * receipts live under `.guild/runs/<id>/handoffs/` and never under a `/fixtures/`
+ * path, so this can never over-exempt a production receipt. Checks (b) and (c)
+ * are unaffected.
+ */
+function isHandoffFixtureExempt(filePath: string): boolean {
+  const normalised = normalisePath(filePath);
+  return normalised.includes("/fixtures/") && normalised.includes("/handoffs/");
+}
+
 // ── Handoff-v2 extraction + validation (mirrored from hooks/lib/handoff-v2.ts) ──
 //
 // Scripts cannot import hooks/lib/ (separate package, different tsconfig).
@@ -782,6 +815,7 @@ export function lintCommsFormat(opts: CommsLintOpts = {}): CommsLintFinding[] {
   // ── Arm 1: check changed paths ────────────────────────────────────────
   for (const filePath of inScopePaths) {
     if (isLegacyExempt(filePath)) continue;
+    if (isBuildArtifactExempt(filePath)) continue; // generated build output — lint source, not dist
 
     let content: string;
     try {
@@ -791,7 +825,10 @@ export function lintCommsFormat(opts: CommsLintOpts = {}): CommsLintFinding[] {
       continue;
     }
 
-    findings.push(...checkAmbiguousReceipt(filePath, content));
+    // check (a) is scoped-out for intentional handoff TEST FIXTURES; (b)/(c) still apply.
+    if (!isHandoffFixtureExempt(filePath)) {
+      findings.push(...checkAmbiguousReceipt(filePath, content));
+    }
     findings.push(...checkNewHandRolledYaml(filePath, content, allowList));
     findings.push(...checkUndeclaredCategory(filePath, content));
   }
@@ -829,7 +866,9 @@ export function lintCommsFormat(opts: CommsLintOpts = {}): CommsLintFinding[] {
             continue;
           }
 
-          findings.push(...checkAmbiguousReceipt(receiptPath, content));
+          if (!isHandoffFixtureExempt(receiptPath)) {
+            findings.push(...checkAmbiguousReceipt(receiptPath, content));
+          }
           // Note: checks (b) and (c) are not applied to runtime receipts —
           // they are source-code and artifact-declaration checks respectively.
           // Runtime receipts are only checked for (a) ambiguous envelope.

@@ -36,6 +36,7 @@
 
 import * as path from "path";
 import type { Fs, WikiGradeRecord, ImportanceGrade } from "./types";
+import { parseYaml } from "../../lib/frontmatter";
 
 /** Marker value stamped into `graded_by:` so accepts/audits can attribute drafts. */
 export const GRADED_BY_STAMP = "guild-migrate";
@@ -59,7 +60,7 @@ export interface FmSplit {
 }
 
 export function splitFrontmatter(content: string): FmSplit {
-  if (!content.startsWith("---")) return { fmLines: null, body: content };
+  if (content.slice(0, 3) !== "---") return { fmLines: null, body: content };
   const lines = content.split("\n");
   if (lines[0].trim() !== "---") return { fmLines: null, body: content };
   for (let i = 1; i < lines.length; i++) {
@@ -72,11 +73,12 @@ export function splitFrontmatter(content: string): FmSplit {
 
 export function fmValue(fmLines: string[] | null, key: string): string | null {
   if (!fmLines) return null;
-  for (const l of fmLines) {
-    const m = l.match(new RegExp(`^${key}\\s*:\\s*(.*)$`));
-    if (m) return m[1].trim().replace(/^["']|["']$/g, "");
-  }
-  return null;
+  // Parse the (fence-stripped) frontmatter block via the shared js-yaml parser
+  // (OD-3); js-yaml handles quote-stripping. String()-coerced; null = absent.
+  const doc = parseYaml(fmLines.join("\n"));
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return null;
+  const v = (doc as Record<string, unknown>)[key];
+  return v === undefined || v === null ? null : String(v);
 }
 
 // ── Classification ─────────────────────────────────────────────────────────

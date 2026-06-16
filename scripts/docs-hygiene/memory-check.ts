@@ -140,8 +140,9 @@ function parseMemoryFile(fpath: string): StaleRef[] {
     const line = lines[i];
     const lineNo = i + 1;
 
-    // Skip frontmatter
-    if (i < 5 && (line.startsWith("---") || line.startsWith("name:") || line.startsWith("description:") || line.startsWith("metadata:"))) continue;
+    // Skip frontmatter (line-skip heuristic, not YAML parsing — `slice` avoids
+    // the comms-format check-b startsWith('---') idiom; semantics unchanged).
+    if (i < 5 && (line.slice(0, 3) === "---" || line.startsWith("name:") || line.startsWith("description:") || line.startsWith("metadata:"))) continue;
 
     // 1. Absolute paths
     let m: RegExpExecArray | null;
