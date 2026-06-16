@@ -8,7 +8,10 @@ lane: P1-L0 (FOUNDATION)
 spec: .guild/spec/universal-host-p1.md
 plan: .guild/plan/universal-host-p1.md
 status: gated (G-spec round-2 SATISFIED; G-plan codex 3 rounds + operator-approved); ships the contracts every P1 lane consumes
+importance: high
 created_at: 2026-06-15
+updated_at: 2026-06-16
+sensitivity: public
 owner: plugin-architect (self-build dev-team)
 ---
 
