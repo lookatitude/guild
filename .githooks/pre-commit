@@ -1,0 +1,26 @@
+#!/bin/sh
+# pre-commit — refuse commits from a Guild lane agent.
+#
+# Guild self-build rule (operator standing constraint): dev-team lane agents
+# NEVER commit — the lead gates + commits. Lane agents are dispatched with
+# GUILD_SPECIALIST / GUILD_TASK_ID exported into their environment; the lead
+# session has neither. This codifies the rule in CODE so a bypass-permissions
+# pane cannot commit just because the prose said not to.
+#
+# Lead override (the lead committing on behalf of a lane, or CI):
+#   GUILD_LEAD_COMMIT=1 git commit ...
+#
+# Setup (per clone): git config core.hooksPath .githooks
+
+if [ -n "$GUILD_LEAD_COMMIT" ]; then
+  exit 0
+fi
+
+if [ -n "$GUILD_SPECIALIST" ] || [ -n "$GUILD_TASK_ID" ]; then
+  echo "[pre-commit] BLOCKED: a Guild lane agent may not commit." >&2
+  echo "             GUILD_SPECIALIST='$GUILD_SPECIALIST' GUILD_TASK_ID='$GUILD_TASK_ID'" >&2
+  echo "             Rule: agents never commit — write your handoff receipt; the lead gates + commits." >&2
+  echo "             (Lead override: GUILD_LEAD_COMMIT=1 git commit ...)" >&2
+  exit 1
+fi
+exit 0
