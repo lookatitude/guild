@@ -563,16 +563,15 @@ export function renderHostConfig(hostId: HostId, input: RenderConfigInput): Host
   // true and future-proofs against any reason that later interpolates caller data).
   if (unsupported.length > 0) out._unsupported = unsupported;
 
-  // ── secret scan over every EXTERNALLY-DERIVED emitted string (fail-closed) ──────
-  // Scan every string whose content can originate OUTSIDE this renderer: the rendered body
-  // (permissions/models/roles), the caller-supplied scalars (_source_version — an operator
-  // sourceVersion could carry a secret — and _rendered_at), and the _unsupported reasons. The
-  // raw secret is replaced in-place before it can leave this function.
-  // NOT scanned (by construction carry NO external data — a scan would be self-referential):
-  // the discriminator/enum fields (schema_version, host_id, family, surface_kind, provenance,
-  // _local_guard, ok, blocked) and the renderer-authored `_redactions[]` records — whose
-  // `field` is a config KEY PATH and whose `detail` for a secret hit is the static PATTERN
-  // LABEL (never the matched value, which is already redacted in the emitted value above).
+  // ── secret scan over every emitted string (fail-closed) ────────────────────────
+  // Scan the rendered body (permissions/models/roles), the caller-supplied scalars
+  // (_source_version — an operator sourceVersion could carry a secret — and _rendered_at), and
+  // the _unsupported reasons. The raw secret is replaced in-place before it can leave this
+  // function. The renderer's own `_redactions[]` records are scanned in a final terminating
+  // pass below (a `field` can be a config KEY PATH and a caller could name a config key after a
+  // secret), so NOTHING emitted escapes the scan. The discriminator/enum fields
+  // (schema_version, host_id, family, surface_kind, provenance, _local_guard, ok, blocked) are
+  // renderer-authored closed sets and carry no external data.
   if (out.permissions) out.permissions = redactDeep(out.permissions, "permissions", operatorPatterns, redactions) as Record<string, PermissionDecision>;
   if (out.models) out.models = redactDeep(out.models, "models", operatorPatterns, redactions) as HostConfigRender["models"];
   if (out.roles) out.roles = redactDeep(out.roles, "roles", operatorPatterns, redactions) as Record<string, unknown>;
@@ -593,7 +592,12 @@ export function renderHostConfig(hostId: HostId, input: RenderConfigInput): Host
 
   // (out._unsupported was attached + scanned above — do NOT re-assign the raw array here.)
   if (redactions.length > 0) {
-    out._redactions = redactions;
+    // Final terminating pass: scan the renderer's own redaction records too — a `field` can
+    // carry a config KEY PATH and a caller could name a config key after a secret. The hits go
+    // to a THROWAWAY sink (never emitted, never re-scanned) so this pass terminates — no
+    // infinite regress — while guaranteeing no raw secret survives anywhere in the output.
+    const sink: RedactionRecord[] = [];
+    out._redactions = redactDeep(redactions, "_redactions", operatorPatterns, sink) as RedactionRecord[];
     // Fail closed: any local/secret leak (or an unverifiable guard) blocks a shared write
     // under the durable default.
     if (failMode === "closed") {

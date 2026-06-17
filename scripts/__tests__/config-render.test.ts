@@ -146,6 +146,18 @@ describe("SECURITY fail-closed (F-9) — secrets never leak", () => {
     expect(r.blocked).toBe(true);
   });
 
+  it("scans the renderer's own _redactions records — a secret in a config KEY NAME never survives", () => {
+    // Codex G-lane round-5 completeness: a local-scoped roles key whose NAME is a secret would
+    // put that secret into _redactions[].field — the final terminating pass must scrub it.
+    const secret = "ghp_0123456789abcdefghijABCDEFGHIJ012345";
+    const r = renderHostConfig("claude", baseInput({
+      config: { roles: { host: "claude", [secret]: "x" } as Record<string, unknown> },
+      sources: { [`roles.${secret}`]: "project-local" },
+    }));
+    expect(JSON.stringify(r)).not.toContain(secret); // absent everywhere, incl. _redactions.field
+    expect(r._redactions?.some((x) => x.field.includes("SECRET-REDACTED"))).toBe(true);
+  });
+
   it("operator redaction_patterns are honored (mirrors secrets_policy.redaction_patterns)", () => {
     const inp = baseInput({
       config: { roles: { host: "claude", tag: "INTERNAL-CODENAME-XYZ" } },
