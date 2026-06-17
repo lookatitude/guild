@@ -1,5 +1,8 @@
 # Guild Wiki Log
 
+## 2026-06-17
+- decided universal-host-p2-p3-wave-sequencing
+
 ## 2026-05-02
 
 - decided guild-diagnose-self-fix-command

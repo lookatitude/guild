@@ -1,6 +1,6 @@
 {
   "version": "guild.codebase_map.v1",
-  "generated_from_commit": "a6ed553b8db73047b1fc82387b55d76c961248f7",
+  "generated_from_commit": "71cb2c197ab9535089e2309538eb0436b369a30d",
   "project": {
     "root": "/Users/miguelp/Projects/guild/plugin",
     "languages": [
@@ -54,7 +54,7 @@
       "is_entrypoint": false
     },
     {
-      "path": ".claude/agents/_shared/plan-anchors.md",
+      "path": ".claude/agents/_shared/methodology-skills.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -62,7 +62,7 @@
       "is_entrypoint": false
     },
     {
-      "path": ".claude/agents/_shared/superpowers-mapping.md",
+      "path": ".claude/agents/_shared/plan-anchors.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -110,6 +110,22 @@
       "is_entrypoint": false
     },
     {
+      "path": ".claude/agents/research-digester.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".claude/agents/security-auditor.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".claude",
+      "is_entrypoint": false
+    },
+    {
       "path": ".claude/agents/skill-author.md",
       "language": "markdown",
       "loc": 0,
@@ -150,6 +166,38 @@
       "is_entrypoint": false
     },
     {
+      "path": ".github/workflows/comms-format.yml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".github",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".github/workflows/comms-negative.yml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".github",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".github/workflows/doc-sync.yml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".github",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".github/workflows/dot-guild-policy.yml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".github",
+      "is_entrypoint": false
+    },
+    {
       "path": ".github/workflows/release.yml",
       "language": "yaml",
       "loc": 0,
@@ -163,30 +211,6 @@
       "loc": 0,
       "complexity": 0,
       "module": "(root)",
-      "is_entrypoint": false
-    },
-    {
-      "path": ".understand-anything/.understandignore",
-      "language": "unknown",
-      "loc": 0,
-      "complexity": 0,
-      "module": ".understand-anything",
-      "is_entrypoint": false
-    },
-    {
-      "path": ".understand-anything/knowledge-graph.json",
-      "language": "json",
-      "loc": 0,
-      "complexity": 0,
-      "module": ".understand-anything",
-      "is_entrypoint": false
-    },
-    {
-      "path": ".understand-anything/meta.json",
-      "language": "json",
-      "loc": 0,
-      "complexity": 0,
-      "module": ".understand-anything",
       "is_entrypoint": false
     },
     {
@@ -254,6 +278,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "agents/advisor.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
       "path": "agents/architect.md",
       "language": "markdown",
       "loc": 0,
@@ -278,7 +310,23 @@
       "is_entrypoint": false
     },
     {
+      "path": "agents/developer.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
       "path": "agents/devops.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "agents",
+      "is_entrypoint": false
+    },
+    {
+      "path": "agents/doc-writer.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -390,6 +438,22 @@
       "is_entrypoint": false
     },
     {
+      "path": "commands/config.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/dashboard.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
       "path": "commands/evolve.md",
       "language": "markdown",
       "loc": 0,
@@ -399,54 +463,6 @@
     },
     {
       "path": "commands/fix.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "commands",
-      "is_entrypoint": false
-    },
-    {
-      "path": "commands/guild-audit.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "commands",
-      "is_entrypoint": false
-    },
-    {
-      "path": "commands/guild-diagnose.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "commands",
-      "is_entrypoint": false
-    },
-    {
-      "path": "commands/guild-evolve.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "commands",
-      "is_entrypoint": false
-    },
-    {
-      "path": "commands/guild-rollback.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "commands",
-      "is_entrypoint": false
-    },
-    {
-      "path": "commands/guild-stats.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "commands",
-      "is_entrypoint": false
-    },
-    {
-      "path": "commands/guild-wiki.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -479,6 +495,22 @@
     },
     {
       "path": "commands/initiative.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/learn.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/migrate.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -558,7 +590,7 @@
       "is_entrypoint": false
     },
     {
-      "path": "docs/architecture.md",
+      "path": "docs/RELEASE-NOTES-2.0.0.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -567,14 +599,6 @@
     },
     {
       "path": "docs/audit/2026-04-25.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "docs",
-      "is_entrypoint": false
-    },
-    {
-      "path": "docs/context-assembly.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -862,31 +886,7 @@
       "is_entrypoint": false
     },
     {
-      "path": "docs/plugin-marketplace-copy.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "docs",
-      "is_entrypoint": false
-    },
-    {
-      "path": "docs/self-evolution.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "docs",
-      "is_entrypoint": false
-    },
-    {
       "path": "docs/specialist-roster.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "docs",
-      "is_entrypoint": false
-    },
-    {
-      "path": "docs/status-line.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -918,14 +918,6 @@
       "is_entrypoint": false
     },
     {
-      "path": "docs/wiki-pattern.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "docs",
-      "is_entrypoint": false
-    },
-    {
       "path": "guild-plan.md",
       "language": "markdown",
       "loc": 0,
@@ -942,42 +934,258 @@
       "is_entrypoint": false
     },
     {
+      "path": "hooks/__tests__/bootstrap-capability.test.ts",
+      "language": "typescript",
+      "loc": 86,
+      "complexity": 0.09,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/bypass-forcing.test.ts",
+      "language": "typescript",
+      "loc": 183,
+      "complexity": 0.17,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/capture-telemetry-v14.test.ts",
+      "language": "typescript",
+      "loc": 214,
+      "complexity": 0.21,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
       "path": "hooks/__tests__/capture-telemetry.test.ts",
       "language": "typescript",
-      "loc": 327,
-      "complexity": 0.31,
+      "loc": 430,
+      "complexity": 0.42,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/comms-format-lint.test.ts",
+      "language": "typescript",
+      "loc": 622,
+      "complexity": 0.62,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/detect-guild-version.test.ts",
+      "language": "typescript",
+      "loc": 300,
+      "complexity": 0.33,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/emit-learning-checkpoint.test.ts",
+      "language": "typescript",
+      "loc": 556,
+      "complexity": 0.55,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/guild-root.test.ts",
+      "language": "typescript",
+      "loc": 133,
+      "complexity": 0.14,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/handoff-v2.test.ts",
+      "language": "typescript",
+      "loc": 271,
+      "complexity": 0.28,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/heartbeat-tier-timeout.test.ts",
+      "language": "typescript",
+      "loc": 228,
+      "complexity": 0.22,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/heartbeat-write.test.ts",
+      "language": "typescript",
+      "loc": 232,
+      "complexity": 0.24,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/injection-guard.test.ts",
+      "language": "typescript",
+      "loc": 223,
+      "complexity": 0.26,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/learning-backstop.test.ts",
+      "language": "typescript",
+      "loc": 253,
+      "complexity": 0.25,
       "module": "hooks",
       "is_entrypoint": false
     },
     {
       "path": "hooks/__tests__/maybe-reflect.test.ts",
       "language": "typescript",
-      "loc": 289,
-      "complexity": 0.29,
+      "loc": 511,
+      "complexity": 0.51,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/post-tool-use-scrub.test.ts",
+      "language": "typescript",
+      "loc": 334,
+      "complexity": 0.34,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/pre-tool-use-degrade.test.ts",
+      "language": "typescript",
+      "loc": 334,
+      "complexity": 0.41,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/pre-tool-use-security.test.ts",
+      "language": "typescript",
+      "loc": 352,
+      "complexity": 0.35,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/run-trace-close-checkpoint.test.ts",
+      "language": "typescript",
+      "loc": 139,
+      "complexity": 0.14,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/run-trace.test.ts",
+      "language": "typescript",
+      "loc": 584,
+      "complexity": 0.59,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/scrubbed-write.test.ts",
+      "language": "typescript",
+      "loc": 267,
+      "complexity": 0.32,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/security-config.test.ts",
+      "language": "typescript",
+      "loc": 140,
+      "complexity": 0.14,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/security-enforce.test.ts",
+      "language": "typescript",
+      "loc": 199,
+      "complexity": 0.2,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/security-events.test.ts",
+      "language": "typescript",
+      "loc": 254,
+      "complexity": 0.27,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/security-mcp-hash-pin.test.ts",
+      "language": "typescript",
+      "loc": 54,
+      "complexity": 0.06,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/security-secrets.test.ts",
+      "language": "typescript",
+      "loc": 63,
+      "complexity": 0.07,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/task-completed-injection.test.ts",
+      "language": "typescript",
+      "loc": 207,
+      "complexity": 0.25,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/task-completed-scrub.test.ts",
+      "language": "typescript",
+      "loc": 350,
+      "complexity": 0.38,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/__tests__/teammate-idle.test.ts",
+      "language": "typescript",
+      "loc": 250,
+      "complexity": 0.25,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/agent-team/__tests__/bus-emit.test.ts",
+      "language": "typescript",
+      "loc": 126,
+      "complexity": 0.14,
       "module": "hooks",
       "is_entrypoint": false
     },
     {
       "path": "hooks/agent-team/__tests__/task-completed.test.ts",
       "language": "typescript",
-      "loc": 135,
-      "complexity": 0.14,
+      "loc": 629,
+      "complexity": 0.61,
       "module": "hooks",
       "is_entrypoint": false
     },
     {
       "path": "hooks/agent-team/__tests__/task-created.test.ts",
       "language": "typescript",
-      "loc": 88,
-      "complexity": 0.09,
+      "loc": 199,
+      "complexity": 0.2,
       "module": "hooks",
       "is_entrypoint": false
     },
     {
       "path": "hooks/agent-team/__tests__/teammate-idle.test.ts",
       "language": "typescript",
-      "loc": 101,
-      "complexity": 0.1,
+      "loc": 325,
+      "complexity": 0.31,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -1040,24 +1248,24 @@
     {
       "path": "hooks/agent-team/task-completed.ts",
       "language": "typescript",
-      "loc": 156,
-      "complexity": 0.2,
+      "loc": 618,
+      "complexity": 0.82,
       "module": "hooks",
       "is_entrypoint": false
     },
     {
       "path": "hooks/agent-team/task-created.ts",
       "language": "typescript",
-      "loc": 165,
-      "complexity": 0.24,
+      "loc": 200,
+      "complexity": 0.28,
       "module": "hooks",
       "is_entrypoint": false
     },
     {
       "path": "hooks/agent-team/teammate-idle.ts",
       "language": "typescript",
-      "loc": 208,
-      "complexity": 0.3,
+      "loc": 408,
+      "complexity": 0.54,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -1072,8 +1280,8 @@
     {
       "path": "hooks/capture-telemetry.ts",
       "language": "typescript",
-      "loc": 212,
-      "complexity": 0.33,
+      "loc": 367,
+      "complexity": 0.53,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -1082,6 +1290,30 @@
       "language": "shell",
       "loc": 0,
       "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/comms-format-lint.ts",
+      "language": "typescript",
+      "loc": 206,
+      "complexity": 0.28,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/detect-guild-version.ts",
+      "language": "typescript",
+      "loc": 221,
+      "complexity": 0.34,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/emit-learning-checkpoint.ts",
+      "language": "typescript",
+      "loc": 491,
+      "complexity": 0.64,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -1134,6 +1366,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "hooks/fixtures/subagent-stop-tokens.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
       "path": "hooks/fixtures/subagent-stop.json",
       "language": "json",
       "loc": 0,
@@ -1158,9 +1398,193 @@
       "is_entrypoint": false
     },
     {
+      "path": "hooks/learning-backstop.ts",
+      "language": "typescript",
+      "loc": 83,
+      "complexity": 0.12,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/__tests__/heartbeat.test.ts",
+      "language": "typescript",
+      "loc": 167,
+      "complexity": 0.17,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/__tests__/run-date.test.ts",
+      "language": "typescript",
+      "loc": 188,
+      "complexity": 0.22,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/__tests__/run-state.test.ts",
+      "language": "typescript",
+      "loc": 296,
+      "complexity": 0.29,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/__tests__/trace-v2.test.ts",
+      "language": "typescript",
+      "loc": 205,
+      "complexity": 0.2,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/bus-emit.ts",
+      "language": "typescript",
+      "loc": 104,
+      "complexity": 0.14,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/guild-root.ts",
+      "language": "typescript",
+      "loc": 58,
+      "complexity": 0.09,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/handoff-v2.ts",
+      "language": "typescript",
+      "loc": 284,
+      "complexity": 0.46,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/heartbeat-write.ts",
+      "language": "typescript",
+      "loc": 156,
+      "complexity": 0.21,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/heartbeat.ts",
+      "language": "typescript",
+      "loc": 264,
+      "complexity": 0.46,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/learning-backstop.ts",
+      "language": "typescript",
+      "loc": 201,
+      "complexity": 0.27,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/run-date.ts",
+      "language": "typescript",
+      "loc": 139,
+      "complexity": 0.21,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/run-state.ts",
+      "language": "typescript",
+      "loc": 410,
+      "complexity": 0.58,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/run-trace.ts",
+      "language": "typescript",
+      "loc": 486,
+      "complexity": 0.68,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/security/config.ts",
+      "language": "typescript",
+      "loc": 295,
+      "complexity": 0.48,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/security/enforce.ts",
+      "language": "typescript",
+      "loc": 322,
+      "complexity": 0.55,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/security/events.ts",
+      "language": "typescript",
+      "loc": 244,
+      "complexity": 0.33,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/security/injection-guard.ts",
+      "language": "typescript",
+      "loc": 161,
+      "complexity": 0.2,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/security/mcp-hash-pin.ts",
+      "language": "typescript",
+      "loc": 63,
+      "complexity": 0.09,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/security/scrubbed-write.ts",
+      "language": "typescript",
+      "loc": 272,
+      "complexity": 0.36,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/security/secrets.ts",
+      "language": "typescript",
+      "loc": 78,
+      "complexity": 0.12,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/trace-v2.ts",
+      "language": "typescript",
+      "loc": 247,
+      "complexity": 0.38,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/v1.4/__tests__/append-trace-v2.test.ts",
+      "language": "typescript",
+      "loc": 101,
+      "complexity": 0.1,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
       "path": "hooks/lib/v1.4/log-jsonl.ts",
       "language": "typescript",
-      "loc": 1138,
+      "loc": 1163,
       "complexity": 1,
       "module": "hooks",
       "is_entrypoint": false
@@ -1184,8 +1608,8 @@
     {
       "path": "hooks/maybe-reflect.ts",
       "language": "typescript",
-      "loc": 311,
-      "complexity": 0.46,
+      "loc": 486,
+      "complexity": 0.73,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -1200,25 +1624,57 @@
     {
       "path": "hooks/post-tool-use.ts",
       "language": "typescript",
-      "loc": 222,
-      "complexity": 0.36,
+      "loc": 454,
+      "complexity": 0.72,
       "module": "hooks",
       "is_entrypoint": false
     },
     {
       "path": "hooks/pre-compact.ts",
       "language": "typescript",
-      "loc": 129,
-      "complexity": 0.2,
+      "loc": 145,
+      "complexity": 0.22,
       "module": "hooks",
       "is_entrypoint": false
     },
     {
       "path": "hooks/pre-tool-use.ts",
       "language": "typescript",
-      "loc": 320,
-      "complexity": 0.55,
+      "loc": 767,
+      "complexity": 1,
       "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/run-trace-close.ts",
+      "language": "typescript",
+      "loc": 128,
+      "complexity": 0.2,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/run-trace-start.ts",
+      "language": "typescript",
+      "loc": 65,
+      "complexity": 0.07,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/run-trace.ts",
+      "language": "typescript",
+      "loc": 175,
+      "complexity": 0.24,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "install.sh",
+      "language": "shell",
+      "loc": 0,
+      "complexity": 0,
+      "module": "(root)",
       "is_entrypoint": false
     },
     {
@@ -1302,10 +1758,18 @@
       "is_entrypoint": false
     },
     {
+      "path": "mcp-servers/guild-memory/src/bm25.ts",
+      "language": "typescript",
+      "loc": 65,
+      "complexity": 0.12,
+      "module": "mcp-servers",
+      "is_entrypoint": false
+    },
+    {
       "path": "mcp-servers/guild-memory/src/index.ts",
       "language": "typescript",
-      "loc": 392,
-      "complexity": 0.65,
+      "loc": 346,
+      "complexity": 0.55,
       "module": "mcp-servers",
       "is_entrypoint": true
     },
@@ -1320,8 +1784,8 @@
     {
       "path": "mcp-servers/guild-telemetry/__tests__/guild-telemetry.test.ts",
       "language": "typescript",
-      "loc": 247,
-      "complexity": 0.26,
+      "loc": 369,
+      "complexity": 0.38,
       "module": "mcp-servers",
       "is_entrypoint": false
     },
@@ -1336,8 +1800,8 @@
     {
       "path": "mcp-servers/guild-telemetry/src/index.ts",
       "language": "typescript",
-      "loc": 384,
-      "complexity": 0.58,
+      "loc": 591,
+      "complexity": 0.9,
       "module": "mcp-servers",
       "is_entrypoint": true
     },
@@ -1360,16 +1824,88 @@
     {
       "path": "scripts/__tests__/agent-team-launcher.test.ts",
       "language": "typescript",
-      "loc": 269,
-      "complexity": 0.31,
+      "loc": 1786,
+      "complexity": 0.98,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/analyze-runs.test.ts",
+      "language": "typescript",
+      "loc": 392,
+      "complexity": 0.41,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/check-command-coverage.test.ts",
+      "language": "typescript",
+      "loc": 137,
+      "complexity": 0.14,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/check-doc-sync.test.ts",
+      "language": "typescript",
+      "loc": 656,
+      "complexity": 0.65,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/check-lane-liveness.test.ts",
+      "language": "typescript",
+      "loc": 337,
+      "complexity": 0.34,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/check-roster-consistency.test.ts",
+      "language": "typescript",
+      "loc": 324,
+      "complexity": 0.33,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/config-cmd.test.ts",
+      "language": "typescript",
+      "loc": 980,
+      "complexity": 0.72,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/dashboard-launch.test.ts",
+      "language": "typescript",
+      "loc": 777,
+      "complexity": 0.73,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
       "path": "scripts/__tests__/description-optimizer.test.ts",
       "language": "typescript",
-      "loc": 147,
-      "complexity": 0.18,
+      "loc": 207,
+      "complexity": 0.23,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/docs-hygiene-pending-grades.test.ts",
+      "language": "typescript",
+      "loc": 63,
+      "complexity": 0.07,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/emit-readback-degradation.test.ts",
+      "language": "typescript",
+      "loc": 144,
+      "complexity": 0.17,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1390,6 +1926,182 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/__tests__/fs-scanner.test.ts",
+      "language": "typescript",
+      "loc": 201,
+      "complexity": 0.21,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/host-router.test.ts",
+      "language": "typescript",
+      "loc": 590,
+      "complexity": 0.58,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/index-cache.test.ts",
+      "language": "typescript",
+      "loc": 612,
+      "complexity": 0.7,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/ingest-similarity.test.ts",
+      "language": "typescript",
+      "loc": 692,
+      "complexity": 0.63,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/knowledge-links-builder.test.ts",
+      "language": "typescript",
+      "loc": 772,
+      "complexity": 0.64,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/lint-context-bundle.test.ts",
+      "language": "typescript",
+      "loc": 241,
+      "complexity": 0.25,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/mark-lane-dead.test.ts",
+      "language": "typescript",
+      "loc": 137,
+      "complexity": 0.14,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/oq11-gate-check.test.ts",
+      "language": "typescript",
+      "loc": 79,
+      "complexity": 0.08,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/pane-adapter.test.ts",
+      "language": "typescript",
+      "loc": 366,
+      "complexity": 0.38,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/phase-compose-blast-radius.test.ts",
+      "language": "typescript",
+      "loc": 392,
+      "complexity": 0.42,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/promote-upstream.test.ts",
+      "language": "typescript",
+      "loc": 725,
+      "complexity": 0.57,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/protect-chunks.test.ts",
+      "language": "typescript",
+      "loc": 259,
+      "complexity": 0.26,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/provider-detect.test.ts",
+      "language": "typescript",
+      "loc": 425,
+      "complexity": 0.45,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/read-guild-config-import.test.ts",
+      "language": "typescript",
+      "loc": 38,
+      "complexity": 0.05,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/read-guild-config.test.ts",
+      "language": "typescript",
+      "loc": 1590,
+      "complexity": 0.59,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/read-workspace-knowledge-config.test.ts",
+      "language": "typescript",
+      "loc": 107,
+      "complexity": 0.11,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/reaping.test.ts",
+      "language": "typescript",
+      "loc": 924,
+      "complexity": 0.74,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/recall-protect.test.ts",
+      "language": "typescript",
+      "loc": 258,
+      "complexity": 0.26,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/recall.test.ts",
+      "language": "typescript",
+      "loc": 692,
+      "complexity": 0.71,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/remote-backend.test.ts",
+      "language": "typescript",
+      "loc": 312,
+      "complexity": 0.32,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/resume-lanes.test.ts",
+      "language": "typescript",
+      "loc": 293,
+      "complexity": 0.3,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/retry-lane.test.ts",
+      "language": "typescript",
+      "loc": 285,
+      "complexity": 0.31,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/__tests__/rollback-walker.test.ts",
       "language": "typescript",
       "loc": 142,
@@ -1398,18 +2110,82 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/__tests__/run-lifecycle.test.ts",
+      "language": "typescript",
+      "loc": 516,
+      "complexity": 0.57,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/__tests__/run-scoping-and-loop-event.test.ts",
       "language": "typescript",
-      "loc": 119,
-      "complexity": 0.11,
+      "loc": 98,
+      "complexity": 0.09,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/runstart-preflight.test.ts",
+      "language": "typescript",
+      "loc": 820,
+      "complexity": 0.64,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/score-tier.test.ts",
+      "language": "typescript",
+      "loc": 406,
+      "complexity": 0.39,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/settings-resolver.test.ts",
+      "language": "typescript",
+      "loc": 1294,
+      "complexity": 0.65,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
       "path": "scripts/__tests__/shadow-mode.test.ts",
       "language": "typescript",
-      "loc": 199,
-      "complexity": 0.23,
+      "loc": 280,
+      "complexity": 0.33,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/sync-migration.test.ts",
+      "language": "typescript",
+      "loc": 330,
+      "complexity": 0.33,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/team-backend.test.ts",
+      "language": "typescript",
+      "loc": 579,
+      "complexity": 0.67,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/team-file.test.ts",
+      "language": "typescript",
+      "loc": 459,
+      "complexity": 0.47,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/tier-threading.test.ts",
+      "language": "typescript",
+      "loc": 188,
+      "complexity": 0.2,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1422,6 +2198,22 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/__tests__/u5-consumer-migration.test.ts",
+      "language": "typescript",
+      "loc": 667,
+      "complexity": 0.63,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/u6-run-provenance.test.ts",
+      "language": "typescript",
+      "loc": 475,
+      "complexity": 0.51,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/__tests__/understand-engine.test.ts",
       "language": "typescript",
       "loc": 160,
@@ -1430,18 +2222,346 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/__tests__/vc-k2-knowledge-links.test.ts",
+      "language": "typescript",
+      "loc": 140,
+      "complexity": 0.17,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/vc-k5-classifier.test.ts",
+      "language": "typescript",
+      "loc": 119,
+      "complexity": 0.11,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/verify-gate-pass.test.ts",
+      "language": "typescript",
+      "loc": 333,
+      "complexity": 0.33,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/wiki-lint-checks.test.ts",
+      "language": "typescript",
+      "loc": 46,
+      "complexity": 0.04,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/wiki-recall.test.ts",
+      "language": "typescript",
+      "loc": 793,
+      "complexity": 0.73,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/workspace-detect.test.ts",
+      "language": "typescript",
+      "loc": 235,
+      "complexity": 0.26,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/workspace-federated-query.test.ts",
+      "language": "typescript",
+      "loc": 188,
+      "complexity": 0.19,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/workspace-write-manifest.test.ts",
+      "language": "typescript",
+      "loc": 181,
+      "complexity": 0.21,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/write-back-scored-tier.test.ts",
+      "language": "typescript",
+      "loc": 237,
+      "complexity": 0.3,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/write-host-capability.test.ts",
+      "language": "typescript",
+      "loc": 255,
+      "complexity": 0.26,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/write-run-manifest.test.ts",
+      "language": "typescript",
+      "loc": 273,
+      "complexity": 0.28,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/__tests__/write-task-run.test.ts",
+      "language": "typescript",
+      "loc": 268,
+      "complexity": 0.26,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/agent-team-launcher.ts",
       "language": "typescript",
-      "loc": 514,
-      "complexity": 0.79,
+      "loc": 1337,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/analyze-runs.ts",
+      "language": "typescript",
+      "loc": 505,
+      "complexity": 0.87,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/check-lane-liveness.ts",
+      "language": "typescript",
+      "loc": 301,
+      "complexity": 0.52,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/check-roster-consistency.ts",
+      "language": "typescript",
+      "loc": 272,
+      "complexity": 0.42,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/classify-proposal.ts",
+      "language": "typescript",
+      "loc": 102,
+      "complexity": 0.14,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/comms/__tests__/comms-format-lint.test.ts",
+      "language": "typescript",
+      "loc": 1027,
+      "complexity": 0.72,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/comms/__tests__/no-accidental-write.test.ts",
+      "language": "typescript",
+      "loc": 627,
+      "complexity": 0.61,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/comms/comms-format-lint.cli.ts",
+      "language": "typescript",
+      "loc": 47,
+      "complexity": 0.06,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/comms/comms-format-lint.ts",
+      "language": "typescript",
+      "loc": 805,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/comms/no-accidental-write.cli.ts",
+      "language": "typescript",
+      "loc": 99,
+      "complexity": 0.14,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/comms/no-accidental-write.ts",
+      "language": "typescript",
+      "loc": 565,
+      "complexity": 0.87,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/config-cmd.ts",
+      "language": "typescript",
+      "loc": 1205,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dashboard-launch.ts",
+      "language": "typescript",
+      "loc": 856,
+      "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
       "path": "scripts/description-optimizer.ts",
       "language": "typescript",
-      "loc": 202,
-      "complexity": 0.34,
+      "loc": 208,
+      "complexity": 0.36,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/docs-hygiene/.last-scan.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/docs-hygiene/docs-code-audit.ts",
+      "language": "typescript",
+      "loc": 1088,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/docs-hygiene/memory-check.ts",
+      "language": "typescript",
+      "loc": 252,
+      "complexity": 0.39,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/docs-hygiene/scan.ts",
+      "language": "typescript",
+      "loc": 859,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/audit.ts",
+      "language": "typescript",
+      "loc": 221,
+      "complexity": 0.41,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/convert/convert.ts",
+      "language": "typescript",
+      "loc": 702,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/convert/detect.ts",
+      "language": "typescript",
+      "loc": 344,
+      "complexity": 0.66,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/convert/index.ts",
+      "language": "typescript",
+      "loc": 289,
+      "complexity": 0.47,
+      "module": "scripts",
+      "is_entrypoint": true
+    },
+    {
+      "path": "scripts/dot-guild/convert/keymap.ts",
+      "language": "typescript",
+      "loc": 218,
+      "complexity": 0.43,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/convert/report.ts",
+      "language": "typescript",
+      "loc": 135,
+      "complexity": 0.26,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/convert/seams.ts",
+      "language": "typescript",
+      "loc": 100,
+      "complexity": 0.16,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/convert/snapshot.ts",
+      "language": "typescript",
+      "loc": 98,
+      "complexity": 0.16,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/convert/types.ts",
+      "language": "typescript",
+      "loc": 178,
+      "complexity": 0.22,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/convert/wiki-importance.ts",
+      "language": "typescript",
+      "loc": 213,
+      "complexity": 0.42,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/migrate-guild.ts",
+      "language": "typescript",
+      "loc": 93,
+      "complexity": 0.15,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/migrate.ts",
+      "language": "typescript",
+      "loc": 85,
+      "complexity": 0.16,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/dot-guild/scrub.ts",
+      "language": "typescript",
+      "loc": 135,
+      "complexity": 0.27,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1458,6 +2578,14 @@
       "language": "typescript",
       "loc": 255,
       "complexity": 0.35,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/evals-bare-strings.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1510,6 +2638,22 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/fixtures/migration-canonical.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/plan-gen-slug.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/fixtures/shadow-run-1/events.ndjson",
       "language": "unknown",
       "loc": 0,
@@ -1519,6 +2663,14 @@
     },
     {
       "path": "scripts/fixtures/shadow-run-2/events.ndjson",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/shadow-slug-divergence/events.ndjson",
       "language": "unknown",
       "loc": 0,
       "complexity": 0,
@@ -1598,7 +2750,55 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/fixtures/team-agent-team.qa.yaml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/fixtures/team-agent-team.yaml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/team-generated-shape-scoped.yaml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/team-generated-shape.yaml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/team-mixed-host.ops.yaml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/team-mixed-host.yaml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/fixtures/team-subagent.build.yaml",
       "language": "yaml",
       "loc": 0,
       "complexity": 0,
@@ -1622,34 +2822,202 @@
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/v1.4/log-jsonl.ts",
+      "path": "scripts/index-migrate.ts",
       "language": "typescript",
-      "loc": 1138,
+      "loc": 311,
+      "complexity": 0.42,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/knowledge-links-builder.ts",
+      "language": "typescript",
+      "loc": 944,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/v1.4/redact-log.ts",
+      "path": "scripts/knowledge-links-traverse.ts",
       "language": "typescript",
-      "loc": 275,
-      "complexity": 0.41,
+      "loc": 139,
+      "complexity": 0.24,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/v1.4/v1.4-lock.ts",
+      "path": "scripts/lib/emit-readback-degradation.ts",
       "language": "typescript",
-      "loc": 301,
-      "complexity": 0.46,
+      "loc": 97,
+      "complexity": 0.11,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
-      "path": "scripts/new-run-id.ts",
+      "path": "scripts/lib/fs-scanner.ts",
       "language": "typescript",
-      "loc": 72,
-      "complexity": 0.09,
+      "loc": 244,
+      "complexity": 0.49,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/host-router.ts",
+      "language": "typescript",
+      "loc": 624,
+      "complexity": 0.95,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/host-types.ts",
+      "language": "typescript",
+      "loc": 36,
+      "complexity": 0.04,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/index-cache.ts",
+      "language": "typescript",
+      "loc": 623,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/ingest-similarity.ts",
+      "language": "typescript",
+      "loc": 350,
+      "complexity": 0.57,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/pane-adapter.ts",
+      "language": "typescript",
+      "loc": 292,
+      "complexity": 0.4,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/protect-chunks.ts",
+      "language": "typescript",
+      "loc": 104,
+      "complexity": 0.2,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/provider-detect.ts",
+      "language": "typescript",
+      "loc": 611,
+      "complexity": 0.97,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/reaping.ts",
+      "language": "typescript",
+      "loc": 692,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/recall-protect.ts",
+      "language": "typescript",
+      "loc": 297,
+      "complexity": 0.48,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/recall.ts",
+      "language": "typescript",
+      "loc": 421,
+      "complexity": 0.72,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/run-lifecycle.ts",
+      "language": "typescript",
+      "loc": 932,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/runstart-preflight.ts",
+      "language": "typescript",
+      "loc": 476,
+      "complexity": 0.57,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/settings-resolver.ts",
+      "language": "typescript",
+      "loc": 1299,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/team-backend.ts",
+      "language": "typescript",
+      "loc": 1249,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/team-file.ts",
+      "language": "typescript",
+      "loc": 309,
+      "complexity": 0.55,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/wiki-recall.ts",
+      "language": "typescript",
+      "loc": 359,
+      "complexity": 0.57,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/write-back-scored-tier.ts",
+      "language": "typescript",
+      "loc": 237,
+      "complexity": 0.39,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lint-context-bundle.ts",
+      "language": "typescript",
+      "loc": 188,
+      "complexity": 0.3,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/mark-lane-dead.ts",
+      "language": "typescript",
+      "loc": 183,
+      "complexity": 0.34,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/oq11-gate-check.ts",
+      "language": "typescript",
+      "loc": 102,
+      "complexity": 0.16,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1664,7 +3032,23 @@
     {
       "path": "scripts/read-guild-config.ts",
       "language": "typescript",
-      "loc": 139,
+      "loc": 1592,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/resume-lanes.ts",
+      "language": "typescript",
+      "loc": 203,
+      "complexity": 0.34,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/retry-lane.ts",
+      "language": "typescript",
+      "loc": 203,
       "complexity": 0.29,
       "module": "scripts",
       "is_entrypoint": false
@@ -1678,10 +3062,18 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/score-tier.ts",
+      "language": "typescript",
+      "loc": 263,
+      "complexity": 0.46,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/shadow-mode.ts",
       "language": "typescript",
-      "loc": 352,
-      "complexity": 0.56,
+      "loc": 360,
+      "complexity": 0.57,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1690,6 +3082,14 @@
       "language": "shell",
       "loc": 0,
       "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/sync-migration.ts",
+      "language": "typescript",
+      "loc": 291,
+      "complexity": 0.45,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1910,6 +3310,102 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/verify-gate-pass.ts",
+      "language": "typescript",
+      "loc": 300,
+      "complexity": 0.47,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/wiki-lint-checks.ts",
+      "language": "typescript",
+      "loc": 86,
+      "complexity": 0.16,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/workspace/check-command-coverage.ts",
+      "language": "typescript",
+      "loc": 142,
+      "complexity": 0.27,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/workspace/check-doc-sync.ts",
+      "language": "typescript",
+      "loc": 470,
+      "complexity": 0.76,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/workspace/detect.ts",
+      "language": "typescript",
+      "loc": 216,
+      "complexity": 0.36,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/workspace/doc-sync-prepush.sh",
+      "language": "shell",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/workspace/federated-query.ts",
+      "language": "typescript",
+      "loc": 171,
+      "complexity": 0.24,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/workspace/promote-upstream.ts",
+      "language": "typescript",
+      "loc": 380,
+      "complexity": 0.64,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/workspace/write-manifest.ts",
+      "language": "typescript",
+      "loc": 149,
+      "complexity": 0.2,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/write-host-capability.ts",
+      "language": "typescript",
+      "loc": 274,
+      "complexity": 0.38,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/write-run-manifest.ts",
+      "language": "typescript",
+      "loc": 287,
+      "complexity": 0.5,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/write-task-run.ts",
+      "language": "typescript",
+      "loc": 381,
+      "complexity": 0.51,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/core/.gitkeep",
       "language": "unknown",
       "loc": 0,
@@ -1934,254 +3430,6 @@
       "is_entrypoint": false
     },
     {
-      "path": "skills/fallback/.gitkeep",
-      "language": "unknown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/finish-branch/LICENSE-attribution.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/finish-branch/SKILL.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/finish-branch/evals.json",
-      "language": "json",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/receive-review/LICENSE-attribution.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/receive-review/SKILL.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/request-review/LICENSE-attribution.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/request-review/SKILL.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/request-review/code-reviewer.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/request-review/evals.json",
-      "language": "json",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/LICENSE-attribution.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/SKILL.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/condition-based-waiting-example.ts",
-      "language": "typescript",
-      "loc": 144,
-      "complexity": 0.26,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/condition-based-waiting.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/defense-in-depth.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/evals.json",
-      "language": "json",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/find-polluter.sh",
-      "language": "shell",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/root-cause-tracing.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/test-academic.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/test-pressure-1.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/test-pressure-2.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/systematic-debug/test-pressure-3.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/tdd/LICENSE-attribution.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/tdd/SKILL.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/tdd/evals.json",
-      "language": "json",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/tdd/testing-anti-patterns.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/verify-claim/LICENSE-attribution.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/verify-claim/SKILL.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/worktrees/LICENSE-attribution.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/worktrees/SKILL.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/fallback/worktrees/evals.json",
-      "language": "json",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
       "path": "skills/guild-operations/SKILL.md",
       "language": "markdown",
       "loc": 0,
@@ -2198,6 +3446,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "skills/guild-quality/quality-mechanics.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/knowledge/.gitkeep",
       "language": "unknown",
       "loc": 0,
@@ -2206,7 +3462,7 @@
       "is_entrypoint": false
     },
     {
-      "path": "skills/knowledge/understand-engine/LICENSE-attribution.md",
+      "path": "skills/knowledge/learn-diff/SKILL.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -2214,15 +3470,7 @@
       "is_entrypoint": false
     },
     {
-      "path": "skills/knowledge/understand-engine/SKILL.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "skills",
-      "is_entrypoint": false
-    },
-    {
-      "path": "skills/knowledge/understand-engine/evals.json",
+      "path": "skills/knowledge/learn-diff/evals.json",
       "language": "json",
       "loc": 0,
       "complexity": 0,
@@ -2230,7 +3478,7 @@
       "is_entrypoint": false
     },
     {
-      "path": "skills/knowledge/understand-onboard/LICENSE-attribution.md",
+      "path": "skills/knowledge/learn-explain/SKILL.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -2238,7 +3486,15 @@
       "is_entrypoint": false
     },
     {
-      "path": "skills/knowledge/understand-onboard/SKILL.md",
+      "path": "skills/knowledge/learn-explain/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/learn-graph/SKILL.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -2246,7 +3502,71 @@
       "is_entrypoint": false
     },
     {
-      "path": "skills/knowledge/understand-onboard/evals.json",
+      "path": "skills/knowledge/learn-graph/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/learn-harvest/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/learn-harvest/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/learn-map/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/learn-map/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/learn-onboard/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/learn-onboard/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/learn/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/learn/evals.json",
       "language": "json",
       "loc": 0,
       "complexity": 0,
@@ -2270,6 +3590,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "skills/knowledge/wiki-ingest/ingest-reference.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/knowledge/wiki-lint/SKILL.md",
       "language": "markdown",
       "loc": 0,
@@ -2286,6 +3614,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "skills/knowledge/wiki-lint/lint-rules.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/knowledge/wiki-query/SKILL.md",
       "language": "markdown",
       "loc": 0,
@@ -2296,6 +3632,14 @@
     {
       "path": "skills/knowledge/wiki-query/evals.json",
       "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/knowledge/wiki-query/query-modes.md",
+      "language": "markdown",
       "loc": 0,
       "complexity": 0,
       "module": "skills",
@@ -2350,6 +3694,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "skills/meta/codex-review/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/meta/context-assemble/SKILL.md",
       "language": "markdown",
       "loc": 0,
@@ -2366,6 +3718,30 @@
       "is_entrypoint": false
     },
     {
+      "path": "skills/meta/create-skill/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/create-skill/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/create-skill/workflow.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/meta/create-specialist/SKILL.md",
       "language": "markdown",
       "loc": 0,
@@ -2375,6 +3751,30 @@
     },
     {
       "path": "skills/meta/create-specialist/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/create-specialist/workflow.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/dashboard/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/dashboard/evals.json",
       "language": "json",
       "loc": 0,
       "complexity": 0,
@@ -2406,7 +3806,7 @@
       "is_entrypoint": false
     },
     {
-      "path": "skills/meta/dispatching-parallel-agents/LICENSE-attribution.md",
+      "path": "skills/meta/dispatching-parallel-agents/SKILL.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -2414,8 +3814,8 @@
       "is_entrypoint": false
     },
     {
-      "path": "skills/meta/dispatching-parallel-agents/SKILL.md",
-      "language": "markdown",
+      "path": "skills/meta/dispatching-parallel-agents/evals.json",
+      "language": "json",
       "loc": 0,
       "complexity": 0,
       "module": "skills",
@@ -2446,7 +3846,31 @@
       "is_entrypoint": false
     },
     {
+      "path": "skills/meta/execute-plan/dispatch.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/meta/execute-plan/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/finish-branch/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/finish-branch/evals.json",
       "language": "json",
       "loc": 0,
       "complexity": 0,
@@ -2462,7 +3886,55 @@
       "is_entrypoint": false
     },
     {
+      "path": "skills/meta/init/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/learning-checkpoint/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/learning-checkpoint/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/meta/loop-clarify/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-clarify/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-clarify/io-contract.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-clarify/loop-mechanics.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -2478,8 +3950,160 @@
       "is_entrypoint": false
     },
     {
+      "path": "skills/meta/loop-implement/counters-and-concurrency.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-implement/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-implement/io-contract.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-implement/loops-applicable-enum.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-implement/security-review-restart.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-implement/workflow-and-events.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/meta/loop-plan-review/SKILL.md",
       "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-plan-review/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-plan-review/io-contract.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/loop-plan-review/loop-mechanics.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/ops-incident/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/ops-incident/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/ops-maintenance/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/ops-maintenance/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/ops-monitoring/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/ops-monitoring/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/ops-release/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/ops-release/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/ops-rollback/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/ops-rollback/evals.json",
+      "language": "json",
       "loc": 0,
       "complexity": 0,
       "module": "skills",
@@ -2518,7 +4142,39 @@
       "is_entrypoint": false
     },
     {
+      "path": "skills/meta/review-broker/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/review-broker/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/meta/review/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/review/code-review-loop.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/review/code-reviewer.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -2528,6 +4184,14 @@
     {
       "path": "skills/meta/review/evals.json",
       "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/review/rubric.md",
+      "language": "markdown",
       "loc": 0,
       "complexity": 0,
       "module": "skills",
@@ -2550,6 +4214,86 @@
       "is_entrypoint": false
     },
     {
+      "path": "skills/meta/systematic-debug/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/systematic-debug/condition-based-waiting-example.ts",
+      "language": "typescript",
+      "loc": 70,
+      "complexity": 0.11,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/systematic-debug/condition-based-waiting.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/systematic-debug/defense-in-depth.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/systematic-debug/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/systematic-debug/find-polluter.sh",
+      "language": "shell",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/systematic-debug/root-cause-tracing.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/tdd/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/tdd/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/tdd/testing-anti-patterns.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/meta/team-compose/SKILL.md",
       "language": "markdown",
       "loc": 0,
@@ -2560,6 +4304,14 @@
     {
       "path": "skills/meta/team-compose/evals.json",
       "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/team-compose/gap-handling.md",
+      "language": "markdown",
       "loc": 0,
       "complexity": 0,
       "module": "skills",
@@ -2582,8 +4334,16 @@
       "is_entrypoint": false
     },
     {
-      "path": "skills/meta/writing-skills/LICENSE-attribution.md",
+      "path": "skills/meta/worktrees/SKILL.md",
       "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/worktrees/evals.json",
+      "language": "json",
       "loc": 0,
       "complexity": 0,
       "module": "skills",
@@ -2592,6 +4352,14 @@
     {
       "path": "skills/meta/writing-skills/SKILL.md",
       "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/writing-skills/evals.json",
+      "language": "json",
       "loc": 0,
       "complexity": 0,
       "module": "skills",
@@ -2839,6 +4607,134 @@
     },
     {
       "path": "skills/specialists/devops-observability-setup/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/doc-writer-doc-site/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/doc-writer-doc-site/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/doc-writer-onboarding-doc/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/doc-writer-onboarding-doc/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/doc-writer-product-guide/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/doc-writer-product-guide/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/doc-writer-readme/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/doc-writer-readme/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/frontend-a11y/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/frontend-a11y/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/frontend-bundler-config/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/frontend-bundler-config/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/frontend-react/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/frontend-react/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/frontend-state-management/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/specialists/frontend-state-management/evals.json",
       "language": "json",
       "loc": 0,
       "complexity": 0,
@@ -3446,7 +5342,135 @@
       "is_entrypoint": false
     },
     {
+      "path": "tests/dot-guild/clone-roundtrip.test.ts",
+      "language": "typescript",
+      "loc": 299,
+      "complexity": 0.57,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/dot-guild/convert.test.ts",
+      "language": "typescript",
+      "loc": 1530,
+      "complexity": 0.78,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/dot-guild/gitignore-equivalence.test.ts",
+      "language": "typescript",
+      "loc": 187,
+      "complexity": 0.28,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/dot-guild/gitignore-policy.test.ts",
+      "language": "typescript",
+      "loc": 151,
+      "complexity": 0.19,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/dot-guild/install-sh-equivalence.test.ts",
+      "language": "typescript",
+      "loc": 73,
+      "complexity": 0.1,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/dot-guild/migration-rehearsal.test.ts",
+      "language": "typescript",
+      "loc": 207,
+      "complexity": 0.24,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/dot-guild/nested-guild.test.ts",
+      "language": "typescript",
+      "loc": 80,
+      "complexity": 0.08,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/dot-guild/no-v1-compat.test.ts",
+      "language": "typescript",
+      "loc": 746,
+      "complexity": 0.9,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/dot-guild/plugin-manifest-commands.test.ts",
+      "language": "typescript",
+      "loc": 31,
+      "complexity": 0.03,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/dot-guild/scrub-coverage.test.ts",
+      "language": "typescript",
+      "loc": 113,
+      "complexity": 0.12,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/dot-guild/scrub.test.ts",
+      "language": "typescript",
+      "loc": 280,
+      "complexity": 0.3,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/dot-guild/wiki-importance.test.ts",
+      "language": "typescript",
+      "loc": 311,
+      "complexity": 0.41,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
       "path": "tests/evolve/README.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/evolve/adversarial.test.ts",
+      "language": "typescript",
+      "loc": 129,
+      "complexity": 0.13,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/evolve/fixtures/adversarial/poisoned-handoff-summary.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/evolve/fixtures/adversarial/poisoned-skill-edit.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/evolve/fixtures/adversarial/poisoned-wiki-page.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -3490,6 +5514,30 @@
       "language": "typescript",
       "loc": 226,
       "complexity": 0.23,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/integration/eval-fixture-coverage.test.ts",
+      "language": "typescript",
+      "loc": 227,
+      "complexity": 0.29,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/integration/handoff-v2-integration.test.ts",
+      "language": "typescript",
+      "loc": 199,
+      "complexity": 0.2,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/integration/tier-model-resolution.test.ts",
+      "language": "typescript",
+      "loc": 224,
+      "complexity": 0.26,
       "module": "tests",
       "is_entrypoint": false
     },
@@ -3606,6 +5654,38 @@
       "is_entrypoint": false
     },
     {
+      "path": "tests/wiki-lint/fixtures/fail-dangling-related/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-dangling-related/wiki/concepts/example-dangling-related.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-dangling-related/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-dangling-related/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
       "path": "tests/wiki-lint/fixtures/fail-decision-shape/FIXTURE.md",
       "language": "markdown",
       "loc": 0,
@@ -3663,6 +5743,38 @@
     },
     {
       "path": "tests/wiki-lint/fixtures/fail-directory-hygiene/wiki/misc/stray.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-drift-markers/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-drift-markers/wiki/concepts/example-drift-markers.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-drift-markers/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-drift-markers/wiki/log.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -3750,6 +5862,46 @@
       "is_entrypoint": false
     },
     {
+      "path": "tests/wiki-lint/fixtures/fail-missing-importance/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-missing-importance/wiki/concepts/example-pattern.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-missing-importance/wiki/decisions/example-missing-importance.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-missing-importance/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-missing-importance/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
       "path": "tests/wiki-lint/fixtures/fail-orphan/FIXTURE.md",
       "language": "markdown",
       "loc": 0,
@@ -3783,6 +5935,78 @@
     },
     {
       "path": "tests/wiki-lint/fixtures/fail-orphan/wiki/standards/orphan-standard.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-pending-grade-review/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-pending-grade-review/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-pending-grade-review/wiki/log.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-pending-grade-review/wiki/standards/example-accepted.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-pending-grade-review/wiki/standards/example-drafted.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-progress-messaging/FIXTURE.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-progress-messaging/wiki/concepts/example-progress-messaging.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-progress-messaging/wiki/index.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/wiki-lint/fixtures/fail-progress-messaging/wiki/log.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -3956,12 +6180,532 @@
       "complexity": 0,
       "module": "tests",
       "is_entrypoint": false
+    },
+    {
+      "path": "tests/workspace/_fixtures.ts",
+      "language": "typescript",
+      "loc": 202,
+      "complexity": 0.26,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/workspace/detection-matrix.test.ts",
+      "language": "typescript",
+      "loc": 176,
+      "complexity": 0.18,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/workspace/federated-query.test.ts",
+      "language": "typescript",
+      "loc": 185,
+      "complexity": 0.19,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/workspace/manifest-shape.test.ts",
+      "language": "typescript",
+      "loc": 218,
+      "complexity": 0.24,
+      "module": "tests",
+      "is_entrypoint": false
+    },
+    {
+      "path": "tests/workspace/no-duplication.test.ts",
+      "language": "typescript",
+      "loc": 172,
+      "complexity": 0.19,
+      "module": "tests",
+      "is_entrypoint": false
     }
   ],
   "import_map": [
     {
+      "from": "hooks/__tests__/bypass-forcing.test.ts",
+      "to": "hooks/lib/security/enforce.ts",
+      "kind": "static"
+    },
+    {
+      "from": "hooks/__tests__/guild-root.test.ts",
+      "to": "hooks/lib/guild-root.ts",
+      "kind": "static"
+    },
+    {
+      "from": "hooks/__tests__/heartbeat-write.test.ts",
+      "to": "hooks/lib/heartbeat.ts",
+      "kind": "static"
+    },
+    {
+      "from": "hooks/__tests__/run-trace-close-checkpoint.test.ts",
+      "to": "hooks/run-trace-close.ts",
+      "kind": "static"
+    },
+    {
+      "from": "hooks/__tests__/scrubbed-write.test.ts",
+      "to": "hooks/lib/security/scrubbed-write.ts",
+      "kind": "static"
+    },
+    {
+      "from": "hooks/__tests__/security-secrets.test.ts",
+      "to": "hooks/lib/security/config.ts",
+      "kind": "static"
+    },
+    {
+      "from": "mcp-servers/guild-memory/src/index.ts",
+      "to": "mcp-servers/guild-memory/src/bm25.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/config-cmd.test.ts",
+      "to": "scripts/config-cmd.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/config-cmd.test.ts",
+      "to": "scripts/lib/provider-detect.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/fs-scanner.test.ts",
+      "to": "scripts/lib/fs-scanner.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/host-router.test.ts",
+      "to": "scripts/write-host-capability.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/host-router.test.ts",
+      "to": "scripts/lib/host-types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/oq11-gate-check.test.ts",
+      "to": "scripts/oq11-gate-check.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/phase-compose-blast-radius.test.ts",
+      "to": "scripts/lib/team-backend.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/phase-compose-blast-radius.test.ts",
+      "to": "scripts/lib/run-lifecycle.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/protect-chunks.test.ts",
+      "to": "scripts/lib/recall-protect.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/read-guild-config.test.ts",
+      "to": "scripts/read-guild-config.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/reaping.test.ts",
+      "to": "scripts/lib/team-backend.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/recall.test.ts",
+      "to": "scripts/lib/recall.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/remote-backend.test.ts",
+      "to": "scripts/lib/pane-adapter.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/remote-backend.test.ts",
+      "to": "scripts/lib/host-router.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/remote-backend.test.ts",
+      "to": "scripts/write-host-capability.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/run-lifecycle.test.ts",
+      "to": "scripts/lib/host-types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/runstart-preflight.test.ts",
+      "to": "scripts/lib/provider-detect.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/score-tier.test.ts",
+      "to": "scripts/score-tier.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/settings-resolver.test.ts",
+      "to": "scripts/lib/settings-resolver.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/tier-threading.test.ts",
+      "to": "scripts/score-tier.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/tier-threading.test.ts",
+      "to": "scripts/lib/host-router.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/tier-threading.test.ts",
+      "to": "scripts/write-host-capability.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/tier-threading.test.ts",
+      "to": "scripts/lib/write-back-scored-tier.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/u5-consumer-migration.test.ts",
+      "to": "scripts/lib/run-lifecycle.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/u5-consumer-migration.test.ts",
+      "to": "scripts/score-tier.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/u5-consumer-migration.test.ts",
+      "to": "scripts/lib/settings-resolver.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/u6-run-provenance.test.ts",
+      "to": "scripts/lib/host-types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/u6-run-provenance.test.ts",
+      "to": "scripts/lib/runstart-preflight.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/__tests__/understand-engine.test.ts",
       "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/vc-k5-classifier.test.ts",
+      "to": "scripts/classify-proposal.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/wiki-lint-checks.test.ts",
+      "to": "scripts/wiki-lint-checks.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/__tests__/wiki-recall.test.ts",
+      "to": "scripts/lib/index-cache.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/agent-team-launcher.ts",
+      "to": "scripts/lib/pane-adapter.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/agent-team-launcher.ts",
+      "to": "scripts/lib/host-router.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/agent-team-launcher.ts",
+      "to": "scripts/lib/settings-resolver.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/agent-team-launcher.ts",
+      "to": "scripts/retry-lane.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/agent-team-launcher.ts",
+      "to": "hooks/lib/run-state.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/agent-team-launcher.ts",
+      "to": "scripts/lib/team-file.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/agent-team-launcher.ts",
+      "to": "scripts/write-task-run.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/agent-team-launcher.ts",
+      "to": "scripts/lib/emit-readback-degradation.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/comms/__tests__/comms-format-lint.test.ts",
+      "to": "scripts/comms/comms-format-lint.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/comms/comms-format-lint.cli.ts",
+      "to": "scripts/comms/comms-format-lint.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/comms/no-accidental-write.cli.ts",
+      "to": "scripts/comms/no-accidental-write.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/config-cmd.ts",
+      "to": "scripts/lib/settings-resolver.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/convert.ts",
+      "to": "scripts/dot-guild/convert/wiki-importance.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/convert.ts",
+      "to": "scripts/dot-guild/convert/seams.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/convert.ts",
+      "to": "scripts/dot-guild/convert/detect.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/detect.ts",
+      "to": "scripts/dot-guild/convert/types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/detect.ts",
+      "to": "scripts/dot-guild/convert/seams.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/index.ts",
+      "to": "scripts/dot-guild/convert/seams.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/index.ts",
+      "to": "scripts/dot-guild/convert/detect.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/index.ts",
+      "to": "scripts/dot-guild/convert/snapshot.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/index.ts",
+      "to": "scripts/dot-guild/convert/convert.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/index.ts",
+      "to": "scripts/dot-guild/convert/report.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/keymap.ts",
+      "to": "scripts/dot-guild/convert/types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/report.ts",
+      "to": "scripts/dot-guild/convert/types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/report.ts",
+      "to": "scripts/dot-guild/convert/snapshot.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/seams.ts",
+      "to": "scripts/dot-guild/convert/types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/snapshot.ts",
+      "to": "scripts/dot-guild/convert/types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/convert/wiki-importance.ts",
+      "to": "scripts/dot-guild/convert/types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/migrate-guild.ts",
+      "to": "scripts/dot-guild/convert/index.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-router.ts",
+      "to": "scripts/write-host-capability.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-router.ts",
+      "to": "scripts/lib/team-backend.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-router.ts",
+      "to": "scripts/read-guild-config.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/index-cache.ts",
+      "to": "scripts/index-migrate.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/protect-chunks.ts",
+      "to": "scripts/lib/recall-protect.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/reaping.ts",
+      "to": "scripts/lib/team-backend.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/reaping.ts",
+      "to": "scripts/lib/run-lifecycle.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/recall-protect.ts",
+      "to": "hooks/lib/security/injection-guard.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/recall.ts",
+      "to": "scripts/lib/index-cache.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/recall.ts",
+      "to": "scripts/lib/wiki-recall.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/recall.ts",
+      "to": "scripts/lib/fs-scanner.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/recall.ts",
+      "to": "scripts/lib/recall-protect.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/recall.ts",
+      "to": "mcp-servers/guild-memory/src/bm25.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/recall.ts",
+      "to": "scripts/understand/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/run-lifecycle.ts",
+      "to": "scripts/lib/host-types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/run-lifecycle.ts",
+      "to": "scripts/lib/settings-resolver.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/run-lifecycle.ts",
+      "to": "scripts/lib/runstart-preflight.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/run-lifecycle.ts",
+      "to": "hooks/lib/security/scrubbed-write.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/runstart-preflight.ts",
+      "to": "scripts/lib/provider-detect.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/team-backend.ts",
+      "to": "scripts/lib/host-types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/team-file.ts",
+      "to": "scripts/lib/run-lifecycle.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/team-file.ts",
+      "to": "hooks/lib/guild-root.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/wiki-recall.ts",
+      "to": "scripts/lib/index-cache.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/wiki-recall.ts",
+      "to": "scripts/lib/recall-protect.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/read-guild-config.ts",
+      "to": "scripts/lib/settings-resolver.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/resume-lanes.ts",
+      "to": "scripts/lib/team-file.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/retry-lane.ts",
+      "to": "scripts/lib/settings-resolver.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/score-tier.ts",
+      "to": "scripts/lib/settings-resolver.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/score-tier.ts",
+      "to": "scripts/read-guild-config.ts",
       "kind": "static"
     },
     {
@@ -4183,10 +6927,60 @@
       "from": "scripts/understand/validate-graph.ts",
       "to": "scripts/understand/lib/schema.ts",
       "kind": "static"
+    },
+    {
+      "from": "scripts/workspace/detect.ts",
+      "to": "scripts/lib/settings-resolver.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/write-host-capability.ts",
+      "to": "scripts/lib/team-backend.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/write-host-capability.ts",
+      "to": "scripts/read-guild-config.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/write-host-capability.ts",
+      "to": "scripts/lib/host-types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "tests/dot-guild/convert.test.ts",
+      "to": "scripts/dot-guild/convert/seams.ts",
+      "kind": "static"
+    },
+    {
+      "from": "tests/dot-guild/convert.test.ts",
+      "to": "scripts/dot-guild/convert/types.ts",
+      "kind": "static"
+    },
+    {
+      "from": "tests/dot-guild/migration-rehearsal.test.ts",
+      "to": "scripts/dot-guild/convert/index.ts",
+      "kind": "static"
+    },
+    {
+      "from": "tests/dot-guild/migration-rehearsal.test.ts",
+      "to": "scripts/dot-guild/convert/seams.ts",
+      "kind": "static"
+    },
+    {
+      "from": "tests/dot-guild/wiki-importance.test.ts",
+      "to": "scripts/dot-guild/convert/seams.ts",
+      "kind": "static"
+    },
+    {
+      "from": "tests/dot-guild/wiki-importance.test.ts",
+      "to": "scripts/dot-guild/convert/types.ts",
+      "kind": "static"
     }
   ],
   "stats": {
-    "file_count": 493,
-    "module_count": 15
+    "file_count": 776,
+    "module_count": 14
   }
 }

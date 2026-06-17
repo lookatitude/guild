@@ -2,6 +2,7 @@
 
 ## decisions
 
+- [universal-host-p2-p3-wave-sequencing](decisions/universal-host-p2-p3-wave-sequencing.md) - 2026-06-17 - Finish ADR steps 12-19 as 3 sequential waves; defer the step-15 `.claude-plugin`→`dist/` install-channel flip until after v2.0.0 ships.
 - [guild-diagnose-self-fix-command](decisions/guild-diagnose-self-fix-command.md) - 2026-05-02 - `/guild:diagnose` is the self-fix dogfooding command with a user gate.
 - [codex-review-user-facing-opt-in](decisions/codex-review-user-facing-opt-in.md) - 2026-05-02 - `--codex-review` is a documented opt-in feature with graceful skip.
 - [run-scoped-telemetry-and-loop-events](decisions/run-scoped-telemetry-and-loop-events.md) - 2026-05-02 - Telemetry is scoped per `/guild` invocation and loop events are emitted at real round boundaries.
