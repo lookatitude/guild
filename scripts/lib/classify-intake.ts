@@ -112,6 +112,22 @@ const SIGNALS: SignalDef[] = [
     weight: W_STRONG_IDEA,
     re: /\b(?:i (?:have|'ve got|ve got|have got|got)|i've got|my)\s+(?:a|an|this|another|the)?\s*(?:idea|concept)\b/,
   },
+  // ── Discovery-phase product triggers (1.0 — standalone, per LW1-8 recall disposition) ──
+  // "prototype the concept for X" / "explore whether X is feasible" are explicit product
+  // DISCOVERY statements, not dev tasks — standalone like "I have an idea". A dev veto
+  // still sinks them via the score gate ("explore whether the API errors" → other).
+  {
+    id: "prototype-concept",
+    category: "strong-idea",
+    weight: W_STRONG_IDEA,
+    re: /\bprototype (?:the |a |an |this |our )?(?:concept|idea|mvp|prototype)\b/,
+  },
+  {
+    id: "explore-feasibility",
+    category: "strong-idea",
+    weight: W_STRONG_IDEA,
+    re: /\bexplore (?:whether|if|the (?:idea|concept|feasibility|possibility|viability))\b/,
+  },
 
   // ── Product-ideation openers (each 0.6 — below THRESHOLD on their own) ──────
   { id: "idea-for", category: "opener", weight: W_OPENER, re: /\bidea for (?:a|an|some)\b/ },
@@ -125,12 +141,16 @@ const SIGNALS: SignalDef[] = [
     id: "what-if-we-built",
     category: "opener",
     weight: W_OPENER,
-    re: /\bwhat if we (?:built|made|created|build|make|create|had)\b/,
+    re: /\bwhat if we (?:built|made|created|build|make|create|had|add|added)\b/,
   },
+  // First-person "I want to build/make/create X" is itself a product-intent statement
+  // (like "I have an idea") — STANDALONE (1.0, strong-idea), so a bare object with no
+  // product-domain noun ("I want to build a habit tracker") still routes. A dev veto
+  // still sinks it ("I want to create a script that migrates users" → other). [LW1-8 disposition]
   {
     id: "want-to-make-build",
-    category: "opener",
-    weight: W_OPENER,
+    category: "strong-idea",
+    weight: W_STRONG_IDEA,
     re: /\bi(?:'d| would)?\s*(?:want|wanna|'d like|would like|wish)\s+to\s+(?:make|build|create)\s+(?:a|an|some|something|my own)\b/,
   },
   { id: "wish-there-was", category: "opener", weight: W_OPENER, re: /\bi wish there (?:was|were|wa?s)\b/ },
