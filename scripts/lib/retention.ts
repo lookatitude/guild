@@ -10,6 +10,7 @@
  */
 import * as fs from "fs";
 import * as path from "path";
+import { resolveGuildRoot } from "./guild-root";
 
 export type RetentionClass = "one-off-90d" | "until-archive";
 export const DEFAULT_RETENTION_DAYS = 90;
@@ -73,7 +74,11 @@ export function sweepExpiredRuns(
 
 if (require.main === module) {
   const argv = process.argv.slice(2);
-  let guildDir = path.join(process.cwd(), ".guild");
+  // Default: walk up from process.cwd() to the repo root so a sub-directory
+  // invocation never creates or targets a nested .guild/.
+  // An explicit --guild-dir takes precedence (honored unchanged).
+  // Decision: .guild/wiki/decisions/telemetry-anchors-to-repo-root-not-cwd.md
+  let guildDir = path.join(resolveGuildRoot(process.cwd()), ".guild");
   let apply = false;
   let nowMs = Date.now();
   for (let i = 0; i < argv.length; i++) {

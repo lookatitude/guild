@@ -59,8 +59,27 @@ export interface MigrationResult {
 
 /**
  * Resolve the canonical MAIN repo root for a given cwd.
- * Worktree-safe: `git rev-parse --git-common-dir` always returns the main
- * repo .git directory; its parent is the main working tree.
+ *
+ * INTENTIONAL DIVERGENCE from scripts/lib/guild-root.ts (the shared resolver
+ * used by emit-loop-event, run-lifecycle, and retention):
+ *
+ *   scripts/lib/guild-root.ts (hooks/lib/guild-root.ts re-export) walks the
+ *   filesystem UP looking for `.git` (file or dir) or `.guild/` (dir). In a
+ *   git linked worktree, it STOPS at the WORKTREE root where the `.git` file
+ *   lives — which is NOT the same as the MAIN working tree.
+ *
+ *   This function uses `git rev-parse --git-common-dir`, which always returns
+ *   the MAIN repo's .git directory regardless of whether the cwd is in a
+ *   linked worktree. The SQLite index at .guild/index.sqlite must live in the
+ *   MAIN repo so all worktrees share the same DB — routing to a worktree's
+ *   local root would create a split-brain index. Therefore this git-based
+ *   resolver is the correct choice for index-migrate.ts, and the divergence
+ *   is deliberate.
+ *
+ *   If the shared resolver is ever made worktree-aware (e.g. it follows the
+ *   `.git` file pointer to resolve the main repo), this local copy can be
+ *   removed and replaced with an import from scripts/lib/guild-root.ts.
+ *
  * Falls back to cwd when git is unavailable or not a git repo.
  */
 export function resolveGuildRoot(cwd: string): string {
