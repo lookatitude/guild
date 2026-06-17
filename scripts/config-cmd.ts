@@ -159,6 +159,9 @@ const ROLE_ALIASES = new Set(["host", "advisory", "adversarial"]);
 /** Known registry host ids (claude/codex/.agents/pi/antigravity) — value set for roles/host_profiles. */
 const KNOWN_HOST_IDS = new Set<string>(HOST_IDS);
 
+/** `host_profiles.<host_id>.enabled` — the one host_profiles leaf that must coerce to a boolean. */
+const HP_ENABLED_RE = /^host_profiles\.[^.]+\.enabled$/;
+
 // ---------------------------------------------------------------------------
 // Full closed-key schema for dotted-path validation
 // ---------------------------------------------------------------------------
@@ -562,6 +565,44 @@ function validateValue(keyPath: string, rawValue: string): string | null {
     return null;
   }
 
+  // roles whole-block set (`config set roles '{…}'`) — strict content validation.
+  if (keyPath === "roles") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawValue);
+    } catch {
+      return `value for "roles" looks like JSON but failed to parse: ${rawValue}`;
+    }
+    if (!isPlainObject(parsed)) return `value for "roles" must be an object { host?, advisory?, adversarial? }`;
+    const rejects = validateRoles(parsed);
+    return rejects.length > 0 ? rejects[0] : null;
+  }
+
+  // host_profiles whole-block / entry / sub-path — strict content validation via the
+  // single-SoT validateHostProfiles. Without this, `config set host_profiles.claude
+  // '{"models":{"cheap":123}}'` (or `…claude.foo true`) would write an invalid shape that
+  // the resolver silently DROPS (filterHostProfiles), so `validate --effective` would
+  // never see it (Codex G-lane MAJOR). Reconstruct the would-be block and validate it.
+  if (keyPath === "host_profiles" || keyPath.startsWith("host_profiles.")) {
+    if (HP_ENABLED_RE.test(keyPath) && rawValue !== "true" && rawValue !== "false") {
+      return `value for "${keyPath}" must be true or false (got "${rawValue}")`;
+    }
+    const coerced = coerceValue(keyPath, rawValue);
+    let block: Record<string, unknown>;
+    if (keyPath === "host_profiles") {
+      if (!isPlainObject(coerced)) return `value for "host_profiles" must be an object keyed by host_id`;
+      block = coerced;
+    } else {
+      const parts = keyPath.split("."); // host_profiles.<id>[.rest…]
+      const id = parts[1];
+      const rest = parts.slice(2);
+      const entry = rest.length === 0 ? coerced : deepSet({}, rest.join("."), coerced);
+      block = { [id]: entry };
+    }
+    const rejects = validateHostProfiles(block);
+    return rejects.length > 0 ? rejects[0] : null;
+  }
+
   // Closed-enum check
   if (keyPath in VALID_VALUES) {
     const valid = VALID_VALUES[keyPath];
@@ -626,6 +667,10 @@ function coerceValue(keyPath: string, rawValue: string): unknown {
   // roles.<alias> clear: null|none ⇒ null.
   if ((rawValue === "null" || rawValue === "none") && keyPath.startsWith("roles.")) {
     return null;
+  }
+  // host_profiles.<id>.enabled ⇒ boolean (validateValue guarantees the true|false literal).
+  if (HP_ENABLED_RE.test(keyPath)) {
+    return rawValue === "true";
   }
   if (rawValue === "null" && (keyPath === "initiative_default" || keyPath === "loops")) {
     return null;
@@ -1349,8 +1394,8 @@ function cmdShowRender(cwd: string): number {
  * and reports each unknown key as a violation ("rejected, not silently
  * ignored"). `_`-prefixed annotation keys (`_help`, `_docs`) are exempt.
  */
-function collectUnknownTopLevelKeyViolations(cwd: string): string[] {
-  const violations: string[] = [];
+/** Every settings file that contributes to the resolved config (project + workspace, each layer). */
+function contributingSettingsFiles(cwd: string): Array<{ label: string; file: string }> {
   const candidates: Array<{ label: string; file: string }> = [
     { label: "project settings.json", file: path.join(cwd, ".guild", "settings.json") },
     { label: "project settings.local.json", file: path.join(cwd, ".guild", "settings.local.json") },
@@ -1362,6 +1407,48 @@ function collectUnknownTopLevelKeyViolations(cwd: string): string[] {
       { label: "workspace settings.local.json", file: path.join(wsRoot, ".guild", "settings.local.json") }
     );
   }
+  return candidates;
+}
+
+/**
+ * Raw-file sweep of the `roles` / `host_profiles` blocks (Codex G-lane MAJOR).
+ *
+ * The resolver FAIL-CLOSED drops malformed roles/host_profiles entries
+ * (sparseRoles / filterHostProfiles), so the post-inheritance resolved config NEVER
+ * carries them — `validateResolved` would validate `{}` and falsely pass. To make
+ * `validate --effective` honest, run the STRICT validators (the single-SoT
+ * validateRoles / validateHostProfiles) against the RAW block in each contributing file,
+ * so an invalid pin or per-host override surfaces no matter how it was written (`config
+ * set` blob, sub-path, or a hand-edit).
+ */
+function collectRawRolesHostProfilesViolations(cwd: string): string[] {
+  const violations: string[] = [];
+  for (const { label, file } of contributingSettingsFiles(cwd)) {
+    if (!fs.existsSync(file)) continue;
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    } catch {
+      continue; // parse errors are reported by the resolver path
+    }
+    if (!isPlainObject(parsed)) continue;
+    if (isPlainObject(parsed["roles"])) {
+      for (const r of validateRoles(parsed["roles"] as Record<string, unknown>)) {
+        violations.push(`${r} — raw ${label} (${file})`);
+      }
+    }
+    if (isPlainObject(parsed["host_profiles"])) {
+      for (const r of validateHostProfiles(parsed["host_profiles"] as Record<string, unknown>)) {
+        violations.push(`${r} — raw ${label} (${file})`);
+      }
+    }
+  }
+  return violations;
+}
+
+function collectUnknownTopLevelKeyViolations(cwd: string): string[] {
+  const violations: string[] = [];
+  const candidates = contributingSettingsFiles(cwd);
   for (const { label, file } of candidates) {
     if (!fs.existsSync(file)) continue;
     let parsed: Record<string, unknown>;
@@ -1402,6 +1489,9 @@ function cmdValidateEffective(cwd: string, selfBuild: boolean): number {
   // D11: unknown top-level keys are rejected, not silently ignored — the
   // resolver strips them before the merge, so they must be swept raw-file-side.
   violations.push(...collectUnknownTopLevelKeyViolations(cwd));
+  // Codex G-lane MAJOR: the resolver also DROPS malformed roles/host_profiles entries,
+  // so their content must be swept raw-file-side too (the resolved-config check is vacuous).
+  violations.push(...collectRawRolesHostProfilesViolations(cwd));
 
   if (violations.length === 0) {
     process.stdout.write(

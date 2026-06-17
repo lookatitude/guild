@@ -1207,3 +1207,61 @@ describe("config role — role-pin aliases (SC-W1-7)", () => {
     expect(run(["set", "roles.host", "claude", "--scope", "project", "--cwd", project]).status).toBe(0);
   });
 });
+
+// ===========================================================================
+// Codex G-lane MAJOR (re-run): config set host_profiles.* must be content-validated
+// at set-time AND raw-file-swept by validate --effective (the resolver DROPS malformed
+// host_profiles, so validating the resolved config alone is vacuous).
+// ===========================================================================
+
+describe("config set host_profiles — strict content validation (Codex MAJOR)", () => {
+  test("set-time rejects a non-string model value in a JSON blob", () => {
+    const project = tmp(mkProject({ settings: {} }));
+    const r = run(["set", "host_profiles.claude", '{"models":{"cheap":123}}', "--scope", "project", "--cwd", project]);
+    expect(r.status).toBe(1);
+    expect(r.out).toMatch(/models\.cheap must be a non-empty string/);
+  });
+
+  test("set-time rejects an unknown nested entry key", () => {
+    const project = tmp(mkProject({ settings: {} }));
+    const r = run(["set", "host_profiles.claude.foo", "true", "--scope", "project", "--cwd", project]);
+    expect(r.status).toBe(1);
+    expect(r.out).toMatch(/unknown host_profiles\["claude"\] key "foo"/);
+  });
+
+  test("set-time rejects an unknown host_profiles host-id", () => {
+    const project = tmp(mkProject({ settings: {} }));
+    expect(
+      run(["set", "host_profiles.nothost", '{"enabled":true}', "--scope", "project", "--cwd", project]).status
+    ).toBe(1);
+  });
+
+  test("validate --effective raw-sweep catches a HAND-EDITED invalid host_profiles (resolver drops it)", () => {
+    const project = tmp(
+      mkProject({ settings: { host_profiles: { claude: { models: { cheap: 123 }, foo: "x" } } } })
+    );
+    const r = run(["validate", "--effective", "--cwd", project]);
+    expect(r.status).toBe(1);
+    expect(r.out).toMatch(/host_profiles/);
+    expect(r.out).toMatch(/raw project settings\.json/);
+  });
+
+  test("valid host_profiles passes set (enabled coerces to boolean) + validate --effective", () => {
+    const project = tmp(mkProject({ settings: {} }));
+    expect(
+      run(["set", "host_profiles.claude", '{"models":{"cheap":"haiku"}}', "--scope", "project", "--cwd", project]).status
+    ).toBe(0);
+    expect(run(["set", "host_profiles.codex.enabled", "false", "--scope", "project", "--cwd", project]).status).toBe(0);
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
+    );
+    expect(settings.host_profiles.codex.enabled).toBe(false); // boolean, not the string "false"
+    expect(run(["validate", "--effective", "--cwd", project]).status).toBe(0);
+  });
+
+  test("roles whole-block set is content-validated (rejects a bad host-id)", () => {
+    const project = tmp(mkProject({ settings: {} }));
+    expect(run(["set", "roles", '{"host":"badhost"}', "--scope", "project", "--cwd", project]).status).toBe(1);
+    expect(run(["set", "roles", '{"host":"claude","advisory":null}', "--scope", "project", "--cwd", project]).status).toBe(0);
+  });
+});
