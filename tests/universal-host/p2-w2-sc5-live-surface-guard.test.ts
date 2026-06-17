@@ -33,6 +33,67 @@ const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const LIVE_PATHS = [".claude-plugin", "commands", "skills"];
 
 /**
+ * Wave-3 RATIFIED additive allowlist (operator decision 2026-06-17): the LW3-5 product-loop
+ * template producer ships its invocation skill as an ADDITIVE new skill. `.claude-plugin/**`
+ * and `commands/**` remain STRICT byte-frozen (the cutover + F-5 freeze, ZERO delta); live
+ * `skills/**` is additive-only — a NEW skill is permitted, but NO existing skill may change.
+ * The allowlist is exactly these two files; everything else under skills/ stays frozen.
+ */
+// EXACT two-file allowlist (not a directory prefix — a prefix would let a third file like
+// product-template/README.md or product-template/extra/SKILL.md slip through; codex G-lane LW3-6).
+const WAVE3_SKILL_ADDITION_FILES = [
+  "skills/meta/product-template/SKILL.md",
+  "skills/meta/product-template/evals.json",
+];
+const isAllowlistedSkillAddition = (p: string): boolean => WAVE3_SKILL_ADDITION_FILES.includes(p);
+
+type DiffRow = { status: string; path: string; raw: string };
+type ResolvedSkill = { source_path: string };
+
+function parseDiffRows(out: string): DiffRow[] {
+  return out
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((raw) => {
+      const [status, ...rest] = raw.split(/\s+/);
+      return { status, path: rest.join(" "), raw };
+    });
+}
+
+function evaluateLiveSurfaceRows(rows: DiffRow[]): {
+  violations: DiffRow[];
+  addedSkillFiles: string[];
+  ok: boolean;
+} {
+  const violations = rows.filter(({ status, path: p }) => {
+    // .claude-plugin/** and commands/** are STRICT — any delta is a violation.
+    if (p.startsWith(".claude-plugin/") || p.startsWith("commands/")) return true;
+    // skills/** is additive-only: a pure ADD ("A") of an allowlisted new skill is OK;
+    // a Modify/Delete/Rename of any skill — or a NON-allowlisted new skill — is a violation.
+    if (p.startsWith("skills/")) return !(status === "A" && isAllowlistedSkillAddition(p));
+    return true;
+  });
+  const addedSkillFiles = rows
+    .filter((r) => r.status === "A" && r.path.startsWith("skills/"))
+    .map((r) => r.path)
+    .sort();
+  const expected = [...WAVE3_SKILL_ADDITION_FILES].sort();
+  return {
+    violations,
+    addedSkillFiles,
+    ok:
+      violations.length === 0 &&
+      addedSkillFiles.length === expected.length &&
+      addedSkillFiles.every((p, i) => p === expected[i]),
+  };
+}
+
+function subtractAllowlistedResolvedSkills<T extends ResolvedSkill>(skills: T[]): T[] {
+  return skills.filter((s) => !isAllowlistedSkillAddition(s.source_path));
+}
+
+/**
  * The HARD-PINNED pre-Wave-2 baseline: the parent of the first Wave-2 commit
  * (`f226a8e^`). Pinned (not env-derived) so the guard's diff anchor cannot be
  * moved to HEAD/worktree to hide a committed live-surface mutation.
@@ -144,19 +205,52 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned pre-Wave-2 baseli
     }
   });
 
-  it("shows ZERO added/changed files under .claude-plugin/, commands/, live skills/", () => {
+  it("strict ZERO delta under .claude-plugin/ + commands/; skills/ additive-only (ratified allowlist)", () => {
     const baseline = resolveBaseline();
     // `git diff <ref> -- paths` spans <ref>..WORKING TREE, so it catches BOTH a
     // committed AND an uncommitted live-surface mutation (the committed case is the
     // env-bypass attack this guard closes).
-    const out = git(["diff", "--name-status", baseline, "--", ...LIVE_PATHS]);
-    const changed = out.split("\n").map((l) => l.trim()).filter(Boolean);
-    if (changed.length > 0) {
+    const verdict = evaluateLiveSurfaceRows(parseDiffRows(git(["diff", "--name-status", baseline, "--", ...LIVE_PATHS])));
+    if (verdict.violations.length > 0) {
       throw new Error(
-        `SC-W2-5: live surface changed vs ${baseline} (allowlist is EMPTY):\n  ${changed.join("\n  ")}`,
+        `SC-W2-5: live surface changed vs ${baseline} beyond the ratified additive allowlist:\n  ${verdict.violations.map((v) => v.raw).join("\n  ")}`,
       );
     }
-    expect(changed).toEqual([]);
+    expect(verdict.violations).toEqual([]);
+    // EXACT-SET: the ADDED files under skills/ must be EXACTLY the two ratified files — no fewer
+    // (each individually present) and no more (a third file under the dir would fail this equality).
+    expect(verdict.addedSkillFiles).toEqual([...WAVE3_SKILL_ADDITION_FILES].sort());
+    expect(verdict.ok).toBe(true);
+  });
+
+  it("anti-vacuity: the SAME live-surface evaluator rejects widened, missing, or frozen-surface deltas", () => {
+    const allowedRows = WAVE3_SKILL_ADDITION_FILES.map((p) => ({ status: "A", path: p, raw: `A\t${p}` }));
+
+    expect(evaluateLiveSurfaceRows(allowedRows).ok).toBe(true);
+
+    const thirdFile = evaluateLiveSurfaceRows([
+      ...allowedRows,
+      { status: "A", path: "skills/meta/product-template/README.md", raw: "A\tskills/meta/product-template/README.md" },
+    ]);
+    expect(thirdFile.violations.map((v) => v.path)).toContain("skills/meta/product-template/README.md");
+    expect(thirdFile.ok).toBe(false);
+
+    for (const required of WAVE3_SKILL_ADDITION_FILES) {
+      const missingRequired = evaluateLiveSurfaceRows(allowedRows.filter((r) => r.path !== required));
+      expect(missingRequired.addedSkillFiles).not.toEqual([...WAVE3_SKILL_ADDITION_FILES].sort());
+      expect(missingRequired.ok).toBe(false);
+    }
+
+    const frozenMutation = evaluateLiveSurfaceRows([
+      ...allowedRows,
+      { status: "M", path: ".claude-plugin/plugin.json", raw: "M\t.claude-plugin/plugin.json" },
+      { status: "A", path: "commands/dashboard.md", raw: "A\tcommands/dashboard.md" },
+    ]);
+    expect(frozenMutation.violations.map((v) => v.path)).toEqual([
+      ".claude-plugin/plugin.json",
+      "commands/dashboard.md",
+    ]);
+    expect(frozenMutation.ok).toBe(false);
   });
 
   it("the guard is anti-vacuous: the SAME diff over Wave-2-CHANGED trees is NON-empty", () => {
@@ -196,8 +290,34 @@ describe("SC-W2-5 (2) — build-inventory resolved-entry A/B (GENUINE pre/post)"
     expect((pre.commands as unknown[]).length).toBeGreaterThan(0);
   });
 
-  it("the RESOLVED SKILL set is byte-identical pre/post Wave-2", () => {
-    expect(JSON.stringify(cur.skills)).toBe(JSON.stringify(pre.skills));
+  it("the RESOLVED SKILL set is byte-identical pre/post EXCEPT the ratified additive skill", () => {
+    // Current minus the ratified Wave-3 addition must byte-equal the pre-Wave-2 resolved set —
+    // i.e. NOTHING changed about any pre-existing skill; the only delta is the allowed new one.
+    const curMinusAdditions = subtractAllowlistedResolvedSkills(cur.skills as { source_path: string }[]);
+    expect(JSON.stringify(curMinusAdditions)).toBe(JSON.stringify(pre.skills));
+    // And the allowlisted addition IS actually present in current (the delta is real, not vacuous).
+    // Subtraction is by EXACT source_path membership (not a dir prefix), so a resolved skill living
+    // under the dir but NOT one of the two ratified files would survive in curMinusAdditions and
+    // break the equality above — i.e. the allowlist can't be silently widened.
+    const additions = (cur.skills as { source_path: string }[]).filter((s) =>
+      isAllowlistedSkillAddition(s.source_path),
+    );
+    expect(additions.length).toBeGreaterThan(0);
+    expect(additions.every((s) => WAVE3_SKILL_ADDITION_FILES.includes(s.source_path))).toBe(true);
+  });
+
+  it("anti-vacuity: resolved-skill subtraction is exact source_path equality, not a product-template prefix", () => {
+    const resolved = [
+      { id: "allowed", source_path: "skills/meta/product-template/SKILL.md" },
+      { id: "readme", source_path: "skills/meta/product-template/README.md" },
+      { id: "nested", source_path: "skills/meta/product-template/extra/SKILL.md" },
+      { id: "existing", source_path: "skills/core/init/SKILL.md" },
+    ];
+    expect(subtractAllowlistedResolvedSkills(resolved).map((s) => s.source_path)).toEqual([
+      "skills/meta/product-template/README.md",
+      "skills/meta/product-template/extra/SKILL.md",
+      "skills/core/init/SKILL.md",
+    ]);
   });
 
   it("the RESOLVED COMMAND set is byte-identical pre/post Wave-2", () => {

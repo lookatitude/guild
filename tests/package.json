@@ -18,6 +18,9 @@
     "transform": {
       "^.+\\.tsx?$": ["ts-jest", { "tsconfig": { "module": "commonjs", "target": "ES2020" } }]
     },
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
     "testMatch": [
       "**/evolve/*.test.ts",
       "**/shadow/harness.test.ts",
