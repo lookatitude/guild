@@ -56,7 +56,12 @@ import {
   validateMcp,
   validateCrossHostBlock,
   validateDefaults,
+  validateRoles,
+  validateHostProfiles,
 } from "./read-guild-config";
+// Closed registry host-id set (single SoT — host-registry-schema.ts HOST_IDS) for
+// validating roles.* / host_profiles.* values written via `config set`.
+import { HOST_IDS } from "./lib/host-registry-schema";
 import {
   detectProviders,
   recommendProvider,
@@ -64,6 +69,23 @@ import {
   type ProbeEnv,
   type ResolvedReview,
 } from "./lib/provider-detect";
+// LW1-7 (SC-W1-7 role aliases / SC-W1-8 --sources permission layers + per-host render):
+// the P1 permission model (host_mode × guild_gates baseline golden), the per-host config
+// renderer (LW1-6), and the never-clobber provenance type — all consumed READ-ONLY here.
+import {
+  resolveBaselineGolden,
+  PHASES,
+  GATE_TYPES,
+  cellKey,
+  type BypassPolicy,
+  type PermissionDecision,
+} from "./lib/permission-policy-schema";
+import { renderAllHostConfigs } from "./lib/config-render";
+import type {
+  RenderConfigLike,
+  ConfigSource,
+} from "./lib/config-render";
+import type { FieldProvenance } from "./lib/config-reconcile-contract";
 
 // ---------------------------------------------------------------------------
 // Prototype-pollution guard
@@ -107,7 +129,35 @@ const TIER1_KEYS = new Set([
   "secrets_policy",
   "mcp",
   "defaults",
+  // LW1-6 schema extension (SC-W1-7/W1-8): the per-run role pins + per-host render
+  // overrides. They live in DEFAULTS, are written by `config role` AND materialized by
+  // `reconcile sync`/`config init`, and resolved by the resolver — so the closed key-set
+  // (config set + validate --effective top-level sweep) MUST accept them, else
+  // `validate --effective` would reject the very keys `config role`/`config init` write
+  // (Codex G-lane MUST-FIX). Their CONTENT is validated by validateRoles/validateHostProfiles.
+  "roles",
+  "host_profiles",
 ]);
+
+// ---------------------------------------------------------------------------
+// Role aliases (SC-W1-7 / AC14) — the host-native role-pin surface
+// ---------------------------------------------------------------------------
+
+/**
+ * The three role-pin aliases. `config role <alias> <host_id|null>` writes `roles.<alias>`
+ * to the scoped settings file. CLOSED set — mirrors read-guild-config.ts VALID_ROLES_KEYS;
+ * the VALUE (a known registry host_id or null) is validated by the imported `validateRoles`,
+ * so the single SoT for the host-id vocabulary stays in read-guild-config.ts (no drift).
+ *
+ * NOTE: the role-pin `host` (a registry host_id under `roles.host`) is DISTINCT from the
+ * top-level `host` dispatch-selector (`claude|codex|auto`, set via `config set host …`).
+ * The 5 registry ids (claude/codex/.agents/pi/antigravity) live only under the
+ * `roles.*` and `host_profiles.*` blocks.
+ */
+const ROLE_ALIASES = new Set(["host", "advisory", "adversarial"]);
+
+/** Known registry host ids (claude/codex/.agents/pi/antigravity) — value set for roles/host_profiles. */
+const KNOWN_HOST_IDS = new Set<string>(HOST_IDS);
 
 // ---------------------------------------------------------------------------
 // Full closed-key schema for dotted-path validation
@@ -327,6 +377,26 @@ function validateKeyPath(keyPath: string): string | null {
     return null;
   }
 
+  // roles.* — closed sub-key set {host, advisory, adversarial}; each a scalar host-id/null.
+  if (top === "roles") {
+    if (!ROLE_ALIASES.has(seg1)) {
+      return `unknown roles key "${seg1}" (closed key set — only host, advisory, adversarial)`;
+    }
+    if (parts.length > 2) {
+      return `key path "${keyPath}" is too deep — roles.${seg1} is a scalar (host_id or null)`;
+    }
+    return null;
+  }
+
+  // host_profiles.* — keyed by KNOWN registry host_id; deeper content (models/enabled)
+  // is validated by validateHostProfiles at validate --effective time.
+  if (top === "host_profiles") {
+    if (!KNOWN_HOST_IDS.has(seg1)) {
+      return `unknown host_profiles host_id "${seg1}" (closed key set — valid: ${[...KNOWN_HOST_IDS].join("|")})`;
+    }
+    return null;
+  }
+
   // defaults.*
   if (top === "defaults") {
     if (!DEFAULTS_ALLOWED_KEYS.has(seg1)) {
@@ -482,6 +552,16 @@ const VALID_VALUES: Record<string, Set<string>> = {
  * Returns an error string if invalid, or null if valid.
  */
 function validateValue(keyPath: string, rawValue: string): string | null {
+  // roles.<alias> — value must be null/none or a known registry host_id (same vocab as
+  // `config role`; a typo like "claudee" is rejected, not silently written).
+  if (keyPath.startsWith("roles.") && ROLE_ALIASES.has(keyPath.slice("roles.".length))) {
+    if (rawValue === "null" || rawValue === "none") return null;
+    if (!KNOWN_HOST_IDS.has(rawValue)) {
+      return `invalid value "${rawValue}" for key "${keyPath}" — valid: ${[...KNOWN_HOST_IDS].join("|")} or null`;
+    }
+    return null;
+  }
+
   // Closed-enum check
   if (keyPath in VALID_VALUES) {
     const valid = VALID_VALUES[keyPath];
@@ -543,6 +623,10 @@ function validateValue(keyPath: string, rawValue: string): string | null {
 // ---------------------------------------------------------------------------
 
 function coerceValue(keyPath: string, rawValue: string): unknown {
+  // roles.<alias> clear: null|none ⇒ null.
+  if ((rawValue === "null" || rawValue === "none") && keyPath.startsWith("roles.")) {
+    return null;
+  }
   if (rawValue === "null" && (keyPath === "initiative_default" || keyPath === "loops")) {
     return null;
   }
@@ -622,6 +706,52 @@ function readModifyWrite(filePath: string, keyPath: string, value: unknown): voi
 }
 
 // ---------------------------------------------------------------------------
+// Provenance sidecar (P1 never-clobber contract reuse — SC-W1-7)
+// ---------------------------------------------------------------------------
+
+/** One provenance-sidecar record — the EXACT shape config-reconcile.ts reads/writes. */
+interface ProvenanceRecord {
+  provenance: FieldProvenance;
+  last_reconciled_at: string | null;
+}
+
+/**
+ * The provenance sidecar path for a settings file. Mirrors config-reconcile.ts:
+ * `settings.json → settings.provenance.json` (the file the reconciler reads to gate
+ * clobbering), and by the same rule `settings.local.json → settings.local.provenance.json`.
+ */
+function provenanceSidecarFor(settingsFile: string): string {
+  return settingsFile.replace(/\.json$/, ".provenance.json");
+}
+
+/**
+ * Stamp `key` as `user`-provenance (+ a UTC timestamp) in the scope's provenance sidecar,
+ * reusing the P1 reconcile never-clobber contract: a `user` value is IMMUTABLE to the
+ * reconciler (`mayReconcileWrite` returns false), so an explicit role pin is never
+ * clobbered by a later `reconcile sync|repair`. Read-modify-write — preserves every
+ * sibling record. Provenance is ADVISORY: if the existing sidecar is malformed we warn and
+ * skip rather than corrupt it (the role write itself already succeeded, and a value with no
+ * sidecar record is treated as `user` ⇒ still never-clobbered). Returns a status note.
+ */
+function stampUserProvenance(settingsFile: string, key: string, now: string): string {
+  const sidecar = provenanceSidecarFor(settingsFile);
+  let existing: Record<string, ProvenanceRecord> = {};
+  if (fs.existsSync(sidecar)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(sidecar, "utf8")) as unknown;
+      if (isPlainObject(parsed)) existing = parsed as Record<string, ProvenanceRecord>;
+      else return `provenance sidecar ${path.basename(sidecar)} is not an object — left untouched (role still never-clobbered)`;
+    } catch {
+      return `provenance sidecar ${path.basename(sidecar)} is malformed — left untouched (role still never-clobbered)`;
+    }
+  }
+  existing[key] = { provenance: "user", last_reconciled_at: now };
+  fs.mkdirSync(path.dirname(sidecar), { recursive: true });
+  fs.writeFileSync(sidecar, JSON.stringify(existing, null, 2) + "\n");
+  return `provenance: ${key} → user @ ${now} (${path.basename(sidecar)})`;
+}
+
+// ---------------------------------------------------------------------------
 // Workspace discovery — check startDir itself first
 // ---------------------------------------------------------------------------
 
@@ -683,6 +813,15 @@ function validateResolved(config: Record<string, unknown>, selfBuild = false): s
   if (isPlainObject(config["defaults"])) {
     violations.push(...validateDefaults(config["defaults"] as Record<string, unknown>, selfBuild));
   }
+  // LW1-6 schema extension: validate the CONTENT of the role pins + per-host overrides
+  // (closed sub-keys + known host-ids) so `validate --effective` accepts valid roles/
+  // host_profiles and flags malformed ones — consistent with what `config role` writes.
+  if (isPlainObject(config["roles"])) {
+    violations.push(...validateRoles(config["roles"] as Record<string, unknown>));
+  }
+  if (isPlainObject(config["host_profiles"])) {
+    violations.push(...validateHostProfiles(config["host_profiles"] as Record<string, unknown>));
+  }
 
   return violations;
 }
@@ -692,7 +831,7 @@ function validateResolved(config: Record<string, unknown>, selfBuild = false): s
 // ---------------------------------------------------------------------------
 
 interface ParsedArgs {
-  subcommand: "set" | "show" | "validate" | "providers" | "update-mcp-hashes" | "reconcile";
+  subcommand: "set" | "role" | "show" | "validate" | "providers" | "update-mcp-hashes" | "reconcile";
   /** For subcommand=providers: the sub-verb (e.g. "detect"). */
   providersVerb?: string;
   /** For subcommand=reconcile: the mode (check|sync|repair). */
@@ -701,9 +840,13 @@ interface ParsedArgs {
   toolsFile?: string;
   key?: string;
   rawValue?: string;
+  /** For subcommand=role: the role alias (host|advisory|adversarial). */
+  roleAlias?: string;
   scope?: "workspace" | "project" | "local";
   cwd: string;
   showSources: boolean;
+  /** For subcommand=show: --render (per-host config render). */
+  showRender: boolean;
   validateEffective: boolean;
   selfBuild: boolean;
 }
@@ -713,9 +856,11 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   if (args.length === 0) {
     return {
       error:
-        "Usage: config-cmd.ts <set|show|validate|providers> [options...]\n" +
+        "Usage: config-cmd.ts <set|role|show|validate|providers> [options...]\n" +
         "  set <key> <value> --scope workspace|project|local [--cwd <p>]\n" +
-        "  show --sources [--cwd <p>]\n" +
+        "  role <host|advisory|adversarial> <host_id|null> --scope workspace|project|local [--cwd <p>]\n" +
+        "  show --sources [--render] [--cwd <p>]\n" +
+        "  show --render [--cwd <p>]\n" +
         "  validate --effective [--cwd <p>]\n" +
         "  providers detect [--cwd <p>]\n" +
         "  update-mcp-hashes --tools <json-file> --scope workspace|project|local [--cwd <p>]\n" +
@@ -724,8 +869,8 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   }
 
   const sub = args[0];
-  if (sub !== "set" && sub !== "show" && sub !== "validate" && sub !== "providers" && sub !== "update-mcp-hashes" && sub !== "reconcile") {
-    return { error: `unknown subcommand "${sub}" — expected: set, show, validate, providers, update-mcp-hashes, reconcile` };
+  if (sub !== "set" && sub !== "role" && sub !== "show" && sub !== "validate" && sub !== "providers" && sub !== "update-mcp-hashes" && sub !== "reconcile") {
+    return { error: `unknown subcommand "${sub}" — expected: set, role, show, validate, providers, update-mcp-hashes, reconcile` };
   }
 
   // P1-L9: reconcile takes a required mode positional (check|sync|repair).
@@ -743,6 +888,7 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   let scope: ParsedArgs["scope"];
   let cwd = process.cwd();
   let showSources = false;
+  let showRender = false;
   let validateEffective = false;
   let selfBuild = false;
   let providersVerb: string | undefined;
@@ -767,6 +913,8 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     const arg = args[i];
     if (arg === "--sources") {
       showSources = true;
+    } else if (arg === "--render") {
+      showRender = true;
     } else if (arg === "--effective") {
       validateEffective = true;
     } else if (arg === "--self-build") {
@@ -806,6 +954,17 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     }
   }
 
+  let roleAlias: string | undefined;
+  if (sub === "role") {
+    [roleAlias, rawValue] = positionals;
+    if (!roleAlias || rawValue === undefined) {
+      return { error: "role requires: <host|advisory|adversarial> <host_id|null>" };
+    }
+    if (!scope) {
+      return { error: "role requires --scope workspace|project|local" };
+    }
+  }
+
   if (sub === "update-mcp-hashes" && !scope) {
     return { error: "update-mcp-hashes requires --scope workspace|project|local" };
   }
@@ -817,9 +976,11 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     toolsFile,
     key,
     rawValue,
+    roleAlias,
     scope,
     cwd,
     showSources,
+    showRender,
     validateEffective,
     selfBuild,
   };
@@ -892,6 +1053,101 @@ function cmdSet(
 }
 
 // ---------------------------------------------------------------------------
+// Scoped settings-file resolution (shared by role; mirrors cmdSet)
+// ---------------------------------------------------------------------------
+
+/** Resolve the settings file for a scope, or an error string for an unfound workspace root. */
+function resolveScopedSettingsFile(
+  scope: "workspace" | "project" | "local",
+  cwd: string
+): { file: string } | { error: string } {
+  if (scope === "workspace") {
+    const wsRoot = discoverWorkspaceRoot(cwd);
+    if (!wsRoot) {
+      return {
+        error:
+          `--scope workspace requires a workspace root ` +
+          `(found by checking ${cwd} and walking up for .guild/workspace.json with is_workspace:true)`,
+      };
+    }
+    return { file: path.join(wsRoot, ".guild", "settings.json") };
+  }
+  if (scope === "project") return { file: path.join(cwd, ".guild", "settings.json") };
+  return { file: path.join(cwd, ".guild", "settings.local.json") };
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: role (SC-W1-7 / AC14) — host-native role-pin aliases
+// ---------------------------------------------------------------------------
+
+/**
+ * `config role <host|advisory|adversarial> <host_id|null> --scope workspace|project|local`.
+ *
+ * Writes `roles.<alias>` to the correct scoped settings file (workspace/project →
+ * settings.json; local → settings.local.json), reusing the P1 reconcile never-clobber
+ * contract: the pin is stamped `user`-provenance + a UTC timestamp in the scope's
+ * provenance sidecar, so a later `reconcile sync|repair` never clobbers it. The write is a
+ * read-modify-write — it NEVER overwrites a sibling role pin (or any other key). The
+ * host-id vocabulary is validated by the imported `validateRoles` (single SoT in
+ * read-guild-config.ts). Pass `null` or `none` to clear a pin back to auto-resolve.
+ */
+function cmdRole(
+  alias: string,
+  rawValue: string,
+  scope: "workspace" | "project" | "local",
+  cwd: string
+): number {
+  // 1. Validate the alias against the closed role set.
+  if (!ROLE_ALIASES.has(alias)) {
+    process.stdout.write(
+      `[config-cmd] ERROR: unknown role "${alias}" — valid: ${[...ROLE_ALIASES].join("|")}\n`
+    );
+    return 1;
+  }
+
+  // 2. Coerce the value: null|none ⇒ null (clear the pin); else the literal host_id.
+  const coerced: string | null =
+    rawValue === "null" || rawValue === "none" ? null : rawValue;
+
+  // 3. Validate the value via the imported validateRoles (closed host-id set — no drift).
+  const rejects = validateRoles({ [alias]: coerced });
+  if (rejects.length > 0) {
+    for (const r of rejects) process.stdout.write(`[config-cmd] ERROR: ${r}\n`);
+    return 1;
+  }
+
+  // 4. Resolve the scoped target file.
+  const resolved = resolveScopedSettingsFile(scope, cwd);
+  if ("error" in resolved) {
+    process.stdout.write(`[config-cmd] ERROR: ${resolved.error}\n`);
+    return 1;
+  }
+  const targetFile = resolved.file;
+  const keyPath = `roles.${alias}`;
+
+  // 5. Read-modify-write the role pin — FAILS CLOSED on malformed JSON; preserves siblings.
+  try {
+    readModifyWrite(targetFile, keyPath, coerced);
+  } catch (e) {
+    process.stdout.write(`[config-cmd] ERROR: ${(e as Error).message}\n`);
+    return 1;
+  }
+
+  // 6. Stamp never-clobber provenance (advisory — a sidecar failure never fails the write).
+  const now = new Date().toISOString();
+  const provNote = stampUserProvenance(targetFile, keyPath, now);
+
+  // 7. Report exactly what was written and where.
+  process.stdout.write(
+    `[config-cmd] ROLE ${keyPath} = ${JSON.stringify(coerced)}\n` +
+      `  scope: ${scope}\n` +
+      `  file:  ${targetFile}\n` +
+      `  ${provNote}\n`
+  );
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Subcommand: show --sources
 // ---------------------------------------------------------------------------
 
@@ -933,6 +1189,147 @@ function cmdShowSources(cwd: string): number {
     (sources["workspace.mode"] as Source) ?? sources["workspace"] ?? "builtin";
   const wsMode = config.workspace?.mode ?? "auto";
   lines.push(`workspace.mode = ${wsMode}  [${wsModeSource}]`);
+
+  // ── phase-permission decisions (SC-W1-8 / AC23) ─────────────────────────────
+  // Annotate every resolved (phase × gate-type) permission decision — the P1
+  // host_mode × guild_gates × bypass triple — with the inheritance layer each input
+  // resolved from. The baseline golden derives guild_gates from `auto_approve` and
+  // bypass from `security.bypass_permissions_policy`; host_mode is the host default
+  // (`ask`, builtin). So each cell's layer = the layer of the key that drives it.
+  appendPermissionSourceLines(lines, config, sources);
+
+  process.stdout.write(lines.join("\n") + "\n");
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Phase-permission decision layers (shared by show --sources and show --render)
+// ---------------------------------------------------------------------------
+
+/** The two config inputs the baseline-golden resolver reads (+ a safe default). */
+function permissionInputs(config: ReturnType<typeof resolveSettings>["config"]): {
+  auto_approve: string[];
+  bypass_permissions_policy: BypassPolicy;
+} {
+  const auto_approve = Array.isArray(config.auto_approve) ? config.auto_approve : [];
+  const bp = config.security?.bypass_permissions_policy;
+  const bypass_permissions_policy: BypassPolicy =
+    bp === "deny" || bp === "allow" || bp === "audit" ? bp : "audit";
+  return { auto_approve, bypass_permissions_policy };
+}
+
+/**
+ * Append a "phase-permission decisions" section: one line per (phase × gate-type) cell,
+ * each annotating host_mode / guild_gates / bypass with the inheritance layer that drove
+ * it. `auto_approve` drives guild_gates; `security.bypass_permissions_policy` drives
+ * bypass; host_mode is the builtin host default. settings-resolver tracks sources at the
+ * top-level-key granularity, so the security-block layer annotates bypass.
+ */
+function appendPermissionSourceLines(
+  lines: string[],
+  config: ReturnType<typeof resolveSettings>["config"],
+  sources: Record<string, Source>
+): void {
+  const { auto_approve, bypass_permissions_policy } = permissionInputs(config);
+  const golden = resolveBaselineGolden({ auto_approve, bypass_permissions_policy });
+
+  const gatesSrc: Source = (sources["auto_approve"] as Source) ?? "builtin";
+  const bypassSrc: Source = (sources["security"] as Source) ?? "builtin";
+  const hostModeSrc: Source = "builtin"; // baseline host_mode is the host default
+
+  lines.push("");
+  lines.push("── phase-permission decisions (host_mode × guild_gates × bypass) ──");
+  lines.push(
+    `inputs: auto_approve=${JSON.stringify(auto_approve)} [${gatesSrc}]  ·  ` +
+      `security.bypass_permissions_policy=${bypass_permissions_policy} [${bypassSrc}]  ·  ` +
+      `host_mode baseline=ask [${hostModeSrc}]`
+  );
+  for (const phase of PHASES) {
+    for (const gate of GATE_TYPES) {
+      const key = cellKey(phase, gate);
+      const d: PermissionDecision = golden[key];
+      lines.push(
+        `${key.padEnd(18)} host_mode=${d.host_mode} [${hostModeSrc}]  ` +
+          `guild_gates=${d.guild_gates} [${gatesSrc}]  bypass=${d.bypass} [${bypassSrc}]`
+      );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: show --render (SC-W1-8) — per-host config render
+// ---------------------------------------------------------------------------
+
+/**
+ * `config show --render` — render the RESOLVED config + the P1 phase-permission block
+ * into each of the 5 host native config shapes (claude / codex / .agents / pi /
+ * antigravity) via the LW1-6 `renderAllHostConfigs` core. READ-ONLY (prints; never
+ * writes). The resolver's per-key `sources` map is passed in so the renderer's
+ * fail-closed local-scope guard can WITHHOLD any gitignored (workspace-local /
+ * project-local) value from a would-be-shared host output. A render with `blocked:true`
+ * means a real shared write of that host's config would be refused (a local/secret leak
+ * was detected); this inspection surface flags it but still exits 0.
+ */
+function cmdShowRender(cwd: string): number {
+  let result: ReturnType<typeof resolveSettings>;
+  try {
+    result = resolveSettings({ cwd });
+  } catch (e) {
+    process.stdout.write(
+      `[config-cmd] ERROR: could not resolve settings — ${(e as Error).message}\n`
+    );
+    return 1;
+  }
+  const { config, sources } = result;
+  const { auto_approve, bypass_permissions_policy } = permissionInputs(config);
+  const permissions = resolveBaselineGolden({ auto_approve, bypass_permissions_policy });
+
+  const renderedAt = new Date().toISOString();
+  const renders = renderAllHostConfigs({
+    config: config as unknown as RenderConfigLike,
+    permissions,
+    sources: sources as unknown as Record<string, ConfigSource>,
+    options: { renderedAt },
+  });
+
+  const lines: string[] = [];
+  lines.push(`[config-cmd] show --render — per-host config (5 hosts)`);
+  lines.push(`  rendered_at : ${renderedAt}`);
+  lines.push("");
+
+  let anyBlocked = false;
+  for (const hostId of Object.keys(renders) as Array<keyof typeof renders>) {
+    const r = renders[hostId];
+    if (r.blocked) anyBlocked = true;
+    const modelStr = r.models
+      ? `cheap=${r.models.cheap ?? "—"} mid=${r.models.mid ?? "—"} powerful=${r.models.powerful ?? "—"}`
+      : "(none)";
+    const permCount = r.permissions ? Object.keys(r.permissions).length : 0;
+    lines.push(
+      `▸ ${String(hostId).padEnd(11)} family=${r.family} surface=${r.surface_kind} ` +
+        `provenance=${r.provenance}  ok=${r.ok}${r.blocked ? " BLOCKED" : ""}`
+    );
+    lines.push(`    models      : ${modelStr}`);
+    lines.push(`    permissions : ${permCount} cell(s)${r.roles ? `  · roles=${JSON.stringify(r.roles)}` : ""}`);
+    if (r._unsupported && r._unsupported.length > 0) {
+      lines.push(`    _unsupported: ${r._unsupported.map((u) => u.field).join(", ")}`);
+    }
+    if (r._redactions && r._redactions.length > 0) {
+      lines.push(
+        `    _redactions : ${r._redactions
+          .map((x) => `${x.field}(${x.reason})`)
+          .join(", ")}`
+      );
+    }
+  }
+
+  if (anyBlocked) {
+    lines.push("");
+    lines.push(
+      `  ⚠ one or more host renders are BLOCKED (fail-closed): a local-scope or secret ` +
+        `value was detected — a real shared write of that host config would be refused.`
+    );
+  }
 
   process.stdout.write(lines.join("\n") + "\n");
   return 0;
@@ -1331,14 +1728,28 @@ function main(): void {
       break;
     }
 
-    case "show": {
-      if (!parsed.showSources) {
+    case "role": {
+      if (!parsed.roleAlias || parsed.rawValue === undefined || !parsed.scope) {
         process.stdout.write(
-          "[config-cmd] ERROR: show requires --sources (bare show coming in U7)\n"
+          "[config-cmd] ERROR: role requires <host|advisory|adversarial> <host_id|null> --scope\n"
         );
         process.exit(1);
       }
-      exitCode = cmdShowSources(parsed.cwd);
+      exitCode = cmdRole(parsed.roleAlias, parsed.rawValue, parsed.scope, parsed.cwd);
+      break;
+    }
+
+    case "show": {
+      if (!parsed.showSources && !parsed.showRender) {
+        process.stdout.write(
+          "[config-cmd] ERROR: show requires --sources or --render\n"
+        );
+        process.exit(1);
+      }
+      // --sources and --render compose; render prints after the source annotations.
+      exitCode = 0;
+      if (parsed.showSources) exitCode = cmdShowSources(parsed.cwd);
+      if (exitCode === 0 && parsed.showRender) exitCode = cmdShowRender(parsed.cwd);
       break;
     }
 

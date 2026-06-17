@@ -3,6 +3,12 @@
   "auto_approve": [],
   "review": "local",
   "host": "auto",
+  "roles": {
+    "host": null,
+    "advisory": null,
+    "adversarial": null
+  },
+  "host_profiles": {},
   "initiative_default": null,
   "index": "auto",
   "record_status_runs": true,
@@ -144,6 +150,8 @@
     "auto_approve": "[] | [spec,plan,build,qa] | [all] — opt-in autonomy; destructive/network/spend STILL ask. qa (G-14/SC-9): auto-proceed ONLY on a computed ReleaseGate PASS — a BLOCK-override and the always-ask hard set still prompt. No ops token (rails stay interactive by design).",
     "review": "local | cross | off — cross engages the Claude<->Codex adversarial review broker",
     "host": "claude | codex | auto — co-equal host adapter selection",
+    "roles": "per-run role pins {host,advisory,adversarial}; null = resolve via the role model (capability-matrix), or pin a registry host_id (claude|codex|.agents|pi|antigravity). Top-level `host` stays the dispatch-host selector; the 5 registry ids live only under roles.*/host_profiles.*.",
+    "host_profiles": "per-host config-render overrides keyed by host_id; {} = none (defaults render from the host-registry capability rows). CLOSED entry shape: { models?: {cheap?,mid?,powerful?}, enabled?: bool }.",
     "initiative_default": "null | <initiative-id> — attach runs to a durable initiative",
     "index": "auto | off — optional SQLite read-through cache (auto = lazy-build past measured slowness)",
     "record_status_runs": "bool (default true) — OQ6 (SC-B): /guild:status records a lightweight run (run.yaml + provenance.json, runs/-only; never wiki/decisions/indexes). false = revert to historical pure-read (no run written). Default-safe-when-absent.",

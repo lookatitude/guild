@@ -1,7 +1,7 @@
 ---
 name: config
-description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
-argument-hint: "<init|set|show|validate|providers|update-mcp-hashes|reconcile> [reconcile: <check|sync|repair>] [--cwd <repo-root>] [--force]"
+description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki, per-run role pins). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key AND each phase-permission decision (host_mode/guild_gates/bypass) with its inheritance layer; `config show --render` renders the resolved config into each of the 5 host-native config shapes (fail-closed on local/secret leaks); `config set` performs a scoped hard-set write; `config role <host|advisory|adversarial> <host_id|null>` pins a per-run role to a registry host (scoped, provenance-stamped, never-clobber); `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
+argument-hint: "<init|set|role|show|validate|providers|update-mcp-hashes|reconcile> [show: --sources|--render] [role: <host|advisory|adversarial> <host_id|null> --scope <s>] [reconcile: <check|sync|repair>] [--cwd <repo-root>] [--force]"
 allowed-tools: Read, Write, Bash
 ---
 
@@ -101,6 +101,40 @@ The `set` command validates the key against the closed key-set before writing.
 Unknown top-level keys and unknown `defaults.*` sub-keys are **rejected** with
 a clear error message (OD-4 minimal-churn: no new keys, only known keys allowed).
 
+## `role` — pin a per-run role to a registry host (host-native aliases)
+
+Pin one of the three **per-run role aliases** — `host`, `advisory`, `adversarial` — to a
+registry host id (`claude`, `codex`, `.agents`, `pi`, `antigravity`), or `null`/`none` to
+clear it back to auto-resolve. The pin is written to `roles.<alias>` in the correct scoped
+settings file and **stamped `user`-provenance + a UTC timestamp in the provenance sidecar**,
+so a later `reconcile sync|repair` **never clobbers** it (it reuses the P1 never-clobber
+contract). The write is a read-modify-write — it **never overwrites a sibling role pin** or
+any other key.
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts role <host|advisory|adversarial> <host_id|null> --scope workspace|project|local [--cwd <p>]
+```
+
+| `--scope` | Target file | Provenance sidecar |
+|---|---|---|
+| `workspace` | workspace-root `.guild/settings.json` | `settings.provenance.json` |
+| `project` | `<cwd>/.guild/settings.json` | `settings.provenance.json` |
+| `local` | `<cwd>/.guild/settings.local.json` (gitignored) | `settings.local.provenance.json` |
+
+```bash
+# pin the host role to claude for this project; advisory + adversarial to codex (gitignored)
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts role host claude --scope project
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts role adversarial codex --scope local
+# clear a pin
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts role advisory null --scope project
+```
+
+**`roles.host` ≠ top-level `host`.** The role pin `roles.host` names a **registry host id**
+(one of the 5: `claude|codex|.agents|pi|antigravity`); the top-level `host`
+(`config set host …`) is the dispatch-host **selector** (`claude|codex|auto`). The 5 registry
+ids live only under `roles.*` / `host_profiles.*`. The host-id value is validated against the
+closed registry set — a typo (`claudee`) is rejected, not silently written.
+
 ## `show` — print the resolved config
 
 Resolve the full 7-source chain (`builtin < workspace < workspace-local <
@@ -131,6 +165,44 @@ loops = spec,plan  [rigor]
 This gives full inheritance transparency: you can see which layer is winning for
 each key. Use this to debug unexpected setting values across a workspace
 hierarchy.
+
+In addition to the per-key annotations, `--sources` appends a **phase-permission
+decisions** block (SC-W1-8 / AC23): every `<phase>.<gate-type>` cell — the P1
+`host_mode × guild_gates × bypass` triple — annotated with the inheritance layer each
+input resolved from. `guild_gates` is driven by `auto_approve` (so it carries that key's
+layer); `bypass` by `security.bypass_permissions_policy`; `host_mode` is the host default
+(`ask`, builtin). The orthogonality invariant holds: the always-ask hard set
+(`release`/`ops`/`security`/`destructive`) never flips to `auto-safe`.
+
+```
+── phase-permission decisions (host_mode × guild_gates × bypass) ──
+inputs: auto_approve=["build"] [project]  ·  security.bypass_permissions_policy=audit [builtin]  ·  host_mode baseline=ask [builtin]
+build.plan         host_mode=ask [builtin]  guild_gates=auto-safe [project]  bypass=audit [builtin]
+build.release      host_mode=ask [builtin]  guild_gates=ask [project]  bypass=audit [builtin]
+…
+```
+
+### `show --render` — render the resolved config into each host-native shape (SC-W1-8)
+
+Render the resolved config + the phase-permission block into all **5 host-native config
+shapes** (`claude` / `codex` / `.agents` / `pi` / `antigravity`) via the per-host render
+core. READ-ONLY — prints a per-host summary (family, surface, models, permission-cell
+count, role pins, `_unsupported` degrade markers, `_redactions`); writes nothing.
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts show --render [--cwd <p>]
+```
+
+**Fail-closed.** The renderer is passed the resolver's per-key `sources` map: any value
+from a gitignored (`workspace-local`/`project-local`) layer is **withheld** from the would-be
+shared host output, and any secret is redacted in-place — recorded in `_redactions`. A host
+render with `ok:false` / **BLOCKED** means a real shared write of that host's config would be
+refused. The command still exits `0` (it is an inspection surface), but flags the block. The
+fail-closed guard withholds at top-level-key granularity, so it may over-withhold (e.g. the
+whole `roles` block when any one pin is local) — never under-withhold.
+
+`--sources` and `--render` compose: `config show --sources --render` prints the source
+annotations first, then the per-host render.
 
 ## `validate` — closed-key check
 
@@ -274,6 +346,11 @@ Exit codes: `0` success; `1` bad input / IO error; `2` bad `--cwd`.
 
 - **Schema is closed-key.** Only keys present in the built-in `DEFAULTS` shape
   are writable via `config set`. Unknown keys are rejected before any write.
+- **Prefer `config role` for role pins.** The per-run role aliases (`roles.host` /
+  `roles.advisory` / `roles.adversarial`) and the per-host `host_profiles.*` overrides are
+  full closed-key members: `config set roles.host claude` works and is validated (a typo'd
+  host-id is rejected), and `validate --effective` accepts them. But only the dedicated
+  `config role` path adds the **never-clobber provenance stamp**, so prefer it for role pins.
 - **`config set` is a HARD-SET write.** It always asks under any `auto_approve`
   posture (writing settings files is always operator-confirmed).
 - **`_help` and unrelated keys are preserved.** `config set` is a read-modify-write

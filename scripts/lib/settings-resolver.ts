@@ -42,6 +42,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { KNOWLEDGE_CONFIG_DEFAULTS } from "../understand/lib/schema";
+import { HOST_IDS } from "./host-registry-schema";
+// host_profiles strict entry-shape filter — single SoT (same rules as `config validate`).
+import { filterHostProfiles } from "./host-profiles-validate";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const yaml = require("js-yaml") as { load: (src: string) => unknown };
 
@@ -87,6 +90,17 @@ interface DefaultsBlock {
 interface WorkspaceBlock {
   mode: "auto" | "on" | "off";
 }
+// LW1-6 (ADR step 14) — additive OPTIONAL keys; inert defaults preserve prior behavior.
+interface RolesBlock {
+  host: string | null;
+  advisory: string | null;
+  adversarial: string | null;
+}
+interface HostProfileEntry {
+  models?: { cheap?: string; mid?: string; powerful?: string };
+  enabled?: boolean;
+}
+type HostProfilesBlock = Record<string, HostProfileEntry>;
 // G-11 (SC-6): tier→host values are a union — string | {model, effort?, verbosity?} | null.
 // This resolver only STORES the union (sparse parse + deep-merge across layers);
 // it never unpacks it. The ONLY unpack point is resolveTierModel() in
@@ -136,6 +150,8 @@ interface ModelsBlock {
   structuredOutputRequired: boolean;
   cacheTTL: CacheTTLBlock;
   importanceGate: number;
+  /** Mirrors read-guild-config DEFAULTS — composite recall scoring toggle (default false). */
+  compositeRecall: boolean;
   ingestSimilarityGate: number;
   shortOutputThreshold: Record<string, Record<string, number>>;
   knowledge: KnowledgeConfigBlock;
@@ -186,6 +202,10 @@ export interface ResolvedConfig {
   auto_approve: string[];
   review: "local" | "cross" | "off";
   host: "claude" | "codex" | "auto";
+  /** LW1-6: per-run role pins. Default all null = auto-resolve via the role model. */
+  roles: RolesBlock;
+  /** LW1-6: per-host config-render overrides keyed by host_id. Default {} = none. */
+  host_profiles: HostProfilesBlock;
   initiative_default: string | null;
   index: "auto" | "off";
   record_status_runs: boolean;
@@ -267,6 +287,8 @@ const DEFAULTS: ResolvedConfig = {
   auto_approve: [],
   review: "local",
   host: "auto",
+  roles: { host: null, advisory: null, adversarial: null },
+  host_profiles: {},
   initiative_default: null,
   index: "auto",
   record_status_runs: true,
@@ -295,6 +317,7 @@ const DEFAULTS: ResolvedConfig = {
     structuredOutputRequired: true,
     cacheTTL: { coordinator: "1h", leaf: "5m" },
     importanceGate: 3,
+    compositeRecall: false,
     ingestSimilarityGate: 0.80,
     shortOutputThreshold: {},
     knowledge: { ...KNOWLEDGE_CONFIG_DEFAULTS },
@@ -377,6 +400,31 @@ const PROTO_POISON_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 const VALID_TIER_HOST_KEYS = new Set(["claude", "codex", "gemini"]);
 
+// LW1-6: known registry host ids (single SoT — host-registry-schema.ts HOST_IDS).
+const KNOWN_HOST_IDS = new Set<string>(HOST_IDS);
+
+/** Sparse-parse the `roles` block: carry only valid {host,advisory,adversarial} pins. */
+function sparseRoles(raw: Record<string, unknown>): RolesBlock {
+  const out: Partial<RolesBlock> = {};
+  for (const k of ["host", "advisory", "adversarial"] as const) {
+    const v = raw[k];
+    if (v === null || (typeof v === "string" && KNOWN_HOST_IDS.has(v))) out[k] = v as string | null;
+  }
+  return out as RolesBlock;
+}
+
+/**
+ * Sparse-parse `host_profiles` on the RESOLVE path. FAIL-CLOSED: reuse the strict entry-shape
+ * validator (single SoT — lib/host-profiles-validate.ts, the same rules `config validate`
+ * runs) and DROP any malformed entry so resolveSettings() never emits malformed host_profiles
+ * content (Codex G-lane item3). An entry with an unknown host_id, unknown entry key
+ * (e.g. host_profiles.claude.bogus_key), non-boolean `enabled`, or malformed `models` is
+ * omitted — not passed through unchanged.
+ */
+function sparseHostProfiles(raw: Record<string, unknown>): HostProfilesBlock {
+  return filterHostProfiles(raw) as HostProfilesBlock;
+}
+
 /** Sparse-copy a raw tier host map keeping ONLY the closed host-key set. */
 function sparseTierHostMap(raw: Record<string, unknown>): TierHostMap {
   const out: Record<string, unknown> = {};
@@ -402,7 +450,7 @@ const VALID_CACHE_TTL  = new Set(["1h", "5m", "off"]);
 const VALID_MODELS_KEYS = new Set([
   "enabled", "tiers", "scoreWeights", "thresholds", "advisorRounds",
   "escalationMarkers", "recallBeforeRead", "recallScoreThreshold",
-  "structuredOutputRequired", "cacheTTL", "importanceGate", "ingestSimilarityGate",
+  "structuredOutputRequired", "cacheTTL", "importanceGate", "compositeRecall", "ingestSimilarityGate",
   "shortOutputThreshold", "knowledge",
 ]);
 const VALID_SECURITY_KEYS       = new Set(["bypass_permissions_policy"]);
@@ -426,7 +474,7 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "allowed_tools",                  // R-020
 ]);
 const TIER1_KEYS = new Set([
-  "rigor", "auto_approve", "review", "host", "initiative_default",
+  "rigor", "auto_approve", "review", "host", "roles", "host_profiles", "initiative_default",
   "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace",
   "models", "security", "secrets_policy", "mcp",
   "statusline",                  // R-009
@@ -627,6 +675,11 @@ function parseSettingsFile(filePath: string): Partial<ResolvedConfig> {
     out.review = parsed["review"] as ResolvedConfig["review"];
   if (VALID_HOST.has(parsed["host"] as string))
     out.host = parsed["host"] as ResolvedConfig["host"];
+  // LW1-6: roles + host_profiles (sparse — deep-merged across layers by assembleLayers).
+  if (isPlainObject(parsed["roles"]))
+    out.roles = sparseRoles(parsed["roles"] as Record<string, unknown>);
+  if (isPlainObject(parsed["host_profiles"]))
+    out.host_profiles = sparseHostProfiles(parsed["host_profiles"] as Record<string, unknown>);
   if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
     out.initiative_default = parsed["initiative_default"] as string | null;
   if (parsed["index"] === "auto" || parsed["index"] === "off")
@@ -683,6 +736,8 @@ function parseSettingsFile(filePath: string): Partial<ResolvedConfig> {
     }
     if (typeof rawModels["importanceGate"] === "number" && rawModels["importanceGate"] >= 1 && rawModels["importanceGate"] <= 5)
       sparse.importanceGate = Math.floor(rawModels["importanceGate"]);
+    if (typeof rawModels["compositeRecall"] === "boolean")
+      sparse.compositeRecall = rawModels["compositeRecall"];
     if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
       sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
     if (isPlainObject(rawModels["shortOutputThreshold"])) {
@@ -814,6 +869,11 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
     out.review = parsed["review"] as ResolvedConfig["review"];
   if (VALID_HOST.has(parsed["host"] as string))
     out.host = parsed["host"] as ResolvedConfig["host"];
+  // LW1-6: roles + host_profiles (sparse — deep-merged across layers by assembleLayers).
+  if (isPlainObject(parsed["roles"]))
+    out.roles = sparseRoles(parsed["roles"] as Record<string, unknown>);
+  if (isPlainObject(parsed["host_profiles"]))
+    out.host_profiles = sparseHostProfiles(parsed["host_profiles"] as Record<string, unknown>);
   if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
     out.initiative_default = parsed["initiative_default"] as string | null;
   if (parsed["index"] === "auto" || parsed["index"] === "off")
@@ -861,6 +921,8 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
     }
     if (typeof rawModels["importanceGate"] === "number" && rawModels["importanceGate"] >= 1 && rawModels["importanceGate"] <= 5)
       sparse.importanceGate = Math.floor(rawModels["importanceGate"]);
+    if (typeof rawModels["compositeRecall"] === "boolean")
+      sparse.compositeRecall = rawModels["compositeRecall"];
     if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
       sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
     if (isPlainObject(rawModels["shortOutputThreshold"])) {

@@ -46,6 +46,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { resolveSettings } from "./lib/settings-resolver";
 import { KNOWLEDGE_CONFIG_DEFAULTS } from "./understand/lib/schema";
+import { HOST_IDS } from "./lib/host-registry-schema";
+// host_profiles strict validation — single SoT (also consumed by the resolve path).
+import { validateHostProfiles } from "./lib/host-profiles-validate";
 
 // ── Schema (Tier-1 + Tier-2 defaults). Canonical body: command-surface.md §4.4.
 interface QualityBudget {
@@ -99,6 +102,25 @@ interface WorkspaceBlock {
   /** auto (default) = detect by immediate-child rule; on = force workspace; off = force regular. NO max_depth — depth is fixed at 1. */
   mode: "auto" | "on" | "off";
 }
+
+// ── roles + host_profiles (P2-Wave-1 LW1-6, ADR step 14 — additive OPTIONAL keys).
+// Defaults (null role pins, empty host_profiles) are INERT ⇒ default-absent behavior is
+// byte-for-byte preserved; only the scaffold/reconcile golden is re-baselined (SC-W1-9).
+/** Per-run role pins. null = resolve via the role model (capability-matrix); else a registry host_id. */
+interface RolesBlock {
+  host: string | null;
+  advisory: string | null;
+  adversarial: string | null;
+}
+/** A per-host config-render override. CLOSED entry shape (validateHostProfiles rejects others). */
+interface HostProfileEntry {
+  /** Optional per-tier model override for this host's render. */
+  models?: { cheap?: string; mid?: string; powerful?: string };
+  /** Optional render toggle. */
+  enabled?: boolean;
+}
+/** Per-host config-render overrides, keyed by registry host_id. {} (default) = none. */
+type HostProfilesBlock = Record<string, HostProfileEntry>;
 
 // ── Host-agnostic model tier map (ADR §1, §10 — cost-aware-tiering-and-lean-context).
 // tiers: cheap|mid|powerful → {claude,codex,gemini}. codex/gemini are null now (no third host).
@@ -345,6 +367,10 @@ interface GuildSettings {
   auto_approve: string[]; // [] | [spec,plan,build] | [all]
   review: "local" | "cross" | "off";
   host: "claude" | "codex" | "auto";
+  /** Per-run role pins {host,advisory,adversarial} (LW1-6 / SC-W1-7). Default all null = auto-resolve. */
+  roles: RolesBlock;
+  /** Per-host config-render overrides keyed by host_id (LW1-6 / SC-W1-8). Default {} = none. */
+  host_profiles: HostProfilesBlock;
   initiative_default: string | null;
   index: "auto" | "off";
   /**
@@ -413,6 +439,8 @@ export const DEFAULTS: GuildSettings = {
   auto_approve: [],
   review: "local",
   host: "auto",
+  roles: { host: null, advisory: null, adversarial: null },
+  host_profiles: {},
   initiative_default: null,
   index: "auto",
   record_status_runs: true,
@@ -504,6 +532,13 @@ export const HELP: Record<string, string> = {
     "always-ask hard set still prompt. No ops token (rails stay interactive by design).",
   review: "local | cross | off — cross engages the Claude<->Codex adversarial review broker",
   host: "claude | codex | auto — co-equal host adapter selection",
+  roles:
+    "per-run role pins {host,advisory,adversarial}; null = resolve via the role model " +
+    "(capability-matrix), or pin a registry host_id (claude|codex|.agents|pi|antigravity). " +
+    "Top-level `host` stays the dispatch-host selector; the 5 registry ids live only under roles.*/host_profiles.*.",
+  host_profiles:
+    "per-host config-render overrides keyed by host_id; {} = none (defaults render from the " +
+    "host-registry capability rows). CLOSED entry shape: { models?: {cheap?,mid?,powerful?}, enabled?: bool }.",
   initiative_default: "null | <initiative-id> — attach runs to a durable initiative",
   index: "auto | off — optional SQLite read-through cache (auto = lazy-build past measured slowness)",
   record_status_runs:
@@ -727,6 +762,15 @@ const VALID_MODELS_KEYS = new Set([
 // (reject) and the resolve-mode merge strip (unknown host keys never leak
 // into the resolved config — same regime as DEFAULTS_ALLOWED_KEYS).
 const VALID_TIER_HOST_KEYS = new Set(["claude", "codex", "gemini"]);
+
+// Known registry host ids (single SoT — host-registry-schema.ts HOST_IDS). Used by
+// validateRoles + validateHostProfiles so a typo'd host id surfaces (closed set).
+const KNOWN_HOST_IDS = new Set<string>(HOST_IDS);
+
+// Closed sub-key sets for the LW1-6 schema extension (ADR step 14).
+const VALID_ROLES_KEYS = new Set(["host", "advisory", "adversarial"]);
+// host_profiles entry-shape validation lives in lib/host-profiles-validate.ts (single SoT,
+// reused by the resolve path — Codex G-lane item3). Re-exported below for config-cmd.
 
 // Closed-key set for security.* block (D-BYPASS).
 const VALID_SECURITY_KEYS = new Set(["bypass_permissions_policy"]);
@@ -1137,6 +1181,37 @@ export function validateMcp(m: Record<string, unknown>): string[] {
 }
 
 /**
+ * Closed-key validation of the `roles` block (LW1-6 / SC-W1-7). Sub-keys are CLOSED to
+ * {host, advisory, adversarial}; each value must be `null` or a KNOWN registry host_id
+ * (a typo like "claudee" must surface, not silently pass). Returns reject messages.
+ */
+export function validateRoles(r: Record<string, unknown>): string[] {
+  const rejects: string[] = [];
+  for (const k of Object.keys(r)) {
+    if (!VALID_ROLES_KEYS.has(k)) {
+      rejects.push(`unknown roles key "${k}" (closed key set — only host, advisory, adversarial)`);
+      continue;
+    }
+    const v = r[k];
+    if (v !== null && !(typeof v === "string" && KNOWN_HOST_IDS.has(v))) {
+      rejects.push(
+        `roles.${k} must be null or a known registry host_id (${[...KNOWN_HOST_IDS].join("|")}); got ${JSON.stringify(v)}`
+      );
+    }
+  }
+  return rejects;
+}
+
+/**
+ * Closed-key validation of the `host_profiles` block (LW1-6 / SC-W1-8). The implementation
+ * is the single SoT in `lib/host-profiles-validate.ts`, reused by the resolve path
+ * (`settings-resolver.ts`) so the --validate and resolve mirrors can never drift (Codex
+ * G-lane item3). Re-exported here so existing `./read-guild-config` importers (config-cmd)
+ * keep working.
+ */
+export { validateHostProfiles };
+
+/**
  * Closed-key validation of the `defaults.cross_host` block (cross-host ADR CR-1/CH-1).
  * Returns reject messages. SECURITY: validates that only address/port/user are present.
  */
@@ -1332,7 +1407,7 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     }
     const rejects: string[] = [];
     const TIER1 = new Set([
-      "rigor", "auto_approve", "review", "host", "initiative_default",
+      "rigor", "auto_approve", "review", "host", "roles", "host_profiles", "initiative_default",
       "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace", "models",
       "security", "secrets_policy", "mcp",
       "statusline",                  // R-009: status-line pane enable (--statusline flag / settings key)
@@ -1357,6 +1432,31 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     if (Array.isArray(parsed["auto_approve"])) out.auto_approve = parsed["auto_approve"] as string[];
     if (VALID_REVIEW.has(parsed["review"] as string)) out.review = parsed["review"] as GuildSettings["review"];
     if (VALID_HOST.has(parsed["host"] as string)) out.host = parsed["host"] as GuildSettings["host"];
+    // roles: per-run role pins (LW1-6). Closed sub-keys; null or known host_id values.
+    if (isPlainObject(parsed["roles"])) {
+      const rawRoles = parsed["roles"] as Record<string, unknown>;
+      rejects.push(...validateRoles(rawRoles));
+      const mergedRoles = { ...DEFAULTS.roles } as unknown as Record<string, unknown>;
+      for (const rk of VALID_ROLES_KEYS) {
+        const v = rawRoles[rk];
+        if (v === null || (typeof v === "string" && KNOWN_HOST_IDS.has(v))) {
+          mergedRoles[rk] = v;
+        }
+      }
+      out.roles = mergedRoles as unknown as RolesBlock;
+    }
+    // host_profiles: per-host render overrides (LW1-6). Strict closed shape.
+    if (isPlainObject(parsed["host_profiles"])) {
+      const rawHp = parsed["host_profiles"] as Record<string, unknown>;
+      rejects.push(...validateHostProfiles(rawHp));
+      const mergedHp: HostProfilesBlock = {};
+      for (const [hostId, entry] of Object.entries(rawHp)) {
+        if (KNOWN_HOST_IDS.has(hostId) && isPlainObject(entry)) {
+          mergedHp[hostId] = entry as HostProfileEntry;
+        }
+      }
+      out.host_profiles = mergedHp;
+    }
     if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
       out.initiative_default = parsed["initiative_default"] as string | null;
     if (parsed["index"] === "auto" || parsed["index"] === "off") out.index = parsed["index"];

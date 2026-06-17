@@ -1138,3 +1138,72 @@ describe("config set — scalar-key extra segments rejected; nested leaf validat
     expect(settings.models?.thresholds?.powerful).toBe(4);
   });
 });
+
+// ===========================================================================
+// LW1-7 (SC-W1-7) — config role aliases + Codex G-lane MUST-FIX:
+// roles/host_profiles are in the closed key-set so `validate --effective`
+// ACCEPTS what `config role` / `config init` write (no self-contradiction).
+// ===========================================================================
+
+describe("config role — role-pin aliases (SC-W1-7)", () => {
+  test("role advisory codex --scope local writes settings.local.json + provenance sidecar", () => {
+    const project = tmp(mkProject({ settings: {} }));
+    const result = run(["role", "advisory", "codex", "--scope", "local", "--cwd", project]);
+    expect(result.status).toBe(0);
+    const local = JSON.parse(
+      fs.readFileSync(path.join(project, ".guild", "settings.local.json"), "utf8")
+    );
+    expect(local.roles.advisory).toBe("codex");
+    const prov = JSON.parse(
+      fs.readFileSync(path.join(project, ".guild", "settings.local.provenance.json"), "utf8")
+    );
+    expect(prov["roles.advisory"].provenance).toBe("user");
+    expect(typeof prov["roles.advisory"].last_reconciled_at).toBe("string");
+  });
+
+  test("CODEX MUST-FIX: role advisory codex --scope local, then validate --effective PASSES", () => {
+    const project = tmp(mkProject({ settings: {} }));
+    const set = run(["role", "advisory", "codex", "--scope", "local", "--cwd", project]);
+    expect(set.status).toBe(0);
+    const validate = run(["validate", "--effective", "--cwd", project]);
+    expect(validate.status).toBe(0);
+    expect(validate.out).toMatch(/VALID/);
+  });
+
+  test("reconcile sync output (roles + host_profiles) passes validate --effective", () => {
+    const project = tmp(mkProject());
+    run(["reconcile", "sync", "--cwd", project]);
+    const validate = run(["validate", "--effective", "--cwd", project]);
+    expect(validate.status).toBe(0);
+  });
+
+  test("role write never-clobbers a sibling role pin", () => {
+    const project = tmp(mkProject({ settings: {} }));
+    run(["role", "host", "claude", "--scope", "project", "--cwd", project]);
+    run(["role", "advisory", "codex", "--scope", "project", "--cwd", project]);
+    const settings = JSON.parse(
+      fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
+    );
+    expect(settings.roles.host).toBe("claude");
+    expect(settings.roles.advisory).toBe("codex");
+  });
+
+  test("role rejects an unknown host-id and an unknown alias", () => {
+    const project = tmp(mkProject({ settings: {} }));
+    expect(run(["role", "host", "claudee", "--scope", "project", "--cwd", project]).status).toBe(1);
+    expect(run(["role", "reviewer", "claude", "--scope", "project", "--cwd", project]).status).toBe(1);
+  });
+
+  test("validate --effective STILL rejects a genuinely-unknown top-level key", () => {
+    const project = tmp(mkProject({ settings: { rigour: "deep" } }));
+    const validate = run(["validate", "--effective", "--cwd", project]);
+    expect(validate.status).toBe(1);
+    expect(validate.out).toMatch(/unknown top-level key "rigour"/);
+  });
+
+  test("config set roles.host validates the host-id (rejects a typo)", () => {
+    const project = tmp(mkProject({ settings: {} }));
+    expect(run(["set", "roles.host", "badhost", "--scope", "project", "--cwd", project]).status).toBe(1);
+    expect(run(["set", "roles.host", "claude", "--scope", "project", "--cwd", project]).status).toBe(0);
+  });
+});

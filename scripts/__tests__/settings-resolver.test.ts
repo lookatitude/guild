@@ -1638,3 +1638,84 @@ describe("G-lane rework — models.tiers unknown host keys stripped by the resol
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// host_profiles strict entry-shape on the RESOLVE path (Codex G-lane item3).
+// The resolver must FAIL CLOSED: a malformed known-host entry is DROPPED, never
+// passed through to consumers — same strict rules as `config validate`.
+// ---------------------------------------------------------------------------
+describe("host_profiles — resolve-path strict entry-shape (fail-closed)", () => {
+  test("a well-formed entry survives resolveSettings()", () => {
+    const root = mkTmp();
+    try {
+      mkGuildDir(root);
+      writeSettings(root, {
+        host_profiles: { claude: { models: { cheap: "haiku" }, enabled: true } },
+      });
+      const { config } = resolveSettings({ cwd: root });
+      expect(config.host_profiles.claude).toEqual({ models: { cheap: "haiku" }, enabled: true });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a malformed known-host entry (host_profiles.claude.bogus_key) is DROPPED, not surfaced", () => {
+    const root = mkTmp();
+    try {
+      mkGuildDir(root);
+      writeSettings(root, {
+        host_profiles: {
+          claude: { bogus_key: 1, enabled: true }, // unknown entry key → whole entry dropped
+          codex: { enabled: false },               // clean sibling → kept
+        },
+      });
+      const { config } = resolveSettings({ cwd: root });
+      expect(config.host_profiles.claude).toBeUndefined(); // malformed entry not surfaced
+      expect(config.host_profiles.codex).toEqual({ enabled: false }); // clean sibling survives
+      // hard guarantee: the malformed sub-key never appears anywhere in the resolved block
+      expect(JSON.stringify(config.host_profiles)).not.toContain("bogus_key");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("non-boolean enabled / malformed models / unknown host_id are all dropped", () => {
+    const root = mkTmp();
+    try {
+      mkGuildDir(root);
+      writeSettings(root, {
+        host_profiles: {
+          claude: { enabled: "yes" },                       // non-boolean enabled → dropped
+          codex: { models: { cheap: "" } },                 // empty model string → dropped
+          pi: { models: { gpu: "x" } },                     // unknown model key → dropped
+          gemini: { enabled: true },                        // unknown host_id → dropped
+          antigravity: { models: { mid: "fast" } },         // clean → kept
+        },
+      });
+      const { config } = resolveSettings({ cwd: root });
+      expect(config.host_profiles.claude).toBeUndefined();
+      expect(config.host_profiles.codex).toBeUndefined();
+      expect(config.host_profiles.pi).toBeUndefined();
+      expect((config.host_profiles as Record<string, unknown>).gemini).toBeUndefined();
+      expect(config.host_profiles.antigravity).toEqual({ models: { mid: "fast" } });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a malformed entry in settings.local.json is also dropped (fail-closed across layers)", () => {
+    const root = mkTmp();
+    try {
+      mkGuildDir(root);
+      writeSettings(root, { host_profiles: { claude: { enabled: true } } });
+      writeLocal(root, { host_profiles: { claude: { rogue: true } } }); // malformed local override
+      const { config } = resolveSettings({ cwd: root });
+      // the local layer's malformed entry is dropped during sparse-parse, so the clean
+      // base entry survives (the malformed override never reaches the merge as content).
+      expect(config.host_profiles.claude).toEqual({ enabled: true });
+      expect(JSON.stringify(config.host_profiles)).not.toContain("rogue");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

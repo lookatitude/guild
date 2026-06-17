@@ -54,7 +54,9 @@ export type FieldProvenance = (typeof FIELD_PROVENANCE)[number];
 // Schema field registry
 // ---------------------------------------------------------------------------
 
-export type ConfigScope = "workspace" | "project";
+// LW1-6 (ADR step 14): `local` added additively so a field can declare scope:"local"
+// (materialized into the gitignored settings.local.json layer the resolver already reads).
+export type ConfigScope = "workspace" | "project" | "local";
 export type ConfigValueType = "string" | "number" | "boolean" | "array" | "object" | "enum";
 
 /** One typed field in the config schema registry (the SoT for one setting). */
@@ -287,7 +289,7 @@ export interface ValidationResult {
 }
 
 const VALUE_TYPE_SET = new Set<string>(["string", "number", "boolean", "array", "object", "enum"]);
-const SCOPE_SET = new Set<string>(["workspace", "project"]);
+const SCOPE_SET = new Set<string>(["workspace", "project", "local"]);
 
 /** Validate a single ConfigFieldSpec. Never throws. */
 export function validateConfigFieldSpec(value: unknown): ValidationResult {
