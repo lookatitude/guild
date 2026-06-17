@@ -39,22 +39,87 @@ function readIf(p: string): string | null {
   }
 }
 
-function hygieneScanClean(): { clean: boolean; out: string } {
+const LAST_SCAN = path.join(PLUGIN_ROOT, "scripts/docs-hygiene/.last-scan.md");
+
+// The scanner writes its authoritative result to `.last-scan.md` (summary table + per-flag rows).
+// We parse THAT — NOT stdout/stderr (the per-category counts print to stderr; capturing only stdout
+// silently yields empty counts → every hard category defaults to 0 → vacuous. codex G-lane LW3-8).
+
+// HARD categories = real drift/leak problems → must be ZERO. Keyed by the summary-table label.
+const HARD_CATEGORY_LABELS = [
+  "Drift markers (v1/single-repo)",
+  "Dangling related: slugs",
+  "Missing importance: on canonical page",
+  "Secrets grep",
+  "Pending grade review (importance_draft)",
+];
+
+// Dispositioned SOFT flags — every remaining flag is individually pinned by {file + a STABLE
+// match-SUBSTRING} (not the full line), so a NEW flag, a CHANGED flag-text, or a flag in a different
+// file breaks the gate (a count-only baseline would let real drift hide in the same bucket — codex
+// G-lane LW3-8). The substring is chosen to be the stable, identifying part of each match. All 11
+// live in the committed ADR and are benign: the 🟨 status of the genuinely cutover-DEFERRED steps
+// 15 & 19, four wave-ordinal architectural references, and two external-URL `source_ref:` entries
+// the path-scanner misreads as missing local files. (Steps 12–14 were RECONCILED to ✅ this round —
+// their stale 🟨/"In-flight" markers were real drift and are now removed.)
+const ADR_REL = "docs/knowledge/decisions/universal-host-plugin-architecture.md";
+const DISPOSITIONED_FLAGS: Array<{ file: string; includes: string }> = [
+  { file: ADR_REL, includes: "Steps 12–14 (P2-Wave-1)" },
+  { file: ADR_REL, includes: "(P2-Wave-3) SHIPPED; step 19" },
+  { file: ADR_REL, includes: "P2-Wave-1 (steps 12–14)" },
+  { file: ADR_REL, includes: "gated in the Wave-1 closeout" }, // Wave-1-complete status block (pattern-3)
+  { file: ADR_REL, includes: "P2-Wave-3 (steps 18–19)" },
+  { file: ADR_REL, includes: "15. 🟨 **P2-Wave-2" }, // pattern-2 (emoji)
+  { file: ADR_REL, includes: "15. 🟨 **P2-Wave-2" }, // pattern-3 (wave ordinal) — same line, 2 patterns
+  { file: ADR_REL, includes: "19. 🟨 **P2-Wave-3" }, // pattern-2 (emoji)
+  { file: ADR_REL, includes: "19. 🟨 **P2-Wave-3" }, // pattern-3 (wave ordinal)
+  { file: ADR_REL, includes: "github.com/pbakaus/impeccable" },
+  { file: ADR_REL, includes: "github.com/obra/superpowers" },
+];
+
+// The Wave-3 deliverable docs that ARE inside the scanner corpus (drift caught at its source).
+// NB: only files under docs/** are scanned — the scanner corpus EXCLUDES root `.guild/initiatives/**`,
+// so the roadmap + website-docs-followup are NOT scanner-covered (codex G-lane LW3-8); their
+// correctness is asserted by the content tests below, not by a (vacuous) zero-flag claim.
+const WAVE_DOCS_IN_CORPUS = ["docs/knowledge/architecture/universal-host-build-flow.md"];
+
+type ScanFlag = { file: string; line: string; pattern: string; match: string };
+
+/** Parse `.last-scan.md`: the summary-table counts AND the per-flag rows. */
+function parseLastScan(md: string): { counts: Record<string, number>; flags: ScanFlag[] } {
+  const counts: Record<string, number> = {};
+  for (const m of md.matchAll(/^\|\s*(.+?)\s*\|\s*\**(\d+)\**\s*\|$/gim)) {
+    counts[m[1].replace(/\*/g, "").trim()] = Number(m[2]);
+  }
+  const flags: ScanFlag[] = [];
+  // flag rows: | `<file>` | L<n> | <pattern> | `<match>` |
+  for (const m of md.matchAll(/^\|\s*`([^`]+)`\s*\|\s*(L\d+)\s*\|\s*([^|]+?)\s*\|\s*`?(.+?)`?\s*\|$/gim)) {
+    flags.push({ file: m[1].trim(), line: m[2].trim(), pattern: m[3].trim(), match: m[4].trim() });
+  }
+  return { counts, flags };
+}
+
+/** Run the scanner (refreshes `.last-scan.md`); exitOk=true iff it exited 0. */
+function runHygieneScan(): { exitOk: boolean } {
   const tsx = path.join(PLUGIN_ROOT, "scripts", "node_modules", ".bin", "tsx");
   try {
-    const out = execFileSync(tsx, [path.join(PLUGIN_ROOT, "scripts/docs-hygiene/scan.ts")], {
+    execFileSync(tsx, [path.join(PLUGIN_ROOT, "scripts/docs-hygiene/scan.ts")], {
       cwd: REPO_ROOT,
       encoding: "utf8",
       timeout: 120000,
+      stdio: "ignore",
     });
-    // The scanner prints a findings summary; "clean" = no nonzero finding counts.
-    const clean = /\b0 findings\b/i.test(out) || /no findings/i.test(out) || !/findings?:\s*[1-9]/i.test(out);
-    return { clean, out };
-  } catch (e) {
-    // Non-zero exit ⇒ findings present (or scan error).
-    const out = (e as { stdout?: string; stderr?: string }).stdout ?? (e as Error).message ?? "";
-    return { clean: false, out: String(out) };
+    return { exitOk: true };
+  } catch {
+    return { exitOk: false };
   }
+}
+
+/** Refresh + load the authoritative scan report. Throws if the scanner failed or wrote nothing. */
+function freshScan(): { counts: Record<string, number>; flags: ScanFlag[]; exitOk: boolean } {
+  const { exitOk } = runHygieneScan();
+  const md = fs.existsSync(LAST_SCAN) ? fs.readFileSync(LAST_SCAN, "utf8") : "";
+  return { ...parseLastScan(md), exitOk };
 }
 
 const buildFlow = readIf(BUILD_FLOW);
@@ -87,10 +152,56 @@ describe("SC-W3-5 — docs reconcile (status probe, always on)", () => {
 });
 
 (lw38Landed ? describe : describe.skip)("SC-W3-5 — BINDING (active once LW3-8 lands)", () => {
-  it("the docs-hygiene scan exits clean (0 findings)", () => {
-    const { clean, out } = hygieneScanClean();
-    if (!clean) throw new Error(`SC-W3-5: docs-hygiene scan reported findings:\n${out.slice(-2000)}`);
-    expect(clean).toBe(true);
+  it("the docs-hygiene scan exits 0 and reports ZERO hard-category findings (drift/dangling-related/missing-importance/secrets/pending-grade-review)", () => {
+    const { exitOk, counts, flags } = freshScan();
+    expect(exitOk).toBe(true);
+    expect(flags.length).toBeGreaterThan(0); // report parsed real rows (parser not silently empty)
+    for (const label of HARD_CATEGORY_LABELS) {
+      // the summary table MUST carry the label (guards a parser/label drift that would skip the check)
+      expect(counts).toHaveProperty(label);
+      expect([label, counts[label]]).toEqual([label, 0]);
+    }
+  });
+
+  it("every remaining flag is a stable-substring-pinned dispositioned false-positive (a new/changed/moved flag fails)", () => {
+    const { flags } = freshScan();
+    // Each actual flag must match a pinned disposition (same file + stable match-substring); and the
+    // pinned set must be fully consumed — so a removed-then-different flag can't sneak in under count.
+    const remaining = [...DISPOSITIONED_FLAGS];
+    const unexplained: ScanFlag[] = [];
+    for (const f of flags) {
+      const i = remaining.findIndex((d) => f.file === d.file && f.match.includes(d.includes));
+      if (i === -1) unexplained.push(f);
+      else remaining.splice(i, 1);
+    }
+    // No flag outside the dispositioned set (catches NEW drift in any bucket, incl. a regressed step 12–14).
+    expect(unexplained).toEqual([]);
+    // Every pinned disposition was actually present (catches a flag silently changing its text).
+    expect(remaining).toEqual([]);
+  });
+
+  it("the in-corpus Wave-3 deliverable doc (build-flow) contributes ZERO scanner flags", () => {
+    const { flags } = freshScan();
+    for (const doc of WAVE_DOCS_IN_CORPUS) {
+      expect(flags.filter((f) => f.file === doc)).toEqual([]);
+    }
+  });
+
+  it("anti-vacuity: the .last-scan.md parser extracts REAL counts + flag rows (not hard-wired to 0/empty)", () => {
+    const synthetic = [
+      "## Summary",
+      "| Category | Count |",
+      "|---|---|",
+      "| Drift markers (v1/single-repo) | 3 |",
+      "| Secrets grep | 0 |",
+      "",
+      "| `docs/x.md` | L10 | C.3-pattern-2: progress emoji | `🟨 thing` |",
+    ].join("\n");
+    const { counts, flags } = parseLastScan(synthetic);
+    expect(counts["Drift markers (v1/single-repo)"]).toBe(3); // real nonzero parsed
+    expect(counts["Secrets grep"]).toBe(0);
+    expect(flags).toHaveLength(1);
+    expect(flags[0]).toMatchObject({ file: "docs/x.md", line: "L10", match: "🟨 thing" });
   });
 
   it("build-flow has a Wave-3 section naming templates/presets/dashboard/installer-contract + deferred-cutover", () => {

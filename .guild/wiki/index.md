@@ -16,3 +16,5 @@
 
 - [shell-hook-json-parsing](standards/shell-hook-json-parsing.md) - 2026-05-02 - Shell hooks must use temp-file + python3 for JSON parsing; bash variable interpolation breaks silently.
 
+
+- [wave3-producer-skill-additive](decisions/wave3-producer-skill-additive.md) - 2026-06-17 - Accept the LW3-5 producer skill as a ratified additive new live skill; skills/** additive-only, .claude-plugin/+commands/ stay strict byte-identical.

@@ -15,3 +15,5 @@
 - decided two-audit-schemas
 - standard shell-hook-json-parsing
 
+
+## [2026-06-17] decided wave3-producer-skill-additive
