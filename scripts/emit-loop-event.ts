@@ -51,6 +51,7 @@ import {
   type LoopRoundEndEvent,
   type LoopRoundStartEvent,
 } from "../hooks/lib/v1.4/log-jsonl.js";
+import { resolveGuildRoot } from "./lib/guild-root";
 
 const VALID_EVENTS = new Set(["loop_round_start", "loop_round_end", "codex_review_round"]);
 const VALID_LAYERS = new Set(["L1", "L2", "L3", "L4", "security-review"]);
@@ -103,7 +104,10 @@ function readSentinel(cwd: string): string | undefined {
 
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
-  const cwd = args.cwd ?? process.env["GUILD_CWD"] ?? process.cwd();
+  // Anchor to the repo root by walking up from the raw cwd so a sub-directory
+  // invocation (e.g. cwd=scripts/) never creates a nested .guild/.
+  // Decision: .guild/wiki/decisions/telemetry-anchors-to-repo-root-not-cwd.md
+  const cwd = resolveGuildRoot(args.cwd ?? process.env["GUILD_CWD"] ?? process.cwd());
 
   if (!args.event || !VALID_EVENTS.has(args.event)) {
     process.stderr.write(

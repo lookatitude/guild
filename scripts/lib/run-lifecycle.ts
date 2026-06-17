@@ -44,6 +44,7 @@ import { parseYaml, replaceTopLevelLine } from "./frontmatter";
 import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
 import { scrubbedWrite } from "../../hooks/lib/security/scrubbed-write";
 import type { ScrubbedWriteResult, ScrubSurface } from "../../hooks/lib/security/scrubbed-write";
+import { resolveGuildRoot } from "./guild-root";
 
 // ── Injected seams (B1 §4) ───────────────────────────────────────────────────
 
@@ -668,8 +669,10 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
 function resolveCloseRoot(env: RunLifecycleEnv, runId: string): string {
   const hint = (env as RunLifecycleEnv & { __rootHint?: string }).__rootHint;
   if (hint) return hint;
-  // Fallback: assume the cwd is the project root (entrypoints run from root).
-  const cwd = process.cwd();
+  // Walk up from process.cwd() to the nearest .git/.guild anchor so a
+  // sub-directory cwd can never resolve to a nested .guild/ base.
+  // Decision: .guild/wiki/decisions/telemetry-anchors-to-repo-root-not-cwd.md
+  const cwd = resolveGuildRoot(process.cwd());
   if (env.fs.exists(runYamlPath(cwd, runId))) return cwd;
   return cwd;
 }
