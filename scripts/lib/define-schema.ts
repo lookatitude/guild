@@ -259,7 +259,10 @@ export function runSelfCheck(): { pass: boolean; details: string } {
   let exoticThrew = false;
   let exoticRejected = false;
   try {
-    exoticRejected = !validateDefineV1({ ...DEFINE_V1_EXAMPLE, schema_version: 1n as unknown }).valid;
+    // Exotic non-string schema_version is rejected. (Was a `1n` BigInt literal,
+    // which TS2737-fails under the project's pre-ES2020 ts-jest target the moment
+    // this module is compiled by a test — a plain non-string exercises the same path.)
+    exoticRejected = !validateDefineV1({ ...DEFINE_V1_EXAMPLE, schema_version: 123 as unknown }).valid;
   } catch {
     exoticThrew = true;
   }
