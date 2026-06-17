@@ -328,3 +328,34 @@ export function runIntakeSmoke(fixture: SmokeCase[] = INTAKE_SMOKE_FIXTURE): {
   const recall = tp + fn === 0 ? 1 : tp / (tp + fn);
   return { precision, recall, mismatches };
 }
+
+// ── CLI — the deterministic router entrypoint for the no-slash `using-guild` path ──
+//
+// LW1-3 wiring (SC-W1-1b). The no-slash entry invokes THIS to decide routing, so the
+// decision is deterministic CODE on the real path — never model-prose re-derivation of
+// the heuristic (the recurring self-build defect). The caller routes on the `intake`
+// field ONLY (`product_loop` ⇒ product-loop intake), NEVER the raw `score`.
+//
+// Import stays PURE — this block runs ONLY when the file is executed directly
+// (`require.main === module`), preserving LW1-2's "no process IO at module scope"
+// contract for every importer (the validators, the smoke test, LW1-8's eval).
+//
+// Usage (prompt via stdin is preferred — robust to quotes/newlines in a user prompt):
+//   echo "<prompt>" | npx tsx scripts/lib/classify-intake.ts
+//   npx tsx scripts/lib/classify-intake.ts "<prompt>"
+// Stdout: the IntakeResult as JSON ({ intake, score, signals }). Exit 0 always.
+if (require.main === module) {
+  const argPrompt = process.argv.slice(2).join(" ");
+  const emit = (p: string): void => {
+    process.stdout.write(JSON.stringify(classifyIntake(p), null, 2) + "\n");
+  };
+  if (argPrompt.trim() !== "") {
+    emit(argPrompt);
+  } else {
+    // No argv prompt — read the verbatim prompt from stdin (quoting-safe).
+    let buf = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (c) => (buf += c));
+    process.stdin.on("end", () => emit(buf));
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "I have an idea for an app that helps people track their houseplants.",
+    "What if we built a tool that summarizes long PDFs?",
+    "I want to make a tool that turns voice notes into to-do lists.",
+    "I wish there was an app that reminded me to call my parents.",
+    "Got a startup idea: a marketplace for local farmers — let's explore it.",
+    "Help me pressure-test a product idea before we commit to building it."
+  ],
+  "should_not_trigger": [
+    "Fix the bug where the login button does nothing on mobile.",
+    "Plan this feature: add SSO to the admin dashboard.",
+    "Review this PR and tell me if the migration is safe.",
+    "Refactor the payment module to use the new client.",
+    "Write the PRD and acceptance criteria for the houseplant app.",
+    "What if we built an endpoint that creates invoices?"
+  ]
+}

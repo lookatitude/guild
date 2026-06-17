@@ -69,6 +69,33 @@ degraded`), recording any loss. The Phase-1 map (Claude verified; Codex rows are
 If a capability is absent, do **not** claim it — degrade and record the loss. The
 row is authoritative; the table above is a convenience index into it.
 
+## Product-loop intake (the no-slash router)
+
+A **vague product idea** ("I have an idea for X", "what if we built…", "I want to make a
+tool that…") enters Guild's **product loop** — NOT the engineering lifecycle — and it does
+so **with no `/guild` typed** (AC30). This is a **router on this existing entry**, not a new
+gate and not an always-on interceptor: a non-product prompt falls straight through to the
+normal lifecycle, unchanged.
+
+**Route deterministically — never eyeball it.** Run the deterministic intake classifier on
+the user's verbatim prompt and route on its `intake` field ONLY:
+
+```
+echo "<the user's verbatim prompt>" | npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/lib/classify-intake.ts
+```
+
+- `intake === "product_loop"` → route to the **product-loop intake**: invoke
+  `guild:product-explore` (it scopes the idea into a `guild.explore.v1` artifact), then
+  `guild:product-define` (the traceable PRD nucleus). No `/guild` is required.
+- anything else (`intake === "other"`) → do **NOT** enter the product loop; continue with
+  the normal "When to engage Guild" judgement above.
+
+**Precision floor (R1) — do not hijack.** Decide on the classifier's `intake` value, never
+on the raw `score` and never on your own re-reading of the prompt. The classifier is tuned
+precision-over-recall (a single engineering veto sinks a product reading), so a build/review/
+debug/ops prompt routes to `other` and is never pulled into the product loop. If the
+classifier says `other`, the product loop does not fire — full stop.
+
 ## If you are a narrow subagent — skip this
 
 If you were handed **one fully-scoped task with the context you need** (a single-file
