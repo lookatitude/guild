@@ -17,7 +17,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   renderAllHostConfigs,
+  renderHostConfig,
   type RenderConfigInput,
+  type ConfigSource,
 } from "../lib/config-render";
 import { resolveBaselineGolden } from "../lib/permission-policy-schema";
 import { HOST_IDS } from "../lib/host-registry-schema";
@@ -56,26 +58,65 @@ describe("SC-W1-8 — per-host render golden (5 hosts)", () => {
 
 describe("SC-W1-8 — cross-host secret / local-leak negative (F-9)", () => {
   const SECRET = "ghp_0123456789abcdefghijABCDEFGHIJ012345";
-  const LOCAL_ONLY = "LOCAL-ONLY-CODENAME-ZEPHYR";
 
   it("a secret value never appears in ANY rendered host shape", () => {
     const all = renderAllHostConfigs(
-      baseInput({ config: { roles: { host: "claude", note: `token=${SECRET}` } } as RenderConfigInput["config"] })
+      baseInput({
+        config: { roles: { host: "claude", note: `token=${SECRET}` } } as RenderConfigInput["config"],
+        sources: {}, // enforce the local-guard (empty = nothing local, but the secret scan still runs)
+      })
     );
     for (const id of HOST_IDS) {
       expect(JSON.stringify(all[id])).not.toContain(SECRET);
     }
   });
 
-  it("a local/secret-codename value is withheld from every shared host output", () => {
-    const all = renderAllHostConfigs(
+  // FIX 2 (codex anti-vacuity): drive the REAL provenance-withhold path with a `sources`
+  // map (not redactionPatterns over a string), exercising BOTH feeders the renderer guards:
+  // the models tier slot AND the permission feeder (auto_approve / security.bypass).
+  it("a LOCAL-scoped models slot value is withheld from the shared render (provenance path)", () => {
+    const LOCAL_MODEL = "LOCAL-ONLY-MODEL-ZEPHYR";
+    const sources: Record<string, ConfigSource> = { "models.tiers.cheap.claude": "project-local" };
+    const r = renderHostConfig(
+      "claude",
       baseInput({
-        config: { roles: { host: "claude", note: LOCAL_ONLY } } as RenderConfigInput["config"],
-        options: { renderedAt: NOW, redactionPatterns: ["LOCAL-ONLY-CODENAME-[A-Z]+"] },
+        config: {
+          models: { tiers: { cheap: { claude: LOCAL_MODEL }, mid: { claude: "sonnet" }, powerful: { claude: "opus" } } },
+        } as RenderConfigInput["config"],
+        sources,
       })
     );
-    for (const id of HOST_IDS) {
-      expect(JSON.stringify(all[id])).not.toContain(LOCAL_ONLY);
-    }
+    // the local-only override never surfaces, anywhere
+    expect(JSON.stringify(r)).not.toContain(LOCAL_MODEL);
+    expect(r.models?.cheap).not.toBe(LOCAL_MODEL);
+    // it was withheld via the provenance guard (recorded redaction), and fails closed
+    expect(r._redactions?.some((x) => x.field === "models.tiers.cheap.claude" && x.reason === "local-scope")).toBe(true);
+    expect(r.ok).toBe(false);
+    expect(r.blocked).toBe(true);
+  });
+
+  it("a LOCAL-scoped permission FEEDER withholds the whole derived permission block (provenance path)", () => {
+    const sources: Record<string, ConfigSource> = { auto_approve: "workspace-local" };
+    const r = renderHostConfig("claude", baseInput({ config: { auto_approve: ["Bash"] } as RenderConfigInput["config"], sources }));
+    expect(r.permissions).toBeUndefined(); // the derived block is withheld, not leaked
+    expect(
+      r._redactions?.some((x) => x.field === "permissions" && x.reason === "local-scope" && /auto_approve/.test(x.detail))
+    ).toBe(true);
+    expect(r.ok).toBe(false);
+  });
+
+  it("ANTI-VACUITY control: the SAME slot marked NON-local (project) IS emitted (withhold is source-driven)", () => {
+    const SHARED_MODEL = "sonnet-shared-override";
+    const sources: Record<string, ConfigSource> = { "models.tiers.cheap.claude": "project" }; // not local
+    const r = renderHostConfig(
+      "claude",
+      baseInput({
+        config: {
+          models: { tiers: { cheap: { claude: SHARED_MODEL }, mid: { claude: "sonnet" }, powerful: { claude: "opus" } } },
+        } as RenderConfigInput["config"],
+        sources,
+      })
+    );
+    expect(r.models?.cheap).toBe(SHARED_MODEL); // a non-local override DOES render → guard isn't always-on
   });
 });

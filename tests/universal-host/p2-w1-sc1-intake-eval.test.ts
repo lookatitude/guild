@@ -16,7 +16,12 @@
  * Falsifiable: if the classifier regresses (a disposition positive drops, or a dev prompt
  * over-fires), the precision/recall floor AND the per-case pins fail.
  */
-import { classifyIntake, type Intake } from "../../scripts/lib/classify-intake";
+import {
+  classifyIntake,
+  intakeRouteTarget,
+  PRODUCT_LOOP_ENTRY_SKILL,
+  type Intake,
+} from "../../scripts/lib/classify-intake";
 
 interface Case {
   prompt: string;
@@ -66,6 +71,13 @@ const NEGATIVES: Case[] = [
   // ↓ added-opener must NOT over-fire on an engineering target
   { prompt: "What if we added an endpoint that creates invoices?", expect: "other" },
   { prompt: "Refactor the CLI so the cron daemon reads its config from disk", expect: "other" },
+  // ── SCOPE BOUNDARY (FIX 4): host / infra / config / ops prompts are OUT OF SCOPE for
+  // product-loop intake. The product loop is for product IDEAS (something a user/market
+  // wants), NOT for registering hosts, provisioning build machines, or config/ops. These
+  // MUST stay `other`; a SEPARATE universal-host intake path owns host/config/ops routing.
+  { prompt: "add a new build server", expect: "other" },
+  { prompt: "register the mac mini as a guild host", expect: "other" },
+  { prompt: "self-hosted build machine for Guild jobs", expect: "other" },
 ];
 
 const FIXTURE = [...POSITIVES, ...NEGATIVES];
@@ -116,42 +128,47 @@ describe("SC-W1-1 — authoritative trigger-accuracy eval", () => {
   });
 });
 
-// ── SC-W1-1b — end-to-end routing decision (the wired no-slash path's decision fn) ──
+// ── SC-W1-1b — end-to-end routing decision (the SHIPPED no-slash decision helper) ──
 //
-// The no-slash `using-guild` entry routes on `classifyIntake(...).intake` ONLY (never the
-// raw score) — that is the deterministic decision the wiring consumes. We exercise that
-// exact decision function here (real path, no re-derivation of the heuristic).
-type Route = "product_loop_intake" | "normal_lifecycle";
-function routeNoSlashPrompt(prompt: string): Route {
-  return classifyIntake(prompt).intake === "product_loop" ? "product_loop_intake" : "normal_lifecycle";
-}
-
-describe("SC-W1-1b — no-slash routing decision", () => {
-  it("a vague product prompt resolves to product-loop intake", () => {
-    expect(routeNoSlashPrompt("I have an idea for an app that helps neighbors share tools")).toBe(
-      "product_loop_intake"
-    );
-    expect(routeNoSlashPrompt("Let's prototype the concept for a budgeting app")).toBe(
-      "product_loop_intake"
+// FIX 1 (codex anti-vacuity): exercise the SHIPPED `intakeRouteTarget()` from the
+// classify-intake module — the one-branch decision the no-slash `using-guild` wiring
+// consumes (product_loop ⇒ hand off to guild:product-explore; else null = normal
+// lifecycle). NO test-local re-implementation of the route decision.
+describe("SC-W1-1b — no-slash routing decision (shipped intakeRouteTarget)", () => {
+  it("a vague product prompt routes to the product-loop entry skill", () => {
+    const r = intakeRouteTarget("I have an idea for an app that helps neighbors share tools");
+    expect(r.intake).toBe("product_loop");
+    expect(r.next_skill).toBe(PRODUCT_LOOP_ENTRY_SKILL);
+    expect(intakeRouteTarget("Let's prototype the concept for a budgeting app").next_skill).toBe(
+      PRODUCT_LOOP_ENTRY_SKILL
     );
   });
 
-  it("a normal build/review prompt does NOT resolve to product-loop intake", () => {
-    expect(routeNoSlashPrompt("Plan this feature: add SSO to the admin dashboard")).toBe(
-      "normal_lifecycle"
-    );
-    expect(routeNoSlashPrompt("Review this PR and tell me if the migration is safe")).toBe(
-      "normal_lifecycle"
-    );
-    expect(routeNoSlashPrompt("Fix the failing build")).toBe("normal_lifecycle");
+  it("a normal build/review prompt has next_skill null (no product-loop handoff)", () => {
+    for (const p of [
+      "Plan this feature: add SSO to the admin dashboard",
+      "Review this PR and tell me if the migration is safe",
+      "Fix the failing build",
+    ]) {
+      const r = intakeRouteTarget(p);
+      expect(r.intake).toBe("other");
+      expect(r.next_skill).toBeNull();
+    }
   });
 
-  it("routes on the intake field, not the raw score (decision is the classifier's verdict)", () => {
-    // A dev prompt can carry product openers yet a negative score → must route normal.
-    const r = classifyIntake("What if we built an endpoint that creates invoices?");
+  it("routes on the verdict, not the raw score (a dev prompt with openers still routes normal)", () => {
+    const r = intakeRouteTarget("What if we built an endpoint that creates invoices?");
     expect(r.intake).toBe("other");
-    expect(routeNoSlashPrompt("What if we built an endpoint that creates invoices?")).toBe(
-      "normal_lifecycle"
-    );
+    expect(r.next_skill).toBeNull();
+  });
+
+  it("SCOPE BOUNDARY (FIX 4): host/infra/ops prompts get next_skill null (a separate path owns them)", () => {
+    for (const p of [
+      "add a new build server",
+      "register the mac mini as a guild host",
+      "self-hosted build machine for Guild jobs",
+    ]) {
+      expect(intakeRouteTarget(p).next_skill).toBeNull();
+    }
   });
 });

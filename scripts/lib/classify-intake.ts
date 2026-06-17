@@ -274,6 +274,38 @@ export function classifyIntake(prompt: unknown): IntakeResult {
   return { intake, score, signals };
 }
 
+// ── Shipped routing-decision helper (the no-slash `using-guild` entry's decision) ──
+//
+// The no-slash `using-guild` intake routing makes ONE branch: a `product_loop` prompt
+// hands off to the product-loop's first producer skill (`guild:product-explore`); anything
+// else continues the normal lifecycle (no product-loop handoff). This helper encodes that
+// SAME one-branch decision as deterministic CODE so the wiring (LW1-3) — and its eval
+// (LW1-8 SC-W1-1b) — consume the shipped decision, not a re-implemented test-local copy.
+
+/** The product-loop's first producer skill — the handoff target on a product_loop verdict. */
+export const PRODUCT_LOOP_ENTRY_SKILL = "guild:product-explore" as const;
+
+export interface IntakeRoute {
+  /** The classifier verdict. */
+  intake: Intake;
+  /**
+   * The skill the no-slash entry hands off to: `guild:product-explore` for product_loop,
+   * `null` for the normal lifecycle (no product-loop handoff). Routing reads THIS, not the
+   * raw score.
+   */
+  next_skill: typeof PRODUCT_LOOP_ENTRY_SKILL | null;
+}
+
+/**
+ * The shipped routing decision for a no-slash prompt. Pure & deterministic — wraps
+ * `classifyIntake` and maps the verdict to the handoff target with the single branch the
+ * `using-guild` entry describes. Never throws.
+ */
+export function intakeRouteTarget(prompt: unknown): IntakeRoute {
+  const intake = classifyIntake(prompt).intake;
+  return { intake, next_skill: intake === "product_loop" ? PRODUCT_LOOP_ENTRY_SKILL : null };
+}
+
 // ── Inline smoke set ──────────────────────────────────────────────────────────
 //
 // A SMALL hand-set used as a smoke check only — NOT the authoritative trigger
