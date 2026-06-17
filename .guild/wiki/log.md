@@ -1,6 +1,7 @@
 # Guild Wiki Log
 
 ## 2026-06-17
+- decided telemetry-anchors-to-repo-root-not-cwd
 - decided universal-host-p2-p3-wave-sequencing
 
 ## 2026-05-02
