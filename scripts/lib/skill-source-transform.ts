@@ -1,248 +1,421 @@
 /**
  * scripts/lib/skill-source-transform.ts
  *
- * LW2-1 — the deterministic source→host transformer for Guild skills
- * (`guild.skill_source.v1`). It renders a NEUTRAL skill source into the
- * host-native (Claude) `SKILL.md` shape so a skill can be authored once from a
- * source that lives OUTSIDE the live install surface and rendered into the
- * committed runtime artifact.
+ * LW2-1 — the NEUTRAL skill source registry (`guild.skill_src.v1`) + a fail-closed
+ * validator + a deterministic transformer that RENDERS the host-native (Claude)
+ * `SKILL.md` from a STRUCTURED registry entry (ADR step 15, spec SC-W2-1).
  *
- * Wave context (BY POINTER):
- *   .guild/spec/universal-host-p2-wave2.md  — SC-W2-1 / SC-W2-2 (ADR step 15)
- *   plugin/skills/meta/using-guild/SKILL.src.md — the P0 `SKILL.src.md` precedent
- *   plugin/scripts/lib/per-host-packaging.ts — the sibling pure-renderer convention
+ * Contract authority (SoT):
+ *   docs/knowledge/decisions/universal-host-plugin-architecture.md §step 15
+ *   .guild/spec/universal-host-p2-wave2.md   SC-W2-1 / SC-W2-5
+ *   .guild/plan/universal-host-p2-wave2.md   lane LW2-1 (transformer) / LW2-2 (sources)
  *
- * HARD INVARIANTS (the spec's F-1/F-2/F-5; enforced here in code, not prose):
- *   - Neutral sources live under `plugin/skill-src/<skill>/` — OUTSIDE the live
- *     surface. They are NOT co-located `skills/<tier>/<skill>/SKILL.src.md` (which
- *     `build-inventory.ts` prefers as the runtime entry — F-1).
- *   - Render targets a TEMP/STAGING path ONLY. `renderSkillToStaging` REFUSES to
- *     write into `.claude-plugin/**`, `commands/**`, or live `skills/**`
- *     (`assertStagingPath` — defense in depth for R2).
- *   - BYTE-IDENTICAL only (F-2). The Claude renderer canonically re-serializes the
- *     parsed source; a source that cannot round-trip to its committed `SKILL.md`
- *     is a defect to escalate (autonomy=ask), never a silent diff.
+ * WHY (and what the earlier round got wrong): the first cut authored each neutral
+ * source as a VERBATIM byte-copy of the committed `SKILL.md`, which made the
+ * transform an IDENTITY function — `render(src) == committed` proved nothing about
+ * host-neutrality (it defeated ADR step 15). This module fixes that by modelling the
+ * source EXACTLY on the (correct) command lane (`command-registry.ts` /
+ * `command-src/command-registry.json`): the SOURCE OF TRUTH is a host-NEUTRAL
+ * registry of STRUCTURED entries `{ name, description, when_to_use, type, body }`;
+ * the renderer PROJECTS an entry back into Claude's exact `SKILL.md` shape. The
+ * transform is therefore NON-trivial (a JSON entry → the YAML-frontmatter+body md),
+ * and a future Codex renderer would consume the SAME entry to emit a different host
+ * shape.
  *
- * DETERMINISM: every exported function is PURE over its inputs — no filesystem
- * (except the explicit `*FromDir` / `*ToStaging` I/O wrappers, which take paths),
- * no network, no `Date.now()`, no `Math.random()`. Identical source → byte-identical
- * render, always.
+ * NEUTRAL vs HOST-NATIVE split:
+ *   - Neutral (registry entry): `id` (the skill dir stem), `name`/`description`/
+ *     `when_to_use`/`type` (the frontmatter fields as discrete values), `body`
+ *     (the host-neutral markdown instructions, verbatim).
+ *   - Host-native (produced by THIS Claude renderer): the `---`-fenced YAML
+ *     frontmatter block with Claude's exact key order (name, description,
+ *     when_to_use, type) as single-line UNQUOTED scalars, then the verbatim body.
  *
- * Owned by tooling-engineer (LW2-1). The neutral SOURCES are authored by
- * skill-author (LW2-2); the per-skill render-equivalence + drift gate are owned by
- * eval-engineer (LW2-6). `extractSkillSource` is the pure inverse — the bootstrap
- * LW2-2 can seed sources from, and the oracle the round-trip self-test uses.
+ * BYTE-IDENTICAL discipline (F-2, no functional-equivalence fallback):
+ *   The committed skill frontmatter uses UNQUOTED single-line scalars, so the
+ *   renderer emits each value verbatim as `key: <value>`. The validator FAILS
+ *   CLOSED on any value the single-line shape could not reproduce (a newline /
+ *   control char in a scalar, a body without the canonical one-blank-line head /
+ *   single trailing newline), so a "valid" entry is GUARANTEED to render
+ *   byte-faithfully. A skill that cannot be expressed in this shape is escalated
+ *   (autonomy=ask) by the producer lane (LW2-2) — never shipped with a silent diff.
+ *
+ * PURITY: every render/validate/extract function is pure (no I/O, no clock, no
+ * random). The ONLY writer is `renderSkillToStaging`, which is guarded by
+ * `assertStagingPath` (anchored to an INDEPENDENTLY-resolved plugin root + a CLOSED
+ * live-surface set) so a render can only ever land in a temp/staging tree — never
+ * `skills/**`, `.claude-plugin/**`, or `commands/**` (HARD INVARIANT, R2 / SC-W2-5).
+ *
+ * Owned by tooling-engineer (LW2-1). The neutral registry is authored by
+ * skill-author (LW2-2); the parity/drift gate is eval-engineer's (LW2-6).
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { splitFrontmatter } from "./frontmatter";
+
 // ---------------------------------------------------------------------------
-// guild.skill_source.v1 — the neutral skill-source AST
+// Schema constants + result shape
 // ---------------------------------------------------------------------------
 
-/**
- * One frontmatter field of a neutral skill source. The neutral metadata is a
- * flat, ORDERED list of single-line `key: value` fields (the shape every Guild
- * skill uses today: name, description, when_to_use, type). Order is preserved so
- * the Claude render is byte-identical to the committed `SKILL.md`.
- */
-export interface SkillSourceField {
-  key: string;
-  value: string;
+export const SKILL_SRC_SCHEMA_VERSION = "guild.skill_src.v1" as const;
+
+/** Fail-closed validator result — `{ valid, errors }` (P1/P2 convention). */
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
 }
 
-/** The parsed neutral skill source (`guild.skill_source.v1`). */
-export interface SkillSource {
-  readonly schema_version: "guild.skill_source.v1";
-  /** Ordered frontmatter fields (the host-neutral metadata). */
-  frontmatter: SkillSourceField[];
+// ---------------------------------------------------------------------------
+// Type — a single neutral skill entry (`guild.skill_src.v1`)
+// ---------------------------------------------------------------------------
+
+export interface SkillSrcV1 {
+  /** Stable skill id == the committed skill DIR stem (`skills/meta/tdd` → `tdd`). Plain scalar. */
+  id: string;
+  /** Frontmatter `name:` — the namespaced skill name (e.g. `guild-tdd`); rendered unquoted. */
+  name: string;
+  /** Frontmatter `description:` — rendered as a single-line UNQUOTED scalar. */
+  description: string;
+  /** Frontmatter `when_to_use:` — rendered as a single-line UNQUOTED scalar. */
+  when_to_use: string;
+  /** Frontmatter `type:` — e.g. `meta`; rendered as an unquoted scalar. */
+  type: string;
   /**
-   * The skill body, VERBATIM — every byte after the frontmatter's closing
-   * `---\n` line (this INCLUDES the conventional blank line that separates the
-   * frontmatter from the `# Title`). Stored verbatim so the body never needs to
-   * round-trip through a lossy structural model — byte-identity is by construction.
+   * The verbatim markdown body — EVERYTHING after the closing `---` frontmatter
+   * fence (exactly what `splitFrontmatter` returns as `body`, including the leading
+   * blank line). Carried byte-for-byte; the renderer never reflows it.
    */
   body: string;
 }
 
-export const SKILL_SOURCE_SCHEMA_VERSION = "guild.skill_source.v1" as const;
+const SKILL_ALLOWED_KEYS = ["id", "name", "description", "when_to_use", "type", "body"];
+
+// ---------------------------------------------------------------------------
+// Type — the registry (the single neutral source for the skill set)
+// ---------------------------------------------------------------------------
+
+export interface SkillSrcRegistryV1 {
+  schema_version: typeof SKILL_SRC_SCHEMA_VERSION;
+  skills: SkillSrcV1[];
+}
+
+const REGISTRY_ALLOWED_KEYS = ["schema_version", "skills"];
+
+// ---------------------------------------------------------------------------
+// Render-safety predicates (WHAT the validator enforces fail-closed)
+// ---------------------------------------------------------------------------
+
+/** The skill dir-stem shape: lowercase alnum + hyphen, leading letter (matches all 5). */
+const SKILL_ID = /^[a-z][a-z0-9-]*$/;
+
+/** The frontmatter `name:` shape — a plain unquoted scalar (`guild-review-broker`, …). */
+const SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+/** The `type:` shape — a plain unquoted scalar (`meta`). */
+const SKILL_TYPE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 /**
- * The frontmatter line grammar. A neutral-source frontmatter line MUST be a
- * single-line `key: value` pair: a key (`[A-Za-z_][A-Za-z0-9_-]*`), a colon, a
- * single space, then the (possibly empty) value running to end-of-line. This is
- * exactly the shape `readScalarField` (build-inventory's reader) consumes, and
- * the shape all five Wave-2 skills already use. A line that does not conform is
- * REJECTED at parse time (it would not round-trip byte-identically) — F-2: escalate,
- * never ship a silent diff.
+ * Reject control characters (incl. newlines / tabs / CR) in a single-line scalar.
+ * The committed frontmatter scalars are one line each; a newline would split the
+ * value across lines and the verbatim emit would NOT round-trip — fail closed.
  */
+// eslint-disable-next-line no-control-regex
+const HAS_CONTROL_CHAR = /[\x00-\x1F\x7F]/;
+
+// ---------------------------------------------------------------------------
+// Validator — single entry (fail-closed, never throws)
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate ONE `guild.skill_src.v1` entry. Fails closed on any missing/empty
+ * required field, wrong type, unknown key, or a value the byte-faithful renderer
+ * could not reproduce. NEVER throws on exotic input.
+ */
+export function validateSkillSrcV1(value: unknown): ValidationResult {
+  // Fail-CLOSED on ANY throw — a throwing getter or a Proxy trap on arbitrary input
+  // must NEVER escape as an exception (codex re-gate); it returns {valid:false}. The
+  // checks live in the inner function; this wrapper is the only public entry.
+  try {
+    return validateSkillSrcV1Inner(value);
+  } catch (err) {
+    // NB: never `String(err)` here — an unstringifiable thrown object (a toString
+    // that itself throws) would escape this very catch. `err.message` is already a
+    // string for an Error; anything else collapses to a fixed label.
+    return {
+      valid: false,
+      errors: [`skill entry: validation threw on exotic input: ${err instanceof Error ? err.message : "(unknown error)"}`],
+    };
+  }
+}
+
+function validateSkillSrcV1Inner(value: unknown): ValidationResult {
+  const errors: string[] = [];
+  const where = (k: string) => `skill entry: ${k}`;
+
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return { valid: false, errors: ["skill entry: not an object"] };
+  }
+  const e = value as Record<string, unknown>;
+
+  for (const k of Object.keys(e)) {
+    if (!SKILL_ALLOWED_KEYS.includes(k)) errors.push(`${where(k)}: unknown key`);
+  }
+
+  // id — the committed dir-stem shape (lowercase alnum+hyphen), non-empty
+  if (typeof e.id !== "string" || e.id.length === 0) {
+    errors.push(`${where("id")}: missing or empty`);
+  } else if (!SKILL_ID.test(e.id)) {
+    errors.push(`${where("id")}: not a skill-dir stem (must match ${SKILL_ID})`);
+  }
+
+  // name — a plain unquoted scalar (namespaced skill name); non-empty
+  if (typeof e.name !== "string" || e.name.length === 0) {
+    errors.push(`${where("name")}: missing or empty`);
+  } else if (!SKILL_NAME.test(e.name)) {
+    errors.push(`${where("name")}: not a plain scalar name (must match ${SKILL_NAME})`);
+  }
+
+  // description — non-empty single-line scalar (renders unquoted)
+  if (typeof e.description !== "string" || e.description.length === 0) {
+    errors.push(`${where("description")}: missing or empty`);
+  } else if (HAS_CONTROL_CHAR.test(e.description)) {
+    errors.push(`${where("description")}: contains a control/newline char (not single-line renderable)`);
+  }
+
+  // when_to_use — non-empty single-line scalar (renders unquoted)
+  if (typeof e.when_to_use !== "string" || e.when_to_use.length === 0) {
+    errors.push(`${where("when_to_use")}: missing or empty`);
+  } else if (HAS_CONTROL_CHAR.test(e.when_to_use)) {
+    errors.push(`${where("when_to_use")}: contains a control/newline char (not single-line renderable)`);
+  }
+
+  // type — non-empty plain scalar (renders unquoted)
+  if (typeof e.type !== "string" || e.type.length === 0) {
+    errors.push(`${where("type")}: missing or empty`);
+  } else if (!SKILL_TYPE.test(e.type)) {
+    errors.push(`${where("type")}: not a plain scalar type (must match ${SKILL_TYPE})`);
+  }
+
+  // body — verbatim, but must be CANONICAL skill-file shape so a valid entry renders
+  // the corpus structure: a non-empty string that begins with EXACTLY ONE blank line
+  // then content (`\n` + a non-newline) and ends with EXACTLY ONE trailing newline
+  // (a non-newline then a final `\n`). All 5 committed files satisfy this.
+  if (typeof e.body !== "string") {
+    errors.push(`${where("body")}: missing (must be a non-empty string)`);
+  } else if (e.body.length === 0) {
+    errors.push(`${where("body")}: empty (a skill file always has a body)`);
+  } else {
+    if (!/^\n[^\n]/.test(e.body)) {
+      errors.push(`${where("body")}: must begin with exactly one blank line then content`);
+    }
+    if (!/[^\n]\n$/.test(e.body)) {
+      errors.push(`${where("body")}: must end with exactly one trailing newline`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// ---------------------------------------------------------------------------
+// Validator — the whole registry (fail-closed, never throws)
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate a `guild.skill_src.v1` registry: the version tag, the skills array,
+ * each entry, and global uniqueness of `id`. Fails closed; never throws.
+ */
+export function validateSkillSrcRegistryV1(value: unknown): ValidationResult {
+  // Fail-CLOSED on ANY throw — same guard as the per-entry validator (the registry's
+  // own member access / iteration could trip a throwing getter or Proxy trap on
+  // arbitrary input). Returns {valid:false} rather than propagating an exception.
+  try {
+    return validateSkillSrcRegistryV1Inner(value);
+  } catch (err) {
+    // Never `String(err)` — see validateSkillSrcV1's catch (an unstringifiable
+    // thrown object would escape this catch).
+    return {
+      valid: false,
+      errors: [`registry: validation threw on exotic input: ${err instanceof Error ? err.message : "(unknown error)"}`],
+    };
+  }
+}
+
+function validateSkillSrcRegistryV1Inner(value: unknown): ValidationResult {
+  const errors: string[] = [];
+
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return { valid: false, errors: ["registry: not an object"] };
+  }
+  const r = value as Record<string, unknown>;
+
+  for (const k of Object.keys(r)) {
+    if (!REGISTRY_ALLOWED_KEYS.includes(k)) errors.push(`registry: unknown key: ${k}`);
+  }
+
+  if (r.schema_version !== SKILL_SRC_SCHEMA_VERSION) {
+    errors.push(`registry: schema_version must be "${SKILL_SRC_SCHEMA_VERSION}"`);
+  }
+
+  if (!Array.isArray(r.skills) || r.skills.length === 0) {
+    errors.push("registry: skills must be a non-empty array");
+    return { valid: errors.length === 0, errors };
+  }
+
+  const seen = new Set<string>();
+  r.skills.forEach((s, i) => {
+    const res = validateSkillSrcV1(s);
+    if (!res.valid) errors.push(...res.errors.map((m) => `skills[${i}]: ${m}`));
+    const id = (s as Record<string, unknown> | null)?.id;
+    if (typeof id === "string") {
+      if (seen.has(id)) errors.push(`registry: duplicate skill id: ${id}`);
+      seen.add(id);
+    }
+  });
+
+  return { valid: errors.length === 0, errors };
+}
+
+// ---------------------------------------------------------------------------
+// Renderer — neutral entry → host-native (Claude) SKILL.md STRING (pure)
+// ---------------------------------------------------------------------------
+
+/**
+ * Render a neutral `guild.skill_src.v1` entry into the Claude `SKILL.md` shape,
+ * BYTE-IDENTICAL to the committed `skills/<tier>/<id>/SKILL.md` for a faithful entry.
+ *
+ * Layout (exactly the corpus shape — single-line UNQUOTED scalars in this order):
+ *   ---\n
+ *   name: <name>\n
+ *   description: <description>\n
+ *   when_to_use: <when_to_use>\n
+ *   type: <type>\n
+ *   ---\n<body>
+ *
+ * `body` is appended verbatim — it begins with the blank line between the closing
+ * fence and the first body line, and ends with exactly one trailing newline.
+ *
+ * PURE: validates first and THROWS on an invalid entry (a renderer must never emit
+ * a non-faithful artifact); deterministic; no I/O.
+ */
+export function renderSkillV1(entry: SkillSrcV1): string {
+  const res = validateSkillSrcV1(entry);
+  if (!res.valid) {
+    throw new Error(`renderSkillV1: refusing to render an invalid entry:\n  ${res.errors.join("\n  ")}`);
+  }
+
+  const fm = [
+    `name: ${entry.name}`,
+    `description: ${entry.description}`,
+    `when_to_use: ${entry.when_to_use}`,
+    `type: ${entry.type}`,
+  ].join("\n");
+
+  // "---\n" + frontmatter + "\n---\n" + body  (the closing fence's trailing newline
+  // is restored here; `body` is the post-fence remainder verbatim).
+  return `---\n${fm}\n---\n${entry.body}`;
+}
+
+/** Find an entry by id in a registry and render it (throws if absent or invalid). */
+export function renderSkillFromRegistry(registry: SkillSrcRegistryV1, id: string): string {
+  const entry = registry.skills.find((s) => s.id === id);
+  if (!entry) {
+    throw new Error(`renderSkillFromRegistry: no skill entry with id "${id}"`);
+  }
+  return renderSkillV1(entry);
+}
+
+// ---------------------------------------------------------------------------
+// Extractor — committed SKILL.md → neutral entry (the byte-identical ORACLE)
+// ---------------------------------------------------------------------------
+
+/** A single frontmatter line: `key: value` (single space). value is the raw rest-of-line. */
 const FRONTMATTER_LINE = /^([A-Za-z_][A-Za-z0-9_-]*): (.*)$/;
 
-/** Raised when a source cannot be parsed into a byte-identical-renderable AST. */
-export class SkillSourceParseError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SkillSourceParseError";
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Parse — neutral source text → AST
-// ---------------------------------------------------------------------------
-
 /**
- * Parse neutral skill-source TEXT (`guild.skill_source.v1`) into its AST.
+ * Parse a committed Claude `SKILL.md` into a neutral `guild.skill_src.v1` entry —
+ * the inverse of `renderSkillV1` and the BOOTSTRAP/ORACLE helper that lets LW2-2
+ * seed the registry from the current corpus and lets the parity test assert
+ * `render(extract(file)) === file`.
  *
- * The source text is a frontmatter-plus-body document, byte-shaped like a
- * `SKILL.md`: an opening `---\n`, one or more `key: value` frontmatter lines, a
- * closing `---\n`, then the verbatim body. PURE: text in, AST out.
+ * The frontmatter values are read as the RAW rest-of-line (NOT through a semantic
+ * YAML parse), so the round-trip is byte-exact for the committed unquoted single-
+ * line scalars. The body is `splitFrontmatter`'s verbatim remainder.
  *
- * Throws `SkillSourceParseError` on any shape the renderer could not reproduce
- * byte-identically (missing/empty frontmatter, a non-conforming frontmatter
- * line, no closing delimiter) — a fail-closed parser is what makes the
- * byte-identical guarantee real rather than best-effort.
+ * `id` is supplied by the caller (the skill dir stem). Returns null on a
+ * structurally-invalid file (no frontmatter, or a non-conforming frontmatter line).
  */
-export function parseSkillSource(text: string): SkillSource {
-  if (!text.startsWith("---\n")) {
-    throw new SkillSourceParseError(
-      "skill source must begin with a `---\\n` frontmatter delimiter",
-    );
-  }
-  // Everything after the opening delimiter.
-  const afterOpen = text.slice("---\n".length);
+export function extractSkillV1(id: string, content: string): SkillSrcV1 | null {
+  const { frontmatter, body } = splitFrontmatter(content);
+  if (frontmatter === null) return null;
 
-  // Find the closing delimiter: a line that is exactly `---`. We scan line by
-  // line so the body (which itself may contain `---` horizontal rules) is never
-  // mistaken for the close — only the FIRST standalone `---` line closes.
-  const closeIdx = findClosingDelimiter(afterOpen);
-  if (closeIdx === null) {
-    throw new SkillSourceParseError(
-      "skill source frontmatter has no closing `---` delimiter line",
-    );
-  }
-
-  const frontmatterBlock = afterOpen.slice(0, closeIdx.blockEnd);
-  const body = afterOpen.slice(closeIdx.bodyStart);
-
-  const frontmatter = parseFrontmatterBlock(frontmatterBlock);
-  if (frontmatter.length === 0) {
-    throw new SkillSourceParseError("skill source frontmatter is empty");
-  }
-
-  return { schema_version: SKILL_SOURCE_SCHEMA_VERSION, frontmatter, body };
-}
-
-/**
- * Locate the first standalone `---` line in the post-open text. Returns the
- * byte offset where the frontmatter block ends (`blockEnd`, exclusive of the
- * delimiter line) and where the body starts (`bodyStart`, just after the
- * delimiter line's trailing `\n`), or null if none is found.
- */
-function findClosingDelimiter(
-  afterOpen: string,
-): { blockEnd: number; bodyStart: number } | null {
-  let cursor = 0;
-  while (cursor <= afterOpen.length) {
-    const nl = afterOpen.indexOf("\n", cursor);
-    const lineEnd = nl === -1 ? afterOpen.length : nl;
-    const line = afterOpen.slice(cursor, lineEnd);
-    if (line === "---") {
-      // bodyStart is past the delimiter line's newline (if any).
-      const bodyStart = nl === -1 ? afterOpen.length : nl + 1;
-      return { blockEnd: cursor, bodyStart };
-    }
-    if (nl === -1) break;
-    cursor = nl + 1;
-  }
-  return null;
-}
-
-/** Parse the raw frontmatter block (between delimiters) into ordered fields. */
-function parseFrontmatterBlock(block: string): SkillSourceField[] {
-  const fields: SkillSourceField[] = [];
-  // The block is the text up to (not including) the closing `---` line. Split on
-  // `\n`; the final element is the empty string before the delimiter line and is
-  // dropped. Any genuinely blank frontmatter line is a non-conforming line → reject.
-  const lines = block.split("\n");
-  // Drop the trailing empty segment produced by the block's final `\n`.
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  for (const line of lines) {
+  const fields: Record<string, string> = {};
+  for (const line of frontmatter.split("\n")) {
+    if (line === "") continue;
     const m = FRONTMATTER_LINE.exec(line);
-    if (!m) {
-      throw new SkillSourceParseError(
-        `non-conforming frontmatter line (must be \`key: value\`): ${JSON.stringify(line)}`,
-      );
-    }
-    fields.push({ key: m[1], value: m[2] });
+    if (!m) return null; // non-conforming frontmatter → cannot source losslessly
+    fields[m[1]] = m[2];
   }
-  return fields;
+
+  if (
+    typeof fields.name !== "string" ||
+    typeof fields.description !== "string" ||
+    typeof fields.when_to_use !== "string" ||
+    typeof fields.type !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    name: fields.name,
+    description: fields.description,
+    when_to_use: fields.when_to_use,
+    type: fields.type,
+    body,
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Render — AST → host-native (Claude) SKILL.md bytes
+// Registry loader (opt-in I/O) — read + validate the neutral registry file
 // ---------------------------------------------------------------------------
 
-/**
- * Render a neutral skill source into the host-native (Claude) `SKILL.md` bytes.
- *
- * The Claude shape is: `---\n`, each frontmatter field as `key: value\n` in
- * source order, `---\n`, then the verbatim body. This is a CANONICAL
- * re-serialization (not a file copy) — the frontmatter is re-emitted from the
- * parsed AST, so a source whose frontmatter does not match Claude's exact
- * single-space `key: value` serialization will NOT round-trip, which is the
- * byte-identity guarantee working as intended (F-2).
- *
- * PURE: AST in, string out. No clock, no randomness, no I/O.
- */
-export function renderClaudeSkill(src: SkillSource): string {
-  const fm = src.frontmatter.map((f) => `${f.key}: ${f.value}\n`).join("");
-  return `---\n${fm}---\n${src.body}`;
+/** Default neutral registry location — OUTSIDE the live surface (`plugin/skill-src/`). */
+export const DEFAULT_REGISTRY_PATH = path.join(
+  path.resolve(__dirname, "..", ".."),
+  "skill-src",
+  "skill-registry.json",
+);
+
+/** Parse + fail-closed-validate registry JSON text into a typed registry (throws on invalid). */
+export function parseSkillRegistry(jsonText: string): SkillSrcRegistryV1 {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (err) {
+    throw new Error(`parseSkillRegistry: not valid JSON: ${String(err)}`);
+  }
+  const res = validateSkillSrcRegistryV1(parsed);
+  if (!res.valid) {
+    throw new Error(`parseSkillRegistry: invalid guild.skill_src.v1 registry:\n  ${res.errors.join("\n  ")}`);
+  }
+  return parsed as SkillSrcRegistryV1;
 }
 
-/** Convenience: parse neutral source text and render it to Claude bytes in one call. */
-export function renderClaudeSkillFromSource(sourceText: string): string {
-  return renderClaudeSkill(parseSkillSource(sourceText));
-}
-
-// ---------------------------------------------------------------------------
-// Extract — committed SKILL.md → neutral source AST (the pure inverse)
-// ---------------------------------------------------------------------------
-
-/**
- * Extract a neutral skill source FROM a committed Claude `SKILL.md`'s text — the
- * pure inverse of `renderClaudeSkill`. This is the bootstrap LW2-2 (skill-author)
- * can seed `plugin/skill-src/<skill>/` sources from, and the oracle the
- * round-trip self-test uses: by construction `renderClaudeSkill(extractSkillSource(x))`
- * reproduces `x` byte-for-byte for any conforming `SKILL.md`.
- *
- * It is `parseSkillSource` with the same fail-closed contract — a committed
- * `SKILL.md` whose frontmatter is non-conforming cannot be sourced losslessly and
- * is surfaced as a parse error (escalate), never silently coerced.
- */
-export function extractSkillSource(skillMdText: string): SkillSource {
-  return parseSkillSource(skillMdText);
-}
-
-/**
- * Serialize a neutral skill source AST back to its on-disk `SKILL.src.md` text.
- * The neutral source's on-disk shape is identical to Claude's render for these
- * skills (frontmatter + body), so this is `renderClaudeSkill` — kept as a named
- * export so callers seeding sources read intent, not a coincidental alias.
- */
-export function serializeSkillSource(src: SkillSource): string {
-  return renderClaudeSkill(src);
+/** Read + validate the registry from disk. */
+export function loadSkillRegistry(registryPath: string = DEFAULT_REGISTRY_PATH): SkillSrcRegistryV1 {
+  return parseSkillRegistry(fs.readFileSync(registryPath, "utf8"));
 }
 
 // ---------------------------------------------------------------------------
-// Staging I/O — render to a TEMP/STAGING path ONLY (never the live surface)
+// Staging guard — render to a TEMP/STAGING path ONLY (never the live surface)
 // ---------------------------------------------------------------------------
 
 /**
  * The plugin repo root resolved INDEPENDENTLY of any caller — `scripts/lib` sits
  * two levels under the plugin root. The live-surface guard anchors to THIS, never
- * to a caller-supplied root (codex G-lane LW2-1-B: a caller could otherwise pass a
- * mismatched `pluginRoot` to slip a write into the live tree past the guard).
+ * to a caller-supplied root (codex G-lane LW2-1-B): a caller could otherwise pass a
+ * mismatched root to slip a write into the live tree past the guard.
  */
 const REAL_PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
 
@@ -257,9 +430,9 @@ const LIVE_SURFACE_DIRS = ["skills", ".claude-plugin", "commands"] as const;
 
 /**
  * Canonicalize a path to an absolute real path, resolving symlinks on the longest
- * EXISTING ancestor (the target file itself may not exist yet). This defeats a
- * symlink-based bypass — e.g. a `stagingRoot` that is itself a symlink into the
- * live `skills/` tree resolves to the real live path and is rejected.
+ * EXISTING ancestor (the target file itself may not exist yet). Defeats a symlink
+ * bypass — e.g. a `stagingRoot` that is itself a symlink into the live `skills/`
+ * tree resolves to the real live path and is rejected.
  */
 function canonicalAbs(p: string): string {
   const abs = path.resolve(p);
@@ -298,10 +471,6 @@ function isUnderOrEqual(child: string, parent: string): boolean {
  * caller-supplied root can route a write into the live surface. The target is
  * canonicalized (symlinks resolved) before the containment test, so neither a
  * mismatched root nor a symlink can bypass the guard.
- *
- * A staging dir that merely contains a `skills`/`commands` segment outside the
- * real plugin tree (e.g. `/tmp/x/skills/…`) is fine — only the actual live roots
- * under `REAL_PLUGIN_ROOT` are forbidden.
  */
 export function assertStagingPath(target: string, _pluginRoot?: string): void {
   const absTarget = canonicalAbs(target);
@@ -318,28 +487,25 @@ export function assertStagingPath(target: string, _pluginRoot?: string): void {
 }
 
 /**
- * Read a neutral skill source from `<srcRoot>/<skillId>/SKILL.src.md`, render it
- * to Claude bytes, and write the result to `<stagingRoot>/<skillId>/SKILL.md`.
+ * Render the skill with id `skillId` FROM the neutral registry and write the
+ * result to `<stagingRoot>/<skillId>/SKILL.md`.
  *
  * The staging target is guarded by `assertStagingPath` BEFORE any write — this is
- * the only function in this module that writes, and it can only ever write into a
- * staging/temp tree. The guard is anchored to an INDEPENDENTLY-resolved plugin
- * root, so even a caller passing the live `skills/` tree as `stagingRoot` (with any
- * `pluginRoot`) is rejected before `fs.writeFileSync` (LW2-1-B). Returns the
- * rendered bytes and the path written.
+ * the ONLY writer in this module, and (the guard being anchored to an
+ * independently-resolved plugin root) even a caller passing the live `skills/` tree
+ * as `stagingRoot` with any `pluginRoot` is rejected before `fs.writeFileSync`
+ * (LW2-1-B). Returns the rendered bytes and the path written.
  *
  * `pluginRoot` is RETAINED for signature compatibility only — it is NOT trusted by
  * the guard (the live-surface decision uses the module's own resolved root).
  */
 export function renderSkillToStaging(
-  srcRoot: string,
+  registry: SkillSrcRegistryV1,
   skillId: string,
   stagingRoot: string,
-  pluginRoot: string = path.resolve(__dirname, "..", ".."),
+  pluginRoot?: string,
 ): { outPath: string; bytes: string } {
-  const srcPath = path.join(srcRoot, skillId, "SKILL.src.md");
-  const sourceText = fs.readFileSync(srcPath, "utf8");
-  const bytes = renderClaudeSkillFromSource(sourceText);
+  const bytes = renderSkillFromRegistry(registry, skillId);
 
   const outDir = path.join(stagingRoot, skillId);
   const outPath = path.join(outDir, "SKILL.md");
@@ -351,7 +517,7 @@ export function renderSkillToStaging(
 }
 
 // ---------------------------------------------------------------------------
-// CLI — render a source dir to a staging path (never the live surface)
+// CLI — render the registry to a staging path (never the live surface)
 // ---------------------------------------------------------------------------
 
 /** The five invocation-driving skills with a committed SKILL.md (F-5: using-guild excluded). */
@@ -364,54 +530,49 @@ export const WAVE2_SKILL_IDS = [
 ] as const;
 
 interface CliArgs {
-  srcRoot: string;
+  registryPath: string;
   stagingRoot: string;
   skills: string[];
-  pluginRoot: string;
 }
 
-export function parseCliArgs(
-  argv: string[],
-  defaults: { pluginRoot: string },
-): CliArgs | { error: string } {
-  let srcRoot: string | undefined;
+export function parseCliArgs(argv: string[]): CliArgs | { error: string } {
+  let registryPath: string = DEFAULT_REGISTRY_PATH;
   let stagingRoot: string | undefined;
   let skills: string[] = [...WAVE2_SKILL_IDS];
-  const pluginRoot = defaults.pluginRoot;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--src" && argv[i + 1] !== undefined) srcRoot = argv[++i];
-    else if (a.startsWith("--src=")) srcRoot = a.slice("--src=".length);
+    if (a === "--registry" && argv[i + 1] !== undefined) registryPath = argv[++i];
+    else if (a.startsWith("--registry=")) registryPath = a.slice("--registry=".length);
     else if (a === "--staging" && argv[i + 1] !== undefined) stagingRoot = argv[++i];
     else if (a.startsWith("--staging=")) stagingRoot = a.slice("--staging=".length);
     else if (a === "--skills" && argv[i + 1] !== undefined) skills = argv[++i].split(",").filter(Boolean);
     else if (a.startsWith("--skills=")) skills = a.slice("--skills=".length).split(",").filter(Boolean);
     else return { error: `unknown argument: ${a}` };
   }
-  if (!srcRoot) return { error: "missing required --src <skill-src root>" };
   if (!stagingRoot) return { error: "missing required --staging <staging/temp root>" };
-  return { srcRoot, stagingRoot, skills, pluginRoot };
+  return { registryPath, stagingRoot, skills };
 }
 
 function main(): number {
-  const pluginRoot = path.resolve(__dirname, "..", "..");
-  const parsed = parseCliArgs(process.argv.slice(2), { pluginRoot });
+  const parsed = parseCliArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(
       parsed.error +
-        "\nusage: skill-source-transform.ts --src <skill-src root> --staging <temp root> [--skills a,b,c]\n" +
-        "Renders neutral sources to a STAGING path only (never the live surface).\n",
+        "\nusage: skill-source-transform.ts --staging <temp root> [--registry <path>] [--skills a,b,c]\n" +
+        "Renders the neutral registry to a STAGING path only (never the live surface).\n",
     );
     return 1;
   }
+  let registry: SkillSrcRegistryV1;
+  try {
+    registry = loadSkillRegistry(parsed.registryPath);
+  } catch (err) {
+    process.stderr.write(`skill-source-transform: ${String(err instanceof Error ? err.message : err)}\n`);
+    return 2;
+  }
   for (const skillId of parsed.skills) {
     try {
-      const { outPath } = renderSkillToStaging(
-        parsed.srcRoot,
-        skillId,
-        parsed.stagingRoot,
-        parsed.pluginRoot,
-      );
+      const { outPath } = renderSkillToStaging(registry, skillId, parsed.stagingRoot);
       process.stdout.write(`rendered ${skillId} → ${outPath}\n`);
     } catch (err) {
       process.stderr.write(

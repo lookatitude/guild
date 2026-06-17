@@ -1,30 +1,27 @@
 /**
  * scripts/__tests__/skill-source-transform.test.ts
  *
- * TDD suite for scripts/lib/skill-source-transform.ts — the LW2-1 deterministic
- * source→host (Claude) skill transformer (`guild.skill_source.v1`).
+ * TDD suite for scripts/lib/skill-source-transform.ts — the LW2-1 NEUTRAL skill
+ * registry (`guild.skill_src.v1`) + the deterministic source→host (Claude)
+ * transformer (spec SC-W2-1, ADR step 15).
  *
- * Wave context (BY POINTER): .guild/spec/universal-host-p2-wave2.md — SC-W2-1.
- *
- * This is the LANE self-test that proves the TRANSFORMER is capable of
- * byte-identical render over the five real committed skills, via the pure inverse
- * (`extractSkillSource`) as the oracle:
- *     renderClaudeSkill(extractSkillSource(committed)) === committed   (byte-for-byte)
- * The canonical render-equivalence + drift gate against the AUTHORED
- * `plugin/skill-src/**` sources (LW2-2) is owned by eval-engineer (LW2-6); this
- * suite proves the tool those lanes depend on, not those lanes' artifacts.
+ * The earlier round was GAMED: neutral sources were verbatim byte-copies of the
+ * committed SKILL.md, so the transform was an IDENTITY function and proved nothing.
+ * This suite asserts the corrected design (modelled on the command lane): the
+ * SOURCE is a STRUCTURED JSON registry, and the renderer PROJECTS each entry into
+ * Claude's SKILL.md shape — a NON-trivial JSON-entry → markdown transform.
  *
  * Coverage:
- *   - byte-identical round-trip over the 5 invocation-driving skills (real files)
- *   - using-guild's co-located SKILL.src.md ALSO round-trips (precedent sanity)
- *   - render is a CANONICAL re-serialization (re-render of parsed AST == render)
- *   - determinism: repeated render of the same AST is byte-identical
- *   - parser is fail-closed (no opening/closing delimiter, non-conforming line,
- *     empty frontmatter)
- *   - frontmatter ordering is preserved
- *   - body verbatim: `---` horizontal rules in the body do not re-trigger the close
- *   - assertStagingPath REFUSES the live surface, ALLOWS staging/temp
- *   - renderSkillToStaging writes only under staging + refuses a live target
+ *   - all 5 entries in the on-disk registry render BYTE-IDENTICAL to the committed SKILL.md
+ *   - the transform is NON-trivial: the source body carries NO frontmatter; the
+ *     renderer reconstructs the `---` fence + ordered keys from discrete fields
+ *   - the on-disk registry is structured JSON, NOT a copy of any rendered SKILL.md
+ *   - render reconstructs the canonical 4-key frontmatter in order, unquoted
+ *   - determinism (repeat render byte-identical; no clock/random)
+ *   - extractSkillV1 is the byte-identical inverse oracle
+ *   - fail-closed entry + registry validators
+ *   - hardened staging guard: rejects live paths, closes the caller-root bypass,
+ *     rejects a symlinked stagingRoot, writes only under staging
  */
 
 import * as fs from "node:fs";
@@ -32,16 +29,20 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import {
-  parseSkillSource,
-  renderClaudeSkill,
-  renderClaudeSkillFromSource,
-  extractSkillSource,
-  serializeSkillSource,
+  validateSkillSrcV1,
+  validateSkillSrcRegistryV1,
+  renderSkillV1,
+  renderSkillFromRegistry,
+  extractSkillV1,
+  parseSkillRegistry,
+  loadSkillRegistry,
   assertStagingPath,
   renderSkillToStaging,
-  SkillSourceParseError,
-  SKILL_SOURCE_SCHEMA_VERSION,
+  DEFAULT_REGISTRY_PATH,
+  SKILL_SRC_SCHEMA_VERSION,
   WAVE2_SKILL_IDS,
+  type SkillSrcV1,
+  type SkillSrcRegistryV1,
 } from "../lib/skill-source-transform";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
@@ -51,246 +52,328 @@ function readSkillMd(id: string): string {
   return fs.readFileSync(path.join(SKILLS_META, id, "SKILL.md"), "utf8");
 }
 
-describe("skill-source-transform: byte-identical round-trip (SC-W2-1)", () => {
-  it("renders all 5 invocation-driving skills byte-for-byte via the inverse oracle", () => {
-    // Anti-vacuity: assert we actually have all five before asserting equality.
-    expect(WAVE2_SKILL_IDS).toEqual([
-      "review-broker",
-      "execute-plan",
-      "systematic-debug",
-      "tdd",
-      "verify-done",
-    ]);
+const REGISTRY: SkillSrcRegistryV1 = loadSkillRegistry();
 
+function entryFor(id: string): SkillSrcV1 {
+  const e = REGISTRY.skills.find((s) => s.id === id);
+  if (!e) throw new Error(`no registry entry for ${id}`);
+  return e;
+}
+
+describe("skill-source-transform: byte-identical render FROM the structured registry (SC-W2-1)", () => {
+  it("the on-disk registry is a valid guild.skill_src.v1 with the 5 invocation skills", () => {
+    expect(REGISTRY.schema_version).toBe("guild.skill_src.v1");
+    expect(REGISTRY.skills.map((s) => s.id).sort()).toEqual([...WAVE2_SKILL_IDS].sort());
+    expect(validateSkillSrcRegistryV1(REGISTRY).valid).toBe(true);
+  });
+
+  it("renders all 5 skills BYTE-FOR-BYTE from the registry entry", () => {
     for (const id of WAVE2_SKILL_IDS) {
       const committed = readSkillMd(id);
-      const rendered = renderClaudeSkill(extractSkillSource(committed));
+      const rendered = renderSkillFromRegistry(REGISTRY, id);
       expect(rendered).toBe(committed);
-      // And the bytes are exactly equal (catch any encoding subtlety).
       expect(Buffer.from(rendered)).toEqual(Buffer.from(committed));
     }
   });
 
-  it("each rendered skill preserves the canonical 4-field frontmatter in order", () => {
+  it("reconstructs the canonical 4-key frontmatter in order, unquoted", () => {
     for (const id of WAVE2_SKILL_IDS) {
-      const src = extractSkillSource(readSkillMd(id));
-      expect(src.frontmatter.map((f) => f.key)).toEqual([
-        "name",
-        "description",
-        "when_to_use",
-        "type",
-      ]);
+      const rendered = renderSkillFromRegistry(REGISTRY, id);
+      const head = rendered.split("\n---\n")[0]; // frontmatter incl. opening fence
+      const keys = head
+        .split("\n")
+        .filter((l) => /^[a-z_]+: /.test(l))
+        .map((l) => l.split(":")[0]);
+      expect(keys).toEqual(["name", "description", "when_to_use", "type"]);
+      // unquoted: the description value is emitted raw (not wrapped in quotes)
+      const e = entryFor(id);
+      expect(rendered).toContain(`\ndescription: ${e.description}\n`);
+    }
+  });
+});
+
+describe("skill-source-transform: the transform is GENUINELY non-trivial (not identity)", () => {
+  it("the source body carries NO frontmatter — the renderer reconstructs it", () => {
+    for (const id of WAVE2_SKILL_IDS) {
+      const e = entryFor(id);
+      // body is the post-fence markdown only: it must NOT start with a `---` fence
+      // and must NOT contain the frontmatter key lines (those live as discrete fields).
+      expect(e.body.startsWith("---")).toBe(false);
+      expect(e.body).not.toContain(`\nname: ${e.name}\n`);
+      expect(e.body).not.toContain(`\ntype: ${e.type}\n`);
+      // the rendered file DOES contain the reconstructed fence + keys
+      const rendered = renderSkillV1(e);
+      expect(rendered.startsWith("---\nname: ")).toBe(true);
     }
   });
 
-  it("using-guild's co-located SKILL.src.md round-trips too (P0 precedent sanity)", () => {
-    const srcText = fs.readFileSync(
-      path.join(SKILLS_META, "using-guild", "SKILL.src.md"),
-      "utf8",
-    );
-    expect(renderClaudeSkillFromSource(srcText)).toBe(srcText);
+  it("the on-disk registry file is structured JSON, NOT a copy of any rendered SKILL.md", () => {
+    const registryText = fs.readFileSync(DEFAULT_REGISTRY_PATH, "utf8");
+    expect(() => JSON.parse(registryText)).not.toThrow();
+    expect(registryText.startsWith("{")).toBe(true);
+    for (const id of WAVE2_SKILL_IDS) {
+      expect(registryText).not.toBe(readSkillMd(id));
+    }
+    // The render output is materially different from the entry's JSON serialization
+    // (proves a real serialization step, not a passthrough).
+    const e = entryFor("tdd");
+    expect(renderSkillV1(e)).not.toBe(JSON.stringify(e));
+  });
+
+  it("changing a structured field changes ONLY the rendered frontmatter, deterministically", () => {
+    const e = entryFor("tdd");
+    const mutated: SkillSrcV1 = { ...e, name: "guild-tdd-x" };
+    const out = renderSkillV1(mutated);
+    expect(out).toContain("\nname: guild-tdd-x\n");
+    expect(out).not.toBe(readSkillMd("tdd")); // a real change in the source changes the render
+    // body is untouched by a frontmatter-field change
+    expect(out.endsWith(e.body)).toBe(true);
   });
 });
 
-describe("skill-source-transform: canonical re-serialization + determinism", () => {
-  it("render is a canonical re-serialization (parse∘render is idempotent)", () => {
+describe("skill-source-transform: determinism + inverse oracle", () => {
+  it("repeated render of the same entry is byte-identical (no clock/randomness)", () => {
+    const e = entryFor("verify-done");
+    expect(renderSkillV1(e)).toBe(renderSkillV1(e));
+  });
+
+  it("extractSkillV1 is the byte-identical inverse: render(extract(committed)) === committed", () => {
     for (const id of WAVE2_SKILL_IDS) {
-      const once = renderClaudeSkill(extractSkillSource(readSkillMd(id)));
-      const twice = renderClaudeSkill(extractSkillSource(once));
-      expect(twice).toBe(once);
+      const committed = readSkillMd(id);
+      const entry = extractSkillV1(id, committed);
+      expect(entry).not.toBeNull();
+      expect(renderSkillV1(entry!)).toBe(committed);
     }
   });
 
-  it("repeated render of the same AST is byte-identical (no clock/randomness)", () => {
-    const src = extractSkillSource(readSkillMd("tdd"));
-    const a = renderClaudeSkill(src);
-    const b = renderClaudeSkill(src);
-    expect(a).toBe(b);
+  it("the on-disk registry equals a fresh extraction of the committed corpus", () => {
+    for (const id of WAVE2_SKILL_IDS) {
+      expect(entryFor(id)).toEqual(extractSkillV1(id, readSkillMd(id)));
+    }
   });
 
-  it("serializeSkillSource equals renderClaudeSkill (source on-disk shape == claude shape)", () => {
-    const src = extractSkillSource(readSkillMd("verify-done"));
-    expect(serializeSkillSource(src)).toBe(renderClaudeSkill(src));
-  });
-
-  it("sets the v1 schema version on the parsed AST", () => {
-    const src = parseSkillSource("---\nname: x\n---\nbody\n");
-    expect(src.schema_version).toBe(SKILL_SOURCE_SCHEMA_VERSION);
-    expect(src.schema_version).toBe("guild.skill_source.v1");
+  it("exposes the v1 schema version constant", () => {
+    expect(SKILL_SRC_SCHEMA_VERSION).toBe("guild.skill_src.v1");
   });
 });
 
-describe("skill-source-transform: body fidelity", () => {
-  it("preserves the blank line + body verbatim, including `---` rules in the body", () => {
-    const text =
-      "---\nname: demo\ntype: meta\n---\n\n# Demo\n\nsome text\n\n---\n\nmore text after a rule\n";
-    const src = parseSkillSource(text);
-    expect(src.body).toBe("\n# Demo\n\nsome text\n\n---\n\nmore text after a rule\n");
-    // The standalone `---` inside the body must NOT have been treated as the close.
-    expect(src.frontmatter.map((f) => f.key)).toEqual(["name", "type"]);
-    expect(renderClaudeSkill(src)).toBe(text);
+describe("skill-source-transform: fail-closed entry validator (F-2 — escalate, never silent diff)", () => {
+  const base: SkillSrcV1 = {
+    id: "demo",
+    name: "guild-demo",
+    description: "a one-line description",
+    when_to_use: "when demoing",
+    type: "meta",
+    body: "\n# Demo\n\nbody\n",
+  };
+
+  it("accepts a faithful entry", () => {
+    expect(validateSkillSrcV1(base).valid).toBe(true);
   });
 
-  it("handles an empty value (`key: `) round-trip", () => {
-    const text = "---\nname: x\nnote: \n---\nbody\n";
-    expect(renderClaudeSkillFromSource(text)).toBe(text);
-    expect(parseSkillSource(text).frontmatter).toContainEqual({ key: "note", value: "" });
+  it("rejects a newline in a scalar field (would break single-line render)", () => {
+    expect(validateSkillSrcV1({ ...base, description: "line one\nline two" }).valid).toBe(false);
+    expect(validateSkillSrcV1({ ...base, when_to_use: "a\nb" }).valid).toBe(false);
+  });
+
+  it("rejects a missing/empty required field", () => {
+    expect(validateSkillSrcV1({ ...base, name: "" }).valid).toBe(false);
+    const { when_to_use, ...noWtu } = base;
+    void when_to_use;
+    expect(validateSkillSrcV1(noWtu).valid).toBe(false);
+  });
+
+  it("rejects an unknown key", () => {
+    expect(validateSkillSrcV1({ ...base, extra: 1 }).valid).toBe(false);
+  });
+
+  it("rejects a non-stem id and a non-scalar name", () => {
+    expect(validateSkillSrcV1({ ...base, id: "Demo Skill" }).valid).toBe(false);
+    expect(validateSkillSrcV1({ ...base, name: "guild demo" }).valid).toBe(false);
+  });
+
+  it("rejects a body without the canonical blank-line head / single trailing newline", () => {
+    expect(validateSkillSrcV1({ ...base, body: "# no blank line\n" }).valid).toBe(false);
+    expect(validateSkillSrcV1({ ...base, body: "\n# trailing\n\n" }).valid).toBe(false);
+  });
+
+  it("never throws on exotic input", () => {
+    expect(() => validateSkillSrcV1(42 as unknown)).not.toThrow();
+    expect(() => validateSkillSrcV1(null)).not.toThrow();
+    expect(validateSkillSrcV1(42 as unknown).valid).toBe(false);
+  });
+
+  it("FAILS CLOSED on a throwing-getter object (does not propagate the throw) — codex re-gate", () => {
+    const throwingGetter = {
+      get id(): string {
+        throw new Error("boom from getter");
+      },
+    };
+    expect(() => validateSkillSrcV1(throwingGetter as unknown)).not.toThrow();
+    expect(validateSkillSrcV1(throwingGetter as unknown).valid).toBe(false);
+  });
+
+  it("FAILS CLOSED on a Proxy whose traps throw (ownKeys + get)", () => {
+    const evil = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error("boom from ownKeys trap");
+        },
+        get() {
+          throw new Error("boom from get trap");
+        },
+      },
+    );
+    expect(() => validateSkillSrcV1(evil as unknown)).not.toThrow();
+    expect(validateSkillSrcV1(evil as unknown).valid).toBe(false);
+    // The registry validator must be equally fail-closed (its own access can trip the trap).
+    expect(() => validateSkillSrcRegistryV1(evil as unknown)).not.toThrow();
+    expect(validateSkillSrcRegistryV1(evil as unknown).valid).toBe(false);
+  });
+
+  it("FAILS CLOSED when the thrown value's toString() itself throws (no String(err) re-throw)", () => {
+    // A getter throws an UNSTRINGIFIABLE object — its toString() throws too. If the
+    // catch block did `String(err)`, the error would escape the catch. It must not.
+    const unstringifiable = {
+      toString() {
+        throw new Error("toString boom");
+      },
+    };
+    const evil = {
+      get id(): string {
+        throw unstringifiable as unknown as Error;
+      },
+    };
+    expect(() => validateSkillSrcV1(evil as unknown)).not.toThrow();
+    expect(validateSkillSrcV1(evil as unknown).valid).toBe(false);
+
+    const registry = { schema_version: SKILL_SRC_SCHEMA_VERSION, skills: [evil] };
+    expect(() => validateSkillSrcRegistryV1(registry as unknown)).not.toThrow();
+    expect(validateSkillSrcRegistryV1(registry as unknown).valid).toBe(false);
+  });
+
+  it("registry validator FAILS CLOSED when a skills entry is a throwing Proxy", () => {
+    const evilEntry = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("boom");
+        },
+      },
+    );
+    const registry = { schema_version: SKILL_SRC_SCHEMA_VERSION, skills: [evilEntry] };
+    expect(() => validateSkillSrcRegistryV1(registry as unknown)).not.toThrow();
+    expect(validateSkillSrcRegistryV1(registry as unknown).valid).toBe(false);
+  });
+
+  it("renderSkillV1 THROWS on an invalid entry (never emits a non-faithful artifact)", () => {
+    expect(() => renderSkillV1({ ...base, description: "a\nb" })).toThrow(/refusing to render/);
   });
 });
 
-describe("skill-source-transform: fail-closed parser (F-2 — escalate, never silent diff)", () => {
-  it("rejects text with no opening delimiter", () => {
-    expect(() => parseSkillSource("name: x\n---\nbody\n")).toThrow(SkillSourceParseError);
+describe("skill-source-transform: fail-closed registry validator + parse", () => {
+  it("rejects a wrong schema_version, non-array skills, and duplicate ids", () => {
+    expect(validateSkillSrcRegistryV1({ schema_version: "nope", skills: [] }).valid).toBe(false);
+    expect(validateSkillSrcRegistryV1({ schema_version: SKILL_SRC_SCHEMA_VERSION, skills: {} }).valid).toBe(false);
+    const dup = {
+      schema_version: SKILL_SRC_SCHEMA_VERSION,
+      skills: [entryFor("tdd"), entryFor("tdd")],
+    };
+    expect(validateSkillSrcRegistryV1(dup).valid).toBe(false);
   });
 
-  it("rejects frontmatter with no closing delimiter", () => {
-    expect(() => parseSkillSource("---\nname: x\nbody with no close\n")).toThrow(
-      SkillSourceParseError,
+  it("parseSkillRegistry throws on invalid JSON and on an invalid registry", () => {
+    expect(() => parseSkillRegistry("{not json")).toThrow(/not valid JSON/);
+    expect(() => parseSkillRegistry(JSON.stringify({ schema_version: "x", skills: [] }))).toThrow(
+      /invalid guild\.skill_src\.v1/,
     );
   });
-
-  it("rejects a non-conforming frontmatter line (no `: ` separator)", () => {
-    expect(() => parseSkillSource("---\nname x\n---\nbody\n")).toThrow(/non-conforming/);
-  });
-
-  it("rejects a missing-space frontmatter line (`key:value`) — would not round-trip", () => {
-    expect(() => parseSkillSource("---\nname:x\n---\nbody\n")).toThrow(SkillSourceParseError);
-  });
-
-  it("rejects empty frontmatter", () => {
-    expect(() => parseSkillSource("---\n---\nbody\n")).toThrow(/empty/);
-  });
 });
 
-describe("skill-source-transform: staging guard (R2 / SC-W2-5)", () => {
-  it("REFUSES a target under the live skills/ tree", () => {
+describe("skill-source-transform: hardened staging guard (R2 / SC-W2-5 / LW2-1-B)", () => {
+  it("REFUSES targets under the live skills/, .claude-plugin/, commands/ trees", () => {
     expect(() =>
       assertStagingPath(path.join(PLUGIN_ROOT, "skills", "meta", "tdd", "SKILL.md"), PLUGIN_ROOT),
     ).toThrow(/live surface/);
-  });
-
-  it("REFUSES a target under .claude-plugin/ and commands/", () => {
     expect(() =>
       assertStagingPath(path.join(PLUGIN_ROOT, ".claude-plugin", "x.json"), PLUGIN_ROOT),
-    ).toThrow(/live surface|forbidden/);
+    ).toThrow(/live surface/);
     expect(() =>
       assertStagingPath(path.join(PLUGIN_ROOT, "commands", "guild.md"), PLUGIN_ROOT),
-    ).toThrow(/live surface|forbidden/);
+    ).toThrow(/live surface/);
   });
 
-  it("ALLOWS a staging/temp target (even one whose name contains 'skills')", () => {
-    const staging = path.join(os.tmpdir(), "guild-staging-xyz", "skills", "tdd", "SKILL.md");
-    expect(() => assertStagingPath(staging, PLUGIN_ROOT)).not.toThrow();
+  it("ALLOWS staging/temp + the plugin/skill-src source tree", () => {
+    expect(() =>
+      assertStagingPath(path.join(os.tmpdir(), "guild-staging-x", "skills", "tdd", "SKILL.md"), PLUGIN_ROOT),
+    ).not.toThrow();
+    expect(() =>
+      assertStagingPath(path.join(PLUGIN_ROOT, "skill-src", "skill-registry.json"), PLUGIN_ROOT),
+    ).not.toThrow();
   });
 
-  it("ALLOWS the plugin/skill-src source tree as a non-live path", () => {
-    // skill-src is OUTSIDE the live surface — never a forbidden render target gate,
-    // though sources are read not written. The guard must not flag it as live.
-    const inSrcTree = path.join(PLUGIN_ROOT, "skill-src", "tdd", "SKILL.src.md");
-    expect(() => assertStagingPath(inSrcTree, PLUGIN_ROOT)).not.toThrow();
+  it("closes the caller-root bypass: a MISMATCHED pluginRoot cannot route a write into live", () => {
+    const bogus = path.join(os.tmpdir(), "guild-bogus-root");
+    expect(() =>
+      assertStagingPath(path.join(PLUGIN_ROOT, "skills", "meta", "tdd", "SKILL.md"), bogus),
+    ).toThrow(/live surface/);
+  });
+
+  it("rejects a symlinked stagingRoot pointing into live skills/", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-symlink-"));
+    let symlinkOk = true;
+    const link = path.join(tmpDir, "sneaky");
+    try {
+      fs.symlinkSync(path.join(PLUGIN_ROOT, "skills", "meta"), link, "dir");
+    } catch {
+      symlinkOk = false;
+    }
+    try {
+      if (symlinkOk) {
+        expect(() => assertStagingPath(path.join(link, "tdd", "SKILL.md"), PLUGIN_ROOT)).toThrow(
+          /live surface/,
+        );
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 
-describe("skill-source-transform: renderSkillToStaging (I/O wrapper, staging-only)", () => {
-  let tmpSrc: string;
+describe("skill-source-transform: renderSkillToStaging (staging-only writer)", () => {
   let tmpStaging: string;
-
   beforeAll(() => {
-    tmpSrc = fs.mkdtempSync(path.join(os.tmpdir(), "guild-skillsrc-"));
     tmpStaging = fs.mkdtempSync(path.join(os.tmpdir(), "guild-staging-"));
-    // Seed a source from a real committed skill (bootstrap path LW2-2 would use).
-    const id = "tdd";
-    const src = extractSkillSource(readSkillMd(id));
-    const dir = path.join(tmpSrc, id);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "SKILL.src.md"), serializeSkillSource(src));
   });
-
   afterAll(() => {
-    fs.rmSync(tmpSrc, { recursive: true, force: true });
     fs.rmSync(tmpStaging, { recursive: true, force: true });
   });
 
-  it("renders a seeded source to staging byte-identical to the committed skill", () => {
-    const { outPath, bytes } = renderSkillToStaging(tmpSrc, "tdd", tmpStaging, PLUGIN_ROOT);
+  it("renders from the registry to staging byte-identical to the committed skill", () => {
+    const { outPath, bytes } = renderSkillToStaging(REGISTRY, "tdd", tmpStaging, PLUGIN_ROOT);
     expect(outPath.startsWith(tmpStaging)).toBe(true);
     expect(bytes).toBe(readSkillMd("tdd"));
     expect(fs.readFileSync(outPath, "utf8")).toBe(readSkillMd("tdd"));
   });
 
-  it("REFUSES to render into the live surface (guard fires before any write)", () => {
-    expect(() =>
-      renderSkillToStaging(tmpSrc, "tdd", path.join(PLUGIN_ROOT, "skills", "meta"), PLUGIN_ROOT),
-    ).toThrow(/live surface/);
-  });
-});
-
-describe("skill-source-transform: caller-root bypass is closed (codex LW2-1-B)", () => {
-  const BOGUS_ROOT = path.join(os.tmpdir(), "guild-bogus-root-does-not-anchor");
-
-  it("REJECTS a live target even when the caller supplies a MISMATCHED pluginRoot", () => {
-    // The attack the guard must close: anchor the liveness check to a bogus root so
-    // the real live `skills/` tree looks "outside" it. The hardened guard ignores the
-    // caller's root and anchors independently → still rejected.
-    const liveTarget = path.join(PLUGIN_ROOT, "skills", "meta", "tdd", "SKILL.md");
-    expect(() => assertStagingPath(liveTarget, BOGUS_ROOT)).toThrow(/live surface/);
-    // .claude-plugin and commands too.
-    expect(() =>
-      assertStagingPath(path.join(PLUGIN_ROOT, ".claude-plugin", "x.json"), BOGUS_ROOT),
-    ).toThrow(/live surface/);
-    expect(() =>
-      assertStagingPath(path.join(PLUGIN_ROOT, "commands", "guild.md"), BOGUS_ROOT),
-    ).toThrow(/live surface/);
-  });
-
-  it("renderSkillToStaging with a live stagingRoot + bogus pluginRoot throws and writes NOTHING", () => {
-    const tmpSrc = fs.mkdtempSync(path.join(os.tmpdir(), "guild-skillsrc-bypass-"));
-    // A probe id that does not exist in the live tree — if the guard were bypassed,
-    // this file/dir would appear under the LIVE skills/meta tree.
-    const probeId = "__lw21b_bypass_probe__";
-    // Seed the source UNDER the probe id so render reads it and reaches the guard.
-    const srcDir = path.join(tmpSrc, probeId);
-    fs.mkdirSync(srcDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(srcDir, "SKILL.src.md"),
-      serializeSkillSource(extractSkillSource(readSkillMd("tdd"))),
-    );
+  it("with a live stagingRoot + bogus pluginRoot it THROWS and writes NOTHING into live", () => {
+    const probeId = "lw21-rework-probe";
     const liveStagingRoot = path.join(PLUGIN_ROOT, "skills", "meta");
     const wouldBeDir = path.join(liveStagingRoot, probeId);
     const wouldBeFile = path.join(wouldBeDir, "SKILL.md");
-
+    const probeRegistry: SkillSrcRegistryV1 = {
+      schema_version: SKILL_SRC_SCHEMA_VERSION,
+      skills: [{ ...entryFor("tdd"), id: probeId }],
+    };
     try {
-      // Mismatched/bogus pluginRoot — the old code would have anchored to it and let
-      // the write through. The hardened guard rejects regardless.
       expect(() =>
-        renderSkillToStaging(tmpSrc, probeId, liveStagingRoot, BOGUS_ROOT),
+        renderSkillToStaging(probeRegistry, probeId, liveStagingRoot, path.join(os.tmpdir(), "bogus")),
       ).toThrow(/live surface/);
-      // Crucially: NO write occurred into the live tree.
       expect(fs.existsSync(wouldBeFile)).toBe(false);
       expect(fs.existsSync(wouldBeDir)).toBe(false);
     } finally {
-      // Defensive cleanup in case a regression DID write (keeps the live tree clean).
       fs.rmSync(wouldBeDir, { recursive: true, force: true });
-      fs.rmSync(tmpSrc, { recursive: true, force: true });
-    }
-  });
-
-  it("a symlinked stagingRoot pointing into live skills/ is still rejected", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-symlink-"));
-    const link = path.join(tmpDir, "sneaky");
-    let symlinkOk = true;
-    try {
-      fs.symlinkSync(path.join(PLUGIN_ROOT, "skills", "meta"), link, "dir");
-    } catch {
-      symlinkOk = false; // some envs disallow symlinks — skip the assertion there
-    }
-    try {
-      if (symlinkOk) {
-        const viaLink = path.join(link, "tdd", "SKILL.md");
-        expect(() => assertStagingPath(viaLink, PLUGIN_ROOT)).toThrow(/live surface/);
-      }
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });
