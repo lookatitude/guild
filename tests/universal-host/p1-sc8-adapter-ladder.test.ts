@@ -54,10 +54,15 @@ describe("P1 SC-8 — ladder table is complete (4 surfaces × 5 hosts)", () => {
   // the "notable" ones, so a silent edit to ANY cell (e.g. session.codex,
   // semantic_tool.antigravity) fails (codex G-lane round-1 MINOR).
   it("pins the verbatim gated rung table — all 4×5 cells exactly", () => {
+    // Oracle refreshed to the CURRENT production FALLBACK_LADDER_TABLE after commit
+    // 445f7b6 ("fix(host-registry): verify pi + antigravity capability rows on-host")
+    // on-host-VERIFIED the pi/antigravity rungs — the newer truth, not a regression.
+    // Changed cells vs the pre-445f7b6 pin: session.pi emulated→native,
+    // session.antigravity emulated→wrapped, semantic_tool.pi emulated→bridged.
     const EXPECTED: Record<AdapterSurface, Record<HostId, Rung>> = {
       interaction: { claude: "native", codex: "wrapped", ".agents": "bridged", pi: "wrapped", antigravity: "wrapped" },
-      session: { claude: "native", codex: "wrapped", ".agents": "emulated", pi: "emulated", antigravity: "emulated" },
-      semantic_tool: { claude: "native", codex: "bridged", ".agents": "bridged", pi: "emulated", antigravity: "bridged" },
+      session: { claude: "native", codex: "wrapped", ".agents": "emulated", pi: "native", antigravity: "wrapped" },
+      semantic_tool: { claude: "native", codex: "bridged", ".agents": "bridged", pi: "bridged", antigravity: "bridged" },
       browser: { claude: "bridged", codex: "bridged", ".agents": "degraded", pi: "degraded", antigravity: "native" },
     };
     // Exact whole-table equality — catches any single-cell drift in either direction.

@@ -8,8 +8,9 @@
  *   its leading dot verbatim, and every row validates.
  * SC-2 (independent capability columns + INFERRED provenance): the single detect-only
  *   `hasAdapter` flag is REPLACED by three INDEPENDENT columns (installability /
- *   result_adapter / dispatch_selectable); claude/codex columns are `verified`, the
- *   three new hosts are `inferred`; the cross-field surface_kind invariant holds.
+ *   result_adapter / dispatch_selectable); claude/codex/pi/antigravity provenance is
+ *   `verified` (pi+antigravity on-host-verified by commit 445f7b6) and only `.agents`
+ *   remains `inferred`; the cross-field surface_kind invariant holds.
  *
  * REAL PATH (no seam): tests drive the SHIPPED `validateHostRegistryEntry()` over the
  * SHIPPED `HOST_REGISTRY_ROWS` — the same validator + rows L7 unifies against. The
@@ -110,12 +111,15 @@ describe("P1 SC-2 — independent capability columns (replace hasAdapter)", () =
     expect(claude.result_adapter).toBe(false);
   });
 
-  it("INFERRED-column provenance: claude/codex verified; .agents/pi/antigravity inferred", () => {
-    expect(HOST_REGISTRY_ROWS["claude"].provenance).toBe("verified");
-    expect(HOST_REGISTRY_ROWS["codex"].provenance).toBe("verified");
-    for (const id of [".agents", "pi", "antigravity"] as HostId[]) {
-      expect(HOST_REGISTRY_ROWS[id].provenance).toBe("inferred");
+  it("provenance: claude/codex/pi/antigravity verified; only .agents inferred", () => {
+    // Oracle refreshed to current production after commit 445f7b6 ("fix(host-registry):
+    // verify pi + antigravity capability rows on-host; correct antigravity bin to agy"):
+    // pi + antigravity were LIVE-VERIFIED on-host (the newer truth, not a regression),
+    // so their provenance is now "verified". .agents was NOT live-verified → stays "inferred".
+    for (const id of ["claude", "codex", "pi", "antigravity"] as HostId[]) {
+      expect(HOST_REGISTRY_ROWS[id].provenance).toBe("verified");
     }
+    expect(HOST_REGISTRY_ROWS[".agents"].provenance).toBe("inferred");
   });
 
   it("every INFERRED host ships installability:target (honest placeholder, never native)", () => {
