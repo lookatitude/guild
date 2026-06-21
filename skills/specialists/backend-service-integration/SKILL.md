@@ -3,6 +3,18 @@ name: backend-service-integration
 description: Integrates a service with an external HTTP/gRPC/webhook API — client module, timeouts, retries with backoff, circuit breaker, idempotency, error mapping, and observability. Output: integration module + config + error-mapping table. Pulled by the `backend` specialist. TRIGGER: "integrate with Stripe", "wire up the SendGrid client", "add the Twilio webhook handler", "call the external X API from our service", "build the client for the partner API", "how do we handle retries and timeouts calling X". DO NOT TRIGGER for: designing *our own* API (use `backend-api-contract`), DB schema for storing integration state (use `backend-data-layer`), a migration landing integration tables (use `backend-migration-writer`), secrets management at infra level (devops group), auth-flow security review on the external protocol (security-auth-flow-review).
 when_to_use: The parent `backend` specialist pulls this skill when the task requires calling into a third-party API or consuming a webhook, and the integration must be production-grade (retries, timeouts, observable). Also fires on explicit user request.
 type: specialist
+surface_manifest:
+  schema_version: guild.surface_manifest.v1
+  kind: skill
+  name: backend-service-integration
+  description: >-
+    Integrates a service with an external HTTP/gRPC/webhook API — client module, timeouts, retries with backoff, circuit breaker, idempotency, error mapping, and observability. Output: integration module + config + error-mapping table. Pulled by the `backend` specialist. TRIGGER: "integrate with Stripe", "wire up the SendGrid client", "add the Twilio webhook handler", "call the external X API from our service", "build the client for the partner API", "how do we handle retries and timeouts calling X". DO NOT TRIGGER for: designing *our own* API (use `backend-api-contract`), DB schema for storing integration state (use `backend-data-layer`), a migration landing integration tables (use `backend-migration-writer`), secrets management at infra level (devops group), auth-flow security review on the external protocol (security-auth-flow-review).
+  when_to_use: >-
+    The parent `backend` specialist pulls this skill when the task requires calling into a third-party API or consuming a webhook, and the integration must be production-grade (retries, timeouts, observable). Also fires on explicit user request.
+  type: specialist
+  dispatch_targets:
+    - backend-data-layer
+    - backend-migration-writer
 ---
 
 # backend-service-integration
