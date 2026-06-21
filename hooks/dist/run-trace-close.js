@@ -4240,10 +4240,6 @@ function classifyMemory(artifacts) {
       const ref = decisions[0];
       return `candidate:${ref}`;
     }
-    const learnings = allLearnings(artifacts);
-    if (learnings.some((l) => /\b(?:always|never|must|should|pattern|convention|rule)\b/i.test(l))) {
-      return `candidate:${bestRef(artifacts)}`;
-    }
     return "none";
   } catch {
     return "none";
@@ -4270,7 +4266,7 @@ function classifyKnowledgeGraph(artifacts) {
   try {
     const initiatives = artifacts.provenanceTouched?.initiatives ?? [];
     if (initiatives.length > 0) {
-      return "re-derive";
+      return "refresh:initiative-touched";
     }
     if (filesInclude(artifacts, [
       /\.guild\/wiki\//,
@@ -4280,7 +4276,7 @@ function classifyKnowledgeGraph(artifacts) {
       /\.guild\/evolve\//,
       /\.guild\/indexes\/harvest-/
     ])) {
-      return "re-derive";
+      return "refresh:stale";
     }
     return "none";
   } catch {
@@ -4290,21 +4286,9 @@ function classifyKnowledgeGraph(artifacts) {
 function classifyDomainModel(artifacts) {
   try {
     if (filesInclude(artifacts, [
-      /\.guild\/indexes\/domain-graph\.json/,
-      /^src\//,
-      /^app\//,
-      /^lib\//,
-      /^services?\//,
-      /^packages?\//,
-      /^modules?\//,
-      /^components?\//,
-      // Also detect changed source files with non-test extensions
-      /\.(ts|tsx|js|jsx|py|rb|go|java|cs|rs|kt|swift)$/
-    ]) && // Only if this is NOT purely test files (tests don't shift the domain)
-    (artifacts.changedFiles ?? artifacts.provenanceTouched?.files ?? []).some(
-      (f) => !/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(f) && !/\/(__tests__|test|spec)\//.test(f)
-    )) {
-      return "refresh:stale";
+      /\.guild\/indexes\/domain-graph\.json/
+    ])) {
+      return "re-derive";
     }
     return "none";
   } catch {
@@ -4416,21 +4400,18 @@ function classifyTaskTracking(artifacts) {
 }
 function classifyWorkflowRules(artifacts) {
   try {
-    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
-    for (const text of all) {
-      if (/\b(?:agents?\.md|workflow[\s_-]rule|process[\s_-](?:pattern|rule)|always[\s_-](?:use|run|check)|never[\s_-](?:use|run|skip)|convention|discipline|practice)\b/i.test(
-        text
-      )) {
-        const ruleMatch = text.match(/rule[:\s]+([\w-]+)/i);
-        return `proposal:${ruleMatch ? ruleMatch[1] : "workflow"}`;
+    const decisions = artifacts.provenanceTouched?.decisions ?? [];
+    for (const d of decisions) {
+      if (/^(?:workflow[\s_-]exception|gate[\s_-]skip|phase[\s_-]override|workflow[\s_-]override)/i.test(d)) {
+        return `proposal:${d}`;
       }
     }
-    if (filesInclude(artifacts, [
-      /AGENTS\.md$/,
-      /CLAUDE\.md$/,
-      /workflow.*\.md$/i
-    ])) {
-      return "proposal:agents-md";
+    const issues = (artifacts.handoffBlocks ?? []).flatMap((b) => b.issues ?? []);
+    for (const text of issues) {
+      if (/\b(?:gate[\s_-]skip(?:ped)?|phase[\s_-]order[\s_-]deviation|workflow[\s_-]override|force[\s_-]gate|gate[\s_-]force[d]?)\b/i.test(text)) {
+        const ruleMatch = text.match(/(?:gate[\s_-]skip|phase[\s_-]override|workflow[\s_-]override)[:\s]+([\w-]+)/i);
+        return `proposal:${ruleMatch ? ruleMatch[1] : "workflow-exception"}`;
+      }
     }
     return "none";
   } catch {

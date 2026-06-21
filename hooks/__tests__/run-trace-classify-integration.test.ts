@@ -53,6 +53,14 @@ describe("run-trace deterministic classify integration (no-loss crux)", () => {
     const runId = startRunOnly(root, resolveHost, { command: "/guild:build" }) as string;
     recordPhase(root, "build", { runId }); // no provenance signal, no handoffs → all none
     const yaml = readCheckpoint(root, runId, "development");
-    expect(yaml).toMatch(/memory:\s*none/); // proves the POSITIVE isn't trivially always-classifying
+    // assert EVERY one of the 12 decision targets is none (codex G-lane: a regression that
+    // over-classifies ANY target on a no-signal phase must fail here, not just `memory`).
+    const TARGETS = [
+      "memory", "wiki", "knowledge_graph", "domain_model", "agent_def", "skill_def",
+      "agent_template", "skill_template", "config", "task_tracking", "workflow_rules", "review_policy",
+    ];
+    for (const t of TARGETS) {
+      expect(yaml).toMatch(new RegExp(`${t}:\\s*none`)); // proves the POSITIVE isn't trivially always-classifying
+    }
   });
 });

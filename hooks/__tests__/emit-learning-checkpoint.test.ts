@@ -653,18 +653,22 @@ describe("emit-learning-checkpoint — HK-03", () => {
     it("classifies a signal-rich ArtifactSet → machine-derivable targets are NON-'none' (not vacuously all-none)", () => {
       // An ArtifactSet that trips the deterministic, machine-derivable signatures
       // (provenance.touched.* + classifyProposalInput) — no NL-regex reliance.
+      // Verdict forms are contract-driven (§2 :63-64):
+      //   knowledge_graph → "refresh:<classifier-state>"   (NOT "re-derive")
+      //   domain_model    → "re-derive"                    (NOT "refresh:stale")
       const artifacts = {
         runId: RUN,
         provenanceTouched: {
-          decisions: ["decision:adr-77"],          // → memory
-          wiki: [".guild/wiki/decisions/adr-77.md"], // → wiki
-          initiatives: ["initiative:learning-tier"], // → knowledge_graph
-          config_keys: ["models.tiers.cheap"],       // → config
-          tasks: ["TASK-9"],                          // → task_tracking (with done handoff)
+          decisions: ["decision:adr-77"],            // → memory: candidate:<ref>
+          wiki: [".guild/wiki/decisions/adr-77.md"], // → wiki: candidate:<ref>
+          initiatives: ["initiative:learning-tier"], // → knowledge_graph: refresh:<state>
+          config_keys: ["models.tiers.cheap"],       // → config: proposal:<key>
+          tasks: ["TASK-9"],                         // → task_tracking (with done handoff)
+          // domain_model signal: domain-graph index touched → re-derive
+          files: [".guild/indexes/domain-graph.json"],
         },
-        changedFiles: ["src/services/payments.ts"],  // → domain_model
         handoffBlocks: [{ status: "done" }],
-        classifyProposalInput: {                      // → agent_template + skill_template
+        classifyProposalInput: {                     // → agent_template + skill_template
           distinct_subject_count: 3,
           same_run: false,
           same_signature: true,
@@ -681,10 +685,11 @@ describe("emit-learning-checkpoint — HK-03", () => {
       expect(Object.keys(decisions).sort()).toEqual([...DECISION_TARGETS].sort());
 
       // …and the machine-derivable targets fired (NON-vacuous proof of wiring).
+      // Verdict forms match contract §2 exactly.
       expect(decisions["memory"]).toBe("candidate:decision:adr-77");
       expect(decisions["wiki"]).toBe("candidate:.guild/wiki/decisions/adr-77.md");
-      expect(decisions["knowledge_graph"]).toBe("re-derive");
-      expect(decisions["domain_model"]).toBe("refresh:stale");
+      expect(decisions["knowledge_graph"]).toBe("refresh:initiative-touched");
+      expect(decisions["domain_model"]).toBe("re-derive");
       expect(decisions["config"]).toBe("proposal:models.tiers.cheap");
       expect(decisions["task_tracking"]).toBe("update:TASK-9");
       expect(decisions["agent_template"]).toBe("systemic-proposal");

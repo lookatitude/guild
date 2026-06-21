@@ -16,8 +16,8 @@
  * Terminal verdict forms per target (from contract §2):
  *   memory          : "candidate:<ref>"
  *   wiki            : "candidate:<ref>"
- *   knowledge_graph : "re-derive"
- *   domain_model    : "refresh:<classifier-state>"
+ *   knowledge_graph : "refresh:<classifier-state>"
+ *   domain_model    : "re-derive"
  *   agent_def       : "proposal:<agent>"
  *   skill_def       : "proposal:<skill>"
  *   agent_template  : "systemic-proposal"   (via classifyProposal)
@@ -252,9 +252,14 @@ function learningsReferenceAgent(artifacts: ArtifactSet): string | null {
 /**
  * TARGET 1: memory
  *
- * Signature: provenance.touched.decisions is non-empty (a decision was captured
- * this phase), OR handoff learnings reference a new persistent fact that
- * warrants memory indexing.
+ * Contract §2 row 1: a guild:decisions / wiki-ingest memory-class candidate
+ * artifact was emitted this phase. The ONLY deterministic signal is
+ * provenance.touched.decisions being non-empty — meaning a decision capture
+ * was written to .guild/wiki/decisions/ this phase.
+ *
+ * The broad free-text keyword fallback (always/never/must/should/pattern/…)
+ * is intentionally excluded: it fires on arbitrary prose and violates the
+ * contract's "deterministic signal" rule. Absence ⇒ "none".
  *
  * Verdict form: "candidate:<ref>"
  */
@@ -264,11 +269,6 @@ export function classifyMemory(artifacts: ArtifactSet): Verdict {
     if (decisions.length > 0) {
       const ref = decisions[0]!;
       return `candidate:${ref}`;
-    }
-    // Secondary signal: learnings that name a durable fact
-    const learnings = allLearnings(artifacts);
-    if (learnings.some((l) => /\b(?:always|never|must|should|pattern|convention|rule)\b/i.test(l))) {
-      return `candidate:${bestRef(artifacts)}`;
     }
     return "none";
   } catch {
@@ -309,17 +309,19 @@ export function classifyWiki(artifacts: ArtifactSet): Verdict {
 /**
  * TARGET 3: knowledge_graph
  *
- * Signature: provenance.touched.initiatives is non-empty (a new initiative was
- * created/modified, meaning the initiative graph needs re-derivation), OR
- * changedFiles include graph index paths that are now stale.
+ * Contract §2 row 3: fires when changed-files set ∩ an indexed path
+ * (file/function/concept added/removed/renamed). The classifier state
+ * is derived from whether provenance.touched.initiatives is non-empty
+ * (a new initiative touched the graph) or whether known index-feeding
+ * paths appear in changedFiles.
  *
- * Verdict form: "re-derive"
+ * Verdict form: "refresh:<classifier-state>"   (contract :63)
  */
 export function classifyKnowledgeGraph(artifacts: ArtifactSet): Verdict {
   try {
     const initiatives = artifacts.provenanceTouched?.initiatives ?? [];
     if (initiatives.length > 0) {
-      return "re-derive";
+      return "refresh:initiative-touched";
     }
     // Stale index: any change to a source that the builder reads
     if (
@@ -332,7 +334,7 @@ export function classifyKnowledgeGraph(artifacts: ArtifactSet): Verdict {
         /\.guild\/indexes\/harvest-/,
       ])
     ) {
-      return "re-derive";
+      return "refresh:stale";
     }
     return "none";
   } catch {
@@ -343,34 +345,29 @@ export function classifyKnowledgeGraph(artifacts: ArtifactSet): Verdict {
 /**
  * TARGET 4: domain_model
  *
- * Signature: changedFiles include source files that feed the domain graph
- * (understand-pipeline inputs: src/**  app/**  lib/**  services/**  etc.),
- * meaning the stage-5 domain analysis is stale.
+ * Contract §2 row 4: fires ONLY when brownfield stage-4/5 domain/component
+ * output for a touched path DIFFERS from the persisted label. That comparison
+ * data lives outside the ArtifactSet at classify time, so if it is absent the
+ * predicate returns "none" (conservative: absence ⇒ none).
  *
- * Verdict form: "refresh:<classifier-state>" where classifier-state is
- * "stale" (we don't track the full classifier state here).
+ * We look for a single explicit signal: provenanceTouched.files contains an
+ * entry under .guild/indexes/domain-graph.json, signalling that the persisted
+ * domain label was actually compared and found to differ this phase. Any
+ * broader "source file changed" heuristic is intentionally excluded — that
+ * fires too eagerly and violates the contract's deterministic-signal rule.
+ *
+ * Verdict form: "re-derive"   (contract :64)
  */
 export function classifyDomainModel(artifacts: ArtifactSet): Verdict {
   try {
+    // The only contract-compliant signal: the domain-graph index itself was
+    // touched this phase (meaning a comparison ran and found drift).
     if (
       filesInclude(artifacts, [
         /\.guild\/indexes\/domain-graph\.json/,
-        /^src\//,
-        /^app\//,
-        /^lib\//,
-        /^services?\//,
-        /^packages?\//,
-        /^modules?\//,
-        /^components?\//,
-        // Also detect changed source files with non-test extensions
-        /\.(ts|tsx|js|jsx|py|rb|go|java|cs|rs|kt|swift)$/,
-      ]) &&
-      // Only if this is NOT purely test files (tests don't shift the domain)
-      (artifacts.changedFiles ?? artifacts.provenanceTouched?.files ?? []).some(
-        (f) => !/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(f) && !/\/(__tests__|test|spec)\//.test(f),
-      )
+      ])
     ) {
-      return "refresh:stale";
+      return "re-derive";
     }
     return "none";
   } catch {
@@ -550,35 +547,40 @@ export function classifyTaskTracking(artifacts: ArtifactSet): Verdict {
 /**
  * TARGET 11: workflow_rules
  *
- * Signature: handoff learnings describe a recurring process correction
- * (a pattern that keeps breaking the same way), or followups propose
- * an AGENTS.md or workflow rule update.
+ * Contract §2 row 11: fires ONLY when an explicit workflow exception/override
+ * was logged this phase — a gate was skipped/forced, or a phase-order deviation
+ * was recorded. This must be an explicit, structured signal, NOT broad process
+ * prose or any AGENTS.md/CLAUDE.md doc touch.
+ *
+ * The broad-prose fallback (always/never/must/convention/…) and the any-doc-
+ * touch fallback (AGENTS.md, workflow*.md) are intentionally excluded — those
+ * fire on normal narration and violate the contract's deterministic-signal rule.
+ *
+ * Deterministic signals (contract-compliant):
+ *   - provenanceTouched.decisions contains an entry whose path signals a
+ *     workflow exception (e.g. "workflow-exception:*", "gate-skip:*",
+ *     "phase-override:*").
+ *   - A handoff block's issues[] contains an explicit gate-skip or
+ *     phase-order-deviation token.
  *
  * Verdict form: "proposal:<rule>"
  */
 export function classifyWorkflowRules(artifacts: ArtifactSet): Verdict {
   try {
-    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
-    for (const text of all) {
-      if (
-        /\b(?:agents?\.md|workflow[\s_-]rule|process[\s_-](?:pattern|rule)|always[\s_-](?:use|run|check)|never[\s_-](?:use|run|skip)|convention|discipline|practice)\b/i.test(
-          text,
-        )
-      ) {
-        // Extract a rule identifier if possible
-        const ruleMatch = text.match(/rule[:\s]+([\w-]+)/i);
-        return `proposal:${ruleMatch ? ruleMatch[1] : "workflow"}`;
+    // Signal A: explicit workflow-exception decision captured in provenance
+    const decisions = artifacts.provenanceTouched?.decisions ?? [];
+    for (const d of decisions) {
+      if (/^(?:workflow[\s_-]exception|gate[\s_-]skip|phase[\s_-]override|workflow[\s_-]override)/i.test(d)) {
+        return `proposal:${d}`;
       }
     }
-    // Detect touched AGENTS.md or process docs
-    if (
-      filesInclude(artifacts, [
-        /AGENTS\.md$/,
-        /CLAUDE\.md$/,
-        /workflow.*\.md$/i,
-      ])
-    ) {
-      return "proposal:agents-md";
+    // Signal B: handoff issue explicitly records a gate skip or phase deviation
+    const issues = (artifacts.handoffBlocks ?? []).flatMap((b) => b.issues ?? []);
+    for (const text of issues) {
+      if (/\b(?:gate[\s_-]skip(?:ped)?|phase[\s_-]order[\s_-]deviation|workflow[\s_-]override|force[\s_-]gate|gate[\s_-]force[d]?)\b/i.test(text)) {
+        const ruleMatch = text.match(/(?:gate[\s_-]skip|phase[\s_-]override|workflow[\s_-]override)[:\s]+([\w-]+)/i);
+        return `proposal:${ruleMatch ? ruleMatch[1] : "workflow-exception"}`;
+      }
     }
     return "none";
   } catch {

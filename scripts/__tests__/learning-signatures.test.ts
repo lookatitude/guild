@@ -110,21 +110,23 @@ const TABLE: TargetCase[] = [
   {
     name: "knowledge_graph",
     predicate: classifyKnowledgeGraph,
+    // Contract §2 row 3: changed-files ∩ indexed path → "refresh:<classifier-state>"
     positive: { runId: RUN, provenanceTouched: { initiatives: ["initiative:learn-tier"] } },
     negative: { runId: RUN, changedFiles: ["README.md", "package.json"] },
     hostile: { runId: RUN, changedFiles: [null as never, 12 as never], provenanceTouched: { initiatives: {} as never } },
-    positiveContains: "re-derive",
+    positiveContains: "refresh:",
   },
   {
     name: "domain_model",
     predicate: classifyDomainModel,
-    positive: { runId: RUN, changedFiles: ["src/services/auth.ts"] },
-    // ALL changes are test files (or docs that match no source pattern) — must
-    // NOT shift the domain model. A single non-test source file would trip it,
-    // so the negative keeps every entry inside a test/spec path.
-    negative: { runId: RUN, changedFiles: ["src/services/auth.test.ts", "src/__tests__/login.spec.ts"] },
+    // Contract §2 row 4: fires ONLY when the persisted domain label was compared
+    // and differed — the contract-compliant signal is the domain-graph index itself
+    // being touched (indicating a comparison ran this phase).
+    positive: { runId: RUN, provenanceTouched: { files: [".guild/indexes/domain-graph.json"] } },
+    // Source-file changes alone do NOT trigger — no comparison data present.
+    negative: { runId: RUN, changedFiles: ["src/services/auth.ts", "src/components/Button.tsx"] },
     hostile: { runId: RUN, changedFiles: { not: "an array" } as never },
-    positiveContains: "refresh:",
+    positiveContains: "re-derive",
   },
   {
     name: "agent_def",
@@ -192,8 +194,11 @@ const TABLE: TargetCase[] = [
   {
     name: "workflow_rules",
     predicate: classifyWorkflowRules,
-    positive: { runId: RUN, handoffBlocks: [{ learnings: ["always run the build before testing — dist was stale"] }] },
-    negative: { runId: RUN, handoffBlocks: [{ learnings: ["renamed a local variable"] }] },
+    // Contract §2 row 11: ONLY an explicit gate-skip / phase-order-deviation fires.
+    // Broad process prose ("always run the build…") must NOT fire.
+    positive: { runId: RUN, handoffBlocks: [{ issues: ["gate-skipped: G-plan gate forced due to time constraint"] }] },
+    // Broad process prose and AGENTS.md touches are NOT the contract signal.
+    negative: { runId: RUN, handoffBlocks: [{ learnings: ["always run the build before testing — dist was stale"] }] },
     hostile: { runId: RUN, handoffBlocks: [HOSTILE_BLOCK], changedFiles: [42 as never] },
     positiveContains: "proposal:",
   },
@@ -275,17 +280,21 @@ describe("learning-signatures — signature_coverage 12/12 (METRIC 3)", () => {
           initiatives: ["initiative:learn-tier"],
           config_keys: ["models.tiers.cheap"],
           tasks: ["TASK-42"],
+          // domain_model signal: domain-graph index was touched (comparison ran)
+          files: [".guild/indexes/domain-graph.json"],
         },
-        changedFiles: ["src/services/auth.ts"],
         handoffBlocks: [
           {
             status: "done",
             learnings: [
               "skill: guild:tdd misfired",
-              "always run the build before testing",
             ],
             followups: ["agent improvement: reviewer over-triggers"],
-            issues: ["BLOCK on G-spec gate — owner accepted risk"],
+            issues: [
+              "BLOCK on G-spec gate — owner accepted risk",
+              // workflow_rules signal: explicit gate skip logged
+              "gate-skipped: G-plan gate forced due to time constraint",
+            ],
           },
         ],
         classifyProposalInput: {
@@ -300,6 +309,61 @@ describe("learning-signatures — signature_coverage 12/12 (METRIC 3)", () => {
       for (const key of PHASE_KEYS) {
         expect(verdict[key]).not.toBe("none");
       }
+    });
+  });
+
+  // ── Contract-driven over-eager predicate negatives ────────────────────────
+  // These cases prove that the three previously over-eager predicates
+  // (memory, domain_model, workflow_rules) return "none" when only the
+  // broad signal (free-text keywords / any source file / any process doc)
+  // is present but the CONTRACT signal is absent. Failing any of these
+  // means the predicate has regressed to over-eager behavior.
+  describe("over-eager predicate contract negatives (broad signals must NOT fire)", () => {
+    it("memory: free-text durable-keyword learnings (always/never/must/…) do NOT fire — requires decisions in provenance", () => {
+      const noDecisions: ArtifactSet = {
+        runId: RUN,
+        handoffBlocks: [{
+          learnings: [
+            "always run the build before testing",
+            "never skip the dist rebuild",
+            "must use absolute paths",
+            "should add a convention here",
+            "this is a pattern we see repeatedly",
+            "rule: avoid direct main commits",
+          ],
+        }],
+      };
+      expect(classifyMemory(noDecisions)).toBe("none");
+    });
+
+    it("domain_model: any non-test source file change alone does NOT fire — requires domain-graph.json touch", () => {
+      const sourceOnly: ArtifactSet = {
+        runId: RUN,
+        changedFiles: [
+          "src/services/auth.ts",
+          "src/components/Button.tsx",
+          "app/api/route.ts",
+          "lib/utils.js",
+          "services/payments/index.ts",
+        ],
+      };
+      expect(classifyDomainModel(sourceOnly)).toBe("none");
+    });
+
+    it("workflow_rules: broad process prose learnings and AGENTS.md touch do NOT fire — requires explicit gate-skip/override", () => {
+      const broadProse: ArtifactSet = {
+        runId: RUN,
+        handoffBlocks: [{
+          learnings: [
+            "always run the build before testing — dist was stale",
+            "never skip the dist rebuild",
+            "convention: use absolute paths",
+            "practice: check TODO.md early",
+          ],
+        }],
+        changedFiles: ["AGENTS.md", "CLAUDE.md", "workflow-guide.md"],
+      };
+      expect(classifyWorkflowRules(broadProse)).toBe("none");
     });
   });
 

@@ -68,11 +68,23 @@ function main(): void {
   const argv = process.argv.slice(2);
   const cwd = parseCwd(argv);
   const gp = guildPaths(cwd);
-  // METRIC 6 (DECISION=B): read the recall-optimised projection instead of the raw graph
+  // METRIC 6 (DECISION=B): read the recall-optimised projection instead of the raw graph.
+  // Graceful-empty: if knowledge-recall.json is absent or malformed, return an empty
+  // successful result (exit 0) — consistent with recall.ts's absent-projection branch.
   const graph = readJson<KnowledgeLinksDoc>(gp.knowledgeRecall);
   if (!graph) {
-    process.stderr.write("[kg-query] ERROR: knowledge-recall.json not found\n");
-    process.exit(1);
+    const neighborOf = parseFlag(argv, "neighbors");
+    const json = hasFlag(argv, "json");
+    if (json) {
+      process.stdout.write(
+        JSON.stringify({ count: 0, capped: false, results: [] }, null, 2) + "\n",
+      );
+    } else if (neighborOf) {
+      process.stdout.write("");
+    } else {
+      process.stdout.write("(no matches)\n");
+    }
+    return;
   }
 
   const neighborOf = parseFlag(argv, "neighbors");
