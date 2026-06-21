@@ -3525,6 +3525,9 @@ function filterHostProfiles(raw) {
   return out;
 }
 
+// ../scripts/lib/shared/safe-object.ts
+var PROTO_POISON_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
+
 // ../scripts/lib/settings-resolver.ts
 var yaml = require_js_yaml2();
 var DEFAULT_ESCALATION_MARKERS = [
@@ -3640,7 +3643,6 @@ var NON_INHERITABLE_KEYS = /* @__PURE__ */ new Set([
   "workspace"
   // workspace.mode is root-detection-only
 ]);
-var PROTO_POISON_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
 var VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
 var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
 function sparseRoles(raw) {
