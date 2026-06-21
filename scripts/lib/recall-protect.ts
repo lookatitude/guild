@@ -28,6 +28,9 @@ import * as path from "node:path";
 // HK-08: pure regex directive-language detector (no I/O).
 import { sanitizeForInjection } from "../../hooks/lib/security/injection-guard";
 import { parseFrontmatter as parseSharedFrontmatter } from "./frontmatter";
+// R-TRACE (Wave 6): additive security_decision trace — NEVER changes return value
+import { emitTraceEvent } from "./guild-trace-emit";
+import { makeSecurityDecisionEvent } from "./guild-trace-events";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -285,6 +288,26 @@ export function protectChunks(
           probe.matchedPatterns,
           tool,
         );
+      }
+      // R-TRACE emit — guild.trace.security_decision.v1 for quarantine decision
+      // emit-point: recall-protect.ts quarantine branch, after chunk is quarantined
+      try {
+        emitTraceEvent(
+          makeSecurityDecisionEvent({
+            ts: new Date().toISOString(),
+            run_id: opts.runId ?? "",
+            lane_id: process.env["GUILD_LANE_ID"] ?? "",
+            tool_name: "recall:chunk-probe",
+            decision: "deny",  // quarantine = deny the chunk from the context bundle
+            bypass_mode: false,
+            policy_forced: false,
+            autonomy_mode: process.env["GUILD_AUTONOMY_MODE"] ?? "default",
+            scope_source: "none",
+          }),
+          opts.runDir ?? null,
+        );
+      } catch {
+        // Trace must never affect security decision — swallow silently
       }
       continue;
     }

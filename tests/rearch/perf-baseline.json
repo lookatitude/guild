@@ -1,0 +1,25 @@
+{
+  "_comment": "R-PERF baseline — measured 2026-06-21 on darwin/arm64, node 20.x, npx tsx.",
+  "_methodology": "10 iterations, warm JIT (tsx module cache), measurements sorted, p95 = arr[floor(N*0.95)]. Hook startup uses subprocess (npx tsx), so includes tsx module load. Recall uses real plugin .guild/wiki for warm path, /tmp empty dir for cold.",
+  "_corpus": "tests/rearch/perf-corpus/ (3 scrubbed-real JSONL files: 636, 942, 1784 events)",
+  "_budget_factor": 1.2,
+
+  "recall_warm_ms_p95": 17,
+  "recall_cold_ms_p95": 10,
+  "config_resolution_ms_p95": 5,
+  "hook_startup_ms_p95": 494,
+  "read_events_small_ms_p95": 7,
+  "read_events_medium_ms_p95": 5,
+  "read_events_large_ms_p95": 10,
+
+  "budgets": {
+    "_comment": "budget = baseline × 1.20 (20% regression margin)",
+    "recall_warm_ms_p95": 21,
+    "recall_cold_ms_p95": 12,
+    "config_resolution_ms_p95": 6,
+    "hook_startup_ms_p95": 593,
+    "read_events_small_ms_p95": 9,
+    "read_events_medium_ms_p95": 6,
+    "read_events_large_ms_p95": 12
+  }
+}

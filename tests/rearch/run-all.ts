@@ -16,14 +16,16 @@ import * as rvac from "./r-vac";
 import * as rdist from "./r-dist";
 import * as rhost from "./r-host";
 import * as rsec from "./r-sec";
+import * as rperf from "./r-perf";
+import * as rtrace from "./r-trace";
 
-const RAILS = [rdup, rdep, rvac, rdist, rhost, rsec];
+const RAILS = [rdup, rdep, rvac, rdist, rhost, rsec, rperf, rtrace];
 
 if (process.argv.includes("--prove")) {
   // each rail's --prove throws on a vacuity failure; run them as child processes so one
   // broken rail does not abort the rest, and a non-zero child exit fails the suite.
   let failed = 0;
-  for (const f of ["r-dup", "r-dep", "r-vac", "r-dist", "r-host", "r-sec"]) {
+  for (const f of ["r-dup", "r-dep", "r-vac", "r-dist", "r-host", "r-sec", "r-perf", "r-trace"]) {
     try {
       execFileSync("npx", ["tsx", path.join(__dirname, `${f}.ts`), "--prove"], {
         stdio: "inherit",

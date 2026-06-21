@@ -51,6 +51,9 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as yaml from "js-yaml";
+// R-TRACE (Wave 6): additive dispatch trace — NEVER changes return value
+import { emitTraceEvent } from "./lib/guild-trace-emit";
+import { makeDispatchEvent } from "./lib/guild-trace-events";
 
 // ── Canonical schema types (guild.task_run.v1) ───────────────────────────────
 
@@ -330,6 +333,34 @@ export function writeTaskRun(
   });
   fs.writeFileSync(tmpPath, yamlStr, "utf8");
   fs.renameSync(tmpPath, outPath);
+
+  // R-TRACE emit — guild.trace.dispatch.v1 (additive, try/catch)
+  // emit-point: write-task-run.ts writeTaskRun(), after task_run file written
+  // The task_run write is the canonical pre-dispatch gate (the orchestrator calls
+  // this BEFORE each dispatch attempt per the module contract).
+  try {
+    const _traceRunDir = path.join(cwd, ".guild", "runs", runId);
+    const _traceTs = new Date().toISOString();
+    // task_run creation happens before host routing/dispatch, so the real backend
+    // is not known yet. Keep the trace schema-valid without leaking host ids.
+    const _traceBackend = "unknown";
+    emitTraceEvent(
+      makeDispatchEvent({
+        ts: _traceTs,
+        run_id: runId,
+        lane_id: taskId,
+        specialist,
+        phase: (initiativeId ?? "execute").replace(/^initiative-/, ""),
+        task_id: taskId,
+        backend: _traceBackend,
+        backend_rung: 0, // not yet determined at write-task-run time
+        dispatched_at: _traceTs,
+      }),
+      _traceRunDir,
+    );
+  } catch {
+    // Trace must never affect task_run write — swallow silently
+  }
 
   return outPath;
 }
