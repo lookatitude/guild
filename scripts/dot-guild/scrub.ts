@@ -13,6 +13,9 @@
 
 import * as fs from "fs";
 import * as path from "path";
+// Canonical single-source share-set membership (re-arch WAVE 1). audit.ts imports
+// the same module — no "keep in sync" duplicate.
+import { inShareSet, isPayloadFile } from "../lib/shared/share-set";
 
 // Import canonical secret patterns — do NOT re-spell the regexes (Decision H.3).
 // tsx handles .ts cross-imports at runtime.
@@ -29,20 +32,6 @@ const WORKSPACE_ROOT_MARKER = "<workspace-root>";
 // URL-encoded slug `~/.claude/projects/-Users-<NAME>-Projects-<WS>/...`.
 const TILDE_CLAUDE_PROJECT_RE = /~\/\.claude\/projects\/-Users-[^/\s]+-Projects-[^/\s]+/g;
 const OPERATOR_MEMORY_ROOT_MARKER = "<operator-memory-root>";
-
-const SHARED_SCRUBBED_NAMES = new Set(["verify.md", "review.md", "provenance.json", "summary.md", "run.yaml", "run-state.json"]);
-
-function isHandoffFile(rel: string): boolean {
-  return rel.startsWith("handoffs" + path.sep) && rel.endsWith(".md");
-}
-function isPayloadFile(rel: string): boolean {
-  return path.basename(rel) === "events.ndjson" || rel.startsWith("logs" + path.sep + "payloads" + path.sep);
-}
-function inShareSet(rel: string, hasFlag: boolean): boolean {
-  if (SHARED_SCRUBBED_NAMES.has(path.basename(rel)) || isHandoffFile(rel)) return true;
-  if (isPayloadFile(rel)) return hasFlag;
-  return false;
-}
 
 interface SecretHit { category: string; line: number; }
 

@@ -50,6 +50,8 @@ import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "./lib/host-registry-s
 import { normalizeHostId } from "./lib/host-id-namespace";
 // host_profiles strict validation — single SoT (also consumed by the resolve path).
 import { validateHostProfiles } from "./lib/host-profiles-validate";
+// Canonical single-source prototype-pollution guard (re-arch WAVE 1).
+import { PROTO_POISON_KEYS } from "./lib/shared/safe-object";
 
 // ── Schema (Tier-1 + Tier-2 defaults). Canonical body: command-surface.md §4.4.
 interface QualityBudget {
@@ -952,10 +954,9 @@ function validateLocalKeys(
  *  - array-typed values  → wholesale replace (Decision F.2)
  *  - scalar values       → replace
  */
-// SECURITY: prototype-pollution guard — these keys are never merged in from an
-// untrusted settings.local.json (mirrors PROTO_POISON_KEYS in lib/settings-resolver.ts;
-// closes the validate-path residual flagged by codex G-lane on U1).
-const PROTO_POISON_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+// SECURITY: prototype-pollution guard — PROTO_POISON_KEYS is the canonical
+// single-source set (scripts/lib/shared/safe-object.ts, imported above); these
+// keys are never merged in from an untrusted settings.local.json.
 
 function deepMergeLocal(
   base: Record<string, unknown>,

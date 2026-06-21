@@ -12,6 +12,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { spawnSync } from "child_process";
+// Canonical single-source share-set membership (re-arch WAVE 1) — the former
+// "keep in sync" mirror of scrub.ts (SCRUB_SHARED_NAMES + inScrubShareSet) is gone.
+import { inShareSet } from "../lib/shared/share-set";
 
 const args = process.argv.slice(2);
 const wsArg   = args.find(a => a.startsWith("--workspace="));
@@ -27,29 +30,17 @@ const outputPath = outArg ? outArg.split("=")[1] : undefined;
 
 interface FileFlag { runId: string; file: string; kind: "operator-path" | "secret" | "payload-excluded" | "nested-guild" | "scrub-uncovered"; detail: string; }
 
-// SC-7 blind-spot guard: scrub.ts's share-set (mirror of scrub.ts — keep in
-// sync with SHARED_SCRUBBED_NAMES + isHandoffFile + isPayloadFile). audit.ts
-// only parses scrub's per-file dry-run lines, so any run-dir file that is
-// git-trackable (would be committed/shared) but OUTSIDE this set never reaches
-// a redaction pass and silently escapes the SC-7 leak gate. The check below
-// flags exactly those files.
-const SCRUB_SHARED_NAMES = new Set(["verify.md", "review.md", "provenance.json", "summary.md", "run.yaml", "run-state.json"]);
+// SC-7 blind-spot guard: scrub.ts's share-set is now the canonical single-source
+// module (scripts/lib/shared/share-set.ts, imported as inShareSet). audit.ts only
+// parses scrub's per-file dry-run lines, so any run-dir file that is git-trackable
+// (would be committed/shared) but OUTSIDE the share-set never reaches a redaction
+// pass and silently escapes the SC-7 leak gate. The check below flags exactly
+// those files — using the SAME share-set scrub uses (no drift possible).
 // Control/meta files that are intentionally git-trackable but NOT redacted by
 // scrub (they carry no operator content). share-payloads.flag is the per-run
 // opt-in sentinel; .gitignore itself is allow-list config. Exempt so they do
 // not false-positive as "uncovered".
 const SCRUB_COVERAGE_EXEMPT_NAMES = new Set(["share-payloads.flag", ".gitignore"]);
-
-// Mirror of scrub.ts inShareSet (sans the payload-flag branch, which scrub
-// handles via share-payloads.flag — payloads are covered when the flag is set).
-function inScrubShareSet(rel: string, hasFlag: boolean): boolean {
-  const base = path.basename(rel);
-  if (SCRUB_SHARED_NAMES.has(base)) return true;
-  if (rel.startsWith("handoffs" + path.sep) && rel.endsWith(".md")) return true;
-  const isPayload = base === "events.ndjson" || rel.startsWith("logs" + path.sep + "payloads" + path.sep);
-  if (isPayload) return hasFlag;
-  return false;
-}
 
 // SC-7 blind-spot guard: walk each run dir; for every file that git would track
 // (NOT ignored = would be shared), flag it if scrub.ts has no coverage for it.
@@ -100,7 +91,7 @@ function findScrubCoverageGaps(repoPath: string): FileFlag[] {
       const base = path.basename(abs);
       if (SCRUB_COVERAGE_EXEMPT_NAMES.has(base)) continue;
       const relToRun = path.relative(runDir, abs);
-      if (inScrubShareSet(relToRun, hasFlag)) continue; // scrub covers it
+      if (inShareSet(relToRun, hasFlag)) continue; // scrub covers it
       flags.push({
         runId: runEnt.name,
         file: relToRun,

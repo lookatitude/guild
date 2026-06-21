@@ -44,6 +44,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import { resolveSettings, Source } from "./lib/settings-resolver";
+// Canonical single-source prototype-pollution guard (re-arch WAVE 1).
+import { PROTO_POISON_KEYS } from "./lib/shared/safe-object";
 // P1-L9: the config reconciler (`config init` → `reconcile sync`).
 import { reconcileConfig, summarizeReconcile } from "./lib/config-reconcile";
 import { RECONCILE_MODES, type ReconcileMode } from "./lib/config-reconcile-contract";
@@ -89,11 +91,8 @@ import type {
 import type { FieldProvenance } from "./lib/config-reconcile-contract";
 
 // ---------------------------------------------------------------------------
-// Prototype-pollution guard
-// ---------------------------------------------------------------------------
-
-const PROTO_POISON_KEYS = new Set(["__proto__", "prototype", "constructor"]);
-
+// Prototype-pollution guard — PROTO_POISON_KEYS is the canonical single-source
+// set (re-arch WAVE 1), imported from ./lib/shared/safe-object above.
 // ---------------------------------------------------------------------------
 // Scalar TIER1 keys — cannot have sub-paths
 // ---------------------------------------------------------------------------

@@ -46,6 +46,8 @@ import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "./host-registry-schem
 import { normalizeHostId } from "./host-id-namespace";
 // host_profiles strict entry-shape filter — single SoT (same rules as `config validate`).
 import { filterHostProfiles } from "./host-profiles-validate";
+// Canonical single-source prototype-pollution guard (re-arch WAVE 1).
+import { PROTO_POISON_KEYS } from "./shared/safe-object";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const yaml = require("js-yaml") as { load: (src: string) => unknown };
 
@@ -385,12 +387,9 @@ const NON_INHERITABLE_KEYS = new Set<string>([
 ]);
 
 // ---------------------------------------------------------------------------
-// Dangerous prototype-pollution key names — blocked at every merge level
-// ---------------------------------------------------------------------------
-
-/** Keys that must never be merged into any object (prototype pollution guard). */
-const PROTO_POISON_KEYS = new Set(["__proto__", "prototype", "constructor"]);
-
+// Dangerous prototype-pollution key names — blocked at every merge level.
+// PROTO_POISON_KEYS is the canonical single-source set (re-arch WAVE 1),
+// imported from ./shared/safe-object above.
 // ---------------------------------------------------------------------------
 // Closed host-key set for models.tiers.<tier>.* (G-11 + G-lane rework).
 // Mirrors VALID_TIER_HOST_KEYS in read-guild-config.ts: unknown host keys

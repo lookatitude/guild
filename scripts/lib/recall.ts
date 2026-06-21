@@ -54,7 +54,8 @@ import { DEFAULT_INDEX_BLOCK, type IndexBlock } from "./index-cache";
 import { wikiRecall } from "./wiki-recall";
 import { fsScan } from "./fs-scanner";
 import { protectChunks, type ProtectedChunk } from "./recall-protect";
-import { tokenize, bm25Score } from "../../mcp-servers/guild-memory/src/bm25";
+import { tokenize, bm25Score } from "./shared/bm25";
+import { termMatchScore } from "./shared/graph-scoring";
 import type { KnowledgeGraph, GraphNode } from "../understand/lib/schema";
 import { ingestImportanceScore, resolveRecallImportance } from "./ingest-importance";
 
@@ -237,19 +238,12 @@ function walkMdFiles(dir: string): string[] {
   return result;
 }
 
-// ── Internal: KG node scorer (mirrors kg-query.ts score()) ───────────────────
-
-function scoreKgNode(node: GraphNode, terms: string[]): number {
-  const hay = `${node.name} ${node.id} ${(node.source_refs ?? []).join(" ")}`.toLowerCase();
-  let s = 0;
-  for (const t of terms) {
-    if (!t) continue;
-    if (node.name.toLowerCase() === t) s += 5;
-    else if (node.name.toLowerCase().includes(t)) s += 3;
-    else if (hay.includes(t)) s += 1;
-  }
-  return s;
-}
+// ── Internal: KG node scorer ─────────────────────────────────────────────────
+//
+// Re-arch WAVE 1: the term-match primitive is now the canonical
+// `termMatchScore` from scripts/lib/shared/graph-scoring.ts — the same loop
+// kg-query.ts uses. recall's KG branch intentionally ranks on term match alone
+// (no importance/confidence), so it calls the shared primitive directly.
 
 // ── Branch A: SQLite FTS (wiki-recall.ts) ─────────────────────────────────────
 //
@@ -423,7 +417,7 @@ function kgQueryBranch(
     .filter(Boolean);
 
   const ranked = (graph.nodes as GraphNode[])
-    .map((n) => ({ n, s: scoreKgNode(n, terms) }))
+    .map((n) => ({ n, s: termMatchScore(n, terms) }))
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s || a.n.id.localeCompare(b.n.id))
     .slice(0, limit);
