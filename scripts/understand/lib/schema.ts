@@ -861,6 +861,36 @@ function validateSubtopicGraph(
 }
 
 // ---------------------------------------------------------------------------
+// Suppressed-candidates artifact (guild.knowledge_suppressed.v1)
+// ---------------------------------------------------------------------------
+
+/**
+ * One entry in the suppressed-candidates artifact.
+ * Records a K2 wiki candidate that was silently dropped and WHY.
+ *
+ * stage: which join point produced the suppression
+ *   "wiki-index-unclassified" — classifier returned no entry for this page id
+ *   "validator-dropped"       — validateGraphV2 issued a level:"dropped" issue
+ */
+export interface KnowledgeSuppressedEntry {
+  /** wiki_page id of the candidate (wiki_page:<relpath>) */
+  id: string;
+  /** Repo-root-relative path to the source file */
+  source_ref: string;
+  /** Human-readable reason for suppression */
+  reason: string;
+  /** Which join point produced this suppression record */
+  stage: "wiki-index-unclassified" | "validator-dropped";
+}
+
+/** Top-level artifact written to .guild/indexes/knowledge-suppressed.json */
+export interface KnowledgeSuppressed {
+  schema: "guild.knowledge_suppressed.v1";
+  generated_at: string;
+  suppressed: KnowledgeSuppressedEntry[];
+}
+
+// ---------------------------------------------------------------------------
 // v2 internal: canonical sort for SC-11 determinism
 // ---------------------------------------------------------------------------
 

@@ -74,6 +74,8 @@ export interface GuildPaths {
   codebaseMap: string;
   knowledgeGraph: string;
   knowledgeLinks: string;
+  /** Recall-optimised projection (guild.knowledge_links.v2) written by write-knowledge-links.ts */
+  knowledgeRecall: string;
   fingerprint: string;
   partialGraph: string;
 }
@@ -91,6 +93,7 @@ export function guildPaths(cwd: string): GuildPaths {
     codebaseMap: path.join(indexesDir, "codebase-map.json"),
     knowledgeGraph: path.join(indexesDir, "knowledge-graph.json"),
     knowledgeLinks: path.join(indexesDir, "knowledge-links.json"),
+    knowledgeRecall: path.join(indexesDir, "knowledge-recall.json"),
     fingerprint: path.join(indexesDir, "understand-fingerprint.json"),
     partialGraph: path.join(indexesDir, "understand-partial-graph.json"),
   };

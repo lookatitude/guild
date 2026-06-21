@@ -34,7 +34,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 import { makeWikiPageId } from "./lib/schema";
-import type { GraphNode, GraphEdge } from "./lib/schema";
+import type { GraphNode, GraphEdge, KnowledgeSuppressedEntry } from "./lib/schema";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -73,6 +73,12 @@ export type ClassifyPageFn = (
 export interface WikiIndexResult {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  /**
+   * Candidates that were suppressed at this stage (i.e. had no classifier
+   * judgment). Callers accumulate these across all K2 roots and persist them
+   * into knowledge-suppressed.json (DROP 1 fix — no silent drops).
+   */
+  suppressed: KnowledgeSuppressedEntry[];
 }
 
 // ---------------------------------------------------------------------------
@@ -336,14 +342,27 @@ export async function indexWiki(
   // 5. Emit wiki_page nodes + related edges
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
+  const suppressed: KnowledgeSuppressedEntry[] = [];
 
   for (const desc of pageDescriptors) {
     // B4 / SC-9: if the classifier returned no entry for this page, skip it.
     // A missing entry means the model didn't classify it (not that it should be
     // silently defaulted to "note"). The defaultClassifier always populates every
     // entry, so dry-run / no-classifier callers are unaffected.
+    //
+    // DROP 1 fix: record the suppression instead of a bare continue so no
+    // candidate silently vanishes (retention invariant: candidates_in ==
+    // classified_nodes + suppressed.length).
     const cls = classifications.get(desc.id);
-    if (!cls) continue;
+    if (!cls) {
+      suppressed.push({
+        id: desc.id,
+        source_ref: desc.relpath,
+        reason: "classifier returned no judgment for this page id (unclassified)",
+        stage: "wiki-index-unclassified",
+      });
+      continue;
+    }
 
     // Compute source_ref anchor: relpath#h1-heading-slug
     // If H1 is missing, fall back to the bare relpath (edge case).
@@ -385,7 +404,7 @@ export async function indexWiki(
     }
   }
 
-  return { nodes, edges };
+  return { nodes, edges, suppressed };
 }
 
 // ---------------------------------------------------------------------------

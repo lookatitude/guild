@@ -286,3 +286,118 @@ describe("REAL PATH — Stop entry (hooks/learning-backstop.ts via tsx)", () => 
     expect(fs.existsSync(path.join(runDir, "learning"))).toBe(false);
   });
 });
+
+// ── METRIC 2: backstop_rate = 0% on the golden full-learn fixture ──────────────
+//
+// A healthy 6-phase run (init/ideate/plan/build/qa/ops) where the deterministic
+// emitter (recordPhase → emitPhaseCheckpoint) has already written a real
+// guild.learning_checkpoint.v1 for EVERY phase must produce backstop_rate = 0%:
+// runLearningBackstop() must write nothing.
+//
+// Golden fixture: hooks/__tests__/fixtures/golden-full-learn-run/
+//   .guild/runs/run-golden-full-6phase-learn/run.yaml          — 6-phase phases_log
+//   .guild/runs/run-golden-full-6phase-learn/learning/<phase>-<id>.yaml × 6
+//
+// The fixture represents the REAL deterministic-emit output — all-none verdicts,
+// no backstop marker (the absence of backstop:true is load-bearing; that marker
+// distinguishes fail-open backstop writes from real emitter output).
+//
+// Anti-vacuity control: deleting ONE phase checkpoint and re-running backstop
+// must produce written.length === 1, proving the metric can fail.
+
+const GOLDEN_FIXTURE_DIR = path.resolve(
+  __dirname,
+  "fixtures/golden-full-learn-run",
+);
+const GOLDEN_RUN_ID = "run-golden-full-6phase-learn";
+// The 6 canonical lifecycle tokens → checkpoint phases (from PHASE_TOKEN_TO_CHECKPOINT)
+const GOLDEN_CHECKPOINT_PHASES = [
+  "init",
+  "ideation",
+  "planning",
+  "development",
+  "quality",
+  "operations",
+] as const;
+
+describe("METRIC 2 — backstop_rate = 0% on golden full-learn fixture", () => {
+  let goldenRoot: string;
+
+  beforeEach(() => {
+    // Copy the golden fixture into a tmpdir so tests can mutate it (anti-vacuity).
+    goldenRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-golden-learn-"));
+    // Recursive copy of the fixture tree
+    function copyDir(src: string, dest: string): void {
+      fs.mkdirSync(dest, { recursive: true });
+      for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+        const s = path.join(src, entry.name);
+        const d = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+          copyDir(s, d);
+        } else {
+          fs.copyFileSync(s, d);
+        }
+      }
+    }
+    copyDir(GOLDEN_FIXTURE_DIR, goldenRoot);
+  });
+
+  afterEach(() => {
+    fs.rmSync(goldenRoot, { recursive: true, force: true });
+  });
+
+  it("fixture sanity: golden run.yaml contains all 6 phase tokens", () => {
+    const raw = fs.readFileSync(
+      path.join(goldenRoot, ".guild", "runs", GOLDEN_RUN_ID, "run.yaml"),
+      "utf8",
+    );
+    for (const token of ["init", "ideate", "plan", "build", "qa", "ops"]) {
+      expect(raw).toContain(`phase: ${token}`);
+    }
+  });
+
+  it("fixture sanity: all 6 checkpoint files exist with no backstop marker", () => {
+    const learningDir = path.join(
+      goldenRoot, ".guild", "runs", GOLDEN_RUN_ID, "learning",
+    );
+    for (const cp of GOLDEN_CHECKPOINT_PHASES) {
+      const p = path.join(learningDir, `${cp}-${GOLDEN_RUN_ID}.yaml`);
+      expect(fs.existsSync(p)).toBe(true);
+      const content = fs.readFileSync(p, "utf8");
+      // Real emitter output: no backstop marker
+      expect(content).not.toContain("backstop: true");
+      // Valid checkpoint envelope
+      expect(content).toContain("version: guild.learning_checkpoint.v1");
+    }
+  });
+
+  it("backstop_rate = 0%: runLearningBackstop writes nothing when all checkpoints exist", () => {
+    const result = runLearningBackstop({ guildRoot: goldenRoot, runId: GOLDEN_RUN_ID });
+    // All 6 phases already have checkpoints → backstop writes nothing
+    expect(result.written).toHaveLength(0);
+    // All 6 checkpoint phases are recognised as already-existing
+    expect(result.skippedExisting.sort()).toEqual([...GOLDEN_CHECKPOINT_PHASES].sort());
+    expect(result.errors).toHaveLength(0);
+    expect(result.unknownTokens).toHaveLength(0);
+  });
+
+  it("ANTI-VACUITY: deleting one checkpoint → backstop writes exactly 1", () => {
+    // Delete the 'development' phase checkpoint (simulates a run where recordPhase
+    // did not emit the checkpoint — the exact scenario METRIC 2 guards against).
+    const missingPhase = "development";
+    const missingFile = path.join(
+      goldenRoot, ".guild", "runs", GOLDEN_RUN_ID, "learning",
+      `${missingPhase}-${GOLDEN_RUN_ID}.yaml`,
+    );
+    fs.unlinkSync(missingFile);
+
+    const result = runLearningBackstop({ guildRoot: goldenRoot, runId: GOLDEN_RUN_ID });
+    // Must write the backstop for the missing phase
+    expect(result.written).toEqual([missingPhase]);
+    expect(result.written).toHaveLength(1);
+    // The written backstop has backstop: true (distinguishable from real emitter output)
+    const backstopContent = fs.readFileSync(missingFile, "utf8");
+    expect(backstopContent).toMatch(/^  backstop: true$/m);
+    // Proves the metric CAN fail (rate > 0%) — anti-vacuity gate passes
+  });
+});

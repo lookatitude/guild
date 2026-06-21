@@ -2875,8 +2875,8 @@ function resolveGuildRoot(startCwd) {
 }
 
 // lib/run-trace.ts
-var fs7 = __toESM(require("fs"));
-var path9 = __toESM(require("path"));
+var fs8 = __toESM(require("fs"));
+var path10 = __toESM(require("path"));
 
 // ../scripts/lib/run-lifecycle.ts
 var crypto3 = __toESM(require("crypto"));
@@ -5349,7 +5349,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     );
   }
   const { cwd, fs: fsSeam, resolvedAtRef } = opts;
-  const fs8 = fsSeam ?? realProvenanceFsSeam();
+  const fs9 = fsSeam ?? realProvenanceFsSeam();
   const outPath = resolvedSettingsPath(cwd, runId);
   const runsBase = path8.resolve(cwd, ".guild", "runs");
   assertContained(outPath, runsBase, "writeResolvedSettingsSnapshot");
@@ -5358,9 +5358,9 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     resolved_at_ref: resolvedAtRef ?? runId
   };
   const serialized = JSON.stringify(onDisk, null, 2) + "\n";
-  if (fs8.scrubbedWriteDurable) {
+  if (fs9.scrubbedWriteDurable) {
     const runDir3 = path8.join(cwd, ".guild", "runs", runId);
-    const result = fs8.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
+    const result = fs9.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
     if (result.blocked) {
       process.stderr.write(
         `[run-lifecycle] WARN: resolved-settings.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
@@ -5368,7 +5368,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
       );
     }
   } else {
-    fs8.writeFile(outPath, serialized);
+    fs9.writeFile(outPath, serialized);
   }
   return outPath;
 }
@@ -5381,31 +5381,726 @@ function readRecordStatusRuns(root) {
   }
 }
 
+// emit-learning-checkpoint.ts
+var fs7 = __toESM(require("fs"));
+var path9 = __toESM(require("path"));
+
+// ../scripts/classify-proposal.ts
+function classifyProposal(input) {
+  const target = input.target ?? "skill";
+  const subject = input.subject ?? "<skill>";
+  const countGate = input.distinct_subject_count >= 3 || input.distinct_subject_count >= 2 && input.same_run === true;
+  const systemic = countGate && input.same_signature === true && input.user_approved === true;
+  const perInstance = `${target}_def: proposal:${subject}`;
+  const outputs = [perInstance];
+  if (systemic) {
+    outputs.push(`${target}_template: systemic-proposal`);
+  }
+  return { verdict: systemic ? "systemic" : "specific", outputs };
+}
+function parseFlag(argv, name) {
+  const eq = `--${name}=`;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === `--${name}` && argv[i + 1] && !argv[i + 1].startsWith("--")) return argv[i + 1];
+    if (argv[i].startsWith(eq)) return argv[i].slice(eq.length);
+  }
+  return void 0;
+}
+function hasFlag(argv, name) {
+  return argv.includes(`--${name}`);
+}
+function main() {
+  const argv = process.argv.slice(2);
+  const distinct = parseInt(parseFlag(argv, "distinct") ?? "0", 10);
+  const target = parseFlag(argv, "target") ?? "skill";
+  const subject = parseFlag(argv, "subject");
+  const res = classifyProposal({
+    distinct_subject_count: Number.isFinite(distinct) ? distinct : 0,
+    same_run: hasFlag(argv, "same-run"),
+    same_signature: hasFlag(argv, "same-signature"),
+    user_approved: hasFlag(argv, "user-approved"),
+    target: target === "agent" ? "agent" : "skill",
+    ...subject ? { subject } : {}
+  });
+  process.stdout.write(JSON.stringify(res, null, 2) + "\n");
+}
+if (require.main === module) main();
+
+// ../scripts/lib/learning-signatures.ts
+function allLearnings(artifacts) {
+  const out = [];
+  for (const block of artifacts.handoffBlocks ?? []) {
+    for (const l of block.learnings ?? []) {
+      if (l) out.push(l);
+    }
+  }
+  return out;
+}
+function allFollowups(artifacts) {
+  const out = [];
+  for (const block of artifacts.handoffBlocks ?? []) {
+    for (const f of block.followups ?? []) {
+      if (f) out.push(f);
+    }
+  }
+  return out;
+}
+function bestRef(artifacts) {
+  const wiki = artifacts.provenanceTouched?.wiki ?? [];
+  if (wiki.length > 0) return wiki[0];
+  return artifacts.evidenceRef ?? artifacts.runId;
+}
+function filesInclude(artifacts, patterns) {
+  const files = [
+    ...artifacts.changedFiles ?? [],
+    ...artifacts.provenanceTouched?.files ?? []
+  ];
+  return files.some((f) => patterns.some((p) => p.test(f)));
+}
+function learningsReferenceSkill(artifacts) {
+  const learnings = allLearnings(artifacts);
+  const followups = allFollowups(artifacts);
+  const all = [...learnings, ...followups];
+  for (const text of all) {
+    const match = text.match(/\b(?:skill[:\s]+|guild:)([\w:-]+)/i);
+    if (match) return match[1] ?? "unknown-skill";
+    if (/skill[\s_-](?:improvement|gap|defect|change|update|refactor)/i.test(text)) {
+      return "unknown-skill";
+    }
+  }
+  return null;
+}
+function learningsReferenceAgent(artifacts) {
+  const learnings = allLearnings(artifacts);
+  const followups = allFollowups(artifacts);
+  const all = [...learnings, ...followups];
+  for (const text of all) {
+    const match = text.match(/\b(?:agent[:\s]+|guild:)([\w:-]+(?:engineer|writer|author|architect|specialist|reviewer|planner|developer|auditor))/i);
+    if (match) return match[1] ?? "unknown-agent";
+    if (/agent[\s_-](?:improvement|gap|defect|change|update|refactor)/i.test(text)) {
+      return "unknown-agent";
+    }
+  }
+  return null;
+}
+function classifyMemory(artifacts) {
+  try {
+    const decisions = artifacts.provenanceTouched?.decisions ?? [];
+    if (decisions.length > 0) {
+      const ref = decisions[0];
+      return `candidate:${ref}`;
+    }
+    const learnings = allLearnings(artifacts);
+    if (learnings.some((l) => /\b(?:always|never|must|should|pattern|convention|rule)\b/i.test(l))) {
+      return `candidate:${bestRef(artifacts)}`;
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyWiki(artifacts) {
+  try {
+    const wikiTouched = artifacts.provenanceTouched?.wiki ?? [];
+    if (wikiTouched.length > 0) {
+      return `candidate:${wikiTouched[0]}`;
+    }
+    const followups = allFollowups(artifacts);
+    if (followups.some(
+      (f) => /\b(?:wiki[\s_-]?ingest|wiki[\s_-]?page|decisions?[\s_-]?capture|guild:decisions|guild:wiki)/i.test(f)
+    )) {
+      return `candidate:${bestRef(artifacts)}`;
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyKnowledgeGraph(artifacts) {
+  try {
+    const initiatives = artifacts.provenanceTouched?.initiatives ?? [];
+    if (initiatives.length > 0) {
+      return "re-derive";
+    }
+    if (filesInclude(artifacts, [
+      /\.guild\/wiki\//,
+      /\.guild\/raw\/sources\//,
+      /\.guild\/initiatives\//,
+      /\.guild\/reflections\//,
+      /\.guild\/evolve\//,
+      /\.guild\/indexes\/harvest-/
+    ])) {
+      return "re-derive";
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyDomainModel(artifacts) {
+  try {
+    if (filesInclude(artifacts, [
+      /\.guild\/indexes\/domain-graph\.json/,
+      /^src\//,
+      /^app\//,
+      /^lib\//,
+      /^services?\//,
+      /^packages?\//,
+      /^modules?\//,
+      /^components?\//,
+      // Also detect changed source files with non-test extensions
+      /\.(ts|tsx|js|jsx|py|rb|go|java|cs|rs|kt|swift)$/
+    ]) && // Only if this is NOT purely test files (tests don't shift the domain)
+    (artifacts.changedFiles ?? artifacts.provenanceTouched?.files ?? []).some(
+      (f) => !/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(f) && !/\/(__tests__|test|spec)\//.test(f)
+    )) {
+      return "refresh:stale";
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyAgentDef(artifacts) {
+  try {
+    const agentRef = learningsReferenceAgent(artifacts);
+    if (agentRef !== null) {
+      return `proposal:${agentRef}`;
+    }
+    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
+    for (const text of all) {
+      const match = text.match(/proposal:([a-z][\w:-]+)/i);
+      if (match && /agent/i.test(match[1] ?? "")) {
+        return `proposal:${match[1]}`;
+      }
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifySkillDef(artifacts) {
+  try {
+    const skillRef = learningsReferenceSkill(artifacts);
+    if (skillRef !== null) {
+      return `proposal:${skillRef}`;
+    }
+    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
+    for (const text of all) {
+      const match = text.match(/proposal:([\w:-]+)/i);
+      if (match && /skill/i.test(text)) {
+        return `proposal:${match[1]}`;
+      }
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyAgentTemplate(artifacts) {
+  try {
+    const input = artifacts.classifyProposalInput;
+    if (!input) return "none";
+    const result = classifyProposal({ ...input, target: "agent" });
+    return result.verdict === "systemic" ? "systemic-proposal" : "none";
+  } catch {
+    return "none";
+  }
+}
+function classifySkillTemplate(artifacts) {
+  try {
+    const input = artifacts.classifyProposalInput;
+    if (!input) return "none";
+    const result = classifyProposal({ ...input, target: "skill" });
+    return result.verdict === "systemic" ? "systemic-proposal" : "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyConfig(artifacts) {
+  try {
+    const configKeys = artifacts.provenanceTouched?.config_keys ?? [];
+    if (configKeys.length > 0) {
+      return `proposal:${configKeys[0]}`;
+    }
+    const settingsFiles = [
+      ...artifacts.changedFiles ?? [],
+      ...artifacts.provenanceTouched?.files ?? []
+    ].filter(
+      (f) => /(?:settings\.json|settings\.local\.json|\.claude-plugin\/|guild\.json|\.guild\/settings|guildstack\.pen)/i.test(f)
+    );
+    if (settingsFiles.length > 0) {
+      const f = settingsFiles[0];
+      const keyMatch = f.match(/([^/]+)\.json$/);
+      return `proposal:${keyMatch ? keyMatch[1] : "settings"}`;
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyTaskTracking(artifacts) {
+  try {
+    const tasks = artifacts.provenanceTouched?.tasks ?? [];
+    if (tasks.length > 0) {
+      const anyDone = (artifacts.handoffBlocks ?? []).some(
+        (b) => b.status === "done" || b.status === "shipped"
+      );
+      if (anyDone || artifacts.handoffBlocks === void 0) {
+        return `update:${tasks[0]}`;
+      }
+    }
+    const runs = artifacts.provenanceTouched?.runs ?? [];
+    if (runs.length > 0) {
+      const anyDone = (artifacts.handoffBlocks ?? []).some(
+        (b) => b.status === "done" || b.status === "shipped"
+      );
+      if (anyDone) {
+        return `update:run:${runs[0]}`;
+      }
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyWorkflowRules(artifacts) {
+  try {
+    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
+    for (const text of all) {
+      if (/\b(?:agents?\.md|workflow[\s_-]rule|process[\s_-](?:pattern|rule)|always[\s_-](?:use|run|check)|never[\s_-](?:use|run|skip)|convention|discipline|practice)\b/i.test(
+        text
+      )) {
+        const ruleMatch = text.match(/rule[:\s]+([\w-]+)/i);
+        return `proposal:${ruleMatch ? ruleMatch[1] : "workflow"}`;
+      }
+    }
+    if (filesInclude(artifacts, [
+      /AGENTS\.md$/,
+      /CLAUDE\.md$/,
+      /workflow.*\.md$/i
+    ])) {
+      return "proposal:agents-md";
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyReviewPolicy(artifacts) {
+  try {
+    const all = [
+      ...allLearnings(artifacts),
+      ...allFollowups(artifacts),
+      ...(artifacts.handoffBlocks ?? []).flatMap((b) => b.issues ?? []),
+      ...(artifacts.handoffBlocks ?? []).map((b) => b.notes ?? ""),
+      ...(artifacts.handoffBlocks ?? []).map((b) => b.summary ?? "")
+    ];
+    for (const text of all) {
+      if (/\b(?:BLOCK|block[\s_-]override|owner[\s_-]accepted[\s_-]risk|gate[\s_-]override|releasegate|review[\s_-]gate[\s_-]fail)\b/.test(text)) {
+        const gateMatch = text.match(/(?:G[-_]?(\w+)|gate[\s:]+([\w-]+)|releasegate)/i);
+        const gate = gateMatch ? gateMatch[1] ?? gateMatch[2] ?? "releasegate" : "releasegate";
+        return `proposal:${gate}`;
+      }
+      if (/\bcap[\s_-]exceeded\b|rounds[\s_-]cap[\s_-]hit\b|codex[\s_-]cap\b/i.test(text)) {
+        return "proposal:codex-cap";
+      }
+    }
+    const decisions = artifacts.provenanceTouched?.decisions ?? [];
+    if (decisions.some((d) => /review[\s_-]?policy|gate[\s_-]?policy/i.test(d))) {
+      return `proposal:${decisions.find((d) => /review|gate/i.test(d))}`;
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyPhase(artifacts) {
+  return {
+    memory: classifyMemory(artifacts),
+    wiki: classifyWiki(artifacts),
+    knowledge_graph: classifyKnowledgeGraph(artifacts),
+    domain_model: classifyDomainModel(artifacts),
+    agent_def: classifyAgentDef(artifacts),
+    skill_def: classifySkillDef(artifacts),
+    agent_template: classifyAgentTemplate(artifacts),
+    skill_template: classifySkillTemplate(artifacts),
+    config: classifyConfig(artifacts),
+    task_tracking: classifyTaskTracking(artifacts),
+    workflow_rules: classifyWorkflowRules(artifacts),
+    review_policy: classifyReviewPolicy(artifacts)
+  };
+}
+
+// emit-learning-checkpoint.ts
+var SCHEMA_VERSION = "guild.learning_checkpoint.v1";
+var VALID_PHASES = [
+  "init",
+  "ideation",
+  "planning",
+  "development",
+  "quality",
+  "operations",
+  "reflection"
+];
+var DECISION_TARGETS = [
+  "memory",
+  "wiki",
+  "knowledge_graph",
+  "domain_model",
+  "agent_def",
+  "skill_def",
+  "agent_template",
+  "skill_template",
+  "config",
+  "task_tracking",
+  "workflow_rules",
+  "review_policy"
+];
+var ALL_NONE_DECISIONS = Object.fromEntries(
+  DECISION_TARGETS.map((k) => [k, "none"])
+);
+var VALID_EDGE_TYPES = [
+  "decided_by",
+  "used_for",
+  "produced",
+  "touches",
+  "supersedes",
+  "learned_from",
+  "constrains",
+  "opens_question",
+  "resolves"
+];
+var ALLOWED_NODE_PREFIXES = [
+  "task:",
+  "run:",
+  "decision:",
+  "skill:",
+  "agent:",
+  "feature:"
+];
+var FORBIDDEN_NODE_PREFIXES = [
+  "wiki:",
+  "file:",
+  "domain:",
+  "component:"
+];
+function assertPhase(phase) {
+  if (!VALID_PHASES.includes(phase)) {
+    throw new Error(
+      `[emit-learning-checkpoint] invalid phase: "${phase}". Expected one of: ${VALID_PHASES.join(", ")}`
+    );
+  }
+}
+function assertEdgeTypes(links) {
+  for (const link of links) {
+    if (!VALID_EDGE_TYPES.includes(link.type)) {
+      throw new Error(
+        `[emit-learning-checkpoint] invalid edge type: "${link.type}". Expected one of: ${VALID_EDGE_TYPES.join(", ")}`
+      );
+    }
+  }
+}
+function assertNodePrefixes(links) {
+  for (const link of links) {
+    for (const node of [link.from, link.to]) {
+      const allowed = ALLOWED_NODE_PREFIXES.some(
+        (p) => node.startsWith(p)
+      );
+      if (!allowed) {
+        const matchedForbidden = FORBIDDEN_NODE_PREFIXES.find(
+          (p) => node.startsWith(p)
+        );
+        const detail = matchedForbidden ? `uses the cross-space prefix "${matchedForbidden}" (code/wiki/domain space)` : `uses an unknown or no-prefix node id "${node}"`;
+        throw new Error(
+          `[emit-learning-checkpoint] invalid node in edge (from: "${link.from}", to: "${link.to}") \u2014 ${detail}. Node ids must start with an allowed work/decision-space prefix: ${ALLOWED_NODE_PREFIXES.join(", ")}.`
+        );
+      }
+    }
+  }
+}
+function yamlValue(v) {
+  if (v === "none") return "none";
+  if (/: /.test(v) || // colon-space → would be a mapping
+  /:$/.test(v) || // trailing colon
+  v.trim() !== v || // leading/trailing whitespace
+  v === "" || // empty
+  /^[{[\]}&*#?|<>=!%@`'"]/.test(v)) {
+    return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  }
+  return v;
+}
+function buildYaml(opts) {
+  const lines = [
+    `# ${SCHEMA_VERSION}`,
+    "learning_checkpoint:",
+    `  version: ${SCHEMA_VERSION}`,
+    `  phase: ${opts.phase}`,
+    `  run_id: ${opts.runId}`
+  ];
+  if (opts.observed.length === 0) {
+    lines.push("  observed: []");
+  } else {
+    lines.push("  observed:");
+    for (const fact of opts.observed) {
+      lines.push(`    - ${yamlValue(fact)}`);
+    }
+  }
+  lines.push("  decisions:");
+  for (const key of DECISION_TARGETS) {
+    lines.push(`    ${key}: ${yamlValue(opts.decisions[key] ?? "none")}`);
+  }
+  if (opts.knowledgeLinksBatch.length === 0) {
+    lines.push("  knowledge_links_batch: []");
+  } else {
+    lines.push("  knowledge_links_batch:");
+    for (const link of opts.knowledgeLinksBatch) {
+      lines.push(
+        `    - from: ${yamlValue(link.from)}`,
+        `      to: ${yamlValue(link.to)}`,
+        `      type: ${link.type}`,
+        `      run_id: ${link.run_id}`
+      );
+    }
+  }
+  lines.push(`  routed_to: ${yamlValue(opts.reflectionsPath)}`);
+  lines.push(`  evidence_ref: ${yamlValue(opts.evidenceRef)}`);
+  if (opts.backstop === true) {
+    lines.push("  backstop: true");
+  }
+  return lines.join("\n") + "\n";
+}
+function appendKnowledgeLinksIndex(guildRoot, links) {
+  if (links.length === 0) return;
+  const indexDir = path9.join(guildRoot, ".guild", "indexes");
+  const indexPath = path9.join(indexDir, "knowledge-links.json");
+  let existing = [];
+  if (fs7.existsSync(indexPath)) {
+    try {
+      const raw = fs7.readFileSync(indexPath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed["links"])) {
+        existing = parsed["links"];
+      }
+    } catch (e) {
+      process.stderr.write(
+        `[emit-learning-checkpoint] WARN: could not parse knowledge-links.json \u2014 starting fresh: ${String(e)}
+`
+      );
+      existing = [];
+    }
+  }
+  const existingKeys = new Set(
+    existing.map((l) => `${l.from}\0${l.to}\0${l.type}`)
+  );
+  const novel = links.filter(
+    (l) => !existingKeys.has(`${l.from}\0${l.to}\0${l.type}`)
+  );
+  if (novel.length === 0) return;
+  const merged = [...existing, ...novel];
+  try {
+    fs7.mkdirSync(indexDir, { recursive: true });
+    fs7.writeFileSync(
+      indexPath,
+      JSON.stringify(
+        { schema_version: "guild.knowledge_links.v1", links: merged },
+        null,
+        2
+      ) + "\n",
+      "utf8"
+    );
+  } catch (e) {
+    process.stderr.write(
+      `[emit-learning-checkpoint] WARN: could not write knowledge-links.json: ${String(e)}
+`
+    );
+  }
+}
+function appendReflections(guildRoot, runId, phase, decisions) {
+  const nonNone = DECISION_TARGETS.filter((k) => decisions[k] !== "none");
+  if (nonNone.length === 0) return;
+  const reflectionsDir = path9.join(guildRoot, ".guild", "reflections");
+  fs7.mkdirSync(reflectionsDir, { recursive: true });
+  const reflPath = path9.join(reflectionsDir, `${runId}.md`);
+  const entry = `
+## Phase: ${phase} (${runId})
+
+` + nonNone.map((k) => `- ${k}: ${decisions[k]}`).join("\n") + "\n";
+  fs7.appendFileSync(reflPath, entry, "utf8");
+}
+function writeCheckpoint(opts) {
+  assertPhase(opts.phase);
+  const links = opts.knowledgeLinksBatch ?? [];
+  assertEdgeTypes(links);
+  assertNodePrefixes(links);
+  const guildRoot = opts.guildRoot ?? process.cwd();
+  const decisions = opts.decisions ?? { ...ALL_NONE_DECISIONS };
+  const learningDir = path9.join(guildRoot, ".guild", "runs", opts.runId, "learning");
+  fs7.mkdirSync(learningDir, { recursive: true });
+  const checkpointFile = path9.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
+  const reflectionsRelPath = `.guild/reflections/${opts.runId}.md`;
+  const reflectionsAbsPath = path9.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
+  const observed = opts.observed ?? [];
+  const yaml3 = buildYaml({
+    runId: opts.runId,
+    phase: opts.phase,
+    evidenceRef: opts.evidenceRef,
+    decisions,
+    observed,
+    reflectionsPath: reflectionsRelPath,
+    knowledgeLinksBatch: links,
+    ...opts.backstop === true ? { backstop: true } : {}
+  });
+  fs7.writeFileSync(checkpointFile, yaml3, "utf8");
+  appendReflections(guildRoot, opts.runId, opts.phase, decisions);
+  appendKnowledgeLinksIndex(guildRoot, links);
+  void reflectionsAbsPath;
+  return checkpointFile;
+}
+function main2() {
+  const runId = process.env["GUILD_RUN_ID"];
+  const phase = process.env["GUILD_PHASE"];
+  const evidenceRef = process.env["GUILD_EVIDENCE_REF"] ?? "none";
+  const guildRoot = process.env["GUILD_CWD"] ?? process.cwd();
+  const verdictPath = process.env["GUILD_CHECKPOINT_VERDICT"];
+  const linksPath = process.env["GUILD_CHECKPOINT_LINKS"];
+  if (!runId) {
+    process.stderr.write("[emit-learning-checkpoint] ERROR: GUILD_RUN_ID not set\n");
+    process.exit(1);
+  }
+  if (!phase) {
+    process.stderr.write("[emit-learning-checkpoint] ERROR: GUILD_PHASE not set\n");
+    process.exit(1);
+  }
+  const artifactsJsonPath = process.env["GUILD_CHECKPOINT_ARTIFACTS_JSON"];
+  let decisions;
+  if (verdictPath) {
+    try {
+      const raw = fs7.readFileSync(verdictPath, "utf8");
+      decisions = JSON.parse(raw);
+    } catch (e) {
+      process.stderr.write(
+        `[emit-learning-checkpoint] WARN: could not read GUILD_CHECKPOINT_VERDICT (${verdictPath}): ${String(e)}
+`
+      );
+    }
+  }
+  if (decisions === void 0 && artifactsJsonPath) {
+    try {
+      const rawArtifacts = fs7.readFileSync(artifactsJsonPath, "utf8");
+      const artifacts = JSON.parse(rawArtifacts);
+      if (!artifacts.runId) artifacts.runId = runId;
+      if (!artifacts.phase) artifacts.phase = phase ?? void 0;
+      if (!artifacts.evidenceRef) artifacts.evidenceRef = evidenceRef !== "none" ? evidenceRef : void 0;
+      const verdict = classifyPhase(artifacts);
+      decisions = verdict;
+      process.stderr.write(
+        `[emit-learning-checkpoint] INFO: classified artifacts \u2192 non-none: ${Object.entries(verdict).filter(([, v]) => v !== "none").map(([k]) => k).join(", ") || "none"}
+`
+      );
+    } catch (e) {
+      process.stderr.write(
+        `[emit-learning-checkpoint] WARN: could not classify GUILD_CHECKPOINT_ARTIFACTS_JSON (${artifactsJsonPath}): ${String(e)}
+`
+      );
+    }
+  }
+  let knowledgeLinksBatch = [];
+  if (linksPath) {
+    try {
+      const raw = fs7.readFileSync(linksPath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        knowledgeLinksBatch = parsed;
+      } else {
+        process.stderr.write(
+          `[emit-learning-checkpoint] WARN: GUILD_CHECKPOINT_LINKS JSON is not an array \u2014 ignoring (${linksPath})
+`
+        );
+      }
+    } catch (e) {
+      process.stderr.write(
+        `[emit-learning-checkpoint] WARN: could not read GUILD_CHECKPOINT_LINKS (${linksPath}): ${String(e)}
+`
+      );
+    }
+  }
+  try {
+    const written = writeCheckpoint({
+      runId,
+      phase,
+      evidenceRef,
+      guildRoot,
+      decisions,
+      knowledgeLinksBatch
+      // populated from GUILD_CHECKPOINT_LINKS (was deferred [] in Wave 1)
+    });
+    process.stdout.write(written + "\n");
+  } catch (e) {
+    process.stderr.write(`[emit-learning-checkpoint] ERROR: ${String(e)}
+`);
+    process.exit(1);
+  }
+}
+if (process.argv[1] !== void 0 && (process.argv[1].endsWith("emit-learning-checkpoint.ts") || process.argv[1].endsWith("emit-learning-checkpoint.js"))) {
+  main2();
+}
+
+// lib/learning-backstop.ts
+var PHASE_TOKEN_TO_CHECKPOINT = {
+  // canonical lifecycle tokens (CANONICAL_PHASES, scripts/lib/run-lifecycle.ts)
+  init: "init",
+  ideate: "ideation",
+  plan: "planning",
+  build: "development",
+  qa: "quality",
+  ops: "operations",
+  // checkpoint-native tokens (VALID_PHASES) — identity pass-through
+  ideation: "ideation",
+  planning: "planning",
+  development: "development",
+  quality: "quality",
+  operations: "operations",
+  reflection: "reflection"
+};
+
+// lib/handoff-v2.ts
+function extractHandoffEnvelope(content) {
+  const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/;
+  const match = pattern.exec(content);
+  if (!match || !match[1]) return null;
+  try {
+    return JSON.parse(match[1].trim());
+  } catch {
+    return null;
+  }
+}
+
 // lib/run-trace.ts
 function runDir2(root, runId) {
-  return path9.join(root, ".guild", "runs", runId);
+  return path10.join(root, ".guild", "runs", runId);
 }
 function liveLogPath2(root, runId) {
-  return path9.join(runDir2(root, runId), "logs", "v1.4-events.jsonl");
+  return path10.join(runDir2(root, runId), "logs", "v1.4-events.jsonl");
 }
 function provenancePath2(root, runId) {
-  return path9.join(runDir2(root, runId), "provenance.json");
+  return path10.join(runDir2(root, runId), "provenance.json");
 }
 function skippedFilesPath(root, runId) {
-  return path9.join(runDir2(root, runId), "learn", "skipped-files.json");
+  return path10.join(runDir2(root, runId), "learn", "skipped-files.json");
 }
 function resolveRunIdForTrace(root, env) {
   const fromEnv = env.GUILD_RUN_ID;
   if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
-  const legacy = readSentinel(path9.join(root, ".guild", "runs", "current-run-id"));
+  const legacy = readSentinel(path10.join(root, ".guild", "runs", "current-run-id"));
   if (legacy) return legacy;
-  const b2 = readSentinel(path9.join(root, ".guild", "current-run-id"));
+  const b2 = readSentinel(path10.join(root, ".guild", "current-run-id"));
   if (b2) return b2;
   return null;
 }
 function readSentinel(p) {
   try {
-    const v = fs7.readFileSync(p, "utf8").trim();
+    const v = fs8.readFileSync(p, "utf8").trim();
     return v.length > 0 ? v : null;
   } catch {
     return null;
@@ -5417,8 +6112,8 @@ function defaultResolveHost(requested) {
   return { requested, resolved };
 }
 function appendTraceLine(file, event) {
-  fs7.mkdirSync(path9.dirname(file), { recursive: true });
-  fs7.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
+  fs8.mkdirSync(path10.dirname(file), { recursive: true });
+  fs8.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
 }
 function emitRunClosed(root, runId, resolveHost, opts = {}) {
   try {
@@ -5430,7 +6125,7 @@ function emitRunClosed(root, runId, resolveHost, opts = {}) {
       final_learning_checkpoint: opts.final_learning_checkpoint,
       artifacts: opts.artifacts
     });
-    const prov = JSON.parse(fs7.readFileSync(provenancePath2(root, runId), "utf8"));
+    const prov = JSON.parse(fs8.readFileSync(provenancePath2(root, runId), "utf8"));
     const pointer = prov.terminal_trace_event;
     if (!pointer || typeof pointer.event_id !== "string") {
       process.stderr.write(
@@ -5492,12 +6187,72 @@ function buildStartRunOpts(root, opts) {
     run_class: runClass
   };
 }
+function buildPhaseArtifacts(root, runId) {
+  const artifacts = { runId };
+  try {
+    const hDir = path10.join(runDir2(root, runId), "handoffs");
+    const blocks = [];
+    const texts = [];
+    for (const f of fs8.readdirSync(hDir)) {
+      if (!f.endsWith(".md")) continue;
+      const content = fs8.readFileSync(path10.join(hDir, f), "utf8");
+      texts.push(content);
+      const env = extractHandoffEnvelope(content);
+      if (env && typeof env === "object") blocks.push(env);
+    }
+    if (blocks.length) artifacts.handoffBlocks = blocks;
+    if (texts.length) artifacts.handoffTexts = texts;
+  } catch {
+  }
+  try {
+    const prov = JSON.parse(fs8.readFileSync(provenancePath2(root, runId), "utf8"));
+    if (prov && typeof prov.touched === "object") artifacts.provenanceTouched = prov.touched;
+  } catch {
+  }
+  return artifacts;
+}
+function emitPhaseCheckpoint(root, runId, phase) {
+  try {
+    const checkpointPhase = PHASE_TOKEN_TO_CHECKPOINT[phase];
+    if (checkpointPhase === void 0) return;
+    const checkpointFile = path10.join(
+      root,
+      ".guild",
+      "runs",
+      runId,
+      "learning",
+      `${checkpointPhase}-${runId}.yaml`
+    );
+    if (fs8.existsSync(checkpointFile)) return;
+    let decisions;
+    try {
+      const verdict = classifyPhase(buildPhaseArtifacts(root, runId));
+      decisions = verdict;
+    } catch {
+      decisions = void 0;
+    }
+    writeCheckpoint({
+      runId,
+      phase: checkpointPhase,
+      evidenceRef: `.guild/runs/${runId}/run.yaml#phases_log`,
+      guildRoot: root,
+      decisions
+    });
+  } catch (err) {
+    process.stderr.write(
+      `[run-trace] WARN: emitPhaseCheckpoint(${phase}) failed (fail-open): ${err instanceof Error ? err.message : String(err)}
+`
+    );
+  }
+}
 function recordPhase(root, phase, opts = {}) {
   try {
     const runId = opts.runId ?? resolveRunIdForTrace(root, opts.env ?? process.env);
     if (!runId) return null;
     const lifecycleEnv = createRealEnv(root, defaultResolveHost);
-    return appendPhase(lifecycleEnv, root, runId, phase) ? runId : null;
+    if (!appendPhase(lifecycleEnv, root, runId, phase)) return null;
+    emitPhaseCheckpoint(root, runId, phase);
+    return runId;
   } catch {
     return null;
   }
@@ -5534,8 +6289,8 @@ function writeSkippedFiles(root, runId, entries) {
     skipped_count: entries.length,
     skipped: entries
   };
-  fs7.mkdirSync(path9.dirname(out), { recursive: true });
-  fs7.writeFileSync(out, JSON.stringify(body, null, 2) + "\n", "utf8");
+  fs8.mkdirSync(path10.dirname(out), { recursive: true });
+  fs8.writeFileSync(out, JSON.stringify(body, null, 2) + "\n", "utf8");
   return out;
 }
 
@@ -5557,7 +6312,7 @@ async function readStdin() {
   });
 }
 var USAGE = "usage: run-trace.ts <start|status|phase|skipped> [--cwd <root>] [--run-id <id>]\n  start   --command=/guild:plan [--phase=<p>] [--run-class=full|lightweight] [--cwd <root>]\n  status  [--cwd <root>]   (alias: start --run-class=lightweight + OQ6 gate)\n  phase   --phase=<init|ideate|plan|build|qa|ops> [--run-id <id>] [--cwd <root>]\n  skipped --run-id <id>    [--cwd <root>] < entries.json\n";
-async function main() {
+async function main3() {
   const argv = process.argv.slice(2);
   const sub = argv[0];
   const cwd = flag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
@@ -5622,7 +6377,7 @@ async function main() {
   process.stderr.write("[run-trace] " + USAGE);
   process.exit(1);
 }
-main().catch((err) => {
+main3().catch((err) => {
   process.stderr.write(
     `[run-trace] FATAL: ${err instanceof Error ? err.message : String(err)}
 `

@@ -55,16 +55,30 @@ This skill owns the **canonical output-locations table** for the whole family
 | CodebaseMap | `.guild/indexes/codebase-map.json` | `guild.codebase_map.v1` (this skill, stage 1) |
 | architecture-map stub | `.guild/wiki/concepts/architecture-map.md` | confidence-tagged; wiki **candidate** only |
 | workspace manifest | `.guild/workspace.json` | `guild.workspace.v1` (federation registry; written via `write-manifest.ts` on a **workspace** only — see step 0) |
-| KnowledgeGraph | `.guild/indexes/knowledge-graph.json` | `guild.knowledge_graph.v1` (`guild:learn-graph`) |
-| knowledge-links | `.guild/indexes/knowledge-links.json` | `guild.knowledge_links.v1` — append-only **recall projection** (`guild:learn-graph`) |
 | OnboardingTour | `.guild/indexes/onboarding-tour.md` | Markdown (`guild:learn-onboard`) |
 | DiffUnderstanding | `.guild/runs/<run-id>/diff-understanding.json` | `guild.diff_understanding.v1` (`guild:learn-diff`) |
 | reverse-spec | `.guild/spec/<slug>.md` | every claim carries `source_refs` + `confidence` (`guild:learn-graph`) |
 
-This skill writes the first two rows always, and the **workspace manifest** row
-only on a workspace (step 0 below). The **wiki** is the canonical store and
-`.guild/indexes/knowledge-links.json` is the recall projection; both are how
-learned knowledge re-enters Guild's loops (see Evidence requirements). Field
+The three `.guild/indexes/` **graph/recall/edge artifacts** are easy to conflate,
+so they get their own authoritative table here — the learn-* family base. Other
+skills bind to this table **by pointer** and must not re-describe these three
+(naming them differently is the drift this table exists to prevent):
+
+| Artifact | Path | Schema | Producer(s) | Lifecycle / persistence | Rebuild source |
+|---|---|---|---|---|---|
+| **KnowledgeGraph (v2)** | `.guild/indexes/knowledge-graph.json` | `guild.knowledge_graph.v2` (structural v1 enriched to v2) | `guild:learn-graph` (structural stages 2–7) → `guild:learn-knowledge` (K1–K6 multi-modal enrichment) | derived, deletable, rebuildable; absence ⇒ re-scan | the repo + `.guild/wiki/` (full learn pipeline) |
+| **knowledge-recall.json** — the **recall projection** | `.guild/indexes/knowledge-recall.json` | nonce-free RECALL PROJECTION of the v2 graph (no `run_id`/timestamp; sidecar `knowledge-recall-provenance.json` holds those) | `guild:learn-knowledge` K6 finalize (`write-knowledge-links.ts`) | derived; SC-8 byte-identical given `(graph, config)`; **the live recall source** read by `guild:context-assemble`'s `kg-query` | pure function of the v2 graph + knowledge config |
+| **knowledge-links.json** — the **learning-loop edge index** | `.guild/indexes/knowledge-links.json` | `guild.knowledge_links.v1` — append-only work/decision-space edge index (closed-9 + extended-6 edge types) | **three producers:** `scripts/knowledge-links-builder.ts` (canonical full rebuild, overwrites) · `hooks/emit-learning-checkpoint.ts` (per-phase append) · `scripts/understand/lib/domain.ts` (stage-5 initial batch) | derived, deletable; append-only between rebuilds; full-rebuildable **lossless** (every appended closed-9 edge is re-derivable, builder.ts:303-327) | provenance + wiki + raw + handoffs + decisions + open-questions (the builder's canonical fact sources) |
+
+**Do not call `knowledge-links.json` "the recall projection"** — that name is
+reserved for `knowledge-recall.json` (the v2 graph's recall projection, the live
+`kg-query` source). `knowledge-links.json` is the **learning-loop edge index**.
+
+This skill writes the first two output-locations rows always, and the
+**workspace manifest** row only on a workspace (step 0 below). The **wiki** is the
+canonical store and `knowledge-recall.json` is the recall projection that
+`kg-query` reads; both are how learned knowledge re-enters Guild's loops (see
+Evidence requirements). Field
 names / `version` strings are canonical and frozen — conform by pointer, never
 copy a schema into a skill body. The architecture-map stub is emitted as a
 **candidate**; promotion stays with the normal `guild:wiki-ingest` /
@@ -139,8 +153,8 @@ escalates (SC-1, VC-1). The deep stages that can reach `mid`/`powerful` live in
 
 **Recall-before-read (ADR §4).** Before reading a file for the project
 description or any summarize step, query the knowledge base first
-(`guild-memory` BM25 over `.guild/wiki/` + `kg-query` over
-`knowledge-links.json`) for that task. If recall returns ≥1 chunk scoring **≥
+(`guild-memory` BM25 over `.guild/wiki/` + `kg-query` over the recall projection
+`knowledge-recall.json`) for that task. If recall returns ≥1 chunk scoring **≥
 the `models.recallScoreThreshold`** (default `0.4`; bound by pointer to ADR
 §10 — not re-spelled), use the recalled chunk(s) + the specific file references
 and **skip the full file read**. A full read is permitted only when recall
@@ -164,8 +178,8 @@ Every map entry traces to a scanned path; the architecture-map stub is
 explicitly confidence-tagged so a reader never mistakes an Init-time inference
 for a deep-scan fact. Indexes record `generated_from_commit`.
 
-**Recall + evolution wiring (D4):** the CodebaseMap and the
-`knowledge-links.json` projection (written by `guild:learn-graph`) are read by
+**Recall + evolution wiring (D4):** the CodebaseMap and the recall projection
+`knowledge-recall.json` (written by `guild:learn-knowledge` K6) are read by
 `guild:context-assemble` (its `kg-query` step) — that is the memory/recall loop
 learned knowledge re-enters. These skills are eval-gated and evolvable under
 `guild:evolve-skill` like any Guild skill (no special pipeline). Graph-derived

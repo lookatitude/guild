@@ -5,7 +5,7 @@
  * HK-03 — per-phase `guild.learning_checkpoint.v1` emitter.
  *
  * CONTRACT (by pointer):
- *   .guild/initiatives/active/drift-remediation/contracts/learning-checkpoint.v1.md
+ *   .guild/initiatives/archived/drift-remediation/contracts/learning-checkpoint.v1.md
  *
  * DRIFT finding: HK-03 (high) — the once-at-Stop maybe-reflect pattern is
  * replaced by a per-phase checkpoint emitted at each phase review boundary.
@@ -24,7 +24,12 @@
  * Usage (phase hook):
  *   GUILD_RUN_ID=<id> GUILD_PHASE=development GUILD_EVIDENCE_REF=<path> \
  *     npx tsx hooks/emit-learning-checkpoint.ts
- * Optional: GUILD_CHECKPOINT_VERDICT=<json-path> (SK-13 integration)
+ * Optional: GUILD_CHECKPOINT_VERDICT=<json-path>           (pre-written verdict; SK-13 integration)
+ * Optional: GUILD_CHECKPOINT_ARTIFACTS_JSON=<json-path>    (ArtifactSet for in-process classify)
+ *   When GUILD_CHECKPOINT_VERDICT is absent but GUILD_CHECKPOINT_ARTIFACTS_JSON is
+ *   provided, the hook calls classifyPhase() from scripts/lib/learning-signatures.ts
+ *   to produce the real 12-target verdict (the GUILD_CHECKPOINT_VERDICT producer path).
+ *   Both absent → all-none default (behavior-neutral, back-compat).
  * Output: path of written checkpoint
  *
  * ── INVARIANTS (VC-K7) ───────────────────────────────────────────────────
@@ -35,6 +40,12 @@
 
 import * as fs from "fs";
 import * as path from "path";
+
+// ── Classifier integration (learning-signatures) ───────────────────────────
+// Imported lazily so the module stays loadable even before scripts/lib is built.
+// classifyPhase is the GUILD_CHECKPOINT_VERDICT producer when the caller
+// provides a serialized ArtifactSet via GUILD_CHECKPOINT_ARTIFACTS_JSON.
+import { classifyPhase, type ArtifactSet } from "../scripts/lib/learning-signatures";
 
 // ── Schema constants ───────────────────────────────────────────────────────
 
@@ -488,6 +499,13 @@ function main(): void {
     process.exit(1);
   }
 
+  // GUILD_CHECKPOINT_ARTIFACTS_JSON: optional path to a JSON file containing
+  // a serialized ArtifactSet produced by the phase skill (step 7.5).
+  // When verdictPath is absent but this env var is present, the hook
+  // classifies the artifacts in-process to produce a real verdict map.
+  // This is the GUILD_CHECKPOINT_VERDICT producer path (learning-signatures.ts).
+  const artifactsJsonPath = process.env["GUILD_CHECKPOINT_ARTIFACTS_JSON"];
+
   let decisions: CheckpointDecisions | undefined;
   if (verdictPath) {
     try {
@@ -497,6 +515,33 @@ function main(): void {
       process.stderr.write(
         `[emit-learning-checkpoint] WARN: could not read GUILD_CHECKPOINT_VERDICT (${verdictPath}): ${String(e)}\n`,
       );
+    }
+  }
+
+  // Fallback: classify from ArtifactSet when no pre-written verdict file exists.
+  // Behavior-neutral when GUILD_CHECKPOINT_ARTIFACTS_JSON is absent (decisions
+  // stays undefined → writeCheckpoint defaults to ALL_NONE_DECISIONS, unchanged).
+  if (decisions === undefined && artifactsJsonPath) {
+    try {
+      const rawArtifacts = fs.readFileSync(artifactsJsonPath, "utf8");
+      const artifacts = JSON.parse(rawArtifacts) as ArtifactSet;
+      // Inject runId and phase from the env if not already in the artifact set
+      if (!artifacts.runId) artifacts.runId = runId;
+      if (!artifacts.phase) artifacts.phase = phase ?? undefined;
+      if (!artifacts.evidenceRef) artifacts.evidenceRef = evidenceRef !== "none" ? evidenceRef : undefined;
+      const verdict = classifyPhase(artifacts);
+      // Cast to CheckpointDecisions (the 12-key map is structurally identical)
+      decisions = verdict as unknown as CheckpointDecisions;
+      process.stderr.write(
+        `[emit-learning-checkpoint] INFO: classified artifacts → non-none: ` +
+          `${Object.entries(verdict).filter(([, v]) => v !== "none").map(([k]) => k).join(", ") || "none"}\n`,
+      );
+    } catch (e) {
+      process.stderr.write(
+        `[emit-learning-checkpoint] WARN: could not classify GUILD_CHECKPOINT_ARTIFACTS_JSON ` +
+          `(${artifactsJsonPath}): ${String(e)}\n`,
+      );
+      // Fail-safe: leave decisions undefined → all-none default
     }
   }
 

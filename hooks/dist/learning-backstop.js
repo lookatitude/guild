@@ -2875,8 +2875,8 @@ function resolveGuildRoot(startCwd) {
 }
 
 // lib/run-trace.ts
-var fs2 = __toESM(require("fs"));
-var path2 = __toESM(require("path"));
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 
 // ../scripts/lib/host-capabilities-schema.ts
 var CLAUDE_CAPABILITIES = {
@@ -3348,32 +3348,358 @@ var yaml2 = __toESM(require_js_yaml2());
 // lib/v1.4/redact-log.ts
 var FIELD_SIZE_CAP_BYTES = 4 * 1024;
 
-// lib/run-trace.ts
-function resolveRunIdForTrace(root, env) {
-  const fromEnv = env.GUILD_RUN_ID;
-  if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
-  const legacy = readSentinel(path2.join(root, ".guild", "runs", "current-run-id"));
-  if (legacy) return legacy;
-  const b2 = readSentinel(path2.join(root, ".guild", "current-run-id"));
-  if (b2) return b2;
+// emit-learning-checkpoint.ts
+var fs2 = __toESM(require("fs"));
+var path2 = __toESM(require("path"));
+
+// ../scripts/classify-proposal.ts
+function classifyProposal(input) {
+  const target = input.target ?? "skill";
+  const subject = input.subject ?? "<skill>";
+  const countGate = input.distinct_subject_count >= 3 || input.distinct_subject_count >= 2 && input.same_run === true;
+  const systemic = countGate && input.same_signature === true && input.user_approved === true;
+  const perInstance = `${target}_def: proposal:${subject}`;
+  const outputs = [perInstance];
+  if (systemic) {
+    outputs.push(`${target}_template: systemic-proposal`);
+  }
+  return { verdict: systemic ? "systemic" : "specific", outputs };
+}
+function parseFlag(argv, name) {
+  const eq = `--${name}=`;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === `--${name}` && argv[i + 1] && !argv[i + 1].startsWith("--")) return argv[i + 1];
+    if (argv[i].startsWith(eq)) return argv[i].slice(eq.length);
+  }
+  return void 0;
+}
+function hasFlag(argv, name) {
+  return argv.includes(`--${name}`);
+}
+function main() {
+  const argv = process.argv.slice(2);
+  const distinct = parseInt(parseFlag(argv, "distinct") ?? "0", 10);
+  const target = parseFlag(argv, "target") ?? "skill";
+  const subject = parseFlag(argv, "subject");
+  const res = classifyProposal({
+    distinct_subject_count: Number.isFinite(distinct) ? distinct : 0,
+    same_run: hasFlag(argv, "same-run"),
+    same_signature: hasFlag(argv, "same-signature"),
+    user_approved: hasFlag(argv, "user-approved"),
+    target: target === "agent" ? "agent" : "skill",
+    ...subject ? { subject } : {}
+  });
+  process.stdout.write(JSON.stringify(res, null, 2) + "\n");
+}
+if (require.main === module) main();
+
+// ../scripts/lib/learning-signatures.ts
+function allLearnings(artifacts) {
+  const out = [];
+  for (const block of artifacts.handoffBlocks ?? []) {
+    for (const l of block.learnings ?? []) {
+      if (l) out.push(l);
+    }
+  }
+  return out;
+}
+function allFollowups(artifacts) {
+  const out = [];
+  for (const block of artifacts.handoffBlocks ?? []) {
+    for (const f of block.followups ?? []) {
+      if (f) out.push(f);
+    }
+  }
+  return out;
+}
+function bestRef(artifacts) {
+  const wiki = artifacts.provenanceTouched?.wiki ?? [];
+  if (wiki.length > 0) return wiki[0];
+  return artifacts.evidenceRef ?? artifacts.runId;
+}
+function filesInclude(artifacts, patterns) {
+  const files = [
+    ...artifacts.changedFiles ?? [],
+    ...artifacts.provenanceTouched?.files ?? []
+  ];
+  return files.some((f) => patterns.some((p) => p.test(f)));
+}
+function learningsReferenceSkill(artifacts) {
+  const learnings = allLearnings(artifacts);
+  const followups = allFollowups(artifacts);
+  const all = [...learnings, ...followups];
+  for (const text of all) {
+    const match = text.match(/\b(?:skill[:\s]+|guild:)([\w:-]+)/i);
+    if (match) return match[1] ?? "unknown-skill";
+    if (/skill[\s_-](?:improvement|gap|defect|change|update|refactor)/i.test(text)) {
+      return "unknown-skill";
+    }
+  }
   return null;
 }
-function readSentinel(p) {
+function learningsReferenceAgent(artifacts) {
+  const learnings = allLearnings(artifacts);
+  const followups = allFollowups(artifacts);
+  const all = [...learnings, ...followups];
+  for (const text of all) {
+    const match = text.match(/\b(?:agent[:\s]+|guild:)([\w:-]+(?:engineer|writer|author|architect|specialist|reviewer|planner|developer|auditor))/i);
+    if (match) return match[1] ?? "unknown-agent";
+    if (/agent[\s_-](?:improvement|gap|defect|change|update|refactor)/i.test(text)) {
+      return "unknown-agent";
+    }
+  }
+  return null;
+}
+function classifyMemory(artifacts) {
   try {
-    const v = fs2.readFileSync(p, "utf8").trim();
-    return v.length > 0 ? v : null;
+    const decisions = artifacts.provenanceTouched?.decisions ?? [];
+    if (decisions.length > 0) {
+      const ref = decisions[0];
+      return `candidate:${ref}`;
+    }
+    const learnings = allLearnings(artifacts);
+    if (learnings.some((l) => /\b(?:always|never|must|should|pattern|convention|rule)\b/i.test(l))) {
+      return `candidate:${bestRef(artifacts)}`;
+    }
+    return "none";
   } catch {
-    return null;
+    return "none";
   }
 }
-
-// lib/learning-backstop.ts
-var fs4 = __toESM(require("node:fs"));
-var path4 = __toESM(require("node:path"));
+function classifyWiki(artifacts) {
+  try {
+    const wikiTouched = artifacts.provenanceTouched?.wiki ?? [];
+    if (wikiTouched.length > 0) {
+      return `candidate:${wikiTouched[0]}`;
+    }
+    const followups = allFollowups(artifacts);
+    if (followups.some(
+      (f) => /\b(?:wiki[\s_-]?ingest|wiki[\s_-]?page|decisions?[\s_-]?capture|guild:decisions|guild:wiki)/i.test(f)
+    )) {
+      return `candidate:${bestRef(artifacts)}`;
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyKnowledgeGraph(artifacts) {
+  try {
+    const initiatives = artifacts.provenanceTouched?.initiatives ?? [];
+    if (initiatives.length > 0) {
+      return "re-derive";
+    }
+    if (filesInclude(artifacts, [
+      /\.guild\/wiki\//,
+      /\.guild\/raw\/sources\//,
+      /\.guild\/initiatives\//,
+      /\.guild\/reflections\//,
+      /\.guild\/evolve\//,
+      /\.guild\/indexes\/harvest-/
+    ])) {
+      return "re-derive";
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyDomainModel(artifacts) {
+  try {
+    if (filesInclude(artifacts, [
+      /\.guild\/indexes\/domain-graph\.json/,
+      /^src\//,
+      /^app\//,
+      /^lib\//,
+      /^services?\//,
+      /^packages?\//,
+      /^modules?\//,
+      /^components?\//,
+      // Also detect changed source files with non-test extensions
+      /\.(ts|tsx|js|jsx|py|rb|go|java|cs|rs|kt|swift)$/
+    ]) && // Only if this is NOT purely test files (tests don't shift the domain)
+    (artifacts.changedFiles ?? artifacts.provenanceTouched?.files ?? []).some(
+      (f) => !/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(f) && !/\/(__tests__|test|spec)\//.test(f)
+    )) {
+      return "refresh:stale";
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyAgentDef(artifacts) {
+  try {
+    const agentRef = learningsReferenceAgent(artifacts);
+    if (agentRef !== null) {
+      return `proposal:${agentRef}`;
+    }
+    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
+    for (const text of all) {
+      const match = text.match(/proposal:([a-z][\w:-]+)/i);
+      if (match && /agent/i.test(match[1] ?? "")) {
+        return `proposal:${match[1]}`;
+      }
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifySkillDef(artifacts) {
+  try {
+    const skillRef = learningsReferenceSkill(artifacts);
+    if (skillRef !== null) {
+      return `proposal:${skillRef}`;
+    }
+    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
+    for (const text of all) {
+      const match = text.match(/proposal:([\w:-]+)/i);
+      if (match && /skill/i.test(text)) {
+        return `proposal:${match[1]}`;
+      }
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyAgentTemplate(artifacts) {
+  try {
+    const input = artifacts.classifyProposalInput;
+    if (!input) return "none";
+    const result = classifyProposal({ ...input, target: "agent" });
+    return result.verdict === "systemic" ? "systemic-proposal" : "none";
+  } catch {
+    return "none";
+  }
+}
+function classifySkillTemplate(artifacts) {
+  try {
+    const input = artifacts.classifyProposalInput;
+    if (!input) return "none";
+    const result = classifyProposal({ ...input, target: "skill" });
+    return result.verdict === "systemic" ? "systemic-proposal" : "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyConfig(artifacts) {
+  try {
+    const configKeys = artifacts.provenanceTouched?.config_keys ?? [];
+    if (configKeys.length > 0) {
+      return `proposal:${configKeys[0]}`;
+    }
+    const settingsFiles = [
+      ...artifacts.changedFiles ?? [],
+      ...artifacts.provenanceTouched?.files ?? []
+    ].filter(
+      (f) => /(?:settings\.json|settings\.local\.json|\.claude-plugin\/|guild\.json|\.guild\/settings|guildstack\.pen)/i.test(f)
+    );
+    if (settingsFiles.length > 0) {
+      const f = settingsFiles[0];
+      const keyMatch = f.match(/([^/]+)\.json$/);
+      return `proposal:${keyMatch ? keyMatch[1] : "settings"}`;
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyTaskTracking(artifacts) {
+  try {
+    const tasks = artifacts.provenanceTouched?.tasks ?? [];
+    if (tasks.length > 0) {
+      const anyDone = (artifacts.handoffBlocks ?? []).some(
+        (b) => b.status === "done" || b.status === "shipped"
+      );
+      if (anyDone || artifacts.handoffBlocks === void 0) {
+        return `update:${tasks[0]}`;
+      }
+    }
+    const runs = artifacts.provenanceTouched?.runs ?? [];
+    if (runs.length > 0) {
+      const anyDone = (artifacts.handoffBlocks ?? []).some(
+        (b) => b.status === "done" || b.status === "shipped"
+      );
+      if (anyDone) {
+        return `update:run:${runs[0]}`;
+      }
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyWorkflowRules(artifacts) {
+  try {
+    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
+    for (const text of all) {
+      if (/\b(?:agents?\.md|workflow[\s_-]rule|process[\s_-](?:pattern|rule)|always[\s_-](?:use|run|check)|never[\s_-](?:use|run|skip)|convention|discipline|practice)\b/i.test(
+        text
+      )) {
+        const ruleMatch = text.match(/rule[:\s]+([\w-]+)/i);
+        return `proposal:${ruleMatch ? ruleMatch[1] : "workflow"}`;
+      }
+    }
+    if (filesInclude(artifacts, [
+      /AGENTS\.md$/,
+      /CLAUDE\.md$/,
+      /workflow.*\.md$/i
+    ])) {
+      return "proposal:agents-md";
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyReviewPolicy(artifacts) {
+  try {
+    const all = [
+      ...allLearnings(artifacts),
+      ...allFollowups(artifacts),
+      ...(artifacts.handoffBlocks ?? []).flatMap((b) => b.issues ?? []),
+      ...(artifacts.handoffBlocks ?? []).map((b) => b.notes ?? ""),
+      ...(artifacts.handoffBlocks ?? []).map((b) => b.summary ?? "")
+    ];
+    for (const text of all) {
+      if (/\b(?:BLOCK|block[\s_-]override|owner[\s_-]accepted[\s_-]risk|gate[\s_-]override|releasegate|review[\s_-]gate[\s_-]fail)\b/.test(text)) {
+        const gateMatch = text.match(/(?:G[-_]?(\w+)|gate[\s:]+([\w-]+)|releasegate)/i);
+        const gate = gateMatch ? gateMatch[1] ?? gateMatch[2] ?? "releasegate" : "releasegate";
+        return `proposal:${gate}`;
+      }
+      if (/\bcap[\s_-]exceeded\b|rounds[\s_-]cap[\s_-]hit\b|codex[\s_-]cap\b/i.test(text)) {
+        return "proposal:codex-cap";
+      }
+    }
+    const decisions = artifacts.provenanceTouched?.decisions ?? [];
+    if (decisions.some((d) => /review[\s_-]?policy|gate[\s_-]?policy/i.test(d))) {
+      return `proposal:${decisions.find((d) => /review|gate/i.test(d))}`;
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyPhase(artifacts) {
+  return {
+    memory: classifyMemory(artifacts),
+    wiki: classifyWiki(artifacts),
+    knowledge_graph: classifyKnowledgeGraph(artifacts),
+    domain_model: classifyDomainModel(artifacts),
+    agent_def: classifyAgentDef(artifacts),
+    skill_def: classifySkillDef(artifacts),
+    agent_template: classifyAgentTemplate(artifacts),
+    skill_template: classifySkillTemplate(artifacts),
+    config: classifyConfig(artifacts),
+    task_tracking: classifyTaskTracking(artifacts),
+    workflow_rules: classifyWorkflowRules(artifacts),
+    review_policy: classifyReviewPolicy(artifacts)
+  };
+}
 
 // emit-learning-checkpoint.ts
-var fs3 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
 var SCHEMA_VERSION = "guild.learning_checkpoint.v1";
 var VALID_PHASES = [
   "init",
@@ -3513,12 +3839,12 @@ function buildYaml(opts) {
 }
 function appendKnowledgeLinksIndex(guildRoot, links) {
   if (links.length === 0) return;
-  const indexDir = path3.join(guildRoot, ".guild", "indexes");
-  const indexPath = path3.join(indexDir, "knowledge-links.json");
+  const indexDir = path2.join(guildRoot, ".guild", "indexes");
+  const indexPath = path2.join(indexDir, "knowledge-links.json");
   let existing = [];
-  if (fs3.existsSync(indexPath)) {
+  if (fs2.existsSync(indexPath)) {
     try {
-      const raw = fs3.readFileSync(indexPath, "utf8");
+      const raw = fs2.readFileSync(indexPath, "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed["links"])) {
         existing = parsed["links"];
@@ -3540,8 +3866,8 @@ function appendKnowledgeLinksIndex(guildRoot, links) {
   if (novel.length === 0) return;
   const merged = [...existing, ...novel];
   try {
-    fs3.mkdirSync(indexDir, { recursive: true });
-    fs3.writeFileSync(
+    fs2.mkdirSync(indexDir, { recursive: true });
+    fs2.writeFileSync(
       indexPath,
       JSON.stringify(
         { schema_version: "guild.knowledge_links.v1", links: merged },
@@ -3560,14 +3886,14 @@ function appendKnowledgeLinksIndex(guildRoot, links) {
 function appendReflections(guildRoot, runId, phase, decisions) {
   const nonNone = DECISION_TARGETS.filter((k) => decisions[k] !== "none");
   if (nonNone.length === 0) return;
-  const reflectionsDir = path3.join(guildRoot, ".guild", "reflections");
-  fs3.mkdirSync(reflectionsDir, { recursive: true });
-  const reflPath = path3.join(reflectionsDir, `${runId}.md`);
+  const reflectionsDir = path2.join(guildRoot, ".guild", "reflections");
+  fs2.mkdirSync(reflectionsDir, { recursive: true });
+  const reflPath = path2.join(reflectionsDir, `${runId}.md`);
   const entry = `
 ## Phase: ${phase} (${runId})
 
 ` + nonNone.map((k) => `- ${k}: ${decisions[k]}`).join("\n") + "\n";
-  fs3.appendFileSync(reflPath, entry, "utf8");
+  fs2.appendFileSync(reflPath, entry, "utf8");
 }
 function writeCheckpoint(opts) {
   assertPhase(opts.phase);
@@ -3576,11 +3902,11 @@ function writeCheckpoint(opts) {
   assertNodePrefixes(links);
   const guildRoot = opts.guildRoot ?? process.cwd();
   const decisions = opts.decisions ?? { ...ALL_NONE_DECISIONS };
-  const learningDir = path3.join(guildRoot, ".guild", "runs", opts.runId, "learning");
-  fs3.mkdirSync(learningDir, { recursive: true });
-  const checkpointFile = path3.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
+  const learningDir = path2.join(guildRoot, ".guild", "runs", opts.runId, "learning");
+  fs2.mkdirSync(learningDir, { recursive: true });
+  const checkpointFile = path2.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
   const reflectionsRelPath = `.guild/reflections/${opts.runId}.md`;
-  const reflectionsAbsPath = path3.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
+  const reflectionsAbsPath = path2.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
   const observed = opts.observed ?? [];
   const yaml3 = buildYaml({
     runId: opts.runId,
@@ -3592,13 +3918,13 @@ function writeCheckpoint(opts) {
     knowledgeLinksBatch: links,
     ...opts.backstop === true ? { backstop: true } : {}
   });
-  fs3.writeFileSync(checkpointFile, yaml3, "utf8");
+  fs2.writeFileSync(checkpointFile, yaml3, "utf8");
   appendReflections(guildRoot, opts.runId, opts.phase, decisions);
   appendKnowledgeLinksIndex(guildRoot, links);
   void reflectionsAbsPath;
   return checkpointFile;
 }
-function main() {
+function main2() {
   const runId = process.env["GUILD_RUN_ID"];
   const phase = process.env["GUILD_PHASE"];
   const evidenceRef = process.env["GUILD_EVIDENCE_REF"] ?? "none";
@@ -3613,10 +3939,11 @@ function main() {
     process.stderr.write("[emit-learning-checkpoint] ERROR: GUILD_PHASE not set\n");
     process.exit(1);
   }
+  const artifactsJsonPath = process.env["GUILD_CHECKPOINT_ARTIFACTS_JSON"];
   let decisions;
   if (verdictPath) {
     try {
-      const raw = fs3.readFileSync(verdictPath, "utf8");
+      const raw = fs2.readFileSync(verdictPath, "utf8");
       decisions = JSON.parse(raw);
     } catch (e) {
       process.stderr.write(
@@ -3625,10 +3952,30 @@ function main() {
       );
     }
   }
+  if (decisions === void 0 && artifactsJsonPath) {
+    try {
+      const rawArtifacts = fs2.readFileSync(artifactsJsonPath, "utf8");
+      const artifacts = JSON.parse(rawArtifacts);
+      if (!artifacts.runId) artifacts.runId = runId;
+      if (!artifacts.phase) artifacts.phase = phase ?? void 0;
+      if (!artifacts.evidenceRef) artifacts.evidenceRef = evidenceRef !== "none" ? evidenceRef : void 0;
+      const verdict = classifyPhase(artifacts);
+      decisions = verdict;
+      process.stderr.write(
+        `[emit-learning-checkpoint] INFO: classified artifacts \u2192 non-none: ${Object.entries(verdict).filter(([, v]) => v !== "none").map(([k]) => k).join(", ") || "none"}
+`
+      );
+    } catch (e) {
+      process.stderr.write(
+        `[emit-learning-checkpoint] WARN: could not classify GUILD_CHECKPOINT_ARTIFACTS_JSON (${artifactsJsonPath}): ${String(e)}
+`
+      );
+    }
+  }
   let knowledgeLinksBatch = [];
   if (linksPath) {
     try {
-      const raw = fs3.readFileSync(linksPath, "utf8");
+      const raw = fs2.readFileSync(linksPath, "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         knowledgeLinksBatch = parsed;
@@ -3663,10 +4010,12 @@ function main() {
   }
 }
 if (process.argv[1] !== void 0 && (process.argv[1].endsWith("emit-learning-checkpoint.ts") || process.argv[1].endsWith("emit-learning-checkpoint.js"))) {
-  main();
+  main2();
 }
 
 // lib/learning-backstop.ts
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
 var PHASE_TOKEN_TO_CHECKPOINT = {
   // canonical lifecycle tokens (CANONICAL_PHASES, scripts/lib/run-lifecycle.ts)
   init: "init",
@@ -3715,10 +4064,10 @@ var EMPTY_RESULT = {
 };
 function runLearningBackstop(opts) {
   try {
-    const runDir = opts.runDir ?? path4.join(opts.guildRoot, ".guild", "runs", opts.runId);
+    const runDir = opts.runDir ?? path3.join(opts.guildRoot, ".guild", "runs", opts.runId);
     let raw;
     try {
-      raw = fs4.readFileSync(path4.join(runDir, "run.yaml"), "utf8");
+      raw = fs3.readFileSync(path3.join(runDir, "run.yaml"), "utf8");
     } catch {
       return { ...EMPTY_RESULT };
     }
@@ -3738,12 +4087,12 @@ function runLearningBackstop(opts) {
       }
       if (phasesSeen.has(phase)) continue;
       phasesSeen.add(phase);
-      const checkpointFile = path4.join(
+      const checkpointFile = path3.join(
         runDir,
         "learning",
         `${phase}-${opts.runId}.yaml`
       );
-      if (fs4.existsSync(checkpointFile)) {
+      if (fs3.existsSync(checkpointFile)) {
         result.skippedExisting.push(phase);
         continue;
       }
@@ -3771,6 +4120,25 @@ function runLearningBackstop(opts) {
   }
 }
 
+// lib/run-trace.ts
+function resolveRunIdForTrace(root, env) {
+  const fromEnv = env.GUILD_RUN_ID;
+  if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
+  const legacy = readSentinel(path4.join(root, ".guild", "runs", "current-run-id"));
+  if (legacy) return legacy;
+  const b2 = readSentinel(path4.join(root, ".guild", "current-run-id"));
+  if (b2) return b2;
+  return null;
+}
+function readSentinel(p) {
+  try {
+    const v = fs4.readFileSync(p, "utf8").trim();
+    return v.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 // learning-backstop.ts
 async function readStdin() {
   return new Promise((resolve2) => {
@@ -3780,7 +4148,7 @@ async function readStdin() {
     process.stdin.on("error", () => resolve2(""));
   });
 }
-async function main2() {
+async function main3() {
   const raw = await readStdin();
   let payload = {};
   try {
@@ -3813,7 +4181,7 @@ async function main2() {
   }
   process.exit(0);
 }
-main2().catch((err) => {
+main3().catch((err) => {
   process.stderr.write(
     `[learning-backstop] FATAL: ${err instanceof Error ? err.message : String(err)}
 `

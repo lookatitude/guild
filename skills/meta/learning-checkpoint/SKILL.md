@@ -10,7 +10,7 @@ type: meta
 Implements the self-evolution pipeline's per-phase
 learning loop (the per-phase LearningCheckpoint). The schema, the 12-target enum, the per-target signature
 table, the closed edge-type set, and the three invariants are **frozen** in the
-contract `.guild/initiatives/active/drift-remediation/contracts/learning-checkpoint.v1.md`
+contract `.guild/initiatives/archived/drift-remediation/contracts/learning-checkpoint.v1.md`
 and its canonical ADR (the continuous-knowledge-and-learning-loop §CR-C).
 **Bind both by pointer; on any conflict the ADR wins. Never re-spell the frozen
 signature table inline** — this skill owns the *classification discipline*, not a
@@ -234,17 +234,19 @@ The model is sound **iff every appended edge is re-derivable by the builder** �
 then a full rebuild reconstructs the appends and the overwrite loses no truth
 (NN#8).
 
-> **Known limitation — `decided_by` / `supersedes` / `resolves` are
-> ephemeral-until-W3.** The builder currently re-derives **6 of the closed 9**
-> edge types (`used_for · produced · touches · learned_from · constrains ·
-> opens_question`) — those checkpoint appends are clobber-safe. The other **3**
-> (`decided_by`, `supersedes`, `resolves`) are **not yet emitted by the builder**,
-> so a checkpoint append of those types **vanishes on the next full rebuild**
-> (NN#8 not yet satisfied for them). The facts are re-derivable in principle
-> (`decided_by ⇐ provenance.touched.decisions`, `supersedes ⇐ wiki frontmatter`,
-> `resolves ⇐ provenance + open-questions`); the **W3 builder extension** adds
-> that re-derivation so all 9 survive a rebuild. Until then, treat those 3 as
-> live-but-ephemeral — do not rely on them persisting across a rebuild.
+> **All closed-9 edge types survive a full rebuild.** The builder re-derives
+> **every one of the closed 9** edge types from its canonical fact sources, so a
+> checkpoint append of **any** closed-9 type is clobber-safe (NN#8 holds for all
+> 9). The three decision-space types are re-derived from wiki/provenance frontmatter
+> by `collectWikiEdges` (`scripts/knowledge-links-builder.ts:303-327`):
+> `supersedes ⇐` the decision page's `supersedes:` frontmatter,
+> `resolves ⇐` its `resolves:` frontmatter, and
+> `decided_by ⇐` its `task:` frontmatter (plus `provenance.touched.decisions` in
+> the provenance pass). The other six (`used_for · produced · touches ·
+> learned_from · constrains · opens_question`) are re-derived from provenance,
+> spec, raw-source, and handoff scans. A full rebuild therefore reconstructs
+> every appended edge and the overwrite loses no truth — the writer model is
+> sound for all closed-9 types.
 
 ## The three invariants no verdict may cross
 

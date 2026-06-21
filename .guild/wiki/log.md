@@ -1,5 +1,8 @@
 # Guild Wiki Log
 
+## 2026-06-18
+- decided v2-final-design-and-doc-artifact-boundary
+
 ## 2026-06-17
 - decided telemetry-anchors-to-repo-root-not-cwd
 - decided universal-host-p2-p3-wave-sequencing

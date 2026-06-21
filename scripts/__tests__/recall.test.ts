@@ -52,7 +52,12 @@ function writeWikiFile(repo: string, relPath: string, content: string): void {
   fs.writeFileSync(abs, content, "utf8");
 }
 
-/** Write a minimal knowledge-graph.json to .guild/indexes/knowledge-graph.json */
+/**
+ * Write a minimal knowledge-recall.json (guild.knowledge_links.v2 schema) to
+ * .guild/indexes/knowledge-recall.json.
+ *
+ * METRIC 6 (DECISION=B): recall reads the recall projection, not the raw graph.
+ */
 function writeKgFile(
   repo: string,
   nodes: Array<{
@@ -65,10 +70,8 @@ function writeKgFile(
 ): void {
   const indexesDir = path.join(repo, ".guild", "indexes");
   fs.mkdirSync(indexesDir, { recursive: true });
-  const graph = {
-    version: "1.0",
-    generated_from_commit: "test",
-    project: { name: "test", description: "test" },
+  const proj = {
+    schema_version: "guild.knowledge_links.v2",
     nodes: nodes.map((n) => ({
       id: n.id,
       type: n.type ?? "file",
@@ -77,12 +80,10 @@ function writeKgFile(
       source_refs: n.source_refs ?? [],
     })),
     edges: [],
-    layers: [],
-    tour: [],
   };
   fs.writeFileSync(
-    path.join(indexesDir, "knowledge-graph.json"),
-    JSON.stringify(graph, null, 2),
+    path.join(indexesDir, "knowledge-recall.json"),
+    JSON.stringify(proj, null, 2),
     "utf8",
   );
 }
@@ -427,7 +428,7 @@ describe("recall — Branch D: kg-query (KG nodes, always additive)", () => {
       _bm25Disabled: true,
     });
 
-    const kgChunks = result.chunks.filter((c) => c.source_path.includes("knowledge-graph.json"));
+    const kgChunks = result.chunks.filter((c) => c.source_path.includes("knowledge-recall.json"));
     if (kgChunks.length > 0) {
       // KG nodes are ALWAYS untrusted (path not in operator allowlist, no frontmatter YAML)
       for (const chunk of kgChunks) {
@@ -457,7 +458,7 @@ describe("recall — Branch D: kg-query (KG nodes, always additive)", () => {
       _bm25Disabled: true,
     });
 
-    const kgChunks = result.chunks.filter((c) => c.source_path.includes("knowledge-graph.json"));
+    const kgChunks = result.chunks.filter((c) => c.source_path.includes("knowledge-recall.json"));
     for (const chunk of kgChunks) {
       expect(chunk.trust_tier).not.toBe("operator");
     }
@@ -474,7 +475,7 @@ describe("recall — Branch D: kg-query (KG nodes, always additive)", () => {
 
     expect(result.source).not.toBe("kg-query");
     for (const chunk of result.chunks) {
-      expect(chunk.source_path).not.toContain("knowledge-graph.json");
+      expect(chunk.source_path).not.toContain("knowledge-recall.json");
     }
   });
 
@@ -495,11 +496,11 @@ describe("recall — Branch D: kg-query (KG nodes, always additive)", () => {
       _indexConfig: { enabled: false },
     });
 
-    const hasWiki = result.chunks.some((c) => !c.source_path.includes("knowledge-graph.json"));
-    const hasKg = result.chunks.some((c) => c.source_path.includes("knowledge-graph.json"));
-    if (hasWiki && hasKg) {
-      expect(result.source).toBe("combined");
-    }
+    // De-guarded (METRIC 5): must unconditionally require both wiki + KG to contribute.
+    // The wiki file and KG node both contain terms from the query, so both must surface.
+    expect(result.chunks.some((c) => !c.source_path.includes("knowledge-recall.json"))).toBe(true);
+    expect(result.chunks.some((c) => c.source_path.includes("knowledge-recall.json"))).toBe(true);
+    expect(result.source).toBe("combined");
   });
 
   it("wiki empty + KG has matching node → source='kg-query'", () => {
@@ -520,11 +521,12 @@ describe("recall — Branch D: kg-query (KG nodes, always additive)", () => {
       _bm25Disabled: true,
     });
 
-    const kgChunks = result.chunks.filter((c) => c.source_path.includes("knowledge-graph.json"));
-    // If KG contributed and wiki is empty, source = "kg-query"
-    if (kgChunks.length > 0 && result.chunks.every((c) => c.source_path.includes("knowledge-graph.json"))) {
-      expect(result.source).toBe("kg-query");
-    }
+    // De-guarded (METRIC 5): must unconditionally require KG to contribute when wiki is absent.
+    // No wiki dir → only KG fires; node name "AuthOnlyKg" matches the query terms.
+    const kgChunks = result.chunks.filter((c) => c.source_path.includes("knowledge-recall.json"));
+    expect(kgChunks.length).toBeGreaterThan(0);
+    expect(result.chunks.every((c) => c.source_path.includes("knowledge-recall.json"))).toBe(true);
+    expect(result.source).toBe("kg-query");
   });
 
   it("_kgDisabled:true → no KG chunks in result, source unchanged from wiki branch", () => {
@@ -541,7 +543,7 @@ describe("recall — Branch D: kg-query (KG nodes, always additive)", () => {
     });
 
     for (const chunk of result.chunks) {
-      expect(chunk.source_path).not.toContain("knowledge-graph.json");
+      expect(chunk.source_path).not.toContain("knowledge-recall.json");
     }
     expect(result.source).not.toBe("kg-query");
     expect(result.source).not.toBe("combined");
@@ -618,7 +620,7 @@ describe("recall — bundle invariant: NO raw injection text on ANY branch", () 
       _bm25Disabled: true,
     });
 
-    const kgChunks = result.chunks.filter((c) => c.source_path.includes("knowledge-graph.json"));
+    const kgChunks = result.chunks.filter((c) => c.source_path.includes("knowledge-recall.json"));
     for (const chunk of kgChunks) {
       expect(chunk.rendered).not.toContain("ignore all previous instructions");
       const isWrapped = chunk.rendered.includes("<guild:recall trust_tier=");

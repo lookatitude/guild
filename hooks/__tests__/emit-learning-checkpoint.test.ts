@@ -608,6 +608,142 @@ describe("emit-learning-checkpoint — HK-03", () => {
     });
   });
 
+  // ── VC-K4 (strengthened): GUILD_CHECKPOINT_ARTIFACTS_JSON producer path ───
+  // METRIC 1b — proves classifyPhase() is actually WIRED into the emit hook.
+  // The original happy-path tests only proved the all-none DEFAULT. This block
+  // drives the real producer path: a serialized ArtifactSet WHERE SIGNALS ARE
+  // PRESENT must yield non-`none` decisions in the emitted YAML — so the test is
+  // NOT vacuously all-none, and a regression that unwires the classifier (or
+  // makes classifyPhase return all-none) flips this RED.
+
+  describe("CLI — GUILD_CHECKPOINT_ARTIFACTS_JSON classifier wiring (VC-K4 / METRIC 1b)", () => {
+    function spawnClassify(
+      r: string,
+      artifacts: Record<string, unknown>,
+      extra: Record<string, string | undefined> = {},
+    ): { status: number | null; stdout: string; stderr: string } {
+      const artifactsFile = path.join(r, "artifacts.json");
+      fs.writeFileSync(artifactsFile, JSON.stringify(artifacts), "utf8");
+      const res = spawnSync("npx", ["tsx", SCRIPT], {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GUILD_RUN_ID: RUN,
+          GUILD_PHASE: "development",
+          GUILD_EVIDENCE_REF: "none",
+          GUILD_CWD: r,
+          GUILD_CHECKPOINT_ARTIFACTS_JSON: artifactsFile,
+          ...extra,
+        },
+        timeout: 30000,
+      });
+      return { status: res.status ?? 1, stdout: res.stdout ?? "", stderr: res.stderr ?? "" };
+    }
+
+    function readEmittedDecisions(r: string): Record<string, string> {
+      const yamlPath = path.join(
+        r, ".guild", "runs", RUN, "learning", `development-${RUN}.yaml`,
+      );
+      const parsed = parseYaml(fs.readFileSync(yamlPath, "utf8")) as {
+        learning_checkpoint?: { decisions?: Record<string, string> };
+      } | null;
+      return parsed?.learning_checkpoint?.decisions ?? {};
+    }
+
+    it("classifies a signal-rich ArtifactSet → machine-derivable targets are NON-'none' (not vacuously all-none)", () => {
+      // An ArtifactSet that trips the deterministic, machine-derivable signatures
+      // (provenance.touched.* + classifyProposalInput) — no NL-regex reliance.
+      const artifacts = {
+        runId: RUN,
+        provenanceTouched: {
+          decisions: ["decision:adr-77"],          // → memory
+          wiki: [".guild/wiki/decisions/adr-77.md"], // → wiki
+          initiatives: ["initiative:learning-tier"], // → knowledge_graph
+          config_keys: ["models.tiers.cheap"],       // → config
+          tasks: ["TASK-9"],                          // → task_tracking (with done handoff)
+        },
+        changedFiles: ["src/services/payments.ts"],  // → domain_model
+        handoffBlocks: [{ status: "done" }],
+        classifyProposalInput: {                      // → agent_template + skill_template
+          distinct_subject_count: 3,
+          same_run: false,
+          same_signature: true,
+          user_approved: true,
+        },
+      };
+
+      const { status } = spawnClassify(root, artifacts);
+      expect(status).toBe(0);
+
+      const decisions = readEmittedDecisions(root);
+
+      // The 12-key shape is intact…
+      expect(Object.keys(decisions).sort()).toEqual([...DECISION_TARGETS].sort());
+
+      // …and the machine-derivable targets fired (NON-vacuous proof of wiring).
+      expect(decisions["memory"]).toBe("candidate:decision:adr-77");
+      expect(decisions["wiki"]).toBe("candidate:.guild/wiki/decisions/adr-77.md");
+      expect(decisions["knowledge_graph"]).toBe("re-derive");
+      expect(decisions["domain_model"]).toBe("refresh:stale");
+      expect(decisions["config"]).toBe("proposal:models.tiers.cheap");
+      expect(decisions["task_tracking"]).toBe("update:TASK-9");
+      expect(decisions["agent_template"]).toBe("systemic-proposal");
+      expect(decisions["skill_template"]).toBe("systemic-proposal");
+
+      // Sanity: at least one target is still `none` — proves the classifier
+      // discriminates and does not blanket-fire every key.
+      const noneCount = Object.values(decisions).filter((v) => v === "none").length;
+      expect(noneCount).toBeGreaterThan(0);
+    });
+
+    it("routes the non-none verdicts to the reflections queue (VC-K7 — proves the emit side-effect ran)", () => {
+      spawnClassify(root, {
+        runId: RUN,
+        provenanceTouched: { decisions: ["decision:adr-77"], config_keys: ["x.y"] },
+      });
+      const ref = reflectionsPath(root, RUN);
+      expect(fs.existsSync(ref)).toBe(true);
+      const body = fs.readFileSync(ref, "utf8");
+      expect(body).toContain("memory");
+      expect(body).toContain("config");
+    });
+
+    it("is a true classifier (anti-vacuity control): an empty-signal ArtifactSet → all-'none'", () => {
+      // Same producer path, ZERO signals → the classifier must yield all-none.
+      // Pairs with the signal-rich case above: the ONLY difference is the input
+      // signals, so the non-none result there cannot be a constant.
+      const { status } = spawnClassify(root, { runId: RUN });
+      expect(status).toBe(0);
+      const decisions = readEmittedDecisions(root);
+      expect(Object.keys(decisions).sort()).toEqual([...DECISION_TARGETS].sort());
+      for (const v of Object.values(decisions)) expect(v).toBe("none");
+      // No non-none verdicts ⇒ no reflections queue file (VC-K7).
+      expect(fs.existsSync(reflectionsPath(root, RUN))).toBe(false);
+    });
+
+    it("a pre-written GUILD_CHECKPOINT_VERDICT wins over the ArtifactSet classify path", () => {
+      // Precedence guard: when both env vars are present, the explicit verdict
+      // file is used (the SK-13 seam), NOT the in-process classify.
+      const verdictFile = path.join(root, "verdict.json");
+      const verdict: CheckpointDecisions = {
+        ...ALL_NONE_DECISIONS,
+        wiki: "candidate:.guild/wiki/explicit.md",
+      };
+      fs.writeFileSync(verdictFile, JSON.stringify(verdict), "utf8");
+
+      // ArtifactSet would classify memory=candidate, but the explicit verdict
+      // (wiki only) must win.
+      spawnClassify(
+        root,
+        { runId: RUN, provenanceTouched: { decisions: ["decision:should-not-win"] } },
+        { GUILD_CHECKPOINT_VERDICT: verdictFile },
+      );
+      const decisions = readEmittedDecisions(root);
+      expect(decisions["wiki"]).toBe("candidate:.guild/wiki/explicit.md");
+      expect(decisions["memory"]).toBe("none"); // ArtifactSet path was NOT used
+    });
+  });
+
   // ── Phase enum validation ─────────────────────────────────────────────────
 
   describe("writeCheckpoint — phase validation", () => {

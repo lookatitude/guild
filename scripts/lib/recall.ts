@@ -56,7 +56,8 @@ import { fsScan } from "./fs-scanner";
 import { protectChunks, type ProtectedChunk } from "./recall-protect";
 import { tokenize, bm25Score } from "./shared/bm25";
 import { termMatchScore } from "./shared/graph-scoring";
-import type { KnowledgeGraph, GraphNode } from "../understand/lib/schema";
+import type { GraphNode } from "../understand/lib/schema";
+import type { KnowledgeLinksDoc, CanonicalNode } from "../understand/write-knowledge-links";
 import { ingestImportanceScore, resolveRecallImportance } from "./ingest-importance";
 // R-TRACE (Wave 6): additive trace emit — NEVER changes return value
 import { emitTraceEvent } from "./guild-trace-emit";
@@ -382,18 +383,23 @@ function fsScanBranch(
   return { source: "fs-scan", chunks, directive };
 }
 
-// ── Branch D: kg-query (KnowledgeGraph 2-hop traversal) ──────────────────────
+// ── Branch D: kg-query (knowledge-recall.json projection) ────────────────────
 //
-// Reads .guild/indexes/knowledge-graph.json (produced by understand/analyze-*.ts),
-// scores nodes via the same grep-first term scorer as kg-query.ts, and routes
-// each matching node through protectChunks.
+// METRIC 6 (DECISION=B): reads .guild/indexes/knowledge-recall.json — the
+// recall-OPTIMISED projection written by understand/write-knowledge-links.ts.
+// Nodes are pre-sorted by recall score (importance desc → confidence desc → id asc)
+// so this branch scores with termMatchScore and the projection's ordering is the
+// tiebreaker rather than re-sorting from scratch.
+//
+// Falls back gracefully when the projection file is absent: returns null (same
+// behaviour as the previous absent-graph path). Never throws.
 //
 // KG nodes are ALWAYS classified untrusted (DEFAULT-DENY). The node "content"
 // is a deterministic markdown summary — not a raw file, so no operator-path
 // allowlist match is possible. The probe still runs on each node (injection guard).
 //
 // This branch is ADDITIVE — it appends to whatever the wiki branch returned.
-// Returns null when the KG file is absent or no nodes match the query.
+// Returns null when the projection file is absent or no nodes match the query.
 
 function kgQueryBranch(
   query: string,
@@ -402,25 +408,29 @@ function kgQueryBranch(
   runDir?: string,
   runId?: string,
 ): RecallResult | null {
-  const kgPath = path.join(cwd, ".guild", "indexes", "knowledge-graph.json");
-  if (!fs.existsSync(kgPath)) return null;
+  // METRIC 6: read the recall projection, not the raw knowledge-graph
+  const projPath = path.join(cwd, ".guild", "indexes", "knowledge-recall.json");
+  if (!fs.existsSync(projPath)) return null;
 
-  let graph: KnowledgeGraph | null = null;
+  let proj: KnowledgeLinksDoc | null = null;
   try {
-    graph = JSON.parse(fs.readFileSync(kgPath, "utf8")) as KnowledgeGraph;
+    proj = JSON.parse(fs.readFileSync(projPath, "utf8")) as KnowledgeLinksDoc;
   } catch {
     return null;
   }
 
-  if (!Array.isArray(graph?.nodes) || graph.nodes.length === 0) return null;
+  if (!Array.isArray(proj?.nodes) || proj.nodes.length === 0) return null;
 
   const terms = query
     .toLowerCase()
     .split(/\s+/)
     .filter(Boolean);
 
-  const ranked = (graph.nodes as GraphNode[])
-    .map((n) => ({ n, s: termMatchScore(n, terms) }))
+  // The projection nodes are pre-sorted by recall score; we still apply
+  // termMatchScore so only relevant nodes surface, but we preserve the
+  // projection's pre-computed ordering as the tiebreaker.
+  const ranked = (proj.nodes as CanonicalNode[])
+    .map((n) => ({ n, s: termMatchScore(n as unknown as GraphNode, terms) }))
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s || a.n.id.localeCompare(b.n.id))
     .slice(0, limit);
@@ -428,8 +438,8 @@ function kgQueryBranch(
   if (ranked.length === 0) return null;
 
   // Build a deterministic markdown summary for each node.
-  // source_path uses the kg file path + node id so classifyTrustTier can
-  // identify the origin without hitting the operator-path allowlist.
+  // source_path uses the projection file path + node id so classifyTrustTier
+  // can identify the origin without hitting the operator-path allowlist.
   const rawHits = ranked.map(({ n }) => {
     const sourceRefs = (n.source_refs ?? []).slice(0, 2).join(", ");
     const content =
@@ -437,7 +447,7 @@ function kgQueryBranch(
       `confidence: ${n.confidence}\n` +
       (sourceRefs ? `source_refs: ${sourceRefs}\n` : "");
     return {
-      source_path: `.guild/indexes/knowledge-graph.json#${n.id}`,
+      source_path: `.guild/indexes/knowledge-recall.json#${n.id}`,
       content,
     };
   });

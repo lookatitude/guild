@@ -42,6 +42,11 @@ const ALLOWED_SKILL_ADDS = [
 const ALLOWED_SKILL_MODS = [
   "skills/specialists/architect-tradeoff-matrix/SKILL.md",
   "skills/specialists/backend-service-integration/SKILL.md",
+  // learning-harness no-loss initiative (ratified, operator goal-authorized): doc-accuracy /
+  // contract-repoint edits — body prose only; frontmatter byte-unchanged; no behavior change.
+  "skills/meta/learning-checkpoint/SKILL.md",
+  "skills/knowledge/learn-map/SKILL.md",
+  "skills/knowledge/learn-graph/SKILL.md",
 ];
 
 function git(args: string[]): string {

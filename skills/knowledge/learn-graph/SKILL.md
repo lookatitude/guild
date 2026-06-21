@@ -48,10 +48,13 @@ the bounded `kg-query` retrieval path (wired into `guild:context-assemble`) /
   deterministic `validate-graph.ts` ladder writes the final artifact, stripping
   the intermediate `_merge_report`). Includes the dependency-BFS-ordered
   `tour[]` **skeleton** (stage 6) for `guild:learn-onboard` to narrate.
-- `.guild/indexes/knowledge-links.json` — `guild.knowledge_links.v1`,
-  append-only **recall projection** batch (stage 5). This is the projection
-  `guild:context-assemble`'s `kg-query` step reads — the memory/recall loop
-  (D4): learned structure re-enters Guild's context path through it.
+- `.guild/indexes/knowledge-links.json` — `guild.knowledge_links.v1`, the
+  append-only **learning-loop edge index** (stage 5 contributes its initial
+  batch). This is the work/decision-space edge index — **not** the recall
+  projection (that is `knowledge-recall.json`, written by `guild:learn-knowledge`
+  K6, which `guild:context-assemble`'s `kg-query` step reads for the memory/recall
+  loop, D4). See the authoritative artifact table in `guild:learn-map §"Output
+  format"` — bound by pointer, never re-described.
 - `.guild/spec/<slug>.md` — the reverse-spec (stage 7), every claim carrying
   `source_refs` + `confidence` (the Brownfield Evidence Map).
 - `.guild/wiki/concepts/*` page **candidates** for named domains/flows
@@ -134,7 +137,8 @@ sub-answer for that sub-question only** — it is not re-run wholesale
 
 **Recall-before-read (ADR §4).** Before the LLM half of any stage reads source,
 query the knowledge base first (`guild-memory` BM25 over `.guild/wiki/` +
-`kg-query` over `knowledge-links.json`) for that stage's task. If recall returns
+`kg-query` over the recall projection `knowledge-recall.json`) for that stage's
+task. If recall returns
 ≥1 chunk scoring **≥ `models.recallScoreThreshold`** (default `0.4`; pointer to
 ADR §10), use the recalled chunk(s) + file references and **skip the full
 read** — reinforcing the existing *"trust the script, do not re-read source"*
@@ -143,7 +147,8 @@ rule. The script halves are unaffected.
 **One-pass three-store update (candidates only — SC-2).** A deep learn run
 updates **memory + wiki + KG in one pass**: the memory note(s), the
 `wiki/concepts/*` page candidate(s) (stage 5), and the KG nodes/edges +
-`knowledge-links.json` recall projection (stages 2–5) are written together, each
+`knowledge-links.json` learning-loop edge-index batch (stages 2–5) are written
+together, each
 claim carrying `source_refs`. All three are **candidates only** — no
 auto-promotion (promotion stays with `guild:wiki-ingest` / `guild:decisions`,
 ADR §8 non-goal). The reverse-spec (stage 7) is part of the same pass, every
@@ -154,8 +159,9 @@ claim with `source_refs` + `confidence`.
 Every graph node / spec claim is traceable to a scanned file via `source_refs`
 (`path#Lx-Ly`) + a calibrated `confidence`. The reverse-spec is synthesised
 from the graph, not raw files. Indexes record `generated_from_commit`. The
-`knowledge-links.json` projection is append-only and feeds recall via
-`guild:context-assemble`. These skills are eval-gated and evolvable under
+`knowledge-links.json` learning-loop edge index is append-only; recall itself is
+fed by the `knowledge-recall.json` projection that `guild:context-assemble`'s
+`kg-query` step reads. These skills are eval-gated and evolvable under
 `guild:evolve-skill` like any Guild skill.
 
 # Escalation rules

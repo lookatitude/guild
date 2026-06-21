@@ -48,6 +48,12 @@ const WAVE3_SKILL_ADDITION_FILES = [
 const WAVE7_SKILL_MODIFICATION_FILES = [
   "skills/specialists/architect-tradeoff-matrix/SKILL.md",
   "skills/specialists/backend-service-integration/SKILL.md",
+  // learning-harness no-loss initiative (ratified, operator goal-authorized): doc-accuracy /
+  // contract-repoint edits — body prose only; frontmatter (name/description/when_to_use/type)
+  // byte-unchanged; no trigger/dispatch behavior change.
+  "skills/meta/learning-checkpoint/SKILL.md",
+  "skills/knowledge/learn-map/SKILL.md",
+  "skills/knowledge/learn-graph/SKILL.md",
 ];
 const isAllowlistedSkillAddition = (p: string): boolean => WAVE3_SKILL_ADDITION_FILES.includes(p);
 const isAllowlistedSkillModification = (p: string): boolean => WAVE7_SKILL_MODIFICATION_FILES.includes(p);
