@@ -3747,35 +3747,7 @@ function emitBusEvent(runDir, input) {
 var fs8 = __toESM(require("node:fs"));
 var path8 = __toESM(require("node:path"));
 
-// lib/v1.4/log-jsonl.ts
-var import_node_fs2 = require("node:fs");
-var import_node_path2 = require("node:path");
-var import_node_zlib = require("node:zlib");
-
-// lib/trace-v2.ts
-var SIDECAR_MAX_BYTES = 16 * 1024;
-function pruneUndefined(obj) {
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v !== void 0) out[k] = v;
-  }
-  return out;
-}
-
-// lib/v1.4/log-jsonl.ts
-function liveLogPath(runDir) {
-  return (0, import_node_path2.join)(runDir, "logs", "v1.4-events.jsonl");
-}
-function archiveDir(runDir) {
-  return (0, import_node_path2.join)(runDir, "logs", "archive");
-}
-function archivePath(runDir, n) {
-  return (0, import_node_path2.join)(archiveDir(runDir), `v1.4-events.${n}.jsonl.gz`);
-}
-function laneFallbackPath(runDir, laneId) {
-  assertSafeLaneId(laneId);
-  return (0, import_node_path2.join)(runDir, "logs", `lane-${laneId}-events.jsonl`);
-}
+// lib/v1.4/log-jsonl-schema.ts
 var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 function isSafeRunId(id) {
@@ -3799,6 +3771,38 @@ function validateEventIds(event) {
   if ("lane_id" in event && event.lane_id !== void 0) {
     assertSafeLaneId(event.lane_id);
   }
+}
+
+// lib/v1.4/log-jsonl-writer.ts
+var import_node_fs2 = require("node:fs");
+var import_node_path2 = require("node:path");
+var import_node_zlib = require("node:zlib");
+
+// lib/trace-v2.ts
+var SIDECAR_MAX_BYTES = 16 * 1024;
+function pruneUndefined(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== void 0) out[k] = v;
+  }
+  return out;
+}
+
+// lib/v1.4/log-jsonl-writer.ts
+function liveLogPath(runDir) {
+  return (0, import_node_path2.join)(runDir, "logs", "v1.4-events.jsonl");
+}
+function archiveDir(runDir) {
+  return (0, import_node_path2.join)(runDir, "logs", "archive");
+}
+function archivePath(runDir, n) {
+  return (0, import_node_path2.join)(archiveDir(runDir), `v1.4-events.${n}.jsonl.gz`);
+}
+function laneFallbackPath(runDir, laneId) {
+  if (!isSafeLaneId(laneId)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(laneId)}`);
+  }
+  return (0, import_node_path2.join)(runDir, "logs", `lane-${laneId}-events.jsonl`);
 }
 var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 function appendEvent(runDir, event, opts = {}) {
@@ -3881,6 +3885,8 @@ function rotateLocked(runDir) {
     `log-jsonl: failed to recreate live log at ${live} with O_EXCL after 5 retries`
   );
 }
+
+// lib/v1.4/log-jsonl-sidecar.ts
 var SIDECAR_MAX_BYTES2 = 1024 * 1024;
 
 // lib/context-compliance.ts

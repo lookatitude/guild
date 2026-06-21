@@ -62,7 +62,52 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
-// lib/v1.4/log-jsonl.ts
+// lib/v1.4/log-jsonl-schema.ts
+var TOOL_CALL_TOOL_VALUES = [
+  "Read",
+  "Write",
+  "Edit",
+  "Grep",
+  "Glob",
+  "Bash",
+  "Agent",
+  "Skill",
+  "AskUserQuestion",
+  "TaskCreate",
+  "TaskUpdate",
+  "TaskList",
+  "WebFetch",
+  "WebSearch",
+  "NotebookEdit",
+  "BashOutput",
+  "KillShell"
+];
+var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+function isSafeRunId(id) {
+  return RUN_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function isSafeLaneId(id) {
+  return LANE_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function assertSafeRunId(id) {
+  if (!isSafeRunId(id)) {
+    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id)}`);
+  }
+}
+function assertSafeLaneId(id) {
+  if (!isSafeLaneId(id)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id)}`);
+  }
+}
+function validateEventIds(event) {
+  assertSafeRunId(event.run_id);
+  if ("lane_id" in event && event.lane_id !== void 0) {
+    assertSafeLaneId(event.lane_id);
+  }
+}
+
+// lib/v1.4/log-jsonl-writer.ts
 var import_node_fs2 = require("node:fs");
 var import_node_path2 = require("node:path");
 var import_node_zlib = require("node:zlib");
@@ -282,7 +327,7 @@ function pruneUndefined(obj) {
   return out;
 }
 
-// lib/v1.4/log-jsonl.ts
+// lib/v1.4/log-jsonl-writer.ts
 function liveLogPath(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "v1.4-events.jsonl");
 }
@@ -296,51 +341,10 @@ function sidecarPath(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "tool-call-pre.jsonl");
 }
 function laneFallbackPath(runDir, laneId) {
-  assertSafeLaneId(laneId);
+  if (!isSafeLaneId(laneId)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(laneId)}`);
+  }
   return (0, import_node_path2.join)(runDir, "logs", `lane-${laneId}-events.jsonl`);
-}
-var TOOL_CALL_TOOL_VALUES = [
-  "Read",
-  "Write",
-  "Edit",
-  "Grep",
-  "Glob",
-  "Bash",
-  "Agent",
-  "Skill",
-  "AskUserQuestion",
-  "TaskCreate",
-  "TaskUpdate",
-  "TaskList",
-  "WebFetch",
-  "WebSearch",
-  "NotebookEdit",
-  "BashOutput",
-  "KillShell"
-];
-var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-function isSafeRunId(id) {
-  return RUN_ID_RE.test(id) && id !== "." && id !== "..";
-}
-function isSafeLaneId(id) {
-  return LANE_ID_RE.test(id) && id !== "." && id !== "..";
-}
-function assertSafeRunId(id) {
-  if (!isSafeRunId(id)) {
-    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id)}`);
-  }
-}
-function assertSafeLaneId(id) {
-  if (!isSafeLaneId(id)) {
-    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id)}`);
-  }
-}
-function validateEventIds(event) {
-  assertSafeRunId(event.run_id);
-  if ("lane_id" in event && event.lane_id !== void 0) {
-    assertSafeLaneId(event.lane_id);
-  }
 }
 var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 function appendEvent(runDir, event, opts = {}) {
@@ -423,6 +427,9 @@ function rotateLocked(runDir) {
     `log-jsonl: failed to recreate live log at ${live} with O_EXCL after 5 retries`
   );
 }
+
+// lib/v1.4/log-jsonl-sidecar.ts
+var import_node_fs3 = require("node:fs");
 var SIDECAR_MAX_BYTES2 = 1024 * 1024;
 function sidecarKeyMatches(entry, key) {
   if (entry.run_id !== key.run_id) return false;
@@ -439,7 +446,7 @@ function sidecarKeyMatches(entry, key) {
 }
 function consumeSidecarPre(runDir, matchOrCallId) {
   const path8 = sidecarPath(runDir);
-  if (!(0, import_node_fs2.existsSync)(path8)) return null;
+  if (!(0, import_node_fs3.existsSync)(path8)) return null;
   const apply = (text) => {
     const lines = text.split("\n");
     const parsedLines = [];
@@ -480,15 +487,15 @@ function consumeSidecarPre(runDir, matchOrCallId) {
     return { match, rest };
   };
   if (process.platform === "win32") {
-    const text = (0, import_node_fs2.readFileSync)(path8, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path8, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs2.writeFileSync)(path8, rest);
+    (0, import_node_fs3.writeFileSync)(path8, rest);
     return match;
   }
   return withStableLock(runDir, () => {
-    const text = (0, import_node_fs2.readFileSync)(path8, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path8, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs2.writeFileSync)(path8, rest);
+    (0, import_node_fs3.writeFileSync)(path8, rest);
     return match;
   });
 }
@@ -545,7 +552,7 @@ function buildToolCallFromPostOnly(opts) {
 }
 function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 * 1e3) {
   const path8 = sidecarPath(runDir);
-  if (!(0, import_node_fs2.existsSync)(path8)) return { orphans: [], events: [] };
+  if (!(0, import_node_fs3.existsSync)(path8)) return { orphans: [], events: [] };
   const apply = (text) => {
     const lines = text.split("\n");
     const orphans2 = [];
@@ -569,15 +576,15 @@ function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 
   };
   let orphans;
   if (process.platform === "win32") {
-    const text = (0, import_node_fs2.readFileSync)(path8, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path8, "utf8");
     const out = apply(text);
-    (0, import_node_fs2.writeFileSync)(path8, out.rest);
+    (0, import_node_fs3.writeFileSync)(path8, out.rest);
     orphans = out.orphans;
   } else {
     orphans = withStableLock(runDir, () => {
-      const text = (0, import_node_fs2.readFileSync)(path8, "utf8");
+      const text = (0, import_node_fs3.readFileSync)(path8, "utf8");
       const out = apply(text);
-      (0, import_node_fs2.writeFileSync)(path8, out.rest);
+      (0, import_node_fs3.writeFileSync)(path8, out.rest);
       return out.orphans;
     });
   }

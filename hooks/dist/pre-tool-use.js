@@ -62,8 +62,46 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
-// lib/v1.4/log-jsonl.ts
-var import_node_fs2 = require("node:fs");
+// lib/v1.4/log-jsonl-schema.ts
+var TOOL_CALL_TOOL_VALUES = [
+  "Read",
+  "Write",
+  "Edit",
+  "Grep",
+  "Glob",
+  "Bash",
+  "Agent",
+  "Skill",
+  "AskUserQuestion",
+  "TaskCreate",
+  "TaskUpdate",
+  "TaskList",
+  "WebFetch",
+  "WebSearch",
+  "NotebookEdit",
+  "BashOutput",
+  "KillShell"
+];
+var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+function isSafeRunId(id) {
+  return RUN_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function isSafeLaneId(id) {
+  return LANE_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function assertSafeRunId(id) {
+  if (!isSafeRunId(id)) {
+    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id)}`);
+  }
+}
+function assertSafeLaneId(id) {
+  if (!isSafeLaneId(id)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id)}`);
+  }
+}
+
+// lib/v1.4/log-jsonl-writer.ts
 var import_node_path2 = require("node:path");
 
 // lib/v1.4/redact-log.ts
@@ -231,68 +269,16 @@ function withStableLock(runDir, fn, opts = {}) {
 // lib/trace-v2.ts
 var SIDECAR_MAX_BYTES = 16 * 1024;
 
-// lib/v1.4/log-jsonl.ts
+// lib/v1.4/log-jsonl-writer.ts
 function sidecarPath(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "tool-call-pre.jsonl");
 }
-var TOOL_CALL_TOOL_VALUES = [
-  "Read",
-  "Write",
-  "Edit",
-  "Grep",
-  "Glob",
-  "Bash",
-  "Agent",
-  "Skill",
-  "AskUserQuestion",
-  "TaskCreate",
-  "TaskUpdate",
-  "TaskList",
-  "WebFetch",
-  "WebSearch",
-  "NotebookEdit",
-  "BashOutput",
-  "KillShell"
-];
-var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-function isSafeRunId(id) {
-  return RUN_ID_RE.test(id) && id !== "." && id !== "..";
-}
-function isSafeLaneId(id) {
-  return LANE_ID_RE.test(id) && id !== "." && id !== "..";
-}
-function assertSafeRunId(id) {
-  if (!isSafeRunId(id)) {
-    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id)}`);
-  }
-}
-function assertSafeLaneId(id) {
-  if (!isSafeLaneId(id)) {
-    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id)}`);
-  }
-}
 var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+
+// lib/v1.4/log-jsonl-sidecar.ts
+var import_node_fs2 = require("node:fs");
+var import_node_path3 = require("node:path");
 var SIDECAR_MAX_BYTES2 = 1024 * 1024;
-function appendSidecarPre(runDir, entry, opts = {}) {
-  validateSidecarEntry(entry);
-  const path6 = sidecarPath(runDir);
-  (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path6), { recursive: true });
-  const redacted = redactEventFields(entry, opts.fieldCap);
-  const line = JSON.stringify(redacted) + "\n";
-  const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES2;
-  const appendCapped = () => {
-    const existing = (0, import_node_fs2.existsSync)(path6) ? (0, import_node_fs2.readFileSync)(path6, "utf8") : "";
-    (0, import_node_fs2.writeFileSync)(path6, capSidecarText(existing, line, maxBytes));
-  };
-  if (process.platform === "win32") {
-    appendCapped();
-    return;
-  }
-  withStableLock(runDir, () => {
-    appendCapped();
-  });
-}
 function validateSidecarEntry(entry) {
   assertSafeRunId(entry.run_id);
   if (entry.lane_id !== void 0) assertSafeLaneId(entry.lane_id);
@@ -318,6 +304,25 @@ function capSidecarText(existing, incomingLine, maxBytes) {
     total += bytes;
   }
   return kept.length === 0 ? "" : kept.join("\n") + "\n";
+}
+function appendSidecarPre(runDir, entry, opts = {}) {
+  validateSidecarEntry(entry);
+  const path6 = sidecarPath(runDir);
+  (0, import_node_fs2.mkdirSync)((0, import_node_path3.dirname)(path6), { recursive: true });
+  const redacted = redactEventFields(entry, opts.fieldCap);
+  const line = JSON.stringify(redacted) + "\n";
+  const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES2;
+  const appendCapped = () => {
+    const existing = (0, import_node_fs2.existsSync)(path6) ? (0, import_node_fs2.readFileSync)(path6, "utf8") : "";
+    (0, import_node_fs2.writeFileSync)(path6, capSidecarText(existing, line, maxBytes));
+  };
+  if (process.platform === "win32") {
+    appendCapped();
+    return;
+  }
+  withStableLock(runDir, () => {
+    appendCapped();
+  });
 }
 
 // lib/security/config.ts
