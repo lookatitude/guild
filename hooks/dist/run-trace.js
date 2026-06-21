@@ -2883,120 +2883,9 @@ var crypto2 = __toESM(require("crypto"));
 var fsNode = __toESM(require("fs"));
 var path6 = __toESM(require("path"));
 
-// ../scripts/lib/settings-resolver.ts
+// ../scripts/lib/core/settings-reader.ts
 var fs2 = __toESM(require("fs"));
 var path2 = __toESM(require("path"));
-
-// ../scripts/understand/lib/schema.ts
-var NODE_TYPES = /* @__PURE__ */ new Set([
-  "file",
-  "function",
-  "class",
-  "module",
-  "concept",
-  "config",
-  "document",
-  "service",
-  "table",
-  "endpoint",
-  "pipeline",
-  "schema",
-  "resource",
-  "domain",
-  "flow",
-  "step",
-  "article",
-  "entity",
-  "topic",
-  "claim",
-  "source"
-]);
-var NODE_TYPES_V2 = /* @__PURE__ */ new Set([
-  ...NODE_TYPES,
-  "wiki_page",
-  // first-class in v2; v1 aliased this to article — alias removed
-  "diagram"
-  // new in v2: fenced mermaid blocks, .svg files
-]);
-var EDGE_TYPES = /* @__PURE__ */ new Set([
-  // Structural
-  "imports",
-  "exports",
-  "contains",
-  "inherits",
-  "implements",
-  "implemented_by",
-  // Behavioral
-  "calls",
-  "subscribes",
-  "publishes",
-  "middleware",
-  // Data flow
-  "reads_from",
-  "writes_to",
-  "transforms",
-  "validates",
-  // Dependencies
-  "depends_on",
-  "tested_by",
-  "configures",
-  // Semantic
-  "related",
-  "similar_to",
-  // Infrastructure
-  "deploys",
-  "serves",
-  "provisions",
-  "triggers",
-  // Schema/Data
-  "migrates",
-  "documents",
-  "routes",
-  "defines_schema",
-  // Domain
-  "contains_flow",
-  "flow_step",
-  "cross_domain",
-  // Knowledge
-  "cites",
-  "contradicts",
-  "builds_on",
-  "exemplifies",
-  "categorized_under",
-  "authored_by"
-]);
-var EDGE_TYPES_V2 = /* @__PURE__ */ new Set([
-  ...EDGE_TYPES,
-  "subtopic_of",
-  // hierarchy; acyclic, tree (single-parent), depth-monotone (SC-2)
-  "relates_to",
-  // weighted, LLM-judged (SC-3)
-  "evidenced_by",
-  // knowledge→artifact, cross-modal (SC-4)
-  "belongs_to_domain",
-  // topic→domain membership (SC-5)
-  "mentions",
-  // modality bridge (SC-3)
-  "defines"
-  // modality bridge (first-class v2 — NOT aliased to defines_schema)
-  // NOTE: "related" is already in v1 EDGE_TYPES (wikilink edges use it)
-]);
-var KNOWLEDGE_CONFIG_DEFAULTS = {
-  maxDepth: 8,
-  // hard ceiling on subtopic_of tree depth
-  maxBranching: 12,
-  // per-node subtopic_of fan-out limit
-  minTopicImportance: 0.4,
-  // numeric importance_score threshold; below → fold into parent
-  relMinConf: 0.5,
-  // min confidence for LLM-judged relates_to/evidenced_by edges
-  maxFiles: 3e3,
-  // cost gate: max files per K-stage run
-  maxTokens: 1e6,
-  // cost gate: max LLM output tokens per run
-  batchSize: 20
-  // files per LLM batch
-};
 
 // ../scripts/lib/host-capabilities-schema.ts
 var CLAUDE_CAPABILITIES = {
@@ -3528,8 +3417,7 @@ function filterHostProfiles(raw) {
 // ../scripts/lib/shared/safe-object.ts
 var PROTO_POISON_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
 
-// ../scripts/lib/settings-resolver.ts
-var yaml = require_js_yaml2();
+// ../scripts/lib/shared/config-defaults.ts
 var DEFAULT_ESCALATION_MARKERS = [
   "I'm not sure",
   "unclear",
@@ -3539,6 +3427,14 @@ var DEFAULT_ESCALATION_MARKERS = [
   "uncertain",
   "not enough information"
 ];
+var NON_INHERITABLE_KEYS = /* @__PURE__ */ new Set([
+  "initiative_default",
+  // OD-1: attach-to-wrong-initiative risk
+  "workspace"
+  // workspace.mode is root-detection-only
+]);
+var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+var SIDECAR_MAX_BYTES = 1024 * 1024;
 var DEFAULTS = {
   rigor: "standard",
   auto_approve: [],
@@ -3578,7 +3474,15 @@ var DEFAULTS = {
     importanceAtIngest: true,
     ingestSimilarityGate: 0.8,
     shortOutputThreshold: {},
-    knowledge: { ...KNOWLEDGE_CONFIG_DEFAULTS }
+    knowledge: {
+      maxDepth: 8,
+      maxBranching: 12,
+      minTopicImportance: 0.4,
+      relMinConf: 0.5,
+      maxFiles: 3e3,
+      maxTokens: 1e6,
+      batchSize: 20
+    }
   },
   security: {
     bypass_permissions_policy: "audit"
@@ -3592,14 +3496,11 @@ var DEFAULTS = {
   mcp: {
     tool_description_hashes: {},
     stdio_available: true,
-    // R-019
     http_available: false,
-    // R-019
     bridge_package: null
-    // R-019
   },
   statusline: false,
-  // R-009
+  adversarial_review_provider: "auto",
   loops: null,
   loop_cap: 16,
   codex_cap: 5,
@@ -3622,27 +3523,17 @@ var DEFAULTS = {
       wiki_file_threshold: 500
     },
     cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
-    // R-015
     retry: { max_attempts: 1, backoff: "exponential" },
-    // R-016
     resume: { enabled: true },
-    // R-016
     heartbeat_timeout_ms: 6e5,
-    // R-017: 10 min — matches hooks/lib/heartbeat.ts DEFAULT_HEARTBEAT_TIMEOUT_MS
     capability_manifest_ttl_s: 3600,
-    // R-018: 1 hour per ADR CR-5
     allowed_tools: []
-    // R-020: no restriction by default
-  },
-  adversarial_review_provider: "auto"
-  // R-008
+  }
 };
-var NON_INHERITABLE_KEYS = /* @__PURE__ */ new Set([
-  "initiative_default",
-  // OD-1: attach-to-wrong-initiative risk
-  "workspace"
-  // workspace.mode is root-detection-only
-]);
+
+// ../scripts/lib/core/settings-reader.ts
+var yaml = require_js_yaml2();
+var DEFAULTS2 = DEFAULTS;
 var VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
 var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
 function sparseRoles(raw) {
@@ -3964,7 +3855,7 @@ function parseLocalFile(guildDir) {
   } catch {
     return {};
   }
-  validateLocalKeysOrThrow(localParsed, DEFAULTS);
+  validateLocalKeysOrThrow(localParsed, DEFAULTS2);
   return parseSettingsFile_fromParsed(localParsed);
 }
 function parseSettingsFile_fromParsed(parsed) {
@@ -4119,7 +4010,7 @@ function parseSettingsFile_fromParsed(parsed) {
   return out;
 }
 function assembleLayers(layers, flagsLayer) {
-  let accumulated = DEFAULTS;
+  let accumulated = DEFAULTS2;
   for (const layer of layers) {
     if (Object.keys(layer).length === 0) continue;
     accumulated = deepMerge(accumulated, layer);
@@ -4229,7 +4120,7 @@ function resolveSettings(opts) {
   const { cwd, flags = {} } = opts;
   const ws = discoverWorkspace(cwd);
   const sources = {};
-  for (const key of Object.keys(DEFAULTS)) {
+  for (const key of Object.keys(DEFAULTS2)) {
     sources[key] = "builtin";
   }
   sources["workspace.mode"] = "builtin";
@@ -4307,7 +4198,7 @@ function resolveSettings(opts) {
     flags
   );
   const resolvedWorkspaceMode = {
-    ...DEFAULTS.workspace,
+    ...DEFAULTS2.workspace,
     ...projectSettings.workspace ?? {},
     ...projectLocalSettings.workspace ?? {},
     // FIX F2: project-local workspace now included
