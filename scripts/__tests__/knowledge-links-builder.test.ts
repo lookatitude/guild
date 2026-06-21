@@ -219,10 +219,29 @@ describe("NN#8 — rebuild-from-canonical (delete index → rebuild → identica
     fs.mkdirSync(path.join(guildDir, "reflections"), { recursive: true });
     fs.mkdirSync(path.join(guildDir, "evolve"), { recursive: true });
 
-    // Canonical wiki decision page
+    // Canonical wiki decision page.
+    //
+    // G7b: this page carries the 3 "W3" canonical sources so the NN#8
+    // delete→rebuild test below can prove all 3 W3 edge types are RE-DERIVED
+    // losslessly from canonical wiki frontmatter (not held in the deleted index):
+    //   - supersedes: <prev>          → decision:test-decision supersedes decision:test-decision-v0
+    //   - task: <task-slug>           → decision:test-decision decided_by task:T1
+    //   - resolves: <open-question>   → decision:test-decision resolves open_question:oq-test
+    // The provenance.touched.decisions entry below also yields a SECOND
+    // decided_by edge (decision:test-decision decided_by run:run-test-1).
     fs.writeFileSync(
       path.join(guildDir, "wiki", "decisions", "test-decision.md"),
-      `---\ntype: decision\nslug: test-decision\n---\n# Test Decision\nSome decision.\n`,
+      [
+        "---",
+        "type: decision",
+        "slug: test-decision",
+        "supersedes: test-decision-v0",
+        "task: T1",
+        "resolves: oq-test",
+        "---",
+        "# Test Decision",
+        "Some decision.",
+      ].join("\n") + "\n",
     );
 
     // Canonical raw source
@@ -320,6 +339,32 @@ describe("NN#8 — rebuild-from-canonical (delete index → rebuild → identica
       expect(second[i].to).toBe(first[i].to);
       expect(second[i].type).toBe(first[i].type);
     }
+
+    // ── G7b: the 3 "W3" edge types survive delete→rebuild specifically ────────
+    //
+    // The general byte-for-byte check above proves the index is rebuildable, but
+    // it would still pass if the W3 fixture simply emitted ZERO W3 edges on BOTH
+    // builds (first === second === none). Anchor the proof to the exact triples
+    // re-derived from canonical sources, so a regression in ANY of the three
+    // re-derivations (provenance.touched.decisions → decided_by; wiki
+    // supersedes:/task:/resolves: frontmatter) fails this test.
+    const hasEdge = (links: KnowledgeLinkDoc["links"], from: string, to: string, type: string) =>
+      links.some((l) => l.from === from && l.to === to && l.type === type);
+
+    // decided_by re-derived from provenance.touched.decisions (decision → run)
+    expect(hasEdge(secondDoc.links, "decision:test-decision", "run:run-test-1", "decided_by")).toBe(true);
+    // decided_by re-derived from the wiki decision page `task:` frontmatter (decision → task)
+    expect(hasEdge(secondDoc.links, "decision:test-decision", "task:T1", "decided_by")).toBe(true);
+    // supersedes re-derived from the wiki decision page `supersedes:` frontmatter (decision → decision)
+    expect(hasEdge(secondDoc.links, "decision:test-decision", "decision:test-decision-v0", "supersedes")).toBe(true);
+    // resolves re-derived from the wiki decision page `resolves:` frontmatter (decision → open_question)
+    expect(hasEdge(secondDoc.links, "decision:test-decision", "open_question:oq-test", "resolves")).toBe(true);
+
+    // Anti-vacuity: all three W3 *edge types* are present in the rebuilt index.
+    const rebuiltTypes = new Set(secondDoc.links.map((l) => l.type));
+    expect(rebuiltTypes.has("decided_by")).toBe(true);
+    expect(rebuiltTypes.has("supersedes")).toBe(true);
+    expect(rebuiltTypes.has("resolves")).toBe(true);
   });
 
   test("NN#8: no unique state — canonical stores are the sole source of truth", () => {

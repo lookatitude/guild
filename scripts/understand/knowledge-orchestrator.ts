@@ -97,6 +97,8 @@ import {
   type GraphEdge,
   type KnowledgeGraph,
   type KnowledgeConfig,
+  type KnowledgeSuppressed,
+  type KnowledgeSuppressedEntry,
 } from "./lib/schema";
 
 import {
@@ -171,6 +173,8 @@ export interface RunKnowledgeResult {
   linksPath: string;
   /** Absolute path to .guild/indexes/knowledge-recall-provenance.json */
   provenancePath: string;
+  /** Absolute path to .guild/indexes/knowledge-suppressed.json (retention audit) */
+  suppressedPath: string;
   nodeCount: number;
   edgeCount: number;
   /**
@@ -869,6 +873,8 @@ interface PartialRunResult {
   nodes: GraphNode[];
   edges: GraphEdge[];
   clusters: ClusterGroup[];
+  /** K2 wiki candidates suppressed at the wiki-index stage (unclassified). */
+  k2Suppressed: KnowledgeSuppressedEntry[];
 }
 
 /**
@@ -924,11 +930,14 @@ async function runKnowledgeStagesK1ToK4(
   // wiki_page node dropped). round1 candidate_key == this id (both repoRoot-rel).
   const k2Opts: { classifier?: ClassifyPageFn; repoRoot: string } = { repoRoot };
   if (seams.classifyPage) k2Opts.classifier = seams.classifyPage;
+  const k2Suppressed: KnowledgeSuppressedEntry[] = [];
   for (const k2Dir of k2Roots) {
     if (fs.existsSync(k2Dir)) {
       const k2Result = await indexWiki(k2Dir, k2Opts);
       allNodes.push(...k2Result.nodes);
       allEdges.push(...k2Result.edges);
+      // DROP 1 fix: collect suppressed entries so they can be persisted
+      k2Suppressed.push(...k2Result.suppressed);
     }
   }
 
@@ -939,7 +948,7 @@ async function runKnowledgeStagesK1ToK4(
   allNodes.push(...k4Result.nodes);
   allEdges.push(...k4Result.edges);
 
-  return { nodes: allNodes, edges: allEdges, clusters };
+  return { nodes: allNodes, edges: allEdges, clusters, k2Suppressed };
 }
 
 // ---------------------------------------------------------------------------
@@ -978,6 +987,8 @@ export async function runKnowledgeStages(
   const partial = await runKnowledgeStagesK1ToK4(repoRoot, filePaths, seams);
   const allNodes = partial.nodes;
   const allEdges = partial.edges;
+  // DROP 1 fix: K2 suppressed entries (unclassified candidates) collected here.
+  const suppressedEntries: KnowledgeSuppressedEntry[] = [...partial.k2Suppressed];
 
   // ── K5: cross-modal-link (unions ALL node sets from K1+K2+K3+K4) ──────────
   // Always runs unconditionally — no caching from previous graph.
@@ -1029,6 +1040,27 @@ export async function runKnowledgeStages(
   }
   const validated = validation.data as KnowledgeGraph;
 
+  // DROP 2 fix: extract validator-dropped issues and append them to the
+  // suppressed-candidates list. The validator records the node id in the
+  // issue message as `node "<id>"` — we parse it out so each entry has a
+  // structured id field. When parsing fails we fall back to the full message.
+  const validatorDropIssues = (validation.issues ?? []).filter(
+    (issue) => issue.level === "dropped"
+  );
+  for (const issue of validatorDropIssues) {
+    // Extract the node id from `node "<id>" (type): ...` or `node "<id>":...`
+    const idMatch = /^node "([^"]+)"/.exec(issue.message ?? "");
+    const id = idMatch ? idMatch[1] : "(unknown)";
+    // Derive source_ref from wiki_page id (wiki_page:<relpath> → <relpath>)
+    const sourceRef = id.startsWith("wiki_page:") ? id.slice("wiki_page:".length) : id;
+    suppressedEntries.push({
+      id,
+      source_ref: sourceRef,
+      reason: issue.message ?? `validator dropped: category=${issue.category ?? "unknown"}`,
+      stage: "validator-dropped",
+    });
+  }
+
   // ── H1 canonicalization — apply fixed key order to BOTH byte-set members ───
   //
   // SC-8 byte-set member 1 (knowledge-graph.json): apply canonicalizeNode /
@@ -1072,9 +1104,21 @@ export async function runKnowledgeStages(
     );
   }
 
-  // ── Write knowledge-graph.json (v2, H1-canonicalized) ─────────────────────
+  // ── Write knowledge-suppressed.json (retention audit artifact) ───────────
+  // Persists ALL suppressed candidates from both drop points so no candidate
+  // silently vanishes (retention invariant: candidates_in == classified_nodes
+  // + suppressed.length). Not part of the SC-8 byte-set — sidecar only.
   const indexesDir = path.join(repoRoot, ".guild", "indexes");
   fs.mkdirSync(indexesDir, { recursive: true });
+  const suppressedDoc: KnowledgeSuppressed = {
+    schema: "guild.knowledge_suppressed.v1",
+    generated_at: opts.generatedAt ?? new Date().toISOString(),
+    suppressed: suppressedEntries,
+  };
+  const suppressedPath = path.join(indexesDir, "knowledge-suppressed.json");
+  fs.writeFileSync(suppressedPath, JSON.stringify(suppressedDoc, null, 2) + "\n", "utf8");
+
+  // ── Write knowledge-graph.json (v2, H1-canonicalized) ─────────────────────
   const graphPath = path.join(indexesDir, "knowledge-graph.json");
   fs.writeFileSync(graphPath, JSON.stringify(graph, null, 2) + "\n", "utf8");
 
@@ -1095,6 +1139,7 @@ export async function runKnowledgeStages(
     graphPath,
     linksPath: linksResult.linksPath,
     provenancePath: linksResult.provenancePath,
+    suppressedPath,
     nodeCount: graph.nodes.length,
     edgeCount: graph.edges.length,
     sc3OrphanWikiPageIds,

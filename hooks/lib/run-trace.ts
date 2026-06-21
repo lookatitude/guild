@@ -65,6 +65,14 @@ import {
   type TargetKind,
 } from "../../scripts/lib/run-lifecycle.js";
 
+import { writeCheckpoint } from "../emit-learning-checkpoint.js";
+import { PHASE_TOKEN_TO_CHECKPOINT } from "./learning-backstop.js";
+// Deterministic classification at phase close: build the ArtifactSet from the run's
+// already-written artifacts and run the pure 12-target classifier, so the checkpoint
+// carries a REAL verdict (not all-none) WITHOUT depending on the model running a CLI.
+import { classifyPhase, type ArtifactSet, type HandoffV2Block } from "../../scripts/lib/learning-signatures.js";
+import { extractHandoffEnvelope } from "./handoff-v2.js";
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 /** The host-adapter binding B2's createRealEnv consumes. Host-neutral. */
@@ -398,10 +406,103 @@ function buildStartRunOpts(
 }
 
 /**
+ * DETERMINISTIC per-phase learning checkpoint emitter (METRIC 2 fix).
+ *
+ * Called immediately after `appendPhase` succeeds in `recordPhase` so that
+ * EVERY canonical phase close produces a real `guild.learning_checkpoint.v1`
+ * YAML without relying on model-prose skill invocations.
+ *
+ * Behaviour:
+ *  - Translates the canonical lifecycle token (init/ideate/plan/build/qa/ops)
+ *    to the checkpoint vocabulary via PHASE_TOKEN_TO_CHECKPOINT.
+ *  - Skips silently when the checkpoint file already exists (idempotent; a
+ *    model-emitted checkpoint is never overwritten by this path).
+ *  - Writes an all-`none` 12-target verdict when no GUILD_CHECKPOINT_ARTIFACTS_JSON
+ *    is present — behaviour-neutral for phases with no externally classified
+ *    artifacts. When the env var IS present the CLI path (not this function) is
+ *    responsible; here we always write all-none.
+ *  - evidenceRef points at run.yaml#phases_log — the deterministic trigger source.
+ *  - Fail-open: any I/O error is logged to stderr and swallowed; the lifecycle
+ *    must never be blocked by a checkpoint write.
+ */
+/**
+ * Build the ArtifactSet the 12-target classifier reads, from the run's already-written
+ * artifacts at phase close: handoff receipts (guild.handoff.v2 envelopes) + provenance
+ * `touched`. Fail-open per source — a missing file/dir contributes nothing (→ those targets
+ * stay `none`, conservative). `changedFiles` is intentionally omitted (not deterministically
+ * available in a hook); targets gated only on changed-files therefore stay `none`.
+ */
+function buildPhaseArtifacts(root: string, runId: string): ArtifactSet {
+  const artifacts: ArtifactSet = { runId };
+  // handoffs/*.md → parsed guild.handoff.v2 blocks + raw texts
+  try {
+    const hDir = path.join(runDir(root, runId), "handoffs");
+    const blocks: HandoffV2Block[] = [];
+    const texts: string[] = [];
+    for (const f of fs.readdirSync(hDir)) {
+      if (!f.endsWith(".md")) continue;
+      const content = fs.readFileSync(path.join(hDir, f), "utf8");
+      texts.push(content);
+      const env = extractHandoffEnvelope(content);
+      if (env && typeof env === "object") blocks.push(env as HandoffV2Block);
+    }
+    if (blocks.length) artifacts.handoffBlocks = blocks;
+    if (texts.length) artifacts.handoffTexts = texts;
+  } catch { /* no handoffs → none */ }
+  // provenance.json `touched`
+  try {
+    const prov = JSON.parse(fs.readFileSync(provenancePath(root, runId), "utf8"));
+    if (prov && typeof prov.touched === "object") artifacts.provenanceTouched = prov.touched;
+  } catch { /* no provenance → none */ }
+  return artifacts;
+}
+
+function emitPhaseCheckpoint(root: string, runId: string, phase: string): void {
+  try {
+    const checkpointPhase = PHASE_TOKEN_TO_CHECKPOINT[phase];
+    if (checkpointPhase === undefined) return; // unknown token — skip silently
+
+    // Idempotent: do not overwrite a model-emitted or previously backstopped checkpoint.
+    const checkpointFile = path.join(
+      root, ".guild", "runs", runId, "learning",
+      `${checkpointPhase}-${runId}.yaml`,
+    );
+    if (fs.existsSync(checkpointFile)) return;
+
+    // Deterministically CLASSIFY this phase from its already-written artifacts, so the
+    // checkpoint carries a real verdict (the no-loss crux). Fail-open: any error → all-none.
+    let decisions;
+    try {
+      const verdict = classifyPhase(buildPhaseArtifacts(root, runId));
+      decisions = verdict as unknown as Record<string, string>; // PhaseVerdict ≡ CheckpointDecisions (12 string keys)
+    } catch {
+      decisions = undefined; // → writeCheckpoint defaults to all-none
+    }
+
+    writeCheckpoint({
+      runId,
+      phase: checkpointPhase,
+      evidenceRef: `.guild/runs/${runId}/run.yaml#phases_log`,
+      guildRoot: root,
+      decisions: decisions as never,
+    });
+  } catch (err) {
+    process.stderr.write(
+      `[run-trace] WARN: emitPhaseCheckpoint(${phase}) failed (fail-open): ` +
+        `${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  }
+}
+
+/**
  * T0 (G-PHASE-COMPOSE): record the active phase for the current (or given) FULL
  * run by appending a `phases_log` entry + rewriting run.yaml's top-level `phase:`.
  * This is the "join an already-open run" writer — phase commands call it at intake
  * when the run was started by an earlier command in the same session.
+ *
+ * After the phases_log write, emitPhaseCheckpoint() is called to produce a
+ * deterministic per-phase `guild.learning_checkpoint.v1` record (METRIC 2).
+ * The checkpoint write is fail-open and never blocks the lifecycle.
  *
  * Best-effort + non-throwing (same posture as the other run-trace writers): a
  * missing run / non-canonical token / unreadable run.yaml simply yields null and
@@ -422,7 +523,11 @@ export function recordPhase(
     const runId = opts.runId ?? resolveRunIdForTrace(root, opts.env ?? process.env);
     if (!runId) return null;
     const lifecycleEnv = createRealEnv(root, defaultResolveHost);
-    return appendPhase(lifecycleEnv, root, runId, phase) ? runId : null;
+    if (!appendPhase(lifecycleEnv, root, runId, phase)) return null;
+    // METRIC 2: deterministic emit — a healthy phase close always produces its
+    // real checkpoint without the model running a CLI (deterministic-code-not-prose).
+    emitPhaseCheckpoint(root, runId, phase);
+    return runId;
   } catch {
     return null; // best-effort: phase recording never breaks the lifecycle
   }

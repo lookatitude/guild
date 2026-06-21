@@ -55,11 +55,22 @@ function mkTmpRepo(): string {
   return d;
 }
 
-/** Write a minimal knowledge-graph.json to .guild/indexes/ */
+/**
+ * Write the kg-query source. As of metric-6=B, kg-query reads the recall-optimized projection
+ * knowledge-recall.json (guild.knowledge_links.v2), NOT the raw v1 graph — so the fixture writes
+ * the projection, wrapping the same nodes/edges (ranking is preserved: the projection retains node
+ * fields). knowledge-graph.json is still written for any v1-graph reader; kg-query keys off recall.
+ */
 function writeGraph(repo: string, graph: Record<string, unknown>): void {
   const dir = path.join(repo, ".guild", "indexes");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "knowledge-graph.json"), JSON.stringify(graph, null, 2), "utf8");
+  const projection = {
+    schema_version: "guild.knowledge_links.v2",
+    nodes: (graph as { nodes?: unknown[] }).nodes ?? [],
+    edges: (graph as { edges?: unknown[] }).edges ?? [],
+  };
+  fs.writeFileSync(path.join(dir, "knowledge-recall.json"), JSON.stringify(projection, null, 2), "utf8");
 }
 
 /** Minimal valid v1 graph skeleton. */

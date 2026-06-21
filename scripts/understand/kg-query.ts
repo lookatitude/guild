@@ -38,7 +38,8 @@
 
 import * as path from "path";
 import { guildPaths, parseCwd, parseFlag, hasFlag, readJson } from "./lib/paths";
-import type { KnowledgeGraph, GraphNode } from "./lib/schema";
+import type { GraphNode } from "./lib/schema";
+import type { KnowledgeLinksDoc } from "./write-knowledge-links";
 
 const MAX_LIMIT = 50;
 
@@ -67,10 +68,23 @@ function main(): void {
   const argv = process.argv.slice(2);
   const cwd = parseCwd(argv);
   const gp = guildPaths(cwd);
-  const graph = readJson<KnowledgeGraph>(gp.knowledgeGraph);
+  // METRIC 6 (DECISION=B): read the recall-optimised projection instead of the raw graph.
+  // Graceful-empty: if knowledge-recall.json is absent or malformed, return an empty
+  // successful result (exit 0) — consistent with recall.ts's absent-projection branch.
+  const graph = readJson<KnowledgeLinksDoc>(gp.knowledgeRecall);
   if (!graph) {
-    process.stderr.write("[kg-query] ERROR: knowledge-graph.json not found\n");
-    process.exit(1);
+    const neighborOf = parseFlag(argv, "neighbors");
+    const json = hasFlag(argv, "json");
+    if (json) {
+      process.stdout.write(
+        JSON.stringify({ count: 0, capped: false, results: [] }, null, 2) + "\n",
+      );
+    } else if (neighborOf) {
+      process.stdout.write("");
+    } else {
+      process.stdout.write("(no matches)\n");
+    }
+    return;
   }
 
   const neighborOf = parseFlag(argv, "neighbors");
@@ -94,7 +108,9 @@ function main(): void {
   const typeFilter = (parseFlag(argv, "type") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const typeSet = new Set(typeFilter);
 
-  let candidates = graph.nodes;
+  // CanonicalNode is structurally compatible with GraphNode for scoring purposes;
+  // cast via unknown so the scorers (which expect GraphNode) accept the projection nodes.
+  let candidates = graph.nodes as unknown as GraphNode[];
   if (typeSet.size) candidates = candidates.filter((n) => typeSet.has(n.type));
 
   // Step 1: score all candidates (importance + confidence baked in)
@@ -105,7 +121,7 @@ function main(): void {
   // Step 2: build topic-proximity bonuses from graph edges (SC-13).
   // Pass graph.nodes so the target-side type guard can identify non-topic targets
   // even when those targets have score=0 and are absent from candidateScored.
-  const proximityBonuses = buildProximityBonuses(candidateScored, graph.edges ?? [], graph.nodes ?? []);
+  const proximityBonuses = buildProximityBonuses(candidateScored, (graph.edges ?? []) as never, (graph.nodes as unknown as GraphNode[]) ?? []);
 
   // Step 3: apply proximity bonuses and final sort
   const ranked = candidateScored
