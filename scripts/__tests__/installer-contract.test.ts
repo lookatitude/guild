@@ -82,8 +82,8 @@ describe("buildInstallReceipt", () => {
   });
 
   it("derives provenance, host identity, and timestamps from the row + caller", () => {
-    const codex = buildInstallReceipt(HOST_REGISTRY_ROWS["codex"], OPTS);
-    expect(codex.host_id).toBe("codex");
+    const codex = buildInstallReceipt(HOST_REGISTRY_ROWS["codex-cli"], OPTS);
+    expect(codex.host_id).toBe("codex-cli");
     expect(codex.family).toBe("codex");
     expect(codex.installability).toBe("target");
     expect(codex.provenance).toBe("verified");
@@ -93,7 +93,7 @@ describe("buildInstallReceipt", () => {
 
   it("surfaces an unsupported facet rather than silently omitting it (render-or-degrade)", () => {
     // Synthesize a row whose permissions express no posture at all.
-    const base = HOST_REGISTRY_ROWS["claude"];
+    const base = HOST_REGISTRY_ROWS["claude-code-cli"];
     const stripped = {
       ...base,
       result_adapter: false,
@@ -124,7 +124,7 @@ describe("buildInstallReceipt", () => {
 
 describe("parity over current canonical — per-host receipt shape", () => {
   it("claude: native install, no result-normalization adapter (reference author host)", () => {
-    const r = buildInstallReceipt(HOST_REGISTRY_ROWS["claude"], OPTS);
+    const r = buildInstallReceipt(HOST_REGISTRY_ROWS["claude-code-cli"], OPTS);
     expect(r.installability).toBe("native");
     // Claude has result_adapter:false but ships native skill autoload + ask permissions.
     expect(r.facets.bootstrap_context.present).toBe(true);
@@ -133,7 +133,7 @@ describe("parity over current canonical — per-host receipt shape", () => {
   });
 
   it("codex: target install, result_adapter drives result-normalization", () => {
-    const r = buildInstallReceipt(HOST_REGISTRY_ROWS["codex"], OPTS);
+    const r = buildInstallReceipt(HOST_REGISTRY_ROWS["codex-cli"], OPTS);
     expect(r.installability).toBe("target");
     expect(r.facets.result_normalization.present).toBe(true);
     expect(r.facets.result_normalization.mechanism).toBe("result_adapter");
@@ -141,20 +141,20 @@ describe("parity over current canonical — per-host receipt shape", () => {
   });
 
   it(".agents: file surface, target install", () => {
-    const r = buildInstallReceipt(HOST_REGISTRY_ROWS[".agents"], OPTS);
+    const r = buildInstallReceipt(HOST_REGISTRY_ROWS["agents-file"], OPTS);
     expect(r.surface_kind).toBe("file");
     expect(r.installability).toBe("target");
     expect(r.provenance).toBe("inferred");
   });
 
   it("antigravity: bypass permission posture surfaces as permission_mode 'bypass'", () => {
-    const r = buildInstallReceipt(HOST_REGISTRY_ROWS["antigravity"], OPTS);
+    const r = buildInstallReceipt(HOST_REGISTRY_ROWS["antigravity-cli"], OPTS);
     expect(r.facets.permission_mode.present).toBe(true);
     expect(r.facets.permission_mode.mechanism).toBe("bypass");
   });
 
   it("pi: native_json structured output drives result-normalization mechanism", () => {
-    const r = buildInstallReceipt(HOST_REGISTRY_ROWS["pi"], OPTS);
+    const r = buildInstallReceipt(HOST_REGISTRY_ROWS["pi-cli"], OPTS);
     expect(r.facets.result_normalization.present).toBe(true);
     // pi has result_adapter:false but native_json:true.
     expect(r.facets.result_normalization.mechanism).toBe("native_json");
@@ -176,7 +176,7 @@ describe("step descriptions", () => {
   });
 
   it("reconcile steps describe check → sync → repair → re-emit and never weaken security", () => {
-    const steps = buildReconcileSteps(HOST_REGISTRY_ROWS["claude"]);
+    const steps = buildReconcileSteps(HOST_REGISTRY_ROWS["claude-code-cli"]);
     const ids = steps.map((s) => s.id);
     expect(ids).toEqual(["reconcile-check", "reconcile-sync", "reconcile-repair", "re-emit-receipt"]);
     expect(steps[0].writes).toBe(false); // check is read-only
@@ -184,7 +184,7 @@ describe("step descriptions", () => {
   });
 
   it("a host with installability 'none' offers no stage/render steps", () => {
-    const base = HOST_REGISTRY_ROWS["pi"];
+    const base = HOST_REGISTRY_ROWS["pi-cli"];
     const none = { ...base, installability: "none" as const };
     const steps = buildInstallSteps(none);
     const ids = steps.map((s) => s.id);
@@ -220,8 +220,8 @@ describe("buildInstallerPlan", () => {
   });
 
   it("per-host plan mirrors the row identity", () => {
-    const h = buildHostInstallerPlan(HOST_REGISTRY_ROWS["codex"], OPTS);
-    expect(h.host_id).toBe("codex");
+    const h = buildHostInstallerPlan(HOST_REGISTRY_ROWS["codex-cli"], OPTS);
+    expect(h.host_id).toBe("codex-cli");
     expect(h.family).toBe("codex");
     expect(h.installability).toBe("target");
   });
@@ -241,19 +241,19 @@ describe("validateInstallReceipt — fail closed", () => {
   });
 
   it("rejects a flipped execution-ban marker (executed:true)", () => {
-    const r = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude"], OPTS), executed: true };
+    const r = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude-code-cli"], OPTS), executed: true };
     const res = validateInstallReceipt(r);
     expect(res.valid).toBe(false);
     expect(res.errors.join(" ")).toMatch(/executed must be the literal false/);
   });
 
   it("rejects side_effects other than 'none'", () => {
-    const r = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude"], OPTS), side_effects: "wrote-files" };
+    const r = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude-code-cli"], OPTS), side_effects: "wrote-files" };
     expect(validateInstallReceipt(r).valid).toBe(false);
   });
 
   it("rejects a receipt missing an AC24 facet", () => {
-    const good = buildInstallReceipt(HOST_REGISTRY_ROWS["claude"], OPTS);
+    const good = buildInstallReceipt(HOST_REGISTRY_ROWS["claude-code-cli"], OPTS);
     const facets = { ...good.facets } as Record<string, unknown>;
     delete facets["permission_mode"];
     const res = validateInstallReceipt({ ...good, facets });
@@ -262,7 +262,7 @@ describe("validateInstallReceipt — fail closed", () => {
   });
 
   it("rejects a wrong schema_version and non-object input", () => {
-    expect(validateInstallReceipt({ ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude"], OPTS), schema_version: "x" }).valid).toBe(false);
+    expect(validateInstallReceipt({ ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude-code-cli"], OPTS), schema_version: "x" }).valid).toBe(false);
     expect(validateInstallReceipt(null).valid).toBe(false);
     expect(validateInstallReceipt([]).valid).toBe(false);
   });
@@ -306,7 +306,7 @@ describe("validateInstallerPlan — fail closed", () => {
 
 describe("type guards", () => {
   it("isInstallReceipt / isInstallerPlan narrow on valid built artifacts", () => {
-    expect(isInstallReceipt(buildInstallReceipt(HOST_REGISTRY_ROWS["pi"], OPTS))).toBe(true);
+    expect(isInstallReceipt(buildInstallReceipt(HOST_REGISTRY_ROWS["pi-cli"], OPTS))).toBe(true);
     expect(isInstallerPlan(buildInstallerPlan(ALL_ROWS, OPTS))).toBe(true);
     expect(isInstallReceipt({})).toBe(false);
     expect(isInstallerPlan({})).toBe(false);
@@ -325,7 +325,7 @@ describe("determinism", () => {
   });
 
   it("deriveReceiptFacets is pure (no mutation of the input row)", () => {
-    const entry = HOST_REGISTRY_ROWS["antigravity"];
+    const entry = HOST_REGISTRY_ROWS["antigravity-cli"];
     const before = JSON.stringify(entry);
     deriveReceiptFacets(entry);
     buildInstallerPlan(ALL_ROWS, OPTS);
@@ -392,7 +392,7 @@ describe("parity-proven against the CURRENT canonical package (structural, on-di
     const plan = buildInstallerPlan(ALL_ROWS, { renderedAt: OPTS.renderedAt, sourceVersion: CANONICAL.version });
     const native = plan.hosts.filter((h) => h.installability === "native");
     // The current canonical package IS the Claude package — exactly one native host.
-    expect(native.map((h) => h.host_id)).toEqual(["claude"]);
+    expect(native.map((h) => h.host_id)).toEqual(["claude-code-cli"]);
     // Its referenced manifest_format must match the canonical claude-plugin format on disk.
     expect(native[0].manifest_format).toBe("claude-plugin");
     // The canonical .claude-plugin directory the "claude-plugin" format names must exist.
@@ -424,14 +424,14 @@ describe("parity-proven against the CURRENT canonical package (structural, on-di
 
 describe("strict unknown-key rejection (FIX 1)", () => {
   it("rejects an unknown top-level receipt key", () => {
-    const r = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude"], OPTS), sneaky: 1 };
+    const r = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude-code-cli"], OPTS), sneaky: 1 };
     const res = validateInstallReceipt(r);
     expect(res.valid).toBe(false);
     expect(res.errors.join(" ")).toMatch(/unknown key "sneaky"/);
   });
 
   it("rejects an unknown key inside a facet", () => {
-    const good = buildInstallReceipt(HOST_REGISTRY_ROWS["claude"], OPTS);
+    const good = buildInstallReceipt(HOST_REGISTRY_ROWS["claude-code-cli"], OPTS);
     const facets = { ...good.facets, bootstrap_context: { ...good.facets.bootstrap_context, extra: true } };
     const res = validateInstallReceipt({ ...good, facets });
     expect(res.valid).toBe(false);
@@ -439,7 +439,7 @@ describe("strict unknown-key rejection (FIX 1)", () => {
   });
 
   it("rejects an unknown key inside an _unsupported entry", () => {
-    const base = HOST_REGISTRY_ROWS["claude"];
+    const base = HOST_REGISTRY_ROWS["claude-code-cli"];
     const stripped = {
       ...base,
       capabilities: {
@@ -475,7 +475,7 @@ describe("strict unknown-key rejection (FIX 1)", () => {
   });
 
   it("rejects a NON-ENUMERABLE smuggled key (Object.keys would miss it)", () => {
-    const r: any = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude"], OPTS) };
+    const r: any = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude-code-cli"], OPTS) };
     Object.defineProperty(r, "sneaky", { enumerable: false, value: 1, configurable: true });
     // Sanity: Object.keys does NOT see it — proving the bypass the fix closes.
     expect(Object.keys(r)).not.toContain("sneaky");
@@ -485,7 +485,7 @@ describe("strict unknown-key rejection (FIX 1)", () => {
   });
 
   it("rejects a symbol own-key", () => {
-    const r: any = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude"], OPTS) };
+    const r: any = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude-code-cli"], OPTS) };
     r[Symbol("smuggled")] = 1;
     const res = validateInstallReceipt(r);
     expect(res.valid).toBe(false);
@@ -500,7 +500,7 @@ describe("strict unknown-key rejection (FIX 1)", () => {
 
 describe("hostile-input no-throw (FIX 2)", () => {
   it("a throwing getter on the receipt yields {valid:false} and does not throw", () => {
-    const hostile: any = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude"], OPTS) };
+    const hostile: any = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude-code-cli"], OPTS) };
     Object.defineProperty(hostile, "schema_version", {
       enumerable: true,
       get() {
@@ -523,7 +523,7 @@ describe("hostile-input no-throw (FIX 2)", () => {
         throw new Error("toString boom");
       },
     };
-    const hostile: any = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude"], OPTS), schema_version: landmine };
+    const hostile: any = { ...buildInstallReceipt(HOST_REGISTRY_ROWS["claude-code-cli"], OPTS), schema_version: landmine };
     let res!: ReturnType<typeof validateInstallReceipt>;
     expect(() => {
       res = validateInstallReceipt(hostile);

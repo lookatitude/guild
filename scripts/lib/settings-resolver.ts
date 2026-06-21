@@ -42,7 +42,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import { KNOWLEDGE_CONFIG_DEFAULTS } from "../understand/lib/schema";
-import { HOST_IDS } from "./host-registry-schema";
+import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "./host-registry-schema";
+import { normalizeHostId } from "./host-id-namespace";
 // host_profiles strict entry-shape filter — single SoT (same rules as `config validate`).
 import { filterHostProfiles } from "./host-profiles-validate";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -109,14 +110,12 @@ type HostProfilesBlock = Record<string, HostProfileEntry>;
 interface TierModelSpec {
   model: string;
   effort?: string;
+  reasoning?: string;
+  thinking?: string;
   verbosity?: string;
 }
 type TierHostValue = string | TierModelSpec | null;
-interface TierHostMap {
-  claude: TierHostValue;
-  codex: TierHostValue;
-  gemini: TierHostValue;
-}
+type TierHostMap = Partial<Record<HostId, TierHostValue>>;
 interface TiersBlock {
   cheap: TierHostMap;
   mid: TierHostMap;
@@ -150,8 +149,10 @@ interface ModelsBlock {
   structuredOutputRequired: boolean;
   cacheTTL: CacheTTLBlock;
   importanceGate: number;
-  /** Mirrors read-guild-config DEFAULTS — composite recall scoring toggle (default false). */
+  /** Mirrors read-guild-config DEFAULTS — composite recall scoring toggle (default true). */
   compositeRecall: boolean;
+  /** Mirrors read-guild-config DEFAULTS — write-time importance-at-ingest scorer (default true). */
+  importanceAtIngest: boolean;
   ingestSimilarityGate: number;
   shortOutputThreshold: Record<string, Record<string, number>>;
   knowledge: KnowledgeConfigBlock;
@@ -201,7 +202,7 @@ export interface ResolvedConfig {
   rigor: "quick" | "standard" | "deep";
   auto_approve: string[];
   review: "local" | "cross" | "off";
-  host: "claude" | "codex" | "auto";
+  host: HostId | "auto";
   /** LW1-6: per-run role pins. Default all null = auto-resolve via the role model. */
   roles: RolesBlock;
   /** LW1-6: per-host config-render overrides keyed by host_id. Default {} = none. */
@@ -298,9 +299,9 @@ const DEFAULTS: ResolvedConfig = {
   models: {
     enabled: true,
     tiers: {
-      cheap:    { claude: "haiku",  codex: null, gemini: null },
-      mid:      { claude: "sonnet", codex: null, gemini: null },
-      powerful: { claude: "opus",   codex: null, gemini: null },
+      cheap:    { "claude-code-cli": "haiku",  "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
+      mid:      { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
+      powerful: { "claude-code-cli": "opus",   "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
     },
     scoreWeights: {
       workType: 0,
@@ -317,7 +318,8 @@ const DEFAULTS: ResolvedConfig = {
     structuredOutputRequired: true,
     cacheTTL: { coordinator: "1h", leaf: "5m" },
     importanceGate: 3,
-    compositeRecall: false,
+    compositeRecall: true,
+    importanceAtIngest: true,
     ingestSimilarityGate: 0.80,
     shortOutputThreshold: {},
     knowledge: { ...KNOWLEDGE_CONFIG_DEFAULTS },
@@ -398,7 +400,7 @@ const PROTO_POISON_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 // design, so it strips instead of throwing.
 // ---------------------------------------------------------------------------
 
-const VALID_TIER_HOST_KEYS = new Set(["claude", "codex", "gemini"]);
+const VALID_TIER_HOST_KEYS = new Set<string>(HOST_IDS);
 
 // LW1-6: known registry host ids (single SoT — host-registry-schema.ts HOST_IDS).
 const KNOWN_HOST_IDS = new Set<string>(HOST_IDS);
@@ -408,7 +410,11 @@ function sparseRoles(raw: Record<string, unknown>): RolesBlock {
   const out: Partial<RolesBlock> = {};
   for (const k of ["host", "advisory", "adversarial"] as const) {
     const v = raw[k];
-    if (v === null || (typeof v === "string" && KNOWN_HOST_IDS.has(v))) out[k] = v as string | null;
+    if (v === null) out[k] = null;
+    else if (typeof v === "string") {
+      const normalized = normalizeHostId(v);
+      if (normalized) out[k] = normalized;
+    }
   }
   return out as RolesBlock;
 }
@@ -429,7 +435,8 @@ function sparseHostProfiles(raw: Record<string, unknown>): HostProfilesBlock {
 function sparseTierHostMap(raw: Record<string, unknown>): TierHostMap {
   const out: Record<string, unknown> = {};
   for (const hk of Object.keys(raw)) {
-    if (VALID_TIER_HOST_KEYS.has(hk)) out[hk] = raw[hk];
+    const canonicalHostId = normalizeHostId(hk);
+    if (canonicalHostId) out[canonicalHostId] = raw[hk];
   }
   return out as unknown as TierHostMap;
 }
@@ -441,7 +448,14 @@ function sparseTierHostMap(raw: Record<string, unknown>): TierHostMap {
 const VALID_LOOPS      = new Set(["none", "spec", "plan", "implementation", "all"]);
 const VALID_RIGOR      = new Set(["quick", "standard", "deep"]);
 const VALID_REVIEW     = new Set(["local", "cross", "off"]);
-const VALID_HOST       = new Set(["claude", "codex", "auto"]);
+const DISPATCH_HOST_IDS = new Set<HostId>(
+  HOST_IDS.filter((id): id is HostId => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
+);
+
+function normalizeDispatchHostId(value: string): HostId | null {
+  const normalized = normalizeHostId(value);
+  return normalized && DISPATCH_HOST_IDS.has(normalized) ? normalized : null;
+}
 // G-14 (SC-9): "qa" token — PASS-only auto-proceed (mirrors read-guild-config.ts).
 const VALID_PHASES     = new Set(["spec", "plan", "build", "qa", "all"]);
 const VALID_AGENT_MODE = new Set(["team", "agent", "subagent", "auto"]);
@@ -450,7 +464,7 @@ const VALID_CACHE_TTL  = new Set(["1h", "5m", "off"]);
 const VALID_MODELS_KEYS = new Set([
   "enabled", "tiers", "scoreWeights", "thresholds", "advisorRounds",
   "escalationMarkers", "recallBeforeRead", "recallScoreThreshold",
-  "structuredOutputRequired", "cacheTTL", "importanceGate", "compositeRecall", "ingestSimilarityGate",
+  "structuredOutputRequired", "cacheTTL", "importanceGate", "compositeRecall", "importanceAtIngest", "ingestSimilarityGate",
   "shortOutputThreshold", "knowledge",
 ]);
 const VALID_SECURITY_KEYS       = new Set(["bypass_permissions_policy"]);
@@ -673,8 +687,11 @@ function parseSettingsFile(filePath: string): Partial<ResolvedConfig> {
     out.auto_approve = parsed["auto_approve"] as string[];
   if (VALID_REVIEW.has(parsed["review"] as string))
     out.review = parsed["review"] as ResolvedConfig["review"];
-  if (VALID_HOST.has(parsed["host"] as string))
-    out.host = parsed["host"] as ResolvedConfig["host"];
+  if (parsed["host"] === "auto") out.host = "auto";
+  else if (typeof parsed["host"] === "string") {
+    const normalized = normalizeDispatchHostId(parsed["host"]);
+    if (normalized) out.host = normalized;
+  }
   // LW1-6: roles + host_profiles (sparse — deep-merged across layers by assembleLayers).
   if (isPlainObject(parsed["roles"]))
     out.roles = sparseRoles(parsed["roles"] as Record<string, unknown>);
@@ -738,6 +755,8 @@ function parseSettingsFile(filePath: string): Partial<ResolvedConfig> {
       sparse.importanceGate = Math.floor(rawModels["importanceGate"]);
     if (typeof rawModels["compositeRecall"] === "boolean")
       sparse.compositeRecall = rawModels["compositeRecall"];
+    if (typeof rawModels["importanceAtIngest"] === "boolean")
+      sparse.importanceAtIngest = rawModels["importanceAtIngest"];
     if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
       sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
     if (isPlainObject(rawModels["shortOutputThreshold"])) {
@@ -867,8 +886,11 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
     out.auto_approve = parsed["auto_approve"] as string[];
   if (VALID_REVIEW.has(parsed["review"] as string))
     out.review = parsed["review"] as ResolvedConfig["review"];
-  if (VALID_HOST.has(parsed["host"] as string))
-    out.host = parsed["host"] as ResolvedConfig["host"];
+  if (parsed["host"] === "auto") out.host = "auto";
+  else if (typeof parsed["host"] === "string") {
+    const normalized = normalizeDispatchHostId(parsed["host"]);
+    if (normalized) out.host = normalized;
+  }
   // LW1-6: roles + host_profiles (sparse — deep-merged across layers by assembleLayers).
   if (isPlainObject(parsed["roles"]))
     out.roles = sparseRoles(parsed["roles"] as Record<string, unknown>);
@@ -923,6 +945,8 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
       sparse.importanceGate = Math.floor(rawModels["importanceGate"]);
     if (typeof rawModels["compositeRecall"] === "boolean")
       sparse.compositeRecall = rawModels["compositeRecall"];
+    if (typeof rawModels["importanceAtIngest"] === "boolean")
+      sparse.importanceAtIngest = rawModels["importanceAtIngest"];
     if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
       sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
     if (isPlainObject(rawModels["shortOutputThreshold"])) {

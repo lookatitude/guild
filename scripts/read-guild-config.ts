@@ -46,7 +46,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { resolveSettings } from "./lib/settings-resolver";
 import { KNOWLEDGE_CONFIG_DEFAULTS } from "./understand/lib/schema";
-import { HOST_IDS } from "./lib/host-registry-schema";
+import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "./lib/host-registry-schema";
+import { normalizeHostId } from "./lib/host-id-namespace";
 // host_profiles strict validation — single SoT (also consumed by the resolve path).
 import { validateHostProfiles } from "./lib/host-profiles-validate";
 
@@ -123,7 +124,7 @@ interface HostProfileEntry {
 type HostProfilesBlock = Record<string, HostProfileEntry>;
 
 // ── Host-agnostic model tier map (ADR §1, §10 — cost-aware-tiering-and-lean-context).
-// tiers: cheap|mid|powerful → {claude,codex,gemini}. codex/gemini are null now (no third host).
+// tiers: cheap|mid|powerful → canonical v2 host-id map.
 // Defaults preserve zero-config behavior (cheaper learn, same routing otherwise).
 //
 // G-11 (SC-6, v2-gap-closure): each tier→host VALUE is a union —
@@ -137,22 +138,22 @@ type HostProfilesBlock = Record<string, HostProfileEntry>;
 // consumer of tier model strings (score-tier.ts, lib/settings-resolver.ts,
 // write-host-capability.ts, lib/host-router.ts) goes through it — never index
 // the map and assume a string.
-/** Object form of a tier→host model value (G-11). Closed key set: model, effort, verbosity. */
+/** Object form of a tier→host model value. Closed key set: model, effort, reasoning, thinking, verbosity. */
 export interface TierModelSpec {
   /** Model name for this tier on this host (required in the object form). */
   model: string;
   /** Optional host effort axis (e.g. "low" | "medium" | "high" — host-defined). */
   effort?: string;
+  /** Optional host reasoning axis (host-defined). */
+  reasoning?: string;
+  /** Optional host thinking axis (host-defined). */
+  thinking?: string;
   /** Optional host verbosity axis (host-defined). */
   verbosity?: string;
 }
 /** A tier→host value: plain model string, object form, or null (no model). */
 export type TierHostValue = string | TierModelSpec | null;
-interface TierHostMap {
-  claude: TierHostValue;
-  codex: TierHostValue;
-  gemini: TierHostValue;
-}
+type TierHostMap = Partial<Record<HostId, TierHostValue>>;
 interface TiersBlock {
   cheap: TierHostMap;
   mid: TierHostMap;
@@ -166,10 +167,14 @@ export interface ResolvedTierModel {
   /** Present only when the object form supplied it. */
   effort?: string;
   /** Present only when the object form supplied it. */
+  reasoning?: string;
+  /** Present only when the object form supplied it. */
+  thinking?: string;
+  /** Present only when the object form supplied it. */
   verbosity?: string;
 }
 
-/** Normalize one tier→host value (string | {model,effort?,verbosity?} | null). */
+/** Normalize one tier→host value (string | {model,effort?,reasoning?,thinking?,verbosity?} | null). */
 function normalizeTierValue(v: unknown): ResolvedTierModel {
   if (typeof v === "string") {
     const t = v.trim();
@@ -180,6 +185,8 @@ function normalizeTierValue(v: unknown): ResolvedTierModel {
     if (typeof o["model"] === "string" && o["model"].trim()) {
       const out: ResolvedTierModel = { model: (o["model"] as string).trim() };
       if (typeof o["effort"] === "string") out.effort = o["effort"] as string;
+      if (typeof o["reasoning"] === "string") out.reasoning = o["reasoning"] as string;
+      if (typeof o["thinking"] === "string") out.thinking = o["thinking"] as string;
       if (typeof o["verbosity"] === "string") out.verbosity = o["verbosity"] as string;
       return out;
     }
@@ -194,14 +201,14 @@ function normalizeTierValue(v: unknown): ResolvedTierModel {
  *
  * Accepts any tiers-shaped record (tolerant — undefined/partial/malformed input
  * yields { model: null }, never throws):
- *   - canonical host-map form:  tiers[tier][host] = string | {model,effort?,verbosity?} | null
+ *   - canonical host-map form:  tiers[tier][host] = string | {model,effort?,reasoning?,thinking?,verbosity?} | null
  *   - legacy flat form:         tiers[tier] = "model-name"  (host-agnostic; kept
  *     byte-identical for write-host-capability.ts's historical settings shape)
  *
  * @param tiers  The models.tiers record (resolved settings, raw settings.json, or partial).
  * @param tier   "cheap" | "mid" | "powerful".
- * @param host   Host slot name (e.g. "claude" | "codex" | "gemini").
- * @returns      { model: string|null, effort?, verbosity? } — model is null when
+ * @param host   Host slot name (canonical id or legacy alias).
+ * @returns      { model: string|null, effort?, reasoning?, thinking?, verbosity? } — model is null when
  *               the slot is empty, the tier/host is absent, or the value is malformed.
  */
 export function resolveTierModel(
@@ -217,7 +224,10 @@ export function resolveTierModel(
   // Legacy flat form: tiers.<tier> is itself the model string (host-agnostic).
   if (typeof entry === "string") return normalizeTierValue(entry);
   if (typeof entry !== "object" || Array.isArray(entry)) return { model: null };
-  return normalizeTierValue((entry as Record<string, unknown>)[host]);
+  const hostMap = entry as Record<string, unknown>;
+  const canonical = normalizeHostId(host);
+  if (canonical && canonical in hostMap) return normalizeTierValue(hostMap[canonical]);
+  return normalizeTierValue(hostMap[host]);
 }
 interface CacheTTLBlock {
   coordinator: "1h" | "5m" | "off";
@@ -247,11 +257,18 @@ interface ModelsBlock {
   /** Min wiki importance level (1–5) for routine recall (ADR §6). Default 3. */
   importanceGate: number;
   /**
-   * Composite recall scoring (docs/v2/05 §Recall scoring). false (default) =
-   * shipped BM25-only ranking. true = wiki recall ranks by relevance × recency ×
-   * importance and filters pages below `importanceGate`.
+   * Composite recall scoring (docs/v2/05 §Recall scoring). true (default) = wiki
+   * recall ranks by relevance × recency × importance and filters pages below
+   * `importanceGate`. false = legacy BM25-only ranking.
    */
   compositeRecall: boolean;
+  /**
+   * Write-time importance-at-ingest scorer (docs/v2/05 §Importance-at-ingest).
+   * true (default) = the ingest/learn path stamps each wiki page with a 1–5
+   * `recall_importance:` score so recall reads a stable stored weight. false =
+   * recall derives the 1–5 weight from the page category at query time.
+   */
+  importanceAtIngest: boolean;
   /** BM25 top-1 similarity threshold for the ingest anomaly gate (D-INGEST-GATE). Default 0.80. */
   ingestSimilarityGate: number;
   /**
@@ -366,7 +383,7 @@ interface GuildSettings {
   rigor: "quick" | "standard" | "deep";
   auto_approve: string[]; // [] | [spec,plan,build] | [all]
   review: "local" | "cross" | "off";
-  host: "claude" | "codex" | "auto";
+  host: HostId | "auto";
   /** Per-run role pins {host,advisory,adversarial} (LW1-6 / SC-W1-7). Default all null = auto-resolve. */
   roles: RolesBlock;
   /** Per-host config-render overrides keyed by host_id (LW1-6 / SC-W1-8). Default {} = none. */
@@ -450,9 +467,9 @@ export const DEFAULTS: GuildSettings = {
   models: {
     enabled: true,
     tiers: {
-      cheap:    { claude: "haiku",  codex: null, gemini: null },
-      mid:      { claude: "sonnet", codex: null, gemini: null },
-      powerful: { claude: "opus",   codex: null, gemini: null },
+      cheap:    { "claude-code-cli": "haiku",  "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
+      mid:      { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
+      powerful: { "claude-code-cli": "opus",   "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
     },
     scoreWeights: {
       workType:         0,  // base; read/summarize=0, draft/extract=+1, architect/review/schema=+2
@@ -469,7 +486,8 @@ export const DEFAULTS: GuildSettings = {
     structuredOutputRequired: true,
     cacheTTL: { coordinator: "1h", leaf: "5m" },
     importanceGate: 3,
-    compositeRecall: false,
+    compositeRecall: true,
+    importanceAtIngest: true,
     ingestSimilarityGate: 0.80,
     shortOutputThreshold: {},
     knowledge: { ...KNOWLEDGE_CONFIG_DEFAULTS },
@@ -531,11 +549,11 @@ export const HELP: Record<string, string> = {
     "qa (G-14/SC-9): auto-proceed ONLY on a computed ReleaseGate PASS — a BLOCK-override and the " +
     "always-ask hard set still prompt. No ops token (rails stay interactive by design).",
   review: "local | cross | off — cross engages the Claude<->Codex adversarial review broker",
-  host: "claude | codex | auto — co-equal host adapter selection",
+  host: "canonical host id | legacy alias | auto — co-equal host adapter selection",
   roles:
     "per-run role pins {host,advisory,adversarial}; null = resolve via the role model " +
-    "(capability-matrix), or pin a registry host_id (claude|codex|.agents|pi|antigravity). " +
-    "Top-level `host` stays the dispatch-host selector; the 5 registry ids live only under roles.*/host_profiles.*.",
+    "(capability-matrix), or pin a canonical registry host_id. Legacy aliases normalize to canonical ids. " +
+    "Top-level `host` stays the dispatch-host selector; the v2 registry ids also key roles.*/host_profiles.*.",
   host_profiles:
     "per-host config-render overrides keyed by host_id; {} = none (defaults render from the " +
     "host-registry capability rows). CLOSED entry shape: { models?: {cheap?,mid?,powerful?}, enabled?: bool }.",
@@ -581,14 +599,14 @@ export const HELP: Record<string, string> = {
   "models.enabled":
     "bool (default true) — master toggle for cost-tiering. false = all lanes run at mid (current v2 behavior).",
   "models.tiers":
-    "{cheap|mid|powerful: {claude,codex,gemini}} — host-agnostic tier→model map (ADR §1). " +
-    "Each host value is string | {model, effort?, verbosity?} | null (G-11/SC-6). " +
-    "Object form pins a model PLUS the host's effort/verbosity axes, e.g. " +
-    "powerful: {claude: {model: \"opus\", effort: \"high\"}}. Closed sub-keys: only " +
-    "model/effort/verbosity are accepted inside the object form (validate rejects others). " +
+    "{cheap|mid|powerful: {<canonical-host-id>: value}} — host-agnostic tier→model map. " +
+    "Each host value is string | {model, effort?, reasoning?, thinking?, verbosity?} | null. " +
+    "Object form pins a model PLUS host-defined effort/reasoning/thinking/verbosity axes, e.g. " +
+    "powerful: {\"claude-code-cli\": {model: \"opus\", effort: \"high\", reasoning: \"xhigh\"}}. " +
+    "Closed sub-keys: only model/effort/reasoning/thinking/verbosity are accepted inside the object form. " +
     "null host slot = no model for that tier on that host (fall through to host mapping). " +
     "Defaults: cheap=haiku, mid=sonnet, powerful=opus (plain strings). " +
-    "codex/gemini are null (no third host yet). " +
+    "Legacy host aliases normalize to canonical ids; non-Claude host slots default to null until configured. " +
     "Consumers unpack the union ONLY via resolveTierModel() (read-guild-config.ts).",
   "models.scoreWeights":
     "object (signal→int) — auto-score rubric weights (ADR §2). " +
@@ -614,9 +632,15 @@ export const HELP: Record<string, string> = {
   "models.importanceGate":
     "int 1–5 (default 3) — min wiki importance level for routine recall (ADR §6).",
   "models.compositeRecall":
-    "bool (default false) — composite recall scoring (docs/v2/05 §Recall scoring). " +
-    "false = shipped BM25-only ranking. true = wiki recall ranks by relevance × recency × importance " +
-    "and filters pages scoring below models.importanceGate.",
+    "bool (default true) — composite recall scoring (docs/v2/05 §Recall scoring). " +
+    "true = wiki recall ranks by relevance × recency × importance and filters pages scoring " +
+    "below models.importanceGate. Because this requires raw BM25 scores, it bypasses the SQLite " +
+    "FTS read-through cache and uses file-BM25 for bundle recall. false = legacy BM25-only " +
+    "ranking with the SQLite cache eligible above defaults.index.wiki_file_threshold.",
+  "models.importanceAtIngest":
+    "bool (default true) — write-time importance-at-ingest scorer (docs/v2/05 §Importance-at-ingest). " +
+    "true = the ingest/learn path stamps each wiki page with a 1–5 recall_importance: score so recall " +
+    "reads a stable stored weight. false = recall derives the weight from the page category at query time.",
   "models.ingestSimilarityGate":
     "float 0–1 (default 0.80) — BM25 top-1 similarity threshold for the wiki ingest anomaly gate (D-INGEST-GATE). " +
     "If a candidate page scores ≥ this against existing pages, guild:wiki-ingest pauses: supersede / skip / proceed — never silently overwrites.",
@@ -739,7 +763,9 @@ export const HELP: Record<string, string> = {
 const VALID_LOOPS = new Set(["none", "spec", "plan", "implementation", "all"]);
 const VALID_RIGOR = new Set(["quick", "standard", "deep"]);
 const VALID_REVIEW = new Set(["local", "cross", "off"]);
-const VALID_HOST = new Set(["claude", "codex", "auto"]);
+const DISPATCH_HOST_IDS = new Set<HostId>(
+  HOST_IDS.filter((id): id is HostId => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
+);
 // G-14 (SC-9): "qa" is a valid auto-approve token. Semantics: auto-proceed ONLY
 // on a computed ReleaseGate PASS — a BLOCK-override and the always-ask hard set
 // (destructive/network/spend) still prompt. There is still NO "ops" token (rails
@@ -753,19 +779,24 @@ const VALID_CACHE_TTL = new Set(["1h", "5m", "off"]);
 const VALID_MODELS_KEYS = new Set([
   "enabled", "tiers", "scoreWeights", "thresholds", "advisorRounds",
   "escalationMarkers", "recallBeforeRead", "recallScoreThreshold",
-  "structuredOutputRequired", "cacheTTL", "importanceGate", "compositeRecall", "ingestSimilarityGate",
+  "structuredOutputRequired", "cacheTTL", "importanceGate", "compositeRecall", "importanceAtIngest", "ingestSimilarityGate",
   "shortOutputThreshold", "knowledge",
 ]);
 
 // Closed host-key set for models.tiers.<tier>.* (G-11 + G-lane rework): the
-// documented host map is {claude, codex, gemini}. Shared by validateModels
+// documented host map is the canonical v2 host-id set. Shared by validateModels
 // (reject) and the resolve-mode merge strip (unknown host keys never leak
 // into the resolved config — same regime as DEFAULTS_ALLOWED_KEYS).
-const VALID_TIER_HOST_KEYS = new Set(["claude", "codex", "gemini"]);
+const VALID_TIER_HOST_KEYS = new Set<string>(HOST_IDS);
 
 // Known registry host ids (single SoT — host-registry-schema.ts HOST_IDS). Used by
 // validateRoles + validateHostProfiles so a typo'd host id surfaces (closed set).
 const KNOWN_HOST_IDS = new Set<string>(HOST_IDS);
+
+function normalizeDispatchHostId(value: string): HostId | null {
+  const normalized = normalizeHostId(value);
+  return normalized && DISPATCH_HOST_IDS.has(normalized) ? normalized : null;
+}
 
 // Closed sub-key sets for the LW1-6 schema extension (ADR step 14).
 const VALID_ROLES_KEYS = new Set(["host", "advisory", "adversarial"]);
@@ -832,7 +863,11 @@ function parseArgs(argv: string[]): ParsedArgs {
       if (VALID_REVIEW.has(v)) flags.review = v as GuildSettings["review"];
     } else if (arg.startsWith("--host=")) {
       const v = arg.slice("--host=".length);
-      if (VALID_HOST.has(v)) flags.host = v as GuildSettings["host"];
+      if (v === "auto") flags.host = "auto";
+      else {
+        const normalized = normalizeDispatchHostId(v);
+        if (normalized) flags.host = normalized;
+      }
     } else if (arg === "--auto-approve") {
       flags.auto_approve = ["all"]; // bare flag = all
     } else if (arg.startsWith("--auto-approve=")) {
@@ -1003,15 +1038,15 @@ export function validateModels(m: Record<string, unknown>): string[] {
       rejects.push(`unknown models key "${k}" (closed key set — check spelling against ADR §10)`);
     }
   }
-  // tiers value union (G-11/SC-6): each tier→host value must be
-  // string | null | {model: string, effort?: string, verbosity?: string}.
+  // tiers value union: each tier→host value must be string | null |
+  // {model: string, effort?: string, reasoning?: string, thinking?: string, verbosity?: string}.
   // The object form is a CLOSED key set — unknown sub-keys are rejected.
   // G-lane rework: the host map itself is ALSO a closed key set
-  // ({claude, codex, gemini}) — a typo like "claudee" must surface, not merge.
+  // canonical v2 host ids — a typo like "claudee" must surface, not merge.
   if (isPlainObject(m["tiers"])) {
     const rt = m["tiers"] as Record<string, unknown>;
     const VALID_TIER_KEYS = new Set(["cheap", "mid", "powerful"]);
-    const VALID_TIER_SPEC_KEYS = new Set(["model", "effort", "verbosity"]);
+    const VALID_TIER_SPEC_KEYS = new Set(["model", "effort", "reasoning", "thinking", "verbosity"]);
     for (const tk of Object.keys(rt)) {
       if (!VALID_TIER_KEYS.has(tk)) {
         rejects.push(`unknown models.tiers key "${tk}" (valid: cheap|mid|powerful)`);
@@ -1019,13 +1054,23 @@ export function validateModels(m: Record<string, unknown>): string[] {
       }
       if (!isPlainObject(rt[tk])) continue; // non-object tier entries handled by the merge (legacy flat form tolerated by resolveTierModel)
       const hostMap = rt[tk] as Record<string, unknown>;
+      const seenCanonicalHosts = new Map<HostId, string>();
       for (const [hk, hv] of Object.entries(hostMap)) {
-        if (!VALID_TIER_HOST_KEYS.has(hk)) {
+        const canonicalHostId = normalizeHostId(hk);
+        if (!canonicalHostId) {
           rejects.push(
-            `unknown models.tiers.${tk} host key "${hk}" (closed key set — valid: claude, codex, gemini)`
+            `unknown models.tiers.${tk} host key "${hk}" (closed key set — valid: ${[...VALID_TIER_HOST_KEYS].join(", ")})`
           );
           continue;
         }
+        const previousHostKey = seenCanonicalHosts.get(canonicalHostId);
+        if (previousHostKey && previousHostKey !== hk) {
+          rejects.push(
+            `duplicate models.tiers.${tk} host keys "${previousHostKey}" and "${hk}" both normalize to "${canonicalHostId}"`
+          );
+          continue;
+        }
+        seenCanonicalHosts.set(canonicalHostId, hk);
         if (hv === null || typeof hv === "string") continue; // both historical forms valid
         if (isPlainObject(hv)) {
           const spec = hv as Record<string, unknown>;
@@ -1033,7 +1078,7 @@ export function validateModels(m: Record<string, unknown>): string[] {
             if (!VALID_TIER_SPEC_KEYS.has(sk)) {
               rejects.push(
                 `unknown models.tiers.${tk}.${hk} key "${sk}" ` +
-                  `(object form is a closed key set — only model, effort, verbosity)`
+                  `(object form is a closed key set — only model, effort, reasoning, thinking, verbosity)`
               );
             }
           }
@@ -1045,12 +1090,18 @@ export function validateModels(m: Record<string, unknown>): string[] {
           if (spec["effort"] !== undefined && typeof spec["effort"] !== "string") {
             rejects.push(`models.tiers.${tk}.${hk}.effort must be a string (got ${JSON.stringify(spec["effort"])})`);
           }
+          if (spec["reasoning"] !== undefined && typeof spec["reasoning"] !== "string") {
+            rejects.push(`models.tiers.${tk}.${hk}.reasoning must be a string (got ${JSON.stringify(spec["reasoning"])})`);
+          }
+          if (spec["thinking"] !== undefined && typeof spec["thinking"] !== "string") {
+            rejects.push(`models.tiers.${tk}.${hk}.thinking must be a string (got ${JSON.stringify(spec["thinking"])})`);
+          }
           if (spec["verbosity"] !== undefined && typeof spec["verbosity"] !== "string") {
             rejects.push(`models.tiers.${tk}.${hk}.verbosity must be a string (got ${JSON.stringify(spec["verbosity"])})`);
           }
         } else {
           rejects.push(
-            `models.tiers.${tk}.${hk} must be a string, null, or {model, effort?, verbosity?} ` +
+            `models.tiers.${tk}.${hk} must be a string, null, or {model, effort?, reasoning?, thinking?, verbosity?} ` +
               `(got ${JSON.stringify(hv)})`
           );
         }
@@ -1091,6 +1142,10 @@ export function validateModels(m: Record<string, unknown>): string[] {
   // compositeRecall is a boolean
   if (m["compositeRecall"] !== undefined && typeof m["compositeRecall"] !== "boolean") {
     rejects.push(`models.compositeRecall must be a boolean (got ${JSON.stringify(m["compositeRecall"])})`);
+  }
+  // importanceAtIngest is a boolean
+  if (m["importanceAtIngest"] !== undefined && typeof m["importanceAtIngest"] !== "boolean") {
+    rejects.push(`models.importanceAtIngest must be a boolean (got ${JSON.stringify(m["importanceAtIngest"])})`);
   }
   // advisorRounds > 0
   if (m["advisorRounds"] !== undefined) {
@@ -1193,7 +1248,7 @@ export function validateRoles(r: Record<string, unknown>): string[] {
       continue;
     }
     const v = r[k];
-    if (v !== null && !(typeof v === "string" && KNOWN_HOST_IDS.has(v))) {
+    if (v !== null && !(typeof v === "string" && normalizeHostId(v) !== null)) {
       rejects.push(
         `roles.${k} must be null or a known registry host_id (${[...KNOWN_HOST_IDS].join("|")}); got ${JSON.stringify(v)}`
       );
@@ -1431,7 +1486,17 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     if (VALID_RIGOR.has(parsed["rigor"] as string)) out.rigor = parsed["rigor"] as GuildSettings["rigor"];
     if (Array.isArray(parsed["auto_approve"])) out.auto_approve = parsed["auto_approve"] as string[];
     if (VALID_REVIEW.has(parsed["review"] as string)) out.review = parsed["review"] as GuildSettings["review"];
-    if (VALID_HOST.has(parsed["host"] as string)) out.host = parsed["host"] as GuildSettings["host"];
+    if (parsed["host"] === "auto") out.host = "auto";
+    else if (typeof parsed["host"] === "string") {
+      const normalized = normalizeDispatchHostId(parsed["host"]);
+      if (normalized) out.host = normalized;
+      else {
+        rejects.push(
+          `host "${parsed["host"]}" is invalid for the top-level dispatch selector ` +
+            `(valid: auto or dispatch-selectable host ids ${[...DISPATCH_HOST_IDS].join("|")})`
+        );
+      }
+    }
     // roles: per-run role pins (LW1-6). Closed sub-keys; null or known host_id values.
     if (isPlainObject(parsed["roles"])) {
       const rawRoles = parsed["roles"] as Record<string, unknown>;
@@ -1439,8 +1504,11 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       const mergedRoles = { ...DEFAULTS.roles } as unknown as Record<string, unknown>;
       for (const rk of VALID_ROLES_KEYS) {
         const v = rawRoles[rk];
-        if (v === null || (typeof v === "string" && KNOWN_HOST_IDS.has(v))) {
-          mergedRoles[rk] = v;
+        if (v === null) {
+          mergedRoles[rk] = null;
+        } else if (typeof v === "string") {
+          const normalized = normalizeHostId(v);
+          if (normalized) mergedRoles[rk] = normalized;
         }
       }
       out.roles = mergedRoles as unknown as RolesBlock;
@@ -1451,8 +1519,9 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       rejects.push(...validateHostProfiles(rawHp));
       const mergedHp: HostProfilesBlock = {};
       for (const [hostId, entry] of Object.entries(rawHp)) {
-        if (KNOWN_HOST_IDS.has(hostId) && isPlainObject(entry)) {
-          mergedHp[hostId] = entry as HostProfileEntry;
+        const normalized = normalizeHostId(hostId);
+        if (normalized && isPlainObject(entry)) {
+          mergedHp[normalized] = entry as HostProfileEntry;
         }
       }
       out.host_profiles = mergedHp;
@@ -1514,8 +1583,9 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
             const rawHostMap = rt[tier] as Record<string, unknown>;
             const knownHosts: Partial<TierHostMap> = {};
             for (const hk of Object.keys(rawHostMap)) {
-              if (VALID_TIER_HOST_KEYS.has(hk)) {
-                (knownHosts as Record<string, unknown>)[hk] = rawHostMap[hk];
+              const canonicalHostId = normalizeHostId(hk);
+              if (canonicalHostId) {
+                (knownHosts as Record<string, unknown>)[canonicalHostId] = rawHostMap[hk];
               }
             }
             mergedModels.tiers[tier] = { ...DEFAULTS.models.tiers[tier], ...knownHosts };
@@ -1535,6 +1605,11 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
         mergedModels.escalationMarkers = rawModels["escalationMarkers"] as string[];
       }
       if (typeof rawModels["recallBeforeRead"] === "boolean") mergedModels.recallBeforeRead = rawModels["recallBeforeRead"];
+      // compositeRecall + importanceAtIngest booleans (these had no merge before — a user's
+      // settings.json value was silently dropped; the live recall path never consumed it so it
+      // went unnoticed. Now that recall is config-driven they MUST merge.)
+      if (typeof rawModels["compositeRecall"] === "boolean") mergedModels.compositeRecall = rawModels["compositeRecall"];
+      if (typeof rawModels["importanceAtIngest"] === "boolean") mergedModels.importanceAtIngest = rawModels["importanceAtIngest"];
       if (typeof rawModels["recallScoreThreshold"] === "number") mergedModels.recallScoreThreshold = rawModels["recallScoreThreshold"];
       if (typeof rawModels["structuredOutputRequired"] === "boolean") mergedModels.structuredOutputRequired = rawModels["structuredOutputRequired"];
       if (isPlainObject(rawModels["cacheTTL"])) {

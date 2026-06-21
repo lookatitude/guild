@@ -42,50 +42,74 @@ export function rungLoss(r: Rung): number {
 
 // ---------------------------------------------------------------------------
 // The rung table (verbatim from the gated C3 contract)
-//   .agents / pi / antigravity rungs are INFERRED (see INFERRED set below).
+//   agents-file / pi-cli / antigravity-cli / app-host rungs are INFERRED (see
+//   INFERRED set below).
 // ---------------------------------------------------------------------------
 
 export const FALLBACK_LADDER_TABLE: Record<AdapterSurface, Record<HostId, Rung>> = {
   interaction: {
-    claude: "native", // AskUserQuestion
-    codex: "wrapped", // CLI prompt
-    ".agents": "bridged", // file-bus ⓘ
-    pi: "wrapped", // VERIFIED on-host 2026-06-16: pi -p / --print
-    antigravity: "wrapped", // VERIFIED on-host 2026-06-16: agy -p / --print
+    "claude-code-cli": "native", // AskUserQuestion
+    "codex-cli": "wrapped", // CLI prompt
+    "agents-file": "bridged", // file-bus / instruction file
+    "pi-cli": "wrapped", // VERIFIED on-host 2026-06-16: print mode
+    "antigravity-cli": "wrapped", // VERIFIED on-host 2026-06-16: print mode
+    "claude-code-app": "degraded",
+    "claude-code-web": "degraded",
+    "codex-app": "degraded",
+    "claude-ai-connector": "degraded",
   },
   session: {
-    claude: "native", // session id/resume
-    codex: "wrapped", // run-dir state
-    ".agents": "emulated", // re-bootstrap ⓘ
-    pi: "native", // VERIFIED on-host 2026-06-16: --resume/-r + --session-id + --fork (full session id/resume)
-    antigravity: "wrapped", // VERIFIED on-host 2026-06-16: --continue/-c + --conversation <id> (resume by id; no fork)
+    "claude-code-cli": "native", // session id/resume
+    "codex-cli": "wrapped", // run-dir state
+    "agents-file": "emulated", // re-bootstrap through instruction file
+    "pi-cli": "native", // VERIFIED on-host 2026-06-16: --resume/-r + --session-id + --fork
+    "antigravity-cli": "wrapped", // VERIFIED on-host 2026-06-16: --continue/-c + --conversation <id>
+    "claude-code-app": "degraded",
+    "claude-code-web": "degraded",
+    "codex-app": "degraded",
+    "claude-ai-connector": "degraded",
   },
   semantic_tool: {
-    claude: "native", // tool names
-    codex: "bridged", // name map
-    ".agents": "bridged", // name map ⓘ
-    pi: "bridged", // VERIFIED on-host 2026-06-16: native read/bash/edit/write tools + --tools allowlist (Guild→pi name map)
-    antigravity: "bridged", // ⓘ
+    "claude-code-cli": "native", // tool names
+    "codex-cli": "bridged", // name map
+    "agents-file": "bridged", // instruction/file-bus name map
+    "pi-cli": "bridged", // VERIFIED on-host 2026-06-16: read/bash/edit/write + --tools allowlist
+    "antigravity-cli": "bridged",
+    "claude-code-app": "degraded",
+    "claude-code-web": "degraded",
+    "codex-app": "degraded",
+    "claude-ai-connector": "degraded",
   },
   browser: {
-    claude: "bridged", // chrome-devtools MCP
-    codex: "bridged", // MCP
-    ".agents": "degraded", // none ⓘ
-    pi: "degraded", // VERIFIED on-host 2026-06-16: no browser tool in pi --help
-    antigravity: "native", // agy browser ⓘ — NOT confirmed from agy --help; keeps pi/antigravity in INFERRED_HOSTS
+    "claude-code-cli": "bridged", // chrome-devtools MCP
+    "codex-cli": "bridged", // MCP
+    "agents-file": "degraded", // none
+    "pi-cli": "degraded", // VERIFIED on-host 2026-06-16: no browser tool in help output
+    "antigravity-cli": "native", // host browser control — still inferred until live-host confirmation
+    "claude-code-app": "degraded",
+    "claude-code-web": "degraded",
+    "codex-app": "degraded",
+    "claude-ai-connector": "degraded",
   },
 };
 
 /**
- * The hosts with at least one still-INFERRED rung (not fully live-verified). claude and
- * codex cells are concrete. `.agents` is fully INFERRED (no live host yet). As of the
- * 2026-06-16 on-host verification, pi/antigravity interaction+session+semantic_tool cells
- * are VERIFIED (see inline comments) — they remain in this set ONLY because their `browser`
- * rung is still unconfirmed (pi=degraded confirmed; antigravity=native NOT confirmed from
- * agy --help). This is a coarse per-host flag; per-cell verified state lives in the inline
- * comments above. Remove a host here once ALL its cells are live-verified.
+ * The hosts with at least one still-INFERRED rung (not fully live-verified).
+ * `claude-code-cli` and `codex-cli` cells are concrete. `agents-file` and app/
+ * connector hosts are fully inferred. As of the 2026-06-16 on-host verification,
+ * pi/antigravity interaction+session+semantic_tool cells are VERIFIED (see
+ * inline comments) — they remain in this set while any cell is unconfirmed.
+ * Remove a host here once ALL its cells are live-verified.
  */
-export const INFERRED_HOSTS = new Set<HostId>([".agents", "pi", "antigravity"]);
+export const INFERRED_HOSTS = new Set<HostId>([
+  "agents-file",
+  "pi-cli",
+  "antigravity-cli",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+]);
 
 export function isInferredRung(surface: AdapterSurface, host: HostId): boolean {
   return INFERRED_HOSTS.has(host);

@@ -199,6 +199,20 @@ describe("SC-5 per-host launch plan — same captured result, host-specific path
     expect(renderLauncherScript("claude")).toContain("claude");
     expect(renderLauncherScript("codex")).toContain("codex");
   });
+
+  it("maps R5 model params into Claude and Codex wrapper argv", () => {
+    const withModelParams = {
+      ...baseReq,
+      modelParams: { model: "opus-4.8", effort: "low", reasoning: "xhigh" },
+    };
+    const claude = planWrapperInvocation({ host: "claude", ...withModelParams });
+    expect(claude.args).toEqual(expect.arrayContaining(["--model", "opus-4.8", "--effort", "low"]));
+    expect(claude.model_params.unsupported_model_params).toEqual(["reasoning"]);
+
+    const codex = planWrapperInvocation({ host: "codex", ...withModelParams });
+    expect(codex.args).toEqual(expect.arrayContaining(["--model", "opus-4.8", "-c", "model_reasoning_effort=\"xhigh\""]));
+    expect(codex.model_params.unsupported_model_params).toEqual([]);
+  });
 });
 
 describe("SC-5 the REAL guild-run.ts CLI wires the wrapper path (--dry-run, real entrypoint)", () => {
@@ -222,6 +236,20 @@ describe("SC-5 the REAL guild-run.ts CLI wires the wrapper path (--dry-run, real
     expect(plan["args"] as string[]).toContain("--append-system-prompt");
     expect(plan["structured_output_instruction"]).toContain("guild.handoff.v2");
     expect(plan["capture"]).toMatchObject({ stdout: true, exit: true });
+    expect(plan["host_adapter"]).toMatchObject({
+      schema_version: "guild.run_host_adapter_receipt.v1",
+      requested_host: "claude",
+      host_id: "claude-code-cli",
+      provenance: "verified",
+      preflight: { status: "ok" },
+      dispatch: {
+        status: "ok",
+        value: {
+          dispatch_kind: "wrapper_launch",
+          command: "claude",
+        },
+      },
+    });
   });
 
   it("codex: the CLI emits a plan injecting bootstrap via an AGENTS.md instruction file", () => {
@@ -239,5 +267,35 @@ describe("SC-5 the REAL guild-run.ts CLI wires the wrapper path (--dry-run, real
     // seam-level guarantee behind wrapper-path parity.
     expect(codex["capture"]).toEqual(claude["capture"]);
     expect(codex["structured_output_instruction"]).toEqual(claude["structured_output_instruction"]);
+  });
+
+  it("the real CLI dry-run records model params in the plan and host adapter receipt", () => {
+    const res = spawnSync(
+      "npx",
+      [
+        "tsx", GUILD_RUN,
+        "--host", "claude",
+        "--mode", "ask",
+        "--prompt", "do the thing",
+        "--bootstrap-file", bootstrapFile,
+        "--model", "opus-4.8",
+        "--effort", "low",
+        "--dry-run",
+      ],
+      { cwd: PLUGIN_ROOT, encoding: "utf8" }
+    );
+    expect(res.status).toBe(0);
+    const plan = JSON.parse(res.stdout) as Record<string, unknown>;
+    expect(plan["args"] as string[]).toEqual(expect.arrayContaining(["--model", "opus-4.8", "--effort", "low"]));
+    expect(plan["model_params"]).toMatchObject({
+      requested: { model: "opus-4.8", effort: "low" },
+      unsupported_model_params: [],
+    });
+    expect(plan["host_adapter"]).toMatchObject({
+      model_params: {
+        status: "ok",
+        value: { modelParams: { model: "opus-4.8", effort: "low" } },
+      },
+    });
   });
 });

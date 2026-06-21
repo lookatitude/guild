@@ -359,11 +359,7 @@ function permissionFeederLocalSource(
 
 /** The models.tiers host-slot key for a registry host_id, or null when none exists. */
 function tierHostKey(hostId: HostId): string | null {
-  // models.tiers closed host set is {claude, codex, gemini}. Only claude/codex overlap the
-  // registry host ids; .agents/pi/antigravity have no tier slot → fall to the registry row.
-  if (hostId === "claude") return "claude";
-  if (hostId === "codex") return "codex";
-  return null;
+  return hostId;
 }
 
 /**

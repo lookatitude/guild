@@ -44,18 +44,22 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * The P1 registry host-id namespace — the FIVE emission/dispatch targets of
- * `build:hosts` (Gemini stays dropped, D10). This is the canonical id set the
- * G-spec/G-plan-gated contracts (C1 substrate enum, C3 ladder table) use.
- *
- * NOTE — namespace divergence (logged as a P1-L0 followup for L7 to reconcile):
- * the legacy `HostKind` union (host-types.ts) uses `antigravity-2` and a 9-host
- * surface set; this registry uses the contract id `antigravity` and adds `.agents`
- * (the universal AGENTS.md package target, which is NOT a HostKind). The `.agents`
- * literal keeps its leading dot **verbatim** per the gated contract enum. L7 owns
- * mapping legacy HostKind ↔ registry HostId during the behavior-preserving unify.
+ * The v2 registry host-id namespace. These are the canonical host ids used by
+ * settings, package rendering, dispatch routing, model-tier maps, docs, and the
+ * generated support matrix. Legacy inputs normalize into this set via
+ * host-id-namespace.ts; legacy aliases are never authoritative registry ids.
  */
-export const HOST_IDS = ["claude", "codex", ".agents", "pi", "antigravity"] as const;
+export const HOST_IDS = [
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+] as const;
 export type HostId = (typeof HOST_IDS)[number];
 
 /** Host families for the independence axis (adversarial different-family rule). */
@@ -135,7 +139,7 @@ export interface HostRegistryEntry {
 
 const CLAUDE_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
-  host_id: "claude",
+  host_id: "claude-code-cli",
   family: "claude",
   surface_kind: "cli",
   detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
@@ -148,7 +152,7 @@ const CLAUDE_ENTRY: HostRegistryEntry = {
 
 const CODEX_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
-  host_id: "codex",
+  host_id: "codex-cli",
   family: "codex",
   surface_kind: "cli",
   detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
@@ -237,23 +241,23 @@ function inferredCaps(
   };
 }
 
-const AGENTS_ENTRY: HostRegistryEntry = {
+const AGENTS_FILE_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
-  host_id: ".agents",
+  host_id: "agents-file",
   family: "agents",
-  // `.agents` is the universal AGENTS.md package target — a FILE surface, not a CLI.
+  // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
   surface_kind: "file",
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
   installability: "target",
   result_adapter: false, // INFERRED — no cross-review adapter; verify at live-host availability.
   dispatch_selectable: true, // INFERRED — a host consuming AGENTS.md can run a lane.
-  capabilities: inferredCaps("agents", "agents", "file"), // file surface — matches top-level surface_kind.
+  capabilities: inferredCaps("agents-file", "agents", "file"), // file surface — matches top-level surface_kind.
   provenance: "inferred",
 };
 
 const PI_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
-  host_id: "pi",
+  host_id: "pi-cli",
   family: "pi",
   surface_kind: "cli",
   detection: { bin: "pi", requires_auth: false, auth_probe: "none" }, // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
@@ -261,7 +265,7 @@ const PI_ENTRY: HostRegistryEntry = {
   result_adapter: false, // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
   dispatch_selectable: true, // VERIFIED: pi is a CLI process a lane can run on.
   capabilities: {
-    ...inferredCaps("pi", "pi"),
+    ...inferredCaps("pi-cli", "pi"),
     // VERIFIED on-host (pi --help, 0.79.3):
     sessions: { continue: true, resume_by_id: true, fork: true }, // --continue/-c, --resume/-r + --session-id, --fork
     structured_output: { native_json: true, schema_validation: false, repair_prompt: true }, // --mode json
@@ -271,7 +275,7 @@ const PI_ENTRY: HostRegistryEntry = {
 
 const ANTIGRAVITY_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
-  host_id: "antigravity",
+  host_id: "antigravity-cli",
   family: "antigravity",
   surface_kind: "cli",
   // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
@@ -280,11 +284,11 @@ const ANTIGRAVITY_ENTRY: HostRegistryEntry = {
   result_adapter: false, // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
   dispatch_selectable: true, // VERIFIED: agy is a CLI process a lane can run on.
   capabilities: {
-    ...inferredCaps("antigravity", "antigravity"),
+    ...inferredCaps("antigravity-cli", "antigravity"),
     // VERIFIED on-host (agy --help, 1.0.8):
     sessions: { continue: true, resume_by_id: true, fork: false }, // --continue/-c, --conversation <id>; no fork flag
     permissions: {
-      ...inferredCaps("antigravity", "antigravity").permissions,
+      ...inferredCaps("antigravity-cli", "antigravity").permissions,
       bypass_prompts: true, // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
       launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
     },
@@ -292,13 +296,69 @@ const ANTIGRAVITY_ENTRY: HostRegistryEntry = {
   provenance: "verified", // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
 };
 
+const CLAUDE_APP_ENTRY: HostRegistryEntry = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-code-app",
+  family: "claude",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-code-app", "claude", "app"),
+  provenance: "inferred",
+};
+
+const CLAUDE_WEB_ENTRY: HostRegistryEntry = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-code-web",
+  family: "claude",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-code-web", "claude", "app"),
+  provenance: "inferred",
+};
+
+const CODEX_APP_ENTRY: HostRegistryEntry = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "codex-app",
+  family: "codex",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("codex-app", "codex", "app"),
+  provenance: "inferred",
+};
+
+const CLAUDE_AI_CONNECTOR_ENTRY: HostRegistryEntry = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-ai-connector",
+  family: "claude",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
+  provenance: "inferred",
+};
+
 /** The Phase-1 registry rows, keyed by host_id. The single design-time SoT for L7. */
 export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = {
-  claude: CLAUDE_ENTRY,
-  codex: CODEX_ENTRY,
-  ".agents": AGENTS_ENTRY,
-  pi: PI_ENTRY,
-  antigravity: ANTIGRAVITY_ENTRY,
+  "claude-code-cli": CLAUDE_ENTRY,
+  "codex-cli": CODEX_ENTRY,
+  "pi-cli": PI_ENTRY,
+  "antigravity-cli": ANTIGRAVITY_ENTRY,
+  "agents-file": AGENTS_FILE_ENTRY,
+  "claude-code-app": CLAUDE_APP_ENTRY,
+  "claude-code-web": CLAUDE_WEB_ENTRY,
+  "codex-app": CODEX_APP_ENTRY,
+  "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
 };
 
 // ---------------------------------------------------------------------------

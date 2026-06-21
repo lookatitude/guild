@@ -220,7 +220,7 @@ describe("RemoteTeamBackend.launch — real (MockTransport)", () => {
     const t = new MockTransport();
     backend(t).launch(req());
     const securityBrief = t.sends.find((s) => s.handle.specialist === "security")!.payload;
-    expect(securityBrief).toBe(buildPrompt("demo", "run-remote-001", SPECIALISTS[1]));
+    expect(securityBrief).toBe(buildPrompt("demo", "run-remote-001", SPECIALISTS[1], undefined, "codex"));
   });
 
   it("a claude-only remote team works without an injected adapter resolver", () => {

@@ -43,17 +43,17 @@ describe("P1-L8 role resolver — contract + default==today (SC-5)", () => {
     }
   });
 
-  it("default Claude+Codex box ⇒ host=claude, advisory=claude, adversarial=codex (all strong) — today's behavior", () => {
+  it("default Claude+Codex box resolves to canonical Claude/Codex substrates", () => {
     const r = resolveRolesForRun(CLAUDE_CODEX);
-    expect(r.host).toMatchObject({ substrate: "claude", strength: "strong" });
-    expect(r.advisory).toMatchObject({ substrate: "claude", strength: "strong" });
-    expect(r.adversarial).toMatchObject({ substrate: "codex", strength: "strong" });
+    expect(r.host).toMatchObject({ substrate: "claude-code-cli", strength: "strong" });
+    expect(r.advisory).toMatchObject({ substrate: "claude-code-cli", strength: "strong" });
+    expect(r.adversarial).toMatchObject({ substrate: "codex-cli", strength: "strong" });
   });
 
   it("Claude-only box ⇒ adversarial degrades (no different-family result_adapter)", () => {
     const r = resolveRolesForRun(CLAUDE_ONLY);
-    expect(r.host).toMatchObject({ substrate: "claude", strength: "strong" });
-    expect(r.advisory).toMatchObject({ substrate: "claude", strength: "strong" });
+    expect(r.host).toMatchObject({ substrate: "claude-code-cli", strength: "strong" });
+    expect(r.advisory).toMatchObject({ substrate: "claude-code-cli", strength: "strong" });
     expect(r.adversarial.substrate).toBeNull();
     expect(r.adversarial.strength).toBe("weak");
   });
@@ -68,14 +68,21 @@ describe("P1-L8 role resolver — contract + default==today (SC-5)", () => {
       ],
     };
     const rows = availableRegistryRows(det);
-    expect(rows.map((r) => r.host_id)).toEqual(["claude", "codex"]); // gemini dropped; registry order
+    expect(rows.map((r) => r.host_id)).toEqual([
+      "claude-code-cli",
+      "codex-cli",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+    ]); // gemini dropped; registry order
   });
 });
 
 describe("P1-L8 advisory routing — substrate stamped on the record (C1)", () => {
   it("advisorySubstrateFromRoles returns the resolved advisory substrate", () => {
     const roles = resolveRolesForRun(CLAUDE_CODEX);
-    expect(advisorySubstrateFromRoles(roles)).toBe("claude");
+    expect(advisorySubstrateFromRoles(roles)).toBe("claude-code-cli");
   });
 
   it("the routed substrate is actually recorded on a valid AdvisoryRecord", () => {
@@ -95,6 +102,6 @@ describe("P1-L8 advisory routing — substrate stamped on the record (C1)", () =
       substrate,
     });
     expect(validateAdvisoryRecord(rec).valid).toBe(true);
-    expect(rec.substrate).toBe("claude");
+    expect(rec.substrate).toBe("claude-code-cli");
   });
 });

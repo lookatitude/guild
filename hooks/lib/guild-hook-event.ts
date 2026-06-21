@@ -40,8 +40,8 @@
  *     are safe to adopt the seam in a later pass, just not in scope here.)
  */
 
-/** The host emitter that produced a GuildHookEvent. Claude in P0. */
-export type GuildHostKind = "claude" | "codex";
+/** The host emitter that produced a GuildHookEvent. */
+export type GuildHostKind = "claude" | "codex" | "pi" | "antigravity" | "claude-code-app" | "claude-code-web" | "codex-app" | "claude-ai-connector";
 
 /**
  * Normalized hook payload. A structural superset of every field the Phase-1
@@ -123,4 +123,74 @@ export function emitClaudeHookEvent(raw: string): GuildHookEvent {
     return parsed as GuildHookEvent;
   }
   return { ...(parsed as Record<string, unknown>), host: "claude" };
+}
+
+function firstString(obj: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return undefined;
+}
+
+function firstValue(obj: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (obj[key] !== undefined) return obj[key];
+  }
+  return undefined;
+}
+
+function normalizeGenericHookEvent(raw: string, host: GuildHostKind): GuildHookEvent {
+  const parsed = JSON.parse(raw.trim()) as unknown;
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return parsed as GuildHookEvent;
+  }
+  const obj = parsed as Record<string, unknown>;
+  const out: GuildHookEvent = { ...obj, host };
+  const sessionId = firstString(obj, ["session_id", "sessionId", "session", "conversation_id", "conversationId", "thread_id", "threadId"]);
+  const cwd = firstString(obj, ["cwd", "workspace", "workspace_path", "workspacePath"]);
+  const eventName = firstString(obj, ["hook_event_name", "hookEventName", "event", "event_name", "eventName", "type"]);
+  const toolName = firstString(obj, ["tool_name", "toolName", "tool", "tool_id", "toolId", "name"]);
+  const prompt = firstString(obj, ["prompt", "message", "input_text", "inputText"]);
+  const model = firstString(obj, ["model", "model_id", "modelId"]);
+  if (sessionId !== undefined) out.session_id = sessionId;
+  if (cwd !== undefined) out.cwd = cwd;
+  if (eventName !== undefined) out.hook_event_name = eventName;
+  if (toolName !== undefined) out.tool_name = toolName;
+  const toolInput = firstValue(obj, ["tool_input", "toolInput", "arguments", "args", "input"]);
+  if (toolInput !== undefined) out.tool_input = toolInput;
+  const toolResponse = firstValue(obj, ["tool_response", "toolResponse", "result", "response", "output"]);
+  if (toolResponse !== undefined) out.tool_response = toolResponse;
+  if (prompt !== undefined) out.prompt = prompt;
+  if (model !== undefined) out.model = model;
+  return out;
+}
+
+/** Pi CLI emitter: maps Pi extension/tool event fields into GuildHookEvent. */
+export function emitPiHookEvent(raw: string): GuildHookEvent {
+  return normalizeGenericHookEvent(raw, "pi");
+}
+
+/** Antigravity CLI emitter: maps agy plugin/tool event fields into GuildHookEvent. */
+export function emitAntigravityHookEvent(raw: string): GuildHookEvent {
+  return normalizeGenericHookEvent(raw, "antigravity");
+}
+
+// App/connector surfaces do not have local native hooks. These emitters are the
+// shared normalization boundary for forwarded connector events and file-bus
+// packets that need to enter Guild's hook-shaped telemetry pipeline.
+export function emitCodexAppHookEvent(raw: string): GuildHookEvent {
+  return normalizeGenericHookEvent(raw, "codex-app");
+}
+
+export function emitClaudeCodeAppHookEvent(raw: string): GuildHookEvent {
+  return normalizeGenericHookEvent(raw, "claude-code-app");
+}
+
+export function emitClaudeCodeWebHookEvent(raw: string): GuildHookEvent {
+  return normalizeGenericHookEvent(raw, "claude-code-web");
+}
+
+export function emitClaudeAiConnectorHookEvent(raw: string): GuildHookEvent {
+  return normalizeGenericHookEvent(raw, "claude-ai-connector");
 }

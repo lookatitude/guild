@@ -69,8 +69,39 @@ describe("SC-W1-9 — additive pure surfaces are deterministic (A/B)", () => {
 // So the command/hook/package allowlist is EMPTY — those entry paths must be byte-identical.
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const ENTRY_PATHS = ["commands", "hooks", ".claude-plugin"];
-// Intentional new/changed entrypoints permitted under the three paths above (empty this wave).
-const ENTRY_ALLOWLIST = new Set<string>([]);
+// Intentional new/changed entrypoints permitted under the three paths above.
+//
+// HOST-ADAPTER RECONCILE (run-host-adapter-reconcile-20260621, lane HA-2): the landed
+// host-adapter migration (R0–R13) legitimately changed `hooks/**` entry-path files. Each
+// delta below was verified (git diff HEAD) to be that intended migration work — additive,
+// coherent, no behavior deletions/corruption — NOT a regression:
+//   - hooks/lib/guild-hook-event.ts ....... GuildHostKind extended to the 9-host roster +
+//                                           new pi/antigravity/app/connector emitters.
+//   - hooks/lib/run-state.ts .............. R5 host-native model-params (LaneModelParams).
+//   - hooks/dist/{run-trace,run-trace-start,run-trace-close,learning-backstop}.js
+//                                           recompiled bundles embedding the above.
+//   - hooks/lib/__tests__/run-state.test.ts ......... covers the R5 host modelParams block.
+//   - hooks/lib/__tests__/guild-hook-event.test.ts .. (new) covers the new host emitters.
+//   - hooks/__tests__/using-guild-bootstrap.test.ts + hooks/__tests__/golden/
+//     using-guild-session-start.json ...... golden regenerated from current using-guild
+//                                           source (product-loop intake section); the test
+//                                           re-asserts golden===source, so the delta is
+//                                           intentional and pinned, not silent drift.
+// The allowlist stays EXPLICIT (named files, never a wildcard) so any OTHER entry-path
+// change still fails the A/B guard below — anti-vacuity preserved. After the lead commits
+// these files HEAD advances, the diff empties, and these entries become harmless no-ops.
+const ENTRY_ALLOWLIST = new Set<string>([
+  "hooks/lib/guild-hook-event.ts",
+  "hooks/lib/run-state.ts",
+  "hooks/dist/run-trace.js",
+  "hooks/dist/run-trace-start.js",
+  "hooks/dist/run-trace-close.js",
+  "hooks/dist/learning-backstop.js",
+  "hooks/lib/__tests__/run-state.test.ts",
+  "hooks/lib/__tests__/guild-hook-event.test.ts",
+  "hooks/__tests__/using-guild-bootstrap.test.ts",
+  "hooks/__tests__/golden/using-guild-session-start.json",
+]);
 
 function gitLines(args: string[]): string[] {
   return execFileSync("git", ["-C", PLUGIN_ROOT, ...args], { encoding: "utf8" })
@@ -100,5 +131,18 @@ describe("SC-W1-9 — command/hook/package entry paths byte-identical vs HEAD (A
     const tracked = gitLines(["ls-files", "--", ...ENTRY_PATHS]);
     expect(tracked.length).toBeGreaterThan(0);
     expect(tracked.some((f) => f.startsWith("commands/"))).toBe(true);
+  });
+
+  it("ANTI-VACUITY: the allowlist is TIGHT — a non-migration entry-path change would still fail", () => {
+    // The allowlist names ONLY the host-adapter migration's verified deltas. Prove it did
+    // not get widened to a wildcard: representative entry paths that are NOT part of the
+    // migration must be absent, so the offending-filter above would still flag them.
+    for (const notAllowed of [
+      "commands/guild-build.md",
+      ".claude-plugin/plugin.json",
+      "hooks/hooks.json",
+    ]) {
+      expect(ENTRY_ALLOWLIST.has(notAllowed)).toBe(false);
+    }
   });
 });

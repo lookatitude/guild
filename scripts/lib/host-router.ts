@@ -33,10 +33,11 @@
 
 import type { HostCapabilityManifest, HostKind } from "../write-host-capability";
 import type { Specialist } from "./team-backend";
-// G-11 (SC-6): the settings models.tiers value union (string | {model,effort?,
-// verbosity?} | null) is unpacked ONLY via resolveTierModel — the router never
+// G-11/R5: the settings models.tiers value union
+// (string | {model,effort?,reasoning?,thinking?,verbosity?} | null) is unpacked
+// ONLY via resolveTierModel — the router never
 // assumes the operator-override slot is a plain string.
-import { resolveTierModel, type TierHostValue } from "../read-guild-config";
+import { resolveTierModel, type ResolvedTierModel, type TierHostValue } from "../read-guild-config";
 // P1-L7: the host registry is the SoT for host IDENTITY. The router reads "is this
 // the claude/codex reference host" THROUGH the registry (via the HostKind→registry
 // id bridge) instead of comparing the raw HostKind literal from a parallel source.
@@ -160,8 +161,9 @@ export interface RouteOptions {
   /**
    * Operator model override: settings.json models.tiers[tier][host_kind].
    * Highest-precedence step of the null-slot fill. Passed in (router stays pure).
-   * G-11 (SC-6): values carry the full union — string | {model, effort?, verbosity?}
-   * | null — and are unpacked exclusively through resolveTierModel().
+   * G-11/R5: values carry the full union — string |
+   * {model, effort?, reasoning?, thinking?, verbosity?} | null — and are
+   * unpacked exclusively through resolveTierModel().
    */
   settingsOverride?: Partial<Record<Tier, Partial<Record<HostKind, TierHostValue>>>>;
   /**
@@ -174,13 +176,25 @@ export interface RouteOptions {
 
 // ── Decision ────────────────────────────────────────────────────────────────
 
-/** The minimal `{host, tier, model}` choice (CR-1 return core). */
+export interface ModelParams {
+  model: string;
+  effort?: string;
+  reasoning?: string;
+  thinking?: string;
+  verbosity?: string;
+  [key: string]: string | undefined;
+}
+
+/** The minimal `{host, tier, model, modelParams}` choice (CR-1/R5 return core). */
 export interface RouteTarget {
   /** host_id from the manifest. */
   host: string;
   hostKind: HostKind;
   tier: Tier;
+  /** Legacy scalar retained for old receipts and docs. Mirrors modelParams.model. */
   model: string;
+  /** R5 full model parameter object carried into dispatch and trace/run records. */
+  modelParams: ModelParams;
 }
 
 export interface RejectedHost {
@@ -286,13 +300,12 @@ const AFFINITY_BOOST = 10;
 // ── Registry-sourced host-identity predicates (P1-L7) ─────────────────────────
 // The registry (via the HostKind→registry id bridge) is the single authority for
 // "is this the claude/codex reference host". Replaces scattered `=== "claude"` /
-// `=== "codex"` literals that read identity from a parallel source. Family-collapsed
-// (claude-* → claude, codex-app → codex) — byte-aligned with resolveAuthorHost().
+// `=== "codex"` literals that read identity from a parallel source.
 function isClaudeHost(hostKind: HostKind): boolean {
-  return hostKindToRegistryId(hostKind) === "claude";
+  return hostKindToRegistryId(hostKind)?.startsWith("claude-") ?? false;
 }
 function isCodexHost(hostKind: HostKind): boolean {
-  return hostKindToRegistryId(hostKind) === "codex";
+  return hostKindToRegistryId(hostKind)?.startsWith("codex-") ?? false;
 }
 
 /**
@@ -411,19 +424,42 @@ export function resolveModel(
   host: RoutableHost,
   settingsOverride?: RouteOptions["settingsOverride"]
 ): string {
-  // G-11 (SC-6): unpack the settings tier-value union (string | object form | null)
-  // through the single helper. Plain-string overrides resolve byte-identically;
-  // the object form contributes its `model` (effort/verbosity are dispatch-time
-  // concerns, not part of the frozen RouteTarget shape).
-  const override = resolveTierModel(settingsOverride, tier, host.host_kind).model;
-  if (override !== null) return override;
+  return resolveModelParams(tier, host, settingsOverride).model;
+}
+
+function toModelParams(resolved: ResolvedTierModel): ModelParams | null {
+  if (resolved.model === null) return null;
+  const params: ModelParams = { model: resolved.model };
+  if (resolved.effort !== undefined) params.effort = resolved.effort;
+  if (resolved.reasoning !== undefined) params.reasoning = resolved.reasoning;
+  if (resolved.thinking !== undefined) params.thinking = resolved.thinking;
+  if (resolved.verbosity !== undefined) params.verbosity = resolved.verbosity;
+  return params;
+}
+
+/**
+ * Resolve the full model parameter object for a tier+host. Legacy manifest and
+ * built-in tiers still produce `{model}`; settings object form adds effort,
+ * reasoning, thinking, and verbosity.
+ */
+export function resolveModelParams(
+  tier: Tier,
+  host: RoutableHost,
+  settingsOverride?: RouteOptions["settingsOverride"]
+): ModelParams {
+  // G-11/R5: unpack the settings tier-value union through the single helper.
+  // Plain-string overrides resolve byte-identically; object form contributes the
+  // host-native parameter axes.
+  const overrideResolved = resolveTierModel(settingsOverride, tier, host.host_kind);
+  const overrideParams = toModelParams(overrideResolved);
+  if (overrideParams !== null) return overrideParams;
   // TE-07: read canonical `tier_models`; fall back to legacy `tiers` for old manifests.
   const fromManifest = host.tier_models?.[tier] ?? host.tiers?.[tier];
-  if (typeof fromManifest === "string" && fromManifest.trim()) return fromManifest.trim();
+  if (typeof fromManifest === "string" && fromManifest.trim()) return { model: fromManifest.trim() };
   // PHASE-1-DISPATCH-WAVE-1: was BUILTIN_DEFAULT_TIERS[tier]; now routed through
   // the per-host registry function. Wave-1 values are identical (Claude defaults
   // for every host) so behavior is byte-identical pending downstream per-host work.
-  return getDefaultModelTierMap(host.host_kind)[tier];
+  return { model: getDefaultModelTierMap(host.host_kind)[tier] };
 }
 
 // ── Ranking ───────────────────────────────────────────────────────────────────
@@ -533,6 +569,7 @@ export function route(
       hostKind: leastBad.host_kind,
       tier: lane.tier,
       model: resolveModel(lane.tier, leastBad, opts.settingsOverride),
+      modelParams: resolveModelParams(lane.tier, leastBad, opts.settingsOverride),
       fallbackChain: [],
       affinityScore: rankScore(leastBad, lane),
       degraded: true,
@@ -569,6 +606,7 @@ export function route(
     hostKind: h.host_kind,
     tier: lane.tier, // SAME tier across the whole chain — CR-3 no silent downgrade
     model: resolveModel(lane.tier, h, opts.settingsOverride),
+    modelParams: resolveModelParams(lane.tier, h, opts.settingsOverride),
   });
 
   const primaryHost = ranked[0];
@@ -596,6 +634,7 @@ export function route(
     hostKind: primary.hostKind,
     tier: primary.tier,
     model: primary.model,
+    modelParams: primary.modelParams,
     fallbackChain,
     affinityScore: rankScore(primaryHost, lane),
     degraded: false,

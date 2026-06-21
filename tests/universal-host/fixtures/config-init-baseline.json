@@ -21,19 +21,37 @@
     "enabled": true,
     "tiers": {
       "cheap": {
-        "claude": "haiku",
-        "codex": null,
-        "gemini": null
+        "claude-code-cli": "haiku",
+        "codex-cli": null,
+        "pi-cli": null,
+        "antigravity-cli": null,
+        "agents-file": null,
+        "claude-code-app": null,
+        "claude-code-web": null,
+        "codex-app": null,
+        "claude-ai-connector": null
       },
       "mid": {
-        "claude": "sonnet",
-        "codex": null,
-        "gemini": null
+        "claude-code-cli": "sonnet",
+        "codex-cli": null,
+        "pi-cli": null,
+        "antigravity-cli": null,
+        "agents-file": null,
+        "claude-code-app": null,
+        "claude-code-web": null,
+        "codex-app": null,
+        "claude-ai-connector": null
       },
       "powerful": {
-        "claude": "opus",
-        "codex": null,
-        "gemini": null
+        "claude-code-cli": "opus",
+        "codex-cli": null,
+        "pi-cli": null,
+        "antigravity-cli": null,
+        "agents-file": null,
+        "claude-code-app": null,
+        "claude-code-web": null,
+        "codex-app": null,
+        "claude-ai-connector": null
       }
     },
     "scoreWeights": {
@@ -65,7 +83,8 @@
       "leaf": "5m"
     },
     "importanceGate": 3,
-    "compositeRecall": false,
+    "compositeRecall": true,
+    "importanceAtIngest": true,
     "ingestSimilarityGate": 0.8,
     "shortOutputThreshold": {},
     "knowledge": {
@@ -149,8 +168,8 @@
     "rigor": "quick | standard | deep — profile knob; expands loops/caps/review depth",
     "auto_approve": "[] | [spec,plan,build,qa] | [all] — opt-in autonomy; destructive/network/spend STILL ask. qa (G-14/SC-9): auto-proceed ONLY on a computed ReleaseGate PASS — a BLOCK-override and the always-ask hard set still prompt. No ops token (rails stay interactive by design).",
     "review": "local | cross | off — cross engages the Claude<->Codex adversarial review broker",
-    "host": "claude | codex | auto — co-equal host adapter selection",
-    "roles": "per-run role pins {host,advisory,adversarial}; null = resolve via the role model (capability-matrix), or pin a registry host_id (claude|codex|.agents|pi|antigravity). Top-level `host` stays the dispatch-host selector; the 5 registry ids live only under roles.*/host_profiles.*.",
+    "host": "canonical host id | legacy alias | auto — co-equal host adapter selection",
+    "roles": "per-run role pins {host,advisory,adversarial}; null = resolve via the role model (capability-matrix), or pin a canonical registry host_id. Legacy aliases normalize to canonical ids. Top-level `host` stays the dispatch-host selector; the v2 registry ids also key roles.*/host_profiles.*.",
     "host_profiles": "per-host config-render overrides keyed by host_id; {} = none (defaults render from the host-registry capability rows). CLOSED entry shape: { models?: {cheap?,mid?,powerful?}, enabled?: bool }.",
     "initiative_default": "null | <initiative-id> — attach runs to a durable initiative",
     "index": "auto | off — optional SQLite read-through cache (auto = lazy-build past measured slowness)",
@@ -174,7 +193,7 @@
     "defaults.quality.budget.total_minutes": "int > 0 — whole-phase wall-clock cap",
     "defaults.reporting": "standard | quiet | verbose — default task/progress reporting",
     "models.enabled": "bool (default true) — master toggle for cost-tiering. false = all lanes run at mid (current v2 behavior).",
-    "models.tiers": "{cheap|mid|powerful: {claude,codex,gemini}} — host-agnostic tier→model map (ADR §1). Each host value is string | {model, effort?, verbosity?} | null (G-11/SC-6). Object form pins a model PLUS the host's effort/verbosity axes, e.g. powerful: {claude: {model: \"opus\", effort: \"high\"}}. Closed sub-keys: only model/effort/verbosity are accepted inside the object form (validate rejects others). null host slot = no model for that tier on that host (fall through to host mapping). Defaults: cheap=haiku, mid=sonnet, powerful=opus (plain strings). codex/gemini are null (no third host yet). Consumers unpack the union ONLY via resolveTierModel() (read-guild-config.ts).",
+    "models.tiers": "{cheap|mid|powerful: {<canonical-host-id>: value}} — host-agnostic tier→model map. Each host value is string | {model, effort?, reasoning?, thinking?, verbosity?} | null. Object form pins a model PLUS host-defined effort/reasoning/thinking/verbosity axes, e.g. powerful: {\"claude-code-cli\": {model: \"opus\", effort: \"high\", reasoning: \"xhigh\"}}. Closed sub-keys: only model/effort/reasoning/thinking/verbosity are accepted inside the object form. null host slot = no model for that tier on that host (fall through to host mapping). Defaults: cheap=haiku, mid=sonnet, powerful=opus (plain strings). Legacy host aliases normalize to canonical ids; non-Claude host slots default to null until configured. Consumers unpack the union ONLY via resolveTierModel() (read-guild-config.ts).",
     "models.scoreWeights": "object (signal→int) — auto-score rubric weights (ADR §2). Signals: workType, blastRadius, dependsOn, security, priorEscalation. Ship fixed; tunable per-repo.",
     "models.thresholds": "{mid:int, powerful:int} — score-band cutoffs (ADR §2). Default {mid:1, powerful:3}. score<mid→cheap; mid≤score<powerful→mid; score≥powerful→powerful.",
     "models.advisorRounds": "int > 0 (default 2) — max advisor consults per lane before recording inconclusive (ADR §3).",
@@ -185,7 +204,8 @@
     "models.cacheTTL.coordinator": "\"1h\" | \"5m\" | \"off\" (default \"1h\") — coordinator prompt-cache TTL hint (ADR §9).",
     "models.cacheTTL.leaf": "\"1h\" | \"5m\" | \"off\" (default \"5m\") — leaf-agent prompt-cache TTL hint (ADR §9).",
     "models.importanceGate": "int 1–5 (default 3) — min wiki importance level for routine recall (ADR §6).",
-    "models.compositeRecall": "bool (default false) — composite recall scoring (docs/v2/05 §Recall scoring). false = shipped BM25-only ranking. true = wiki recall ranks by relevance × recency × importance and filters pages scoring below models.importanceGate.",
+    "models.compositeRecall": "bool (default true) — composite recall scoring (docs/v2/05 §Recall scoring). true = wiki recall ranks by relevance × recency × importance and filters pages scoring below models.importanceGate. Because this requires raw BM25 scores, it bypasses the SQLite FTS read-through cache and uses file-BM25 for bundle recall. false = legacy BM25-only ranking with the SQLite cache eligible above defaults.index.wiki_file_threshold.",
+    "models.importanceAtIngest": "bool (default true) — write-time importance-at-ingest scorer (docs/v2/05 §Importance-at-ingest). true = the ingest/learn path stamps each wiki page with a 1–5 recall_importance: score so recall reads a stable stored weight. false = recall derives the weight from the page category at query time.",
     "models.ingestSimilarityGate": "float 0–1 (default 0.80) — BM25 top-1 similarity threshold for the wiki ingest anomaly gate (D-INGEST-GATE). If a candidate page scores ≥ this against existing pages, guild:wiki-ingest pauses: supersede / skip / proceed — never silently overwrites.",
     "models.shortOutputThreshold": "object (default {}) — O-3 short-output advisor trigger buckets (D-OBS-3). Shape: { [task_type]: { [tier]: number } } where numbers are output-token floors. Empty map ⇒ O-3 trigger is silent for all (task_type, tier) buckets. Values are proposed by benchmark/src/calibrate-o3-cli.ts after ≥30 samples per bucket; operator reviews and lands them here — nothing auto-writes this key.",
     "security.bypass_permissions_policy": "\"deny\" | \"audit\" | \"allow\" (default \"audit\") — bypassPermissions governance during Guild-managed runs (D-BYPASS). deny: hard-block + security event (forced under auto_approve / autonomous_after_plan_approval). audit: surfaces always-ask channel + security event (default for interactive mode). allow: opt-in for interactive mode only. Guild cannot govern bypass outside its own run lifecycle.",

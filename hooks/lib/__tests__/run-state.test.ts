@@ -142,6 +142,40 @@ describe("run-state.ts", () => {
       expect(lane.receipt_ref).toBe("handoffs/backend-backend-001.md");
     });
 
+    it("persists R5 host modelParams in the launcher routing block", () => {
+      const state = upsertLane(runDir, { runId: "run-abc", planSlug: "auth" }, "backend-001", {
+        status: "in_progress",
+        host: {
+          selected: "claude-code-cli",
+          degraded: false,
+          independence: "strong",
+          tier: "powerful",
+          model: "opus-4.8",
+          modelParams: {
+            model: "opus-4.8",
+            effort: "low",
+            reasoning: "xhigh",
+            thinking: "enabled",
+            verbosity: "low",
+          },
+        },
+      });
+      expect(state.lanes["backend-001"].host).toEqual({
+        selected: "claude-code-cli",
+        degraded: false,
+        independence: "strong",
+        tier: "powerful",
+        model: "opus-4.8",
+        modelParams: {
+          model: "opus-4.8",
+          effort: "low",
+          reasoning: "xhigh",
+          thinking: "enabled",
+          verbosity: "low",
+        },
+      });
+    });
+
     it("preserves launcher-seeded top-level identity across later writes", () => {
       // First write (launcher) sets the slug/program/wave.
       upsertLane(

@@ -440,20 +440,25 @@ export interface PreflightFailure {
 
 /**
  * Probe every distinct pane host BEFORE any pane spawns. The orchestrator pane
- * is always the claude host (CH-4); each specialist uses its `host_kind` (absent
- * ⇒ claude). Returns ALL failures so the caller can name every blocker, but the
- * contract is fail-fast: if `ok` is false, the launcher MUST open zero panes.
+ * is the starting host (default claude for backward compatibility); each
+ * specialist uses its `host_kind` (absent ⇒ orchestrator host). Returns ALL
+ * failures so the caller can name every blocker, but the contract is fail-fast:
+ * if `ok` is false, the launcher MUST open zero panes.
  */
 export function preflightTeam(
   specialists: Array<{ name: string; host_kind?: HostKind }>,
-  resolver: AdapterResolver
+  resolver: AdapterResolver,
+  orchestratorHostKind: HostKind = "claude",
 ): { ok: boolean; failures: PreflightFailure[] } {
   const panes: Array<{ name: string; hostKind: HostKind }> = [
-    { name: "orchestrator", hostKind: "claude" },
-    ...specialists.map((s) => ({ name: s.name, hostKind: s.host_kind ?? "claude" })),
+    { name: "orchestrator", hostKind: orchestratorHostKind },
+    ...specialists.map((s) => ({ name: s.name, hostKind: s.host_kind ?? orchestratorHostKind })),
   ];
   const failures: PreflightFailure[] = [];
+  const probed = new Set<HostKind>();
   for (const pane of panes) {
+    if (probed.has(pane.hostKind)) continue;
+    probed.add(pane.hostKind);
     const r = resolver(pane.hostKind).preflight();
     if (!r.ok) {
       failures.push({ specialist: pane.name, hostKind: pane.hostKind, message: r.message });

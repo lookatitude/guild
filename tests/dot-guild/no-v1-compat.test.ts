@@ -81,6 +81,15 @@ function walk(
     if (entry.isDirectory()) {
       if (entry.name === "node_modules") continue;
       if (entry.name === "dist" && !opts.includeDist) continue;
+      // SCAN-SCOPE: `.guild/` is project-local RUNTIME state (run traces, payloads,
+      // context bundles, reflections) — or runtime-shaped fixture data — never shipped
+      // plugin source. Skip every `.guild/` subtree wherever it nests (e.g. the
+      // gitignored `scripts/.guild/runs/**/logs/payloads/*.json` run-trace payloads that
+      // merely CAPTURED test-file text containing `agent_team`). This generalizes the
+      // pre-existing top-level `.guild` allowlist (D14) to the nested case; tracked source
+      // (scripts/*.ts, hooks/**, commands/**, skills/**, …) stays fully scanned, so a real
+      // v1 marker in tracked source still fails (anti-vacuity preserved).
+      if (entry.name === ".guild") continue;
       results.push(...walk(full, exts, opts));
     } else if (exts.some((e) => full.endsWith(e))) {
       results.push(full);

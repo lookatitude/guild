@@ -49,18 +49,31 @@ import {
 } from "../../scripts/lib/advisory-record";
 
 describe("P1 SC-9 — L0 contract surfaces BEHAVE (not just exist) after L7–L11 edits", () => {
-  it("host-registry: validator accepts a real row, rejects an empty object; 5 ids", () => {
-    expect(validateHostRegistryEntry(HOST_REGISTRY_ROWS.claude).valid).toBe(true);
+  it("host-registry: validator accepts a real row, rejects an empty object; 9 canonical ids", () => {
+    // Host-adapter migration (R0–R13): the registry roster is the 9 canonical ids
+    // (legacy claude/codex/.agents/pi/antigravity renamed + 4 app/web/connector surfaces).
+    expect(validateHostRegistryEntry(HOST_REGISTRY_ROWS["claude-code-cli"]).valid).toBe(true);
     expect(validateHostRegistryEntry({}).valid).toBe(false); // would pass if validator no-op'd
-    expect([...HOST_IDS]).toEqual(["claude", "codex", ".agents", "pi", "antigravity"]);
+    expect([...HOST_IDS]).toEqual([
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+    ]);
   });
 
   it("role-model: default Claude+Codex resolves adversarial=codex(strong) and self-validates", () => {
     const roles = resolveRoles({
-      available: [HOST_REGISTRY_ROWS.claude, HOST_REGISTRY_ROWS.codex],
+      available: [HOST_REGISTRY_ROWS["claude-code-cli"], HOST_REGISTRY_ROWS["codex-cli"]],
     });
-    expect(roles.adversarial.substrate).toBe("codex");
-    expect(roles.host.substrate).toBe("claude");
+    // substrate is the resolved registry host_id — canonical ids post host-adapter migration.
+    expect(roles.adversarial.substrate).toBe("codex-cli");
+    expect(roles.host.substrate).toBe("claude-code-cli");
     expect(validateRoleResolutionSet(roles).valid).toBe(true);
   });
 
@@ -85,7 +98,8 @@ describe("P1 SC-9 — L0 contract surfaces BEHAVE (not just exist) after L7–L1
   });
 
   it("adapter-ladder: resolveRung returns the table rung for a known host, degrades an unknown one", () => {
-    expect(resolveRung("interaction", "claude").rung).toBe("native");
+    // The ladder table is keyed by canonical host ids post host-adapter migration.
+    expect(resolveRung("interaction", "claude-code-cli").rung).toBe("native");
     const unknown = resolveRung("interaction", "gemini");
     expect(unknown.rung).toBe("degraded");
     expect(unknown.degraded).toBe(true);
@@ -112,9 +126,9 @@ describe("P1 SC-9 — L0 contract surfaces BEHAVE (not just exist) after L7–L1
     const noSub = makeAdvisoryRecord(base);
     expect("substrate" in noSub).toBe(false); // absent ⇒ omitted (byte-identical to pre-P1)
     expect(validateAdvisoryRecord(noSub).valid).toBe(true);
-    expect(DEFAULT_ADVISORY_SUBSTRATE).toBe("claude");
+    expect(DEFAULT_ADVISORY_SUBSTRATE).toBe("claude-code-cli"); // canonical id post host-adapter migration
     const bad = makeAdvisoryRecord(base) as unknown as Record<string, unknown>;
-    bad.substrate = "gemini";
+    bad.substrate = "gemini"; // still not a known substrate ⇒ rejected (non-vacuity preserved)
     expect(validateAdvisoryRecord(bad).valid).toBe(false); // would pass if validator no-op'd
   });
 });

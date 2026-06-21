@@ -7,6 +7,9 @@
     "hostKind": "claude",
     "independence": "strong",
     "model": "sonnet",
+    "modelParams": {
+      "model": "sonnet"
+    },
     "notes": [
       "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
     ],
@@ -29,6 +32,9 @@
         "host": "claude",
         "hostKind": "claude",
         "model": "opus",
+        "modelParams": {
+          "model": "opus"
+        },
         "tier": "powerful"
       }
     ],
@@ -36,6 +42,9 @@
     "hostKind": "codex",
     "independence": "strong",
     "model": "o3",
+    "modelParams": {
+      "model": "o3"
+    },
     "notes": [
       "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
     ],
@@ -52,6 +61,9 @@
     "hostKind": "claude",
     "independence": "strong",
     "model": "haiku",
+    "modelParams": {
+      "model": "haiku"
+    },
     "notes": [
       "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
     ],
@@ -74,6 +86,9 @@
     "hostKind": "claude",
     "independence": "strong",
     "model": "sonnet",
+    "modelParams": {
+      "model": "sonnet"
+    },
     "notes": [
       "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
     ],

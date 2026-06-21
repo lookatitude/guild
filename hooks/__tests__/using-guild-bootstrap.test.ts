@@ -83,6 +83,13 @@ describe("using-guild-bootstrap.ts (L5b SessionStart injection)", () => {
     expect(parsed.hookSpecificOutput.additionalContext).toContain("# using-guild");
   });
 
+  it("keeps the committed golden generated from the current using-guild source", () => {
+    const golden = JSON.parse(fs.readFileSync(GOLDEN, "utf8"));
+    const expected = gatewayContext(fs.readFileSync(SKILL_SRC, "utf8"));
+    expect(golden.hookSpecificOutput.additionalContext).toBe(expected);
+    expect(golden.hookSpecificOutput.additionalContext).toContain("Product-loop intake");
+  });
+
   it("is a silent no-op (no stdout, exit 0) when the skill source is absent everywhere", () => {
     // Run the SELF-CONTAINED bundled dist from an isolated temp dir whose
     // ancestors have NO using-guild skill, and point CLAUDE_PLUGIN_ROOT at an

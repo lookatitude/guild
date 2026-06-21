@@ -2998,6 +2998,533 @@ var KNOWLEDGE_CONFIG_DEFAULTS = {
   // files per LLM batch
 };
 
+// ../scripts/lib/host-capabilities-schema.ts
+var CLAUDE_CAPABILITIES = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "claude",
+  family: "claude",
+  surface_kind: "cli",
+  package: { installable: true, installability: "verified", manifest_format: "claude-plugin" },
+  bootstrap: {
+    context_injection: "hookSpecificOutput.additionalContext",
+    skill_autoload: true,
+    prompt_transform: false,
+    wrapper_injection: true
+  },
+  commands: { slash_commands: true, command_files: "markdown" },
+  skills: { native_skills: true, skill_dir: ".claude/skills" },
+  agents: { native_agents: true, agent_format: "claude-md" },
+  hooks: {
+    // All ten events are bound in the live hooks/hooks.json (verified).
+    session_start: true,
+    user_prompt_submit: true,
+    pre_tool_use: true,
+    post_tool_use: true,
+    stop: true,
+    pre_compact: true,
+    subagent_stop: true,
+    task_created: true,
+    task_completed: true,
+    teammate_idle: true
+  },
+  permissions: {
+    deny: true,
+    ask: true,
+    ask_mode: "pre_tool_use",
+    accept_edits_without_prompt: true,
+    auto_approve_tools: true,
+    bypass_prompts: true,
+    bypass_sandbox: false,
+    permission_prompt_layer: true,
+    launch_modes: {
+      read_only: ["--tools", "Read,Grep,Glob"],
+      ask: ["--permission-mode", "default"],
+      accept_edits: ["--permission-mode", "acceptEdits"],
+      auto: ["--permission-mode", "auto"],
+      bypass_all: ["--permission-mode", "bypassPermissions"]
+    }
+  },
+  dispatch: {
+    tmux_processes: true,
+    plain_processes: true,
+    independent_agents: true,
+    subagents: true,
+    inline: true
+  },
+  interaction: {
+    native_questions: true,
+    terminal_prompt: true,
+    file_bus_questions: true
+  },
+  sessions: { continue: true, resume_by_id: true, fork: true },
+  structured_output: {
+    native_json: true,
+    schema_validation: true,
+    repair_prompt: true
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "bridge",
+    web: "native",
+    mcp: "native"
+  },
+  mcp: { stdio: true, http: false },
+  models: {
+    cheap: { model: "haiku" },
+    mid: { model: "sonnet" },
+    powerful: { model: "opus" }
+  }
+};
+var CODEX_CAPABILITIES = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "codex",
+  family: "codex",
+  surface_kind: "cli",
+  // installable:false is the honest MACHINE state — the Codex renderer exists but
+  // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
+  // as installable until proven. installability:"target" records that the renderer
+  // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
+  package: { installable: false, installability: "target", manifest_format: "codex-plugin" },
+  bootstrap: {
+    // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
+    // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
+    context_injection: "instruction_file",
+    skill_autoload: false,
+    // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
+    prompt_transform: false,
+    // INFERRED
+    wrapper_injection: true
+    // The generated guild-run wrapper injects bootstrap.
+  },
+  commands: {
+    // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
+    slash_commands: false,
+    command_files: "none"
+  },
+  skills: { native_skills: false, skill_dir: null },
+  // Verified (per-host-packaging).
+  agents: { native_agents: false, agent_format: null },
+  // Verified (per-host-packaging flags agents unsupported).
+  hooks: {
+    // Verified-by-design: Codex hook taxonomy differs from Claude; no native
+    // Claude-equivalent hooks. All degrade through the HookEmitter (ADR Surface 3).
+    session_start: false,
+    user_prompt_submit: false,
+    pre_tool_use: false,
+    post_tool_use: false,
+    stop: false,
+    pre_compact: false,
+    subagent_stop: false,
+    task_created: false,
+    task_completed: false,
+    teammate_idle: false
+  },
+  permissions: {
+    // INFERRED (Codex CLI approval model). Confirm on-box at L3.
+    deny: false,
+    ask: true,
+    // Codex prompts for approval by default.
+    ask_mode: null,
+    // No pre_tool_use layer; approval is interactive.
+    accept_edits_without_prompt: false,
+    // INFERRED
+    auto_approve_tools: false,
+    // INFERRED
+    bypass_prompts: true,
+    // Codex YOLO / --dangerously-bypass exists (AC19).
+    bypass_sandbox: true,
+    // INFERRED — YOLO bypasses the sandbox.
+    permission_prompt_layer: false,
+    // INFERRED
+    launch_modes: {
+      // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
+      // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
+      // than guessed, so their absence reads as "degrade/record", not "supported".
+      bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
+      // INFERRED flag name — verify on-box (AC19).
+    }
+  },
+  dispatch: {
+    tmux_processes: true,
+    // Codex is a CLI process — tmux panes work.
+    plain_processes: true,
+    independent_agents: false,
+    // INFERRED — no native agent-team primitive.
+    subagents: false,
+    // INFERRED
+    inline: true
+  },
+  interaction: {
+    native_questions: false,
+    // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
+    terminal_prompt: true,
+    file_bus_questions: true
+    // Guild file-bus approval works on any FS host.
+  },
+  sessions: {
+    continue: true,
+    // INFERRED — Codex has session continuation.
+    resume_by_id: true,
+    // INFERRED
+    fork: false
+    // INFERRED
+  },
+  structured_output: {
+    native_json: false,
+    // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
+    schema_validation: false,
+    // Guild-side validation (validateHandoffV2) instead.
+    repair_prompt: true
+    // Bounded repair prompt is the fallback (ADR §Result contracts).
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "none",
+    // INFERRED — no native browser; record fallback (AC29).
+    web: "emulated",
+    // INFERRED
+    mcp: "native"
+    // Codex supports stdio MCP.
+  },
+  mcp: { stdio: true, http: false },
+  // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
+  models: {
+    // Codex model ids are host-specific and not pinned in this repo yet; null =
+    // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
+    cheap: { model: null },
+    mid: { model: null },
+    powerful: { model: null }
+  }
+};
+
+// ../scripts/lib/host-registry-schema.ts
+var HOST_IDS = [
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector"
+];
+var HOST_FAMILIES = ["claude", "codex", "agents", "pi", "antigravity"];
+var CLAUDE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-code-cli",
+  family: "claude",
+  surface_kind: "cli",
+  detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
+  installability: "native",
+  result_adapter: false,
+  // Claude is the reference author host, not a cross reviewer for itself.
+  dispatch_selectable: true,
+  capabilities: CLAUDE_CAPABILITIES,
+  provenance: "verified"
+};
+var CODEX_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "codex-cli",
+  family: "codex",
+  surface_kind: "cli",
+  detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
+  // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
+  installability: "target",
+  result_adapter: true,
+  // The only selectable cross reviewer today (provider-detect codex-plugin/codex-cli).
+  dispatch_selectable: true,
+  capabilities: CODEX_CAPABILITIES,
+  provenance: "verified"
+  // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
+};
+function inferredCaps(host_kind, family, surface_kind = "cli") {
+  return {
+    schema_version: "guild.host_capabilities.v1",
+    host_kind,
+    family,
+    // Must equal the registry entry's top-level surface_kind (cross-field invariant,
+    // enforced by validateHostRegistryEntry). `.agents` is a file surface, not cli.
+    surface_kind,
+    package: { installable: false, installability: "target", manifest_format: `${host_kind}-package` },
+    bootstrap: {
+      context_injection: "instruction_file",
+      skill_autoload: false,
+      prompt_transform: false,
+      wrapper_injection: true
+    },
+    commands: { slash_commands: false, command_files: "none" },
+    skills: { native_skills: false, skill_dir: null },
+    agents: { native_agents: false, agent_format: null },
+    hooks: {
+      session_start: false,
+      user_prompt_submit: false,
+      pre_tool_use: false,
+      post_tool_use: false,
+      stop: false,
+      pre_compact: false,
+      subagent_stop: false,
+      task_created: false,
+      task_completed: false,
+      teammate_idle: false
+    },
+    permissions: {
+      deny: false,
+      ask: true,
+      ask_mode: null,
+      accept_edits_without_prompt: false,
+      auto_approve_tools: false,
+      bypass_prompts: false,
+      bypass_sandbox: false,
+      permission_prompt_layer: false,
+      launch_modes: {}
+    },
+    dispatch: {
+      tmux_processes: true,
+      plain_processes: true,
+      independent_agents: false,
+      subagents: false,
+      inline: true
+    },
+    interaction: { native_questions: false, terminal_prompt: true, file_bus_questions: true },
+    sessions: { continue: false, resume_by_id: false, fork: false },
+    structured_output: { native_json: false, schema_validation: false, repair_prompt: true },
+    artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+    tools: {
+      read: "native",
+      search: "native",
+      shell: "native",
+      edit: "native",
+      write: "native",
+      browser: "none",
+      web: "emulated",
+      mcp: "none"
+    },
+    mcp: { stdio: false, http: false },
+    models: { cheap: { model: null }, mid: { model: null }, powerful: { model: null } }
+  };
+}
+var AGENTS_FILE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "agents-file",
+  family: "agents",
+  // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
+  surface_kind: "file",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "target",
+  result_adapter: false,
+  // INFERRED — no cross-review adapter; verify at live-host availability.
+  dispatch_selectable: true,
+  // INFERRED — a host consuming AGENTS.md can run a lane.
+  capabilities: inferredCaps("agents-file", "agents", "file"),
+  // file surface — matches top-level surface_kind.
+  provenance: "inferred"
+};
+var PI_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "pi-cli",
+  family: "pi",
+  surface_kind: "cli",
+  detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
+  // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
+  installability: "target",
+  // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
+  result_adapter: false,
+  // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
+  dispatch_selectable: true,
+  // VERIFIED: pi is a CLI process a lane can run on.
+  capabilities: {
+    ...inferredCaps("pi-cli", "pi"),
+    // VERIFIED on-host (pi --help, 0.79.3):
+    sessions: { continue: true, resume_by_id: true, fork: true },
+    // --continue/-c, --resume/-r + --session-id, --fork
+    structured_output: { native_json: true, schema_validation: false, repair_prompt: true }
+    // --mode json
+  },
+  provenance: "verified"
+  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+};
+var ANTIGRAVITY_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "antigravity-cli",
+  family: "antigravity",
+  surface_kind: "cli",
+  // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
+  detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
+  installability: "target",
+  // VERIFIED-as-target: CLI present; Guild-package install unproven.
+  result_adapter: false,
+  // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
+  dispatch_selectable: true,
+  // VERIFIED: agy is a CLI process a lane can run on.
+  capabilities: {
+    ...inferredCaps("antigravity-cli", "antigravity"),
+    // VERIFIED on-host (agy --help, 1.0.8):
+    sessions: { continue: true, resume_by_id: true, fork: false },
+    // --continue/-c, --conversation <id>; no fork flag
+    permissions: {
+      ...inferredCaps("antigravity-cli", "antigravity").permissions,
+      bypass_prompts: true,
+      // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
+      launch_modes: { bypass_all: ["--dangerously-skip-permissions"] }
+    }
+  },
+  provenance: "verified"
+  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+};
+var CLAUDE_APP_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-code-app",
+  family: "claude",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-code-app", "claude", "app"),
+  provenance: "inferred"
+};
+var CLAUDE_WEB_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-code-web",
+  family: "claude",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-code-web", "claude", "app"),
+  provenance: "inferred"
+};
+var CODEX_APP_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "codex-app",
+  family: "codex",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("codex-app", "codex", "app"),
+  provenance: "inferred"
+};
+var CLAUDE_AI_CONNECTOR_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-ai-connector",
+  family: "claude",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
+  provenance: "inferred"
+};
+var HOST_REGISTRY_ROWS = {
+  "claude-code-cli": CLAUDE_ENTRY,
+  "codex-cli": CODEX_ENTRY,
+  "pi-cli": PI_ENTRY,
+  "antigravity-cli": ANTIGRAVITY_ENTRY,
+  "agents-file": AGENTS_FILE_ENTRY,
+  "claude-code-app": CLAUDE_APP_ENTRY,
+  "claude-code-web": CLAUDE_WEB_ENTRY,
+  "codex-app": CODEX_APP_ENTRY,
+  "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY
+};
+var HOST_ID_SET = new Set(HOST_IDS);
+var FAMILY_SET = new Set(HOST_FAMILIES);
+
+// ../scripts/lib/host-id-namespace.ts
+var HOST_ID_SET2 = new Set(HOST_IDS);
+var LEGACY_HOST_ALIASES = {
+  claude: "claude-code-cli",
+  "claude-code-desktop": "claude-code-app",
+  codex: "codex-cli",
+  "codex-plugin": "codex-cli",
+  agents: "agents-file",
+  ".agents": "agents-file",
+  pi: "pi-cli",
+  antigravity: "antigravity-cli",
+  "antigravity-2": "antigravity-cli"
+};
+function normalizeHostId(value) {
+  const s = value.trim();
+  if (HOST_ID_SET2.has(s)) return s;
+  return LEGACY_HOST_ALIASES[s] ?? null;
+}
+
+// ../scripts/lib/host-profiles-validate.ts
+var KNOWN_HOST_IDS = new Set(HOST_IDS);
+var VALID_HOST_PROFILE_ENTRY_KEYS = /* @__PURE__ */ new Set(["models", "enabled"]);
+var VALID_HOST_PROFILE_MODEL_KEYS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
+function isPlainObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function validateHostProfiles(hp) {
+  const rejects = [];
+  for (const [hostId, entry] of Object.entries(hp)) {
+    const canonicalHostId = normalizeHostId(hostId);
+    if (!canonicalHostId) {
+      rejects.push(
+        `unknown host_profiles host_id "${hostId}" (closed key set \u2014 valid: ${[...KNOWN_HOST_IDS].join("|")})`
+      );
+      continue;
+    }
+    if (!isPlainObject(entry)) {
+      rejects.push(`host_profiles["${hostId}"] must be an object { models?, enabled? }`);
+      continue;
+    }
+    const e = entry;
+    for (const ek of Object.keys(e)) {
+      if (!VALID_HOST_PROFILE_ENTRY_KEYS.has(ek)) {
+        rejects.push(
+          `unknown host_profiles["${hostId}"] key "${ek}" (closed entry shape \u2014 only models, enabled)`
+        );
+      }
+    }
+    if (e["enabled"] !== void 0 && typeof e["enabled"] !== "boolean") {
+      rejects.push(`host_profiles["${hostId}"].enabled must be a boolean (got ${JSON.stringify(e["enabled"])})`);
+    }
+    if (e["models"] !== void 0) {
+      if (!isPlainObject(e["models"])) {
+        rejects.push(`host_profiles["${hostId}"].models must be an object { cheap?, mid?, powerful? }`);
+      } else {
+        const m = e["models"];
+        for (const mk of Object.keys(m)) {
+          if (!VALID_HOST_PROFILE_MODEL_KEYS.has(mk)) {
+            rejects.push(
+              `unknown host_profiles["${hostId}"].models key "${mk}" (closed key set \u2014 only cheap, mid, powerful)`
+            );
+          } else if (typeof m[mk] !== "string" || !m[mk].trim()) {
+            rejects.push(`host_profiles["${hostId}"].models.${mk} must be a non-empty string (got ${JSON.stringify(m[mk])})`);
+          }
+        }
+      }
+    }
+  }
+  return rejects;
+}
+function filterHostProfiles(raw) {
+  const out = {};
+  for (const [hostId, entry] of Object.entries(raw)) {
+    if (validateHostProfiles({ [hostId]: entry }).length === 0) {
+      const canonicalHostId = normalizeHostId(hostId);
+      if (canonicalHostId) out[canonicalHostId] = entry;
+    }
+  }
+  return out;
+}
+
 // ../scripts/lib/settings-resolver.ts
 var yaml = require_js_yaml2();
 var DEFAULT_ESCALATION_MARKERS = [
@@ -3014,6 +3541,8 @@ var DEFAULTS = {
   auto_approve: [],
   review: "local",
   host: "auto",
+  roles: { host: null, advisory: null, adversarial: null },
+  host_profiles: {},
   initiative_default: null,
   index: "auto",
   record_status_runs: true,
@@ -3023,9 +3552,9 @@ var DEFAULTS = {
   models: {
     enabled: true,
     tiers: {
-      cheap: { claude: "haiku", codex: null, gemini: null },
-      mid: { claude: "sonnet", codex: null, gemini: null },
-      powerful: { claude: "opus", codex: null, gemini: null }
+      cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
+      mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
+      powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null }
     },
     scoreWeights: {
       workType: 0,
@@ -3042,6 +3571,8 @@ var DEFAULTS = {
     structuredOutputRequired: true,
     cacheTTL: { coordinator: "1h", leaf: "5m" },
     importanceGate: 3,
+    compositeRecall: true,
+    importanceAtIngest: true,
     ingestSimilarityGate: 0.8,
     shortOutputThreshold: {},
     knowledge: { ...KNOWLEDGE_CONFIG_DEFAULTS }
@@ -3110,18 +3641,41 @@ var NON_INHERITABLE_KEYS = /* @__PURE__ */ new Set([
   // workspace.mode is root-detection-only
 ]);
 var PROTO_POISON_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
-var VALID_TIER_HOST_KEYS = /* @__PURE__ */ new Set(["claude", "codex", "gemini"]);
+var VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
+var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
+function sparseRoles(raw) {
+  const out = {};
+  for (const k of ["host", "advisory", "adversarial"]) {
+    const v = raw[k];
+    if (v === null) out[k] = null;
+    else if (typeof v === "string") {
+      const normalized = normalizeHostId(v);
+      if (normalized) out[k] = normalized;
+    }
+  }
+  return out;
+}
+function sparseHostProfiles(raw) {
+  return filterHostProfiles(raw);
+}
 function sparseTierHostMap(raw) {
   const out = {};
   for (const hk of Object.keys(raw)) {
-    if (VALID_TIER_HOST_KEYS.has(hk)) out[hk] = raw[hk];
+    const canonicalHostId = normalizeHostId(hk);
+    if (canonicalHostId) out[canonicalHostId] = raw[hk];
   }
   return out;
 }
 var VALID_LOOPS = /* @__PURE__ */ new Set(["none", "spec", "plan", "implementation", "all"]);
 var VALID_RIGOR = /* @__PURE__ */ new Set(["quick", "standard", "deep"]);
 var VALID_REVIEW = /* @__PURE__ */ new Set(["local", "cross", "off"]);
-var VALID_HOST = /* @__PURE__ */ new Set(["claude", "codex", "auto"]);
+var DISPATCH_HOST_IDS = new Set(
+  HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
+);
+function normalizeDispatchHostId(value) {
+  const normalized = normalizeHostId(value);
+  return normalized && DISPATCH_HOST_IDS.has(normalized) ? normalized : null;
+}
 var VALID_AGENT_MODE = /* @__PURE__ */ new Set(["team", "agent", "subagent", "auto"]);
 var VALID_CACHE_TTL = /* @__PURE__ */ new Set(["1h", "5m", "off"]);
 var DEFAULTS_ALLOWED_KEYS = /* @__PURE__ */ new Set([
@@ -3146,7 +3700,7 @@ var DEFAULTS_ALLOWED_KEYS = /* @__PURE__ */ new Set([
   "allowed_tools"
   // R-020
 ]);
-function isPlainObject(v) {
+function isPlainObject2(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function deepMerge(base, overlay) {
@@ -3155,7 +3709,7 @@ function deepMerge(base, overlay) {
     if (PROTO_POISON_KEYS.has(k)) continue;
     if (Array.isArray(v)) {
       result[k] = v;
-    } else if (isPlainObject(v) && isPlainObject(result[k])) {
+    } else if (isPlainObject2(v) && isPlainObject2(result[k])) {
       result[k] = deepMerge(
         result[k],
         v
@@ -3172,7 +3726,7 @@ function collectKeyPaths(obj, prefix = "") {
     if (PROTO_POISON_KEYS.has(k)) continue;
     const full = prefix ? `${prefix}.${k}` : k;
     paths.add(full);
-    if (isPlainObject(v)) {
+    if (isPlainObject2(v)) {
       for (const sub of collectKeyPaths(v, full)) {
         paths.add(sub);
       }
@@ -3248,8 +3802,15 @@ function parseSettingsFile(filePath) {
     out.auto_approve = parsed["auto_approve"];
   if (VALID_REVIEW.has(parsed["review"]))
     out.review = parsed["review"];
-  if (VALID_HOST.has(parsed["host"]))
-    out.host = parsed["host"];
+  if (parsed["host"] === "auto") out.host = "auto";
+  else if (typeof parsed["host"] === "string") {
+    const normalized = normalizeDispatchHostId(parsed["host"]);
+    if (normalized) out.host = normalized;
+  }
+  if (isPlainObject2(parsed["roles"]))
+    out.roles = sparseRoles(parsed["roles"]);
+  if (isPlainObject2(parsed["host_profiles"]))
+    out.host_profiles = sparseHostProfiles(parsed["host_profiles"]);
   if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
     out.initiative_default = parsed["initiative_default"];
   if (parsed["index"] === "auto" || parsed["index"] === "off")
@@ -3260,30 +3821,30 @@ function parseSettingsFile(filePath) {
     out.codex_skip_enforcement = parsed["codex_skip_enforcement"];
   if (VALID_AGENT_MODE.has(parsed["agent_mode"]))
     out.agent_mode = parsed["agent_mode"];
-  if (isPlainObject(parsed["workspace"])) {
+  if (isPlainObject2(parsed["workspace"])) {
     const ws = parsed["workspace"];
     const wsMode = ws["mode"];
     if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
       out.workspace = { mode: wsMode };
     }
   }
-  if (isPlainObject(parsed["models"])) {
+  if (isPlainObject2(parsed["models"])) {
     const rawModels = parsed["models"];
     const sparse = {};
     if (typeof rawModels["enabled"] === "boolean") sparse.enabled = rawModels["enabled"];
-    if (isPlainObject(rawModels["tiers"])) {
+    if (isPlainObject2(rawModels["tiers"])) {
       const rt = rawModels["tiers"];
       const sparseTiers = {};
       for (const tier of ["cheap", "mid", "powerful"]) {
-        if (isPlainObject(rt[tier])) {
+        if (isPlainObject2(rt[tier])) {
           sparseTiers[tier] = sparseTierHostMap(rt[tier]);
         }
       }
       sparse.tiers = sparseTiers;
     }
-    if (isPlainObject(rawModels["scoreWeights"]))
+    if (isPlainObject2(rawModels["scoreWeights"]))
       sparse.scoreWeights = rawModels["scoreWeights"];
-    if (isPlainObject(rawModels["thresholds"]))
+    if (isPlainObject2(rawModels["thresholds"]))
       sparse.thresholds = rawModels["thresholds"];
     if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1)
       sparse.advisorRounds = Math.floor(rawModels["advisorRounds"]);
@@ -3295,7 +3856,7 @@ function parseSettingsFile(filePath) {
       sparse.recallScoreThreshold = rawModels["recallScoreThreshold"];
     if (typeof rawModels["structuredOutputRequired"] === "boolean")
       sparse.structuredOutputRequired = rawModels["structuredOutputRequired"];
-    if (isPlainObject(rawModels["cacheTTL"])) {
+    if (isPlainObject2(rawModels["cacheTTL"])) {
       const rttl = rawModels["cacheTTL"];
       const newTTL = {};
       if (VALID_CACHE_TTL.has(rttl["coordinator"])) newTTL.coordinator = rttl["coordinator"];
@@ -3304,13 +3865,17 @@ function parseSettingsFile(filePath) {
     }
     if (typeof rawModels["importanceGate"] === "number" && rawModels["importanceGate"] >= 1 && rawModels["importanceGate"] <= 5)
       sparse.importanceGate = Math.floor(rawModels["importanceGate"]);
+    if (typeof rawModels["compositeRecall"] === "boolean")
+      sparse.compositeRecall = rawModels["compositeRecall"];
+    if (typeof rawModels["importanceAtIngest"] === "boolean")
+      sparse.importanceAtIngest = rawModels["importanceAtIngest"];
     if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
       sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
-    if (isPlainObject(rawModels["shortOutputThreshold"])) {
+    if (isPlainObject2(rawModels["shortOutputThreshold"])) {
       const sot = rawModels["shortOutputThreshold"];
       const sotMerged = {};
       for (const taskType of Object.keys(sot)) {
-        if (!isPlainObject(sot[taskType])) continue;
+        if (!isPlainObject2(sot[taskType])) continue;
         const innerRaw = sot[taskType];
         const innerMerged = {};
         for (const tier of Object.keys(innerRaw)) {
@@ -3320,7 +3885,7 @@ function parseSettingsFile(filePath) {
       }
       sparse.shortOutputThreshold = sotMerged;
     }
-    if (isPlainObject(rawModels["knowledge"])) {
+    if (isPlainObject2(rawModels["knowledge"])) {
       const rawK = rawModels["knowledge"];
       const sparseK = {};
       if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
@@ -3341,14 +3906,14 @@ function parseSettingsFile(filePath) {
     }
     out.models = sparse;
   }
-  if (isPlainObject(parsed["security"])) {
+  if (isPlainObject2(parsed["security"])) {
     const rawSec = parsed["security"];
     const sparseSec = {};
     const bpp = rawSec["bypass_permissions_policy"];
     if (bpp === "deny" || bpp === "audit" || bpp === "allow") sparseSec.bypass_permissions_policy = bpp;
     out.security = sparseSec;
   }
-  if (isPlainObject(parsed["secrets_policy"])) {
+  if (isPlainObject2(parsed["secrets_policy"])) {
     const rawSp = parsed["secrets_policy"];
     const sparseSp = {};
     if (Array.isArray(rawSp["env_allowlist"])) sparseSp.env_allowlist = rawSp["env_allowlist"];
@@ -3357,10 +3922,10 @@ function parseSettingsFile(filePath) {
     if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") sparseSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
     out.secrets_policy = sparseSp;
   }
-  if (isPlainObject(parsed["mcp"])) {
+  if (isPlainObject2(parsed["mcp"])) {
     const rawMcp = parsed["mcp"];
     const sparseMcp = {};
-    if (isPlainObject(rawMcp["tool_description_hashes"]))
+    if (isPlainObject2(rawMcp["tool_description_hashes"]))
       sparseMcp.tool_description_hashes = rawMcp["tool_description_hashes"];
     if (typeof rawMcp["stdio_available"] === "boolean") sparseMcp.stdio_available = rawMcp["stdio_available"];
     if (typeof rawMcp["http_available"] === "boolean") sparseMcp.http_available = rawMcp["http_available"];
@@ -3378,7 +3943,7 @@ function parseSettingsFile(filePath) {
     out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
   if (typeof parsed["codex_cap"] === "number")
     out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
-  if (isPlainObject(parsed["defaults"])) {
+  if (isPlainObject2(parsed["defaults"])) {
     const rawDefaults = parsed["defaults"];
     const sparseDefaults = {};
     for (const k of Object.keys(rawDefaults)) {
@@ -3408,8 +3973,15 @@ function parseSettingsFile_fromParsed(parsed) {
     out.auto_approve = parsed["auto_approve"];
   if (VALID_REVIEW.has(parsed["review"]))
     out.review = parsed["review"];
-  if (VALID_HOST.has(parsed["host"]))
-    out.host = parsed["host"];
+  if (parsed["host"] === "auto") out.host = "auto";
+  else if (typeof parsed["host"] === "string") {
+    const normalized = normalizeDispatchHostId(parsed["host"]);
+    if (normalized) out.host = normalized;
+  }
+  if (isPlainObject2(parsed["roles"]))
+    out.roles = sparseRoles(parsed["roles"]);
+  if (isPlainObject2(parsed["host_profiles"]))
+    out.host_profiles = sparseHostProfiles(parsed["host_profiles"]);
   if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
     out.initiative_default = parsed["initiative_default"];
   if (parsed["index"] === "auto" || parsed["index"] === "off")
@@ -3420,34 +3992,34 @@ function parseSettingsFile_fromParsed(parsed) {
     out.codex_skip_enforcement = parsed["codex_skip_enforcement"];
   if (VALID_AGENT_MODE.has(parsed["agent_mode"]))
     out.agent_mode = parsed["agent_mode"];
-  if (isPlainObject(parsed["workspace"])) {
+  if (isPlainObject2(parsed["workspace"])) {
     const ws = parsed["workspace"];
     const wsMode = ws["mode"];
     if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
       out.workspace = { mode: wsMode };
     }
   }
-  if (isPlainObject(parsed["models"])) {
+  if (isPlainObject2(parsed["models"])) {
     const rawModels = parsed["models"];
     const sparse = {};
     if (typeof rawModels["enabled"] === "boolean") sparse.enabled = rawModels["enabled"];
-    if (isPlainObject(rawModels["tiers"])) {
+    if (isPlainObject2(rawModels["tiers"])) {
       const rt = rawModels["tiers"];
       const sparseTiers = {};
       for (const tier of ["cheap", "mid", "powerful"]) {
-        if (isPlainObject(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier]);
+        if (isPlainObject2(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier]);
       }
       sparse.tiers = sparseTiers;
     }
-    if (isPlainObject(rawModels["scoreWeights"])) sparse.scoreWeights = rawModels["scoreWeights"];
-    if (isPlainObject(rawModels["thresholds"])) sparse.thresholds = rawModels["thresholds"];
+    if (isPlainObject2(rawModels["scoreWeights"])) sparse.scoreWeights = rawModels["scoreWeights"];
+    if (isPlainObject2(rawModels["thresholds"])) sparse.thresholds = rawModels["thresholds"];
     if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1)
       sparse.advisorRounds = Math.floor(rawModels["advisorRounds"]);
     if (Array.isArray(rawModels["escalationMarkers"])) sparse.escalationMarkers = rawModels["escalationMarkers"];
     if (typeof rawModels["recallBeforeRead"] === "boolean") sparse.recallBeforeRead = rawModels["recallBeforeRead"];
     if (typeof rawModels["recallScoreThreshold"] === "number") sparse.recallScoreThreshold = rawModels["recallScoreThreshold"];
     if (typeof rawModels["structuredOutputRequired"] === "boolean") sparse.structuredOutputRequired = rawModels["structuredOutputRequired"];
-    if (isPlainObject(rawModels["cacheTTL"])) {
+    if (isPlainObject2(rawModels["cacheTTL"])) {
       const rttl = rawModels["cacheTTL"];
       const newTTL = {};
       if (VALID_CACHE_TTL.has(rttl["coordinator"])) newTTL.coordinator = rttl["coordinator"];
@@ -3456,13 +4028,17 @@ function parseSettingsFile_fromParsed(parsed) {
     }
     if (typeof rawModels["importanceGate"] === "number" && rawModels["importanceGate"] >= 1 && rawModels["importanceGate"] <= 5)
       sparse.importanceGate = Math.floor(rawModels["importanceGate"]);
+    if (typeof rawModels["compositeRecall"] === "boolean")
+      sparse.compositeRecall = rawModels["compositeRecall"];
+    if (typeof rawModels["importanceAtIngest"] === "boolean")
+      sparse.importanceAtIngest = rawModels["importanceAtIngest"];
     if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
       sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
-    if (isPlainObject(rawModels["shortOutputThreshold"])) {
+    if (isPlainObject2(rawModels["shortOutputThreshold"])) {
       const sot = rawModels["shortOutputThreshold"];
       const sotMerged = {};
       for (const taskType of Object.keys(sot)) {
-        if (!isPlainObject(sot[taskType])) continue;
+        if (!isPlainObject2(sot[taskType])) continue;
         const innerRaw = sot[taskType];
         const innerMerged = {};
         for (const tier of Object.keys(innerRaw)) {
@@ -3472,7 +4048,7 @@ function parseSettingsFile_fromParsed(parsed) {
       }
       sparse.shortOutputThreshold = sotMerged;
     }
-    if (isPlainObject(rawModels["knowledge"])) {
+    if (isPlainObject2(rawModels["knowledge"])) {
       const rawK = rawModels["knowledge"];
       const sparseK = {};
       if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
@@ -3493,14 +4069,14 @@ function parseSettingsFile_fromParsed(parsed) {
     }
     out.models = sparse;
   }
-  if (isPlainObject(parsed["security"])) {
+  if (isPlainObject2(parsed["security"])) {
     const rawSec = parsed["security"];
     const sparseSec = {};
     const bpp = rawSec["bypass_permissions_policy"];
     if (bpp === "deny" || bpp === "audit" || bpp === "allow") sparseSec.bypass_permissions_policy = bpp;
     out.security = sparseSec;
   }
-  if (isPlainObject(parsed["secrets_policy"])) {
+  if (isPlainObject2(parsed["secrets_policy"])) {
     const rawSp = parsed["secrets_policy"];
     const sparseSp = {};
     if (Array.isArray(rawSp["env_allowlist"])) sparseSp.env_allowlist = rawSp["env_allowlist"];
@@ -3509,10 +4085,10 @@ function parseSettingsFile_fromParsed(parsed) {
     if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") sparseSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
     out.secrets_policy = sparseSp;
   }
-  if (isPlainObject(parsed["mcp"])) {
+  if (isPlainObject2(parsed["mcp"])) {
     const rawMcp = parsed["mcp"];
     const sparseMcp = {};
-    if (isPlainObject(rawMcp["tool_description_hashes"]))
+    if (isPlainObject2(rawMcp["tool_description_hashes"]))
       sparseMcp.tool_description_hashes = rawMcp["tool_description_hashes"];
     if (typeof rawMcp["stdio_available"] === "boolean") sparseMcp.stdio_available = rawMcp["stdio_available"];
     if (typeof rawMcp["http_available"] === "boolean") sparseMcp.http_available = rawMcp["http_available"];
@@ -3530,7 +4106,7 @@ function parseSettingsFile_fromParsed(parsed) {
     out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
   if (typeof parsed["codex_cap"] === "number")
     out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
-  if (isPlainObject(parsed["defaults"])) {
+  if (isPlainObject2(parsed["defaults"])) {
     const rawDefaults = parsed["defaults"];
     const sparseDefaults = {};
     for (const k of Object.keys(rawDefaults)) {
@@ -3585,11 +4161,11 @@ function initiativeIsWorkspaceScoped(workspaceRoot, id) {
       try {
         const raw = fs2.readFileSync(registryPath, "utf8");
         const parsed = yaml.load(raw);
-        if (isPlainObject(parsed)) {
+        if (isPlainObject2(parsed)) {
           const list = parsed["initiatives"];
           if (Array.isArray(list)) {
             for (const entry of list) {
-              if (!isPlainObject(entry)) continue;
+              if (!isPlainObject2(entry)) continue;
               const rec = entry;
               if (rec["id"] === id) {
                 return rec["scope"] === "workspace";
@@ -3629,9 +4205,9 @@ function initiativeIsWorkspaceScoped(workspaceRoot, id) {
       try {
         const raw = fs2.readFileSync(yamlPath, "utf8");
         const parsed = yaml.load(raw);
-        if (isPlainObject(parsed)) {
+        if (isPlainObject2(parsed)) {
           const doc = parsed["initiative"];
-          if (isPlainObject(doc)) {
+          if (isPlainObject2(doc)) {
             return doc["scope"] === "workspace";
           }
         }
@@ -3984,7 +4560,7 @@ function securityDefaults() {
     allowed_tools: []
   };
 }
-function isPlainObject2(v) {
+function isPlainObject3(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function isStringArray(v) {
@@ -3992,14 +4568,14 @@ function isStringArray(v) {
 }
 function parseSecurityConfig(parsed) {
   const out = securityDefaults();
-  if (!isPlainObject2(parsed)) return out;
-  if (isPlainObject2(parsed["security"])) {
+  if (!isPlainObject3(parsed)) return out;
+  if (isPlainObject3(parsed["security"])) {
     const bpp = parsed["security"]["bypass_permissions_policy"];
     if (bpp === "deny" || bpp === "audit" || bpp === "allow") {
       out.bypass_permissions_policy = bpp;
     }
   }
-  if (isPlainObject2(parsed["secrets_policy"])) {
+  if (isPlainObject3(parsed["secrets_policy"])) {
     const sp = parsed["secrets_policy"];
     if (isStringArray(sp["env_allowlist"])) out.secrets_policy.env_allowlist = sp["env_allowlist"];
     if (isStringArray(sp["redaction_patterns"])) {
@@ -4012,15 +4588,15 @@ function parseSecurityConfig(parsed) {
       out.secrets_policy.fail_mode_telemetry = sp["fail_mode_telemetry"];
     }
   }
-  if (isPlainObject2(parsed["defaults"])) {
+  if (isPlainObject3(parsed["defaults"])) {
     const defs = parsed["defaults"];
     if (isStringArray(defs["allowed_tools"])) {
       out.allowed_tools = defs["allowed_tools"];
     }
   }
-  if (isPlainObject2(parsed["mcp"])) {
+  if (isPlainObject3(parsed["mcp"])) {
     const mcp = parsed["mcp"];
-    if (isPlainObject2(mcp["tool_description_hashes"])) {
+    if (isPlainObject3(mcp["tool_description_hashes"])) {
       const hashes = {};
       for (const [k, v] of Object.entries(mcp["tool_description_hashes"])) {
         if (typeof v === "string") hashes[k] = v;
@@ -4528,7 +5104,7 @@ function createRunLifecycle(env) {
 function resolveCloseRoot(env, runId) {
   const hint = env.__rootHint;
   if (hint) return hint;
-  const cwd = process.cwd();
+  const cwd = resolveGuildRoot(process.cwd());
   if (env.fs.exists(runYamlPath(cwd, runId))) return cwd;
   return cwd;
 }

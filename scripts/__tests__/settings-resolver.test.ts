@@ -117,6 +117,17 @@ describe("1 — Pinning: parity with read-guild-config (no workspace)", () => {
     expect(config.agent_mode).toBe("team");
   });
 
+  test("top-level host ignores app-only host ids but accepts dispatch aliases", () => {
+    const dir = tmpDir();
+    mkGuildDir(dir);
+
+    writeSettings(dir, { host: "codex-app" });
+    expect(resolveSettings({ cwd: dir }).config.host).toBe("auto");
+
+    writeSettings(dir, { host: "codex" });
+    expect(resolveSettings({ cwd: dir }).config.host).toBe("codex-cli");
+  });
+
   test("CLI flags override settings.json and built-ins", () => {
     const dir = tmpDir();
     mkGuildDir(dir);
@@ -1477,7 +1488,7 @@ describe("G-lane MAJOR — initiativeIsWorkspaceScoped: path traversal preventio
 
 // ─────────────────────────────────────────────────────────────────────────────
 // G-11 (SC-6) — the resolver STORES the models.tiers value union
-// (string | {model, effort?, verbosity?} | null) across layers without
+// (string | {model, effort?, reasoning?, thinking?, verbosity?} | null) across layers without
 // unpacking it; resolveTierModel() in read-guild-config.ts is the only
 // unpack point.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1489,18 +1500,30 @@ describe("G-11 — models.tiers value union storage through the layer chain", ()
       mkGuildDir(root);
       writeSettings(root, {
         models: {
-          tiers: { powerful: { claude: { model: "opus", effort: "high", verbosity: "low" } } },
+          tiers: {
+            powerful: {
+              claude: {
+                model: "opus",
+                effort: "high",
+                reasoning: "xhigh",
+                thinking: "enabled",
+                verbosity: "low",
+              },
+            },
+          },
         },
       });
       const { config } = resolveSettings({ cwd: root });
-      expect(config.models.tiers.powerful.claude).toEqual({
+      expect(config.models.tiers.powerful["claude-code-cli"]).toEqual({
         model: "opus",
         effort: "high",
+        reasoning: "xhigh",
+        thinking: "enabled",
         verbosity: "low",
       });
       // untouched tiers keep the built-in plain-string defaults
-      expect(config.models.tiers.mid.claude).toBe("sonnet");
-      expect(config.models.tiers.cheap.claude).toBe("haiku");
+      expect(config.models.tiers.mid["claude-code-cli"]).toBe("sonnet");
+      expect(config.models.tiers.cheap["claude-code-cli"]).toBe("haiku");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -1525,7 +1548,7 @@ describe("G-11 — models.tiers value union storage through the layer chain", ()
         models: { tiers: { powerful: { claude: { model: "opus", effort: "high" } } } },
       });
       const { config } = resolveSettings({ cwd: child });
-      expect(config.models.tiers.powerful.claude).toEqual({ model: "opus", effort: "high" });
+      expect(config.models.tiers.powerful["claude-code-cli"]).toEqual({ model: "opus", effort: "high" });
     } finally {
       fs.rmSync(ws, { recursive: true, force: true });
     }
@@ -1548,8 +1571,8 @@ describe("G-lane rework — models.tiers unknown host keys stripped by the resol
       });
       const { config } = resolveSettings({ cwd: root });
       expect(config.models.tiers.powerful).not.toHaveProperty("claudee");
-      expect(config.models.tiers.powerful.codex).toBe("o3");
-      expect(config.models.tiers.powerful.claude).toBe("opus"); // builtin default kept
+      expect(config.models.tiers.powerful["codex-cli"]).toBe("o3");
+      expect(config.models.tiers.powerful["claude-code-cli"]).toBe("opus"); // builtin default kept
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -1563,7 +1586,7 @@ describe("G-lane rework — models.tiers unknown host keys stripped by the resol
       writeLocal(root, { models: { tiers: { mid: { claudee: "sonnet-typo" } } } });
       const { config } = resolveSettings({ cwd: root });
       expect(config.models.tiers.mid).not.toHaveProperty("claudee");
-      expect(config.models.tiers.mid.claude).toBe("sonnet");
+      expect(config.models.tiers.mid["claude-code-cli"]).toBe("sonnet");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -1653,7 +1676,7 @@ describe("host_profiles — resolve-path strict entry-shape (fail-closed)", () =
         host_profiles: { claude: { models: { cheap: "haiku" }, enabled: true } },
       });
       const { config } = resolveSettings({ cwd: root });
-      expect(config.host_profiles.claude).toEqual({ models: { cheap: "haiku" }, enabled: true });
+      expect(config.host_profiles["claude-code-cli"]).toEqual({ models: { cheap: "haiku" }, enabled: true });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -1670,8 +1693,8 @@ describe("host_profiles — resolve-path strict entry-shape (fail-closed)", () =
         },
       });
       const { config } = resolveSettings({ cwd: root });
-      expect(config.host_profiles.claude).toBeUndefined(); // malformed entry not surfaced
-      expect(config.host_profiles.codex).toEqual({ enabled: false }); // clean sibling survives
+      expect(config.host_profiles["claude-code-cli"]).toBeUndefined(); // malformed entry not surfaced
+      expect(config.host_profiles["codex-cli"]).toEqual({ enabled: false }); // clean sibling survives
       // hard guarantee: the malformed sub-key never appears anywhere in the resolved block
       expect(JSON.stringify(config.host_profiles)).not.toContain("bogus_key");
     } finally {
@@ -1693,11 +1716,11 @@ describe("host_profiles — resolve-path strict entry-shape (fail-closed)", () =
         },
       });
       const { config } = resolveSettings({ cwd: root });
-      expect(config.host_profiles.claude).toBeUndefined();
-      expect(config.host_profiles.codex).toBeUndefined();
-      expect(config.host_profiles.pi).toBeUndefined();
+      expect(config.host_profiles["claude-code-cli"]).toBeUndefined();
+      expect(config.host_profiles["codex-cli"]).toBeUndefined();
+      expect(config.host_profiles["pi-cli"]).toBeUndefined();
       expect((config.host_profiles as Record<string, unknown>).gemini).toBeUndefined();
-      expect(config.host_profiles.antigravity).toEqual({ models: { mid: "fast" } });
+      expect(config.host_profiles["antigravity-cli"]).toEqual({ models: { mid: "fast" } });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -1712,7 +1735,7 @@ describe("host_profiles — resolve-path strict entry-shape (fail-closed)", () =
       const { config } = resolveSettings({ cwd: root });
       // the local layer's malformed entry is dropped during sparse-parse, so the clean
       // base entry survives (the malformed override never reaches the merge as content).
-      expect(config.host_profiles.claude).toEqual({ enabled: true });
+      expect(config.host_profiles["claude-code-cli"]).toEqual({ enabled: true });
       expect(JSON.stringify(config.host_profiles)).not.toContain("rogue");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });

@@ -20,6 +20,7 @@
 import {
   route,
   resolveModel,
+  resolveModelParams,
   affinityBoost,
   backendForMode,
   planTeamRouting,
@@ -630,6 +631,14 @@ describe("resolveModel — G-11 object-form settings override", () => {
       mid: { codex: { model: "gpt-6-codex", effort: "high" } },
     });
     expect(m).toBe("gpt-6-codex");
+    expect(resolveModelParams("mid", codexHost(), {
+      mid: { codex: { model: "gpt-6-codex", effort: "high", reasoning: "xhigh", verbosity: "low" } },
+    })).toEqual({
+      model: "gpt-6-codex",
+      effort: "high",
+      reasoning: "xhigh",
+      verbosity: "low",
+    });
   });
 
   it("null override falls through to the manifest tier_models", () => {
@@ -653,6 +662,31 @@ describe("resolveModel — G-11 object-form settings override", () => {
       { ...baseOpts, settingsOverride: { powerful: { claude: { model: "opus-4.5", effort: "high" } } } }
     );
     expect(d.model).toBe("opus-4.5");
+    expect(d.modelParams).toEqual({ model: "opus-4.5", effort: "high" });
     expect(d.tier).toBe("powerful");
+  });
+
+  it("route() propagates modelParams into fallback targets and onDecision", () => {
+    let observed: RoutingDecision | null = null;
+    const d = route(
+      lane({ tier: "powerful" }),
+      [host(), codexHost()],
+      {
+        ...baseOpts,
+        crossHostEnabled: true,
+        settingsOverride: {
+          powerful: {
+            claude: { model: "opus-4.8", effort: "low" },
+            codex: { model: "gpt-6-codex", reasoning: "xhigh" },
+          },
+        },
+        onDecision: (decision) => {
+          observed = decision;
+        },
+      }
+    );
+    expect(d.modelParams).toEqual({ model: "opus-4.8", effort: "low" });
+    expect(d.fallbackChain[0]?.modelParams).toEqual({ model: "gpt-6-codex", reasoning: "xhigh" });
+    expect(observed?.modelParams).toEqual(d.modelParams);
   });
 });

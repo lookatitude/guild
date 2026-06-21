@@ -347,9 +347,9 @@ describe("U5/score-tier — models resolver projection (pinning + inheritance)",
     const { config } = resolveSettings({ cwd: root });
     expect(config.models.thresholds.mid).toBe(1);
     expect(config.models.thresholds.powerful).toBe(3);
-    expect(config.models.tiers.cheap.claude).toBe("haiku");
-    expect(config.models.tiers.mid.claude).toBe("sonnet");
-    expect(config.models.tiers.powerful.claude).toBe("opus");
+    expect(config.models.tiers.cheap["claude-code-cli"]).toBe("haiku");
+    expect(config.models.tiers.mid["claude-code-cli"]).toBe("sonnet");
+    expect(config.models.tiers.powerful["claude-code-cli"]).toBe("opus");
     expect(config.models.scoreWeights.blastRadius).toBe(1);
   });
 
@@ -359,9 +359,9 @@ describe("U5/score-tier — models resolver projection (pinning + inheritance)",
       models: {
         thresholds: { mid: 2, powerful: 5 },
         tiers: {
-          cheap: { claude: "haiku-3", codex: null, gemini: null },
-          mid: { claude: "sonnet-4", codex: null, gemini: null },
-          powerful: { claude: "opus-4", codex: null, gemini: null },
+          cheap: { "claude-code-cli": "haiku-3", "codex-cli": null, "agents-file": null },
+          mid: { "claude-code-cli": "sonnet-4", "codex-cli": null, "agents-file": null },
+          powerful: { "claude-code-cli": "opus-4", "codex-cli": null, "agents-file": null },
         },
         scoreWeights: { blastRadius: 2, security: 3, dependsOn: 1, priorEscalation: 1, workType: 0 },
       },
@@ -369,7 +369,7 @@ describe("U5/score-tier — models resolver projection (pinning + inheritance)",
     const { config } = resolveSettings({ cwd: root });
     expect(config.models.thresholds.mid).toBe(2);
     expect(config.models.thresholds.powerful).toBe(5);
-    expect(config.models.tiers.mid.claude).toBe("sonnet-4");
+    expect(config.models.tiers.mid["claude-code-cli"]).toBe("sonnet-4");
     expect(config.models.scoreWeights.blastRadius).toBe(2);
   });
 
@@ -379,9 +379,9 @@ describe("U5/score-tier — models resolver projection (pinning + inheritance)",
       models: {
         thresholds: { mid: 0, powerful: 2 }, // score 0 → mid; score >= 2 → powerful
         tiers: {
-          cheap:    { claude: "haiku",  codex: null, gemini: null },
-          mid:      { claude: "sonnet", codex: null, gemini: null },
-          powerful: { claude: "opus",   codex: null, gemini: null },
+          cheap:    { "claude-code-cli": "haiku",  "codex-cli": null, "agents-file": null },
+          mid:      { "claude-code-cli": "sonnet", "codex-cli": null, "agents-file": null },
+          powerful: { "claude-code-cli": "opus",   "codex-cli": null, "agents-file": null },
         },
         scoreWeights: { blastRadius: 1, security: 1, dependsOn: 1, priorEscalation: 1, workType: 0 },
       },
@@ -424,9 +424,9 @@ describe("U5/score-tier — models resolver projection (pinning + inheritance)",
       models: {
         thresholds: { mid: 0, powerful: 10 },
         tiers: {
-          cheap:    { claude: "haiku-ws",  codex: null, gemini: null },
-          mid:      { claude: "sonnet-ws", codex: null, gemini: null },
-          powerful: { claude: "opus-ws",   codex: null, gemini: null },
+          cheap:    { "claude-code-cli": "haiku-ws",  "codex-cli": null, "agents-file": null },
+          mid:      { "claude-code-cli": "sonnet-ws", "codex-cli": null, "agents-file": null },
+          powerful: { "claude-code-cli": "opus-ws",   "codex-cli": null, "agents-file": null },
         },
       },
     });
@@ -443,8 +443,8 @@ describe("U5/score-tier — models resolver projection (pinning + inheritance)",
     expect(config.models.thresholds.mid).toBe(2);
     expect(config.models.thresholds.powerful).toBe(5);
     // Workspace's tiers are still inherited (deep merge)
-    expect(config.models.tiers.cheap.claude).toBe("haiku-ws");
-    expect(config.models.tiers.mid.claude).toBe("sonnet-ws");
+    expect(config.models.tiers.cheap["claude-code-cli"]).toBe("haiku-ws");
+    expect(config.models.tiers.mid["claude-code-cli"]).toBe("sonnet-ws");
   });
 });
 
@@ -659,9 +659,9 @@ describe("U5/score-tier — CLI --cwd drives real loadConfigModels (MINOR fix �
       models: {
         thresholds: { mid: 0, powerful: 10 },
         tiers: {
-          cheap:    { claude: "haiku",  codex: null, gemini: null },
-          mid:      { claude: "sonnet", codex: null, gemini: null },
-          powerful: { claude: "opus",   codex: null, gemini: null },
+          cheap:    { "claude-code-cli": "haiku",  "codex-cli": null, "agents-file": null },
+          mid:      { "claude-code-cli": "sonnet", "codex-cli": null, "agents-file": null },
+          powerful: { "claude-code-cli": "opus",   "codex-cli": null, "agents-file": null },
         },
       },
     });
@@ -685,9 +685,9 @@ describe("U5/score-tier — CLI --cwd drives real loadConfigModels (MINOR fix �
     writeSettings(root, {
       models: {
         tiers: {
-          cheap:    { claude: "haiku-3",  codex: null, gemini: null },
-          mid:      { claude: "sonnet-4", codex: null, gemini: null },
-          powerful: { claude: "opus-4",   codex: null, gemini: null },
+          cheap:    { "claude-code-cli": "haiku-3",  "codex-cli": null, "agents-file": null },
+          mid:      { "claude-code-cli": "sonnet-4", "codex-cli": null, "agents-file": null },
+          powerful: { "claude-code-cli": "opus-4",   "codex-cli": null, "agents-file": null },
         },
       },
     });
@@ -711,9 +711,9 @@ describe("U5/score-tier — CLI --cwd drives real loadConfigModels (MINOR fix �
       models: {
         thresholds: { mid: 0, powerful: 0 }, // everything would score powerful
         tiers: {
-          cheap:    { claude: "haiku",  codex: null, gemini: null },
-          mid:      { claude: "sonnet", codex: null, gemini: null },
-          powerful: { claude: "opus",   codex: null, gemini: null },
+          cheap:    { "claude-code-cli": "haiku",  "codex-cli": null, "agents-file": null },
+          mid:      { "claude-code-cli": "sonnet", "codex-cli": null, "agents-file": null },
+          powerful: { "claude-code-cli": "opus",   "codex-cli": null, "agents-file": null },
         },
       },
     });

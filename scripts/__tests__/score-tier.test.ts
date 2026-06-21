@@ -20,7 +20,16 @@ function runCli(args: string[]): { status: number; out: string; err: string } {
   return { status: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
 
-function parseOut(out: string): { score: number; tier: string; model?: string } {
+function parseOut(out: string): {
+  score: number;
+  tier: string;
+  model?: string;
+  modelParams?: Record<string, string>;
+  effort?: string;
+  reasoning?: string;
+  thinking?: string;
+  verbosity?: string;
+} {
   return JSON.parse(out.trim());
 }
 
@@ -377,34 +386,54 @@ describe("score-tier.ts CLI", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// G-11 (SC-6) — models.tiers value union consumed via resolveTierModel():
-// string | {model, effort?, verbosity?} | null. String behavior byte-identical
-// (covered above); the object form surfaces model + effort/verbosity.
+// G-11/R5 — models.tiers value union consumed via resolveTierModel():
+// string | {model, effort?, reasoning?, thinking?, verbosity?} | null. String
+// behavior byte-identical (covered above); object form surfaces modelParams.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as fs from "fs";
 import * as os from "os";
 
 describe("scoreTier — G-11 object-form tier values", () => {
-  test("object form resolves model and surfaces effort/verbosity", () => {
+  test("object form resolves model and surfaces full modelParams", () => {
     const r = scoreTier(
       { workType: "architect", sensitivity: true }, // score 3 → powerful
       {
         tiers: {
-          powerful: { claude: { model: "opus-4.5", effort: "high", verbosity: "low" } },
+          powerful: {
+            claude: {
+              model: "opus-4.5",
+              effort: "high",
+              reasoning: "xhigh",
+              thinking: "enabled",
+              verbosity: "low",
+            },
+          },
         },
       }
     );
     expect(r.tier).toBe("powerful");
     expect(r.model).toBe("opus-4.5");
+    expect(r.modelParams).toEqual({
+      model: "opus-4.5",
+      effort: "high",
+      reasoning: "xhigh",
+      thinking: "enabled",
+      verbosity: "low",
+    });
     expect(r.effort).toBe("high");
+    expect(r.reasoning).toBe("xhigh");
+    expect(r.thinking).toBe("enabled");
     expect(r.verbosity).toBe("low");
   });
 
-  test("string form output is unchanged — no effort/verbosity keys appear", () => {
+  test("string form output keeps legacy model and adds modelParams without effort axes", () => {
     const r = scoreTier({ workType: "architect", sensitivity: true });
     expect(r.model).toBe("opus");
+    expect(r.modelParams).toEqual({ model: "opus" });
     expect(r).not.toHaveProperty("effort");
+    expect(r).not.toHaveProperty("reasoning");
+    expect(r).not.toHaveProperty("thinking");
     expect(r).not.toHaveProperty("verbosity");
   });
 
@@ -427,6 +456,7 @@ describe("scoreTier — G-11 object-form tier values", () => {
     );
     expect(r.tier).toBe("mid");
     expect(r.model).toBe("sonnet-4");
+    expect(r.modelParams).toEqual({ model: "sonnet-4", effort: "medium" });
     expect(r.effort).toBe("medium");
   });
 
@@ -460,6 +490,7 @@ describe("scoreTier — G-11 object-form tier values", () => {
       const j = JSON.parse(out.trim());
       expect(j.tier).toBe("powerful");
       expect(j.model).toBe("opus-4.5");
+      expect(j.modelParams).toEqual({ model: "opus-4.5", effort: "high" });
       expect(j.effort).toBe("high");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

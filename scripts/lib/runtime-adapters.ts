@@ -7,9 +7,11 @@
  * Each adapter resolves a host to a rung on the L0 minimum-loss ladder
  * (`native > wrapped > bridged > emulated > degraded`, adapter-fallback-ladders.ts),
  * names the concrete per-rung strategy, and records a degradation receipt. Routing
- * reads the LADDER (capability), never the host name. Claude/Codex rungs are concrete;
- * `.agents`/pi/antigravity rungs are INFERRED until live-host verification — the receipt
- * carries `inferred: true` so a wrong off-box guess is visible, never silent.
+ * reads the LADDER (capability), never the host name. `claude-code-cli` /
+ * `codex-cli` rungs are concrete; `agents-file`, Pi/Antigravity, and app-host
+ * rungs remain INFERRED where live-host verification has not landed — the
+ * receipt carries `inferred: true` so a wrong off-box guess is visible, never
+ * silent.
  *
  * SC-8: each surface resolves a rung; degradation is recorded; an unknown host degrades
  * (never silently assumes a capability).
@@ -59,7 +61,7 @@ const STRATEGY: Record<AdapterSurface, Record<Rung, string | null>> = {
     degraded: "tool unavailable — record + skip",
   },
   browser: {
-    native: "native browser control (e.g. agy browser)",
+    native: "native host browser control",
     wrapped: "wrapped browser CLI",
     bridged: "chrome-devtools MCP bridge",
     emulated: "headless fetch emulation",

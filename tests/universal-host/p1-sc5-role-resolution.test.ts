@@ -42,27 +42,27 @@ import {
   type AdvisoryRecord,
 } from "../../scripts/lib/advisory-record";
 
-const CLAUDE = HOST_REGISTRY_ROWS["claude"];
-const CODEX = HOST_REGISTRY_ROWS["codex"];
+const CLAUDE = HOST_REGISTRY_ROWS["claude-code-cli"];
+const CODEX = HOST_REGISTRY_ROWS["codex-cli"];
 
 // ── Default Claude+Codex resolution == today ────────────────────────────────
 
 describe("P1 SC-5 — resolveRoles default Claude+Codex == today", () => {
   const roles = resolveRoles({ available: [CLAUDE, CODEX] });
 
-  it("host = claude, strong", () => {
-    expect(roles.host.substrate).toBe("claude");
+  it("host = claude-code-cli, strong", () => {
+    expect(roles.host.substrate).toBe("claude-code-cli");
     expect(roles.host.strength).toBe("strong");
   });
 
-  it("advisory = claude, strong (local advisor runs on the host)", () => {
-    expect(roles.advisory.substrate).toBe("claude");
+  it("advisory = claude-code-cli, strong (local advisor runs on the host)", () => {
+    expect(roles.advisory.substrate).toBe("claude-code-cli");
     expect(roles.advisory.strength).toBe("strong");
     expect(roles.advisory.reason).toMatch(/host substrate|local advisor/i);
   });
 
-  it("adversarial = codex, strong (different family ⇒ cross-host independence)", () => {
-    expect(roles.adversarial.substrate).toBe("codex");
+  it("adversarial = codex-cli, strong (different family ⇒ cross-host independence)", () => {
+    expect(roles.adversarial.substrate).toBe("codex-cli");
     expect(roles.adversarial.strength).toBe("strong");
     expect(roles.adversarial.reason).toMatch(/different-family|cross-host independence/i);
   });
@@ -80,8 +80,8 @@ describe("P1 SC-5 — resolveRoles default Claude+Codex == today", () => {
 describe("P1 SC-5 — adversarial independence degradation", () => {
   it("solo-claude box: adversarial degrades (no different-family result_adapter)", () => {
     const roles = resolveRoles({ available: [CLAUDE] });
-    expect(roles.host.substrate).toBe("claude");
-    expect(roles.advisory.substrate).toBe("claude"); // advisory still strong on host
+    expect(roles.host.substrate).toBe("claude-code-cli");
+    expect(roles.advisory.substrate).toBe("claude-code-cli"); // advisory still strong on host
     expect(roles.adversarial.substrate).toBeNull();
     expect(roles.adversarial.strength).toBe("weak");
     expect(validateRoleResolutionSet(roles).valid).toBe(true);
@@ -92,13 +92,13 @@ describe("P1 SC-5 — adversarial independence degradation", () => {
     // must pick it but mark weak, because it is the same family as the host.
     const claudeFamilyReviewer: HostRegistryEntry = {
       ...CODEX,
-      host_id: "claude", // same family as host
+      host_id: "claude-code-app", // same (claude) family as host
       family: "claude",
       result_adapter: true,
     };
     const roles = resolveRoles({ available: [CLAUDE, claudeFamilyReviewer] });
-    expect(roles.host.substrate).toBe("claude");
-    expect(roles.adversarial.substrate).toBe("claude");
+    expect(roles.host.substrate).toBe("claude-code-cli");
+    expect(roles.adversarial.substrate).toBe("claude-code-app");
     expect(roles.adversarial.strength).toBe("weak");
     expect(roles.adversarial.reason).toMatch(/same-family|independence lost/i);
   });
@@ -106,13 +106,13 @@ describe("P1 SC-5 — adversarial independence degradation", () => {
   it("prefers a DIFFERENT-family reviewer over a same-family one for strong independence", () => {
     const sameFamily: HostRegistryEntry = {
       ...CLAUDE,
-      host_id: "claude",
+      host_id: "claude-code-app",
       family: "claude",
       result_adapter: true,
     };
     // Both a same-family and a different-family (codex) result_adapter present ⇒ codex wins, strong.
     const roles = resolveRoles({ available: [CLAUDE, sameFamily, CODEX] });
-    expect(roles.adversarial.substrate).toBe("codex");
+    expect(roles.adversarial.substrate).toBe("codex-cli");
     expect(roles.adversarial.strength).toBe("strong");
   });
 });
@@ -169,9 +169,27 @@ describe("P1 SC-5 — advisory substrate (C1, additive + back-compatible)", () =
     };
   }
 
-  it("the substrate enum is exactly the five registry hosts (default = claude)", () => {
-    expect([...ADVISORY_SUBSTRATES]).toEqual(["claude", "codex", ".agents", "pi", "antigravity"]);
-    expect(DEFAULT_ADVISORY_SUBSTRATE).toBe("claude");
+  it("the substrate enum is the nine canonical registry hosts + five legacy aliases (default = claude-code-cli)", () => {
+    // Post host-adapter-migration: the canonical 9 host ids, followed by the 5
+    // retained legacy aliases (claude/codex/.agents/pi/antigravity) so older
+    // advisory records still validate. Default flips to the canonical claude-code-cli.
+    expect([...ADVISORY_SUBSTRATES]).toEqual([
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+      "claude",
+      "codex",
+      ".agents",
+      "pi",
+      "antigravity",
+    ]);
+    expect(DEFAULT_ADVISORY_SUBSTRATE).toBe("claude-code-cli");
   });
 
   it("ABSENT substrate ⇒ field omitted (byte-identical to a pre-P1 record) + validates", () => {
@@ -180,9 +198,9 @@ describe("P1 SC-5 — advisory substrate (C1, additive + back-compatible)", () =
     expect(validateAdvisoryRecord(rec).valid).toBe(true);
   });
 
-  it("a supplied substrate (codex) is carried + validates", () => {
-    const rec = makeAdvisoryRecord({ ...baseInput(), substrate: "codex" });
-    expect(rec.substrate).toBe("codex");
+  it("a supplied substrate (codex-cli) is carried + validates", () => {
+    const rec = makeAdvisoryRecord({ ...baseInput(), substrate: "codex-cli" });
+    expect(rec.substrate).toBe("codex-cli");
     expect(validateAdvisoryRecord(rec).valid).toBe(true);
   });
 

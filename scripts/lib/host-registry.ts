@@ -83,7 +83,10 @@ const FAMILY_TO_ROW: Record<string, HostRegistryEntry> = (() => {
   const out: Record<string, HostRegistryEntry> = {};
   for (const id of HOST_IDS) {
     const row = HOST_REGISTRY_ROWS[id];
-    out[row.family] = row;
+    const existing = out[row.family];
+    if (!existing || (!existing.result_adapter && row.result_adapter)) {
+      out[row.family] = row;
+    }
   }
   return out;
 })();

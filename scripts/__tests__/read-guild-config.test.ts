@@ -64,6 +64,19 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
     expect(j.review).toBe("off");
   });
 
+  test("top-level host accepts dispatch aliases but rejects app-only host ids", () => {
+    const dir = repo();
+    writeSettings(dir, { host: "claude" });
+    const ok = run(["--cwd", dir, "--validate"]);
+    expect(ok.status).toBe(0);
+
+    writeSettings(dir, { host: "codex-app" });
+    const bad = run(["--cwd", dir, "--validate"]);
+    expect(bad.status).not.toBe(0);
+    expect(bad.out).toMatch(/invalid for the top-level dispatch selector/);
+    expect(bad.out).toMatch(/dispatch-selectable host ids/);
+  });
+
   test("config.yml is NOT read at runtime — built-in defaults apply when only config.yml exists (SC-8 W2B-5)", () => {
     const dir = repo();
     fs.writeFileSync(
@@ -509,14 +522,15 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
     test("--scaffold default tier map is cheap=haiku, mid=sonnet, powerful=opus (ADR §1)", () => {
       const { out } = run(["--scaffold"]);
       const j = JSON.parse(out);
-      expect(j.models.tiers.cheap.claude).toBe("haiku");
-      expect(j.models.tiers.mid.claude).toBe("sonnet");
-      expect(j.models.tiers.powerful.claude).toBe("opus");
-      // codex and gemini are null (no third host yet)
-      expect(j.models.tiers.cheap.codex).toBeNull();
-      expect(j.models.tiers.cheap.gemini).toBeNull();
-      expect(j.models.tiers.mid.codex).toBeNull();
-      expect(j.models.tiers.powerful.codex).toBeNull();
+      expect(j.models.tiers.cheap["claude-code-cli"]).toBe("haiku");
+      expect(j.models.tiers.mid["claude-code-cli"]).toBe("sonnet");
+      expect(j.models.tiers.powerful["claude-code-cli"]).toBe("opus");
+      // non-Claude canonical hosts default to null until configured.
+      expect(j.models.tiers.cheap["codex-cli"]).toBeNull();
+      expect(j.models.tiers.cheap["pi-cli"]).toBeNull();
+      expect(j.models.tiers.cheap["agents-file"]).toBeNull();
+      expect(j.models.tiers.mid["codex-cli"]).toBeNull();
+      expect(j.models.tiers.powerful["codex-cli"]).toBeNull();
     });
 
     test("--scaffold _precedence includes model-tier ladder", () => {
@@ -534,7 +548,7 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
       const j = JSON.parse(out);
       expect(j.models).toBeDefined();
       expect(j.models.enabled).toBe(true);
-      expect(j.models.tiers.cheap.claude).toBe("haiku");
+      expect(j.models.tiers.cheap["claude-code-cli"]).toBe("haiku");
       expect(j.models.advisorRounds).toBe(2);
       expect(j.models.recallScoreThreshold).toBe(0.4);
     });
@@ -549,18 +563,18 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
       const j = JSON.parse(out);
       expect(j.models.enabled).toBe(false);
       // Tier defaults still present (deep-merge)
-      expect(j.models.tiers.cheap.claude).toBe("haiku");
+      expect(j.models.tiers.cheap["claude-code-cli"]).toBe("haiku");
     });
 
     test("settings.json partial models.tiers override merges over defaults", () => {
       const dir = repo();
-      writeSettings(dir, { models: { tiers: { cheap: { claude: "sonnet", codex: null, gemini: null } } } });
+      writeSettings(dir, { models: { tiers: { cheap: { claude: "sonnet", "codex-cli": null, "pi-cli": null } } } });
       const { status, out } = run(["--cwd", dir]);
       expect(status).toBe(0);
       const j = JSON.parse(out);
-      expect(j.models.tiers.cheap.claude).toBe("sonnet"); // overridden
-      expect(j.models.tiers.mid.claude).toBe("sonnet");   // default still present
-      expect(j.models.tiers.powerful.claude).toBe("opus"); // default still present
+      expect(j.models.tiers.cheap["claude-code-cli"]).toBe("sonnet"); // overridden
+      expect(j.models.tiers.mid["claude-code-cli"]).toBe("sonnet");   // default still present
+      expect(j.models.tiers.powerful["claude-code-cli"]).toBe("opus"); // default still present
     });
 
     test("settings.json models.advisorRounds: 4 is read and resolved", () => {
@@ -1486,7 +1500,8 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// G-11 (SC-6) — models.tiers value union: string | {model, effort?, verbosity?} | null
+// G-11 (SC-6) — models.tiers value union:
+// string | {model, effort?, reasoning?, thinking?, verbosity?} | null
 // Unpacked ONLY by resolveTierModel(). DEFAULTS stay plain strings.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1504,16 +1519,28 @@ describe("G-11 — models.tiers value union (SC-6)", () => {
   describe("--validate: both forms accepted, object form is a closed key set", () => {
     test("accepts the plain-string form (historical)", () => {
       const dir = repo();
-      writeSettings(dir, { models: { tiers: { powerful: { claude: "opus", codex: null, gemini: null } } } });
+      writeSettings(dir, { models: { tiers: { powerful: { claude: "opus", "codex-cli": null, "pi-cli": null } } } });
       const { status, out } = run(["--cwd", dir, "--validate"]);
       expect(status).toBe(0);
       expect(out).toMatch(/VALID/);
     });
 
-    test("accepts the object form {model, effort?, verbosity?}", () => {
+    test("accepts the object form {model, effort?, reasoning?, thinking?, verbosity?}", () => {
       const dir = repo();
       writeSettings(dir, {
-        models: { tiers: { powerful: { claude: { model: "opus", effort: "high", verbosity: "low" } } } },
+        models: {
+          tiers: {
+            powerful: {
+              claude: {
+                model: "opus",
+                effort: "high",
+                reasoning: "xhigh",
+                thinking: "enabled",
+                verbosity: "low",
+              },
+            },
+          },
+        },
       });
       const { status, out } = run(["--cwd", dir, "--validate"]);
       expect(status).toBe(0);
@@ -1525,8 +1552,8 @@ describe("G-11 — models.tiers value union (SC-6)", () => {
       writeSettings(dir, {
         models: {
           tiers: {
-            cheap: { claude: "haiku", codex: null, gemini: null },
-            powerful: { claude: { model: "opus", effort: "high" }, codex: null, gemini: null },
+            cheap: { claude: "haiku", "codex-cli": null, "pi-cli": null },
+            powerful: { claude: { model: "opus", effort: "high" }, "codex-cli": null, "pi-cli": null },
           },
         },
       });
@@ -1535,7 +1562,7 @@ describe("G-11 — models.tiers value union (SC-6)", () => {
       expect(out).toMatch(/VALID/);
     });
 
-    test("REJECTS an unknown sub-key inside the object form (closed: model/effort/verbosity)", () => {
+    test("REJECTS an unknown sub-key inside the object form (closed: model/effort/reasoning/thinking/verbosity)", () => {
       const dir = repo();
       writeSettings(dir, {
         models: { tiers: { powerful: { claude: { model: "opus", efort: "high" } } } },
@@ -1544,7 +1571,7 @@ describe("G-11 — models.tiers value union (SC-6)", () => {
       expect(status).not.toBe(0);
       expect(out).toMatch(/INVALID/);
       expect(out).toMatch(/efort/);
-      expect(out).toMatch(/only model, effort, verbosity/);
+      expect(out).toMatch(/only model, effort, reasoning, thinking, verbosity/);
     });
 
     test("REJECTS the object form when model is missing", () => {
@@ -1560,7 +1587,7 @@ describe("G-11 — models.tiers value union (SC-6)", () => {
       writeSettings(dir, { models: { tiers: { mid: { claude: 42 } } } });
       const { status, out } = run(["--cwd", dir, "--validate"]);
       expect(status).not.toBe(0);
-      expect(out).toMatch(/must be a string, null, or \{model, effort\?, verbosity\?\}/);
+      expect(out).toMatch(/must be a string, null, or \{model, effort\?, reasoning\?, thinking\?, verbosity\?\}/);
     });
 
     test("REJECTS non-string effort/verbosity in the object form", () => {
@@ -1589,19 +1616,19 @@ describe("G-11 — models.tiers value union (SC-6)", () => {
       const { status, out } = run(["--cwd", dir]);
       expect(status).toBe(0);
       const j = JSON.parse(out);
-      expect(j.models.tiers.powerful.claude).toEqual({ model: "opus", effort: "high" });
-      expect(j.models.tiers.mid.claude).toBe("sonnet");   // default stays a plain string
-      expect(j.models.tiers.cheap.claude).toBe("haiku");  // default stays a plain string
+      expect(j.models.tiers.powerful["claude-code-cli"]).toEqual({ model: "opus", effort: "high" });
+      expect(j.models.tiers.mid["claude-code-cli"]).toBe("sonnet");   // default stays a plain string
+      expect(j.models.tiers.cheap["claude-code-cli"]).toBe("haiku");  // default stays a plain string
     });
 
     test("--scaffold DEFAULTS stay plain strings + _help documents the object form", () => {
       const { status, out } = run(["--scaffold"]);
       expect(status).toBe(0);
       const j = JSON.parse(out);
-      expect(j.models.tiers.cheap.claude).toBe("haiku");
-      expect(j.models.tiers.mid.claude).toBe("sonnet");
-      expect(j.models.tiers.powerful.claude).toBe("opus");
-      expect(j._help["models.tiers"]).toMatch(/\{model, effort\?, verbosity\?\}/);
+      expect(j.models.tiers.cheap["claude-code-cli"]).toBe("haiku");
+      expect(j.models.tiers.mid["claude-code-cli"]).toBe("sonnet");
+      expect(j.models.tiers.powerful["claude-code-cli"]).toBe("opus");
+      expect(j._help["models.tiers"]).toMatch(/\{model, effort\?, reasoning\?, thinking\?, verbosity\?\}/);
       expect(j._help["models.tiers"]).toMatch(/effort: "high"/);
       expect(j._help["models.tiers"]).toMatch(/resolveTierModel/);
     });
@@ -1609,9 +1636,19 @@ describe("G-11 — models.tiers value union (SC-6)", () => {
 
   describe("resolveTierModel — the single unpack point", () => {
     const tiers = {
-      cheap: { claude: "haiku", codex: null, gemini: null },
-      mid: { claude: "  sonnet  ", codex: null, gemini: null },
-      powerful: { claude: { model: "opus", effort: "high", verbosity: "low" }, codex: null, gemini: null },
+      cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null },
+      mid: { "claude-code-cli": "  sonnet  ", "codex-cli": null, "pi-cli": null },
+      powerful: {
+        "claude-code-cli": {
+          model: "opus",
+          effort: "high",
+          reasoning: "xhigh",
+          thinking: "enabled",
+          verbosity: "low",
+        },
+        "codex-cli": null,
+        "pi-cli": null,
+      },
     };
 
     test("string form → {model} (trimmed), no effort/verbosity keys", () => {
@@ -1619,13 +1656,19 @@ describe("G-11 — models.tiers value union (SC-6)", () => {
       expect(r).toEqual({ model: "sonnet" });
     });
 
-    test("object form → {model, effort, verbosity}", () => {
+    test("object form → {model, effort, reasoning, thinking, verbosity}", () => {
       const r = resolveTierModel(tiers, "powerful", "claude");
-      expect(r).toEqual({ model: "opus", effort: "high", verbosity: "low" });
+      expect(r).toEqual({
+        model: "opus",
+        effort: "high",
+        reasoning: "xhigh",
+        thinking: "enabled",
+        verbosity: "low",
+      });
     });
 
     test("null host slot → {model: null}", () => {
-      expect(resolveTierModel(tiers, "cheap", "codex")).toEqual({ model: null });
+      expect(resolveTierModel(tiers, "cheap", "codex-cli")).toEqual({ model: null });
     });
 
     test("absent host / absent tier / malformed tiers → {model: null}", () => {
@@ -1644,7 +1687,7 @@ describe("G-11 — models.tiers value union (SC-6)", () => {
     test("legacy flat form (tier → string) resolves host-agnostically (write-host-capability shape)", () => {
       const flat = { cheap: "haiku-3", mid: "sonnet-4", powerful: "opus-4" };
       expect(resolveTierModel(flat, "powerful", "claude")).toEqual({ model: "opus-4" });
-      expect(resolveTierModel(flat, "powerful", "codex")).toEqual({ model: "opus-4" });
+      expect(resolveTierModel(flat, "powerful", "codex-cli")).toEqual({ model: "opus-4" });
     });
   });
 });
@@ -1706,7 +1749,7 @@ describe("G-14 — qa auto-approve token (SC-9)", () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // G-lane rework — closed HOST-key set under models.tiers.<tier>:
-// only {claude, codex, gemini}. A typo like "claudee" must be rejected by
+// only canonical HostId keys. A typo like "claudee" must be rejected by
 // --validate and must never merge into the resolved config.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1726,7 +1769,7 @@ describe("G-lane rework — models.tiers closed host-key set", () => {
     expect(status).not.toBe(0);
     expect(out).toMatch(/INVALID/);
     expect(out).toMatch(/unknown models\.tiers\.powerful host key "claudee"/);
-    expect(out).toMatch(/valid: claude, codex, gemini/);
+    expect(out).toMatch(/valid: claude-code-cli, codex-cli/);
   });
 
   test("--validate REJECTS an unknown host key in the object form too", () => {
@@ -1737,16 +1780,26 @@ describe("G-lane rework — models.tiers closed host-key set", () => {
     expect(out).toMatch(/unknown models\.tiers\.mid host key "sonnet"/);
   });
 
-  test("all three legal hosts accepted in BOTH string and object form", () => {
+  test("--validate REJECTS alias/canonical collisions in one tier map", () => {
+    const dir = repo();
+    writeSettings(dir, {
+      models: { tiers: { powerful: { claude: "opus-a", "claude-code-cli": "opus-b" } } },
+    });
+    const { status, out } = run(["--cwd", dir, "--validate"]);
+    expect(status).not.toBe(0);
+    expect(out).toMatch(/both normalize to "claude-code-cli"/);
+  });
+
+  test("canonical hosts accepted in BOTH string and object form", () => {
     const dir = repo();
     writeSettings(dir, {
       models: {
         tiers: {
-          cheap: { claude: "haiku", codex: "gpt-4o-mini", gemini: "flash" },
+          cheap: { "claude-code-cli": "haiku", "codex-cli": "gpt-4o-mini", "pi-cli": "pi-model" },
           powerful: {
-            claude: { model: "opus", effort: "high" },
-            codex: { model: "o3-pro", verbosity: "low" },
-            gemini: { model: "gemini-ultra" },
+            "claude-code-cli": { model: "opus", effort: "high" },
+            "codex-cli": { model: "o3-pro", verbosity: "low" },
+            "pi-cli": { model: "pi-model" },
           },
         },
       },
@@ -1765,7 +1818,7 @@ describe("G-lane rework — models.tiers closed host-key set", () => {
     expect(status).toBe(0);
     const j = JSON.parse(out);
     expect(j.models.tiers.powerful).not.toHaveProperty("claudee");
-    expect(j.models.tiers.powerful.codex).toBe("o3");      // legal key carried
-    expect(j.models.tiers.powerful.claude).toBe("opus");   // default slot untouched
+    expect(j.models.tiers.powerful["codex-cli"]).toBe("o3");      // legal key carried
+    expect(j.models.tiers.powerful["claude-code-cli"]).toBe("opus");   // default slot untouched
   });
 });

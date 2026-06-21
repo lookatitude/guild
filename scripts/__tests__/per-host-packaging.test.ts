@@ -173,9 +173,14 @@ describe("validateManifest", () => {
 // ---------------------------------------------------------------------------
 
 describe("renderCodexPluginJson — happy path", () => {
-  it("produces the correct schema_version", () => {
+  it("does not emit stale schema_version or unsupported diagnostic fields into live plugin.json", () => {
     const out = renderCodexPluginJson(minimalManifest, opts);
-    expect(out.schema_version).toBe("codex-plugin.v1");
+    expect("schema_version" in out).toBe(false);
+    expect("commands" in out).toBe(false);
+    expect("mcpServers" in out).toBe(false);
+    expect("_unsupported" in out).toBe(false);
+    expect("_rendered_at" in out).toBe(false);
+    expect("_source_version" in out).toBe(false);
   });
 
   it("copies name, version, description from the manifest", () => {
@@ -194,45 +199,18 @@ describe("renderCodexPluginJson — happy path", () => {
     expect(out.keywords).toEqual(["agents", "specialists", "wiki", "tmux"]);
   });
 
-  it("renders commands as CodexCommandEntry descriptors", () => {
+  it("points Codex at the bundled Guild skill root", () => {
     const out = renderCodexPluginJson(fullManifest, opts);
-    expect(out.commands).toBeDefined();
-    expect(out.commands).toHaveLength(4);
-    const names = (out.commands ?? []).map((c) => c.name);
-    expect(names).toContain("guild");
-    expect(names).toContain("init");
-    expect(names).toContain("plan");
-    expect(names).toContain("build");
+    expect(out.skills).toBe("./.agents/skills/");
   });
 
-  it("each command entry carries the original source_path", () => {
+  it("renders live Codex interface metadata", () => {
     const out = renderCodexPluginJson(fullManifest, opts);
-    const guildCmd = (out.commands ?? []).find((c) => c.name === "guild");
-    expect(guildCmd?.source_path).toBe("./commands/guild.md");
-  });
-
-  it("renders stdio MCP servers in the mcpServers block", () => {
-    const out = renderCodexPluginJson(fullManifest, opts);
-    expect(out.mcpServers).toBeDefined();
-    const memSrv = (out.mcpServers ?? []).find((s) => s.id === "guild-memory");
-    expect(memSrv).toBeDefined();
-    expect(memSrv?.command).toBe("node");
-    expect(memSrv?.args).toEqual(["./mcp-servers/guild-memory/index.js"]);
-  });
-
-  it("uses caller-supplied _rendered_at, never calls the clock", () => {
-    const out = renderCodexPluginJson(minimalManifest, opts);
-    expect(out._rendered_at).toBe(FIXED_TS);
-  });
-
-  it("records _source_version from the manifest version", () => {
-    const out = renderCodexPluginJson(minimalManifest, opts);
-    expect(out._source_version).toBe("2.0.0");
-  });
-
-  it("produces no _unsupported array for a minimal manifest with no unsupported fields", () => {
-    const out = renderCodexPluginJson(minimalManifest, opts);
-    expect(out._unsupported).toBeUndefined();
+    expect(out.interface.displayName).toBe("Guild Stack");
+    expect(out.interface.category).toBe("Developer Tools");
+    expect(out.interface.capabilities).toEqual(["Read", "Write"]);
+    expect(out.interface.websiteURL).toBe("https://guildstack.dev/");
+    expect(out.interface.developerName).toBe("Miguel Pinto");
   });
 });
 
@@ -241,65 +219,17 @@ describe("renderCodexPluginJson — happy path", () => {
 // ---------------------------------------------------------------------------
 
 describe("renderCodexPluginJson — render-or-degrade", () => {
-  it("flags HTTP MCP servers in _unsupported (Codex does not support HTTP MCP)", () => {
+  it("does not render unsupported command/MCP/agent/hook fields into Codex plugin.json", () => {
     const manifest: GuildPluginManifest = {
-      ...minimalManifest,
+      ...fullManifest,
       mcpServers: [{ id: "remote-srv", transport: "http", url: "https://example.com/mcp" }],
     };
     const out = renderCodexPluginJson(manifest, opts);
-    expect(out.mcpServers).toBeUndefined();
-    expect(out._unsupported).toBeDefined();
-    const u = out._unsupported ?? [];
-    expect(u.some((f) => f.field.includes("remote-srv"))).toBe(true);
-    expect(u.some((f) => f.reason.toLowerCase().includes("http"))).toBe(true);
-  });
-
-  it("flags agents in _unsupported when agents are present", () => {
-    const out = renderCodexPluginJson(fullManifest, opts);
-    const u = out._unsupported ?? [];
-    expect(u.some((f) => f.field === "agents")).toBe(true);
-  });
-
-  it("flags skills in _unsupported when skills are present", () => {
-    const out = renderCodexPluginJson(fullManifest, opts);
-    const u = out._unsupported ?? [];
-    expect(u.some((f) => f.field === "skills")).toBe(true);
-  });
-
-  it("flags hooks in _unsupported when hooks are present", () => {
-    const out = renderCodexPluginJson(fullManifest, opts);
-    const u = out._unsupported ?? [];
-    expect(u.some((f) => f.field === "hooks")).toBe(true);
-  });
-
-  it("flags a stdio MCP server missing a command field in _unsupported", () => {
-    const manifest: GuildPluginManifest = {
-      ...minimalManifest,
-      mcpServers: [{ id: "no-cmd-srv", transport: "stdio" }],
-    };
-    const out = renderCodexPluginJson(manifest, opts);
-    const u = out._unsupported ?? [];
-    expect(u.some((f) => f.field.includes("no-cmd-srv"))).toBe(true);
-  });
-
-  it("does not silently omit any unsupported field — all flags present together", () => {
-    // A manifest with ALL unsupported field types must produce _unsupported entries
-    // for all of them (agents + skills + hooks + HTTP MCP).
-    const manifest: GuildPluginManifest = {
-      ...fullManifest,
-      mcpServers: [
-        { id: "guild-memory", transport: "stdio", command: "node", args: [] },
-        { id: "http-srv", transport: "http", url: "https://example.com/mcp" },
-      ],
-    };
-    const out = renderCodexPluginJson(manifest, opts);
-    const u = out._unsupported ?? [];
-    const fields = u.map((f) => f.field);
-    // All four unsupported categories must be flagged
-    expect(fields).toContain("agents");
-    expect(fields).toContain("skills");
-    expect(fields).toContain("hooks");
-    expect(fields.some((f) => f.includes("http-srv"))).toBe(true);
+    expect("commands" in out).toBe(false);
+    expect("mcpServers" in out).toBe(false);
+    expect("agents" in out).toBe(false);
+    expect("hooks" in out).toBe(false);
+    expect(out.skills).toBe("./.agents/skills/");
   });
 });
 
@@ -308,26 +238,16 @@ describe("renderCodexPluginJson — render-or-degrade", () => {
 // ---------------------------------------------------------------------------
 
 describe("renderCodexPluginJson — edge cases", () => {
-  it("does not produce an empty commands array for a manifest with no commands", () => {
-    const out = renderCodexPluginJson(minimalManifest, opts);
-    expect(out.commands).toBeUndefined();
-  });
-
-  it("does not produce an empty mcpServers array for a manifest with no servers", () => {
-    const out = renderCodexPluginJson(minimalManifest, opts);
-    expect(out.mcpServers).toBeUndefined();
-  });
-
   it("is deterministic — same input + same opts always produces byte-identical output", () => {
     const a = JSON.stringify(renderCodexPluginJson(fullManifest, opts));
     const b = JSON.stringify(renderCodexPluginJson(fullManifest, opts));
     expect(a).toBe(b);
   });
 
-  it("two different renderedAt values produce different _rendered_at in output", () => {
+  it("two different renderedAt values do not change live Codex plugin.json", () => {
     const out1 = renderCodexPluginJson(minimalManifest, { renderedAt: "2026-01-01T00:00:00Z" });
     const out2 = renderCodexPluginJson(minimalManifest, { renderedAt: "2026-06-13T00:00:00Z" });
-    expect(out1._rendered_at).not.toBe(out2._rendered_at);
+    expect(out1).toEqual(out2);
   });
 });
 
@@ -630,25 +550,26 @@ describe("cross-renderer contract", () => {
     expect(gemini).toContain(`"${fullManifest.version}"`);
   });
 
-  it("all three renderers flag unsupported fields — none silently omit", () => {
+  it("Codex emits live schema while Pi/Gemini retain render-or-degrade diagnostics", () => {
     const codex = renderCodexPluginJson(fullManifest, opts);
     const pi = renderPiManifest(fullManifest, opts);
     const gemini = renderGeminiToml(fullManifest, opts);
 
-    // Codex: agents + skills + hooks flagged
-    expect(codex._unsupported?.some((f) => f.field === "agents")).toBe(true);
+    // Codex: strict live plugin.json shape, with Guild skills as the supported surface.
+    expect(codex.skills).toBe("./.agents/skills/");
+    expect("_unsupported" in codex).toBe(false);
     // Pi: agents + hooks + MCP flagged
     expect(pi._unsupported?.some((f) => f.field === "agents")).toBe(true);
     // Gemini: UNSUPPORTED comment block present for agents/skills/hooks
     expect(gemini).toContain("UNSUPPORTED");
   });
 
-  it("_rendered_at is consistent across all three renderers for the same opts", () => {
+  it("_rendered_at remains on renderers whose live formats allow provenance fields", () => {
     const codex = renderCodexPluginJson(fullManifest, opts);
     const pi = renderPiManifest(fullManifest, opts);
     const gemini = renderGeminiToml(fullManifest, opts);
 
-    expect(codex._rendered_at).toBe(FIXED_TS);
+    expect("_rendered_at" in codex).toBe(false);
     expect(pi._rendered_at).toBe(FIXED_TS);
     expect(gemini).toContain(`_rendered_at = "${FIXED_TS}"`);
   });

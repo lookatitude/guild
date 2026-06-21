@@ -251,6 +251,8 @@ export function writeClaudeTree(
   }
   copyClaudeHooks(root, dest, inv);
   copyFileEnsured(path.join(root, ".mcp.json"), path.join(dest, ".mcp.json"));
+  copyFileEnsured(path.join(root, "AGENTS.md"), path.join(dest, "AGENTS.md"));
+  copyFileEnsured(path.join(root, "CLAUDE.md"), path.join(dest, "CLAUDE.md"));
   // MCP server runtime referenced by .mcp.json (so the package is self-contained).
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
   writeLauncher(dest, "claude");
@@ -284,6 +286,30 @@ export function writeCodexTree(
   }
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
   writeLauncher(dest, "codex");
+  return dest;
+}
+
+/** Emit a Codex marketplace root so `codex plugin marketplace add <dir>` can list/install Guild. */
+export function writeCodexMarketplaceTree(codexDir: string, distRoot: string): string {
+  const dest = path.join(distRoot, "codex-marketplace");
+  rmrf(dest);
+  const pluginDest = path.join(dest, "plugins", "guild");
+  copyDirExcludingNodeModules(codexDir, pluginDest);
+  writeFileEnsured(
+    path.join(dest, ".agents", "plugins", "marketplace.json"),
+    stableJson({
+      name: "guild",
+      interface: { displayName: "Guild Stack" },
+      plugins: [
+        {
+          name: "guild",
+          source: { source: "local", path: "./plugins/guild" },
+          policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+          category: "Developer Tools",
+        },
+      ],
+    })
+  );
   return dest;
 }
 
@@ -376,12 +402,13 @@ function codexPackageRefs(
   inv: GuildInventoryV1,
   codexJson: ReturnType<typeof renderCodexPluginJson>
 ): PackageReferences {
+  void codexJson;
   return {
     host: "codex",
-    command_ids: (codexJson.commands ?? []).map((c) => c.name),
+    command_ids: [],
     skill_ids: inv.skills.map((s) => s.id), // exposed under .agents/skills/guild/**
     agent_ids: [], // Codex flags agents unsupported (render-or-degrade) — none referenced.
-    mcp_server_ids: (codexJson.mcpServers ?? []).map((m) => m.id),
+    mcp_server_ids: [],
     script_ids: [],
     hook_ids: [],
     schema_versions: [],
@@ -395,6 +422,7 @@ function codexPackageRefs(
 export interface BuildResult {
   claudeDir: string;
   codexDir: string;
+  codexMarketplaceDir: string;
   /** P1-L6: the new-host trees (.agents universal, Pi, Antigravity). */
   agentsDir: string;
   piDir: string;
@@ -463,6 +491,7 @@ export function buildHostPackages(opts: {
 
   const claudeDir = writeClaudeTree(opts.root, inv, opts.distRoot, opts.generatedAt);
   const codexDir = writeCodexTree(opts.root, inv, opts.distRoot, opts.generatedAt);
+  const codexMarketplaceDir = writeCodexMarketplaceTree(codexDir, opts.distRoot);
   // P1-L6: new-host trees (INFERRED capability rows, installability: target).
   const agentsDir = writeAgentsTree(opts.root, inv, opts.distRoot, opts.generatedAt);
   const piDir = writePiTree(opts.root, inv, opts.distRoot, opts.generatedAt);
@@ -497,6 +526,7 @@ export function buildHostPackages(opts: {
   return {
     claudeDir,
     codexDir,
+    codexMarketplaceDir,
     agentsDir,
     piDir,
     antigravityDir,
@@ -554,7 +584,14 @@ function main(): number {
     return 1;
   }
 
-  for (const d of [result.claudeDir, result.codexDir, result.agentsDir, result.piDir, result.antigravityDir]) {
+  for (const d of [
+    result.claudeDir,
+    result.codexDir,
+    result.codexMarketplaceDir,
+    result.agentsDir,
+    result.piDir,
+    result.antigravityDir,
+  ]) {
     process.stdout.write(`build:hosts: wrote ${d}\n`);
   }
   if (!result.gateOk) {

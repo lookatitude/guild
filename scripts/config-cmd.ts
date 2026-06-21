@@ -62,6 +62,7 @@ import {
 // Closed registry host-id set (single SoT — host-registry-schema.ts HOST_IDS) for
 // validating roles.* / host_profiles.* values written via `config set`.
 import { HOST_IDS } from "./lib/host-registry-schema";
+import { normalizeHostId } from "./lib/host-id-namespace";
 import {
   detectProviders,
   recommendProvider,
@@ -156,7 +157,7 @@ const TIER1_KEYS = new Set([
  */
 const ROLE_ALIASES = new Set(["host", "advisory", "adversarial"]);
 
-/** Known registry host ids (claude/codex/.agents/pi/antigravity) — value set for roles/host_profiles. */
+/** Known canonical registry host ids — value set for roles/host_profiles. */
 const KNOWN_HOST_IDS = new Set<string>(HOST_IDS);
 
 /** `host_profiles.<host_id>.enabled` — the one host_profiles leaf that must coerce to a boolean. */
@@ -183,6 +184,7 @@ const MODELS_KEYS = new Set([
   "cacheTTL",
   "importanceGate",
   "compositeRecall",
+  "importanceAtIngest",
   "ingestSimilarityGate",
   "shortOutputThreshold",
 ]);
@@ -394,7 +396,7 @@ function validateKeyPath(keyPath: string): string | null {
   // host_profiles.* — keyed by KNOWN registry host_id; deeper content (models/enabled)
   // is validated by validateHostProfiles at validate --effective time.
   if (top === "host_profiles") {
-    if (!KNOWN_HOST_IDS.has(seg1)) {
+    if (!normalizeHostId(seg1)) {
       return `unknown host_profiles host_id "${seg1}" (closed key set — valid: ${[...KNOWN_HOST_IDS].join("|")})`;
     }
     return null;
@@ -559,7 +561,7 @@ function validateValue(keyPath: string, rawValue: string): string | null {
   // `config role`; a typo like "claudee" is rejected, not silently written).
   if (keyPath.startsWith("roles.") && ROLE_ALIASES.has(keyPath.slice("roles.".length))) {
     if (rawValue === "null" || rawValue === "none") return null;
-    if (!KNOWN_HOST_IDS.has(rawValue)) {
+    if (!normalizeHostId(rawValue)) {
       return `invalid value "${rawValue}" for key "${keyPath}" — valid: ${[...KNOWN_HOST_IDS].join("|")} or null`;
     }
     return null;
@@ -668,6 +670,9 @@ function coerceValue(keyPath: string, rawValue: string): unknown {
   if ((rawValue === "null" || rawValue === "none") && keyPath.startsWith("roles.")) {
     return null;
   }
+  if (keyPath.startsWith("roles.") && ROLE_ALIASES.has(keyPath.slice("roles.".length))) {
+    return normalizeHostId(rawValue) ?? rawValue;
+  }
   // host_profiles.<id>.enabled ⇒ boolean (validateValue guarantees the true|false literal).
   if (HP_ENABLED_RE.test(keyPath)) {
     return rawValue === "true";
@@ -692,6 +697,14 @@ function coerceValue(keyPath: string, rawValue: string): unknown {
     }
   }
   return rawValue;
+}
+
+function normalizeHostProfileKeyPath(keyPath: string): string {
+  if (keyPath === "host_profiles" || !keyPath.startsWith("host_profiles.")) return keyPath;
+  const parts = keyPath.split(".");
+  const canonical = normalizeHostId(parts[1]);
+  if (canonical) parts[1] = canonical;
+  return parts.join(".");
 }
 
 // ---------------------------------------------------------------------------
@@ -1041,6 +1054,7 @@ function cmdSet(
   scope: "workspace" | "project" | "local",
   cwd: string
 ): number {
+  const writeKeyPath = normalizeHostProfileKeyPath(keyPath);
   // 1. Validate the FULL dotted key path
   const keyErr = validateKeyPath(keyPath);
   if (keyErr) {
@@ -1078,7 +1092,7 @@ function cmdSet(
 
   // 5. Read-modify-write — FAIL CLOSED on malformed JSON
   try {
-    readModifyWrite(targetFile, keyPath, coerced);
+    readModifyWrite(targetFile, writeKeyPath, coerced);
   } catch (e) {
     process.stdout.write(`[config-cmd] ERROR: ${(e as Error).message}\n`);
     return 1;
@@ -1088,7 +1102,7 @@ function cmdSet(
   const valueDisplay = JSON.stringify(coerced);
   const fileName = path.basename(targetFile);
   process.stdout.write(
-    `[config-cmd] SET ${keyPath} = ${valueDisplay}\n` +
+    `[config-cmd] SET ${writeKeyPath} = ${valueDisplay}\n` +
       `  scope: ${scope}\n` +
       `  file:  ${targetFile}\n` +
       `  written: ${fileName}\n`

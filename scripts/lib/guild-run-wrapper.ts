@@ -54,6 +54,17 @@ export interface WrapperRequest {
   structuredOutput?: { wire_schema_version: string };
   /** Resume a prior session by id. */
   resume?: { sessionId: string };
+  /** R5 host-native model params requested for this run. */
+  modelParams?: WrapperModelParams;
+}
+
+export interface WrapperModelParams {
+  model?: string;
+  effort?: string;
+  reasoning?: string;
+  thinking?: string;
+  verbosity?: string;
+  [key: string]: string | undefined;
 }
 
 export interface LaunchModeResolution {
@@ -105,6 +116,13 @@ export interface WrapperPlan {
   prompt: string;
   launch: LaunchModeResolution;
   bootstrap: BootstrapInjection;
+  /** R5 model params mapped to host-native argv where supported. */
+  model_params: {
+    requested: WrapperModelParams | null;
+    args: string[];
+    unsupported_model_params: string[];
+    degraded: boolean;
+  };
   /** The structured-output instruction appended to the prompt (if requested). */
   structured_output_instruction?: string;
   /** What the wrapper captures from the run. */
@@ -256,6 +274,36 @@ export const HOST_BINARY: Record<string, string> = {
   codex: "codex",
 };
 
+export function planModelParamArgs(host: string, params?: WrapperModelParams): WrapperPlan["model_params"] {
+  if (!params || Object.keys(params).length === 0) {
+    return { requested: null, args: [], unsupported_model_params: [], degraded: false };
+  }
+  const requested = { ...params };
+  if (host === "claude") {
+    const unsupported = Object.keys(requested).filter((key) => !["model", "effort"].includes(key));
+    const args = [
+      ...(requested.model ? ["--model", requested.model] : []),
+      ...(requested.effort ? ["--effort", requested.effort] : []),
+    ];
+    return { requested, args, unsupported_model_params: unsupported, degraded: unsupported.length > 0 };
+  }
+  if (host === "codex") {
+    const unsupported = Object.keys(requested).filter((key) => !["model", "effort", "reasoning"].includes(key));
+    const reasoningEffort = requested.reasoning ?? requested.effort;
+    const args = [
+      ...(requested.model ? ["--model", requested.model] : []),
+      ...(reasoningEffort ? ["-c", `model_reasoning_effort=${JSON.stringify(reasoningEffort)}`] : []),
+    ];
+    return { requested, args, unsupported_model_params: unsupported, degraded: unsupported.length > 0 };
+  }
+  return {
+    requested,
+    args: [],
+    unsupported_model_params: Object.keys(requested),
+    degraded: true,
+  };
+}
+
 /**
  * Build the complete, pure invocation plan for a host run. Throws (explicit) for
  * a host with no capability row — we never guess a host's launch shape.
@@ -274,6 +322,7 @@ export function planWrapperInvocation(
 
   const launch = resolveLaunchMode(caps, request.mode);
   const bootstrap = planBootstrapInjection(caps, request);
+  const modelParams = planModelParamArgs(request.host, request.modelParams);
 
   const soInstruction = request.structuredOutput
     ? structuredOutputInstruction(request.structuredOutput.wire_schema_version)
@@ -290,7 +339,7 @@ export function planWrapperInvocation(
   // subcommand (INFERRED — confirm on-box at SC-3).
   const args: string[] = [];
   if (request.host === "codex") args.push("exec");
-  args.push(...launch.args, ...bootstrap.args);
+  args.push(...launch.args, ...modelParams.args, ...bootstrap.args);
   if (request.resume) {
     // Claude resumes by id with --resume; codex resume shape is INFERRED.
     args.push("--resume", request.resume.sessionId);
@@ -316,6 +365,7 @@ export function planWrapperInvocation(
     prompt,
     launch,
     bootstrap,
+    model_params: modelParams,
     capture: {
       session_id: caps.sessions.resume_by_id,
       stdout: true,

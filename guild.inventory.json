@@ -39,7 +39,7 @@
     {
       "id": "config",
       "source_path": "commands/config.md",
-      "description": "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki). `config init` scaffolds it fully-documented; `config show` prints the resolved config; `config show --sources` annotates each key with its inheritance layer; `config set` performs a scoped hard-set write; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
+      "description": "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki, per-run role pins). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key AND each phase-permission decision (host_mode/guild_gates/bypass) with its inheritance layer; `config show --render` renders the resolved config into each of the 5 host-native config shapes (fail-closed on local/secret leaks); `config set` performs a scoped hard-set write; `config role <host|advisory|adversarial> <host_id|null>` pins a per-run role to a registry host (scoped, provenance-stamped, never-clobber); `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
     },
     {
       "id": "dashboard",
@@ -433,6 +433,24 @@
       "source_path": "skills/core/principles/SKILL.md",
       "tier": "core",
       "description": "Guild's five operating principles — Think-before-doing, Simplicity-first, Surgical-changes, Goal-driven-execution, Evidence-over-claims — loaded as the mandatory prelude for every Guild specialist (engineering, writing, or commercial). The first four are Karpathy's 4; the fifth is Guild's addition. Includes per-group adaptations so a copywriter, a backend engineer, and an SEO specialist each read the rules in their own idiom. TRIGGER when a user or specialist asks \"what are Guild's principles\", \"what's the specialist prelude\", \"how should I adapt these principles for a copywriter / marketer / engineer\", \"what does surgical changes mean for a technical writer\", \"remind me of the Karpathy 4 plus evidence rule\", or any variant — including single-principle lookups scoped to a specific role. DO NOT TRIGGER for trivial one-off tasks (typo fixes, branch pushes, single-line renames) where a principles review is overkill, or for generic LLM-ethics / alignment questions unrelated to Guild."
+    },
+    {
+      "id": "guild-product-define",
+      "source_path": "skills/meta/product-define/SKILL.md",
+      "tier": "meta",
+      "description": "Product-loop DEFINE producer — turns a validated explore artifact into a typed, fail-closed `guild.define.v1` PRD nucleus whose every acceptance criterion carries a STABLE, unique id for full downstream traceability (plan lane → build receipt → QA check → release gate, AC32). Emits acceptance_criteria[{id,text}] plus user_stories, non_goals, risks, affected_surfaces, test_implications, and self-validates with validateDefineV1. TRIGGER after guild:product-explore produces a valid explore artifact, or when a user asks to define / write the PRD / set acceptance criteria for an explored product idea. It produces the DEFINE artifact only; it does not plan lanes or build. DO NOT TRIGGER for engineering/maintenance prompts, for the initial idea exploration (that is guild:product-explore), for team composition, code edits, or micro-tasks."
+    },
+    {
+      "id": "guild-product-explore",
+      "source_path": "skills/meta/product-explore/SKILL.md",
+      "tier": "meta",
+      "description": "Product-loop EXPLORE producer — turns a vague product idea into a typed, fail-closed `guild.explore.v1` artifact before any engineering scoping. Emits the five required fields (assumptions, evidence_needs, comparables, risks, recommended_next_step) and self-validates with validateExploreV1. TRIGGER when the no-slash `using-guild` intake router classifies a prompt as `intake=product_loop` (\"I have an idea for X\", \"what if we built…\", \"I want to make a tool that…\", \"I wish there was an app that…\"), or when a user explicitly asks to explore / pressure-test / scope a product idea before building. It produces the EXPLORE artifact only; it does not write a PRD (that is guild:product-define) and does not plan or build. DO NOT TRIGGER for engineering/maintenance prompts (bug fix, \"plan this feature\", review a PR, refactor, deploy) — those route to the normal lifecycle, never the product loop; nor for team composition, code edits, or micro-tasks."
+    },
+    {
+      "id": "guild-product-template",
+      "source_path": "skills/meta/product-template/SKILL.md",
+      "tier": "meta",
+      "description": "Product-loop TEMPLATE producer — seeds a product idea from a named `guild.template.v1` (cli-tool, web-app, …) into a VALID `guild.explore.v1` + `guild.define.v1` skeleton pair, so the product loop starts from a proven contract. Resolves the template by id, instantiates via the `scripts/instantiate-template.ts` producer (reuses the LW3-1 instantiator + W1 validators, fails closed), and writes the skeletons under `.guild/`. TRIGGER when a product-loop idea matches a known archetype and the operator wants to scaffold from a template (\"start from the CLI template\", \"scaffold a web-app product\", \"use the <id> template\", \"seed explore/define from a template\"). Seeds artifacts only (refine via guild:product-explore / guild:product-define); never plans, builds, or edits runtime permission/skill/agent files (AC37 no-self-edit). DO NOT TRIGGER for engineering/maintenance prompts, idea exploration with no template (guild:product-explore), PRD authoring (guild:product-define), team composition, or code edits."
     },
     {
       "id": "guild-quality",
@@ -1155,6 +1173,11 @@
       "kind": "cli"
     },
     {
+      "id": "instantiate-template",
+      "source_path": "scripts/instantiate-template.ts",
+      "kind": "cli"
+    },
+    {
       "id": "knowledge-links-builder",
       "source_path": "scripts/knowledge-links-builder.ts",
       "kind": "cli"
@@ -1175,6 +1198,21 @@
       "kind": "lib"
     },
     {
+      "id": "lib/autonomy-presets",
+      "source_path": "scripts/lib/autonomy-presets.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/benchmark-guild-artifacts",
+      "source_path": "scripts/lib/benchmark-guild-artifacts.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/classify-intake",
+      "source_path": "scripts/lib/classify-intake.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/cloud-consent-gate",
       "source_path": "scripts/lib/cloud-consent-gate.ts",
       "kind": "lib"
@@ -1182,6 +1220,11 @@
     {
       "id": "lib/cloud-task-packet",
       "source_path": "scripts/lib/cloud-task-packet.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/command-registry",
+      "source_path": "scripts/lib/command-registry.ts",
       "kind": "lib"
     },
     {
@@ -1195,6 +1238,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/config-render",
+      "source_path": "scripts/lib/config-render.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/config-schema",
       "source_path": "scripts/lib/config-schema.ts",
       "kind": "lib"
@@ -1205,8 +1253,43 @@
       "kind": "lib"
     },
     {
+      "id": "lib/dashboard-projector",
+      "source_path": "scripts/lib/dashboard-projector.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/define-schema",
+      "source_path": "scripts/lib/define-schema.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/define-test-matrix",
+      "source_path": "scripts/lib/define-test-matrix.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/define-test-matrix.import-contract",
+      "source_path": "scripts/lib/define-test-matrix.import-contract.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/define-traceability",
+      "source_path": "scripts/lib/define-traceability.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/degradation-trace",
       "source_path": "scripts/lib/degradation-trace.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/dependency-graph-reader",
+      "source_path": "scripts/lib/dependency-graph-reader.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/dependency-graph-schema",
+      "source_path": "scripts/lib/dependency-graph-schema.ts",
       "kind": "lib"
     },
     {
@@ -1220,6 +1303,16 @@
       "kind": "lib"
     },
     {
+      "id": "lib/explore-schema",
+      "source_path": "scripts/lib/explore-schema.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/failure-ingestion",
+      "source_path": "scripts/lib/failure-ingestion.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/frontmatter",
       "source_path": "scripts/lib/frontmatter.ts",
       "kind": "lib"
@@ -1227,6 +1320,21 @@
     {
       "id": "lib/fs-scanner",
       "source_path": "scripts/lib/fs-scanner.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/guild-artifact-paths",
+      "source_path": "scripts/lib/guild-artifact-paths.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/guild-discovery",
+      "source_path": "scripts/lib/guild-discovery.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/guild-root",
+      "source_path": "scripts/lib/guild-root.ts",
       "kind": "lib"
     },
     {
@@ -1240,6 +1348,46 @@
       "kind": "lib"
     },
     {
+      "id": "lib/host-adapter-contract",
+      "source_path": "scripts/lib/host-adapter-contract.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-adapter-factory",
+      "source_path": "scripts/lib/host-adapter-factory.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-adapters/agents-file",
+      "source_path": "scripts/lib/host-adapters/agents-file.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-adapters/antigravity-cli",
+      "source_path": "scripts/lib/host-adapters/antigravity-cli.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-adapters/app-host",
+      "source_path": "scripts/lib/host-adapters/app-host.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-adapters/claude-code-cli",
+      "source_path": "scripts/lib/host-adapters/claude-code-cli.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-adapters/codex-cli",
+      "source_path": "scripts/lib/host-adapters/codex-cli.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-adapters/pi-cli",
+      "source_path": "scripts/lib/host-adapters/pi-cli.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/host-capabilities-schema",
       "source_path": "scripts/lib/host-capabilities-schema.ts",
       "kind": "lib"
@@ -1247,6 +1395,11 @@
     {
       "id": "lib/host-id-namespace",
       "source_path": "scripts/lib/host-id-namespace.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-profiles-validate",
+      "source_path": "scripts/lib/host-profiles-validate.ts",
       "kind": "lib"
     },
     {
@@ -1315,6 +1468,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/installer-contract",
+      "source_path": "scripts/lib/installer-contract.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/inventory-schema",
       "source_path": "scripts/lib/inventory-schema.ts",
       "kind": "lib"
@@ -1337,6 +1495,11 @@
     {
       "id": "lib/learning-candidate",
       "source_path": "scripts/lib/learning-candidate.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/memory-adapter",
+      "source_path": "scripts/lib/memory-adapter.ts",
       "kind": "lib"
     },
     {
@@ -1420,6 +1583,16 @@
       "kind": "lib"
     },
     {
+      "id": "lib/review-pairing",
+      "source_path": "scripts/lib/review-pairing.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/review-progress",
+      "source_path": "scripts/lib/review-progress.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/role-model-schema",
       "source_path": "scripts/lib/role-model-schema.ts",
       "kind": "lib"
@@ -1432,6 +1605,11 @@
     {
       "id": "lib/routing-ab-contract",
       "source_path": "scripts/lib/routing-ab-contract.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/run-learning-classifier",
+      "source_path": "scripts/lib/run-learning-classifier.ts",
       "kind": "lib"
     },
     {
@@ -1455,13 +1633,28 @@
       "kind": "lib"
     },
     {
+      "id": "lib/sanitized-run-export",
+      "source_path": "scripts/lib/sanitized-run-export.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/settings-resolver",
       "source_path": "scripts/lib/settings-resolver.ts",
       "kind": "lib"
     },
     {
+      "id": "lib/skill-source-transform",
+      "source_path": "scripts/lib/skill-source-transform.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/sqlite-projections",
       "source_path": "scripts/lib/sqlite-projections.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/support-matrix",
+      "source_path": "scripts/lib/support-matrix.ts",
       "kind": "lib"
     },
     {
@@ -1480,6 +1673,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/template-schema",
+      "source_path": "scripts/lib/template-schema.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/trace-replay",
       "source_path": "scripts/lib/trace-replay.ts",
       "kind": "lib"
@@ -1487,6 +1685,16 @@
     {
       "id": "lib/wiki-recall",
       "source_path": "scripts/lib/wiki-recall.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/workspace-impact-detector",
+      "source_path": "scripts/lib/workspace-impact-detector.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/workspace-impact-schema",
+      "source_path": "scripts/lib/workspace-impact-schema.ts",
       "kind": "lib"
     },
     {

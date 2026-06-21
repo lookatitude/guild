@@ -35,7 +35,7 @@ import { HOST_IDS, type HostId } from "../../scripts/lib/host-registry-schema";
 
 // ── Table completeness + verbatim rungs ─────────────────────────────────────
 
-describe("P1 SC-8 — ladder table is complete (4 surfaces × 5 hosts)", () => {
+describe("P1 SC-8 — ladder table is complete (4 surfaces × 9 hosts)", () => {
   it("validateLadderTableComplete passes", () => {
     const r = validateLadderTableComplete();
     expect(r.errors).toEqual([]);
@@ -53,17 +53,40 @@ describe("P1 SC-8 — ladder table is complete (4 surfaces × 5 hosts)", () => {
   // Pin the ENTIRE gated C3 table verbatim — EVERY one of the 4×5 cells, not just
   // the "notable" ones, so a silent edit to ANY cell (e.g. session.codex,
   // semantic_tool.antigravity) fails (codex G-lane round-1 MINOR).
-  it("pins the verbatim gated rung table — all 4×5 cells exactly", () => {
-    // Oracle refreshed to the CURRENT production FALLBACK_LADDER_TABLE after commit
-    // 445f7b6 ("fix(host-registry): verify pi + antigravity capability rows on-host")
-    // on-host-VERIFIED the pi/antigravity rungs — the newer truth, not a regression.
-    // Changed cells vs the pre-445f7b6 pin: session.pi emulated→native,
-    // session.antigravity emulated→wrapped, semantic_tool.pi emulated→bridged.
+  it("pins the verbatim gated rung table — all 4×9 cells exactly", () => {
+    // Oracle refreshed to the CURRENT production FALLBACK_LADDER_TABLE after the
+    // host-adapter-migration renamed the roster to the canonical 9 host ids
+    // (claude→claude-code-cli, codex→codex-cli, .agents→agents-file, pi→pi-cli,
+    // antigravity→antigravity-cli) and added the four app/connector surfaces
+    // (claude-code-app, claude-code-web, codex-app, claude-ai-connector), all of
+    // which degrade across every surface. The RUNG VALUES for the original five
+    // hosts are byte-identical to the pre-rename pin (pure key rename); the four
+    // app/connector rows are the new canonical-roster additions (all "degraded").
     const EXPECTED: Record<AdapterSurface, Record<HostId, Rung>> = {
-      interaction: { claude: "native", codex: "wrapped", ".agents": "bridged", pi: "wrapped", antigravity: "wrapped" },
-      session: { claude: "native", codex: "wrapped", ".agents": "emulated", pi: "native", antigravity: "wrapped" },
-      semantic_tool: { claude: "native", codex: "bridged", ".agents": "bridged", pi: "bridged", antigravity: "bridged" },
-      browser: { claude: "bridged", codex: "bridged", ".agents": "degraded", pi: "degraded", antigravity: "native" },
+      interaction: {
+        "claude-code-cli": "native", "codex-cli": "wrapped", "agents-file": "bridged",
+        "pi-cli": "wrapped", "antigravity-cli": "wrapped",
+        "claude-code-app": "degraded", "claude-code-web": "degraded",
+        "codex-app": "degraded", "claude-ai-connector": "degraded",
+      },
+      session: {
+        "claude-code-cli": "native", "codex-cli": "wrapped", "agents-file": "emulated",
+        "pi-cli": "native", "antigravity-cli": "wrapped",
+        "claude-code-app": "degraded", "claude-code-web": "degraded",
+        "codex-app": "degraded", "claude-ai-connector": "degraded",
+      },
+      semantic_tool: {
+        "claude-code-cli": "native", "codex-cli": "bridged", "agents-file": "bridged",
+        "pi-cli": "bridged", "antigravity-cli": "bridged",
+        "claude-code-app": "degraded", "claude-code-web": "degraded",
+        "codex-app": "degraded", "claude-ai-connector": "degraded",
+      },
+      browser: {
+        "claude-code-cli": "bridged", "codex-cli": "bridged", "agents-file": "degraded",
+        "pi-cli": "degraded", "antigravity-cli": "native",
+        "claude-code-app": "degraded", "claude-code-web": "degraded",
+        "codex-app": "degraded", "claude-ai-connector": "degraded",
+      },
     };
     // Exact whole-table equality — catches any single-cell drift in either direction.
     expect(FALLBACK_LADDER_TABLE).toEqual(EXPECTED);
@@ -77,10 +100,10 @@ describe("P1 SC-8 — ladder table is complete (4 surfaces × 5 hosts)", () => {
 
   // The notable non-defaults, called out explicitly for documentation/intent.
   it("encodes the notable non-defaults (Claude browser=bridged, antigravity browser=native)", () => {
-    expect(FALLBACK_LADDER_TABLE.browser.claude).toBe("bridged");
-    expect(FALLBACK_LADDER_TABLE.browser.codex).toBe("bridged");
-    expect(FALLBACK_LADDER_TABLE.browser.antigravity).toBe("native");
-    expect(FALLBACK_LADDER_TABLE.browser[".agents"]).toBe("degraded");
+    expect(FALLBACK_LADDER_TABLE.browser["claude-code-cli"]).toBe("bridged");
+    expect(FALLBACK_LADDER_TABLE.browser["codex-cli"]).toBe("bridged");
+    expect(FALLBACK_LADDER_TABLE.browser["antigravity-cli"]).toBe("native");
+    expect(FALLBACK_LADDER_TABLE.browser["agents-file"]).toBe("degraded");
   });
 });
 
@@ -114,19 +137,30 @@ describe("P1 SC-8 — resolveRung produces correct receipts for known hosts", ()
   });
 
   it("claude interaction is native ⇒ degraded:false; codex interaction is wrapped ⇒ degraded:true", () => {
-    expect(resolveRung("interaction", "claude").degraded).toBe(false);
-    expect(resolveRung("interaction", "codex").degraded).toBe(true);
+    expect(resolveRung("interaction", "claude-code-cli").degraded).toBe(false);
+    expect(resolveRung("interaction", "codex-cli").degraded).toBe(true);
   });
 
-  it("INFERRED set is exactly {.agents, pi, antigravity}; claude/codex are concrete", () => {
-    expect([...INFERRED_HOSTS].sort()).toEqual([".agents", "antigravity", "pi"]);
-    expect(isInferredRung("interaction", "claude")).toBe(false);
-    expect(isInferredRung("interaction", "codex")).toBe(false);
-    expect(isInferredRung("browser", ".agents")).toBe(true);
+  it("INFERRED set is the agents-file/pi/antigravity + app/connector hosts; claude-code-cli/codex-cli are concrete", () => {
+    // Canonical-roster INFERRED set: agents-file, pi-cli, antigravity-cli plus the
+    // four app/connector surfaces. claude-code-cli + codex-cli are the only concrete
+    // (live-verified) rows.
+    expect([...INFERRED_HOSTS].sort()).toEqual([
+      "agents-file",
+      "antigravity-cli",
+      "claude-ai-connector",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "pi-cli",
+    ]);
+    expect(isInferredRung("interaction", "claude-code-cli")).toBe(false);
+    expect(isInferredRung("interaction", "codex-cli")).toBe(false);
+    expect(isInferredRung("browser", "agents-file")).toBe(true);
   });
 
   it("a degraded inferred cell carries the INFERRED note in its reason", () => {
-    const r = resolveRung("browser", ".agents"); // degraded + inferred
+    const r = resolveRung("browser", "agents-file"); // degraded + inferred
     expect(r.degraded).toBe(true);
     expect(r.inferred).toBe(true);
     expect(r.reason).toMatch(/INFERRED/);
@@ -156,7 +190,7 @@ describe("P1 SC-8 — unknown host fails closed to degraded", () => {
 // ── receipt validator fail-fixtures ─────────────────────────────────────────
 
 describe("P1 SC-8 — degradation-receipt validator fail-closed", () => {
-  const good = resolveRung("session", "codex");
+  const good = resolveRung("session", "codex-cli");
 
   it("rejects an invalid rung, a bad schema_version, and a non-boolean flag", () => {
     expect(validateDegradationReceipt({ ...good, rung: "supercharged" }).valid).toBe(false);

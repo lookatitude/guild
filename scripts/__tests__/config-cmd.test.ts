@@ -1255,7 +1255,7 @@ describe("config set host_profiles — strict content validation (Codex MAJOR)",
     const settings = JSON.parse(
       fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
     );
-    expect(settings.host_profiles.codex.enabled).toBe(false); // boolean, not the string "false"
+    expect(settings.host_profiles["codex-cli"].enabled).toBe(false); // boolean, not the string "false"
     expect(run(["validate", "--effective", "--cwd", project]).status).toBe(0);
   });
 

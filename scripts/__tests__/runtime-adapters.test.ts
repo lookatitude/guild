@@ -38,18 +38,18 @@ describe("P1-L11 runtime adapters — every surface resolves a rung for every ho
   });
 
   it("concrete Claude/Codex rungs match the contract (interaction native/wrapped; browser bridged)", () => {
-    expect(resolveAdapter("interaction", "claude").rung).toBe("native");
-    expect(resolveAdapter("interaction", "codex").rung).toBe("wrapped");
-    expect(resolveAdapter("session", "claude").rung).toBe("native");
-    expect(resolveAdapter("browser", "claude").rung).toBe("bridged");
-    expect(resolveAdapter("browser", "antigravity").rung).toBe("native"); // agy browser
+    expect(resolveAdapter("interaction", "claude-code-cli").rung).toBe("native");
+    expect(resolveAdapter("interaction", "codex-cli").rung).toBe("wrapped");
+    expect(resolveAdapter("session", "claude-code-cli").rung).toBe("native");
+    expect(resolveAdapter("browser", "claude-code-cli").rung).toBe("bridged");
+    expect(resolveAdapter("browser", "antigravity-cli").rung).toBe("native"); // agy browser
   });
 });
 
 describe("P1-L11 runtime adapters — degradation recorded + inferred flagged", () => {
   it("records a receipt per resolve into the recorder", () => {
     const rec = new DegradationRecorder();
-    resolveAllAdapters("codex", rec);
+    resolveAllAdapters("codex-cli", rec);
     expect(rec.all().length).toBe(ADAPTER_SURFACES.length);
     // codex: interaction=wrapped, session=wrapped, semantic_tool=bridged, browser=bridged → all degraded (below native)
     expect(rec.degraded().length).toBe(ADAPTER_SURFACES.length);
@@ -59,14 +59,14 @@ describe("P1-L11 runtime adapters — degradation recorded + inferred flagged", 
 
   it("INFERRED hosts flag their receipts (off-box, must re-verify)", () => {
     const rec = new DegradationRecorder();
-    resolveAllAdapters(".agents", rec);
-    expect(rec.inferred().length).toBe(ADAPTER_SURFACES.length); // every .agents cell is INFERRED
+    resolveAllAdapters("agents-file", rec);
+    expect(rec.inferred().length).toBe(ADAPTER_SURFACES.length); // every agents-file cell is INFERRED
   });
 
   it("claude native interaction/session are NOT degraded", () => {
     const rec = new DegradationRecorder();
-    resolveAdapter("interaction", "claude", rec);
-    resolveAdapter("session", "claude", rec);
+    resolveAdapter("interaction", "claude-code-cli", rec);
+    resolveAdapter("session", "claude-code-cli", rec);
     expect(rec.degraded().length).toBe(0);
   });
 });

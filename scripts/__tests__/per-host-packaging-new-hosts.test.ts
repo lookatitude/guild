@@ -57,18 +57,18 @@ describe("P1-L6 renderAgentsPackage — universal AGENTS.md", () => {
   });
 });
 
-describe("P1-L6 renderAntigravityManifest — INFERRED host", () => {
+describe("P1-L6 renderAntigravityManifest — verified target host", () => {
   const m = renderAntigravityManifest(manifest(), { renderedAt: RENDERED_AT });
 
-  it("renders the extension shape + marks the row INFERRED", () => {
+  it("renders the extension shape + records verified provenance", () => {
     expect(m.schema_version).toBe("antigravity-manifest.v1");
-    expect(m._inferred).toBe(true);
+    expect(m._provenance).toBe("verified");
     expect(m._source_version).toBe("2.0.0");
     expect(m.commands?.map((c) => c.name)).toEqual(["guild", "init"]);
     expect(m.skills).toEqual(["./skills/meta/", "./skills/specialists/"]);
   });
 
-  it("flags agents/hooks/mcp as unsupported (INFERRED off-box)", () => {
+  it("flags agents/hooks/mcp as unsupported in the CLI package surface", () => {
     const fields = (m._unsupported ?? []).map((u) => u.field);
     expect(fields).toContain("agents");
     expect(fields).toContain("hooks");

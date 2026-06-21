@@ -40,6 +40,8 @@ import {
 } from "./lib/guild-run-wrapper";
 import { normalizeWithRepair, type BoundedRepairResult } from "./lib/result-normalizer";
 import type { PermissionMode } from "./lib/host-capabilities-schema";
+import { createHostAdapter } from "./lib/host-adapter-factory";
+import type { HostAdapterResult } from "./lib/host-adapter-contract";
 
 // ---------------------------------------------------------------------------
 // Arg parsing
@@ -57,6 +59,7 @@ interface CliArgs {
   resume?: string;
   record?: string;
   dryRun: boolean;
+  modelParams?: Record<string, string>;
 }
 
 const VALID_MODES = new Set<PermissionMode>([
@@ -79,6 +82,7 @@ export function parseArgs(argv: string[]): CliArgs | { error: string } {
   let resume: string | undefined;
   let record: string | undefined;
   let dryRun = false;
+  const modelParams: Record<string, string> = {};
 
   const next = (i: number): string | undefined => argv[i + 1];
   for (let i = 0; i < argv.length; i++) {
@@ -94,6 +98,11 @@ export function parseArgs(argv: string[]): CliArgs | { error: string } {
     else if (a === "--max-repair" && next(i) !== undefined) maxRepair = Number(argv[++i]);
     else if (a === "--resume" && next(i) !== undefined) resume = argv[++i];
     else if (a === "--record" && next(i) !== undefined) record = path.resolve(argv[++i]);
+    else if (a === "--model" && next(i) !== undefined) modelParams.model = argv[++i];
+    else if (a === "--effort" && next(i) !== undefined) modelParams.effort = argv[++i];
+    else if (a === "--reasoning" && next(i) !== undefined) modelParams.reasoning = argv[++i];
+    else if (a === "--thinking" && next(i) !== undefined) modelParams.thinking = argv[++i];
+    else if (a === "--verbosity" && next(i) !== undefined) modelParams.verbosity = argv[++i];
     else if (a === "--dry-run") dryRun = true;
     else return { error: `unknown or incomplete argument: ${a}` };
   }
@@ -108,6 +117,7 @@ export function parseArgs(argv: string[]): CliArgs | { error: string } {
   if (contract !== undefined) out.contract = contract;
   if (resume !== undefined) out.resume = resume;
   if (record !== undefined) out.record = record;
+  if (Object.keys(modelParams).length > 0) out.modelParams = modelParams;
   return out;
 }
 
@@ -140,6 +150,47 @@ interface RunOutcome {
   stdout: string;
   stderr: string;
   exit: number;
+}
+
+interface HostAdapterRuntimeReceipt {
+  schema_version: "guild.run_host_adapter_receipt.v1";
+  requested_host: string;
+  host: string;
+  host_id: string | null;
+  provenance: string;
+  preflight: HostAdapterResult;
+  model_params: HostAdapterResult<Record<string, unknown>>;
+  dispatch: HostAdapterResult;
+}
+
+function hostAdapterRuntimeReceipt(parsed: CliArgs, request: WrapperRequest, plan: WrapperPlan): HostAdapterRuntimeReceipt {
+  const adapter = createHostAdapter(parsed.host);
+  const runId = parsed.record ? path.basename(parsed.record, path.extname(parsed.record)) : "guild-run-wrapper";
+  return {
+    schema_version: "guild.run_host_adapter_receipt.v1",
+    requested_host: parsed.host,
+    host: adapter.host,
+    host_id: adapter.hostId,
+    provenance: adapter.capabilities().provenance,
+    preflight: adapter.preflight({ cwd: parsed.cwd, runId }),
+    model_params: adapter.resolveModelParams({
+      tier: "mid",
+      params: parsed.modelParams ?? null,
+    }),
+    dispatch: adapter.dispatch({
+      taskRun: {
+        runId,
+        prompt: request.prompt ?? "",
+        host: parsed.host,
+        cwd: parsed.cwd,
+        ...(parsed.modelParams ? { modelParams: parsed.modelParams } : {}),
+        command: plan.command,
+        args: plan.args,
+        env: plan.env,
+        launch_mode: plan.launch,
+      },
+    }),
+  };
 }
 
 /** Spawn the host with a given argv (synchronous; captures stdio). */
@@ -234,6 +285,7 @@ function main(): number {
   if (parsed.prompt !== undefined) request.prompt = parsed.prompt;
   if (parsed.contract !== undefined) request.structuredOutput = { wire_schema_version: parsed.contract };
   if (parsed.resume !== undefined) request.resume = { sessionId: parsed.resume };
+  if (parsed.modelParams !== undefined) request.modelParams = parsed.modelParams;
 
   let plan: WrapperPlan;
   try {
@@ -243,8 +295,10 @@ function main(): number {
     return 1;
   }
 
+  const hostAdapter = hostAdapterRuntimeReceipt(parsed, request, plan);
+
   if (parsed.dryRun) {
-    process.stdout.write(JSON.stringify(plan, null, 2) + "\n");
+    process.stdout.write(JSON.stringify({ ...plan, host_adapter: hostAdapter }, null, 2) + "\n");
     return 0;
   }
 
@@ -311,6 +365,7 @@ function main(): number {
     cwd: plan.cwd,
     launch_mode: plan.launch,
     bootstrap_method: plan.bootstrap.method,
+    host_adapter: hostAdapter,
     session_id: sessionId,
     exit: initial.exit,
     receipt_paths: receiptPaths,

@@ -21,6 +21,7 @@
  */
 
 import { HOST_IDS } from "./host-registry-schema";
+import { normalizeHostId } from "./host-id-namespace";
 
 /** Closed registry host-id set (single SoT — host-registry-schema.ts HOST_IDS). */
 const KNOWN_HOST_IDS = new Set<string>(HOST_IDS);
@@ -41,7 +42,8 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 export function validateHostProfiles(hp: Record<string, unknown>): string[] {
   const rejects: string[] = [];
   for (const [hostId, entry] of Object.entries(hp)) {
-    if (!KNOWN_HOST_IDS.has(hostId)) {
+    const canonicalHostId = normalizeHostId(hostId);
+    if (!canonicalHostId) {
       rejects.push(
         `unknown host_profiles host_id "${hostId}" (closed key set — valid: ${[...KNOWN_HOST_IDS].join("|")})`
       );
@@ -100,7 +102,8 @@ export function filterHostProfiles(
   for (const [hostId, entry] of Object.entries(raw)) {
     // Validate this entry in isolation; keep it only when it is fully clean.
     if (validateHostProfiles({ [hostId]: entry }).length === 0) {
-      out[hostId] = entry as Record<string, unknown>;
+      const canonicalHostId = normalizeHostId(hostId);
+      if (canonicalHostId) out[canonicalHostId] = entry as Record<string, unknown>;
     }
   }
   return out;

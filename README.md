@@ -4,7 +4,7 @@
 
 # Guild
 
-A Claude Code plugin that gives you self-evolving teams of specialist agents.
+A Guild Stack plugin for AI coding hosts that gives you self-evolving teams of specialist agents.
 
 Guild turns a single coding session into a disciplined guild: `/guild "<task>"`
 runs brainstorm, composes a team, writes per-specialist plans, assembles tight
@@ -79,12 +79,31 @@ Domain unavailable? The same script ships in this repo:
 curl -fsSL https://raw.githubusercontent.com/lookatitude/guild/main/install.sh | bash
 ```
 
-Installing manually does exactly the same thing:
+Preview host-specific install paths without changing anything:
+
+```bash
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --dry-run --host claude-code-cli
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --dry-run --host codex-cli
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --dry-run --host pi-cli
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --dry-run --host antigravity-cli
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --dry-run --host agents-file
+```
+
+Installing manually into Claude Code does exactly the same thing:
 
 ```bash
 claude plugin marketplace add lookatitude/guild
 claude plugin marketplace update guild
 claude plugin install guild@guild
+```
+
+Installing manually into Codex CLI uses Codex's plugin manager:
+
+```bash
+npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+codex plugin marketplace remove guild || true
+codex plugin marketplace add dist/codex-marketplace
+codex plugin add guild@guild
 ```
 
 Restart Claude Code after installation so commands, skills, agents, hooks, and

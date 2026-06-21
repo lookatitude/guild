@@ -162,8 +162,8 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
     //    so the planTeamRouting block engages.
     const env = { ...process.env, NODE_NO_WARNINGS: "1" } as NodeJS.ProcessEnv;
     delete env["TMUX"]; // force new-session mode regardless of the test runner's env
-    delete env["GUILD_HOST_ID"];
-    delete env["GUILD_HOST"];
+    env["GUILD_HOST_ID"] = "claude";
+    env["GUILD_HOST"] = "claude";
     env["GUILD_CROSS_HOST_ENABLED"] = "1";
     env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "1";
 
@@ -183,7 +183,9 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
       ],
       { encoding: "utf8", env }
     );
-    expect(r.status).toBe(0);
+    if (r.status !== 0) {
+      throw new Error(`launcher exited ${r.status}\nstdout:\n${r.stdout}\nstderr:\n${r.stderr}`);
+    }
 
     // 5. Read the run-state the production onDecision wrote. If the launcher
     //    dropped the scored tier, T1-route would carry "mid" here.

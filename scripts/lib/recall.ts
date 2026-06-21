@@ -56,6 +56,14 @@ import { fsScan } from "./fs-scanner";
 import { protectChunks, type ProtectedChunk } from "./recall-protect";
 import { tokenize, bm25Score } from "../../mcp-servers/guild-memory/src/bm25";
 import type { KnowledgeGraph, GraphNode } from "../understand/lib/schema";
+import { ingestImportanceScore, resolveRecallImportance } from "./ingest-importance";
+
+// Re-export so existing importers (`recall.ts` was the original home of the scorer)
+// keep resolving `ingestImportanceScore` from here; canonical impl now in ingest-importance.ts.
+export { ingestImportanceScore };
+
+/** Default recency half-life (days) for composite recall when none is supplied. */
+export const DEFAULT_RECALL_HALF_LIFE_DAYS = 90;
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -126,27 +134,6 @@ export interface CompositeConfig {
   nowMs?: number;
 }
 
-/**
- * Write-time importance score (1–5) for a wiki page, by its category — the
- * machine-facing recall weight from the ADR→5 / contract→4 / summary→3 /
- * context→2 design table (docs/v2/05 §Importance-at-ingest), mapped onto Guild's
- * wiki category convention (`.guild/wiki/<category>/`). Pure + deterministic.
- */
-export function ingestImportanceScore(category: string | undefined): number {
-  switch ((category ?? "").toLowerCase()) {
-    case "decisions": case "decision": case "adr":
-      return 5;
-    case "standards": case "standard": case "contracts": case "contract":
-      return 4;
-    case "recipes": case "recipe": case "concepts": case "concept": case "guides": case "guide":
-      return 3;
-    case "context": case "notes": case "note": case "log": case "changelog": case "index":
-      return 2;
-    default:
-      return 3;
-  }
-}
-
 /** Exponential recency decay in (0,1]: 1.0 at age 0, 0.5 at one half-life. */
 export function recencyDecay(ageMs: number, halfLifeDays: number): number {
   if (!(halfLifeDays > 0)) return 1;
@@ -162,6 +149,29 @@ export function compositeScore(
   halfLifeDays: number,
 ): number {
   return relevance * recencyDecay(ageMs, halfLifeDays) * (importance1to5 / 5);
+}
+
+/**
+ * Resolve the composite-recall config from settings (`models.compositeRecall` +
+ * `models.importanceGate`) for a cwd. Returns the `CompositeConfig` when composite
+ * recall is enabled (the default), or `undefined` when disabled / settings are
+ * unreadable (→ legacy BM25-only ranking). Kept OUT of the pure `recall()` fn so
+ * the pure path never loads the settings resolver — both the CLI and the
+ * host-adapter memory path call this so the config-driven default takes effect
+ * on every recall surface, not just the CLI.
+ */
+export function resolveCompositeConfig(cwd: string): CompositeConfig | undefined {
+  try {
+    // Lazy require so the pure library path never loads the settings resolver.
+    const { resolveSettings } = require("./settings-resolver") as typeof import("./settings-resolver");
+    const models = (resolveSettings({ cwd }).config as {
+      models?: { compositeRecall?: boolean; importanceGate?: number };
+    }).models;
+    if (models?.compositeRecall) {
+      return { importanceGate: models.importanceGate ?? 3, halfLifeDays: DEFAULT_RECALL_HALF_LIFE_DAYS };
+    }
+  } catch { /* settings unreadable → BM25-only default */ }
+  return undefined;
 }
 
 /** Wiki category from an absolute path under `<wikiBase>/<category>/…`. */
@@ -188,7 +198,9 @@ function rankWikiDocs(
   const now = composite.nowMs ?? Date.now();
   return scoring
     .map((d) => {
-      const importance = ingestImportanceScore(categoryFromWikiPath(d.path, wikiBase));
+      // Prefer the persisted write-time `recall_importance:` score; fall back to the
+      // category-derived value for an un-stamped page (byte-identical to pre-lane behavior).
+      const importance = resolveRecallImportance(d.content, categoryFromWikiPath(d.path, wikiBase));
       let ageMs = 0;
       try { ageMs = now - fs.statSync(d.path).mtimeMs; } catch { /* unstattable → age 0 */ }
       return { d, importance, comp: compositeScore(d.score, importance, ageMs, composite.halfLifeDays) };
@@ -561,17 +573,9 @@ if (require.main === module) {
     _indexConfig.wiki_file_threshold = thresholdOverride;
   }
 
-  // Resolve composite recall config from settings (models.compositeRecall +
-  // models.importanceGate). Kept out of the pure recall() fn — passed in.
-  let composite: CompositeConfig | undefined;
-  try {
-    // Lazy require so the pure library path never loads the settings resolver.
-    const { resolveSettings } = require("./settings-resolver") as typeof import("./settings-resolver");
-    const models = (resolveSettings({ cwd }).config as { models?: { compositeRecall?: boolean; importanceGate?: number } }).models;
-    if (models?.compositeRecall) {
-      composite = { importanceGate: models.importanceGate ?? 3, halfLifeDays: 90 };
-    }
-  } catch { /* settings unreadable → BM25-only default */ }
+  // Resolve composite recall config from settings (shared with memory-adapter so the
+  // config-driven default takes effect on BOTH the CLI and the host-adapter recall path).
+  const composite = resolveCompositeConfig(cwd);
 
   const result = recall(query, {
     cwd,

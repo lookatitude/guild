@@ -2,7 +2,7 @@
   "name": "guild-scripts",
   "private": true,
   "scripts": {
-    "test": "npx jest --testPathPattern=__tests__ --no-coverage",
+    "test": "npx jest --testPathPattern=__tests__ --no-coverage --runInBand",
     "build:inventory": "npx tsx build-inventory.ts",
     "build:hosts": "npx tsx build-host-packages.ts"
   },

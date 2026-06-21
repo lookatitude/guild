@@ -1,16 +1,21 @@
 # Guild — repo orientation
 
-Guild is a Claude Code plugin that ships 17 registered agents (14 product specialists
-plus advisor, developer, and doc-writer) and 106 skills across a
+Guild is a cross-host plugin that ships 17 registered agents (14 product specialists
+plus advisor, developer, and doc-writer) and 110 skills across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
 capture, and a self-evolution loop with shadow-mode gating.
+
+This `AGENTS.md` file is the canonical host-neutral instruction file. Claude Code
+loads `CLAUDE.md`, but `CLAUDE.md` must only import this file; all durable
+directions belong here so Codex, Pi, Antigravity, and AGENTS.md-consuming hosts
+read the same guidance.
 
 For full architecture and design documentation see **https://guildstack.dev/docs**.
 
 ## Where things live
 
 - `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` — plugin + marketplace manifests.
-- `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/` — 106-skill taxonomy.
+- `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/` — skill taxonomy.
   The former `fallback/` tier no longer exists — its skills were promoted into `meta/`
   (`tdd`, `systematic-debug`, `worktrees`, `finish-branch`) or folded into `guild:review`.
 - `agents/*.md` — 17 registered agents: 14 product specialists plus `advisor`, `developer`,
@@ -18,11 +23,17 @@ For full architecture and design documentation see **https://guildstack.dev/docs
 - `commands/*.md` — the v2 flat-token command surface (`/guild:<verb>`; the `:` plugin
   namespace stays — Claude Code requires it — v2 only drops the redundant `guild-` prefix;
   sub-verbs are positional arguments, never separate files or namespaces).
-- `hooks/hooks.json` — native Claude Code hooks.
+- `hooks/hooks.json` — native Claude Code hooks; other hosts consume equivalent
+  behavior through host adapters and graceful fallback.
 - `scripts/`, `mcp-servers/` — evolve loop, telemetry, optional MCP servers.
 - `tests/` — skill evals and wiki-lint fixtures.
 - `templates/{skills,agents}/` — authoring scaffolds.
 - `docs/` — user-facing docs, diagrams, and assets.
+
+Generated project-local Guild artifacts do **not** live in the plugin install
+tree. Any agent, skill, tool, memory page, graph, initiative, run record, or
+reflection created by Guild for a consuming project is written under that
+project's `.guild/` directory.
 
 v1→v2 migration guide: `https://guildstack.dev/docs/migration-v1-to-v2`
 
@@ -69,21 +80,58 @@ specialists in parallel (worktree-isolated) per `guild:execute-plan`.
 ## Project-local state
 
 Runtime artifacts live under `.guild/` at the consuming repo's root (never committed by
-Guild itself). Layout:
+Guild itself). Guild has exactly two state levels: an umbrella workspace root and
+its immediate sub-project roots. Each level has its own `AGENTS.md` and `.guild/`.
+There is no third nested Guild level. Every host with the Guild plugin must
+discover the active root, load settings/workspace manifests/local capability
+files from that root's `.guild/`, and use workspace federation to read
+sub-project `AGENTS.md` and `.guild/` contents when operating from the umbrella
+workspace. The workspace reads sub-project state in place; it never replicates
+sub-project agents, skills, tools, wiki pages, initiatives, or runs.
+
+Use absolute paths for writes when operating in this umbrella workspace.
+
+All project-created Guild state lives in the active root's `.guild/`:
 
 ```
 .guild/
-├── raw/                 # immutable source inputs + checksums
-├── wiki/                # synthesized memory, decisions, standards
-├── spec/                # approved specs
-├── plan/                # per-task plans
-├── team/                # resolved specialist teams
-├── context/             # per-run specialist context bundles
-├── runs/                # telemetry, handoff receipts, assumptions
-├── reflections/         # proposed skill and specialist edits
-├── evolve/              # shadow-mode eval runs and reports
-└── skill-versions/      # rollback snapshots
+├── settings.json              # project/workspace behavior
+├── workspace.json             # workspace federation manifest, when present
+├── agents/                    # project-created agents/specialists
+├── skills/                    # project-created skills/tools/workflows
+├── tools/                     # project-created tool wrappers/adapters
+├── raw/                       # immutable source inputs + checksums
+├── wiki/                      # synthesized memory, decisions, standards
+├── indexes/                   # codebase map, knowledge graph, links, sqlite index
+├── initiatives/               # initiative registries and phase progress
+├── spec/                      # approved specs
+├── plan/                      # per-task plans
+├── team/                      # resolved specialist teams
+├── context/                   # per-run specialist context bundles
+├── runs/                      # run traces, handoffs, prompts, responses, tool logs
+├── reflections/               # proposed learnings and improvements
+├── evolve/                    # shadow-mode eval runs and reports
+└── skill-versions/            # rollback snapshots
 ```
+
+The benchmark consumes these artifacts. Keep them structured, deterministic, and
+safe to share in a team repository when policy allows it.
+
+Each run directory must be self-contained enough for replay and analysis:
+
+- phase order and active initiative/spec/plan identifiers;
+- team composition, each agent's role, host, phase, task id, and dispatch order;
+- prompts, responses, tool calls, tool results, operator steering, approvals,
+  rejections, and manual interventions;
+- handoff receipts, review packets/results, trace events, degradation receipts,
+  and final verification state.
+
+Before any run record is shared, committed, exported, or used in benchmark
+fixtures, scrub PII and sensitive content: API keys, passwords, tokens, session
+cookies, private keys, credit-card/payment data, auth headers, customer/user
+identifiers, private absolute paths when policy requires, and any configured
+redaction pattern. Redaction must preserve structure so the run remains useful
+for replay and learning.
 
 The wiki read path uses a lazy SQLite read-through cache (`index: "auto"`, default);
 disable with `index: "off"`. See `https://guildstack.dev/docs/configuration`
@@ -125,6 +173,26 @@ Guild has a built-in self-evolution loop. For Guild's own development, the disci
 The wiki for the Guild repo lives at `.guild/wiki/` (start at `index.md`). Read it before
 making decisions that touch the same surface — prior choices are recorded with their
 rationale.
+
+Host-global memories such as Codex app memory or Claude `MEMORY.md` are not canonical
+Guild state. Durable Guild memory is project/workspace `.guild/` state.
+
+## Run learning and improvement routing
+
+After a non-trivial run, analyze the sanitized run record for learnings and route each
+proposed improvement to exactly one level:
+
+- **Workspace/project level** — project-specific knowledge, agents, skills, tools,
+  settings, plans, standards, or team conventions. These can be shared with the team
+  through the repo's `.guild/` tree after the normal review gate.
+- **Plugin level** — broken Guild flows, missing host-adapter behavior, unsafe defaults,
+  portability defects, bad docs, or reusable improvements that belong in the Guild plugin
+  itself.
+
+Plugin-level findings must become an analysis artifact first. Do not file or share
+anything automatically. Ask the user for permission, then file a GitHub issue in the
+plugin repository only after approval, using the sanitized analysis and linking the
+relevant run artifacts.
 
 ## Codex adversarial review
 

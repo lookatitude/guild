@@ -29,9 +29,10 @@
  */
 
 import { resolveSettings } from "./lib/settings-resolver";
-// G-11 (SC-6): the models.tiers value union (string | {model,effort?,verbosity?} | null)
+// G-11/R5: the models.tiers value union
+// (string | {model,effort?,reasoning?,thinking?,verbosity?} | null)
 // is unpacked ONLY by resolveTierModel — never index the tier map and assume a string.
-import { resolveTierModel, type TierHostValue } from "./read-guild-config";
+import { resolveTierModel, type ResolvedTierModel, type TierHostValue } from "./read-guild-config";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,15 +79,16 @@ export interface ScorerOpts {
   thresholds?: Partial<Thresholds>;
   /**
    * The host-agnostic tier→model map. When absent, model is not resolved.
-   * G-11 (SC-6): host values accept the full union string | {model,effort?,verbosity?} | null.
+   * G-11/R5: host values accept the full union
+   * string | {model,effort?,reasoning?,thinking?,verbosity?} | null.
    */
   tiers?: {
-    cheap?: { claude?: TierHostValue; codex?: TierHostValue; gemini?: TierHostValue };
-    mid?:   { claude?: TierHostValue; codex?: TierHostValue; gemini?: TierHostValue };
-    powerful?: { claude?: TierHostValue; codex?: TierHostValue; gemini?: TierHostValue };
+    cheap?: Record<string, TierHostValue | undefined>;
+    mid?: Record<string, TierHostValue | undefined>;
+    powerful?: Record<string, TierHostValue | undefined>;
   };
-  /** Active host adapter. Default "claude". */
-  host?: "claude" | "codex" | "gemini";
+  /** Active host adapter/canonical host id. Default "claude". */
+  host?: string;
   /** Explicit tier pin (--model-tier or per-lane override). Bypasses scoring. */
   modelTierPin?: Tier;
   /**
@@ -101,10 +103,25 @@ export interface TierResult {
   score: number;
   tier: Tier;
   model?: string; // resolved model name for the active host, or undefined if not in map
+  /** R5: full model parameter object carried into routing/dispatch. */
+  modelParams?: ModelParams;
   /** G-11: present only when the tier map's object form pinned an effort axis. */
   effort?: string;
+  /** R5: present only when the tier map's object form pinned a reasoning axis. */
+  reasoning?: string;
+  /** R5: present only when the tier map's object form pinned a thinking axis. */
+  thinking?: string;
   /** G-11: present only when the tier map's object form pinned a verbosity axis. */
   verbosity?: string;
+}
+
+export interface ModelParams {
+  model: string;
+  effort?: string;
+  reasoning?: string;
+  thinking?: string;
+  verbosity?: string;
+  [key: string]: string | undefined;
 }
 
 // ── Built-in defaults (mirrors DEFAULTS.models in read-guild-config.ts) ──────
@@ -127,6 +144,28 @@ const DEFAULT_TIERS = {
   mid:      { claude: "sonnet", codex: null, gemini: null },
   powerful: { claude: "opus",   codex: null, gemini: null },
 };
+
+function toModelParams(resolved: ResolvedTierModel): ModelParams | undefined {
+  if (resolved.model === null) return undefined;
+  const params: ModelParams = { model: resolved.model };
+  if (resolved.effort !== undefined) params.effort = resolved.effort;
+  if (resolved.reasoning !== undefined) params.reasoning = resolved.reasoning;
+  if (resolved.thinking !== undefined) params.thinking = resolved.thinking;
+  if (resolved.verbosity !== undefined) params.verbosity = resolved.verbosity;
+  return params;
+}
+
+function applyResolvedModel(result: TierResult, resolved: ResolvedTierModel): TierResult {
+  const modelParams = toModelParams(resolved);
+  if (!modelParams) return result;
+  result.model = modelParams.model;
+  result.modelParams = modelParams;
+  if (modelParams.effort !== undefined) result.effort = modelParams.effort;
+  if (modelParams.reasoning !== undefined) result.reasoning = modelParams.reasoning;
+  if (modelParams.thinking !== undefined) result.thinking = modelParams.thinking;
+  if (modelParams.verbosity !== undefined) result.verbosity = modelParams.verbosity;
+  return result;
+}
 
 // ── Work-type verb → score delta (ADR §2 rubric) ──────────────────────────
 
@@ -167,14 +206,7 @@ export function scoreTier(signals: TierSignals, opts: ScorerOpts = {}): TierResu
   if (opts.enabled === false && opts.modelTierPin === undefined) {
     // G-11: unpack the tier value union through the single helper (never assume string).
     const mid = resolveTierModel(tiers, "mid", host);
-    const out: TierResult = {
-      score: 0,
-      tier: "mid",
-      model: mid.model ?? undefined,
-    };
-    if (mid.effort !== undefined) out.effort = mid.effort;
-    if (mid.verbosity !== undefined) out.verbosity = mid.verbosity;
-    return out;
+    return applyResolvedModel({ score: 0, tier: "mid" }, mid);
   }
 
   // Compute score
@@ -207,10 +239,7 @@ export function scoreTier(signals: TierSignals, opts: ScorerOpts = {}): TierResu
   // verbosity?} | null) is unpacked ONLY via resolveTierModel.
   const resolved = resolveTierModel(tiers, tier, host);
 
-  const result: TierResult = { score, tier, model: resolved.model ?? undefined };
-  if (resolved.effort !== undefined) result.effort = resolved.effort;
-  if (resolved.verbosity !== undefined) result.verbosity = resolved.verbosity;
-  return result;
+  return applyResolvedModel({ score, tier }, resolved);
 }
 
 // ── Config loader (uses settings-resolver — no subprocess, inherits workspace) ─

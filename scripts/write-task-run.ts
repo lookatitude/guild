@@ -96,11 +96,22 @@ export interface TaskRunCapabilityRequirements {
   isolation: "worktree" | "none";
 }
 
+export interface TaskRunModelParams {
+  model: string;
+  effort?: string;
+  reasoning?: string;
+  thinking?: string;
+  verbosity?: string;
+  [key: string]: string | undefined;
+}
+
 export interface TaskRunHost {
   requested: "claude-code" | "codex-local" | "codex-cloud" | "any";
   /** Filled in by the router AFTER routing; null until then. */
   selected: string | null;
   capability_requirements: TaskRunCapabilityRequirements;
+  /** R5 full model params for this task, null until route/dispatch resolves them. */
+  model_params: TaskRunModelParams | null;
 }
 
 export interface TaskRunTrace {
@@ -155,6 +166,7 @@ export interface TaskRunBudgetParams {
 export interface TaskRunHostParams {
   requested?: "claude-code" | "codex-local" | "codex-cloud" | "any";
   capabilityRequirements?: TaskRunCapabilityRequirementsParams;
+  modelParams?: TaskRunModelParams | null;
 }
 
 /** Accepted by writeTaskRun(). All fields except task_run_id have sensible defaults. */
@@ -293,6 +305,7 @@ export function writeTaskRun(
         needs_network: capReqs.needsNetwork ?? false,
         isolation: capReqs.isolation ?? "worktree",
       },
+      model_params: host.modelParams ?? null,
     },
     trace: {
       events_ref: eventsRef,
@@ -347,6 +360,7 @@ function parseArgs(argv: string[]): {
   let needsParallel = false;
   let needsNetwork = false;
   let isolation: "worktree" | "none" = "worktree";
+  let modelParams: TaskRunModelParams | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -370,6 +384,18 @@ function parseArgs(argv: string[]): {
       case "--needs-parallel": needsParallel = true; break;
       case "--needs-network": needsNetwork = true; break;
       case "--isolation":     isolation = next as "worktree" | "none"; i++; break;
+      case "--model-params": {
+        try {
+          const parsed = JSON.parse(next) as TaskRunModelParams;
+          if (parsed && typeof parsed.model === "string" && parsed.model.trim()) {
+            modelParams = parsed;
+          }
+        } catch {
+          return { error: "--model-params must be JSON with a non-empty model string" };
+        }
+        i++;
+        break;
+      }
     }
   }
 
@@ -398,6 +424,7 @@ function parseArgs(argv: string[]): {
       host: {
         requested: hostRequested,
         capabilityRequirements: { needsPr, needsParallel, needsNetwork, isolation },
+        modelParams,
       },
     },
   };

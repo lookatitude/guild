@@ -207,6 +207,8 @@ export interface TeamLaunchRequest {
   targetName: string;
   mode: LaunchMode;
   dryRun: boolean;
+  /** Starting host / lead pane host. Default claude preserves legacy behavior. */
+  orchestratorHostKind?: HostKind;
   /**
    * C13 (G-PHASE-COMPOSE): the RESOLVED team-file path the orchestrator should
    * read — sourced from resolveTeamFile (per-phase `<slug>.<phase>.yaml`, or the
@@ -366,11 +368,19 @@ export function buildPrompt(
   runId: string,
   specialist: Specialist | null,
   teamPath?: string,
+  paneHostKind: HostKind = "claude",
 ): string {
   if (!specialist) {
     // C13: prefer the RESOLVED per-phase team path; fall back to the legacy
     // reconstruction only when no resolved path was threaded (back-compat).
     const teamRef = teamPath ?? `.guild/team/${slug}.yaml`;
+    const coordination =
+      paneHostKind === "claude"
+        ? `Dispatch specialists via TaskCreated events when their plan dependencies clear, ` +
+          `then aggregate handoffs and invoke guild:review → guild:verify-done → guild:reflect.`
+        : `Dispatch specialists through the file-based agent bus when their plan dependencies clear; ` +
+          `write dispatch/brief records under \`.guild/runs/${runId}/agent-bus/\`, ` +
+          `then aggregate handoffs and invoke guild:review → guild:verify-done → guild:reflect.`;
     return (
       `You are the Guild orchestrator for team \`${slug}\`, run-id \`${runId}\`. ` +
       `The spec is at \`.guild/spec/${slug}.md\`, the team at \`${teamRef}\`, ` +
@@ -378,10 +388,14 @@ export function buildPrompt(
       `Per-specialist context bundles are under \`.guild/context/${runId}/<specialist>-<task-id>.md\` ` +
       `(build them via guild:context-assemble before dispatch). ` +
       `Teammate handoff receipts will land at \`.guild/runs/${runId}/handoffs/<specialist>-<task-id>.md\`. ` +
-      `Dispatch specialists via TaskCreated events when their plan dependencies clear, ` +
-      `then aggregate handoffs and invoke guild:review → guild:verify-done → guild:reflect.`
+      coordination
     );
   }
+  const waitInstruction =
+    paneHostKind === "claude"
+      ? `Wait for a \`TaskCreated\` event from the orchestrator before starting.`
+      : `Watch the file-based agent bus at \`.guild/runs/${runId}/agent-bus/\` ` +
+        `for your dispatch/brief record before starting; do not wait for host-native event callbacks.`;
   return (
     `You are the \`${specialist.name}\` teammate for run-id \`${runId}\`. ` +
     `Your lane scope: \`${specialist.scope}\`. ` +
@@ -390,7 +404,7 @@ export function buildPrompt(
     `When you finish, write your §8.2 handoff receipt to ` +
     `\`.guild/runs/${runId}/handoffs/${specialist.name}-<task-id>.md\` with all 5 fields ` +
     `(changed_files, opens_for, assumptions, evidence, followups). ` +
-    `Wait for a \`TaskCreated\` event from the orchestrator before starting.`
+    waitInstruction
   );
 }
 
@@ -470,26 +484,39 @@ export function composeTmuxCommands(opts: {
    * legacy Claude-only path runs verbatim (`paneCommand(buildPrompt(...))`),
    * so single-host teams compose byte-identically to today (the launcher
    * regression anchor). When PRESENT, each pane's command is produced by the
-   * adapter for its `host_kind` — the orchestrator pane is ALWAYS the claude
-   * host (CH-4: orchestrator = the starting host).
+   * adapter for its `host_kind`; the orchestrator pane uses
+   * `orchestratorHostKind` (default claude).
    */
   resolveAdapter?: AdapterResolver;
+  /** Starting host / lead pane host. Default claude preserves legacy behavior. */
+  orchestratorHostKind?: HostKind;
   /** C13: resolved per-phase team path threaded into the orchestrator prompt. */
   teamPath?: string;
 }): ParsedTmuxCommand[] {
-  const { mode, targetName, cwd, slug, runId, specialists, resolveAdapter, teamPath } = opts;
+  const {
+    mode,
+    targetName,
+    cwd,
+    slug,
+    runId,
+    specialists,
+    resolveAdapter,
+    orchestratorHostKind = "claude",
+    teamPath,
+  } = opts;
   const cmds: ParsedTmuxCommand[] = [];
 
   // Per-pane command builder. Default (no resolver) path is the legacy
   // Claude-only invocation: set env vars, cd into the consumer repo, then
   // launch `claude` with a staging prompt — relying on PATH to find `claude`.
   // With a resolver, the pane's host_kind picks the adapter; the orchestrator
-  // (spec === null) is pinned to claude regardless (CH-4).
+  // (spec === null) uses the starting host. Specialists with no explicit host
+  // inherit the starting host rather than silently becoming Claude panes.
   const commandFor = (spec: Specialist | null): string => {
-    const prompt = buildPrompt(slug, runId, spec, teamPath);
+    const hostKind: HostKind = spec?.host_kind ?? orchestratorHostKind;
+    const prompt = buildPrompt(slug, runId, spec, teamPath, hostKind);
     if (!resolveAdapter)
       return paneCommand(prompt, runId, spec?.capability_scope, spec?.taskId, spec?.name);
-    const hostKind: HostKind = spec?.host_kind ?? "claude";
     return resolveAdapter(hostKind).command({
       name: spec?.name ?? "orchestrator",
       scope: spec?.scope ?? "",
@@ -654,6 +681,7 @@ export class TmuxTeamBackend implements TeamBackend {
       runId: req.runId,
       specialists: req.specialists,
       resolveAdapter: this.resolveAdapter,
+      orchestratorHostKind: req.orchestratorHostKind ?? "claude",
       teamPath: req.teamPath, // C13: resolved per-phase path → orchestrator prompt
     });
     return { mode: req.mode, targetName: req.targetName, commands };
@@ -661,7 +689,7 @@ export class TmuxTeamBackend implements TeamBackend {
 
   /**
    * CH-6 — fail-fast preflight. Probe every pane's adapter (orchestrator =
-   * claude, plus each specialist's host) BEFORE any pane spawns. On the first
+   * starting host, plus each specialist's host) BEFORE any pane spawns. On the first
    * failure the caller MUST abort with zero panes opened, naming the failing
    * specialist + host + missing dependency (no partial spawn).
    *
@@ -669,20 +697,22 @@ export class TmuxTeamBackend implements TeamBackend {
    * launcher never preflighted (it let the pane surface a missing `claude`), so
    * this preserves that behavior for single-host teams.
    */
-  preflight(specialists: Specialist[]): {
+  preflight(specialists: Specialist[], orchestratorHostKind: HostKind = "claude"): {
     ok: boolean;
     failures: Array<{ specialist: string; hostKind: HostKind; message: string }>;
   } {
     if (!this.resolveAdapter) return { ok: true, failures: [] };
     const failures: Array<{ specialist: string; hostKind: HostKind; message: string }> = [];
-    // Orchestrator pane is always the claude host (CH-4).
     const panes: Array<{ name: string; hostKind: HostKind }> = [
-      { name: "orchestrator", hostKind: "claude" },
-      ...specialists.map((s) => ({ name: s.name, hostKind: s.host_kind ?? "claude" })),
+      { name: "orchestrator", hostKind: orchestratorHostKind },
+      ...specialists.map((s) => ({ name: s.name, hostKind: s.host_kind ?? orchestratorHostKind })),
     ];
     // De-dupe identical (host) probes — preflight per distinct host is enough,
     // but we report against the first specialist that needs it.
+    const probed = new Set<HostKind>();
     for (const pane of panes) {
+      if (probed.has(pane.hostKind)) continue;
+      probed.add(pane.hostKind);
       const r = this.resolveAdapter(pane.hostKind).preflight();
       if (!r.ok) {
         failures.push({ specialist: pane.name, hostKind: pane.hostKind, message: r.message });
@@ -838,7 +868,13 @@ export function composeInProcessDispatch(
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
         : {}),
     },
-    prompt: buildPrompt(req.slug, req.runId, spec, req.teamPath), // C13: resolved per-phase path
+    prompt: buildPrompt(
+      req.slug,
+      req.runId,
+      spec,
+      req.teamPath,
+      spec.host_kind ?? req.orchestratorHostKind ?? "claude",
+    ), // C13: resolved per-phase path
   }));
 }
 
@@ -1348,8 +1384,8 @@ export class RemoteTeamBackend implements TeamBackend {
 
   /** Build the per-specialist command for a remote pane (orchestrator excluded). */
   private commandFor(spec: Specialist, req: TeamLaunchRequest): { paneSpec: PaneSpec; command: string } {
-    const hostKind: HostKind = spec.host_kind ?? "claude";
-    const prompt = buildPrompt(req.slug, req.runId, spec, req.teamPath); // C13: resolved per-phase path
+    const hostKind: HostKind = spec.host_kind ?? req.orchestratorHostKind ?? "claude";
+    const prompt = buildPrompt(req.slug, req.runId, spec, req.teamPath, hostKind); // C13: resolved per-phase path
     const paneSpec: PaneSpec = {
       name: spec.name,
       scope: spec.scope,

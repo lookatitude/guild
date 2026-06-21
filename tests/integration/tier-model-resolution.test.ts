@@ -68,28 +68,35 @@ describe("Tier→model map resolution — end-to-end contract (ADR §1, VC-5)", 
 
   // ── Built-in defaults resolve the canonical cheap/mid/powerful→claude model map ──
 
-  test("built-in cheap tier resolves to claude=haiku (zero-config)", () => {
+  // Post host-adapter-migration: the resolved tier map is keyed by the canonical
+  // v2 host ids (claude→claude-code-cli, codex→codex-cli). `gemini` is DROPPED
+  // entirely (D10 — no registry row, normalizeHostId("gemini")===null), so the
+  // former gemini null-slot assertions retarget to a real canonical non-primary
+  // host (pi-cli). This is a test-expectation update: the resolved OUTPUT object is
+  // intentionally closed to the canonical key set; normalizeHostId only aliases
+  // INPUT/lookup keys at the resolveTierModel seam, never injects legacy output keys.
+  test("built-in cheap tier resolves to claude-code-cli=haiku (zero-config)", () => {
     const dir = repo();
     const { status, out } = run(["--cwd", dir]);
     expect(status).toBe(0);
     const j = JSON.parse(out);
-    expect(j.models.tiers.cheap.claude).toBe("haiku");
+    expect(j.models.tiers.cheap["claude-code-cli"]).toBe("haiku");
   });
 
-  test("built-in mid tier resolves to claude=sonnet (zero-config)", () => {
+  test("built-in mid tier resolves to claude-code-cli=sonnet (zero-config)", () => {
     const dir = repo();
     const { status, out } = run(["--cwd", dir]);
     expect(status).toBe(0);
     const j = JSON.parse(out);
-    expect(j.models.tiers.mid.claude).toBe("sonnet");
+    expect(j.models.tiers.mid["claude-code-cli"]).toBe("sonnet");
   });
 
-  test("built-in powerful tier resolves to claude=opus (zero-config)", () => {
+  test("built-in powerful tier resolves to claude-code-cli=opus (zero-config)", () => {
     const dir = repo();
     const { status, out } = run(["--cwd", dir]);
     expect(status).toBe(0);
     const j = JSON.parse(out);
-    expect(j.models.tiers.powerful.claude).toBe("opus");
+    expect(j.models.tiers.powerful["claude-code-cli"]).toBe("opus");
   });
 
   // ── Null host slot semantics ─────────────────────────────────────────────────
@@ -97,53 +104,53 @@ describe("Tier→model map resolution — end-to-end contract (ADR §1, VC-5)", 
   // fall through to the selected host's mapping."
   // Null is a valid value — the contract must expose it (not coerce to string).
 
-  test("built-in codex slot is null for all tiers (no third host yet)", () => {
+  test("built-in codex-cli slot is null for all tiers (non-primary host)", () => {
     const dir = repo();
     const { status, out } = run(["--cwd", dir]);
     expect(status).toBe(0);
     const j = JSON.parse(out);
-    expect(j.models.tiers.cheap.codex).toBeNull();
-    expect(j.models.tiers.mid.codex).toBeNull();
-    expect(j.models.tiers.powerful.codex).toBeNull();
+    expect(j.models.tiers.cheap["codex-cli"]).toBeNull();
+    expect(j.models.tiers.mid["codex-cli"]).toBeNull();
+    expect(j.models.tiers.powerful["codex-cli"]).toBeNull();
   });
 
-  test("built-in gemini slot is null for all tiers (no third host yet)", () => {
+  test("built-in pi-cli slot is null for all tiers (non-primary host; gemini dropped per D10)", () => {
     const dir = repo();
     const { status, out } = run(["--cwd", dir]);
     expect(status).toBe(0);
     const j = JSON.parse(out);
-    expect(j.models.tiers.cheap.gemini).toBeNull();
-    expect(j.models.tiers.mid.gemini).toBeNull();
-    expect(j.models.tiers.powerful.gemini).toBeNull();
+    expect(j.models.tiers.cheap["pi-cli"]).toBeNull();
+    expect(j.models.tiers.mid["pi-cli"]).toBeNull();
+    expect(j.models.tiers.powerful["pi-cli"]).toBeNull();
   });
 
-  test("settings.json null codex slot survives deep-merge without being coerced", () => {
+  test("settings.json null non-primary slot survives deep-merge without being coerced", () => {
     const dir = repo();
     writeSettings(dir, {
       models: {
         tiers: {
-          mid: { claude: "sonnet", codex: null, gemini: null },
+          mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null },
         },
       },
     });
     const { status, out } = run(["--cwd", dir]);
     expect(status).toBe(0);
     const j = JSON.parse(out);
-    // The null for codex/gemini must survive the merge — not become undefined or ""
-    expect(j.models.tiers.mid.codex).toBeNull();
-    expect(j.models.tiers.mid.gemini).toBeNull();
-    // The primary claude mapping must be present
-    expect(j.models.tiers.mid.claude).toBe("sonnet");
+    // The null for codex-cli/pi-cli must survive the merge — not become undefined or ""
+    expect(j.models.tiers.mid["codex-cli"]).toBeNull();
+    expect(j.models.tiers.mid["pi-cli"]).toBeNull();
+    // The primary claude-code-cli mapping must be present
+    expect(j.models.tiers.mid["claude-code-cli"]).toBe("sonnet");
   });
 
-  test("null codex slot does not cause --validate to reject the config", () => {
+  test("null non-primary slot does not cause --validate to reject the config", () => {
     const dir = repo();
     writeSettings(dir, {
       models: {
         tiers: {
-          cheap: { claude: "haiku", codex: null, gemini: null },
-          mid: { claude: "sonnet", codex: null, gemini: null },
-          powerful: { claude: "opus", codex: null, gemini: null },
+          cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null },
+          mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null },
+          powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null },
         },
       },
     });
@@ -156,37 +163,37 @@ describe("Tier→model map resolution — end-to-end contract (ADR §1, VC-5)", 
   // (Lane C covered --model-tier > settings. Here we confirm settings wins over
   // built-in for an explicit per-tier override, completing the ladder.)
 
-  test("settings.json claude model override for cheap tier wins over built-in haiku", () => {
+  test("settings.json claude-code-cli model override for cheap tier wins over built-in haiku", () => {
     const dir = repo();
     writeSettings(dir, {
       models: {
         tiers: {
-          cheap: { claude: "sonnet", codex: null, gemini: null },
+          cheap: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null },
         },
       },
     });
     const { out } = run(["--cwd", dir]);
     const j = JSON.parse(out);
-    expect(j.models.tiers.cheap.claude).toBe("sonnet"); // overridden
+    expect(j.models.tiers.cheap["claude-code-cli"]).toBe("sonnet"); // overridden
     // other tiers unchanged
-    expect(j.models.tiers.mid.claude).toBe("sonnet");
-    expect(j.models.tiers.powerful.claude).toBe("opus");
+    expect(j.models.tiers.mid["claude-code-cli"]).toBe("sonnet");
+    expect(j.models.tiers.powerful["claude-code-cli"]).toBe("opus");
   });
 
-  test("settings.json claude model override for powerful tier wins over built-in opus", () => {
+  test("settings.json claude-code-cli model override for powerful tier wins over built-in opus", () => {
     const dir = repo();
     writeSettings(dir, {
       models: {
         tiers: {
-          powerful: { claude: "sonnet", codex: null, gemini: null },
+          powerful: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null },
         },
       },
     });
     const { out } = run(["--cwd", dir]);
     const j = JSON.parse(out);
-    expect(j.models.tiers.powerful.claude).toBe("sonnet");
+    expect(j.models.tiers.powerful["claude-code-cli"]).toBe("sonnet");
     // cheap stays at built-in haiku
-    expect(j.models.tiers.cheap.claude).toBe("haiku");
+    expect(j.models.tiers.cheap["claude-code-cli"]).toBe("haiku");
   });
 
   // ── Precedence: --model-tier CLI > settings (integration assertion) ──────────
@@ -197,7 +204,7 @@ describe("Tier→model map resolution — end-to-end contract (ADR §1, VC-5)", 
     writeSettings(dir, {
       models: {
         tiers: {
-          mid: { claude: "opus", codex: null, gemini: null }, // operator pin
+          mid: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null }, // operator pin
         },
       },
     });
@@ -208,7 +215,7 @@ describe("Tier→model map resolution — end-to-end contract (ADR §1, VC-5)", 
     expect(j._model_tier_override).toBeDefined();
     expect(j._model_tier_override.tier).toBe("cheap");
     // Underlying tiers map still reflects settings.json override (not clobbered)
-    expect(j.models.tiers.mid.claude).toBe("opus");
+    expect(j.models.tiers.mid["claude-code-cli"]).toBe("opus");
   });
 
   test("--model-tier=powerful surfaces at top of ladder in _model_tier_override.source", () => {
@@ -224,16 +231,25 @@ describe("Tier→model map resolution — end-to-end contract (ADR §1, VC-5)", 
 
   // ── Scaffold includes all three tier keys with full host triples ─────────────
 
-  test("scaffold tier map has exactly cheap/mid/powerful each with claude/codex/gemini keys", () => {
+  test("scaffold tier map has exactly cheap/mid/powerful each with the canonical 9 host-id keys", () => {
     const { status, out } = run(["--scaffold"]);
     expect(status).toBe(0);
     const j = JSON.parse(out);
     const tiers = j.models.tiers;
+    const CANONICAL_HOST_KEYS = [
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+    ];
     for (const tier of ["cheap", "mid", "powerful"]) {
       expect(tiers[tier]).toBeDefined();
-      expect(Object.keys(tiers[tier]).sort()).toEqual(
-        ["claude", "codex", "gemini"].sort()
-      );
+      expect(Object.keys(tiers[tier]).sort()).toEqual(CANONICAL_HOST_KEYS.slice().sort());
     }
   });
 

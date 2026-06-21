@@ -61,11 +61,22 @@ export type AdvisoryBackend = (typeof ADVISORY_BACKENDS)[number];
  *   - `backend`   = the dispatch MECHANISM (tmux_team | host_subagents | single_agent)
  *   - `substrate` = WHICH host produces the advice (the resolved roles.advisory)
  * Do NOT overload `backend` with the provider. Additive + back-compatible: the field
- * is optional and an ABSENT `substrate` means the default local advisor — `"claude"`.
+ * is optional and an ABSENT `substrate` means the default local advisor —
+ * `"claude-code-cli"` (legacy `"claude"` records remain valid).
  * The routing change (populate from roles.advisory) lands in P1-L8; the schema field
  * is the P1-L0 additive migration.
  */
 export const ADVISORY_SUBSTRATES = [
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+  // Legacy substrate labels accepted for older records.
   "claude",
   "codex",
   ".agents",
@@ -74,8 +85,8 @@ export const ADVISORY_SUBSTRATES = [
 ] as const;
 export type AdvisorySubstrate = (typeof ADVISORY_SUBSTRATES)[number];
 
-/** Default advisory substrate when none is recorded (back-compat: absent ⇒ claude). */
-export const DEFAULT_ADVISORY_SUBSTRATE: AdvisorySubstrate = "claude";
+/** Default advisory substrate when none is recorded (back-compat: absent ⇒ local Claude). */
+export const DEFAULT_ADVISORY_SUBSTRATE: AdvisorySubstrate = "claude-code-cli";
 
 /** Overall (and per-advisor) confidence scale. */
 export const ADVISORY_CONFIDENCE = ["high", "medium", "low"] as const;
@@ -133,7 +144,7 @@ export interface AdvisoryRecord {
   /**
    * Role-resolved advisory substrate — WHICH host gave the advice (C1). Optional +
    * back-compatible: when absent, consumers treat it as the default local advisor
-   * (`DEFAULT_ADVISORY_SUBSTRATE` = "claude"). Distinct from `backend`.
+   * (`DEFAULT_ADVISORY_SUBSTRATE` = "claude-code-cli"). Distinct from `backend`.
    */
   substrate?: AdvisorySubstrate;
   /** The question the panel was asked. */
@@ -187,7 +198,7 @@ export function makeAdvisoryRecord(input: {
   initiative_id?: string | null;
   unresolved_questions?: string[];
   decision_link?: string;
-  /** C1: role-resolved advisory substrate. Omitted ⇒ absent ⇒ default "claude". */
+  /** C1: role-resolved advisory substrate. Omitted ⇒ absent ⇒ default local Claude. */
   substrate?: AdvisorySubstrate;
 }): AdvisoryRecord {
   const rec: AdvisoryRecord = {
@@ -269,7 +280,7 @@ export function validateAdvisoryRecord(x: unknown): { valid: boolean; errors: st
   }
 
   // substrate (C1) — OPTIONAL; when present must be a known substrate. Absent is
-  // valid + means the default "claude" (back-compat: pre-P1 records have no substrate).
+  // valid + means the default local Claude (back-compat: pre-P1 records have no substrate).
   if (r["substrate"] !== undefined && !SUBSTRATE_SET.has(r["substrate"] as string)) {
     errors.push(
       `"substrate" (when present) must be one of ${ADVISORY_SUBSTRATES.join(" | ")} (got ${JSON.stringify(r["substrate"])})`

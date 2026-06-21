@@ -5,7 +5,7 @@
  * (P2-Wave-1 LW1-6, SC-W1-8 / ADR step 14).
  *
  * Coverage:
- *   - renders ALL FIVE host shapes (claude / codex / .agents / pi / antigravity)
+ *   - renders all canonical host shapes from the registry
  *   - renders strictly via the registry capability rows (host_id-keyed, not name-driven)
  *   - permission block surfaced only for hosts with caps.permissions.ask
  *   - render-or-degrade: hooks/skills/permissions/models flagged in _unsupported
@@ -33,7 +33,7 @@ const NOW = "2026-06-17T00:00:00Z";
 function baseInput(over: Partial<RenderConfigInput> = {}): RenderConfigInput {
   return {
     config: {
-      models: { tiers: { cheap: { claude: "haiku" }, mid: { claude: "sonnet" }, powerful: { claude: "opus" } } },
+      models: { tiers: { cheap: { "claude-code-cli": "haiku" }, mid: { "claude-code-cli": "sonnet" }, powerful: { "claude-code-cli": "opus" } } },
       security: { bypass_permissions_policy: "audit" },
       auto_approve: [],
       ...(over.config ?? {}),
@@ -58,17 +58,17 @@ describe("renderAllHostConfigs — all five host shapes", () => {
 
   it("carries the registry family / surface_kind / provenance (single SoT, not name-driven)", () => {
     const all = renderAllHostConfigs(baseInput());
-    expect(all["claude"].surface_kind).toBe("cli");
-    expect(all["claude"].provenance).toBe("verified");
-    expect(all[".agents"].surface_kind).toBe("file"); // .agents is a FILE surface
-    expect(all[".agents"].family).toBe("agents");
-    expect(all["antigravity"].family).toBe("antigravity");
+    expect(all["claude-code-cli"].surface_kind).toBe("cli");
+    expect(all["claude-code-cli"].provenance).toBe("verified");
+    expect(all["agents-file"].surface_kind).toBe("file"); // .agents is a FILE surface
+    expect(all["agents-file"].family).toBe("agents");
+    expect(all["antigravity-cli"].family).toBe("antigravity");
   });
 });
 
 describe("permissions block — capability-gated (caps.permissions.ask)", () => {
   it("claude (ask=true) carries the full 36-cell permission block", () => {
-    const r = renderHostConfig("claude", baseInput());
+    const r = renderHostConfig("claude-code-cli", baseInput());
     expect(r.permissions).toBeDefined();
     expect(Object.keys(r.permissions as object).length).toBe(36);
     // baseline: every cell is the all-ask triple
@@ -88,24 +88,24 @@ describe("permissions block — capability-gated (caps.permissions.ask)", () => 
   it("flags bypass 'allow' on a host that cannot bypass prompts", () => {
     const inp = baseInput({ config: { security: { bypass_permissions_policy: "allow" } } });
     // pi caps.permissions.bypass_prompts is false (inferred row) → flag the degrade
-    const r = renderHostConfig("pi", inp);
+    const r = renderHostConfig("pi-cli", inp);
     expect(r._unsupported?.some((u) => u.field === "security.bypass_permissions_policy")).toBe(true);
   });
 
   it("omits the permission block entirely when no permissions input is supplied", () => {
-    const r = renderHostConfig("claude", baseInput({ permissions: {} }));
+    const r = renderHostConfig("claude-code-cli", baseInput({ permissions: {} }));
     expect(r.permissions).toBeUndefined();
   });
 });
 
 describe("models — config slot then registry capability row", () => {
   it("claude resolves cheap/mid/powerful from the config tiers slot", () => {
-    const r = renderHostConfig("claude", baseInput());
+    const r = renderHostConfig("claude-code-cli", baseInput());
     expect(r.models).toEqual({ cheap: "haiku", mid: "sonnet", powerful: "opus" });
   });
 
   it("codex (no config slot set) flags models unsupported when the capability row is empty", () => {
-    const r = renderHostConfig("codex", baseInput());
+    const r = renderHostConfig("codex-cli", baseInput());
     // CODEX_CAPABILITIES.models are all null and settings codex slot is unset → no model
     expect(r.models).toBeUndefined();
     expect(r._unsupported?.some((u) => u.field === "models")).toBe(true);
@@ -113,22 +113,22 @@ describe("models — config slot then registry capability row", () => {
 
   it("honors the {model,effort} object form in the config tiers slot", () => {
     const inp = baseInput({
-      config: { models: { tiers: { cheap: { claude: { model: "haiku" } }, mid: { claude: { model: "sonnet" } }, powerful: { claude: { model: "opus" } } } } },
+      config: { models: { tiers: { cheap: { "claude-code-cli": { model: "haiku" } }, mid: { "claude-code-cli": { model: "sonnet" } }, powerful: { "claude-code-cli": { model: "opus" } } } } },
     });
-    const r = renderHostConfig("claude", inp);
+    const r = renderHostConfig("claude-code-cli", inp);
     expect(r.models).toEqual({ cheap: "haiku", mid: "sonnet", powerful: "opus" });
   });
 });
 
 describe("render-or-degrade — degrade markers", () => {
   it("flags hooks + skills unsupported on a file/instruction host (.agents)", () => {
-    const r = renderHostConfig(".agents", baseInput());
+    const r = renderHostConfig("agents-file", baseInput());
     expect(r._unsupported?.some((u) => u.field === "hooks")).toBe(true);
     expect(r._unsupported?.some((u) => u.field === "skills")).toBe(true);
   });
 
   it("claude (native skills + hooks) does NOT flag hooks/skills", () => {
-    const r = renderHostConfig("claude", baseInput());
+    const r = renderHostConfig("claude-code-cli", baseInput());
     expect(r._unsupported?.some((u) => u.field === "hooks")).toBeFalsy();
     expect(r._unsupported?.some((u) => u.field === "skills")).toBeFalsy();
   });
@@ -137,8 +137,8 @@ describe("render-or-degrade — degrade markers", () => {
 describe("SECURITY fail-closed (F-9) — secrets never leak", () => {
   it("redacts a secret in a role pin and never emits the raw value; ok:false under closed", () => {
     const secret = "ghp_0123456789abcdefghijABCDEFGHIJ012345";
-    const inp = baseInput({ config: { roles: { host: "claude", note: `token=${secret}` } } });
-    const r = renderHostConfig("claude", inp);
+    const inp = baseInput({ config: { roles: { host: "claude-code-cli", note: `token=${secret}` } } });
+    const r = renderHostConfig("claude-code-cli", inp);
     const serialized = JSON.stringify(r);
     expect(serialized).not.toContain(secret); // raw secret NEVER present
     expect(r._redactions?.some((x) => x.reason === "secret")).toBe(true);
@@ -150,8 +150,8 @@ describe("SECURITY fail-closed (F-9) — secrets never leak", () => {
     // Codex G-lane round-5 completeness: a local-scoped roles key whose NAME is a secret would
     // put that secret into _redactions[].field — the final terminating pass must scrub it.
     const secret = "ghp_0123456789abcdefghijABCDEFGHIJ012345";
-    const r = renderHostConfig("claude", baseInput({
-      config: { roles: { host: "claude", [secret]: "x" } as Record<string, unknown> },
+    const r = renderHostConfig("claude-code-cli", baseInput({
+      config: { roles: { host: "claude-code-cli", [secret]: "x" } as Record<string, unknown> },
       sources: { [`roles.${secret}`]: "project-local" },
     }));
     expect(JSON.stringify(r)).not.toContain(secret); // absent everywhere, incl. _redactions.field
@@ -160,10 +160,10 @@ describe("SECURITY fail-closed (F-9) — secrets never leak", () => {
 
   it("operator redaction_patterns are honored (mirrors secrets_policy.redaction_patterns)", () => {
     const inp = baseInput({
-      config: { roles: { host: "claude", tag: "INTERNAL-CODENAME-XYZ" } },
+      config: { roles: { host: "claude-code-cli", tag: "INTERNAL-CODENAME-XYZ" } },
       options: { renderedAt: NOW, redactionPatterns: ["INTERNAL-CODENAME-[A-Z]+"] },
     });
-    const r = renderHostConfig("claude", inp);
+    const r = renderHostConfig("claude-code-cli", inp);
     expect(JSON.stringify(r)).not.toContain("INTERNAL-CODENAME-XYZ");
     expect(r._redactions?.some((x) => x.reason === "secret")).toBe(true);
   });
@@ -171,10 +171,10 @@ describe("SECURITY fail-closed (F-9) — secrets never leak", () => {
   it("failMode 'open' redacts but keeps ok:true (warn-and-proceed)", () => {
     const secret = "ghp_0123456789abcdefghijABCDEFGHIJ012345";
     const inp = baseInput({
-      config: { roles: { host: "claude", note: secret } },
+      config: { roles: { host: "claude-code-cli", note: secret } },
       options: { renderedAt: NOW, failMode: "open" },
     });
-    const r = renderHostConfig("claude", inp);
+    const r = renderHostConfig("claude-code-cli", inp);
     expect(JSON.stringify(r)).not.toContain(secret); // still never emitted
     expect(r._redactions?.some((x) => x.reason === "secret")).toBe(true);
     expect(r.ok).toBe(true);
@@ -185,34 +185,34 @@ describe("SECURITY fail-closed (F-9) — secrets never leak", () => {
 describe("SECURITY fail-closed (F-9) — local-scope values withheld from shared output", () => {
   it("withholds a project-local role sub-key and records it; ok:false under closed", () => {
     const inp = baseInput({
-      config: { roles: { host: "claude", adversarial: "codex" } },
+      config: { roles: { host: "claude-code-cli", adversarial: "codex-cli" } },
       sources: { "roles.adversarial": "project-local" },
     });
-    const r = renderHostConfig("claude", inp);
+    const r = renderHostConfig("claude-code-cli", inp);
     expect(r.roles).toBeDefined();
     expect((r.roles as Record<string, unknown>)["adversarial"]).toBeUndefined(); // withheld
-    expect((r.roles as Record<string, unknown>)["host"]).toBe("claude"); // shared value kept
+    expect((r.roles as Record<string, unknown>)["host"]).toBe("claude-code-cli"); // shared value kept
     expect(r._redactions?.some((x) => x.reason === "local-scope" && x.field === "roles.adversarial")).toBe(true);
     expect(r.ok).toBe(false);
   });
 
   it("withholds an entire local-scoped block (roles wholly local)", () => {
     const inp = baseInput({
-      config: { roles: { host: "claude" } },
+      config: { roles: { host: "claude-code-cli" } },
       sources: { roles: "workspace-local" },
     });
-    const r = renderHostConfig("claude", inp);
+    const r = renderHostConfig("claude-code-cli", inp);
     expect(r.roles).toEqual({});
     expect(r._redactions?.some((x) => x.reason === "local-scope" && x.field === "roles")).toBe(true);
   });
 
   it("a shared (project/workspace) source is NOT withheld", () => {
     const inp = baseInput({
-      config: { roles: { host: "claude" } },
+      config: { roles: { host: "claude-code-cli" } },
       sources: { "roles.host": "project" },
     });
-    const r = renderHostConfig("claude", inp);
-    expect((r.roles as Record<string, unknown>)["host"]).toBe("claude");
+    const r = renderHostConfig("claude-code-cli", inp);
+    expect((r.roles as Record<string, unknown>)["host"]).toBe("claude-code-cli");
     expect(r.ok).toBe(true);
   });
 
@@ -222,9 +222,9 @@ describe("SECURITY fail-closed (F-9) — local-scope values withheld from shared
     const all = renderAllHostConfigs(
       baseInput({
         config: {
-          models: { tiers: { cheap: { claude: SECRET_LOCAL_MODEL }, mid: { claude: "sonnet" }, powerful: { claude: "opus" } } },
+          models: { tiers: { cheap: { "claude-code-cli": SECRET_LOCAL_MODEL }, mid: { "claude-code-cli": "sonnet" }, powerful: { "claude-code-cli": "opus" } } },
         },
-        sources: { "models.tiers.cheap.claude": "workspace-local" },
+        sources: { "models.tiers.cheap.claude-code-cli": "workspace-local" },
       })
     );
     for (const id of HOST_IDS) {
@@ -232,11 +232,11 @@ describe("SECURITY fail-closed (F-9) — local-scope values withheld from shared
       expect(JSON.stringify(all[id])).not.toContain(SECRET_LOCAL_MODEL);
     }
     // claude (the host with the local slot) records the local-scope redaction + fails closed
-    const claude = all["claude"];
+    const claude = all["claude-code-cli"];
     expect(claude.ok).toBe(false);
     expect(claude.blocked).toBe(true);
     expect(
-      claude._redactions?.some((x) => x.reason === "local-scope" && x.field === "models.tiers.cheap.claude")
+      claude._redactions?.some((x) => x.reason === "local-scope" && x.field === "models.tiers.cheap.claude-code-cli")
     ).toBe(true);
     // the cheap slot fell back to the SHARED registry default (not the local value)
     expect(claude.models?.cheap).not.toBe(SECRET_LOCAL_MODEL);
@@ -246,13 +246,13 @@ describe("SECURITY fail-closed (F-9) — local-scope values withheld from shared
   // (finer granularity than the slot) must still withhold the model (descendant taint).
   it("withholds an object-form model whose .model CHILD key is local-sourced", () => {
     const LOCAL = "local-child-only-model";
-    const r = renderHostConfig("claude", baseInput({
-      config: { models: { tiers: { cheap: { claude: { model: LOCAL } }, mid: { claude: "sonnet" }, powerful: { claude: "opus" } } } },
-      sources: { "models.tiers.cheap.claude.model": "project-local" },
+    const r = renderHostConfig("claude-code-cli", baseInput({
+      config: { models: { tiers: { cheap: { "claude-code-cli": { model: LOCAL } }, mid: { "claude-code-cli": "sonnet" }, powerful: { "claude-code-cli": "opus" } } } },
+      sources: { "models.tiers.cheap.claude-code-cli.model": "project-local" },
     }));
     expect(JSON.stringify(r)).not.toContain(LOCAL);
     expect(r.models?.cheap).not.toBe(LOCAL); // fell back to the shared registry default
-    expect(r._redactions?.some((x) => x.reason === "local-scope" && x.field === "models.tiers.cheap.claude")).toBe(true);
+    expect(r._redactions?.some((x) => x.reason === "local-scope" && x.field === "models.tiers.cheap.claude-code-cli")).toBe(true);
     expect(r.ok).toBe(false);
   });
 
@@ -260,8 +260,8 @@ describe("SECURITY fail-closed (F-9) — local-scope values withheld from shared
   // must withhold that entry whole (defense-in-depth; roles values are strings in practice).
   it("withholds a roles entry whose nested DESCENDANT is local-sourced", () => {
     const LOCAL = "local-nested-role-value";
-    const r = renderHostConfig("claude", baseInput({
-      config: { roles: { host: { pin: "claude", child: LOCAL } } as unknown as Record<string, unknown> },
+    const r = renderHostConfig("claude-code-cli", baseInput({
+      config: { roles: { host: { pin: "claude-code-cli", child: LOCAL } } as unknown as Record<string, unknown> },
       sources: { "roles.host.child": "workspace-local" },
     }));
     expect(JSON.stringify(r)).not.toContain(LOCAL);
@@ -289,7 +289,7 @@ describe("SECURITY fail-closed (F-9) — local-scope values withheld from shared
   });
 
   it("withholds the permission block when security.bypass_permissions_policy is workspace-local", () => {
-    const r = renderHostConfig("claude", baseInput({
+    const r = renderHostConfig("claude-code-cli", baseInput({
       sources: { "security.bypass_permissions_policy": "workspace-local" },
     }));
     expect(r.permissions).toBeUndefined();
@@ -298,7 +298,7 @@ describe("SECURITY fail-closed (F-9) — local-scope values withheld from shared
   });
 
   it("a SHARED feeder source keeps the full permission block (no false withhold)", () => {
-    const r = renderHostConfig("claude", baseInput({
+    const r = renderHostConfig("claude-code-cli", baseInput({
       sources: { auto_approve: "project", "security.bypass_permissions_policy": "workspace" },
     }));
     expect(r.permissions).toBeDefined();
@@ -315,7 +315,7 @@ describe("determinism + clock-freedom", () => {
   });
 
   it("_rendered_at is exactly the caller-supplied timestamp (no clock read)", () => {
-    const r = renderHostConfig("claude", baseInput({ options: { renderedAt: "1999-01-01T00:00:00Z" } }));
+    const r = renderHostConfig("claude-code-cli", baseInput({ options: { renderedAt: "1999-01-01T00:00:00Z" } }));
     expect(r._rendered_at).toBe("1999-01-01T00:00:00Z");
   });
 });
@@ -323,8 +323,8 @@ describe("determinism + clock-freedom", () => {
 // ── Codex G-lane MAJOR 1 — host_profiles overrides are consumed by the renderer ──
 describe("host_profiles overrides (SC-W1-8)", () => {
   it("applies a SHARED per-host models override over the tiers/registry value", () => {
-    const r = renderHostConfig("claude", baseInput({
-      config: { host_profiles: { claude: { models: { cheap: "haiku-profile" } } } },
+    const r = renderHostConfig("claude-code-cli", baseInput({
+      config: { host_profiles: { "claude-code-cli": { models: { cheap: "haiku-profile" } } } },
       sources: {},
     }));
     expect(r.models?.cheap).toBe("haiku-profile"); // profile wins
@@ -333,32 +333,32 @@ describe("host_profiles overrides (SC-W1-8)", () => {
   });
 
   it("surfaces the `enabled` toggle from the host profile", () => {
-    const r = renderHostConfig("pi", baseInput({
-      config: { host_profiles: { pi: { enabled: false } } },
+    const r = renderHostConfig("pi-cli", baseInput({
+      config: { host_profiles: { "pi-cli": { enabled: false } } },
       sources: {},
     }));
     expect(r.enabled).toBe(false);
   });
 
   it("WITHHOLDS a LOCAL-sourced host_profiles `enabled` toggle (fails closed)", () => {
-    const r = renderHostConfig("pi", baseInput({
-      config: { host_profiles: { pi: { enabled: false } } },
-      sources: { "host_profiles.pi.enabled": "project-local" },
+    const r = renderHostConfig("pi-cli", baseInput({
+      config: { host_profiles: { "pi-cli": { enabled: false } } },
+      sources: { "host_profiles.pi-cli.enabled": "project-local" },
     }));
     expect(r.enabled).toBeUndefined(); // withheld — not leaked into the shared render
-    expect(r._redactions?.some((x) => x.reason === "local-scope" && x.field === "host_profiles.pi.enabled")).toBe(true);
+    expect(r._redactions?.some((x) => x.reason === "local-scope" && x.field === "host_profiles.pi-cli.enabled")).toBe(true);
     expect(r.ok).toBe(false);
   });
 
   it("WITHHOLDS a LOCAL-sourced host_profiles model override (fails closed) and keeps the shared value", () => {
     const LOCAL = "local-only-profile-model";
-    const r = renderHostConfig("claude", baseInput({
-      config: { host_profiles: { claude: { models: { cheap: LOCAL } } } },
-      sources: { "host_profiles.claude.models.cheap": "project-local" },
+    const r = renderHostConfig("claude-code-cli", baseInput({
+      config: { host_profiles: { "claude-code-cli": { models: { cheap: LOCAL } } } },
+      sources: { "host_profiles.claude-code-cli.models.cheap": "project-local" },
     }));
     expect(JSON.stringify(r)).not.toContain(LOCAL);
     expect(r.models?.cheap).not.toBe(LOCAL); // fell back to the shared tiers/registry value
-    expect(r._redactions?.some((x) => x.reason === "local-scope" && x.field === "host_profiles.claude.models.cheap")).toBe(true);
+    expect(r._redactions?.some((x) => x.reason === "local-scope" && x.field === "host_profiles.claude-code-cli.models.cheap")).toBe(true);
     expect(r.ok).toBe(false);
   });
 });
@@ -367,7 +367,7 @@ describe("host_profiles overrides (SC-W1-8)", () => {
 describe("secret scan covers caller-supplied scalar fields", () => {
   it("redacts a secret in sourceVersion and never emits it raw", () => {
     const secret = "ghp_0123456789abcdefghijABCDEFGHIJ012345";
-    const r = renderHostConfig("claude", baseInput({
+    const r = renderHostConfig("claude-code-cli", baseInput({
       sources: {},
       options: { renderedAt: NOW, sourceVersion: `build ${secret}` },
     }));
@@ -380,12 +380,12 @@ describe("secret scan covers caller-supplied scalar fields", () => {
 // ── Codex G-lane BLOCKER 2 — absent sources must NOT silently fail open ──
 describe("local-scope guard verifiability (_local_guard)", () => {
   it("sources supplied ⇒ _local_guard 'enforced'", () => {
-    const r = renderHostConfig("claude", baseInput({ sources: {} }));
+    const r = renderHostConfig("claude-code-cli", baseInput({ sources: {} }));
     expect(r._local_guard).toBe("enforced");
   });
 
   it("NO sources under failMode 'closed' ⇒ unverified + fails closed (ok:false/blocked)", () => {
-    const r = renderHostConfig("claude", baseInput({ sources: undefined }));
+    const r = renderHostConfig("claude-code-cli", baseInput({ sources: undefined }));
     expect(r._local_guard).toBe("unverified");
     expect(r.ok).toBe(false);
     expect(r.blocked).toBe(true);
@@ -393,7 +393,7 @@ describe("local-scope guard verifiability (_local_guard)", () => {
   });
 
   it("NO sources under failMode 'open' ⇒ unverified but warn-and-proceed (ok:true)", () => {
-    const r = renderHostConfig("claude", baseInput({ sources: undefined, options: { renderedAt: NOW, failMode: "open" } }));
+    const r = renderHostConfig("claude-code-cli", baseInput({ sources: undefined, options: { renderedAt: NOW, failMode: "open" } }));
     expect(r._local_guard).toBe("unverified");
     expect(r.ok).toBe(true);
     expect(r.blocked).toBe(false);

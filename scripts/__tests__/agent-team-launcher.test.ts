@@ -243,6 +243,35 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).toMatch(/CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1/);
     });
 
+    it("codex-started dry-run uses codex as orchestrator and default pane host", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { stdout, exitCode } = runScript(
+        [
+          "--team",
+          teamPath,
+          "--session-name",
+          "guild-codex-started",
+          "--cwd",
+          tmpDir,
+          "--dry-run",
+        ],
+        { GUILD_HOST_ID: "codex-cli", OPENAI_API_KEY: "sk-test" }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/tmux\s+new-session/);
+      expect(stdout).toMatch(/codex exec/);
+      expect(stdout).toMatch(/agent-bus/);
+      expect(stdout).not.toMatch(/TaskCreated/);
+      expect(stdout).not.toMatch(/CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1/);
+
+      const sessionJson = findSessionJson(tmpDir)!;
+      const manifest = JSON.parse(fs.readFileSync(sessionJson, "utf8"));
+      expect(manifest.orchestrator_host_kind).toBe("codex");
+      expect(manifest.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBeUndefined();
+      const hosts = manifest.teammate_panes.map((p: { host_kind: string }) => p.host_kind);
+      expect(new Set(hosts)).toEqual(new Set(["codex"]));
+    });
+
     it("does NOT invoke real tmux (session must not exist after dry-run)", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const sessionName = `guild-dryrun-${Date.now()}`;

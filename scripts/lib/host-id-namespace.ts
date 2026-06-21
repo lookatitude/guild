@@ -4,7 +4,8 @@
  * P1-L0 FOUNDATION — namespace reconciliation contract between the **legacy
  * `HostKind`** union (`host-types.ts` — 9 surfaces incl. `antigravity-2`, `gemini`,
  * the claude-* desktop/web/connector variants) and the **P1 registry `HostId`**
- * namespace (`host-registry-schema.ts` — `claude|codex|.agents|pi|antigravity`).
+ * namespace (`host-registry-schema.ts` — v2 canonical ids such as
+ * `claude-code-cli`, `codex-cli`, and `agents-file`).
  *
  * Authored to CLEAR the L0 followup carried by P1-L7 (registry unification): L7 must
  * route the legacy host knowledge through the registry **behavior-preserving** for
@@ -29,7 +30,7 @@
  */
 
 import { HostKind } from "./host-types";
-import { HostId } from "./host-registry-schema";
+import { HOST_IDS, HostId } from "./host-registry-schema";
 
 // ---------------------------------------------------------------------------
 // Legacy HostKind → registry HostId
@@ -44,14 +45,14 @@ import { HostId } from "./host-registry-schema";
  * map is the authoritative, reviewable enumeration.
  */
 export const HOSTKIND_TO_REGISTRY_ID: Record<HostKind, HostId | null> = {
-  claude: "claude",
-  "claude-code-desktop": "claude", // claude family surface
-  "claude-code-web": "claude", // claude family surface
-  "claude-ai-connector": "claude", // claude family surface (remote MCP control plane)
-  codex: "codex",
-  "codex-app": "codex", // codex family surface
-  pi: "pi",
-  "antigravity-2": "antigravity", // legacy id `antigravity-2` ⇒ registry id `antigravity`
+  claude: "claude-code-cli",
+  "claude-code-desktop": "claude-code-app", // legacy desktop alias
+  "claude-code-web": "claude-code-web",
+  "claude-ai-connector": "claude-ai-connector", // remote MCP control plane
+  codex: "codex-cli",
+  "codex-app": "codex-app",
+  pi: "pi-cli",
+  "antigravity-2": "antigravity-cli",
   gemini: null, // DROPPED (D10) — no registry row; routing degrades/records (matches today: detect-only, not selectable)
 };
 
@@ -67,12 +68,34 @@ export function hostKindToRegistryId(hk: HostKind | string): HostId | null {
   }
   // Prefix fallback — byte-aligned with provider-detect.ts resolveAuthorHost().
   const s = String(hk);
-  if (s.startsWith("antigravity")) return "antigravity";
-  if (s.startsWith("claude")) return "claude";
-  if (s.startsWith("codex")) return "codex";
-  if (s === "pi") return "pi";
+  const normalized = normalizeHostId(s);
+  if (normalized) return normalized;
   if (s.startsWith("gemini")) return null; // dropped (D10)
   return null; // unknown ⇒ no registry row (safe: forces degrade/record, never a false capability)
+}
+
+const HOST_ID_SET = new Set<string>(HOST_IDS);
+
+export const LEGACY_HOST_ALIASES: Record<string, HostId> = {
+  claude: "claude-code-cli",
+  "claude-code-desktop": "claude-code-app",
+  codex: "codex-cli",
+  "codex-plugin": "codex-cli",
+  agents: "agents-file",
+  ".agents": "agents-file",
+  pi: "pi-cli",
+  antigravity: "antigravity-cli",
+  "antigravity-2": "antigravity-cli",
+};
+
+/**
+ * Normalize a canonical host id or legacy alias into the v2 canonical HostId.
+ * Returns null for unknown or intentionally dropped hosts such as Gemini.
+ */
+export function normalizeHostId(value: string): HostId | null {
+  const s = value.trim();
+  if (HOST_ID_SET.has(s)) return s as HostId;
+  return LEGACY_HOST_ALIASES[s] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,15 +111,23 @@ export function hostKindToRegistryId(hk: HostKind | string): HostId | null {
  */
 export function registryIdToCanonicalHostKind(id: HostId | string): HostKind | null {
   switch (id) {
-    case "claude":
+    case "claude-code-cli":
       return "claude";
-    case "codex":
+    case "codex-cli":
       return "codex";
-    case "pi":
+    case "pi-cli":
       return "pi";
-    case "antigravity":
+    case "antigravity-cli":
       return "antigravity-2"; // registry `antigravity` ⇒ canonical legacy id `antigravity-2`
-    case ".agents":
+    case "claude-code-app":
+      return "claude-code-desktop";
+    case "claude-code-web":
+      return "claude-code-web";
+    case "codex-app":
+      return "codex-app";
+    case "claude-ai-connector":
+      return "claude-ai-connector";
+    case "agents-file":
       return null; // emission target only — no HostKind surface
     default:
       return null;

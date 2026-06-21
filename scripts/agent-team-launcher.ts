@@ -77,6 +77,7 @@ import { resolveAdapter } from "./lib/pane-adapter";
 // CH-1: route each specialist to its backend (local tmux vs remote) via the
 // CR-1 routing function, reading guild.host_capability.v1 manifests.
 import { planTeamRouting, RouteError, type RoutableHost } from "./lib/host-router";
+import { normalizeHostId, registryIdToCanonicalHostKind } from "./lib/host-id-namespace";
 // U5: typed settings projection via the resolver (replaces direct settings slice reads)
 import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
 // R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
@@ -362,7 +363,37 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
 
 function parseHostKind(value: string): HostKind | undefined {
   const v = stripQuotes(value).trim().toLowerCase();
-  return v === "claude" || v === "codex" ? v : undefined;
+  if (v === "claude" || v === "codex" || v === "pi" || v === "antigravity-2") return v;
+  if (v === "antigravity" || v === "antigravity-cli") return "antigravity-2";
+  if (v === "claude-code-cli" || v === "claude-code-app" || v === "claude-code-desktop") return "claude";
+  if (v === "codex-cli" || v === "codex-app") return "codex";
+  if (v === "pi-cli") return "pi";
+  return undefined;
+}
+
+function paneHostKindForStartingHost(value: string | undefined): HostKind {
+  const raw = (value ?? "").trim();
+  if (!raw) return "claude";
+  const parsed = parseHostKind(raw);
+  if (parsed) return parsed;
+  const normalized = normalizeHostId(raw);
+  const registryKind = normalized ? registryIdToCanonicalHostKind(normalized) : null;
+  if (!registryKind) return "claude";
+  if (
+    registryKind === "claude-code-desktop" ||
+    registryKind === "claude-code-web" ||
+    registryKind === "claude-ai-connector"
+  ) {
+    return "claude";
+  }
+  if (registryKind === "codex-app") return "codex";
+  return registryKind;
+}
+
+function resolveOrchestratorHostKind(env: NodeJS.ProcessEnv = process.env): HostKind {
+  return paneHostKindForStartingHost(
+    env["GUILD_ORCHESTRATOR_HOST"] ?? env["GUILD_HOST_ID"] ?? env["GUILD_HOST"]
+  );
 }
 
 function parseFlowList(value: string): string[] {
@@ -401,6 +432,7 @@ interface Manifest {
   // session. Null in new-session mode (the whole session is ours).
   window_name: string | null;
   created_at: string;
+  orchestrator_host_kind: HostKind;
   orchestrator_pane_id: string;
   // CH-5: `host_kind` + `adapter_version` are additive optional per-pane fields
   // under the lenient-reader rule (no schema_version bump). Existing readers
@@ -431,14 +463,30 @@ function buildManifest(opts: {
   specialists: Specialist[];
   dryRun: boolean;
   realPaneIds: { orchestrator: string; teammates: Record<string, string> } | null;
+  orchestratorHostKind?: HostKind;
 }): Manifest {
-  const { runId, mode, sessionName, windowName, specialists, dryRun, realPaneIds } = opts;
+  const {
+    runId,
+    mode,
+    sessionName,
+    windowName,
+    specialists,
+    dryRun,
+    realPaneIds,
+    orchestratorHostKind = "claude",
+  } = opts;
+  const paneHosts = [
+    orchestratorHostKind,
+    ...specialists.map((s) => s.host_kind ?? orchestratorHostKind),
+  ];
+  const hasClaudePane = paneHosts.includes("claude");
   return {
     run_id: runId,
     mode,
     session_name: sessionName,
     window_name: windowName,
     created_at: new Date().toISOString(),
+    orchestrator_host_kind: orchestratorHostKind,
     orchestrator_pane_id: dryRun
       ? "(dry-run: not spawned)"
       : realPaneIds?.orchestrator ?? "(unknown)",
@@ -447,13 +495,13 @@ function buildManifest(opts: {
       pane_id: dryRun
         ? "(dry-run: not spawned)"
         : realPaneIds?.teammates?.[s.name] ?? "(unknown)",
-      host_kind: s.host_kind ?? "claude",
+      host_kind: s.host_kind ?? orchestratorHostKind,
       adapter_version: ADAPTER_VERSION,
       // D-CAP: capability_scope is additive+optional — undefined is omitted by JSON.stringify.
       capability_scope: s.capability_scope,
     })),
     env: {
-      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
+      ...(hasClaudePane ? { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" } : {}),
       // GUILD_RUN_ID is exported into each pane at spawn time (see composeTmuxCommands)
       // so hooks inside the panes converge on this run-id.
       GUILD_RUN_ID: runId,
@@ -906,6 +954,7 @@ async function main(): Promise<void> {
       ? `guild-${slug}`
       : `guild-${slug}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
   const cwd = path.resolve(args.cwd);
+  const orchestratorHostKind = resolveOrchestratorHostKind(process.env);
 
   // R-009: apply statusline env gate before pane commands are composed.
   // If settings.json resolves statusline: true (via --statusline flag or
@@ -1015,8 +1064,13 @@ async function main(): Promise<void> {
   if (crossHostEnabled(process.env, cwd)) {
     const manifests = loadHostManifests(cwd);
     if (manifests.length > 0) {
+      const explicitLocalHostId = (process.env["GUILD_HOST_ID"] ?? process.env["GUILD_HOST"] ?? "").trim();
       const localHostId =
-        process.env["GUILD_HOST_ID"] ?? process.env["GUILD_HOST"] ?? "claude";
+        explicitLocalHostId ||
+        (orchestratorHostKind === "codex" ? "codex-cli" :
+          orchestratorHostKind === "pi" ? "pi-cli" :
+          orchestratorHostKind === "antigravity-2" ? "antigravity-cli" :
+          "claude-code-cli");
       try {
         // Load cross-host config here so R-015/R-018 values are available
         // for both the routing decision AND the endpoint lookup below.
@@ -1056,6 +1110,7 @@ async function main(): Promise<void> {
               independence: d.independence,
               tier: d.tier,
               model: d.model,
+              modelParams: d.modelParams,
             };
             for (const taskId of taskIds) {
               upsertLane(
@@ -1263,18 +1318,19 @@ async function main(): Promise<void> {
     }
   }
 
-  // CH-1: a team is "mixed-host" when any specialist names a non-claude `host:`.
-  // For a mixed team we wire pane-adapter's resolver so each pane spawns via its
-  // brand's adapter (codex → `codex exec`); a pure-claude team keeps the legacy
-  // resolver-less path (byte-identical to the shipped launcher — the regression
-  // anchor).
-  const mixedHost = team.specialists.some((s) => s.host_kind && s.host_kind !== "claude");
+  // CH-1/R8: wire pane adapters whenever any actual pane host is not Claude.
+  // A pure-Claude team keeps the resolver-less path (byte-identical legacy
+  // regression anchor). Specialists without `host:` inherit the orchestrator host.
+  const adapterBacked = [
+    orchestratorHostKind,
+    ...team.specialists.map((s) => s.host_kind ?? orchestratorHostKind),
+  ].some((hostKind) => hostKind !== "claude");
 
   // RE-4: the tmux spawn logic lives behind the TeamBackend seam. The launcher
   // drives one TmuxTeamBackend for probes (availability, collision), pure
   // command composition (plan), and the spawn/teardown loop. The launcher keeps
   // the CLI-specific UX (exact error messages, exit codes, manifest, attach).
-  const tmux = new TmuxTeamBackend(mixedHost ? { resolveAdapter: resolveAdapter() } : {});
+  const tmux = new TmuxTeamBackend(adapterBacked ? { resolveAdapter: resolveAdapter() } : {});
 
   // For real (non-dry-run) launches: tmux must be installed, and the target must
   // not already exist (refuse to clobber). Which collision we check depends on
@@ -1312,13 +1368,13 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    // CH-6: fail-fast preflight for a mixed-host team. Probe every pane's
-    // adapter (orchestrator = claude + each specialist's host) BEFORE any pane
+    // CH-6/R8: fail-fast preflight for adapter-backed teams. Probe every
+    // actually-present pane host BEFORE any pane
     // spawns; on failure abort naming the specialist + host + missing
     // dependency, with ZERO panes opened (no partial spawn). No-op for a
     // pure-claude team (no resolver wired → preflight returns ok).
-    if (mixedHost) {
-      const pf = tmux.preflight(team.specialists);
+    if (adapterBacked) {
+      const pf = tmux.preflight(team.specialists, orchestratorHostKind);
       if (!pf.ok) {
         const lines = pf.failures
           .map((f) => `    - ${f.specialist} [${f.hostKind}]: ${f.message}`)
@@ -1340,6 +1396,7 @@ async function main(): Promise<void> {
     runId,
     specialists: team.specialists,
     dryRun: args.dryRun,
+    orchestratorHostKind,
     // C13: the path the launcher was handed (--team, already resolved by the
     // dispatch layer via resolveTeamFile) IS the resolved per-phase team file —
     // thread it into the orchestrator prompt so the persisted reference matches.
@@ -1375,6 +1432,7 @@ async function main(): Promise<void> {
         specialists: team.specialists,
         dryRun: true,
         realPaneIds: null,
+        orchestratorHostKind,
       })
     );
     process.stdout.write(
@@ -1411,6 +1469,7 @@ async function main(): Promise<void> {
         orchestrator: outcome.orchestratorPaneId,
         teammates: outcome.teammatePaneIds,
       },
+      orchestratorHostKind,
     })
   );
 

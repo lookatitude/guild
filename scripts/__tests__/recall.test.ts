@@ -765,6 +765,11 @@ describe("recall CLI — protected stdout (no raw injection text)", () => {
 
   it("CLI: sqlite branch triggers with GUILD_WIKI_THRESHOLD=1", () => {
     const repo = mkTmpRepo();
+    // Composite recall (now ON by default) BYPASSES the sqlite-FTS cache by design — it
+    // re-ranks in the file-bm25 branch which owns the raw score. To exercise the sqlite
+    // branch specifically, run in legacy non-composite mode.
+    fs.mkdirSync(path.join(repo, ".guild"), { recursive: true });
+    fs.writeFileSync(path.join(repo, ".guild", "settings.json"), JSON.stringify({ models: { compositeRecall: false } }));
     writeWikiFile(repo, "sqlite-a.md", "# A\n\nSqlite CLI recall test authentication content.\n");
     writeWikiFile(repo, "sqlite-b.md", "# B\n\nAnother sqlite CLI recall test authentication page.\n");
 

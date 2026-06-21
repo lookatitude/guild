@@ -186,6 +186,32 @@ describe("write-task-run — writeTaskRun (TE-01/ARCH-1)", () => {
     expect(cr.needs_parallel).toBe(false);
     expect(cr.needs_network).toBe(false);
     expect(cr.isolation).toBe("worktree");
+    expect(doc.task_run.host.model_params).toBeNull();
+  });
+
+  it("host block can carry R5 model_params", () => {
+    const root = mkRoot();
+    writeTaskRun(root, "run-001", "backend-api-001", {
+      ...BASE_PARAMS,
+      host: {
+        ...BASE_PARAMS.host,
+        modelParams: {
+          model: "opus-4.8",
+          effort: "low",
+          reasoning: "xhigh",
+          thinking: "enabled",
+          verbosity: "low",
+        },
+      },
+    });
+    const doc = readTaskRun(root, "run-001", "backend-api-001");
+    expect(doc.task_run.host.model_params).toEqual({
+      model: "opus-4.8",
+      effort: "low",
+      reasoning: "xhigh",
+      thinking: "enabled",
+      verbosity: "low",
+    });
   });
 
   it("trace block carries events_ref pointing to the run log", () => {

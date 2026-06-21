@@ -280,6 +280,13 @@ describe("InProcessTeamBackend — Agent-tool dispatch plan (RE-4 / VC-RE-4)", (
     expect(backendDesc.prompt).toContain("api + data");
   });
 
+  it("uses file-bus prompt wording for non-Claude in-process descriptors", () => {
+    const plan = composeInProcessDispatch(req({ orchestratorHostKind: "codex" }));
+    expect(plan).toHaveLength(SPECIALISTS.length);
+    expect(plan.every((d) => d.prompt.includes("agent-bus"))).toBe(true);
+    expect(plan.some((d) => d.prompt.includes("TaskCreated"))).toBe(false);
+  });
+
   it("the in-process env does NOT carry the tmux team gate (it is the no-tmux path)", () => {
     const result = new InProcessTeamBackend().launch(req());
     for (const d of result.dispatchPlan!) {

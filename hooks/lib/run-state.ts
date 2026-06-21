@@ -60,6 +60,16 @@ export type LaneStatus =
 /** Resolved model tier (cost ADR §2) — recorded per-lane. */
 export type LaneTier = "cheap" | "mid" | "powerful";
 
+/** R5 full host-native model parameter object. */
+export interface LaneModelParams {
+  model: string;
+  effort?: string;
+  reasoning?: string;
+  thinking?: string;
+  verbosity?: string;
+  [key: string]: string | undefined;
+}
+
 /** Per-lane DAG execution state, keyed by task-id in `RunStateV1.lanes`. */
 export interface LaneState {
   /** Required. Lane lifecycle status. */
@@ -83,6 +93,8 @@ export interface LaneState {
     tier: LaneTier;
     /** Concrete model resolved for the routed tier on the selected host. */
     model: string;
+    /** Full host-native model params; legacy `model` mirrors this object's model. */
+    modelParams?: LaneModelParams;
   };
   /** Current attempt (ADR-RE-2). Defaults to 1. */
   attempt: number;
@@ -141,6 +153,7 @@ export interface LanePatch {
     independence: "strong" | "weak";
     tier: LaneTier;
     model: string;
+    modelParams?: LaneModelParams;
   };
   attempt?: number;
   depends_on?: string[];

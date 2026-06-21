@@ -6,11 +6,11 @@
  *   §Decision 1 / Surface 1 (Packaging)
  * Distribution doc (BY POINTER): docs/v2/15-distribution.md §Per-host packaging
  *
- * Status: [v2.x] — dormant surfaces. These renderers are NOT wired into any
- * install path yet. The installer's via-Claude/planned postures in
- * docs/v2/15-distribution.md §The repo-hosted installer are the ground truth;
- * no doc surface may present a non-Claude render as installable until the
- * adapter ships.
+ * Status: [v2] — wired render surfaces. These renderers are called by
+ * build-host-packages.ts and the repo-hosted installer dry-runs for the CLI/file
+ * targets. A renderer existing is still separate from live installability:
+ * unsupported fields are emitted as degradation records until a host adapter
+ * proves the runtime path.
  *
  * Provides three pure renderers that derive from a common GuildPluginManifest
  * input (the neutral inventory). Each renders the host-native package format:
@@ -118,11 +118,10 @@ export interface HookEntry {
 
 /**
  * The rendered .codex-plugin/plugin.json object.
- * Fields that Codex's plugin format cannot express are noted in `_unsupported`.
+ * Codex's live plugin schema is intentionally narrow. Host capability gaps are
+ * recorded by adapter receipts and package evidence, not inside plugin.json.
  */
 export interface CodexPluginJson {
-  /** Schema identifier for the Codex plugin format. */
-  schema_version: "codex-plugin.v1";
   name: string;
   version: string;
   description: string;
@@ -131,30 +130,19 @@ export interface CodexPluginJson {
   author?: { name: string; email?: string };
   license?: string;
   keywords?: string[];
-  /**
-   * Codex workflow/command entries — derived from the manifest's command list.
-   * Codex does not use .md slash-command files; commands are rendered as workflow
-   * entry descriptors pointing at the canonical command path.
-   */
-  commands?: CodexCommandEntry[];
-  /**
-   * MCP block for servers Codex can bundle.
-   * Codex supports stdio MCP; HTTP transport is unsupported and flagged.
-   */
-  mcpServers?: CodexMcpEntry[];
-  /**
-   * Fields from the source manifest that could not be rendered into the
-   * Codex plugin format (render-or-degrade — ADR Surface 1).
-   * Stub present means the installer must surface the gap to the operator.
-   */
-  _unsupported?: UnsupportedField[];
-  /**
-   * Provenance: the timestamp the caller supplied for this render.
-   * Callers MUST pass this — the renderer never reads the clock.
-   */
-  _rendered_at: string;
-  /** Source manifest version included for traceability. */
-  _source_version: string;
+  /** Codex skill root relative to the plugin package. */
+  skills: string;
+  interface: {
+    displayName: string;
+    shortDescription: string;
+    longDescription: string;
+    developerName?: string;
+    category: string;
+    capabilities: string[];
+    websiteURL?: string;
+    defaultPrompt: string[];
+    brandColor: string;
+  };
 }
 
 /** A single command entry in the Codex plugin format. */
@@ -308,79 +296,26 @@ export function renderCodexPluginJson(
   manifest: GuildPluginManifest,
   opts: RenderOptions
 ): CodexPluginJson {
-  const unsupported: UnsupportedField[] = [];
-
-  // Commands → Codex workflow descriptors
-  const commands: CodexCommandEntry[] = (manifest.commands ?? []).map((cmdPath) => ({
-    name: commandNameFromPath(cmdPath),
-    source_path: cmdPath,
-  }));
-
-  // MCP servers — stdio only; HTTP flagged
-  const mcpServers: CodexMcpEntry[] = [];
-  for (const srv of manifest.mcpServers ?? []) {
-    if (srv.transport === "stdio" && srv.command) {
-      mcpServers.push({
-        id: srv.id,
-        command: srv.command,
-        ...(srv.args ? { args: srv.args } : {}),
-        ...(srv.description ? { description: srv.description } : {}),
-      });
-    } else if (srv.transport === "http") {
-      unsupported.push({
-        field: `mcpServers[${srv.id}]`,
-        reason:
-          "Codex does not support HTTP MCP transport; " +
-          "this server cannot be bundled in the Codex plugin manifest",
-      });
-    } else if (srv.transport === "stdio" && !srv.command) {
-      unsupported.push({
-        field: `mcpServers[${srv.id}]`,
-        reason:
-          "stdio MCP server is missing a command field; " +
-          "cannot render a Codex mcpServers entry without a launch command",
-      });
-    }
-  }
-
-  // Agents — no direct Codex equivalent
-  if (manifest.agents && manifest.agents.length > 0) {
-    unsupported.push({
-      field: "agents",
-      reason:
-        "Codex has no direct equivalent of Guild agent definition files; " +
-        "agents are omitted from the Codex plugin manifest",
-    });
-  }
-
-  // Hooks — Codex hook taxonomy differs from Claude; requires a dedicated HookEmitter
-  if (manifest.hooks && manifest.hooks.length > 0) {
-    unsupported.push({
-      field: "hooks",
-      reason:
-        "Hook event semantics differ between Claude and Codex; " +
-        "hooks require a dedicated HookEmitter adapter (ADR Surface 3) — " +
-        "not rendered by this Surface 1 packager",
-    });
-  }
-
-  // Skills — no direct Codex equivalent
-  if (manifest.skills && manifest.skills.length > 0) {
-    unsupported.push({
-      field: "skills",
-      reason:
-        "Codex has no equivalent of Guild skill directories; " +
-        "skills are omitted from the Codex plugin manifest",
-    });
-  }
-
+  void opts;
   const result: CodexPluginJson = {
-    schema_version: "codex-plugin.v1",
     name: manifest.name,
     version: manifest.version,
     description: manifest.description,
-    _rendered_at: opts.renderedAt,
-    _source_version: manifest.version,
+    skills: "./.agents/skills/",
+    interface: {
+      displayName: "Guild Stack",
+      shortDescription: "Specialist agent teams for Codex",
+      longDescription: manifest.description,
+      ...(manifest.author?.name ? { developerName: manifest.author.name } : {}),
+      category: "Developer Tools",
+      capabilities: ["Read", "Write"],
+      ...(manifest.homepage ? { websiteURL: manifest.homepage } : {}),
+      defaultPrompt: [
+        "Run a Guild planning pass for this task",
+        "Review this implementation with Guild",
+      ],
+      brandColor: "#202A44",
+    },
   };
 
   if (manifest.homepage !== undefined) result.homepage = manifest.homepage;
@@ -388,9 +323,6 @@ export function renderCodexPluginJson(
   if (manifest.author !== undefined) result.author = manifest.author;
   if (manifest.license !== undefined) result.license = manifest.license;
   if (manifest.keywords && manifest.keywords.length > 0) result.keywords = manifest.keywords;
-  if (commands.length > 0) result.commands = commands;
-  if (mcpServers.length > 0) result.mcpServers = mcpServers;
-  if (unsupported.length > 0) result._unsupported = unsupported;
 
   return result;
 }
@@ -692,7 +624,7 @@ export function renderPiManifest(
 }
 
 // ---------------------------------------------------------------------------
-// renderAntigravityManifest (P1-L6) — INFERRED host, installability: target
+// renderAntigravityManifest — verified target renderer, installability: target
 // ---------------------------------------------------------------------------
 
 /** The rendered Antigravity package manifest. Mirrors PiManifest (extension shape). */
@@ -711,19 +643,19 @@ export interface AntigravityManifest {
   _unsupported?: UnsupportedField[];
   _rendered_at: string;
   _source_version: string;
-  /** P1-L6: the antigravity capability row is INFERRED until live-host verification. */
-  _inferred: true;
+  /** Registry provenance for the Antigravity row that backed the render. */
+  _provenance: "verified";
 }
 
 /**
  * Render an Antigravity package manifest from a neutral GuildPluginManifest.
  *
- * Antigravity (registry id `antigravity`, family `antigravity`) is an INFERRED P1 host
- * (`installability: target`, `provenance: inferred`). Its package shape is modeled on the
- * extension surface (commands as descriptors, skill dirs passed through). Native agents /
- * hooks / MCP are flagged in `_unsupported` (render-or-degrade) until the live host
- * confirms its surfaces. Browser is native on antigravity (ladder C3) but that is a
- * RUNTIME-adapter concern (L11), not a package-manifest field.
+ * Antigravity (registry id `antigravity-cli`, family `antigravity`) is a verified
+ * target host (`installability: target`, `provenance: verified`). Its package
+ * shape is modeled on the extension surface (commands as descriptors, skill dirs
+ * passed through). Native agents / hooks / MCP are flagged in `_unsupported`
+ * (render-or-degrade) because the CLI package path still coordinates through
+ * AGENTS.md, the wrapper, and the file bus.
  */
 export function renderAntigravityManifest(
   manifest: GuildPluginManifest,
@@ -742,21 +674,21 @@ export function renderAntigravityManifest(
       unsupported.push({
         field: `mcpServers[${srv.id}]`,
         reason:
-          "Antigravity MCP support is INFERRED off-box; this server must be bridged via a " +
-          "package-provided shim until the live host confirms an MCP transport (verify at SC-3).",
+          "Antigravity MCP support is not exposed by the CLI package surface; this server must be bridged via a " +
+          "package-provided shim or filesystem/BM25 fallback.",
       });
     }
   }
   if (manifest.agents && manifest.agents.length > 0) {
     unsupported.push({
       field: "agents",
-      reason: "Antigravity has no confirmed agent-definition equivalent (INFERRED) — agents omitted.",
+      reason: "Antigravity has no confirmed agent-definition equivalent in the CLI package surface — agents omitted.",
     });
   }
   if (manifest.hooks && manifest.hooks.length > 0) {
     unsupported.push({
       field: "hooks",
-      reason: "Antigravity hook semantics are INFERRED off-box — hooks require a dedicated emitter (not rendered here).",
+      reason: "Antigravity hook semantics do not map to Guild hooks in the package surface — hooks require a dedicated emitter.",
     });
   }
 
@@ -767,7 +699,7 @@ export function renderAntigravityManifest(
     description: manifest.description,
     _rendered_at: opts.renderedAt,
     _source_version: manifest.version,
-    _inferred: true,
+    _provenance: "verified",
   };
   if (manifest.homepage !== undefined) result.homepage = manifest.homepage;
   if (manifest.repository !== undefined) result.repository = manifest.repository;

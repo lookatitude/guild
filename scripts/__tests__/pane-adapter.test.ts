@@ -14,8 +14,8 @@
  *       (b) OPENAI_API_KEY present + no auth.json → pass
  *       (c) neither present → refuse with message naming both paths
  *       (d) codex --version failing → refuse regardless of auth
- *   - preflightTeam fail-fast: orchestrator is always claude; specialist host
- *     picked from host_kind; failures collected.
+ *   - preflightTeam fail-fast: orchestrator uses the starting host; specialist
+ *     host picked from host_kind or inherited from the orchestrator; failures collected.
  *   - TmuxTeamBackend.preflight() no-ops without a resolver (regression) and
  *     reports failures with one.
  *   - composeTmuxCommands with an all-claude resolver === the no-resolver path
@@ -303,7 +303,7 @@ describe("CodexPaneAdapter", () => {
 describe("preflightTeam — fail-fast (CH-6)", () => {
   const claudeOk = runner({ claude: OK, codex: OK });
 
-  it("orchestrator is always probed as claude; a mixed team passes when all probes pass (key auth)", () => {
+  it("defaults the orchestrator probe to claude; a mixed team passes when all probes pass (key auth)", () => {
     const resolver = resolveAdapter({ run: claudeOk, env: { OPENAI_API_KEY: "sk-x" }, fs: AUTH_JSON_ABSENT });
     const specialists: Array<{ name: string; host_kind?: "claude" | "codex" }> = [
       { name: "architect" }, // defaults to claude
@@ -314,7 +314,7 @@ describe("preflightTeam — fail-fast (CH-6)", () => {
     expect(r.failures).toHaveLength(0);
   });
 
-  it("orchestrator is always probed as claude; a mixed team passes when all probes pass (auth.json)", () => {
+  it("defaults the orchestrator probe to claude; a mixed team passes when all probes pass (auth.json)", () => {
     const resolver = resolveAdapter({ run: claudeOk, env: {}, fs: AUTH_JSON_PRESENT });
     const specialists: Array<{ name: string; host_kind?: "claude" | "codex" }> = [
       { name: "architect" },
@@ -345,6 +345,17 @@ describe("preflightTeam — fail-fast (CH-6)", () => {
     const r = preflightTeam([{ name: "security", host_kind: "codex" }], resolver);
     expect(r.ok).toBe(false);
     expect(r.failures.some((x) => x.specialist === "orchestrator")).toBe(true);
+  });
+
+  it("codex-started preflight does not probe claude when no claude pane is present", () => {
+    const resolver = resolveAdapter({
+      run: runner({ claude: FAIL, codex: OK }),
+      env: { OPENAI_API_KEY: "sk-x" },
+      fs: AUTH_JSON_ABSENT,
+    });
+    const r = preflightTeam([{ name: "security" }], resolver, "codex");
+    expect(r.ok).toBe(true);
+    expect(r.failures).toHaveLength(0);
   });
 });
 
@@ -389,6 +400,28 @@ describe("TmuxTeamBackend integration (regression-preserving)", () => {
     const codexPanes = inline.filter((c) => c.includes("codex exec"));
     expect(codexPanes).toHaveLength(1);
     expect(codexPanes[0]).not.toContain("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS");
+  });
+
+  it("a codex-started team uses codex for the orchestrator and default specialists", () => {
+    const cmds = composeTmuxCommands({
+      mode: "new-session",
+      targetName: "guild-demo",
+      cwd: "/tmp/repo",
+      slug: "demo",
+      runId: "run-test-001",
+      specialists: SPECIALISTS,
+      resolveAdapter: resolveAdapter({ env: { OPENAI_API_KEY: "sk-x" }, fs: AUTH_JSON_ABSENT }),
+      orchestratorHostKind: "codex",
+    });
+    const inline = cmds.map((c) => c.argv[c.argv.length - 1]);
+    expect(inline[0]).toContain("codex exec");
+    expect(inline[0]).toContain("agent-bus");
+    expect(inline[0]).not.toContain("TaskCreated");
+    expect(inline[0]).not.toContain("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS");
+    const codexPanes = inline.filter((c) => c.includes("codex exec"));
+    expect(codexPanes).toHaveLength(1 + SPECIALISTS.length);
+    expect(inline.some((c) => c.includes("claude "))).toBe(false);
+    expect(inline.some((c) => c.includes("TaskCreated"))).toBe(false);
   });
 
   it("TmuxTeamBackend.preflight() no-ops without a resolver (regression)", () => {
