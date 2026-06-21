@@ -8,6 +8,9 @@
  */
 
 import { hostKindToRegistryId, getRegistryEntry } from "../host-registry";
+// W4 D1: identity predicates — replace `=== "claude"` / `=== "codex"` literals with
+// registry-bridge functions so adding a host never requires editing these call sites.
+import { isClaudeCli } from "../capability/rank";
 import type {
   AdapterResolver,
   LaunchMode,
@@ -48,7 +51,9 @@ export function buildPrompt(
   if (!specialist) {
     const teamRef = teamPath ?? `.guild/team/${slug}.yaml`;
     const coordination =
-      paneHostKind === "claude"
+      // W4 D1: identity via registry bridge — exact `isClaudeCli` resolves the registry row,
+      // no literal string comparison. Behavior: identical for all existing HostKind values.
+      isClaudeCli(paneHostKind)
         ? `Dispatch specialists via TaskCreated events when their plan dependencies clear, ` +
           `then aggregate handoffs and invoke guild:review → guild:verify-done → guild:reflect.`
         : `Dispatch specialists through the file-based agent bus when their plan dependencies clear; ` +
@@ -65,7 +70,8 @@ export function buildPrompt(
     );
   }
   const waitInstruction =
-    paneHostKind === "claude"
+    // W4 D1: identity via registry bridge (exact isClaudeCli) — same behavior for all existing HostKind values.
+    isClaudeCli(paneHostKind)
       ? `Wait for a \`TaskCreated\` event from the orchestrator before starting.`
       : `Watch the file-based agent bus at \`.guild/runs/${runId}/agent-bus/\` ` +
         `for your dispatch/brief record before starting; do not wait for host-native event callbacks.`;

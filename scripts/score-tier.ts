@@ -33,6 +33,8 @@ import { resolveSettings } from "./lib/settings-resolver";
 // (string | {model,effort?,reasoning?,thinking?,verbosity?} | null)
 // is unpacked ONLY by resolveTierModel — never index the tier map and assume a string.
 import { resolveTierModel, type ResolvedTierModel, type TierHostValue } from "./read-guild-config";
+// W4 D2: runtime tier defaults from the registry (kills DEFAULT_TIERS hand-typed literal).
+import { defaultTiersMap } from "./lib/capability/tier-defaults";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -139,11 +141,11 @@ const DEFAULT_THRESHOLDS: Thresholds = {
   powerful: 3,
 };
 
-const DEFAULT_TIERS = {
-  cheap:    { claude: "haiku",  codex: null, gemini: null },
-  mid:      { claude: "sonnet", codex: null, gemini: null },
-  powerful: { claude: "opus",   codex: null, gemini: null },
-};
+// W4 D2 SINGLE-SOURCE: DEFAULT_TIERS is now runtime-computed from HOST_REGISTRY_ROWS via
+// defaultTiersMap(). The prior {cheap:{claude:"haiku",codex:null,gemini:null},...} literals
+// are replaced with a computed equivalent. Parity test proves all host×tier values are
+// identical for existing rows (see rearch-tier-defaults-parity.test.ts).
+const DEFAULT_TIERS = defaultTiersMap();
 
 function toModelParams(resolved: ResolvedTierModel): ModelParams | undefined {
   if (resolved.model === null) return undefined;

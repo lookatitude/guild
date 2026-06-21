@@ -5,7 +5,7 @@
  *   cd tests && npx tsx rearch/run-all.ts --prove    # anti-vacuity self-test of every rail
  *
  * Exit code: non-zero iff a STRICT rail is RED (advisory rails never block).
- * Strict rails: R-DUP, R-DIST, R-DEP (layering floor).  Advisory rails: R-VAC.
+ * Strict rails: R-DUP, R-DIST, R-DEP (layering floor), R-HOST.  Advisory rails: R-VAC.
  */
 import { execFileSync } from "child_process";
 import * as path from "path";
@@ -14,14 +14,15 @@ import * as rdup from "./r-dup";
 import * as rdep from "./r-dep";
 import * as rvac from "./r-vac";
 import * as rdist from "./r-dist";
+import * as rhost from "./r-host";
 
-const RAILS = [rdup, rdep, rvac, rdist];
+const RAILS = [rdup, rdep, rvac, rdist, rhost];
 
 if (process.argv.includes("--prove")) {
   // each rail's --prove throws on a vacuity failure; run them as child processes so one
   // broken rail does not abort the rest, and a non-zero child exit fails the suite.
   let failed = 0;
-  for (const f of ["r-dup", "r-dep", "r-vac", "r-dist"]) {
+  for (const f of ["r-dup", "r-dep", "r-vac", "r-dist", "r-host"]) {
     try {
       execFileSync("npx", ["tsx", path.join(__dirname, `${f}.ts`), "--prove"], {
         stdio: "inherit",

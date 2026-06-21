@@ -42,6 +42,9 @@ import { normalizeWithRepair, type BoundedRepairResult } from "./lib/result-norm
 import type { PermissionMode } from "./lib/host-capabilities-schema";
 import { createHostAdapter } from "./lib/host-adapter-factory";
 import type { HostAdapterResult } from "./lib/host-adapter-contract";
+// W4 D1: registry-bridge predicate replaces `plan.host === "claude"` literal.
+import { isClaudeCli } from "./lib/capability/rank";
+import type { HostKind } from "./lib/host-types";
 
 // ---------------------------------------------------------------------------
 // Arg parsing
@@ -213,7 +216,9 @@ function spawnHost(plan: WrapperPlan, args: string[]): RunOutcome {
  */
 function rebuildArgsWithPrompt(plan: WrapperPlan, repairPrompt: string): string[] {
   const args = [...plan.args];
-  if (plan.host === "claude") {
+  // W4 D1: registry bridge — exact isClaudeCli resolves via the registry row, no literal
+  // string comparison. plan.host carries a HostKind-compatible string ("claude"/"codex").
+  if (isClaudeCli(plan.host as HostKind)) {
     const idx = args.lastIndexOf("-p");
     if (idx >= 0 && idx + 1 < args.length) args[idx + 1] = repairPrompt;
     else args.push("-p", repairPrompt);

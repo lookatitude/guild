@@ -10,6 +10,9 @@
 import { hostKindToRegistryId } from "../host-registry";
 import type { HostKind } from "../host-types";
 import type { LaneRequest, RoutableHost, Tier, AgentMode, BackendCapability, WorkType } from "./router";
+// W4 D2: tierDefaults() is the runtime-computed single source for tier→model defaults.
+// Replaces the hand-typed `claudeDefaults` switch that was duplicated ×3 (audit A2).
+import { tierDefaultsForHost } from "./tier-defaults";
 
 const AFFINITY_BOOST = 10;
 
@@ -22,6 +25,19 @@ export function isClaudeHost(hostKind: HostKind): boolean {
 }
 export function isCodexHost(hostKind: HostKind): boolean {
   return hostKindToRegistryId(hostKind)?.startsWith("codex-") ?? false;
+}
+// EXACT Claude Code CLI (not the claude *family*). Some call sites gate on a CLI-native
+// capability that the desktop/web/app variants do NOT share (e.g. native PreToolUse ask,
+// in-process independent agents). For those, `isClaudeHost` (family-wide) is too broad —
+// use this exact check. Behavior-equivalent to the historical `hostKind === "claude"` literal
+// (only the `claude` HostKind maps to the `claude-code-cli` registry id), but registry-sourced.
+export function isClaudeCli(hostKind: HostKind): boolean {
+  return hostKindToRegistryId(hostKind) === "claude-code-cli";
+}
+// EXACT Codex CLI (not the codex family/app). Behavior-equivalent to the historical
+// `hostKind === "codex"` literal (only `codex` maps to `codex-cli`), but registry-sourced.
+export function isCodexCli(hostKind: HostKind): boolean {
+  return hostKindToRegistryId(hostKind) === "codex-cli";
 }
 
 /**
@@ -79,32 +95,14 @@ export function backendForMode(mode: AgentMode): BackendCapability | null {
   }
 }
 
-// ── Built-in default tier ladder (claude fallback; cost ADR §1) ────────────────
+// ── Built-in default tier ladder (W4 D2: runtime-from-registry) ──────────────
 
-// PHASE-1-DISPATCH-WAVE-1: hardcoded tier-map hoisted to a registry function.
-// Currently returns Claude defaults for every host; per-host tuning is
-// downstream work tracked in the cross-platform-compatibility followups
-// (audit leak D-8: "Model-tier defaults are Claude-specific"). The exhaustive
-// switch makes future per-host overrides a compile-time obligation — extending
-// HostKind without adding a case will type-error here.
+// W4 D2 SINGLE-SOURCE: `getDefaultModelTierMap` now delegates to `tierDefaultsForHost`
+// (scripts/lib/capability/tier-defaults.ts), which reads the tier→model slots from
+// the HOST_REGISTRY_ROWS at runtime. No hand-typed model names here.
+// Adding a host means editing HOST_REGISTRY_ROWS only — zero edits here.
+// Parity proof: rearch-tier-defaults-parity.test.ts asserts computed == prior literals
+// for all 9 hosts (anti-vacuous: a divergent row fails the test).
 export function getDefaultModelTierMap(host: HostKind): Record<Tier, string> {
-  // Claude defaults; reused by every host until per-host overrides land.
-  const claudeDefaults: Record<Tier, string> = {
-    cheap: "haiku",
-    mid: "sonnet",
-    powerful: "opus",
-  };
-  // Per-host overrides land here in downstream initiatives.
-  switch (host) {
-    case "claude":
-    case "codex":
-    case "gemini":
-    case "pi":
-    case "antigravity-2":
-    case "claude-code-desktop":
-    case "claude-code-web":
-    case "codex-app":
-    case "claude-ai-connector":
-      return claudeDefaults;
-  }
+  return tierDefaultsForHost(host);
 }
