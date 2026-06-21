@@ -25,6 +25,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+// R-TRACE (Wave 6): additive degradation trace — NEVER changes return value
+import { emitTraceEvent } from "./guild-trace-emit";
+import { makeDegradationEvent } from "./guild-trace-events";
 
 /** Schema version for the degradation event record. */
 export const READBACK_DEGRADATION_SCHEMA = "guild.degradation_event.v1" as const;
@@ -78,15 +81,9 @@ export function emitReadbackDegradation(
   }
 
   // 2. NDJSON record in the run's v1.4-events.jsonl — queryable by guild-telemetry.
+  const runDir = path.join(cwd, ".guild", "runs", runId);
   try {
-    const eventsLog = path.join(
-      cwd,
-      ".guild",
-      "runs",
-      runId,
-      "logs",
-      "v1.4-events.jsonl",
-    );
+    const eventsLog = path.join(runDir, "logs", "v1.4-events.jsonl");
     fs.mkdirSync(path.dirname(eventsLog), { recursive: true });
     const record: ReadbackDegradationRecord = {
       schema_version: READBACK_DEGRADATION_SCHEMA,
@@ -100,5 +97,25 @@ export function emitReadbackDegradation(
     fs.appendFileSync(eventsLog, JSON.stringify(record) + "\n", "utf8");
   } catch {
     /* never throw — the events log append is best-effort */
+  }
+
+  // R-TRACE emit — guild.trace.degradation.v1 (additive, try/catch)
+  // emit-point: emit-readback-degradation.ts emitReadbackDegradation(), after NDJSON record
+  try {
+    emitTraceEvent(
+      makeDegradationEvent({
+        ts: at,
+        run_id: runId,
+        lane_id: process.env["GUILD_LANE_ID"] ?? "",
+        surface: "dispatch",
+        reason: `task_run readback failed for ${taskId}/${specialist} — in-memory fallback used`,
+        attempted: "task_run file readback (readTaskRunCapReqs)",
+        fallback: "in-memory capability_requirements (benign — equals written value)",
+        severity: "warn",
+      }),
+      runDir,
+    );
+  } catch {
+    /* never throw from the observer */
   }
 }

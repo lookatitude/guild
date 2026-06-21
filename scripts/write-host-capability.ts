@@ -51,6 +51,13 @@ import { resolveTierModel } from "./read-guild-config";
 // PHASE-1-DISPATCH-WAVE-1: HostKind canonicalized in lib/host-types.ts.
 import type { HostKind } from "./lib/host-types";
 export type { HostKind };
+// W4 D1: registry-bridge predicates replace `=== "claude"` literals in this file.
+// Both sites gate on a CLI-NATIVE capability (in-process independent agents, native PreToolUse
+// ask) that the claude desktop/web/app variants do NOT share — so they use the EXACT isClaudeCli,
+// NOT the family-wide isClaudeHost (which would wrongly enable claude-code-desktop/web/app).
+import { isClaudeCli } from "./lib/capability/rank";
+// W4 D2: runtime tier defaults from the registry (kills DEFAULT_TIER_MODELS hand-typed literal).
+import { defaultTierModels } from "./lib/capability/tier-defaults";
 
 export interface HostCapabilityManifest {
   schema_version: "guild.host_capability.v1";
@@ -99,12 +106,11 @@ export interface HostCapabilityManifest {
   };
 }
 
-// Built-in tier ladder (host-agnostic default; see cost-aware-tiering ADR §1).
-const DEFAULT_TIER_MODELS: HostCapabilityManifest["tier_models"] = {
-  cheap: "haiku",
-  mid: "sonnet",
-  powerful: "opus",
-};
+// Built-in tier ladder — W4 D2: runtime-from-registry via defaultTierModels().
+// No hand-typed literals; reads from HOST_REGISTRY_ROWS["claude-code-cli"].capabilities.models.
+// Behavior-neutral: the computed values equal the former {cheap:"haiku",mid:"sonnet",powerful:"opus"}.
+// See tier-defaults.ts and the parity test (rearch-tier-defaults-parity.test.ts).
+const DEFAULT_TIER_MODELS = defaultTierModels();
 
 // ── Inputs ───────────────────────────────────────────────────────────────────
 
@@ -150,7 +156,10 @@ function resolveIndependentAgents(hostKind: HostKind, env: NodeJS.ProcessEnv): b
   }
   // Mirror the launcher's D5 heuristic: claude supports independent agents;
   // codex currently does not.
-  return hostKind === "claude";
+  // W4 D1: registry bridge — EXACT claude CLI (isClaudeCli), behavior-equivalent to the
+  // historical `hostKind === "claude"` (only the CLI does in-process independent agents;
+  // desktop/web/app do not). isClaudeHost (family) would over-broaden this.
+  return isClaudeCli(hostKind);
 }
 
 /** Best-effort read of `.guild/settings.json` models block. Never throws. */
@@ -226,7 +235,10 @@ export function buildCapability(opts: BuildCapabilityOpts): HostCapabilityManife
       mcp: true, // Claude Code MCP loader is available on supported hosts.
       // HK-07: Claude Code natively supports PreToolUse ask; other hosts
       // (codex, gemini, pi) must degrade to the file-bus approval_request path.
-      pre_tool_use_ask: hostKind === "claude",
+      // W4 D1: registry bridge — EXACT isClaudeCli replaces the `=== "claude"` literal.
+      // Behavior-neutral: Claude Code CLI is the ONLY host with native PreToolUse ask; the
+      // desktop/web/app variants degrade to the file-bus path (isClaudeHost would wrongly include them).
+      pre_tool_use_ask: isClaudeCli(hostKind),
     },
   };
 }

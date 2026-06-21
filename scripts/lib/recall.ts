@@ -54,9 +54,13 @@ import { DEFAULT_INDEX_BLOCK, type IndexBlock } from "./index-cache";
 import { wikiRecall } from "./wiki-recall";
 import { fsScan } from "./fs-scanner";
 import { protectChunks, type ProtectedChunk } from "./recall-protect";
-import { tokenize, bm25Score } from "../../mcp-servers/guild-memory/src/bm25";
+import { tokenize, bm25Score } from "./shared/bm25";
+import { termMatchScore } from "./shared/graph-scoring";
 import type { KnowledgeGraph, GraphNode } from "../understand/lib/schema";
 import { ingestImportanceScore, resolveRecallImportance } from "./ingest-importance";
+// R-TRACE (Wave 6): additive trace emit — NEVER changes return value
+import { emitTraceEvent } from "./guild-trace-emit";
+import { makeRecallEvent } from "./guild-trace-events";
 
 // Re-export so existing importers (`recall.ts` was the original home of the scorer)
 // keep resolving `ingestImportanceScore` from here; canonical impl now in ingest-importance.ts.
@@ -237,19 +241,12 @@ function walkMdFiles(dir: string): string[] {
   return result;
 }
 
-// ── Internal: KG node scorer (mirrors kg-query.ts score()) ───────────────────
-
-function scoreKgNode(node: GraphNode, terms: string[]): number {
-  const hay = `${node.name} ${node.id} ${(node.source_refs ?? []).join(" ")}`.toLowerCase();
-  let s = 0;
-  for (const t of terms) {
-    if (!t) continue;
-    if (node.name.toLowerCase() === t) s += 5;
-    else if (node.name.toLowerCase().includes(t)) s += 3;
-    else if (hay.includes(t)) s += 1;
-  }
-  return s;
-}
+// ── Internal: KG node scorer ─────────────────────────────────────────────────
+//
+// Re-arch WAVE 1: the term-match primitive is now the canonical
+// `termMatchScore` from scripts/lib/shared/graph-scoring.ts — the same loop
+// kg-query.ts uses. recall's KG branch intentionally ranks on term match alone
+// (no importance/confidence), so it calls the shared primitive directly.
 
 // ── Branch A: SQLite FTS (wiki-recall.ts) ─────────────────────────────────────
 //
@@ -423,7 +420,7 @@ function kgQueryBranch(
     .filter(Boolean);
 
   const ranked = (graph.nodes as GraphNode[])
-    .map((n) => ({ n, s: scoreKgNode(n, terms) }))
+    .map((n) => ({ n, s: termMatchScore(n, terms) }))
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s || a.n.id.localeCompare(b.n.id))
     .slice(0, limit);
@@ -480,6 +477,9 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
     composite,
   } = opts;
 
+  // R-TRACE: wall-clock start (additive timing — does not affect result)
+  const _traceStart = Date.now();
+
   // Derive runDir from cwd + runId when not given explicitly.
   const runDir = rawRunDir ?? (runId ? path.join(cwd, ".guild", "runs", runId) : undefined);
 
@@ -521,7 +521,39 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   // Directive: set when ANY wrapped chunk exists (either wiki or KG).
   const directive = wikiResult.directive ?? kgResult?.directive ?? null;
 
-  return { source, chunks: allChunks, directive };
+  const result: RecallResult = { source, chunks: allChunks, directive };
+
+  // R-TRACE emit — additive, try/catch, never changes result (guild.trace.recall.v1)
+  // emit-point: recall.ts line ~519, after result is fully assembled
+  try {
+    const _traceDurationMs = Date.now() - _traceStart;
+    const _traceBranch = allChunks.length === 0
+      ? "empty" as const
+      : source === "combined" ? "combined" as const
+      : source as "sqlite" | "file-bm25" | "fs-scan" | "kg-query";
+    // ProtectedChunk exposes an explicit `quarantined` boolean — use it directly.
+    // (The prior `c.content.includes("[QUARANTINED]")` referenced a property that does not
+    // exist on ProtectedChunk — TS2339; the rendered text field is `rendered`, not `content`.)
+    const _hadQuarantine = allChunks.some((c) => c.quarantined === true);
+    emitTraceEvent(
+      makeRecallEvent({
+        ts: new Date().toISOString(),
+        run_id: runId ?? "",
+        lane_id: process.env["GUILD_LANE_ID"] ?? "",
+        query: query.slice(0, 200), // truncate long queries in the trace
+        branch: _traceBranch,
+        chunk_count: allChunks.length,
+        duration_ms: _traceDurationMs,
+        had_quarantine: _hadQuarantine,
+        cwd_redacted: cwd.replace(/\/Users\/[^/]+/, "<operator-home>"),
+      }),
+      runDir ?? null,
+    );
+  } catch {
+    // Trace must never affect recall result — swallow all errors silently
+  }
+
+  return result;
 }
 
 // ── CLI entrypoint ────────────────────────────────────────────────────────────

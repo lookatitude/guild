@@ -32,6 +32,10 @@ import {
   type GuildHostCapabilitiesV1,
   type PermissionMode,
 } from "./host-capabilities-schema";
+// W4 D1: registry-bridge predicates replace `=== "claude"` / `=== "codex"` literals.
+// host here is a HostKind-compatible string ("claude" | "codex" | …).
+import { isClaudeCli, isCodexCli } from "./capability/rank";
+import type { HostKind } from "./host-types";
 
 // ---------------------------------------------------------------------------
 // Request / plan types
@@ -279,7 +283,9 @@ export function planModelParamArgs(host: string, params?: WrapperModelParams): W
     return { requested: null, args: [], unsupported_model_params: [], degraded: false };
   }
   const requested = { ...params };
-  if (host === "claude") {
+  // W4 D1: registry bridge — exact isClaudeCli/isCodexCli replace `=== "claude"` / `=== "codex"` literals.
+  // `host` carries a HostKind-compatible string; behavior-neutral for all existing values.
+  if (isClaudeCli(host as HostKind)) {
     const unsupported = Object.keys(requested).filter((key) => !["model", "effort"].includes(key));
     const args = [
       ...(requested.model ? ["--model", requested.model] : []),
@@ -287,7 +293,7 @@ export function planModelParamArgs(host: string, params?: WrapperModelParams): W
     ];
     return { requested, args, unsupported_model_params: unsupported, degraded: unsupported.length > 0 };
   }
-  if (host === "codex") {
+  if (isCodexCli(host as HostKind)) {
     const unsupported = Object.keys(requested).filter((key) => !["model", "effort", "reasoning"].includes(key));
     const reasoningEffort = requested.reasoning ?? requested.effort;
     const args = [
@@ -337,14 +343,15 @@ export function planWrapperInvocation(
 
   // Argv assembly. Claude: non-interactive print mode (`-p`). Codex: `exec`
   // subcommand (INFERRED — confirm on-box at SC-3).
+  // W4 D1: registry bridge — exact isClaudeCli/isCodexCli replace `=== "claude"` / `=== "codex"`.
   const args: string[] = [];
-  if (request.host === "codex") args.push("exec");
+  if (isCodexCli(request.host as HostKind)) args.push("exec");
   args.push(...launch.args, ...modelParams.args, ...bootstrap.args);
   if (request.resume) {
     // Claude resumes by id with --resume; codex resume shape is INFERRED.
     args.push("--resume", request.resume.sessionId);
   }
-  if (request.host === "claude") {
+  if (isClaudeCli(request.host as HostKind)) {
     args.push("-p", prompt);
   } else {
     args.push(prompt);

@@ -45,7 +45,12 @@ const WAVE3_SKILL_ADDITION_FILES = [
   "skills/meta/product-template/SKILL.md",
   "skills/meta/product-template/evals.json",
 ];
+const WAVE7_SKILL_MODIFICATION_FILES = [
+  "skills/specialists/architect-tradeoff-matrix/SKILL.md",
+  "skills/specialists/backend-service-integration/SKILL.md",
+];
 const isAllowlistedSkillAddition = (p: string): boolean => WAVE3_SKILL_ADDITION_FILES.includes(p);
+const isAllowlistedSkillModification = (p: string): boolean => WAVE7_SKILL_MODIFICATION_FILES.includes(p);
 
 type DiffRow = { status: string; path: string; raw: string };
 type ResolvedSkill = { source_path: string };
@@ -62,32 +67,46 @@ function parseDiffRows(out: string): DiffRow[] {
 }
 
 function evaluateLiveSurfaceRows(rows: DiffRow[]): {
-  violations: DiffRow[];
-  addedSkillFiles: string[];
-  ok: boolean;
-} {
-  const violations = rows.filter(({ status, path: p }) => {
+	  violations: DiffRow[];
+	  addedSkillFiles: string[];
+	  modifiedSkillFiles: string[];
+	  ok: boolean;
+	} {
+	  const violations = rows.filter(({ status, path: p }) => {
     // .claude-plugin/** and commands/** are STRICT — any delta is a violation.
     if (p.startsWith(".claude-plugin/") || p.startsWith("commands/")) return true;
-    // skills/** is additive-only: a pure ADD ("A") of an allowlisted new skill is OK;
-    // a Modify/Delete/Rename of any skill — or a NON-allowlisted new skill — is a violation.
-    if (p.startsWith("skills/")) return !(status === "A" && isAllowlistedSkillAddition(p));
-    return true;
-  });
-  const addedSkillFiles = rows
-    .filter((r) => r.status === "A" && r.path.startsWith("skills/"))
-    .map((r) => r.path)
-    .sort();
-  const expected = [...WAVE3_SKILL_ADDITION_FILES].sort();
-  return {
-    violations,
-    addedSkillFiles,
-    ok:
-      violations.length === 0 &&
-      addedSkillFiles.length === expected.length &&
-      addedSkillFiles.every((p, i) => p === expected[i]),
-  };
-}
+	    // skills/** is additive-only for Wave 3 plus exact ratified Wave 7 metadata mods.
+	    // Any delete/rename, non-allowlisted add, or non-allowlisted modify remains a violation.
+	    if (p.startsWith("skills/")) {
+	      return !(
+	        (status === "A" && isAllowlistedSkillAddition(p)) ||
+	        (status === "M" && isAllowlistedSkillModification(p))
+	      );
+	    }
+	    return true;
+	  });
+	  const addedSkillFiles = rows
+	    .filter((r) => r.status === "A" && r.path.startsWith("skills/"))
+	    .map((r) => r.path)
+	    .sort();
+	  const modifiedSkillFiles = rows
+	    .filter((r) => r.status === "M" && r.path.startsWith("skills/"))
+	    .map((r) => r.path)
+	    .sort();
+	  const expected = [...WAVE3_SKILL_ADDITION_FILES].sort();
+	  const expectedModified = [...WAVE7_SKILL_MODIFICATION_FILES].sort();
+	  return {
+	    violations,
+	    addedSkillFiles,
+	    modifiedSkillFiles,
+	    ok:
+	      violations.length === 0 &&
+	      addedSkillFiles.length === expected.length &&
+	      addedSkillFiles.every((p, i) => p === expected[i]) &&
+	      modifiedSkillFiles.length === expectedModified.length &&
+	      modifiedSkillFiles.every((p, i) => p === expectedModified[i]),
+	  };
+	}
 
 function subtractAllowlistedResolvedSkills<T extends ResolvedSkill>(skills: T[]): T[] {
   return skills.filter((s) => !isAllowlistedSkillAddition(s.source_path));
@@ -217,14 +236,18 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned pre-Wave-2 baseli
       );
     }
     expect(verdict.violations).toEqual([]);
-    // EXACT-SET: the ADDED files under skills/ must be EXACTLY the two ratified files — no fewer
-    // (each individually present) and no more (a third file under the dir would fail this equality).
-    expect(verdict.addedSkillFiles).toEqual([...WAVE3_SKILL_ADDITION_FILES].sort());
-    expect(verdict.ok).toBe(true);
-  });
+	    // EXACT-SET: the ADDED files under skills/ must be EXACTLY the two ratified files — no fewer
+	    // (each individually present) and no more (a third file under the dir would fail this equality).
+	    expect(verdict.addedSkillFiles).toEqual([...WAVE3_SKILL_ADDITION_FILES].sort());
+	    expect(verdict.modifiedSkillFiles).toEqual([...WAVE7_SKILL_MODIFICATION_FILES].sort());
+	    expect(verdict.ok).toBe(true);
+	  });
 
-  it("anti-vacuity: the SAME live-surface evaluator rejects widened, missing, or frozen-surface deltas", () => {
-    const allowedRows = WAVE3_SKILL_ADDITION_FILES.map((p) => ({ status: "A", path: p, raw: `A\t${p}` }));
+	  it("anti-vacuity: the SAME live-surface evaluator rejects widened, missing, or frozen-surface deltas", () => {
+	    const allowedRows = [
+	      ...WAVE3_SKILL_ADDITION_FILES.map((p) => ({ status: "A", path: p, raw: `A\t${p}` })),
+	      ...WAVE7_SKILL_MODIFICATION_FILES.map((p) => ({ status: "M", path: p, raw: `M\t${p}` })),
+	    ];
 
     expect(evaluateLiveSurfaceRows(allowedRows).ok).toBe(true);
 
@@ -235,14 +258,26 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned pre-Wave-2 baseli
     expect(thirdFile.violations.map((v) => v.path)).toContain("skills/meta/product-template/README.md");
     expect(thirdFile.ok).toBe(false);
 
-    for (const required of WAVE3_SKILL_ADDITION_FILES) {
-      const missingRequired = evaluateLiveSurfaceRows(allowedRows.filter((r) => r.path !== required));
-      expect(missingRequired.addedSkillFiles).not.toEqual([...WAVE3_SKILL_ADDITION_FILES].sort());
-      expect(missingRequired.ok).toBe(false);
-    }
+	    for (const required of WAVE3_SKILL_ADDITION_FILES) {
+	      const missingRequired = evaluateLiveSurfaceRows(allowedRows.filter((r) => r.path !== required));
+	      expect(missingRequired.addedSkillFiles).not.toEqual([...WAVE3_SKILL_ADDITION_FILES].sort());
+	      expect(missingRequired.ok).toBe(false);
+	    }
+	    for (const required of WAVE7_SKILL_MODIFICATION_FILES) {
+	      const missingRequired = evaluateLiveSurfaceRows(allowedRows.filter((r) => r.path !== required));
+	      expect(missingRequired.modifiedSkillFiles).not.toEqual([...WAVE7_SKILL_MODIFICATION_FILES].sort());
+	      expect(missingRequired.ok).toBe(false);
+	    }
 
-    const frozenMutation = evaluateLiveSurfaceRows([
-      ...allowedRows,
+	    const wrongStatus = evaluateLiveSurfaceRows([
+	      ...allowedRows.filter((r) => r.path !== WAVE7_SKILL_MODIFICATION_FILES[0]),
+	      { status: "A", path: WAVE7_SKILL_MODIFICATION_FILES[0], raw: `A\t${WAVE7_SKILL_MODIFICATION_FILES[0]}` },
+	    ]);
+	    expect(wrongStatus.violations.map((v) => v.path)).toContain(WAVE7_SKILL_MODIFICATION_FILES[0]);
+	    expect(wrongStatus.ok).toBe(false);
+
+	    const frozenMutation = evaluateLiveSurfaceRows([
+	      ...allowedRows,
       { status: "M", path: ".claude-plugin/plugin.json", raw: "M\t.claude-plugin/plugin.json" },
       { status: "A", path: "commands/dashboard.md", raw: "A\tcommands/dashboard.md" },
     ]);

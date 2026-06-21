@@ -92,65 +92,15 @@ export interface IngestSimilarityResult {
   pause_reason: "similarity" | "directive_probe" | "both" | null;
 }
 
-// ── BM25 implementation (mirrors guild-memory/src/index.ts, same constants) ──
+// ── BM25 implementation (canonical single-source, re-arch WAVE 1) ────────────
 //
-// Replicated here (not imported) because bm25Score in guild-memory is a private
-// module-level function in an MCP server binary — not exported for library use.
-// Parameters are IDENTICAL: k1=1.5, b=0.75, IDF floor +0.5, tokenize = alphanum
-// length>1 lowercase. A unit test in this module verifies score parity.
-
-const TOKEN_RE = /[A-Za-z0-9]+/g;
-
-export function tokenize(s: string): string[] {
-  const out: string[] = [];
-  const m = s.toLowerCase().match(TOKEN_RE);
-  if (!m) return out;
-  for (const tok of m) if (tok.length > 1) out.push(tok);
-  return out;
-}
-
-export function bm25Score(
-  queryTokens: string[],
-  docs: { tokens: string[] }[],
-): number[] {
-  const k1 = 1.5;
-  const b = 0.75;
-  const N = docs.length;
-  if (N === 0) return [];
-  const avgdl = docs.reduce((s, d) => s + d.tokens.length, 0) / N;
-
-  // Document frequency per query token
-  const df = new Map<string, number>();
-  for (const q of new Set(queryTokens)) {
-    let count = 0;
-    for (const d of docs) {
-      if (d.tokens.includes(q)) count++;
-    }
-    df.set(q, count);
-  }
-
-  const scores: number[] = new Array(N).fill(0);
-  for (let i = 0; i < N; i++) {
-    const doc = docs[i];
-    const dl = doc.tokens.length || 1;
-    const tf = new Map<string, number>();
-    for (const t of doc.tokens) tf.set(t, (tf.get(t) ?? 0) + 1);
-
-    let s = 0;
-    for (const q of queryTokens) {
-      const f = tf.get(q) ?? 0;
-      if (f === 0) continue;
-      const n = df.get(q) ?? 0;
-      // IDF with +0.5 floor — matches guild-memory exactly
-      const idf = Math.log(1 + (N - n + 0.5) / (n + 0.5));
-      const num = f * (k1 + 1);
-      const den = f + k1 * (1 - b + b * (dl / avgdl));
-      s += idf * (num / den);
-    }
-    scores[i] = s;
-  }
-  return scores;
-}
+// The BM25 tokenizer + scorer now live in ONE place: scripts/lib/shared/bm25.ts
+// (k1=1.5, b=0.75, IDF floor +0.5, tokenize = alphanum length>1 lowercase —
+// identical to guild-memory's search path). Re-exported here so this module's
+// historical export surface (tokenize/bm25Score) is unchanged for callers and
+// tests. The former verbatim copy was deleted to enforce the single-source floor.
+export { tokenize, bm25Score } from "./shared/bm25";
+import { tokenize, bm25Score } from "./shared/bm25";
 
 // ── Config reader ─────────────────────────────────────────────────────────────
 //

@@ -77,7 +77,9 @@ import { resolveAdapter } from "./lib/pane-adapter";
 // CH-1: route each specialist to its backend (local tmux vs remote) via the
 // CR-1 routing function, reading guild.host_capability.v1 manifests.
 import { planTeamRouting, RouteError, type RoutableHost } from "./lib/host-router";
-import { normalizeHostId, registryIdToCanonicalHostKind } from "./lib/host-id-namespace";
+import { normalizeHostId, registryIdToCanonicalHostKind, hostKindToRegistryId } from "./lib/host-id-namespace";
+// W4 D1: registry-bridge predicates replace `=== "claude"` / `=== "codex"` / `=== "pi"` literals.
+import { isClaudeCli } from "./lib/capability/rank";
 // U5: typed settings projection via the resolver (replaces direct settings slice reads)
 import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
 // R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
@@ -479,7 +481,8 @@ function buildManifest(opts: {
     orchestratorHostKind,
     ...specialists.map((s) => s.host_kind ?? orchestratorHostKind),
   ];
-  const hasClaudePane = paneHosts.includes("claude");
+  // W4 D1: registry bridge — exact isClaudeCli() replaces `.includes("claude")` literal check.
+  const hasClaudePane = paneHosts.some((h) => isClaudeCli(h));
   return {
     run_id: runId,
     mode,
@@ -678,8 +681,10 @@ function hostSupportsIndependentAgents(): boolean {
     return !(s === "0" || s === "false" || s === "no" || s === "off");
   }
   // Default: assume claude (the expected host) supports independent agents.
+  // W4 D1: registry bridge — exact isClaudeCli() replaces `=== "claude"` literal.
+  // "auto" still maps to true (unset host defaults to Claude behavior).
   const host = (process.env["GUILD_HOST"] ?? "auto").toLowerCase();
-  return host === "claude" || host === "auto";
+  return isClaudeCli(host as HostKind) || host === "auto";
 }
 
 /**
@@ -1065,12 +1070,12 @@ async function main(): Promise<void> {
     const manifests = loadHostManifests(cwd);
     if (manifests.length > 0) {
       const explicitLocalHostId = (process.env["GUILD_HOST_ID"] ?? process.env["GUILD_HOST"] ?? "").trim();
+      // W4 D1: registry bridge — hostKindToRegistryId replaces the inline switch of
+      // `=== "codex"` / `=== "pi"` / `=== "antigravity-2"` literals. Fallback to
+      // "claude-code-cli" when the registry has no row (e.g. gemini). Behavior-neutral.
       const localHostId =
         explicitLocalHostId ||
-        (orchestratorHostKind === "codex" ? "codex-cli" :
-          orchestratorHostKind === "pi" ? "pi-cli" :
-          orchestratorHostKind === "antigravity-2" ? "antigravity-cli" :
-          "claude-code-cli");
+        (hostKindToRegistryId(orchestratorHostKind) ?? "claude-code-cli");
       try {
         // Load cross-host config here so R-015/R-018 values are available
         // for both the routing decision AND the endpoint lookup below.

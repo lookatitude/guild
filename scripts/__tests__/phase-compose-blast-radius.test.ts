@@ -367,7 +367,10 @@ describe("(E) static guard — no consumer hard-codes a single-file team path", 
 
   // C13 buildPrompt is migrated: param present + guarded fallback.
   it("C13 buildPrompt takes a teamPath param and prefers it over reconstruction", () => {
-    const src = readConsumer("scripts/lib/team-backend.ts");
+    // W3 god-file split: buildPrompt moved from team-backend.ts → host/tmux-backend.ts
+    // (team-backend.ts is now a thin re-export shim; the `import { buildPrompt }` above still
+    // resolves through it). The static-source guard follows the implementation to its new home.
+    const src = readConsumer("scripts/lib/host/tmux-backend.ts");
     expect(src).toMatch(/teamPath\?\s*:\s*string/); // param exists
     expect(src).toContain("teamPath ?? `.guild/team/${slug}.yaml`"); // guarded fallback, not unconditional
   });

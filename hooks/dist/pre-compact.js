@@ -62,7 +62,33 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
-// lib/v1.4/log-jsonl.ts
+// lib/v1.4/log-jsonl-schema.ts
+var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+function isSafeRunId(id) {
+  return RUN_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function isSafeLaneId(id) {
+  return LANE_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function assertSafeRunId(id) {
+  if (!isSafeRunId(id)) {
+    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id)}`);
+  }
+}
+function assertSafeLaneId(id) {
+  if (!isSafeLaneId(id)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id)}`);
+  }
+}
+function validateEventIds(event) {
+  assertSafeRunId(event.run_id);
+  if ("lane_id" in event && event.lane_id !== void 0) {
+    assertSafeLaneId(event.lane_id);
+  }
+}
+
+// lib/v1.4/log-jsonl-writer.ts
 var import_node_fs2 = require("node:fs");
 var import_node_path2 = require("node:path");
 var import_node_zlib = require("node:zlib");
@@ -265,7 +291,7 @@ function pruneUndefined(obj) {
   return out;
 }
 
-// lib/v1.4/log-jsonl.ts
+// lib/v1.4/log-jsonl-writer.ts
 function liveLogPath(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "v1.4-events.jsonl");
 }
@@ -276,32 +302,10 @@ function archivePath(runDir, n) {
   return (0, import_node_path2.join)(archiveDir(runDir), `v1.4-events.${n}.jsonl.gz`);
 }
 function laneFallbackPath(runDir, laneId) {
-  assertSafeLaneId(laneId);
+  if (!isSafeLaneId(laneId)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(laneId)}`);
+  }
   return (0, import_node_path2.join)(runDir, "logs", `lane-${laneId}-events.jsonl`);
-}
-var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-function isSafeRunId(id) {
-  return RUN_ID_RE.test(id) && id !== "." && id !== "..";
-}
-function isSafeLaneId(id) {
-  return LANE_ID_RE.test(id) && id !== "." && id !== "..";
-}
-function assertSafeRunId(id) {
-  if (!isSafeRunId(id)) {
-    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id)}`);
-  }
-}
-function assertSafeLaneId(id) {
-  if (!isSafeLaneId(id)) {
-    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id)}`);
-  }
-}
-function validateEventIds(event) {
-  assertSafeRunId(event.run_id);
-  if ("lane_id" in event && event.lane_id !== void 0) {
-    assertSafeLaneId(event.lane_id);
-  }
 }
 var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 function appendEvent(runDir, event, opts = {}) {
@@ -384,6 +388,8 @@ function rotateLocked(runDir) {
     `log-jsonl: failed to recreate live log at ${live} with O_EXCL after 5 retries`
   );
 }
+
+// lib/v1.4/log-jsonl-sidecar.ts
 var SIDECAR_MAX_BYTES2 = 1024 * 1024;
 
 // pre-compact.ts

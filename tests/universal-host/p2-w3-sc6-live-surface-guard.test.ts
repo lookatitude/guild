@@ -39,6 +39,10 @@ const ALLOWED_SKILL_ADDS = [
   "skills/meta/product-template/SKILL.md",
   "skills/meta/product-template/evals.json",
 ];
+const ALLOWED_SKILL_MODS = [
+  "skills/specialists/architect-tradeoff-matrix/SKILL.md",
+  "skills/specialists/backend-service-integration/SKILL.md",
+];
 
 function git(args: string[]): string {
   return execFileSync("git", args, { cwd: PLUGIN_ROOT, encoding: "utf8" }).trim();
@@ -113,12 +117,23 @@ function classifyFrozen(rows: Row[]): Row[] {
  * perturbation controls both route through this single helper, so the controls exercise the
  * real classification path (not a hand-rolled parallel).
  */
-function classifySkills(rows: Row[]): { nonAdds: Row[]; added: string[]; ok: boolean } {
-  const nonAdds = rows.filter((r) => r.status !== "A");
+function classifySkills(rows: Row[]): { violations: Row[]; added: string[]; modified: string[]; ok: boolean } {
+  const violations = rows.filter((r) => {
+    if (r.status === "A") return !ALLOWED_SKILL_ADDS.includes(r.path);
+    if (r.status === "M") return !ALLOWED_SKILL_MODS.includes(r.path);
+    return true;
+  });
   const added = rows.filter((r) => r.status === "A").map((r) => r.path).sort();
+  const modified = rows.filter((r) => r.status === "M").map((r) => r.path).sort();
   const allow = [...ALLOWED_SKILL_ADDS].sort();
-  const ok = nonAdds.length === 0 && added.length === allow.length && added.every((p, i) => p === allow[i]);
-  return { nonAdds, added, ok };
+  const allowMods = [...ALLOWED_SKILL_MODS].sort();
+  const ok =
+    violations.length === 0 &&
+    added.length === allow.length &&
+    added.every((p, i) => p === allow[i]) &&
+    modified.length === allowMods.length &&
+    modified.every((p, i) => p === allowMods[i]);
+  return { violations, added, modified, ok };
 }
 
 describe("SC-W3-6 — pinned pre-Wave-3 baseline is real (guard not vacuous)", () => {
@@ -185,18 +200,22 @@ describe("SC-W3-6 (A) — DECISIVE: .claude-plugin/** + commands/** byte-identic
 });
 
 describe("SC-W3-6 (B) — live skills/**: additive-only (ONLY the LW3-5 producer skill)", () => {
-  it("the ONLY skills delta is the ADDITION of the product-template producer skill", () => {
+  it("the ONLY skills deltas are the product-template addition plus ratified W7 metadata mods", () => {
     const baseline = resolveBaseline();
     const c = classifySkills(diffRows(baseline, ["skills"]));
-    expect(c.nonAdds).toEqual([]); // no pre-existing skill modified/deleted/renamed
+    expect(c.violations).toEqual([]); // no unratified skill add/modify/delete/rename
     expect(c.added).toEqual([...ALLOWED_SKILL_ADDS].sort()); // added set is EXACTLY the allowlist
+    expect(c.modified).toEqual([...ALLOWED_SKILL_MODS].sort()); // modified set is EXACTLY the W7 allowlist
     expect(c.ok).toBe(true);
   });
 
   it("anti-vacuity (REAL): the SAME classifier REJECTS each forbidden perturbation", () => {
     // Feed the SAME classifySkills the real assertion uses a perturbed added-set and prove the
     // additive-only verdict FLIPS to false for every forbidden delta (codex must-fix #2).
-    const allowed: Row[] = ALLOWED_SKILL_ADDS.map((p) => ({ status: "A", path: p }));
+    const allowed: Row[] = [
+      ...ALLOWED_SKILL_ADDS.map((p) => ({ status: "A", path: p })),
+      ...ALLOWED_SKILL_MODS.map((p) => ({ status: "M", path: p })),
+    ];
 
     // sanity: the EXACT allowed set passes — the control is discriminating, not always-false.
     expect(classifySkills(allowed).ok).toBe(true);
@@ -206,14 +225,14 @@ describe("SC-W3-6 (B) — live skills/**: additive-only (ONLY the LW3-5 producer
     expect(thirdAdd.added).not.toEqual([...ALLOWED_SKILL_ADDS].sort());
     expect(thirdAdd.ok).toBe(false);
 
-    // (b) a MODIFIED existing skill (status M) → nonAdds non-empty → FAIL.
+    // (b) a MODIFIED non-allowlisted existing skill (status M) → violations non-empty → FAIL.
     const modified = classifySkills([...allowed, { status: "M", path: "skills/meta/review/SKILL.md" }]);
-    expect(modified.nonAdds).not.toEqual([]);
+    expect(modified.violations).not.toEqual([]);
     expect(modified.ok).toBe(false);
 
-    // (c) a DELETION (status D) → nonAdds non-empty → FAIL.
+    // (c) a DELETION (status D) → violations non-empty → FAIL.
     const deleted = classifySkills([...allowed, { status: "D", path: "skills/core/init/SKILL.md" }]);
-    expect(deleted.nonAdds).not.toEqual([]);
+    expect(deleted.violations).not.toEqual([]);
     expect(deleted.ok).toBe(false);
 
     // (d) a RENAME (git --name-status emits `R<score>\told\tnew` → status "R100") → FAIL.
@@ -221,8 +240,16 @@ describe("SC-W3-6 (B) — live skills/**: additive-only (ONLY the LW3-5 producer
       ...allowed,
       { status: "R100", path: "skills/meta/a/SKILL.md skills/meta/b/SKILL.md" },
     ]);
-    expect(renamed.nonAdds).not.toEqual([]);
+    expect(renamed.violations).not.toEqual([]);
     expect(renamed.ok).toBe(false);
+
+    // (e) an allowlisted W7 file with the wrong status must not pass.
+    const wrongStatus = classifySkills([
+      ...allowed.filter((r) => r.path !== ALLOWED_SKILL_MODS[0]),
+      { status: "A", path: ALLOWED_SKILL_MODS[0] },
+    ]);
+    expect(wrongStatus.violations.map((r) => r.path)).toContain(ALLOWED_SKILL_MODS[0]);
+    expect(wrongStatus.ok).toBe(false);
   });
 });
 
@@ -235,11 +262,13 @@ describe("SC-W3-6 — SC-W2-5 cutover surface still frozen (pre-Wave-2 anchor)",
     expect(rows).toEqual([]);
   });
 
-  it("NOTE: SC-W2-5's skills empty-set is reddened by the SAME product-template addition", () => {
-    // Documented cross-wave consequence (see questions/LW3-6.md). The skills delta vs the
-    // pre-Wave-2 baseline is exactly the product-template producer skill — identical to (B).
+  it("NOTE: SC-W2-5's skills empty-set is reddened by the product-template addition plus W7 metadata mods", () => {
+    // Documented cross-wave consequence. The skills delta vs the pre-Wave-2 baseline is
+    // exactly the product-template producer skill plus the ratified W7 exemplar metadata.
     const base = revParse(PINNED_W2);
-    const added = diffRows(base, ["skills"]).filter((r) => r.status === "A").map((r) => r.path).sort();
-    expect(added).toEqual([...ALLOWED_SKILL_ADDS].sort());
+    const c = classifySkills(diffRows(base, ["skills"]));
+    expect(c.added).toEqual([...ALLOWED_SKILL_ADDS].sort());
+    expect(c.modified).toEqual([...ALLOWED_SKILL_MODS].sort());
+    expect(c.ok).toBe(true);
   });
 });

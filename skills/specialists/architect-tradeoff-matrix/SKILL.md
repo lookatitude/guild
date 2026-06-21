@@ -3,6 +3,17 @@ name: architect-tradeoff-matrix
 description: Scores 2–4 architecture options across named axes (cost, complexity, performance, ops burden, time-to-ship, reversibility, etc.) and surfaces a recommendation. Output: markdown table with per-cell rationale plus a final pick. Pulled by the `architect` specialist. TRIGGER: "compare these architecture options", "pick between X and Y", "which is better: monolith or split service", "score these approaches", "give me a tradeoff matrix for X vs Y", "which option should we choose". DO NOT TRIGGER for: greenfield design with no options yet (use `architect-systems-design`), locking in a final decision as a durable record (use `architect-adr-writer`), comparing libraries or vendors at the research level (researcher-comparison-table), API vs API shape choices inside one design (backend-api-contract), DB engine selection at vendor level (researcher-comparison-table).
 when_to_use: The parent `architect` specialist pulls this skill when two or more viable architecture options exist and the team needs a structured comparison before choosing. Also fires on explicit user request.
 type: specialist
+surface_manifest:
+  schema_version: guild.surface_manifest.v1
+  kind: skill
+  name: architect-tradeoff-matrix
+  description: >-
+    Scores 2–4 architecture options across named axes (cost, complexity, performance, ops burden, time-to-ship, reversibility, etc.) and surfaces a recommendation. Output: markdown table with per-cell rationale plus a final pick. Pulled by the `architect` specialist. TRIGGER: "compare these architecture options", "pick between X and Y", "which is better: monolith or split service", "score these approaches", "give me a tradeoff matrix for X vs Y", "which option should we choose". DO NOT TRIGGER for: greenfield design with no options yet (use `architect-systems-design`), locking in a final decision as a durable record (use `architect-adr-writer`), comparing libraries or vendors at the research level (researcher-comparison-table), API vs API shape choices inside one design (backend-api-contract), DB engine selection at vendor level (researcher-comparison-table).
+  when_to_use: >-
+    The parent `architect` specialist pulls this skill when two or more viable architecture options exist and the team needs a structured comparison before choosing. Also fires on explicit user request.
+  type: specialist
+  dispatch_targets:
+    - architect-adr-writer
 ---
 
 # architect-tradeoff-matrix
