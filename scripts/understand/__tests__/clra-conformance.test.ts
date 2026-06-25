@@ -155,6 +155,51 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Slice the lexical body of `class <cls>` out of a source file — TS brace-matched
+ * (`class C ... { … }`) or Python indentation-bounded (`class C(...):`), or null
+ * if the class is not declared. Used so the method-dispatch oracle validates a
+ * method INSIDE its named class (FIX G2-r2-2), not anywhere in the file.
+ */
+function classBodySource(src: string, cls: string): string | null {
+  const clsRe = new RegExp(`(?:^|\\n)[ \\t]*(?:export\\s+)?(?:abstract\\s+)?class\\s+${escapeRe(cls)}\\b`);
+  const m = clsRe.exec(src);
+  if (!m) return null;
+  const afterHeader = m.index + m[0].length;
+  const brace = src.indexOf("{", afterHeader);
+  const headerEnd = src.indexOf("\n", afterHeader);
+  // TS: the `{` opens the body on the (possibly extends/implements) header line.
+  if (brace !== -1 && (headerEnd === -1 || brace < headerEnd)) {
+    let depth = 0;
+    for (let k = brace; k < src.length; k++) {
+      if (src[k] === "{") depth++;
+      else if (src[k] === "}" && --depth === 0) return src.slice(brace + 1, k);
+    }
+    return src.slice(brace + 1); // unbalanced — fall back to the tail
+  }
+  // Python: indentation-bounded body below the `class …:` header line.
+  const lines = src.split("\n");
+  const headerLineIdx = src.slice(0, afterHeader).split("\n").length - 1;
+  const baseIndent = (lines[headerLineIdx].match(/^[ \t]*/)?.[0].length) ?? 0;
+  const body: string[] = [];
+  for (let k = headerLineIdx + 1; k < lines.length; k++) {
+    if (lines[k].trim() === "") { body.push(lines[k]); continue; }
+    const ind = lines[k].match(/^[ \t]*/)?.[0].length ?? 0;
+    if (ind <= baseIndent) break;
+    body.push(lines[k]);
+  }
+  return body.join("\n");
+}
+
+/** True iff `method` is defined inside the body of class `cls` in `src`. */
+function methodDefinedInClass(src: string, cls: string, method: string): boolean {
+  const body = classBodySource(src, cls);
+  if (body === null) return false;
+  // TS member (`area(): number {`) or Python member (`def area(self):`).
+  return new RegExp(`\\bdef\\s+${escapeRe(method)}\\s*\\(`).test(body)
+    || new RegExp(`\\b${escapeRe(method)}\\s*\\(`).test(body);
+}
+
 /** Mask every identifier to `_` and collapse whitespace — a structural fingerprint. */
 function normalizeBody(src: string): string {
   return src.replace(/[A-Za-z_$][\w$]*/g, "_").replace(/\s+/g, " ").trim();
@@ -234,8 +279,12 @@ function checkOracleConsistency(oracle: Oracle): string[] {
       violations.push(`methodCalls "${c.to}": file "${toP.relpath}" not in fixture`);
     } else if (!idx.hasClass(toP.relpath, cls)) {
       violations.push(`methodCalls "${c.to}": class "${cls}" not found in "${toP.relpath}"`);
-    } else if (!new RegExp(`\\b${escapeRe(method)}\\s*\\(`).test(idx.source(toP.relpath))) {
-      violations.push(`methodCalls "${c.to}": method "${method}" not defined in "${toP.relpath}"`);
+    } else if (!methodDefinedInClass(idx.source(toP.relpath), cls, method)) {
+      // FIX G2-r2-2: the method must be defined INSIDE the named class body, not
+      // merely somewhere in the file. The old whole-file `\bmethod(` scan let a
+      // wrong-class callee (`Shape.draw` — draw is Circle-only) pass because
+      // `draw(` existed elsewhere in the file. Body-scoping catches it.
+      violations.push(`methodCalls "${c.to}": method "${method}" not defined in class "${cls}" of "${toP.relpath}"`);
     }
     const fromRel = parseNodeId(c.from).relpath;
     if ((fromRel !== toP.relpath) !== c.cross_file) {
@@ -389,6 +438,25 @@ describe("CLRA fixture — oracle self-consistency", () => {
       cross_file: true,
     });
     expect(checkOracleConsistency(o).some((v) => v.includes("methodCalls"))).toBe(true);
+  });
+
+  test("anti-vacuity (FIX G2-r2-2): a WRONG-CLASS dispatch to a real-but-foreign method is caught", () => {
+    const o = loadOracle();
+    // `draw` is a REAL method, but it is defined ONLY in Circle, not Shape. The
+    // old whole-file scan let `Shape.draw` pass because `draw(` exists elsewhere
+    // in shapes.ts (Circle.draw). main DOES contain a `.draw(` call site, so the
+    // caller-body oracle does not catch it either — only the in-class-body check
+    // does. (Note: `Shape.area` cannot be used here — `area` IS overridden in
+    // both classes, and a source-grounded oracle without type inference cannot
+    // disambiguate an overridden method by receiver type; `draw` is the genuine,
+    // catchable wrong-class case.)
+    o.methodCalls.push({
+      from: "function:src/a.ts:main",
+      to: "function:src/shapes.ts:Shape.draw",
+      cross_file: true,
+    });
+    const violations = checkOracleConsistency(o);
+    expect(violations.some((v) => v.includes('method "draw" not defined in class "Shape"'))).toBe(true);
   });
 
   test("anti-vacuity: a non-clone pair of existing functions is caught (masked-body check)", () => {

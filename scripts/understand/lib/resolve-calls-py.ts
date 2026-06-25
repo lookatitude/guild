@@ -1,10 +1,11 @@
 /**
  * understand/lib/resolve-calls-py.ts — LANE G2 import-aware Python call resolution.
  *
- * Python has no compiler API, so this is an **import-aware symbol-table
- * resolver** (goals.md G2): parse `from MOD import a, b as c` and `import MOD`,
- * resolve MOD → file (relative + dotted), then resolve each in-function call to a
- * top-level def — but ONLY with import or same-file evidence:
+ * Python has no compiler API, so this is an **import-aware, scope-aware
+ * symbol-table resolver** (goals.md G2): parse `from MOD import a, b as c` and
+ * `import MOD`, resolve MOD → file (relative + dotted), then resolve each
+ * in-function call to a top-level def — but ONLY with import or same-file
+ * evidence that is VISIBLE at the call site:
  *   - bare `name()`     → high, when bound by `from … import name` to a def in the
  *                         target file, OR a same-file top-level def
  *   - qualified `m.fn()` → high, when receiver `m` is bound by `import m` (incl.
@@ -14,7 +15,14 @@
  * import/same-file evidence is treated as external/dynamic (no edge) rather than
  * falsely linked to a same-named def in another file. Method calls on instances
  * (`obj.method()`) and builtins (`print`, `range`) likewise produce no edge.
- * Deterministic, model-free, no network.
+ *
+ * FIX G2-r2-4: import bindings are SCOPED, not file-wide. A module-level import
+ * (indent 0) is visible everywhere in the file; an import nested inside a
+ * function is visible ONLY within that function. A receiver/name shadowed by a
+ * parameter or a local assignment in the enclosing callable is treated as a local
+ * object and suppresses the import binding. This prevents a function-local
+ * `import b` (or a local `b = …`) from falsely linking ANOTHER function's
+ * `b.add()` cross-file. Deterministic, model-free, no network.
  */
 
 import * as path from "path";
@@ -30,22 +38,33 @@ const PY_KEYWORDS = new Set([
 interface Callable {
   id: string;
   simpleName: string;
-  start: number; // 1-indexed first body-eligible line (def line)
-  end: number;   // 1-indexed exclusive
+  start: number; // 1-indexed def (signature) line
+  end: number;   // 1-indexed exclusive body bound (matches `enclosing` below)
 }
 
-interface ImportBinding {
-  targetRel: string; // resolved file
-  realName: string;  // original symbol name (handles `import x as y`)
+/** A single binding introduced by an `import …` / `from … import …` statement. */
+interface ImportClause {
+  bindName: string;  // local receiver / binding name (alias-aware; dotted for `import a.b`)
+  targetRel: string; // resolved repo-relative file
+  realName: string;  // original symbol (from-import); "" for module-import
+  kind: "from" | "module";
+  line: number;      // 1-indexed line the statement appears on
+  topLevel: boolean; // indent 0 → module scope (file-wide); else nested (local)
 }
 
 interface PyFile {
   rel: string;
   lines: string[];
-  topDefs: Map<string, Callable>;     // name → top-level function
-  callables: Callable[];              // top-level functions + methods
-  imports: Map<string, ImportBinding>; // local binding name → resolved import (from … import)
-  moduleImports: Map<string, string>; // local receiver name → resolved module file (import …)
+  topDefs: Map<string, Callable>; // name → top-level function
+  callables: Callable[];          // top-level functions + methods
+  importClauses: ImportClause[];  // every import binding, with line + scope
+}
+
+/** Resolved view of which import bindings + local shadows apply inside a callable. */
+interface CallableScope {
+  fromBindings: Map<string, { targetRel: string; realName: string }>;
+  moduleBindings: Map<string, string>; // receiver name → module file
+  shadowNames: Set<string>;            // names bound by params/locals (non-import)
 }
 
 function indentEnd(lines: string[], start: number): number {
@@ -60,13 +79,19 @@ function indentEnd(lines: string[], start: number): number {
 
 const RE_DEF = /^(\s*)def\s+([A-Za-z_]\w*)/;
 const RE_CLASS = /^(\s*)class\s+([A-Za-z_]\w*)/;
-const RE_FROM = /^\s*from\s+(\.*)([\w.]*)\s+import\s+(.+)$/;
-const RE_IMPORT = /^\s*import\s+(.+)$/;
+const RE_FROM = /^(\s*)from\s+(\.*)([\w.]*)\s+import\s+(.+)$/;
+const RE_IMPORT = /^(\s*)import\s+(.+)$/;
 // call names NOT preceded by '.' (excludes method calls) or a word char
 const RE_CALL = /(?<![.\w])([A-Za-z_]\w*)\s*\(/g;
 // FIX G2-5: qualified calls `receiver(.seg)*.method(` — receiver is a dotted
 // path (`b`, `a.b`), method is the final attribute. Used to resolve module calls.
 const RE_QUAL_CALL = /(?<![.\w])([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.([A-Za-z_]\w*)\s*\(/g;
+
+// Local-binding patterns (scanned against stripped source) — names these
+// introduce SHADOW an equally-named import within the enclosing callable.
+const RE_ASSIGN = /^\s*([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*(?::[^=]+)?=(?!=)/;
+const RE_FOR = /^\s*for\s+([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s+in\b/;
+const RE_AS = /\bas\s+([A-Za-z_]\w*)/g;
 
 /** Resolve a python module spec to a known repo-relative file, or null. */
 function resolveModule(
@@ -106,35 +131,41 @@ function parsePyFile(rel: string, content: string, fileSet: Set<string>): PyFile
   const lines = content.split("\n");
   const topDefs = new Map<string, Callable>();
   const callables: Callable[] = [];
-  const imports = new Map<string, ImportBinding>();
-  const moduleImports = new Map<string, string>();
+  const importClauses: ImportClause[] = [];
 
+  // Imports are collected on a FULL pass (so nested imports are captured with
+  // their line + indent), independent of the def/class walk below.
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-
     const mFrom = line.match(RE_FROM);
     if (mFrom) {
-      const targetRel = resolveModule(rel, mFrom[1], mFrom[2], fileSet);
+      const indent = mFrom[1]?.length ?? 0;
+      const targetRel = resolveModule(rel, mFrom[2], mFrom[3], fileSet);
       if (targetRel) {
-        // `a, b as c, *` → bindings
-        for (const part of mFrom[3].replace(/[()]/g, "").split(",")) {
+        for (const part of mFrom[4].replace(/[()]/g, "").split(",")) {
           const seg = part.trim();
           if (!seg || seg === "*") continue;
           const [orig, alias] = seg.split(/\s+as\s+/).map((s) => s.trim());
           if (!/^[A-Za-z_]\w*$/.test(orig)) continue;
-          imports.set(alias || orig, { targetRel, realName: orig });
+          importClauses.push({
+            bindName: alias || orig,
+            targetRel,
+            realName: orig,
+            kind: "from",
+            line: i + 1,
+            topLevel: indent === 0,
+          });
         }
       }
       continue;
     }
-    const mImport = !mFrom ? line.match(RE_IMPORT) : null;
+    const mImport = line.match(RE_IMPORT);
     if (mImport && !/^\s*import\s+\(/.test(line)) {
-      // FIX G2-5: `import b`, `import b as c`, `import a.b as c`, `import a.b`,
-      // and comma lists. Record receiver-name → resolved module file so qualified
-      // calls (`b.add()`, `c.add()`, `a.b.add()`) resolve. The receiver bound in
-      // code is the alias when present, else the FULL dotted module path
-      // (`import a.b` is referenced as `a.b.x`).
-      for (const clause of mImport[1].split(",")) {
+      const indent = mImport[1]?.length ?? 0;
+      // `import b`, `import b as c`, `import a.b as c`, `import a.b`, comma lists.
+      // The receiver bound in code is the alias when present, else the FULL dotted
+      // module path (`import a.b` is referenced as `a.b.x`).
+      for (const clause of mImport[2].split(",")) {
         const seg = clause.trim();
         if (!seg) continue;
         const [modRaw, aliasRaw] = seg.split(/\s+as\s+/).map((s) => s.trim());
@@ -142,11 +173,22 @@ function parsePyFile(rel: string, content: string, fileSet: Set<string>): PyFile
         const targetRel = resolveModule(rel, "", modRaw, fileSet);
         if (!targetRel) continue;
         const receiver = aliasRaw && /^[A-Za-z_]\w*$/.test(aliasRaw) ? aliasRaw : modRaw;
-        moduleImports.set(receiver, targetRel);
+        importClauses.push({
+          bindName: receiver,
+          targetRel,
+          realName: "",
+          kind: "module",
+          line: i + 1,
+          topLevel: indent === 0,
+        });
       }
       continue;
     }
+  }
 
+  // Def/class walk: top-level functions + class methods → callables.
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const mClass = line.match(RE_CLASS);
     if (mClass && (mClass[1]?.length ?? 0) === 0) {
       const clsName = mClass[2];
@@ -177,7 +219,98 @@ function parsePyFile(rel: string, content: string, fileSet: Set<string>): PyFile
     }
   }
 
-  return { rel, lines, topDefs, callables, imports, moduleImports };
+  return { rel, lines, topDefs, callables, importClauses };
+}
+
+/** Split a comma-separated list at TOP-LEVEL commas only (parens/brackets aware). */
+function splitTopLevel(s: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of s) {
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") depth--;
+    if (ch === "," && depth === 0) { out.push(cur); cur = ""; continue; }
+    cur += ch;
+  }
+  if (cur.trim() !== "") out.push(cur);
+  return out;
+}
+
+/** Parameter names of the def whose signature starts at 0-indexed `defIdx`. */
+function parseParams(lines: string[], defIdx: number): string[] {
+  let text = "";
+  let depth = 0;
+  let started = false;
+  outer: for (let k = defIdx; k < lines.length; k++) {
+    for (const ch of lines[k]) {
+      if (ch === "(") { depth++; started = true; if (depth === 1) continue; }
+      else if (ch === ")") { depth--; if (depth === 0) break outer; }
+      if (started && depth >= 1) text += ch;
+    }
+    text += " ";
+    if (started && depth <= 0) break;
+  }
+  const names: string[] = [];
+  for (const part of splitTopLevel(text)) {
+    const seg = part.trim().replace(/^\*+/, "");
+    const m = seg.match(/^([A-Za-z_]\w*)/);
+    if (m) names.push(m[1]);
+  }
+  return names;
+}
+
+/**
+ * Compute the import bindings + local shadows visible inside one callable:
+ *   - module-level imports (file-wide) MINUS names shadowed by params/locals,
+ *   - then within-callable imports OVERRIDE (a local `import b` wins),
+ *   - shadowNames = params + local assignment/for/with/nested-def targets that
+ *     are NOT themselves import bindings (those locals shadow same-named imports).
+ */
+function computeScope(f: PyFile, c: Callable): CallableScope {
+  // Within-callable import clauses (line strictly inside the callable body).
+  const localFrom = new Map<string, { targetRel: string; realName: string }>();
+  const localModule = new Map<string, string>();
+  const localImportNames = new Set<string>();
+  for (const cl of f.importClauses) {
+    if (cl.line <= c.start || cl.line >= c.end) continue;
+    localImportNames.add(cl.bindName);
+    if (cl.kind === "from") localFrom.set(cl.bindName, { targetRel: cl.targetRel, realName: cl.realName });
+    else localModule.set(cl.bindName, cl.targetRel);
+  }
+
+  // Local non-import bindings (params + assignment/for/with/nested-def targets).
+  const shadowRaw = new Set<string>(parseParams(f.lines, c.start - 1));
+  for (let k = c.start; k < c.end - 1 && k < f.lines.length; k++) {
+    const raw = stripPy(f.lines[k]);
+    const mAssign = raw.match(RE_ASSIGN);
+    if (mAssign) for (const n of mAssign[1].split(",")) shadowRaw.add(n.trim());
+    const mFor = raw.match(RE_FOR);
+    if (mFor) for (const n of mFor[1].split(",")) shadowRaw.add(n.trim());
+    let mAs: RegExpExecArray | null;
+    RE_AS.lastIndex = 0;
+    while ((mAs = RE_AS.exec(raw)) !== null) shadowRaw.add(mAs[1]);
+    const mDef = raw.match(RE_DEF);
+    if (mDef) shadowRaw.add(mDef[2]);
+    const mCls = raw.match(RE_CLASS);
+    if (mCls) shadowRaw.add(mCls[2]);
+  }
+  // An import binding is not a shadow — it IS the binding for that name.
+  const shadowNames = new Set([...shadowRaw].filter((n) => n && !localImportNames.has(n)));
+
+  const fromBindings = new Map<string, { targetRel: string; realName: string }>();
+  const moduleBindings = new Map<string, string>();
+  for (const cl of f.importClauses) {
+    if (!cl.topLevel) continue;
+    if (shadowNames.has(cl.bindName)) continue; // param/local shadows the import
+    if (cl.kind === "from") fromBindings.set(cl.bindName, { targetRel: cl.targetRel, realName: cl.realName });
+    else moduleBindings.set(cl.bindName, cl.targetRel);
+  }
+  // within-callable imports win over file-wide + shadow.
+  for (const [name, fr] of localFrom) fromBindings.set(name, fr);
+  for (const [name, t] of localModule) moduleBindings.set(name, t);
+
+  return { fromBindings, moduleBindings, shadowNames };
 }
 
 /**
@@ -222,10 +355,15 @@ export function resolvePyCalls(
       return best;
     };
 
+    // Per-callable visible bindings + shadows (FIX G2-r2-4).
+    const scopeByCallable = new Map<string, CallableScope>();
+    for (const c of f.callables) scopeByCallable.set(c.id, computeScope(f, c));
+
     for (let i = 0; i < f.lines.length; i++) {
       const line1 = i + 1;
       const caller = enclosing(line1);
       if (!caller) continue;
+      const scope = scopeByCallable.get(caller.id)!;
       const codeLine = stripPy(f.lines[i]);
 
       // ── Bare-name calls: `add(...)` ──────────────────────────────────────
@@ -236,8 +374,8 @@ export function resolvePyCalls(
         if (PY_KEYWORDS.has(name)) continue;
         if (name === caller.simpleName) continue; // skip recursion/self
 
-        // 1) import-bound name (`from MOD import name`) → target file's def
-        const imp = f.imports.get(name);
+        // 1) import-bound name (`from MOD import name`) visible here → target def
+        const imp = scope.fromBindings.get(name);
         if (imp) {
           const tf = files.find((x) => x.rel === imp.targetRel);
           if (tf && tf.topDefs.has(imp.realName)) {
@@ -248,28 +386,26 @@ export function resolvePyCalls(
           }
           continue;
         }
-        // 2) same-file top-level def
-        if (f.topDefs.has(name)) {
+        // 2) same-file top-level def — unless a param/local shadows the name
+        if (!scope.shadowNames.has(name) && f.topDefs.has(name)) {
           const to = `function:${f.rel}:${name}`;
           if (to !== caller.id) {
             push({ from: caller.id, to, confidence: "high", crossFile: false, kind: "function", backend: "py-imports" });
           }
           continue;
         }
-        // FIX G2-6: NO cross-file global fallback. A bare name with no import and
-        // no same-file def is external/builtin/dynamic — resolving it to a unique
-        // (or lexicographically-picked) def in ANOTHER file falsely links an
-        // unimported name across files. Leave it unresolved (reported as dynamic).
+        // FIX G2-6: NO cross-file global fallback for an unbound bare name.
       }
 
       // ── Qualified module calls: `b.add(...)`, `a.b.add(...)` ─────────────
-      // FIX G2-5: resolve `import b; b.add()` (and aliased / dotted variants) by
-      // matching the receiver against the module-import bindings.
       RE_QUAL_CALL.lastIndex = 0;
       while ((m = RE_QUAL_CALL.exec(codeLine)) !== null) {
         const receiver = m[1];
         const method = m[2];
-        const targetRel = f.moduleImports.get(receiver);
+        // A param/local shadowing the receiver ROOT makes this attribute access on
+        // a local object, NOT a module call (FIX G2-r2-4).
+        if (scope.shadowNames.has(receiver.split(".")[0])) continue;
+        const targetRel = scope.moduleBindings.get(receiver);
         if (!targetRel) continue; // receiver is a local object / unimported → skip
         const tf = files.find((x) => x.rel === targetRel);
         if (!tf || !tf.topDefs.has(method)) continue; // attribute is not a top-level def

@@ -30,8 +30,6 @@ import { resolvePyCalls } from "./lib/resolve-calls-py";
 import type { ResolvedCall } from "./lib/resolved-call";
 import type { GraphEdge, GraphNode } from "./lib/schema";
 
-const TS_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"]);
-
 function relpathOf(nodeId: string): string {
   const parts = nodeId.split(":");
   return parts[0] === "file" ? parts.slice(1).join(":") : parts.slice(1, -1).join(":");
@@ -64,11 +62,7 @@ export function refineCalls(
   ];
 
   const nodeIds = new Set(base.nodes.map((n) => n.id));
-  const handledRel = new Set(
-    relFiles
-      .filter((r) => TS_EXTS.has(path.extname(r).toLowerCase()) || r.toLowerCase().endsWith(".py"))
-      .map((r) => r.replace(/\\/g, "/")),
-  );
+  const isPyRel = (rel: string) => rel.toLowerCase().endsWith(".py");
 
   const nonCall = base.edges.filter((e) => e.type !== "calls");
 
@@ -82,11 +76,21 @@ export function refineCalls(
     e.type === "calls" && (e as Record<string, unknown>).extractor === STRUCTURAL_EXTRACTOR;
   const foreignCalls: GraphEdge[] = base.edges.filter((e) => e.type === "calls" && !isG1Call(e));
 
-  // Keep G1 syntactic calls only for languages G2 does NOT resolve; re-tag so
-  // EVERY structural calls edge has a confidence field (G2 gate item 3). G1 calls
-  // on handled (ts/js/py) files are dropped here — refined edges replace them.
+  // FIX G2-r2-1 (BLOCKER): retain G1 syntactic calls as a LOW-confidence recall
+  // net for every language EXCEPT Python. A refined (G2) edge overwrites the
+  // matching key below, so a G1 call the resolver REPRODUCES is upgraded to its
+  // accurate confidence, while a G1 TS/JS call the compiler resolver canNOT
+  // resolve (unimported/dynamic/symbol-less) SURVIVES as `g1-syntactic` low —
+  // it no longer vanishes. This is the documented G2 contract ("keeps G1's
+  // syntactic edge, re-tagged confidence low") and matches the round-2 finding.
+  //
+  // Python is deliberately EXCLUDED (precision-first, FIX G2-6): its import-aware
+  // resolver suppresses unimported names ON PURPOSE, and re-admitting G1's
+  // global-unique guesses here would reintroduce exactly the cross-file false
+  // links that the Python lane and its negative oracles forbid. So Python G1
+  // calls on handled files are dropped — the py resolver's edges replace them.
   const keptG1: GraphEdge[] = base.edges
-    .filter((e) => isG1Call(e) && !handledRel.has(relpathOf(e.source)))
+    .filter((e) => isG1Call(e) && !isPyRel(relpathOf(e.source)))
     .map((e) => ({ ...e, confidence: "low", resolution: "g1-syntactic", backend: "g1-syntactic" }));
 
   let droppedMissingNode = 0;

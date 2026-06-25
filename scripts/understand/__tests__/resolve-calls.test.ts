@@ -113,6 +113,85 @@ describe("G2 gate 3 — no silent drops, confidence on every calls edge", () => 
 });
 
 // ---------------------------------------------------------------------------
+// FIX G2-r2-1 (BLOCKER) — a TS/JS call the compiler resolver CANNOT resolve is
+// retained as a low-confidence g1-syntactic edge, not silently dropped.
+// ---------------------------------------------------------------------------
+
+describe("FIX G2-r2-1 — unresolved TS/JS G1 call survives low-confidence", () => {
+  test("a TS call the compiler can't resolve is kept as g1-syntactic / low", () => {
+    // `widget()` is NOT imported into a.ts (and a.ts has no local `widget`), so
+    // the TS compiler resolver finds no symbol and emits nothing. G1 name-matched
+    // it to the global-unique `function:b.ts:widget`. After the fix the G1 edge
+    // SURVIVES as a low-confidence recall net rather than vanishing.
+    const dir = tempRepo({
+      "b.ts": "export function widget(): number {\n  return 1;\n}\n",
+      "a.ts": [
+        "export function main(): number {",
+        "  return widget();",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    try {
+      const g = build(dir, ["a.ts", "b.ts"]);
+      const edge = calls(g.edges).find(
+        (e) => e.source === "function:a.ts:main" && e.target === "function:b.ts:widget",
+      ) as Record<string, unknown> | undefined;
+      expect(edge).toBeDefined();
+      expect(edge!.confidence).toBe("low");
+      expect(edge!.resolution).toBe("g1-syntactic");
+      expect(edge!.backend).toBe("g1-syntactic");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a RESOLVED TS call is upgraded past low — refined edge wins on the same key", () => {
+    // Anti-vacuity for the above: when the compiler DOES resolve the call, the
+    // accurate (high) refined edge must overwrite the low g1-syntactic one — the
+    // retention must not pin every TS edge to low.
+    const dir = tempRepo({
+      "b.ts": "export function compute(): number {\n  return 1;\n}\n",
+      "a.ts": [
+        'import { compute } from "./b";',
+        "export function main(): number {",
+        "  return compute();",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    try {
+      const g = build(dir, ["a.ts", "b.ts"]);
+      const edge = calls(g.edges).find(
+        (e) => e.source === "function:a.ts:main" && e.target === "function:b.ts:compute",
+      ) as Record<string, unknown> | undefined;
+      expect(edge).toBeDefined();
+      expect(edge!.confidence).toBe("high");
+      expect(edge!.resolution).not.toBe("g1-syntactic");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("Python stays precision-first: an unimported global-unique name is still dropped (not retained)", () => {
+    // The retention is TS/JS-only. Python's import-aware resolver suppresses
+    // unimported names (FIX G2-6); re-admitting G1's global-unique guess here
+    // would be a cross-file false link. `only_here` is global-unique but never
+    // imported → NO edge, even low-confidence.
+    const dir = tempRepo({
+      "b.py": "def only_here():\n    return 1\n",
+      "a.py": "def main():\n    return only_here()\n",
+    });
+    try {
+      const g = build(dir, ["a.py", "b.py"]);
+      expect(calls(g.edges).some((e) => e.target === "function:b.py:only_here")).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // FIX G2-6 — an unimported bare name is NOT falsely linked cross-file
 // ---------------------------------------------------------------------------
 
@@ -199,6 +278,94 @@ describe("FIX G2-5 — Python `import module` qualified calls resolve", () => {
 });
 
 // ---------------------------------------------------------------------------
+// FIX G2-r2-4 — Python import bindings are SCOPED to the enclosing callable;
+// a function-local import / a local shadow does not leak cross-file.
+// ---------------------------------------------------------------------------
+
+describe("FIX G2-r2-4 — Python import scoping + shadowing", () => {
+  test("a function-local `import b` does NOT resolve another function's `b.add()`", () => {
+    const dir = tempRepo({
+      "b.py": "def add(a, b):\n    return a + b\n",
+      "a.py": [
+        "def uses_b():",
+        "    import b",            // local import — visible ONLY inside uses_b
+        "    return b.add(1, 2)",
+        "",
+        "",
+        "def other():",
+        "    return b.add(3, 4)",  // b is NOT imported here → must NOT resolve
+        "",
+      ].join("\n"),
+    });
+    try {
+      const g = build(dir, ["a.py", "b.py"]);
+      const c = calls(g.edges);
+      // the local import still resolves for its OWN function (scoping is not a blanket drop)
+      expect(c.some((e) => e.source === "function:a.py:uses_b" && e.target === "function:b.py:add")).toBe(true);
+      // …but it does not leak into a different function with no import in scope
+      expect(c.some((e) => e.source === "function:a.py:other" && e.target === "function:b.py:add")).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a param shadowing a module-level `import b` suppresses the cross-file link", () => {
+    const dir = tempRepo({
+      "b.py": "def add(a, b):\n    return a + b\n",
+      "a.py": [
+        "import b",                // module-level import (file-wide)
+        "",
+        "",
+        "def main(b):",           // param `b` SHADOWS the imported module
+        "    return b.add(1, 2)",  // b is the param, not the module → no edge
+        "",
+      ].join("\n"),
+    });
+    try {
+      const g = build(dir, ["a.py", "b.py"]);
+      expect(calls(g.edges).some((e) => e.source === "function:a.py:main" && e.target === "function:b.py:add")).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a local assignment shadowing a `from` import suppresses the bare-name link", () => {
+    const dir = tempRepo({
+      "b.py": "def add(a, b):\n    return a + b\n",
+      "a.py": [
+        "from b import add",       // file-wide bare-name binding
+        "",
+        "",
+        "def main():",
+        "    add = make_local()",  // local rebinds `add` → shadows the import
+        "    return add(1, 2)",    // calls the local, not b.add → no edge
+        "",
+      ].join("\n"),
+    });
+    try {
+      const g = build(dir, ["a.py", "b.py"]);
+      expect(calls(g.edges).some((e) => e.source === "function:a.py:main" && e.target === "function:b.py:add")).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a module-level `import b` still resolves a normal `b.add()` (no false suppression)", () => {
+    // Anti-vacuity for the scoping: the common, correct case must still link.
+    const dir = tempRepo({
+      "b.py": "def add(a, b):\n    return a + b\n",
+      "a.py": "import b\n\n\ndef main():\n    return b.add(1, 2)\n",
+    });
+    try {
+      const g = build(dir, ["a.py", "b.py"]);
+      expect(calls(g.edges).some((e) => e.source === "function:a.py:main" && e.target === "function:b.py:add")).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // FIX G2-1 — enriched / LLM-tier calls edges are preserved, not dropped
 // ---------------------------------------------------------------------------
 
@@ -236,10 +403,39 @@ describe("FIX G2-1 — non-structural calls edges survive refinement", () => {
         weight: 0.5,
         extractor: "llm-v1",
       };
+      // FIX G2-r2-3: a foreign `calls` edge on a DISTINCT key that G2 can never
+      // reproduce (b.ts:add does NOT call a.ts:main — the reverse direction, no
+      // such call site). Because no refined/G1 edge collides with this key, it
+      // exercises true PRESERVATION (a foreign edge surviving on its own), not
+      // merely collision precedence over a key G2 also emits.
+      const foreignDistinctEdge = {
+        source: "function:b.ts:add",
+        target: "function:a.ts:main",
+        type: "calls",
+        direction: "out" as const,
+        weight: 0.3,
+        confidence: "low",
+        extractor: "llm-v1",
+        rationale: "model-inferred-dynamic",
+      };
       const enriched = {
         nodes: base.nodes,
-        edges: [...base.edges, llmEdge as unknown as GraphEdge, dynamicLlmEdge as unknown as GraphEdge],
+        edges: [
+          ...base.edges,
+          llmEdge as unknown as GraphEdge,
+          dynamicLlmEdge as unknown as GraphEdge,
+          foreignDistinctEdge as unknown as GraphEdge,
+        ],
       };
+      // Sanity: G2's own resolver must NOT emit the distinct reverse key, else the
+      // assertion below would be vacuous (it would be testing collision, not
+      // preservation). Build with NO foreign edges and confirm the key is absent.
+      const g2Only = refineCalls(dir, ["a.ts", "b.ts"], readFile, base);
+      expect(
+        g2Only.edges.some(
+          (e) => e.type === "calls" && e.source === "function:b.ts:add" && e.target === "function:a.ts:main",
+        ),
+      ).toBe(false);
       const refined = refineCalls(dir, ["a.ts", "b.ts"], readFile, enriched);
       // The LLM calls edge is preserved with its original provenance (not re-tagged
       // g1-syntactic, not dropped) — foreign edges win on collision.
@@ -249,6 +445,14 @@ describe("FIX G2-1 — non-structural calls edges survive refinement", () => {
       expect(kept).toBeDefined();
       expect(kept.extractor).toBe("llm-v1");
       expect(kept.rationale).toBe("model-inferred");
+      // FIX G2-r2-3: the distinct-key foreign edge survives the resolve pass
+      // verbatim — preservation, not precedence.
+      const keptDistinct = refined.edges.find(
+        (e) => e.type === "calls" && e.source === "function:b.ts:add" && e.target === "function:a.ts:main",
+      ) as Record<string, unknown> | undefined;
+      expect(keptDistinct).toBeDefined();
+      expect(keptDistinct!.extractor).toBe("llm-v1");
+      expect(keptDistinct!.rationale).toBe("model-inferred-dynamic");
       // the unrelated non-calls LLM edge survives too
       expect(refined.edges.some((e) => e.type === "depends_on" && (e as Record<string, unknown>).extractor === "llm-v1")).toBe(true);
     } finally {
