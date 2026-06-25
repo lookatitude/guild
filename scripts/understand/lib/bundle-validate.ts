@@ -4,7 +4,13 @@
  * ── THREAT MODEL (the reason this is integrity, not field-by-field validation) ──
  * The per-file structural cache (`.guild/indexes/*.structural-cache.json`) is a
  * GITIGNORED, project-local runtime artifact — our OWN deterministic extractor
- * output, never committed, exported, or shared. The ADVERSARIAL shared path is the
+ * output, never committed, exported, or shared. This is ENFORCED, not assumed: an
+ * explicit `*.structural-cache.json` deny (globbed at any depth) is appended to the
+ * local-only re-deny section of every workspace `.gitignore` (FIX-T4.1-r6), placed
+ * AFTER the `!.guild/indexes` re-include so it wins even where the indexes dir is
+ * otherwise tracked — a committed-then-tampered cache (the only way the
+ * recompute-the-checksum bypass could reach a victim) cannot exist. The
+ * ADVERSARIAL shared path is the
  * G6 knowledge-graph artifact, and it ships NO cache: only the graph the extraction
  * write-path already ran `validateGraph` over. So the local cache's trust boundary
  * is PROVENANCE + INTEGRITY — "our own output, for unchanged source content,

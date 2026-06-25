@@ -62,6 +62,8 @@ node_modules/
 # Re-deny operator-private / local-only sub-paths (D-SHR-4 + Decision G)
 .guild/settings.local.json
 .guild/hosts/
+# Re-deny the structural-cache sidecar: a LOCAL-ONLY, rebuildable, derived artifact (our deterministic extractor output) — never committed/exported/shared. This later rule wins over the !.guild/indexes/** re-include above, so even where .guild/indexes/** is tracked a tampered cache can never be committed (FIX-T4.1-r6; threat model in scripts/understand/lib/bundle-validate.ts).
+**/*.structural-cache.json
 
 # .claude/ — Claude Code config (FU-D: dev-team agents + settings.json default
 # to tracked when explicitly added; settings.local.json holds the operator's
