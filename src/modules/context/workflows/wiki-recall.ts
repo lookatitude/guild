@@ -313,6 +313,39 @@ export function normalizeFtsQuery(query: string): string {
     .join(" ");
 }
 
+/**
+ * G7 finding-4 — identifier-shaped query detector for SQLite-FTS parity.
+ *
+ * The file-BM25 recall branch tokenizes identifier-aware (camel/snake split), so
+ * `process_order` matches a `processOrder` symbol. The SQLite FTS path indexes
+ * `processOrder` as the single token `processorder` (FTS5 does NOT split camelCase),
+ * so the SAME identifier query can return DIFFERENT results with `index:on` vs
+ * `index:off` — a parity break (the off path is the source of truth).
+ *
+ * Rather than re-index the FTS table with split tokens (heavy, and FTS5 bm25()
+ * ranking still would not match our bm25Score byte-for-byte), the router BYPASSES
+ * the SQLite branch for identifier-shaped queries and lets the identifier-aware
+ * file-BM25 branch answer — guaranteeing `index:on == index:off`.
+ *
+ * A query is identifier-shaped when it carries a token boundary FTS5 tokenizes
+ * differently from the identifier-aware tokenizer: a `snake_case` underscore, or
+ * a camelCase / PascalCase / acronym boundary inside a run. Plain prose (no such
+ * boundary) is NOT flagged → the SQLite path is used exactly as before (no
+ * behaviour change for ordinary recall).
+ *
+ * FIX-T7.1-r2 finding-3: this is a QUERY-shape detector and so does NOT catch a
+ * PLAIN query (`process order`) whose terms only diverge because a DOC carries a
+ * camelCase identifier (`processOrder`) the file-BM25 path splits and FTS does not.
+ * That corpus-driven case is handled by `corpusForcesIdentifierBypass` in recall.ts,
+ * which complements this query-side check; the two together close the parity gap.
+ */
+export function isIdentifierAwareQuery(query: string): boolean {
+  if (/[A-Za-z0-9]_[A-Za-z0-9]/.test(query)) return true; // snake_case: a_b
+  if (/[a-z0-9][A-Z]/.test(query)) return true;           // camelCase / PascalCase boundary
+  if (/[A-Z]{2,}[a-z]/.test(query)) return true;          // acronym→word (HTTPRequest)
+  return false;
+}
+
 // ── CLI entrypoint ────────────────────────────────────────────────────────
 
 export function runWikiRecallCli(): void {

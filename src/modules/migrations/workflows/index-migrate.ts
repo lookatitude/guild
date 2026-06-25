@@ -43,11 +43,22 @@ function openDatabase(dbPath: string): SqliteDb {
   const { DatabaseSync } = require("node:sqlite") as {
     DatabaseSync: new (path: string) => SqliteDb;
   };
-  return new DatabaseSync(dbPath);
+  const db = new DatabaseSync(dbPath);
+  // Concurrent hooks contend for .guild/index.sqlite: UserPromptSubmit runs the
+  // migrator (run-trace-start) while Stop runs it again (run-trace-close +
+  // learning-backstop). Without a busy timeout the loser gets an IMMEDIATE
+  // SQLITE_BUSY ("database is locked") — even the journal_mode=WAL switch below
+  // needs a brief exclusive lock, which is why it never persisted. Set the busy
+  // timeout as the FIRST statement so every later op waits/retries up to 5s
+  // instead of failing the hook.
+  db.exec("PRAGMA busy_timeout = 5000");
+  return db;
 }
 
 // TE-14: bump to 2 for federation_wiki_cache table.
-export const CURRENT_SCHEMA_VERSION = 2;
+// T5.1 (G5): bump to 3 for the optional structural projection
+// (kg_calls + kg_symbols_fts).
+export const CURRENT_SCHEMA_VERSION = 3;
 
 export interface MigrationResult {
   ok: boolean;
@@ -238,6 +249,69 @@ const MIGRATIONS: Migration[] = [
           PRIMARY KEY (sub_guild_root, path)
         );
       `);
+    },
+  },
+
+  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
+  //
+  // Two OPTIONAL acceleration tables projected from the canonical, file-first
+  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
+  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
+  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
+  // remains the source of truth that returns IDENTICAL answers.
+  //
+  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
+  //                    indexed on source AND target so the call-graph BFS
+  //                    (kgTrace / kgDeadCode) is fetched without parsing the
+  //                    whole JSON graph.
+  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
+  //                    node, so identifier search (`process_order` →
+  //                    `processOrder`) is an index lookup, not a full node scan.
+  //                    Tokens are PRE-SPLIT with the shared identifier-aware
+  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
+  //                    document and query side, so the FTS built-in tokenizer
+  //                    only has to whitespace-split — the camel/snake behaviour
+  //                    lives in the (deterministic, model-free) projection feed.
+  {
+    version: 3,
+    tables: ["kg_calls", "kg_symbols_fts"],
+    up(db: SqliteDb): void {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_calls;
+        DROP TABLE IF EXISTS kg_symbols_fts;
+      `);
+
+      db.exec(`
+        CREATE TABLE kg_calls (
+          id         INTEGER PRIMARY KEY,
+          source     TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          confidence TEXT
+        );
+        CREATE INDEX kg_calls_source ON kg_calls (source);
+        CREATE INDEX kg_calls_target ON kg_calls (target);
+      `);
+
+      // kg_symbols_fts: attempt FTS5 (like wiki_fts); fall back to a plain
+      // table when the linked SQLite build lacks FTS5. The projection feed and
+      // the symbol-search read seam both detect the fallback and degrade to the
+      // in-process JSON scan, so correctness is preserved either way.
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
+            node_id UNINDEXED,
+            name_tokens,
+            tokenize='ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE kg_symbols_fts (
+            node_id     TEXT,
+            name_tokens TEXT
+          );
+        `);
+      }
     },
   },
 ];

@@ -125,6 +125,49 @@ describe("Section B — createIgnoreFilter excludes test dirs (pure filter)", ()
 });
 
 // ---------------------------------------------------------------------------
+// Section B2 — generated module-resource mirrors (src/modules/<id>/resources/**)
+// are excluded (they are byte-for-byte sync:module-resources copies of first-party
+// source; indexing them duplicated ~31% of the structural graph). Non-vacuous: the
+// REAL module source (src/modules/<id>/workflows/**, index.ts) must stay indexed.
+// ---------------------------------------------------------------------------
+
+describe("Section B2 — createIgnoreFilter excludes generated module-resource mirrors", () => {
+  let repo: string;
+  beforeAll(() => {
+    repo = mkTmpRepo("guild-filter-mirror-");
+  });
+
+  it("M1: DEFAULT_IGNORE_PATTERNS declares the generated-mirror pattern", () => {
+    expect(DEFAULT_IGNORE_PATTERNS).toContain("src/modules/*/resources/");
+  });
+
+  it("M2: a mirrored script under resources/ → isIgnored true", () => {
+    const filter = createIgnoreFilter(repo);
+    expect(
+      filter.isIgnored("src/modules/understanding/resources/scripts/understand/lib/structural.ts"),
+    ).toBe(true);
+  });
+
+  it("M3: the resources dir itself → isIgnored true", () => {
+    const filter = createIgnoreFilter(repo);
+    expect(filter.isIgnored("src/modules/knowledge/resources")).toBe(true);
+    expect(filter.isIgnored("src/modules/knowledge/resources/")).toBe(true);
+  });
+
+  it("M4 (non-vacuity): real module source is KEPT — workflows/index, not under resources/", () => {
+    const filter = createIgnoreFilter(repo);
+    expect(filter.isIgnored("src/modules/kernel/workflows/identifier-tokenize.ts")).toBe(false);
+    expect(filter.isIgnored("src/modules/knowledge/index.ts")).toBe(false);
+    expect(filter.isIgnored("src/modules/knowledge/module.manifest.json")).toBe(false);
+  });
+
+  it("M5 (non-vacuity): canonical source the mirror copies FROM is KEPT", () => {
+    const filter = createIgnoreFilter(repo);
+    expect(filter.isIgnored("scripts/understand/lib/structural.ts")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Section C — walkRepo (cost-gate corpus) excludes tests/ dirs
 // ---------------------------------------------------------------------------
 

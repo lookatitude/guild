@@ -26,6 +26,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { runMigrations } from "../../migrations";
+// Identifier tokenizer is a base-layer primitive in kernel (not the higher
+// knowledge module) — keeps this lower `state` module's dependency direction inward.
+import { tokenizeIdentifierAware } from "../../kernel";
 
 // ── Minimal node:sqlite type stubs ────────────────────────────────────────
 
@@ -361,6 +364,124 @@ export function ensureKgIndex(cwd: string, config: IndexBlock): CacheResult | nu
     return { status: "populated", dbPath };
   } catch (err) {
     return { status: "error", message: `ensureKgIndex error: ${(err as Error).message}` };
+  }
+}
+
+/**
+ * T5.1 (G5) — Ensure the OPTIONAL structural projection (kg_calls +
+ * kg_symbols_fts) is populated.
+ *
+ * Source: .guild/indexes/knowledge-graph.json (SAME source + thresholds +
+ * fingerprint discipline as {@link ensureKgIndex}; a sibling projection, not a
+ * replacement). Fingerprint key: "kg_projection".
+ *
+ *   kg_calls       ← every `calls` edge (source, target, confidence).
+ *   kg_symbols_fts ← one row per NAMED node: (node_id, name_tokens), where
+ *                    name_tokens is the camel/snake-split identifier tokens of
+ *                    the node name joined by spaces (model-free, deterministic).
+ *
+ * HARD INVARIANT (goals.md §1.3): this is acceleration ONLY. `index: off`
+ * (in-process JSON BFS via lib/graph-query.ts) is the source of truth and
+ * returns IDENTICAL answers; deleting index.sqlite loses nothing. Both tables
+ * are a PURE function of the graph — rebuild twice → identical contents.
+ *
+ * Returns null  → below threshold / disabled / missing source → caller uses JSON.
+ * Returns CacheResult { status:'cache-hit'|'populated', dbPath } → projection ready.
+ */
+export function ensureKgProjectionIndex(cwd: string, config: IndexBlock): CacheResult | null {
+  if (!config.enabled) return null;
+
+  try {
+    const repoRoot = resolveMainRepoRoot(cwd);
+    const kgPath = path.join(repoRoot, ".guild", "indexes", "knowledge-graph.json");
+    const dbPath = path.join(repoRoot, ".guild", "index.sqlite");
+
+    if (!fs.existsSync(kgPath)) return null;
+
+    // Threshold check — identical gating to ensureKgIndex (node count OR size).
+    const stat = fs.statSync(kgPath);
+    const sizeMb = stat.size / (1024 * 1024);
+    let nodeCount = 0;
+    try {
+      const raw = JSON.parse(fs.readFileSync(kgPath, "utf8")) as { nodes?: unknown[] };
+      nodeCount = raw.nodes?.length ?? 0;
+    } catch {
+      return null;
+    }
+
+    const aboveThreshold =
+      nodeCount > config.kg_node_threshold || sizeMb > config.kg_size_threshold_mb;
+    if (!aboveThreshold) return null;
+
+    const currentHash = sha256File(kgPath);
+    const db = openIndex(dbPath);
+    if (!db) return null;
+
+    const stored = getFingerprint(db, "kg_projection");
+    if (stored === currentHash) {
+      db.close();
+      return { status: "cache-hit", dbPath };
+    }
+
+    try {
+      const graph = JSON.parse(fs.readFileSync(kgPath, "utf8")) as {
+        nodes?: Array<{ id: string; name?: string; [k: string]: unknown }>;
+        edges?: Array<{ source: string; target: string; type?: string; confidence?: string; [k: string]: unknown }>;
+      };
+
+      db.exec("BEGIN IMMEDIATE");
+      db.exec("DELETE FROM kg_calls");
+      db.exec("DELETE FROM kg_symbols_fts");
+
+      const insCall = db.prepare(
+        "INSERT INTO kg_calls (source, target, confidence) VALUES (?, ?, ?)",
+      );
+      for (const edge of graph.edges ?? []) {
+        if (edge.type !== "calls") continue;
+        if (typeof edge.source !== "string" || typeof edge.target !== "string") continue;
+        insCall.run(
+          edge.source,
+          edge.target,
+          typeof edge.confidence === "string" ? edge.confidence : null,
+        );
+      }
+
+      const insSym = db.prepare(
+        "INSERT INTO kg_symbols_fts (node_id, name_tokens) VALUES (?, ?)",
+      );
+      for (const node of graph.nodes ?? []) {
+        if (typeof node.id !== "string") continue;
+        const name = typeof node.name === "string" ? node.name : "";
+        if (name.length === 0) continue;
+        // Index the camel/snake-split tokens of the node's display NAME only
+        // (not the id — its path/type segments would pollute symbol search), so
+        // `process_order` finds `processOrder`. Pre-split here so the FTS
+        // built-in tokenizer only whitespace-splits (see migration v3). The
+        // read seam (graph-query-projection.ts) tokenizes the SAME `node.name`
+        // on the query+document side, so FTS and the JSON scan agree exactly.
+        const tokens = tokenizeIdentifierAware(name);
+        insSym.run(node.id, tokens.join(" "));
+      }
+
+      setFingerprint(db, "kg_projection", kgPath, currentHash);
+      db.exec("COMMIT");
+    } catch (err) {
+      try {
+        db.exec("ROLLBACK");
+      } catch {
+        /* ignore */
+      }
+      db.close();
+      return {
+        status: "error",
+        message: `kg projection rebuild failed: ${(err as Error).message}`,
+      };
+    }
+
+    db.close();
+    return { status: "populated", dbPath };
+  } catch (err) {
+    return { status: "error", message: `ensureKgProjectionIndex error: ${(err as Error).message}` };
   }
 }
 

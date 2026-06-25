@@ -86,7 +86,8 @@ export type RecallBranch =
   | "file-bm25"   // branch B — in-process BM25
   | "fs-scan"     // branch C — last-resort fs scan
   | "kg-query"    // branch D — knowledge-graph 2-hop
-  | "combined"    // wiki + KG both contributed
+  | "structural"  // branch E (G7) — model-free graph-query structural channel
+  | "combined"    // wiki + KG (+ structural) both contributed
   | "empty";      // no results from any branch
 
 export interface GuildTraceRecallV1 extends GuildTraceEventBase {
@@ -106,6 +107,58 @@ export interface GuildTraceRecallV1 extends GuildTraceEventBase {
   had_quarantine: boolean;
   /** Optional wiki root path (redacted at caller if it contains operator path). */
   cwd_redacted: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2b. guild.trace.recall_decision.v1 — recall-quality decision (G10)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Downstream outcome of the lane that consumed this recall (if resolvable). */
+export type LaneOutcome = "success" | "failure" | "unknown";
+
+/**
+ * A recall-QUALITY decision event (distinct from guild.trace.recall.v1, which is
+ * the operational recall trace). Carries the signal needed to tune the
+ * `recallScoreThreshold` empirically: the top relevance score the winning
+ * branch produced, the threshold in effect, and whether the recall was strong
+ * enough that an agent could skip a full file read (`read_skip_fired`).
+ *
+ * Privacy: the raw query is NEVER logged. `query_hash` is a sha256[:16] of the
+ * full query (stable grouping key); `query_preview` is a short truncation for
+ * human-readable reports (≤ 60 chars, may be empty).
+ */
+export interface GuildTraceRecallDecisionV1 extends GuildTraceEventBase {
+  schema_version: "guild.trace.recall_decision.v1";
+  /** sha256[:16] of the full query — stable grouping key, no raw content. */
+  query_hash: string;
+  /** Truncated query preview (≤ 60 chars) for report readability; may be "". */
+  query_preview: string;
+  /** Recall branch that won the waterfall (or 'empty'). */
+  branch: RecallBranch;
+  /** Top raw relevance score of the winning branch (branch-native scale, ≥ 0). */
+  top_score: number;
+  /** The recallScoreThreshold in effect at recall time (≥ 0). */
+  threshold: number;
+  /**
+   * Whether recall was strong enough to skip a full read:
+   * chunk_count > 0 AND top_score >= threshold.
+   */
+  read_skip_fired: boolean;
+  /** Number of ProtectedChunks returned. */
+  chunk_count: number;
+  /**
+   * G10 parity: whether `top_score` is a comparable, threshold-meaningful score.
+   * The SQLite (branch A) and fs-scan (branch C) wiki paths expose NO comparable
+   * score, so a recall they win is `scored: false` and `top_score` is a
+   * placeholder 0 — it MUST NOT be compared against a threshold. Only the
+   * file-BM25 (B) and kg-query (D) branches produce a real score (`scored: true`).
+   * recall-stats EXCLUDES `scored: false` events from skip-rate + threshold
+   * simulation so the SQLite-on vs SQLite-off (BM25) skip behavior cannot diverge
+   * via a coerced-0 (the off==on invariant). See recall.ts §combine.
+   */
+  scored: boolean;
+  /** Downstream lane outcome hook ('unknown' at emit time; resolved by a join). */
+  lane_outcome: LaneOutcome;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -205,6 +258,7 @@ export interface GuildTraceDegradationV1 extends GuildTraceEventBase {
 export type GuildTraceEvent =
   | GuildTraceDispatchV1
   | GuildTraceRecallV1
+  | GuildTraceRecallDecisionV1
   | GuildTraceConfigResolutionV1
   | GuildTraceSecurityDecisionV1
   | GuildTraceDegradationV1;
@@ -213,6 +267,7 @@ export type GuildTraceEvent =
 export const GUILD_TRACE_SCHEMA_VERSIONS = [
   "guild.trace.dispatch.v1",
   "guild.trace.recall.v1",
+  "guild.trace.recall_decision.v1",
   "guild.trace.config_resolution.v1",
   "guild.trace.security_decision.v1",
   "guild.trace.degradation.v1",
@@ -252,7 +307,7 @@ function validateBase(ev: unknown): ValidationResult {
 }
 
 const DISPATCH_BACKENDS: DispatchBackend[] = ["agent", "tmux", "remote", "unknown"];
-const RECALL_BRANCHES: RecallBranch[] = ["sqlite", "file-bm25", "fs-scan", "kg-query", "combined", "empty"];
+const RECALL_BRANCHES: RecallBranch[] = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
 const SECURITY_OUTCOMES: SecurityDecisionOutcome[] = ["allow", "ask", "deny", "audit", "pass-through"];
 const DEGRADATION_SURFACES: DegradationSurface[] = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
 
@@ -312,6 +367,55 @@ export function validateRecallEvent(ev: unknown): ValidationResult {
   }
   if (typeof e["cwd_redacted"] !== "string") {
     return { ok: false, reason: "cwd_redacted must be a string" };
+  }
+  return { ok: true };
+}
+
+const LANE_OUTCOMES: LaneOutcome[] = ["success", "failure", "unknown"];
+
+/** Validate a guild.trace.recall_decision.v1 event. */
+export function validateRecallDecisionEvent(ev: unknown): ValidationResult {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev as Record<string, unknown>;
+
+  if (e["schema_version"] !== "guild.trace.recall_decision.v1") {
+    return { ok: false, reason: `wrong schema_version for recall_decision: ${e["schema_version"]}` };
+  }
+  // Privacy: query_hash MUST be exactly sha256[:16] — 16 lowercase hex chars.
+  // A raw query, an upper-case hash, or a wrong-length digest is rejected so a
+  // full query can never masquerade as a "hash" and be written to the log.
+  if (typeof e["query_hash"] !== "string" || !/^[0-9a-f]{16}$/.test(e["query_hash"] as string)) {
+    return { ok: false, reason: "query_hash must be exactly 16 lowercase hex chars (sha256[:16])" };
+  }
+  // Privacy: query_preview is a SHORT truncation (≤ 60 chars). A raw-query-length
+  // string is rejected so the preview cannot become a full-query side-channel.
+  if (typeof e["query_preview"] !== "string") {
+    return { ok: false, reason: "query_preview must be a string (may be empty)" };
+  }
+  if ((e["query_preview"] as string).length > 60) {
+    return { ok: false, reason: "query_preview must be <= 60 chars (no raw-query leak)" };
+  }
+  if (!RECALL_BRANCHES.includes(e["branch"] as RecallBranch)) {
+    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
+  }
+  if (typeof e["top_score"] !== "number" || e["top_score"] < 0 || !isFinite(e["top_score"] as number)) {
+    return { ok: false, reason: "top_score must be a finite number >= 0" };
+  }
+  if (typeof e["threshold"] !== "number" || e["threshold"] < 0 || !isFinite(e["threshold"] as number)) {
+    return { ok: false, reason: "threshold must be a finite number >= 0" };
+  }
+  if (typeof e["read_skip_fired"] !== "boolean") {
+    return { ok: false, reason: "read_skip_fired must be a boolean" };
+  }
+  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
+    return { ok: false, reason: "chunk_count must be a non-negative number" };
+  }
+  if (typeof e["scored"] !== "boolean") {
+    return { ok: false, reason: "scored must be a boolean" };
+  }
+  if (!LANE_OUTCOMES.includes(e["lane_outcome"] as LaneOutcome)) {
+    return { ok: false, reason: `lane_outcome must be one of: ${LANE_OUTCOMES.join(", ")}` };
   }
   return { ok: true };
 }
@@ -420,6 +524,8 @@ export function validateGuildTraceEvent(ev: unknown): ValidationResult {
       return validateDispatchEvent(ev);
     case "guild.trace.recall.v1":
       return validateRecallEvent(ev);
+    case "guild.trace.recall_decision.v1":
+      return validateRecallDecisionEvent(ev);
     case "guild.trace.config_resolution.v1":
       return validateConfigResolutionEvent(ev);
     case "guild.trace.security_decision.v1":
@@ -447,6 +553,13 @@ export function makeRecallEvent(
   fields: Omit<GuildTraceRecallV1, "schema_version">,
 ): GuildTraceRecallV1 {
   return { schema_version: "guild.trace.recall.v1", ...fields };
+}
+
+/** Build a guild.trace.recall_decision.v1 event (G10). */
+export function makeRecallDecisionEvent(
+  fields: Omit<GuildTraceRecallDecisionV1, "schema_version">,
+): GuildTraceRecallDecisionV1 {
+  return { schema_version: "guild.trace.recall_decision.v1", ...fields };
 }
 
 /** Build a guild.trace.config_resolution.v1 event. */

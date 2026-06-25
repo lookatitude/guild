@@ -1,0 +1,75 @@
+# clra-gate.yml — Codebase Learning & Recall Acceleration (CLRA) conformance gate.
+#
+# Gates the model-free structural-intelligence initiative (G1-G15) on every PR/push:
+#   - clra-conformance: the keystone gate. Asserts the structural query / similarity /
+#     impact APIs against a hand-labelled oracle, the index:off == index:on PARITY
+#     proof (runBothIndexModes + engagementProven), the G14 SECURITY invariants
+#     (recall-protection never emits a planted secret; scrub.ts & audit.ts derive the
+#     SAME share-set from ONE canonical module — AST-bound, no mirror drift), each
+#     proven non-vacuous (mutate-and-confirm). A zero-skip meta-check guards against a
+#     silently disabled gate.
+#   - structural-intelligence: the underlying extractor / incremental refresh /
+#     committable artifact / impact / similarity suites.
+#
+# SQLite-optional invariant: the file-based (index:off) path must pass WITHOUT
+# node:sqlite. node:sqlite is required ONLY on the index:on parity branch, so this job
+# pins Node 24 (stable, unflagged node:sqlite) to exercise BOTH modes and prove parity.
+
+name: clra gate
+
+on:
+  pull_request:
+  push:
+    branches: ["**"]
+
+jobs:
+  clra-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24 (stable node:sqlite for the index:on parity branch)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install scripts/ dependencies
+        run: |
+          if [ -f scripts/package.json ]; then
+            cd scripts && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+          fi
+
+      - name: Anti-skip meta-guard (a silently skipped gate is a dead gate)
+        run: |
+          cd scripts
+          if grep -nE "describe\.skip|it\.skip|test\.skip" understand/__tests__/clra-conformance.test.ts; then
+            echo "::error::clra-conformance.test.ts contains a skipped block — the gate must not be vacuous."
+            exit 1
+          fi
+
+      - name: CLRA conformance gate (oracle + parity + security invariants)
+        run: |
+          cd scripts && npx jest --no-coverage --runInBand clra-conformance
+
+  structural-intelligence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install scripts/ dependencies
+        run: |
+          if [ -f scripts/package.json ]; then
+            cd scripts && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+          fi
+
+      - name: Structural extractor / incremental / artifact / impact / similarity suites
+        run: |
+          cd scripts && npx jest --no-coverage --runInBand \
+            --testPathPattern="extract-structural|incremental|graph-artifact|graph-query-projection|impact|similarity"

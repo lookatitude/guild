@@ -18,6 +18,7 @@ export {
   RECALL_INTEGRITY_DIRECTIVE,
   wikiRecall,
   normalizeFtsQuery,
+  isIdentifierAwareQuery,
   runWikiRecallCli,
 } from "../../src/modules/context/workflows/wiki-recall";
 

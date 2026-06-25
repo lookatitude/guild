@@ -49,22 +49,35 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 
-import { DEFAULT_INDEX_BLOCK, type IndexBlock } from "../../state";
-import { wikiRecall } from "./wiki-recall";
+import { DEFAULT_INDEX_BLOCK, resolveMainRepoRoot, type IndexBlock } from "../../state";
+import { wikiRecall, isIdentifierAwareQuery } from "./wiki-recall";
 import { fsScan } from "./fs-scanner";
 import { protectChunks, type ProtectedChunk } from "./recall-protect";
-import { tokenize, bm25Score } from "../../knowledge";
-import { termMatchScore } from "../../knowledge";
-import type { GraphNode } from "../../understanding";
-import type { KnowledgeLinksDoc, CanonicalNode } from "../../knowledge";
+import { tokenize, tokenizeIdentifierAware, bm25Score } from "../../knowledge";
+import { rankKgNodes } from "../../knowledge";
+import type { GraphNode, GraphEdge } from "../../understanding";
+// G7 structural channel: reuse the COMMITTED model-free graph-query lib (G3) —
+// kgTrace/kgNeighbors/kgDeadCode read the FROZEN knowledge-graph.json with
+// per-node file:line provenance + trust tiering. Same cross-module import shape
+// docs-sync/workflows already uses for scripts/understand/lib/*.
+import {
+  kgTrace,
+  kgNeighbors,
+  kgDeadCode,
+  type GraphView as StructuralGraphView,
+  type EvidenceNode,
+  type Direction as StructuralDirection,
+} from "../../../../scripts/understand/lib/graph-query";
+import type { KnowledgeLinksDoc } from "../../knowledge";
 import {
   ingestImportanceScore,
   resolveRecallImportance,
 } from "../../knowledge";
 // R-TRACE (Wave 6): additive trace emit — NEVER changes return value
 import { emitTraceEvent } from "../../telemetry";
-import { makeRecallEvent } from "../../telemetry";
+import { makeRecallEvent, makeRecallDecisionEvent } from "../../telemetry";
 
 // Re-export so existing importers (`recall.ts` was the original home of the scorer)
 // keep resolving `ingestImportanceScore` from here; canonical impl now in ingest-importance.ts.
@@ -75,7 +88,13 @@ export const DEFAULT_RECALL_HALF_LIFE_DAYS = 90;
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
-export type RecallSource = "sqlite" | "file-bm25" | "fs-scan" | "kg-query" | "combined";
+export type RecallSource =
+  | "sqlite"
+  | "file-bm25"
+  | "fs-scan"
+  | "kg-query"
+  | "structural"
+  | "combined";
 
 export interface RecallResult {
   /** Protected chunks — each passed through protectChunks on every branch. */
@@ -87,6 +106,12 @@ export interface RecallResult {
   directive: string | null;
   /** Which recall mechanism(s) were used — informational (telemetry / logging). */
   source: RecallSource;
+  /**
+   * G10: top raw relevance score of the winning branch (branch-native scale).
+   * Informational — surfaced for recall-quality telemetry / threshold tuning.
+   * Undefined when the branch does not expose a numeric score (sqlite/fs-scan).
+   */
+  topScore?: number;
 }
 
 export interface RecallOpts {
@@ -128,7 +153,23 @@ export interface RecallOpts {
    * Resolved from `models.compositeRecall` + `models.importanceGate` by the CLI.
    */
   composite?: CompositeConfig;
+  /**
+   * G10: the `recallScoreThreshold` in effect (read-skip threshold). Drives the
+   * recall-decision telemetry's `read_skip_fired` (top_score >= threshold). The
+   * pure path defaults to 0.4 (config default); the CLI resolves it from
+   * `models.recallScoreThreshold`.
+   */
+  recallScoreThreshold?: number;
+  /**
+   * G10: downstream lane outcome hook for the recall-decision event. Defaults to
+   * "unknown" — a caller that knows whether the recall helped its lane can pass
+   * "success"/"failure" so recall-stats can compute precision.
+   */
+  laneOutcome?: "success" | "failure" | "unknown";
 }
+
+/** G10: default read-skip threshold (mirrors config-defaults models.recallScoreThreshold). */
+export const DEFAULT_RECALL_SCORE_THRESHOLD = 0.4;
 
 // ── Composite recall scoring (docs/v2/05-knowledge-memory.md §Recall scoring) ──
 
@@ -180,6 +221,34 @@ export function resolveCompositeConfig(cwd: string): CompositeConfig | undefined
     }
   } catch { /* settings unreadable → BM25-only default */ }
   return undefined;
+}
+
+/**
+ * G10: resolve `models.recallScoreThreshold` from settings for a cwd, falling
+ * back to DEFAULT_RECALL_SCORE_THRESHOLD when unset/unreadable. Kept out of the
+ * pure recall() path (which takes the value via opts) so the library never loads
+ * the settings resolver.
+ */
+export function resolveRecallScoreThreshold(cwd: string): number {
+  try {
+    // Lazy require so the pure library path never loads the settings resolver.
+    const { resolveSettings } = require("../../config") as typeof import("../../config");
+    const models = (resolveSettings({ cwd }).config as {
+      models?: { recallScoreThreshold?: number };
+    }).models;
+    if (typeof models?.recallScoreThreshold === "number" && models.recallScoreThreshold >= 0) {
+      return models.recallScoreThreshold;
+    }
+  } catch { /* settings unreadable → default */ }
+  return DEFAULT_RECALL_SCORE_THRESHOLD;
+}
+
+/**
+ * G10: stable, privacy-preserving query key — sha256[:16] of the full query.
+ * The raw query is never logged; recall-stats groups by this hash.
+ */
+export function hashQuery(query: string): string {
+  return crypto.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 
 /** Wiki category from an absolute path under `<wikiBase>/<category>/…`. */
@@ -247,10 +316,12 @@ function walkMdFiles(dir: string): string[] {
 
 // ── Internal: KG node scorer ─────────────────────────────────────────────────
 //
-// Re-arch WAVE 1: the term-match primitive is now the canonical
-// `termMatchScore` from scripts/lib/shared/graph-scoring.ts — the same loop
-// kg-query.ts uses. recall's KG branch intentionally ranks on term match alone
-// (no importance/confidence), so it calls the shared primitive directly.
+// G15: the KG branch now ranks via the SHARED `rankKgNodes` pipeline from
+// src/modules/knowledge/workflows/graph-scoring.ts — the SAME ranking kg-query.ts
+// uses (scoreNode importance+confidence + topic-proximity, then score-desc/id-asc).
+// This closes the bundle-vs-CLI scoring drift (goals.md §2.2): an agent now gets
+// identical KG recall ordering through the context bundle and the CLI. Previously
+// this branch ranked on flat termMatchScore + id tiebreak, silently worse.
 
 // ── Branch A: SQLite FTS (wiki-recall.ts) ─────────────────────────────────────
 //
@@ -301,17 +372,22 @@ function fileBm25Branch(
   const files = walkMdFiles(scanDir);
   if (files.length === 0) return null;
 
-  const queryTokens = tokenize(query);
+  // G7: identifier-aware tokenizer (camel/snake) on BOTH query and document side,
+  // so `process_order` matches `processOrder`/`ProcessOrder`. Strict super-set of
+  // `tokenize` — identical for plain prose, so existing wiki ranking is unchanged.
+  const queryTokens = tokenizeIdentifierAware(query);
   if (queryTokens.length === 0) return null;
 
   // Read and tokenize all files
   const docs = files.map((f) => {
     let content = "";
     try { content = fs.readFileSync(f, "utf8"); } catch { /* unreadable: keep empty */ }
-    return { path: f, content, tokens: tokenize(content) };
+    return { path: f, content, tokens: tokenizeIdentifierAware(content) };
   });
 
   const scores = bm25Score(queryTokens, docs);
+  // G10: top raw BM25 score (pre-rank) — the winning branch's relevance signal.
+  const topScore = scores.length ? Math.max(0, ...scores) : 0;
 
   // BM25 desc by default; composite re-rank + importance gate when configured.
   const ranked = rankWikiDocs(
@@ -333,7 +409,7 @@ function fileBm25Branch(
     runId,
     callerTool: "recall:file-bm25",
   });
-  return { source: "file-bm25", chunks, directive };
+  return { source: "file-bm25", chunks, directive, topScore };
 }
 
 // ── Branch C: fsScan → protectChunks ─────────────────────────────────────────
@@ -390,9 +466,8 @@ function fsScanBranch(
 //
 // METRIC 6 (DECISION=B): reads .guild/indexes/knowledge-recall.json — the
 // recall-OPTIMISED projection written by understand/write-knowledge-links.ts.
-// Nodes are pre-sorted by recall score (importance desc → confidence desc → id asc)
-// so this branch scores with termMatchScore and the projection's ordering is the
-// tiebreaker rather than re-sorting from scratch.
+// G15: this branch ranks the projection nodes via the shared rankKgNodes pipeline
+// (importance + confidence + topic-proximity) — identical to the kg-query CLI.
 //
 // Falls back gracefully when the projection file is absent: returns null (same
 // behaviour as the previous absent-graph path). Never throws.
@@ -410,6 +485,7 @@ function kgQueryBranch(
   limit: number,
   runDir?: string,
   runId?: string,
+  category?: string,
 ): RecallResult | null {
   // METRIC 6: read the recall projection, not the raw knowledge-graph
   const projPath = path.join(cwd, ".guild", "indexes", "knowledge-recall.json");
@@ -429,16 +505,30 @@ function kgQueryBranch(
     .split(/\s+/)
     .filter(Boolean);
 
-  // The projection nodes are pre-sorted by recall score; we still apply
-  // termMatchScore so only relevant nodes surface, but we preserve the
-  // projection's pre-computed ordering as the tiebreaker.
-  const ranked = (proj.nodes as CanonicalNode[])
-    .map((n) => ({ n, s: termMatchScore(n as unknown as GraphNode, terms) }))
-    .filter((x) => x.s > 0)
-    .sort((a, b) => b.s - a.s || a.n.id.localeCompare(b.n.id))
-    .slice(0, limit);
+  // G7 scope honoring: when a category is requested, exclude out-of-scope KG nodes
+  // BEFORE ranking (category field OR source-path segment), so a scoped query never
+  // leaks an out-of-scope node. No category → all nodes (unchanged default).
+  const allNodes = proj.nodes as unknown as GraphNode[];
+  const scopedNodes = category
+    ? allNodes.filter((n) => nodeInScope(category, n.category, n.source_refs))
+    : allNodes;
+  if (scopedNodes.length === 0) return null;
+
+  // G15: rank via the shared pipeline (importance + confidence + topic-proximity),
+  // identical to kg-query.ts. The projection carries nodes AND subtopic_of edges,
+  // so proximity applies here exactly as it does in the CLI. SQLite-optional: this
+  // reads the knowledge-recall.json projection directly and never requires the cache.
+  const ranked = rankKgNodes(
+    scopedNodes,
+    (proj.edges ?? []) as unknown as GraphEdge[],
+    terms,
+    limit,
+  );
 
   if (ranked.length === 0) return null;
+
+  // G10: top rankKgNodes score — the KG branch's relevance signal.
+  const topScore = ranked[0]?.s ?? 0;
 
   // Build a deterministic markdown summary for each node.
   // source_path uses the projection file path + node id so classifyTrustTier
@@ -459,8 +549,265 @@ function kgQueryBranch(
     runDir,
     runId,
     callerTool: "recall:kg-query",
+    // G7 finding-2: KG nodes are DEFAULT-DENY untrusted and must never land as raw
+    // operator content even if a node id coincides with an operator path pattern.
+    noOperator: true,
   });
-  return { source: "kg-query", chunks, directive };
+  return { source: "kg-query", chunks, directive, topScore };
+}
+
+// ── Scope honoring (G7): category/source filter for KG + structural nodes ─────
+//
+// Today `category` scopes only the wiki branch (it picks the scan dir). The KG
+// (branch D) and structural (branch E) channels were appended UNSCOPED, so a
+// scoped query could leak an out-of-scope node. This predicate extends the scope
+// filter to graph nodes: a node is in-scope iff (a) no category is requested, OR
+// (b) its `category` field equals the requested category, OR (c) one of its
+// `source_refs` file paths contains the category as a path segment (source-scope
+// for code nodes, which carry file:line refs but no wiki category). Deterministic
+// and pure — never reads a file.
+function nodeInScope(
+  category: string | undefined,
+  nodeCategory: unknown,
+  sourceRefs: readonly string[] | undefined,
+): boolean {
+  if (!category) return true;
+  if (typeof nodeCategory === "string" && nodeCategory === category) return true;
+  for (const ref of sourceRefs ?? []) {
+    if (typeof ref !== "string") continue;
+    const filePart = ref.split("#")[0] ?? "";
+    if (filePart.split("/").includes(category)) return true;
+  }
+  return false;
+}
+
+// ── Structural channel (branch E, G7): model-free graph-query routing ─────────
+//
+// A deterministic classifier maps structural-intent queries (callers/callees/
+// imports/defines/dead-code/impact) to the committed G3 graph-query lib over the
+// FROZEN knowledge-graph.json — 0 model tokens, SQLite-independent (the lib reads
+// the JSON graph directly; it is the source of truth, never the FTS cache). Result
+// nodes carry file:line `source_refs`; a node that retains a `#Lx-Ly` anchor is
+// EVIDENCE (trusted), a node without is down-tiered to untrusted. Nothing is ever
+// returned raw — every chunk still flows through protectChunks.
+
+/** A resolved structural intent (which graph-query to run + its parameters). */
+interface StructuralIntent {
+  kind: "trace" | "neighbors" | "deadcode";
+  /** target symbol for trace/neighbors (absent for deadcode). */
+  target?: string;
+  /** trace direction (inbound = callers, outbound = callees). */
+  direction?: StructuralDirection;
+}
+
+/** Identifier token: a symbol name, optionally `Class.method` (dot kept). */
+const STRUCT_SYMBOL = "([A-Za-z_$][A-Za-z0-9_$.]*)";
+
+/**
+ * Deterministic structural-intent classifier. Returns null for any non-structural
+ * query (the common case) so the wiki/KG waterfall is the unchanged default —
+ * PRECISION over recall: a query must clearly ask a structural question to route
+ * here. Patterns are ordered; first match wins.
+ */
+export function classifyStructuralIntent(query: string): StructuralIntent | null {
+  const q = query.trim();
+  // Dead code — no target symbol.
+  if (/\b(?:dead[\s-]?code|unused (?:functions?|code)|unreachable (?:functions?|code))\b/i.test(q)) {
+    return { kind: "deadcode" };
+  }
+  // Callers / inbound ("what calls X", "who calls X", "callers of X", "who uses X").
+  let m =
+    new RegExp(`\\b(?:who|what)\\s+calls\\s+${STRUCT_SYMBOL}`, "i").exec(q) ??
+    new RegExp(`\\bcallers?\\s+of\\s+${STRUCT_SYMBOL}`, "i").exec(q) ??
+    new RegExp(`\\bwho\\s+(?:invokes|uses)\\s+${STRUCT_SYMBOL}`, "i").exec(q);
+  if (m) return { kind: "trace", direction: "inbound", target: m[1] };
+  // Impact / blast radius / dependents ("impact of X", "what depends on X").
+  m =
+    new RegExp(`\\b(?:impact|blast[\\s-]?radius|dependents?)\\s+of\\s+${STRUCT_SYMBOL}`, "i").exec(q) ??
+    new RegExp(`\\bwhat\\s+depends\\s+on\\s+${STRUCT_SYMBOL}`, "i").exec(q);
+  if (m) return { kind: "trace", direction: "inbound", target: m[1] };
+  // Callees / outbound ("what does X call", "callees of X", "what X calls").
+  m =
+    new RegExp(`\\bwhat\\s+does\\s+${STRUCT_SYMBOL}\\s+call\\b`, "i").exec(q) ??
+    new RegExp(`\\bcallees?\\s+of\\s+${STRUCT_SYMBOL}`, "i").exec(q) ??
+    new RegExp(`\\bwhat\\s+${STRUCT_SYMBOL}\\s+calls\\b`, "i").exec(q);
+  if (m) return { kind: "trace", direction: "outbound", target: m[1] };
+  // Imports / defines / neighbours ("imports of X", "what imports X", "neighbors of X").
+  // G7 finding-1 (PRECISION): the generic semantic phrase `related to X` was REMOVED —
+  // it routed ordinary semantic recall (e.g. "related to billing") into the structural
+  // channel. Every alternative here now requires an EXPLICIT graph/code term
+  // (imports / defines / neighbors) plus a symbol-shaped token, so a plain semantic
+  // query never misroutes; it falls through to the wiki/KG waterfall (returns null).
+  m =
+    new RegExp(`\\b(?:imports?\\s+of|what\\s+imports|neighbou?rs?\\s+of|defines?)\\s+${STRUCT_SYMBOL}`, "i").exec(q);
+  if (m) return { kind: "neighbors", target: m[1] };
+  return null;
+}
+
+/** Build the markdown summary for a structural evidence node (deterministic). */
+function structuralNodeContent(n: EvidenceNode): string {
+  const refsBlock = n.source_refs.map((r) => `  - ${r}`).join("\n");
+  if (n.tier === "trusted" && n.source_refs.length > 0) {
+    // confidence:high + source_refs → classifyTrustTier grants "trusted". The
+    // file:line provenance is REAL (graph-query filtered to #Lx-Ly anchors only).
+    return (
+      `---\nconfidence: high\nsource_refs:\n${refsBlock}\n---\n` +
+      `# ${n.name} (${n.type})\n\nstructural evidence (hop ${n.depth}) from knowledge-graph.json\n`
+    );
+  }
+  // No line provenance → no high-confidence frontmatter → classifyTrustTier
+  // DEFAULT-DENY → untrusted. The node is kept (traversal structure) but never
+  // asserted as a grounded fact.
+  return `# ${n.name} (${n.type})\n\nstructural node (hop ${n.depth}) — no line provenance, untrusted\n`;
+}
+
+function structuralBranch(
+  query: string,
+  cwd: string,
+  category: string | undefined,
+  limit: number,
+  runDir?: string,
+  runId?: string,
+): RecallResult | null {
+  const intent = classifyStructuralIntent(query);
+  if (!intent) return null;
+
+  // Read the FROZEN structural graph (source of truth; never the FTS cache).
+  const graphPath = path.join(cwd, ".guild", "indexes", "knowledge-graph.json");
+  if (!fs.existsSync(graphPath)) return null;
+  let doc: { nodes?: unknown; edges?: unknown } | null = null;
+  try {
+    doc = JSON.parse(fs.readFileSync(graphPath, "utf8")) as { nodes?: unknown; edges?: unknown };
+  } catch {
+    return null;
+  }
+  const nodes = Array.isArray(doc?.nodes) ? (doc!.nodes as GraphNode[]) : [];
+  const edges = Array.isArray(doc?.edges) ? (doc!.edges as GraphEdge[]) : [];
+  if (nodes.length === 0) return null;
+  const view: StructuralGraphView = { nodes, edges };
+
+  // Route to the committed model-free query.
+  let evidence: EvidenceNode[];
+  if (intent.kind === "deadcode") {
+    evidence = kgDeadCode(view).nodes;
+  } else if (intent.kind === "neighbors") {
+    evidence = kgNeighbors(view, intent.target ?? "", 1).nodes;
+  } else {
+    evidence = kgTrace(view, intent.target ?? "", intent.direction ?? "outbound", 3).nodes;
+  }
+  if (evidence.length === 0) return null;
+
+  // Scope honoring: drop out-of-scope nodes (category field OR source-path segment).
+  const byId = new Map(nodes.map((n) => [n.id, n] as const));
+  const scoped = evidence.filter((e) =>
+    nodeInScope(category, byId.get(e.id)?.category, e.source_refs),
+  );
+  if (scoped.length === 0) return null;
+
+  const rawHits = scoped.slice(0, limit).map((n) => ({
+    // source_path is the node's first source file (line anchor stripped); full
+    // #Lx-Ly anchors live in the frontmatter refs. NOTE: this path can coincide
+    // with an operator allowlist pattern (e.g. a code file under `principles/`),
+    // so the protect call below runs in NO-OPERATOR mode — a structural hit is
+    // ALWAYS trust-tier wrapped, never raw/operator (G7 finding-2).
+    source_path: n.source_refs[0]?.split("#")[0] ?? `.guild/indexes/knowledge-graph.json#${n.id}`,
+    content: structuralNodeContent(n),
+  }));
+
+  const { chunks, directive } = protectChunks(rawHits, {
+    runDir,
+    runId,
+    callerTool: "recall:structural",
+    // G7 finding-2: structural chunks never escape the trust wrapper as operator.
+    noOperator: true,
+  });
+  return { source: "structural", chunks, directive };
+}
+
+// ── G7 finding-3 (FIX-T7.1-r2): corpus-aware SQLite bypass for identifier parity ──
+//
+// The file-BM25 path (index:off — the SOURCE OF TRUTH) tokenizes documents
+// identifier-aware: a camelCase/Pascal/acronym run like `processOrder` yields the
+// split sub-words `process` + `order` IN ADDITION to the concatenated
+// `processorder`. The SQLite FTS path does NOT split camelCase — it indexes only
+// `processorder`. So a PLAIN multi-word query (`process order`) — which is itself
+// NOT identifier-shaped, so `isIdentifierAwareQuery` returns false — matches the
+// doc via file-BM25 but NOT via FTS, breaking the core `index:on == index:off`
+// invariant. `isIdentifierAwareQuery` keys off the QUERY shape and so cannot see
+// this: `process order` and the prose query `invoice settlement` look identical at
+// the query layer. The distinguishing signal is the CORPUS — whether a candidate
+// doc carries a camelCase identifier whose split a query term relies on.
+//
+// This predicate supplies exactly that signal. SQLite is bypassed iff some
+// candidate wiki doc carries a camelCase/Pascal/acronym identifier whose split
+// sub-words intersect the query's identifier-aware token set — i.e. precisely the
+// case where doc-side splitting changes the match. snake_case is NOT a divergence
+// source (both TOKEN_RE and FTS5's tokenizer split on `_`), so only camel/acronym
+// runs are inspected. Bypassing is ALWAYS parity-safe (both modes then read
+// file-BM25); only NOT bypassing when divergence is possible is unsafe — so this
+// must over-approximate, never under-approximate, the divergence set. A doc whose
+// split term is ALSO present standalone would still match FTS (so the bypass was
+// not strictly needed), but routing it through file-BM25 is harmless.
+//
+// Cost: the divergence only exists once SQLite actually engages — i.e. the wiki
+// file count exceeds `wikiFileThreshold` (below it `ensureWikiFtsIndex` returns
+// null and BOTH modes use file-BM25, so parity holds trivially and no read is
+// needed). Below threshold this returns after a cheap readdir-only walk; above it,
+// it reads candidate `.md` files and SHORT-CIRCUITS at the first proven divergence
+// (a code-bearing wiki stops at its first identifier). The pure-prose worst case
+// reads the corpus once — strictly cheaper than the file-BM25 ranking that runs
+// when it returns true, and it preserves the parity invariant over the scan cost.
+const CAMEL_OR_ACRONYM_BOUNDARY = /[a-z0-9][A-Z]|[A-Z]{2,}[a-z]/;
+
+function corpusForcesIdentifierBypass(
+  query: string,
+  cwd: string,
+  category: string | undefined,
+  wikiFileThreshold: number,
+): boolean {
+  // Gate on the GLOBAL SQLite-engagement condition (Codex FIX-T7.1-r3 #2): SQLite
+  // engages from the WHOLE-wiki .md count under resolveMainRepoRoot(cwd) — the EXACT
+  // condition ensureWikiFtsIndex() uses (index-cache.ts: count > wiki_file_threshold,
+  // wikiDir = resolveMainRepoRoot(cwd)/.guild/wiki). The previous gate counted only
+  // the CATEGORY-scoped subset, so a category-scoped query whose scoped count was
+  // ≤ threshold skipped the bypass while SQLite still engaged on the larger GLOBAL
+  // count → index:on diverged from index:off. `walkMdFiles` enumerates identically
+  // to ensureWikiFtsIndex's `collectMarkdownFiles` (recursive *.md), so the counts
+  // agree. Below the global threshold the FTS cache never populates and BOTH modes
+  // fall through to file-BM25 → parity holds without any bypass.
+  const globalWikiBase = path.join(resolveMainRepoRoot(cwd), ".guild", "wiki");
+  if (walkMdFiles(globalWikiBase).length <= wikiFileThreshold) return false;
+
+  const querySet = new Set(tokenizeIdentifierAware(query));
+  if (querySet.size === 0) return false;
+
+  // SQLite WILL engage. Now scan the SCOPED corpus the file-BM25 path actually
+  // ranks (raw-cwd base + category, matching fileBm25Branch's wikiBase) for a
+  // doc-side identifier that file-BM25 splits but FTS5 does not — the divergence
+  // the bypass exists to prevent.
+  const wikiBase = path.join(cwd, ".guild", "wiki");
+  const scanDir = category ? path.join(wikiBase, category) : wikiBase;
+  for (const f of walkMdFiles(scanDir)) {
+    let content: string;
+    try {
+      content = fs.readFileSync(f, "utf8");
+    } catch {
+      continue;
+    }
+    const runs = content.match(/[A-Za-z0-9]+/g);
+    if (!runs) continue;
+    for (const run of runs) {
+      // Only camelCase/Pascal/acronym runs can tokenize differently between
+      // file-BM25 (splits) and FTS5 (does not). Skip everything else cheaply.
+      if (!CAMEL_OR_ACRONYM_BOUNDARY.test(run)) continue;
+      const lowerFull = run.toLowerCase();
+      // The split sub-words that file-BM25 emits but FTS cannot reproduce.
+      for (const t of tokenizeIdentifierAware(run)) {
+        if (t !== lowerFull && querySet.has(t)) return true;
+      }
+    }
+  }
+  return false;
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -488,6 +835,8 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
     _bm25Disabled = false,
     _kgDisabled = false,
     composite,
+    recallScoreThreshold = DEFAULT_RECALL_SCORE_THRESHOLD,
+    laneOutcome = "unknown",
   } = opts;
 
   // R-TRACE: wall-clock start (additive timing — does not affect result)
@@ -499,51 +848,133 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   // Merge test-seam overrides into DEFAULT_INDEX_BLOCK.
   const indexConfig: IndexBlock = { ...DEFAULT_INDEX_BLOCK, ..._indexConfig };
 
+  // ── Structural (branch E, G7) — runs FIRST, BEFORE any wiki file sweep ──────
+  // G7 finding-3: the structural channel answers a structural-intent query
+  // (callers/callees/imports/dead-code/impact) from the FROZEN knowledge-graph.json
+  // at 0 model tokens / 0 file sweep. It MUST be classified+run BEFORE the wiki
+  // waterfall — otherwise the expensive SQLite/BM25/fs-scan file sweep runs first
+  // and the "0-token structural before any file sweep" claim is false. When
+  // structural FULLY answers, the wiki waterfall is SKIPPED entirely (no file
+  // sweep at all). Returns null for non-structural queries (the common case), in
+  // which case the wiki waterfall runs exactly as before (byte-identical default).
+  const structuralResult: RecallResult | null = structuralBranch(
+    query, cwd, category, limit, runDir, runId,
+  );
+  const structuralAnswered = (structuralResult?.chunks.length ?? 0) > 0;
+
   // ── Wiki waterfall: A → B → C (first non-null wins for wiki content) ────────
+  // SKIPPED when structural fully answered (G7 finding-3): a structural query
+  // never triggers a wiki file sweep. Otherwise:
   // Composite mode bypasses the sqlite-FTS cache: re-ranking by recency ×
   // importance + the gate is applied in the file-BM25 branch, which owns the
   // raw relevance score. (The sqlite cache returns pre-ranked chunks without
   // exposed scores.) Default mode is unchanged → byte-identical.
-  const sqlite = composite ? null : sqliteBranch(query, cwd, indexConfig, limit, runDir, runId);
-  const bm25wiki = sqlite
+  // G7 finding-4: identifier-shaped QUERIES (camel/snake) bypass the sqlite branch —
+  // the FTS path tokenizes them differently from the identifier-aware file-BM25
+  // path, so routing them through file-BM25 keeps index:on == index:off.
+  const identifierAware = isIdentifierAwareQuery(query);
+  // G7 finding-3 (FIX-T7.1-r2): a PLAIN query (`process order`) is not itself
+  // identifier-shaped, yet still diverges when a DOC carries a camelCase identifier
+  // (`processOrder`) that file-BM25 splits and FTS does not. Consult the corpus to
+  // catch that case too. Computed lazily — ONLY when the cheaper signals have not
+  // already forced a bypass AND a real wiki sweep (not a structural answer, not the
+  // bm25-disabled test seam) would otherwise reach SQLite — so the scan cost is
+  // never paid on the structural / identifier / composite / bm25-off paths.
+  const corpusBypass =
+    !structuralAnswered &&
+    !composite &&
+    !identifierAware &&
+    !_bm25Disabled &&
+    indexConfig.enabled !== false &&
+    corpusForcesIdentifierBypass(query, cwd, category, indexConfig.wiki_file_threshold);
+  const bypassSqlite = composite || identifierAware || corpusBypass;
+  const sqlite = structuralAnswered || bypassSqlite
+    ? null
+    : sqliteBranch(query, cwd, indexConfig, limit, runDir, runId);
+  const bm25wiki = structuralAnswered || sqlite
     ? null
     : _bm25Disabled
       ? null
       : fileBm25Branch(query, cwd, category, limit, runDir, runId, composite);
-  const wikiResult: RecallResult =
-    sqlite ?? bm25wiki ?? fsScanBranch(query, cwd, category, limit, runDir, runId);
+  const wikiResult: RecallResult = structuralAnswered
+    ? { source: "structural", chunks: [], directive: null }
+    : sqlite ?? bm25wiki ?? fsScanBranch(query, cwd, category, limit, runDir, runId);
 
-  // ── KG (branch D): additive — appended to wiki results ─────────────────────
+  // ── KG (branch D): additive — appended to wiki/structural results ──────────
+  // KG reads a graph PROJECTION (knowledge-recall.json) — a single file read, not
+  // a wiki file sweep — so it still runs alongside a structural answer (0 model
+  // tokens, additive). Only the wiki file sweep is gated by structuralAnswered.
   const kgResult: RecallResult | null = _kgDisabled
     ? null
-    : kgQueryBranch(query, cwd, limit, runDir, runId);
+    : kgQueryBranch(query, cwd, limit, runDir, runId, category);
 
-  // ── Combine wiki + KG ───────────────────────────────────────────────────────
+  // ── Combine structural + wiki + KG into ONE protected bundle ───────────────
+  const structuralChunks = structuralResult?.chunks ?? [];
   const wikiChunks = wikiResult.chunks;
   const kgChunks = kgResult?.chunks ?? [];
-  const allChunks = [...wikiChunks, ...kgChunks];
+  // Structural evidence first (highest-value, trusted), then wiki, then KG.
+  const allChunks = [...structuralChunks, ...wikiChunks, ...kgChunks];
 
+  const hasStructural = structuralChunks.length > 0;
   const hasWiki = wikiChunks.length > 0;
   const hasKg = kgChunks.length > 0;
 
+  // >1 channel contributes → "combined"; exactly one → that channel's label.
+  const contributing = [hasStructural, hasWiki, hasKg].filter(Boolean).length;
   const source: RecallSource =
-    hasWiki && hasKg ? "combined" :
+    contributing > 1 ? "combined" :
+    hasStructural ? "structural" :
     hasKg ? "kg-query" :
     wikiResult.source;
 
-  // Directive: set when ANY wrapped chunk exists (either wiki or KG).
-  const directive = wikiResult.directive ?? kgResult?.directive ?? null;
+  // Directive: set when ANY wrapped chunk exists (structural, wiki, or KG).
+  const directive =
+    structuralResult?.directive ?? wikiResult.directive ?? kgResult?.directive ?? null;
 
-  const result: RecallResult = { source, chunks: allChunks, directive };
+  // G10 parity (SQLite-off==on): only branches that expose a COMPARABLE numeric
+  // score may drive the read-skip decision. The SQLite (A) and fs-scan (C) wiki
+  // branches expose none (sqlite's bm25() rank is a different, negative scale —
+  // not comparable to file-BM25's positive score), so they are UNSCORED. Treating
+  // an unscored branch's missing score as 0 is exactly the bug that made the same
+  // recall report a different `read_skip_fired` with index:on (sqlite, →0) vs
+  // index:off (file-bm25, real score). We instead mark the event `scored:false`
+  // and exclude it downstream. A contribution counts only when it both returned
+  // chunks AND exposed a numeric topScore.
+  const wikiScored = hasWiki && wikiResult.topScore !== undefined;
+  const kgScored = hasKg && kgResult?.topScore !== undefined;
+  const scored = wikiScored || kgScored;
+
+  // top relevance score across the SCORED contributing branches (branch-native
+  // scale). 0 is a placeholder when unscored — never threshold-compared then.
+  const scoredValues = [
+    ...(wikiScored ? [wikiResult.topScore as number] : []),
+    ...(kgScored ? [kgResult!.topScore as number] : []),
+  ];
+  const topScore = scoredValues.length ? Math.max(...scoredValues) : 0;
+
+  const result: RecallResult = { source, chunks: allChunks, directive, topScore };
+
+  // Lane/task identifier shared by both trace emits below. The dispatch adapters
+  // export GUILD_TASK_ID (tmux-backend.ts, inprocess-backend.ts, pane-adapter.ts) —
+  // NOT GUILD_LANE_ID — so the recall-decision event must read GUILD_TASK_ID to
+  // carry the SAME key the handoff receipt's task_id uses. recall-stats joins
+  // lane_outcome on this value (record.lane_id === receipt.task_id); reading the
+  // wrong env var left lane_id empty in production, so precision never populated
+  // from real receipts (G10 FIX-G10-r2 finding 2). Fall back to GUILD_LANE_ID for
+  // any host that sets that instead.
+  const _laneId = process.env["GUILD_TASK_ID"] ?? process.env["GUILD_LANE_ID"] ?? "";
+
+  // Branch label shared by both trace emits below.
+  const _traceBranch = allChunks.length === 0
+    ? "empty" as const
+    : source === "combined" ? "combined" as const
+    : source === "structural" ? "structural" as const
+    : source as "sqlite" | "file-bm25" | "fs-scan" | "kg-query";
 
   // R-TRACE emit — additive, try/catch, never changes result (guild.trace.recall.v1)
-  // emit-point: recall.ts line ~519, after result is fully assembled
+  // emit-point: recall.ts, after result is fully assembled
   try {
     const _traceDurationMs = Date.now() - _traceStart;
-    const _traceBranch = allChunks.length === 0
-      ? "empty" as const
-      : source === "combined" ? "combined" as const
-      : source as "sqlite" | "file-bm25" | "fs-scan" | "kg-query";
     // ProtectedChunk exposes an explicit `quarantined` boolean — use it directly.
     // (The prior `c.content.includes("[QUARANTINED]")` referenced a property that does not
     // exist on ProtectedChunk — TS2339; the rendered text field is `rendered`, not `content`.)
@@ -552,7 +983,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
       makeRecallEvent({
         ts: new Date().toISOString(),
         run_id: runId ?? "",
-        lane_id: process.env["GUILD_LANE_ID"] ?? "",
+        lane_id: _laneId,
         query: query.slice(0, 200), // truncate long queries in the trace
         branch: _traceBranch,
         chunk_count: allChunks.length,
@@ -564,6 +995,34 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
     );
   } catch {
     // Trace must never affect recall result — swallow all errors silently
+  }
+
+  // G10 emit — recall-quality decision (guild.trace.recall_decision.v1).
+  // Additive + safe: no runDir → emitTraceEvent no-ops; never throws.
+  // read_skip_fired = SCORED branch produced ≥1 chunk AND its (comparable) top
+  // score cleared the threshold. An unscored branch (sqlite/fs-scan) can NEVER
+  // fire a skip — its placeholder 0 is not threshold-comparable (parity fix).
+  try {
+    const readSkipFired = scored && allChunks.length > 0 && topScore >= recallScoreThreshold;
+    emitTraceEvent(
+      makeRecallDecisionEvent({
+        ts: new Date().toISOString(),
+        run_id: runId ?? "",
+        lane_id: _laneId,
+        query_hash: hashQuery(query),
+        query_preview: query.slice(0, 60),
+        branch: _traceBranch,
+        top_score: topScore,
+        threshold: recallScoreThreshold,
+        read_skip_fired: readSkipFired,
+        chunk_count: allChunks.length,
+        scored,
+        lane_outcome: laneOutcome,
+      }),
+      runDir ?? null,
+    );
+  } catch {
+    // Telemetry must never affect recall result — swallow all errors silently
   }
 
   return result;
@@ -622,10 +1081,15 @@ export function runRecallCli(): void {
   // config-driven default takes effect on BOTH the CLI and the host-adapter recall path).
   const composite = resolveCompositeConfig(cwd);
 
+  // G10: resolve the read-skip threshold from settings so recall-decision telemetry
+  // records the threshold actually in effect for this repo.
+  const recallScoreThreshold = resolveRecallScoreThreshold(cwd);
+
   const result = recall(query, {
     cwd,
     category,
     limit,
+    recallScoreThreshold,
     ...(runId ? { runId } : {}),
     ...(runDir ? { runDir } : {}),
     ...(composite ? { composite } : {}),

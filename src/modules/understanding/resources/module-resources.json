@@ -12,6 +12,13 @@
     },
     {
       "category": "scripts",
+      "id": "understand/architecture",
+      "source_path": "scripts/understand/architecture.ts",
+      "resource_path": "resources/scripts/understand/architecture.ts",
+      "sha256": "81323cbef01e836d2942e750dbd9292547a602d73953a2e39f5f29b778a32485"
+    },
+    {
+      "category": "scripts",
       "id": "understand/assign-layers",
       "source_path": "scripts/understand/assign-layers.ts",
       "resource_path": "resources/scripts/understand/assign-layers.ts",
@@ -75,6 +82,34 @@
     },
     {
       "category": "scripts",
+      "id": "understand/extract-structural",
+      "source_path": "scripts/understand/extract-structural.ts",
+      "resource_path": "resources/scripts/understand/extract-structural.ts",
+      "sha256": "edba5aa3247f7cf0b091f7de1e2f7b03472255a791e168470e627bbcfb0a0933"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/graph-artifact",
+      "source_path": "scripts/understand/graph-artifact.ts",
+      "resource_path": "resources/scripts/understand/graph-artifact.ts",
+      "sha256": "c2d750903ed117fe468e76134c90d61d62dbbc71fe25d4fd0bdb44581fe4dcb0"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/graph-query",
+      "source_path": "scripts/understand/graph-query.ts",
+      "resource_path": "resources/scripts/understand/graph-query.ts",
+      "sha256": "e69685c79feb5564bc3bea3ff6638d6a5411ac8a48e3ce7b194b71347117d7bc"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/impact",
+      "source_path": "scripts/understand/impact.ts",
+      "resource_path": "resources/scripts/understand/impact.ts",
+      "sha256": "71b999d5906d3095355ff178be89529a1f75decb04bd507d9730b25619785866"
+    },
+    {
+      "category": "scripts",
       "id": "understand/k-stage-staleness",
       "source_path": "scripts/understand/k-stage-staleness.ts",
       "resource_path": "resources/scripts/understand/k-stage-staleness.ts",
@@ -85,7 +120,7 @@
       "id": "understand/kg-query",
       "source_path": "scripts/understand/kg-query.ts",
       "resource_path": "resources/scripts/understand/kg-query.ts",
-      "sha256": "78d4b8a65b034b97b6c3400797c23193b2c4d9e25f6d593cdb788c7b75119d6a"
+      "sha256": "f4fa84f4f7022f94f1f4c6e86ad1478774fb74c889b738d38f91c4089b6b4887"
     },
     {
       "category": "scripts",
@@ -93,6 +128,20 @@
       "source_path": "scripts/understand/knowledge-orchestrator.ts",
       "resource_path": "resources/scripts/understand/knowledge-orchestrator.ts",
       "sha256": "80e3aec1d049c7d6af7e4612c754a1dc50e4160b4768c9afd292e324b024e5c2"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/lib/architecture",
+      "source_path": "scripts/understand/lib/architecture.ts",
+      "resource_path": "resources/scripts/understand/lib/architecture.ts",
+      "sha256": "729f457edaf1f8ea2762cd62bd0a1138b557564e538d0079149e78b5e4651798"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/lib/bundle-validate",
+      "source_path": "scripts/understand/lib/bundle-validate.ts",
+      "resource_path": "resources/scripts/understand/lib/bundle-validate.ts",
+      "sha256": "5f163723aa7ab9c7db86da1cdf5edfea1ba9a7bf3a10d75d856d6311e64ff233"
     },
     {
       "category": "scripts",
@@ -120,7 +169,7 @@
       "id": "understand/lib/git",
       "source_path": "scripts/understand/lib/git.ts",
       "resource_path": "resources/scripts/understand/lib/git.ts",
-      "sha256": "9b31eb1c866ebea53c758b29e268554179161be713b225f501488adef01b7e5d"
+      "sha256": "761647fc5ae88236b8cbc0273acacf6f001374ac1a14e2564308d92235e719fd"
     },
     {
       "category": "scripts",
@@ -131,17 +180,45 @@
     },
     {
       "category": "scripts",
+      "id": "understand/lib/graph-artifact",
+      "source_path": "scripts/understand/lib/graph-artifact.ts",
+      "resource_path": "resources/scripts/understand/lib/graph-artifact.ts",
+      "sha256": "0eea5256de3d3d12f9bce5720ffbd18b6374bdfe694dea720fb6dd0ea20fb93a"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/lib/graph-query",
+      "source_path": "scripts/understand/lib/graph-query.ts",
+      "resource_path": "resources/scripts/understand/lib/graph-query.ts",
+      "sha256": "bb6a20aa2150d9635053d2dba614e49962d5f7245bc55ca6d2093ba2126b8e56"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/lib/graph-query-projection",
+      "source_path": "scripts/understand/lib/graph-query-projection.ts",
+      "resource_path": "resources/scripts/understand/lib/graph-query-projection.ts",
+      "sha256": "56d7fd3dbad24c0ebff970ef71f372cada1c20bc8017fc22f397bad742f7c302"
+    },
+    {
+      "category": "scripts",
       "id": "understand/lib/ignore",
       "source_path": "scripts/understand/lib/ignore.ts",
       "resource_path": "resources/scripts/understand/lib/ignore.ts",
-      "sha256": "dc45ef3255784ac101b03db44b4ad155eb204e7de0606a39538766da613940c5"
+      "sha256": "7870db402bbd48c275b42d23d185d2c58b41aa67c46d3d0c43132f77f54f4e60"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/lib/impact",
+      "source_path": "scripts/understand/lib/impact.ts",
+      "resource_path": "resources/scripts/understand/lib/impact.ts",
+      "sha256": "48752c7baa8035ac8737875c3d35bb610a01304ce1d069c7a0346d5c62eb8ef9"
     },
     {
       "category": "scripts",
       "id": "understand/lib/import-map",
       "source_path": "scripts/understand/lib/import-map.ts",
       "resource_path": "resources/scripts/understand/lib/import-map.ts",
-      "sha256": "dad865fae3f3ec3581e9122b9bfdb0c1340c93171ce416e1f976ca3c262bdb46"
+      "sha256": "e9858d00dd1aeb039e5ee0135612fdb971a43c7128dbbeafe8ca258924cc8e78"
     },
     {
       "category": "scripts",
@@ -159,6 +236,13 @@
     },
     {
       "category": "scripts",
+      "id": "understand/lib/parity-harness",
+      "source_path": "scripts/understand/lib/parity-harness.ts",
+      "resource_path": "resources/scripts/understand/lib/parity-harness.ts",
+      "sha256": "61c463d74e32cfee57c02cceecf2b13e6926623d39e7666fcac52fe48be2bf9d"
+    },
+    {
+      "category": "scripts",
       "id": "understand/lib/paths",
       "source_path": "scripts/understand/lib/paths.ts",
       "resource_path": "resources/scripts/understand/lib/paths.ts",
@@ -166,10 +250,45 @@
     },
     {
       "category": "scripts",
+      "id": "understand/lib/resolve-calls-py",
+      "source_path": "scripts/understand/lib/resolve-calls-py.ts",
+      "resource_path": "resources/scripts/understand/lib/resolve-calls-py.ts",
+      "sha256": "beb4b2c0b0e76e669cab64f6dd4dda196ef95839c7fc10fc79688d2befd07e14"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/lib/resolve-calls-ts",
+      "source_path": "scripts/understand/lib/resolve-calls-ts.ts",
+      "resource_path": "resources/scripts/understand/lib/resolve-calls-ts.ts",
+      "sha256": "e931edff48eebc676f9de76ed1dcb4919c3b25d51dbd4620e00fdb6fb27c1ce7"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/lib/resolved-call",
+      "source_path": "scripts/understand/lib/resolved-call.ts",
+      "resource_path": "resources/scripts/understand/lib/resolved-call.ts",
+      "sha256": "0602de3a9468de46850510e652b7abce3795c68a2e258715a3bf52bcd5df68b2"
+    },
+    {
+      "category": "scripts",
       "id": "understand/lib/schema",
       "source_path": "scripts/understand/lib/schema.ts",
       "resource_path": "resources/scripts/understand/lib/schema.ts",
       "sha256": "03e2b40e95b74af8710e171ae2c4ba4570bb77203a5d9e653fea5237cf2f5581"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/lib/similarity",
+      "source_path": "scripts/understand/lib/similarity.ts",
+      "resource_path": "resources/scripts/understand/lib/similarity.ts",
+      "sha256": "a21092cf482c0d909f18f7a0eeccf2013d5d7db05e65f2a9f077ae0ac78b2c16"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/lib/structural",
+      "source_path": "scripts/understand/lib/structural.ts",
+      "resource_path": "resources/scripts/understand/lib/structural.ts",
+      "sha256": "c33e4da24de3b54b3baf3b3219d1fd00a5a3ea230e0f9f5bbb81883ec9ec9195"
     },
     {
       "category": "scripts",
@@ -184,6 +303,13 @@
       "source_path": "scripts/understand/lib/walk.ts",
       "resource_path": "resources/scripts/understand/lib/walk.ts",
       "sha256": "995ae8312ffcfddb2296704df0286f71077982e79316ca598eb3e1fc5c684bc5"
+    },
+    {
+      "category": "scripts",
+      "id": "understand/resolve-calls",
+      "source_path": "scripts/understand/resolve-calls.ts",
+      "resource_path": "resources/scripts/understand/resolve-calls.ts",
+      "sha256": "88eb31162a163df7e62a5f87f25bc0a539f66e29dd517f12ca44a23850635e9a"
     },
     {
       "category": "scripts",

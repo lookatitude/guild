@@ -21,6 +21,13 @@ export const DEFAULT_IGNORE_PATTERNS: string[] = [
   ".guild/",
   "dist/", "build/", "out/", "coverage/", ".next/", ".cache/", ".turbo/",
   "target/", "obj/",
+  // Generated module-resource mirrors (src/modules/<id>/resources/**) are
+  // byte-for-byte copies of first-party source (scripts/**, hooks/**) produced by
+  // sync:module-resources for host packaging — exactly like dist/. Indexing them
+  // duplicates every mirrored node (~31% of the graph) and makes each source file
+  // look like it has an exact clone. Exclude the generated tree; the canonical
+  // source is indexed from its real path.
+  "src/modules/*/resources/",
   // Test directories and fixtures are not first-party knowledge — they must be
   // excluded from the cost-gate corpus AND from knowledge discovery so the two
   // share one policy (L13-fix BLOCKER 2 / L17 residual). Without `tests/` the

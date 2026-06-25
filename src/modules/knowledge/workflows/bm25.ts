@@ -16,7 +16,14 @@
  * guarded by scripts/__tests__/bm25-parity.test.ts (parity + anti-vacuity).
  */
 
-export const TOKEN_RE = /[A-Za-z0-9]+/g;
+// The identifier-tokenizer primitive (TOKEN_RE + camel/snake-aware split) lives in
+// the base `kernel` module so callers at any layer share ONE implementation without
+// an upward import — notably state/workflows/index-cache (the kg_symbols_fts
+// projection) which is below this `knowledge` module. Re-exported here so every
+// existing `bm25` consumer import path (mcp-servers/guild-memory, scripts/lib/shared,
+// context/recall via the knowledge public index) is unchanged.
+import { TOKEN_RE, tokenizeIdentifierAware } from "../../kernel";
+export { TOKEN_RE, tokenizeIdentifierAware };
 
 /**
  * Tokenize a string: lowercase, split on non-alphanumeric, drop length-1 tokens.

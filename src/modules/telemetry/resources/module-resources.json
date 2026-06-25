@@ -22,14 +22,14 @@
       "id": "Stop:run-trace-close.js",
       "source_path": "hooks/dist/run-trace-close.js",
       "resource_path": "resources/hooks/dist/run-trace-close.js",
-      "sha256": "3707deb24dc99f71366156ab45c6a18bdca10aa0ba18b94d8ca5a72f98cc34b7"
+      "sha256": "f78dd2db842b71869c951c1af41a6feb7168d9404cad0426081e569b6ec12084"
     },
     {
       "category": "hooks",
       "id": "UserPromptSubmit:run-trace-start.js",
       "source_path": "hooks/dist/run-trace-start.js",
       "resource_path": "resources/hooks/dist/run-trace-start.js",
-      "sha256": "c1c905fc41fbcc9d34aeef2472f5a58c72725cb22074f1ca6d5501be459030cc"
+      "sha256": "1a45df27846020c91611ea52859226ba865bee7e46e5787f377d1294eb3d9f58"
     },
     {
       "category": "mcp_servers",
@@ -57,7 +57,7 @@
       "id": "lib/guild-trace-events",
       "source_path": "scripts/lib/guild-trace-events.ts",
       "resource_path": "resources/scripts/lib/guild-trace-events.ts",
-      "sha256": "1e2e5464c33d99ef09b1393d395c6e4f32ab4e943a8244fdd301f5deb9397936"
+      "sha256": "29c1d9903b1aab08b1a960e4f0700f77b77546a06461e2c3ebc8ba82584c0869"
     },
     {
       "category": "scripts",
@@ -65,6 +65,13 @@
       "source_path": "scripts/lib/telemetry-redirect.ts",
       "resource_path": "resources/scripts/lib/telemetry-redirect.ts",
       "sha256": "45886ab80380be882dd6a9fef65fe3a4caf4a2a8753fa01ff6983eb131a4d988"
+    },
+    {
+      "category": "scripts",
+      "id": "recall-stats",
+      "source_path": "scripts/recall-stats.ts",
+      "resource_path": "resources/scripts/recall-stats.ts",
+      "sha256": "b719c47104dc45915c9e3ccbca0d41cbd8b2f1c3ed55be26facb8097f715091f"
     },
     {
       "category": "scripts",

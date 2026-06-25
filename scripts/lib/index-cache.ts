@@ -9,6 +9,7 @@ export {
   DEFAULT_INDEX_BLOCK,
   resolveMainRepoRoot,
   ensureKgIndex,
+  ensureKgProjectionIndex,
   ensureKlIndex,
   ensureRunProvenanceIndex,
   ensureWikiFtsIndex,

@@ -5,7 +5,7 @@
   "kind": "capability",
   "implementation_mode": "workflow-backed",
   "description": "Owns wiki, recall, learn-* flows, knowledge graph outputs, links, and the guild-memory MCP surface.",
-  "depends_on": ["state", "understanding"],
+  "depends_on": ["kernel", "state", "understanding"],
   "owns": {
     "commands": ["learn", "wiki"],
     "skills": [
