@@ -42,7 +42,11 @@ import {
   type ProjectionQueryOptions,
 } from "../lib/graph-query-projection";
 import { runBothIndexModes } from "../lib/parity-harness";
-import { DEFAULT_INDEX_BLOCK, type IndexBlock } from "../../../src/modules/state/workflows/index-cache";
+import {
+  DEFAULT_INDEX_BLOCK,
+  ensureKgProjectionIndex,
+  type IndexBlock,
+} from "../../../src/modules/state/workflows/index-cache";
 
 const FIXTURE_ROOT = path.join(__dirname, "fixtures", "clra-fixture");
 const REL_FILES = [
@@ -103,6 +107,43 @@ function openDb(p: string) {
     };
   };
   return new DatabaseSync(p);
+}
+
+// ── projection-table dumpers (FULL stable key; surrogate ids excluded) ───────
+
+/** Dump kg_calls by its FULL semantic key (source,target,confidence), sorted. */
+function callsRowsOf(repo: string): Array<{ source: string; target: string; confidence: string | null }> {
+  const db = openDb(dbPath(repo));
+  const rows = db
+    .prepare("SELECT source, target, confidence FROM kg_calls")
+    .all() as Array<{ source: string; target: string; confidence: string | null }>;
+  db.close();
+  return rows
+    .map((r) => ({ source: r.source, target: r.target, confidence: r.confidence }))
+    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+}
+
+/** Dump kg_symbols_fts by its FULL key (node_id, name_tokens), sorted. */
+function symbolsRowsOf(repo: string): Array<{ node_id: string; name_tokens: string }> {
+  const db = openDb(dbPath(repo));
+  const rows = db
+    .prepare("SELECT node_id, name_tokens FROM kg_symbols_fts")
+    .all() as Array<{ node_id: string; name_tokens: string }>;
+  db.close();
+  return rows
+    .map((r) => ({ node_id: r.node_id, name_tokens: r.name_tokens }))
+    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+}
+
+/** Read the kg_projection fingerprint row (sha256 + populated_at), or nulls. */
+function projectionFp(repo: string): { sha256: string | null; populated_at: string | null } {
+  const db = openDb(dbPath(repo));
+  const rows = db
+    .prepare("SELECT sha256, populated_at FROM _fingerprints WHERE table_name = ?")
+    .all("kg_projection") as Array<{ sha256?: string; populated_at?: string }>;
+  db.close();
+  const row = rows[0];
+  return { sha256: row?.sha256 ?? null, populated_at: row?.populated_at ?? null };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -213,37 +254,114 @@ describe("[T5.1] delete-safe — wiping the projection loses nothing", () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
+// 2b. Fallback robustness — a CORRUPT projection degrades to JSON, never throws.
+//
+//     Finding #1 (Codex MAJOR): the delete-safe test above proves AUTO-REBUILD,
+//     not FALLBACK. When index.sqlite is wiped, ensure*Index() rebuilds it and
+//     the projection is used again (usedSqlite:true). To exercise the silent-
+//     degrade branch (graph-query-projection.ts:tryProjectionView catch → null,
+//     and kgSymbolSearchSqlite catch → null) we must instead leave a FRESH
+//     fingerprint but a BROKEN table: drop the projection table while the
+//     `kg_projection` fingerprint still matches the source. ensure*Index() then
+//     returns `cache-hit` WITHOUT rebuilding, openReadDb succeeds, and the
+//     SELECT throws "no such table" inside the read seam — which MUST be caught
+//     and degrade to the JSON source of truth (usedSqlite:false), same answer.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe("[T5.1] fallback robustness — corrupt projection degrades to JSON", () => {
+  test("missing kg_calls (fingerprint still fresh) → trace falls back, usedSqlite:false, same answer", () => {
+    const view = buildClraGraph();
+    const repo = mkRepo(view);
+    const cfg: IndexBlock = { ...DEFAULT_INDEX_BLOCK, ...ENGAGE, enabled: true };
+    const opts: ProjectionQueryOptions = { repoRoot: repo, config: cfg };
+    const seed = "function:src/a.ts:main";
+
+    // Populate the projection and PROVE it was engaged (so the later fallback is
+    // due to corruption, not because SQLite was never reached).
+    const engaged = kgTraceAuto(view, opts, seed, "outbound", 3);
+    expect(engaged.usedSqlite).toBe(true);
+    expect(callsRowsOf(repo).length).toBeGreaterThan(0); // real rows projected
+
+    // Corrupt: drop kg_calls but DO NOT touch the kg_projection fingerprint. The
+    // next ensureKgProjectionIndex() is a cache-hit (no rebuild), so the table
+    // stays missing — forcing the read seam's SELECT to throw.
+    const tamper = openDb(dbPath(repo));
+    tamper.prepare("DROP TABLE kg_calls").run();
+    tamper.close();
+    // Sanity: the fingerprint is intact, so ensure*Index reports cache-hit.
+    expect(ensureKgProjectionIndex(repo, cfg)?.status).toBe("cache-hit");
+
+    // Re-query: must NOT throw, must take the JSON fallback (usedSqlite:false),
+    // and must equal the in-process source of truth.
+    const jsonBaseline = kgTrace(view, seed, "outbound", 3);
+    let after!: ReturnType<typeof kgTraceAuto>;
+    expect(() => {
+      after = kgTraceAuto(view, opts, seed, "outbound", 3);
+    }).not.toThrow();
+    expect(after.usedSqlite).toBe(false); // fallback path taken (line 181 catch)
+    expect(after.result).toEqual(jsonBaseline);
+  });
+
+  test("missing kg_symbols_fts (fingerprint still fresh) → symbol search falls back, usedSqlite:false, same answer", () => {
+    const view = buildClraGraph();
+    const repo = mkRepo(view);
+    const cfg: IndexBlock = { ...DEFAULT_INDEX_BLOCK, ...ENGAGE, enabled: true };
+    const opts: ProjectionQueryOptions = { repoRoot: repo, config: cfg };
+    const q = "main";
+
+    const engaged = kgSymbolSearchAuto(view, opts, q);
+    expect(engaged.usedSqlite).toBe(true);
+
+    const tamper = openDb(dbPath(repo));
+    tamper.prepare("DROP TABLE kg_symbols_fts").run();
+    tamper.close();
+    expect(ensureKgProjectionIndex(repo, cfg)?.status).toBe("cache-hit");
+
+    const jsonBaseline = kgSymbolSearchJson(view.nodes, q);
+    let after!: ReturnType<typeof kgSymbolSearchAuto>;
+    expect(() => {
+      after = kgSymbolSearchAuto(view, opts, q);
+    }).not.toThrow();
+    expect(after.usedSqlite).toBe(false); // degraded to JSON reference
+    expect(after.result).toEqual(jsonBaseline);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
 // 3. Pure projection — rebuild twice → identical kg_calls contents; fp stable.
 // ───────────────────────────────────────────────────────────────────────────
 
 describe("[T5.1] pure projection — deterministic, fingerprint-stable", () => {
-  function callsRows(repo: string): Array<{ source: string; target: string; confidence: string | null }> {
-    const db = openDb(dbPath(repo));
-    const rows = db
-      .prepare("SELECT source, target, confidence FROM kg_calls")
-      .all() as Array<{ source: string; target: string; confidence: string | null }>;
-    db.close();
-    // Compare by the FULL semantic key, ignoring the surrogate autoincrement id.
-    return rows
-      .map((r) => ({ source: r.source, target: r.target, confidence: r.confidence }))
-      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
-  }
-
-  test("two independent builds of the same graph yield identical kg_calls", () => {
+  test("two independent builds of the same graph yield identical projection (kg_calls + kg_symbols_fts + fingerprint)", () => {
     const view = buildClraGraph();
     const repoA = mkRepo(view);
     const repoB = mkRepo(view);
     const cfg: IndexBlock = { ...DEFAULT_INDEX_BLOCK, ...ENGAGE, enabled: true };
+    // kgTraceAuto → ensureKgProjectionIndex populates BOTH kg_calls AND
+    // kg_symbols_fts in one pass, so both tables are exercised here.
     kgTraceAuto(view, { repoRoot: repoA, config: cfg }, "function:src/a.ts:main", "outbound", 1);
     kgTraceAuto(view, { repoRoot: repoB, config: cfg }, "function:src/a.ts:main", "outbound", 1);
 
-    const a = callsRows(repoA);
-    const b = callsRows(repoB);
-    expect(a.length).toBeGreaterThan(0); // non-vacuous: real edges projected
-    expect(a).toEqual(b);
+    // (a) kg_calls — pure, deterministic across independent builds.
+    const callsA = callsRowsOf(repoA);
+    expect(callsA.length).toBeGreaterThan(0); // non-vacuous: real edges projected
+    expect(callsA).toEqual(callsRowsOf(repoB));
+
+    // (b) kg_symbols_fts — Finding #2: the symbol projection must ALSO be
+    // deterministic, not just kg_calls.
+    const symsA = symbolsRowsOf(repoA);
+    expect(symsA.length).toBeGreaterThan(0); // non-vacuous: real symbols projected
+    expect(symsA).toEqual(symbolsRowsOf(repoB));
+
+    // (c) _fingerprints.sha256 for kg_projection — Finding #2: identical source
+    // bytes ⇒ identical fingerprint across two clean builds (populated_at is a
+    // wall-clock stamp and is intentionally NOT compared across repos).
+    const fpA = projectionFp(repoA);
+    expect(fpA.sha256).not.toBeNull(); // non-vacuous: a fingerprint was written
+    expect(fpA.sha256).toEqual(projectionFp(repoB).sha256);
   });
 
-  test("reversed input edge order yields identical kg_calls contents", () => {
+  test("reversed input order yields identical kg_calls AND kg_symbols_fts contents", () => {
     const view = buildClraGraph();
     const reversed: GraphView = { nodes: [...view.nodes].reverse(), edges: [...view.edges].reverse() };
     const repoFwd = mkRepo(view);
@@ -251,7 +369,12 @@ describe("[T5.1] pure projection — deterministic, fingerprint-stable", () => {
     const cfg: IndexBlock = { ...DEFAULT_INDEX_BLOCK, ...ENGAGE, enabled: true };
     kgTraceAuto(view, { repoRoot: repoFwd, config: cfg }, "function:src/a.ts:main", "outbound", 1);
     kgTraceAuto(reversed, { repoRoot: repoRev, config: cfg }, "function:src/a.ts:main", "outbound", 1);
-    expect(callsRows(repoFwd)).toEqual(callsRows(repoRev));
+    // Content is order-independent (sorted by FULL key) for BOTH projection
+    // tables. NB: the fingerprint is NOT compared here — reversing node/edge
+    // order changes the knowledge-graph.json bytes, so the source sha256 legit-
+    // imately differs even though the projected contents are identical.
+    expect(callsRowsOf(repoFwd)).toEqual(callsRowsOf(repoRev));
+    expect(symbolsRowsOf(repoFwd)).toEqual(symbolsRowsOf(repoRev));
   });
 
   test("re-query with unchanged source is a fingerprint cache-hit (no rebuild)", () => {
@@ -259,11 +382,28 @@ describe("[T5.1] pure projection — deterministic, fingerprint-stable", () => {
     const repo = mkRepo(view);
     const cfg: IndexBlock = { ...DEFAULT_INDEX_BLOCK, ...ENGAGE, enabled: true };
     const opts: ProjectionQueryOptions = { repoRoot: repo, config: cfg };
+
+    // Build once.
+    const first = kgTraceAuto(view, opts, "function:src/a.ts:main", "outbound", 1);
+    expect(first.usedSqlite).toBe(true);
+    const before = callsRowsOf(repo);
+    expect(before.length).toBeGreaterThan(0); // non-vacuous
+    const fpBefore = projectionFp(repo);
+    expect(fpBefore.populated_at).not.toBeNull(); // a build stamp exists
+
+    // Finding #3: prove NO rebuild on the second pass. A full rebuild with
+    // identical rows would pass the row-equality check alone (vacuous), so we
+    // ALSO assert the explicit cache-hit signal AND an unchanged populated_at —
+    // either of which a real rebuild (status:"populated", new stamp) would fail.
+    const ensured = ensureKgProjectionIndex(repo, cfg);
+    expect(ensured?.status).toBe("cache-hit"); // explicit no-rebuild signal
+
     kgTraceAuto(view, opts, "function:src/a.ts:main", "outbound", 1);
-    const before = callsRows(repo);
-    kgTraceAuto(view, opts, "function:src/a.ts:main", "outbound", 1);
-    const after = callsRows(repo);
-    expect(after).toEqual(before);
+    const after = callsRowsOf(repo);
+    const fpAfter = projectionFp(repo);
+
+    expect(after).toEqual(before); // contents stable
+    expect(fpAfter.populated_at).toBe(fpBefore.populated_at); // NOT re-stamped
   });
 });
 
