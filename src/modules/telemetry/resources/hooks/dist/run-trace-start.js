@@ -370,6 +370,69 @@ var ANTIGRAVITY_CAPABILITIES = {
   },
   ...TARGET_CLI_COMMON
 };
+var AGENTS_FILE_CAPABILITIES = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "agents-file",
+  family: "agents",
+  surface_kind: "file",
+  package: { installable: false, installability: "target", manifest_format: "agents-file" },
+  bootstrap: {
+    context_injection: "instruction_file",
+    skill_autoload: false,
+    prompt_transform: false,
+    wrapper_injection: true
+  },
+  commands: { slash_commands: false, command_files: "none" },
+  skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
+  agents: { native_agents: false, agent_format: null },
+  hooks: NO_HOOKS,
+  permissions: {
+    deny: false,
+    ask: true,
+    ask_mode: null,
+    accept_edits_without_prompt: false,
+    auto_approve_tools: false,
+    bypass_prompts: false,
+    bypass_sandbox: false,
+    permission_prompt_layer: false,
+    launch_modes: {}
+  },
+  dispatch: {
+    tmux_processes: false,
+    plain_processes: false,
+    independent_agents: false,
+    subagents: false,
+    inline: false
+  },
+  interaction: {
+    native_questions: false,
+    terminal_prompt: false,
+    file_bus_questions: true
+  },
+  sessions: { continue: false, resume_by_id: false, fork: false },
+  structured_output: {
+    native_json: false,
+    schema_validation: false,
+    repair_prompt: true
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "none",
+    web: "emulated",
+    mcp: "none"
+  },
+  mcp: { stdio: false, http: false },
+  models: {
+    cheap: { model: null },
+    mid: { model: null },
+    powerful: { model: null }
+  }
+};
 
 // ../src/modules/host-runtime/workflows/host-registry-schema.ts
 var HOST_IDS = [
@@ -490,7 +553,7 @@ var AGENTS_FILE_ENTRY = {
   // INFERRED — no cross-review adapter; verify at live-host availability.
   dispatch_selectable: true,
   // INFERRED — a host consuming AGENTS.md can run a lane.
-  capabilities: inferredCaps("agents-file", "agents", "file"),
+  capabilities: AGENTS_FILE_CAPABILITIES,
   // file surface — matches top-level surface_kind.
   provenance: "inferred"
 };
@@ -690,9 +753,11 @@ var fs2 = __toESM(require("node:fs"));
 var path3 = __toESM(require("node:path"));
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
-  return new DatabaseSync(dbPath);
+  const db = new DatabaseSync(dbPath);
+  db.exec("PRAGMA busy_timeout = 5000");
+  return db;
 }
-var CURRENT_SCHEMA_VERSION = 2;
+var CURRENT_SCHEMA_VERSION = 3;
 function resolveGuildRoot2(cwd) {
   try {
     const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
@@ -806,6 +871,62 @@ var MIGRATIONS = [
           PRIMARY KEY (sub_guild_root, path)
         );
       `);
+    }
+  },
+  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
+  //
+  // Two OPTIONAL acceleration tables projected from the canonical, file-first
+  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
+  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
+  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
+  // remains the source of truth that returns IDENTICAL answers.
+  //
+  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
+  //                    indexed on source AND target so the call-graph BFS
+  //                    (kgTrace / kgDeadCode) is fetched without parsing the
+  //                    whole JSON graph.
+  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
+  //                    node, so identifier search (`process_order` →
+  //                    `processOrder`) is an index lookup, not a full node scan.
+  //                    Tokens are PRE-SPLIT with the shared identifier-aware
+  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
+  //                    document and query side, so the FTS built-in tokenizer
+  //                    only has to whitespace-split — the camel/snake behaviour
+  //                    lives in the (deterministic, model-free) projection feed.
+  {
+    version: 3,
+    tables: ["kg_calls", "kg_symbols_fts"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_calls;
+        DROP TABLE IF EXISTS kg_symbols_fts;
+      `);
+      db.exec(`
+        CREATE TABLE kg_calls (
+          id         INTEGER PRIMARY KEY,
+          source     TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          confidence TEXT
+        );
+        CREATE INDEX kg_calls_source ON kg_calls (source);
+        CREATE INDEX kg_calls_target ON kg_calls (target);
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
+            node_id UNINDEXED,
+            name_tokens,
+            tokenize='ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE kg_symbols_fts (
+            node_id     TEXT,
+            name_tokens TEXT
+          );
+        `);
+      }
     }
   }
 ];
