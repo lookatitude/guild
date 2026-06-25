@@ -274,9 +274,46 @@ describe("G10 FINDING-2 — skip-rate excludes unscored (sqlite/fs-scan) events"
     expect(report.overall.skipRate).toBeCloseTo(1.0, 6);
   });
 
-  test("all-unscored run → skip-rate 0 over an empty scored denominator (no divide-by-zero)", () => {
+  test("all-unscored run → skip-rate n/a (null), NOT a coerced 0% (no divide-by-zero, no parity leak)", () => {
     const report = computeRecallStats([rec({ scored: false, top_score: 0, read_skip_fired: false })]);
     expect(report.overall.scoredCount).toBe(0);
-    expect(report.overall.skipRate).toBe(0);
+    // REGRESSION (FIX-G10-r2 finding 1): an empty scored denominator must report
+    // null/n/a, never 0 — a 0.0% would let an all-unscored index:on run look like
+    // a genuine "0% skipped" next to a scored index:off run (parity leak).
+    expect(report.overall.skipRate).toBeNull();
+  });
+
+  test("renderTable shows 'n/a' (not '0.0%') for an all-unscored run's skip-rate", () => {
+    const out = renderTable(computeRecallStats([rec({ scored: false, top_score: 0, read_skip_fired: false })]));
+    // The overall row must carry an n/a skip-rate, never a misleading 0.0%.
+    const overallLine = out.split("\n").find((l) => l.startsWith("overall"))!;
+    expect(overallLine).toContain("n/a");
+    // Anti-vacuity: a SCORED 0%-skip run still renders a real 0.0% (n/a is only
+    // for the empty-denominator case, not "nothing skipped").
+    const scored = renderTable(
+      computeRecallStats([rec({ scored: true, top_score: 0.1, threshold: 0.4, read_skip_fired: false, lane_outcome: "success" })]),
+    );
+    const scoredOverall = scored.split("\n").find((l) => l.startsWith("overall"))!;
+    expect(scoredOverall).toContain("0.0%");
+  });
+
+  test("index:on (all-unscored sqlite) vs index:off (scored bm25) skip-rate reports are consistent — on=n/a, off=real, neither a coerced 0", () => {
+    // Separate per-mode reports over the SAME corpus, exactly as `recall-stats`
+    // would render for an index:on run-set vs an index:off run-set.
+    const onReport = computeRecallStats([
+      rec({ branch: "sqlite", scored: false, top_score: 0, read_skip_fired: false }),
+      rec({ branch: "sqlite", scored: false, top_score: 0, read_skip_fired: false }),
+    ]);
+    const offReport = computeRecallStats([
+      rec({ branch: "file-bm25", scored: true, top_score: 5, read_skip_fired: true }),
+      rec({ branch: "file-bm25", scored: true, top_score: 0.1, threshold: 0.4, read_skip_fired: false }),
+    ]);
+    // index:on has no comparable score → n/a, NOT 0% (which would falsely read as
+    // "consistent with a 0%-skip scored run"). index:off reports its real rate.
+    expect(onReport.overall.skipRate).toBeNull();
+    expect(offReport.overall.skipRate).toBeCloseTo(0.5, 6);
+    // The two reports never both claim a numeric skip-rate that could silently
+    // diverge: the unscored side is explicitly n/a.
+    expect(onReport.overall.skipRate).not.toBe(0);
   });
 });

@@ -618,6 +618,16 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
 
   const result: RecallResult = { source, chunks: allChunks, directive, topScore };
 
+  // Lane/task identifier shared by both trace emits below. The dispatch adapters
+  // export GUILD_TASK_ID (tmux-backend.ts, inprocess-backend.ts, pane-adapter.ts) —
+  // NOT GUILD_LANE_ID — so the recall-decision event must read GUILD_TASK_ID to
+  // carry the SAME key the handoff receipt's task_id uses. recall-stats joins
+  // lane_outcome on this value (record.lane_id === receipt.task_id); reading the
+  // wrong env var left lane_id empty in production, so precision never populated
+  // from real receipts (G10 FIX-G10-r2 finding 2). Fall back to GUILD_LANE_ID for
+  // any host that sets that instead.
+  const _laneId = process.env["GUILD_TASK_ID"] ?? process.env["GUILD_LANE_ID"] ?? "";
+
   // Branch label shared by both trace emits below.
   const _traceBranch = allChunks.length === 0
     ? "empty" as const
@@ -636,7 +646,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
       makeRecallEvent({
         ts: new Date().toISOString(),
         run_id: runId ?? "",
-        lane_id: process.env["GUILD_LANE_ID"] ?? "",
+        lane_id: _laneId,
         query: query.slice(0, 200), // truncate long queries in the trace
         branch: _traceBranch,
         chunk_count: allChunks.length,
@@ -661,7 +671,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
       makeRecallDecisionEvent({
         ts: new Date().toISOString(),
         run_id: runId ?? "",
-        lane_id: process.env["GUILD_LANE_ID"] ?? "",
+        lane_id: _laneId,
         query_hash: hashQuery(query),
         query_preview: query.slice(0, 60),
         branch: _traceBranch,

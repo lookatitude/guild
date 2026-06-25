@@ -19,7 +19,7 @@ import {
   validateRecallDecisionEvent,
   makeRecallDecisionEvent,
 } from "../../src/modules/telemetry/workflows/guild-trace-events";
-import { computeRecallStats } from "../recall-stats";
+import { computeRecallStats, readRecallDecisionEvents } from "../recall-stats";
 
 const TEMP_DIRS: string[] = [];
 afterAll(() => {
@@ -195,6 +195,88 @@ describe("G10 FINDING-2 — index:on (sqlite) vs index:off (bm25) skip parity", 
     const report = computeRecallStats(recs);
     expect(report.overall.count).toBe(2);
     expect(report.overall.scoredCount).toBe(1); // only the bm25 event is scored
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX-G10-r2 FINDING 2 — precision populates IN PRODUCTION via a real recall()
+// emit + real handoff receipt join, using the SAME dispatched env key.
+//
+// The dispatch adapters export GUILD_TASK_ID (tmux-backend.ts / inprocess-backend.ts
+// / pane-adapter.ts), NOT GUILD_LANE_ID. recall() must emit lane_id from
+// GUILD_TASK_ID so the recall-stats lane-outcome join (record.lane_id ===
+// receipt.task_id) actually fires. This test drives the REAL env key (not a
+// hand-written lane_id) end to end.
+// ---------------------------------------------------------------------------
+
+describe("FIX-G10-r2 FINDING-2 — precision populates from a real recall()+receipt join via GUILD_TASK_ID", () => {
+  /** Write a guild.handoff.v2 receipt whose task_id is the join key. */
+  function writeHandoff(runDir: string, file: string, taskId: string, status: string): void {
+    const dir = path.join(runDir, "handoffs");
+    fs.mkdirSync(dir, { recursive: true });
+    const env = JSON.stringify(
+      { schema_version: "guild.handoff.v2", task_id: taskId, tier: "mid", status, summary: "s", artifacts: [], issues: [] },
+      null,
+      2,
+    );
+    fs.writeFileSync(path.join(dir, file), `# Receipt\n\n\`\`\`guild.handoff.v2\n${env}\n\`\`\`\n`, "utf8");
+  }
+
+  const SAVED_TASK_ID = process.env["GUILD_TASK_ID"];
+  const SAVED_LANE_ID = process.env["GUILD_LANE_ID"];
+  afterEach(() => {
+    if (SAVED_TASK_ID === undefined) delete process.env["GUILD_TASK_ID"];
+    else process.env["GUILD_TASK_ID"] = SAVED_TASK_ID;
+    if (SAVED_LANE_ID === undefined) delete process.env["GUILD_LANE_ID"];
+    else process.env["GUILD_LANE_ID"] = SAVED_LANE_ID;
+  });
+
+  test("recall() emits lane_id from GUILD_TASK_ID, and the receipt join makes precision real (not n/a)", () => {
+    const cwd = makeRepoWithKg();
+    const runId = "run-precision";
+    const runDir = path.join(cwd, ".guild", "runs", runId);
+
+    // The dispatch adapters export GUILD_TASK_ID (the REAL key) — set it, leave
+    // GUILD_LANE_ID unset to mirror production.
+    delete process.env["GUILD_LANE_ID"];
+    process.env["GUILD_TASK_ID"] = "task-pay-001";
+
+    recall("payment", { cwd, runId, runDir, _bm25Disabled: true, recallScoreThreshold: 0.4 });
+
+    // The emitted decision event carries the dispatched task id (NOT empty).
+    const ev = readDecisionEvents(runDir)[0]!;
+    expect(ev["lane_id"]).toBe("task-pay-001");
+
+    // A real handoff receipt for that SAME task id lands later (done → success).
+    writeHandoff(runDir, "backend-task-pay-001.md", "task-pay-001", "done");
+
+    // The run-set read joins event ↔ receipt on the shared key → precision real.
+    const events = readRecallDecisionEvents(path.join(cwd, ".guild", "runs"));
+    const report = computeRecallStats(events);
+    expect(report.overall.hits).toBe(1);
+    expect(report.overall.misses).toBe(0);
+    expect(report.overall.precision).toBe(1); // 1/1 — populated from the real join
+    expect(report.overall.precision).not.toBeNull();
+  });
+
+  test("ANTI-VACUITY: a key MISMATCH (receipt task_id ≠ dispatched GUILD_TASK_ID) leaves precision n/a", () => {
+    const cwd = makeRepoWithKg();
+    const runId = "run-mismatch";
+    const runDir = path.join(cwd, ".guild", "runs", runId);
+
+    delete process.env["GUILD_LANE_ID"];
+    process.env["GUILD_TASK_ID"] = "task-real-001";
+    recall("payment", { cwd, runId, runDir, _bm25Disabled: true, recallScoreThreshold: 0.4 });
+
+    // Receipt for a DIFFERENT task id → nothing joins → outcome stays unknown.
+    writeHandoff(runDir, "backend-other.md", "task-OTHER-999", "done");
+
+    const events = readRecallDecisionEvents(path.join(cwd, ".guild", "runs"));
+    const report = computeRecallStats(events);
+    // If recall() emitted an empty lane_id (the bug), this would ALSO be n/a — so
+    // the companion test above (real lane_id, matching receipt → precision 1) is
+    // what proves the emit reads the right key. Here we only assert the negative.
+    expect(report.overall.precision).toBeNull();
   });
 });
 

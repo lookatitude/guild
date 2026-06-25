@@ -68,8 +68,15 @@ export interface BranchStats {
    * Unscored events (sqlite/fs-scan) carry no comparable score and are excluded.
    */
   scoredCount: number;
-  /** skips / scoredCount — read_skip_fired (or, under --threshold, top_score>=threshold). */
-  skipRate: number;
+  /**
+   * skips / scoredCount — read_skip_fired (or, under --threshold, top_score>=threshold).
+   * `null` (rendered "n/a") when scoredCount===0: an all-unscored run (e.g. an
+   * index:on SQLite-only branch set) has NO comparable score to skip on, so it
+   * must NOT report a real-looking 0% that an index:off scored run could differ
+   * from. Reporting null keeps index:on vs index:off skip-rate reports honest
+   * (both n/a, or both real) instead of leaking a coerced 0 (G10 parity).
+   */
+  skipRate: number | null;
   skips: number;
   hits: number;
   misses: number;
@@ -121,7 +128,10 @@ function aggregate(
     count,
     scoredCount,
     skips,
-    skipRate: scoredCount === 0 ? 0 : skips / scoredCount,
+    // Empty scored denominator → n/a (null), NEVER a coerced 0: a 0.0% would be
+    // indistinguishable from a genuine "nothing skipped" and lets an all-unscored
+    // index:on run masquerade as scored-0% next to an index:off scored report.
+    skipRate: scoredCount === 0 ? null : skips / scoredCount,
     hits,
     misses,
     precision: decided === 0 ? null : hits / decided,
@@ -333,7 +343,9 @@ export function renderTable(report: RecallStatsReport): string {
   lines.push("------          -----   ---------   ---------   ---------");
   const row = (s: BranchStats): string => {
     const prec = s.precision === null ? "  n/a  " : pct(s.precision).padStart(7);
-    return `${s.branch.padEnd(14)}  ${String(s.count).padStart(5)}   ${pct(s.skipRate).padStart(8)}   ${prec}   ${s.hits}/${s.misses}`;
+    // null skip-rate (no scored events) renders "n/a", not a misleading 0.0%.
+    const skip = s.skipRate === null ? "   n/a  " : pct(s.skipRate).padStart(8);
+    return `${s.branch.padEnd(14)}  ${String(s.count).padStart(5)}   ${skip}   ${prec}   ${s.hits}/${s.misses}`;
   };
   for (const b of report.perBranch) lines.push(row(b));
   lines.push("------          -----   ---------   ---------   ---------");
