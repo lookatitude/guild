@@ -178,6 +178,76 @@ describe("[G9] hotspots — degree-ranked, non-vacuous ordering", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Gate 2b — self-call (recursion) policy: ONE consistent policy across degree +
+// clustering + counts (FIX-T9.2, closes the MAJOR self-call inconsistency).
+// Policy: a self-call (source === target) connects a function to NO OTHER symbol
+// and is EXCLUDED, in lock-step, from callEdgeCount, fan-in/out degree, AND
+// clustering — never counted in one view and missing from another.
+// ---------------------------------------------------------------------------
+
+describe("[G9] self-call policy — recursion handled consistently", () => {
+  const mk = (n: string): GraphNode => ({
+    id: `function:src/r.ts:${n}`, type: "function", name: n,
+    source_refs: [`src/r.ts#L1-L2`], confidence: "high",
+  });
+  const call = (s: string, t: string): GraphEdge => ({
+    source: `function:src/r.ts:${s}`, target: `function:src/r.ts:${t}`,
+    type: "calls", direction: "out", weight: 1,
+  });
+
+  test("a purely-recursive function (self-call only) is excluded from BOTH degree and clustering", () => {
+    // `rec` calls only itself; `a`→`b` is the one inter-symbol edge.
+    const nodes = ["rec", "a", "b"].map(mk);
+    const edges = [call("rec", "rec"), call("a", "b")];
+    const arch = computeArchitecture({ nodes, edges });
+
+    // Excluded from clustering — rec is in NO cluster (a↔b is the only cluster).
+    const clustered = new Set(arch.clusters.flatMap((c) => c.members));
+    expect(clustered.has("function:src/r.ts:rec")).toBe(false);
+    expect(clustered.has("function:src/r.ts:a")).toBe(true);
+    expect(clustered.has("function:src/r.ts:b")).toBe(true);
+
+    // Excluded from degree — rec is NOT a hotspot participant (degree 0).
+    expect(arch.hotspots.some((h) => h.id === "function:src/r.ts:rec")).toBe(false);
+
+    // Excluded from the edge count — only the inter-symbol a→b edge is counted.
+    expect(arch.summary.callEdgeCount).toBe(1);
+  });
+
+  test("the self-loop does NOT inflate degree; a real edge still ranks AND clusters the node", () => {
+    // `f` recurses AND calls `g`. Its degree reflects ONLY the f→g edge.
+    const nodes = ["f", "g"].map(mk);
+    const arch = computeArchitecture({ nodes, edges: [call("f", "f"), call("f", "g")] });
+    const f = arch.hotspots.find((h) => h.id === "function:src/r.ts:f")!;
+    expect(f).toBeDefined();
+    expect(f.fanOut).toBe(1);  // g only — the self-loop is ignored
+    expect(f.fanIn).toBe(0);   // the self-loop does NOT make f its own caller
+    expect(f.degree).toBe(1);
+    expect(arch.summary.callEdgeCount).toBe(1);  // only the inter-symbol edge
+    // f and g land in the same single cluster.
+    expect(arch.clusters.length).toBe(1);
+    expect(arch.clusters[0].members).toEqual([
+      "function:src/r.ts:f",
+      "function:src/r.ts:g",
+    ]);
+  });
+
+  test("consistency invariant: the degree-participant set EQUALS the clustered set (the old bug broke this)", () => {
+    // Under the OLD inconsistent policy a self-call-only node entered the degree
+    // participants (callers/callees) but never `undirected`, so it appeared in
+    // hotspots yet vanished from clusters — breaking this equality. This invariant
+    // is the non-vacuous guard: mutate the policy back and it FAILS.
+    const nodes = ["rec", "x", "y", "z"].map(mk);
+    const edges = [call("rec", "rec"), call("x", "y"), call("y", "z")];
+    const arch = computeArchitecture({ nodes, edges });
+    const degreeParticipants = arch.hotspots.filter((h) => h.degree > 0).map((h) => h.id).sort();
+    const clustered = [...new Set(arch.clusters.flatMap((c) => c.members))].sort();
+    expect(degreeParticipants).toEqual(clustered);
+    expect(clustered).not.toContain("function:src/r.ts:rec");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Gate 3 — determinism: reversed node/edge order → byte-identical skeleton.
 // ---------------------------------------------------------------------------
 
