@@ -774,6 +774,185 @@ describe("FIX-T4.1-r4 — a cached element no real extraction would produce forc
 });
 
 // ---------------------------------------------------------------------------
+// FIX-T4.1-r5 — ONE integrity checksum covers EVERY field, incl. the non-graph
+// resolution inputs (isCode / importSpecs / bases / ifaces / callees / anchors)
+// that cannot be validated against truth without re-extracting. Any mutation —
+// even one a per-field shape check accepts — breaks the checksum → re-extract.
+// ---------------------------------------------------------------------------
+
+describe("FIX-T4.1-r5 — a tampered cache field (graph OR non-graph) breaks the integrity checksum → re-extract (incremental == full)", () => {
+  let dir: string;
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  // Rich fixture: class Base, class Derived(Base), def bar, def foo, plus an
+  // import so importSpecs is non-empty — every mutated field below is one a fresh
+  // extraction DOES produce, so a per-field SHAPE check would accept the tampered
+  // value; only the content checksum rejects it.
+  const A_SRC = [
+    "from b import baz",
+    "",
+    "class Base:",
+    "    pass",
+    "",
+    "class Derived(Base):",
+    "    pass",
+    "",
+    "def bar():",
+    "    return 1",
+    "",
+    "def foo():",
+    "    return bar()",
+    "",
+  ].join("\n");
+
+  type B = import("../lib/structural").FileBundle;
+  const rec = (x: unknown) => x as Record<string, unknown>;
+  const find = (arr: unknown[], pred: (r: Record<string, unknown>) => boolean) =>
+    (arr as Record<string, unknown>[]).find(pred)!;
+
+  // Each case mutates ONE field of a.py's cached bundle to ANOTHER WELL-FORMED
+  // value (a per-field validator would accept it) WITHOUT re-stamping the stored
+  // checksum — exactly what staleness / partial-write / accidental mutation looks
+  // like. contentHash + cache-version stay valid throughout, so the ONLY thing that
+  // can reject the bundle is the integrity checksum.
+  const cases: Array<{ name: string; corrupt: (b: B) => void }> = [
+    {
+      name: "isCode flipped (non-graph resolution input, valid boolean)",
+      corrupt: (b) => { (b as { isCode: boolean }).isCode = !b.isCode; },
+    },
+    {
+      name: "importSpecs reassigned to another valid string (non-graph input)",
+      corrupt: (b) => { (b.importSpecs as string[])[0] = "./elsewhere"; },
+    },
+    {
+      name: "classes[].bases reassigned to another valid string[] (non-graph input)",
+      corrupt: (b) => { find(b.classes as unknown[], (c) => c.simpleName === "Derived").bases = ["Other"]; },
+    },
+    {
+      name: "classes[].ifaces gains a valid string (non-graph input)",
+      corrupt: (b) => { (find(b.classes as unknown[], (c) => c.simpleName === "Derived").ifaces as string[]).push("IFoo"); },
+    },
+    {
+      name: "callables[].callees gains a valid string (non-graph input)",
+      corrupt: (b) => { (find(b.callables as unknown[], (c) => c.simpleName === "foo").callees as string[]).push("ghost"); },
+    },
+    {
+      name: "symbolNode source_ref valid-FORM but wrong lines (a.py#L99-L99)",
+      corrupt: (b) => { rec(b.symbolNodes[0]).source_refs = ["a.py#L99-L99"]; },
+    },
+    {
+      name: "symbolNode sp.loc reassigned to another finite number (graph field, valid shape)",
+      corrupt: (b) => { (rec(b.symbolNodes[0]).sp as Record<string, unknown>).loc = 99999; },
+    },
+  ];
+
+  for (const c of cases) {
+    test(`${c.name} → a.py re-extracted, b.py reused, incremental == full`, () => {
+      dir = tmpRepo("g4-r5-");
+      write(dir, "a.py", A_SRC);
+      write(dir, "b.py", "def baz():\n    return 2\n");
+      const FILES = ["a.py", "b.py"];
+
+      const cache = bundlesToCache(buildBundles(dir, FILES, readFile));
+      // Sanity: the write path stamped an integrity checksum on every bundle.
+      expect(typeof (cache.files["a.py"] as unknown as Record<string, unknown>).checksum).toBe("string");
+      expect(typeof (cache.files["b.py"] as unknown as Record<string, unknown>).checksum).toBe("string");
+
+      // Mutate ONE well-formed field; do NOT re-stamp the checksum.
+      c.corrupt(cache.files["a.py"]);
+
+      const full = fullStructural(dir, FILES);
+
+      // The integrity checksum is the ONLY guard that can fire here (contentHash and
+      // version are both valid), so a.py is re-extracted while the intact b.py is a
+      // cache hit — and the result equals a clean full rebuild.
+      const incr = refreshStructuralIncremental(dir, FILES, readFile, cache);
+      expect(incr.stats.reExtracted).toEqual(["a.py"]);
+      expect(incr.stats.reused).toEqual(["b.py"]);
+      expect(subsetJson(incr.structural)).toBe(subsetJson(full)); // lossless == full
+    });
+  }
+
+  test("an intact, same-version, same-contentHash cache is STILL reused (checksum does not over-reject)", () => {
+    // Anti-vacuity: the integrity guard must not blanket-re-extract valid bundles.
+    dir = tmpRepo("g4-r5-ok-");
+    write(dir, "a.py", A_SRC);
+    write(dir, "b.py", "def baz():\n    return 2\n");
+    const FILES = ["a.py", "b.py"];
+
+    const cache = bundlesToCache(buildBundles(dir, FILES, readFile));
+    const full = fullStructural(dir, FILES);
+    const incr = refreshStructuralIncremental(dir, FILES, readFile, cache);
+
+    expect(incr.stats.reExtracted).toEqual([]);       // nothing changed on disk
+    expect(incr.stats.reused.sort()).toEqual(FILES);  // BOTH intact bundles reused
+    expect(subsetJson(incr.structural)).toBe(subsetJson(full));
+  });
+
+  test("the checksum is a pure function of content — re-stamping a reused bundle is idempotent + deterministic", () => {
+    // bundlesToCache excludes the `checksum` field when hashing, so a bundle read
+    // back (carrying a checksum) re-stamps to the SAME value, and two independent
+    // serializations of the same tree are byte-identical.
+    dir = tmpRepo("g4-r5-det-");
+    write(dir, "a.py", A_SRC);
+    write(dir, "b.py", "def baz():\n    return 2\n");
+    const FILES = ["a.py", "b.py"];
+
+    const cache1 = bundlesToCache(buildBundles(dir, FILES, readFile));
+    const c1 = (cache1.files["a.py"] as unknown as Record<string, unknown>).checksum as string;
+
+    // Round-trip a.py's already-stamped bundle back through bundlesToCache: the
+    // recomputed checksum must equal the original (field excluded from the hash).
+    const restamped = bundlesToCache([cache1.files["a.py"] as unknown as B]);
+    expect((restamped.files["a.py"] as unknown as Record<string, unknown>).checksum).toBe(c1);
+
+    // Two fresh serializations of the same tree are byte-identical (determinism).
+    const cache2 = bundlesToCache(buildBundles(dir, FILES, readFile));
+    expect(JSON.stringify(cache2)).toBe(JSON.stringify(cache1));
+  });
+
+  test("a pre-r5 cache (no checksum field, old version) is invalidated wholesale → re-extract all", () => {
+    // The cfg bump means an old cache mismatches the version stamp and is dropped
+    // entirely; even forcing the current version, a missing checksum fails integrity.
+    dir = tmpRepo("g4-r5-prefix-");
+    write(dir, "a.py", A_SRC);
+    write(dir, "b.py", "def baz():\n    return 2\n");
+    const FILES = ["a.py", "b.py"];
+
+    const cache = bundlesToCache(buildBundles(dir, FILES, readFile));
+    // Simulate a pre-r5 cache: strip every checksum and stamp the old version.
+    for (const k of Object.keys(cache.files)) {
+      delete (cache.files[k] as unknown as Record<string, unknown>).checksum;
+    }
+    const pre: StructuralCache = { ...cache, version: "structural-v1|sp:25|cfg:1" };
+
+    const full = fullStructural(dir, FILES);
+    const incr = refreshStructuralIncremental(dir, FILES, readFile, pre);
+    expect(incr.stats.reused).toEqual([]);            // nothing trusted from the old cache
+    expect(incr.stats.newFiles.sort()).toEqual(FILES); // every file re-extracted
+    expect(subsetJson(incr.structural)).toBe(subsetJson(full));
+  });
+
+  test("current version but a stripped checksum still fails integrity → that file re-extracts", () => {
+    // Isolate the checksum guard from the version gate: keep the CURRENT version so
+    // the whole-cache gate passes, then strip a.py's checksum only.
+    dir = tmpRepo("g4-r5-nochecksum-");
+    write(dir, "a.py", A_SRC);
+    write(dir, "b.py", "def baz():\n    return 2\n");
+    const FILES = ["a.py", "b.py"];
+
+    const cache = bundlesToCache(buildBundles(dir, FILES, readFile));
+    delete (cache.files["a.py"] as unknown as Record<string, unknown>).checksum;
+
+    const full = fullStructural(dir, FILES);
+    const incr = refreshStructuralIncremental(dir, FILES, readFile, cache);
+    expect(incr.stats.reExtracted).toEqual(["a.py"]); // missing checksum ⇒ not reusable
+    expect(incr.stats.reused).toEqual(["b.py"]);       // intact b.py still a hit
+    expect(subsetJson(incr.structural)).toBe(subsetJson(full));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // FIX-T4.1-2 — --incremental uses the LIVE tree, not a stale CodebaseMap (CLI)
 // ---------------------------------------------------------------------------
 

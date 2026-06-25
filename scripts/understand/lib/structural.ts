@@ -31,7 +31,8 @@ import { loadTsAliases, resolveImportSpec } from "./import-map";
 import { detectLanguage, isCodeLanguage } from "./languages";
 import { analyzeSource } from "./extract";
 import { contentHash } from "./fingerprint";
-import { isValidBundle } from "./bundle-validate";
+import { isValidBundle, bundleChecksum } from "./bundle-validate";
+import type { CachedBundle } from "./bundle-validate";
 import type { GraphEdge, GraphNode } from "./schema";
 
 // ---------------------------------------------------------------------------
@@ -81,9 +82,13 @@ export type StructuralProfile = Record<(typeof STRUCTURAL_PROFILE_KEYS)[number],
  *   - `STRUCTURAL_EXTRACTOR` — the extractor marker/version,
  *   - `sp:<n>`               — the structural-profile shape (key count),
  *   - `cfg:<rev>`            — manual revision covering resolution/bundle logic.
+ *
+ * cfg bumped 1→2 at FIX-T4.1-r5: persisted bundles now carry an integrity
+ * `checksum` field, so a pre-r5 cache (no checksum) is a different shape — the
+ * version mismatch drops it wholesale and re-extracts cleanly.
  */
 export const STRUCTURAL_CACHE_VERSION =
-  `${STRUCTURAL_EXTRACTOR}|sp:${STRUCTURAL_PROFILE_KEYS.length}|cfg:1`;
+  `${STRUCTURAL_EXTRACTOR}|sp:${STRUCTURAL_PROFILE_KEYS.length}|cfg:2`;
 
 export interface StructuralGraph {
   nodes: GraphNode[];
@@ -486,7 +491,11 @@ export interface StructuralCache {
    * incremental can never diverge from a full rebuild after a logic/shape change.
    */
   version: string;
-  files: Record<string, FileBundle>;
+  /**
+   * Persisted bundles carry a `checksum` (FIX-T4.1-r5) the in-memory `FileBundle`
+   * lacks — stamped at serialization, verified on reuse for byte-level integrity.
+   */
+  files: Record<string, CachedBundle>;
 }
 
 /**
@@ -500,13 +509,15 @@ export interface StructuralCache {
  * full rebuild. Any violation rejects the bundle → re-extract that file, so
  * incremental stays == full.
  *
- * FIX-T4.1-r4: `isValidBundle` delegates base node/edge SHAPE to the SAME
- * authoritative validator the extraction write-path runs (`validateGraph`) — one
- * definition of node/edge validity, comprehensive by construction — and layers
- * only the structural superset + bundle membership `validateGraph` cannot express
- * (the `extractor` marker, the complete `sp`, the exact file-node/symbol/source-
- * ref contracts, id↔kind, id↔name, id↔owning-file, edge endpoints in-bundle). We
- * additionally require a non-empty `contentHash` here — the reuse caller below
+ * FIX-T4.1-r5 (REDIRECT): `isValidBundle` no longer hand-enumerates fields. It
+ * verifies a single INTEGRITY CHECKSUM (`bundleChecksum`, stamped at write) that
+ * covers EVERY field at once — including the non-graph resolution inputs (`isCode`,
+ * `importSpecs`, `bases`/`ifaces`, `callees`, source-ref anchors) that cannot be
+ * validated against truth without re-extracting — and keeps `validateGraph` over the
+ * graph slice as defense-in-depth. See lib/bundle-validate.ts for the threat model:
+ * the cache is our OWN gitignored output, so its trust boundary is provenance +
+ * integrity (version + contentHash + checksum), not adversarial field validation.
+ * We additionally require a non-empty `contentHash` here — the reuse caller below
  * only trusts a bundle whose `contentHash` equals the live file's, which is never "".
  */
 function isReusableBundle(rel: string, b: unknown): b is FileBundle {
@@ -764,11 +775,16 @@ export function extractStructuralGraph(
 // Incremental git-aware refresh (G4)
 // ---------------------------------------------------------------------------
 
-/** Serialize bundles into the persisted cache (rel-sorted, deterministic). */
+/**
+ * Serialize bundles into the persisted cache (rel-sorted, deterministic). Each
+ * bundle is stamped with an integrity `checksum` (FIX-T4.1-r5) over its content;
+ * stamping is idempotent — a reused bundle that already carries a `checksum` is
+ * re-stamped to the same value, since `bundleChecksum` excludes the field itself.
+ */
 export function bundlesToCache(bundles: FileBundle[]): StructuralCache {
-  const files: Record<string, FileBundle> = {};
+  const files: Record<string, CachedBundle> = {};
   for (const b of [...bundles].sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0))) {
-    files[b.rel] = b;
+    files[b.rel] = { ...b, checksum: bundleChecksum(b) };
   }
   return { schema: "guild.structural_cache.v1", version: STRUCTURAL_CACHE_VERSION, files };
 }
