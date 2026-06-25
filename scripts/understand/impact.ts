@@ -99,18 +99,29 @@ function normalizeChangedFile(f: string): string {
  * graph lives at `.guild/indexes/knowledge-graph.json`, so a caller-supplied
  * override is constrained to that SAME trusted directory — an in-repo file
  * outside `.guild/indexes` (e.g. `<repo>/knowledge-graph.json`) is refused, not
- * just `../`-escapes. Two layers, mirroring lib/similarity.ts: (1) a lexical
- * containment check on the resolved path; (2) a best-effort realpath check when
- * both paths exist on disk. Returns the absolute path or refuses.
+ * just `../`-escapes. Returns the absolute path or refuses.
+ *
+ * The user arg is resolved against the REPO ROOT (or, when absolute, taken
+ * as-is) — NOT against the indexes dir, which would double a repo-relative
+ * `.guild/indexes/...` into `.guild/indexes/.guild/indexes/...`. Containment is
+ * then enforced against `indexesDir`. Two layers, mirroring lib/similarity.ts:
+ * (1) a lexical containment check on the resolved path; (2) a best-effort
+ * realpath check when both paths exist on disk.
  */
-function resolveGraphUnderIndexes(indexesDir: string, graphArg: string): string {
-  const root = path.resolve(indexesDir);
-  const abs = path.resolve(root, graphArg);
-  if (escapesBase(path.relative(root, abs))) {
+function resolveGraphUnderIndexes(
+  repoRoot: string,
+  indexesDir: string,
+  graphArg: string,
+): string {
+  const indexesRoot = path.resolve(indexesDir);
+  // Resolve relative to the repo root (absolute args pass through path.resolve
+  // unchanged); containment below decides acceptance — never the resolve base.
+  const abs = path.resolve(repoRoot, graphArg);
+  if (escapesBase(path.relative(indexesRoot, abs))) {
     fail(`graph path escapes the indexes dir (.guild/indexes): ${graphArg}`);
   }
   try {
-    const realRoot = fs.realpathSync(root);
+    const realRoot = fs.realpathSync(indexesRoot);
     const realAbs = fs.realpathSync(abs);
     if (escapesBase(path.relative(realRoot, realAbs))) {
       fail(`graph path escapes the indexes dir (.guild/indexes, symlink): ${graphArg}`);
@@ -166,7 +177,7 @@ function main(): void {
   // location already lives there. An in-repo file outside .guild/indexes is
   // refused — the containment gate the header documents is actually closed.
   const graphPath = graphArg
-    ? resolveGraphUnderIndexes(paths.indexesDir, graphArg)
+    ? resolveGraphUnderIndexes(paths.repoRoot, paths.indexesDir, graphArg)
     : paths.knowledgeGraph;
   const graph = readJson<GraphView>(graphPath);
   if (!graph || !Array.isArray(graph.nodes)) {

@@ -512,4 +512,53 @@ describe("[G9] CLI impact.ts — rejects bad input and path traversal", () => {
 
     fs.rmSync(repoRoot, { recursive: true, force: true });
   }, 120_000);
+
+  test("a REPO-RELATIVE --graph `.guild/indexes/...` resolves under indexes (no path doubling) and is accepted; repo-root-relative is refused", () => {
+    const g = buildGraph();
+    const graphWrapper = JSON.stringify(
+      { version: "guild.knowledge_graph.v1", nodes: g.nodes, edges: g.edges },
+      null,
+      2,
+    );
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-relpath-"));
+    const indexesDir = path.join(repoRoot, ".guild", "indexes");
+    fs.mkdirSync(indexesDir, { recursive: true });
+    fs.writeFileSync(path.join(indexesDir, "knowledge-graph.json"), graphWrapper, "utf8");
+    const cliPath = path.join(__dirname, "..", "impact.ts");
+
+    // (a) ACCEPT: a REPO-RELATIVE `.guild/indexes/knowledge-graph.json` must
+    // resolve against the repo root, NOT the indexes dir — the prior round
+    // doubled it into `.guild/indexes/.guild/indexes/...` (file-not-found).
+    const out = execFileSync(
+      "npx",
+      [
+        "tsx",
+        cliPath,
+        JSON.stringify({ changedFiles: ["src/b.ts"] }),
+        "--cwd",
+        repoRoot,
+        "--graph",
+        ".guild/indexes/knowledge-graph.json",
+      ],
+      { cwd: path.join(__dirname, ".."), encoding: "utf-8", timeout: 60_000 },
+    );
+    const result = JSON.parse(out);
+    const reached = new Set<string>(result.nodes.map((n: { id: string }) => n.id));
+    expect(reached.has("function:src/a.ts:main")).toBe(true);
+
+    // (b) REJECT: a REPO-ROOT-relative `knowledge-graph.json` resolves to
+    // <repo>/knowledge-graph.json — in-repo but OUTSIDE .guild/indexes — and is
+    // refused by the containment gate (proves the gate guards the resolved path,
+    // not just the literal arg). Plant the file so the refusal is the gate, not
+    // a missing-file error.
+    fs.writeFileSync(path.join(repoRoot, "knowledge-graph.json"), graphWrapper, "utf8");
+    const stderr = runExpectingFailure(
+      JSON.stringify({ changedFiles: ["src/b.ts"] }),
+      ["--cwd", repoRoot, "--graph", "knowledge-graph.json"],
+      path.join(__dirname, ".."),
+    );
+    expect(stderr).toMatch(/escapes the indexes dir/i);
+
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  }, 120_000);
 });
