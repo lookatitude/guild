@@ -18,8 +18,11 @@
  *      identical results, with BOTH modes provably executed (the `on` run
  *      actually engaged SQLite; the `off` run actually did not).
  *
- * The G1/G3/G8/G9 wiring is left as clearly-labeled describe.skip placeholders
- * that activate as those lanes land.
+ * The G1/G2/G3/G8/G9 wiring is now LIVE: each goal's block builds the real
+ * fixture graph (extractStructuralGraph → refineCalls) and asserts the actual
+ * query API against the oracle, each proven identical with index:off and
+ * index:on via runBothIndexModes. (Earlier revisions parked these as skipped
+ * placeholders that activated as the lanes landed; none remain.)
  *
  * Run from plugin/scripts/:  npx jest --no-coverage clra-conformance
  */
@@ -38,7 +41,10 @@ import {
 import { ensureKgIndex } from "../../../src/modules/state/workflows/index-cache";
 import { extractStructuralGraph } from "../lib/structural";
 import { refineCalls } from "../resolve-calls";
-import type { GraphEdge } from "../lib/schema";
+import { kgDeadCode, kgTrace, type GraphView } from "../lib/graph-query";
+import { kgSimilar } from "../lib/similarity";
+import { computeImpact } from "../lib/impact";
+import type { GraphNode, GraphEdge } from "../lib/schema";
 
 // ---------------------------------------------------------------------------
 // Fixture + oracle loading
@@ -381,6 +387,137 @@ function checkOracleConsistency(oracle: Oracle, root: string = FIXTURE_ROOT): st
 }
 
 // ---------------------------------------------------------------------------
+// Shared fixture-graph builder + SQLite-optional GraphView loader.
+//
+// The structural-query (G3), similarity (G8), and impact (G9) gates all assert
+// the REAL extracted graph against the oracle, each proven identical with
+// index:off and index:on. They build the graph the SAME way the [G1+G2] block
+// does — extractStructuralGraph → refineCalls — and read it back through the
+// index-cache knob, so no goal re-invents extraction.
+// ---------------------------------------------------------------------------
+
+const REL_FILES = [
+  "src/a.ts", "src/b.ts", "src/shapes.ts",
+  "py/a.py", "py/b.py", "py/shapes.py",
+];
+
+/** Build the REAL fixture KnowledgeGraph: structural extraction + resolved calls. */
+function buildFixtureGraph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
+  const readFile = (abs: string) => fs.readFileSync(abs, "utf8");
+  const base = extractStructuralGraph(FIXTURE_ROOT, REL_FILES, readFile);
+  const refined = refineCalls(FIXTURE_ROOT, REL_FILES, readFile, base);
+  return { nodes: refined.nodes as unknown as GraphNode[], edges: refined.edges };
+}
+
+/** Persist a graph to `<repo>/.guild/indexes/knowledge-graph.json` (the index-cache source). */
+function writeFixtureGraph(repo: string, graph: { nodes: GraphNode[]; edges: GraphEdge[] }): void {
+  const idxDir = path.join(repo, ".guild", "indexes");
+  fs.mkdirSync(idxDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(idxDir, "knowledge-graph.json"),
+    JSON.stringify({
+      version: "guild.knowledge_graph.v1",
+      generated_from_commit: "fixture",
+      project: { name: "clra-fixture", description: "" },
+      nodes: graph.nodes,
+      edges: graph.edges,
+      layers: [],
+      tour: [],
+    }),
+    "utf8",
+  );
+}
+
+/** Parse a JSON object column value, tolerating null/garbage → {}. */
+function parseJsonObject(v: unknown): Record<string, unknown> {
+  if (typeof v !== "string") return {};
+  try {
+    const o = JSON.parse(v) as unknown;
+    return o !== null && typeof o === "object" && !Array.isArray(o)
+      ? (o as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Parse a JSON string[] column value, tolerating null/garbage → []. */
+function parseJsonStringArray(v: unknown): string[] {
+  if (typeof v !== "string") return [];
+  try {
+    const a = JSON.parse(v) as unknown;
+    return Array.isArray(a) ? a.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Load the FULL GraphView (nodes WITH `sp`/`confidence`/`resolution`, plus edges)
+ * for one index mode, reporting backend engagement (FIX G14-7):
+ *   index:on  → ensureKgIndex populates index.sqlite; reconstruct nodes+edges
+ *               from kg_nodes/kg_edges (the `data` column carries `sp` and every
+ *               other non-promoted field).
+ *   index:off → ensureKgIndex returns null; parse the canonical JSON.
+ * A query run over this view returns IDENTICAL results in both modes — the SQLite
+ * projection is a pure accelerator. That equality is exactly what each goal's
+ * parity test asserts (off==on AND engagementProven), so a `data`-column drop or
+ * a silently-ignored `config` cannot pass green.
+ */
+function loadGraphView(repo: string, ctx: IndexModeContext): GraphView {
+  const res = ensureKgIndex(repo, ctx.config);
+  const usedSqlite = !!(res && res.dbPath);
+  ctx.reportEngagement(usedSqlite);
+
+  if (usedSqlite) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { DatabaseSync } = require("node:sqlite") as {
+      DatabaseSync: new (p: string) => {
+        prepare(sql: string): { all(): Array<Record<string, unknown>> };
+        close(): void;
+      };
+    };
+    const db = new DatabaseSync(res!.dbPath!);
+    try {
+      const nodeRows = db
+        .prepare("SELECT id, type, name, source_refs, confidence, data FROM kg_nodes")
+        .all();
+      const edgeRows = db
+        .prepare("SELECT source, target, type, direction, weight, data FROM kg_edges")
+        .all();
+      const nodes = nodeRows.map(
+        (r) =>
+          ({
+            id: r.id,
+            type: r.type,
+            name: r.name,
+            source_refs: parseJsonStringArray(r.source_refs),
+            ...(r.confidence != null ? { confidence: r.confidence } : {}),
+            ...parseJsonObject(r.data),
+          }) as unknown as GraphNode,
+      );
+      const edges = edgeRows.map(
+        (r) =>
+          ({
+            source: r.source,
+            target: r.target,
+            type: r.type,
+            ...(r.direction != null ? { direction: r.direction } : {}),
+            ...(r.weight != null ? { weight: r.weight } : {}),
+            ...parseJsonObject(r.data),
+          }) as unknown as GraphEdge,
+      );
+      return { nodes, edges };
+    } finally {
+      db.close();
+    }
+  }
+
+  const kgPath = path.join(repo, ".guild", "indexes", "knowledge-graph.json");
+  return JSON.parse(fs.readFileSync(kgPath, "utf8")) as GraphView;
+}
+
+// ---------------------------------------------------------------------------
 // 1. Oracle self-consistency
 // ---------------------------------------------------------------------------
 
@@ -662,12 +799,12 @@ describe("CLRA parity harness — index:off vs index:on", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Goal-wiring placeholders — activate as each lane lands.
+// 3. Goal wiring — LIVE (G1/G2/G3/G8/G9).
 //
-// NOTE: skipped tests ESCAPE the gate. When a lane wires its extraction to the
-// shared fixture, it MUST replace the describe.skip with describe and assert
-// against the oracle (clra-fixture.expected.json). Leaving these skipped after
-// the feature lands is a silent coverage hole.
+// Each block asserts a goal's real API against the shared oracle
+// (clra-fixture.expected.json) and proves index:off==index:on parity with
+// engagement. NOTE: a skipped test ESCAPES the gate — none remain here; every
+// landed lane is wired live (a placeholder left skipped is a silent coverage hole).
 // ---------------------------------------------------------------------------
 
 // G1 + G2 — model-free structural extraction (G1) + import/type-aware call
@@ -675,17 +812,9 @@ describe("CLRA parity harness — index:off vs index:on", () => {
 // calls/imports/inherits/implements match expected.json; oracle precision/recall
 // meet the G2 thresholds (TS ≥85%, Py ≥80%); SQLite-off parity holds.
 describe("[G1+G2] structural extraction + resolved calls match the oracle", () => {
-  const REL_FILES = [
-    "src/a.ts", "src/b.ts", "src/shapes.ts",
-    "py/a.py", "py/b.py", "py/shapes.py",
-  ];
-  const readFile = (abs: string) => fs.readFileSync(abs, "utf8");
-
-  function buildGraph(): { nodes: Array<Record<string, unknown>>; edges: GraphEdge[] } {
-    const base = extractStructuralGraph(FIXTURE_ROOT, REL_FILES, readFile);
-    const refined = refineCalls(FIXTURE_ROOT, REL_FILES, readFile, base);
-    return { nodes: refined.nodes as unknown as Array<Record<string, unknown>>, edges: refined.edges };
-  }
+  // Reuse the shared fixture-graph builder (extractStructuralGraph → refineCalls);
+  // the G3/G8/G9 blocks below build the SAME way (don't re-invent extraction).
+  const buildGraph = buildFixtureGraph;
 
   // module-level function = function:<rel>:<name> with no "." in the name. The
   // module-level precision/recall test below is SCOPED to these; method dispatch
@@ -889,27 +1018,252 @@ describe("[G1+G2] structural extraction + resolved calls match the oracle", () =
   });
 });
 
-// G3 — structural query API. Wire: kg_trace(inbound) returns the oracle call
-// chain; kg_dead_code equals oracle.deadCode (precision & recall = 1.0); query
-// results identical with index:off and index:on via runBothIndexModes.
-describe.skip("[G3] structural query API matches the oracle (WIRE WHEN G3 LANDS)", () => {
-  test("placeholder — dead-code list equals oracle.deadCode (functions only)", () => {
-    // const dead = kgDeadCode(graph); expect(new Set(dead)).toEqual(new Set(loadOracle().deadCode));
+// G3 — structural query API (lib/graph-query.ts). kgDeadCode equals
+// oracle.deadCode (precision & recall = 1.0); kgTrace(inbound) returns the
+// oracle call chain; results identical with index:off and index:on.
+describe("[G3] structural query API matches the oracle", () => {
+  // A known callee with exactly one caller (main) — the inbound oracle call chain.
+  const TRACE_SEED = "function:src/b.ts:add";
+  const TRACE_CALLER = "function:src/a.ts:main";
+
+  test("kgDeadCode equals oracle.deadCode (free functions; precision & recall = 1.0)", () => {
+    const o = loadOracle();
+    const graph = buildFixtureGraph();
+    const dead = new Set(kgDeadCode(graph).nodes.map((n) => n.id));
+    const oracleDead = new Set(o.deadCode);
+
+    // Every dead-code id is a FREE function (no "." in the name) — methods are
+    // deliberately out of scope, so the precision/recall claim is module-level.
+    for (const id of dead) expect(id.split(":").slice(2).join(":")).not.toContain(".");
+
+    let hit = 0;
+    for (const d of dead) if (oracleDead.has(d)) hit++;
+    const precision = dead.size === 0 ? 1 : hit / dead.size;
+    const recall = oracleDead.size === 0 ? 1 : hit / oracleDead.size;
+    // eslint-disable-next-line no-console
+    console.log(`[G3 oracle] dead-code precision=${precision} recall=${recall} (${dead.size} predicted, ${oracleDead.size} oracle)`);
+    expect(precision).toBe(1);
+    expect(recall).toBe(1);
+    expect(dead).toEqual(oracleDead);
+  });
+
+  test("kgTrace(inbound) returns the oracle call chain for a known seed", () => {
+    const graph = buildFixtureGraph();
+    const trace = kgTrace(graph, TRACE_SEED, "inbound", 5);
+    const ids = new Set(trace.nodes.map((n) => n.id));
+    // The reverse-reachable caller (main calls add) is in the chain, with its edge.
+    expect(ids.has(TRACE_CALLER)).toBe(true);
+    expect(trace.edges.some((e) => e.source === TRACE_CALLER && e.target === TRACE_SEED)).toBe(true);
+    // Anti-vacuity: a function NOT on the call chain (the dead helper) is absent.
+    expect(ids.has("function:src/b.ts:unusedHelper")).toBe(false);
+  });
+
+  test("kgTrace(outbound) from main returns its full oracle callee set", () => {
+    const o = loadOracle();
+    const graph = buildFixtureGraph();
+    const trace = kgTrace(graph, TRACE_CALLER, "outbound", 5);
+    const ids = new Set(trace.nodes.map((n) => n.id));
+    for (const c of o.calls.filter((c) => c.from === TRACE_CALLER)) {
+      expect(ids.has(c.to)).toBe(true);
+    }
+  });
+
+  test("anti-vacuity: a synthetic inbound call makes a dead function NOT dead (gate bites)", () => {
+    const o = loadOracle();
+    const graph = buildFixtureGraph();
+    const oracleDead = new Set(o.deadCode);
+    const mutated: GraphView = {
+      nodes: graph.nodes,
+      edges: [
+        ...graph.edges,
+        { source: "function:src/a.ts:main", target: "function:src/b.ts:unusedHelper", type: "calls" } as unknown as GraphEdge,
+      ],
+    };
+    const mutatedDead = new Set(kgDeadCode(mutated).nodes.map((n) => n.id));
+    expect(mutatedDead.has("function:src/b.ts:unusedHelper")).toBe(false);
+    expect(mutatedDead).not.toEqual(oracleDead);
+  });
+
+  describe("SQLite-off parity for the structural query API", () => {
+    let tmpRepo: string;
+    beforeAll(() => {
+      tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), "clra-g3-parity-"));
+      writeFixtureGraph(tmpRepo, buildFixtureGraph());
+    });
+    afterAll(() => {
+      if (tmpRepo) fs.rmSync(tmpRepo, { recursive: true, force: true });
+    });
+
+    function queryProjection(ctx: IndexModeContext): {
+      dead: string[];
+      traceNodes: string[];
+      traceEdges: string[];
+    } {
+      const graph = loadGraphView(tmpRepo, ctx);
+      const trace = kgTrace(graph, "function:src/b.ts:add", "inbound", 5);
+      return {
+        dead: kgDeadCode(graph).nodes.map((n) => n.id).sort(),
+        traceNodes: trace.nodes.map((n) => n.id).sort(),
+        traceEdges: trace.edges.map((e) => `${e.source}->${e.target}`).sort(),
+      };
+    }
+
+    test("dead-code + trace identical off vs on; engagement PROVEN", () => {
+      const outcome = runBothIndexModes(queryProjection, {
+        overrides: { kg_node_threshold: 0, kg_size_threshold_mb: 0 },
+      });
+      expect(outcome.ranBoth).toBe(true);
+      expect(outcome.identical).toBe(true);
+      expect(outcome.off.dead.length).toBeGreaterThan(0);
+      expect(outcome.off.traceNodes.length).toBeGreaterThan(0);
+      expect(outcome.off).toEqual(outcome.on);
+      expect(outcome.engagementProven).toBe(true);
+      expect(outcome.engagement).toEqual({ off: false, on: true });
+    });
   });
 });
 
-// G8 — local model-free similarity. Wire: kg_similar(cloneA) ranks cloneB #1
-// (precision@1 = 1.0 on oracle.clonePairs); deterministic; SQLite-off parity.
-describe.skip("[G8] code similarity ranks the clone pair first (WIRE WHEN G8 LANDS)", () => {
-  test("placeholder — each clonePair[i][1] is the top neighbor of clonePair[i][0]", () => {
-    // for (const [a, b] of loadOracle().clonePairs) expect(kgSimilar(a)[0]).toBe(b);
+// G8 — local model-free similarity (lib/similarity.ts). kgSimilar ranks the
+// clone pair first (precision@1 = 1.0 on oracle.clonePairs); deterministic;
+// SQLite-off parity.
+describe("[G8] code similarity ranks the clone pair first", () => {
+  // Source slices resolve from the fixture tree (nodes carry path#Lx-Ly refs).
+  const SIM_OPTS = { repoRoot: FIXTURE_ROOT } as const;
+
+  test("each clonePair[i][1] is the top neighbor of clonePair[i][0] (precision@1 = 1.0)", () => {
+    const o = loadOracle();
+    const graph = buildFixtureGraph();
+    expect(o.clonePairs.length).toBeGreaterThan(0); // non-vacuity: pairs to measure
+    for (const [a, b] of o.clonePairs) {
+      const top = kgSimilar(graph, a, 5, 0, SIM_OPTS).neighbors[0];
+      expect(top?.id).toBe(b);
+    }
+  });
+
+  test("deterministic: identical ranking across two runs AND under reversed node order", () => {
+    const o = loadOracle();
+    const graph = buildFixtureGraph();
+    const [a, b] = o.clonePairs[0];
+    const run1 = kgSimilar(graph, a, 5, 0, SIM_OPTS).neighbors.map((n) => `${n.id}|${n.score}`);
+    const run2 = kgSimilar(graph, a, 5, 0, SIM_OPTS).neighbors.map((n) => `${n.id}|${n.score}`);
+    expect(run2).toEqual(run1);
+    // Reverse the data structure kgSimilar consumes (graph.nodes) — the score-desc,
+    // id-tie-break ranking must be byte-identical (determinism is not array-order luck).
+    const reversed = kgSimilar({ nodes: [...graph.nodes].reverse() }, a, 5, 0, SIM_OPTS).neighbors.map((n) => `${n.id}|${n.score}`);
+    expect(reversed).toEqual(run1);
+    expect(kgSimilar({ nodes: [...graph.nodes].reverse() }, a, 5, 0, SIM_OPTS).neighbors[0]?.id).toBe(b);
+  });
+
+  test("anti-vacuity: removing the clone node changes the top neighbor (gate bites)", () => {
+    const o = loadOracle();
+    const graph = buildFixtureGraph();
+    const [a, b] = o.clonePairs[0];
+    const pruned = { nodes: graph.nodes.filter((n) => n.id !== b) };
+    expect(kgSimilar(pruned, a, 5, 0, SIM_OPTS).neighbors[0]?.id).not.toBe(b);
+  });
+
+  describe("SQLite-off parity for code similarity", () => {
+    let tmpRepo: string;
+    beforeAll(() => {
+      tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), "clra-g8-parity-"));
+      writeFixtureGraph(tmpRepo, buildFixtureGraph());
+    });
+    afterAll(() => {
+      if (tmpRepo) fs.rmSync(tmpRepo, { recursive: true, force: true });
+    });
+
+    // Rank every clone seed; return id|score lists. The ranking depends on each
+    // node's `sp` (cosine) and source slice (MinHash), both of which must survive
+    // the SQLite round-trip — so a `data`-column drop would diverge off vs on.
+    function simProjection(ctx: IndexModeContext): string[][] {
+      const o = loadOracle();
+      const graph = loadGraphView(tmpRepo, ctx);
+      return o.clonePairs.map(([a]) =>
+        kgSimilar(graph, a, 5, 0, SIM_OPTS).neighbors.map((n) => `${n.id}|${n.score}`),
+      );
+    }
+
+    test("clone-pair ranking identical off vs on; engagement PROVEN", () => {
+      const outcome = runBothIndexModes(simProjection, {
+        overrides: { kg_node_threshold: 0, kg_size_threshold_mb: 0 },
+      });
+      expect(outcome.ranBoth).toBe(true);
+      expect(outcome.identical).toBe(true);
+      // Each seed found at least its clone — non-empty rankings to compare.
+      expect(outcome.off.every((r) => r.length > 0)).toBe(true);
+      expect(outcome.off).toEqual(outcome.on);
+      expect(outcome.engagementProven).toBe(true);
+      expect(outcome.engagement).toEqual({ off: false, on: true });
+    });
   });
 });
 
-// G9 — impact & architecture recall. Wire: impact(diff touching b.ts) flags the
-// reverse-reachable callers (a.ts) and not unrelated files; SQLite-off parity.
-describe.skip("[G9] impact analysis flags reverse-reachable callers (WIRE WHEN G9 LANDS)", () => {
-  test("placeholder — editing b.ts flags a.ts as impacted, shapes.ts not", () => {
-    // expect(impact(["src/b.ts"]).map(n=>n.file)).toContain("src/a.ts");
+// G9 — impact & architecture recall (lib/impact.ts). Editing b.ts flags the
+// reverse-reachable caller (a.ts:main) and NOT unrelated files; SQLite-off parity.
+describe("[G9] impact analysis flags reverse-reachable callers", () => {
+  // oracle.calls: main (src/a.ts) → add (src/b.ts). Changing src/b.ts must flag
+  // its caller main, but not the unrelated shapes module.
+  const CHANGED = ["src/b.ts"];
+  const CALLER = "function:src/a.ts:main";
+
+  test("editing b.ts flags a.ts:main (reverse-reachable) and not shapes.ts", () => {
+    const graph = buildFixtureGraph();
+    const impact = computeImpact(graph, { changedFiles: CHANGED });
+    const ids = new Set(impact.nodes.map((n) => n.id));
+    const files = new Set(impact.files.map((f) => f.path));
+    // The caller is reverse-reachable from the changed file.
+    expect(ids.has(CALLER)).toBe(true);
+    expect(files.has("src/a.ts")).toBe(true);
+    // The unrelated shapes module is NOT pulled in (it never calls into b.ts).
+    expect([...ids].some((id) => id.split(":")[1] === "src/shapes.ts")).toBe(false);
+    expect(files.has("src/shapes.ts")).toBe(false);
+  });
+
+  test("anti-vacuity: severing the calls into b.ts drops the caller (gate bites)", () => {
+    const graph = buildFixtureGraph();
+    const severed: GraphView = {
+      nodes: graph.nodes,
+      edges: graph.edges.filter((e) => !(e.type === "calls" && e.target.split(":")[1] === "src/b.ts")),
+    };
+    const ids = new Set(computeImpact(severed, { changedFiles: CHANGED }).nodes.map((n) => n.id));
+    expect(ids.has(CALLER)).toBe(false);
+  });
+
+  describe("SQLite-off parity for impact analysis", () => {
+    let tmpRepo: string;
+    beforeAll(() => {
+      tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), "clra-g9-parity-"));
+      writeFixtureGraph(tmpRepo, buildFixtureGraph());
+    });
+    afterAll(() => {
+      if (tmpRepo) fs.rmSync(tmpRepo, { recursive: true, force: true });
+    });
+
+    function impactProjection(ctx: IndexModeContext): {
+      nodes: string[];
+      files: string[];
+      edges: string[];
+    } {
+      const graph = loadGraphView(tmpRepo, ctx);
+      const impact = computeImpact(graph, { changedFiles: CHANGED });
+      return {
+        nodes: impact.nodes.map((n) => `${n.id}|${n.risk}`).sort(),
+        files: impact.files.map((f) => `${f.path}|${f.risk}`).sort(),
+        edges: impact.edges.map((e) => `${e.source}->${e.target}`).sort(),
+      };
+    }
+
+    test("impact set identical off vs on; engagement PROVEN", () => {
+      const outcome = runBothIndexModes(impactProjection, {
+        overrides: { kg_node_threshold: 0, kg_size_threshold_mb: 0 },
+      });
+      expect(outcome.ranBoth).toBe(true);
+      expect(outcome.identical).toBe(true);
+      expect(outcome.off.nodes.length).toBeGreaterThan(0);
+      expect(outcome.off.nodes.some((n) => n.startsWith(`${CALLER}|`))).toBe(true);
+      expect(outcome.off).toEqual(outcome.on);
+      expect(outcome.engagementProven).toBe(true);
+      expect(outcome.engagement).toEqual({ off: false, on: true });
+    });
   });
 });
