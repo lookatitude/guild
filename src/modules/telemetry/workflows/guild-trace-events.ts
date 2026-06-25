@@ -109,6 +109,47 @@ export interface GuildTraceRecallV1 extends GuildTraceEventBase {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 2b. guild.trace.recall_decision.v1 — recall-quality decision (G10)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Downstream outcome of the lane that consumed this recall (if resolvable). */
+export type LaneOutcome = "success" | "failure" | "unknown";
+
+/**
+ * A recall-QUALITY decision event (distinct from guild.trace.recall.v1, which is
+ * the operational recall trace). Carries the signal needed to tune the
+ * `recallScoreThreshold` empirically: the top relevance score the winning
+ * branch produced, the threshold in effect, and whether the recall was strong
+ * enough that an agent could skip a full file read (`read_skip_fired`).
+ *
+ * Privacy: the raw query is NEVER logged. `query_hash` is a sha256[:16] of the
+ * full query (stable grouping key); `query_preview` is a short truncation for
+ * human-readable reports (≤ 60 chars, may be empty).
+ */
+export interface GuildTraceRecallDecisionV1 extends GuildTraceEventBase {
+  schema_version: "guild.trace.recall_decision.v1";
+  /** sha256[:16] of the full query — stable grouping key, no raw content. */
+  query_hash: string;
+  /** Truncated query preview (≤ 60 chars) for report readability; may be "". */
+  query_preview: string;
+  /** Recall branch that won the waterfall (or 'empty'). */
+  branch: RecallBranch;
+  /** Top raw relevance score of the winning branch (branch-native scale, ≥ 0). */
+  top_score: number;
+  /** The recallScoreThreshold in effect at recall time (≥ 0). */
+  threshold: number;
+  /**
+   * Whether recall was strong enough to skip a full read:
+   * chunk_count > 0 AND top_score >= threshold.
+   */
+  read_skip_fired: boolean;
+  /** Number of ProtectedChunks returned. */
+  chunk_count: number;
+  /** Downstream lane outcome hook ('unknown' until resolved). */
+  lane_outcome: LaneOutcome;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 3. guild.trace.config_resolution.v1 — resolveSettings() completion
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -205,6 +246,7 @@ export interface GuildTraceDegradationV1 extends GuildTraceEventBase {
 export type GuildTraceEvent =
   | GuildTraceDispatchV1
   | GuildTraceRecallV1
+  | GuildTraceRecallDecisionV1
   | GuildTraceConfigResolutionV1
   | GuildTraceSecurityDecisionV1
   | GuildTraceDegradationV1;
@@ -213,6 +255,7 @@ export type GuildTraceEvent =
 export const GUILD_TRACE_SCHEMA_VERSIONS = [
   "guild.trace.dispatch.v1",
   "guild.trace.recall.v1",
+  "guild.trace.recall_decision.v1",
   "guild.trace.config_resolution.v1",
   "guild.trace.security_decision.v1",
   "guild.trace.degradation.v1",
@@ -312,6 +355,44 @@ export function validateRecallEvent(ev: unknown): ValidationResult {
   }
   if (typeof e["cwd_redacted"] !== "string") {
     return { ok: false, reason: "cwd_redacted must be a string" };
+  }
+  return { ok: true };
+}
+
+const LANE_OUTCOMES: LaneOutcome[] = ["success", "failure", "unknown"];
+
+/** Validate a guild.trace.recall_decision.v1 event. */
+export function validateRecallDecisionEvent(ev: unknown): ValidationResult {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev as Record<string, unknown>;
+
+  if (e["schema_version"] !== "guild.trace.recall_decision.v1") {
+    return { ok: false, reason: `wrong schema_version for recall_decision: ${e["schema_version"]}` };
+  }
+  if (typeof e["query_hash"] !== "string" || e["query_hash"] === "") {
+    return { ok: false, reason: "query_hash must be a non-empty string" };
+  }
+  if (typeof e["query_preview"] !== "string") {
+    return { ok: false, reason: "query_preview must be a string (may be empty)" };
+  }
+  if (!RECALL_BRANCHES.includes(e["branch"] as RecallBranch)) {
+    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
+  }
+  if (typeof e["top_score"] !== "number" || e["top_score"] < 0 || !isFinite(e["top_score"] as number)) {
+    return { ok: false, reason: "top_score must be a finite number >= 0" };
+  }
+  if (typeof e["threshold"] !== "number" || e["threshold"] < 0 || !isFinite(e["threshold"] as number)) {
+    return { ok: false, reason: "threshold must be a finite number >= 0" };
+  }
+  if (typeof e["read_skip_fired"] !== "boolean") {
+    return { ok: false, reason: "read_skip_fired must be a boolean" };
+  }
+  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
+    return { ok: false, reason: "chunk_count must be a non-negative number" };
+  }
+  if (!LANE_OUTCOMES.includes(e["lane_outcome"] as LaneOutcome)) {
+    return { ok: false, reason: `lane_outcome must be one of: ${LANE_OUTCOMES.join(", ")}` };
   }
   return { ok: true };
 }
@@ -420,6 +501,8 @@ export function validateGuildTraceEvent(ev: unknown): ValidationResult {
       return validateDispatchEvent(ev);
     case "guild.trace.recall.v1":
       return validateRecallEvent(ev);
+    case "guild.trace.recall_decision.v1":
+      return validateRecallDecisionEvent(ev);
     case "guild.trace.config_resolution.v1":
       return validateConfigResolutionEvent(ev);
     case "guild.trace.security_decision.v1":
@@ -447,6 +530,13 @@ export function makeRecallEvent(
   fields: Omit<GuildTraceRecallV1, "schema_version">,
 ): GuildTraceRecallV1 {
   return { schema_version: "guild.trace.recall.v1", ...fields };
+}
+
+/** Build a guild.trace.recall_decision.v1 event (G10). */
+export function makeRecallDecisionEvent(
+  fields: Omit<GuildTraceRecallDecisionV1, "schema_version">,
+): GuildTraceRecallDecisionV1 {
+  return { schema_version: "guild.trace.recall_decision.v1", ...fields };
 }
 
 /** Build a guild.trace.config_resolution.v1 event. */

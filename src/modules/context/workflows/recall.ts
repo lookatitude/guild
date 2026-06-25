@@ -49,6 +49,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 
 import { DEFAULT_INDEX_BLOCK, type IndexBlock } from "../../state";
 import { wikiRecall } from "./wiki-recall";
@@ -64,7 +65,7 @@ import {
 } from "../../knowledge";
 // R-TRACE (Wave 6): additive trace emit — NEVER changes return value
 import { emitTraceEvent } from "../../telemetry";
-import { makeRecallEvent } from "../../telemetry";
+import { makeRecallEvent, makeRecallDecisionEvent } from "../../telemetry";
 
 // Re-export so existing importers (`recall.ts` was the original home of the scorer)
 // keep resolving `ingestImportanceScore` from here; canonical impl now in ingest-importance.ts.
@@ -87,6 +88,12 @@ export interface RecallResult {
   directive: string | null;
   /** Which recall mechanism(s) were used — informational (telemetry / logging). */
   source: RecallSource;
+  /**
+   * G10: top raw relevance score of the winning branch (branch-native scale).
+   * Informational — surfaced for recall-quality telemetry / threshold tuning.
+   * Undefined when the branch does not expose a numeric score (sqlite/fs-scan).
+   */
+  topScore?: number;
 }
 
 export interface RecallOpts {
@@ -128,7 +135,23 @@ export interface RecallOpts {
    * Resolved from `models.compositeRecall` + `models.importanceGate` by the CLI.
    */
   composite?: CompositeConfig;
+  /**
+   * G10: the `recallScoreThreshold` in effect (read-skip threshold). Drives the
+   * recall-decision telemetry's `read_skip_fired` (top_score >= threshold). The
+   * pure path defaults to 0.4 (config default); the CLI resolves it from
+   * `models.recallScoreThreshold`.
+   */
+  recallScoreThreshold?: number;
+  /**
+   * G10: downstream lane outcome hook for the recall-decision event. Defaults to
+   * "unknown" — a caller that knows whether the recall helped its lane can pass
+   * "success"/"failure" so recall-stats can compute precision.
+   */
+  laneOutcome?: "success" | "failure" | "unknown";
 }
+
+/** G10: default read-skip threshold (mirrors config-defaults models.recallScoreThreshold). */
+export const DEFAULT_RECALL_SCORE_THRESHOLD = 0.4;
 
 // ── Composite recall scoring (docs/v2/05-knowledge-memory.md §Recall scoring) ──
 
@@ -180,6 +203,34 @@ export function resolveCompositeConfig(cwd: string): CompositeConfig | undefined
     }
   } catch { /* settings unreadable → BM25-only default */ }
   return undefined;
+}
+
+/**
+ * G10: resolve `models.recallScoreThreshold` from settings for a cwd, falling
+ * back to DEFAULT_RECALL_SCORE_THRESHOLD when unset/unreadable. Kept out of the
+ * pure recall() path (which takes the value via opts) so the library never loads
+ * the settings resolver.
+ */
+export function resolveRecallScoreThreshold(cwd: string): number {
+  try {
+    // Lazy require so the pure library path never loads the settings resolver.
+    const { resolveSettings } = require("../../config") as typeof import("../../config");
+    const models = (resolveSettings({ cwd }).config as {
+      models?: { recallScoreThreshold?: number };
+    }).models;
+    if (typeof models?.recallScoreThreshold === "number" && models.recallScoreThreshold >= 0) {
+      return models.recallScoreThreshold;
+    }
+  } catch { /* settings unreadable → default */ }
+  return DEFAULT_RECALL_SCORE_THRESHOLD;
+}
+
+/**
+ * G10: stable, privacy-preserving query key — sha256[:16] of the full query.
+ * The raw query is never logged; recall-stats groups by this hash.
+ */
+export function hashQuery(query: string): string {
+  return crypto.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 
 /** Wiki category from an absolute path under `<wikiBase>/<category>/…`. */
@@ -314,6 +365,8 @@ function fileBm25Branch(
   });
 
   const scores = bm25Score(queryTokens, docs);
+  // G10: top raw BM25 score (pre-rank) — the winning branch's relevance signal.
+  const topScore = scores.length ? Math.max(0, ...scores) : 0;
 
   // BM25 desc by default; composite re-rank + importance gate when configured.
   const ranked = rankWikiDocs(
@@ -335,7 +388,7 @@ function fileBm25Branch(
     runId,
     callerTool: "recall:file-bm25",
   });
-  return { source: "file-bm25", chunks, directive };
+  return { source: "file-bm25", chunks, directive, topScore };
 }
 
 // ── Branch C: fsScan → protectChunks ─────────────────────────────────────────
@@ -443,6 +496,9 @@ function kgQueryBranch(
 
   if (ranked.length === 0) return null;
 
+  // G10: top rankKgNodes score — the KG branch's relevance signal.
+  const topScore = ranked[0]?.s ?? 0;
+
   // Build a deterministic markdown summary for each node.
   // source_path uses the projection file path + node id so classifyTrustTier
   // can identify the origin without hitting the operator-path allowlist.
@@ -463,7 +519,7 @@ function kgQueryBranch(
     runId,
     callerTool: "recall:kg-query",
   });
-  return { source: "kg-query", chunks, directive };
+  return { source: "kg-query", chunks, directive, topScore };
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -491,6 +547,8 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
     _bm25Disabled = false,
     _kgDisabled = false,
     composite,
+    recallScoreThreshold = DEFAULT_RECALL_SCORE_THRESHOLD,
+    laneOutcome = "unknown",
   } = opts;
 
   // R-TRACE: wall-clock start (additive timing — does not affect result)
@@ -537,16 +595,21 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   // Directive: set when ANY wrapped chunk exists (either wiki or KG).
   const directive = wikiResult.directive ?? kgResult?.directive ?? null;
 
-  const result: RecallResult = { source, chunks: allChunks, directive };
+  // G10: top relevance score across the contributing branches (branch-native scale).
+  const topScore = Math.max(wikiResult.topScore ?? 0, kgResult?.topScore ?? 0);
+
+  const result: RecallResult = { source, chunks: allChunks, directive, topScore };
+
+  // Branch label shared by both trace emits below.
+  const _traceBranch = allChunks.length === 0
+    ? "empty" as const
+    : source === "combined" ? "combined" as const
+    : source as "sqlite" | "file-bm25" | "fs-scan" | "kg-query";
 
   // R-TRACE emit — additive, try/catch, never changes result (guild.trace.recall.v1)
-  // emit-point: recall.ts line ~519, after result is fully assembled
+  // emit-point: recall.ts, after result is fully assembled
   try {
     const _traceDurationMs = Date.now() - _traceStart;
-    const _traceBranch = allChunks.length === 0
-      ? "empty" as const
-      : source === "combined" ? "combined" as const
-      : source as "sqlite" | "file-bm25" | "fs-scan" | "kg-query";
     // ProtectedChunk exposes an explicit `quarantined` boolean — use it directly.
     // (The prior `c.content.includes("[QUARANTINED]")` referenced a property that does not
     // exist on ProtectedChunk — TS2339; the rendered text field is `rendered`, not `content`.)
@@ -567,6 +630,31 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
     );
   } catch {
     // Trace must never affect recall result — swallow all errors silently
+  }
+
+  // G10 emit — recall-quality decision (guild.trace.recall_decision.v1).
+  // Additive + safe: no runDir → emitTraceEvent no-ops; never throws.
+  // read_skip_fired = chunk produced AND the top score cleared the threshold.
+  try {
+    const readSkipFired = allChunks.length > 0 && topScore >= recallScoreThreshold;
+    emitTraceEvent(
+      makeRecallDecisionEvent({
+        ts: new Date().toISOString(),
+        run_id: runId ?? "",
+        lane_id: process.env["GUILD_LANE_ID"] ?? "",
+        query_hash: hashQuery(query),
+        query_preview: query.slice(0, 60),
+        branch: _traceBranch,
+        top_score: topScore,
+        threshold: recallScoreThreshold,
+        read_skip_fired: readSkipFired,
+        chunk_count: allChunks.length,
+        lane_outcome: laneOutcome,
+      }),
+      runDir ?? null,
+    );
+  } catch {
+    // Telemetry must never affect recall result — swallow all errors silently
   }
 
   return result;
@@ -625,10 +713,15 @@ export function runRecallCli(): void {
   // config-driven default takes effect on BOTH the CLI and the host-adapter recall path).
   const composite = resolveCompositeConfig(cwd);
 
+  // G10: resolve the read-skip threshold from settings so recall-decision telemetry
+  // records the threshold actually in effect for this repo.
+  const recallScoreThreshold = resolveRecallScoreThreshold(cwd);
+
   const result = recall(query, {
     cwd,
     category,
     limit,
+    recallScoreThreshold,
     ...(runId ? { runId } : {}),
     ...(runDir ? { runDir } : {}),
     ...(composite ? { composite } : {}),
