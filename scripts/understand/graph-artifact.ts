@@ -70,7 +70,9 @@ function resolveGraphPath(argv: string[], gp: ReturnType<typeof guildPaths>): st
   // realpathSync(baseDir) inside assertContainedPath needs the dir to exist.
   fs.mkdirSync(gp.indexesDir, { recursive: true });
   try {
-    return assertContainedPath(raw, gp.indexesDir);
+    // repo-anchor the containment base: a symlinked .guild/indexes pointing outside
+    // the repo must NOT become the containment root (Codex FIX-T6.1-r3 #1).
+    return assertContainedPath(raw, gp.indexesDir, gp.repoRoot);
   } catch {
     return null;
   }
@@ -153,7 +155,7 @@ function doExport(cwd: string, argv: string[]): number {
   fs.mkdirSync(gp.indexesDir, { recursive: true });
   let artifactPath: string;
   try {
-    artifactPath = assertContainedPath(path.join(gp.indexesDir, ARTIFACT_BASENAME), gp.indexesDir);
+    artifactPath = assertContainedPath(path.join(gp.indexesDir, ARTIFACT_BASENAME), gp.indexesDir, gp.repoRoot);
   } catch (err) {
     process.stderr.write(`[graph-artifact] refusing unsafe path: ${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
@@ -200,7 +202,7 @@ function doImport(cwd: string, argv: string[]): number {
   // Decode + integrity-check the artifact. Any failure → full-extraction fallback.
   let envelope;
   try {
-    const artifactPath = assertContainedPath(path.join(gp.indexesDir, ARTIFACT_BASENAME), gp.indexesDir);
+    const artifactPath = assertContainedPath(path.join(gp.indexesDir, ARTIFACT_BASENAME), gp.indexesDir, gp.repoRoot);
     const buf = fs.readFileSync(artifactPath);
     envelope = unpackGraphArtifact(buf).envelope;
   } catch (err) {

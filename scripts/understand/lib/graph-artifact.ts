@@ -39,7 +39,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as zlib from "zlib";
 import * as crypto from "crypto";
-import { validateGraph } from "./schema";
+import { validateGraph, CONFIDENCE, DIRECTIONS } from "./schema";
 import type { KnowledgeGraph } from "./schema";
 import type { StructuralCache } from "./structural";
 // SoT for secret regexes (docs-hygiene/scan.ts). Static import — ts-jest
@@ -121,9 +121,27 @@ export class ArtifactError extends Error {
  * directory when the final target does not exist yet (Codex FIX-T6.1-r2 #1).
  * Returns the symlink-resolved absolute candidate path (== the lexical resolve
  * for the symlink-free case).
+ *
+ * Repo-anchor (Codex FIX-T6.1-r3 #1): `baseDir` ITSELF may be a symlink. A
+ * caller passes `gp.indexesDir` (`.guild/indexes`) as the containment root; if
+ * that directory is a symlink pointing OUTSIDE the repo, `realpathSync(baseDir)`
+ * silently relocates the containment root outside the repo and every
+ * "contained" write lands outside it. When `repoRoot` is supplied, the
+ * realpath of the base is asserted to stay within the realpath of the repo root
+ * BEFORE it is trusted as the containment base — a symlinked base that escapes
+ * the repo is refused.
  */
-export function assertContainedPath(candidate: string, baseDir: string): string {
+export function assertContainedPath(candidate: string, baseDir: string, repoRoot?: string): string {
   const base = fs.realpathSync(baseDir);
+  // Repo-anchor the containment base: a symlinked `baseDir` resolving outside the
+  // repo root must not become a (relocated) containment root (Codex FIX-T6.1-r3 #1).
+  if (repoRoot !== undefined) {
+    const realRoot = fs.realpathSync(repoRoot);
+    const relToRoot = path.relative(realRoot, base);
+    if (relToRoot !== "" && (relToRoot.startsWith("..") || path.isAbsolute(relToRoot))) {
+      throw new ArtifactError(`containment base escapes repo root ${realRoot}: ${baseDir}`);
+    }
+  }
   const resolved = path.resolve(base, candidate);
   const within = (child: string): boolean => {
     const rel = path.relative(base, child);
@@ -307,29 +325,65 @@ function isStringArray(v: unknown): boolean {
   return Array.isArray(v) && v.every((x) => typeof x === "string");
 }
 
+/** The structural node types a cached symbol node may carry (file is the fileNode). */
+const SYMBOL_NODE_TYPES = new Set(["function", "class"]);
+
 /**
- * A cached `symbolNodes` element must carry a non-empty string `id` — that is the
- * sole field `assembleStructuralGraph()` dereferences for it (Pass 1 `addNode`
- * dedups on `n.id`). A null/missing-id element would throw on `nodeIds.has(n.id)`.
+ * The FULL `GraphNode` shape the schema requires AND a fresh structural
+ * extraction emits (Codex FIX-T6.1-r3 #2). `assembleStructuralGraph()` adds the
+ * cached `fileNode` (Pass 1 `addNode(b.fileNode)`) and every `symbolNodes`
+ * element (Pass 1 `for (n of b.symbolNodes) addNode(n)`) WHOLESALE into the
+ * graph, so a cached node that is missing a schema-required field (or carries a
+ * bogus type / empty provenance) would surface a node that `validateGraph` later
+ * repairs or drops — diverging the incremental bundle from a full rebuild.
+ * Validate every required field so any deviation rejects the artifact → fallback.
  */
+function isValidGraphNode(n: unknown, allowedTypes: Set<string>): boolean {
+  if (!n || typeof n !== "object" || Array.isArray(n)) return false;
+  const r = n as Record<string, unknown>;
+  if (typeof r.id !== "string" || r.id === "") return false;
+  if (typeof r.type !== "string" || !allowedTypes.has(r.type)) return false;
+  if (typeof r.name !== "string" || r.name === "") return false;
+  // A structural node always carries real provenance (the file path, or
+  // `rel#Lx-Ly` for a symbol); never accept empty/non-string source_refs.
+  if (!Array.isArray(r.source_refs) || r.source_refs.length === 0) return false;
+  if (!r.source_refs.every((s) => typeof s === "string" && s !== "")) return false;
+  if (typeof r.confidence !== "string" || !CONFIDENCE.has(r.confidence)) return false;
+  return true;
+}
+
+/** A cached `fileNode`: full GraphNode shape, type `file`, id keyed to its file. */
+function isValidFileNode(n: unknown, rel: string): boolean {
+  if (!isValidGraphNode(n, new Set(["file"]))) return false;
+  return (n as Record<string, unknown>).id === `file:${rel}`;
+}
+
+/** A cached `symbolNodes` element: full GraphNode shape, type `function`/`class`. */
 function isValidSymbolNode(n: unknown): boolean {
-  if (!n || typeof n !== "object") return false;
-  const id = (n as Record<string, unknown>).id;
-  return typeof id === "string" && id !== "";
+  return isValidGraphNode(n, SYMBOL_NODE_TYPES);
 }
 
 /**
- * A cached `contains` edge must carry the string `type`/`source`/`target` that
- * Pass 1 `addEdge` reads to build its `type|source|target` dedup key.
+ * A cached `contains` edge: the FULL `GraphEdge` shape the schema requires
+ * (Codex FIX-T6.1-r3 #2). `assembleStructuralGraph()` adds each cached `contains`
+ * edge WHOLESALE (Pass 1 `for (e of b.contains) addEdge(e)`), so a malformed edge
+ * (bad `type`/`direction`/`weight`, or an endpoint that is not a node in THIS
+ * bundle) would surface an invalid or dangling-reference edge in the graph.
+ * `nodeIds` is the set of this bundle's node ids (fileNode + symbolNodes) — both
+ * endpoints must reference one (bundle cross-consistency).
  */
-function isValidContainsEdge(e: unknown): boolean {
-  if (!e || typeof e !== "object") return false;
+function isValidContainsEdge(e: unknown, nodeIds: Set<string>): boolean {
+  if (!e || typeof e !== "object" || Array.isArray(e)) return false;
   const r = e as Record<string, unknown>;
-  return (
-    typeof r.type === "string" &&
-    typeof r.source === "string" && r.source !== "" &&
-    typeof r.target === "string" && r.target !== ""
-  );
+  if (r.type !== "contains") return false;
+  if (typeof r.source !== "string" || r.source === "") return false;
+  if (typeof r.target !== "string" || r.target === "") return false;
+  if (typeof r.direction !== "string" || !DIRECTIONS.has(r.direction)) return false;
+  if (typeof r.weight !== "number" || !Number.isFinite(r.weight) || r.weight < 0 || r.weight > 1) {
+    return false;
+  }
+  // bundle cross-consistency: both endpoints must be nodes this same bundle emits.
+  return nodeIds.has(r.source) && nodeIds.has(r.target);
 }
 
 /**
@@ -392,8 +446,8 @@ export function validateStructuralCache(cache: unknown): cache is StructuralCach
     // is a malformed fingerprint that must not become an incremental key.
     if (typeof b.contentHash !== "string") return false;
     if (b.contentHash !== "" && !/^[0-9a-f]{64}$/.test(b.contentHash)) return false;
-    const fileNode = b.fileNode as Record<string, unknown> | undefined;
-    if (!fileNode || typeof fileNode !== "object" || fileNode.id !== `file:${rel}`) return false;
+    // fileNode: full GraphNode shape (it is added wholesale via addNode(b.fileNode)).
+    if (!isValidFileNode(b.fileNode, rel)) return false;
     if (
       !Array.isArray(b.symbolNodes) ||
       !Array.isArray(b.contains) ||
@@ -403,17 +457,40 @@ export function validateStructuralCache(cache: unknown): cache is StructuralCach
     ) {
       return false;
     }
-    // Element-level validation (Codex FIX-T6.1-r2 #2): the array-shape checks above
-    // pass even when an array holds MALFORMED entries (a null callable, a class with
-    // no `bases`, a symbol node with no `id`). `refreshStructuralIncremental()`
-    // reuses such a bundle and `assembleStructuralGraph()` then dereferences these
-    // fields — crashing or diverging from a full rebuild. Reject each defect so the
-    // artifact is refused and the CLI falls back to a full extraction.
-    if (!(b.symbolNodes as unknown[]).every(isValidSymbolNode)) return false;
-    if (!(b.contains as unknown[]).every(isValidContainsEdge)) return false;
+    // Element-level validation (Codex FIX-T6.1-r2 #2 + r3 #2/#3): the array-shape
+    // checks above pass even when an array holds MALFORMED entries.
+    // `refreshStructuralIncremental()` reuses such a bundle and
+    // `assembleStructuralGraph()` then emits these nodes/edges WHOLESALE — crashing,
+    // diverging from a full rebuild, or surfacing invalid/dangling edges. Validate
+    // the FULL node/edge shape + bundle cross-consistency so any defect rejects the
+    // artifact and the CLI falls back to a full extraction.
+    //
+    // symbolNodes: full GraphNode shape; collect ids for the cross-consistency checks.
+    const symbolIds = new Set<string>();
+    for (const n of b.symbolNodes as unknown[]) {
+      if (!isValidSymbolNode(n)) return false;
+      symbolIds.add((n as Record<string, unknown>).id as string);
+    }
+    // contains edges: full GraphEdge shape + endpoints within this bundle's nodes
+    // (fileNode + symbolNodes) — a phantom endpoint would emit a dangling edge.
+    const bundleNodeIds = new Set<string>(symbolIds);
+    bundleNodeIds.add(`file:${rel}`);
+    if (!(b.contains as unknown[]).every((e) => isValidContainsEdge(e, bundleNodeIds))) return false;
     if (!(b.importSpecs as unknown[]).every((s) => typeof s === "string")) return false;
-    if (!(b.classes as unknown[]).every(isValidClassEntry)) return false;
-    if (!(b.callables as unknown[]).every(isValidCallableEntry)) return false;
+    // classes/callables: full shape AND each id MUST be a real cached symbol node in
+    // THIS bundle (Codex FIX-T6.1-r3 #3). Pass 1 registers `c.id` and Pass 2b/2c emit
+    // inherits/implements/calls edges with `c.id` as the SOURCE; a bogus id that does
+    // not correspond to a symbol node surfaces an invalid edge from a phantom node.
+    for (const c of b.classes as unknown[]) {
+      if (!isValidClassEntry(c) || !symbolIds.has((c as Record<string, unknown>).id as string)) {
+        return false;
+      }
+    }
+    for (const c of b.callables as unknown[]) {
+      if (!isValidCallableEntry(c) || !symbolIds.has((c as Record<string, unknown>).id as string)) {
+        return false;
+      }
+    }
   }
   return true;
 }

@@ -388,6 +388,114 @@ describe("G6 gate 2 — integrity / corrupt artifact rejected", () => {
     const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
     expect(JSON.stringify(structuralSubset(imported))).toBe(JSON.stringify(structuralSubset(scratch)));
   });
+
+  test("FULL cached node/edge shape + bundle cross-consistency is validated (FIX-T6.1-r3 #2)", () => {
+    // FIX-T6.1-r3 #2: assembleStructuralGraph emits cached fileNode/symbolNodes and
+    // contains edges WHOLESALE, so a node missing a schema-required field or an edge
+    // with a bad field / phantom endpoint must reject the artifact (not just an
+    // id-present / key-present partial check).
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    // anti-vacuity: the well-formed cache passes the validator and round-trips.
+    expect(validateStructuralCache(cache)).toBe(true);
+    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, cache).artifact)).not.toThrow();
+
+    // pick the code bundle that carries symbols + contains edges (a.ts).
+    const key = Object.keys(cache.files).find(
+      (k) => cache.files[k].symbolNodes.length > 0 && cache.files[k].contains.length > 0,
+    ) as string;
+    expect(key).toBeDefined();
+    const clone = () => JSON.parse(JSON.stringify(cache)) as StructuralCache;
+    const bundleOf = (c: StructuralCache) => c.files[key] as unknown as Record<string, unknown>;
+    const expectRejected = (c: StructuralCache) => {
+      expect(validateStructuralCache(c)).toBe(false);
+      expect(() => unpackGraphArtifact(packageGraphArtifact(graph, c).artifact)).toThrow(ArtifactError);
+    };
+
+    // (a) a symbolNode missing schema-required `source_refs` → rejected (partial
+    //     id-only check would have accepted it).
+    const noRefs = clone();
+    delete (bundleOf(noRefs).symbolNodes as Record<string, unknown>[])[0].source_refs;
+    expectRejected(noRefs);
+
+    // (b) a symbolNode with an invalid `confidence` value → rejected.
+    const badConf = clone();
+    (bundleOf(badConf).symbolNodes as Record<string, unknown>[])[0].confidence = "bogus";
+    expectRejected(badConf);
+
+    // (c) the fileNode with a wrong `type` (not "file") → rejected.
+    const badFileType = clone();
+    (bundleOf(badFileType).fileNode as Record<string, unknown>).type = "function";
+    expectRejected(badFileType);
+
+    // (d) a contains edge with an out-of-range `weight` → rejected.
+    const badWeight = clone();
+    (bundleOf(badWeight).contains as Record<string, unknown>[])[0].weight = 9;
+    expectRejected(badWeight);
+
+    // (e) a contains edge with a wrong `direction` → rejected.
+    const badDir = clone();
+    (bundleOf(badDir).contains as Record<string, unknown>[])[0].direction = "sideways";
+    expectRejected(badDir);
+
+    // (f) a contains edge whose `target` is a PHANTOM id (not a node in this bundle)
+    //     → bundle cross-consistency rejects it (would otherwise emit a dangling edge).
+    const danglingEdge = clone();
+    (bundleOf(danglingEdge).contains as Record<string, unknown>[])[0].target = "function:a.ts:ghost";
+    expectRejected(danglingEdge);
+  });
+
+  test("a class/callable id with no matching cached symbol node is REJECTED (FIX-T6.1-r3 #3)", () => {
+    // FIX-T6.1-r3 #3: Pass 2b/2c emit inherits/implements/calls edges with the
+    // class/callable `id` as the SOURCE. A bogus id not backed by a symbol node
+    // surfaces an invalid edge from a phantom source — reject → fallback.
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    const key = Object.keys(cache.files).find(
+      (k) => cache.files[k].classes.length > 0 && cache.files[k].callables.length > 0,
+    ) as string;
+    expect(key).toBeDefined();
+    const clone = () => JSON.parse(JSON.stringify(cache)) as StructuralCache;
+    const bundleOf = (c: StructuralCache) => c.files[key] as unknown as Record<string, unknown>;
+    const expectRejected = (c: StructuralCache) => {
+      expect(validateStructuralCache(c)).toBe(false);
+      expect(() => unpackGraphArtifact(packageGraphArtifact(graph, c).artifact)).toThrow(ArtifactError);
+    };
+
+    // anti-vacuity: well-formed → valid (every class/callable id IS a symbol node).
+    expect(validateStructuralCache(cache)).toBe(true);
+
+    // (a) a class id that does not correspond to any cached symbol node → rejected.
+    const ghostClass = clone();
+    (bundleOf(ghostClass).classes as Record<string, unknown>[])[0].id = "class:a.ts:Ghost";
+    expectRejected(ghostClass);
+
+    // (b) a callable id that does not correspond to any cached symbol node → rejected.
+    const ghostCallable = clone();
+    (bundleOf(ghostCallable).callables as Record<string, unknown>[])[0].id = "function:a.ts:ghostFn";
+    expectRejected(ghostCallable);
+  });
+
+  test("CLI --import on a dangling class-id artifact falls back == from-scratch (FIX-T6.1-r3 #3)", () => {
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    const key = Object.keys(cache.files).find((k) => cache.files[k].classes.length > 0) as string;
+    const bad = JSON.parse(JSON.stringify(cache)) as StructuralCache;
+    (bad.files[key] as unknown as Record<string, unknown> & { classes: Record<string, unknown>[] })
+      .classes[0].id = "class:a.ts:Ghost";
+    const { artifact } = packageGraphArtifact(graph, bad);
+    fs.mkdirSync(path.dirname(artifactPathOf(dir)), { recursive: true });
+    fs.writeFileSync(artifactPathOf(dir), artifact);
+
+    const imp = runCli(dir, ["--import"]);
+    expect(imp.status).toBe(0); // rejected the dangling id, fell back, did not crash
+    const imported = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
+
+    // == from-scratch: the fallback full extraction equals a clean rebuild, and the
+    // graph carries NO edge sourced from the phantom id.
+    const scratchPath = path.join(dir, ".guild", "indexes", "scratch-graph.json");
+    runExtractFull(dir, scratchPath);
+    const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
+    expect(JSON.stringify(structuralSubset(imported))).toBe(JSON.stringify(structuralSubset(scratch)));
+    expect(imported.edges.some((e) => e.source === "class:a.ts:Ghost")).toBe(false);
+  });
 });
 
 // ===========================================================================
@@ -571,6 +679,36 @@ describe("G6 path containment", () => {
       fs.rmSync(outside, { recursive: true, force: true });
     }
   });
+
+  test("a symlinked containment BASE that escapes the repo is refused when repo-anchored (FIX-T6.1-r3 #1)", () => {
+    // The base dir ITSELF (e.g. .guild/indexes) is a symlink pointing OUTSIDE the
+    // repo. Without the repo-anchor, realpathSync(base) silently relocates the
+    // containment root outside the repo: a RELATIVE candidate (the `--out` case)
+    // then resolves UNDER the symlinked base and a write lands outside the repo.
+    const repoRoot = fs.realpathSync(dir);
+    const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "g6-base-outside-")));
+    try {
+      const linkedBase = path.join(repoRoot, "linked-indexes");
+      fs.symlinkSync(outside, linkedBase); // base → outside the repo
+      const candidate = "new.json"; // a relative --out under the (symlinked) base
+
+      // anti-vacuity: WITHOUT a repoRoot anchor the relative candidate resolves
+      // under the symlinked base (outside the repo) and is ACCEPTED — proving the
+      // new anchor is what refuses it below (not the pre-existing lexical check).
+      expect(assertContainedPath(candidate, linkedBase)).toBe(path.join(outside, "new.json"));
+      // WITH the repo anchor: the base realpath is outside repoRoot → refused.
+      expect(() => assertContainedPath(candidate, linkedBase, repoRoot)).toThrow(ArtifactError);
+
+      // anti-vacuity: a real in-repo base under repoRoot still passes WITH the anchor.
+      const realBase = path.join(repoRoot, ".guild", "indexes");
+      fs.mkdirSync(realBase, { recursive: true });
+      expect(assertContainedPath("new.json", realBase, repoRoot)).toBe(
+        path.join(realBase, "new.json"),
+      );
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
 });
 
 // ===========================================================================
@@ -638,6 +776,46 @@ describe("G6 CLI --out containment (escaping --out refused before any write/spaw
     } finally {
       fs.rmSync(outside, { recursive: true, force: true });
     }
+  });
+});
+
+// ===========================================================================
+// CLI symlinked-indexes base is repo-anchored (FIX-T6.1-r3 #1)
+// ===========================================================================
+
+describe("G6 CLI symlinked .guild/indexes base is refused (FIX-T6.1-r3 #1)", () => {
+  let dir: string;
+  let outside: string;
+  beforeEach(() => {
+    dir = tmpRepo("g6-symbase-");
+    write(dir, "a.ts", A_TS);
+    write(dir, "b.ts", B_TS);
+    fs.mkdirSync(path.join(dir, ".guild"), { recursive: true });
+    // .guild/indexes is a SYMLINK to a dir OUTSIDE the repo.
+    outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "g6-symbase-outside-")));
+    fs.symlinkSync(outside, path.join(dir, ".guild", "indexes"));
+  });
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  test("import with a relative --out through a symlinked indexes dir is refused before any write (exit 1, nothing outside)", () => {
+    // A valid artifact exists at the (symlinked) indexes path so import would proceed
+    // to its write. With a RELATIVE --out, the symlinked base relocates the write
+    // OUTSIDE the repo. Pre-fix `resolveGraphPath` accepts it (the relative path
+    // resolves under the symlinked base); the repo-anchor is what refuses it.
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    const { artifact } = packageGraphArtifact(graph, cache);
+    fs.writeFileSync(artifactPathOf(dir), artifact); // lands in `outside` via the symlink
+    expect(fs.existsSync(path.join(outside, ARTIFACT_BASENAME))).toBe(true); // setup is valid
+
+    const r = runCli(dir, ["--import", "--out", "new.json"]);
+    expect(r.status).toBe(1); // refused at path resolution, before any write/spawn
+    // graph-artifact's OWN repo-anchored refusal (not a downstream error).
+    expect(r.out).toContain("[graph-artifact] refusing --out outside .guild/indexes");
+    // nothing was written through the symlink into `outside`.
+    expect(fs.existsSync(path.join(outside, "new.json"))).toBe(false);
   });
 });
 
