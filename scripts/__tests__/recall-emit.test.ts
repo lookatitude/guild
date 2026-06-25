@@ -15,7 +15,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { recall } from "../lib/recall";
-import { validateRecallDecisionEvent } from "../../src/modules/telemetry/workflows/guild-trace-events";
+import {
+  validateRecallDecisionEvent,
+  makeRecallDecisionEvent,
+} from "../../src/modules/telemetry/workflows/guild-trace-events";
+import { computeRecallStats } from "../recall-stats";
 
 const TEMP_DIRS: string[] = [];
 afterAll(() => {
@@ -108,5 +112,139 @@ describe("G10 — recall-decision event emission", () => {
     expect(() => recall("payment", { cwd, _bm25Disabled: true })).not.toThrow();
     // Nothing under .guild/runs should have been created by the emit path.
     expect(fs.existsSync(path.join(cwd, ".guild", "runs"))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FINDING 2 — SQLite-off==on parity: an unscored branch never reports a
+// threshold-derived skip the scored branch wouldn't (no coerced-0 divergence).
+// ---------------------------------------------------------------------------
+
+/** A repo with 2 wiki files (one matches "payment"), so sqlite + file-bm25 both return. */
+function makeRepoWithWiki(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "g10-parity-"));
+  TEMP_DIRS.push(dir);
+  const wikiDir = path.join(dir, ".guild", "wiki", "decisions");
+  fs.mkdirSync(wikiDir, { recursive: true });
+  fs.writeFileSync(path.join(wikiDir, "pay.md"), "# Payment flow\n\npayment billing invoice settlement payment\n", "utf8");
+  fs.writeFileSync(path.join(wikiDir, "other.md"), "# Unrelated\n\nsomething entirely different here\n", "utf8");
+  return dir;
+}
+
+function readDecision(runDir: string): Record<string, unknown> {
+  return readDecisionEvents(runDir)[0]!;
+}
+
+describe("G10 FINDING-2 — index:on (sqlite) vs index:off (bm25) skip parity", () => {
+  test("the SAME query on vs off yields a consistent skip decision (unscored marker on the sqlite side)", () => {
+    // index:ON → sqlite branch wins (enabled, file count 2 > threshold 1).
+    const onCwd = makeRepoWithWiki();
+    const onDir = path.join(onCwd, ".guild", "runs", "run-on");
+    recall("payment", {
+      cwd: onCwd,
+      runId: "run-on",
+      runDir: onDir,
+      _kgDisabled: true,
+      recallScoreThreshold: 0.4,
+      _indexConfig: { enabled: true, wiki_file_threshold: 1 },
+    });
+    const onEv = readDecision(onDir);
+
+    // index:OFF → file-bm25 branch wins (sqlite disabled).
+    const offCwd = makeRepoWithWiki();
+    const offDir = path.join(offCwd, ".guild", "runs", "run-off");
+    recall("payment", {
+      cwd: offCwd,
+      runId: "run-off",
+      runDir: offDir,
+      _kgDisabled: true,
+      recallScoreThreshold: 0.4,
+      _indexConfig: { enabled: false },
+    });
+    const offEv = readDecision(offDir);
+
+    // Both produced wiki chunks for the same query.
+    expect(onEv["chunk_count"] as number).toBeGreaterThan(0);
+    expect(offEv["chunk_count"] as number).toBeGreaterThan(0);
+
+    // The sqlite side is explicitly UNSCORED — it never claims a threshold skip
+    // off a coerced-0. THIS is the parity fix: previously it reported
+    // read_skip_fired=false off a fake 0 while the bm25 side could report true.
+    expect(onEv["branch"]).toBe("sqlite");
+    expect(onEv["scored"]).toBe(false);
+    expect(onEv["read_skip_fired"]).toBe(false);
+
+    // The bm25 side carries a real, comparable score.
+    expect(offEv["branch"]).toBe("file-bm25");
+    expect(offEv["scored"]).toBe(true);
+    expect(typeof offEv["top_score"]).toBe("number");
+
+    // Aggregated, the unscored sqlite event is EXCLUDED from the skip-rate, so the
+    // two index modes cannot report a different skip-rate for the same corpus.
+    const recs = [onEv, offEv].map((e) => ({
+      run_id: "", lane_id: "",
+      query_hash: e["query_hash"] as string,
+      branch: e["branch"] as string,
+      top_score: e["top_score"] as number,
+      threshold: e["threshold"] as number,
+      read_skip_fired: e["read_skip_fired"] as boolean,
+      chunk_count: e["chunk_count"] as number,
+      scored: e["scored"] as boolean,
+      lane_outcome: "unknown" as const,
+    }));
+    const report = computeRecallStats(recs);
+    expect(report.overall.count).toBe(2);
+    expect(report.overall.scoredCount).toBe(1); // only the bm25 event is scored
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FINDING 3 — validator rejects raw-query / malformed-hash / over-long preview.
+// ---------------------------------------------------------------------------
+
+describe("G10 FINDING-3 — recall_decision validator enforces privacy invariants", () => {
+  const valid = makeRecallDecisionEvent({
+    ts: "2026-06-25T00:00:00Z",
+    run_id: "run-x",
+    lane_id: "",
+    query_hash: "abcdef0123456789", // exactly 16 lowercase hex
+    query_preview: "payment configure auth",
+    branch: "kg-query",
+    top_score: 5,
+    threshold: 0.4,
+    read_skip_fired: true,
+    chunk_count: 3,
+    scored: true,
+    lane_outcome: "unknown",
+  });
+
+  test("a conforming event passes", () => {
+    expect(validateRecallDecisionEvent(valid)).toEqual({ ok: true });
+  });
+
+  test("a non-16-hex query_hash is rejected (malformed hash)", () => {
+    expect(validateRecallDecisionEvent({ ...valid, query_hash: "ABCDEF0123456789" }).ok).toBe(false); // upper-case
+    expect(validateRecallDecisionEvent({ ...valid, query_hash: "abcdef012345678" }).ok).toBe(false); // 15 chars
+    expect(validateRecallDecisionEvent({ ...valid, query_hash: "abcdef01234567890" }).ok).toBe(false); // 17 chars
+    expect(validateRecallDecisionEvent({ ...valid, query_hash: "zzzzzzzzzzzzzzzz" }).ok).toBe(false); // non-hex
+  });
+
+  test("a raw-query-shaped query_hash is rejected (would leak the query)", () => {
+    const res = validateRecallDecisionEvent({ ...valid, query_hash: "how do I configure payment auth" });
+    expect(res.ok).toBe(false);
+  });
+
+  test("an over-long query_preview (>60 chars) is rejected (raw-query leak)", () => {
+    const longPreview = "x".repeat(61);
+    const res = validateRecallDecisionEvent({ ...valid, query_preview: longPreview });
+    expect(res.ok).toBe(false);
+    // exactly 60 is allowed
+    expect(validateRecallDecisionEvent({ ...valid, query_preview: "y".repeat(60) })).toEqual({ ok: true });
+  });
+
+  test("scored must be a boolean", () => {
+    const { scored: _omit, ...noScored } = valid as unknown as Record<string, unknown> & { scored: boolean };
+    expect(validateRecallDecisionEvent(noScored).ok).toBe(false);
+    expect(validateRecallDecisionEvent({ ...valid, scored: "yes" }).ok).toBe(false);
   });
 });

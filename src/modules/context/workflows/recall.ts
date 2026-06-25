@@ -595,8 +595,26 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   // Directive: set when ANY wrapped chunk exists (either wiki or KG).
   const directive = wikiResult.directive ?? kgResult?.directive ?? null;
 
-  // G10: top relevance score across the contributing branches (branch-native scale).
-  const topScore = Math.max(wikiResult.topScore ?? 0, kgResult?.topScore ?? 0);
+  // G10 parity (SQLite-off==on): only branches that expose a COMPARABLE numeric
+  // score may drive the read-skip decision. The SQLite (A) and fs-scan (C) wiki
+  // branches expose none (sqlite's bm25() rank is a different, negative scale —
+  // not comparable to file-BM25's positive score), so they are UNSCORED. Treating
+  // an unscored branch's missing score as 0 is exactly the bug that made the same
+  // recall report a different `read_skip_fired` with index:on (sqlite, →0) vs
+  // index:off (file-bm25, real score). We instead mark the event `scored:false`
+  // and exclude it downstream. A contribution counts only when it both returned
+  // chunks AND exposed a numeric topScore.
+  const wikiScored = hasWiki && wikiResult.topScore !== undefined;
+  const kgScored = hasKg && kgResult?.topScore !== undefined;
+  const scored = wikiScored || kgScored;
+
+  // top relevance score across the SCORED contributing branches (branch-native
+  // scale). 0 is a placeholder when unscored — never threshold-compared then.
+  const scoredValues = [
+    ...(wikiScored ? [wikiResult.topScore as number] : []),
+    ...(kgScored ? [kgResult!.topScore as number] : []),
+  ];
+  const topScore = scoredValues.length ? Math.max(...scoredValues) : 0;
 
   const result: RecallResult = { source, chunks: allChunks, directive, topScore };
 
@@ -634,9 +652,11 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
 
   // G10 emit — recall-quality decision (guild.trace.recall_decision.v1).
   // Additive + safe: no runDir → emitTraceEvent no-ops; never throws.
-  // read_skip_fired = chunk produced AND the top score cleared the threshold.
+  // read_skip_fired = SCORED branch produced ≥1 chunk AND its (comparable) top
+  // score cleared the threshold. An unscored branch (sqlite/fs-scan) can NEVER
+  // fire a skip — its placeholder 0 is not threshold-comparable (parity fix).
   try {
-    const readSkipFired = allChunks.length > 0 && topScore >= recallScoreThreshold;
+    const readSkipFired = scored && allChunks.length > 0 && topScore >= recallScoreThreshold;
     emitTraceEvent(
       makeRecallDecisionEvent({
         ts: new Date().toISOString(),
@@ -649,6 +669,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
         threshold: recallScoreThreshold,
         read_skip_fired: readSkipFired,
         chunk_count: allChunks.length,
+        scored,
         lane_outcome: laneOutcome,
       }),
       runDir ?? null,

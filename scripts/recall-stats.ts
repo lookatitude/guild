@@ -33,12 +33,29 @@ export const RECALL_DECISION_SCHEMA = "guild.trace.recall_decision.v1";
 
 /** One recall-decision record (the fields recall-stats consumes). */
 export interface RecallDecisionRecord {
+  /** Run this decision belongs to (join key for the lane-outcome join). */
+  run_id: string;
+  /** Lane/specialist this decision belongs to (join key → handoff task_id). */
+  lane_id: string;
   query_hash: string;
   branch: string;
   top_score: number;
   threshold: number;
   read_skip_fired: boolean;
   chunk_count: number;
+  /**
+   * Whether `top_score` is a comparable, threshold-meaningful score. Unscored
+   * events (SQLite / fs-scan wiki branches) are EXCLUDED from skip-rate and
+   * threshold simulation so the index-on vs index-off skip behavior cannot
+   * diverge via a coerced-0 (G10 SQLite-off==on parity). Absent in pre-parity
+   * events → treated as `true` (legacy events carried a real or coerced score).
+   */
+  scored: boolean;
+  /**
+   * Downstream lane outcome. Emitted as "unknown" by recall() (the outcome is
+   * not knowable at recall time); resolved in production by joining to the run's
+   * handoff receipts (see readRecallDecisionEvents → joinLaneOutcomes).
+   */
   lane_outcome: "success" | "failure" | "unknown";
 }
 
@@ -46,7 +63,12 @@ export interface RecallDecisionRecord {
 export interface BranchStats {
   branch: string;
   count: number;
-  /** read_skip_fired==true (or, under --threshold, top_score>=threshold) / count. */
+  /**
+   * Number of SCORED events (`scored===true`) — the skip-rate denominator.
+   * Unscored events (sqlite/fs-scan) carry no comparable score and are excluded.
+   */
+  scoredCount: number;
+  /** skips / scoredCount — read_skip_fired (or, under --threshold, top_score>=threshold). */
   skipRate: number;
   skips: number;
   hits: number;
@@ -72,14 +94,23 @@ function aggregate(
   thresholdOverride: number | null,
 ): BranchStats {
   let skips = 0;
+  let scoredCount = 0;
   let hits = 0;
   let misses = 0;
   for (const r of records) {
-    const skipped =
-      thresholdOverride === null
-        ? r.read_skip_fired
-        : r.chunk_count > 0 && r.top_score >= thresholdOverride;
-    if (skipped) skips++;
+    // Parity (G10): only scored events have a threshold-comparable top_score, so
+    // only they participate in the skip-rate (recorded OR simulated). An unscored
+    // event's read_skip_fired is always false and its top_score is a placeholder
+    // 0 — including it would let index-on (sqlite, unscored) and index-off
+    // (file-bm25, scored) report different skip behavior for the same recall.
+    if (r.scored) {
+      scoredCount++;
+      const skipped =
+        thresholdOverride === null
+          ? r.read_skip_fired
+          : r.chunk_count > 0 && r.top_score >= thresholdOverride;
+      if (skipped) skips++;
+    }
     if (r.lane_outcome === "success") hits++;
     else if (r.lane_outcome === "failure") misses++;
   }
@@ -88,8 +119,9 @@ function aggregate(
   return {
     branch,
     count,
+    scoredCount,
     skips,
-    skipRate: count === 0 ? 0 : skips / count,
+    skipRate: scoredCount === 0 ? 0 : skips / scoredCount,
     hits,
     misses,
     precision: decided === 0 ? null : hits / decided,
@@ -159,25 +191,106 @@ function parseJsonlEvents(filePath: string): RecallDecisionRecord[] {
       continue; // skip malformed lines
     }
     if (isRecallDecision(obj)) {
-      const e = obj as RecallDecisionRecord;
+      const e = obj as unknown as Record<string, unknown>;
       out.push({
-        query_hash: typeof e.query_hash === "string" ? e.query_hash : "",
-        branch: e.branch,
-        top_score: e.top_score,
-        threshold: e.threshold,
-        read_skip_fired: e.read_skip_fired,
-        chunk_count: e.chunk_count,
+        run_id: typeof e["run_id"] === "string" ? (e["run_id"] as string) : "",
+        lane_id: typeof e["lane_id"] === "string" ? (e["lane_id"] as string) : "",
+        query_hash: typeof e["query_hash"] === "string" ? (e["query_hash"] as string) : "",
+        branch: e["branch"] as string,
+        top_score: e["top_score"] as number,
+        threshold: e["threshold"] as number,
+        read_skip_fired: e["read_skip_fired"] as boolean,
+        chunk_count: e["chunk_count"] as number,
+        // Absent (pre-parity event) → treated as scored; see RecallDecisionRecord.scored.
+        scored: typeof e["scored"] === "boolean" ? (e["scored"] as boolean) : true,
         lane_outcome:
-          e.lane_outcome === "success" || e.lane_outcome === "failure" ? e.lane_outcome : "unknown",
+          e["lane_outcome"] === "success" || e["lane_outcome"] === "failure"
+            ? (e["lane_outcome"] as "success" | "failure")
+            : "unknown",
       });
     }
   }
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Lane-outcome join (G10 — real precision wiring, NOT hand-seeded)
+// ---------------------------------------------------------------------------
+//
+// recall() emits recall_decision events with lane_outcome="unknown" — the outcome
+// is genuinely unknowable at recall time (recall runs BEFORE the lane executes).
+// The real signal lands later, when the lane writes its `guild.handoff.v2` receipt
+// to `.guild/runs/<id>/handoffs/<owner>-<task-id>.md`. recall-stats JOINS the two
+// (on run + lane/task id) so precision populates in production from real receipts.
+
+/** Extract the `guild.handoff.v2` fenced JSON from a receipt's markdown. */
+function extractHandoffFence(content: string): Record<string, unknown> | null {
+  // Mirror of hooks/lib/handoff-v2.ts:extractHandoffEnvelope (kept local so
+  // recall-stats stays self-contained, as reaping.ts does the same).
+  const m = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/.exec(content);
+  if (!m) return null;
+  try {
+    const parsed = JSON.parse(m[1]!.trim());
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read lane outcomes from one run dir's handoff receipts. Maps each receipt's
+ * `task_id` → "success" (status "done") / "failure" (status "blocked"|"escalate").
+ * Receipts without a parseable envelope / task_id / status are skipped. Never throws.
+ */
+export function readHandoffOutcomes(runDir: string): Map<string, "success" | "failure"> {
+  const out = new Map<string, "success" | "failure">();
+  const handoffsDir = path.join(runDir, "handoffs");
+  let files: string[];
+  try {
+    files = fs.readdirSync(handoffsDir).filter((f) => f.endsWith(".md"));
+  } catch {
+    return out;
+  }
+  for (const f of files) {
+    let content: string;
+    try {
+      content = fs.readFileSync(path.join(handoffsDir, f), "utf8");
+    } catch {
+      continue;
+    }
+    const env = extractHandoffFence(content);
+    if (!env) continue;
+    const taskId = typeof env["task_id"] === "string" ? (env["task_id"] as string) : "";
+    const status = env["status"];
+    if (!taskId) continue;
+    if (status === "done") out.set(taskId, "success");
+    else if (status === "blocked" || status === "escalate") out.set(taskId, "failure");
+  }
+  return out;
+}
+
+/**
+ * Resolve each record's lane_outcome from a (lane_id → outcome) map — but ONLY
+ * for records still "unknown" (the production case). Records that already carry
+ * an explicit success/failure (e.g. a caller wired it via opts.laneOutcome) are
+ * left untouched. Pure; returns new records.
+ */
+export function joinLaneOutcomes(
+  records: RecallDecisionRecord[],
+  outcomes: Map<string, "success" | "failure">,
+): RecallDecisionRecord[] {
+  return records.map((r) => {
+    if (r.lane_outcome !== "unknown") return r;
+    const joined = outcomes.get(r.lane_id);
+    return joined ? { ...r, lane_outcome: joined } : r;
+  });
+}
+
 /**
  * Read all recall-decision events from a run-set directory (`.guild/runs`).
- * Each run dir contributes `logs/v1.4-events.jsonl` (or legacy `events.ndjson`).
+ * Each run dir contributes `logs/v1.4-events.jsonl` (or legacy `events.ndjson`),
+ * and its `handoffs/*.md` receipts supply the lane-outcome join so precision can
+ * populate from REAL run telemetry (not hand-seeded outcomes).
  * Missing/unreadable files are skipped. Never throws.
  */
 export function readRecallDecisionEvents(runsDir: string): RecallDecisionRecord[] {
@@ -194,7 +307,9 @@ export function readRecallDecisionEvents(runsDir: string): RecallDecisionRecord[
     const canonical = path.join(runDir, "logs", "v1.4-events.jsonl");
     const legacy = path.join(runDir, "events.ndjson");
     const file = fs.existsSync(canonical) ? canonical : legacy;
-    events.push(...parseJsonlEvents(file));
+    // Join each run dir's events to its OWN handoff receipts (same physical run).
+    const outcomes = readHandoffOutcomes(runDir);
+    events.push(...joinLaneOutcomes(parseJsonlEvents(file), outcomes));
   }
   return events;
 }

@@ -145,7 +145,18 @@ export interface GuildTraceRecallDecisionV1 extends GuildTraceEventBase {
   read_skip_fired: boolean;
   /** Number of ProtectedChunks returned. */
   chunk_count: number;
-  /** Downstream lane outcome hook ('unknown' until resolved). */
+  /**
+   * G10 parity: whether `top_score` is a comparable, threshold-meaningful score.
+   * The SQLite (branch A) and fs-scan (branch C) wiki paths expose NO comparable
+   * score, so a recall they win is `scored: false` and `top_score` is a
+   * placeholder 0 — it MUST NOT be compared against a threshold. Only the
+   * file-BM25 (B) and kg-query (D) branches produce a real score (`scored: true`).
+   * recall-stats EXCLUDES `scored: false` events from skip-rate + threshold
+   * simulation so the SQLite-on vs SQLite-off (BM25) skip behavior cannot diverge
+   * via a coerced-0 (the off==on invariant). See recall.ts §combine.
+   */
+  scored: boolean;
+  /** Downstream lane outcome hook ('unknown' at emit time; resolved by a join). */
   lane_outcome: LaneOutcome;
 }
 
@@ -370,11 +381,19 @@ export function validateRecallDecisionEvent(ev: unknown): ValidationResult {
   if (e["schema_version"] !== "guild.trace.recall_decision.v1") {
     return { ok: false, reason: `wrong schema_version for recall_decision: ${e["schema_version"]}` };
   }
-  if (typeof e["query_hash"] !== "string" || e["query_hash"] === "") {
-    return { ok: false, reason: "query_hash must be a non-empty string" };
+  // Privacy: query_hash MUST be exactly sha256[:16] — 16 lowercase hex chars.
+  // A raw query, an upper-case hash, or a wrong-length digest is rejected so a
+  // full query can never masquerade as a "hash" and be written to the log.
+  if (typeof e["query_hash"] !== "string" || !/^[0-9a-f]{16}$/.test(e["query_hash"] as string)) {
+    return { ok: false, reason: "query_hash must be exactly 16 lowercase hex chars (sha256[:16])" };
   }
+  // Privacy: query_preview is a SHORT truncation (≤ 60 chars). A raw-query-length
+  // string is rejected so the preview cannot become a full-query side-channel.
   if (typeof e["query_preview"] !== "string") {
     return { ok: false, reason: "query_preview must be a string (may be empty)" };
+  }
+  if ((e["query_preview"] as string).length > 60) {
+    return { ok: false, reason: "query_preview must be <= 60 chars (no raw-query leak)" };
   }
   if (!RECALL_BRANCHES.includes(e["branch"] as RecallBranch)) {
     return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
@@ -390,6 +409,9 @@ export function validateRecallDecisionEvent(ev: unknown): ValidationResult {
   }
   if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
     return { ok: false, reason: "chunk_count must be a non-negative number" };
+  }
+  if (typeof e["scored"] !== "boolean") {
+    return { ok: false, reason: "scored must be a boolean" };
   }
   if (!LANE_OUTCOMES.includes(e["lane_outcome"] as LaneOutcome)) {
     return { ok: false, reason: `lane_outcome must be one of: ${LANE_OUTCOMES.join(", ")}` };
