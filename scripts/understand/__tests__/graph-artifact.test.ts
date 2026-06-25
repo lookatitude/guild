@@ -46,6 +46,8 @@ import {
   unpackGraphArtifact,
   auditForSecrets,
   assertContainedPath,
+  canonicalJson,
+  validateStructuralCache,
   ArtifactError,
   SecretLeakError,
   zstdAvailable,
@@ -198,6 +200,42 @@ describe("G6 gate 2 — integrity / corrupt artifact rejected", () => {
     expect(envelope.cache.schema).toBe("guild.structural_cache.v1");
   });
 
+  test("round-trip is lossless over the FULL graph envelope (not just the subset)", () => {
+    // FIX-T6.1 #2: the previous gate only compared structuralSubset, so a
+    // validation repair/drop on a non-structural field went unnoticed. Assert the
+    // ENTIRE graph + cache survive the round-trip (modulo the documented commit
+    // normalization), and that this is non-vacuous (would fail if any field dropped).
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    const { artifact } = packageGraphArtifact(graph, cache);
+    const { envelope } = unpackGraphArtifact(artifact);
+    const expected: KnowledgeGraph = { ...graph, generated_from_commit: "structural" };
+    expect(canonicalJson(envelope.graph)).toBe(canonicalJson(expected));
+    expect(canonicalJson(envelope.cache)).toBe(canonicalJson(cache));
+    // anti-vacuity: a deliberately-different graph would NOT match.
+    expect(canonicalJson(envelope.graph)).not.toBe(
+      canonicalJson({ ...expected, project: { ...expected.project, name: "DIFFERENT" } }),
+    );
+  });
+
+  test("packaging REFUSES a graph that schema validation would repair/drop", () => {
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    // anti-vacuity: the clean (fixpoint) graph packages without throwing.
+    expect(() => packageGraphArtifact(graph, cache)).not.toThrow();
+    // a node with an unknown type is DROPPED by validateGraph → packaging is not
+    // lossless → refuse (never silently ship the repaired graph).
+    const droppy: KnowledgeGraph = {
+      ...graph,
+      nodes: [
+        ...graph.nodes,
+        { id: "bogus", type: "not_a_real_type", name: "x", source_refs: [], confidence: "high" } as never,
+      ],
+    };
+    expect(() => packageGraphArtifact(droppy, cache)).toThrow(ArtifactError);
+    // an unknown top-level field is silently dropped by validateGraph → also refused.
+    const extra = { ...graph, customMeta: { keep: "me" } } as unknown as KnowledgeGraph;
+    expect(() => packageGraphArtifact(extra, cache)).toThrow(ArtifactError);
+  });
+
   test("zstd codec round-trips when available", () => {
     if (!zstdAvailable()) return; // runtime without zstd — gzip default covered elsewhere
     const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
@@ -239,6 +277,56 @@ describe("G6 gate 2 — integrity / corrupt artifact rejected", () => {
     const imp = runCli(dir, ["--import"]);
     expect(imp.status).toBe(0); // fell back, did not crash
     expect(fs.existsSync(graphPathOf(dir))).toBe(true); // full extraction produced a graph
+    const g = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
+    expect(g.nodes.length).toBeGreaterThan(0);
+  });
+
+  test("a checksum-valid artifact with a MALFORMED cache is REJECTED on unpack", () => {
+    // FIX-T6.1 #3: package builds a valid checksum even over a malformed cache
+    // (it does not validate the cache), so the import-side check is what bites.
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    // anti-vacuity: the well-formed cache round-trips, and the validator agrees.
+    expect(validateStructuralCache(cache)).toBe(true);
+    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, cache).artifact)).not.toThrow();
+
+    const firstKey = Object.keys(cache.files)[0];
+
+    // (a) a bundle missing its fileNode → broken shape → rejected.
+    const noFileNode = JSON.parse(JSON.stringify(cache)) as StructuralCache;
+    delete (noFileNode.files[firstKey] as unknown as Record<string, unknown>).fileNode;
+    expect(validateStructuralCache(noFileNode)).toBe(false);
+    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, noFileNode).artifact)).toThrow(ArtifactError);
+
+    // (b) a non-relative (escaping) cache key → rejected.
+    const escKey = JSON.parse(JSON.stringify(cache)) as StructuralCache;
+    const moved = escKey.files[firstKey] as unknown as Record<string, unknown>;
+    delete escKey.files[firstKey];
+    (escKey.files as Record<string, unknown>)["../escape.ts"] = {
+      ...moved,
+      rel: "../escape.ts",
+      fileNode: { ...(moved.fileNode as Record<string, unknown>), id: "file:../escape.ts" },
+    };
+    expect(validateStructuralCache(escKey)).toBe(false);
+    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, escKey).artifact)).toThrow(ArtifactError);
+
+    // (c) a malformed content hash (not "" and not 64-hex) → rejected.
+    const badHash = JSON.parse(JSON.stringify(cache)) as StructuralCache;
+    (badHash.files[firstKey] as unknown as Record<string, unknown>).contentHash = "deadbeef";
+    expect(validateStructuralCache(badHash)).toBe(false);
+    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, badHash).artifact)).toThrow(ArtifactError);
+  });
+
+  test("CLI --import falls back to full extraction on a malformed-cache artifact (no crash)", () => {
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    const firstKey = Object.keys(cache.files)[0];
+    const badCache = JSON.parse(JSON.stringify(cache)) as StructuralCache;
+    delete (badCache.files[firstKey] as unknown as Record<string, unknown>).fileNode;
+    const { artifact } = packageGraphArtifact(graph, badCache);
+    fs.mkdirSync(path.dirname(artifactPathOf(dir)), { recursive: true });
+    fs.writeFileSync(artifactPathOf(dir), artifact);
+    const imp = runCli(dir, ["--import"]);
+    expect(imp.status).toBe(0); // rejected the cache, fell back, did not crash
+    expect(fs.existsSync(graphPathOf(dir))).toBe(true);
     const g = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
     expect(g.nodes.length).toBeGreaterThan(0);
   });
@@ -398,6 +486,52 @@ describe("G6 path containment", () => {
       ArtifactError,
     );
     expect(() => assertContainedPath("/etc/passwd", base)).toThrow(ArtifactError);
+  });
+});
+
+// ===========================================================================
+// CLI --out path containment (FIX-T6.1 #1)
+// ===========================================================================
+
+describe("G6 CLI --out containment (escaping --out refused before any write/spawn)", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = tmpRepo("g6-cli-out-");
+    write(dir, "a.ts", A_TS);
+    write(dir, "b.ts", B_TS);
+    runExtractFull(dir, graphPathOf(dir));
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  test("export with a ../ --out escape is refused (exit 1, nothing written outside)", () => {
+    const escapeTarget = path.join(dir, "escape-graph.json"); // sibling of .guild → outside indexes
+    const r = runCli(dir, ["--export", "--force", "--out", "../../escape-graph.json"]);
+    expect(r.status).toBe(1);
+    expect(fs.existsSync(escapeTarget)).toBe(false);
+    expect(fs.existsSync(artifactPathOf(dir))).toBe(false);
+  });
+
+  test("export with an absolute --out outside indexes is refused", () => {
+    const abs = path.join(os.tmpdir(), "g6-abs-escape-graph.json");
+    fs.rmSync(abs, { force: true });
+    const r = runCli(dir, ["--export", "--force", "--out", abs]);
+    expect(r.status).toBe(1);
+    expect(fs.existsSync(abs)).toBe(false);
+  });
+
+  test("import with a ../ --out escape is refused before any write/spawn (exit 1)", () => {
+    const escapeTarget = path.join(dir, "escape-graph.json");
+    const r = runCli(dir, ["--import", "--out", "../../escape-graph.json"]);
+    expect(r.status).toBe(1);
+    expect(fs.existsSync(escapeTarget)).toBe(false);
+  });
+
+  test("a contained --out under .guild/indexes is accepted", () => {
+    const rel = "contained-graph.json";
+    runExtractFull(dir, path.join(dir, ".guild", "indexes", rel)); // graph at the contained path
+    const r = runCli(dir, ["--export", "--force", "--out", rel]);
+    expect(r.status).toBe(0);
+    expect(fs.existsSync(artifactPathOf(dir))).toBe(true);
   });
 });
 

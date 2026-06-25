@@ -53,6 +53,13 @@ export const ARTIFACT_BASENAME = "structural-graph.json.zst";
 /** Envelope schema for the uncompressed payload. */
 export const ARTIFACT_SCHEMA = "guild.structural_graph_artifact.v1" as const;
 
+/**
+ * Commit-independent constant stamped on the packaged graph (determinism): the
+ * nondeterministic HEAD sha lives ONLY in the CLI sidecar, never in the artifact,
+ * so two identical trees at different commits package byte-identically.
+ */
+const STRUCTURAL_COMMIT = "structural";
+
 /** Container magic — 8 bytes, identifies a Guild structural-graph artifact v01. */
 const MAGIC = Buffer.from("GLDSGA01", "ascii");
 
@@ -238,6 +245,81 @@ export function auditForSecrets(text: string): SecretFinding[] {
 }
 
 // ---------------------------------------------------------------------------
+// Lossless-packaging + cache-shape validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Order-independent canonical JSON: object keys sorted recursively, array order
+ * preserved. Used to compare a graph against its post-validation form so the
+ * lossless-packaging check is not fooled by benign top-level key REORDERING
+ * inside validateGraph — only genuine mutations/drops (different values, dropped
+ * nodes/edges/fields) change the canonical string.
+ */
+export function canonicalJson(value: unknown): string {
+  const norm = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(norm);
+    if (v && typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      const sorted: Record<string, unknown> = {};
+      for (const k of Object.keys(o).sort()) sorted[k] = norm(o[k]);
+      return sorted;
+    }
+    return v;
+  };
+  return JSON.stringify(norm(value));
+}
+
+/** A repo-relative cache key with no escape: not absolute, no `..` segment, non-empty. */
+function isSafeRelKey(rel: string): boolean {
+  if (typeof rel !== "string" || rel === "") return false;
+  if (path.isAbsolute(rel)) return false;
+  return !rel.split(/[/\\]/).some((seg) => seg === "..");
+}
+
+/**
+ * Validate the bootstrap fingerprint cache shape before an imported artifact is
+ * accepted (Codex FIX-T6.1 #3). A checksum-valid artifact can still carry a
+ * MALFORMED `cache` (tampered, or from a non-conforming producer); writing it
+ * would let `--incremental` reuse a broken bundle and diverge from a full
+ * rebuild. We reject schema/version/relative-key/content-hash/bundle-shape
+ * defects so the CLI falls back to a full extraction instead of bootstrapping
+ * garbage. Mirrors structural.ts `isReusableBundle` (shape) + adds key-safety
+ * and hash-format checks; kept in THIS lane's file (no edit to structural.ts).
+ */
+export function validateStructuralCache(cache: unknown): cache is StructuralCache {
+  if (!cache || typeof cache !== "object" || Array.isArray(cache)) return false;
+  const c = cache as Record<string, unknown>;
+  if (c.schema !== "guild.structural_cache.v1") return false;
+  if (typeof c.version !== "string" || c.version === "") return false;
+  const files = c.files;
+  if (!files || typeof files !== "object" || Array.isArray(files)) return false;
+  for (const [rel, bundle] of Object.entries(files as Record<string, unknown>)) {
+    if (!isSafeRelKey(rel)) return false;
+    if (!bundle || typeof bundle !== "object") return false;
+    const b = bundle as Record<string, unknown>;
+    if (b.rel !== rel) return false; // entry must be keyed to its own file
+    if (typeof b.language !== "string") return false;
+    if (typeof b.isCode !== "boolean") return false;
+    // content hash: "" (unreadable file) OR a 64-char SHA-256 hex — anything else
+    // is a malformed fingerprint that must not become an incremental key.
+    if (typeof b.contentHash !== "string") return false;
+    if (b.contentHash !== "" && !/^[0-9a-f]{64}$/.test(b.contentHash)) return false;
+    const fileNode = b.fileNode as Record<string, unknown> | undefined;
+    if (!fileNode || typeof fileNode !== "object" || fileNode.id !== `file:${rel}`) return false;
+    if (
+      !Array.isArray(b.symbolNodes) ||
+      !Array.isArray(b.contains) ||
+      !Array.isArray(b.importSpecs) ||
+      !Array.isArray(b.classes) ||
+      !Array.isArray(b.callables)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Package / unpack
 // ---------------------------------------------------------------------------
 
@@ -262,20 +344,32 @@ export function packageGraphArtifact(
   cache: StructuralCache,
   opts: { codec?: Codec } = {},
 ): PackageResult {
-  const validation = validateGraph(graph);
+  // Determinism: a stale sha carried by an existing graph is normalized away BEFORE
+  // validation so two identical trees at different commits package byte-identically
+  // AND the lossless check below compares like-for-like.
+  const normalizedInput: KnowledgeGraph = { ...graph, generated_from_commit: STRUCTURAL_COMMIT };
+  const validation = validateGraph(normalizedInput);
   if (!validation.success || !validation.data) {
     throw new ArtifactError(`graph failed schema validation: ${validation.fatal ?? "unknown"}`);
   }
-  // Determinism: a stale sha carried by an existing graph is normalized away so
-  // two identical trees at different commits package byte-identically.
-  const normalizedGraph: KnowledgeGraph = {
-    ...validation.data,
-    generated_from_commit: "structural",
-  };
+  const validated: KnowledgeGraph = { ...validation.data, generated_from_commit: STRUCTURAL_COMMIT };
+
+  // Lossless contract (Codex FIX-T6.1 #2): packaging must store the graph EXACTLY
+  // as given (modulo the documented commit normalization). validateGraph can
+  // repair/auto-fix/drop nodes, edges, or unknown top-level/project fields; if it
+  // would change ANYTHING here, refuse — never silently package a repaired graph
+  // behind a "lossless round-trip" claim. A real structural graph is already a
+  // validation fixpoint, so this is a no-op for legitimate input.
+  if (canonicalJson(validated) !== canonicalJson(normalizedInput)) {
+    throw new ArtifactError(
+      "graph not losslessly packageable: schema validation would mutate or drop data " +
+        "(auto-fix / dropped node|edge|field) — refusing to package a repaired graph",
+    );
+  }
 
   const envelope: ArtifactEnvelope = {
     schema: ARTIFACT_SCHEMA,
-    graph: normalizedGraph,
+    graph: validated,
     cache,
   };
   const payload = envelopeBytes(envelope);
@@ -377,6 +471,22 @@ export function unpackGraphArtifact(buf: Buffer): { envelope: ArtifactEnvelope; 
   if (!validation.success || !validation.data) {
     throw new ArtifactError(`artifact graph failed schema validation: ${validation.fatal ?? "unknown"}`);
   }
+  // Lossless contract (Codex FIX-T6.1 #2): a genuine Guild artifact was packaged
+  // from a validation-fixpoint graph, so re-validation is a no-op. If it would
+  // mutate/drop here, the artifact came from a non-conforming producer — reject
+  // (→ full-extract fallback) rather than silently bootstrap a repaired graph.
+  if (canonicalJson(validation.data) !== canonicalJson(envelope.graph)) {
+    throw new ArtifactError("artifact graph is not a validation fixpoint — repaired/dropped on import");
+  }
   envelope.graph = validation.data;
+
+  // Cache validation (Codex FIX-T6.1 #3): a checksum-valid artifact can still
+  // carry a MALFORMED `cache`. Validate schema/relative-keys/content-hashes/
+  // bundle-shapes BEFORE accepting — a defect rejects the artifact so the CLI
+  // falls back to a full extraction instead of writing a broken incremental
+  // baseline.
+  if (!validateStructuralCache(envelope.cache)) {
+    throw new ArtifactError("artifact cache is malformed (schema/keys/hashes/bundle shape) — rejected");
+  }
   return { envelope, header };
 }

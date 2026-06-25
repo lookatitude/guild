@@ -57,6 +57,25 @@ function shareFlagEnabled(guildDir: string): boolean {
   }
 }
 
+/**
+ * Resolve the graph output path, containing any `--out` override under
+ * `.guild/indexes/` (Codex FIX-T6.1 #1). `--out` is operator-supplied, so it is
+ * realpath-checked under the indexes dir BEFORE any read/write/spawn touches it —
+ * an absolute or `../` escape is REFUSED (returns null). The default
+ * (`gp.knowledgeGraph`) is constructed under the indexes dir and trusted as-is.
+ */
+function resolveGraphPath(argv: string[], gp: ReturnType<typeof guildPaths>): string | null {
+  const raw = parseFlag(argv, "out");
+  if (raw === undefined) return gp.knowledgeGraph;
+  // realpathSync(baseDir) inside assertContainedPath needs the dir to exist.
+  fs.mkdirSync(gp.indexesDir, { recursive: true });
+  try {
+    return assertContainedPath(raw, gp.indexesDir);
+  } catch {
+    return null;
+  }
+}
+
 /** Run the G4 extractor as a child process (the lane may NOT edit it — only invoke it). */
 function runExtractor(cwd: string, graphPath: string, incremental: boolean): number {
   const script = path.join(__dirname, "extract-structural.ts");
@@ -69,7 +88,12 @@ function runExtractor(cwd: string, graphPath: string, incremental: boolean): num
 function doExport(cwd: string, argv: string[]): number {
   const gp = guildPaths(cwd);
   const repoRoot = gp.repoRoot;
-  const graphPath = parseFlag(argv, "out") ?? gp.knowledgeGraph;
+  // Path containment FIRST — refuse an escaping --out before any read/write/spawn.
+  const graphPath = resolveGraphPath(argv, gp);
+  if (graphPath === null) {
+    process.stderr.write(`[graph-artifact] refusing --out outside .guild/indexes\n`);
+    return 1;
+  }
   const cachePath = `${graphPath}.structural-cache.json`;
 
   // Opt-out default (gate #3): never write unless the operator opted in.
@@ -165,7 +189,12 @@ function doExport(cwd: string, argv: string[]): number {
 function doImport(cwd: string, argv: string[]): number {
   const gp = guildPaths(cwd);
   const repoRoot = gp.repoRoot;
-  const graphPath = parseFlag(argv, "out") ?? gp.knowledgeGraph;
+  // Path containment FIRST — refuse an escaping --out before any read/write/spawn.
+  const graphPath = resolveGraphPath(argv, gp);
+  if (graphPath === null) {
+    process.stderr.write(`[graph-artifact] refusing --out outside .guild/indexes\n`);
+    return 1;
+  }
   const cachePath = `${graphPath}.structural-cache.json`;
 
   // Decode + integrity-check the artifact. Any failure → full-extraction fallback.
