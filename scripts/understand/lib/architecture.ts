@@ -64,7 +64,12 @@
  *   callEdgeCount + degree but dropped them from clustering). (A function with
  *   BOTH a self-call and a real call to another symbol carries both: the self-loop
  *   contributes itself to fanIn/fanOut and the inter-symbol edge clusters it with
- *   its neighbour.)
+ *   its neighbour.) ONE refinement on the clustering side: a self-loop is kept as
+ *   a cluster PARTICIPANT but is NOT a label-propagation VOTE (a node's own edge
+ *   may not vote for its own label). Were it counted, `b->b` + `b->a` would pin
+ *   `b` to its own id and split one component into {a},{b}; silencing the
+ *   self-vote lets the real `b->a` edge collapse them to ONE {a,b}, while an
+ *   isolated `c->c` (no cross-node edge) still stands alone as its singleton.
  *
  * ── Entry-point rule (documented; the graph carries no `exported` flag) ──
  *   A `function` node is an entry point iff (a) its simple name is a conventional
@@ -361,7 +366,10 @@ function computeHotspots(
  * Deterministic synchronous-per-node label propagation:
  *   - seed: every participating node is labelled by its own id.
  *   - each pass, in sorted node-id order, a node adopts the MOST FREQUENT label
- *     among {itself ∪ its neighbours}; ties broken by the SMALLEST label id.
+ *     among {itself ∪ its CROSS-NODE neighbours}; ties broken by the SMALLEST
+ *     label id. A self-loop neighbour (`nb === n`) is EXCLUDED from the vote — it
+ *     could only re-affirm the node's own label and would fragment a component
+ *     bridged by a real edge; the self-call node stays a participant regardless.
  *   - including the node's own label damps the bipartite oscillation that breaks
  *     naive synchronous LPA, so disconnected components converge to one label
  *     each (and a bridged graph collapses to one).
@@ -383,6 +391,14 @@ function detectClusters(deg: CallsDegree, maxIter: number): Cluster[] {
       const own = label.get(n)!;
       counts.set(own, 1);
       for (const nb of deg.undirected.get(n)!) {
+        // A self-loop (`nb === n`, a recursive function's own edge) is NOT a
+        // label vote: it can only ever re-affirm the node's own label, which —
+        // combined with a real cross-node edge — would otherwise pin the node to
+        // its own id and fragment one connected component (`b->b` + `b->a` ⇒
+        // {a},{b} instead of {a,b}). The self-call node STAYS a cluster
+        // participant (it remains a key of `undirected`, so an isolated `c->c`
+        // is still its own singleton); only its self-edge is silenced as a vote.
+        if (nb === n) continue;
         const l = label.get(nb)!;
         counts.set(l, (counts.get(l) ?? 0) + 1);
       }

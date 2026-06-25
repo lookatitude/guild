@@ -248,6 +248,50 @@ describe("[G9] self-call policy — recursion handled consistently", () => {
     expect(arch.clusters[0].size).toBe(2);
   });
 
+  test("a self-loop is NOT a label vote: `b->b` + `b->a` clusters {a,b} as ONE (does not split)", () => {
+    // REGRESSION (FIX-T9.2-r3): the self-loop on `b` must not vote for b's own
+    // label. If it did, `b` would stay pinned to "b" while `a` stayed "a",
+    // fragmenting one connected component into {a} and {b}. The real `b->a`
+    // edge must collapse them to a SINGLE {a,b} cluster. NOTE: `b` carries the
+    // self-loop and a < b, so the bug bites here (unlike the harmless `f->f` +
+    // `f->g` case where the self-loop node is already the smallest label).
+    const nodes = ["a", "b"].map(mk);
+    const arch = computeArchitecture({ nodes, edges: [call("b", "b"), call("b", "a")] });
+
+    // ONE cluster spanning both a and b — NOT two singletons. This assertion
+    // FAILS if the self-loop is counted as a vote (the pre-fix behaviour).
+    expect(arch.clusters.length).toBe(1);
+    expect(arch.summary.clusterCount).toBe(1);
+    expect(arch.clusters[0].members).toEqual([
+      "function:src/r.ts:a",
+      "function:src/r.ts:b",
+    ]);
+    expect(arch.clusters[0].size).toBe(2);
+
+    // b is still a degree participant (own caller via the self-loop + its a callee).
+    const b = arch.hotspots.find((h) => h.id === "function:src/r.ts:b")!;
+    expect(b.fanIn).toBe(1);   // the self-loop makes b its own caller
+    expect(b.fanOut).toBe(2);  // itself (self-loop) + a
+    expect(b.degree).toBe(3);
+    expect(arch.summary.callEdgeCount).toBe(2);  // self-call + b->a
+  });
+
+  test("an isolated self-only node (`c->c`, no cross-node edge) is STILL its own singleton cluster", () => {
+    // The self-call node stays a cluster participant even when silenced as a
+    // vote: with no cross-node edge there is nothing to merge into, so `c`
+    // remains a singleton. `a->b` forms the only other cluster.
+    const nodes = ["a", "b", "c"].map(mk);
+    const arch = computeArchitecture({ nodes, edges: [call("c", "c"), call("a", "b")] });
+
+    const cCluster = arch.clusters.find((cl) => cl.members.includes("function:src/r.ts:c"));
+    expect(cCluster).toBeDefined();                            // FAILS if the singleton vanishes
+    expect(cCluster!.members).toEqual(["function:src/r.ts:c"]);
+    expect(cCluster!.size).toBe(1);
+    expect(cCluster!.id).toBe("function:src/r.ts:c");
+    expect(arch.clusters.length).toBe(2);                      // {c} + {a,b}
+    expect(arch.summary.clusterCount).toBe(2);
+  });
+
   test("consistency invariant: the degree-participant set EQUALS the clustered set (rec is in BOTH)", () => {
     // The bug this policy closes: a self-call-only node entered the degree
     // participants (callers/callees) but never `undirected`, so it appeared in
