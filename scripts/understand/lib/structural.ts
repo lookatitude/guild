@@ -161,7 +161,10 @@ const NON_CALL_NAMES = new Set([
   "fn", "func", "match", "when", "use", "pub", "static", "const", "let", "var",
 ]);
 
-const CALL_RE = /\b([A-Za-z_$][\w$]*)\s*\(/g;
+// Call-name match that EXCLUDES qualified/member calls: a name preceded by "."
+// (e.g. `obj.bar(`) or by another word char is not a free call. This prevents a
+// false `calls` edge from `obj.bar()` to a same-named free `bar` (FIX G1-1).
+const CALL_RE = /(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g;
 const IDENT_RE = /[A-Za-z_$][\w$]*/g;
 
 // ---------------------------------------------------------------------------
@@ -603,11 +606,19 @@ export function canonicalize(g: StructuralGraph): StructuralGraph {
   return { nodes, edges };
 }
 
-/** The structural subset of a graph = nodes/edges this extractor stamped. */
+/**
+ * The structural subset of a graph = nodes/edges this extractor produced.
+ * A node counts as structural if it was emitted fresh (`extractor` marker) OR is
+ * a collided LLM-tier node that ALSO denotes a structural symbol (`structural:
+ * true`, stamped additively at merge — FIX G1-5) so the subset + sidecar counts
+ * stay correct when a structural symbol coincides with an existing node id.
+ */
 export function structuralSubset(g: { nodes: GraphNode[]; edges: GraphEdge[] }): StructuralGraph {
+  const isStructural = (x: Record<string, unknown>) =>
+    x.extractor === STRUCTURAL_EXTRACTOR || x.structural === true;
   return canonicalize({
-    nodes: g.nodes.filter((n) => (n as Record<string, unknown>).extractor === STRUCTURAL_EXTRACTOR),
-    edges: g.edges.filter((e) => (e as Record<string, unknown>).extractor === STRUCTURAL_EXTRACTOR),
+    nodes: g.nodes.filter((n) => isStructural(n as Record<string, unknown>)),
+    edges: g.edges.filter((e) => isStructural(e as Record<string, unknown>)),
   });
 }
 
@@ -629,11 +640,21 @@ export function mergeStructuralInto(
     if (!ex) {
       nodeById.set(s.id, s);
     } else {
+      // Non-clobbering merge: existing (LLM-tier) values win, but fill in
+      // structural-only fields AND stamp additive structural provenance so the
+      // collided node is still counted in the structural subset (FIX G1-5).
+      const exRec = ex as Record<string, unknown>;
+      const exAlreadyStructural =
+        exRec.extractor === STRUCTURAL_EXTRACTOR || exRec.structural === true;
       const merged: GraphNode = { ...ex };
       if (merged.sp === undefined && s.sp !== undefined) merged.sp = s.sp;
       if (merged.language === undefined && (s as Record<string, unknown>).language !== undefined) {
         merged.language = (s as Record<string, unknown>).language;
       }
+      // Only stamp additive provenance on a GENUINE LLM-tier collision. If the
+      // existing node is already ours (re-run on prior output), leave it as-is so
+      // the merge is idempotent → byte-identical re-runs (FIX G1-4 determinism).
+      if (!exAlreadyStructural) (merged as Record<string, unknown>).structural = true;
       nodeById.set(s.id, merged);
     }
   }

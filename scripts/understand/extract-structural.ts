@@ -28,6 +28,7 @@ import {
   mergeStructuralInto,
   structuralSubset,
 } from "./lib/structural";
+import { validateGraph } from "./lib/schema";
 import type { GraphEdge, GraphNode } from "./lib/schema";
 import * as fs from "fs";
 
@@ -70,13 +71,33 @@ function main(): void {
   const out: Record<string, unknown> = {
     version: existing?.version ?? SCHEMA.knowledgeGraph,
     kind: existing?.kind ?? "codebase",
-    generated_from_commit: headSha(repoRoot),
+    // FIX G1-4: commit/run metadata lives in the SIDECAR only. The graph artifact
+    // is a pure function of (source, config) — never the HEAD sha — so two
+    // identical trees at different commits produce byte-identical graphs.
+    generated_from_commit: existing?.generated_from_commit ?? "structural",
     project: existing?.project ?? { name: path.basename(repoRoot), description: "" },
     nodes: merged.nodes,
     edges: merged.edges,
     layers: existing?.layers ?? [],
     tour: existing?.tour ?? [],
   };
+
+  // FIX G1-3: validate BEFORE write on the real artifact. Fail (non-zero exit) if
+  // any structural node/edge is dropped or the graph is fatally invalid.
+  const preCount = structuralSubset(out as { nodes: GraphNode[]; edges: GraphEdge[] });
+  const validation = validateGraph(out);
+  if (!validation.success || !validation.data) {
+    process.stderr.write(`[extract-structural] FATAL: graph failed schema validation: ${validation.fatal}\n`);
+    process.exit(1);
+  }
+  const postCount = structuralSubset(validation.data);
+  if (postCount.nodes.length < preCount.nodes.length || postCount.edges.length < preCount.edges.length) {
+    process.stderr.write(
+      `[extract-structural] FATAL: validation dropped structural items ` +
+      `(nodes ${preCount.nodes.length}→${postCount.nodes.length}, edges ${preCount.edges.length}→${postCount.edges.length})\n`,
+    );
+    process.exit(1);
+  }
 
   try {
     writeJson(outPath, out);
@@ -91,6 +112,7 @@ function main(): void {
   const sidecar = {
     schema: "guild.structural_extraction_meta.v1",
     generated_at: new Date(started).toISOString(),
+    generated_from_commit: headSha(repoRoot),
     wall_clock_ms: elapsedMs,
     file_count: relFiles.length,
     structural_node_count: subset.nodes.length,

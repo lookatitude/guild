@@ -44,6 +44,14 @@ export interface IndexModeContext {
    * merged with any caller overrides.
    */
   config: IndexBlock;
+  /**
+   * FIX G14-7: the callback MUST report whether it actually engaged the SQLite
+   * backend for this mode (true = read from index.sqlite, false = read JSON /
+   * in-process). The harness uses this to PROVE engagement so a gate that
+   * silently ignores `config` (e.g. always reads JSON) cannot pass: a correct
+   * run reports off→false and on→true. Call exactly once per invocation.
+   */
+  reportEngagement: (usedSqlite: boolean) => void;
 }
 
 /** Outcome of running a function through both index modes. */
@@ -61,6 +69,17 @@ export interface ParityOutcome<T> {
   ranBoth: boolean;
   /** The modes actually executed, in invocation order: ["off", "on"]. */
   executed: IndexMode[];
+  /**
+   * FIX G14-7: per-mode backend engagement as reported by the callback.
+   * `off`/`on` are undefined if the callback never called reportEngagement.
+   */
+  engagement: { off?: boolean; on?: boolean };
+  /**
+   * True iff engagement was reported for BOTH modes AND matches expectation:
+   * off did NOT use SQLite and on DID. A gate that ignores `config` cannot make
+   * this true. Assert `engagementProven` to make the parity check non-vacuous.
+   */
+  engagementProven: boolean;
 }
 
 /** Build an index:off config (SQLite disabled — the source of truth). */
@@ -99,11 +118,20 @@ export function runBothIndexModes<T>(
 ): ParityOutcome<T> {
   const executed: IndexMode[] = [];
   const ov = opts.overrides ?? {};
+  const engagement: { off?: boolean; on?: boolean } = {};
 
-  const off = fn({ mode: "off", config: offConfig(ov) });
+  const off = fn({
+    mode: "off",
+    config: offConfig(ov),
+    reportEngagement: (used) => { engagement.off = used; },
+  });
   executed.push("off");
 
-  const on = fn({ mode: "on", config: onConfig(ov) });
+  const on = fn({
+    mode: "on",
+    config: onConfig(ov),
+    reportEngagement: (used) => { engagement.on = used; },
+  });
   executed.push("on");
 
   return {
@@ -112,6 +140,8 @@ export function runBothIndexModes<T>(
     identical: deepEqual(off, on),
     ranBoth: executed.length === 2 && executed.includes("off") && executed.includes("on"),
     executed,
+    engagement,
+    engagementProven: engagement.off === false && engagement.on === true,
   };
 }
 

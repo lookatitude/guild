@@ -147,19 +147,23 @@ function resolvePython(
   spec: string,
   known: Set<string>,
 ): string | null {
-  // Relative ("from .x import y") and absolute ("pkg.mod") → pkg/mod.py
-  let base: string;
+  const bases: string[] = [];
   if (spec.startsWith(".")) {
+    // Relative ("from .x import y") — walk up per dot, then descend.
     const up = spec.match(/^\.+/)?.[0].length ?? 1;
     let dir = path.dirname(importerRel);
     for (let i = 1; i < up; i++) dir = path.dirname(dir);
-    base = path.join(dir, spec.replace(/^\.+/, "").replace(/\./g, "/"));
+    bases.push(path.join(dir, spec.replace(/^\.+/, "").replace(/\./g, "/")));
   } else {
-    base = spec.replace(/\./g, "/");
+    const sub = spec.replace(/\./g, "/");
+    // Absolute ("pkg.mod") — try BOTH importer-dir-relative (sibling/script-style
+    // imports where the package dir is on sys.path) AND repo-root-relative.
+    bases.push(path.join(path.dirname(importerRel), sub));
+    bases.push(sub);
   }
-  const cands = [base + ".py", path.join(base, "__init__.py")].map((p) =>
-    p.replace(/\\/g, "/").replace(/^\.\//, ""),
-  );
+  const cands = bases
+    .flatMap((base) => [base + ".py", path.join(base, "__init__.py")])
+    .map((p) => p.replace(/\\/g, "/").replace(/^\.\//, ""));
   return cands.find((c) => known.has(c)) ?? null;
 }
 

@@ -18,9 +18,11 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { execFileSync } from "child_process";
 
 import {
   extractStructuralGraph,
+  mergeStructuralInto,
   structuralSubset,
   canonicalize,
   STRUCTURAL_PROFILE_KEYS,
@@ -253,6 +255,244 @@ describe("G1 — 25-feature AST structural profile (sp)", () => {
     const barSp = (bar as Record<string, unknown>).sp as Record<string, number>;
     expect(fooSp.branch_count).toBeGreaterThan(barSp.branch_count); // foo has `if` + call sites
     expect(fooSp.call_count).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX G1-1 — member calls must not become false free-function edges
+// ---------------------------------------------------------------------------
+
+describe("FIX G1-1 — member/qualified calls are not false free-call edges", () => {
+  test("obj.bar() does NOT link to a free bar(); a real bar() call DOES", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "g1-member-"));
+    try {
+      fs.writeFileSync(
+        path.join(dir, "a.ts"),
+        [
+          "export function bar(): number {",
+          "  return 1;",
+          "}",
+          "export function viaMember(): number {",
+          "  const obj = { bar: () => 2 };",
+          "  return obj.bar();", // member call — must NOT link to free `bar`
+          "}",
+          "export function viaFree(): number {",
+          "  return bar();", // free call — MUST link
+          "}",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      const g = runOn(dir, ["a.ts"]);
+      expect(callsEdge(g.edges, "function:a.ts:viaMember", "function:a.ts:bar").length).toBe(0);
+      expect(callsEdge(g.edges, "function:a.ts:viaFree", "function:a.ts:bar").length).toBe(1);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX G1-5 — collided LLM node keeps structural provenance + counts
+// ---------------------------------------------------------------------------
+
+describe("FIX G1-5 — collision provenance is preserved", () => {
+  test("an LLM node colliding with a structural symbol stays in the subset + keeps LLM fields", () => {
+    const g = runOn(FIXTURE_DIR, REL_FILES);
+    const fooId = "function:a.ts:foo";
+    const structuralFoo = g.nodes.find((n) => n.id === fooId)!;
+    expect(structuralFoo).toBeDefined();
+
+    // Simulate a pre-existing LLM-tier node at the same id (enriched, no `sp`).
+    const llmFoo: GraphNode = {
+      id: fooId, type: "function", name: "foo",
+      source_refs: ["a.ts#L10-L17"], confidence: "high",
+      summary: "LLM-written summary", // LLM-only field
+    } as GraphNode;
+    const otherLlm: GraphNode = {
+      id: "concept:domain", type: "concept", name: "Domain",
+      source_refs: ["a.ts"], confidence: "medium",
+    } as GraphNode;
+
+    const merged = mergeStructuralInto([llmFoo, otherLlm], [], g);
+    const mFoo = merged.nodes.find((n) => n.id === fooId)! as Record<string, unknown>;
+    expect(mFoo.summary).toBe("LLM-written summary"); // not clobbered
+    expect(mFoo.sp).toBeDefined();                    // structural profile attached
+    expect(mFoo.structural).toBe(true);               // additive provenance
+
+    // The collided node is COUNTED in the structural subset (not dropped).
+    const subset = structuralSubset(merged);
+    expect(subset.nodes.some((n) => n.id === fooId)).toBe(true);
+    // The pure-LLM node is NOT structural.
+    expect(subset.nodes.some((n) => n.id === "concept:domain")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX G1-6 — zero network/model: dependency-closure scan + runtime fetch spy
+// ---------------------------------------------------------------------------
+
+describe("FIX G1-6 — no network/model across the dependency closure", () => {
+  function depClosure(entries: string[]): string[] {
+    const seen = new Set<string>();
+    const stack = [...entries.map((e) => path.resolve(e))];
+    const importRe = /(?:from|require\()\s*['"](\.[^'"]+)['"]/g;
+    while (stack.length) {
+      const real = stack.pop()!;
+      if (seen.has(real) || !fs.existsSync(real) || !fs.statSync(real).isFile()) continue;
+      seen.add(real);
+      const text = fs.readFileSync(real, "utf8");
+      let m: RegExpExecArray | null;
+      importRe.lastIndex = 0;
+      while ((m = importRe.exec(text)) !== null) {
+        const base = path.resolve(path.dirname(real), m[1]);
+        for (const ext of ["", ".ts", ".tsx", ".js", "/index.ts"]) {
+          const cand = base + ext;
+          if (fs.existsSync(cand) && fs.statSync(cand).isFile()) { stack.push(cand); break; }
+        }
+      }
+    }
+    return [...seen];
+  }
+
+  test("the whole transitive closure imports no model client and opens no socket", () => {
+    const here = path.join(__dirname, "..");
+    const closure = depClosure([
+      path.join(here, "lib", "structural.ts"),
+      path.join(here, "extract-structural.ts"),
+      path.join(here, "resolve-calls.ts"),
+    ]);
+    // sanity: the closure actually fanned out beyond the entry files
+    expect(closure.length).toBeGreaterThan(5);
+
+    // Usage-precise patterns (a doc URL in a comment is harmless; an actual
+    // import/call of a network/model surface is not).
+    const FORBIDDEN: RegExp[] = [
+      /\banthropic\b/i, /\bopenai\b/i, /@ai-sdk/i, /\bnode-fetch\b/i,
+      /\baxios\b/i, /\bollama\b/i, /\bfetch\s*\(/,
+      /require\(\s*['"](?:node:)?(?:http|https|net|tls)['"]\s*\)/,
+      /from\s+['"](?:node:)?(?:http|https|net|tls)['"]/,
+      /new\s+XMLHttpRequest/,
+    ];
+    for (const f of closure) {
+      const text = fs.readFileSync(f, "utf8");
+      for (const re of FORBIDDEN) {
+        expect({ file: path.relative(here, f), matched: re.test(text) }).toEqual({ file: path.relative(here, f), matched: false });
+      }
+    }
+  });
+
+  test("runtime spy: extraction + call resolution never call global fetch", () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { refineCalls } = require("../resolve-calls") as typeof import("../resolve-calls");
+    const orig = (globalThis as Record<string, unknown>).fetch;
+    let called = false;
+    (globalThis as Record<string, unknown>).fetch = () => { called = true; throw new Error("network blocked"); };
+    try {
+      const base = extractStructuralGraph(FIXTURE_DIR, REL_FILES, readFile);
+      refineCalls(FIXTURE_DIR, REL_FILES, readFile, base);
+      expect(called).toBe(false);
+    } finally {
+      (globalThis as Record<string, unknown>).fetch = orig;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX G1-2 + G1-3 + G1-4 — real CLI path: write, validate, sidecar, determinism
+// ---------------------------------------------------------------------------
+
+describe("FIX G1-2/3/4 — real extract-structural.ts CLI on a git repo", () => {
+  const SCRIPTS_DIR = path.resolve(__dirname, "..", "..");
+  const CLI = path.join(SCRIPTS_DIR, "understand", "extract-structural.ts");
+  let repo: string;
+
+  function git(args: string[]): void {
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: repo, stdio: "ignore" });
+  }
+  function runCli(): void {
+    execFileSync("npx", ["tsx", CLI, "--cwd", repo], { cwd: SCRIPTS_DIR, stdio: "ignore" });
+  }
+  function readGraph(): Record<string, unknown> {
+    return JSON.parse(fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-graph.json"), "utf8"));
+  }
+  function readSidecar(): Record<string, unknown> {
+    return JSON.parse(fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-graph.json.meta.json"), "utf8"));
+  }
+
+  beforeAll(() => {
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), "g1-cli-"));
+    fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "src", "b.ts"), "export function helper(): number {\n  return 42;\n}\nexport class Base {\n  greet(): string {\n    return \"hi\";\n  }\n}\n", "utf8");
+    fs.writeFileSync(
+      path.join(repo, "src", "a.ts"),
+      [
+        'import { Base } from "./b";',
+        "export function bar(): number { return 1; }",
+        "export function foo(): number {",
+        "  const x = bar();",
+        "  return x + bar();",
+        "}",
+        "export class Derived extends Base {",
+        "  run(): number { return foo(); }",
+        "}",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    git(["init"]);
+    git(["add", "-A"]);
+    git(["commit", "-m", "fixture"]);
+    runCli();
+  });
+
+  afterAll(() => {
+    if (repo) fs.rmSync(repo, { recursive: true, force: true });
+  });
+
+  test("CLI writes a real knowledge-graph.json with the expected structural facts", () => {
+    const g = readGraph();
+    const nodes = g.nodes as GraphNode[];
+    const edges = g.edges as GraphEdge[];
+    expect(nodes.some((n) => n.id === "file:src/a.ts")).toBe(true);
+    expect(nodes.some((n) => n.id === "function:src/a.ts:foo")).toBe(true);
+    expect(nodes.some((n) => n.id === "class:src/a.ts:Derived")).toBe(true);
+    expect(edges.some((e) => e.type === "calls" && e.source === "function:src/a.ts:foo" && e.target === "function:src/a.ts:bar")).toBe(true);
+    expect(edges.some((e) => e.type === "inherits" && e.source === "class:src/a.ts:Derived" && e.target === "class:src/b.ts:Base")).toBe(true);
+    // structural profile rode through the real write path
+    const foo = nodes.find((n) => n.id === "function:src/a.ts:foo") as Record<string, unknown>;
+    expect(foo.sp).toBeDefined();
+  });
+
+  test("FIX G1-3: the written graph validates (validateGraph success)", () => {
+    const result = validateGraph(readGraph());
+    expect(result.success).toBe(true);
+  });
+
+  test("FIX G1-4: commit metadata is in the SIDECAR, not the graph", () => {
+    const g = readGraph();
+    // graph carries the commit-independent constant, NOT a 40-hex sha
+    expect(g.generated_from_commit).toBe("structural");
+    expect(String(g.generated_from_commit)).not.toMatch(/^[0-9a-f]{40}$/);
+    // sidecar carries the real HEAD sha + 0 model/network
+    const sc = readSidecar();
+    expect(String(sc.generated_from_commit)).toMatch(/^[0-9a-f]{40}$/);
+    expect(sc.model_calls).toBe(0);
+    expect(sc.network_calls).toBe(0);
+  });
+
+  test("FIX G1-4 anti-vacuity: identical tree at a DIFFERENT commit → byte-identical graph", () => {
+    const graph1 = fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-graph.json"), "utf8");
+    const commit1 = readSidecar().generated_from_commit;
+
+    git(["commit", "--allow-empty", "-m", "empty — same tree, new HEAD"]);
+    runCli();
+
+    const graph2 = fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-graph.json"), "utf8");
+    const commit2 = readSidecar().generated_from_commit;
+
+    expect(graph2).toBe(graph1);      // graph unchanged across the commit
+    expect(commit2).not.toBe(commit1); // but the sidecar DID see the new HEAD
   });
 });
 

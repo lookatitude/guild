@@ -76,7 +76,7 @@ tests that confirm a broken oracle entry is caught.
 
 Every CLRA feature must answer **identically** with the SQLite index cache
 `off` (the source of truth) and `on` (acceleration). Gates assert this with the
-parity harness ([`../../lib/parity-harness.ts`](../../lib/parity-harness.ts)):
+parity harness ([`../../../lib/parity-harness.ts`](../../../lib/parity-harness.ts)):
 
 ```ts
 import { runBothIndexModes } from "../lib/parity-harness";
