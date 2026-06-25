@@ -68,6 +68,22 @@ export const STRUCTURAL_PROFILE_KEYS = [
 
 export type StructuralProfile = Record<(typeof STRUCTURAL_PROFILE_KEYS)[number], number>;
 
+/**
+ * Cache-validity stamp (FIX-T4.1-3). A reused cached bundle is trusted ONLY when
+ * the cache it came from was produced by the SAME extractor + config + bundle
+ * shape — `contentHash` alone is insufficient (an unchanged file's stale/tampered
+ * bundle could otherwise make `--incremental` diverge from a full rebuild).
+ *
+ * Fold every input that changes a bundle's bytes into this stamp; BUMP `cfg`
+ * whenever extraction, import-resolution (lib/import-map), call/inheritance
+ * resolution, or the FileBundle shape changes so old caches invalidate cleanly:
+ *   - `STRUCTURAL_EXTRACTOR` — the extractor marker/version,
+ *   - `sp:<n>`               — the structural-profile shape (key count),
+ *   - `cfg:<rev>`            — manual revision covering resolution/bundle logic.
+ */
+export const STRUCTURAL_CACHE_VERSION =
+  `${STRUCTURAL_EXTRACTOR}|sp:${STRUCTURAL_PROFILE_KEYS.length}|cfg:1`;
+
 export interface StructuralGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -463,7 +479,36 @@ export interface FileBundle {
 /** Persisted bundle cache — the reuse baseline for `--incremental` runs. */
 export interface StructuralCache {
   schema: "guild.structural_cache.v1";
+  /**
+   * Extractor+config+shape stamp (FIX-T4.1-3). A mismatch (or absent field, i.e.
+   * a pre-fix cache) invalidates the WHOLE cache — every file is re-extracted so
+   * incremental can never diverge from a full rebuild after a logic/shape change.
+   */
+  version: string;
   files: Record<string, FileBundle>;
+}
+
+/**
+ * A cached bundle may be reused ONLY if its shape is intact and it is keyed to
+ * the file it claims (FIX-T4.1-3). Guards against a truncated/tampered cache
+ * entry whose `contentHash` happens to match: a structurally-broken bundle is
+ * rejected and the file re-extracted, so incremental stays == full.
+ */
+function isReusableBundle(rel: string, b: unknown): b is FileBundle {
+  if (!b || typeof b !== "object") return false;
+  const r = b as Record<string, unknown>;
+  if (r.rel !== rel) return false; // entry must be keyed to its own file
+  if (typeof r.contentHash !== "string" || r.contentHash === "") return false;
+  if (typeof r.language !== "string" || typeof r.isCode !== "boolean") return false;
+  const fileNode = r.fileNode as Record<string, unknown> | undefined;
+  if (!fileNode || typeof fileNode !== "object" || fileNode.id !== `file:${rel}`) return false;
+  return (
+    Array.isArray(r.symbolNodes) &&
+    Array.isArray(r.contains) &&
+    Array.isArray(r.importSpecs) &&
+    Array.isArray(r.classes) &&
+    Array.isArray(r.callables)
+  );
 }
 
 function symbolNodeName(sym: Symbol): string {
@@ -721,7 +766,7 @@ export function bundlesToCache(bundles: FileBundle[]): StructuralCache {
   for (const b of [...bundles].sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0))) {
     files[b.rel] = b;
   }
-  return { schema: "guild.structural_cache.v1", files };
+  return { schema: "guild.structural_cache.v1", version: STRUCTURAL_CACHE_VERSION, files };
 }
 
 export interface RefreshStats {
@@ -751,7 +796,12 @@ export function refreshStructuralIncremental(
   readFile: (abs: string) => string,
   prior: StructuralCache,
 ): { structural: StructuralGraph; bundles: FileBundle[]; stats: RefreshStats } {
-  const priorFiles = prior.files ?? {};
+  // FIX-T4.1-3: a stamp mismatch (or a pre-fix cache with no `version`) means the
+  // cached bundles were produced by a different extractor/config/shape — none are
+  // trustworthy, so drop the whole cache and re-extract every file. The result is
+  // a full rebuild surfaced through the incremental path (still == a clean build).
+  const versionOk = prior.version === STRUCTURAL_CACHE_VERSION;
+  const priorFiles = versionOk ? (prior.files ?? {}) : {};
   const stats: RefreshStats = { mode: "incremental", reExtracted: [], reused: [], newFiles: [], deleted: [] };
 
   const currentSet = new Set(relFiles);
@@ -770,7 +820,9 @@ export function refreshStructuralIncremental(
     }
     const hash = content === null ? "" : contentHash(content);
     const cached = priorFiles[rel];
-    if (cached && hash !== "" && cached.contentHash === hash) {
+    // Reuse ONLY when the bundle's shape is intact AND its content hash matches —
+    // a hash match on a malformed bundle is never enough (FIX-T4.1-3).
+    if (cached && hash !== "" && isReusableBundle(rel, cached) && cached.contentHash === hash) {
       bundles.push(cached);
       stats.reused.push(rel);
     } else {

@@ -567,6 +567,71 @@ describe("FIX G2-2/G2-3 — stale sha normalized + validated graph written (real
 });
 
 // ---------------------------------------------------------------------------
+// FIX-T4.1-1 — path containment: a `../` out path is refused (real CLI)
+// ---------------------------------------------------------------------------
+
+describe("FIX-T4.1-1 — out-path containment (real CLI)", () => {
+  const SCRIPTS_DIR = path.resolve(__dirname, "..", "..");
+  const CLI = path.join(SCRIPTS_DIR, "understand", "extract-structural.ts");
+  let repo: string;
+  let outside: string;
+
+  function git(args: string[]): void {
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: repo, stdio: "ignore" });
+  }
+
+  beforeAll(() => {
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), "g1-contain-"));
+    outside = fs.mkdtempSync(path.join(os.tmpdir(), "g1-outside-"));
+    fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "src", "a.ts"), "export function foo(): number { return 1; }\n", "utf8");
+    git(["init"]);
+    git(["add", "-A"]);
+    git(["commit", "-m", "fixture"]);
+  });
+
+  afterAll(() => {
+    if (repo) fs.rmSync(repo, { recursive: true, force: true });
+    if (outside) fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  test("a relative `../` out path escaping the repo is refused (non-zero exit, no write)", () => {
+    const escapeRel = path.join("..", path.basename(outside), "escape.json");
+    const escapeAbsTarget = path.join(repo, escapeRel); // == outside/escape.json
+    let exitCode = 0;
+    try {
+      execFileSync("npx", ["tsx", CLI, "--cwd", repo, "--out", escapeRel], { cwd: SCRIPTS_DIR, stdio: "pipe" });
+    } catch (err) {
+      exitCode = (err as { status?: number }).status ?? 1;
+    }
+    expect(exitCode).not.toBe(0);
+    // the artifact was NOT written outside the repo
+    expect(fs.existsSync(escapeAbsTarget)).toBe(false);
+    expect(fs.existsSync(path.join(outside, "escape.json"))).toBe(false);
+    // …and nothing leaked the cache sidecar either
+    expect(fs.existsSync(`${escapeAbsTarget}.structural-cache.json`)).toBe(false);
+  });
+
+  test("an ABSOLUTE out path outside the repo is refused (non-zero exit, no write)", () => {
+    const absTarget = path.join(outside, "abs-escape.json");
+    let exitCode = 0;
+    try {
+      execFileSync("npx", ["tsx", CLI, "--cwd", repo, "--out", absTarget], { cwd: SCRIPTS_DIR, stdio: "pipe" });
+    } catch (err) {
+      exitCode = (err as { status?: number }).status ?? 1;
+    }
+    expect(exitCode).not.toBe(0);
+    expect(fs.existsSync(absTarget)).toBe(false);
+  });
+
+  test("a contained out path under the repo is ACCEPTED (proves the guard is not vacuous)", () => {
+    const okRel = path.join("sub", "graph.json");
+    execFileSync("npx", ["tsx", CLI, "--cwd", repo, "--out", okRel], { cwd: SCRIPTS_DIR, stdio: "ignore" });
+    expect(fs.existsSync(path.join(repo, okRel))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. Perf note (recorded, not gated)
 // ---------------------------------------------------------------------------
 

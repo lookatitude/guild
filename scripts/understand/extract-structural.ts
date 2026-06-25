@@ -49,6 +49,36 @@ import { validateGraph } from "./lib/schema";
 import type { GraphEdge, GraphNode } from "./lib/schema";
 import * as fs from "fs";
 
+/**
+ * FIX-T4.1-1: resolve `p` and PROVE it stays within `root` before any read/write.
+ * The artifact may not exist yet, so containment is checked via the realpath of
+ * the nearest EXISTING ancestor (defeating a symlink-through-an-existing-parent
+ * escape) with the non-existent tail re-appended. Returns the plain resolved
+ * path (location unchanged); throws on any `../`/symlink escape outside `root`.
+ */
+function assertContained(root: string, p: string, label: string): string {
+  const resolved = path.resolve(root, p);
+  const realRoot = fs.existsSync(root) ? fs.realpathSync(root) : path.resolve(root);
+  let existing = resolved;
+  const tail: string[] = [];
+  while (!fs.existsSync(existing)) {
+    tail.unshift(path.basename(existing));
+    const parent = path.dirname(existing);
+    if (parent === existing) break; // reached filesystem root
+    existing = parent;
+  }
+  const realFinal = path.join(fs.realpathSync(existing), ...tail);
+  const rel = path.relative(realRoot, realFinal);
+  const contained = rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+  if (!contained) {
+    throw new Error(
+      `[extract-structural] refusing ${label} outside repo root: ` +
+      `"${p}" → ${realFinal} (root ${realRoot})`,
+    );
+  }
+  return resolved;
+}
+
 interface ExistingGraph {
   version?: string;
   kind?: string;
@@ -66,14 +96,29 @@ function main(): void {
   const cwd = parseCwd(argv);
   const gp = guildPaths(cwd);
   const repoRoot = gp.repoRoot;
-  const outPath = parseFlag(argv, "out") ?? gp.knowledgeGraph;
-  const cachePath = `${outPath}.structural-cache.json`;
   const incremental = hasFlag(argv, "incremental");
   const started = Date.now();
 
-  // File list: prefer the deterministic scan's inventory, else a fresh walk.
+  // FIX-T4.1-1: containment-check the (possibly user-supplied) out path BEFORE it
+  // is read/written; the cache path is derived from the validated out path and so
+  // is checked too. Reject `../`/symlink escapes out of the repo root.
+  let outPath: string;
+  let cachePath: string;
+  try {
+    outPath = assertContained(repoRoot, parseFlag(argv, "out") ?? gp.knowledgeGraph, "--out path");
+    cachePath = assertContained(repoRoot, `${outPath}.structural-cache.json`, "cache path");
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    process.exit(1);
+  }
+
+  // File list: for --incremental, ALWAYS the LIVE tree (walkRepo) so add/delete is
+  // lossless even when .guild/indexes/codebase-map.json is stale (FIX-T4.1-2). A
+  // full build prefers the deterministic scan's shared inventory, else a walk.
   const cm = readJson<{ files: { path: string }[] }>(gp.codebaseMap);
-  const relFiles = cm?.files?.map((f) => f.path) ?? walkRepo(repoRoot).files;
+  const relFiles = incremental
+    ? walkRepo(repoRoot).files
+    : cm?.files?.map((f) => f.path) ?? walkRepo(repoRoot).files;
   const readFile = (abs: string) => fs.readFileSync(abs, "utf8");
 
   const existing = readJson<ExistingGraph>(outPath);

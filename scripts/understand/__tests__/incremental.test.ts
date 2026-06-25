@@ -36,6 +36,8 @@ import {
   stripStructural,
   structuralSubset,
   STRUCTURAL_EXTRACTOR,
+  STRUCTURAL_CACHE_VERSION,
+  type StructuralCache,
 } from "../lib/structural";
 import { validateGraph } from "../lib/schema";
 import type { GraphEdge, GraphNode } from "../lib/schema";
@@ -359,6 +361,167 @@ describe("G4 gate 4 — determinism + only-changed-file re-extraction", () => {
     expect(JSON.stringify(g1)).toBe(JSON.stringify(g2));
     // non-vacuity: the graph actually carries edges (would fail if assemble dropped them)
     expect(g1.edges.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX-T4.1-3 — cache reuse is version+shape validated, not contentHash-only
+// ---------------------------------------------------------------------------
+
+describe("FIX-T4.1-3 — a stale/mismatched cache is invalidated (incremental == full)", () => {
+  let dir: string;
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  test("bundlesToCache stamps the current version", () => {
+    dir = tmpRepo("g4-cacheversion-");
+    write(dir, "a.py", "def bar():\n    return 1\n");
+    const cache = bundlesToCache(buildBundles(dir, ["a.py"], readFile));
+    expect(cache.version).toBe(STRUCTURAL_CACHE_VERSION);
+  });
+
+  test("a stale cache VERSION forces a full re-extract — and a reused stale bundle WOULD have diverged", () => {
+    dir = tmpRepo("g4-staleversion-");
+    write(dir, "a.py", "def bar():\n    return 1\n\ndef foo():\n    return bar()\n");
+    write(dir, "b.py", "def baz():\n    return 2\n");
+    const FILES = ["a.py", "b.py"];
+
+    // Build a cache, then simulate a stale extractor: drop a.py's symbol nodes
+    // (as an old extractor version would have) while KEEPING its contentHash, and
+    // stamp an old version. The file bytes are unchanged → a contentHash-only
+    // check would happily reuse the broken bundle.
+    const cache = bundlesToCache(buildBundles(dir, FILES, readFile));
+    cache.files["a.py"].symbolNodes = [];
+    cache.files["a.py"].callables = [];
+    const stale: StructuralCache = { ...cache, version: "structural-v0|sp:1|cfg:0" };
+
+    const full = fullStructural(dir, FILES);
+
+    // Proof the corruption is meaningful: reusing the stale bundle as-is diverges.
+    const wouldDiverge = assembleStructuralGraph(dir, Object.values(stale.files));
+    expect(subsetJson(wouldDiverge)).not.toBe(subsetJson(full));
+
+    // With the guard: version mismatch invalidates the WHOLE cache → re-extract all.
+    const incr = refreshStructuralIncremental(dir, FILES, readFile, stale);
+    expect(incr.stats.reused).toEqual([]);                // nothing trusted from the stale cache
+    expect(incr.stats.newFiles).toEqual(FILES);           // every file re-extracted
+    expect(subsetJson(incr.structural)).toBe(subsetJson(full)); // lossless == full
+  });
+
+  test("a pre-fix cache with NO version field is treated as stale (re-extract all)", () => {
+    dir = tmpRepo("g4-noversion-");
+    write(dir, "a.py", "def bar():\n    return 1\n");
+    const cache = bundlesToCache(buildBundles(dir, ["a.py"], readFile));
+    // Older caches predate the version stamp.
+    delete (cache as unknown as Record<string, unknown>).version;
+
+    const full = fullStructural(dir, ["a.py"]);
+    const incr = refreshStructuralIncremental(dir, ["a.py"], readFile, cache as StructuralCache);
+    expect(incr.stats.reused).toEqual([]);
+    expect(subsetJson(incr.structural)).toBe(subsetJson(full));
+  });
+
+  test("a shape-broken bundle (valid version, matching hash) is rejected per-file → re-extract", () => {
+    dir = tmpRepo("g4-shape-");
+    write(dir, "a.py", "def bar():\n    return 1\n\ndef foo():\n    return bar()\n");
+    write(dir, "b.py", "def baz():\n    return 2\n");
+    const FILES = ["a.py", "b.py"];
+
+    // Keep the CURRENT version but tamper a.py's bundle shape: drop fileNode and
+    // empty its symbols. contentHash still matches the unchanged file on disk.
+    const cache = bundlesToCache(buildBundles(dir, FILES, readFile));
+    delete (cache.files["a.py"] as unknown as Record<string, unknown>).fileNode;
+    cache.files["a.py"].symbolNodes = [];
+
+    const full = fullStructural(dir, FILES);
+    const incr = refreshStructuralIncremental(dir, FILES, readFile, cache);
+
+    // a.py's broken bundle is re-extracted; the intact b.py is still reused.
+    expect(incr.stats.reExtracted).toEqual(["a.py"]);
+    expect(incr.stats.reused).toEqual(["b.py"]);
+    expect(subsetJson(incr.structural)).toBe(subsetJson(full)); // lossless == full
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX-T4.1-2 — --incremental uses the LIVE tree, not a stale CodebaseMap (CLI)
+// ---------------------------------------------------------------------------
+
+describe("FIX-T4.1-2 — incremental add/delete is lossless under a STALE codebase-map", () => {
+  const SCRIPTS_DIR = path.resolve(__dirname, "..", "..");
+  const CLI = path.join(SCRIPTS_DIR, "understand", "extract-structural.ts");
+  let repo: string;
+  let cleanRepo: string;
+
+  function git(r: string, args: string[]): void {
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: r, stdio: "ignore" });
+  }
+  function runCli(r: string, ...extra: string[]): void {
+    execFileSync("npx", ["tsx", CLI, "--cwd", r, ...extra], { cwd: SCRIPTS_DIR, stdio: "ignore" });
+  }
+  const KG = (r: string) => path.join(r, ".guild", "indexes", "knowledge-graph.json");
+  const MAP = (r: string) => path.join(r, ".guild", "indexes", "codebase-map.json");
+  const readJ = (p: string) => JSON.parse(fs.readFileSync(p, "utf8"));
+
+  beforeAll(() => {
+    repo = tmpRepo("g4-stalemap-");
+    fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+    // Initial tree: a.ts + gone.ts. Seed graph + cache via a full run.
+    fs.writeFileSync(path.join(repo, "src", "a.ts"), "export function foo(): number { return 1; }\n", "utf8");
+    fs.writeFileSync(path.join(repo, "src", "gone.ts"), "export function obsolete(): number { return 9; }\n", "utf8");
+    git(repo, ["init"]);
+    git(repo, ["add", "-A"]);
+    git(repo, ["commit", "-m", "fixture"]);
+    runCli(repo); // full run → graph + structural-cache, file list from walk
+
+    // Mutate the LIVE tree: delete gone.ts, ADD added.ts.
+    fs.rmSync(path.join(repo, "src", "gone.ts"));
+    fs.writeFileSync(path.join(repo, "src", "added.ts"), "export function fresh(): number { return 7; }\n", "utf8");
+
+    // Write a STALE codebase-map that still lists gone.ts and is MISSING added.ts.
+    // A map-driven file list would delete nothing-new and miss the addition.
+    fs.mkdirSync(path.join(repo, ".guild", "indexes"), { recursive: true });
+    fs.writeFileSync(
+      MAP(repo),
+      JSON.stringify({
+        version: "guild.codebase_map.v1",
+        files: [{ path: "src/a.ts" }, { path: "src/gone.ts" }],
+      }),
+      "utf8",
+    );
+    git(repo, ["add", "-A"]);
+    git(repo, ["commit", "-m", "live tree drifts from the map"]);
+    runCli(repo, "--incremental");
+
+    // Clean full rebuild of the SAME final tree (no map) for the lossless compare.
+    cleanRepo = tmpRepo("g4-stalemap-clean-");
+    fs.mkdirSync(path.join(cleanRepo, "src"), { recursive: true });
+    fs.copyFileSync(path.join(repo, "src", "a.ts"), path.join(cleanRepo, "src", "a.ts"));
+    fs.copyFileSync(path.join(repo, "src", "added.ts"), path.join(cleanRepo, "src", "added.ts"));
+    git(cleanRepo, ["init"]);
+    git(cleanRepo, ["add", "-A"]);
+    git(cleanRepo, ["commit", "-m", "final tree"]);
+    runCli(cleanRepo);
+  });
+
+  afterAll(() => {
+    if (repo) fs.rmSync(repo, { recursive: true, force: true });
+    if (cleanRepo) fs.rmSync(cleanRepo, { recursive: true, force: true });
+  });
+
+  test("the DELETED file (still in the stale map) is gone from the incremental graph", () => {
+    const nodes = readJ(KG(repo)).nodes as GraphNode[];
+    expect(nodes.some((n) => n.id === "file:src/gone.ts")).toBe(false);
+    expect(nodes.some((n) => n.id === "function:src/gone.ts:obsolete")).toBe(false);
+  });
+
+  test("the ADDED file (absent from the stale map) IS in the incremental graph", () => {
+    const nodes = readJ(KG(repo)).nodes as GraphNode[];
+    expect(nodes.some((n) => n.id === "file:src/added.ts")).toBe(true);
+    expect(nodes.some((n) => n.id === "function:src/added.ts:fresh")).toBe(true);
+  });
+
+  test("incremental (under a stale map) == a clean full rebuild of the live tree", () => {
+    expect(subsetJson(readJ(KG(repo)))).toBe(subsetJson(readJ(KG(cleanRepo))));
   });
 });
 
