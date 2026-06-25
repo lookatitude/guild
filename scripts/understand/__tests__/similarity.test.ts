@@ -23,6 +23,7 @@
  */
 
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 
 import type { GraphNode } from "../lib/schema";
@@ -64,24 +65,53 @@ const stripComments = (s: string) =>
 const SIMILARITY_CODE = stripComments(SIMILARITY_SRC);
 
 /**
+ * Module-specifier source, covering EVERY import form (finding T8.1-r2#1):
+ *   - bare side-effect    `import "x";`
+ *   - static default/named `import x from "x"` / `import {a} from "x"` / `import * as x from "x"`
+ *   - re-export            `export {a} from "x"` / `export * from "x"`
+ *   - dynamic             `import("x")`
+ *   - CommonJS            `require("x")`
+ * The capture group is the specifier. `\bimport\s*\(?` matches both the bare
+ * side-effect form (no `(`) and the dynamic form (`import(`); `\bfrom` covers the
+ * static/re-export forms; `\brequire\s*\(` covers CJS. A regex (not a TS parser) is
+ * sufficient and dependency-free for this hygiene scan — it errs toward MORE matches.
+ */
+const SPEC_SRC = `(?:\\bfrom\\s*|\\bimport\\s*\\(?\\s*|\\brequire\\s*\\(\\s*)["']([^"']+)["']`;
+
+/**
+ * Deny regex: ANY of the import forms above targeting a network/socket builtin
+ * (`http`/`https`/`net`/`tls`/`dgram`, bare or `node:`-prefixed). Shared by the
+ * top-file check, the transitive-closure check, and the synthetic detection test
+ * below so the proof that "a network import is caught" exercises the SAME matcher
+ * the real scans use (non-vacuity).
+ */
+const NET_IMPORT_RE = new RegExp(
+  `(?:\\bfrom\\s*|\\bimport\\s*\\(?\\s*|\\brequire\\s*\\(\\s*)["'](?:node:)?(?:http|https|net|tls|dgram)["']`,
+);
+
+/**
  * Transitive LOCAL import closure of `entryAbs`: follow every relative (`.`-prefixed)
- * `from "…"` / `require("…")` to its `.ts` file and recurse. Used to prove the
+ * specifier — across ALL import forms ({@link SPEC_SRC}: static, bare side-effect,
+ * dynamic, re-export, require) — to its `.ts` file and recurse. Used to prove the
  * no-network / no-model property over the WHOLE local closure, not just the top
- * file (finding T8.1#2). Bare specifiers (fs/path/crypto) and node builtins stop.
+ * file (findings T8.1#2 / T8.1-r2#1). Bare specifiers (fs/path/crypto) and node
+ * builtins stop the walk (they are not followed, but ARE denied by NET_IMPORT_RE).
  */
 function localImportClosure(entryAbs: string): string[] {
   const seen = new Set<string>();
   const stack = [path.resolve(entryAbs)];
-  const re = /(?:from|require\()\s*["'](\.[^"']+)["']/g;
   while (stack.length) {
     const file = stack.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
     const src = fs.readFileSync(file, "utf8");
     const dir = path.dirname(file);
+    // Fresh regex per file — a shared /g/ instance would carry lastIndex across files.
+    const re = new RegExp(SPEC_SRC, "g");
     let m: RegExpExecArray | null;
     while ((m = re.exec(src)) !== null) {
       const spec = m[1];
+      if (!spec.startsWith(".")) continue; // only FOLLOW local relative imports
       const candidates = [
         path.resolve(dir, `${spec}.ts`),
         path.resolve(dir, `${spec}.tsx`),
@@ -197,10 +227,10 @@ describe("G8 gate 3 — 0 model tokens, 0 network", () => {
   test("module source imports no model client and opens no socket (top file)", () => {
     // No LLM / embeddings client (code, not prose).
     expect(SIMILARITY_CODE).not.toMatch(/anthropic|openai|embedding|@ai-sdk|langchain/i);
-    // No network call / socket stack.
+    // No network call / socket stack — deny across EVERY import form (T8.1-r2#1):
+    // static, bare side-effect `import "net"`, dynamic `import("net")`, require.
     expect(SIMILARITY_CODE).not.toMatch(/\b(fetch|XMLHttpRequest)\s*\(/);
-    expect(SIMILARITY_CODE).not.toMatch(/require\(["'](http|https|net|tls|dgram|node:http|node:https|node:net|node:tls)["']\)/);
-    expect(SIMILARITY_CODE).not.toMatch(/from ["'](http|https|net|tls|dgram|node:http|node:https|node:net|node:tls)["']/);
+    expect(SIMILARITY_CODE).not.toMatch(NET_IMPORT_RE);
     // Only fs + path + sibling lib imports are permitted.
     const imports = [...SIMILARITY_CODE.matchAll(/from ["']([^"']+)["']/g)].map((m) => m[1]).sort();
     expect(imports).toEqual(["./schema", "./structural", "fs", "path"]);
@@ -214,12 +244,11 @@ describe("G8 gate 3 — 0 model tokens, 0 network", () => {
     expect(closure.length).toBeGreaterThan(3);
     expect(closure.some((f) => f.endsWith(path.join("lib", "structural.ts")))).toBe(true);
     expect(closure.some((f) => f.endsWith(path.join("lib", "schema.ts")))).toBe(true);
-    const denyImport = /(?:from|require\()\s*["'](?:node:)?(?:http|https|net|tls|dgram)["']/;
     for (const file of closure) {
       const code = stripComments(fs.readFileSync(file, "utf8"));
       expect(code).not.toMatch(/anthropic|openai|embedding|@ai-sdk|langchain/i);
       expect(code).not.toMatch(/\b(fetch|XMLHttpRequest)\s*\(/);
-      expect(code).not.toMatch(denyImport);
+      expect(code).not.toMatch(NET_IMPORT_RE);
     }
   });
 
@@ -235,6 +264,53 @@ describe("G8 gate 3 — 0 model tokens, 0 network", () => {
       (globalThis as { fetch?: unknown }).fetch = orig;
     }
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  test("a BARE side-effect network import in the closure is followed AND denied (T8.1-r2#1)", () => {
+    // Build a synthetic local closure whose only network reference is a bare
+    // side-effect import — `import "net";` — reached through a bare side-effect
+    // RELATIVE import — `import "./mid";`. The old `(?:from|require\()` regex saw
+    // neither form, so such a module would have evaded the no-network proof.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clra-closure-"));
+    try {
+      const entry = path.join(dir, "entry.ts");
+      const mid = path.join(dir, "mid.ts");
+      // Reached only via the bare side-effect relative form (no `from`, no `require`).
+      fs.writeFileSync(entry, 'import "./mid";\nexport const x = 1;\n');
+      // The hidden network access — a bare side-effect import of a socket builtin.
+      fs.writeFileSync(mid, 'import "net";\nexport const y = 2;\n');
+
+      // The walker now follows the bare side-effect relative import to `mid.ts`.
+      const closure = localImportClosure(entry);
+      expect(closure.some((f) => f === fs.realpathSync(mid) || f === mid)).toBe(true);
+
+      // Across the closure, the SAME NET_IMPORT_RE the real scan uses flags `mid`'s
+      // bare side-effect `import "net";` — detected and denied.
+      const offender = closure.find((f) =>
+        NET_IMPORT_RE.test(stripComments(fs.readFileSync(f, "utf8"))),
+      );
+      expect(offender).toBeDefined();
+
+      // Mutation guard (non-vacuity): drop the bare side-effect form back to the old
+      // `from`/`require`-only matcher and the same offender is MISSED — proving the
+      // broadened form-coverage is what catches it.
+      const oldNetRe = /(?:from|require\()\s*["'](?:node:)?(?:http|https|net|tls|dgram)["']/;
+      expect(
+        closure.some((f) => oldNetRe.test(stripComments(fs.readFileSync(f, "utf8")))),
+      ).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("dynamic import() and require() of a network builtin are denied too (T8.1-r2#1)", () => {
+    // The deny matcher must also bite on the dynamic and CJS forms, not just static.
+    expect('const m = await import("https");').toMatch(NET_IMPORT_RE);
+    expect('const m = require("dgram");').toMatch(NET_IMPORT_RE);
+    expect('import "node:tls";').toMatch(NET_IMPORT_RE);
+    // ...but a benign local/builtin module is NOT a false positive.
+    expect('import "./schema";').not.toMatch(NET_IMPORT_RE);
+    expect('import * as fs from "fs";').not.toMatch(NET_IMPORT_RE);
   });
 });
 
@@ -389,6 +465,16 @@ describe("G8 gate 7 — path containment + input validation", () => {
     expect(() => kgSimilar(g, a, 1.5, 0, OPTS)).toThrow(/k must be a non-negative integer/);
     expect(() => kgSimilar(g, a, 5, Number.NaN, OPTS)).toThrow(/threshold/);
     expect(() => kgSimilar(g, a, 5, Number.POSITIVE_INFINITY, OPTS)).toThrow(/threshold/);
+    // Out-of-[0,1] threshold rejected on BOTH APIs (T8.1-r2#2): `<0` admits every
+    // pair (no exclusion / unbounded edges); `>1` excludes all — both out of contract.
+    expect(() => kgSimilar(g, a, 5, -1, OPTS)).toThrow(/threshold must be a finite number in \[0,1\]/);
+    expect(() => kgSimilar(g, a, 5, 2, OPTS)).toThrow(/threshold must be a finite number in \[0,1\]/);
+    expect(() => buildSimilarEdges(g, -1, 5, OPTS)).toThrow(/threshold must be a finite number in \[0,1\]/);
+    expect(() => buildSimilarEdges(g, 2, 5, OPTS)).toThrow(/threshold must be a finite number in \[0,1\]/);
+    // Inclusive bounds 0 and 1 remain valid (no spurious rejection at the edges).
+    expect(() => kgSimilar(g, a, 5, 0, OPTS)).not.toThrow();
+    expect(() => kgSimilar(g, a, 5, 1, OPTS)).not.toThrow();
+    expect(() => buildSimilarEdges(g, 1, 5, OPTS)).not.toThrow();
     expect(() => kgSimilar(g, a, 5, 0, { ...OPTS, alpha: 2 })).toThrow(/alpha/);
     expect(() => buildSimilarEdges(g, 0.6, -3, OPTS)).toThrow(/k must be a non-negative integer/);
     // k = 0 is the valid empty floor — bounded, never the slice(0,-n) leak.

@@ -461,16 +461,19 @@ function validateFingerprintParams(numHashes: number, shingleSize: number): void
 
 /**
  * Validate ranking params. A negative `k` would make `slice(0, k)` slice from the
- * end and silently emit candidates, breaking the k·|codeNodes| bound; a non-finite
- * `threshold` makes every `score < threshold` comparison NaN-driven; an `alpha`
- * outside [0,1] distorts the convex score mix. Throws RangeError on violation.
+ * end and silently emit candidates, breaking the k·|codeNodes| bound; a `threshold`
+ * outside [0,1] is out of contract — combined scores are a convex mix of two
+ * components each in [0,1], so they live in [0,1]; a `threshold < 0` admits every
+ * pair (no exclusion / unbounded edges) and `> 1` excludes all, while a non-finite
+ * value makes every `score < threshold` comparison NaN-driven; an `alpha` outside
+ * [0,1] distorts the convex score mix. Throws RangeError on violation.
  */
 function validateRankParams(k: number, threshold: number, alpha: number): void {
   if (!Number.isInteger(k) || k < 0) {
     throw new RangeError(`similarity: k must be a non-negative integer (got ${k})`);
   }
-  if (!Number.isFinite(threshold)) {
-    throw new RangeError(`similarity: threshold must be a finite number (got ${threshold})`);
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    throw new RangeError(`similarity: threshold must be a finite number in [0,1] (got ${threshold})`);
   }
   if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) {
     throw new RangeError(`similarity: alpha must be a finite number in [0,1] (got ${alpha})`);
