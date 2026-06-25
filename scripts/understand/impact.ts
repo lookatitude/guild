@@ -25,7 +25,9 @@
  * a symbol no entry point reaches reports entryDistance: null (honest, not 0).
  *
  * `--graph <path>` (or a "graph" field in the JSON args) overrides the default
- * .guild/indexes/knowledge-graph.json location — handy for tests/fixtures.
+ * .guild/indexes/knowledge-graph.json location — handy for tests/fixtures. The
+ * override is realpath-contained UNDER `.guild/indexes`: an in-repo file outside
+ * that dir (or any `../`-escape / symlink escape) is refused, exit 1.
  *
  * Exit: 0 ok · 1 no graph / bad input.
  */
@@ -92,22 +94,26 @@ function normalizeChangedFile(f: string): string {
 }
 
 /**
- * Resolve `--graph`/`graph` and REFUSE any path outside `repoRoot` (path
- * traversal / symlink escape). Two layers, mirroring lib/similarity.ts: (1) a
- * lexical containment check on the resolved path; (2) a best-effort realpath
- * check when both paths exist on disk. Returns the absolute path or refuses.
+ * Resolve `--graph`/`graph` and REFUSE any path outside the canonical indexes
+ * directory `.guild/indexes` (path traversal / symlink escape). The default
+ * graph lives at `.guild/indexes/knowledge-graph.json`, so a caller-supplied
+ * override is constrained to that SAME trusted directory — an in-repo file
+ * outside `.guild/indexes` (e.g. `<repo>/knowledge-graph.json`) is refused, not
+ * just `../`-escapes. Two layers, mirroring lib/similarity.ts: (1) a lexical
+ * containment check on the resolved path; (2) a best-effort realpath check when
+ * both paths exist on disk. Returns the absolute path or refuses.
  */
-function resolveGraphUnderRoot(repoRoot: string, graphArg: string): string {
-  const root = path.resolve(repoRoot);
+function resolveGraphUnderIndexes(indexesDir: string, graphArg: string): string {
+  const root = path.resolve(indexesDir);
   const abs = path.resolve(root, graphArg);
   if (escapesBase(path.relative(root, abs))) {
-    fail(`graph path escapes the repo root: ${graphArg}`);
+    fail(`graph path escapes the indexes dir (.guild/indexes): ${graphArg}`);
   }
   try {
     const realRoot = fs.realpathSync(root);
     const realAbs = fs.realpathSync(abs);
     if (escapesBase(path.relative(realRoot, realAbs))) {
-      fail(`graph path escapes the repo root (symlink): ${graphArg}`);
+      fail(`graph path escapes the indexes dir (.guild/indexes, symlink): ${graphArg}`);
     }
   } catch {
     // Root or target absent on disk: layer 1 already proved lexical containment.
@@ -155,10 +161,12 @@ function main(): void {
   const cwd = parseCwd(argv);
   const paths = guildPaths(cwd);
   const graphArg = parseFlag(argv, "graph") ?? args.graph;
-  // SECURITY: a caller-supplied graph path is realpath-contained under the repo
-  // root; the default knowledge-graph location is already inside it.
+  // SECURITY: a caller-supplied graph path is realpath-contained under the
+  // canonical indexes dir (.guild/indexes); the default knowledge-graph
+  // location already lives there. An in-repo file outside .guild/indexes is
+  // refused — the containment gate the header documents is actually closed.
   const graphPath = graphArg
-    ? resolveGraphUnderRoot(paths.repoRoot, graphArg)
+    ? resolveGraphUnderIndexes(paths.indexesDir, graphArg)
     : paths.knowledgeGraph;
   const graph = readJson<GraphView>(graphPath);
   if (!graph || !Array.isArray(graph.nodes)) {

@@ -364,7 +364,11 @@ describe("[G9] CLI impact.ts — real invocation against a written graph", () =>
   test("`impact.ts '<json>' --graph <file>' emits the reverse-reachable result", () => {
     const g = buildGraph();
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-"));
-    const graphFile = path.join(tmpDir, "knowledge-graph.json");
+    // The CLI contains --graph under .guild/indexes, so the override graph must
+    // live there (the same trusted dir as the default knowledge-graph.json).
+    const indexesDir = path.join(tmpDir, ".guild", "indexes");
+    fs.mkdirSync(indexesDir, { recursive: true });
+    const graphFile = path.join(indexesDir, "knowledge-graph.json");
     // Persist a minimal-but-valid graph wrapper the CLI's readJson can load.
     fs.writeFileSync(
       graphFile,
@@ -373,8 +377,9 @@ describe("[G9] CLI impact.ts — real invocation against a written graph", () =>
     );
 
     const cliPath = path.join(__dirname, "..", "impact.ts");
-    // `--cwd tmpDir` anchors the repo root at tmpDir, so the graph file (written
-    // inside it) is realpath-contained under the root the CLI now enforces.
+    // `--cwd tmpDir` anchors the repo root at tmpDir; the graph file lives under
+    // tmpDir/.guild/indexes, so it is realpath-contained under the dir the CLI
+    // now enforces (.guild/indexes — not merely the repo root).
     const out = execFileSync(
       "npx",
       ["tsx", cliPath, JSON.stringify({ changedFiles: ["src/b.ts"] }), "--cwd", tmpDir, "--graph", graphFile],
@@ -452,17 +457,59 @@ describe("[G9] CLI impact.ts — rejects bad input and path traversal", () => {
 
   test("a `../`-escaping --graph path is refused (no arbitrary filesystem read)", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-esc-"));
-    // Plant a file OUTSIDE the repo root the CLI will enforce (the parent dir).
+    // Plant a file OUTSIDE the enforced indexes dir (above the repo root entirely).
     const outside = path.join(tmpDir, "outside-secret.json");
     fs.writeFileSync(outside, JSON.stringify({ nodes: [], edges: [] }), "utf8");
     const innerRoot = path.join(tmpDir, "root");
-    fs.mkdirSync(innerRoot, { recursive: true });
+    fs.mkdirSync(path.join(innerRoot, ".guild", "indexes"), { recursive: true });
+    // From <root>/.guild/indexes, `../../../outside-secret.json` climbs out of
+    // the repo to the planted secret — the containment gate must refuse it.
     const stderr = runExpectingFailure(
       JSON.stringify({ changedFiles: ["src/b.ts"] }),
-      ["--cwd", innerRoot, "--graph", "../outside-secret.json"],
+      ["--cwd", innerRoot, "--graph", "../../../outside-secret.json"],
       path.join(__dirname, ".."),
     );
-    expect(stderr).toMatch(/escapes the repo root/i);
+    expect(stderr).toMatch(/escapes the indexes dir/i);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }, 90_000);
+
+  test("an in-repo --graph OUTSIDE .guild/indexes is refused; one INSIDE it is accepted", () => {
+    const g = buildGraph();
+    const graphWrapper = JSON.stringify(
+      { version: "guild.knowledge_graph.v1", nodes: g.nodes, edges: g.edges },
+      null,
+      2,
+    );
+
+    // (a) REJECT: a graph at <repo>/knowledge-graph.json — in-repo, but NOT under
+    // the canonical .guild/indexes trusted dir. This is the gate the prior round
+    // left open (containment was only against repoRoot, so this was accepted).
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-inrepo-"));
+    const inRepoOutside = path.join(repoRoot, "knowledge-graph.json");
+    fs.writeFileSync(inRepoOutside, graphWrapper, "utf8");
+    const stderr = runExpectingFailure(
+      JSON.stringify({ changedFiles: ["src/b.ts"] }),
+      ["--cwd", repoRoot, "--graph", inRepoOutside],
+      path.join(__dirname, ".."),
+    );
+    expect(stderr).toMatch(/escapes the indexes dir/i);
+
+    // (b) ACCEPT: the SAME graph at <repo>/.guild/indexes/knowledge-graph.json —
+    // inside the trusted dir — is loaded and the reverse-reachable set is emitted.
+    const indexesDir = path.join(repoRoot, ".guild", "indexes");
+    fs.mkdirSync(indexesDir, { recursive: true });
+    const inIndexes = path.join(indexesDir, "knowledge-graph.json");
+    fs.writeFileSync(inIndexes, graphWrapper, "utf8");
+    const cliPath = path.join(__dirname, "..", "impact.ts");
+    const out = execFileSync(
+      "npx",
+      ["tsx", cliPath, JSON.stringify({ changedFiles: ["src/b.ts"] }), "--cwd", repoRoot, "--graph", inIndexes],
+      { cwd: path.join(__dirname, ".."), encoding: "utf-8", timeout: 60_000 },
+    );
+    const result = JSON.parse(out);
+    const reached = new Set<string>(result.nodes.map((n: { id: string }) => n.id));
+    expect(reached.has("function:src/a.ts:main")).toBe(true);
+
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  }, 120_000);
 });
