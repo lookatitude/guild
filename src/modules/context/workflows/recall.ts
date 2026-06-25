@@ -51,7 +51,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 
-import { DEFAULT_INDEX_BLOCK, type IndexBlock } from "../../state";
+import { DEFAULT_INDEX_BLOCK, resolveMainRepoRoot, type IndexBlock } from "../../state";
 import { wikiRecall, isIdentifierAwareQuery } from "./wiki-recall";
 import { fsScan } from "./fs-scanner";
 import { protectChunks, type ProtectedChunk } from "./recall-protect";
@@ -765,17 +765,29 @@ function corpusForcesIdentifierBypass(
   category: string | undefined,
   wikiFileThreshold: number,
 ): boolean {
-  const wikiBase = path.join(cwd, ".guild", "wiki");
-  const scanDir = category ? path.join(wikiBase, category) : wikiBase;
-  const files = walkMdFiles(scanDir); // readdir-only enumeration (no content read yet)
-  // Below the SQLite engagement threshold the FTS cache never populates, so the
-  // `on` path also falls through to file-BM25 → parity holds without any bypass.
-  if (files.length <= wikiFileThreshold) return false;
+  // Gate on the GLOBAL SQLite-engagement condition (Codex FIX-T7.1-r3 #2): SQLite
+  // engages from the WHOLE-wiki .md count under resolveMainRepoRoot(cwd) — the EXACT
+  // condition ensureWikiFtsIndex() uses (index-cache.ts: count > wiki_file_threshold,
+  // wikiDir = resolveMainRepoRoot(cwd)/.guild/wiki). The previous gate counted only
+  // the CATEGORY-scoped subset, so a category-scoped query whose scoped count was
+  // ≤ threshold skipped the bypass while SQLite still engaged on the larger GLOBAL
+  // count → index:on diverged from index:off. `walkMdFiles` enumerates identically
+  // to ensureWikiFtsIndex's `collectMarkdownFiles` (recursive *.md), so the counts
+  // agree. Below the global threshold the FTS cache never populates and BOTH modes
+  // fall through to file-BM25 → parity holds without any bypass.
+  const globalWikiBase = path.join(resolveMainRepoRoot(cwd), ".guild", "wiki");
+  if (walkMdFiles(globalWikiBase).length <= wikiFileThreshold) return false;
 
   const querySet = new Set(tokenizeIdentifierAware(query));
   if (querySet.size === 0) return false;
 
-  for (const f of files) {
+  // SQLite WILL engage. Now scan the SCOPED corpus the file-BM25 path actually
+  // ranks (raw-cwd base + category, matching fileBm25Branch's wikiBase) for a
+  // doc-side identifier that file-BM25 splits but FTS5 does not — the divergence
+  // the bypass exists to prevent.
+  const wikiBase = path.join(cwd, ".guild", "wiki");
+  const scanDir = category ? path.join(wikiBase, category) : wikiBase;
+  for (const f of walkMdFiles(scanDir)) {
     let content: string;
     try {
       content = fs.readFileSync(f, "utf8");

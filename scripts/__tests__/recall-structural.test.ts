@@ -413,6 +413,7 @@ describe("G7 F3 — a structural query resolves from the graph with 0 file-sweep
     // Instrumented sweep denial: count every directory walk during the recall.
     const readdirSpy = jest.spyOn(fs, "readdirSync");
     let result: RecallResult;
+    let recallReaddirCalls = -1; // sentinel: must be overwritten inside the try
     try {
       // index:on with threshold 0 → IF the wiki waterfall ran it would readdir the
       // wiki dir (to populate the FTS cache OR to walk it for file-BM25), and the
@@ -422,6 +423,10 @@ describe("G7 F3 — a structural query resolves from the graph with 0 file-sweep
         _indexConfig: { enabled: true, wiki_file_threshold: 0 },
         _kgDisabled: true,
       });
+      // Capture the call count BEFORE mockRestore() — mockRestore() RESETS
+      // mock.calls, so asserting on the spy AFTER restore is vacuous (Codex
+      // FIX-T7.1-r3 #1): it would pass even if recall had swept the wiki dir.
+      recallReaddirCalls = readdirSpy.mock.calls.length;
     } finally {
       (globalThis as unknown as { fetch?: unknown }).fetch = origFetch;
       readdirSpy.mockRestore();
@@ -430,9 +435,9 @@ describe("G7 F3 — a structural query resolves from the graph with 0 file-sweep
     // Structural fully answered → wiki waterfall skipped → structural-only source.
     expect(result.source).toBe("structural");
     expect(result.chunks.length).toBeGreaterThan(0);
-    // 0 file-sweep — INSTRUMENTED: no directory walk ran at all (proves the wiki
-    // sweep was never STARTED, not merely that its output was discarded).
-    expect(readdirSpy).not.toHaveBeenCalled();
+    // 0 file-sweep — INSTRUMENTED on the count captured BEFORE restore, so a recall
+    // that DID readdir the wiki dir (sweep STARTED) makes this FAIL, not pass.
+    expect(recallReaddirCalls).toBe(0);
     // 0 file-sweep — BEHAVIOURAL corroboration: the matching wiki page is absent.
     expect(result.chunks.some((c) => c.source_path.endsWith(".md"))).toBe(false);
     // 0 LLM tokens: no network call.
@@ -588,5 +593,83 @@ describe("G7 finding-3 — a plain (non-identifier) query whose terms split a do
     // Not bypassed → index:on engages the FTS cache, index:off does not.
     expect(outcome.engagement.off).toBe(false);
     expect(outcome.engagement.on).toBe(true);
+  });
+});
+
+// ── FIX-T7.1-r3 finding-2: CATEGORY-scoped parity when the GLOBAL count crosses ──
+//
+// `corpusForcesIdentifierBypass` previously gated the bypass on the CATEGORY-scoped
+// .md count. But SQLite engages on the WHOLE-wiki count (ensureWikiFtsIndex), and its
+// FTS is category-AGNOSTIC (sqliteBranch passes no category). So a category-scoped
+// `process order` whose SCOPED count was ≤ threshold skipped the bypass while SQLite
+// engaged on the larger GLOBAL count — index:on then ranked out-of-category docs the
+// scoped index:off (file-BM25) never saw → divergence. The gate now mirrors the GLOBAL
+// engagement count (resolveMainRepoRoot(cwd) whole-wiki, the exact ensureWikiFtsIndex
+// condition), so the bypass fires and BOTH modes read the scoped file-BM25 corpus.
+
+describe("G7 finding-2 (r3) — a CATEGORY-scoped query stays parity-safe when the GLOBAL wiki count crosses the SQLite threshold", () => {
+  test("category-scoped 'process order' is byte-identical index:on == index:off (scoped count ≤ threshold < global count)", () => {
+    const repo = mkTmpRepo();
+    // In-category (decisions): ONE doc carrying the camelCase identifier the plain
+    // query splits — the scoped count (1) does NOT exceed threshold 1 on its own.
+    writeWikiFile(repo, "decisions/order-flow.md", "# Order\n\nThe processOrder function settles the invoice.\n");
+    // OUT-of-category padding: pushes the GLOBAL count over threshold AND (for p1)
+    // carries plain `process`/`order` tokens that SQLite's category-agnostic FTS
+    // WOULD rank for the plain query — the divergent doc the scoped index:off never sees.
+    writeWikiFile(repo, "notes/p1.md", "# Notes\n\nprocess order routing; order process steps.\n");
+    writeWikiFile(repo, "notes/p2.md", "# Pad\n\nunrelated billing and dunning content.\n");
+
+    // Plain query — not identifier-shaped; only the corpus signal can catch it.
+    expect(isIdentifierAwareQuery("process order")).toBe(false);
+
+    const outcome = runBothIndexModes((ctx) => {
+      const r = recall("process order", {
+        cwd: repo,
+        category: "decisions",
+        // threshold 1: SCOPED decisions count (1) ≤ 1, but GLOBAL count (3) > 1, so
+        // SQLite engages globally — the exact gap the old scoped-count gate missed.
+        _indexConfig: { ...ctx.config, wiki_file_threshold: 1 },
+        _kgDisabled: true,
+      });
+      ctx.reportEngagement(r.source === "sqlite");
+      return { source: r.source, paths: r.chunks.map((c) => c.source_path).sort() };
+    });
+
+    expect(outcome.ranBoth).toBe(true);
+    expect(outcome.identical).toBe(true);            // byte-identical across modes
+    expect(outcome.off.source).toBe("file-bm25");
+    expect(outcome.on.source).toBe("file-bm25");      // global-gate bypass → NOT sqlite
+    // Non-vacuity: the scoped in-category doc IS returned, and NO out-of-category
+    // (notes/p1.md, p2.md) doc leaked into EITHER mode. Pre-fix, index:on returned
+    // the global-FTS p1.md while index:off returned order-flow.md → these would differ.
+    const leaked = (paths: string[]) => paths.some((p) => p.endsWith("p1.md") || p.endsWith("p2.md"));
+    expect(outcome.off.paths.some((p) => p.endsWith("order-flow.md"))).toBe(true);
+    expect(outcome.on.paths.some((p) => p.endsWith("order-flow.md"))).toBe(true);
+    expect(leaked(outcome.off.paths)).toBe(false);
+    expect(leaked(outcome.on.paths)).toBe(false);
+  });
+
+  test("ANTI-VACUITY: the SAME 3-file corpus DOES cross the global SQLite threshold (un-scoped non-splitting query engages index:on)", () => {
+    // Proves the parity above is NOT vacuous (i.e. not holding merely because SQLite
+    // never engaged): with the same 3-file corpus at threshold 1, an un-scoped plain
+    // query that relies on NO identifier split is NOT bypassed → index:on DOES engage
+    // the FTS cache. So the global count (3) genuinely exceeds the threshold (1).
+    const repo = mkTmpRepo();
+    writeWikiFile(repo, "decisions/order-flow.md", "# Order\n\nThe processOrder function settles the invoice.\n");
+    writeWikiFile(repo, "notes/p1.md", "# Notes\n\nprocess order routing; order process steps.\n");
+    writeWikiFile(repo, "notes/p2.md", "# Pad\n\nunrelated billing and dunning content.\n");
+
+    const outcome = runBothIndexModes((ctx) => {
+      const r = recall("billing", {
+        cwd: repo,
+        _indexConfig: { ...ctx.config, wiki_file_threshold: 1 },
+        _kgDisabled: true,
+      });
+      ctx.reportEngagement(r.source === "sqlite");
+      return { source: r.source };
+    });
+
+    expect(outcome.engagement.off).toBe(false);
+    expect(outcome.engagement.on).toBe(true); // SQLite engaged → global threshold (1) crossed by 3 files
   });
 });
