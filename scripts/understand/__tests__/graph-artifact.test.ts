@@ -235,6 +235,52 @@ describe("G6 gate 1 — round-trip == from-scratch (CLI, bootstrap preserves LLM
       JSON.stringify(structuralSubset(g0)),
     );
   });
+
+  test("a preexisting STALE structural-cache sidecar is NOT reused on import → post-import == from-scratch (FIX-T6.1-r6)", () => {
+    // 1) Seed a GENUINE local cache (V1) and export the V1 snapshot.
+    runExtractFull(dir, graphPathOf(dir)); // writes graphPath.structural-cache.json (V1)
+    const cachePath = `${graphPathOf(dir)}.structural-cache.json`;
+    const v1Cache = JSON.parse(readFile(cachePath)) as {
+      version: string;
+      files: Record<string, { contentHash: string }>;
+    };
+    expect(v1Cache.files["a.ts"]).toBeDefined(); // setup is valid
+    const exp = runCli(dir, ["--export", "--force"]);
+    expect(exp.status).toBe(0);
+
+    // 2) Evolve a.ts to V2 — a structurally DIFFERENT tree (adds exported `baz`).
+    const A_V2 = A_TS + "export function baz(): number { return 42; }\n";
+    write(dir, "a.ts", A_V2);
+    const v2Hash = contentHash(A_V2);
+
+    // 3) Plant a STALE cache that LIES: it still carries the V1 bundle for a.ts but
+    //    stamps it with V2's contentHash. The version stamp is kept CURRENT so the
+    //    whole-cache version invalidation does NOT fire — this isolates the sidecar
+    //    removal as the SOLE protection. If reused, the graph would carry V1
+    //    structure (NO `baz`). Wipe only the local graph; KEEP the poisoned cache +
+    //    the committed artifact (mirrors a fresh clone with a leftover local cache).
+    v1Cache.files["a.ts"].contentHash = v2Hash;
+    fs.rmSync(graphPathOf(dir), { force: true });
+    fs.writeFileSync(cachePath, JSON.stringify(v1Cache, null, 2));
+    expect(fs.existsSync(cachePath)).toBe(true); // the stale sidecar is present pre-import
+
+    // 4) Import: must drop the stale sidecar and rebuild structural from live source.
+    const imp = runCli(dir, ["--import"]);
+    expect(imp.status).toBe(0);
+    const imported = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
+
+    // 5) From-scratch on the SAME V2 tree.
+    const scratchPath = path.join(dir, ".guild", "indexes", "scratch-graph.json");
+    runExtractFull(dir, scratchPath);
+    const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
+
+    const importedSubset = JSON.stringify(structuralSubset(imported));
+    // post-import structural subset == from-scratch: the stale cache was NOT reused.
+    expect(importedSubset).toBe(JSON.stringify(structuralSubset(scratch)));
+    // Non-vacuity (would FAIL if the stale V1 bundle were reused): the result
+    // reflects the LIVE V2 tree — it carries `baz`, which the V1 bundle lacks.
+    expect(importedSubset).toContain("baz");
+  });
 });
 
 // ===========================================================================

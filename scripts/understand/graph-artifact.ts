@@ -12,11 +12,14 @@
  *              `--force`). Default = NOT written. Fails closed (non-zero, nothing
  *              written) if a leak audit finds a secret in the payload.
  *
- *   --import   On a fresh clone: decode + integrity-check the artifact, write the
+ *   --import   On a fresh clone: drop any preexisting local structural-cache
+ *              sidecar (a clean import never inherits a stale/foreign cache —
+ *              FIX-T6.1-r6), decode + integrity-check the artifact, write the
  *              bootstrap graph with its structural subset STRIPPED (so the local
  *              re-extraction is the sole author of structural data — the artifact's
  *              structural tier is never trusted), then run G4 incremental to
- *              (re)build the structural tier locally for the working tree. A
+ *              (re)build the structural tier locally for the working tree. With the
+ *              cache gone the first incremental is a full rebuild == from-scratch. A
  *              missing/corrupt artifact falls back to a full extraction — never
  *              crashes.
  *
@@ -98,6 +101,30 @@ function runExtractor(cwd: string, graphPath: string, incremental: boolean): num
   if (incremental) args.push("--incremental");
   const r = spawnSync("npx", args, { stdio: "inherit" });
   return r.status ?? 1;
+}
+
+/**
+ * Remove any preexisting LOCAL structural-cache sidecar before the first
+ * post-import extraction (Codex FIX-T6.1-r6). A clean import must (re)build its
+ * local cache FRESH from the validated bootstrap graph + live source — it must
+ * NEVER inherit a stale or foreign `${graphPath}.structural-cache.json` (e.g. a
+ * legacy cache left by an earlier import or a now-superseded extraction). The
+ * incremental rebuild at the end of doImport keys reuse on `contentHash`, so a
+ * stale bundle whose `contentHash` happens to match the live file would be reused
+ * wholesale and the post-import structural tier could DIVERGE from a from-scratch
+ * extraction. Removing the sidecar forces the first `--incremental` run to find no
+ * usable cache → full rebuild → byte-for-byte == from-scratch, then seeds the
+ * trusted local cache for LATER incrementals. The path is the extractor's own
+ * cache path (derived from the already-contained graphPath), so it stays under
+ * `.guild/indexes/`. Best-effort: a missing sidecar is the normal case.
+ */
+function removeStaleLocalCache(graphPath: string): void {
+  try {
+    fs.rmSync(`${graphPath}.structural-cache.json`, { force: true });
+  } catch {
+    /* best-effort: if it cannot be removed the extractor still re-validates every
+       reused bundle, but a clean import is no longer guaranteed == from-scratch. */
+  }
 }
 
 /**
@@ -223,6 +250,13 @@ function doImport(cwd: string, argv: string[]): number {
     process.stderr.write(`[graph-artifact] refusing --out outside .guild/indexes\n`);
     return 1;
   }
+
+  // A clean import owns its local cache: drop any preexisting (stale/foreign)
+  // structural-cache sidecar BEFORE either extraction below, so neither the
+  // corrupt-artifact full-rebuild fallback nor the post-bootstrap incremental
+  // rebuild can reuse it. The post-import structural tier is then always == from-
+  // scratch (Codex FIX-T6.1-r6).
+  removeStaleLocalCache(graphPath);
 
   // Decode + integrity-check the artifact. Any failure (bad integrity, a graph that
   // is not a validation fixpoint, OR a malformed fingerprint map) → full-extraction
