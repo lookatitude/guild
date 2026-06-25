@@ -330,6 +330,64 @@ describe("G6 gate 2 — integrity / corrupt artifact rejected", () => {
     const g = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
     expect(g.nodes.length).toBeGreaterThan(0);
   });
+
+  test("a malformed callables/classes/symbolNodes cache ELEMENT is REJECTED on unpack (FIX-T6.1-r2 #2)", () => {
+    // FIX-T6.1-r2 #2: the array-SHAPE check passes even when an array holds a
+    // malformed ENTRY; assembleStructuralGraph() then dereferences callable/class/
+    // symbol-node fields and crashes/diverges. Each defect must reject the artifact.
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    // anti-vacuity: the well-formed cache passes the validator and round-trips.
+    expect(validateStructuralCache(cache)).toBe(true);
+    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, cache).artifact)).not.toThrow();
+
+    // pick the bundle that actually carries symbols/classes/callables (a.ts), so
+    // mutating element [0] is meaningful (not a vacuous empty-array mutation).
+    const key = Object.keys(cache.files).find((k) => {
+      const b = cache.files[k];
+      return b.symbolNodes.length > 0 && b.classes.length > 0 && b.callables.length > 0;
+    });
+    expect(key).toBeDefined();
+    const clone = () => JSON.parse(JSON.stringify(cache)) as StructuralCache;
+    const bundleOf = (c: StructuralCache) => c.files[key as string] as unknown as Record<string, unknown>;
+
+    // (a) a null `callables` entry → assemble throws on register(c.simpleName, c.id).
+    const badCallable = clone();
+    (bundleOf(badCallable).callables as unknown[])[0] = null;
+    expect(validateStructuralCache(badCallable)).toBe(false);
+    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, badCallable).artifact)).toThrow(ArtifactError);
+
+    // (b) a `classes` entry whose `bases` is not an array → Pass 2b `for…of` throws.
+    const badClass = clone();
+    (bundleOf(badClass).classes as Record<string, unknown>[])[0].bases = "oops";
+    expect(validateStructuralCache(badClass)).toBe(false);
+    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, badClass).artifact)).toThrow(ArtifactError);
+
+    // (c) a `symbolNodes` entry with a non-string `id` → Pass 1 addNode dereferences it.
+    const badSymbol = clone();
+    (bundleOf(badSymbol).symbolNodes as Record<string, unknown>[])[0].id = 42;
+    expect(validateStructuralCache(badSymbol)).toBe(false);
+    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, badSymbol).artifact)).toThrow(ArtifactError);
+  });
+
+  test("CLI --import on a malformed-cache-ELEMENT artifact falls back == from-scratch (FIX-T6.1-r2 #2)", () => {
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    const key = Object.keys(cache.files).find((k) => cache.files[k].callables.length > 0) as string;
+    const bad = JSON.parse(JSON.stringify(cache)) as StructuralCache;
+    (bad.files[key] as unknown as Record<string, unknown>).callables = [null];
+    const { artifact } = packageGraphArtifact(graph, bad);
+    fs.mkdirSync(path.dirname(artifactPathOf(dir)), { recursive: true });
+    fs.writeFileSync(artifactPathOf(dir), artifact);
+
+    const imp = runCli(dir, ["--import"]);
+    expect(imp.status).toBe(0); // rejected the bad element, fell back, did not crash
+    const imported = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
+
+    // == from-scratch: the fallback full extraction equals a clean rebuild.
+    const scratchPath = path.join(dir, ".guild", "indexes", "scratch-graph.json");
+    runExtractFull(dir, scratchPath);
+    const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
+    expect(JSON.stringify(structuralSubset(imported))).toBe(JSON.stringify(structuralSubset(scratch)));
+  });
 });
 
 // ===========================================================================
@@ -487,6 +545,32 @@ describe("G6 path containment", () => {
     );
     expect(() => assertContainedPath("/etc/passwd", base)).toThrow(ArtifactError);
   });
+
+  test("a symlinked PARENT escape is rejected even when the tail does not exist (FIX-T6.1-r2 #1)", () => {
+    const base = fs.realpathSync(path.join(dir, ".guild", "indexes"));
+    const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "g6-outside-")));
+    try {
+      // A symlink inside base pointing OUTSIDE; the final target (new.json) does
+      // not exist, so the pre-fix realpath-only-when-target-exists check is fooled.
+      const link = path.join(base, "evil");
+      fs.symlinkSync(outside, link);
+      // anti-vacuity: a real (non-symlinked) sibling tail under base is accepted.
+      expect(assertContainedPath(path.join(base, "ok", "new.json"), base)).toBe(
+        path.join(base, "ok", "new.json"),
+      );
+      // the symlinked-parent write would land in `outside` → refused.
+      expect(() => assertContainedPath(path.join(base, "evil", "new.json"), base)).toThrow(
+        ArtifactError,
+      );
+      // also refused for a DANGLING symlink (target removed after creation).
+      fs.rmSync(outside, { recursive: true, force: true });
+      expect(() => assertContainedPath(path.join(base, "evil", "new.json"), base)).toThrow(
+        ArtifactError,
+      );
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
 });
 
 // ===========================================================================
@@ -532,6 +616,28 @@ describe("G6 CLI --out containment (escaping --out refused before any write/spaw
     const r = runCli(dir, ["--export", "--force", "--out", rel]);
     expect(r.status).toBe(0);
     expect(fs.existsSync(artifactPathOf(dir))).toBe(true);
+  });
+
+  test("import with a symlinked-parent --out is refused before any write/spawn (FIX-T6.1-r2 #1)", () => {
+    // A symlink UNDER .guild/indexes pointing outside the repo; `evil/new.json`
+    // stays syntactically under indexes but the import write/spawn (writeJson +
+    // runExtractor --out) would follow `evil` OUTSIDE the containment root. This is
+    // the real write-escape (export only READS --out; import WRITES it).
+    const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "g6-cli-outside-")));
+    try {
+      fs.symlinkSync(outside, path.join(dir, ".guild", "indexes", "evil"));
+      const r = runCli(dir, ["--import", "--out", "evil/new.json"]);
+      expect(r.status).toBe(1); // refused at path resolution, before any write/spawn
+      // Non-vacuity: graph-artifact's OWN containment must be what refuses it —
+      // assert its specific message, not the downstream extractor's. Pre-fix this
+      // message is absent (the symlinked parent slipped through resolveGraphPath),
+      // so this assertion FAILS without the fix.
+      expect(r.out).toContain("[graph-artifact] refusing --out outside .guild/indexes");
+      // nothing was written through the symlink into `outside`.
+      expect(fs.existsSync(path.join(outside, "new.json"))).toBe(false);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 });
 

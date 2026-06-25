@@ -117,8 +117,10 @@ export class ArtifactError extends Error {
 
 /**
  * Resolve `candidate` and assert it stays within `baseDir` (which must exist).
- * Rejects `../` escapes and symlink escapes (both base and any existing target
- * are realpath-ed). Returns the realpath-resolved absolute candidate path.
+ * Rejects `../` escapes AND symlink escapes — including a symlinked PARENT
+ * directory when the final target does not exist yet (Codex FIX-T6.1-r2 #1).
+ * Returns the symlink-resolved absolute candidate path (== the lexical resolve
+ * for the symlink-free case).
  */
 export function assertContainedPath(candidate: string, baseDir: string): string {
   const base = fs.realpathSync(baseDir);
@@ -127,17 +129,41 @@ export function assertContainedPath(candidate: string, baseDir: string): string 
     const rel = path.relative(base, child);
     return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
   };
+  // Lexical containment first — cheap reject of absolute / `../` escapes.
   if (!within(resolved)) {
     throw new ArtifactError(`path escapes ${base}: ${candidate}`);
   }
-  // If the target already exists, follow symlinks and re-check containment.
-  if (fs.existsSync(resolved)) {
-    const real = fs.realpathSync(resolved);
-    if (real !== resolved && !within(real)) {
-      throw new ArtifactError(`path resolves outside ${base} via symlink: ${candidate}`);
+  // Symlink containment (Codex FIX-T6.1-r2 #1): the lexical check above is fooled
+  // by a symlinked PARENT — `link/new.json` stays syntactically under base while a
+  // write/spawn follows `link` outside. Walk every component from base to the
+  // (possibly nonexistent) target, resolving the NEAREST EXISTING ANCESTOR through
+  // any symlink BEFORE appending the nonexistent tail, then re-assert containment.
+  let real = base;
+  let exhausted = false; // once a component is missing, the rest is a literal tail
+  for (const seg of path.relative(base, resolved).split(path.sep)) {
+    real = path.join(real, seg);
+    if (exhausted) continue;
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(real);
+    } catch {
+      exhausted = true; // missing — nothing below it can be a symlink
+      continue;
+    }
+    if (stat.isSymbolicLink()) {
+      // Resolve the link (full chain when the target exists; lexical readlink when
+      // it dangles) so a symlink hop outside base is caught even for a missing tail.
+      try {
+        real = fs.realpathSync(real);
+      } catch {
+        real = path.resolve(path.dirname(real), fs.readlinkSync(real));
+      }
     }
   }
-  return resolved;
+  if (!within(real)) {
+    throw new ArtifactError(`path resolves outside ${base} via symlink: ${candidate}`);
+  }
+  return real;
 }
 
 // ---------------------------------------------------------------------------
@@ -276,6 +302,68 @@ function isSafeRelKey(rel: string): boolean {
   return !rel.split(/[/\\]/).some((seg) => seg === "..");
 }
 
+/** Every element of the array is a (possibly empty) string. */
+function isStringArray(v: unknown): boolean {
+  return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
+
+/**
+ * A cached `symbolNodes` element must carry a non-empty string `id` — that is the
+ * sole field `assembleStructuralGraph()` dereferences for it (Pass 1 `addNode`
+ * dedups on `n.id`). A null/missing-id element would throw on `nodeIds.has(n.id)`.
+ */
+function isValidSymbolNode(n: unknown): boolean {
+  if (!n || typeof n !== "object") return false;
+  const id = (n as Record<string, unknown>).id;
+  return typeof id === "string" && id !== "";
+}
+
+/**
+ * A cached `contains` edge must carry the string `type`/`source`/`target` that
+ * Pass 1 `addEdge` reads to build its `type|source|target` dedup key.
+ */
+function isValidContainsEdge(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const r = e as Record<string, unknown>;
+  return (
+    typeof r.type === "string" &&
+    typeof r.source === "string" && r.source !== "" &&
+    typeof r.target === "string" && r.target !== ""
+  );
+}
+
+/**
+ * A cached `classes` element must carry the fields Pass 1 registers (`id`,
+ * `simpleName`) and the `bases`/`ifaces` name arrays Pass 2b iterates with
+ * `for…of` — a non-array `bases`/`ifaces` throws "not iterable" during assembly.
+ */
+function isValidClassEntry(c: unknown): boolean {
+  if (!c || typeof c !== "object") return false;
+  const r = c as Record<string, unknown>;
+  return (
+    typeof r.id === "string" && r.id !== "" &&
+    typeof r.simpleName === "string" &&
+    isStringArray(r.bases) &&
+    isStringArray(r.ifaces)
+  );
+}
+
+/**
+ * A cached `callables` element must carry the fields Pass 1 registers (`id`,
+ * `simpleName`) and the `callees` name array Pass 2c iterates with `for…of` —
+ * a null element throws on `register(…, c.simpleName, c.id)`, a non-array
+ * `callees` throws "not iterable".
+ */
+function isValidCallableEntry(c: unknown): boolean {
+  if (!c || typeof c !== "object") return false;
+  const r = c as Record<string, unknown>;
+  return (
+    typeof r.id === "string" && r.id !== "" &&
+    typeof r.simpleName === "string" &&
+    isStringArray(r.callees)
+  );
+}
+
 /**
  * Validate the bootstrap fingerprint cache shape before an imported artifact is
  * accepted (Codex FIX-T6.1 #3). A checksum-valid artifact can still carry a
@@ -315,6 +403,17 @@ export function validateStructuralCache(cache: unknown): cache is StructuralCach
     ) {
       return false;
     }
+    // Element-level validation (Codex FIX-T6.1-r2 #2): the array-shape checks above
+    // pass even when an array holds MALFORMED entries (a null callable, a class with
+    // no `bases`, a symbol node with no `id`). `refreshStructuralIncremental()`
+    // reuses such a bundle and `assembleStructuralGraph()` then dereferences these
+    // fields — crashing or diverging from a full rebuild. Reject each defect so the
+    // artifact is refused and the CLI falls back to a full extraction.
+    if (!(b.symbolNodes as unknown[]).every(isValidSymbolNode)) return false;
+    if (!(b.contains as unknown[]).every(isValidContainsEdge)) return false;
+    if (!(b.importSpecs as unknown[]).every((s) => typeof s === "string")) return false;
+    if (!(b.classes as unknown[]).every(isValidClassEntry)) return false;
+    if (!(b.callables as unknown[]).every(isValidCallableEntry)) return false;
   }
   return true;
 }
