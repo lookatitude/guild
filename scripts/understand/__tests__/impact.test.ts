@@ -237,6 +237,27 @@ describe("[G9] determinism — order-independent, full stable keys", () => {
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
   });
 
+  test("parallel `calls` edges differing ONLY in a DROPPED field (weight) collapse to one — order-independent", () => {
+    const nodes: GraphNode[] = ["a", "b"].map((n) => ({
+      id: `function:src/x.ts:${n}`, type: "function", name: n,
+      source_refs: ["src/x.ts#L1-L2"], confidence: "high",
+    }));
+    const mk = (weight: number): GraphEdge => ({
+      source: "function:src/x.ts:a", target: "function:src/x.ts:b",
+      type: "calls", direction: "out", weight, confidence: "high",
+    });
+    const forward: GraphView = { nodes, edges: [mk(1), mk(2)] };
+    // Reverse the CONSUMED data structure (graph.edges) — the array computeImpact reads.
+    const reversed: GraphView = { nodes, edges: [...forward.edges].reverse() };
+    const rf = computeImpact(forward, { changedSymbols: ["b"] });
+    const rr = computeImpact(reversed, { changedSymbols: ["b"] });
+    // `weight` is dropped by the projection, so the two edges are equivalent here
+    // and collapse to ONE projected edge — by design (would be 2 if all fields keyed).
+    expect(rf.edges.length).toBe(1);
+    // …and the collapse is order-independent: byte-identical regardless of input order.
+    expect(JSON.stringify(rr)).toBe(JSON.stringify(rf));
+  });
+
   test("parallel `calls` edges differing only in confidence both survive (full key)", () => {
     const nodes: GraphNode[] = ["a", "b"].map((n) => ({
       id: `function:src/x.ts:${n}`, type: "function", name: n,
@@ -352,9 +373,11 @@ describe("[G9] CLI impact.ts — real invocation against a written graph", () =>
     );
 
     const cliPath = path.join(__dirname, "..", "impact.ts");
+    // `--cwd tmpDir` anchors the repo root at tmpDir, so the graph file (written
+    // inside it) is realpath-contained under the root the CLI now enforces.
     const out = execFileSync(
       "npx",
-      ["tsx", cliPath, JSON.stringify({ changedFiles: ["src/b.ts"] }), "--graph", graphFile],
+      ["tsx", cliPath, JSON.stringify({ changedFiles: ["src/b.ts"] }), "--cwd", tmpDir, "--graph", graphFile],
       { cwd: path.join(__dirname, ".."), encoding: "utf-8", timeout: 60_000 },
     );
     const result = JSON.parse(out);
@@ -366,6 +389,80 @@ describe("[G9] CLI impact.ts — real invocation against a written graph", () =>
     const main = result.nodes.find((n: { id: string }) => n.id === "function:src/a.ts:main");
     expect(["CRITICAL", "HIGH"]).toContain(main.risk);
 
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }, 90_000);
+});
+
+// ---------------------------------------------------------------------------
+// Gate 7 — CLI input validation + path containment (security, real invocation).
+// ---------------------------------------------------------------------------
+
+describe("[G9] CLI impact.ts — rejects bad input and path traversal", () => {
+  const cliPath = path.join(__dirname, "..", "impact.ts");
+
+  /** Run the real CLI and capture the failure (status + stderr), or fail loudly. */
+  function runExpectingFailure(jsonArg: string, extra: string[], cwd: string) {
+    let err: { status?: number; stderr?: Buffer | string } | undefined;
+    try {
+      execFileSync("npx", ["tsx", cliPath, jsonArg, ...extra], {
+        cwd,
+        encoding: "utf-8",
+        timeout: 60_000,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (e) {
+      err = e as { status?: number; stderr?: Buffer | string };
+    }
+    expect(err).toBeDefined();
+    expect(err!.status).toBe(1);
+    return String(err!.stderr ?? "");
+  }
+
+  test("a non-array `changedFiles` (bare string) is rejected, not iterated per-character", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-bad-"));
+    fs.writeFileSync(
+      path.join(tmpDir, "knowledge-graph.json"),
+      JSON.stringify({ version: "guild.knowledge_graph.v1", nodes: [], edges: [] }),
+      "utf8",
+    );
+    const stderr = runExpectingFailure(
+      JSON.stringify({ changedFiles: "src/b.ts" }),
+      ["--cwd", tmpDir],
+      path.join(__dirname, ".."),
+    );
+    expect(stderr).toMatch(/changedFiles.*must be an array/i);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }, 90_000);
+
+  test("malformed `entryPoints` (array with a non-string) is rejected", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-bad-"));
+    fs.writeFileSync(
+      path.join(tmpDir, "knowledge-graph.json"),
+      JSON.stringify({ version: "guild.knowledge_graph.v1", nodes: [], edges: [] }),
+      "utf8",
+    );
+    const stderr = runExpectingFailure(
+      JSON.stringify({ entryPoints: ["ok", 7] }),
+      ["--cwd", tmpDir],
+      path.join(__dirname, ".."),
+    );
+    expect(stderr).toMatch(/entryPoints.*non-empty strings/i);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }, 90_000);
+
+  test("a `../`-escaping --graph path is refused (no arbitrary filesystem read)", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-esc-"));
+    // Plant a file OUTSIDE the repo root the CLI will enforce (the parent dir).
+    const outside = path.join(tmpDir, "outside-secret.json");
+    fs.writeFileSync(outside, JSON.stringify({ nodes: [], edges: [] }), "utf8");
+    const innerRoot = path.join(tmpDir, "root");
+    fs.mkdirSync(innerRoot, { recursive: true });
+    const stderr = runExpectingFailure(
+      JSON.stringify({ changedFiles: ["src/b.ts"] }),
+      ["--cwd", innerRoot, "--graph", "../outside-secret.json"],
+      path.join(__dirname, ".."),
+    );
+    expect(stderr).toMatch(/escapes the repo root/i);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }, 90_000);
 });

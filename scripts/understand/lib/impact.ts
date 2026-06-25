@@ -24,10 +24,18 @@
  * a node with no line provenance is DOWN-TIERED to `tier: "untrusted"` (kept so
  * the impact structure stays intact, but never asserted as a grounded fact).
  *
- * DETERMINISM: every traversal sorts its frontier by node id, and edge
- * de-dupe/sort uses a FULL stable key (source, target, type, confidence) so
- * parallel `calls` edges that differ only in metadata are neither collapsed nor
- * reordered. Reversing the node/edge input order cannot change the output.
+ * DETERMINISM (scoped to the ImpactEdge PROJECTION): impact analysis consumes a
+ * narrow edge view — `ImpactEdge = {source, target, type:"calls", confidence?}`
+ * — and DELIBERATELY drops every other `GraphEdge` field (`direction`, `weight`,
+ * `description`, and any extra `resolution`/`backend` metadata). The de-dupe/sort
+ * key is the FULL stable key OF THAT PROJECTION (all four projected fields), so:
+ *   • parallel `calls` edges that differ in a RETAINED field (`confidence`) get
+ *     distinct keys and BOTH survive, in a stable order;
+ *   • parallel `calls` edges that differ ONLY in a dropped field (e.g. `weight`)
+ *     project to one identical `ImpactEdge` and collapse to a single output edge
+ *     — by design, since impact does not key on those fields.
+ * Every traversal also sorts its frontier by node id. Reversing the node/edge
+ * input order therefore cannot change the (projected) output — byte-identical.
  *
  * ── Node-id convention (LOCKED, codebase-understanding.md §"KnowledgeGraph") ──
  *   file:<relpath>                          (no name segment)
@@ -150,7 +158,12 @@ export interface ImpactNode {
   entryPoint: boolean;
 }
 
-/** A traversed inbound `calls` edge (caller → callee), with resolution confidence. */
+/**
+ * A traversed inbound `calls` edge (caller → callee), with resolution
+ * confidence. This is the DELIBERATE narrow projection impact keys on — it omits
+ * `direction`/`weight`/`description` and any other `GraphEdge` metadata. The
+ * determinism guarantee is scoped to exactly these four fields (see header).
+ */
 export interface ImpactEdge {
   source: string;
   target: string;
@@ -223,15 +236,24 @@ export function isEntryPointNode(node: GraphNode): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * FULL stable key for an impact edge: source, target, type, AND confidence.
- * Parallel `calls` edges that differ only in metadata get distinct keys, so they
- * are neither collapsed by de-dupe nor reordered nondeterministically by the
- * sort. JSON.stringify gives a printable, NUL-free composite separator.
+ * FULL stable key for an `ImpactEdge` — every field of the projection:
+ * source, target, type, AND confidence. The key is "full" relative to the
+ * projected type, NOT the raw `GraphEdge`: two `calls` edges that differ in a
+ * RETAINED field (`confidence`) get distinct keys and both survive; two that
+ * differ only in a field `toImpactEdge` DROPS (`weight`/`direction`/… ) project
+ * to one identical `ImpactEdge`, share a key, and collapse — by design.
+ * JSON.stringify gives a printable, NUL-free composite separator.
  */
 function impactEdgeKey(e: ImpactEdge): string {
   return JSON.stringify([e.source, e.target, e.type, e.confidence ?? null]);
 }
 
+/**
+ * Project a raw `GraphEdge` onto the narrow `ImpactEdge` view impact analysis
+ * keys on. INTENTIONAL drop of `direction`/`weight`/`description` and any other
+ * metadata: impact reasons only about who-calls-whom + resolution `confidence`,
+ * so edges differing only in a dropped field are equivalent here and collapse.
+ */
 function toImpactEdge(e: GraphEdge): ImpactEdge {
   return {
     source: e.source,

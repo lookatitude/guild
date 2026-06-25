@@ -30,6 +30,9 @@
  * Exit: 0 ok · 1 no graph / bad input.
  */
 
+import * as fs from "fs";
+import * as path from "path";
+
 import { guildPaths, parseCwd, parseFlag, readJson } from "./lib/paths";
 import { changedFiles as gitChangedFiles } from "./lib/git";
 import { computeImpact, type GraphView, type ImpactOptions } from "./lib/impact";
@@ -44,6 +47,99 @@ interface CliArgs {
   graph?: string;
 }
 
+/** Reject this run with a stderr diagnostic and a non-zero exit. */
+function fail(msg: string): never {
+  process.stderr.write(`[impact] ${msg}\n`);
+  process.exit(1);
+  throw new Error(msg); // unreachable — keeps the type `never` for callers
+}
+
+/** True iff `rel` (a path RELATIVE to a base) escapes that base or is absolute. */
+function escapesBase(rel: string): boolean {
+  return rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel);
+}
+
+/**
+ * Validate one optional `string[]` arg. Rejects (via {@link fail}) anything that
+ * is not an array of non-empty strings — so e.g. `changedFiles: "src/b.ts"` (a
+ * bare string, which would otherwise iterate into a per-CHARACTER set) and
+ * `changedSymbols: [1,null]` are refused BEFORE they reach computeImpact.
+ */
+function asStringArray(value: unknown, field: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) fail(`"${field}" must be an array of strings`);
+  const out: string[] = [];
+  for (const v of value as unknown[]) {
+    if (typeof v !== "string" || v.trim() === "") {
+      fail(`"${field}" must contain only non-empty strings`);
+    }
+    out.push(v);
+  }
+  return out;
+}
+
+/**
+ * Normalize a repo-relative changed-file path and refuse anything that is not a
+ * legitimate repo-relative path (absolute, or `../`-escaping). Path separators
+ * are normalized to `/` to match the node-id relpath convention.
+ */
+function normalizeChangedFile(f: string): string {
+  const norm = path.normalize(f).replace(/\\/g, "/").replace(/^\.\//, "");
+  if (escapesBase(path.normalize(norm))) {
+    fail(`"changedFiles" entry escapes the repo: ${f}`);
+  }
+  return norm;
+}
+
+/**
+ * Resolve `--graph`/`graph` and REFUSE any path outside `repoRoot` (path
+ * traversal / symlink escape). Two layers, mirroring lib/similarity.ts: (1) a
+ * lexical containment check on the resolved path; (2) a best-effort realpath
+ * check when both paths exist on disk. Returns the absolute path or refuses.
+ */
+function resolveGraphUnderRoot(repoRoot: string, graphArg: string): string {
+  const root = path.resolve(repoRoot);
+  const abs = path.resolve(root, graphArg);
+  if (escapesBase(path.relative(root, abs))) {
+    fail(`graph path escapes the repo root: ${graphArg}`);
+  }
+  try {
+    const realRoot = fs.realpathSync(root);
+    const realAbs = fs.realpathSync(abs);
+    if (escapesBase(path.relative(realRoot, realAbs))) {
+      fail(`graph path escapes the repo root (symlink): ${graphArg}`);
+    }
+  } catch {
+    // Root or target absent on disk: layer 1 already proved lexical containment.
+  }
+  return abs;
+}
+
+/** Parse + VALIDATE the JSON args: a plain object with arrays-of-strings only. */
+function parseArgs(rawJson: string): CliArgs {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    fail(`invalid JSON args: ${rawJson}`);
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    fail("JSON args must be a plain object");
+  }
+  const o = parsed as Record<string, unknown>;
+  for (const k of ["base", "head", "graph"] as const) {
+    if (o[k] !== undefined && typeof o[k] !== "string") fail(`"${k}" must be a string`);
+  }
+  return {
+    changedFiles: asStringArray(o.changedFiles, "changedFiles")?.map(normalizeChangedFile),
+    changedSymbols: asStringArray(o.changedSymbols, "changedSymbols"),
+    entryPoints: asStringArray(o.entryPoints, "entryPoints"),
+    base: o.base as string | undefined,
+    head: o.head as string | undefined,
+    graph: o.graph as string | undefined,
+  };
+}
+
 function main(): void {
   const argv = process.argv.slice(2);
   const positional = argv.filter(
@@ -54,22 +150,19 @@ function main(): void {
   );
   const rawJson = positional[0] ?? "{}";
 
-  let args: CliArgs;
-  try {
-    args = JSON.parse(rawJson) as CliArgs;
-  } catch {
-    process.stderr.write(`[impact] invalid JSON args: ${rawJson}\n`);
-    process.exit(1);
-    return;
-  }
+  const args = parseArgs(rawJson);
 
   const cwd = parseCwd(argv);
-  const graphPath = parseFlag(argv, "graph") ?? args.graph ?? guildPaths(cwd).knowledgeGraph;
+  const paths = guildPaths(cwd);
+  const graphArg = parseFlag(argv, "graph") ?? args.graph;
+  // SECURITY: a caller-supplied graph path is realpath-contained under the repo
+  // root; the default knowledge-graph location is already inside it.
+  const graphPath = graphArg
+    ? resolveGraphUnderRoot(paths.repoRoot, graphArg)
+    : paths.knowledgeGraph;
   const graph = readJson<GraphView>(graphPath);
   if (!graph || !Array.isArray(graph.nodes)) {
-    process.stderr.write(`[impact] no knowledge graph at ${graphPath}\n`);
-    process.exit(1);
-    return;
+    fail(`no knowledge graph at ${graphPath}`);
   }
 
   // Derive changedFiles from a git diff when base is supplied; merge with explicit list.
