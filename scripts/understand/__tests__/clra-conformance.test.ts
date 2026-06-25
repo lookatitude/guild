@@ -1022,9 +1022,56 @@ describe("[G1+G2] structural extraction + resolved calls match the oracle", () =
 // oracle.deadCode (precision & recall = 1.0); kgTrace(inbound) returns the
 // oracle call chain; results identical with index:off and index:on.
 describe("[G3] structural query API matches the oracle", () => {
-  // A known callee with exactly one caller (main) — the inbound oracle call chain.
-  const TRACE_SEED = "function:src/b.ts:add";
-  const TRACE_CALLER = "function:src/a.ts:main";
+  // Inbound seed: a callee whose only caller is the entry point. Outbound seed:
+  // the entry point, whose callee set spans module-level AND method-dispatch
+  // `calls` edges. BOTH expected sets are DERIVED from the oracle (below), never
+  // hardcoded — the exact-set test fails on any over- or under-return.
+  const INBOUND_SEED = "function:src/b.ts:add";
+  const OUTBOUND_SEED = "function:src/a.ts:main";
+
+  // kgTrace traverses EVERY `calls` edge regardless of resolution, so the
+  // ground-truth call graph is the oracle's module-level calls UNION its
+  // method-dispatch calls — both are real caller→callee `calls` edges.
+  const oracleCallEdges = (o: Oracle): Array<{ from: string; to: string }> => [
+    ...o.calls.map((c) => ({ from: c.from, to: c.to })),
+    ...(o.methodCalls ?? []).map((c) => ({ from: c.from, to: c.to })),
+  ];
+
+  /**
+   * Forward (outbound) / reverse (inbound) reachable closure from `seed` over the
+   * oracle call edges. Returns the EXACT node-id set (incl. the seed) and the
+   * caller→callee edge-key set kgTrace must return for a depth that exhausts the
+   * fixture. Unbounded BFS — the fixture's chains are far shallower than the
+   * depth bound, so bounded == unbounded here.
+   */
+  const oracleTraceClosure = (
+    edges: Array<{ from: string; to: string }>,
+    seed: string,
+    direction: "inbound" | "outbound",
+  ): { nodes: Set<string>; edges: Set<string> } => {
+    const adj = new Map<string, Array<{ next: string; key: string }>>();
+    for (const e of edges) {
+      const key = `${e.from}->${e.to}`; // always caller→callee, both directions
+      const [from, to] = direction === "outbound" ? [e.from, e.to] : [e.to, e.from];
+      const arr = adj.get(from);
+      if (arr) arr.push({ next: to, key });
+      else adj.set(from, [{ next: to, key }]);
+    }
+    const nodes = new Set<string>([seed]);
+    const edgeSet = new Set<string>();
+    const queue = [seed];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      for (const { next, key } of adj.get(cur) ?? []) {
+        edgeSet.add(key);
+        if (!nodes.has(next)) {
+          nodes.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    return { nodes, edges: edgeSet };
+  };
 
   test("kgDeadCode equals oracle.deadCode (free functions; precision & recall = 1.0)", () => {
     const o = loadOracle();
@@ -1047,25 +1094,63 @@ describe("[G3] structural query API matches the oracle", () => {
     expect(dead).toEqual(oracleDead);
   });
 
-  test("kgTrace(inbound) returns the oracle call chain for a known seed", () => {
-    const graph = buildFixtureGraph();
-    const trace = kgTrace(graph, TRACE_SEED, "inbound", 5);
-    const ids = new Set(trace.nodes.map((n) => n.id));
-    // The reverse-reachable caller (main calls add) is in the chain, with its edge.
-    expect(ids.has(TRACE_CALLER)).toBe(true);
-    expect(trace.edges.some((e) => e.source === TRACE_CALLER && e.target === TRACE_SEED)).toBe(true);
-    // Anti-vacuity: a function NOT on the call chain (the dead helper) is absent.
-    expect(ids.has("function:src/b.ts:unusedHelper")).toBe(false);
-  });
-
-  test("kgTrace(outbound) from main returns its full oracle callee set", () => {
+  test("kgTrace inbound+outbound equal the EXACT oracle-derived node/edge sets (set equality)", () => {
     const o = loadOracle();
     const graph = buildFixtureGraph();
-    const trace = kgTrace(graph, TRACE_CALLER, "outbound", 5);
-    const ids = new Set(trace.nodes.map((n) => n.id));
-    for (const c of o.calls.filter((c) => c.from === TRACE_CALLER)) {
-      expect(ids.has(c.to)).toBe(true);
+    const callEdges = oracleCallEdges(o);
+
+    for (const { seed, direction } of [
+      { seed: INBOUND_SEED, direction: "inbound" as const },
+      { seed: OUTBOUND_SEED, direction: "outbound" as const },
+    ]) {
+      const expected = oracleTraceClosure(callEdges, seed, direction);
+      // Non-vacuity: the chosen case actually traverses ≥1 edge to ≥1 other node.
+      expect(expected.edges.size).toBeGreaterThan(0);
+      expect(expected.nodes.size).toBeGreaterThan(1);
+
+      const trace = kgTrace(graph, seed, direction, 5);
+      const actualNodes = new Set(trace.nodes.map((n) => n.id));
+      const actualEdges = new Set(trace.edges.map((e) => `${e.source}->${e.target}`));
+
+      // EXACT set equality: over-returning an extra trace result OR dropping one
+      // (e.g. a deleted oracle call) breaks equality — "includes" would not.
+      expect([...actualNodes].sort()).toEqual([...expected.nodes].sort());
+      expect([...actualEdges].sort()).toEqual([...expected.edges].sort());
     }
+  });
+
+  test("anti-vacuity (kgTrace): deleting an oracle call entry breaks set-equality (gate bites)", () => {
+    const o = loadOracle();
+    const graph = buildFixtureGraph();
+    // Drop the sole caller edge into the inbound seed. The REAL graph still traces
+    // the caller, so the oracle-derived expected set diverges → the gate fires.
+    const corrupted = { ...o, calls: o.calls.filter((c) => c.to !== INBOUND_SEED) };
+    const expected = oracleTraceClosure(oracleCallEdges(corrupted), INBOUND_SEED, "inbound");
+    const trace = kgTrace(graph, INBOUND_SEED, "inbound", 5);
+    const actualNodes = new Set(trace.nodes.map((n) => n.id));
+    expect(actualNodes.has(OUTBOUND_SEED)).toBe(true); // real graph keeps the caller
+    expect(expected.nodes.has(OUTBOUND_SEED)).toBe(false); // corrupted oracle drops it
+    expect([...actualNodes].sort()).not.toEqual([...expected.nodes].sort());
+  });
+
+  test("anti-vacuity (kgTrace): an over-returned trace edge breaks set-equality (gate bites)", () => {
+    const o = loadOracle();
+    const base = buildFixtureGraph();
+    // Inject a spurious outbound edge main→unusedHelper into the GRAPH. The oracle
+    // never sanctions it, so the exact-set assertion the live test makes would fail.
+    const polluted: GraphView = {
+      nodes: base.nodes,
+      edges: [
+        ...base.edges,
+        { source: OUTBOUND_SEED, target: "function:src/b.ts:unusedHelper", type: "calls" } as unknown as GraphEdge,
+      ],
+    };
+    const expected = oracleTraceClosure(oracleCallEdges(o), OUTBOUND_SEED, "outbound");
+    const trace = kgTrace(polluted, OUTBOUND_SEED, "outbound", 5);
+    const actualNodes = new Set(trace.nodes.map((n) => n.id));
+    expect(actualNodes.has("function:src/b.ts:unusedHelper")).toBe(true);
+    expect(expected.nodes.has("function:src/b.ts:unusedHelper")).toBe(false);
+    expect([...actualNodes].sort()).not.toEqual([...expected.nodes].sort());
   });
 
   test("anti-vacuity: a synthetic inbound call makes a dead function NOT dead (gate bites)", () => {
@@ -1100,7 +1185,7 @@ describe("[G3] structural query API matches the oracle", () => {
       traceEdges: string[];
     } {
       const graph = loadGraphView(tmpRepo, ctx);
-      const trace = kgTrace(graph, "function:src/b.ts:add", "inbound", 5);
+      const trace = kgTrace(graph, INBOUND_SEED, "inbound", 5);
       return {
         dead: kgDeadCode(graph).nodes.map((n) => n.id).sort(),
         traceNodes: trace.nodes.map((n) => n.id).sort(),
@@ -1206,17 +1291,67 @@ describe("[G9] impact analysis flags reverse-reachable callers", () => {
   const CHANGED = ["src/b.ts"];
   const CALLER = "function:src/a.ts:main";
 
-  test("editing b.ts flags a.ts:main (reverse-reachable) and not shapes.ts", () => {
+  /**
+   * EXACT affected-node set computeImpact(changedFiles=[fileRel]) must produce,
+   * DERIVED from the oracle: the function nodes the oracle places in `fileRel`
+   * (the changed-file seeds) UNION their transitive reverse-reachable callers
+   * over the oracle's call graph (module-level ∪ method-dispatch). Nothing is
+   * hardcoded — corrupting the oracle calls changes this set, so the gate bites.
+   */
+  const oracleImpactClosure = (o: Oracle, fileRel: string): Set<string> => {
+    const callEdges = [...o.calls, ...(o.methodCalls ?? [])];
+    const callersOf = new Map<string, string[]>();
+    for (const e of callEdges) {
+      const arr = callersOf.get(e.to);
+      if (arr) arr.push(e.from);
+      else callersOf.set(e.to, [e.from]);
+    }
+    const inFile = (id: string) =>
+      id.startsWith("function:") && parseNodeId(id).relpath === fileRel;
+    const seeds = new Set<string>();
+    for (const e of callEdges) {
+      if (inFile(e.from)) seeds.add(e.from);
+      if (inFile(e.to)) seeds.add(e.to);
+    }
+    for (const d of o.deadCode) if (inFile(d)) seeds.add(d);
+    for (const ep of o.entryPoints) if (inFile(ep)) seeds.add(ep);
+    for (const [a, b] of o.clonePairs) {
+      if (inFile(a)) seeds.add(a);
+      if (inFile(b)) seeds.add(b);
+    }
+    const affected = new Set<string>(seeds);
+    const queue = [...seeds];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      for (const caller of callersOf.get(cur) ?? []) {
+        if (!affected.has(caller)) {
+          affected.add(caller);
+          queue.push(caller);
+        }
+      }
+    }
+    return affected;
+  };
+
+  test("editing b.ts: impact set EQUALS the oracle reverse-reachable closure (unrelated files excluded)", () => {
+    const o = loadOracle();
     const graph = buildFixtureGraph();
-    const impact = computeImpact(graph, { changedFiles: CHANGED });
-    const ids = new Set(impact.nodes.map((n) => n.id));
-    const files = new Set(impact.files.map((f) => f.path));
-    // The caller is reverse-reachable from the changed file.
-    expect(ids.has(CALLER)).toBe(true);
-    expect(files.has("src/a.ts")).toBe(true);
-    // The unrelated shapes module is NOT pulled in (it never calls into b.ts).
-    expect([...ids].some((id) => id.split(":")[1] === "src/shapes.ts")).toBe(false);
-    expect(files.has("src/shapes.ts")).toBe(false);
+    const B = CHANGED[0]; // "src/b.ts"
+    const expectedNodes = oracleImpactClosure(o, B);
+    // Non-vacuity: the closure actually reaches a caller in ANOTHER file.
+    expect([...expectedNodes].some((id) => parseNodeId(id).relpath !== B)).toBe(true);
+    expect(expectedNodes.has(CALLER)).toBe(true); // a.ts:main is reverse-reachable
+
+    const impact = computeImpact(graph, { changedFiles: [B] });
+    const actualNodes = new Set(impact.nodes.map((n) => n.id));
+    // EXACT node-set equality — flagging an unrelated symbol OR dropping a caller fails.
+    expect([...actualNodes].sort()).toEqual([...expectedNodes].sort());
+
+    // File roll-up = exactly the changed file ∪ the files of its callers; shapes.ts excluded.
+    const expectedFiles = new Set([...expectedNodes].map((id) => parseNodeId(id).relpath));
+    const actualFiles = new Set(impact.files.map((f) => f.path));
+    expect([...actualFiles].sort()).toEqual([...expectedFiles].sort());
+    expect(actualFiles.has("src/shapes.ts")).toBe(false);
   });
 
   test("anti-vacuity: severing the calls into b.ts drops the caller (gate bites)", () => {
@@ -1227,6 +1362,38 @@ describe("[G9] impact analysis flags reverse-reachable callers", () => {
     };
     const ids = new Set(computeImpact(severed, { changedFiles: CHANGED }).nodes.map((n) => n.id));
     expect(ids.has(CALLER)).toBe(false);
+  });
+
+  test("anti-vacuity (computeImpact): corrupting the oracle calls breaks set-equality (gate bites)", () => {
+    const o = loadOracle();
+    const graph = buildFixtureGraph();
+    // Delete every call INTO src/b.ts. The oracle-derived closure then loses the
+    // caller `main`, but the REAL graph still flags it → exact equality fails.
+    const corrupted = { ...o, calls: o.calls.filter((c) => parseNodeId(c.to).relpath !== CHANGED[0]) };
+    const expectedNodes = oracleImpactClosure(corrupted, CHANGED[0]);
+    const actualNodes = new Set(computeImpact(graph, { changedFiles: CHANGED }).nodes.map((n) => n.id));
+    expect(actualNodes.has(CALLER)).toBe(true); // real graph still reverse-reaches main
+    expect(expectedNodes.has(CALLER)).toBe(false); // corrupted oracle no longer does
+    expect([...actualNodes].sort()).not.toEqual([...expectedNodes].sort());
+  });
+
+  test("anti-vacuity (computeImpact): an over-returned caller breaks set-equality (gate bites)", () => {
+    const o = loadOracle();
+    const base = buildFixtureGraph();
+    // Inject a spurious call shapes.ts:Circle.draw → b.ts:add. Editing b.ts now
+    // reverse-reaches shapes.ts, which the oracle never sanctions.
+    const polluted: GraphView = {
+      nodes: base.nodes,
+      edges: [
+        ...base.edges,
+        { source: "function:src/shapes.ts:Circle.draw", target: "function:src/b.ts:add", type: "calls" } as unknown as GraphEdge,
+      ],
+    };
+    const expectedNodes = oracleImpactClosure(o, CHANGED[0]);
+    const actualNodes = new Set(computeImpact(polluted, { changedFiles: CHANGED }).nodes.map((n) => n.id));
+    expect(actualNodes.has("function:src/shapes.ts:Circle.draw")).toBe(true);
+    expect(expectedNodes.has("function:src/shapes.ts:Circle.draw")).toBe(false);
+    expect([...actualNodes].sort()).not.toEqual([...expectedNodes].sort());
   });
 
   describe("SQLite-off parity for impact analysis", () => {
