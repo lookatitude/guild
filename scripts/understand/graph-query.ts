@@ -12,7 +12,13 @@
  *
  *   trace      '{"node":"main","direction":"outbound","depth":3}'
  *   neighbors  '{"node":"function:src/a.ts:main","hops":1}'
- *   dead-code  '{}'
+ *   dead-code  '{"entryPoints":["function:src/cli.ts:run","handler"]}'
+ *
+ * `dead-code` reports INTERNAL reachability only ("unused within the analysed
+ * file set"). The graph carries no `exported` flag, so a public API / CLI / route
+ * handler with zero inbound calls would be a FALSE POSITIVE — pass your exported
+ * surface via `entryPoints` (matched by node id OR simple name; `exported` is an
+ * accepted alias) to exclude it. `main`/`__main__` are always excluded.
  *
  * `--graph <path>` (or a "graph" field in the JSON args) overrides the default
  * .guild/indexes/knowledge-graph.json location — handy for tests/fixtures.
@@ -34,6 +40,10 @@ interface VerbArgs {
   direction?: string;
   depth?: number;
   hops?: number;
+  /** dead-code: exported/public surface to exclude (id or simple name). */
+  entryPoints?: string[];
+  /** dead-code: accepted alias for `entryPoints`. */
+  exported?: string[];
   graph?: string;
 }
 
@@ -85,7 +95,8 @@ function main(): void {
     }
     case "dead-code":
     case "dead_code": {
-      result = kgDeadCode(graph);
+      const entryPoints = args.entryPoints ?? args.exported;
+      result = kgDeadCode(graph, entryPoints ? { entryPoints } : {});
       break;
     }
     default:

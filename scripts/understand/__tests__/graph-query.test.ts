@@ -12,7 +12,9 @@
  */
 
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
+import { execFileSync } from "child_process";
 
 import { extractStructuralGraph } from "../lib/structural";
 import { refineCalls } from "../resolve-calls";
@@ -122,6 +124,60 @@ describe("[G3] kgTrace — depth-bounded call-chain BFS", () => {
       expect(n.source_refs[0]).toMatch(/#L\d+-L\d+$/); // path#Lx-Ly provenance
     }
   });
+
+  // ── Finding 1: full-stable-key edge de-dupe (reversed input → identical) ──
+  test("determinism: parallel `calls` edges with differing metadata survive input reversal", () => {
+    const nodes: GraphNode[] = ["a", "b"].map((n) => ({
+      id: `function:src/x.ts:${n}`, type: "function", name: n,
+      source_refs: ["src/x.ts#L1-L2"], confidence: "high",
+    }));
+    const mk = (confidence: string): GraphEdge => ({
+      source: "function:src/x.ts:a", target: "function:src/x.ts:b",
+      type: "calls", direction: "out", weight: 1, confidence,
+    });
+    const forward: GraphView = { nodes, edges: [mk("high"), mk("low")] };
+    const reversed: GraphView = { nodes: [...nodes].reverse(), edges: [mk("low"), mk("high")] };
+
+    const rf = kgTrace(forward, "function:src/x.ts:a", "outbound", 2);
+    const rr = kgTrace(reversed, "function:src/x.ts:a", "outbound", 2);
+
+    // Reversed input → byte-identical output (would DIFFER under source->target keying).
+    expect(JSON.stringify(rf)).toBe(JSON.stringify(rr));
+    // Both parallel edges retained (NOT collapsed to one), sorted by full key.
+    expect(rf.edges.length).toBe(2);
+    expect(rf.edges.map((e) => e.confidence)).toEqual(["high", "low"]);
+  });
+
+  // ── Finding 2: provenance enforcement — never pass through non-line refs ──
+  test("a node without #Lx-Ly provenance is down-tiered, never passed through as trusted", () => {
+    const nodes: GraphNode[] = [
+      { id: "function:src/x.ts:a", type: "function", name: "a", source_refs: ["src/x.ts#L1-L2"], confidence: "high" },
+      { id: "function:src/x.ts:b", type: "function", name: "b", source_refs: ["src/x.ts"], confidence: "high" }, // bare path, no line range
+      { id: "function:src/x.ts:c", type: "function", name: "c", source_refs: [], confidence: "high" },           // no refs at all
+    ];
+    const edges: GraphEdge[] = [
+      { source: "function:src/x.ts:a", target: "function:src/x.ts:b", type: "calls", direction: "out", weight: 1 },
+      { source: "function:src/x.ts:a", target: "function:src/x.ts:c", type: "calls", direction: "out", weight: 1 },
+    ];
+    const g: GraphView = { nodes, edges };
+    const res = kgTrace(g, "function:src/x.ts:a", "outbound", 2);
+    const byId = new Map(res.nodes.map((n) => [n.id, n]));
+
+    expect(byId.get("function:src/x.ts:a")!.tier).toBe("trusted");
+    // b had a non-line ref → filtered out and down-tiered.
+    expect(byId.get("function:src/x.ts:b")!.source_refs).toEqual([]);
+    expect(byId.get("function:src/x.ts:b")!.tier).toBe("untrusted");
+    // c had no refs → untrusted (never silently trusted).
+    expect(byId.get("function:src/x.ts:c")!.tier).toBe("untrusted");
+    // No returned node carries a non-line source_ref anywhere.
+    for (const n of res.nodes) for (const r of n.source_refs) expect(r).toMatch(/#L\d+-L\d+$/);
+
+    // Same enforcement on the kgNeighbors path (Finding 2 cited kgNeighbors).
+    const nb = kgNeighbors(g, "function:src/x.ts:a", 1);
+    const nbById = new Map(nb.nodes.map((n) => [n.id, n]));
+    expect(nbById.get("function:src/x.ts:b")!.tier).toBe("untrusted");
+    expect(nbById.get("function:src/x.ts:b")!.source_refs).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -169,6 +225,34 @@ describe("[G3] kgDeadCode — zero-inbound free functions minus entry points", (
     // zero-inbound methods exist in the fixture but must NOT be reported.
     expect(dead.has("function:src/shapes.ts:Shape.area")).toBe(false);
     expect(dead.has("function:py/shapes.py:Circle.__init__")).toBe(false);
+  });
+
+  // ── Findings 3 & 4: exported/public surface excluded via config (not just `main`) ──
+  test("a non-`main` entry point supplied by simple name is NOT reported dead", () => {
+    const g = buildGraph();
+    // Baseline: unusedHelper has zero inbound calls → dead by default.
+    expect(new Set(kgDeadCode(g).nodes.map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(true);
+    // Declare it exported/public surface by simple name → excluded.
+    const dead = new Set(kgDeadCode(g, { entryPoints: ["unusedHelper"] }).nodes.map((n) => n.id));
+    expect(dead.has("function:src/b.ts:unusedHelper")).toBe(false);
+    // The supplied entry point is NOT a conventional `main` — proves config, not the name heuristic, did it.
+    expect("unusedHelper").not.toBe("main");
+  });
+
+  test("a non-`main` entry point supplied by full node id is NOT reported dead", () => {
+    const g = buildGraph();
+    const dead = new Set(
+      kgDeadCode(g, { entryPoints: ["function:src/b.ts:unusedHelper"] }).nodes.map((n) => n.id),
+    );
+    expect(dead.has("function:src/b.ts:unusedHelper")).toBe(false);
+  });
+
+  test("default (no config) still equals the oracle — claim stays scoped to internal reachability", () => {
+    const g = buildGraph();
+    const o = loadOracle();
+    // An unrelated name in the config must not perturb the default oracle match.
+    expect(new Set(kgDeadCode(g, { entryPoints: ["does-not-exist"] }).nodes.map((n) => n.id)))
+      .toEqual(new Set(o.deadCode));
   });
 });
 
@@ -232,4 +316,65 @@ describe("[G3] seed resolution by name | id", () => {
     expect(res.nodes).toEqual([]);
     expect(res.edges).toEqual([]);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Gate 5 — the REAL CLI path (arg parsing → kgDeadCode options), non-vacuous.
+// ---------------------------------------------------------------------------
+
+describe("[G3] graph-query.ts CLI — dead-code entry-point config wiring", () => {
+  const SCRIPTS_DIR = path.resolve(__dirname, "..", "..");
+  const CLI = path.join(SCRIPTS_DIR, "understand", "graph-query.ts");
+  let graphPath: string;
+
+  // A free function `orphan` with zero inbound calls (a bare, non-line ref to
+  // exercise provenance filtering) plus a normal main→run chain.
+  const GRAPH = {
+    version: "guild.knowledge_graph.v1",
+    project: { name: "cli-fixture", description: "" },
+    generated_from_commit: "x",
+    nodes: [
+      { id: "function:src/a.ts:main", type: "function", name: "main", source_refs: ["src/a.ts#L1-L2"], confidence: "high" },
+      { id: "function:src/a.ts:run", type: "function", name: "run", source_refs: ["src/a.ts#L5-L9"], confidence: "high" },
+      { id: "function:src/a.ts:orphan", type: "function", name: "orphan", source_refs: ["src/a.ts"], confidence: "high" },
+    ],
+    edges: [
+      { source: "function:src/a.ts:main", target: "function:src/a.ts:run", type: "calls", direction: "out", weight: 1, confidence: "high" },
+    ],
+    layers: [],
+    tour: [],
+  };
+
+  function runCli(verb: string, args: object): unknown {
+    const out = execFileSync(
+      "npx",
+      ["tsx", CLI, verb, JSON.stringify(args), "--graph", graphPath],
+      { cwd: SCRIPTS_DIR, encoding: "utf8" },
+    );
+    return JSON.parse(out);
+  }
+
+  beforeAll(() => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "g3-cli-"));
+    graphPath = path.join(dir, "knowledge-graph.json");
+    fs.writeFileSync(graphPath, JSON.stringify(GRAPH), "utf8");
+  });
+
+  test("dead-code (no config) reports the orphan, down-tiered for its bare ref", () => {
+    const res = runCli("dead-code", {}) as { nodes: Array<{ id: string; tier: string; source_refs: string[] }> };
+    const orphan = res.nodes.find((n) => n.id === "function:src/a.ts:orphan");
+    expect(orphan).toBeDefined();
+    expect(orphan!.tier).toBe("untrusted");      // bare ref → no line provenance
+    expect(orphan!.source_refs).toEqual([]);      // non-line ref filtered, never passed through
+  }, 30000);
+
+  test("dead-code with entryPoints (by name) excludes the orphan — non-`main` entry via CLI config", () => {
+    const res = runCli("dead-code", { entryPoints: ["orphan"] }) as { nodes: Array<{ id: string }> };
+    expect(res.nodes.some((n) => n.id === "function:src/a.ts:orphan")).toBe(false);
+  }, 30000);
+
+  test("dead-code with `exported` alias also excludes the orphan", () => {
+    const res = runCli("dead-code", { exported: ["function:src/a.ts:orphan"] }) as { nodes: Array<{ id: string }> };
+    expect(res.nodes.some((n) => n.id === "function:src/a.ts:orphan")).toBe(false);
+  }, 30000);
 });

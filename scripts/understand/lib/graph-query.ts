@@ -14,12 +14,23 @@
  *                                          minus entry points.
  *
  * EVIDENCE, NOT INSTRUCTIONS: every result node carries its `file:line`
- * `source_refs` (path#Lx-Ly) copied verbatim from the graph and is tagged
- * `tier: "trusted"`. Callers splice these as grounded facts; they are never a
- * directive to execute.
+ * `source_refs` (path#Lx-Ly). Callers splice these as grounded facts; they are
+ * never a directive to execute.
+ *
+ * PROVENANCE ENFORCEMENT (per-node tier): `source_refs` are FILTERED to keep
+ * only well-formed `#Lx-Ly` line anchors — empty or non-line refs are never
+ * passed through. A node that retains at least one line anchor is tagged
+ * `tier: "trusted"`; a node with no line provenance is DOWN-TIERED to
+ * `tier: "untrusted"` (kept in the result so traversal structure is intact, but
+ * never asserted as a grounded fact). The result-envelope `tier` is the default
+ * trust of the query mechanism; each node's own `tier` is authoritative for that
+ * node.
  *
  * DETERMINISM: every traversal sorts its frontier by node id, so the same graph
  * always yields byte-identical output regardless of node/edge array order.
+ * Edge de-dupe/sort uses a FULL stable key (source, target, type, confidence) —
+ * parallel `calls` edges that differ only in metadata are NOT collapsed, and
+ * reversing the input edge order cannot change the output.
  *
  * ── Node-id convention (LOCKED, codebase-understanding.md §"KnowledgeGraph") ──
  *   file:<relpath>                          (no name segment)
@@ -28,18 +39,27 @@
  *   class:<relpath>:<Class>
  *
  * ── Entry-point rule (documented; the graph carries no `exported` flag) ──
- *   A `function` node is an entry point iff its simple name is a conventional
- *   program entry name (`main`, `__main__`). This is a deterministic name
- *   heuristic — the structural layer (G1) does not record export/visibility, so
- *   an "exported + zero-inbound" rule is not yet computable. Centralised in
- *   ENTRY_POINT_NAMES so callers can extend it.
+ *   A `function` node is an entry point iff (a) its simple name is a conventional
+ *   program entry name (`main`, `__main__` — the deterministic name heuristic),
+ *   OR (b) it is named explicitly in the caller-supplied entry-point set (by node
+ *   id OR simple name). The structural layer (G1) does not record
+ *   export/visibility, so an "exported + zero-inbound" rule is not yet computable
+ *   from the graph alone — callers that know their public surface pass it in via
+ *   `DeadCodeOptions.entryPoints`. FOLLOWUP (G1): once the structural extractor
+ *   records an `exported` flag, derive the exported set automatically and fold it
+ *   in here.
  *
- * ── Dead-code rule (documented) ──
+ * ── Dead-code rule (documented, EXPLICITLY SCOPED) ──
  *   Dead code = FREE (module-level) functions with zero inbound `calls` edges,
- *   minus entry points. METHODS (`<Class>.<method>`) are deliberately excluded:
- *   method reachability needs type/dispatch analysis (a method may be reached
- *   via an interface, override, or reflection) beyond G3's model-free scope.
- *   Flagging a zero-inbound method as dead would be a false positive.
+ *   minus entry points (heuristic + supplied). This measures INTERNAL
+ *   REACHABILITY ONLY: with no `exported` flag in the graph, a result is "unused
+ *   within the analysed file set". A function reachable only as exported public
+ *   API / a CLI / a route handler has zero inbound `calls` here and would be a
+ *   FALSE POSITIVE — supply the exported/public surface via
+ *   `DeadCodeOptions.entryPoints` to exclude it. METHODS (`<Class>.<method>`) are
+ *   deliberately excluded: method reachability needs type/dispatch analysis
+ *   (interface, override, reflection) beyond G3's model-free scope, so flagging a
+ *   zero-inbound method as dead would be a false positive.
  */
 
 import type { GraphNode, GraphEdge } from "./schema";
@@ -56,6 +76,23 @@ export type Direction = "inbound" | "outbound" | "both";
  */
 export const EVIDENCE_TIER = "trusted" as const;
 
+/**
+ * Per-node trust tier. A node retains "trusted" iff it carries at least one
+ * well-formed `#Lx-Ly` line anchor; a node with no line provenance is
+ * down-tiered to "untrusted" (see header — provenance enforcement).
+ */
+export type EvidenceTier = "trusted" | "untrusted";
+
+/** Matches a well-formed `path#Lx-Ly` line anchor (the only provenance we trust). */
+const LINE_REF_RE = /#L\d+-L\d+$/;
+
+/** Keep only well-formed `#Lx-Ly` line anchors; drop empty / non-line refs. */
+function lineRefs(refs: unknown): string[] {
+  return Array.isArray(refs)
+    ? refs.filter((r): r is string => typeof r === "string" && LINE_REF_RE.test(r))
+    : [];
+}
+
 /** Conventional program entry-point simple names (see header). */
 export const ENTRY_POINT_NAMES = new Set<string>(["main", "__main__"]);
 
@@ -70,8 +107,10 @@ export interface EvidenceNode {
   id: string;
   type: string;
   name: string;
-  /** path#Lx-Ly provenance copied from the graph node (may be []). */
+  /** `#Lx-Ly` line anchors ONLY (non-line / empty refs filtered out). */
   source_refs: string[];
+  /** "trusted" iff at least one `#Lx-Ly` anchor survives; else "untrusted". */
+  tier: EvidenceTier;
   /** hop distance from the query seed (0 = seed). */
   depth: number;
 }
@@ -111,6 +150,19 @@ export interface DeadCodeResult {
   nodes: EvidenceNode[];
 }
 
+/** Options for {@link kgDeadCode}. */
+export interface DeadCodeOptions {
+  /**
+   * Exported / public surface + real entry points to EXCLUDE from dead code.
+   * Each string matches a function node by exact node id OR by simple name.
+   * Supplied because the structural graph carries no `exported` flag yet; this
+   * is how a caller scopes the "internal reachability" claim to its real public
+   * API / CLI / route handlers (see header). Heuristic entry points
+   * (`main`/`__main__`) are always excluded regardless of this set.
+   */
+  entryPoints?: Iterable<string>;
+}
+
 // ---------------------------------------------------------------------------
 // Id helpers
 // ---------------------------------------------------------------------------
@@ -146,6 +198,16 @@ function pushMap<K, V>(m: Map<K, V[]>, k: K, v: V): void {
   const arr = m.get(k);
   if (arr) arr.push(v);
   else m.set(k, [v]);
+}
+
+/**
+ * FULL stable key for a traced edge: source, target, type, AND confidence.
+ * Parallel `calls` edges that differ only in metadata get distinct keys, so they
+ * are neither collapsed by de-dupe nor reordered nondeterministically by the
+ * sort. JSON.stringify gives a printable, NUL-free composite separator.
+ */
+function traceEdgeKey(e: TraceEdge): string {
+  return JSON.stringify([e.source, e.target, e.type, e.confidence ?? null]);
 }
 
 function buildCallsAdjacency(edges: GraphEdge[]): CallsAdjacency {
@@ -202,11 +264,13 @@ export function resolveSeeds(graph: GraphView, query: string): string[] {
 }
 
 function toEvidence(node: GraphNode, depth: number): EvidenceNode {
+  const refs = lineRefs(node.source_refs);
   return {
     id: node.id,
     type: node.type,
     name: node.name,
-    source_refs: Array.isArray(node.source_refs) ? node.source_refs : [],
+    source_refs: refs,
+    tier: refs.length > 0 ? "trusted" : "untrusted",
     depth,
   };
 }
@@ -253,15 +317,16 @@ export function kgTrace(
       const outgoing: TraceEdge[] = [];
       if (direction === "outbound" || direction === "both") outgoing.push(...(adj.out.get(cur) ?? []));
       if (direction === "inbound" || direction === "both") outgoing.push(...(adj.in.get(cur) ?? []));
-      // Deterministic neighbour order.
+      // Deterministic neighbour order (full stable key — total order even across
+      // parallel edges with differing metadata).
       outgoing.sort((a, b) => {
-        const ka = `${a.source}->${a.target}`;
-        const kb = `${b.source}->${b.target}`;
+        const ka = traceEdgeKey(a);
+        const kb = traceEdgeKey(b);
         return ka < kb ? -1 : ka > kb ? 1 : 0;
       });
       for (const e of outgoing) {
         const neighbour = e.source === cur ? e.target : e.source;
-        const ek = `${e.source}->${e.target}`;
+        const ek = traceEdgeKey(e);
         if (!edgeKeys.has(ek)) {
           edgeKeys.add(ek);
           tracedEdges.push(e);
@@ -279,8 +344,8 @@ export function kgTrace(
     .map(([id, dep]) => toEvidence(byId.get(id)!, dep))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   tracedEdges.sort((a, b) => {
-    const ka = `${a.source}->${a.target}`;
-    const kb = `${b.source}->${b.target}`;
+    const ka = traceEdgeKey(a);
+    const kb = traceEdgeKey(b);
     return ka < kb ? -1 : ka > kb ? 1 : 0;
   });
 
@@ -339,15 +404,24 @@ export function kgNeighbors(graph: GraphView, query: string, hops = 1): Neighbor
 
 /**
  * Free (module-level) functions that are never called and are not entry points.
- * See header for the rule + why methods are excluded.
+ *
+ * SCOPE (see header): this is INTERNAL reachability — "unused within the analysed
+ * file set". The graph has no `exported` flag, so callers MUST pass their
+ * exported/public surface via `opts.entryPoints` to avoid flagging public API as
+ * dead. See header for the rule + why methods are excluded.
  */
-export function kgDeadCode(graph: GraphView): DeadCodeResult {
+export function kgDeadCode(graph: GraphView, opts: DeadCodeOptions = {}): DeadCodeResult {
   const inbound = new Set<string>();
   for (const e of graph.edges) {
     if (e.type === "calls") inbound.add(e.target);
   }
+  // Caller-supplied exported/public surface — matched by node id OR simple name.
+  const supplied = new Set<string>(opts.entryPoints ?? []);
+  const isExcluded = (n: GraphNode): boolean =>
+    isEntryPoint(n) || supplied.has(n.id) || supplied.has(simpleName(n.id));
+
   const dead = graph.nodes
-    .filter((n) => isFreeFunction(n) && !inbound.has(n.id) && !isEntryPoint(n))
+    .filter((n) => isFreeFunction(n) && !inbound.has(n.id) && !isExcluded(n))
     .map((n) => toEvidence(n, 0))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return { tier: EVIDENCE_TIER, nodes: dead };
