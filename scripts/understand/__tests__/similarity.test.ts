@@ -25,6 +25,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import type { GraphNode } from "../lib/schema";
 import { extractStructuralGraph } from "../lib/structural";
 import {
   kgSimilar,
@@ -50,17 +51,51 @@ const ORACLE = JSON.parse(
   fs.readFileSync(path.join(FIXTURE_DIR, "clra-fixture.expected.json"), "utf8"),
 ) as { clonePairs: [string, string][] };
 
-const SIMILARITY_SRC = fs.readFileSync(
-  path.join(__dirname, "..", "lib", "similarity.ts"),
-  "utf8",
-);
+const SIMILARITY_ENTRY = path.join(__dirname, "..", "lib", "similarity.ts");
+const SIMILARITY_SRC = fs.readFileSync(SIMILARITY_ENTRY, "utf8");
 
 // Comment-stripped view: the structural cost/no-network proofs must hold over
 // CODE, not prose. (The header legitimately says "no embeddings / SQLite: NONE";
 // those words must not trip the assertions.)
-const SIMILARITY_CODE = SIMILARITY_SRC
-  .replace(/\/\*[\s\S]*?\*\//g, "")   // block comments
-  .replace(/(^|[^:])\/\/.*$/gm, "$1"); // line comments (keeps http:// in strings, of which there are none)
+const stripComments = (s: string) =>
+  s
+    .replace(/\/\*[\s\S]*?\*\//g, "")    // block comments
+    .replace(/(^|[^:])\/\/.*$/gm, "$1"); // line comments (keeps http:// in strings, of which there are none)
+const SIMILARITY_CODE = stripComments(SIMILARITY_SRC);
+
+/**
+ * Transitive LOCAL import closure of `entryAbs`: follow every relative (`.`-prefixed)
+ * `from "…"` / `require("…")` to its `.ts` file and recurse. Used to prove the
+ * no-network / no-model property over the WHOLE local closure, not just the top
+ * file (finding T8.1#2). Bare specifiers (fs/path/crypto) and node builtins stop.
+ */
+function localImportClosure(entryAbs: string): string[] {
+  const seen = new Set<string>();
+  const stack = [path.resolve(entryAbs)];
+  const re = /(?:from|require\()\s*["'](\.[^"']+)["']/g;
+  while (stack.length) {
+    const file = stack.pop()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const src = fs.readFileSync(file, "utf8");
+    const dir = path.dirname(file);
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(src)) !== null) {
+      const spec = m[1];
+      const candidates = [
+        path.resolve(dir, `${spec}.ts`),
+        path.resolve(dir, `${spec}.tsx`),
+        path.resolve(dir, spec, "index.ts"),
+        path.resolve(dir, spec),
+      ];
+      const resolved = candidates.find(
+        (c) => fs.existsSync(c) && fs.statSync(c).isFile(),
+      );
+      if (resolved) stack.push(resolved);
+    }
+  }
+  return [...seen];
+}
 
 function buildGraph(rel: string[] = REL_FILES) {
   return extractStructuralGraph(FIXTURE_DIR, rel, readFile);
@@ -127,9 +162,14 @@ describe("G8 gate 2 — determinism (byte-stable, order-independent)", () => {
     expect(minhashSignature(src)).toEqual(minhashSignature(src));
   });
 
-  test("reversed input file order → identical ranking AND identical edges", () => {
-    const g = buildGraph(REL_FILES);
-    const gRev = buildGraph([...REL_FILES].reverse());
+  test("reversed CONSUMED node+edge arrays → identical ranking AND identical edges", () => {
+    // Reverse the arrays kgSimilar/buildSimilarEdges actually consume — NOT the
+    // file-order input, which extractStructuralGraph re-sorts (that would make this
+    // test vacuous, finding T8.1#1). Order-independence must hold for the real path.
+    const g = buildGraph();
+    const gRev = { nodes: [...g.nodes].reverse(), edges: [...g.edges].reverse() };
+    // Guard: the reversal is real (the node order genuinely differs).
+    expect(gRev.nodes.map((n) => n.id)).not.toEqual(g.nodes.map((n) => n.id));
     for (const [a] of ORACLE.clonePairs) {
       expect(JSON.stringify(kgSimilar(gRev, a, 5, 0.3, OPTS)))
         .toBe(JSON.stringify(kgSimilar(g, a, 5, 0.3, OPTS)));
@@ -154,7 +194,7 @@ describe("G8 gate 2 — determinism (byte-stable, order-independent)", () => {
 // ---------------------------------------------------------------------------
 
 describe("G8 gate 3 — 0 model tokens, 0 network", () => {
-  test("module source imports no model client and opens no socket", () => {
+  test("module source imports no model client and opens no socket (top file)", () => {
     // No LLM / embeddings client (code, not prose).
     expect(SIMILARITY_CODE).not.toMatch(/anthropic|openai|embedding|@ai-sdk|langchain/i);
     // No network call / socket stack.
@@ -164,6 +204,23 @@ describe("G8 gate 3 — 0 model tokens, 0 network", () => {
     // Only fs + path + sibling lib imports are permitted.
     const imports = [...SIMILARITY_CODE.matchAll(/from ["']([^"']+)["']/g)].map((m) => m[1]).sort();
     expect(imports).toEqual(["./schema", "./structural", "fs", "path"]);
+  });
+
+  test("TRANSITIVE local import closure opens no socket and pulls no model client", () => {
+    // Finding T8.1#2: the cost proof must cover everything similarity.ts pulls in
+    // (./schema, ./structural, and their deps), not just the top file.
+    const closure = localImportClosure(SIMILARITY_ENTRY);
+    // Non-vacuity: the closure genuinely followed the sibling imports + their deps.
+    expect(closure.length).toBeGreaterThan(3);
+    expect(closure.some((f) => f.endsWith(path.join("lib", "structural.ts")))).toBe(true);
+    expect(closure.some((f) => f.endsWith(path.join("lib", "schema.ts")))).toBe(true);
+    const denyImport = /(?:from|require\()\s*["'](?:node:)?(?:http|https|net|tls|dgram)["']/;
+    for (const file of closure) {
+      const code = stripComments(fs.readFileSync(file, "utf8"));
+      expect(code).not.toMatch(/anthropic|openai|embedding|@ai-sdk|langchain/i);
+      expect(code).not.toMatch(/\b(fetch|XMLHttpRequest)\s*\(/);
+      expect(code).not.toMatch(denyImport);
+    }
   });
 
   test("running similarity makes no network call (fetch spy)", () => {
@@ -219,9 +276,17 @@ describe("G8 gate 4 — threshold exclusion + bounded candidate edges", () => {
     expect(low).toBeLessThanOrEqual(5 * codeNodeCount);
   });
 
-  test("a high threshold excludes below-threshold pairs entirely", () => {
+  test("a high threshold keeps ONLY the true clone pairs (everything else excluded)", () => {
+    // After type-2 normalization (finding T8.1#3) the genuine clone pairs are
+    // near-identical (≈1.0), so a 0.99 threshold admits exactly those and excludes
+    // every non-clone pair — proving threshold exclusion still bites.
     const edges = buildSimilarEdges(graph, 0.99, 5, OPTS);
-    expect(edges.length).toBe(0); // no fixture pair is a 0.99 near-identical match
+    expect(edges.length).toBe(ORACLE.clonePairs.length);
+    for (const [a, b] of ORACLE.clonePairs) {
+      const lo = a < b ? a : b;
+      const hi = a < b ? b : a;
+      expect(edges.some((e) => e.source === lo && e.target === hi)).toBe(true);
+    }
   });
 });
 
@@ -236,5 +301,97 @@ describe("G8 gate 5 — JSON-only (no SQLite) + source hygiene", () => {
 
   test("module source contains no literal NUL byte", () => {
     expect(SIMILARITY_SRC.includes(String.fromCharCode(0))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. Adversarial: rename-invariant fingerprint (finding T8.1#3)
+// ---------------------------------------------------------------------------
+
+describe("G8 gate 6 — rename-invariant fingerprint (a renamed clone beats a same-name non-clone)", () => {
+  // Q vs T: structurally identical, every local identifier renamed (true clone).
+  // Q vs D: D reuses Q's identifier names verbatim but has a DIFFERENT structure.
+  // Verbatim shingling would let D (same names) outrank T (renamed) — finding #3.
+  const Q_SRC =
+    "function f(xs) { let total = 0; for (let i = 0; i < xs.length; i++) { total = total + xs[i]; } return total; }";
+  const T_SRC =
+    "function renamed(items) { let sum = 0; for (let k = 0; k < items.length; k++) { sum = sum + items[k]; } return sum; }";
+  const D_SRC =
+    "function f(xs) { let total = xs; let i = total; total = i; return i; }";
+
+  test("minhashSignature is rename-invariant AND structure-sensitive", () => {
+    // Renaming all locals must NOT change the signature (would FAIL on verbatim hashing).
+    expect(minhashSignature(Q_SRC)).toEqual(minhashSignature(T_SRC));
+    // A same-identifier but structurally different body MUST change the signature.
+    expect(minhashSignature(Q_SRC)).not.toEqual(minhashSignature(D_SRC));
+  });
+
+  test("kgSimilar ranks the renamed true clone above the same-identifier non-clone", () => {
+    const nodes = [
+      { id: "Q", type: "function", name: "f", source_refs: [], src: Q_SRC },
+      { id: "T", type: "function", name: "renamed", source_refs: [], src: T_SRC },
+      { id: "D", type: "function", name: "f2", source_refs: [], src: D_SRC },
+    ] as unknown as GraphNode[];
+    // alpha:1 isolates the MinHash signal (the path finding #3 is about); cosine off.
+    const res = kgSimilar({ nodes }, "Q", 5, 0, { alpha: 1 });
+    expect(res.neighbors[0].id).toBe("T");
+    const tScore = res.neighbors.find((n) => n.id === "T")!.score;
+    const dScore = res.neighbors.find((n) => n.id === "D")!.score;
+    expect(tScore).toBeGreaterThan(dScore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Security: path containment + numeric-input validation (findings T8.1#4/#5)
+// ---------------------------------------------------------------------------
+
+describe("G8 gate 7 — path containment + input validation", () => {
+  test("a ../ source_ref that escapes the repo root is refused (no out-of-root read)", () => {
+    const reads: string[] = [];
+    const spyRead = (abs: string) => {
+      reads.push(abs);
+      return readFile(abs);
+    };
+    const evilNode = {
+      id: "function:evil",
+      type: "function",
+      name: "evil",
+      source_refs: ["../../../../../../etc/passwd#L1-L1"],
+    } as unknown as GraphNode;
+    const fps = computeFingerprints(
+      { nodes: [evilNode] },
+      { repoRoot: FIXTURE_DIR, readFile: spyRead },
+    );
+    // Traversal ref resolved to nothing → empty fingerprint, reader never invoked.
+    expect(fps.get("function:evil")!.minhash).toEqual([]);
+    expect(reads).toEqual([]);
+
+    // Positive control: a legit in-root ref IS read through the same spy (proves the
+    // refusal above is specific to the escape, not a dead reader).
+    const goodNode = {
+      id: "function:good",
+      type: "function",
+      name: "good",
+      source_refs: ["src/a.ts#L22-L28"],
+    } as unknown as GraphNode;
+    const fpsGood = computeFingerprints(
+      { nodes: [goodNode] },
+      { repoRoot: FIXTURE_DIR, readFile: spyRead },
+    );
+    expect(reads.some((p) => p.endsWith(path.join("src", "a.ts")))).toBe(true);
+    expect(fpsGood.get("function:good")!.minhash.length).toBeGreaterThan(0);
+  });
+
+  test("invalid k / threshold / alpha are rejected before any output", () => {
+    const g = buildGraph();
+    const [a] = ORACLE.clonePairs[0];
+    expect(() => kgSimilar(g, a, -1, 0, OPTS)).toThrow(/k must be a non-negative integer/);
+    expect(() => kgSimilar(g, a, 1.5, 0, OPTS)).toThrow(/k must be a non-negative integer/);
+    expect(() => kgSimilar(g, a, 5, Number.NaN, OPTS)).toThrow(/threshold/);
+    expect(() => kgSimilar(g, a, 5, Number.POSITIVE_INFINITY, OPTS)).toThrow(/threshold/);
+    expect(() => kgSimilar(g, a, 5, 0, { ...OPTS, alpha: 2 })).toThrow(/alpha/);
+    expect(() => buildSimilarEdges(g, 0.6, -3, OPTS)).toThrow(/k must be a non-negative integer/);
+    // k = 0 is the valid empty floor — bounded, never the slice(0,-n) leak.
+    expect(kgSimilar(g, a, 0, 0, OPTS).neighbors).toEqual([]);
   });
 });

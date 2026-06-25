@@ -6,8 +6,12 @@
  * Two LOCAL signals, combined; NO embeddings model, NO network, NO model tokens:
  *
  *   1. MinHash structural fingerprint — a seeded MinHash signature over the
- *      token-shingle set of a code node's source slice. Jaccard(MinHash) estimates
- *      token-set overlap and is robust to small edits / reordering.
+ *      token-shingle set of a code node's source slice. Tokens are type-2
+ *      normalized first (local identifier NAMES → a single `$id` class, numeric
+ *      literals → `$num`; keywords/operators kept), so the fingerprint is
+ *      rename-invariant: a renamed true clone still matches, while a same-name
+ *      semantic edit cannot win on verbatim name overlap. Jaccard(MinHash) then
+ *      estimates structural-token overlap and is robust to small edits / reordering.
  *   2. AST-profile cosine — cosine over the existing 25-feature structural profile
  *      (`sp`, committed by G1 in lib/structural.ts). This signal is rename-invariant:
  *      two functions that differ only in local identifier names share an (almost)
@@ -184,6 +188,59 @@ export function tokenize(src: string): string[] {
 }
 
 /**
+ * Language-agnostic keyword superset (JS/TS + Python control-flow and declaration
+ * keywords). Keywords are STRUCTURAL anchors and are kept verbatim; every other
+ * identifier is canonicalized so local names never affect the fingerprint. This is
+ * a heuristic superset — a missing keyword only weakens discrimination slightly (it
+ * is canonicalized like any identifier); it never breaks determinism or
+ * rename-invariance.
+ */
+const KEYWORDS = new Set<string>([
+  // shared control flow + declarations
+  "if", "else", "elif", "for", "while", "do", "return", "break", "continue",
+  "function", "def", "class", "new", "try", "catch", "except", "finally",
+  "throw", "raise", "switch", "case", "default", "in", "of", "with", "lambda",
+  "pass", "yield", "async", "await", "import", "from", "as", "export",
+  // JS/TS
+  "const", "let", "var", "typeof", "instanceof", "void", "this", "super",
+  "extends", "implements", "interface", "type", "enum", "public", "private",
+  "protected", "static", "readonly", "delete", "null", "undefined", "true",
+  "false",
+  // Python
+  "and", "or", "not", "is", "None", "True", "False", "global", "nonlocal",
+  "del", "assert",
+]);
+
+/** Canonical placeholders (printable; an identifier literally named `$id` shares the class). */
+const ID_PLACEHOLDER = "$id";
+const NUM_PLACEHOLDER = "$num";
+
+/**
+ * Type-2 normalization of one token: keywords + punctuation/operators are kept
+ * verbatim (structural anchors), non-keyword identifiers collapse to `$id`, and
+ * numeric literals collapse to `$num`. The effect is that two functions differing
+ * only in local identifier names / literal values produce the SAME token stream,
+ * while a structurally different function does not — so a renamed true clone wins
+ * over a same-identifier non-clone on the MinHash signal too (not just on cosine).
+ */
+function canonicalizeToken(tok: string): string {
+  const c = tok.charCodeAt(0);
+  // identifier or keyword: starts with a letter, `_`, or `$`
+  if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36) {
+    return KEYWORDS.has(tok) ? tok : ID_PLACEHOLDER;
+  }
+  // numeric literal: starts with a digit
+  if (c >= 48 && c <= 57) return NUM_PLACEHOLDER;
+  // punctuation / operator — structural, kept verbatim
+  return tok;
+}
+
+/** Apply {@link canonicalizeToken} across a token stream. */
+function canonicalizeTokens(tokens: string[]): string[] {
+  return tokens.map(canonicalizeToken);
+}
+
+/**
  * Build the set of shingle hashes (k-grams over the token stream). When the token
  * count is below the shingle width, the whole token list is one shingle so short
  * functions still produce a non-empty set.
@@ -214,7 +271,7 @@ export function minhashSignature(
   numHashes: number = DEFAULT_NUM_HASHES,
   shingleSize: number = DEFAULT_SHINGLE_SIZE,
 ): number[] {
-  const shingles = shingleHashes(tokenize(src), shingleSize);
+  const shingles = shingleHashes(canonicalizeTokens(tokenize(src)), shingleSize);
   if (shingles.size === 0) return [];
   const seeds = permutationSeeds(numHashes);
   const sig = new Array(numHashes).fill(0xffffffff);
@@ -269,6 +326,34 @@ export function cosine(a: number[], b: number[]): number {
 
 const defaultReadFile = (abs: string): string => fs.readFileSync(abs, "utf8");
 
+/** True when `rel` (output of path.relative) points outside the base directory. */
+function escapesBase(rel: string): boolean {
+  return rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel);
+}
+
+/**
+ * Resolve `relPath` against `repoRoot` and REFUSE any escape outside the root.
+ * Two layers: (1) a lexical containment check on the resolved path — defeats `../`
+ * traversal without touching disk; then (2) a best-effort realpath check — defeats
+ * symlink escapes — applied only when both paths exist on disk (a not-yet-created
+ * file or an injected reader skips layer 2, since layer 1 already proved lexical
+ * containment). Returns the absolute path, or null when the target is not under root.
+ */
+function resolveUnderRoot(repoRoot: string, relPath: string): string | null {
+  const root = path.resolve(repoRoot);
+  const abs = path.resolve(root, relPath);
+  if (escapesBase(path.relative(root, abs))) return null;
+  try {
+    const realRoot = fs.realpathSync(root);
+    const realAbs = fs.realpathSync(abs);
+    if (escapesBase(path.relative(realRoot, realAbs))) return null;
+  } catch {
+    // Root or target absent on disk (injected reader / not-yet-created file):
+    // layer 1 already established lexical containment.
+  }
+  return abs;
+}
+
 /**
  * Resolve a node's source slice. Priority: explicit `sourceOf` → inline `src`
  * string → on-disk read of `source_refs[0]` (path#Lx-Ly). Returns "" when no
@@ -288,9 +373,13 @@ function nodeSource(node: GraphNode, opts: SimilarityOptions): string {
   const hash = ref.indexOf("#");
   const relPath = hash === -1 ? ref : ref.slice(0, hash);
   const frag = hash === -1 ? "" : ref.slice(hash + 1);
+  // SECURITY: refuse `source_refs` that escape the repo root (path traversal /
+  // symlink). A rejected ref yields "" — the node is treated as empty-fingerprint.
+  const abs = resolveUnderRoot(opts.repoRoot, relPath);
+  if (abs === null) return "";
   let content: string;
   try {
-    content = read(path.join(opts.repoRoot, relPath));
+    content = read(abs);
   } catch {
     return "";
   }
@@ -320,6 +409,7 @@ export function computeFingerprints(
 ): Map<string, Fingerprint> {
   const numHashes = opts.numHashes ?? DEFAULT_NUM_HASHES;
   const shingleSize = opts.shingleSize ?? DEFAULT_SHINGLE_SIZE;
+  validateFingerprintParams(numHashes, shingleSize);
   const table = new Map<string, Fingerprint>();
   for (const node of graph.nodes) {
     if (!isCodeNode(node)) continue;
@@ -352,6 +442,42 @@ function round6(n: number): number {
 }
 
 // ---------------------------------------------------------------------------
+// Input validation (reject out-of-contract params before they distort output)
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate MinHash params. Non-positive / non-integer `numHashes` would make
+ * `new Array(numHashes)` throw or yield a degenerate signature; same for the
+ * shingle width. Throws RangeError on violation.
+ */
+function validateFingerprintParams(numHashes: number, shingleSize: number): void {
+  if (!Number.isInteger(numHashes) || numHashes < 1) {
+    throw new RangeError(`similarity: numHashes must be a positive integer (got ${numHashes})`);
+  }
+  if (!Number.isInteger(shingleSize) || shingleSize < 1) {
+    throw new RangeError(`similarity: shingleSize must be a positive integer (got ${shingleSize})`);
+  }
+}
+
+/**
+ * Validate ranking params. A negative `k` would make `slice(0, k)` slice from the
+ * end and silently emit candidates, breaking the k·|codeNodes| bound; a non-finite
+ * `threshold` makes every `score < threshold` comparison NaN-driven; an `alpha`
+ * outside [0,1] distorts the convex score mix. Throws RangeError on violation.
+ */
+function validateRankParams(k: number, threshold: number, alpha: number): void {
+  if (!Number.isInteger(k) || k < 0) {
+    throw new RangeError(`similarity: k must be a non-negative integer (got ${k})`);
+  }
+  if (!Number.isFinite(threshold)) {
+    throw new RangeError(`similarity: threshold must be a finite number (got ${threshold})`);
+  }
+  if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) {
+    throw new RangeError(`similarity: alpha must be a finite number in [0,1] (got ${alpha})`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public API: kgSimilar
 // ---------------------------------------------------------------------------
 
@@ -370,6 +496,7 @@ export function kgSimilar(
   opts: SimilarityOptions = {},
 ): KgSimilarResult {
   const alpha = opts.alpha ?? DEFAULT_ALPHA;
+  validateRankParams(k, threshold, alpha);
   const table = computeFingerprints(graph, opts);
   const self = table.get(nodeId);
 
@@ -420,6 +547,7 @@ export function buildSimilarEdges(
   opts: SimilarityOptions = {},
 ): GraphEdge[] {
   const alpha = opts.alpha ?? DEFAULT_ALPHA;
+  validateRankParams(k, threshold, alpha);
   const table = computeFingerprints(graph, opts);
   const ids = [...table.keys()].sort();
 
@@ -499,30 +627,36 @@ function runCli(argv: string[]): number {
     repoRoot: typeof req.repoRoot === "string" ? req.repoRoot : undefined,
     alpha: typeof req.alpha === "number" ? req.alpha : undefined,
   };
-  if (verb === "edges") {
-    const out = buildSimilarEdges(
+  // Validation (RangeError) surfaces as a clean exit-2 rather than a stack trace.
+  try {
+    if (verb === "edges") {
+      const out = buildSimilarEdges(
+        graph,
+        typeof req.threshold === "number" ? req.threshold : DEFAULT_THRESHOLD,
+        typeof req.k === "number" ? req.k : DEFAULT_K,
+        opts,
+      );
+      process.stdout.write(JSON.stringify(out, null, 2) + "\n");
+      return 0;
+    }
+    const nodeId = req.nodeId;
+    if (typeof nodeId !== "string") {
+      process.stderr.write("payload.nodeId (string) is required for `similar`\n");
+      return 2;
+    }
+    const out = kgSimilar(
       graph,
-      typeof req.threshold === "number" ? req.threshold : DEFAULT_THRESHOLD,
+      nodeId,
       typeof req.k === "number" ? req.k : DEFAULT_K,
+      typeof req.threshold === "number" ? req.threshold : DEFAULT_THRESHOLD,
       opts,
     );
     process.stdout.write(JSON.stringify(out, null, 2) + "\n");
     return 0;
-  }
-  const nodeId = req.nodeId;
-  if (typeof nodeId !== "string") {
-    process.stderr.write("payload.nodeId (string) is required for `similar`\n");
+  } catch (e) {
+    process.stderr.write(`${(e as Error).message}\n`);
     return 2;
   }
-  const out = kgSimilar(
-    graph,
-    nodeId,
-    typeof req.k === "number" ? req.k : DEFAULT_K,
-    typeof req.threshold === "number" ? req.threshold : DEFAULT_THRESHOLD,
-    opts,
-  );
-  process.stdout.write(JSON.stringify(out, null, 2) + "\n");
-  return 0;
 }
 
 // Execute only when run directly (never on import — the test suite imports this).
