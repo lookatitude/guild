@@ -57,8 +57,10 @@ export {
   confidenceBonus,
   scoreNode,
   buildProximityBonuses,
+  rankKgNodes,
 } from "../lib/shared/graph-scoring";
-import { scoreNode, buildProximityBonuses } from "../lib/shared/graph-scoring";
+import { rankKgNodes } from "../lib/shared/graph-scoring";
+import type { GraphEdge } from "./lib/schema";
 
 // ---------------------------------------------------------------------------
 // Main CLI entry point
@@ -113,24 +115,17 @@ function main(): void {
   let candidates = graph.nodes as unknown as GraphNode[];
   if (typeSet.size) candidates = candidates.filter((n) => typeSet.has(n.type));
 
-  // Step 1: score all candidates (importance + confidence baked in)
-  const candidateScored = candidates
-    .map((n) => ({ n, s: scoreNode(n, terms) }))
-    .filter((x) => x.s > 0);
-
-  // Step 2: build topic-proximity bonuses from graph edges (SC-13).
-  // Pass graph.nodes so the target-side type guard can identify non-topic targets
-  // even when those targets have score=0 and are absent from candidateScored.
-  const proximityBonuses = buildProximityBonuses(candidateScored, (graph.edges ?? []) as never, (graph.nodes as unknown as GraphNode[]) ?? []);
-
-  // Step 3: apply proximity bonuses and final sort
-  const ranked = candidateScored
-    .map((x) => ({
-      n: x.n,
-      s: x.s + (proximityBonuses.get(x.n.id) ?? 0),
-    }))
-    .sort((a, b) => b.s - a.s || a.n.id.localeCompare(b.n.id))
-    .slice(0, limit);
+  // Score → topic-proximity → sort → cap, via the SINGLE shared ranking pipeline
+  // (rankKgNodes) that recall.ts's KG branch also calls — so the bundle ranking
+  // and this CLI ranking are identical (G15). `candidates` is the (optionally
+  // type-filtered) set; the full graph.nodes is passed as the proximity guard set.
+  const ranked = rankKgNodes(
+    candidates,
+    (graph.edges ?? []) as unknown as GraphEdge[],
+    terms,
+    limit,
+    (graph.nodes as unknown as GraphNode[]) ?? [],
+  );
 
   if (json) {
     const results = ranked.map((x) => {

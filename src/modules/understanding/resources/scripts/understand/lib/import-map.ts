@@ -76,7 +76,7 @@ function resolveJsFile(target: string): string | null {
   return null;
 }
 
-function loadTsAliases(repoRoot: string): Array<{ prefix: string; targets: string[] }> {
+export function loadTsAliases(repoRoot: string): Array<{ prefix: string; targets: string[] }> {
   const tsconfigPath = path.join(repoRoot, "tsconfig.json");
   try {
     const raw = fs
@@ -142,24 +142,65 @@ export function buildImportMap(
   return edges;
 }
 
+/**
+ * Resolve ONE import specifier from a single importer to a repo-relative target,
+ * sharing the exact resolution path `buildImportMap` uses. Exposed so the
+ * incremental structural refresh (G4) can re-resolve a cached file's import
+ * specifiers against the CURRENT file set + working tree WITHOUT re-reading or
+ * re-parsing that file's body — the result is byte-identical to what
+ * buildImportMap would emit for the same specifier.
+ *
+ * `known` must be the current repo-relative file set (POSIX-separated); `aliases`
+ * the tsconfig path aliases from `loadTsAliases(repoRoot)`. Returns null for
+ * external/unresolvable specifiers or self-imports (matching `pushEdge`).
+ */
+export function resolveImportSpec(
+  repoRoot: string,
+  importerRel: string,
+  spec: string,
+  known: Set<string>,
+  aliases: Array<{ prefix: string; targets: string[] }>,
+): ImportEdge | null {
+  const lang = detectLanguage(importerRel);
+  const from = importerRel.replace(/\\/g, "/");
+  if (lang === "python") {
+    const to = resolvePython(importerRel, spec, known);
+    if (!to || to === from) return null;
+    return { from, to, kind: "static" };
+  }
+  if (lang === "typescript" || lang === "javascript") {
+    const abs = path.join(repoRoot, importerRel);
+    const r = resolveJs(abs, spec, repoRoot, aliases);
+    if (!r) return null;
+    const to = path.relative(repoRoot, r.abs).replace(/\\/g, "/");
+    if (!known.has(to) || to === from) return null;
+    return { from, to, kind: r.kind };
+  }
+  return null;
+}
+
 function resolvePython(
   importerRel: string,
   spec: string,
   known: Set<string>,
 ): string | null {
-  // Relative ("from .x import y") and absolute ("pkg.mod") → pkg/mod.py
-  let base: string;
+  const bases: string[] = [];
   if (spec.startsWith(".")) {
+    // Relative ("from .x import y") — walk up per dot, then descend.
     const up = spec.match(/^\.+/)?.[0].length ?? 1;
     let dir = path.dirname(importerRel);
     for (let i = 1; i < up; i++) dir = path.dirname(dir);
-    base = path.join(dir, spec.replace(/^\.+/, "").replace(/\./g, "/"));
+    bases.push(path.join(dir, spec.replace(/^\.+/, "").replace(/\./g, "/")));
   } else {
-    base = spec.replace(/\./g, "/");
+    const sub = spec.replace(/\./g, "/");
+    // Absolute ("pkg.mod") — try BOTH importer-dir-relative (sibling/script-style
+    // imports where the package dir is on sys.path) AND repo-root-relative.
+    bases.push(path.join(path.dirname(importerRel), sub));
+    bases.push(sub);
   }
-  const cands = [base + ".py", path.join(base, "__init__.py")].map((p) =>
-    p.replace(/\\/g, "/").replace(/^\.\//, ""),
-  );
+  const cands = bases
+    .flatMap((base) => [base + ".py", path.join(base, "__init__.py")])
+    .map((p) => p.replace(/\\/g, "/").replace(/^\.\//, ""));
   return cands.find((c) => known.has(c)) ?? null;
 }
 

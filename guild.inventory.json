@@ -1848,6 +1848,11 @@
       "kind": "cli"
     },
     {
+      "id": "recall-stats",
+      "source_path": "scripts/recall-stats.ts",
+      "kind": "cli"
+    },
+    {
       "id": "registry-rollup",
       "source_path": "scripts/registry-rollup.ts",
       "kind": "cli"
@@ -1913,6 +1918,11 @@
       "kind": "cli"
     },
     {
+      "id": "understand/architecture",
+      "source_path": "scripts/understand/architecture.ts",
+      "kind": "cli"
+    },
+    {
       "id": "understand/assign-layers",
       "source_path": "scripts/understand/assign-layers.ts",
       "kind": "cli"
@@ -1958,6 +1968,26 @@
       "kind": "cli"
     },
     {
+      "id": "understand/extract-structural",
+      "source_path": "scripts/understand/extract-structural.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/graph-artifact",
+      "source_path": "scripts/understand/graph-artifact.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/graph-query",
+      "source_path": "scripts/understand/graph-query.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/impact",
+      "source_path": "scripts/understand/impact.ts",
+      "kind": "cli"
+    },
+    {
       "id": "understand/k-stage-staleness",
       "source_path": "scripts/understand/k-stage-staleness.ts",
       "kind": "cli"
@@ -1970,6 +2000,16 @@
     {
       "id": "understand/knowledge-orchestrator",
       "source_path": "scripts/understand/knowledge-orchestrator.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/lib/architecture",
+      "source_path": "scripts/understand/lib/architecture.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/lib/bundle-validate",
+      "source_path": "scripts/understand/lib/bundle-validate.ts",
       "kind": "cli"
     },
     {
@@ -1998,8 +2038,28 @@
       "kind": "cli"
     },
     {
+      "id": "understand/lib/graph-artifact",
+      "source_path": "scripts/understand/lib/graph-artifact.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/lib/graph-query",
+      "source_path": "scripts/understand/lib/graph-query.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/lib/graph-query-projection",
+      "source_path": "scripts/understand/lib/graph-query-projection.ts",
+      "kind": "cli"
+    },
+    {
       "id": "understand/lib/ignore",
       "source_path": "scripts/understand/lib/ignore.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/lib/impact",
+      "source_path": "scripts/understand/lib/impact.ts",
       "kind": "cli"
     },
     {
@@ -2018,13 +2078,43 @@
       "kind": "cli"
     },
     {
+      "id": "understand/lib/parity-harness",
+      "source_path": "scripts/understand/lib/parity-harness.ts",
+      "kind": "cli"
+    },
+    {
       "id": "understand/lib/paths",
       "source_path": "scripts/understand/lib/paths.ts",
       "kind": "cli"
     },
     {
+      "id": "understand/lib/resolve-calls-py",
+      "source_path": "scripts/understand/lib/resolve-calls-py.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/lib/resolve-calls-ts",
+      "source_path": "scripts/understand/lib/resolve-calls-ts.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/lib/resolved-call",
+      "source_path": "scripts/understand/lib/resolved-call.ts",
+      "kind": "cli"
+    },
+    {
       "id": "understand/lib/schema",
       "source_path": "scripts/understand/lib/schema.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/lib/similarity",
+      "source_path": "scripts/understand/lib/similarity.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/lib/structural",
+      "source_path": "scripts/understand/lib/structural.ts",
       "kind": "cli"
     },
     {
@@ -2035,6 +2125,11 @@
     {
       "id": "understand/lib/walk",
       "source_path": "scripts/understand/lib/walk.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "understand/resolve-calls",
+      "source_path": "scripts/understand/resolve-calls.ts",
       "kind": "cli"
     },
     {

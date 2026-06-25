@@ -17,6 +17,7 @@
     ],
     "mcp_servers": ["guild-telemetry"],
     "scripts": [
+      "recall-stats",
       "trace-summarize",
       "v1.4-log-validator",
       "lib/failure-ingestion",
