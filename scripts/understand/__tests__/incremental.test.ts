@@ -443,6 +443,131 @@ describe("FIX-T4.1-3 — a stale/mismatched cache is invalidated (incremental ==
 });
 
 // ---------------------------------------------------------------------------
+// FIX-T4.1-r2 — cache reuse validates EVERY NESTED element, not just array shape
+// ---------------------------------------------------------------------------
+
+describe("FIX-T4.1-r2 — a malformed nested cache element forces re-extract (incremental == full)", () => {
+  let dir: string;
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  // A fixture rich enough that EVERY nested element drives observable output:
+  //   - Derived(Base)  → an inherits edge (classes element)
+  //   - foo() → bar()  → a calls edge (callables element)
+  //   - file→symbol contains edges carry the structural extractor marker
+  // a.py source (Python): class Base, class Derived(Base), def bar, def foo.
+  const A_SRC = [
+    "class Base:",
+    "    pass",
+    "",
+    "class Derived(Base):",
+    "    pass",
+    "",
+    "def bar():",
+    "    return 1",
+    "",
+    "def foo():",
+    "    return bar()",
+    "",
+  ].join("\n");
+
+  // Each case OVERWRITES a REAL nested element of a.py (one that produces output)
+  // with a malformed one. contentHash STILL matches the file on disk, so the old
+  // array-only guard would happily reuse the broken bundle. The deepened guard
+  // must reject it → re-extract a.py; b.py (intact) stays a cache hit; the result
+  // must EQUAL a full rebuild (no crash, no divergence).
+  const cases: Array<{ name: string; corrupt: (b: import("../lib/structural").FileBundle) => void }> = [
+    {
+      name: "callables[0] = null",
+      corrupt: (b) => { (b.callables as unknown as unknown[])[0] = null; },
+    },
+    {
+      name: "callables[0] missing simpleName + non-array callees",
+      corrupt: (b) => { (b.callables as unknown as unknown[])[0] = { id: "function:a.py:bar" }; },
+    },
+    {
+      name: "classes element bases not a string[]",
+      corrupt: (b) => {
+        // Derived(Base) carries the inherits edge — corrupt ITS bases so the edge
+        // would vanish (divergence) if the broken bundle were reused.
+        const cls = (b.classes as unknown as Record<string, unknown>[]).find(
+          (c) => c.simpleName === "Derived",
+        )!;
+        cls.bases = [42];
+      },
+    },
+    {
+      name: "classes[0] = null",
+      corrupt: (b) => { (b.classes as unknown as unknown[])[0] = null; },
+    },
+    {
+      name: "symbolNodes[0] missing id",
+      corrupt: (b) => {
+        (b.symbolNodes as unknown as unknown[])[0] = { type: "function", name: "x", source_refs: [] };
+      },
+    },
+    {
+      name: "contains[0] null endpoint",
+      corrupt: (b) => {
+        const e = (b.contains as unknown as Record<string, unknown>[])[0];
+        (e as Record<string, unknown>).target = null;
+      },
+    },
+    {
+      name: "importSpecs element non-string",
+      corrupt: (b) => { (b.importSpecs as unknown as unknown[]).push(123); },
+    },
+  ];
+
+  for (const c of cases) {
+    test(`${c.name} → a.py re-extracted, b.py reused, incremental == full`, () => {
+      dir = tmpRepo("g4-nested-");
+      write(dir, "a.py", A_SRC);
+      write(dir, "b.py", "def baz():\n    return 2\n");
+      const FILES = ["a.py", "b.py"];
+
+      const cache = bundlesToCache(buildBundles(dir, FILES, readFile));
+      // Corrupt ONE nested element of a.py; version + contentHash stay valid.
+      c.corrupt(cache.files["a.py"]);
+
+      const full = fullStructural(dir, FILES);
+
+      // Meaningfulness: reusing the malformed bundle as-is would CRASH or DIVERGE
+      // from a full rebuild — i.e. the corruption is not benign.
+      let diverges: boolean;
+      try {
+        diverges = subsetJson(assembleStructuralGraph(dir, Object.values(cache.files))) !== subsetJson(full);
+      } catch {
+        diverges = true; // a throw is the worst divergence
+      }
+      expect(diverges).toBe(true);
+
+      // With the deepened guard: a.py's malformed bundle is rejected → re-extract;
+      // the intact b.py stays a cache hit; output equals a clean full rebuild.
+      const incr = refreshStructuralIncremental(dir, FILES, readFile, cache);
+      expect(incr.stats.reExtracted).toEqual(["a.py"]);
+      expect(incr.stats.reused).toEqual(["b.py"]);
+      expect(subsetJson(incr.structural)).toBe(subsetJson(full)); // lossless == full, no crash
+    });
+  }
+
+  test("a fully intact bundle (valid version, matching hash) is STILL reused (cache hit preserved)", () => {
+    // Anti-vacuity for the guard: it must not over-reject valid bundles.
+    dir = tmpRepo("g4-nested-ok-");
+    write(dir, "a.py", "class Acme:\n    pass\n\ndef bar():\n    return 1\n\ndef foo():\n    return bar()\n");
+    write(dir, "b.py", "def baz():\n    return 2\n");
+    const FILES = ["a.py", "b.py"];
+
+    const cache = bundlesToCache(buildBundles(dir, FILES, readFile));
+    const full = fullStructural(dir, FILES);
+    const incr = refreshStructuralIncremental(dir, FILES, readFile, cache);
+
+    expect(incr.stats.reExtracted).toEqual([]);       // nothing changed on disk
+    expect(incr.stats.reused.sort()).toEqual(FILES);  // BOTH intact bundles reused
+    expect(subsetJson(incr.structural)).toBe(subsetJson(full));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // FIX-T4.1-2 — --incremental uses the LIVE tree, not a stale CodebaseMap (CLI)
 // ---------------------------------------------------------------------------
 

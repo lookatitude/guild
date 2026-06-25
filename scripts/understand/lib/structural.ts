@@ -488,11 +488,53 @@ export interface StructuralCache {
   files: Record<string, FileBundle>;
 }
 
+// Element-level runtime schema guards (FIX-T4.1-r2). `isReusableBundle` must
+// validate every NESTED element of a cached bundle, not just the top-level array
+// shape: `assembleStructuralGraph` dereferences `.id`/`.simpleName`/`.callees`/
+// `.bases`/`.ifaces`/edge endpoints on each element, so a current-version /
+// matching-hash bundle carrying a malformed (or `null`) element would crash or
+// silently diverge from a full rebuild. Any malformed element invalidates the
+// whole bundle → re-extract that file.
+const isStr = (x: unknown): x is string => typeof x === "string";
+const isNonEmptyStr = (x: unknown): x is string => typeof x === "string" && x !== "";
+const isStrArray = (x: unknown): x is string[] => Array.isArray(x) && x.every(isStr);
+
+/** A symbol node element must carry the identity fields assemble adds/keys on. */
+function isValidSymbolNode(n: unknown): boolean {
+  if (!n || typeof n !== "object") return false;
+  const r = n as Record<string, unknown>;
+  return isNonEmptyStr(r.id) && isStr(r.type) && isStr(r.name) && Array.isArray(r.source_refs);
+}
+
+/** A contains/structural edge element must carry string endpoints + type. */
+function isValidEdgeEl(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const r = e as Record<string, unknown>;
+  return isNonEmptyStr(r.source) && isNonEmptyStr(r.target) && isStr(r.type);
+}
+
+/** A class element must carry id/simpleName + string-array bases & ifaces. */
+function isValidClassEl(c: unknown): boolean {
+  if (!c || typeof c !== "object") return false;
+  const r = c as Record<string, unknown>;
+  return isNonEmptyStr(r.id) && isStr(r.simpleName) && isStrArray(r.bases) && isStrArray(r.ifaces);
+}
+
+/** A callable element must carry id/simpleName + a string-array callee list. */
+function isValidCallableEl(c: unknown): boolean {
+  if (!c || typeof c !== "object") return false;
+  const r = c as Record<string, unknown>;
+  return isNonEmptyStr(r.id) && isStr(r.simpleName) && isStrArray(r.callees);
+}
+
 /**
- * A cached bundle may be reused ONLY if its shape is intact and it is keyed to
- * the file it claims (FIX-T4.1-3). Guards against a truncated/tampered cache
- * entry whose `contentHash` happens to match: a structurally-broken bundle is
- * rejected and the file re-extracted, so incremental stays == full.
+ * A cached bundle may be reused ONLY if its shape is intact — top-level AND every
+ * nested element — and it is keyed to the file it claims (FIX-T4.1-3, deepened in
+ * FIX-T4.1-r2). Guards against a truncated/tampered cache entry whose
+ * `contentHash` happens to match: a structurally-broken bundle (e.g. a malformed
+ * or `null` `callables`/`classes`/`symbolNodes`/`contains` element) is rejected
+ * and the file re-extracted, so incremental stays == full (never a crash, never a
+ * divergence).
  */
 function isReusableBundle(rel: string, b: unknown): b is FileBundle {
   if (!b || typeof b !== "object") return false;
@@ -503,11 +545,11 @@ function isReusableBundle(rel: string, b: unknown): b is FileBundle {
   const fileNode = r.fileNode as Record<string, unknown> | undefined;
   if (!fileNode || typeof fileNode !== "object" || fileNode.id !== `file:${rel}`) return false;
   return (
-    Array.isArray(r.symbolNodes) &&
-    Array.isArray(r.contains) &&
-    Array.isArray(r.importSpecs) &&
-    Array.isArray(r.classes) &&
-    Array.isArray(r.callables)
+    Array.isArray(r.symbolNodes) && r.symbolNodes.every(isValidSymbolNode) &&
+    Array.isArray(r.contains) && r.contains.every(isValidEdgeEl) &&
+    isStrArray(r.importSpecs) &&
+    Array.isArray(r.classes) && r.classes.every(isValidClassEl) &&
+    Array.isArray(r.callables) && r.callables.every(isValidCallableEl)
   );
 }
 
