@@ -872,6 +872,101 @@ describe("G6 CLI import cache-clearance (containment-before-delete + fail-closed
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  // #3 MAJOR (FIX-T6.1-r8) — a cache sidecar that is ITSELF a symlink to another
+  // CONTAINED .guild/indexes file must not make the pre-import clearance delete that
+  // target. Pre-fix, assertContainedPath dereferenced the final component (both files
+  // are in-repo, so containment passed) and rmSync deleted the symlink's TARGET; the
+  // link survived. Post-fix the lexical link is unlinked and its target is untouched.
+  test("a cache sidecar that is a SYMLINK → another contained .guild/indexes file does NOT delete that target (FIX-T6.1-r8)", () => {
+    const dir = tmpRepo("g6-r8-");
+    try {
+      write(dir, "a.ts", A_TS);
+      write(dir, "b.ts", B_TS);
+      // 1) Seed a real graph + cache and export a valid snapshot, so import proceeds.
+      runExtractFull(dir, graphPathOf(dir));
+      const cachePath = `${graphPathOf(dir)}.structural-cache.json`;
+      expect(fs.existsSync(cachePath)).toBe(true); // setup is valid
+      const exp = runCli(dir, ["--export", "--force"]);
+      expect(exp.status).toBe(0);
+
+      // 2) Plant a VICTIM file inside .guild/indexes (contained), then replace the
+      //    cache sidecar with a SYMLINK pointing at that contained victim.
+      const indexesDir = path.join(dir, ".guild", "indexes");
+      const victim = path.join(indexesDir, "victim-keep-me.json");
+      const victimBody = '{"keep":"me","important":true}';
+      fs.writeFileSync(victim, victimBody, "utf8");
+      fs.rmSync(cachePath, { force: true });
+      fs.symlinkSync(victim, cachePath); // sidecar IS a symlink → another contained file
+      expect(fs.lstatSync(cachePath).isSymbolicLink()).toBe(true); // setup is valid
+
+      // 3) Import (default path) — exercises removeStaleLocalCache on the real CLI.
+      const imp = runCliBoth(dir, ["--import"]);
+      expect(imp.status).toBe(0);
+      // The clearance was contained (not the symlinked-indexes escape branch).
+      expect(imp.out).not.toContain("escapes .guild/indexes");
+
+      // Non-vacuity (FAILS pre-fix): the symlink TARGET survives byte-for-byte — the
+      // pre-fix code resolved the final symlink and rmSync-deleted the victim.
+      expect(fs.existsSync(victim)).toBe(true);
+      expect(readFile(victim)).toBe(victimBody);
+
+      // The sidecar symlink itself was removed (only the link). Any cache now present
+      // at the path is a freshly written REGULAR file, never the surviving symlink.
+      if (fs.existsSync(cachePath)) {
+        expect(fs.lstatSync(cachePath).isSymbolicLink()).toBe(false);
+      }
+
+      // The post-import structural tier still equals a from-scratch extraction (the
+      // collateral-delete did not corrupt the rebuild; round-trip preserved).
+      const imported = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
+      const scratchPath = path.join(indexesDir, "scratch-graph.json");
+      runExtractFull(dir, scratchPath);
+      const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
+      expect(JSON.stringify(structuralSubset(imported))).toBe(
+        JSON.stringify(structuralSubset(scratch)),
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Anti-vacuity for the lstat gone-check (#2/#3): a sidecar that is a DANGLING
+  // symlink (target removed) which cannot be unlinked is still seen as present and
+  // fails closed. We assert assertContainedPath's lexical-final mode directly so the
+  // gone-check semantics are pinned even where the CLI would otherwise rebuild.
+  test("lexicalFinal containment keeps the literal final symlink (does not resolve to its target) (FIX-T6.1-r8)", () => {
+    const dir = tmpRepo("g6-r8-lex-");
+    try {
+      fs.mkdirSync(path.join(dir, ".guild", "indexes"), { recursive: true });
+      const base = fs.realpathSync(path.join(dir, ".guild", "indexes"));
+      const target = path.join(base, "target.json");
+      fs.writeFileSync(target, "{}", "utf8");
+      const link = path.join(base, "side.structural-cache.json");
+      fs.symlinkSync(target, link);
+
+      // Default (resolve-final) mode dereferences the symlink → returns the TARGET.
+      expect(assertContainedPath(link, base)).toBe(target);
+      // lexicalFinal mode keeps the literal link path → deleting it removes the link.
+      expect(assertContainedPath(link, base, undefined, { lexicalFinal: true })).toBe(link);
+
+      // A symlinked PARENT escape is STILL rejected under lexicalFinal (only the final
+      // component is left lexical; parents are resolved + checked).
+      const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "g6-r8-out-")));
+      try {
+        fs.symlinkSync(outside, path.join(base, "evil"));
+        expect(() =>
+          assertContainedPath(path.join(base, "evil", "x.json"), base, undefined, {
+            lexicalFinal: true,
+          }),
+        ).toThrow(ArtifactError);
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ===========================================================================

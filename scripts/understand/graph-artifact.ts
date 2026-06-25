@@ -141,6 +141,14 @@ type CacheClearance = "cleared" | "uncontained" | "unremovable";
  *    gone; a swallowed failure that leaves an in-repo sidecar on disk must not let
  *    a stale/foreign matching-hash cache survive into the incremental reuse path
  *    (returns "unremovable"). `force: true` already treats an absent file as ok.
+ *  - #3 Lexical final component (Codex FIX-T6.1-r8). The containment check resolves
+ *    PARENT symlinks (keeping #1) but does NOT dereference the sidecar's own final
+ *    component, and the unlink + the gone-check both operate on that LEXICAL path.
+ *    A sidecar that is itself a symlink → another *contained* `.guild/indexes` file
+ *    is therefore UNLINKED (only the link is removed) — never its target deleted.
+ *    The gone-check uses `lstatSync` (NOT `existsSync`, which dereferences) so a
+ *    surviving sidecar — including a dangling symlink — is still seen as present
+ *    and fails closed to "unremovable".
  */
 function removeStaleLocalCache(
   graphPath: string,
@@ -150,16 +158,36 @@ function removeStaleLocalCache(
   const cachePath = `${graphPath}.structural-cache.json`;
   let contained: string;
   try {
-    contained = assertContainedPath(cachePath, indexesDir, repoRoot);
+    // lexicalFinal: resolve+check parent symlinks (escape rejection preserved) but
+    // keep the literal final name so the delete below targets the link, not a target.
+    contained = assertContainedPath(cachePath, indexesDir, repoRoot, { lexicalFinal: true });
   } catch {
     return "uncontained"; // escapes the repo → refuse to delete anything
   }
   try {
+    // rmSync does NOT follow a final symlink → removes the link itself, not its
+    // target. A regular sidecar file is removed normally.
     fs.rmSync(contained, { force: true });
   } catch {
-    /* fall through to the existence check — fail closed if it survived */
+    /* fall through to the lstat check — fail closed if it survived */
   }
-  return fs.existsSync(contained) ? "unremovable" : "cleared";
+  return sidecarPresent(contained) ? "unremovable" : "cleared";
+}
+
+/**
+ * Does a path still have a directory entry? `lstatSync` (NOT `existsSync`) so the
+ * final component is never dereferenced: a surviving sidecar symlink — even a
+ * dangling one whose target was deleted — is correctly seen as present (fail
+ * closed), and an unlinked symlink whose contained target still exists is correctly
+ * seen as gone (the link is what we removed). (Codex FIX-T6.1-r8.)
+ */
+function sidecarPresent(p: string): boolean {
+  try {
+    fs.lstatSync(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

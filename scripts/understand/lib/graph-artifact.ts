@@ -155,8 +155,21 @@ export class ArtifactError extends Error {
  * realpath of the base is asserted to stay within the realpath of the repo root
  * BEFORE it is trusted as the containment base — a symlinked base that escapes
  * the repo is refused.
+ *
+ * `opts.lexicalFinal` (Codex FIX-T6.1-r8): when set, every PARENT component is
+ * still resolved through symlinks and containment-checked (so the symlinked-parent
+ * escape rejection above still holds), but the FINAL component is NOT
+ * dereferenced — the returned path keeps the literal final name. A caller that
+ * then DELETES the returned path unlinks the sidecar ITSELF (the link), never the
+ * file it points at: a cache sidecar that is a symlink to another *contained*
+ * `.guild/indexes` file must not make deletion remove that target.
  */
-export function assertContainedPath(candidate: string, baseDir: string, repoRoot?: string): string {
+export function assertContainedPath(
+  candidate: string,
+  baseDir: string,
+  repoRoot?: string,
+  opts: { lexicalFinal?: boolean } = {},
+): string {
   const base = fs.realpathSync(baseDir);
   // Repo-anchor the containment base: a symlinked `baseDir` resolving outside the
   // repo root must not become a (relocated) containment root (Codex FIX-T6.1-r3 #1).
@@ -183,9 +196,14 @@ export function assertContainedPath(candidate: string, baseDir: string, repoRoot
   // any symlink BEFORE appending the nonexistent tail, then re-assert containment.
   let real = base;
   let exhausted = false; // once a component is missing, the rest is a literal tail
-  for (const seg of path.relative(base, resolved).split(path.sep)) {
-    real = path.join(real, seg);
+  const segs = path.relative(base, resolved).split(path.sep);
+  for (let i = 0; i < segs.length; i++) {
+    real = path.join(real, segs[i]);
     if (exhausted) continue;
+    // lexicalFinal (Codex FIX-T6.1-r8): never dereference the LAST component, so a
+    // caller that DELETES this path unlinks the link itself rather than following it
+    // to a (possibly in-repo) target. Parents are still resolved + checked above.
+    if (opts.lexicalFinal && i === segs.length - 1) continue;
     let stat: fs.Stats;
     try {
       stat = fs.lstatSync(real);
