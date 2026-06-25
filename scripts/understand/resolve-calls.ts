@@ -72,10 +72,21 @@ export function refineCalls(
 
   const nonCall = base.edges.filter((e) => e.type !== "calls");
 
+  // FIX G2-1 (BLOCKER): partition the existing `calls` edges by provenance. ONLY
+  // our own G1 syntactic edges (extractor "structural-v1") are eligible for G2
+  // replacement/re-tag. EVERY other `calls` edge — LLM-tier, future extractors —
+  // is "unrelated" and preserved verbatim, even on a fully-enriched graph. The
+  // previous code dropped non-handled foreign calls into the re-tag bucket (and
+  // dropped handled-file foreign calls entirely), corrupting/erasing enrichment.
+  const isG1Call = (e: GraphEdge) =>
+    e.type === "calls" && (e as Record<string, unknown>).extractor === STRUCTURAL_EXTRACTOR;
+  const foreignCalls: GraphEdge[] = base.edges.filter((e) => e.type === "calls" && !isG1Call(e));
+
   // Keep G1 syntactic calls only for languages G2 does NOT resolve; re-tag so
-  // EVERY calls edge has a confidence field (G2 gate item 3).
+  // EVERY structural calls edge has a confidence field (G2 gate item 3). G1 calls
+  // on handled (ts/js/py) files are dropped here — refined edges replace them.
   const keptG1: GraphEdge[] = base.edges
-    .filter((e) => e.type === "calls" && !handledRel.has(relpathOf(e.source)))
+    .filter((e) => isG1Call(e) && !handledRel.has(relpathOf(e.source)))
     .map((e) => ({ ...e, confidence: "low", resolution: "g1-syntactic", backend: "g1-syntactic" }));
 
   let droppedMissingNode = 0;
@@ -96,11 +107,15 @@ export function refineCalls(
     });
   }
 
-  // union by type|source|target (resolved wins over any kept G1 collision)
+  // union by type|source|target. Resolved (G2) wins over any kept G1 collision;
+  // foreign (non-structural) calls are applied LAST so an enriched/LLM-tier edge
+  // is NEVER clobbered — it is "unrelated" to G2 and must survive intact (G2-1).
+  const ekey = (e: GraphEdge) => `${e.type}|${e.source}|${e.target}`;
   const byKey = new Map<string, GraphEdge>();
-  for (const e of nonCall) byKey.set(`${e.type}|${e.source}|${e.target}`, e);
-  for (const e of keptG1) byKey.set(`${e.type}|${e.source}|${e.target}`, e);
-  for (const e of refined) byKey.set(`${e.type}|${e.source}|${e.target}`, e);
+  for (const e of nonCall) byKey.set(ekey(e), e);
+  for (const e of keptG1) byKey.set(ekey(e), e);
+  for (const e of refined) byKey.set(ekey(e), e);
+  for (const e of foreignCalls) byKey.set(ekey(e), e);
 
   const g = canonicalize({ nodes: base.nodes, edges: [...byKey.values()] });
   return { nodes: g.nodes, edges: g.edges, droppedMissingNode };
@@ -144,8 +159,10 @@ function main(): void {
   const out: Record<string, unknown> = {
     version: existing?.version ?? SCHEMA.knowledgeGraph,
     kind: existing?.kind ?? "codebase",
-    // FIX G1-4: commit metadata in the sidecar only; graph is commit-independent.
-    generated_from_commit: existing?.generated_from_commit ?? "structural",
+    // FIX G2-2 (determinism): commit metadata lives in the sidecar only; ALWAYS
+    // write the commit-independent constant so a stale sha on a pre-fix graph is
+    // normalized away rather than carried forward.
+    generated_from_commit: "structural",
     project: existing?.project ?? { name: path.basename(repoRoot), description: "" },
     nodes: refined.nodes,
     edges: refined.edges,
@@ -169,8 +186,10 @@ function main(): void {
     process.exit(1);
   }
 
+  // FIX G2-3: persist the VALIDATED graph (validation.data), not the original
+  // `out` — never write an artifact that differs from what the validator accepted.
   try {
-    writeJson(outPath, out);
+    writeJson(outPath, validation.data);
   } catch (err) {
     process.stderr.write(`[resolve-calls] ERROR writing graph: ${String(err)}\n`);
     process.exit(1);

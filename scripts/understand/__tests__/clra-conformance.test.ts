@@ -52,6 +52,9 @@ interface Oracle {
   fixtureRoot: string;
   files: string[];
   calls: Array<{ from: string; to: string; cross_file: boolean }>;
+  /** G2 method-dispatch ground truth: caller → Class.method (TS only — Python has
+   *  no type inference for instance method calls). */
+  methodCalls: Array<{ from: string; to: string; cross_file: boolean }>;
   imports: Array<{ importer: string; source: string; symbols: string[] }>;
   inherits: Array<{ child: string; parent: string }>;
   implements: Array<{ class: string; interface: string }>;
@@ -213,6 +216,40 @@ function checkOracleConsistency(oracle: Oracle): string[] {
     }
   }
 
+  // FIX G2-7 (method dispatch): caller resolves as a function; callee is a
+  // Class.method whose class exists, whose method is defined in the class file,
+  // and which has a MEMBER call site (`.method(`) in the caller body. cross_file
+  // is accurate. This grounds the method-dispatch precision/recall claim.
+  for (const c of oracle.methodCalls ?? []) {
+    resolveSymbol(c.from, ["function"]);
+    const toP = parseNodeId(c.to);
+    const dot = toP.name ? toP.name.indexOf(".") : -1;
+    if (!toP.name || dot < 0) {
+      violations.push(`methodCalls "${c.to}": expected a "Class.method" callee id`);
+      continue;
+    }
+    const cls = toP.name.slice(0, dot);
+    const method = toP.name.slice(dot + 1);
+    if (!idx.fileExists(toP.relpath)) {
+      violations.push(`methodCalls "${c.to}": file "${toP.relpath}" not in fixture`);
+    } else if (!idx.hasClass(toP.relpath, cls)) {
+      violations.push(`methodCalls "${c.to}": class "${cls}" not found in "${toP.relpath}"`);
+    } else if (!new RegExp(`\\b${escapeRe(method)}\\s*\\(`).test(idx.source(toP.relpath))) {
+      violations.push(`methodCalls "${c.to}": method "${method}" not defined in "${toP.relpath}"`);
+    }
+    const fromRel = parseNodeId(c.from).relpath;
+    if ((fromRel !== toP.relpath) !== c.cross_file) {
+      violations.push(`methodCalls "${c.from}"→"${c.to}": cross_file=${c.cross_file} but files are ${fromRel} vs ${toP.relpath}`);
+    }
+    const fromP = parseNodeId(c.from);
+    if (fromP.name) {
+      const body = functionBody(idx, fromP.relpath, fromP.name);
+      if (body !== null && !new RegExp(`\\.${escapeRe(method)}\\s*\\(`).test(body)) {
+        violations.push(`methodCalls "${c.from}"→"${c.to}": no ".${method}(" call site in "${fromP.name}" body`);
+      }
+    }
+  }
+
   // imports: importer resolves and the declared import actually exists in source
   for (const imp of oracle.imports) {
     const p = parseNodeId(imp.importer);
@@ -340,6 +377,18 @@ describe("CLRA fixture — oracle self-consistency", () => {
       cross_file: true,
     });
     expect(checkOracleConsistency(o).some((v) => v.includes("no call site"))).toBe(true);
+  });
+
+  test("anti-vacuity: a method call with no member call site in the caller is caught", () => {
+    const o = loadOracle();
+    // Circle.area is a real method, but main never calls `.draw2(` — fabricate a
+    // method-dispatch oracle entry whose call site is absent from main's body.
+    o.methodCalls.push({
+      from: "function:src/a.ts:main",
+      to: "function:src/shapes.ts:Circle.area2",
+      cross_file: true,
+    });
+    expect(checkOracleConsistency(o).some((v) => v.includes("methodCalls"))).toBe(true);
   });
 
   test("anti-vacuity: a non-clone pair of existing functions is caught (masked-body check)", () => {
@@ -548,13 +597,17 @@ describe("[G1+G2] structural extraction + resolved calls match the oracle", () =
     return { nodes: refined.nodes as unknown as Array<Record<string, unknown>>, edges: refined.edges };
   }
 
-  // module-level function = function:<rel>:<name> with no "." in the name (excludes methods)
+  // module-level function = function:<rel>:<name> with no "." in the name. The
+  // module-level precision/recall test below is SCOPED to these; method dispatch
+  // (Class.method) is measured SEPARATELY against oracle.methodCalls (FIX G2-7) so
+  // the method-resolution claim is backed by its own non-vacuous measurement.
   const relOf = (id: string) => {
     const parts = id.split(":");
     return parts[0] === "file" ? parts.slice(1).join(":") : parts.slice(1, -1).join(":");
   };
   const nameOf = (id: string) => id.split(":").slice(2).join(":");
   const isModuleFn = (id: string) => id.startsWith("function:") && !nameOf(id).includes(".");
+  const isMethodFn = (id: string) => id.startsWith("function:") && nameOf(id).includes(".");
 
   function prAndRecall(predicted: Set<string>, oracle: Set<string>) {
     let hit = 0;
@@ -591,6 +644,39 @@ describe("[G1+G2] structural extraction + resolved calls match the oracle", () =
     expect(ts.recall).toBeGreaterThanOrEqual(0.85);
     expect(py.precision).toBeGreaterThanOrEqual(0.80);
     expect(py.recall).toBeGreaterThanOrEqual(0.80);
+  });
+
+  test("method dispatch — TS Class.method resolution precision/recall ≥ 85% (measured, non-vacuous)", () => {
+    const o = loadOracle();
+    const g = buildGraph();
+
+    // Predicted = compiler-resolved method-dispatch edges (resolution:"method")
+    // whose caller AND callee are TS method/function ids. Python instance method
+    // calls are out of scope (no type inference) and excluded by the .ts filter.
+    const predicted = new Set(
+      (g.edges as GraphEdge[])
+        .filter(
+          (e) =>
+            e.type === "calls" &&
+            (e as Record<string, unknown>).resolution === "method" &&
+            isMethodFn(e.target) &&
+            relOf(e.source).endsWith(".ts"),
+        )
+        .map((e) => `${e.source}->${e.target}`),
+    );
+    const oracleSet = new Set((o.methodCalls ?? []).map((c) => `${c.from}->${c.to}`));
+
+    // Non-vacuity: the oracle actually carries method-dispatch cases to measure.
+    expect(oracleSet.size).toBeGreaterThan(0);
+
+    const m = prAndRecall(predicted, oracleSet);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[G2 oracle] TS method-dispatch precision=${(m.precision * 100).toFixed(1)}% recall=${(m.recall * 100).toFixed(1)}% (${predicted.size} predicted, ${oracleSet.size} oracle)`,
+    );
+
+    expect(m.precision).toBeGreaterThanOrEqual(0.85);
+    expect(m.recall).toBeGreaterThanOrEqual(0.85);
   });
 
   test("every oracle call is present, with the correct (cross-file) target node id", () => {

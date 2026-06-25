@@ -497,6 +497,76 @@ describe("FIX G1-2/3/4 — real extract-structural.ts CLI on a git repo", () => 
 });
 
 // ---------------------------------------------------------------------------
+// FIX G2-2 + G2-3 — CLI normalizes a stale sha AND writes the VALIDATED graph
+// ---------------------------------------------------------------------------
+
+describe("FIX G2-2/G2-3 — stale sha normalized + validated graph written (real CLI)", () => {
+  const SCRIPTS_DIR = path.resolve(__dirname, "..", "..");
+  const CLI = path.join(SCRIPTS_DIR, "understand", "extract-structural.ts");
+  let repo: string;
+  const KG = () => path.join(repo, ".guild", "indexes", "knowledge-graph.json");
+
+  function git(args: string[]): void {
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: repo, stdio: "ignore" });
+  }
+  function runCli(): void {
+    execFileSync("npx", ["tsx", CLI, "--cwd", repo], { cwd: SCRIPTS_DIR, stdio: "ignore" });
+  }
+
+  beforeAll(() => {
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), "g2-norm-"));
+    fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "src", "a.ts"), "export function foo(): number {\n  return 1;\n}\n", "utf8");
+    git(["init"]);
+    git(["add", "-A"]);
+    git(["commit", "-m", "fixture"]);
+
+    // Seed a PRE-EXISTING graph that (1) carries a stale 40-hex commit sha and
+    // (2) holds a non-structural node MISSING `confidence` — which the validator
+    // auto-fixes to "low". A faithful run must normalize BOTH.
+    const idxDir = path.join(repo, ".guild", "indexes");
+    fs.mkdirSync(idxDir, { recursive: true });
+    const staleSha = "a".repeat(40);
+    const seeded = {
+      version: "guild.knowledge_graph.v1",
+      kind: "codebase",
+      generated_from_commit: staleSha,
+      project: { name: "seeded", description: "" },
+      nodes: [
+        // non-structural LLM-tier node, deliberately missing `confidence`
+        { id: "concept:domain", type: "concept", name: "Domain", source_refs: ["src/a.ts"] },
+      ],
+      edges: [],
+      layers: [],
+      tour: [],
+    };
+    fs.writeFileSync(KG(), JSON.stringify(seeded), "utf8");
+    runCli();
+  });
+
+  afterAll(() => {
+    if (repo) fs.rmSync(repo, { recursive: true, force: true });
+  });
+
+  test("FIX G2-2: a stale 40-hex sha in the existing graph is normalized to \"structural\"", () => {
+    const g = JSON.parse(fs.readFileSync(KG(), "utf8")) as Record<string, unknown>;
+    expect(g.generated_from_commit).toBe("structural");
+    expect(String(g.generated_from_commit)).not.toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  test("FIX G2-3: the written graph is the VALIDATED one (validator auto-fix applied on disk)", () => {
+    const g = JSON.parse(fs.readFileSync(KG(), "utf8")) as { nodes: Array<Record<string, unknown>> };
+    const concept = g.nodes.find((n) => n.id === "concept:domain");
+    expect(concept).toBeDefined();
+    // The seeded node had NO confidence; writing validation.data (not the raw
+    // `out`) means the auto-fixed default is what landed on disk.
+    expect(concept!.confidence).toBe("low");
+    // And the on-disk artifact re-validates clean (idempotent).
+    expect(validateGraph(g).success).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. Perf note (recorded, not gated)
 // ---------------------------------------------------------------------------
 

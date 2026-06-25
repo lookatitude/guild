@@ -20,6 +20,10 @@
     { "from": "function:py/a.py:main", "to": "function:py/a.py:sum_list_one", "cross_file": false },
     { "from": "function:py/a.py:main", "to": "function:py/a.py:sum_list_two", "cross_file": false }
   ],
+  "methodCalls": [
+    { "from": "function:src/a.ts:main", "to": "function:src/shapes.ts:Circle.draw", "cross_file": true },
+    { "from": "function:src/a.ts:main", "to": "function:src/shapes.ts:Circle.area", "cross_file": true }
+  ],
   "imports": [
     { "importer": "file:src/a.ts", "source": "./b", "symbols": ["add", "multiply"] },
     { "importer": "file:src/a.ts", "source": "./shapes", "symbols": ["Circle"] },

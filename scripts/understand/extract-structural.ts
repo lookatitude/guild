@@ -71,10 +71,12 @@ function main(): void {
   const out: Record<string, unknown> = {
     version: existing?.version ?? SCHEMA.knowledgeGraph,
     kind: existing?.kind ?? "codebase",
-    // FIX G1-4: commit/run metadata lives in the SIDECAR only. The graph artifact
-    // is a pure function of (source, config) — never the HEAD sha — so two
-    // identical trees at different commits produce byte-identical graphs.
-    generated_from_commit: existing?.generated_from_commit ?? "structural",
+    // FIX G2-2 (determinism): commit/run metadata lives in the SIDECAR only. The
+    // graph artifact is a pure function of (source, config) — never the HEAD sha —
+    // so two identical trees at different commits produce byte-identical graphs.
+    // ALWAYS write the commit-independent constant: a stale sha carried by an
+    // existing (pre-fix) graph must be NORMALIZED away, not preserved.
+    generated_from_commit: "structural",
     project: existing?.project ?? { name: path.basename(repoRoot), description: "" },
     nodes: merged.nodes,
     edges: merged.edges,
@@ -99,8 +101,12 @@ function main(): void {
     process.exit(1);
   }
 
+  // FIX G2-3: write the VALIDATED graph (validation.data), not the original `out`.
+  // Any auto-fix/normalization the validator applied is then what lands on disk —
+  // we never persist an unvalidated artifact that silently differs from what the
+  // validator accepted.
   try {
-    writeJson(outPath, out);
+    writeJson(outPath, validation.data);
   } catch (err) {
     process.stderr.write(`[extract-structural] ERROR writing graph: ${String(err)}\n`);
     process.exit(1);

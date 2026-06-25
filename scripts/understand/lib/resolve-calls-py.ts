@@ -2,17 +2,18 @@
  * understand/lib/resolve-calls-py.ts — LANE G2 import-aware Python call resolution.
  *
  * Python has no compiler API, so this is an **import-aware symbol-table
- * resolver** (goals.md G2): parse `from MOD import a, b as c` / `import MOD`,
- * resolve MOD → file (relative + dotted), then resolve each in-function call
- * name → a top-level def. Confidence tiers:
- *   high   — name bound by an import to a def in the target file, OR a same-file
- *            top-level def
- *   medium — exactly one global def of that name (not import-confirmed)
- *   low    — ambiguous (multiple global defs): a deterministic pick is KEPT, not
- *            dropped (G2 gate item 3 — no silent drops)
+ * resolver** (goals.md G2): parse `from MOD import a, b as c` and `import MOD`,
+ * resolve MOD → file (relative + dotted), then resolve each in-function call to a
+ * top-level def — but ONLY with import or same-file evidence:
+ *   - bare `name()`     → high, when bound by `from … import name` to a def in the
+ *                         target file, OR a same-file top-level def
+ *   - qualified `m.fn()` → high, when receiver `m` is bound by `import m` (incl.
+ *                         `import m as x` / dotted) to a file defining `fn`
  *
- * Method calls (`obj.method()`) and external/builtin calls (`print`, `range`)
- * have no resolvable top-level def and produce no edge (counted as dynamic).
+ * FIX G2-6: there is NO cross-file global-name fallback. A bare name without
+ * import/same-file evidence is treated as external/dynamic (no edge) rather than
+ * falsely linked to a same-named def in another file. Method calls on instances
+ * (`obj.method()`) and builtins (`print`, `range`) likewise produce no edge.
  * Deterministic, model-free, no network.
  */
 
@@ -43,7 +44,8 @@ interface PyFile {
   lines: string[];
   topDefs: Map<string, Callable>;     // name → top-level function
   callables: Callable[];              // top-level functions + methods
-  imports: Map<string, ImportBinding>; // local binding name → resolved import
+  imports: Map<string, ImportBinding>; // local binding name → resolved import (from … import)
+  moduleImports: Map<string, string>; // local receiver name → resolved module file (import …)
 }
 
 function indentEnd(lines: string[], start: number): number {
@@ -62,6 +64,9 @@ const RE_FROM = /^\s*from\s+(\.*)([\w.]*)\s+import\s+(.+)$/;
 const RE_IMPORT = /^\s*import\s+(.+)$/;
 // call names NOT preceded by '.' (excludes method calls) or a word char
 const RE_CALL = /(?<![.\w])([A-Za-z_]\w*)\s*\(/g;
+// FIX G2-5: qualified calls `receiver(.seg)*.method(` — receiver is a dotted
+// path (`b`, `a.b`), method is the final attribute. Used to resolve module calls.
+const RE_QUAL_CALL = /(?<![.\w])([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.([A-Za-z_]\w*)\s*\(/g;
 
 /** Resolve a python module spec to a known repo-relative file, or null. */
 function resolveModule(
@@ -102,6 +107,7 @@ function parsePyFile(rel: string, content: string, fileSet: Set<string>): PyFile
   const topDefs = new Map<string, Callable>();
   const callables: Callable[] = [];
   const imports = new Map<string, ImportBinding>();
+  const moduleImports = new Map<string, string>();
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -123,8 +129,21 @@ function parsePyFile(rel: string, content: string, fileSet: Set<string>): PyFile
     }
     const mImport = !mFrom ? line.match(RE_IMPORT) : null;
     if (mImport && !/^\s*import\s+\(/.test(line)) {
-      // `import x`, `import x.y as z` — module-level binding (attribute calls skipped)
-      // recorded for completeness; not used for bare-name resolution.
+      // FIX G2-5: `import b`, `import b as c`, `import a.b as c`, `import a.b`,
+      // and comma lists. Record receiver-name → resolved module file so qualified
+      // calls (`b.add()`, `c.add()`, `a.b.add()`) resolve. The receiver bound in
+      // code is the alias when present, else the FULL dotted module path
+      // (`import a.b` is referenced as `a.b.x`).
+      for (const clause of mImport[1].split(",")) {
+        const seg = clause.trim();
+        if (!seg) continue;
+        const [modRaw, aliasRaw] = seg.split(/\s+as\s+/).map((s) => s.trim());
+        if (!/^[A-Za-z_][\w.]*$/.test(modRaw)) continue;
+        const targetRel = resolveModule(rel, "", modRaw, fileSet);
+        if (!targetRel) continue;
+        const receiver = aliasRaw && /^[A-Za-z_]\w*$/.test(aliasRaw) ? aliasRaw : modRaw;
+        moduleImports.set(receiver, targetRel);
+      }
       continue;
     }
 
@@ -158,7 +177,7 @@ function parsePyFile(rel: string, content: string, fileSet: Set<string>): PyFile
     }
   }
 
-  return { rel, lines, topDefs, callables, imports };
+  return { rel, lines, topDefs, callables, imports, moduleImports };
 }
 
 /**
@@ -179,15 +198,6 @@ export function resolvePyCalls(
     let content: string;
     try { content = readFile(`${repoRoot}/${rel}`); } catch { continue; }
     files.push(parsePyFile(rel.replace(/\\/g, "/"), content, fileSet));
-  }
-
-  // global top-level def name → files that define it (for medium/low fallback)
-  const globalDefs = new Map<string, string[]>();
-  for (const f of files) {
-    for (const name of f.topDefs.keys()) {
-      if (!globalDefs.has(name)) globalDefs.set(name, []);
-      globalDefs.get(name)!.push(f.rel);
-    }
   }
 
   const out: ResolvedCall[] = [];
@@ -217,6 +227,8 @@ export function resolvePyCalls(
       const caller = enclosing(line1);
       if (!caller) continue;
       const codeLine = stripPy(f.lines[i]);
+
+      // ── Bare-name calls: `add(...)` ──────────────────────────────────────
       let m: RegExpExecArray | null;
       RE_CALL.lastIndex = 0;
       while ((m = RE_CALL.exec(codeLine)) !== null) {
@@ -224,7 +236,7 @@ export function resolvePyCalls(
         if (PY_KEYWORDS.has(name)) continue;
         if (name === caller.simpleName) continue; // skip recursion/self
 
-        // 1) import-bound name → target file's def
+        // 1) import-bound name (`from MOD import name`) → target file's def
         const imp = f.imports.get(name);
         if (imp) {
           const tf = files.find((x) => x.rel === imp.targetRel);
@@ -233,8 +245,8 @@ export function resolvePyCalls(
             if (to !== caller.id) {
               push({ from: caller.id, to, confidence: "high", crossFile: imp.targetRel !== f.rel, kind: "function", backend: "py-imports" });
             }
-            continue;
           }
+          continue;
         }
         // 2) same-file top-level def
         if (f.topDefs.has(name)) {
@@ -244,19 +256,27 @@ export function resolvePyCalls(
           }
           continue;
         }
-        // 3) global fallback
-        const defs = globalDefs.get(name);
-        if (defs && defs.length === 1) {
-          push({ from: caller.id, to: `function:${defs[0]}:${name}`, confidence: "medium", crossFile: defs[0] !== f.rel, kind: "function", backend: "py-imports" });
-          continue;
+        // FIX G2-6: NO cross-file global fallback. A bare name with no import and
+        // no same-file def is external/builtin/dynamic — resolving it to a unique
+        // (or lexicographically-picked) def in ANOTHER file falsely links an
+        // unimported name across files. Leave it unresolved (reported as dynamic).
+      }
+
+      // ── Qualified module calls: `b.add(...)`, `a.b.add(...)` ─────────────
+      // FIX G2-5: resolve `import b; b.add()` (and aliased / dotted variants) by
+      // matching the receiver against the module-import bindings.
+      RE_QUAL_CALL.lastIndex = 0;
+      while ((m = RE_QUAL_CALL.exec(codeLine)) !== null) {
+        const receiver = m[1];
+        const method = m[2];
+        const targetRel = f.moduleImports.get(receiver);
+        if (!targetRel) continue; // receiver is a local object / unimported → skip
+        const tf = files.find((x) => x.rel === targetRel);
+        if (!tf || !tf.topDefs.has(method)) continue; // attribute is not a top-level def
+        const to = `function:${targetRel}:${method}`;
+        if (to !== caller.id) {
+          push({ from: caller.id, to, confidence: "high", crossFile: targetRel !== f.rel, kind: "function", backend: "py-imports" });
         }
-        if (defs && defs.length > 1) {
-          // ambiguous: deterministic pick (lexicographically first), KEPT as low
-          const pick = [...defs].sort()[0];
-          push({ from: caller.id, to: `function:${pick}:${name}`, confidence: "low", crossFile: pick !== f.rel, kind: "function", backend: "py-imports" });
-          continue;
-        }
-        // else external/builtin/dynamic — no internal target
       }
     }
   }
