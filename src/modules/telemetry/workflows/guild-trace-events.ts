@@ -86,7 +86,8 @@ export type RecallBranch =
   | "file-bm25"   // branch B — in-process BM25
   | "fs-scan"     // branch C — last-resort fs scan
   | "kg-query"    // branch D — knowledge-graph 2-hop
-  | "combined"    // wiki + KG both contributed
+  | "structural"  // branch E (G7) — model-free graph-query structural channel
+  | "combined"    // wiki + KG (+ structural) both contributed
   | "empty";      // no results from any branch
 
 export interface GuildTraceRecallV1 extends GuildTraceEventBase {
@@ -306,7 +307,7 @@ function validateBase(ev: unknown): ValidationResult {
 }
 
 const DISPATCH_BACKENDS: DispatchBackend[] = ["agent", "tmux", "remote", "unknown"];
-const RECALL_BRANCHES: RecallBranch[] = ["sqlite", "file-bm25", "fs-scan", "kg-query", "combined", "empty"];
+const RECALL_BRANCHES: RecallBranch[] = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
 const SECURITY_OUTCOMES: SecurityDecisionOutcome[] = ["allow", "ask", "deny", "audit", "pass-through"];
 const DEGRADATION_SURFACES: DegradationSurface[] = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
 
