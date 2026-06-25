@@ -90,6 +90,18 @@ export interface ProtectChunksOpts {
    * Pass "wikiRecall" from the SQLite path for audit-trail continuity.
    */
   callerTool?: string;
+  /**
+   * D-RECALL (G7 finding-2): NO-OPERATOR mode. When true, any chunk that would
+   * classify "operator" (unwrapped, authoritative) is FORCED down to "trusted"
+   * and WRAPPED instead. Graph-derived channels (structural / KG) pass this so a
+   * node whose `source_path` happens to match an operator allowlist pattern
+   * (e.g. a code file under a `principles/` dir, or a node id containing
+   * `goals.md`) can NEVER land as raw operator content. Operator tier is
+   * legitimate ONLY for the wiki branches (real operator pages); a structural/KG
+   * hit must always stay trust-tier wrapped. Default (false) preserves the wiki
+   * path's operator behaviour byte-for-byte.
+   */
+  noOperator?: boolean;
 }
 
 export interface ProtectChunksResult {
@@ -313,7 +325,12 @@ export function protectChunks(
     }
 
     // Step 2: Trust-tier classify + wrap (clean chunks only).
-    const tier = classifyTrustTier(source_path, content);
+    // G7 finding-2: NO-OPERATOR mode forces a would-be "operator" classification
+    // (granted by the path allowlist) down to wrapped "trusted" for graph-derived
+    // channels, so a structural/KG hit can never escape the trust-tier wrapper as
+    // raw operator content — even when its source_path matches an operator pattern.
+    const rawTier = classifyTrustTier(source_path, content);
+    const tier: TrustTier = opts.noOperator && rawTier === "operator" ? "trusted" : rawTier;
     let rendered: string;
     if (tier === "operator") {
       // Operator pages are authoritative — include without wrapping.

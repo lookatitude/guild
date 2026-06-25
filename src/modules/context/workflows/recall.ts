@@ -52,7 +52,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 
 import { DEFAULT_INDEX_BLOCK, type IndexBlock } from "../../state";
-import { wikiRecall } from "./wiki-recall";
+import { wikiRecall, isIdentifierAwareQuery } from "./wiki-recall";
 import { fsScan } from "./fs-scanner";
 import { protectChunks, type ProtectedChunk } from "./recall-protect";
 import { tokenize, tokenizeIdentifierAware, bm25Score } from "../../knowledge";
@@ -549,6 +549,9 @@ function kgQueryBranch(
     runDir,
     runId,
     callerTool: "recall:kg-query",
+    // G7 finding-2: KG nodes are DEFAULT-DENY untrusted and must never land as raw
+    // operator content even if a node id coincides with an operator path pattern.
+    noOperator: true,
   });
   return { source: "kg-query", chunks, directive, topScore };
 }
@@ -630,8 +633,13 @@ export function classifyStructuralIntent(query: string): StructuralIntent | null
     new RegExp(`\\bwhat\\s+${STRUCT_SYMBOL}\\s+calls\\b`, "i").exec(q);
   if (m) return { kind: "trace", direction: "outbound", target: m[1] };
   // Imports / defines / neighbours ("imports of X", "what imports X", "neighbors of X").
+  // G7 finding-1 (PRECISION): the generic semantic phrase `related to X` was REMOVED —
+  // it routed ordinary semantic recall (e.g. "related to billing") into the structural
+  // channel. Every alternative here now requires an EXPLICIT graph/code term
+  // (imports / defines / neighbors) plus a symbol-shaped token, so a plain semantic
+  // query never misroutes; it falls through to the wiki/KG waterfall (returns null).
   m =
-    new RegExp(`\\b(?:imports?\\s+of|what\\s+imports|neighbou?rs?\\s+of|related\\s+to|defines?)\\s+${STRUCT_SYMBOL}`, "i").exec(q);
+    new RegExp(`\\b(?:imports?\\s+of|what\\s+imports|neighbou?rs?\\s+of|defines?)\\s+${STRUCT_SYMBOL}`, "i").exec(q);
   if (m) return { kind: "neighbors", target: m[1] };
   return null;
 }
@@ -697,8 +705,11 @@ function structuralBranch(
   if (scoped.length === 0) return null;
 
   const rawHits = scoped.slice(0, limit).map((n) => ({
-    // source_path is the node's first source file (line anchor stripped) so it is
-    // a real, non-operator path; full #Lx-Ly anchors live in the frontmatter refs.
+    // source_path is the node's first source file (line anchor stripped); full
+    // #Lx-Ly anchors live in the frontmatter refs. NOTE: this path can coincide
+    // with an operator allowlist pattern (e.g. a code file under `principles/`),
+    // so the protect call below runs in NO-OPERATOR mode — a structural hit is
+    // ALWAYS trust-tier wrapped, never raw/operator (G7 finding-2).
     source_path: n.source_refs[0]?.split("#")[0] ?? `.guild/indexes/knowledge-graph.json#${n.id}`,
     content: structuralNodeContent(n),
   }));
@@ -707,6 +718,8 @@ function structuralBranch(
     runDir,
     runId,
     callerTool: "recall:structural",
+    // G7 finding-2: structural chunks never escape the trust wrapper as operator.
+    noOperator: true,
   });
   return { source: "structural", chunks, directive };
 }
@@ -749,29 +762,48 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   // Merge test-seam overrides into DEFAULT_INDEX_BLOCK.
   const indexConfig: IndexBlock = { ...DEFAULT_INDEX_BLOCK, ..._indexConfig };
 
+  // ── Structural (branch E, G7) — runs FIRST, BEFORE any wiki file sweep ──────
+  // G7 finding-3: the structural channel answers a structural-intent query
+  // (callers/callees/imports/dead-code/impact) from the FROZEN knowledge-graph.json
+  // at 0 model tokens / 0 file sweep. It MUST be classified+run BEFORE the wiki
+  // waterfall — otherwise the expensive SQLite/BM25/fs-scan file sweep runs first
+  // and the "0-token structural before any file sweep" claim is false. When
+  // structural FULLY answers, the wiki waterfall is SKIPPED entirely (no file
+  // sweep at all). Returns null for non-structural queries (the common case), in
+  // which case the wiki waterfall runs exactly as before (byte-identical default).
+  const structuralResult: RecallResult | null = structuralBranch(
+    query, cwd, category, limit, runDir, runId,
+  );
+  const structuralAnswered = (structuralResult?.chunks.length ?? 0) > 0;
+
   // ── Wiki waterfall: A → B → C (first non-null wins for wiki content) ────────
+  // SKIPPED when structural fully answered (G7 finding-3): a structural query
+  // never triggers a wiki file sweep. Otherwise:
   // Composite mode bypasses the sqlite-FTS cache: re-ranking by recency ×
   // importance + the gate is applied in the file-BM25 branch, which owns the
   // raw relevance score. (The sqlite cache returns pre-ranked chunks without
   // exposed scores.) Default mode is unchanged → byte-identical.
-  const sqlite = composite ? null : sqliteBranch(query, cwd, indexConfig, limit, runDir, runId);
-  const bm25wiki = sqlite
+  // G7 finding-4: identifier-shaped queries (camel/snake) ALSO bypass the sqlite
+  // branch — the FTS path tokenizes them differently from the identifier-aware
+  // file-BM25 path, so routing them through file-BM25 keeps index:on == index:off.
+  const identifierAware = isIdentifierAwareQuery(query);
+  const bypassSqlite = composite || identifierAware;
+  const sqlite = structuralAnswered || bypassSqlite
+    ? null
+    : sqliteBranch(query, cwd, indexConfig, limit, runDir, runId);
+  const bm25wiki = structuralAnswered || sqlite
     ? null
     : _bm25Disabled
       ? null
       : fileBm25Branch(query, cwd, category, limit, runDir, runId, composite);
-  const wikiResult: RecallResult =
-    sqlite ?? bm25wiki ?? fsScanBranch(query, cwd, category, limit, runDir, runId);
+  const wikiResult: RecallResult = structuralAnswered
+    ? { source: "structural", chunks: [], directive: null }
+    : sqlite ?? bm25wiki ?? fsScanBranch(query, cwd, category, limit, runDir, runId);
 
-  // ── Structural (branch E, G7): model-free graph-query channel ──────────────
-  // Additive + PREPENDED — trusted file:line evidence answering a structural
-  // question (callers/callees/imports/dead-code/impact) BEFORE any file sweep,
-  // 0 model tokens. Returns null for non-structural queries (the common case).
-  const structuralResult: RecallResult | null = structuralBranch(
-    query, cwd, category, limit, runDir, runId,
-  );
-
-  // ── KG (branch D): additive — appended to wiki results ─────────────────────
+  // ── KG (branch D): additive — appended to wiki/structural results ──────────
+  // KG reads a graph PROJECTION (knowledge-recall.json) — a single file read, not
+  // a wiki file sweep — so it still runs alongside a structural answer (0 model
+  // tokens, additive). Only the wiki file sweep is gated by structuralAnswered.
   const kgResult: RecallResult | null = _kgDisabled
     ? null
     : kgQueryBranch(query, cwd, limit, runDir, runId, category);
