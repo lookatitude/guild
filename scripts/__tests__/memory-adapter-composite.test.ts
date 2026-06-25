@@ -10,7 +10,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import * as recallModule from "../lib/recall";
+import * as recallModule from "../../src/modules/context/workflows/recall";
 import { queryGuildMemory, type MemoryQuery } from "../lib/memory-adapter";
 
 function mkRepo(settings?: unknown): string {

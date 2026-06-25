@@ -1,0 +1,35 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "loops",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "lib/owner-architect-loop",
+      "source_path": "scripts/lib/owner-architect-loop.ts",
+      "resource_path": "resources/scripts/lib/owner-architect-loop.ts",
+      "sha256": "9a437b71d891bce8d6ed704ac50f700e2fa989374b058872f3436834be2e8894"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-clarify",
+      "source_path": "skills/meta/loop-clarify/SKILL.md",
+      "resource_path": "resources/skills/meta/loop-clarify/SKILL.md",
+      "sha256": "d84bbc87406ca21e9c164875eeabb6e2d24a8dcbcfcd24230b589c58357d0021"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-implement",
+      "source_path": "skills/meta/loop-implement/SKILL.md",
+      "resource_path": "resources/skills/meta/loop-implement/SKILL.md",
+      "sha256": "d2c0292b63e70bc370ffb80e6de9dcc759cbc3698d12787094babb9d64863f34"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-plan-review",
+      "source_path": "skills/meta/loop-plan-review/SKILL.md",
+      "resource_path": "resources/skills/meta/loop-plan-review/SKILL.md",
+      "sha256": "d71f3c26d7130d28cb06d46584c96a2ebeba924eec63fab1feaceda203740d76"
+    }
+  ]
+}

@@ -1023,6 +1023,11 @@
       "kind": "cli"
     },
     {
+      "id": "check-module-ownership",
+      "source_path": "scripts/check-module-ownership.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-roster-consistency",
       "source_path": "scripts/check-roster-consistency.ts",
       "kind": "cli"
@@ -1208,6 +1213,31 @@
       "kind": "lib"
     },
     {
+      "id": "lib/capability/backend-factory",
+      "source_path": "scripts/lib/capability/backend-factory.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/rank",
+      "source_path": "scripts/lib/capability/rank.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/router",
+      "source_path": "scripts/lib/capability/router.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/tiebreak",
+      "source_path": "scripts/lib/capability/tiebreak.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/tier-defaults",
+      "source_path": "scripts/lib/capability/tier-defaults.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/classify-intake",
       "source_path": "scripts/lib/classify-intake.ts",
       "kind": "lib"
@@ -1245,6 +1275,21 @@
     {
       "id": "lib/config-schema",
       "source_path": "scripts/lib/config-schema.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/core/config-cli",
+      "source_path": "scripts/lib/core/config-cli.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/core/contracts/team-backend",
+      "source_path": "scripts/lib/core/contracts/team-backend.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/core/settings-reader",
+      "source_path": "scripts/lib/core/settings-reader.ts",
       "kind": "lib"
     },
     {
@@ -1343,6 +1388,16 @@
       "kind": "lib"
     },
     {
+      "id": "lib/guild-trace-emit",
+      "source_path": "scripts/lib/guild-trace-emit.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/guild-trace-events",
+      "source_path": "scripts/lib/guild-trace-events.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/heartbeat-write-side",
       "source_path": "scripts/lib/heartbeat-write-side.ts",
       "kind": "lib"
@@ -1423,6 +1478,21 @@
       "kind": "lib"
     },
     {
+      "id": "lib/host/inprocess-backend",
+      "source_path": "scripts/lib/host/inprocess-backend.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host/remote-backend",
+      "source_path": "scripts/lib/host/remote-backend.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host/tmux-backend",
+      "source_path": "scripts/lib/host/tmux-backend.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/ideation-min-build",
       "source_path": "scripts/lib/ideation-min-build.ts",
       "kind": "lib"
@@ -1430,6 +1500,11 @@
     {
       "id": "lib/index-cache",
       "source_path": "scripts/lib/index-cache.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/ingest-importance",
+      "source_path": "scripts/lib/ingest-importance.ts",
       "kind": "lib"
     },
     {
@@ -1498,6 +1573,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/learning-signatures",
+      "source_path": "scripts/lib/learning-signatures.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/memory-adapter",
       "source_path": "scripts/lib/memory-adapter.ts",
       "kind": "lib"
@@ -1505,6 +1585,16 @@
     {
       "id": "lib/mixed-host-contracts",
       "source_path": "scripts/lib/mixed-host-contracts.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/module-manifest",
+      "source_path": "scripts/lib/module-manifest.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/module-resources",
+      "source_path": "scripts/lib/module-resources.ts",
       "kind": "lib"
     },
     {
@@ -1643,6 +1733,31 @@
       "kind": "lib"
     },
     {
+      "id": "lib/shared/bm25",
+      "source_path": "scripts/lib/shared/bm25.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/shared/config-defaults",
+      "source_path": "scripts/lib/shared/config-defaults.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/shared/graph-scoring",
+      "source_path": "scripts/lib/shared/graph-scoring.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/shared/safe-object",
+      "source_path": "scripts/lib/shared/safe-object.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/shared/share-set",
+      "source_path": "scripts/lib/shared/share-set.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/skill-source-transform",
       "source_path": "scripts/lib/skill-source-transform.ts",
       "kind": "lib"
@@ -1655,6 +1770,11 @@
     {
       "id": "lib/support-matrix",
       "source_path": "scripts/lib/support-matrix.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/surface-manifest",
+      "source_path": "scripts/lib/surface-manifest.ts",
       "kind": "lib"
     },
     {
@@ -1758,13 +1878,33 @@
       "kind": "cli"
     },
     {
+      "id": "stamp-recall-importance",
+      "source_path": "scripts/stamp-recall-importance.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "sync-live-resources",
+      "source_path": "scripts/sync-live-resources.ts",
+      "kind": "cli"
+    },
+    {
       "id": "sync-migration",
       "source_path": "scripts/sync-migration.ts",
       "kind": "cli"
     },
     {
+      "id": "sync-module-resources",
+      "source_path": "scripts/sync-module-resources.ts",
+      "kind": "cli"
+    },
+    {
       "id": "trace-summarize",
       "source_path": "scripts/trace-summarize.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "types/js-yaml.d",
+      "source_path": "scripts/types/js-yaml.d.ts",
       "kind": "cli"
     },
     {
@@ -1950,6 +2090,16 @@
     {
       "id": "verify-gate-pass",
       "source_path": "scripts/verify-gate-pass.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "verify-host-packages",
+      "source_path": "scripts/verify-host-packages.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "verify-installer",
+      "source_path": "scripts/verify-installer.ts",
       "kind": "cli"
     },
     {

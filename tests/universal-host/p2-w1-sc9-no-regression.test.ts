@@ -87,6 +87,13 @@ const ENTRY_PATHS = ["commands", "hooks", ".claude-plugin"];
 //                                           source (product-loop intake section); the test
 //                                           re-asserts golden===source, so the delta is
 //                                           intentional and pinned, not silent drift.
+// MODULE REORG (run-plugin-module-reorg-20260621): the additive src/modules
+// migration moved the shared frontmatter/YAML reader behind src/modules/state and
+// the package-local YAML resolver behind src/modules/kernel. `task-completed.js`
+// is rebuilt from the same hook source, but the bundle shape legitimately changes
+// to use the module runtime resolver. scripts/__tests__/claude-host-adapter.test.ts
+// probes generated Claude hook execution from the installed package layout, so
+// this is an explicit, tested re-baseline rather than silent entrypoint drift.
 // The allowlist stays EXPLICIT (named files, never a wildcard) so any OTHER entry-path
 // change still fails the A/B guard below — anti-vacuity preserved. After the lead commits
 // these files HEAD advances, the diff empties, and these entries become harmless no-ops.
@@ -97,6 +104,7 @@ const ENTRY_ALLOWLIST = new Set<string>([
   "hooks/dist/run-trace-start.js",
   "hooks/dist/run-trace-close.js",
   "hooks/dist/learning-backstop.js",
+  "hooks/agent-team/dist/task-completed.js",
   "hooks/lib/__tests__/run-state.test.ts",
   "hooks/lib/__tests__/guild-hook-event.test.ts",
   "hooks/__tests__/using-guild-bootstrap.test.ts",

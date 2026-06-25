@@ -142,7 +142,7 @@ describe("R4 install.sh host dry-runs", () => {
       "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>"
     );
     expect(res.stdout).toContain("would run: codex plugin marketplace remove guild || true");
-    expect(res.stdout).toContain("would run: codex plugin marketplace add dist/codex-marketplace");
+    expect(res.stdout).toContain("would run: codex plugin marketplace add ./dist/codex-marketplace");
     expect(res.stdout).toContain("would run: codex plugin add guild@guild");
     expect(res.stdout).toContain("Package bootstrap: AGENTS.md plus .agents/skills/guild");
   });
@@ -155,7 +155,7 @@ describe("R4 install.sh host dry-runs", () => {
       env: { ...process.env, PATH: "/usr/bin:/bin" },
     });
     expect(res.status).toBe(0);
-    expect(res.stdout).toContain("would run: codex plugin marketplace add dist/codex-marketplace");
+    expect(res.stdout).toContain("would run: codex plugin marketplace add ./dist/codex-marketplace");
     expect(res.stdout).toContain("would run: codex plugin add guild@guild");
   });
 

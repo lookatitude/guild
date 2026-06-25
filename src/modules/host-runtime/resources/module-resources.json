@@ -1,0 +1,196 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "host-runtime",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "guild-run",
+      "source_path": "scripts/guild-run.ts",
+      "resource_path": "resources/scripts/guild-run.ts",
+      "sha256": "a74e9ed8001cc70d20346e1297765494435c85649ced859b51e2e138c5647826"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/adapter-fallback-ladders",
+      "source_path": "scripts/lib/adapter-fallback-ladders.ts",
+      "resource_path": "resources/scripts/lib/adapter-fallback-ladders.ts",
+      "sha256": "607813a5add3265dddb1d73ecc441cb55cea6d6405da5eaca8e01cb922727c49"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/degradation-trace",
+      "source_path": "scripts/lib/degradation-trace.ts",
+      "resource_path": "resources/scripts/lib/degradation-trace.ts",
+      "sha256": "564577b045d676e43fc3aeda654ed3bb90ddcc0931b3acf31c7c689e11757daa"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/emit-readback-degradation",
+      "source_path": "scripts/lib/emit-readback-degradation.ts",
+      "resource_path": "resources/scripts/lib/emit-readback-degradation.ts",
+      "sha256": "a3865ce834cf0c0afe181980e52d52e966b19bc688880944e75a30f39c16910a"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/guild-run-wrapper",
+      "source_path": "scripts/lib/guild-run-wrapper.ts",
+      "resource_path": "resources/scripts/lib/guild-run-wrapper.ts",
+      "sha256": "347fe57ff68b5c0c93f11e286b884087faab660770037d16be7908df6d12da32"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapter-contract",
+      "source_path": "scripts/lib/host-adapter-contract.ts",
+      "resource_path": "resources/scripts/lib/host-adapter-contract.ts",
+      "sha256": "76368603384f94e16e24f0f9ea08cb78ca9905a55b2483d3f666098917cb5628"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapter-factory",
+      "source_path": "scripts/lib/host-adapter-factory.ts",
+      "resource_path": "resources/scripts/lib/host-adapter-factory.ts",
+      "sha256": "d4794cd012ff99df51f35aafdc23979f46e4b7a0f344bd095c72bc90b4b3db39"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/agents-file",
+      "source_path": "scripts/lib/host-adapters/agents-file.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/agents-file.ts",
+      "sha256": "073c01e1b8c88d3c511198e5e471e96efdfa02a00d07736f27c0f8cf3993f38d"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/antigravity-cli",
+      "source_path": "scripts/lib/host-adapters/antigravity-cli.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/antigravity-cli.ts",
+      "sha256": "f9af57b74377a27d839d18584a167d3b04872a3b76d7b7e2193883f52a9ce053"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/app-host",
+      "source_path": "scripts/lib/host-adapters/app-host.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/app-host.ts",
+      "sha256": "4e54374402578d777596994fc4d1d2158817fa8f530906756870bec0b028a3ab"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/claude-code-cli",
+      "source_path": "scripts/lib/host-adapters/claude-code-cli.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/claude-code-cli.ts",
+      "sha256": "c0ef38cd7576a7159b419bfcfd1e8df4959b758ccd6bf737b5789e3880a4cd19"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/codex-cli",
+      "source_path": "scripts/lib/host-adapters/codex-cli.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/codex-cli.ts",
+      "sha256": "15d766bbd55caa016a5eeae234c195389dee0d11d09b25162360f59fd2ab423f"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/pi-cli",
+      "source_path": "scripts/lib/host-adapters/pi-cli.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/pi-cli.ts",
+      "sha256": "e53901985fb55c03da3bdc5681932803af4741241dd1d2d7213b26d68800eb55"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-capabilities-schema",
+      "source_path": "scripts/lib/host-capabilities-schema.ts",
+      "resource_path": "resources/scripts/lib/host-capabilities-schema.ts",
+      "sha256": "fc65c2064bb332e2846b6af7d9c658ddfbc7e4935aaf59b6d7493ad48aed54ad"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-id-namespace",
+      "source_path": "scripts/lib/host-id-namespace.ts",
+      "resource_path": "resources/scripts/lib/host-id-namespace.ts",
+      "sha256": "3dfc8df099c16b32eb92e922b9ca95caa5687bea74ff5bcaf2089b00d4c77778"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-profiles-validate",
+      "source_path": "scripts/lib/host-profiles-validate.ts",
+      "resource_path": "resources/scripts/lib/host-profiles-validate.ts",
+      "sha256": "f5edbb7bc146115eb56422b62755ed7d6947875893f718fec9c9cf166bdeb21d"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-registry",
+      "source_path": "scripts/lib/host-registry.ts",
+      "resource_path": "resources/scripts/lib/host-registry.ts",
+      "sha256": "211238deb83f36f52b0fd68a6d38ef099a2edc90b43f90f6a4642d640b66f57f"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-registry-schema",
+      "source_path": "scripts/lib/host-registry-schema.ts",
+      "resource_path": "resources/scripts/lib/host-registry-schema.ts",
+      "sha256": "71e618b57293a586e8233d9221c0464a8fa03bb9f1f0fd11f2263e49a193acab"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-router",
+      "source_path": "scripts/lib/host-router.ts",
+      "resource_path": "resources/scripts/lib/host-router.ts",
+      "sha256": "1784d929b03d7416832c77661e037a4e346c143ce5a601208f65298f398a1e97"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-types",
+      "source_path": "scripts/lib/host-types.ts",
+      "resource_path": "resources/scripts/lib/host-types.ts",
+      "sha256": "20be407854bcbb9abd085b4477fb251647fa8ca78c8ba566b4b48a857bf2e4a5"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/mixed-host-contracts",
+      "source_path": "scripts/lib/mixed-host-contracts.ts",
+      "resource_path": "resources/scripts/lib/mixed-host-contracts.ts",
+      "sha256": "718ee2d4836187e6c3379db71b63d60631849b5eb2790c9b2ac3d1095447a8a9"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/pane-adapter",
+      "source_path": "scripts/lib/pane-adapter.ts",
+      "resource_path": "resources/scripts/lib/pane-adapter.ts",
+      "sha256": "0c5e13ca56f98c55359193838faf72b81850abe9866253a3b6c79a5d1d949638"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/provider-detect",
+      "source_path": "scripts/lib/provider-detect.ts",
+      "resource_path": "resources/scripts/lib/provider-detect.ts",
+      "sha256": "0af058375ee4c291f875e8c4c04ab5e9c284200bfd9de3b02ab76f3937b08bc1"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/result-normalizer",
+      "source_path": "scripts/lib/result-normalizer.ts",
+      "resource_path": "resources/scripts/lib/result-normalizer.ts",
+      "sha256": "c8bef0b61739e8c4bc4f0fc33a5e644e9f773cc018fb19d8dea7dda57fffff02"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/runtime-adapters",
+      "source_path": "scripts/lib/runtime-adapters.ts",
+      "resource_path": "resources/scripts/lib/runtime-adapters.ts",
+      "sha256": "2a7740926bfca474c1b2d65eb7da7db39dfda7eecc00ccb312d218cfbc2b78d1"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/support-matrix",
+      "source_path": "scripts/lib/support-matrix.ts",
+      "resource_path": "resources/scripts/lib/support-matrix.ts",
+      "sha256": "e714155b3bcd3d3ce329bc4e1e9e1e74f8147601579ada0b36e9971f997d0a6f"
+    },
+    {
+      "category": "scripts",
+      "id": "write-host-capability",
+      "source_path": "scripts/write-host-capability.ts",
+      "resource_path": "resources/scripts/write-host-capability.ts",
+      "sha256": "f7de6897e917c9a7645de10122e08bcf1a4f50f4e7361b7c861e132aedd55d7b"
+    }
+  ]
+}

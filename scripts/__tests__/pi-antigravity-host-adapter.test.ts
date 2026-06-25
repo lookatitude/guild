@@ -45,7 +45,7 @@ describe("R9 Pi and Antigravity concrete host adapters", () => {
     const adapter = createHostAdapter("pi-cli");
     expect(adapter.bootstrap({ cwd: "/repo", runId: "run-1" })).toMatchObject({
       status: "ok",
-      value: { instruction_file: "AGENTS.md", package_manifest: "pi-manifest.json", install_command: "pi install dist/pi" },
+      value: { instruction_file: "AGENTS.md", package_manifest: "pi-manifest.json", install_command: "pi install ./dist/pi" },
     });
     expect(adapter.preflight({ cwd: "/repo", runId: "run-1" })).toMatchObject({
       status: "degraded",
@@ -90,8 +90,9 @@ describe("R9 Pi and Antigravity concrete host adapters", () => {
       status: "ok",
       value: {
         instruction_file: "AGENTS.md",
-        package_manifest: "antigravity-manifest.json",
-        validate_command: "agy plugin validate dist/antigravity",
+        package_manifest: "plugin.json",
+        compatibility_manifest: "antigravity-manifest.json",
+        validate_command: "agy plugin validate ./dist/antigravity",
       },
     });
     expect(adapter.preflight({ cwd: "/repo", runId: "run-1" })).toMatchObject({
@@ -100,11 +101,11 @@ describe("R9 Pi and Antigravity concrete host adapters", () => {
     });
     expect(adapter.renderCommandSurface({ commandIds: ["guild"] })).toMatchObject({
       status: "ok",
-      value: { manifest_path: "antigravity-manifest.json", invoke: "agy -p" },
+      value: { manifest_path: "plugin.json", compatibility_manifest_path: "antigravity-manifest.json", invoke: "agy -p" },
     });
     expect(adapter.renderPackage({ packageRoot: PLUGIN_ROOT })).toMatchObject({
       status: "degraded",
-      value: { manifest_path: "antigravity-manifest.json", skill_root: ".agents/skills/guild", installability: "target" },
+      value: { manifest_path: "plugin.json", compatibility_manifest_path: "antigravity-manifest.json", skill_root: ".agents/skills/guild", installability: "target" },
     });
     expect(adapter.renderPermissionDecision({ decision: { bypass: "audit" } })).toMatchObject({
       status: "degraded",
@@ -213,7 +214,7 @@ describe("R9 install.sh Pi/Antigravity dry-runs", () => {
     });
     expect(res.status).toBe(0);
     expect(res.stdout).toContain("would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>");
-    expect(res.stdout).toContain("would run: pi install dist/pi");
+    expect(res.stdout).toContain("would run: pi install ./dist/pi");
     expect(res.stdout).toContain("pi-manifest.json");
     expect(res.stdout).toContain("guild-run --host pi");
   });
@@ -227,8 +228,9 @@ describe("R9 install.sh Pi/Antigravity dry-runs", () => {
     });
     expect(res.status).toBe(0);
     expect(res.stdout).toContain("would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>");
-    expect(res.stdout).toContain("would run: agy plugin validate dist/antigravity");
-    expect(res.stdout).toContain("would run: agy plugin install dist/antigravity");
+    expect(res.stdout).toContain("would run: agy plugin validate ./dist/antigravity");
+    expect(res.stdout).toContain("would run: agy plugin install ./dist/antigravity");
+    expect(res.stdout).toContain("plugin.json");
     expect(res.stdout).toContain("antigravity-manifest.json");
     expect(res.stdout).toContain("guild-run --host antigravity");
   });

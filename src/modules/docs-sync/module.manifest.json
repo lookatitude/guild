@@ -1,0 +1,17 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "docs-sync",
+  "title": "Docs Sync",
+  "kind": "operator",
+  "implementation_mode": "workflow-backed",
+  "description": "Checks documentation hygiene, docs/code drift, command coverage, and workspace doc-sync gates.",
+  "depends_on": ["distribution", "kernel", "state", "workspace"],
+  "owns": {
+    "scripts": [
+      "wiki-lint-checks",
+      "workspace/check-command-coverage",
+      "workspace/check-doc-sync"
+    ],
+    "script_id_prefixes": ["docs-hygiene/"]
+  }
+}

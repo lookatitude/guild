@@ -102,7 +102,7 @@ Installing manually into Codex CLI uses Codex's plugin manager:
 ```bash
 npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 codex plugin marketplace remove guild || true
-codex plugin marketplace add dist/codex-marketplace
+codex plugin marketplace add ./dist/codex-marketplace
 codex plugin add guild@guild
 ```
 

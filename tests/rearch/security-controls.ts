@@ -11,7 +11,7 @@
  *
  * Sources audited:
  *   - hooks/lib/security/   (enforce, injection-guard, mcp-hash-pin, scrubbed-write, secrets, config, events)
- *   - scripts/lib/recall-protect.ts (D-RECALL exemplar)
+ *   - src/modules/context/workflows/recall-protect.ts (D-RECALL exemplar)
  *   - scripts/lib/shared/safe-object.ts (proto-poison guard)
  *   - scripts/lib/shared/share-set.ts + scripts/dot-guild/scrub.ts (share-set redaction)
  *   - scripts/dot-guild/audit.ts (SC-7 scrub-coverage gap check)
@@ -71,7 +71,7 @@ export const SECURITY_CONTROLS: SecurityControl[] = [
     what_it_protects:
       "Prompt-injection via recalled wiki content: a hostile wiki chunk carrying " +
       "directive language is quarantined before it reaches the agent context.",
-    enforcer_file: "scripts/lib/recall-protect.ts",
+    enforcer_file: "src/modules/context/workflows/recall-protect.ts",
     enforcer_function: "protectChunks",
     enforcer_kind: "code",
     hostile_test: "scripts/__tests__/recall-protect.test.ts",
@@ -96,7 +96,7 @@ export const SECURITY_CONTROLS: SecurityControl[] = [
     what_it_protects:
       "Trust-escalation forgery: a wiki page cannot grant itself unwrapped operator " +
       "tier via frontmatter `owner: operator` — only path-allowlist pages reach operator tier.",
-    enforcer_file: "scripts/lib/recall-protect.ts",
+    enforcer_file: "src/modules/context/workflows/recall-protect.ts",
     enforcer_function: "classifyTrustTier",
     enforcer_kind: "code",
     hostile_test: "scripts/__tests__/recall-protect.test.ts",

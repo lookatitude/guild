@@ -1,0 +1,175 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "lifecycle",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "commands",
+      "id": "build",
+      "source_path": "commands/build.md",
+      "resource_path": "resources/commands/build.md",
+      "sha256": "bad6ab642cb85d2838944903823c5b9c0630d6db5b1d97c3da77a22f28e8da7a"
+    },
+    {
+      "category": "commands",
+      "id": "guild",
+      "source_path": "commands/guild.md",
+      "resource_path": "resources/commands/guild.md",
+      "sha256": "575de82d53eab6ac7487310197bce89d5ec0dc81980e403200fbad4c2658d657"
+    },
+    {
+      "category": "commands",
+      "id": "ideate",
+      "source_path": "commands/ideate.md",
+      "resource_path": "resources/commands/ideate.md",
+      "sha256": "bd1c2fabb2b80d6d30fc65e29979ab60f256f48fc7c31f9292c1883f72d255e1"
+    },
+    {
+      "category": "commands",
+      "id": "init",
+      "source_path": "commands/init.md",
+      "resource_path": "resources/commands/init.md",
+      "sha256": "79124b9ea2f6b2a99633bc353b5d3799e90e6f63b59df009f046c5de7e1ec0a5"
+    },
+    {
+      "category": "commands",
+      "id": "ops",
+      "source_path": "commands/ops.md",
+      "resource_path": "resources/commands/ops.md",
+      "sha256": "a30604f99457582b8445daad9f59553222882e56e606a7f73d873b3ffb53e2a3"
+    },
+    {
+      "category": "commands",
+      "id": "plan",
+      "source_path": "commands/plan.md",
+      "resource_path": "resources/commands/plan.md",
+      "sha256": "f328e5fee1df7a6dfd7c337939fa3091b8524cf8ec5bd8e4a4a989056c69ce9f"
+    },
+    {
+      "category": "commands",
+      "id": "qa",
+      "source_path": "commands/qa.md",
+      "resource_path": "resources/commands/qa.md",
+      "sha256": "6fce154f71680e82600ea8d50dadcabfc14382511c464a83a9f968874ab6873a"
+    },
+    {
+      "category": "commands",
+      "id": "resume",
+      "source_path": "commands/resume.md",
+      "resource_path": "resources/commands/resume.md",
+      "sha256": "4483403eaeaeecbce14187c67cdf71214ad6e6ed489aff6a645b1d91c944a898"
+    },
+    {
+      "category": "commands",
+      "id": "status",
+      "source_path": "commands/status.md",
+      "resource_path": "resources/commands/status.md",
+      "sha256": "fa3f3f1d4022477348b81049694c72556702cac09d3c88914f6e8014b00078c6"
+    },
+    {
+      "category": "scripts",
+      "id": "check-lane-liveness",
+      "source_path": "scripts/check-lane-liveness.ts",
+      "resource_path": "resources/scripts/check-lane-liveness.ts",
+      "sha256": "dd53d5fd3912bfb13ac567b6bdf5b791d9d0d352e238026eef28ffdd784afcd3"
+    },
+    {
+      "category": "scripts",
+      "id": "emit-loop-event",
+      "source_path": "scripts/emit-loop-event.ts",
+      "resource_path": "resources/scripts/emit-loop-event.ts",
+      "sha256": "8aa5c41be5ef4b102cde59df63691016b80c4800d4cdbeb389f4f47460a4c7f9"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/run-lifecycle",
+      "source_path": "scripts/lib/run-lifecycle.ts",
+      "resource_path": "resources/scripts/lib/run-lifecycle.ts",
+      "sha256": "946473ab9d7647641041369f419a42b2f347b2f824c52e0c3b1268ec0f9cdb80"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/run-manifest-wiring",
+      "source_path": "scripts/lib/run-manifest-wiring.ts",
+      "resource_path": "resources/scripts/lib/run-manifest-wiring.ts",
+      "sha256": "13d4b146f608f6881056170c9d6626bc51d85fc603d10c0d5956123835bc4d89"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/runstart-preflight",
+      "source_path": "scripts/lib/runstart-preflight.ts",
+      "resource_path": "resources/scripts/lib/runstart-preflight.ts",
+      "sha256": "740854e73fd883fc5c3d1331a293863b39a28a0343788b558ded1e5af54c9457"
+    },
+    {
+      "category": "scripts",
+      "id": "mark-lane-dead",
+      "source_path": "scripts/mark-lane-dead.ts",
+      "resource_path": "resources/scripts/mark-lane-dead.ts",
+      "sha256": "fae20cec7792b0582c1b901fd640e99947903e1664d14c78482009d91839fb1a"
+    },
+    {
+      "category": "scripts",
+      "id": "resume-lanes",
+      "source_path": "scripts/resume-lanes.ts",
+      "resource_path": "resources/scripts/resume-lanes.ts",
+      "sha256": "004a626dbc937d8422b78d538338ccf7eb8318a1e821e2caf4f189bdcabd10b6"
+    },
+    {
+      "category": "scripts",
+      "id": "retry-lane",
+      "source_path": "scripts/retry-lane.ts",
+      "resource_path": "resources/scripts/retry-lane.ts",
+      "sha256": "ea24e018a111feef9bde91f08a462e107513e7f353c0ab1c229e3ce119ccd3ac"
+    },
+    {
+      "category": "scripts",
+      "id": "write-run-manifest",
+      "source_path": "scripts/write-run-manifest.ts",
+      "resource_path": "resources/scripts/write-run-manifest.ts",
+      "sha256": "dc3336ee1ae63e557669ad746b1c280c94176d5324bf1b6fdfd83892811ea589"
+    },
+    {
+      "category": "scripts",
+      "id": "write-task-run",
+      "source_path": "scripts/write-task-run.ts",
+      "resource_path": "resources/scripts/write-task-run.ts",
+      "sha256": "d558e01a45a09bf7f0e5debe10e18e4bfb8c83df91605d897525ab0722e14200"
+    },
+    {
+      "category": "skills",
+      "id": "guild-brainstorm",
+      "source_path": "skills/meta/brainstorm/SKILL.md",
+      "resource_path": "resources/skills/meta/brainstorm/SKILL.md",
+      "sha256": "bcbe09b3a0918c84aaf37bc932322dca8516ae6ebae737d90a3db0778b83b9f8"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan",
+      "source_path": "skills/meta/execute-plan/SKILL.md",
+      "resource_path": "resources/skills/meta/execute-plan/SKILL.md",
+      "sha256": "54ec156a33cc483ea2fcdbc487dc5b7f22d6381d001051e9bf6739c8872637cf"
+    },
+    {
+      "category": "skills",
+      "id": "guild-plan",
+      "source_path": "skills/meta/plan/SKILL.md",
+      "resource_path": "resources/skills/meta/plan/SKILL.md",
+      "sha256": "ef3b17939cfa8fe4124e5587de0a9c68da53f68671f99ed749a075fbaa719a6a"
+    },
+    {
+      "category": "skills",
+      "id": "guild-verify-done",
+      "source_path": "skills/meta/verify-done/SKILL.md",
+      "resource_path": "resources/skills/meta/verify-done/SKILL.md",
+      "sha256": "423d4bc0dfbb8d4b87cb4a81efecff248d116a7c63d14ac736f9c3245885b58b"
+    },
+    {
+      "category": "skills",
+      "id": "init",
+      "source_path": "skills/meta/init/SKILL.md",
+      "resource_path": "resources/skills/meta/init/SKILL.md",
+      "sha256": "f95a001185ac5d6e63cfe94b2d7f0e04bc2e28a1ba466cbb4661993d99aa0cd7"
+    }
+  ]
+}

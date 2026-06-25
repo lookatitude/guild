@@ -1,0 +1,21 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "context",
+  "title": "Context Assembly",
+  "kind": "substrate",
+  "implementation_mode": "workflow-backed",
+  "description": "Builds bounded per-agent context bundles, recall-before-read payloads, and context budget linting.",
+  "depends_on": ["config", "knowledge", "state", "telemetry", "understanding"],
+  "owns": {
+    "skills": ["guild-context-assemble"],
+    "scripts": [
+      "lint-context-bundle",
+      "lib/fs-scanner",
+      "lib/memory-adapter",
+      "lib/protect-chunks",
+      "lib/recall",
+      "lib/recall-protect",
+      "lib/wiki-recall"
+    ]
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "evals",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "lib/benchmark-guild-artifacts",
+      "source_path": "scripts/lib/benchmark-guild-artifacts.ts",
+      "resource_path": "resources/scripts/lib/benchmark-guild-artifacts.ts",
+      "sha256": "d223dbd3a40251fede7fa34ead5785bf5fe1c9d0e8c189d4835e38ae6eb36e6d"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/counterfactual-replay",
+      "source_path": "scripts/lib/counterfactual-replay.ts",
+      "resource_path": "resources/scripts/lib/counterfactual-replay.ts",
+      "sha256": "897e6f1505e7c5756afceb4a45cb8702231f7c4304acb9bbabbbc6f51368d983"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/define-schema",
+      "source_path": "scripts/lib/define-schema.ts",
+      "resource_path": "resources/scripts/lib/define-schema.ts",
+      "sha256": "a42baad19a5e86a6fdcf90b8199773a4d14fbc1bb86d0d8df4c39e9a585f0b17"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/define-test-matrix",
+      "source_path": "scripts/lib/define-test-matrix.ts",
+      "resource_path": "resources/scripts/lib/define-test-matrix.ts",
+      "sha256": "d32ef33ac59570677a0c506573545a1ff12889ac39b952c03db6a8af5668c10a"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/define-test-matrix.import-contract",
+      "source_path": "scripts/lib/define-test-matrix.import-contract.ts",
+      "resource_path": "resources/scripts/lib/define-test-matrix.import-contract.ts",
+      "sha256": "33bd30e2b3fb7fc80fc4c23c80161e97b754f897f516b872b72f1f7cef7d3bf3"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/define-traceability",
+      "source_path": "scripts/lib/define-traceability.ts",
+      "resource_path": "resources/scripts/lib/define-traceability.ts",
+      "sha256": "faaed9fbcfbc02c67378490b593774583fa70e7bcf8f1db1dadc9743091ebfed"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/explore-schema",
+      "source_path": "scripts/lib/explore-schema.ts",
+      "resource_path": "resources/scripts/lib/explore-schema.ts",
+      "sha256": "29333125b30f879154618e5b4faf86df0c35db400e8c10e7632cb5ccb150d835"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/routing-ab-contract",
+      "source_path": "scripts/lib/routing-ab-contract.ts",
+      "resource_path": "resources/scripts/lib/routing-ab-contract.ts",
+      "sha256": "2eebbbd82f613bd1b9504aa9149144b97e89a63adcb9a53d06ec7cbaa4d8a77a"
+    }
+  ]
+}

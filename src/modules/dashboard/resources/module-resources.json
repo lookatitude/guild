@@ -1,0 +1,35 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "dashboard",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "commands",
+      "id": "dashboard",
+      "source_path": "commands/dashboard.md",
+      "resource_path": "resources/commands/dashboard.md",
+      "sha256": "afcd1e195d10c94c9e63a2b6eaa5cba13c081c71dfc0156db35c76d40f7ec769"
+    },
+    {
+      "category": "scripts",
+      "id": "dashboard-launch",
+      "source_path": "scripts/dashboard-launch.ts",
+      "resource_path": "resources/scripts/dashboard-launch.ts",
+      "sha256": "2758b71d10f533dd306f9faa4e239e1d8b9821770df2f5505f068d7ddf3b4920"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/dashboard-projector",
+      "source_path": "scripts/lib/dashboard-projector.ts",
+      "resource_path": "resources/scripts/lib/dashboard-projector.ts",
+      "sha256": "70e925d999992f3e2b92ff2ea9924853e704f0528d60c1c70c12a8a78474cfa5"
+    },
+    {
+      "category": "skills",
+      "id": "guild-dashboard",
+      "source_path": "skills/meta/dashboard/SKILL.md",
+      "resource_path": "resources/skills/meta/dashboard/SKILL.md",
+      "sha256": "1729d195d006e25de3a47ee11fb26411b017281f3609c785d3a7d4acf9f9fe4a"
+    }
+  ]
+}

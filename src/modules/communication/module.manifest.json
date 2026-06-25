@@ -1,0 +1,23 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "communication",
+  "title": "Agent Communication",
+  "kind": "substrate",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns machine-readable handoff, liveness, and communication-format linting surfaces.",
+  "depends_on": ["kernel", "state"],
+  "owns": {
+    "hooks": [
+      "PostToolUse:comms-format-lint.js",
+      "TaskCompleted:task-completed.js",
+      "TaskCreated:task-created.js",
+      "TeammateIdle:teammate-idle.js"
+    ],
+    "scripts": [
+      "comms/comms-format-lint",
+      "comms/comms-format-lint.cli",
+      "comms/no-accidental-write",
+      "comms/no-accidental-write.cli"
+    ]
+  }
+}

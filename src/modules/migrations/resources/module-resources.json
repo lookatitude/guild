@@ -1,0 +1,126 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "migrations",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "commands",
+      "id": "migrate",
+      "source_path": "commands/migrate.md",
+      "resource_path": "resources/commands/migrate.md",
+      "sha256": "0fff4ed952a69e4cdb8231f5979372bf1b90baaa324967b15013807f7fe0c682"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/audit",
+      "source_path": "scripts/dot-guild/audit.ts",
+      "resource_path": "resources/scripts/dot-guild/audit.ts",
+      "sha256": "e393caf60dab3e31e226d84fd31cf18a1ac4ab2dde78c0a577c4890798c2a366"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/convert/convert",
+      "source_path": "scripts/dot-guild/convert/convert.ts",
+      "resource_path": "resources/scripts/dot-guild/convert/convert.ts",
+      "sha256": "b523d644b94fb7804677f2957b9a4ac2e00d0d11b8fb0a5b6924493c5ad19271"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/convert/detect",
+      "source_path": "scripts/dot-guild/convert/detect.ts",
+      "resource_path": "resources/scripts/dot-guild/convert/detect.ts",
+      "sha256": "3b53762b296fc28af377811d7231b2ca4271000c68c2214f23f5ca90c7be4667"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/convert/index",
+      "source_path": "scripts/dot-guild/convert/index.ts",
+      "resource_path": "resources/scripts/dot-guild/convert/index.ts",
+      "sha256": "76c52bdf80ea2b4e58ba78c91bdfc2ffa7c8a7fcd4a0db2091ccf2bb60b6503d"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/convert/keymap",
+      "source_path": "scripts/dot-guild/convert/keymap.ts",
+      "resource_path": "resources/scripts/dot-guild/convert/keymap.ts",
+      "sha256": "bfa885466d3c3f5efb290d3a56d8606e2ced7cae2b6db52a6f4a6de678ead2ac"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/convert/report",
+      "source_path": "scripts/dot-guild/convert/report.ts",
+      "resource_path": "resources/scripts/dot-guild/convert/report.ts",
+      "sha256": "ca564a1642e746571e097bb69fa647783399720a3f1a6b87687390f18ad3740d"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/convert/seams",
+      "source_path": "scripts/dot-guild/convert/seams.ts",
+      "resource_path": "resources/scripts/dot-guild/convert/seams.ts",
+      "sha256": "0dc26e2783a7fe02ee41e3ff0271d274520ab435ad14d6882bcaa0f76ea7b16d"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/convert/snapshot",
+      "source_path": "scripts/dot-guild/convert/snapshot.ts",
+      "resource_path": "resources/scripts/dot-guild/convert/snapshot.ts",
+      "sha256": "6e6979e35c81a2e575adf3abbbfa5c454bef82f1323b742f3c0d973a686ebf51"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/convert/types",
+      "source_path": "scripts/dot-guild/convert/types.ts",
+      "resource_path": "resources/scripts/dot-guild/convert/types.ts",
+      "sha256": "51e24eed27f92954a14eea0df4b83037625efd97a7a88ab0f298de68801b4f72"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/convert/wiki-importance",
+      "source_path": "scripts/dot-guild/convert/wiki-importance.ts",
+      "resource_path": "resources/scripts/dot-guild/convert/wiki-importance.ts",
+      "sha256": "92554bff656c5c87f0313282d690af7dd2577d660df58f00b2470e0fa78b82ec"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/migrate",
+      "source_path": "scripts/dot-guild/migrate.ts",
+      "resource_path": "resources/scripts/dot-guild/migrate.ts",
+      "sha256": "3b175a45964c87d87d13a7407f501d7591cac162446c3d145044d54bf184abd8"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/migrate-guild",
+      "source_path": "scripts/dot-guild/migrate-guild.ts",
+      "resource_path": "resources/scripts/dot-guild/migrate-guild.ts",
+      "sha256": "77df57e2c5c2b77ee06fe51a24c8bf579c7dc9945d8925247d3c1937a843560b"
+    },
+    {
+      "category": "scripts",
+      "id": "dot-guild/scrub",
+      "source_path": "scripts/dot-guild/scrub.ts",
+      "resource_path": "resources/scripts/dot-guild/scrub.ts",
+      "sha256": "af0bd0cb45a7cc7b8b4fb96b31205a1e7fad94e9fa2403f93ceb85e5deb7f3d4"
+    },
+    {
+      "category": "scripts",
+      "id": "index-migrate",
+      "source_path": "scripts/index-migrate.ts",
+      "resource_path": "resources/scripts/index-migrate.ts",
+      "sha256": "c411ecc41d82902f2440cff385f27c8c9a73a7649bed3df12dc9060ba9cb305e"
+    },
+    {
+      "category": "scripts",
+      "id": "sync-migration",
+      "source_path": "scripts/sync-migration.ts",
+      "resource_path": "resources/scripts/sync-migration.ts",
+      "sha256": "61b094703391087b3d62e128676bc0a80a3425e97907ffd33d12f9097d45b47b"
+    },
+    {
+      "category": "scripts",
+      "id": "v1.4-summary-md-regen",
+      "source_path": "scripts/v1.4-summary-md-regen.ts",
+      "resource_path": "resources/scripts/v1.4-summary-md-regen.ts",
+      "sha256": "dd7f8c31dd8e6c603f5aebcdac1decf4cb2e314f4ecfd4df6d002818d6286a22"
+    }
+  ]
+}

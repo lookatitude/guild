@@ -24,6 +24,8 @@ import {
   tokenize as canonicalTokenize,
   bm25Score as canonicalBm25Score,
 } from "../lib/shared/bm25";
+import * as bm25Shim from "../lib/shared/bm25";
+import * as bm25Module from "../../src/modules/knowledge/workflows/bm25";
 
 // ── Frozen reference: the verbatim algorithm that lived in ingest-similarity.ts
 //    and guild-memory/src/bm25.ts BEFORE the WAVE-1 single-source collapse.
@@ -104,6 +106,12 @@ function docsFromCorpus(tok: (s: string) => string[]) {
 }
 
 describe("WAVE-1 Unit 1 — BM25 single-source parity", () => {
+  test("compatibility shim: scripts/lib/shared/bm25 re-exports src/modules/knowledge", () => {
+    expect(bm25Shim.TOKEN_RE).toBe(bm25Module.TOKEN_RE);
+    expect(bm25Shim.tokenize).toBe(bm25Module.tokenize);
+    expect(bm25Shim.bm25Score).toBe(bm25Module.bm25Score);
+  });
+
   test("(A) parity: canonical bm25Score matches the frozen reference on every query", () => {
     for (const q of QUERIES) {
       const canonical = canonicalBm25Score(canonicalTokenize(q), docsFromCorpus(canonicalTokenize));
@@ -137,6 +145,7 @@ describe("WAVE-1 Unit 1 — BM25 single-source parity", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const roots = [
       path.join(repoRoot, "scripts"),
+      path.join(repoRoot, "src"),
       path.join(repoRoot, "mcp-servers"),
     ];
     const SKIP = new Set(["node_modules", "dist", ".git", "build", "coverage"]);
@@ -160,6 +169,6 @@ describe("WAVE-1 Unit 1 — BM25 single-source parity", () => {
     }
     for (const r of roots) walk(r);
 
-    expect(definers).toEqual(["scripts/lib/shared/bm25.ts"]);
+    expect(definers).toEqual(["src/modules/knowledge/workflows/bm25.ts"]);
   });
 });

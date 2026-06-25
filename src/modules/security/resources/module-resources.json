@@ -1,0 +1,70 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "security",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "hooks",
+      "id": "PostToolUse:post-tool-use.js",
+      "source_path": "hooks/dist/post-tool-use.js",
+      "resource_path": "resources/hooks/dist/post-tool-use.js",
+      "sha256": "f236c34447c0883c4b6bbea8e0949bd13be13310d322742f4ee07a2d2e738424"
+    },
+    {
+      "category": "hooks",
+      "id": "PreToolUse:pre-tool-use.js",
+      "source_path": "hooks/dist/pre-tool-use.js",
+      "resource_path": "resources/hooks/dist/pre-tool-use.js",
+      "sha256": "3243f8321b50cf3f4274a09d31a97d8817d138af788a3e1357d2e3479e3547be"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/cloud-consent-gate",
+      "source_path": "scripts/lib/cloud-consent-gate.ts",
+      "resource_path": "resources/scripts/lib/cloud-consent-gate.ts",
+      "sha256": "c86eb6cb41418b40b7bebd69aa4adcd4cadb2022df58e83e1dae4837992a2aac"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/cloud-task-packet",
+      "source_path": "scripts/lib/cloud-task-packet.ts",
+      "resource_path": "resources/scripts/lib/cloud-task-packet.ts",
+      "sha256": "d3ee29a8e445a1ddbeccc2ce699f0ff8fcb0cc6454abee7b35c24b46d27faee6"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/permission-policy",
+      "source_path": "scripts/lib/permission-policy.ts",
+      "resource_path": "resources/scripts/lib/permission-policy.ts",
+      "sha256": "acf2c3656dcff6ab5345d1746bf6b62c386bc930c3cd5c85286438ac3bbf5e47"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/permission-policy-schema",
+      "source_path": "scripts/lib/permission-policy-schema.ts",
+      "resource_path": "resources/scripts/lib/permission-policy-schema.ts",
+      "sha256": "24a78f198b91385ddbc864035f4b04c300368bb4534465ebe35855f1e61727fb"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/shared/safe-object",
+      "source_path": "scripts/lib/shared/safe-object.ts",
+      "resource_path": "resources/scripts/lib/shared/safe-object.ts",
+      "sha256": "b8167acbd8e75d8cb7f871f57c74802d2df592332abd546ed92939b7d059ed91"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/shared/share-set",
+      "source_path": "scripts/lib/shared/share-set.ts",
+      "resource_path": "resources/scripts/lib/shared/share-set.ts",
+      "sha256": "6704b60613a8d61b4875215eff3b58b4a39e820c4cf82830546ca402df868668"
+    },
+    {
+      "category": "scripts",
+      "id": "permission-policy",
+      "source_path": "scripts/permission-policy.ts",
+      "resource_path": "resources/scripts/permission-policy.ts",
+      "sha256": "403bc1dc0e0ec9f43d35cf641f9cb31af74a1c98836484aaf8f51267e94bd544"
+    }
+  ]
+}

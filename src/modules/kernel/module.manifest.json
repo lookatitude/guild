@@ -1,0 +1,18 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "kernel",
+  "title": "Plugin Kernel",
+  "kind": "substrate",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns module registration conventions and plugin-wide bootstrap principles.",
+  "owns": {
+    "skills": ["guild-principles", "using-guild"],
+    "hooks": [
+      "SessionStart:bootstrap.sh",
+      "SessionStart:detect-guild-version.js",
+      "SessionStart:using-guild-bootstrap.js",
+      "UserPromptSubmit:check-skill-coverage.sh"
+    ],
+    "scripts": ["lib/module-manifest", "types/js-yaml.d"]
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "telemetry",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "commands",
+      "id": "stats",
+      "source_path": "commands/stats.md",
+      "resource_path": "resources/commands/stats.md",
+      "sha256": "75c6a18033e98baaa5983969e3be0b8197ea868aafc93297904df792f3a5d473"
+    },
+    {
+      "category": "hooks",
+      "id": "PostToolUse:capture-telemetry.js",
+      "source_path": "hooks/dist/capture-telemetry.js",
+      "resource_path": "resources/hooks/dist/capture-telemetry.js",
+      "sha256": "d40ddfe0f590e384c7916e3526ca07ea5ca162da2e8dd117eab31af4b86ab888"
+    },
+    {
+      "category": "hooks",
+      "id": "Stop:run-trace-close.js",
+      "source_path": "hooks/dist/run-trace-close.js",
+      "resource_path": "resources/hooks/dist/run-trace-close.js",
+      "sha256": "3707deb24dc99f71366156ab45c6a18bdca10aa0ba18b94d8ca5a72f98cc34b7"
+    },
+    {
+      "category": "hooks",
+      "id": "UserPromptSubmit:run-trace-start.js",
+      "source_path": "hooks/dist/run-trace-start.js",
+      "resource_path": "resources/hooks/dist/run-trace-start.js",
+      "sha256": "c1c905fc41fbcc9d34aeef2472f5a58c72725cb22074f1ca6d5501be459030cc"
+    },
+    {
+      "category": "mcp_servers",
+      "id": "guild-telemetry",
+      "source_path": ".mcp.json",
+      "resource_path": "resources/mcp_servers/.mcp.json",
+      "sha256": "60091d773900b8e0796c2af42e2e032476732c4d120f7a7159470d966231eb33"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/failure-ingestion",
+      "source_path": "scripts/lib/failure-ingestion.ts",
+      "resource_path": "resources/scripts/lib/failure-ingestion.ts",
+      "sha256": "fe03a9214aa7daf5f4a39406daa086105f12f840d4c59978a34eb79a7f0bb146"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/guild-trace-emit",
+      "source_path": "scripts/lib/guild-trace-emit.ts",
+      "resource_path": "resources/scripts/lib/guild-trace-emit.ts",
+      "sha256": "e48730222d62b44f56016fd4ca9e84727bfe751d3aba4a4800b75bacb2a1d31c"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/guild-trace-events",
+      "source_path": "scripts/lib/guild-trace-events.ts",
+      "resource_path": "resources/scripts/lib/guild-trace-events.ts",
+      "sha256": "1e2e5464c33d99ef09b1393d395c6e4f32ab4e943a8244fdd301f5deb9397936"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/telemetry-redirect",
+      "source_path": "scripts/lib/telemetry-redirect.ts",
+      "resource_path": "resources/scripts/lib/telemetry-redirect.ts",
+      "sha256": "45886ab80380be882dd6a9fef65fe3a4caf4a2a8753fa01ff6983eb131a4d988"
+    },
+    {
+      "category": "scripts",
+      "id": "trace-summarize",
+      "source_path": "scripts/trace-summarize.ts",
+      "resource_path": "resources/scripts/trace-summarize.ts",
+      "sha256": "fa56130837bcf23352fcb93606dfb5ec2a57b40879c417881aa57b35464966bb"
+    },
+    {
+      "category": "scripts",
+      "id": "v1.4-log-validator",
+      "source_path": "scripts/v1.4-log-validator.ts",
+      "resource_path": "resources/scripts/v1.4-log-validator.ts",
+      "sha256": "d52541e81852f5198e92cfca5f9a13a20927411c2445febada58b1ae27144e74"
+    }
+  ]
+}

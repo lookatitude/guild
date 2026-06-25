@@ -1,0 +1,20 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "capability",
+  "title": "Capability Routing",
+  "kind": "substrate",
+  "implementation_mode": "workflow-backed",
+  "description": "Ranks and resolves task capability, model tier, backend selection, and role/capability metadata.",
+  "depends_on": ["config", "dispatch", "host-runtime"],
+  "owns": {
+    "scripts": [
+      "score-tier",
+      "lib/autonomy-presets",
+      "lib/isolation-capability-set",
+      "lib/lane-reserved-field",
+      "lib/role-model-schema",
+      "lib/role-resolver"
+    ],
+    "script_id_prefixes": ["lib/capability/"]
+  }
+}

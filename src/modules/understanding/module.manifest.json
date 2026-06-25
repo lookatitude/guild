@@ -1,0 +1,13 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "understanding",
+  "title": "Repository Understanding",
+  "kind": "capability",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns repo scanning, taxonomy, structural analysis, knowledge graph construction, staleness, diagrams, and onboarding maps.",
+  "depends_on": ["knowledge", "state"],
+  "owns": {
+    "scripts": [],
+    "script_id_prefixes": ["understand/"]
+  }
+}

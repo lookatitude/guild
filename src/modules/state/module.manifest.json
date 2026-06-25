@@ -1,0 +1,26 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "state",
+  "title": "Guild State",
+  "kind": "substrate",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns .guild root/path discovery, artifact paths, run replay/export, retention, and durable state helpers.",
+  "depends_on": ["kernel", "migrations"],
+  "owns": {
+    "hooks": ["PreCompact:pre-compact.js"],
+    "scripts": [
+      "lib/dependency-graph-reader",
+      "lib/dependency-graph-schema",
+      "lib/frontmatter",
+      "lib/guild-artifact-paths",
+      "lib/guild-discovery",
+      "lib/guild-root",
+      "lib/heartbeat-write-side",
+      "lib/index-cache",
+      "lib/replay-rundir",
+      "lib/retention",
+      "lib/sanitized-run-export",
+      "lib/trace-replay"
+    ]
+  }
+}

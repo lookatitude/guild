@@ -1,0 +1,28 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "templates",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "instantiate-template",
+      "source_path": "scripts/instantiate-template.ts",
+      "resource_path": "resources/scripts/instantiate-template.ts",
+      "sha256": "014ba35f09d6b1cd65b1580ad906ca2a232cab448e56919da8777e845b9a8f5f"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/template-schema",
+      "source_path": "scripts/lib/template-schema.ts",
+      "resource_path": "resources/scripts/lib/template-schema.ts",
+      "sha256": "1fad5daf8aa63333743bb78361bf9fd8110171dcc9a7ac55151135f0db3a0365"
+    },
+    {
+      "category": "skills",
+      "id": "guild-create-skill",
+      "source_path": "skills/meta/create-skill/SKILL.md",
+      "resource_path": "resources/skills/meta/create-skill/SKILL.md",
+      "sha256": "f44aa2629a30a66a2a7721d569092fe55d28816a6eea89a4a4f5175a70b59904"
+    }
+  ]
+}

@@ -19,6 +19,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { inShareSet as canonicalInShareSet } from "../lib/shared/share-set";
+import * as shareSetShim from "../lib/shared/share-set";
+import * as shareSetModule from "../../src/modules/security/workflows/share-set";
 
 const sep = path.sep;
 
@@ -56,6 +58,12 @@ const PATHS = [
 ];
 
 describe("WAVE-1 Unit 3 — scrub share-set single-source parity", () => {
+  test("compatibility shim: scripts/lib/shared/share-set re-exports src/modules/security", () => {
+    expect(shareSetShim.SHARED_SCRUBBED_NAMES).toBe(shareSetModule.SHARED_SCRUBBED_NAMES);
+    expect(shareSetShim.inShareSet).toBe(shareSetModule.inShareSet);
+    expect(shareSetShim.isPayloadFile).toBe(shareSetModule.isPayloadFile);
+  });
+
   test("(A) parity: canonical inShareSet matches the reference for both flag states", () => {
     for (const rel of PATHS) {
       for (const hasFlag of [false, true]) {
@@ -77,7 +85,7 @@ describe("WAVE-1 Unit 3 — scrub share-set single-source parity", () => {
 
   test("(C) single-impl: exactly one source file DEFINES inShareSet; no dup name set", () => {
     const repoRoot = path.resolve(__dirname, "../..");
-    const roots = [path.join(repoRoot, "scripts"), path.join(repoRoot, "mcp-servers")];
+    const roots = [path.join(repoRoot, "scripts"), path.join(repoRoot, "src"), path.join(repoRoot, "mcp-servers")];
     const SKIP = new Set(["node_modules", "dist", ".git", "build", "coverage"]);
     const inShareSetDefiners: string[] = [];
     const mirrorOffenders: string[] = [];
@@ -103,7 +111,7 @@ describe("WAVE-1 Unit 3 — scrub share-set single-source parity", () => {
     }
     for (const r of roots) walk(r);
 
-    expect(inShareSetDefiners).toEqual(["scripts/lib/shared/share-set.ts"]);
+    expect(inShareSetDefiners).toEqual(["src/modules/security/workflows/share-set.ts"]);
     expect(mirrorOffenders).toEqual([]);
   });
 });

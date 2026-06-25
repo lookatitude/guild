@@ -1,0 +1,28 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "initiatives",
+  "title": "Initiatives",
+  "kind": "capability",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns initiative state, activity, work items, product ideation helpers, proposal classification, and decision capture surfaces.",
+  "depends_on": ["state", "knowledge"],
+  "owns": {
+    "commands": ["initiative"],
+    "skills": [
+      "guild-decisions",
+      "guild-product-define",
+      "guild-product-explore",
+      "guild-product-template"
+    ],
+    "scripts": [
+      "classify-proposal",
+      "lib/ideation-min-build",
+      "lib/init-offer-initiative",
+      "lib/init-resume-repair",
+      "lib/init-staging-gate",
+      "lib/initiative",
+      "lib/initiative-activity",
+      "lib/initiative-workitems"
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "mcpServers": {
+    "guild-memory": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-memory/dist/index.js"
+      ],
+      "env": {},
+      "mcp_capability": {
+        "description": "D-MCP declared capability (docs/v2/11-security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation.",
+        "read_only": true,
+        "read_paths": [
+          ".guild/wiki/**"
+        ],
+        "write_paths": [],
+        "network": "none"
+      }
+    },
+    "guild-telemetry": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-telemetry/dist/index.js"
+      ],
+      "env": {},
+      "mcp_capability": {
+        "description": "D-MCP declared capability (docs/v2/11-security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation.",
+        "read_only": true,
+        "read_paths": [
+          ".guild/runs/**"
+        ],
+        "write_paths": [],
+        "network": "none"
+      }
+    }
+  }
+}

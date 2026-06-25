@@ -1,0 +1,63 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "context",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "lib/fs-scanner",
+      "source_path": "scripts/lib/fs-scanner.ts",
+      "resource_path": "resources/scripts/lib/fs-scanner.ts",
+      "sha256": "562cf8570808f212ed090e9ccb8c2e93fa39db28f6b2cc94eb92fffcaffcdd52"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/memory-adapter",
+      "source_path": "scripts/lib/memory-adapter.ts",
+      "resource_path": "resources/scripts/lib/memory-adapter.ts",
+      "sha256": "b0b5bdf0a53252024af0f3e3327b1dc5403010632d48bf8e2045c7a2ab864a1d"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/protect-chunks",
+      "source_path": "scripts/lib/protect-chunks.ts",
+      "resource_path": "resources/scripts/lib/protect-chunks.ts",
+      "sha256": "9e5468471bd4f417d0da8a7f4e1c1ed76d80811afc3500c4624139b0fed3e533"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/recall",
+      "source_path": "scripts/lib/recall.ts",
+      "resource_path": "resources/scripts/lib/recall.ts",
+      "sha256": "f44a0fc8e9858479e44372fe7ed18e3b43508d275d548a9ac31c3a3898b11a5e"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/recall-protect",
+      "source_path": "scripts/lib/recall-protect.ts",
+      "resource_path": "resources/scripts/lib/recall-protect.ts",
+      "sha256": "d31d8feecf0ef908c326f5505952b83cfa01ae54b198fcdb86014463d4b54b6b"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/wiki-recall",
+      "source_path": "scripts/lib/wiki-recall.ts",
+      "resource_path": "resources/scripts/lib/wiki-recall.ts",
+      "sha256": "b1cf6229de1709d1561482bb813ebb91e3b1561b9dd73c93c1f45d7d9304cd15"
+    },
+    {
+      "category": "scripts",
+      "id": "lint-context-bundle",
+      "source_path": "scripts/lint-context-bundle.ts",
+      "resource_path": "resources/scripts/lint-context-bundle.ts",
+      "sha256": "931616e7490ae068fdb6a2ff64fc8994509d56cf45e2130cff6ca786792d6d9f"
+    },
+    {
+      "category": "skills",
+      "id": "guild-context-assemble",
+      "source_path": "skills/meta/context-assemble/SKILL.md",
+      "resource_path": "resources/skills/meta/context-assemble/SKILL.md",
+      "sha256": "626457706e312a8a940a2e00fbf34f0b2e9a3941c08a8dd00f561df8588d17dd"
+    }
+  ]
+}

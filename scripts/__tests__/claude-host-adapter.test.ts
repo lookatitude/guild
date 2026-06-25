@@ -7,7 +7,28 @@ import { createHostAdapter } from "../lib/host-adapter-factory";
 import { createClaudeCodeCliAdapter } from "../lib/host-adapters/claude-code-cli";
 import { HOST_REGISTRY_ROWS } from "../lib/host-registry-schema";
 import { buildInventory, PLUGIN_ROOT, UNSTAMPED_GENERATED_AT } from "../build-inventory";
-import { writeClaudeTree } from "../build-host-packages";
+import {
+  checkClaudeInstallSurface,
+  syncClaudeInstallSurface,
+  writeAgentsTree,
+  writeAntigravityTree,
+  writeClaudeTree,
+  writeCodexTree,
+  writeCodexMarketplaceTree,
+  writePiTree,
+} from "../build-host-packages";
+
+function copyPluginFixture(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-host-package-fixture-"));
+  for (const dir of ["commands", "skills", "agents", "hooks", "scripts", "src", ".claude-plugin"]) {
+    fs.cpSync(path.join(PLUGIN_ROOT, dir), path.join(root, dir), {
+      recursive: true,
+      filter: (src) => !src.includes(`${path.sep}node_modules${path.sep}`),
+    });
+  }
+  fs.copyFileSync(path.join(PLUGIN_ROOT, ".mcp.json"), path.join(root, ".mcp.json"));
+  return root;
+}
 
 describe("Claude HostAdapter concrete parity", () => {
   it("factory returns the concrete Claude adapter for canonical id and legacy alias", () => {
@@ -185,6 +206,354 @@ describe("Claude HostAdapter concrete parity", () => {
       fs.rmSync(tmpDist, { recursive: true, force: true });
     }
   });
+
+  it("generated Claude package includes generated install metadata sidecars", () => {
+    const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-r3-claude-install-metadata-"));
+    try {
+      const inv = buildInventory(PLUGIN_ROOT);
+      const dest = writeClaudeTree(PLUGIN_ROOT, inv, tmpDist, UNSTAMPED_GENERATED_AT);
+      const pluginJson = JSON.parse(
+        fs.readFileSync(path.join(dest, ".claude-plugin", "plugin.json"), "utf8")
+      ) as { name: string; version: string };
+      const marketplace = JSON.parse(
+        fs.readFileSync(path.join(dest, ".claude-plugin", "marketplace.json"), "utf8")
+      ) as { plugins: Array<{ name: string; version: string; source: string }> };
+      expect(pluginJson).toMatchObject({ name: "guild", version: inv.manifest.version });
+      expect(marketplace.plugins).toHaveLength(1);
+      expect(marketplace.plugins[0]).toMatchObject({
+        name: "guild",
+        version: inv.manifest.version,
+        source: "./",
+      });
+    } finally {
+      fs.rmSync(tmpDist, { recursive: true, force: true });
+    }
+  });
+
+  it("generated Claude package bundles src/modules for script compatibility shims", () => {
+    const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-r3-claude-src-"));
+    try {
+      const dest = writeClaudeTree(PLUGIN_ROOT, buildInventory(PLUGIN_ROOT), tmpDist, UNSTAMPED_GENERATED_AT);
+      const shim = fs.readFileSync(path.join(dest, "scripts", "lib", "module-manifest.ts"), "utf8");
+      expect(shim).toContain("../../src/modules/kernel/workflows/module-manifest");
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "kernel", "workflows", "module-manifest.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "kernel", "workflows", "yaml-loader.ts"))
+      ).toBe(true);
+      expect(fs.existsSync(path.join(dest, "scripts", "package.json"))).toBe(true);
+      expect(fs.existsSync(path.join(dest, "scripts", "package-lock.json"))).toBe(true);
+      expect(fs.existsSync(path.join(dest, "scripts", "node_modules", "js-yaml", "index.js"))).toBe(true);
+      expect(fs.existsSync(path.join(dest, "scripts", "node_modules", "argparse", "index.js"))).toBe(true);
+      expect(fs.existsSync(path.join(dest, "scripts", "node_modules", "esprima", "package.json"))).toBe(true);
+      expect(fs.existsSync(path.join(dest, "scripts", "node_modules", "sprintf-js", "package.json"))).toBe(true);
+      expect(require.resolve("js-yaml", { paths: [path.join(dest, "scripts")] })).toContain(
+        path.join(dest, "scripts", "node_modules", "js-yaml")
+      );
+      const hookProbe = spawnSync(process.execPath, [path.join(dest, "hooks", "dist", "learning-backstop.js")], {
+        cwd: dest,
+        encoding: "utf8",
+        input: "{}",
+      });
+      expect(hookProbe.status).toBe(0);
+      expect(hookProbe.stderr).not.toContain("Cannot resolve js-yaml");
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "distribution", "workflows", "check-module-ownership.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "distribution", "workflows", "build-inventory.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "distribution", "workflows", "equivalence-contract.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "distribution", "workflows", "inventory-schema.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "distribution", "workflows", "installer-contract.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "distribution", "workflows", "parity-contract.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "distribution", "workflows", "per-host-packaging.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "distribution", "workflows", "result-contracts.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "distribution", "workflows", "review-result.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "distribution", "workflows", "surface-manifest.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "dispatch", "workflows", "specialist-contract.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "host-types.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "capability", "workflows", "router.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "capability", "workflows", "rank.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "capability", "workflows", "tiebreak.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "capability", "workflows", "tier-defaults.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "config", "workflows", "settings-reader.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "config", "workflows", "settings-resolver.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "config", "workflows", "tier-model.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "prompting", "workflows", "team-prompt.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "context", "workflows", "recall-protect.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "context", "workflows", "protect-chunks-cli.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "context", "workflows", "wiki-recall.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "context", "workflows", "recall.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "context", "workflows", "fs-scanner.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "context", "workflows", "memory-adapter.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "evals", "workflows", "define-schema.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "evals", "workflows", "explore-schema.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "knowledge", "workflows", "ingest-importance.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "knowledge", "workflows", "knowledge-links-contract.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "telemetry", "workflows", "guild-trace-events.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "telemetry", "workflows", "guild-trace-emit.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "state", "workflows", "frontmatter.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "state", "workflows", "guild-discovery.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "state", "workflows", "guild-root.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "state", "workflows", "index-cache.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "migrations", "workflows", "index-migrate.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "host-runtime", "workflows", "host-capabilities-schema.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "host-runtime", "workflows", "host-capability-manifest.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "host-runtime", "workflows", "host-registry-schema.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "host-id-namespace.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "host-registry.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "host-runtime", "workflows", "adapter-fallback-ladders.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "host-runtime", "workflows", "host-profiles-validate.ts")
+        )
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "runtime-adapters.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "host-adapter-contract.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "degradation-trace.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "mixed-host-contracts.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "provider-detect.ts"))
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(dest, "src", "modules", "understanding", "workflows", "knowledge-graph-contract.ts")
+        )
+      ).toBe(true);
+    } finally {
+      fs.rmSync(tmpDist, { recursive: true, force: true });
+    }
+  });
+
+  it("generated packages refuse stale module resource mirrors", () => {
+    const fixtureRoot = copyPluginFixture();
+    const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-stale-module-resources-"));
+    try {
+      fs.appendFileSync(path.join(fixtureRoot, "commands", "plan.md"), "\nSTALE RESOURCE CONTROL\n");
+      expect(() =>
+        writeClaudeTree(fixtureRoot, buildInventory(fixtureRoot), tmpDist, UNSTAMPED_GENERATED_AT)
+      ).toThrow(/module resources are stale/);
+    } finally {
+      fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      fs.rmSync(tmpDist, { recursive: true, force: true });
+    }
+  });
+
+  it("live Claude install metadata can be synced and checked against the generated render", () => {
+    const fixtureRoot = copyPluginFixture();
+    try {
+      const inv = buildInventory(fixtureRoot);
+      syncClaudeInstallSurface(fixtureRoot, inv, UNSTAMPED_GENERATED_AT);
+      expect(checkClaudeInstallSurface(fixtureRoot, inv, UNSTAMPED_GENERATED_AT)).toEqual({
+        ok: true,
+        stale: [],
+      });
+
+      fs.appendFileSync(path.join(fixtureRoot, ".claude-plugin", "plugin.json"), "\n");
+      const drift = checkClaudeInstallSurface(fixtureRoot, inv, UNSTAMPED_GENERATED_AT);
+      expect(drift.ok).toBe(false);
+      expect(drift.stale).toContainEqual({
+        path: ".claude-plugin/plugin.json",
+        reason: "content differs from generated module/inventory render",
+      });
+    } finally {
+      fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("live Claude install metadata sync refuses stale module resource mirrors", () => {
+    const fixtureRoot = copyPluginFixture();
+    try {
+      const inv = buildInventory(fixtureRoot);
+      fs.appendFileSync(path.join(fixtureRoot, "commands", "plan.md"), "\nSTALE RESOURCE CONTROL\n");
+      expect(() => syncClaudeInstallSurface(fixtureRoot, inv, UNSTAMPED_GENERATED_AT)).toThrow(
+        /module resources are stale/
+      );
+    } finally {
+      fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("generated Codex marketplace package preserves scripts runtime dependencies", () => {
+    const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-r3-codex-marketplace-runtime-"));
+    try {
+      const inv = buildInventory(PLUGIN_ROOT);
+      const codexDir = writeCodexTree(PLUGIN_ROOT, inv, tmpDist, UNSTAMPED_GENERATED_AT);
+      const marketplaceDir = writeCodexMarketplaceTree(codexDir, tmpDist);
+      const pluginDir = path.join(marketplaceDir, "plugins", "guild");
+      expect(fs.existsSync(path.join(pluginDir, "scripts", "node_modules", "js-yaml", "index.js"))).toBe(true);
+      expect(require.resolve("js-yaml", { paths: [path.join(pluginDir, "scripts")] })).toContain(
+        path.join(pluginDir, "scripts", "node_modules", "js-yaml")
+      );
+    } finally {
+      fs.rmSync(tmpDist, { recursive: true, force: true });
+    }
+  });
+
+  it("generated non-Claude packages execute bundled guild-run wrappers in dry-run mode", () => {
+    const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-generated-wrapper-smoke-"));
+    const tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), "guild-wrapper-cwd-"));
+    try {
+      const inv = buildInventory(PLUGIN_ROOT);
+      const agentsDir = writeAgentsTree(PLUGIN_ROOT, inv, tmpDist, UNSTAMPED_GENERATED_AT);
+      expect(fs.existsSync(path.join(agentsDir, "AGENTS.md"))).toBe(true);
+      expect(
+        fs.existsSync(path.join(agentsDir, ".agents", "skills", "guild", "meta", "using-guild", "SKILL.src.md"))
+      ).toBe(true);
+      const packages = [
+        { host: "codex", dir: writeCodexTree(PLUGIN_ROOT, inv, tmpDist, UNSTAMPED_GENERATED_AT) },
+        { host: "pi", dir: writePiTree(PLUGIN_ROOT, inv, tmpDist, UNSTAMPED_GENERATED_AT) },
+        { host: "antigravity", dir: writeAntigravityTree(PLUGIN_ROOT, inv, tmpDist, UNSTAMPED_GENERATED_AT) },
+      ];
+
+      for (const pkg of packages) {
+        const res = spawnSync(
+          path.join(pkg.dir, "bin", "guild-run"),
+          ["--dry-run", "--prompt", `smoke ${pkg.host}`, "--cwd", tmpCwd],
+          {
+            cwd: pkg.dir,
+            encoding: "utf8",
+            env: { ...process.env, npm_config_cache: "/private/tmp/guild-npm-cache" },
+            maxBuffer: 10 * 1024 * 1024,
+          }
+        );
+        expect(res.status).toBe(0);
+        const plan = JSON.parse(res.stdout) as Record<string, unknown>;
+        expect(plan).toMatchObject({
+          host: pkg.host,
+          cwd: tmpCwd,
+          host_adapter: {
+            schema_version: "guild.run_host_adapter_receipt.v1",
+          },
+        });
+        expect(plan["command"]).toBeTruthy();
+        expect(JSON.stringify(plan)).toContain(`smoke ${pkg.host}`);
+      }
+    } finally {
+      fs.rmSync(tmpDist, { recursive: true, force: true });
+      fs.rmSync(tmpCwd, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("install.sh Claude host dry-run", () => {
@@ -192,10 +561,15 @@ describe("install.sh Claude host dry-run", () => {
     const script = path.resolve(PLUGIN_ROOT, "install.sh");
     const res = spawnSync("bash", [script, "--dry-run", "--host", "claude-code-cli"], {
       encoding: "utf8",
+      cwd: PLUGIN_ROOT,
       env: { ...process.env, PATH: "/usr/bin:/bin" },
     });
     expect(res.status).toBe(0);
-    expect(res.stdout).toContain("would run: claude plugin marketplace add");
+    expect(res.stdout).toContain(
+      "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>"
+    );
+    expect(res.stdout).toContain("would run: claude plugin validate ./dist/claude-code");
+    expect(res.stdout).toContain("would run: claude plugin marketplace add ./dist/claude-code");
     expect(res.stdout).toContain("would run: claude plugin install guild@guild");
     expect(res.stdout).toContain("CLAUDE.md imports AGENTS.md");
     expect(res.stdout).toContain("@AGENTS.md");

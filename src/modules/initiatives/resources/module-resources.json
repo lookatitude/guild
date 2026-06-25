@@ -1,0 +1,98 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "initiatives",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "commands",
+      "id": "initiative",
+      "source_path": "commands/initiative.md",
+      "resource_path": "resources/commands/initiative.md",
+      "sha256": "10cb0a60a3a3bf2cff0d68b71ab9ff1a6eac9bbb26b5f0a9ea21d9724c541810"
+    },
+    {
+      "category": "scripts",
+      "id": "classify-proposal",
+      "source_path": "scripts/classify-proposal.ts",
+      "resource_path": "resources/scripts/classify-proposal.ts",
+      "sha256": "a9d39c6da10e86e7206b079c0a7987031385635b6639750c2a54ebb3e933ed20"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/ideation-min-build",
+      "source_path": "scripts/lib/ideation-min-build.ts",
+      "resource_path": "resources/scripts/lib/ideation-min-build.ts",
+      "sha256": "e4f28fe6a2320201c4095d75f969e354fa8663a19aa9fd68dc5ca5c02cad689a"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/init-offer-initiative",
+      "source_path": "scripts/lib/init-offer-initiative.ts",
+      "resource_path": "resources/scripts/lib/init-offer-initiative.ts",
+      "sha256": "59999ff7f78397e6ab14b18e9492fa77a3596ea0097cdcb87eefba270fae7f55"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/init-resume-repair",
+      "source_path": "scripts/lib/init-resume-repair.ts",
+      "resource_path": "resources/scripts/lib/init-resume-repair.ts",
+      "sha256": "f78e22d82831ed8ca3d6fb762ddb95d12fc9e39e364d07e04c471dd4f251a5a5"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/init-staging-gate",
+      "source_path": "scripts/lib/init-staging-gate.ts",
+      "resource_path": "resources/scripts/lib/init-staging-gate.ts",
+      "sha256": "f4753bf2359dbf1205e9c8f844cfa77aa8cc176b0ec915f077a0b7452eaacde2"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/initiative",
+      "source_path": "scripts/lib/initiative.ts",
+      "resource_path": "resources/scripts/lib/initiative.ts",
+      "sha256": "4e82630199f00d630e934ed4f8e11417a6e21b1cd0c5a38fb3a1c8e572f00964"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/initiative-activity",
+      "source_path": "scripts/lib/initiative-activity.ts",
+      "resource_path": "resources/scripts/lib/initiative-activity.ts",
+      "sha256": "b3cdfb4850b2171a5a0f668aa1b4bfee61b455fc1282bed9084b692bdd6048a3"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/initiative-workitems",
+      "source_path": "scripts/lib/initiative-workitems.ts",
+      "resource_path": "resources/scripts/lib/initiative-workitems.ts",
+      "sha256": "7a4b4caf001ee30ebf719bd5829f7c2e9eb207f6bb7598ce40a248097ecc90b2"
+    },
+    {
+      "category": "skills",
+      "id": "guild-decisions",
+      "source_path": "skills/meta/decisions/SKILL.md",
+      "resource_path": "resources/skills/meta/decisions/SKILL.md",
+      "sha256": "a3105d8b3e918611df33f46b1376b26007f744c2a19a3031a32e038a7ce19da3"
+    },
+    {
+      "category": "skills",
+      "id": "guild-product-define",
+      "source_path": "skills/meta/product-define/SKILL.md",
+      "resource_path": "resources/skills/meta/product-define/SKILL.md",
+      "sha256": "1a5438b1900e5ee5f74a17603feecff7a574ca17d8b7011e77c077831b64249d"
+    },
+    {
+      "category": "skills",
+      "id": "guild-product-explore",
+      "source_path": "skills/meta/product-explore/SKILL.md",
+      "resource_path": "resources/skills/meta/product-explore/SKILL.md",
+      "sha256": "a221e9082a062fc0b7a351f6099e9f6cbd6213adae3d66c5d76d6eb45be01967"
+    },
+    {
+      "category": "skills",
+      "id": "guild-product-template",
+      "source_path": "skills/meta/product-template/SKILL.md",
+      "resource_path": "resources/skills/meta/product-template/SKILL.md",
+      "sha256": "092ba8133c66d9290d101302f8bae7be8b8cd4a0a2d2def7b8ad94914e596555"
+    }
+  ]
+}

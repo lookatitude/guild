@@ -1,0 +1,49 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "workspace",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "lib/workspace-impact-detector",
+      "source_path": "scripts/lib/workspace-impact-detector.ts",
+      "resource_path": "resources/scripts/lib/workspace-impact-detector.ts",
+      "sha256": "5758038ec16980a38c58e4351a28ea58a096ca6ff327fa088ce418da10f00b48"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/workspace-impact-schema",
+      "source_path": "scripts/lib/workspace-impact-schema.ts",
+      "resource_path": "resources/scripts/lib/workspace-impact-schema.ts",
+      "sha256": "a67081e96f01d41389010f879bc1b2dd1fc75f9b18c0a920ce470da7ce24261c"
+    },
+    {
+      "category": "scripts",
+      "id": "workspace/detect",
+      "source_path": "scripts/workspace/detect.ts",
+      "resource_path": "resources/scripts/workspace/detect.ts",
+      "sha256": "e5f2a3c0460443696728ed7e9b0c5755b70619afc9d3fabfa38d73c6161a7226"
+    },
+    {
+      "category": "scripts",
+      "id": "workspace/federated-query",
+      "source_path": "scripts/workspace/federated-query.ts",
+      "resource_path": "resources/scripts/workspace/federated-query.ts",
+      "sha256": "924b82be97bd9e4f276f8c473ae80c26091941d8cc9f7674139f87161d12a17d"
+    },
+    {
+      "category": "scripts",
+      "id": "workspace/promote-upstream",
+      "source_path": "scripts/workspace/promote-upstream.ts",
+      "resource_path": "resources/scripts/workspace/promote-upstream.ts",
+      "sha256": "8750e41209e8e80b795e8b1b161023553c68ba061759826e29971fb8a8a8ca9b"
+    },
+    {
+      "category": "scripts",
+      "id": "workspace/write-manifest",
+      "source_path": "scripts/workspace/write-manifest.ts",
+      "resource_path": "resources/scripts/workspace/write-manifest.ts",
+      "sha256": "c14efdeb6ad0a03b138d5948a7ada461cb6f1f25259f35287db897196a61a71d"
+    }
+  ]
+}

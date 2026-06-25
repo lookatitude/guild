@@ -4,7 +4,19 @@
   "scripts": {
     "test": "npx jest --testPathPattern=__tests__ --no-coverage --runInBand",
     "build:inventory": "npx tsx build-inventory.ts",
-    "build:hosts": "npx tsx build-host-packages.ts"
+    "build:hosts": "npx tsx build-host-packages.ts",
+    "check:modules": "npx tsx check-module-ownership.ts",
+    "sync:module-resources": "npx tsx sync-module-resources.ts",
+    "check:module-resources": "npx tsx sync-module-resources.ts --check",
+    "sync:live-resources": "npx tsx sync-live-resources.ts",
+    "check:live-resources": "npx tsx sync-live-resources.ts --check",
+    "sync:claude-install": "npx tsx build-host-packages.ts --sync-claude-install",
+    "check:claude-install": "npx tsx build-host-packages.ts --check-claude-install",
+    "check:module-source-of-truth": "npm run check:modules -- --root .. && npm run check:module-resources -- --root .. && npm run check:live-resources -- --root .. && npm run check:claude-install -- --root ..",
+    "verify:host-packages": "npx tsx sync-live-resources.ts --check --root .. && npx tsx build-host-packages.ts --check-claude-install && npx tsx verify-host-packages.ts",
+    "verify:installer": "npx tsx verify-installer.ts",
+    "verify:installer-execution": "npx tsx verify-installer.ts --execute-fixtures",
+    "verify:installer-live": "npx tsx verify-installer.ts --execute-live-isolated"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"

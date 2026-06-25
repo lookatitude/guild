@@ -1,0 +1,24 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "config",
+  "title": "Configuration",
+  "kind": "substrate",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns settings schema, config rendering, config command behavior, and layered settings resolution.",
+  "depends_on": ["host-runtime", "kernel", "security", "state", "telemetry"],
+  "owns": {
+    "commands": ["config"],
+    "scripts": [
+      "config-cmd",
+      "read-guild-config",
+      "lib/config-reconcile",
+      "lib/config-reconcile-contract",
+      "lib/config-render",
+      "lib/config-schema",
+      "lib/core/config-cli",
+      "lib/core/settings-reader",
+      "lib/shared/config-defaults",
+      "lib/settings-resolver"
+    ]
+  }
+}

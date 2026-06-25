@@ -1,0 +1,35 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "host-runtime",
+  "title": "Host Runtime",
+  "kind": "substrate",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns host registry, adapters, wrapper launch planning, host capability files, fallback ladders, and degradation normalization.",
+  "depends_on": ["config", "state"],
+  "owns": {
+    "scripts": [
+      "guild-run",
+      "write-host-capability",
+      "lib/adapter-fallback-ladders",
+      "lib/degradation-trace",
+      "lib/emit-readback-degradation",
+      "lib/guild-run-wrapper",
+      "lib/host-adapter-contract",
+      "lib/host-adapter-factory",
+      "lib/host-capabilities-schema",
+      "lib/host-id-namespace",
+      "lib/host-profiles-validate",
+      "lib/host-registry",
+      "lib/host-registry-schema",
+      "lib/host-router",
+      "lib/host-types",
+      "lib/mixed-host-contracts",
+      "lib/pane-adapter",
+      "lib/provider-detect",
+      "lib/result-normalizer",
+      "lib/runtime-adapters",
+      "lib/support-matrix"
+    ],
+    "script_id_prefixes": ["lib/host-adapters/"]
+  }
+}

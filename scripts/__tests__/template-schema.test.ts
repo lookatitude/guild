@@ -28,10 +28,18 @@ import {
   instantiateTemplate,
   runSelfCheck,
 } from "../lib/template-schema";
+import * as templateShim from "../lib/template-schema";
+import * as templateModule from "../../src/modules/templates/workflows/template-schema";
 import { EXPLORE_SCHEMA_VERSION, validateExploreV1 } from "../lib/explore-schema";
 import { DEFINE_SCHEMA_VERSION, validateDefineV1 } from "../lib/define-schema";
 
 describe("guild.template.v1 — constant + valid example", () => {
+  it("keeps scripts/lib/template-schema as a compatibility shim over src/modules/templates", () => {
+    expect(templateShim.TEMPLATE_SCHEMA_VERSION).toBe(templateModule.TEMPLATE_SCHEMA_VERSION);
+    expect(templateShim.validateTemplateV1).toBe(templateModule.validateTemplateV1);
+    expect(templateShim.instantiateTemplate).toBe(templateModule.instantiateTemplate);
+  });
+
   it("exposes the frozen schema constant", () => {
     expect(TEMPLATE_SCHEMA_VERSION).toBe("guild.template.v1");
   });

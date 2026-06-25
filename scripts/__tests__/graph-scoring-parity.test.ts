@@ -20,6 +20,8 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as graphScoringShim from "../lib/shared/graph-scoring";
+import * as graphScoringModule from "../../src/modules/knowledge/workflows/graph-scoring";
 import {
   scoreNode as canonicalScoreNode,
   termMatchScore as canonicalTermMatchScore,
@@ -89,6 +91,12 @@ const TERM_SETS: string[][] = [
 ];
 
 describe("WAVE-1 Unit 2 — KG scorer single-source parity", () => {
+  test("compatibility shim: scripts/lib/shared/graph-scoring re-exports src/modules/knowledge", () => {
+    expect(graphScoringShim.scoreNode).toBe(graphScoringModule.scoreNode);
+    expect(graphScoringShim.termMatchScore).toBe(graphScoringModule.termMatchScore);
+    expect(graphScoringShim.buildProximityBonuses).toBe(graphScoringModule.buildProximityBonuses);
+  });
+
   test("(A) parity: importanceMultiplier + confidenceBonus match the reference", () => {
     for (const n of NODES) {
       expect(canonicalImportanceMultiplier(n)).toBe(refImportanceMultiplier(n));
@@ -126,7 +134,7 @@ describe("WAVE-1 Unit 2 — KG scorer single-source parity", () => {
 
   test("(C) single-impl: exactly one source file DEFINES the KG scorers", () => {
     const repoRoot = path.resolve(__dirname, "../..");
-    const roots = [path.join(repoRoot, "scripts"), path.join(repoRoot, "mcp-servers")];
+    const roots = [path.join(repoRoot, "scripts"), path.join(repoRoot, "mcp-servers"), path.join(repoRoot, "src")];
     const SKIP = new Set(["node_modules", "dist", ".git", "build", "coverage"]);
     const definers = { scoreNode: [] as string[], buildProximityBonuses: [] as string[], termMatchScore: [] as string[], scoreKgNode: [] as string[] };
 
@@ -151,9 +159,9 @@ describe("WAVE-1 Unit 2 — KG scorer single-source parity", () => {
     }
     for (const r of roots) walk(r);
 
-    expect(definers.scoreNode).toEqual(["scripts/lib/shared/graph-scoring.ts"]);
-    expect(definers.buildProximityBonuses).toEqual(["scripts/lib/shared/graph-scoring.ts"]);
-    expect(definers.termMatchScore).toEqual(["scripts/lib/shared/graph-scoring.ts"]);
+    expect(definers.scoreNode).toEqual(["src/modules/knowledge/workflows/graph-scoring.ts"]);
+    expect(definers.buildProximityBonuses).toEqual(["src/modules/knowledge/workflows/graph-scoring.ts"]);
+    expect(definers.termMatchScore).toEqual(["src/modules/knowledge/workflows/graph-scoring.ts"]);
     expect(definers.scoreKgNode).toEqual([]); // old duplicate name must be gone for good
   });
 });

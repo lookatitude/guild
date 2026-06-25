@@ -22,8 +22,7 @@
 #   --project    install with --scope project (current directory) instead of user scope
 #
 # Environment:
-#   GUILD_MARKETPLACE   override the Claude marketplace source (default: lookatitude/guild)
-#   GUILD_SOURCE_REPO   override source repo for agents-file render fallback
+#   GUILD_SOURCE_REPO   override source repo for render fallback when install.sh is run without a checkout
 #
 set -euo pipefail
 
@@ -34,7 +33,6 @@ else
   SCRIPT_DIR="$(pwd)"
 fi
 
-MARKETPLACE="${GUILD_MARKETPLACE:-lookatitude/guild}"
 SOURCE_REPO="${GUILD_SOURCE_REPO:-https://github.com/lookatitude/guild.git}"
 PLUGIN_SPEC="guild@guild"
 DRY_RUN=0
@@ -74,8 +72,7 @@ Options (pass after `bash -s --`):
   --project    install with --scope project (current directory)
 
 Environment:
-  GUILD_MARKETPLACE   override the Claude marketplace source (default: lookatitude/guild)
-  GUILD_SOURCE_REPO   override source repo for agents-file render fallback
+  GUILD_SOURCE_REPO   override source repo for render fallback when install.sh is run without a checkout
 HELP
       exit 0
       ;;
@@ -169,7 +166,15 @@ if command -v claude >/dev/null 2>&1 || { [ "$DRY_RUN" -eq 1 ] && [ "$HOST" = "c
   else
     say "Claude Code selected (dry-run; claude binary not required for planning)"
   fi
-  run claude plugin marketplace add "$MARKETPLACE"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    GENERATED_AT="<generated-at>"
+  else
+    GENERATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  fi
+  render_host_packages "$GENERATED_AT"
+  CLAUDE_MARKETPLACE_PATH="./$RENDERED_DIST/claude-code"
+  run claude plugin validate "$CLAUDE_MARKETPLACE_PATH"
+  run claude plugin marketplace add "$CLAUDE_MARKETPLACE_PATH"
   run claude plugin marketplace update guild
   if [ ${#SCOPE_ARGS[@]} -gt 0 ]; then
     run claude plugin install "$PLUGIN_SPEC" "${SCOPE_ARGS[@]}"
@@ -203,7 +208,7 @@ if command -v codex >/dev/null 2>&1 || { [ "$DRY_RUN" -eq 1 ] && [ "$HOST" = "co
     GENERATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   fi
   render_host_packages "$GENERATED_AT"
-  CODEX_MARKETPLACE_PATH="$RENDERED_DIST/codex-marketplace"
+  CODEX_MARKETPLACE_PATH="./$RENDERED_DIST/codex-marketplace"
   run_allow_fail codex plugin marketplace remove guild
   run codex plugin marketplace add "$CODEX_MARKETPLACE_PATH"
   run codex plugin add "$PLUGIN_SPEC"
@@ -233,7 +238,7 @@ if command -v pi >/dev/null 2>&1 || { [ "$DRY_RUN" -eq 1 ] && [ "$HOST" = "pi-cl
     GENERATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   fi
   render_host_packages "$GENERATED_AT"
-  PI_PACKAGE_PATH="$RENDERED_DIST/pi"
+  PI_PACKAGE_PATH="./$RENDERED_DIST/pi"
   run pi install "$PI_PACKAGE_PATH"
   installed_any=1
   say ""
@@ -262,13 +267,13 @@ if command -v agy >/dev/null 2>&1 || { [ "$DRY_RUN" -eq 1 ] && [ "$HOST" = "anti
     GENERATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   fi
   render_host_packages "$GENERATED_AT"
-  ANTIGRAVITY_PACKAGE_PATH="$RENDERED_DIST/antigravity"
+  ANTIGRAVITY_PACKAGE_PATH="./$RENDERED_DIST/antigravity"
   run agy plugin validate "$ANTIGRAVITY_PACKAGE_PATH"
   run agy plugin install "$ANTIGRAVITY_PACKAGE_PATH"
   installed_any=1
   say ""
   say "Guild package prepared for Antigravity CLI."
-  say "Package bootstrap: AGENTS.md plus .agents/skills/guild and antigravity-manifest.json."
+  say "Package bootstrap: AGENTS.md plus .agents/skills/guild, plugin.json, and antigravity-manifest.json."
   say "Unsupported hooks and MCP are surfaced as Guild degradation receipts; memory falls back through .guild filesystem/BM25."
   say "Use the bundled guild-run wrapper for structured Guild runs:"
   say ""

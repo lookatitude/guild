@@ -1,0 +1,19 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "teams",
+  "title": "Teams",
+  "kind": "capability",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns team composition, specialist creation, worktree support, and team-file parsing.",
+  "depends_on": ["capability", "lifecycle", "specialists", "state"],
+  "owns": {
+    "skills": [
+      "guild-create-specialist",
+      "guild-finish-branch",
+      "guild-team-compose",
+      "guild-worktrees",
+      "writing-skills"
+    ],
+    "scripts": ["lib/team-file"]
+  }
+}

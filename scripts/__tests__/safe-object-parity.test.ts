@@ -20,6 +20,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROTO_POISON_KEYS as canonical, isProtoPoisonKey } from "../lib/shared/safe-object";
+import * as safeObjectShim from "../lib/shared/safe-object";
+import * as safeObjectModule from "../../src/modules/security/workflows/safe-object";
 
 // Frozen reference: the verbatim pre-collapse set.
 const REF = new Set(["__proto__", "prototype", "constructor"]);
@@ -30,6 +32,11 @@ const DANGEROUS = ["__proto__", "prototype", "constructor"];
 const BENIGN = ["models", "defaults", "index", "host_profiles", "roles", "constructorX", "proto"];
 
 describe("WAVE-1 Unit 4 — proto-poison keys single-source parity", () => {
+  test("compatibility shim: scripts/lib/shared/safe-object re-exports src/modules/security", () => {
+    expect(safeObjectShim.PROTO_POISON_KEYS).toBe(safeObjectModule.PROTO_POISON_KEYS);
+    expect(safeObjectShim.isProtoPoisonKey).toBe(safeObjectModule.isProtoPoisonKey);
+  });
+
   test("(A) parity: canonical set blocks exactly the reference dangerous keys", () => {
     for (const k of DANGEROUS) {
       expect(canonical.has(k)).toBe(REF.has(k));
@@ -54,7 +61,7 @@ describe("WAVE-1 Unit 4 — proto-poison keys single-source parity", () => {
 
   test("(C) single-impl: exactly one source file DEFINES the proto-poison key set", () => {
     const repoRoot = path.resolve(__dirname, "../..");
-    const roots = [path.join(repoRoot, "scripts"), path.join(repoRoot, "mcp-servers")];
+    const roots = [path.join(repoRoot, "scripts"), path.join(repoRoot, "src"), path.join(repoRoot, "mcp-servers")];
     const SKIP = new Set(["node_modules", "dist", ".git", "build", "coverage"]);
     const definers: string[] = [];
 
@@ -78,6 +85,6 @@ describe("WAVE-1 Unit 4 — proto-poison keys single-source parity", () => {
     }
     for (const r of roots) walk(r);
 
-    expect(definers).toEqual(["scripts/lib/shared/safe-object.ts"]);
+    expect(definers).toEqual(["src/modules/security/workflows/safe-object.ts"]);
   });
 });

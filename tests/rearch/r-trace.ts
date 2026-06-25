@@ -55,19 +55,19 @@ const EMIT_POINTS: EmitPoint[] = [
   },
   {
     event: "guild.trace.recall.v1",
-    file: "scripts/lib/recall.ts",
+    file: "src/modules/context/workflows/recall.ts",
     line_hint: "~519",
     description: "emitted by recall() after result is assembled, measures branch + chunk_count + duration",
   },
   {
     event: "guild.trace.config_resolution.v1",
-    file: "scripts/lib/settings-resolver.ts",
+    file: "src/modules/config/workflows/settings-resolver.ts",
     line_hint: "~45",
-    description: "emitted by resolveSettings() wrapper in the shim (not core/), captures rigor/layers/fingerprint",
+    description: "emitted by resolveSettings() wrapper in the config module (not pure reader), captures rigor/layers/fingerprint",
   },
   {
     event: "guild.trace.security_decision.v1",
-    file: "scripts/lib/recall-protect.ts",
+    file: "src/modules/context/workflows/recall-protect.ts",
     line_hint: "~280",
     description: "emitted by protectChunks() when a chunk is quarantined (injection probe deny)",
   },
@@ -349,7 +349,7 @@ function prove(): void {
   // (e) Emit-point detector passes when file exists AND has the import
   const realEmitPoint: EmitPoint = {
     event: "guild.trace.recall.v1",
-    file: "scripts/lib/recall.ts",
+    file: "src/modules/context/workflows/recall.ts",
     line_hint: "~519",
     description: "real recall emit point",
   };

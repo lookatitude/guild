@@ -14,14 +14,14 @@
  *      compiler), so they are an explicit, allowed exception to the layering floor.
  *      A RUNTIME (value) upward import is a strict violation → pass:false.
  *
- *      Verified real-tree case: scripts/lib/shared/graph-scoring.ts has
- *        import type { GraphNode, GraphEdge } from "../../understand/lib/schema";
- *      That is type-only and MUST pass. A runtime `import { x } from "../../understand/…"`
- *      MUST fail.
+ *      Compatibility shims are allowed to re-export implementations from src/modules
+ *      when they contain no local logic. A runtime `import { x } from "../../understand/…"`
+ *      MUST still fail.
  *
  * Anti-vacuity: `--prove` runs the pure layering detector against (a) a synthetic shared
  * module with a RUNTIME upward import → flagged, (b) a clean one → not flagged, and
- * (c) a `import type` upward import → NOT flagged (the type-only exception).
+ * (c) a `import type` upward import → NOT flagged (the type-only exception), and
+ * (d) a pure src/modules re-export shim → NOT flagged.
  */
 import { REPO, RailResult, report, walk, read, rel, proveAssert } from "./_common";
 import { execFileSync } from "child_process";
@@ -57,6 +57,7 @@ export function detectUpwardImports(sharedRel: string, content: string): string[
       path.posix.join(path.posix.dirname(sharedRel), spec),
     );
     if (resolved.startsWith(SHARED_FLOOR)) continue; // within the floor — fine
+    if (isPureModuleShim(sharedRel, content, spec, resolved)) continue;
 
     // upward import — is it type-only (allowed) or runtime (forbidden)?
     const isStatementTypeOnly = keyword === "import type" || keyword === "export type";
@@ -67,6 +68,15 @@ export function detectUpwardImports(sharedRel: string, content: string): string[
     bad.push(`${spec}  →  ${resolved}`);
   }
   return bad;
+}
+
+function isPureModuleShim(sharedRel: string, content: string, spec: string, resolved: string): boolean {
+  if (!sharedRel.replace(/\\/g, "/").startsWith(SHARED_FLOOR)) return false;
+  if (!resolved.startsWith("src/modules/")) return false;
+  const trimmed = content.trim();
+  const escapedSpec = spec.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const shimRe = new RegExp(`^(?:/\\*[\\s\\S]*?\\*/\\s*)?export\\s+\\*\\s+from\\s+["']${escapedSpec}["'];?$`);
+  return shimRe.test(trimmed);
 }
 
 /**
@@ -182,6 +192,18 @@ function prove(): void {
     typeOnly.length === 0,
     "layering detector ALLOWS `import type {…}` upward (zero runtime coupling — type-only exception)",
   );
+
+  const moduleShim = detectUpwardImports(
+    "scripts/lib/shared/graph-scoring.ts",
+    'export * from "../../../src/modules/knowledge/workflows/graph-scoring";\n',
+  );
+  proveAssert(moduleShim.length === 0, "layering detector ALLOWS a pure shared/ compatibility shim to src/modules");
+
+  const impureModuleShim = detectUpwardImports(
+    "scripts/lib/shared/graph-scoring.ts",
+    'const local = 1;\nexport * from "../../../src/modules/knowledge/workflows/graph-scoring";\n',
+  );
+  proveAssert(impureModuleShim.length === 1, "PLANTED CONTROL: a shared/ shim with local logic still TRIPS the layer rail");
 
   // (c2) the same upward path as a VALUE import MUST fail (control proving the exception
   //      is the keyword, not the path).

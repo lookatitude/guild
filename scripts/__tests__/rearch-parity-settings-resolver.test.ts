@@ -1,7 +1,7 @@
 /**
  * scripts/__tests__/rearch-parity-settings-resolver.test.ts
  *
- * W3 parity test — settings-resolver.ts split into core/settings-reader.ts + shared/config-defaults.ts
+ * W3 parity test — settings-resolver.ts split into core/settings-reader.ts + config defaults
  *
  * Imports via ORIGINAL paths to verify shims resolve correctly.
  * Anti-vacuity control: asserts that rigor profiles produce DIFFERENT outputs.
@@ -19,11 +19,16 @@ import {
   type ResolveResult,
 } from "../lib/settings-resolver"; // ORIGINAL path — the shim
 import * as settingsResolverExports from "../lib/settings-resolver";
+import * as settingsResolverModule from "../../src/modules/config/workflows/settings-resolver";
+import * as settingsReaderShim from "../lib/core/settings-reader";
+import * as settingsReaderModule from "../../src/modules/config/workflows/settings-reader";
 
 import {
   DEFAULT_ESCALATION_MARKERS,
   NON_INHERITABLE_KEYS,
 } from "../lib/shared/config-defaults"; // shared constants
+import * as configDefaultsShim from "../lib/shared/config-defaults";
+import * as configDefaultsModule from "../../src/modules/config/workflows/config-defaults";
 
 import * as os from "os";
 import * as path from "path";
@@ -50,6 +55,18 @@ describe("settings-resolver shim — parity after W3 split", () => {
       "resolveSettings",
       "rigorProfile",
     ]);
+  });
+
+  it("scripts/lib/settings-resolver re-exports src/modules/config settings resolver", () => {
+    expect(settingsResolverExports.resolveSettings).toBe(settingsResolverModule.resolveSettings);
+    expect(settingsResolverExports.deepMerge).toBe(settingsResolverModule.deepMerge);
+    expect(settingsResolverExports.rigorProfile).toBe(settingsResolverModule.rigorProfile);
+  });
+
+  it("scripts/lib/core/settings-reader re-exports src/modules/config settings reader", () => {
+    expect(settingsReaderShim.resolveSettings).toBe(settingsReaderModule.resolveSettings);
+    expect(settingsReaderShim.deepMerge).toBe(settingsReaderModule.deepMerge);
+    expect(settingsReaderShim.rigorProfile).toBe(settingsReaderModule.rigorProfile);
   });
 
   // ── resolveSettings() — basic resolution ──────────────────────────────────
@@ -102,7 +119,13 @@ describe("settings-resolver shim — parity after W3 split", () => {
     expect(deep.loops).toBe("all");
   });
 
-  // ── shared/config-defaults ────────────────────────────────────────────────
+  // ── config defaults compatibility shim ───────────────────────────────────
+  it("scripts/lib/shared/config-defaults re-exports src/modules/config", () => {
+    expect(configDefaultsShim.DEFAULTS).toBe(configDefaultsModule.DEFAULTS);
+    expect(configDefaultsShim.DEFAULT_ESCALATION_MARKERS).toBe(configDefaultsModule.DEFAULT_ESCALATION_MARKERS);
+    expect(configDefaultsShim.NON_INHERITABLE_KEYS).toBe(configDefaultsModule.NON_INHERITABLE_KEYS);
+  });
+
   it("DEFAULT_ESCALATION_MARKERS is a non-empty array", () => {
     expect(Array.isArray(DEFAULT_ESCALATION_MARKERS)).toBe(true);
     expect(DEFAULT_ESCALATION_MARKERS.length).toBeGreaterThan(0);
@@ -126,18 +149,25 @@ describe("settings-resolver shim — parity after W3 split", () => {
     expect(standard.loops).toBe("spec,plan");
   });
 
-  // — M2 single-source DEFAULTS (the codex G-lane finding) —
-  // W3's first pass left a full DEFAULTS literal in BOTH core/config-cli.ts and core/settings-reader.ts
-  // (only small constants reached shared/). codex consolidated it; this asserts the full DEFAULTS object
-  // is DEFINED in exactly shared/config-defaults.ts and the two core readers IMPORT it, so the M2
-  // dual-source can't silently return. (R-DUP enforces this too; this is the localized control.)
-  it("DEFAULTS is single-sourced in shared/config-defaults.ts; core readers import it", () => {
-    const read = (rel: string) => fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
-    const shared = read("lib/shared/config-defaults.ts");
-    expect(shared).toMatch(/compositeRecall/); // shared owns the real object, not just a few constants
-    expect(shared).toMatch(/importanceGate/);
-    for (const core of ["lib/core/config-cli.ts", "lib/core/settings-reader.ts"]) {
-      const src = read(core);
+  // -- M2 single-source DEFAULTS (the codex G-lane finding) --
+  // W3's first pass left a full DEFAULTS literal in BOTH core/config-cli.ts and core/settings-reader.ts.
+  // The module reorg keeps public shared/core paths as shims but moves real config logic into
+  // src/modules/config. This asserts the full DEFAULTS object is DEFINED there and remaining
+  // core CLI code still imports through the stable shared entrypoint.
+  it("DEFAULTS is single-sourced in src/modules/config; legacy readers do not redeclare it", () => {
+    const readScripts = (rel: string) => fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
+    const readRepo = (rel: string) => fs.readFileSync(path.join(__dirname, "../..", rel), "utf8");
+    const shared = readScripts("lib/shared/config-defaults.ts");
+    const module = readRepo("src/modules/config/workflows/config-defaults.ts");
+    const settingsReader = readRepo("src/modules/config/workflows/settings-reader.ts");
+    expect(shared).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/\.\.\/src\/modules\/config\/workflows\/config-defaults["']/);
+    expect(shared).not.toMatch(/export\s+const\s+DEFAULTS\s*=/);
+    expect(module).toMatch(/compositeRecall/); // module owns the real object, not just a few constants
+    expect(module).toMatch(/importanceGate/);
+    expect(settingsReader).toMatch(/from\s+["']\.\/config-defaults["']/);
+    expect(settingsReader).not.toMatch(/(?:const|let)\s+DEFAULTS\s*(?::[^=]+)?=\s*\{[\s\S]*?compositeRecall/);
+    for (const core of ["lib/core/config-cli.ts"]) {
+      const src = readScripts(core);
       expect(src).toMatch(/from\s+["']\.\.\/shared\/config-defaults["']/); // imports canonical DEFAULTS
       // and does NOT re-declare a full DEFAULTS object literal of its own
       expect(src).not.toMatch(/(?:const|let)\s+DEFAULTS\s*(?::[^=]+)?=\s*\{[\s\S]*?compositeRecall/);

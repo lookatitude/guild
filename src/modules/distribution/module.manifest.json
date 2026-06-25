@@ -1,0 +1,33 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "distribution",
+  "title": "Distribution",
+  "kind": "build",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns neutral inventory, live-surface registries, host package rendering, parity contracts, and install-surface equivalence.",
+  "depends_on": ["host-runtime", "kernel", "state"],
+  "owns": {
+    "scripts": [
+      "build-host-packages",
+      "build-inventory",
+      "check-module-ownership",
+      "check-roster-consistency",
+      "description-optimizer",
+      "registry-rollup",
+      "sync-live-resources",
+      "sync-module-resources",
+      "verify-host-packages",
+      "verify-installer",
+      "lib/command-registry",
+      "lib/equivalence-contract",
+      "lib/installer-contract",
+      "lib/inventory-schema",
+      "lib/module-resources",
+      "lib/parity-contract",
+      "lib/per-host-packaging",
+      "lib/result-contracts",
+      "lib/skill-source-transform",
+      "lib/surface-manifest"
+    ]
+  }
+}

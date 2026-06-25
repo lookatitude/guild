@@ -24,6 +24,8 @@ import * as os from "os";
 import * as path from "path";
 
 import { resolveGuildRoot } from "../lib/guild-root";
+import * as shim from "../lib/guild-root";
+import * as moduleImpl from "../../src/modules/state/workflows/guild-root";
 
 const EMIT_LOOP_EVENT = path.resolve(__dirname, "../emit-loop-event.ts");
 
@@ -88,6 +90,10 @@ describe("resolveGuildRoot (scripts/lib/guild-root)", () => {
     } finally {
       fs.rmSync(noGitRoot, { recursive: true, force: true });
     }
+  });
+
+  it("keeps scripts/lib/guild-root as a compatibility shim over src/modules/state", () => {
+    expect(shim.resolveGuildRoot).toBe(moduleImpl.resolveGuildRoot);
   });
 });
 

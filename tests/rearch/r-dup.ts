@@ -14,8 +14,9 @@
  *         REF copy, a DIVERGENT copy) to assert the canonical body matches; counting
  *         them is a false positive (the original substring matcher tripped on
  *         graph-scoring-parity.test.ts + safe-object-parity.test.ts).
- *       · scripts/lib/shared/**  is the CANONICAL floor — its file is the surviving hit
- *         we ASSERT is present, not a violation.
+ *       · canonical module homes are the surviving hits we ASSERT are present, not
+ *         violations. During the module reorg, some canonical homes move under src/modules
+ *         while scripts/lib/shared keeps compatibility shims.
  *   - A concern is RED if it appears in >1 non-test source file, OR if the canonical
  *     file is NOT among the hits (the dedup pointed at the wrong home / lost the body).
  *
@@ -40,13 +41,13 @@ export const DUP_SIGS: DupSig[] = [
   {
     id: "bm25-scorer",
     signature: "export function bm25Score(",
-    canonical: "scripts/lib/shared/bm25.ts",
+    canonical: "src/modules/knowledge/workflows/bm25.ts",
   },
   {
     id: "kg-graph-scoring",
     // the term-scoring haystack line shared by kg-query.ts scoreNode + recall.ts scoreKgNode
     signature: '(node.source_refs ?? []).join(" ")}`.toLowerCase()',
-    canonical: "scripts/lib/shared/graph-scoring.ts",
+    canonical: "src/modules/knowledge/workflows/graph-scoring.ts",
   },
   {
     id: "scrub-share-set",
@@ -56,12 +57,12 @@ export const DUP_SIGS: DupSig[] = [
     // single-line literal was reflowed multi-line, so a literal-substring match is brittle).
     // A re-introduced duplicate of the concern would re-declare inShareSet().
     signature: "export function inShareSet(",
-    canonical: "scripts/lib/shared/share-set.ts",
+    canonical: "src/modules/security/workflows/share-set.ts",
   },
   {
     id: "proto-poison-keys",
     signature: 'new Set(["__proto__", "prototype", "constructor"])',
-    canonical: "scripts/lib/shared/safe-object.ts",
+    canonical: "src/modules/security/workflows/safe-object.ts",
   },
 ];
 
@@ -78,11 +79,6 @@ export interface DupFinding {
 export function isTestPath(relPath: string): boolean {
   const p = relPath.replace(/\\/g, "/");
   return /\.test\.ts$/.test(p) || p.includes("/__tests__/");
-}
-
-/** A path is on the canonical shared/ floor. */
-export function isCanonicalFloor(relPath: string): boolean {
-  return relPath.replace(/\\/g, "/").startsWith("scripts/lib/shared/");
 }
 
 /**
@@ -113,7 +109,7 @@ export function detectDups(files: Map<string, string>, sigs: DupSig[]): DupFindi
   return out;
 }
 
-const SOURCE_DIRS = ["scripts", "mcp-servers", "hooks"];
+const SOURCE_DIRS = ["scripts", "mcp-servers", "hooks", "src"];
 
 export function run(): RailResult {
   const files = new Map<string, string>();
@@ -199,9 +195,9 @@ function prove(): void {
     "test files are EXCLUDED from the match scope (parity tests are not counted as duplicates)",
   );
   proveAssert(
-    isTestPath("scripts/__tests__/graph-scoring-parity.test.ts") &&
+      isTestPath("scripts/__tests__/graph-scoring-parity.test.ts") &&
       isTestPath("scripts/foo.test.ts") &&
-      !isTestPath("scripts/lib/shared/graph-scoring.ts"),
+      !isTestPath("src/modules/knowledge/workflows/graph-scoring.ts"),
     "isTestPath classifies *.test.ts and /__tests__/ as tests, real source as non-test",
   );
 }

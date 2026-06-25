@@ -1,0 +1,119 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "review",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "commands",
+      "id": "audit",
+      "source_path": "commands/audit.md",
+      "resource_path": "resources/commands/audit.md",
+      "sha256": "e2d97e910a25adbea5bfb3e60ba9d607b9f756d3941386b0e0d5e016013e1e4c"
+    },
+    {
+      "category": "commands",
+      "id": "fix",
+      "source_path": "commands/fix.md",
+      "resource_path": "resources/commands/fix.md",
+      "sha256": "e80d4d13f5ca8f1a3587f9f06a479e11269800e4e4844fc417fad6b109359e90"
+    },
+    {
+      "category": "scripts",
+      "id": "flip-report",
+      "source_path": "scripts/flip-report.ts",
+      "resource_path": "resources/scripts/flip-report.ts",
+      "sha256": "ab52694749bf4e66f17f767eeef7126caa79ab86dc0723c5d75ac7c4e8ab73d5"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/advisory-record",
+      "source_path": "scripts/lib/advisory-record.ts",
+      "resource_path": "resources/scripts/lib/advisory-record.ts",
+      "sha256": "12f0cac0b6d8b78499fcfbc0ada890663b8a98353d61d246c1df0fa68ba63deb"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/review-pairing",
+      "source_path": "scripts/lib/review-pairing.ts",
+      "resource_path": "resources/scripts/lib/review-pairing.ts",
+      "sha256": "5805871b0475198d920c184c9026b7a952cc8f8704f3db33549e4fc05f564003"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/review-progress",
+      "source_path": "scripts/lib/review-progress.ts",
+      "resource_path": "resources/scripts/lib/review-progress.ts",
+      "sha256": "4b0e0d6d656e6391f087174402136df93d0a7d97d890a72b4adc87c06d145e57"
+    },
+    {
+      "category": "scripts",
+      "id": "oq11-gate-check",
+      "source_path": "scripts/oq11-gate-check.ts",
+      "resource_path": "resources/scripts/oq11-gate-check.ts",
+      "sha256": "e6a6a145af733d94b662f8730c45cc2aa771c0831e026ae7d27bbb29c2a84a02"
+    },
+    {
+      "category": "scripts",
+      "id": "verify-codex-review-trail",
+      "source_path": "scripts/verify-codex-review-trail.ts",
+      "resource_path": "resources/scripts/verify-codex-review-trail.ts",
+      "sha256": "38f61338e95f2433e804776d6380c929f124c1856891907592ad3c3600586ab1"
+    },
+    {
+      "category": "scripts",
+      "id": "verify-gate-pass",
+      "source_path": "scripts/verify-gate-pass.ts",
+      "resource_path": "resources/scripts/verify-gate-pass.ts",
+      "sha256": "8a0893edeeebeca57ac962490881cde14a388df60daf752ca380b98c676b814d"
+    },
+    {
+      "category": "skills",
+      "id": "guild-audit",
+      "source_path": "skills/meta/audit/SKILL.md",
+      "resource_path": "resources/skills/meta/audit/SKILL.md",
+      "sha256": "b293607277ffd37ecdf7410090ea01685ca5ede9a9145e7a63ed295c454ef874"
+    },
+    {
+      "category": "skills",
+      "id": "guild-codex-review",
+      "source_path": "skills/meta/codex-review/SKILL.md",
+      "resource_path": "resources/skills/meta/codex-review/SKILL.md",
+      "sha256": "52784d3d1d10a5909915a003d347115dbfa0b25642a41b8ac361b1814702bb08"
+    },
+    {
+      "category": "skills",
+      "id": "guild-diagnose",
+      "source_path": "skills/meta/diagnose/SKILL.md",
+      "resource_path": "resources/skills/meta/diagnose/SKILL.md",
+      "sha256": "f6dea373872a234b7a50ee8faf5075afa7f8a1dd61da0edafc5238e0eca584dc"
+    },
+    {
+      "category": "skills",
+      "id": "guild-review",
+      "source_path": "skills/meta/review/SKILL.md",
+      "resource_path": "resources/skills/meta/review/SKILL.md",
+      "sha256": "f118673cba6e1e1e7f5be4d4a987b07c035e9c0091e13a5a6f4dcae5d6e5be64"
+    },
+    {
+      "category": "skills",
+      "id": "guild-review-broker",
+      "source_path": "skills/meta/review-broker/SKILL.md",
+      "resource_path": "resources/skills/meta/review-broker/SKILL.md",
+      "sha256": "1ba173b68a10b4a345fbaaf78c30ad77b64372588085d6d1d560ae0cd4791e9f"
+    },
+    {
+      "category": "skills",
+      "id": "guild-systematic-debug",
+      "source_path": "skills/meta/systematic-debug/SKILL.md",
+      "resource_path": "resources/skills/meta/systematic-debug/SKILL.md",
+      "sha256": "95860309eb2a69ee30ecf2d17ee466553bcb9f8273a9c92816e2ce7f5cb1fd1a"
+    },
+    {
+      "category": "skills",
+      "id": "guild-tdd",
+      "source_path": "skills/meta/tdd/SKILL.md",
+      "resource_path": "resources/skills/meta/tdd/SKILL.md",
+      "sha256": "192b335fad63b3b52badc40fdd0b009b254be31ddbec828a95087b18ed116ca8"
+    }
+  ]
+}

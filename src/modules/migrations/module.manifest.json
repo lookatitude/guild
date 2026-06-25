@@ -1,0 +1,18 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "migrations",
+  "title": "Migration",
+  "kind": "operator",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns .guild conversion, migration, scrub/compatibility tooling, and v1.4 summary compatibility scripts.",
+  "depends_on": ["state", "security"],
+  "owns": {
+    "commands": ["migrate"],
+    "scripts": [
+      "index-migrate",
+      "sync-migration",
+      "v1.4-summary-md-regen"
+    ],
+    "script_id_prefixes": ["dot-guild/"]
+  }
+}
