@@ -43,7 +43,16 @@ function openDatabase(dbPath: string): SqliteDb {
   const { DatabaseSync } = require("node:sqlite") as {
     DatabaseSync: new (path: string) => SqliteDb;
   };
-  return new DatabaseSync(dbPath);
+  const db = new DatabaseSync(dbPath);
+  // Concurrent hooks contend for .guild/index.sqlite: UserPromptSubmit runs the
+  // migrator (run-trace-start) while Stop runs it again (run-trace-close +
+  // learning-backstop). Without a busy timeout the loser gets an IMMEDIATE
+  // SQLITE_BUSY ("database is locked") — even the journal_mode=WAL switch below
+  // needs a brief exclusive lock, which is why it never persisted. Set the busy
+  // timeout as the FIRST statement so every later op waits/retries up to 5s
+  // instead of failing the hook.
+  db.exec("PRAGMA busy_timeout = 5000");
+  return db;
 }
 
 // TE-14: bump to 2 for federation_wiki_cache table.
