@@ -55,9 +55,21 @@ import { DEFAULT_INDEX_BLOCK, type IndexBlock } from "../../state";
 import { wikiRecall } from "./wiki-recall";
 import { fsScan } from "./fs-scanner";
 import { protectChunks, type ProtectedChunk } from "./recall-protect";
-import { tokenize, bm25Score } from "../../knowledge";
+import { tokenize, tokenizeIdentifierAware, bm25Score } from "../../knowledge";
 import { rankKgNodes } from "../../knowledge";
 import type { GraphNode, GraphEdge } from "../../understanding";
+// G7 structural channel: reuse the COMMITTED model-free graph-query lib (G3) —
+// kgTrace/kgNeighbors/kgDeadCode read the FROZEN knowledge-graph.json with
+// per-node file:line provenance + trust tiering. Same cross-module import shape
+// docs-sync/workflows already uses for scripts/understand/lib/*.
+import {
+  kgTrace,
+  kgNeighbors,
+  kgDeadCode,
+  type GraphView as StructuralGraphView,
+  type EvidenceNode,
+  type Direction as StructuralDirection,
+} from "../../../../scripts/understand/lib/graph-query";
 import type { KnowledgeLinksDoc } from "../../knowledge";
 import {
   ingestImportanceScore,
@@ -76,7 +88,13 @@ export const DEFAULT_RECALL_HALF_LIFE_DAYS = 90;
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
-export type RecallSource = "sqlite" | "file-bm25" | "fs-scan" | "kg-query" | "combined";
+export type RecallSource =
+  | "sqlite"
+  | "file-bm25"
+  | "fs-scan"
+  | "kg-query"
+  | "structural"
+  | "combined";
 
 export interface RecallResult {
   /** Protected chunks — each passed through protectChunks on every branch. */
@@ -354,14 +372,17 @@ function fileBm25Branch(
   const files = walkMdFiles(scanDir);
   if (files.length === 0) return null;
 
-  const queryTokens = tokenize(query);
+  // G7: identifier-aware tokenizer (camel/snake) on BOTH query and document side,
+  // so `process_order` matches `processOrder`/`ProcessOrder`. Strict super-set of
+  // `tokenize` — identical for plain prose, so existing wiki ranking is unchanged.
+  const queryTokens = tokenizeIdentifierAware(query);
   if (queryTokens.length === 0) return null;
 
   // Read and tokenize all files
   const docs = files.map((f) => {
     let content = "";
     try { content = fs.readFileSync(f, "utf8"); } catch { /* unreadable: keep empty */ }
-    return { path: f, content, tokens: tokenize(content) };
+    return { path: f, content, tokens: tokenizeIdentifierAware(content) };
   });
 
   const scores = bm25Score(queryTokens, docs);
@@ -464,6 +485,7 @@ function kgQueryBranch(
   limit: number,
   runDir?: string,
   runId?: string,
+  category?: string,
 ): RecallResult | null {
   // METRIC 6: read the recall projection, not the raw knowledge-graph
   const projPath = path.join(cwd, ".guild", "indexes", "knowledge-recall.json");
@@ -483,12 +505,21 @@ function kgQueryBranch(
     .split(/\s+/)
     .filter(Boolean);
 
+  // G7 scope honoring: when a category is requested, exclude out-of-scope KG nodes
+  // BEFORE ranking (category field OR source-path segment), so a scoped query never
+  // leaks an out-of-scope node. No category → all nodes (unchanged default).
+  const allNodes = proj.nodes as unknown as GraphNode[];
+  const scopedNodes = category
+    ? allNodes.filter((n) => nodeInScope(category, n.category, n.source_refs))
+    : allNodes;
+  if (scopedNodes.length === 0) return null;
+
   // G15: rank via the shared pipeline (importance + confidence + topic-proximity),
   // identical to kg-query.ts. The projection carries nodes AND subtopic_of edges,
   // so proximity applies here exactly as it does in the CLI. SQLite-optional: this
   // reads the knowledge-recall.json projection directly and never requires the cache.
   const ranked = rankKgNodes(
-    proj.nodes as unknown as GraphNode[],
+    scopedNodes,
     (proj.edges ?? []) as unknown as GraphEdge[],
     terms,
     limit,
@@ -520,6 +551,164 @@ function kgQueryBranch(
     callerTool: "recall:kg-query",
   });
   return { source: "kg-query", chunks, directive, topScore };
+}
+
+// ── Scope honoring (G7): category/source filter for KG + structural nodes ─────
+//
+// Today `category` scopes only the wiki branch (it picks the scan dir). The KG
+// (branch D) and structural (branch E) channels were appended UNSCOPED, so a
+// scoped query could leak an out-of-scope node. This predicate extends the scope
+// filter to graph nodes: a node is in-scope iff (a) no category is requested, OR
+// (b) its `category` field equals the requested category, OR (c) one of its
+// `source_refs` file paths contains the category as a path segment (source-scope
+// for code nodes, which carry file:line refs but no wiki category). Deterministic
+// and pure — never reads a file.
+function nodeInScope(
+  category: string | undefined,
+  nodeCategory: unknown,
+  sourceRefs: readonly string[] | undefined,
+): boolean {
+  if (!category) return true;
+  if (typeof nodeCategory === "string" && nodeCategory === category) return true;
+  for (const ref of sourceRefs ?? []) {
+    if (typeof ref !== "string") continue;
+    const filePart = ref.split("#")[0] ?? "";
+    if (filePart.split("/").includes(category)) return true;
+  }
+  return false;
+}
+
+// ── Structural channel (branch E, G7): model-free graph-query routing ─────────
+//
+// A deterministic classifier maps structural-intent queries (callers/callees/
+// imports/defines/dead-code/impact) to the committed G3 graph-query lib over the
+// FROZEN knowledge-graph.json — 0 model tokens, SQLite-independent (the lib reads
+// the JSON graph directly; it is the source of truth, never the FTS cache). Result
+// nodes carry file:line `source_refs`; a node that retains a `#Lx-Ly` anchor is
+// EVIDENCE (trusted), a node without is down-tiered to untrusted. Nothing is ever
+// returned raw — every chunk still flows through protectChunks.
+
+/** A resolved structural intent (which graph-query to run + its parameters). */
+interface StructuralIntent {
+  kind: "trace" | "neighbors" | "deadcode";
+  /** target symbol for trace/neighbors (absent for deadcode). */
+  target?: string;
+  /** trace direction (inbound = callers, outbound = callees). */
+  direction?: StructuralDirection;
+}
+
+/** Identifier token: a symbol name, optionally `Class.method` (dot kept). */
+const STRUCT_SYMBOL = "([A-Za-z_$][A-Za-z0-9_$.]*)";
+
+/**
+ * Deterministic structural-intent classifier. Returns null for any non-structural
+ * query (the common case) so the wiki/KG waterfall is the unchanged default —
+ * PRECISION over recall: a query must clearly ask a structural question to route
+ * here. Patterns are ordered; first match wins.
+ */
+export function classifyStructuralIntent(query: string): StructuralIntent | null {
+  const q = query.trim();
+  // Dead code — no target symbol.
+  if (/\b(?:dead[\s-]?code|unused (?:functions?|code)|unreachable (?:functions?|code))\b/i.test(q)) {
+    return { kind: "deadcode" };
+  }
+  // Callers / inbound ("what calls X", "who calls X", "callers of X", "who uses X").
+  let m =
+    new RegExp(`\\b(?:who|what)\\s+calls\\s+${STRUCT_SYMBOL}`, "i").exec(q) ??
+    new RegExp(`\\bcallers?\\s+of\\s+${STRUCT_SYMBOL}`, "i").exec(q) ??
+    new RegExp(`\\bwho\\s+(?:invokes|uses)\\s+${STRUCT_SYMBOL}`, "i").exec(q);
+  if (m) return { kind: "trace", direction: "inbound", target: m[1] };
+  // Impact / blast radius / dependents ("impact of X", "what depends on X").
+  m =
+    new RegExp(`\\b(?:impact|blast[\\s-]?radius|dependents?)\\s+of\\s+${STRUCT_SYMBOL}`, "i").exec(q) ??
+    new RegExp(`\\bwhat\\s+depends\\s+on\\s+${STRUCT_SYMBOL}`, "i").exec(q);
+  if (m) return { kind: "trace", direction: "inbound", target: m[1] };
+  // Callees / outbound ("what does X call", "callees of X", "what X calls").
+  m =
+    new RegExp(`\\bwhat\\s+does\\s+${STRUCT_SYMBOL}\\s+call\\b`, "i").exec(q) ??
+    new RegExp(`\\bcallees?\\s+of\\s+${STRUCT_SYMBOL}`, "i").exec(q) ??
+    new RegExp(`\\bwhat\\s+${STRUCT_SYMBOL}\\s+calls\\b`, "i").exec(q);
+  if (m) return { kind: "trace", direction: "outbound", target: m[1] };
+  // Imports / defines / neighbours ("imports of X", "what imports X", "neighbors of X").
+  m =
+    new RegExp(`\\b(?:imports?\\s+of|what\\s+imports|neighbou?rs?\\s+of|related\\s+to|defines?)\\s+${STRUCT_SYMBOL}`, "i").exec(q);
+  if (m) return { kind: "neighbors", target: m[1] };
+  return null;
+}
+
+/** Build the markdown summary for a structural evidence node (deterministic). */
+function structuralNodeContent(n: EvidenceNode): string {
+  const refsBlock = n.source_refs.map((r) => `  - ${r}`).join("\n");
+  if (n.tier === "trusted" && n.source_refs.length > 0) {
+    // confidence:high + source_refs → classifyTrustTier grants "trusted". The
+    // file:line provenance is REAL (graph-query filtered to #Lx-Ly anchors only).
+    return (
+      `---\nconfidence: high\nsource_refs:\n${refsBlock}\n---\n` +
+      `# ${n.name} (${n.type})\n\nstructural evidence (hop ${n.depth}) from knowledge-graph.json\n`
+    );
+  }
+  // No line provenance → no high-confidence frontmatter → classifyTrustTier
+  // DEFAULT-DENY → untrusted. The node is kept (traversal structure) but never
+  // asserted as a grounded fact.
+  return `# ${n.name} (${n.type})\n\nstructural node (hop ${n.depth}) — no line provenance, untrusted\n`;
+}
+
+function structuralBranch(
+  query: string,
+  cwd: string,
+  category: string | undefined,
+  limit: number,
+  runDir?: string,
+  runId?: string,
+): RecallResult | null {
+  const intent = classifyStructuralIntent(query);
+  if (!intent) return null;
+
+  // Read the FROZEN structural graph (source of truth; never the FTS cache).
+  const graphPath = path.join(cwd, ".guild", "indexes", "knowledge-graph.json");
+  if (!fs.existsSync(graphPath)) return null;
+  let doc: { nodes?: unknown; edges?: unknown } | null = null;
+  try {
+    doc = JSON.parse(fs.readFileSync(graphPath, "utf8")) as { nodes?: unknown; edges?: unknown };
+  } catch {
+    return null;
+  }
+  const nodes = Array.isArray(doc?.nodes) ? (doc!.nodes as GraphNode[]) : [];
+  const edges = Array.isArray(doc?.edges) ? (doc!.edges as GraphEdge[]) : [];
+  if (nodes.length === 0) return null;
+  const view: StructuralGraphView = { nodes, edges };
+
+  // Route to the committed model-free query.
+  let evidence: EvidenceNode[];
+  if (intent.kind === "deadcode") {
+    evidence = kgDeadCode(view).nodes;
+  } else if (intent.kind === "neighbors") {
+    evidence = kgNeighbors(view, intent.target ?? "", 1).nodes;
+  } else {
+    evidence = kgTrace(view, intent.target ?? "", intent.direction ?? "outbound", 3).nodes;
+  }
+  if (evidence.length === 0) return null;
+
+  // Scope honoring: drop out-of-scope nodes (category field OR source-path segment).
+  const byId = new Map(nodes.map((n) => [n.id, n] as const));
+  const scoped = evidence.filter((e) =>
+    nodeInScope(category, byId.get(e.id)?.category, e.source_refs),
+  );
+  if (scoped.length === 0) return null;
+
+  const rawHits = scoped.slice(0, limit).map((n) => ({
+    // source_path is the node's first source file (line anchor stripped) so it is
+    // a real, non-operator path; full #Lx-Ly anchors live in the frontmatter refs.
+    source_path: n.source_refs[0]?.split("#")[0] ?? `.guild/indexes/knowledge-graph.json#${n.id}`,
+    content: structuralNodeContent(n),
+  }));
+
+  const { chunks, directive } = protectChunks(rawHits, {
+    runDir,
+    runId,
+    callerTool: "recall:structural",
+  });
+  return { source: "structural", chunks, directive };
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -574,26 +763,41 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   const wikiResult: RecallResult =
     sqlite ?? bm25wiki ?? fsScanBranch(query, cwd, category, limit, runDir, runId);
 
+  // ── Structural (branch E, G7): model-free graph-query channel ──────────────
+  // Additive + PREPENDED — trusted file:line evidence answering a structural
+  // question (callers/callees/imports/dead-code/impact) BEFORE any file sweep,
+  // 0 model tokens. Returns null for non-structural queries (the common case).
+  const structuralResult: RecallResult | null = structuralBranch(
+    query, cwd, category, limit, runDir, runId,
+  );
+
   // ── KG (branch D): additive — appended to wiki results ─────────────────────
   const kgResult: RecallResult | null = _kgDisabled
     ? null
-    : kgQueryBranch(query, cwd, limit, runDir, runId);
+    : kgQueryBranch(query, cwd, limit, runDir, runId, category);
 
-  // ── Combine wiki + KG ───────────────────────────────────────────────────────
+  // ── Combine structural + wiki + KG into ONE protected bundle ───────────────
+  const structuralChunks = structuralResult?.chunks ?? [];
   const wikiChunks = wikiResult.chunks;
   const kgChunks = kgResult?.chunks ?? [];
-  const allChunks = [...wikiChunks, ...kgChunks];
+  // Structural evidence first (highest-value, trusted), then wiki, then KG.
+  const allChunks = [...structuralChunks, ...wikiChunks, ...kgChunks];
 
+  const hasStructural = structuralChunks.length > 0;
   const hasWiki = wikiChunks.length > 0;
   const hasKg = kgChunks.length > 0;
 
+  // >1 channel contributes → "combined"; exactly one → that channel's label.
+  const contributing = [hasStructural, hasWiki, hasKg].filter(Boolean).length;
   const source: RecallSource =
-    hasWiki && hasKg ? "combined" :
+    contributing > 1 ? "combined" :
+    hasStructural ? "structural" :
     hasKg ? "kg-query" :
     wikiResult.source;
 
-  // Directive: set when ANY wrapped chunk exists (either wiki or KG).
-  const directive = wikiResult.directive ?? kgResult?.directive ?? null;
+  // Directive: set when ANY wrapped chunk exists (structural, wiki, or KG).
+  const directive =
+    structuralResult?.directive ?? wikiResult.directive ?? kgResult?.directive ?? null;
 
   // G10 parity (SQLite-off==on): only branches that expose a COMPARABLE numeric
   // score may drive the read-skip decision. The SQLite (A) and fs-scan (C) wiki
@@ -632,6 +836,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   const _traceBranch = allChunks.length === 0
     ? "empty" as const
     : source === "combined" ? "combined" as const
+    : source === "structural" ? "structural" as const
     : source as "sqlite" | "file-bm25" | "fs-scan" | "kg-query";
 
   // R-TRACE emit — additive, try/catch, never changes result (guild.trace.recall.v1)

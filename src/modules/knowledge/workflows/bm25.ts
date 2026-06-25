@@ -31,6 +31,55 @@ export function tokenize(s: string): string[] {
 }
 
 /**
+ * Split ONE alphanumeric run into camelCase / PascalCase / acronym sub-words.
+ * Digits stay attached to the preceding letters (so `v2`/`bm25` are NOT split),
+ * which keeps this a strict super-set of `tokenize` for all-lowercase/digit text.
+ *   processOrder   → [process, Order]
+ *   ProcessOrder   → [Process, Order]
+ *   HTTPRequest    → [HTTP, Request]
+ *   bm25           → [bm25]           (no internal uppercase → unchanged)
+ */
+function splitCamel(run: string): string[] {
+  return run
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2") // fooBar / v2Bar → foo Bar / v2 Bar
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2") // HTTPRequest → HTTP Request
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/**
+ * Identifier-aware tokenizer (G7): like {@link tokenize}, but ALSO emits the
+ * camelCase/PascalCase sub-words of each run, so `process_order` (→ process,
+ * order) matches `processOrder` (→ processorder, process, order). The full
+ * lowercased run is always kept first, so exact-match behaviour is preserved.
+ *
+ * INVARIANT — strict super-set of {@link tokenize}: for any text with NO internal
+ * uppercase boundary (plain prose, snake_case, all-lowercase, digits) this returns
+ * EXACTLY what `tokenize` returns. Extra sub-tokens appear ONLY for camel/Pascal
+ * identifiers. This is the ONE shared identifier tokenizer for the recall
+ * file-BM25 + FTS query paths (used on BOTH query and document side so the two
+ * agree); it deliberately does NOT replace `tokenize` on the guild-memory MCP
+ * search path (kept byte-stable by bm25-parity.test.ts).
+ */
+export function tokenizeIdentifierAware(s: string): string[] {
+  const out: string[] = [];
+  const runs = s.match(TOKEN_RE);
+  if (!runs) return out;
+  for (const run of runs) {
+    const lowerFull = run.toLowerCase();
+    if (lowerFull.length > 1) out.push(lowerFull);
+    const parts = splitCamel(run);
+    if (parts.length > 1) {
+      for (const p of parts) {
+        const lp = p.toLowerCase();
+        if (lp.length > 1) out.push(lp);
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Classic BM25 (k1=1.5, b=0.75) scoring.
  * Returns one score per doc in the same order as `docs`.
  * IDF floor: `log(1 + (N - n + 0.5) / (n + 0.5))` — same as guild-memory.
