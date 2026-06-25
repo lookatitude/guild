@@ -102,23 +102,27 @@ interface FixtureIndex {
   hasFunction: (relpath: string, name: string) => boolean;
   hasClass: (relpath: string, name: string) => boolean;
   hasInterface: (relpath: string, name: string) => boolean;
+  /** True iff `Class.method` is a real MEMBER DECLARATION (not a call site). */
+  hasMethod: (relpath: string, cls: string, method: string) => boolean;
   importsOf: (relpath: string) => ImportInfo[];
   source: (relpath: string) => string;
 }
 
-function buildFixtureIndex(files: string[]): FixtureIndex {
+function buildFixtureIndex(files: string[], root: string = FIXTURE_ROOT): FixtureIndex {
   const fnSet = new Set<string>(); // `${relpath}::${name}`
   const clsSet = new Set<string>();
   const ifaceSet = new Set<string>();
   const importMap = new Map<string, ImportInfo[]>();
   const srcMap = new Map<string, string>();
   const existing = new Set<string>();
+  const existingRel: string[] = [];
 
   for (const fileId of files) {
     const { relpath } = parseNodeId(fileId);
-    const abs = path.join(FIXTURE_ROOT, relpath);
+    const abs = path.join(root, relpath);
     if (!fs.existsSync(abs)) continue;
     existing.add(relpath);
+    existingRel.push(relpath);
     const content = fs.readFileSync(abs, "utf8");
     srcMap.set(relpath, content);
 
@@ -136,11 +140,24 @@ function buildFixtureIndex(files: string[]): FixtureIndex {
     }
   }
 
+  // FIX G2-r3 (finding 1): method-definition ground truth comes from the REAL
+  // structural extractor's `function:<rel>:Class.method` member-declaration nodes
+  // — NOT a generic `method(` regex over the class body, which a call site like
+  // `this.draw()` would falsely satisfy. The extractor's RE_TS_METHOD / RE_PY_DEF
+  // match member DECLARATIONS only, so a call-site name is never a "definition".
+  const methodIds = new Set<string>();
+  const readFile = (abs: string) => fs.readFileSync(abs, "utf8");
+  const sg = extractStructuralGraph(root, existingRel, readFile);
+  for (const n of sg.nodes) {
+    if (typeof (n as { id?: unknown }).id === "string") methodIds.add((n as { id: string }).id);
+  }
+
   return {
     fileExists: (relpath) => existing.has(relpath),
     hasFunction: (relpath, name) => fnSet.has(`${relpath}::${name}`),
     hasClass: (relpath, name) => clsSet.has(`${relpath}::${name}`),
     hasInterface: (relpath, name) => ifaceSet.has(`${relpath}::${name}`),
+    hasMethod: (relpath, cls, method) => methodIds.has(`function:${relpath}:${cls}.${method}`),
     importsOf: (relpath) => importMap.get(relpath) ?? [],
     source: (relpath) => srcMap.get(relpath) ?? "",
   };
@@ -153,51 +170,6 @@ function buildFixtureIndex(files: string[]): FixtureIndex {
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * Slice the lexical body of `class <cls>` out of a source file — TS brace-matched
- * (`class C ... { … }`) or Python indentation-bounded (`class C(...):`), or null
- * if the class is not declared. Used so the method-dispatch oracle validates a
- * method INSIDE its named class (FIX G2-r2-2), not anywhere in the file.
- */
-function classBodySource(src: string, cls: string): string | null {
-  const clsRe = new RegExp(`(?:^|\\n)[ \\t]*(?:export\\s+)?(?:abstract\\s+)?class\\s+${escapeRe(cls)}\\b`);
-  const m = clsRe.exec(src);
-  if (!m) return null;
-  const afterHeader = m.index + m[0].length;
-  const brace = src.indexOf("{", afterHeader);
-  const headerEnd = src.indexOf("\n", afterHeader);
-  // TS: the `{` opens the body on the (possibly extends/implements) header line.
-  if (brace !== -1 && (headerEnd === -1 || brace < headerEnd)) {
-    let depth = 0;
-    for (let k = brace; k < src.length; k++) {
-      if (src[k] === "{") depth++;
-      else if (src[k] === "}" && --depth === 0) return src.slice(brace + 1, k);
-    }
-    return src.slice(brace + 1); // unbalanced — fall back to the tail
-  }
-  // Python: indentation-bounded body below the `class …:` header line.
-  const lines = src.split("\n");
-  const headerLineIdx = src.slice(0, afterHeader).split("\n").length - 1;
-  const baseIndent = (lines[headerLineIdx].match(/^[ \t]*/)?.[0].length) ?? 0;
-  const body: string[] = [];
-  for (let k = headerLineIdx + 1; k < lines.length; k++) {
-    if (lines[k].trim() === "") { body.push(lines[k]); continue; }
-    const ind = lines[k].match(/^[ \t]*/)?.[0].length ?? 0;
-    if (ind <= baseIndent) break;
-    body.push(lines[k]);
-  }
-  return body.join("\n");
-}
-
-/** True iff `method` is defined inside the body of class `cls` in `src`. */
-function methodDefinedInClass(src: string, cls: string, method: string): boolean {
-  const body = classBodySource(src, cls);
-  if (body === null) return false;
-  // TS member (`area(): number {`) or Python member (`def area(self):`).
-  return new RegExp(`\\bdef\\s+${escapeRe(method)}\\s*\\(`).test(body)
-    || new RegExp(`\\b${escapeRe(method)}\\s*\\(`).test(body);
 }
 
 /** Mask every identifier to `_` and collapse whitespace — a structural fingerprint. */
@@ -214,9 +186,9 @@ function functionBody(idx: FixtureIndex, relpath: string, name: string): string 
   return src.split("\n").slice(fn.lineRange[0] - 1, fn.lineRange[1]).join("\n");
 }
 
-function checkOracleConsistency(oracle: Oracle): string[] {
+function checkOracleConsistency(oracle: Oracle, root: string = FIXTURE_ROOT): string[] {
   const violations: string[] = [];
-  const idx = buildFixtureIndex(oracle.files);
+  const idx = buildFixtureIndex(oracle.files, root);
 
   const resolveSymbol = (id: string, kinds: Array<"function" | "class" | "interface">): void => {
     const p = parseNodeId(id);
@@ -279,11 +251,13 @@ function checkOracleConsistency(oracle: Oracle): string[] {
       violations.push(`methodCalls "${c.to}": file "${toP.relpath}" not in fixture`);
     } else if (!idx.hasClass(toP.relpath, cls)) {
       violations.push(`methodCalls "${c.to}": class "${cls}" not found in "${toP.relpath}"`);
-    } else if (!methodDefinedInClass(idx.source(toP.relpath), cls, method)) {
-      // FIX G2-r2-2: the method must be defined INSIDE the named class body, not
-      // merely somewhere in the file. The old whole-file `\bmethod(` scan let a
-      // wrong-class callee (`Shape.draw` — draw is Circle-only) pass because
-      // `draw(` existed elsewhere in the file. Body-scoping catches it.
+    } else if (!idx.hasMethod(toP.relpath, cls, method)) {
+      // FIX G2-r2-2 + FIX G2-r3: the method must be a real MEMBER DECLARATION
+      // inside the named class — validated against the structural extractor's
+      // `function:<rel>:Class.method` nodes, NOT a `method(` regex over the class
+      // body. The old regex let a wrong-class callee (`Shape.draw` — draw is
+      // Circle-only) AND a call-site name (`this.draw()` with no `draw` decl) pass;
+      // member-declaration nodes catch both.
       violations.push(`methodCalls "${c.to}": method "${method}" not defined in class "${cls}" of "${toP.relpath}"`);
     }
     const fromRel = parseNodeId(c.from).relpath;
@@ -457,6 +431,54 @@ describe("CLRA fixture — oracle self-consistency", () => {
     });
     const violations = checkOracleConsistency(o);
     expect(violations.some((v) => v.includes('method "draw" not defined in class "Shape"'))).toBe(true);
+  });
+
+  test("anti-vacuity (FIX G2-r3): a `this.<name>()` CALL SITE does not count as a method definition", () => {
+    // The old check scanned the class body with `\bmethod\s*\(`, so a call site
+    // like `this.ghost()` (no `ghost` declaration) falsely satisfied a nonexistent
+    // method. Validation now uses the structural extractor's member-declaration
+    // nodes — a call site is NEVER a definition. Run the REAL oracle path over a
+    // synthetic repo so the test FAILS if the regex behavior returns.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clra-method-"));
+    try {
+      fs.writeFileSync(
+        path.join(dir, "m.ts"),
+        [
+          "export function run(): void {}",
+          "export class Widget {",
+          "  render(): void {",
+          "    this.ghost();", // call site ONLY — `ghost` is never declared
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      const base = {
+        schema: "guild.clra_fixture_oracle.v1",
+        fixtureRoot: ".",
+        files: ["file:m.ts"],
+        calls: [],
+        methodCalls: [{ from: "function:m.ts:run", to: "function:m.ts:Widget.render", cross_file: false }],
+        imports: [], inherits: [], implements: [],
+        deadCode: [], entryPoints: [], clonePairs: [],
+      } as unknown as Oracle;
+
+      // A REAL member declaration (`render`) is accepted — no "not defined" violation.
+      const okViol = checkOracleConsistency(base, dir);
+      expect(okViol.some((v) => v.includes('method "render" not defined'))).toBe(false);
+
+      // The call-site-only name (`ghost`) is REJECTED — the regex bug would have
+      // accepted it because `this.ghost(` matches `\bghost\(`.
+      const bad = {
+        ...base,
+        methodCalls: [{ from: "function:m.ts:run", to: "function:m.ts:Widget.ghost", cross_file: false }],
+      } as unknown as Oracle;
+      const badViol = checkOracleConsistency(bad, dir);
+      expect(badViol.some((v) => v.includes('method "ghost" not defined in class "Widget"'))).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("anti-vacuity: a non-clone pair of existing functions is caught (masked-body check)", () => {

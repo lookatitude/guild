@@ -366,6 +366,57 @@ describe("FIX G2-r2-4 — Python import scoping + shadowing", () => {
 });
 
 // ---------------------------------------------------------------------------
+// FIX G2-r3 — a nested-def import is bound to its LEXICAL owner (the inner def),
+// not the enclosing callable's line range. An `import b` inside an inner `def`
+// must NOT leak into the OUTER function's `b.add()`.
+// ---------------------------------------------------------------------------
+
+describe("FIX G2-r3 — nested-def import does not leak to the outer callable", () => {
+  test("`import b` inside an inner def does NOT resolve the OUTER function's b.add()", () => {
+    const dir = tempRepo({
+      "b.py": "def add(a, b):\n    return a + b\n",
+      "a.py": [
+        "def outer():",
+        "    def inner():",
+        "        import b",            // owned by `inner`, NOT visible in `outer`
+        "        return b.add(1, 2)",
+        "    return b.add(3, 4)",      // `b` is undefined in outer's scope → NO edge
+        "",
+      ].join("\n"),
+    });
+    try {
+      const g = build(dir, ["a.py", "b.py"]);
+      // The nested import must not leak up to `outer` (the only tracked callable
+      // enclosing both call sites); the outer `b.add()` stays unlinked.
+      expect(calls(g.edges).some((e) => e.source === "function:a.py:outer" && e.target === "function:b.py:add")).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("anti-vacuity: the same import placed DIRECTLY in outer's body DOES resolve b.add()", () => {
+    // Proves the suppression above is lexical-owner scoping, not a blanket drop of
+    // every nested-looking import: move `import b` out of `inner` into `outer`'s
+    // own body (still indented) and the outer `b.add()` resolves.
+    const dir = tempRepo({
+      "b.py": "def add(a, b):\n    return a + b\n",
+      "a.py": [
+        "def outer():",
+        "    import b",                // owned by `outer` → visible in outer
+        "    return b.add(3, 4)",
+        "",
+      ].join("\n"),
+    });
+    try {
+      const g = build(dir, ["a.py", "b.py"]);
+      expect(calls(g.edges).some((e) => e.source === "function:a.py:outer" && e.target === "function:b.py:add")).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // FIX G2-1 — enriched / LLM-tier calls edges are preserved, not dropped
 // ---------------------------------------------------------------------------
 

@@ -23,6 +23,13 @@
  * object and suppresses the import binding. This prevents a function-local
  * `import b` (or a local `b = …`) from falsely linking ANOTHER function's
  * `b.add()` cross-file. Deterministic, model-free, no network.
+ *
+ * FIX G2-r3: a nested import is bound to its LEXICAL owner (the innermost
+ * enclosing `def`), not merely to a line range. Each import records the def line
+ * of the callable that lexically owns it; an import is applied to a callable ONLY
+ * when that callable IS its owner. So an `import b` inside an inner `def` (nested
+ * within an outer function) does NOT leak into the outer function — its owner is
+ * the inner def, not the outer callable, so the outer's `b.add()` stays unlinked.
  */
 
 import * as path from "path";
@@ -50,6 +57,8 @@ interface ImportClause {
   kind: "from" | "module";
   line: number;      // 1-indexed line the statement appears on
   topLevel: boolean; // indent 0 → module scope (file-wide); else nested (local)
+  ownerStart: number; // 1-indexed def line of the innermost enclosing callable;
+                      // 0 = module scope (no enclosing def). FIX G2-r3.
 }
 
 interface PyFile {
@@ -133,6 +142,23 @@ function parsePyFile(rel: string, content: string, fileSet: Set<string>): PyFile
   const callables: Callable[] = [];
   const importClauses: ImportClause[] = [];
 
+  // FIX G2-r3: every `def` block (ANY nesting depth) with its body range, used to
+  // attribute each import to the innermost enclosing callable that lexically owns
+  // it. `start`/`end` match the callable convention (start = 1-indexed def line;
+  // end = indentEnd exclusive bound) so `ownerOf` aligns with `enclosing` below.
+  const defBlocks: Array<{ start: number; end: number }> = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (RE_DEF.test(lines[i])) defBlocks.push({ start: i + 1, end: indentEnd(lines, i) });
+  }
+  // Innermost (deepest-starting) def whose body contains `line1`; 0 = module scope.
+  const ownerOf = (line1: number): number => {
+    let owner = 0;
+    for (const b of defBlocks) {
+      if (b.start <= line1 && line1 < b.end && b.start > owner) owner = b.start;
+    }
+    return owner;
+  };
+
   // Imports are collected on a FULL pass (so nested imports are captured with
   // their line + indent), independent of the def/class walk below.
   for (let i = 0; i < lines.length; i++) {
@@ -154,6 +180,7 @@ function parsePyFile(rel: string, content: string, fileSet: Set<string>): PyFile
             kind: "from",
             line: i + 1,
             topLevel: indent === 0,
+            ownerStart: ownerOf(i + 1),
           });
         }
       }
@@ -180,6 +207,7 @@ function parsePyFile(rel: string, content: string, fileSet: Set<string>): PyFile
           kind: "module",
           line: i + 1,
           topLevel: indent === 0,
+          ownerStart: ownerOf(i + 1),
         });
       }
       continue;
@@ -268,12 +296,15 @@ function parseParams(lines: string[], defIdx: number): string[] {
  *     are NOT themselves import bindings (those locals shadow same-named imports).
  */
 function computeScope(f: PyFile, c: Callable): CallableScope {
-  // Within-callable import clauses (line strictly inside the callable body).
+  // Import clauses lexically OWNED by this callable (FIX G2-r3): the import's
+  // innermost enclosing def IS this callable — NOT a nested inner def inside it,
+  // and NOT merely a line within the body range. This stops an `import b` nested
+  // in an inner `def` from leaking into the outer callable's calls.
   const localFrom = new Map<string, { targetRel: string; realName: string }>();
   const localModule = new Map<string, string>();
   const localImportNames = new Set<string>();
   for (const cl of f.importClauses) {
-    if (cl.line <= c.start || cl.line >= c.end) continue;
+    if (cl.ownerStart !== c.start) continue;
     localImportNames.add(cl.bindName);
     if (cl.kind === "from") localFrom.set(cl.bindName, { targetRel: cl.targetRel, realName: cl.realName });
     else localModule.set(cl.bindName, cl.targetRel);
