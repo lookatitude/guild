@@ -26,7 +26,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { runMigrations } from "../../migrations";
-import { tokenizeIdentifierAware } from "../../knowledge/workflows/bm25";
+// Identifier tokenizer is a base-layer primitive in kernel (not the higher
+// knowledge module) — keeps this lower `state` module's dependency direction inward.
+import { tokenizeIdentifierAware } from "../../kernel";
 
 // ── Minimal node:sqlite type stubs ────────────────────────────────────────
 

@@ -16,7 +16,14 @@
  * guarded by scripts/__tests__/bm25-parity.test.ts (parity + anti-vacuity).
  */
 
-export const TOKEN_RE = /[A-Za-z0-9]+/g;
+// The identifier-tokenizer primitive (TOKEN_RE + camel/snake-aware split) lives in
+// the base `kernel` module so callers at any layer share ONE implementation without
+// an upward import — notably state/workflows/index-cache (the kg_symbols_fts
+// projection) which is below this `knowledge` module. Re-exported here so every
+// existing `bm25` consumer import path (mcp-servers/guild-memory, scripts/lib/shared,
+// context/recall via the knowledge public index) is unchanged.
+import { TOKEN_RE, tokenizeIdentifierAware } from "../../kernel";
+export { TOKEN_RE, tokenizeIdentifierAware };
 
 /**
  * Tokenize a string: lowercase, split on non-alphanumeric, drop length-1 tokens.
@@ -27,55 +34,6 @@ export function tokenize(s: string): string[] {
   const m = s.toLowerCase().match(TOKEN_RE);
   if (!m) return out;
   for (const tok of m) if (tok.length > 1) out.push(tok);
-  return out;
-}
-
-/**
- * Split ONE alphanumeric run into camelCase / PascalCase / acronym sub-words.
- * Digits stay attached to the preceding letters (so `v2`/`bm25` are NOT split),
- * which keeps this a strict super-set of `tokenize` for all-lowercase/digit text.
- *   processOrder   → [process, Order]
- *   ProcessOrder   → [Process, Order]
- *   HTTPRequest    → [HTTP, Request]
- *   bm25           → [bm25]           (no internal uppercase → unchanged)
- */
-function splitCamel(run: string): string[] {
-  return run
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2") // fooBar / v2Bar → foo Bar / v2 Bar
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2") // HTTPRequest → HTTP Request
-    .split(/\s+/)
-    .filter(Boolean);
-}
-
-/**
- * Identifier-aware tokenizer (G7): like {@link tokenize}, but ALSO emits the
- * camelCase/PascalCase sub-words of each run, so `process_order` (→ process,
- * order) matches `processOrder` (→ processorder, process, order). The full
- * lowercased run is always kept first, so exact-match behaviour is preserved.
- *
- * INVARIANT — strict super-set of {@link tokenize}: for any text with NO internal
- * uppercase boundary (plain prose, snake_case, all-lowercase, digits) this returns
- * EXACTLY what `tokenize` returns. Extra sub-tokens appear ONLY for camel/Pascal
- * identifiers. This is the ONE shared identifier tokenizer for the recall
- * file-BM25 + FTS query paths (used on BOTH query and document side so the two
- * agree); it deliberately does NOT replace `tokenize` on the guild-memory MCP
- * search path (kept byte-stable by bm25-parity.test.ts).
- */
-export function tokenizeIdentifierAware(s: string): string[] {
-  const out: string[] = [];
-  const runs = s.match(TOKEN_RE);
-  if (!runs) return out;
-  for (const run of runs) {
-    const lowerFull = run.toLowerCase();
-    if (lowerFull.length > 1) out.push(lowerFull);
-    const parts = splitCamel(run);
-    if (parts.length > 1) {
-      for (const p of parts) {
-        const lp = p.toLowerCase();
-        if (lp.length > 1) out.push(lp);
-      }
-    }
-  }
   return out;
 }
 
