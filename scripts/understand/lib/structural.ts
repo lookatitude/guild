@@ -491,22 +491,23 @@ export interface StructuralCache {
 
 /**
  * A cached bundle may be reused ONLY if it passes the shared comprehensive
- * validator (`lib/bundle-validate.ts` `isValidBundle`) — top-level shape, the
- * FULL GraphNode/GraphEdge schema of every nested element, AND the bundle's
- * cross-consistency (id↔kind, id↔name, id↔owning-file, source_ref↔file, edge
- * endpoints within this bundle). `assembleStructuralGraph` dereferences and
- * emits this data WHOLESALE, so a current-version / matching-hash bundle that is
- * shaped-invalid (a phantom symbol id, a `contains` endpoint outside the bundle,
- * a `source_ref` for a foreign file, a class id resolving to a function node, a
+ * validator (`lib/bundle-validate.ts` `isValidBundle`). `assembleStructuralGraph`
+ * dereferences and emits the bundle's `fileNode` + `symbolNodes` and `contains`
+ * edges WHOLESALE, so a current-version / matching-hash bundle that is shaped-
+ * invalid (a phantom symbol id, a `contains` endpoint outside the bundle, a
+ * `source_ref` for a foreign file, a class id resolving to a function node, a
  * `null`/malformed element, …) would otherwise crash or silently diverge from a
  * full rebuild. Any violation rejects the bundle → re-extract that file, so
  * incremental stays == full.
  *
- * FIX-T4.1-r3: the validator is the SINGLE source of truth shared with the
- * artifact-bootstrap path (`graph-artifact.ts` `validateStructuralCache`) so the
- * two reuse paths cannot diverge. We additionally require a non-empty
- * `contentHash` here — the reuse caller below only trusts a bundle whose
- * `contentHash` equals the live file's, which is never "".
+ * FIX-T4.1-r4: `isValidBundle` delegates base node/edge SHAPE to the SAME
+ * authoritative validator the extraction write-path runs (`validateGraph`) — one
+ * definition of node/edge validity, comprehensive by construction — and layers
+ * only the structural superset + bundle membership `validateGraph` cannot express
+ * (the `extractor` marker, the complete `sp`, the exact file-node/symbol/source-
+ * ref contracts, id↔kind, id↔name, id↔owning-file, edge endpoints in-bundle). We
+ * additionally require a non-empty `contentHash` here — the reuse caller below
+ * only trusts a bundle whose `contentHash` equals the live file's, which is never "".
  */
 function isReusableBundle(rel: string, b: unknown): b is FileBundle {
   if (!b || typeof b !== "object") return false;

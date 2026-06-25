@@ -628,6 +628,152 @@ describe("FIX-T4.1-r2 — a malformed nested cache element forces re-extract (in
 });
 
 // ---------------------------------------------------------------------------
+// FIX-T4.1-r4 — cache validity DELEGATES to the authoritative validateGraph;
+// the structural SUPERSET (extractor / complete sp / exact contracts) is rejected
+// when a cached element is one a real extraction would never produce.
+// ---------------------------------------------------------------------------
+
+describe("FIX-T4.1-r4 — a cached element no real extraction would produce forces re-extract (incremental == full)", () => {
+  let dir: string;
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  // Same rich fixture as r2: class Base, class Derived(Base), def bar, def foo —
+  // every nested element drives observable output (inherits / calls / contains).
+  const A_SRC = [
+    "class Base:",
+    "    pass",
+    "",
+    "class Derived(Base):",
+    "    pass",
+    "",
+    "def bar():",
+    "    return 1",
+    "",
+    "def foo():",
+    "    return bar()",
+    "",
+  ].join("\n");
+
+  type B = import("../lib/structural").FileBundle;
+  const rec = (x: unknown) => x as Record<string, unknown>;
+
+  // Each case overwrites a cached element of a.py with one a FRESH extraction
+  // never produces. These are the gaps the r3 hand-written field list missed and
+  // the validateGraph-delegation + thin structural-superset layer now close. The
+  // `validateGraph` base-shape check would PASS several of them (a non-"high"
+  // confidence, a foreign-but-present source_ref, an extra field, a missing
+  // `extractor`/`sp`) — yet each DIVERGES from a full rebuild, so the layered
+  // structural checks must reject. contentHash + version stay valid throughout.
+  const cases: Array<{ name: string; corrupt: (b: B) => void }> = [
+    {
+      name: "symbolNode missing the extractor marker (node vanishes from the subset)",
+      corrupt: (b) => { delete rec(b.symbolNodes[0]).extractor; },
+    },
+    {
+      name: "symbolNode missing sp (sp rides into the graph → diverges)",
+      corrupt: (b) => { delete rec(b.symbolNodes[0]).sp; },
+    },
+    {
+      name: "symbolNode incomplete sp (a profile key dropped)",
+      corrupt: (b) => { delete (rec(b.symbolNodes[0]).sp as Record<string, unknown>).loc; },
+    },
+    {
+      name: "symbolNode sp value non-numeric",
+      corrupt: (b) => { (rec(b.symbolNodes[0]).sp as Record<string, unknown>).loc = "x"; },
+    },
+    {
+      name: "symbolNode carries an EXTRA field (rides wholesale → diverges)",
+      corrupt: (b) => { rec(b.symbolNodes[0]).bogus = 1; },
+    },
+    {
+      name: "symbolNode bare source_ref (no #Lx-Ly line anchor)",
+      corrupt: (b) => { rec(b.symbolNodes[0]).source_refs = ["a.py"]; },
+    },
+    {
+      name: "symbolNode source_ref bogus fragment (not Lx-Ly)",
+      corrupt: (b) => { rec(b.symbolNodes[0]).source_refs = ["a.py#bogus"]; },
+    },
+    {
+      name: "symbolNode confidence not 'high' (passes validateGraph, diverges)",
+      corrupt: (b) => { rec(b.symbolNodes[0]).confidence = "medium"; },
+    },
+    {
+      name: "fileNode wrong name (file-node contract beyond id)",
+      corrupt: (b) => { rec(b.fileNode).name = "WRONG.py"; },
+    },
+    {
+      name: "fileNode missing the extractor marker (file node vanishes from subset)",
+      corrupt: (b) => { delete rec(b.fileNode).extractor; },
+    },
+    {
+      name: "fileNode wrong language",
+      corrupt: (b) => { rec(b.fileNode).language = "javascript"; },
+    },
+    {
+      name: "fileNode wrong source_refs (not the bare file path)",
+      corrupt: (b) => { rec(b.fileNode).source_refs = ["a.py#L1-L1"]; },
+    },
+    {
+      name: "contains edge missing the extractor marker (edge vanishes from the subset)",
+      corrupt: (b) => { delete rec(b.contains[0]).extractor; },
+    },
+    {
+      name: "contains edge carries an EXTRA field (rides wholesale → diverges)",
+      corrupt: (b) => { rec(b.contains[0]).bogus = true; },
+    },
+  ];
+
+  for (const c of cases) {
+    test(`${c.name} → a.py re-extracted, b.py reused, incremental == full`, () => {
+      dir = tmpRepo("g4-r4-");
+      write(dir, "a.py", A_SRC);
+      write(dir, "b.py", "def baz():\n    return 2\n");
+      const FILES = ["a.py", "b.py"];
+
+      const cache = bundlesToCache(buildBundles(dir, FILES, readFile));
+      c.corrupt(cache.files["a.py"]);
+
+      const full = fullStructural(dir, FILES);
+
+      // Meaningfulness: reusing the corrupted bundle as-is DIVERGES from a full
+      // rebuild (a vanished node/edge, a changed field, or a throw).
+      let diverges: boolean;
+      try {
+        diverges = subsetJson(assembleStructuralGraph(dir, Object.values(cache.files))) !== subsetJson(full);
+      } catch {
+        diverges = true;
+      }
+      expect(diverges).toBe(true);
+
+      // With the delegated+layered guard: a.py is rejected → re-extracted; the
+      // intact b.py stays a cache hit; output equals a clean full rebuild.
+      const incr = refreshStructuralIncremental(dir, FILES, readFile, cache);
+      expect(incr.stats.reExtracted).toEqual(["a.py"]);
+      expect(incr.stats.reused).toEqual(["b.py"]);
+      expect(subsetJson(incr.structural)).toBe(subsetJson(full)); // lossless == full, no crash
+    });
+  }
+
+  test("a fully intact bundle is STILL reused (delegation does not over-reject)", () => {
+    // Anti-vacuity: a genuinely valid cache passes the authoritative validator
+    // AND the structural-superset layer, so it is reused — the guard is not a
+    // blanket re-extract.
+    dir = tmpRepo("g4-r4-ok-");
+    write(dir, "a.py", A_SRC);
+    write(dir, "b.py", "def baz():\n    return 2\n");
+    const FILES = ["a.py", "b.py"];
+
+    const cache = bundlesToCache(buildBundles(dir, FILES, readFile));
+    const full = fullStructural(dir, FILES);
+    const incr = refreshStructuralIncremental(dir, FILES, readFile, cache);
+
+    expect(incr.stats.reExtracted).toEqual([]);       // nothing changed on disk
+    expect(incr.stats.reused.sort()).toEqual(FILES);  // BOTH intact bundles reused
+    expect(subsetJson(incr.structural)).toBe(subsetJson(full));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // FIX-T4.1-2 — --incremental uses the LIVE tree, not a stale CodebaseMap (CLI)
 // ---------------------------------------------------------------------------
 
