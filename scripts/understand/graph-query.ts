@@ -10,15 +10,20 @@
  * Usage:
  *   npx tsx graph-query.ts <verb> '<json-args>' [--cwd <path>] [--graph <path>]
  *
- *   trace      '{"node":"main","direction":"outbound","depth":3}'
- *   neighbors  '{"node":"function:src/a.ts:main","hops":1}'
- *   dead-code  '{"entryPoints":["function:src/cli.ts:run","handler"]}'
+ *   trace        '{"node":"main","direction":"outbound","depth":3}'
+ *   neighbors    '{"node":"function:src/a.ts:main","hops":1}'
+ *   dead-code    '{"entryPoints":["function:src/cli.ts:run","handler"]}'
+ *   entry-points '{}'   (lists name-heuristic + on-disk/configured entries)
  *
  * `dead-code` reports INTERNAL reachability only ("unused within the analysed
  * file set"). The graph carries no `exported` flag, so a public API / CLI / route
- * handler with zero inbound calls would be a FALSE POSITIVE — pass your exported
- * surface via `entryPoints` (matched by node id OR simple name; `exported` is an
- * accepted alias) to exclude it. `main`/`__main__` are always excluded.
+ * handler with zero inbound calls would be a FALSE POSITIVE. The exported/public
+ * surface is resolved from REAL on-disk sources of the repo at `--cwd` — merged,
+ * in union: `package.json` (`main`/`bin`/`exports`), `.guild/settings.json`
+ * (`models.entryPoints`), `.guild/indexes/entry_points.json`, AND any `entryPoints`
+ * passed in the JSON args (`exported` is an accepted alias). Each is matched by
+ * node id, simple name, OR file relpath; `main`/`__main__` are always excluded.
+ * `entry-points` lists the resolved entry set the same way.
  *
  * `--graph <path>` (or a "graph" field in the JSON args) overrides the default
  * .guild/indexes/knowledge-graph.json location — handy for tests/fixtures.
@@ -31,6 +36,8 @@ import {
   kgTrace,
   kgNeighbors,
   kgDeadCode,
+  kgEntryPoints,
+  resolveEntryPointConfig,
   type Direction,
   type GraphView,
 } from "./lib/graph-query";
@@ -58,7 +65,7 @@ function main(): void {
   const rawJson = positional[1] ?? "{}";
 
   if (!verb) {
-    process.stderr.write("usage: graph-query.ts <trace|neighbors|dead-code> '<json-args>'\n");
+    process.stderr.write("usage: graph-query.ts <trace|neighbors|dead-code|entry-points> '<json-args>'\n");
     process.exit(1);
   }
 
@@ -95,8 +102,31 @@ function main(): void {
     }
     case "dead-code":
     case "dead_code": {
-      const entryPoints = args.entryPoints ?? args.exported;
-      result = kgDeadCode(graph, entryPoints ? { entryPoints } : {});
+      // Resolve the REAL on-disk exported/public surface for the repo at --cwd,
+      // unioned with any explicit entryPoints/exported from the JSON args. The
+      // structural graph has no `exported` flag, so without this a public API /
+      // CLI / route handler with zero inbound calls is a false positive.
+      const { repoRoot, guildDir, indexesDir } = guildPaths(cwd);
+      const entryPoints = resolveEntryPointConfig({
+        repoRoot,
+        guildDir,
+        indexesDir,
+        explicit: args.entryPoints ?? args.exported,
+      });
+      result = kgDeadCode(graph, { entryPoints });
+      break;
+    }
+    case "entry-points":
+    case "entry_points":
+    case "entrypoints": {
+      const { repoRoot, guildDir, indexesDir } = guildPaths(cwd);
+      const entryPoints = resolveEntryPointConfig({
+        repoRoot,
+        guildDir,
+        indexesDir,
+        explicit: args.entryPoints ?? args.exported,
+      });
+      result = { tier: "trusted", nodes: kgEntryPoints(graph, { entryPoints }) };
       break;
     }
     default:

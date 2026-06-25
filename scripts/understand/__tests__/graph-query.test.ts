@@ -24,6 +24,7 @@ import {
   kgNeighbors,
   kgDeadCode,
   kgEntryPoints,
+  resolveEntryPointConfig,
   EVIDENCE_TIER,
   type GraphView,
 } from "../lib/graph-query";
@@ -254,6 +255,64 @@ describe("[G3] kgDeadCode — zero-inbound free functions minus entry points", (
     expect(new Set(kgDeadCode(g, { entryPoints: ["does-not-exist"] }).nodes.map((n) => n.id)))
       .toEqual(new Set(o.deadCode));
   });
+
+  // ── Round-3 Finding 1: entry by FILE RELPATH (manifest marks a whole file public) ──
+  test("an entry supplied by file relpath excludes every free function in that file", () => {
+    const g = buildGraph();
+    // unusedHelper lives in src/b.ts; declaring the file as public surface excludes it.
+    expect(new Set(kgDeadCode(g).nodes.map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(true);
+    const dead = new Set(kgDeadCode(g, { entryPoints: ["src/b.ts"] }).nodes.map((n) => n.id));
+    expect(dead.has("function:src/b.ts:unusedHelper")).toBe(false);
+    // A leading "./" on the same path is normalised to the same match.
+    const deadDot = new Set(kgDeadCode(g, { entryPoints: ["./src/b.ts"] }).nodes.map((n) => n.id));
+    expect(deadDot.has("function:src/b.ts:unusedHelper")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Gate 2b — Round-3 Finding 2: kgEntryPoints honours configured entries.
+// ---------------------------------------------------------------------------
+
+describe("[G3] kgEntryPoints — name-heuristic + configured entries (Finding 2)", () => {
+  test("default returns the oracle entry points (name heuristic only)", () => {
+    const g = buildGraph();
+    const o = loadOracle();
+    const eps = new Set(kgEntryPoints(g).map((n) => n.id));
+    for (const ep of o.entryPoints) expect(eps.has(ep)).toBe(true);
+  });
+
+  test("a configured non-`main` entry (by simple name) IS included in kgEntryPoints", () => {
+    const g = buildGraph();
+    // Baseline: unusedHelper is NOT an entry point by the name heuristic alone.
+    expect(new Set(kgEntryPoints(g).map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(false);
+    // Configure it → now kgEntryPoints includes it (was the round-3 MAJOR: it ignored config).
+    const eps = new Set(kgEntryPoints(g, { entryPoints: ["unusedHelper"] }).map((n) => n.id));
+    expect(eps.has("function:src/b.ts:unusedHelper")).toBe(true);
+    expect("unusedHelper").not.toBe("main"); // proves config, not the name heuristic
+  });
+
+  test("a configured entry by full node id IS included in kgEntryPoints", () => {
+    const g = buildGraph();
+    const eps = new Set(
+      kgEntryPoints(g, { entryPoints: ["function:src/b.ts:unusedHelper"] }).map((n) => n.id),
+    );
+    expect(eps.has("function:src/b.ts:unusedHelper")).toBe(true);
+  });
+
+  test("a configured entry by file relpath includes every free function in that file", () => {
+    const g = buildGraph();
+    const eps = new Set(kgEntryPoints(g, { entryPoints: ["src/b.ts"] }).map((n) => n.id));
+    expect(eps.has("function:src/b.ts:unusedHelper")).toBe(true);
+  });
+
+  test("dead-code and entry-points use ONE consistent rule (a configured entry is in EPs and not dead)", () => {
+    const g = buildGraph();
+    const cfg = { entryPoints: ["function:src/b.ts:unusedHelper"] };
+    const eps = new Set(kgEntryPoints(g, cfg).map((n) => n.id));
+    const dead = new Set(kgDeadCode(g, cfg).nodes.map((n) => n.id));
+    expect(eps.has("function:src/b.ts:unusedHelper")).toBe(true);
+    expect(dead.has("function:src/b.ts:unusedHelper")).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -319,16 +378,23 @@ describe("[G3] seed resolution by name | id", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Gate 5 — the REAL CLI path (arg parsing → kgDeadCode options), non-vacuous.
+// Gate 5 — the REAL CLI path with REAL on-disk entry-point sources (Finding 1).
+//
+// Round-2 made entry points config-injectable only via the JSON arg, and the
+// test injected `{entryPoints:["orphan"]}` directly. Codex round-3 = the config
+// "isn't real": the CLI read no on-disk surface. These tests build an actual repo
+// on disk (package.json / .guild/settings.json / .guild/indexes/entry_points.json)
+// and run `dead-code {}` with NO JSON injection — anti-vacuity: remove the entry
+// from the on-disk source → the function is reported dead again.
 // ---------------------------------------------------------------------------
 
-describe("[G3] graph-query.ts CLI — dead-code entry-point config wiring", () => {
+describe("[G3] graph-query.ts CLI — dead-code reads a REAL on-disk entry surface", () => {
   const SCRIPTS_DIR = path.resolve(__dirname, "..", "..");
   const CLI = path.join(SCRIPTS_DIR, "understand", "graph-query.ts");
-  let graphPath: string;
 
-  // A free function `orphan` with zero inbound calls (a bare, non-line ref to
-  // exercise provenance filtering) plus a normal main→run chain.
+  // main→run chain (heuristic entry `main`) + a free `orphan` with zero inbound
+  // calls in its OWN file src/lib.ts. The bare (non-line) ref exercises the
+  // provenance down-tiering on the real CLI path too.
   const GRAPH = {
     version: "guild.knowledge_graph.v1",
     project: { name: "cli-fixture", description: "" },
@@ -336,7 +402,7 @@ describe("[G3] graph-query.ts CLI — dead-code entry-point config wiring", () =
     nodes: [
       { id: "function:src/a.ts:main", type: "function", name: "main", source_refs: ["src/a.ts#L1-L2"], confidence: "high" },
       { id: "function:src/a.ts:run", type: "function", name: "run", source_refs: ["src/a.ts#L5-L9"], confidence: "high" },
-      { id: "function:src/a.ts:orphan", type: "function", name: "orphan", source_refs: ["src/a.ts"], confidence: "high" },
+      { id: "function:src/lib.ts:orphan", type: "function", name: "orphan", source_refs: ["src/lib.ts"], confidence: "high" },
     ],
     edges: [
       { source: "function:src/a.ts:main", target: "function:src/a.ts:run", type: "calls", direction: "out", weight: 1, confidence: "high" },
@@ -345,36 +411,122 @@ describe("[G3] graph-query.ts CLI — dead-code entry-point config wiring", () =
     tour: [],
   };
 
-  function runCli(verb: string, args: object): unknown {
+  /**
+   * Build a real on-disk repo: graph at .guild/indexes/knowledge-graph.json plus
+   * the optional manifest/settings/override files. Returns the repo root, which
+   * is passed as --cwd so the CLI resolves its entry sources from THIS repo (not
+   * the plugin's). The tmpdir is not a git repo, so guildPaths falls back to it.
+   */
+  function makeRepo(files: {
+    packageJson?: object;
+    settings?: object;
+    entryPointsJson?: unknown;
+  }): { repo: string; graphPath: string } {
+    const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "g3-repo-")));
+    const indexes = path.join(repo, ".guild", "indexes");
+    fs.mkdirSync(indexes, { recursive: true });
+    const graphPath = path.join(indexes, "knowledge-graph.json");
+    fs.writeFileSync(graphPath, JSON.stringify(GRAPH), "utf8");
+    if (files.packageJson) fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify(files.packageJson), "utf8");
+    if (files.settings) fs.writeFileSync(path.join(repo, ".guild", "settings.json"), JSON.stringify(files.settings), "utf8");
+    if (files.entryPointsJson !== undefined) fs.writeFileSync(path.join(indexes, "entry_points.json"), JSON.stringify(files.entryPointsJson), "utf8");
+    return { repo, graphPath };
+  }
+
+  function runCli(verb: string, args: object, repo: string, graphPath: string): unknown {
     const out = execFileSync(
       "npx",
-      ["tsx", CLI, verb, JSON.stringify(args), "--graph", graphPath],
+      ["tsx", CLI, verb, JSON.stringify(args), "--cwd", repo, "--graph", graphPath],
       { cwd: SCRIPTS_DIR, encoding: "utf8" },
     );
     return JSON.parse(out);
   }
+  const deadIds = (r: unknown) => new Set((r as { nodes: Array<{ id: string }> }).nodes.map((n) => n.id));
 
-  beforeAll(() => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "g3-cli-"));
-    graphPath = path.join(dir, "knowledge-graph.json");
-    fs.writeFileSync(graphPath, JSON.stringify(GRAPH), "utf8");
+  test("anti-vacuity: with NO on-disk entry for orphan, `dead-code {}` reports it (down-tiered)", () => {
+    const { repo, graphPath } = makeRepo({ packageJson: { name: "x", main: "src/a.ts" } });
+    const res = runCli("dead-code", {}, repo, graphPath) as { nodes: Array<{ id: string; tier: string; source_refs: string[] }> };
+    const orphan = res.nodes.find((n) => n.id === "function:src/lib.ts:orphan");
+    expect(orphan).toBeDefined();              // not in package.json main → still dead
+    expect(orphan!.tier).toBe("untrusted");    // bare ref → no line provenance
+    expect(orphan!.source_refs).toEqual([]);   // non-line ref filtered, never passed through
+  }, 30000);
+
+  test("package.json `main` (ON DISK) excludes orphan from `dead-code {}` — no JSON injection", () => {
+    const { repo, graphPath } = makeRepo({ packageJson: { name: "x", main: "src/lib.ts" } });
+    expect(deadIds(runCli("dead-code", {}, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
+  }, 30000);
+
+  test("package.json `bin` map and `exports` tree (ON DISK) also exclude orphan", () => {
+    const binRepo = makeRepo({ packageJson: { name: "x", bin: { "x-cli": "src/lib.ts" } } });
+    expect(deadIds(runCli("dead-code", {}, binRepo.repo, binRepo.graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
+    const expRepo = makeRepo({ packageJson: { name: "x", exports: { ".": { import: "src/lib.ts" } } } });
+    expect(deadIds(runCli("dead-code", {}, expRepo.repo, expRepo.graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
+  }, 30000);
+
+  test(".guild/settings.json `models.entryPoints` (ON DISK) excludes orphan", () => {
+    const { repo, graphPath } = makeRepo({ settings: { models: { entryPoints: ["orphan"] } } });
+    expect(deadIds(runCli("dead-code", {}, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
+  }, 30000);
+
+  test(".guild/indexes/entry_points.json override (ON DISK) excludes orphan", () => {
+    const { repo, graphPath } = makeRepo({ entryPointsJson: ["function:src/lib.ts:orphan"] });
+    expect(deadIds(runCli("dead-code", {}, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
+  }, 30000);
+
+  test("explicit JSON `entryPoints` is still unioned in (and `exported` alias works)", () => {
+    const { repo, graphPath } = makeRepo({}); // no on-disk entry sources at all
+    expect(deadIds(runCli("dead-code", {}, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(true);
+    expect(deadIds(runCli("dead-code", { entryPoints: ["orphan"] }, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
+    expect(deadIds(runCli("dead-code", { exported: ["function:src/lib.ts:orphan"] }, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
+  }, 30000);
+
+  // Finding 2 on the REAL CLI: entry-points verb reflects the on-disk surface.
+  test("`entry-points {}` includes the package.json-configured entry (Finding 2, real CLI)", () => {
+    const { repo, graphPath } = makeRepo({ packageJson: { name: "x", main: "src/lib.ts" } });
+    const ids = deadIds(runCli("entry-points", {}, repo, graphPath));
+    expect(ids.has("function:src/lib.ts:orphan")).toBe(true); // configured via manifest
+    expect(ids.has("function:src/a.ts:main")).toBe(true);     // name heuristic still applies
+  }, 30000);
+});
+
+// ---------------------------------------------------------------------------
+// Gate 6 — resolveEntryPointConfig unit: REAL on-disk union + precedence.
+// ---------------------------------------------------------------------------
+
+describe("[G3] resolveEntryPointConfig — on-disk union (model-free, injectable reader)", () => {
+  test("unions package.json + settings + entry_points.json + explicit (sorted, normalised)", () => {
+    const fsmap: Record<string, string> = {
+      "/repo/package.json": JSON.stringify({ main: "./src/lib.ts", bin: { cli: "src/cli.ts" }, exports: { ".": "src/index.ts" } }),
+      "/repo/.guild/settings.json": JSON.stringify({ models: { entryPoints: ["handler"] } }),
+      "/repo/.guild/indexes/entry_points.json": JSON.stringify({ entryPoints: ["function:src/x.ts:run"] }),
+    };
+    const read = (p: string) => {
+      const v = fsmap[p.replace(/\\/g, "/")];
+      if (v === undefined) throw new Error("ENOENT " + p);
+      return v;
+    };
+    const got = resolveEntryPointConfig({
+      repoRoot: "/repo",
+      explicit: ["extra"],
+      readFile: read,
+    });
+    // "./src/lib.ts" normalised to "src/lib.ts"; everything sorted + de-duped.
+    expect(got).toEqual([
+      "extra",
+      "function:src/x.ts:run",
+      "handler",
+      "src/cli.ts",
+      "src/index.ts",
+      "src/lib.ts",
+    ]);
   });
 
-  test("dead-code (no config) reports the orphan, down-tiered for its bare ref", () => {
-    const res = runCli("dead-code", {}) as { nodes: Array<{ id: string; tier: string; source_refs: string[] }> };
-    const orphan = res.nodes.find((n) => n.id === "function:src/a.ts:orphan");
-    expect(orphan).toBeDefined();
-    expect(orphan!.tier).toBe("untrusted");      // bare ref → no line provenance
-    expect(orphan!.source_refs).toEqual([]);      // non-line ref filtered, never passed through
-  }, 30000);
-
-  test("dead-code with entryPoints (by name) excludes the orphan — non-`main` entry via CLI config", () => {
-    const res = runCli("dead-code", { entryPoints: ["orphan"] }) as { nodes: Array<{ id: string }> };
-    expect(res.nodes.some((n) => n.id === "function:src/a.ts:orphan")).toBe(false);
-  }, 30000);
-
-  test("dead-code with `exported` alias also excludes the orphan", () => {
-    const res = runCli("dead-code", { exported: ["function:src/a.ts:orphan"] }) as { nodes: Array<{ id: string }> };
-    expect(res.nodes.some((n) => n.id === "function:src/a.ts:orphan")).toBe(false);
-  }, 30000);
+  test("missing/malformed sources are skipped silently (only explicit survives)", () => {
+    const read = (_p: string) => { throw new Error("ENOENT"); };
+    expect(resolveEntryPointConfig({ repoRoot: "/repo", explicit: ["only"], readFile: read })).toEqual(["only"]);
+    // malformed package.json → skipped, not thrown
+    const read2 = (p: string) => (p.endsWith("package.json") ? "{not json" : (() => { throw new Error("ENOENT"); })());
+    expect(resolveEntryPointConfig({ repoRoot: "/repo", readFile: read2 })).toEqual([]);
+  });
 });

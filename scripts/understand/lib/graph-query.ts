@@ -41,13 +41,34 @@
  * ── Entry-point rule (documented; the graph carries no `exported` flag) ──
  *   A `function` node is an entry point iff (a) its simple name is a conventional
  *   program entry name (`main`, `__main__` — the deterministic name heuristic),
- *   OR (b) it is named explicitly in the caller-supplied entry-point set (by node
- *   id OR simple name). The structural layer (G1) does not record
- *   export/visibility, so an "exported + zero-inbound" rule is not yet computable
- *   from the graph alone — callers that know their public surface pass it in via
- *   `DeadCodeOptions.entryPoints`. FOLLOWUP (G1): once the structural extractor
- *   records an `exported` flag, derive the exported set automatically and fold it
- *   in here.
+ *   OR (b) it is matched by the resolved entry-point set — by node id, simple
+ *   name, OR file relpath. The structural layer (G1) does not record
+ *   export/visibility, so an "exported + zero-inbound" rule is not computable from
+ *   the graph alone — instead the entry/exported surface is resolved from REAL
+ *   on-disk sources of the consuming repo (see resolution below). FOLLOWUP (G1):
+ *   once the structural extractor records an `exported` flag, derive the exported
+ *   set automatically and fold it in here.
+ *
+ * ── Entry-point RESOLUTION (REAL on-disk surface, model-free) ──
+ *   `resolveEntryPointConfig()` unions four model-free, on-disk sources into one
+ *   matcher set (no model, no network — local file reads only):
+ *     1. `<repoRoot>/package.json` — `main`, `bin` (string or map), and `exports`
+ *        (string or nested condition/subpath tree). These are FILE relpaths: a
+ *        match excludes EVERY free function defined in that file (the public
+ *        module surface).
+ *     2. `<repoRoot>/.guild/settings.json` — `models.entryPoints: string[]`.
+ *     3. `<repoRoot>/.guild/indexes/entry_points.json` — `string[]` or
+ *        `{ entryPoints: string[] }`. The `.guild`-level override.
+ *     4. Explicit caller / CLI entries (`DeadCodeOptions.entryPoints`).
+ *   PRECEDENCE: the four sources are UNIONED (purely additive — set union, so no
+ *   source can remove another's entries); the explicit set (4) is highest and is
+ *   layered last, but because union never subtracts, the documented order only
+ *   reflects authoring intent, not a tie-break. The `main`/`__main__` name
+ *   heuristic is ALWAYS applied on top, independent of all four. Each matcher is
+ *   compared against a node's id, simple name, OR file relpath (leading `./`
+ *   stripped); matching is EXACT (no extension stripping) to avoid false-linking,
+ *   so a manifest that points at build output (e.g. `dist/`) must reference the
+ *   analysed source path or be supplemented via the `entry_points.json` override.
  *
  * ── Dead-code rule (documented, EXPLICITLY SCOPED) ──
  *   Dead code = FREE (module-level) functions with zero inbound `calls` edges,
@@ -61,6 +82,9 @@
  *   (interface, override, reflection) beyond G3's model-free scope, so flagging a
  *   zero-inbound method as dead would be a false positive.
  */
+
+import * as fs from "fs";
+import * as path from "path";
 
 import type { GraphNode, GraphEdge } from "./schema";
 
@@ -173,6 +197,17 @@ export function simpleName(id: string): string {
   return parts.length > 2 ? parts.slice(2).join(":") : "";
 }
 
+/** The file relpath segment of a node id (`<type>:<relpath>[:<name>]`), or "". */
+export function nodeRelPath(id: string): string {
+  const parts = id.split(":");
+  return parts.length >= 2 ? parts[1] : "";
+}
+
+/** Strip a leading `./` and back-slashes so manifest paths match node relpaths. */
+function normRel(p: string): string {
+  return p.replace(/^\.\//, "").replace(/\\/g, "/");
+}
+
 /** A free (module-level) function — type "function" whose name has no ".". */
 function isFreeFunction(node: GraphNode): boolean {
   return node.type === "function" && !simpleName(node.id).includes(".");
@@ -181,6 +216,28 @@ function isFreeFunction(node: GraphNode): boolean {
 /** Conventional entry point — a function whose simple name is in ENTRY_POINT_NAMES. */
 export function isEntryPoint(node: GraphNode): boolean {
   return node.type === "function" && ENTRY_POINT_NAMES.has(simpleName(node.id));
+}
+
+/** Normalise a caller/on-disk matcher set (skip non-strings, strip `./`). */
+function normalizeMatchers(entries?: Iterable<string>): Set<string> {
+  const s = new Set<string>();
+  for (const e of entries ?? []) if (typeof e === "string" && e.length > 0) s.add(normRel(e));
+  return s;
+}
+
+/**
+ * A node is an entry point iff it is a name-heuristic entry (`main`/`__main__`)
+ * OR matched by the resolved set via node id, simple name, OR file relpath
+ * (EXACT match — see header "Entry-point RESOLUTION"; relpath match covers
+ * manifest file paths that mark an entire file as public surface).
+ */
+function isEntryNode(node: GraphNode, matchers: Set<string>): boolean {
+  if (isEntryPoint(node)) return true;
+  return (
+    matchers.has(node.id) ||
+    matchers.has(simpleName(node.id)) ||
+    matchers.has(nodeRelPath(node.id))
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -415,22 +472,121 @@ export function kgDeadCode(graph: GraphView, opts: DeadCodeOptions = {}): DeadCo
   for (const e of graph.edges) {
     if (e.type === "calls") inbound.add(e.target);
   }
-  // Caller-supplied exported/public surface — matched by node id OR simple name.
-  const supplied = new Set<string>(opts.entryPoints ?? []);
-  const isExcluded = (n: GraphNode): boolean =>
-    isEntryPoint(n) || supplied.has(n.id) || supplied.has(simpleName(n.id));
+  // Resolved exported/public surface — matched by node id, simple name, OR relpath.
+  const matchers = normalizeMatchers(opts.entryPoints);
 
   const dead = graph.nodes
-    .filter((n) => isFreeFunction(n) && !inbound.has(n.id) && !isExcluded(n))
+    .filter((n) => isFreeFunction(n) && !inbound.has(n.id) && !isEntryNode(n, matchers))
     .map((n) => toEvidence(n, 0))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return { tier: EVIDENCE_TIER, nodes: dead };
 }
 
-/** All entry-point function nodes (sorted) — exposed for callers/diagnostics. */
-export function kgEntryPoints(graph: GraphView): EvidenceNode[] {
+/**
+ * All entry-point function nodes (sorted). Accepts the SAME entry-point options
+ * as {@link kgDeadCode}: the name-heuristic entries (`main`/`__main__`) PLUS any
+ * configured/supplied entry matched by id, simple name, or relpath are returned.
+ * (Round-3 fix: previously ignored configured entries and returned only `main`.)
+ */
+export function kgEntryPoints(graph: GraphView, opts: DeadCodeOptions = {}): EvidenceNode[] {
+  const matchers = normalizeMatchers(opts.entryPoints);
   return graph.nodes
-    .filter(isEntryPoint)
+    .filter((n) => n.type === "function" && isEntryNode(n, matchers))
     .map((n) => toEvidence(n, 0))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+// ---------------------------------------------------------------------------
+// Entry-point resolution — REAL on-disk public surface (model-free)
+// ---------------------------------------------------------------------------
+
+/** Sources for {@link resolveEntryPointConfig}. */
+export interface EntryPointSources {
+  /** Repo root holding `package.json`. */
+  repoRoot: string;
+  /** `.guild` dir holding `settings.json` (defaults to `<repoRoot>/.guild`). */
+  guildDir?: string;
+  /** `.guild/indexes` dir holding `entry_points.json` (defaults to `<guildDir>/indexes`). */
+  indexesDir?: string;
+  /** Explicit caller/CLI entries (unioned in last; highest authoring precedence). */
+  explicit?: Iterable<string>;
+  /** Injectable reader (tests). Defaults to `fs.readFileSync(p, "utf8")`. */
+  readFile?: (absPath: string) => string;
+}
+
+/** Recurse a `package.json` `exports` tree, collecting every string leaf. */
+function collectExports(node: unknown, out: string[]): void {
+  if (typeof node === "string") out.push(node);
+  else if (node && typeof node === "object") {
+    for (const v of Object.values(node as Record<string, unknown>)) collectExports(v, out);
+  }
+}
+
+/** `main` + `bin` (string|map) + `exports` (string|tree) file paths, or []. */
+function manifestEntryPoints(repoRoot: string, read: (p: string) => string): string[] {
+  let pkg: Record<string, unknown>;
+  try {
+    pkg = JSON.parse(read(path.join(repoRoot, "package.json"))) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  if (typeof pkg.main === "string") out.push(pkg.main);
+  if (typeof pkg.bin === "string") out.push(pkg.bin);
+  else if (pkg.bin && typeof pkg.bin === "object") {
+    for (const v of Object.values(pkg.bin as Record<string, unknown>)) {
+      if (typeof v === "string") out.push(v);
+    }
+  }
+  collectExports(pkg.exports, out);
+  return out;
+}
+
+/** `.guild/settings.json` → `models.entryPoints: string[]`, or []. */
+function settingsEntryPoints(guildDir: string, read: (p: string) => string): string[] {
+  try {
+    const s = JSON.parse(read(path.join(guildDir, "settings.json"))) as {
+      models?: { entryPoints?: unknown };
+    };
+    const ep = s.models?.entryPoints;
+    return Array.isArray(ep) ? ep.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** `.guild/indexes/entry_points.json` → `string[]` | `{entryPoints:string[]}`, or []. */
+function indexEntryPoints(indexesDir: string, read: (p: string) => string): string[] {
+  try {
+    const j = JSON.parse(read(path.join(indexesDir, "entry_points.json"))) as unknown;
+    const arr = Array.isArray(j)
+      ? j
+      : j && typeof j === "object" && Array.isArray((j as { entryPoints?: unknown }).entryPoints)
+        ? (j as { entryPoints: unknown[] }).entryPoints
+        : [];
+    return arr.filter((x): x is string => typeof x === "string");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolve the entry/exported surface from REAL on-disk sources (see header
+ * "Entry-point RESOLUTION"). Returns a sorted, de-duplicated, normalised union of
+ * matchers (id | simple name | relpath). Model-free: local file reads only — no
+ * model, no network. Missing/malformed sources are skipped silently (each source
+ * is optional), so a repo with none yields just the explicit entries.
+ */
+export function resolveEntryPointConfig(src: EntryPointSources): string[] {
+  const guildDir = src.guildDir ?? path.join(src.repoRoot, ".guild");
+  const indexesDir = src.indexesDir ?? path.join(guildDir, "indexes");
+  const read = src.readFile ?? ((p: string) => fs.readFileSync(p, "utf8"));
+
+  const all = new Set<string>();
+  // Union order reflects authoring precedence (1→4); union itself never subtracts.
+  for (const m of manifestEntryPoints(src.repoRoot, read)) all.add(normRel(m));
+  for (const m of settingsEntryPoints(guildDir, read)) all.add(normRel(m));
+  for (const m of indexEntryPoints(indexesDir, read)) all.add(normRel(m));
+  for (const m of src.explicit ?? []) if (typeof m === "string" && m.length > 0) all.add(normRel(m));
+  return [...all].sort();
 }
