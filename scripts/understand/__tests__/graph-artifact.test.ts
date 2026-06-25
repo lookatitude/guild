@@ -42,7 +42,7 @@ import * as os from "os";
 import * as path from "path";
 import * as zlib from "zlib";
 import * as crypto from "crypto";
-import { execFileSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
 
 import {
   buildBundles,
@@ -101,6 +101,12 @@ function runCli(dir: string, args: string[]): { status: number; out: string } {
 }
 function runExtractFull(dir: string, outPath: string): void {
   execFileSync("npx", ["tsx", EXTRACT, "--cwd", dir, "--out", outPath], { encoding: "utf8" });
+}
+/** Like runCli but captures stdout AND stderr regardless of exit code (the CLI's
+ *  diagnostics — and the inherited extractor output — go to stderr even on exit 0). */
+function runCliBoth(dir: string, args: string[]): { status: number; out: string } {
+  const r = spawnSync("npx", ["tsx", CLI, "--cwd", dir, ...args], { encoding: "utf8" });
+  return { status: r.status ?? 1, out: String(r.stdout ?? "") + String(r.stderr ?? "") };
 }
 
 /**
@@ -775,6 +781,96 @@ describe("G6 CLI symlinked .guild/indexes base is refused (FIX-T6.1-r3 #1)", () 
     expect(r.status).toBe(1); // refused at path resolution, before any write/spawn
     expect(r.out).toContain("[graph-artifact] refusing --out outside .guild/indexes");
     expect(fs.existsSync(path.join(outside, "new.json"))).toBe(false);
+  });
+});
+
+// ===========================================================================
+// CLI import cache-clearance is contained + fail-closed (FIX-T6.1-r7)
+// ===========================================================================
+
+describe("G6 CLI import cache-clearance (containment-before-delete + fail-closed)", () => {
+  // #1 BLOCKER — a symlinked .guild/indexes must not let the DEFAULT-path (no --out)
+  // cache deletion remove a sidecar OUTSIDE the repo. Pre-fix, removeStaleLocalCache
+  // ran before any containment check on the default graphPath.
+  test("symlinked indexes dir → default-path import does NOT delete an outside sidecar (refused)", () => {
+    const dir = tmpRepo("g6-r7-blocker-");
+    const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "g6-r7-outside-")));
+    try {
+      write(dir, "a.ts", A_TS);
+      write(dir, "b.ts", B_TS);
+      fs.mkdirSync(path.join(dir, ".guild"), { recursive: true });
+      // .guild/indexes → a dir OUTSIDE the repo.
+      fs.symlinkSync(outside, path.join(dir, ".guild", "indexes"));
+      // The exact file the default-path cache deletion would target (graphPath is
+      // <indexes>/knowledge-graph.json → resolves into `outside`).
+      const outsideSidecar = path.join(outside, "knowledge-graph.json.structural-cache.json");
+      fs.writeFileSync(outsideSidecar, '{"version":"x","files":{}}', "utf8");
+      expect(fs.existsSync(outsideSidecar)).toBe(true); // setup is valid
+
+      const imp = runCli(dir, ["--import"]); // NO --out — exercises the default path
+      expect(imp.status).toBe(1); // refused: cache path escapes the repo
+      expect(imp.out).toContain("escapes .guild/indexes");
+      // Non-vacuity (would FAIL pre-fix): the outside sidecar was NOT deleted.
+      expect(fs.existsSync(outsideSidecar)).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  // #2 MAJOR — an existing in-repo sidecar that cannot be removed must NOT be left
+  // reachable by the cache-reading incremental path. A non-empty DIRECTORY at the
+  // cache path is genuinely un-removable by the code's `rmSync(force)` (no
+  // recursive) → the import must fail closed onto a no-cache FULL rebuild, never a
+  // silent incremental reuse.
+  test("un-removable sidecar → forced no-cache full rebuild, result == from-scratch (no reuse)", () => {
+    const dir = tmpRepo("g6-r7-major-");
+    try {
+      write(dir, "a.ts", A_TS);
+      write(dir, "b.ts", B_TS);
+      // 1) Seed a real V1 cache + graph, export the V1 snapshot.
+      runExtractFull(dir, graphPathOf(dir));
+      const cachePath = `${graphPathOf(dir)}.structural-cache.json`;
+      expect(fs.existsSync(cachePath)).toBe(true); // setup is valid
+      const exp = runCli(dir, ["--export", "--force"]);
+      expect(exp.status).toBe(0);
+
+      // 2) Evolve a.ts to a structurally DIFFERENT V2 (adds exported `baz`).
+      const A_V2 = A_TS + "export function baz(): number { return 42; }\n";
+      write(dir, "a.ts", A_V2);
+
+      // 3) Wipe the local graph; replace the cache FILE with an un-removable
+      //    non-empty DIRECTORY at the same path. `rmSync(path,{force:true})` (the
+      //    code's call) throws on a directory → the sidecar survives removal.
+      fs.rmSync(graphPathOf(dir), { force: true });
+      fs.rmSync(cachePath, { force: true });
+      fs.mkdirSync(cachePath, { recursive: true });
+      fs.writeFileSync(path.join(cachePath, "blocker"), "x", "utf8"); // non-empty
+      expect(fs.statSync(cachePath).isDirectory()).toBe(true); // setup is valid
+
+      // 4) Import: must fail closed → forced full rebuild, never the incremental path.
+      //    Capture stderr too (the diagnostics below are written there on exit 0).
+      const imp = runCliBoth(dir, ["--import"]);
+      expect(imp.status).toBe(0);
+      const imported = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
+
+      // 5) From-scratch on the SAME V2 tree (side path, own cache).
+      const scratchPath = path.join(dir, ".guild", "indexes", "scratch-graph.json");
+      runExtractFull(dir, scratchPath);
+      const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
+
+      const importedSubset = JSON.stringify(structuralSubset(imported));
+      expect(importedSubset).toBe(JSON.stringify(structuralSubset(scratch)));
+      expect(importedSubset).toContain("baz"); // reflects the LIVE V2 tree, not a stale reuse
+
+      // Non-vacuity (both FAIL pre-fix): the fail-closed branch is taken (forced full
+      // rebuild) and the cache-reading incremental path is NOT (its "no usable cache"
+      // log is absent because the extractor ran in full mode, never reading the cache).
+      expect(imp.out).toContain("forcing a no-cache full rebuild");
+      expect(imp.out).not.toContain("no usable cache");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
