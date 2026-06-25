@@ -3,45 +3,62 @@
  *
  * Pure functions behind the opt-in, committable, compressed structural-graph
  * snapshot (`.guild/indexes/structural-graph.json.zst`). The artifact lets a
- * teammate skip the cold structural pass: on a fresh clone the snapshot is
- * imported (graph + per-file fingerprint cache) and then G4 incremental
- * re-extracts ONLY the local delta (bootstrap-then-incremental, mirroring the
- * reference engine's `graph.db.zst`).
+ * teammate skip the cold pass on a fresh clone: the snapshot is imported and the
+ * local structural tier is then (re)built locally.
  *
- * File-first, NOT SQLite (goals.md §G6): the uncompressed payload is the
- * canonical JSON graph (plus the fingerprint cache needed to bootstrap
- * incremental), so the snapshot decompresses to a diff-tooling-friendly JSON.
+ * ARCHITECTURAL SIMPLIFICATION (FIX-T6.1-r5). Earlier rounds shipped the canonical
+ * graph PLUS the per-file structural-cache bundles, then had to comprehensively
+ * validate every cached node/edge/bundle element on import (the bundles are added
+ * to the graph WHOLESALE by `assembleStructuralGraph`, so a single malformed cached
+ * element could crash or silently diverge a reused incremental). That untrusted-cache
+ * validation surface is the asymptote rounds 1–5 chased (source-ref format, edge
+ * topology, id↔kind/name/file, …). This round removes it ENTIRELY:
  *
- * Determinism: the artifact is a pure function of (graph, cache). The graph's
+ *   - The artifact carries ONLY (a) the canonical graph and (b) a flat per-file
+ *     fingerprint map `{ repo-rel-path: content-sha }`. NOT the structural-cache
+ *     bundles.
+ *   - The graph is already validated comprehensively by `validateGraph` (the SOLE
+ *     structural-validation surface now). The fingerprint map is just `path → sha`
+ *     strings — trivially validatable as a flat `{string: hex-sha}` map.
+ *   - On import the local structural cache is NEVER read from the artifact. It is
+ *     rebuilt locally: the importer strips the structural subset from the validated
+ *     bootstrap graph and a local model-free re-extraction re-authors it (and seeds
+ *     a locally-produced, trusted cache). The expensive LLM-tier nodes/edges/layers/
+ *     tour from the snapshot ARE preserved — that is the bootstrap benefit (a fresh
+ *     clone skips the LLM pass, not the cheap structural pass). The fingerprint map
+ *     is the snapshot baseline for the first incremental diff.
+ *
+ * File-first, NOT SQLite (goals.md §G6): the uncompressed payload is the canonical
+ * JSON graph plus the fingerprint map, so the snapshot decompresses to a clean,
+ * diff-tooling-friendly JSON.
+ *
+ * Determinism: the artifact is a pure function of (graph, fingerprints). The graph's
  * `generated_from_commit` is NORMALIZED to the commit-independent constant on
  * package, so a snapshot carrying a stale sha re-packages byte-identically.
  * Nonce/timestamp facts live ONLY in the CLI sidecar, never in the artifact.
  *
  * Codec: gzip via Node's built-in `zlib` by default (no new dep; universally
- * available for any teammate decompressing). zstd is selectable when the
- * runtime exposes it. The codec is recorded in the self-describing header, so a
- * snapshot ALWAYS decompresses with the codec it was written with — the `.zst`
- * file name follows the brief; the container is the source of truth.
+ * available for any teammate decompressing). zstd is selectable when the runtime
+ * exposes it. The codec is recorded in the self-describing header.
  *
- * Integrity: a magic + length-prefixed JSON header + SHA-256 over the
- * uncompressed payload. A corrupt/tampered/truncated artifact is REJECTED
- * (typed error) so the CLI can fall back to full extraction without crashing.
+ * Integrity: a magic + length-prefixed JSON header + SHA-256 over the uncompressed
+ * payload. A corrupt/tampered/truncated artifact is REJECTED (typed error) so the
+ * CLI can fall back to full extraction without crashing.
  *
- * Security: a leak audit (canonical SECRET_PATTERNS, SoT in docs-hygiene/scan.ts
- * — never re-spelled) runs over the WHOLE uncompressed payload BEFORE packaging.
- * Any finding fails closed: the artifact is NOT produced (`SecretLeakError`), so
- * a secret never reaches a committable file. This is a self-contained
- * package-time gate — it does NOT introduce a run-dir scrub surface, so
- * scrub.ts/audit.ts are untouched (it reuses their canonical pattern source).
+ * Security: a leak audit (canonical SECRET_PATTERNS, SoT in docs-hygiene/scan.ts —
+ * never re-spelled) runs over the WHOLE uncompressed payload BEFORE packaging. Any
+ * finding fails closed (`SecretLeakError`), so a secret never reaches a committable
+ * file. This is a self-contained package-time gate — it does NOT introduce a run-dir
+ * scrub surface, so scrub.ts/audit.ts are untouched (it reuses their canonical
+ * pattern source).
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import * as zlib from "zlib";
 import * as crypto from "crypto";
-import { validateGraph, CONFIDENCE, DIRECTIONS } from "./schema";
+import { validateGraph } from "./schema";
 import type { KnowledgeGraph } from "./schema";
-import type { StructuralCache } from "./structural";
 // SoT for secret regexes (docs-hygiene/scan.ts). Static import — ts-jest
 // transforms it and the module's `require.main === module` guard prevents the
 // scan from running on import (mirrors scripts/lib/sanitized-run-export.ts).
@@ -77,12 +94,20 @@ export interface ArtifactHeader {
   uncompressed_bytes: number;
 }
 
-/** The uncompressed payload: the canonical graph + the bootstrap fingerprint cache. */
+/**
+ * The uncompressed payload: the canonical graph + the flat per-file fingerprint
+ * map. NOT the structural-cache bundles (FIX-T6.1-r5) — the local cache is rebuilt
+ * locally on import and never trusted from the artifact.
+ */
 export interface ArtifactEnvelope {
   schema: typeof ARTIFACT_SCHEMA;
   graph: KnowledgeGraph;
-  /** Per-file fingerprint cache so import → incremental processes only the local delta. */
-  cache: StructuralCache;
+  /**
+   * Per-file fingerprint map `{ repo-rel-path: content-sha-hex }` — the snapshot
+   * baseline for the first incremental diff. Trivially validatable; carries no
+   * structural data to trust.
+   */
+  fingerprints: Record<string, string>;
 }
 
 export interface SecretFinding {
@@ -238,17 +263,17 @@ export function envelopeBytes(env: ArtifactEnvelope): Buffer {
 // ---------------------------------------------------------------------------
 
 /**
- * Mask benign machine-derived hash values (the cache's per-file SHA-256
- * `contentHash` and any 40-char git-sha) so the high-entropy-hex SECRET_PATTERN
- * does not false-positive on every fingerprint. This mirrors scan.ts's OWN
- * high-entropy suppression for known-safe SHA contexts — it neutralizes ONLY the
- * bare-hex heuristic; the `password=`/`api_key=`/AWS/GCP/GitHub/PEM patterns are
- * untouched (a real secret is not a bare quoted hex string). Replacement is
- * same-line so reported line numbers stay accurate.
+ * Mask benign machine-derived hash values (the per-file SHA-256 fingerprints and
+ * any 40-char git-sha) so the high-entropy-hex SECRET_PATTERN does not
+ * false-positive on every fingerprint. This mirrors scan.ts's OWN high-entropy
+ * suppression for known-safe SHA contexts — it neutralizes ONLY the bare-hex
+ * heuristic; the `password=`/`api_key=`/AWS/GCP/GitHub/PEM patterns are untouched
+ * (a real secret is not a bare quoted hex string). Replacement is same-line so
+ * reported line numbers stay accurate.
  */
 function maskBenignHashes(text: string): string {
-  // Match quoted ("...") OR bare hex tokens — the cache stores fingerprints both
-  // ways (serialized payload quotes them; the raw-value corpus does not).
+  // Match quoted ("...") OR bare hex tokens — fingerprints appear both ways
+  // (serialized payload quotes them; the raw-value corpus does not).
   return text.replace(/\b[0-9a-f]{40,}\b/g, "<hash>");
 }
 
@@ -289,7 +314,7 @@ export function auditForSecrets(text: string): SecretFinding[] {
 }
 
 // ---------------------------------------------------------------------------
-// Lossless-packaging + cache-shape validation
+// Lossless-packaging + fingerprint-map validation
 // ---------------------------------------------------------------------------
 
 /**
@@ -313,217 +338,33 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(norm(value));
 }
 
-/** A repo-relative cache key with no escape: not absolute, no `..` segment, non-empty. */
+/** A repo-relative key with no escape: not absolute, no `..` segment, non-empty. */
 function isSafeRelKey(rel: string): boolean {
   if (typeof rel !== "string" || rel === "") return false;
   if (path.isAbsolute(rel)) return false;
   return !rel.split(/[/\\]/).some((seg) => seg === "..");
 }
 
-/** Every element of the array is a (possibly empty) string. */
-function isStringArray(v: unknown): boolean {
-  return Array.isArray(v) && v.every((x) => typeof x === "string");
-}
-
-/** The structural node types a cached symbol node may carry (file is the fileNode). */
-const SYMBOL_NODE_TYPES = new Set(["function", "class"]);
+/** A lowercase hex content digest: SHA-256 (64) is what Guild produces; a 40-hex
+ *  git sha is also accepted so an alternate producer's map is not spuriously
+ *  rejected. */
+const FINGERPRINT_SHA_RE = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /**
- * The FULL `GraphNode` shape the schema requires AND a fresh structural
- * extraction emits (Codex FIX-T6.1-r3 #2). `assembleStructuralGraph()` adds the
- * cached `fileNode` (Pass 1 `addNode(b.fileNode)`) and every `symbolNodes`
- * element (Pass 1 `for (n of b.symbolNodes) addNode(n)`) WHOLESALE into the
- * graph, so a cached node that is missing a schema-required field (or carries a
- * bogus type / empty provenance) would surface a node that `validateGraph` later
- * repairs or drops — diverging the incremental bundle from a full rebuild.
- * Validate every required field so any deviation rejects the artifact → fallback.
+ * The ENTIRE untrusted-data validation surface that replaces the removed
+ * `validateStructuralCache` (FIX-T6.1-r5): the fingerprint map is a flat
+ * `{ repo-rel-path: content-sha-hex }` object — every key a safe repo-relative
+ * path (no `..`/absolute escape), every value a lowercase hex sha. It carries NO
+ * structural nodes/edges, so there is nothing the importer adds to the graph
+ * wholesale and nothing to deep-validate; a defect here just rejects the artifact
+ * so the CLI falls back to a full extraction. An empty map is valid (a degenerate
+ * snapshot with no baseline).
  */
-function isValidGraphNode(n: unknown, allowedTypes: Set<string>): boolean {
-  if (!n || typeof n !== "object" || Array.isArray(n)) return false;
-  const r = n as Record<string, unknown>;
-  if (typeof r.id !== "string" || r.id === "") return false;
-  if (typeof r.type !== "string" || !allowedTypes.has(r.type)) return false;
-  if (typeof r.name !== "string" || r.name === "") return false;
-  // A structural node always carries real provenance (the file path, or
-  // `rel#Lx-Ly` for a symbol); never accept empty/non-string source_refs.
-  if (!Array.isArray(r.source_refs) || r.source_refs.length === 0) return false;
-  if (!r.source_refs.every((s) => typeof s === "string" && s !== "")) return false;
-  if (typeof r.confidence !== "string" || !CONFIDENCE.has(r.confidence)) return false;
-  return true;
-}
-
-/** A cached `fileNode`: full GraphNode shape, type `file`, id keyed to its file. */
-function isValidFileNode(n: unknown, rel: string): boolean {
-  if (!isValidGraphNode(n, new Set(["file"]))) return false;
-  return (n as Record<string, unknown>).id === `file:${rel}`;
-}
-
-/**
- * A cached `symbolNodes` element: full GraphNode shape, type `function`/`class`,
- * AND anchored to THIS bundle's `rel` (Codex FIX-T6.1-r4). A structural symbol id
- * is `<type>:<rel>:<name>` and the node `name` IS that id suffix (structural.ts
- * `symbolNodeName`: function name = the suffix after `function:<rel>:`, class name
- * = simpleName == the suffix), so the single id-identity below pins the type
- * prefix, the OWNING FILE, and name-consistency in one check. Every `source_ref`
- * path (the part before `#Lx-Ly`) is also required to be this bundle's file, so a
- * symbol that names a FOREIGN file can never ride in on a bundle keyed to `rel`
- * (it would surface a node/edge that a full rebuild emits from a different bundle).
- */
-function isValidSymbolNode(n: unknown, rel: string): boolean {
-  if (!isValidGraphNode(n, SYMBOL_NODE_TYPES)) return false;
-  const r = n as Record<string, unknown>;
-  // id is namespaced `<type>:<rel>:<name>` — pins type prefix + owning file + name.
-  if (r.id !== `${r.type as string}:${rel}:${r.name as string}`) return false;
-  // every source_ref's path component (before `#Lx-Ly`) is this bundle's file.
-  for (const ref of r.source_refs as unknown[]) {
-    if (typeof ref !== "string" || ref.split("#")[0] !== rel) return false;
-  }
-  return true;
-}
-
-/**
- * A cached `contains` edge: the FULL `GraphEdge` shape the schema requires
- * (Codex FIX-T6.1-r3 #2). `assembleStructuralGraph()` adds each cached `contains`
- * edge WHOLESALE (Pass 1 `for (e of b.contains) addEdge(e)`), so a malformed edge
- * (bad `type`/`direction`/`weight`, or an endpoint that is not a node in THIS
- * bundle) would surface an invalid or dangling-reference edge in the graph.
- * `nodeIds` is the set of this bundle's node ids (fileNode + symbolNodes) — both
- * endpoints must reference one (bundle cross-consistency).
- */
-function isValidContainsEdge(e: unknown, nodeIds: Set<string>): boolean {
-  if (!e || typeof e !== "object" || Array.isArray(e)) return false;
-  const r = e as Record<string, unknown>;
-  if (r.type !== "contains") return false;
-  if (typeof r.source !== "string" || r.source === "") return false;
-  if (typeof r.target !== "string" || r.target === "") return false;
-  if (typeof r.direction !== "string" || !DIRECTIONS.has(r.direction)) return false;
-  if (typeof r.weight !== "number" || !Number.isFinite(r.weight) || r.weight < 0 || r.weight > 1) {
-    return false;
-  }
-  // bundle cross-consistency: both endpoints must be nodes this same bundle emits.
-  return nodeIds.has(r.source) && nodeIds.has(r.target);
-}
-
-/**
- * A cached `classes` element must carry the fields Pass 1 registers (`id`,
- * `simpleName`) and the `bases`/`ifaces` name arrays Pass 2b iterates with
- * `for…of` — a non-array `bases`/`ifaces` throws "not iterable" during assembly.
- */
-function isValidClassEntry(c: unknown): boolean {
-  if (!c || typeof c !== "object") return false;
-  const r = c as Record<string, unknown>;
-  return (
-    typeof r.id === "string" && r.id !== "" &&
-    typeof r.simpleName === "string" &&
-    isStringArray(r.bases) &&
-    isStringArray(r.ifaces)
-  );
-}
-
-/**
- * A cached `callables` element must carry the fields Pass 1 registers (`id`,
- * `simpleName`) and the `callees` name array Pass 2c iterates with `for…of` —
- * a null element throws on `register(…, c.simpleName, c.id)`, a non-array
- * `callees` throws "not iterable".
- */
-function isValidCallableEntry(c: unknown): boolean {
-  if (!c || typeof c !== "object") return false;
-  const r = c as Record<string, unknown>;
-  return (
-    typeof r.id === "string" && r.id !== "" &&
-    typeof r.simpleName === "string" &&
-    isStringArray(r.callees)
-  );
-}
-
-/**
- * Validate the bootstrap fingerprint cache shape before an imported artifact is
- * accepted (Codex FIX-T6.1 #3). A checksum-valid artifact can still carry a
- * MALFORMED `cache` (tampered, or from a non-conforming producer); writing it
- * would let `--incremental` reuse a broken bundle and diverge from a full
- * rebuild. We reject schema/version/relative-key/content-hash/bundle-shape
- * defects so the CLI falls back to a full extraction instead of bootstrapping
- * garbage. Mirrors structural.ts `isReusableBundle` (shape) + adds key-safety
- * and hash-format checks; kept in THIS lane's file (no edit to structural.ts).
- */
-export function validateStructuralCache(cache: unknown): cache is StructuralCache {
-  if (!cache || typeof cache !== "object" || Array.isArray(cache)) return false;
-  const c = cache as Record<string, unknown>;
-  if (c.schema !== "guild.structural_cache.v1") return false;
-  if (typeof c.version !== "string" || c.version === "") return false;
-  const files = c.files;
-  if (!files || typeof files !== "object" || Array.isArray(files)) return false;
-  for (const [rel, bundle] of Object.entries(files as Record<string, unknown>)) {
+export function validateFingerprintMap(x: unknown): x is Record<string, string> {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return false;
+  for (const [rel, sha] of Object.entries(x as Record<string, unknown>)) {
     if (!isSafeRelKey(rel)) return false;
-    if (!bundle || typeof bundle !== "object") return false;
-    const b = bundle as Record<string, unknown>;
-    if (b.rel !== rel) return false; // entry must be keyed to its own file
-    if (typeof b.language !== "string") return false;
-    if (typeof b.isCode !== "boolean") return false;
-    // content hash: "" (unreadable file) OR a 64-char SHA-256 hex — anything else
-    // is a malformed fingerprint that must not become an incremental key.
-    if (typeof b.contentHash !== "string") return false;
-    if (b.contentHash !== "" && !/^[0-9a-f]{64}$/.test(b.contentHash)) return false;
-    // fileNode: full GraphNode shape (it is added wholesale via addNode(b.fileNode)).
-    if (!isValidFileNode(b.fileNode, rel)) return false;
-    if (
-      !Array.isArray(b.symbolNodes) ||
-      !Array.isArray(b.contains) ||
-      !Array.isArray(b.importSpecs) ||
-      !Array.isArray(b.classes) ||
-      !Array.isArray(b.callables)
-    ) {
-      return false;
-    }
-    // Element-level validation (Codex FIX-T6.1-r2 #2 + r3 #2/#3 + r4): the
-    // array-shape checks above pass even when an array holds MALFORMED entries.
-    // `refreshStructuralIncremental()` reuses such a bundle and
-    // `assembleStructuralGraph()` then emits these nodes/edges WHOLESALE — crashing,
-    // diverging from a full rebuild, or surfacing invalid/dangling/mis-sourced
-    // edges. Validate the FULL node/edge shape AND deep bundle cross-consistency
-    // (id↔kind, id↔name, source_ref↔file, edge topology) so any defect rejects the
-    // artifact and the CLI falls back to a full extraction.
-    //
-    // symbolNodes: full GraphNode shape, anchored to THIS bundle's `rel`; INDEX by id
-    // so the classes/callables cross-checks below resolve the ACTUAL symbol node
-    // (its kind + name), not merely "some id is present" (Codex FIX-T6.1-r4).
-    const symbolById = new Map<string, Record<string, unknown>>();
-    for (const n of b.symbolNodes as unknown[]) {
-      if (!isValidSymbolNode(n, rel)) return false;
-      symbolById.set((n as Record<string, unknown>).id as string, n as Record<string, unknown>);
-    }
-    // contains edges: full GraphEdge shape + endpoints within this bundle's nodes
-    // (fileNode + symbolNodes) — a phantom endpoint would emit a dangling edge.
-    const bundleNodeIds = new Set<string>(symbolById.keys());
-    bundleNodeIds.add(`file:${rel}`);
-    if (!(b.contains as unknown[]).every((e) => isValidContainsEdge(e, bundleNodeIds))) return false;
-    if (!(b.importSpecs as unknown[]).every((s) => typeof s === "string")) return false;
-    // classes: full shape AND the `id` MUST resolve to a real CLASS symbol node in
-    // THIS bundle whose NAME matches the entry's `simpleName` (Codex FIX-T6.1-r4).
-    // Pass 1 registers `c.simpleName`→`c.id`; Pass 2b emits inherits/implements edges
-    // with `c.id` as the SOURCE. An id that resolves to a FUNCTION node, or whose
-    // name disagrees, would register a mis-named symbol and emit a phantom-source /
-    // mis-resolved edge that diverges from a full rebuild. (A class symbol node's
-    // `name` IS its simpleName, so node.name === c.simpleName is the exact match.)
-    for (const c of b.classes as unknown[]) {
-      if (!isValidClassEntry(c)) return false;
-      const r = c as Record<string, unknown>;
-      const node = symbolById.get(r.id as string);
-      if (!node || node.type !== "class" || node.name !== r.simpleName) return false;
-    }
-    // callables: full shape AND the `id` MUST resolve to a real FUNCTION symbol node
-    // in THIS bundle whose name's LAST dotted segment matches the entry's `simpleName`
-    // (top-level fn: node name == simpleName; method `Cls.method`: node name suffix ==
-    // method). Pass 2c emits calls edges with `c.id` as the SOURCE; an id that
-    // resolves to a class node — or a mismatched name — would emit a phantom-source /
-    // mis-registered edge diverging from a full rebuild (Codex FIX-T6.1-r4).
-    for (const c of b.callables as unknown[]) {
-      if (!isValidCallableEntry(c)) return false;
-      const r = c as Record<string, unknown>;
-      const node = symbolById.get(r.id as string);
-      if (!node || node.type !== "function") return false;
-      if (r.simpleName !== (node.name as string).split(".").pop()) return false;
-    }
+    if (typeof sha !== "string" || !FINGERPRINT_SHA_RE.test(sha)) return false;
   }
   return true;
 }
@@ -538,7 +379,7 @@ export interface PackageResult {
 }
 
 /**
- * Build the committable artifact buffer from a graph + bootstrap cache.
+ * Build the committable artifact buffer from a graph + per-file fingerprint map.
  *
  * Steps: validate the graph (write only validated data) → normalize
  * `generated_from_commit` to the commit-independent constant → leak-audit the
@@ -546,13 +387,20 @@ export interface PackageResult {
  * self-describing header + integrity SHA-256.
  *
  * @throws SecretLeakError if the leak audit finds a secret (artifact NOT built).
- * @throws ArtifactError   if the graph fails schema validation.
+ * @throws ArtifactError   if the graph fails schema validation, is not a lossless
+ *                         fixpoint, or the fingerprint map is malformed.
  */
 export function packageGraphArtifact(
   graph: KnowledgeGraph,
-  cache: StructuralCache,
+  fingerprints: Record<string, string>,
   opts: { codec?: Codec } = {},
 ): PackageResult {
+  // Defensive symmetry: a producer must hand a well-formed fingerprint map (the
+  // importer rejects a malformed one → fallback; refuse to ship one too).
+  if (!validateFingerprintMap(fingerprints)) {
+    throw new ArtifactError("fingerprint map is malformed (not a flat {rel: hex-sha} map)");
+  }
+
   // Determinism: a stale sha carried by an existing graph is normalized away BEFORE
   // validation so two identical trees at different commits package byte-identically
   // AND the lossless check below compares like-for-like.
@@ -579,7 +427,7 @@ export function packageGraphArtifact(
   const envelope: ArtifactEnvelope = {
     schema: ARTIFACT_SCHEMA,
     graph: validated,
-    cache,
+    fingerprints,
   };
   const payload = envelopeBytes(envelope);
 
@@ -609,8 +457,9 @@ export function packageGraphArtifact(
  *
  * Rejects (ArtifactError) on bad magic, truncation, out-of-range header length,
  * malformed header, decompression failure, SHA-256 mismatch (tamper/corruption),
- * non-JSON payload, or a graph that fails schema validation. The CLI catches
- * this and falls back to full extraction — no crash.
+ * non-JSON payload, a graph that fails schema validation / is not a fixpoint, or
+ * a malformed fingerprint map. The CLI catches this and falls back to full
+ * extraction — no crash.
  */
 export function unpackGraphArtifact(buf: Buffer): { envelope: ArtifactEnvelope; header: ArtifactHeader } {
   if (!Buffer.isBuffer(buf) || buf.length < MAGIC.length + 4) {
@@ -675,27 +524,28 @@ export function unpackGraphArtifact(buf: Buffer): { envelope: ArtifactEnvelope; 
     throw new ArtifactError("artifact payload is not a structural-graph envelope");
   }
 
-  // Defense in depth: the bootstrapped graph must itself pass schema validation.
+  // The SOLE structural-validation surface (FIX-T6.1-r5): the bootstrapped graph
+  // must pass schema validation AND be a fixpoint. A genuine Guild artifact was
+  // packaged from a validation-fixpoint graph, so re-validation is a no-op; if it
+  // would mutate/drop here, the artifact came from a non-conforming/tampered
+  // producer — reject (→ full-extract fallback) rather than silently bootstrap a
+  // repaired graph. There is NO cache to deep-validate: the structural tier is
+  // rebuilt locally and never trusted from the artifact.
   const validation = validateGraph(envelope.graph);
   if (!validation.success || !validation.data) {
     throw new ArtifactError(`artifact graph failed schema validation: ${validation.fatal ?? "unknown"}`);
   }
-  // Lossless contract (Codex FIX-T6.1 #2): a genuine Guild artifact was packaged
-  // from a validation-fixpoint graph, so re-validation is a no-op. If it would
-  // mutate/drop here, the artifact came from a non-conforming producer — reject
-  // (→ full-extract fallback) rather than silently bootstrap a repaired graph.
   if (canonicalJson(validation.data) !== canonicalJson(envelope.graph)) {
     throw new ArtifactError("artifact graph is not a validation fixpoint — repaired/dropped on import");
   }
   envelope.graph = validation.data;
 
-  // Cache validation (Codex FIX-T6.1 #3): a checksum-valid artifact can still
-  // carry a MALFORMED `cache`. Validate schema/relative-keys/content-hashes/
-  // bundle-shapes BEFORE accepting — a defect rejects the artifact so the CLI
-  // falls back to a full extraction instead of writing a broken incremental
-  // baseline.
-  if (!validateStructuralCache(envelope.cache)) {
-    throw new ArtifactError("artifact cache is malformed (schema/keys/hashes/bundle shape) — rejected");
+  // The fingerprint map is the ONLY other untrusted element — a trivial flat
+  // `{rel: hex-sha}` shape check. A defect rejects the artifact → full-extract
+  // fallback (it never feeds the graph, so no deeper validation is possible or
+  // needed).
+  if (!validateFingerprintMap(envelope.fingerprints)) {
+    throw new ArtifactError("artifact fingerprint map is malformed (not a flat {rel: hex-sha} map) — rejected");
   }
   return { envelope, header };
 }

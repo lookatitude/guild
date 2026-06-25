@@ -5,17 +5,29 @@
  * Opt-in, committable, compressed structural-graph snapshot so teammates skip the
  * cold structural pass (goals.md §G6). Two verbs:
  *
- *   --export   Package `.guild/indexes/knowledge-graph.json` (+ its fingerprint
- *              cache) into `.guild/indexes/structural-graph.json.zst`. Written
- *              ONLY when the operator opts in via `defaults.share_structural_graph`
- *              in `.guild/settings.json` (or `--force`). Default = NOT written.
- *              Fails closed (non-zero, nothing written) if a leak audit finds a
- *              secret in the payload.
+ *   --export   Package `.guild/indexes/knowledge-graph.json` (+ a flat per-file
+ *              fingerprint map) into `.guild/indexes/structural-graph.json.zst`.
+ *              Written ONLY when the operator opts in via
+ *              `defaults.share_structural_graph` in `.guild/settings.json` (or
+ *              `--force`). Default = NOT written. Fails closed (non-zero, nothing
+ *              written) if a leak audit finds a secret in the payload.
  *
  *   --import   On a fresh clone: decode + integrity-check the artifact, write the
- *              bootstrap graph + fingerprint cache, then run G4 incremental for the
- *              local delta (bootstrap-then-incremental). A missing/corrupt artifact
- *              falls back to a full extraction — never crashes.
+ *              bootstrap graph with its structural subset STRIPPED (so the local
+ *              re-extraction is the sole author of structural data — the artifact's
+ *              structural tier is never trusted), then run G4 incremental to
+ *              (re)build the structural tier locally for the working tree. A
+ *              missing/corrupt artifact falls back to a full extraction — never
+ *              crashes.
+ *
+ * ARCHITECTURAL SIMPLIFICATION (FIX-T6.1-r5): the artifact ships ONLY the canonical
+ * graph + a flat `{ path: sha }` fingerprint map — NOT the per-file structural-cache
+ * bundles. The local structural cache is rebuilt locally (lazily repopulated by the
+ * G4 extractor) and NEVER imported from the artifact. This removes the entire
+ * "validate an untrusted cache element" surface; `validateGraph` is the sole
+ * structural-validation surface, and the fingerprint map is a trivially-validatable
+ * flat map. The expensive LLM tier (nodes/edges/layers/tour) IS preserved on import
+ * — that is the bootstrap benefit.
  *
  * File-first (NOT SQLite). Deterministic (commit/timestamp facts live in the
  * `.meta.json` sidecar only). Model-free, zero-network. Path-contained: every
@@ -32,7 +44,8 @@ import * as path from "path";
 import { spawnSync } from "child_process";
 import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson } from "./lib/paths";
 import { walkRepo } from "./lib/walk";
-import { buildBundles, bundlesToCache, type StructuralCache } from "./lib/structural";
+import { contentHash } from "./lib/fingerprint";
+import { stripStructural } from "./lib/structural";
 import {
   ARTIFACT_BASENAME,
   assertContainedPath,
@@ -87,6 +100,24 @@ function runExtractor(cwd: string, graphPath: string, incremental: boolean): num
   return r.status ?? 1;
 }
 
+/**
+ * Build the flat per-file fingerprint map `{ rel: content-sha }` packaged in the
+ * artifact (FIX-T6.1-r5) — the snapshot baseline for the first incremental diff.
+ * Pure function of the source tree; rel-sorted insertion for deterministic bytes.
+ * Carries NO structural data (no nodes/edges/bundles) — nothing to deep-validate.
+ */
+function buildFingerprintMap(repoRoot: string, relFiles: string[]): Record<string, string> {
+  const fp: Record<string, string> = {};
+  for (const rel of [...relFiles].sort()) {
+    try {
+      fp[rel] = contentHash(fs.readFileSync(path.join(repoRoot, rel), "utf8"));
+    } catch {
+      /* unreadable file → omit (no fingerprint); the importer treats it as new). */
+    }
+  }
+  return fp;
+}
+
 function doExport(cwd: string, argv: string[]): number {
   const gp = guildPaths(cwd);
   const repoRoot = gp.repoRoot;
@@ -96,7 +127,6 @@ function doExport(cwd: string, argv: string[]): number {
     process.stderr.write(`[graph-artifact] refusing --out outside .guild/indexes\n`);
     return 1;
   }
-  const cachePath = `${graphPath}.structural-cache.json`;
 
   // Opt-out default (gate #3): never write unless the operator opted in.
   if (!hasFlag(argv, "force") && !shareFlagEnabled(gp.guildDir)) {
@@ -128,20 +158,15 @@ function doExport(cwd: string, argv: string[]): number {
     return 1;
   }
 
-  // The bootstrap fingerprint cache: prefer the sidecar the extractor already
-  // wrote; else build it deterministically from the current tree so export works
-  // standalone. Either way it is a pure function of the source tree.
-  let cache = readJson<StructuralCache>(cachePath);
-  if (!cache || !cache.files) {
-    const cm = readJson<{ files: { path: string }[] }>(gp.codebaseMap);
-    const relFiles = cm?.files?.map((f) => f.path) ?? walkRepo(repoRoot).files;
-    const readFile = (abs: string) => fs.readFileSync(abs, "utf8");
-    cache = bundlesToCache(buildBundles(repoRoot, relFiles, readFile));
-  }
+  // The bootstrap fingerprint map: a pure function of the current source tree.
+  // Prefer the deterministic scan's shared inventory; else walk.
+  const cm = readJson<{ files: { path: string }[] }>(gp.codebaseMap);
+  const relFiles = cm?.files?.map((f) => f.path) ?? walkRepo(repoRoot).files;
+  const fingerprints = buildFingerprintMap(repoRoot, relFiles);
 
   let pkg;
   try {
-    pkg = packageGraphArtifact(graph, cache, { codec });
+    pkg = packageGraphArtifact(graph, fingerprints, { codec });
   } catch (err) {
     if (err instanceof SecretLeakError) {
       process.stderr.write(`[graph-artifact] FAIL CLOSED: ${err.message}\n`);
@@ -177,6 +202,7 @@ function doExport(cwd: string, argv: string[]): number {
       sha256: pkg.header.sha256,
       uncompressed_bytes: pkg.header.uncompressed_bytes,
       compressed_bytes: pkg.artifact.length,
+      fingerprint_file_count: Object.keys(fingerprints).length,
     });
   } catch { /* sidecar best-effort */ }
 
@@ -197,9 +223,10 @@ function doImport(cwd: string, argv: string[]): number {
     process.stderr.write(`[graph-artifact] refusing --out outside .guild/indexes\n`);
     return 1;
   }
-  const cachePath = `${graphPath}.structural-cache.json`;
 
-  // Decode + integrity-check the artifact. Any failure → full-extraction fallback.
+  // Decode + integrity-check the artifact. Any failure (bad integrity, a graph that
+  // is not a validation fixpoint, OR a malformed fingerprint map) → full-extraction
+  // fallback.
   let envelope;
   try {
     const artifactPath = assertContainedPath(path.join(gp.indexesDir, ARTIFACT_BASENAME), gp.indexesDir, gp.repoRoot);
@@ -213,17 +240,50 @@ function doImport(cwd: string, argv: string[]): number {
     return runExtractor(repoRoot, graphPath, /* incremental */ false);
   }
 
-  // Bootstrap: write the snapshot graph + fingerprint cache, then incrementally
-  // refresh ONLY the local delta against the working tree (bootstrap-then-incremental).
+  // Bootstrap: write the validated graph with its STRUCTURAL SUBSET STRIPPED. The
+  // expensive LLM-tier nodes/edges/layers/tour are preserved (the bootstrap
+  // benefit); the cheap structural tier is then re-authored locally by the G4
+  // extractor below, which merges the freshly-extracted structural data into this
+  // base. The artifact's structural data is therefore NEVER trusted as final — it
+  // is rebuilt from the working tree, removing the untrusted-cache surface entirely.
+  const base = stripStructural(envelope.graph.nodes, envelope.graph.edges);
+  const bootstrap: KnowledgeGraph = { ...envelope.graph, nodes: base.nodes, edges: base.edges };
   try {
-    writeJson(graphPath, envelope.graph);
-    writeJson(cachePath, envelope.cache);
+    writeJson(graphPath, bootstrap);
   } catch (err) {
     process.stderr.write(`[graph-artifact] bootstrap write error: ${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
 
-  process.stderr.write(`[graph-artifact] bootstrapped from artifact → incremental for local delta\n`);
+  // The imported fingerprint map is the snapshot baseline for the first incremental
+  // diff: report how the working tree differs from it (a malformed map was already
+  // rejected by unpackGraphArtifact → fallback above, so this map is well-formed).
+  // The structural tier is then rebuilt IN FULL locally — lossless and never
+  // trusting the artifact's structural data. The local cache is seeded/repopulated
+  // by this G4 run (it is the trusted, locally-produced reuse baseline for LATER
+  // incrementals).
+  const liveFiles = walkRepo(repoRoot).files;
+  const liveSet = new Set(liveFiles);
+  const fp = envelope.fingerprints;
+  let changed = 0;
+  let added = 0;
+  for (const rel of liveFiles) {
+    let live: string;
+    try {
+      live = contentHash(fs.readFileSync(path.join(repoRoot, rel), "utf8"));
+    } catch {
+      continue;
+    }
+    if (!(rel in fp)) added++;
+    else if (fp[rel] !== live) changed++;
+  }
+  let deleted = 0;
+  for (const rel of Object.keys(fp)) if (!liveSet.has(rel)) deleted++;
+
+  process.stderr.write(
+    `[graph-artifact] bootstrapped from artifact (snapshot delta: ${changed} changed, ${added} new, ` +
+      `${deleted} deleted) → local structural rebuild (cache never imported from artifact)\n`,
+  );
   return runExtractor(repoRoot, graphPath, /* incremental */ true);
 }
 

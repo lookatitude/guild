@@ -4,25 +4,35 @@
  * LANE G6 validation gate (non-vacuous). Run from plugin/scripts/:
  *   npx jest --no-coverage graph-artifact
  *
- * Gates (T6.1 brief / goals.md §G6):
- *   1. Round-trip   — export → wipe local graph+cache → import → incremental:
+ * ARCHITECTURAL SIMPLIFICATION (FIX-T6.1-r5): the artifact ships ONLY the canonical
+ * graph + a flat `{ path: sha }` fingerprint map — NOT the per-file structural-cache
+ * bundles. `validateGraph` is the SOLE structural-validation surface; the fingerprint
+ * map is a trivially-validatable flat map. The local structural cache is rebuilt
+ * locally and NEVER imported from the artifact (removing the deep cache-validation
+ * surface rounds 1–5 chased). The expensive LLM tier IS preserved on import — the
+ * bootstrap benefit.
+ *
+ * Gates (T6.1-r5 brief / goals.md §G6):
+ *   1. Round-trip   — export → edit locally → wipe local graph+cache → import: the
  *                     resulting structural graph EQUALS a from-scratch graph
- *                     (canonical equality). Non-vacuity: a LOCAL edit before
- *                     import is folded by incremental (bootstrap-then-incremental),
- *                     AND ≥1 unchanged file is reused (proves it is not a cold
- *                     full rebuild). Exercised through the REAL CLI.
+ *                     (canonical equality), AND the snapshot's LLM-tier node survives
+ *                     (proving the freshly-extracted structural tier merged INTO the
+ *                     bootstrapped graph, not a cold structural-only rebuild).
+ *                     Exercised through the REAL CLI.
  *   2. Integrity    — artifact round-trips with a checksum; a corrupt / truncated /
- *                     bad-magic / tampered artifact is REJECTED (ArtifactError);
- *                     the CLI --import falls back to full extraction (no crash).
+ *                     bad-magic / tampered artifact, a graph that is not a validation
+ *                     fixpoint, AND a malformed fingerprint map are all REJECTED
+ *                     (ArtifactError); the CLI --import falls back to full extraction
+ *                     (no crash). NO code path imports cache bundles from the artifact.
  *   3. Opt-out      — the artifact is NOT written unless share_structural_graph is
  *                     set (or --force); enabling it writes the artifact.
  *   4. Security     — leak audit over the artifact fails closed on a seeded secret
  *                     (anti-vacuity: caught BEFORE packaging); a secret in a source
  *                     COMMENT is excluded by construction (0 findings). CLI export
  *                     of a secret-bearing graph exits 1 and writes nothing.
- *   + Determinism   — same (graph,cache) → byte-identical artifact; a stale-sha
+ *   + Determinism   — same (graph,fingerprints) → byte-identical artifact; a stale-sha
  *                     graph normalizes to the same bytes; reversed file-input order
- *                     yields an identical artifact (cache is rel-sorted).
+ *                     yields an identical artifact (fingerprint map is rel-sorted).
  *   + Containment   — artifact read/write is realpath-checked under .guild/indexes.
  *   + Model-free    — 0 model/network on the package/unpack path (import-closure).
  */
@@ -30,15 +40,16 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import * as zlib from "zlib";
+import * as crypto from "crypto";
 import { execFileSync } from "child_process";
 
 import {
   buildBundles,
-  bundlesToCache,
   assembleStructuralGraph,
   structuralSubset,
-  type StructuralCache,
 } from "../lib/structural";
+import { contentHash } from "../lib/fingerprint";
 import {
   ARTIFACT_BASENAME,
   ARTIFACT_SCHEMA,
@@ -47,7 +58,7 @@ import {
   auditForSecrets,
   assertContainedPath,
   canonicalJson,
-  validateStructuralCache,
+  validateFingerprintMap,
   ArtifactError,
   SecretLeakError,
   zstdAvailable,
@@ -92,6 +103,28 @@ function runExtractFull(dir: string, outPath: string): void {
   execFileSync("npx", ["tsx", EXTRACT, "--cwd", dir, "--out", outPath], { encoding: "utf8" });
 }
 
+/**
+ * Manually frame an artifact buffer from a raw envelope object (test-only). Mirrors
+ * the lib's container framing (MAGIC + 4-byte BE header len + JSON header + gzip
+ * payload + integrity SHA-256). Used to inject a payload the lib's own packager
+ * would refuse to build (a non-fixpoint graph, a malformed fingerprint map) so the
+ * IMPORT-side rejection is exercised with a valid checksum.
+ */
+function frameArtifact(envelopeObj: unknown): Buffer {
+  const payload = Buffer.from(JSON.stringify(envelopeObj, null, 2) + "\n", "utf8");
+  const compressed = zlib.gzipSync(payload);
+  const header = {
+    format: ARTIFACT_SCHEMA,
+    codec: "gzip",
+    sha256: crypto.createHash("sha256").update(payload).digest("hex"),
+    uncompressed_bytes: payload.length,
+  };
+  const headerBuf = Buffer.from(JSON.stringify(header), "utf8");
+  const lenBuf = Buffer.alloc(4);
+  lenBuf.writeUInt32BE(headerBuf.length, 0);
+  return Buffer.concat([Buffer.from("GLDSGA01", "ascii"), lenBuf, headerBuf, compressed]);
+}
+
 const A_TS = [
   'import { Base } from "./b";',
   "export function bar(): number { return 1; }",
@@ -108,8 +141,22 @@ const B_TS = [
   "",
 ].join("\n");
 
-/** Build a real (graph, cache) pair from an in-memory-ish tree on disk. */
-function buildGraphAndCache(dir: string, relFiles: string[]): { graph: KnowledgeGraph; cache: StructuralCache } {
+/** An LLM-tier node that structural extraction would NEVER emit — used to prove the
+ *  bootstrap base (not a cold rebuild) is what the import merges into. */
+const LLM_NODE = {
+  id: "concept:demo-feature",
+  type: "concept",
+  name: "Demo Feature",
+  source_refs: ["a.ts"],
+  confidence: "high",
+  description: "an LLM-tier node not produced by structural extraction",
+};
+
+/** Build a real (graph, fingerprints) pair from an on-disk tree. */
+function buildGraphAndFingerprints(
+  dir: string,
+  relFiles: string[],
+): { graph: KnowledgeGraph; fingerprints: Record<string, string> } {
   const bundles = buildBundles(dir, relFiles, readFile);
   const structural = assembleStructuralGraph(dir, bundles);
   const graph: KnowledgeGraph = {
@@ -122,14 +169,18 @@ function buildGraphAndCache(dir: string, relFiles: string[]): { graph: Knowledge
     layers: [],
     tour: [],
   };
-  return { graph, cache: bundlesToCache(bundles) };
+  const fingerprints: Record<string, string> = {};
+  for (const rel of [...relFiles].sort()) {
+    fingerprints[rel] = contentHash(readFile(path.join(dir, rel)));
+  }
+  return { graph, fingerprints };
 }
 
 // ===========================================================================
-// Gate 1 — Round-trip through the real CLI (export → wipe → import → incremental)
+// Gate 1 — Round-trip == from-scratch (CLI, bootstrap-then-local-rebuild)
 // ===========================================================================
 
-describe("G6 gate 1 — round-trip == from-scratch (CLI, bootstrap-then-incremental)", () => {
+describe("G6 gate 1 — round-trip == from-scratch (CLI, bootstrap preserves LLM tier)", () => {
   let dir: string;
   beforeEach(() => {
     dir = tmpRepo("g6-roundtrip-");
@@ -138,21 +189,26 @@ describe("G6 gate 1 — round-trip == from-scratch (CLI, bootstrap-then-incremen
   });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  test("export, edit locally, wipe, import+incremental → equals a from-scratch graph", () => {
-    // 1) Full extraction at S0 + export the snapshot (opt-in via --force).
+  test("export (graph+fingerprints) → edit, wipe, import → equals from-scratch AND keeps the LLM node", () => {
+    // 1) Full extraction at S0, then inject an LLM-tier node into the graph and
+    //    export the snapshot (opt-in via --force).
     runExtractFull(dir, graphPathOf(dir));
+    const g0 = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
+    g0.nodes.push(LLM_NODE as never);
+    fs.writeFileSync(graphPathOf(dir), JSON.stringify(g0, null, 2) + "\n");
     const exp = runCli(dir, ["--export", "--force"]);
     expect(exp.status).toBe(0);
     expect(fs.existsSync(artifactPathOf(dir))).toBe(true);
 
     // 2) Simulate a fresh clone WITH a local delta: edit a.ts (S1), then wipe the
-    //    locally-derived graph + cache but KEEP the committed artifact.
+    //    locally-derived graph + any local cache but KEEP the committed artifact.
     write(dir, "a.ts", A_TS.replace("return bar() + bar();", "return bar() + bar() + bar();"));
     fs.rmSync(graphPathOf(dir), { force: true });
     fs.rmSync(`${graphPathOf(dir)}.structural-cache.json`, { force: true });
     expect(fs.existsSync(graphPathOf(dir))).toBe(false);
 
-    // 3) Import: bootstrap from artifact, then incremental for the local delta.
+    // 3) Import: bootstrap from artifact (strip structural, keep LLM tier), then
+    //    rebuild the structural tier locally for the working tree.
     const imp = runCli(dir, ["--import"]);
     expect(imp.status).toBe(0);
     const imported = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
@@ -162,25 +218,30 @@ describe("G6 gate 1 — round-trip == from-scratch (CLI, bootstrap-then-incremen
     runExtractFull(dir, scratchPath);
     const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
 
-    // Canonical equality of the structural subset (== `diff` exits 0).
+    // Canonical equality of the structural subset (== `diff` exits 0): the local
+    // edit is folded in and the import is lossless vs a clean rebuild.
     expect(JSON.stringify(structuralSubset(imported))).toBe(JSON.stringify(structuralSubset(scratch)));
 
-    // Non-vacuity: the incremental sidecar proves a delta refresh, not a cold full
-    // rebuild — b.ts (unchanged) was reused from the bootstrapped cache.
-    const sidecar = JSON.parse(readFile(`${graphPathOf(dir)}.meta.json`)) as {
-      refresh_mode: string;
-      reused_file_count?: number;
-    };
-    expect(sidecar.refresh_mode).toBe("incremental");
-    expect(sidecar.reused_file_count ?? 0).toBeGreaterThanOrEqual(1);
+    // Non-vacuity (bootstrap benefit): the snapshot's LLM-tier node SURVIVED — the
+    // freshly-extracted structural tier merged INTO the bootstrapped graph. A cold
+    // structural-only rebuild (what a from-scratch run produces) does NOT carry it.
+    expect(imported.nodes.some((n) => n.id === LLM_NODE.id)).toBe(true);
+    expect(scratch.nodes.some((n) => n.id === LLM_NODE.id)).toBe(false);
+
+    // Non-vacuity (no blind dump): the imported structural subset is the LIVE tree
+    // (S1), NOT the snapshot's S0 structural — proving the structural tier was
+    // re-extracted locally, not trusted from the artifact.
+    expect(JSON.stringify(structuralSubset(imported))).not.toBe(
+      JSON.stringify(structuralSubset(g0)),
+    );
   });
 });
 
 // ===========================================================================
-// Gate 2 — Integrity + corrupt rejection
+// Gate 2 — Integrity + corrupt/fixpoint/fingerprint rejection + no cache import
 // ===========================================================================
 
-describe("G6 gate 2 — integrity / corrupt artifact rejected", () => {
+describe("G6 gate 2 — integrity / rejection / no cache imported", () => {
   let dir: string;
   beforeEach(() => {
     dir = tmpRepo("g6-integrity-");
@@ -189,28 +250,49 @@ describe("G6 gate 2 — integrity / corrupt artifact rejected", () => {
   });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  test("package → unpack round-trips the graph (checksum verified)", () => {
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const { artifact, header } = packageGraphArtifact(graph, cache);
+  test("package → unpack round-trips the graph + fingerprints (checksum verified)", () => {
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    const { artifact, header } = packageGraphArtifact(graph, fingerprints);
     expect(header.format).toBe(ARTIFACT_SCHEMA);
     const { envelope } = unpackGraphArtifact(artifact);
     expect(JSON.stringify(structuralSubset(envelope.graph))).toBe(
       JSON.stringify(structuralSubset(graph)),
     );
-    expect(envelope.cache.schema).toBe("guild.structural_cache.v1");
+    expect(validateFingerprintMap(envelope.fingerprints)).toBe(true);
+    expect(canonicalJson(envelope.fingerprints)).toBe(canonicalJson(fingerprints));
+  });
+
+  test("the artifact carries a fingerprint map, NOT structural-cache bundles; no importer reads a cache into reuse", () => {
+    // FIX-T6.1-r5: the envelope is graph + fingerprints only — there is NO `cache`
+    // field, so nothing untrusted is added to the graph wholesale.
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    const { envelope } = unpackGraphArtifact(packageGraphArtifact(graph, fingerprints).artifact);
+    expect(envelope.fingerprints).toBeDefined();
+    expect((envelope as unknown as Record<string, unknown>).cache).toBeUndefined();
+    // every value is a content sha — no node/edge/bundle payload smuggled in.
+    expect(Object.values(envelope.fingerprints).every((v) => /^[0-9a-f]{64}$/.test(v))).toBe(true);
+
+    // grep (code tokens only — these never appear in prose/comments): there is
+    // provably no code path that reads a cache out of the artifact envelope into
+    // reuse. The envelope has no `cache`; the importer derives/seeds the local cache
+    // by re-extraction (extract-structural), never from the artifact.
+    const libSrc = readFile(path.resolve(__dirname, "../lib/graph-artifact.ts"));
+    const cliSrc = readFile(path.resolve(__dirname, "../graph-artifact.ts"));
+    expect(libSrc).not.toMatch(/validateStructuralCache\(/);
+    expect(libSrc).not.toMatch(/envelope\.cache/);
+    expect(libSrc).not.toMatch(/import[\s{][^;]*\bStructuralCache\b/);
+    expect(cliSrc).not.toMatch(/envelope\.cache/);
+    expect(cliSrc).not.toMatch(/bundlesToCache\(/);
+    expect(cliSrc).not.toMatch(/import[\s{][^;]*\bStructuralCache\b/);
   });
 
   test("round-trip is lossless over the FULL graph envelope (not just the subset)", () => {
-    // FIX-T6.1 #2: the previous gate only compared structuralSubset, so a
-    // validation repair/drop on a non-structural field went unnoticed. Assert the
-    // ENTIRE graph + cache survive the round-trip (modulo the documented commit
-    // normalization), and that this is non-vacuous (would fail if any field dropped).
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const { artifact } = packageGraphArtifact(graph, cache);
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    const { artifact } = packageGraphArtifact(graph, fingerprints);
     const { envelope } = unpackGraphArtifact(artifact);
     const expected: KnowledgeGraph = { ...graph, generated_from_commit: "structural" };
     expect(canonicalJson(envelope.graph)).toBe(canonicalJson(expected));
-    expect(canonicalJson(envelope.cache)).toBe(canonicalJson(cache));
+    expect(canonicalJson(envelope.fingerprints)).toBe(canonicalJson(fingerprints));
     // anti-vacuity: a deliberately-different graph would NOT match.
     expect(canonicalJson(envelope.graph)).not.toBe(
       canonicalJson({ ...expected, project: { ...expected.project, name: "DIFFERENT" } }),
@@ -218,9 +300,9 @@ describe("G6 gate 2 — integrity / corrupt artifact rejected", () => {
   });
 
   test("packaging REFUSES a graph that schema validation would repair/drop", () => {
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
     // anti-vacuity: the clean (fixpoint) graph packages without throwing.
-    expect(() => packageGraphArtifact(graph, cache)).not.toThrow();
+    expect(() => packageGraphArtifact(graph, fingerprints)).not.toThrow();
     // a node with an unknown type is DROPPED by validateGraph → packaging is not
     // lossless → refuse (never silently ship the repaired graph).
     const droppy: KnowledgeGraph = {
@@ -230,24 +312,75 @@ describe("G6 gate 2 — integrity / corrupt artifact rejected", () => {
         { id: "bogus", type: "not_a_real_type", name: "x", source_refs: [], confidence: "high" } as never,
       ],
     };
-    expect(() => packageGraphArtifact(droppy, cache)).toThrow(ArtifactError);
+    expect(() => packageGraphArtifact(droppy, fingerprints)).toThrow(ArtifactError);
     // an unknown top-level field is silently dropped by validateGraph → also refused.
     const extra = { ...graph, customMeta: { keep: "me" } } as unknown as KnowledgeGraph;
-    expect(() => packageGraphArtifact(extra, cache)).toThrow(ArtifactError);
+    expect(() => packageGraphArtifact(extra, fingerprints)).toThrow(ArtifactError);
+  });
+
+  test("packaging REFUSES a malformed fingerprint map (defensive symmetry)", () => {
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    expect(() => packageGraphArtifact(graph, fingerprints)).not.toThrow();
+    expect(() => packageGraphArtifact(graph, { "a.ts": "not-a-sha" })).toThrow(ArtifactError);
+    expect(() => packageGraphArtifact(graph, { "../escape.ts": "a".repeat(64) })).toThrow(ArtifactError);
+    expect(() => packageGraphArtifact(graph, { "/abs.ts": "a".repeat(64) })).toThrow(ArtifactError);
+  });
+
+  test("validateFingerprintMap accepts a flat {rel: hex-sha} map and rejects everything else", () => {
+    expect(validateFingerprintMap({})).toBe(true); // empty is valid
+    expect(validateFingerprintMap({ "a.ts": "a".repeat(64) })).toBe(true); // sha-256
+    expect(validateFingerprintMap({ "src/a.ts": "a".repeat(40) })).toBe(true); // git sha
+    expect(validateFingerprintMap({ "a.ts": "xyz" })).toBe(false); // not hex
+    expect(validateFingerprintMap({ "a.ts": "a".repeat(50) })).toBe(false); // wrong width
+    expect(validateFingerprintMap({ "a.ts": 123 })).toBe(false); // not a string
+    expect(validateFingerprintMap({ "../e.ts": "a".repeat(64) })).toBe(false); // escaping key
+    expect(validateFingerprintMap({ "/abs.ts": "a".repeat(64) })).toBe(false); // absolute key
+    expect(validateFingerprintMap({ "": "a".repeat(64) })).toBe(false); // empty key
+    expect(validateFingerprintMap([])).toBe(false); // not an object
+    expect(validateFingerprintMap(null)).toBe(false);
+  });
+
+  test("a hand-framed artifact with a MALFORMED fingerprint map is REJECTED on unpack", () => {
+    // The lib's packager refuses a malformed map, so frame one by hand (valid graph,
+    // valid checksum) to exercise the IMPORT-side fingerprint rejection.
+    const { graph } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    // anti-vacuity: a hand-framed artifact with a WELL-FORMED map round-trips.
+    const okArtifact = frameArtifact({ schema: ARTIFACT_SCHEMA, graph, fingerprints: { "a.ts": "a".repeat(64) } });
+    expect(() => unpackGraphArtifact(okArtifact)).not.toThrow();
+
+    const badArtifact = frameArtifact({ schema: ARTIFACT_SCHEMA, graph, fingerprints: { "a.ts": "deadbeef" } });
+    expect(() => unpackGraphArtifact(badArtifact)).toThrow(ArtifactError);
+    const escArtifact = frameArtifact({ schema: ARTIFACT_SCHEMA, graph, fingerprints: { "../escape.ts": "a".repeat(64) } });
+    expect(() => unpackGraphArtifact(escArtifact)).toThrow(ArtifactError);
+  });
+
+  test("a hand-framed artifact whose GRAPH is not a validation fixpoint is REJECTED on unpack", () => {
+    // validateGraph is the SOLE structural-validation surface: a graph with a node
+    // that validation would DROP is not a fixpoint → rejected → fallback.
+    const { graph } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    const droppy: KnowledgeGraph = {
+      ...graph,
+      nodes: [
+        ...graph.nodes,
+        { id: "bogus", type: "not_a_real_type", name: "x", source_refs: [], confidence: "high" } as never,
+      ],
+    };
+    const artifact = frameArtifact({ schema: ARTIFACT_SCHEMA, graph: droppy, fingerprints: { "a.ts": "a".repeat(64) } });
+    expect(() => unpackGraphArtifact(artifact)).toThrow(ArtifactError);
   });
 
   test("zstd codec round-trips when available", () => {
     if (!zstdAvailable()) return; // runtime without zstd — gzip default covered elsewhere
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const { artifact, header } = packageGraphArtifact(graph, cache, { codec: "zstd" });
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    const { artifact, header } = packageGraphArtifact(graph, fingerprints, { codec: "zstd" });
     expect(header.codec).toBe("zstd");
     const { envelope } = unpackGraphArtifact(artifact);
-    expect(JSON.stringify(envelope.graph)).toBe(JSON.stringify(graph));
+    expect(canonicalJson(envelope.graph)).toBe(canonicalJson(graph));
   });
 
   test("corrupt / truncated / bad-magic / tampered artifacts are REJECTED", () => {
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const { artifact } = packageGraphArtifact(graph, cache);
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    const { artifact } = packageGraphArtifact(graph, fingerprints);
 
     // anti-vacuity: the pristine buffer unpacks fine, so each rejection below bites.
     expect(() => unpackGraphArtifact(artifact)).not.toThrow();
@@ -281,318 +414,20 @@ describe("G6 gate 2 — integrity / corrupt artifact rejected", () => {
     expect(g.nodes.length).toBeGreaterThan(0);
   });
 
-  test("a checksum-valid artifact with a MALFORMED cache is REJECTED on unpack", () => {
-    // FIX-T6.1 #3: package builds a valid checksum even over a malformed cache
-    // (it does not validate the cache), so the import-side check is what bites.
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    // anti-vacuity: the well-formed cache round-trips, and the validator agrees.
-    expect(validateStructuralCache(cache)).toBe(true);
-    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, cache).artifact)).not.toThrow();
-
-    const firstKey = Object.keys(cache.files)[0];
-
-    // (a) a bundle missing its fileNode → broken shape → rejected.
-    const noFileNode = JSON.parse(JSON.stringify(cache)) as StructuralCache;
-    delete (noFileNode.files[firstKey] as unknown as Record<string, unknown>).fileNode;
-    expect(validateStructuralCache(noFileNode)).toBe(false);
-    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, noFileNode).artifact)).toThrow(ArtifactError);
-
-    // (b) a non-relative (escaping) cache key → rejected.
-    const escKey = JSON.parse(JSON.stringify(cache)) as StructuralCache;
-    const moved = escKey.files[firstKey] as unknown as Record<string, unknown>;
-    delete escKey.files[firstKey];
-    (escKey.files as Record<string, unknown>)["../escape.ts"] = {
-      ...moved,
-      rel: "../escape.ts",
-      fileNode: { ...(moved.fileNode as Record<string, unknown>), id: "file:../escape.ts" },
-    };
-    expect(validateStructuralCache(escKey)).toBe(false);
-    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, escKey).artifact)).toThrow(ArtifactError);
-
-    // (c) a malformed content hash (not "" and not 64-hex) → rejected.
-    const badHash = JSON.parse(JSON.stringify(cache)) as StructuralCache;
-    (badHash.files[firstKey] as unknown as Record<string, unknown>).contentHash = "deadbeef";
-    expect(validateStructuralCache(badHash)).toBe(false);
-    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, badHash).artifact)).toThrow(ArtifactError);
-  });
-
-  test("CLI --import falls back to full extraction on a malformed-cache artifact (no crash)", () => {
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const firstKey = Object.keys(cache.files)[0];
-    const badCache = JSON.parse(JSON.stringify(cache)) as StructuralCache;
-    delete (badCache.files[firstKey] as unknown as Record<string, unknown>).fileNode;
-    const { artifact } = packageGraphArtifact(graph, badCache);
-    fs.mkdirSync(path.dirname(artifactPathOf(dir)), { recursive: true });
-    fs.writeFileSync(artifactPathOf(dir), artifact);
-    const imp = runCli(dir, ["--import"]);
-    expect(imp.status).toBe(0); // rejected the cache, fell back, did not crash
-    expect(fs.existsSync(graphPathOf(dir))).toBe(true);
-    const g = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
-    expect(g.nodes.length).toBeGreaterThan(0);
-  });
-
-  test("a malformed callables/classes/symbolNodes cache ELEMENT is REJECTED on unpack (FIX-T6.1-r2 #2)", () => {
-    // FIX-T6.1-r2 #2: the array-SHAPE check passes even when an array holds a
-    // malformed ENTRY; assembleStructuralGraph() then dereferences callable/class/
-    // symbol-node fields and crashes/diverges. Each defect must reject the artifact.
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    // anti-vacuity: the well-formed cache passes the validator and round-trips.
-    expect(validateStructuralCache(cache)).toBe(true);
-    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, cache).artifact)).not.toThrow();
-
-    // pick the bundle that actually carries symbols/classes/callables (a.ts), so
-    // mutating element [0] is meaningful (not a vacuous empty-array mutation).
-    const key = Object.keys(cache.files).find((k) => {
-      const b = cache.files[k];
-      return b.symbolNodes.length > 0 && b.classes.length > 0 && b.callables.length > 0;
-    });
-    expect(key).toBeDefined();
-    const clone = () => JSON.parse(JSON.stringify(cache)) as StructuralCache;
-    const bundleOf = (c: StructuralCache) => c.files[key as string] as unknown as Record<string, unknown>;
-
-    // (a) a null `callables` entry → assemble throws on register(c.simpleName, c.id).
-    const badCallable = clone();
-    (bundleOf(badCallable).callables as unknown[])[0] = null;
-    expect(validateStructuralCache(badCallable)).toBe(false);
-    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, badCallable).artifact)).toThrow(ArtifactError);
-
-    // (b) a `classes` entry whose `bases` is not an array → Pass 2b `for…of` throws.
-    const badClass = clone();
-    (bundleOf(badClass).classes as Record<string, unknown>[])[0].bases = "oops";
-    expect(validateStructuralCache(badClass)).toBe(false);
-    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, badClass).artifact)).toThrow(ArtifactError);
-
-    // (c) a `symbolNodes` entry with a non-string `id` → Pass 1 addNode dereferences it.
-    const badSymbol = clone();
-    (bundleOf(badSymbol).symbolNodes as Record<string, unknown>[])[0].id = 42;
-    expect(validateStructuralCache(badSymbol)).toBe(false);
-    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, badSymbol).artifact)).toThrow(ArtifactError);
-  });
-
-  test("CLI --import on a malformed-cache-ELEMENT artifact falls back == from-scratch (FIX-T6.1-r2 #2)", () => {
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const key = Object.keys(cache.files).find((k) => cache.files[k].callables.length > 0) as string;
-    const bad = JSON.parse(JSON.stringify(cache)) as StructuralCache;
-    (bad.files[key] as unknown as Record<string, unknown>).callables = [null];
-    const { artifact } = packageGraphArtifact(graph, bad);
+  test("CLI --import on a malformed-fingerprint artifact falls back == from-scratch (no crash)", () => {
+    const { graph } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    const artifact = frameArtifact({ schema: ARTIFACT_SCHEMA, graph, fingerprints: { "a.ts": "deadbeef" } });
     fs.mkdirSync(path.dirname(artifactPathOf(dir)), { recursive: true });
     fs.writeFileSync(artifactPathOf(dir), artifact);
 
     const imp = runCli(dir, ["--import"]);
-    expect(imp.status).toBe(0); // rejected the bad element, fell back, did not crash
-    const imported = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
-
-    // == from-scratch: the fallback full extraction equals a clean rebuild.
-    const scratchPath = path.join(dir, ".guild", "indexes", "scratch-graph.json");
-    runExtractFull(dir, scratchPath);
-    const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
-    expect(JSON.stringify(structuralSubset(imported))).toBe(JSON.stringify(structuralSubset(scratch)));
-  });
-
-  test("FULL cached node/edge shape + bundle cross-consistency is validated (FIX-T6.1-r3 #2)", () => {
-    // FIX-T6.1-r3 #2: assembleStructuralGraph emits cached fileNode/symbolNodes and
-    // contains edges WHOLESALE, so a node missing a schema-required field or an edge
-    // with a bad field / phantom endpoint must reject the artifact (not just an
-    // id-present / key-present partial check).
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    // anti-vacuity: the well-formed cache passes the validator and round-trips.
-    expect(validateStructuralCache(cache)).toBe(true);
-    expect(() => unpackGraphArtifact(packageGraphArtifact(graph, cache).artifact)).not.toThrow();
-
-    // pick the code bundle that carries symbols + contains edges (a.ts).
-    const key = Object.keys(cache.files).find(
-      (k) => cache.files[k].symbolNodes.length > 0 && cache.files[k].contains.length > 0,
-    ) as string;
-    expect(key).toBeDefined();
-    const clone = () => JSON.parse(JSON.stringify(cache)) as StructuralCache;
-    const bundleOf = (c: StructuralCache) => c.files[key] as unknown as Record<string, unknown>;
-    const expectRejected = (c: StructuralCache) => {
-      expect(validateStructuralCache(c)).toBe(false);
-      expect(() => unpackGraphArtifact(packageGraphArtifact(graph, c).artifact)).toThrow(ArtifactError);
-    };
-
-    // (a) a symbolNode missing schema-required `source_refs` → rejected (partial
-    //     id-only check would have accepted it).
-    const noRefs = clone();
-    delete (bundleOf(noRefs).symbolNodes as Record<string, unknown>[])[0].source_refs;
-    expectRejected(noRefs);
-
-    // (b) a symbolNode with an invalid `confidence` value → rejected.
-    const badConf = clone();
-    (bundleOf(badConf).symbolNodes as Record<string, unknown>[])[0].confidence = "bogus";
-    expectRejected(badConf);
-
-    // (c) the fileNode with a wrong `type` (not "file") → rejected.
-    const badFileType = clone();
-    (bundleOf(badFileType).fileNode as Record<string, unknown>).type = "function";
-    expectRejected(badFileType);
-
-    // (d) a contains edge with an out-of-range `weight` → rejected.
-    const badWeight = clone();
-    (bundleOf(badWeight).contains as Record<string, unknown>[])[0].weight = 9;
-    expectRejected(badWeight);
-
-    // (e) a contains edge with a wrong `direction` → rejected.
-    const badDir = clone();
-    (bundleOf(badDir).contains as Record<string, unknown>[])[0].direction = "sideways";
-    expectRejected(badDir);
-
-    // (f) a contains edge whose `target` is a PHANTOM id (not a node in this bundle)
-    //     → bundle cross-consistency rejects it (would otherwise emit a dangling edge).
-    const danglingEdge = clone();
-    (bundleOf(danglingEdge).contains as Record<string, unknown>[])[0].target = "function:a.ts:ghost";
-    expectRejected(danglingEdge);
-  });
-
-  test("a class/callable id with no matching cached symbol node is REJECTED (FIX-T6.1-r3 #3)", () => {
-    // FIX-T6.1-r3 #3: Pass 2b/2c emit inherits/implements/calls edges with the
-    // class/callable `id` as the SOURCE. A bogus id not backed by a symbol node
-    // surfaces an invalid edge from a phantom source — reject → fallback.
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const key = Object.keys(cache.files).find(
-      (k) => cache.files[k].classes.length > 0 && cache.files[k].callables.length > 0,
-    ) as string;
-    expect(key).toBeDefined();
-    const clone = () => JSON.parse(JSON.stringify(cache)) as StructuralCache;
-    const bundleOf = (c: StructuralCache) => c.files[key] as unknown as Record<string, unknown>;
-    const expectRejected = (c: StructuralCache) => {
-      expect(validateStructuralCache(c)).toBe(false);
-      expect(() => unpackGraphArtifact(packageGraphArtifact(graph, c).artifact)).toThrow(ArtifactError);
-    };
-
-    // anti-vacuity: well-formed → valid (every class/callable id IS a symbol node).
-    expect(validateStructuralCache(cache)).toBe(true);
-
-    // (a) a class id that does not correspond to any cached symbol node → rejected.
-    const ghostClass = clone();
-    (bundleOf(ghostClass).classes as Record<string, unknown>[])[0].id = "class:a.ts:Ghost";
-    expectRejected(ghostClass);
-
-    // (b) a callable id that does not correspond to any cached symbol node → rejected.
-    const ghostCallable = clone();
-    (bundleOf(ghostCallable).callables as Record<string, unknown>[])[0].id = "function:a.ts:ghostFn";
-    expectRejected(ghostCallable);
-  });
-
-  test("CLI --import on a dangling class-id artifact falls back == from-scratch (FIX-T6.1-r3 #3)", () => {
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const key = Object.keys(cache.files).find((k) => cache.files[k].classes.length > 0) as string;
-    const bad = JSON.parse(JSON.stringify(cache)) as StructuralCache;
-    (bad.files[key] as unknown as Record<string, unknown> & { classes: Record<string, unknown>[] })
-      .classes[0].id = "class:a.ts:Ghost";
-    const { artifact } = packageGraphArtifact(graph, bad);
-    fs.mkdirSync(path.dirname(artifactPathOf(dir)), { recursive: true });
-    fs.writeFileSync(artifactPathOf(dir), artifact);
-
-    const imp = runCli(dir, ["--import"]);
-    expect(imp.status).toBe(0); // rejected the dangling id, fell back, did not crash
-    const imported = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
-
-    // == from-scratch: the fallback full extraction equals a clean rebuild, and the
-    // graph carries NO edge sourced from the phantom id.
-    const scratchPath = path.join(dir, ".guild", "indexes", "scratch-graph.json");
-    runExtractFull(dir, scratchPath);
-    const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
-    expect(JSON.stringify(structuralSubset(imported))).toBe(JSON.stringify(structuralSubset(scratch)));
-    expect(imported.edges.some((e) => e.source === "class:a.ts:Ghost")).toBe(false);
-  });
-
-  test("an EXISTING-but-wrong cached symbol (wrong kind / name / foreign file) is REJECTED (FIX-T6.1-r4)", () => {
-    // FIX-T6.1-r4 (MAJOR): the prior cross-consistency only checked that a
-    // class/callable id was PRESENT in the symbol-id set — it did NOT require the id
-    // to resolve to a node of the matching KIND, with a matching NAME, nor that
-    // symbol source_refs belong to the bundle's file. A checksum-valid-but-malformed
-    // artifact (a class entry pointing at a FUNCTION node, a wrong simpleName, or a
-    // foreign source_ref) was therefore ACCEPTED and Pass 2b/2c emitted bogus
-    // inherits/implements/calls edges. Each defect must now reject → full-extract.
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const key = Object.keys(cache.files).find(
-      (k) =>
-        cache.files[k].classes.length > 0 &&
-        cache.files[k].callables.length > 0 &&
-        cache.files[k].symbolNodes.length > 0,
-    ) as string;
-    expect(key).toBeDefined();
-    const clone = () => JSON.parse(JSON.stringify(cache)) as StructuralCache;
-    const bundleOf = (c: StructuralCache) => c.files[key] as unknown as Record<string, unknown>;
-    const expectRejected = (c: StructuralCache) => {
-      expect(validateStructuralCache(c)).toBe(false);
-      expect(() => unpackGraphArtifact(packageGraphArtifact(graph, c).artifact)).toThrow(ArtifactError);
-    };
-
-    // anti-vacuity: the well-formed cache is accepted (every id resolves to a node
-    // of the right kind, name, and file), proving each rejection below truly bites.
-    expect(validateStructuralCache(cache)).toBe(true);
-
-    // pick ids that genuinely EXIST in this bundle so the defect is "existing-but-wrong",
-    // not "absent" (which the r3 #3 check already covered).
-    const aClassId = (bundleOf(cache).classes as Record<string, unknown>[])[0].id as string; // class:a.ts:Widget
-    const aFnId = (bundleOf(cache).callables as Record<string, unknown>[])[0].id as string; // function:a.ts:bar
-
-    // (a) a class entry whose id resolves to a real FUNCTION node (wrong KIND).
-    const classToFn = clone();
-    (bundleOf(classToFn).classes as Record<string, unknown>[])[0].id = aFnId;
-    expectRejected(classToFn);
-
-    // (b) a callable entry whose id resolves to a real CLASS node (wrong KIND).
-    const fnToClass = clone();
-    (bundleOf(fnToClass).callables as Record<string, unknown>[])[0].id = aClassId;
-    expectRejected(fnToClass);
-
-    // (c) a class entry pointing at its real class node but with a WRONG simpleName.
-    const wrongClassName = clone();
-    (bundleOf(wrongClassName).classes as Record<string, unknown>[])[0].simpleName = "NotWidget";
-    expectRejected(wrongClassName);
-
-    // (d) a callable entry pointing at its real function node but with a WRONG simpleName.
-    const wrongFnName = clone();
-    (bundleOf(wrongFnName).callables as Record<string, unknown>[])[0].simpleName = "notBar";
-    expectRejected(wrongFnName);
-
-    // (e) a symbol node whose source_ref names a FOREIGN file (not this bundle's rel).
-    const foreignRef = clone();
-    (bundleOf(foreignRef).symbolNodes as Record<string, unknown>[])[0].source_refs = ["other.ts#L1-L1"];
-    expectRejected(foreignRef);
-
-    // (f) a symbol node whose id is namespaced to a FOREIGN file (id↔file mismatch).
-    const foreignId = clone();
-    {
-      const sn = (bundleOf(foreignId).symbolNodes as Record<string, unknown>[])[0];
-      sn.id = `${sn.type as string}:other.ts:${sn.name as string}`;
-    }
-    expectRejected(foreignId);
-  });
-
-  test("CLI --import on a wrong-kind class-id artifact falls back == from-scratch, no bogus edge (FIX-T6.1-r4)", () => {
-    // The end-to-end proof: a class entry whose id resolves to a FUNCTION node must
-    // fall back to a clean full rebuild — and the imported graph must carry NO
-    // inherits/implements edge SOURCED from the misused (function) id.
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const key = Object.keys(cache.files).find(
-      (k) => cache.files[k].classes.length > 0 && cache.files[k].callables.length > 0,
-    ) as string;
-    const fnId = (cache.files[key].callables as Record<string, unknown>[])[0].id as string; // function:a.ts:bar
-    const bad = JSON.parse(JSON.stringify(cache)) as StructuralCache;
-    (bad.files[key] as unknown as Record<string, unknown> & { classes: Record<string, unknown>[] })
-      .classes[0].id = fnId;
-    const { artifact } = packageGraphArtifact(graph, bad);
-    fs.mkdirSync(path.dirname(artifactPathOf(dir)), { recursive: true });
-    fs.writeFileSync(artifactPathOf(dir), artifact);
-
-    const imp = runCli(dir, ["--import"]);
-    expect(imp.status).toBe(0); // rejected the wrong-kind id, fell back, did not crash
+    expect(imp.status).toBe(0); // rejected the bad map, fell back, did not crash
     const imported = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
 
     const scratchPath = path.join(dir, ".guild", "indexes", "scratch-graph.json");
     runExtractFull(dir, scratchPath);
     const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
     expect(JSON.stringify(structuralSubset(imported))).toBe(JSON.stringify(structuralSubset(scratch)));
-    // no inherits/implements edge sourced from the misused function id.
-    expect(
-      imported.edges.some(
-        (e) => e.source === fnId && (e.type === "inherits" || e.type === "implements"),
-      ),
-    ).toBe(false);
   });
 });
 
@@ -644,9 +479,9 @@ describe("G6 gate 4 — leak audit over the artifact", () => {
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   test("seeded secret in the payload is caught BEFORE packaging (fail closed)", () => {
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
     // anti-vacuity: clean graph packages with zero findings...
-    expect(() => packageGraphArtifact(graph, cache)).not.toThrow();
+    expect(() => packageGraphArtifact(graph, fingerprints)).not.toThrow();
     // ...inject a known secret into a human field → packaging refuses.
     const seeded: KnowledgeGraph = {
       ...graph,
@@ -654,7 +489,7 @@ describe("G6 gate 4 — leak audit over the artifact", () => {
     };
     let thrown: unknown;
     try {
-      packageGraphArtifact(seeded, cache);
+      packageGraphArtifact(seeded, fingerprints);
     } catch (e) {
       thrown = e;
     }
@@ -663,17 +498,17 @@ describe("G6 gate 4 — leak audit over the artifact", () => {
   });
 
   test("the benign per-file SHA-256 fingerprints do NOT false-positive", () => {
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    // cache.files[*].contentHash are 64-char hex SHA-256 — must not be flagged.
-    expect(Object.values(cache.files).every((b) => /^[0-9a-f]{64}$/.test(b.contentHash))).toBe(true);
-    expect(auditForSecrets(JSON.stringify({ graph, cache }))).toEqual([]);
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    // fingerprints[*] are 64-char hex SHA-256 — must not be flagged.
+    expect(Object.values(fingerprints).every((v) => /^[0-9a-f]{64}$/.test(v))).toBe(true);
+    expect(auditForSecrets(JSON.stringify({ graph, fingerprints }))).toEqual([]);
   });
 
   test("a secret in a source COMMENT is excluded by construction (0 findings)", () => {
     // Structural extraction carries no comments/snippets — only names + paths.
     write(dir, "c.ts", '// password = "supersecret123"\nexport function safe(): void {}\n');
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts", "c.ts"]);
-    const { artifact } = packageGraphArtifact(graph, cache); // no throw
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts", "c.ts"]);
+    const { artifact } = packageGraphArtifact(graph, fingerprints); // no throw
     const { envelope } = unpackGraphArtifact(artifact);
     const text = JSON.stringify(envelope);
     expect(text.includes("supersecret123")).toBe(false);
@@ -703,28 +538,28 @@ describe("G6 determinism", () => {
   });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  test("same (graph,cache) → byte-identical artifact", () => {
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const x = packageGraphArtifact(graph, cache).artifact;
-    const y = packageGraphArtifact(graph, cache).artifact;
+  test("same (graph,fingerprints) → byte-identical artifact", () => {
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    const x = packageGraphArtifact(graph, fingerprints).artifact;
+    const y = packageGraphArtifact(graph, fingerprints).artifact;
     expect(x.equals(y)).toBe(true);
   });
 
   test("a stale generated_from_commit normalizes → same bytes as a clean graph", () => {
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const clean = packageGraphArtifact(graph, cache).artifact;
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    const clean = packageGraphArtifact(graph, fingerprints).artifact;
     const stale = packageGraphArtifact(
       { ...graph, generated_from_commit: "deadbeefcafef00ddeadbeefcafef00ddeadbeef" },
-      cache,
+      fingerprints,
     ).artifact;
     expect(stale.equals(clean)).toBe(true);
   });
 
-  test("reversed file-input order yields an identical artifact (cache is rel-sorted)", () => {
-    const forward = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const reversed = buildGraphAndCache(dir, ["b.ts", "a.ts"]);
-    const x = packageGraphArtifact(forward.graph, forward.cache).artifact;
-    const y = packageGraphArtifact(reversed.graph, reversed.cache).artifact;
+  test("reversed file-input order yields an identical artifact (fingerprint map is rel-sorted)", () => {
+    const forward = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    const reversed = buildGraphAndFingerprints(dir, ["b.ts", "a.ts"]);
+    const x = packageGraphArtifact(forward.graph, forward.fingerprints).artifact;
+    const y = packageGraphArtifact(reversed.graph, reversed.fingerprints).artifact;
     expect(x.equals(y)).toBe(true);
   });
 });
@@ -779,10 +614,6 @@ describe("G6 path containment", () => {
   });
 
   test("a symlinked containment BASE that escapes the repo is refused when repo-anchored (FIX-T6.1-r3 #1)", () => {
-    // The base dir ITSELF (e.g. .guild/indexes) is a symlink pointing OUTSIDE the
-    // repo. Without the repo-anchor, realpathSync(base) silently relocates the
-    // containment root outside the repo: a RELATIVE candidate (the `--out` case)
-    // then resolves UNDER the symlinked base and a write lands outside the repo.
     const repoRoot = fs.realpathSync(dir);
     const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "g6-base-outside-")));
     try {
@@ -791,8 +622,7 @@ describe("G6 path containment", () => {
       const candidate = "new.json"; // a relative --out under the (symlinked) base
 
       // anti-vacuity: WITHOUT a repoRoot anchor the relative candidate resolves
-      // under the symlinked base (outside the repo) and is ACCEPTED — proving the
-      // new anchor is what refuses it below (not the pre-existing lexical check).
+      // under the symlinked base (outside the repo) and is ACCEPTED.
       expect(assertContainedPath(candidate, linkedBase)).toBe(path.join(outside, "new.json"));
       // WITH the repo anchor: the base realpath is outside repoRoot → refused.
       expect(() => assertContainedPath(candidate, linkedBase, repoRoot)).toThrow(ArtifactError);
@@ -855,21 +685,12 @@ describe("G6 CLI --out containment (escaping --out refused before any write/spaw
   });
 
   test("import with a symlinked-parent --out is refused before any write/spawn (FIX-T6.1-r2 #1)", () => {
-    // A symlink UNDER .guild/indexes pointing outside the repo; `evil/new.json`
-    // stays syntactically under indexes but the import write/spawn (writeJson +
-    // runExtractor --out) would follow `evil` OUTSIDE the containment root. This is
-    // the real write-escape (export only READS --out; import WRITES it).
     const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "g6-cli-outside-")));
     try {
       fs.symlinkSync(outside, path.join(dir, ".guild", "indexes", "evil"));
       const r = runCli(dir, ["--import", "--out", "evil/new.json"]);
       expect(r.status).toBe(1); // refused at path resolution, before any write/spawn
-      // Non-vacuity: graph-artifact's OWN containment must be what refuses it —
-      // assert its specific message, not the downstream extractor's. Pre-fix this
-      // message is absent (the symlinked parent slipped through resolveGraphPath),
-      // so this assertion FAILS without the fix.
       expect(r.out).toContain("[graph-artifact] refusing --out outside .guild/indexes");
-      // nothing was written through the symlink into `outside`.
       expect(fs.existsSync(path.join(outside, "new.json"))).toBe(false);
     } finally {
       fs.rmSync(outside, { recursive: true, force: true });
@@ -899,20 +720,14 @@ describe("G6 CLI symlinked .guild/indexes base is refused (FIX-T6.1-r3 #1)", () 
   });
 
   test("import with a relative --out through a symlinked indexes dir is refused before any write (exit 1, nothing outside)", () => {
-    // A valid artifact exists at the (symlinked) indexes path so import would proceed
-    // to its write. With a RELATIVE --out, the symlinked base relocates the write
-    // OUTSIDE the repo. Pre-fix `resolveGraphPath` accepts it (the relative path
-    // resolves under the symlinked base); the repo-anchor is what refuses it.
-    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
-    const { artifact } = packageGraphArtifact(graph, cache);
+    const { graph, fingerprints } = buildGraphAndFingerprints(dir, ["a.ts", "b.ts"]);
+    const { artifact } = packageGraphArtifact(graph, fingerprints);
     fs.writeFileSync(artifactPathOf(dir), artifact); // lands in `outside` via the symlink
     expect(fs.existsSync(path.join(outside, ARTIFACT_BASENAME))).toBe(true); // setup is valid
 
     const r = runCli(dir, ["--import", "--out", "new.json"]);
     expect(r.status).toBe(1); // refused at path resolution, before any write/spawn
-    // graph-artifact's OWN repo-anchored refusal (not a downstream error).
     expect(r.out).toContain("[graph-artifact] refusing --out outside .guild/indexes");
-    // nothing was written through the symlink into `outside`.
     expect(fs.existsSync(path.join(outside, "new.json"))).toBe(false);
   });
 });
