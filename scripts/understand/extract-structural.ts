@@ -30,7 +30,7 @@
 
 import * as path from "path";
 import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA } from "./lib/paths";
-import { headSha } from "./lib/git";
+import { headSha, isTracked } from "./lib/git";
 import { walkRepo } from "./lib/walk";
 import {
   assembleStructuralGraph,
@@ -135,7 +135,25 @@ function main(): void {
   let mergeNodes = existing?.nodes ?? [];
   let mergeEdges = existing?.edges ?? [];
 
-  const prior = incremental ? readJson<StructuralCache>(cachePath) : null;
+  let prior = incremental ? readJson<StructuralCache>(cachePath) : null;
+  // FIX-T4.1-r7: enforce LOCAL-ONLY at reuse time, not just via .gitignore. The
+  // r5 checksum-only trust model is sound ONLY because the cache is local-only;
+  // .gitignore prevents *accidental* commits but is NOT an enforcement boundary —
+  // a sidecar can be force-added (`git add -f`) and committed, then a victim's
+  // `--incremental` would trust an attacker's committed, checksum-recomputed cache.
+  // So a git-TRACKED sidecar is untrusted: drop it → re-extract (incremental ==
+  // full). Layered ON TOP of the r6 gitignore + the r5 integrity checksum.
+  // Degrades gracefully: no git repo / probe error ⇒ isTracked()==false ⇒ fall
+  // back to the gitignore-convention + checksum trust (a non-git workspace is
+  // never hard-failed).
+  if (incremental && prior && isTracked(repoRoot, cachePath)) {
+    process.stderr.write(
+      `[extract-structural] --incremental: cache sidecar ` +
+      `${path.relative(repoRoot, cachePath)} is git-tracked (shareable, not local-only) ` +
+      `→ untrusted, ignoring cache → full rebuild (re-seeding cache)\n`,
+    );
+    prior = null;
+  }
   if (incremental && prior && prior.files && Object.keys(prior.files).length > 0) {
     const r = refreshStructuralIncremental(repoRoot, relFiles, readFile, prior);
     structural = r.structural;
@@ -150,6 +168,15 @@ function main(): void {
         `[extract-structural] --incremental: no usable cache at ` +
         `${path.relative(repoRoot, cachePath)} → full rebuild (seeding cache)\n`,
       );
+      // An --incremental run with no USABLE cache (missing / empty / version-stale /
+      // or REFUSED because git-tracked, FIX-T4.1-r7) still owes incremental == full:
+      // STRIP the prior structural tier from the existing graph so the freshly
+      // assembled subgraph replaces it wholesale (stale/edited/deleted structural
+      // nodes do not survive the merge). A plain full run (`incremental` false)
+      // keeps the long-standing union-as-is behavior and does NOT strip.
+      const stripped = stripStructural(mergeNodes, mergeEdges);
+      mergeNodes = stripped.nodes;
+      mergeEdges = stripped.edges;
     }
     bundles = buildBundles(repoRoot, relFiles, readFile);
     structural = assembleStructuralGraph(repoRoot, bundles);

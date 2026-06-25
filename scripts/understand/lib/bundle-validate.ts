@@ -3,14 +3,21 @@
  *
  * ── THREAT MODEL (the reason this is integrity, not field-by-field validation) ──
  * The per-file structural cache (`.guild/indexes/*.structural-cache.json`) is a
- * GITIGNORED, project-local runtime artifact — our OWN deterministic extractor
- * output, never committed, exported, or shared. This is ENFORCED, not assumed: an
- * explicit `*.structural-cache.json` deny (globbed at any depth) is appended to the
- * local-only re-deny section of every workspace `.gitignore` (FIX-T4.1-r6), placed
- * AFTER the `!.guild/indexes` re-include so it wins even where the indexes dir is
- * otherwise tracked — a committed-then-tampered cache (the only way the
- * recompute-the-checksum bypass could reach a victim) cannot exist. The
- * ADVERSARIAL shared path is the
+ * project-local runtime artifact — our OWN deterministic extractor output, never
+ * meant to be committed, exported, or shared. Local-only is ENFORCED in TWO layers,
+ * not assumed:
+ *   (a) ACCIDENT prevention — an explicit `*.structural-cache.json` deny (globbed at
+ *       any depth) is appended to the local-only re-deny section of every workspace
+ *       `.gitignore` (FIX-T4.1-r6), placed AFTER the `!.guild/indexes` re-include so
+ *       it wins even where the indexes dir is otherwise tracked.
+ *   (b) RUNTIME enforcement — `.gitignore` is not an enforcement boundary (a file
+ *       can be force-added with `git add -f` and committed). So at reuse time the
+ *       extraction CLI probes whether the sidecar is git-TRACKED (`isTracked`,
+ *       FIX-T4.1-r7); a tracked sidecar is treated as untrusted and DROPPED → full
+ *       re-extract. This defeats the committed-then-tampered-cache bypass (the only
+ *       way the recompute-the-checksum attack could reach a victim) that gitignore
+ *       alone could not. Degrades gracefully where git is absent.
+ * The ADVERSARIAL shared path is the
  * G6 knowledge-graph artifact, and it ships NO cache: only the graph the extraction
  * write-path already ran `validateGraph` over. So the local cache's trust boundary
  * is PROVENANCE + INTEGRITY — "our own output, for unchanged source content,

@@ -25,7 +25,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { execFileSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
 
 import {
   assembleStructuralGraph,
@@ -978,6 +978,10 @@ describe("FIX-T4.1-2 — incremental add/delete is lossless under a STALE codeba
     // Initial tree: a.ts + gone.ts. Seed graph + cache via a full run.
     fs.writeFileSync(path.join(repo, "src", "a.ts"), "export function foo(): number { return 1; }\n", "utf8");
     fs.writeFileSync(path.join(repo, "src", "gone.ts"), "export function obsolete(): number { return 9; }\n", "utf8");
+    // Gitignore the cache sidecar (shipped behavior, FIX-T4.1-r6) so the later
+    // `git add -A` never tracks it — keeping the FIX-T4.1-r7 tracked-check from
+    // refusing the cache, so this test genuinely exercises the incremental path.
+    fs.writeFileSync(path.join(repo, ".gitignore"), "**/*.structural-cache.json\n", "utf8");
     git(repo, ["init"]);
     git(repo, ["add", "-A"]);
     git(repo, ["commit", "-m", "fixture"]);
@@ -1074,6 +1078,11 @@ describe("G4 gate 5 — real extract-structural.ts --incremental CLI", () => {
       ].join("\n"),
       "utf8",
     );
+    // Gitignore the structural-cache sidecar exactly as the shipped repo does
+    // (FIX-T4.1-r6) so `git add -A` never tracks it — otherwise the FIX-T4.1-r7
+    // runtime tracked-check would (correctly) refuse the cache and this gate would
+    // measure a full rebuild instead of the incremental reuse it intends to assert.
+    fs.writeFileSync(path.join(r, ".gitignore"), "**/*.structural-cache.json\n", "utf8");
     git(r, ["init"]);
     git(r, ["add", "-A"]);
     git(r, ["commit", "-m", "fixture"]);
@@ -1165,5 +1174,127 @@ describe("G4 gate 5 — real extract-structural.ts --incremental CLI", () => {
 
   test("SQLite is NOT required (no .guild/index.sqlite written by this path)", () => {
     expect(fs.existsSync(path.join(repo, ".guild", "index.sqlite"))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX-T4.1-r7 — LOCAL-ONLY enforced at reuse time, not just by .gitignore.
+//   .gitignore blocks ACCIDENTAL commits but is not an enforcement boundary: a
+//   sidecar can be force-added (`git add -f`) past the ignore rule and committed.
+//   The r5 checksum-only trust model is sound ONLY for a local-only cache, so a
+//   git-TRACKED sidecar (the shareable/committed-cache attack path) must be
+//   refused at reuse and re-extracted (incremental == full). This is a REAL-CLI
+//   test that actually force-tracks the file (NOT a `git check-ignore --no-index`
+//   probe, which never exercised the force-add bypass the r6 test missed).
+// ---------------------------------------------------------------------------
+
+describe("FIX-T4.1-r7 — a git-TRACKED cache sidecar is refused at reuse (force-add bypass denied)", () => {
+  const SCRIPTS_DIR = path.resolve(__dirname, "..", "..");
+  const CLI = path.join(SCRIPTS_DIR, "understand", "extract-structural.ts");
+  // The sidecar path RELATIVE to the repo root (for git operations).
+  const REL_CACHE = path.join(".guild", "indexes", "knowledge-graph.json.structural-cache.json");
+
+  function git(r: string, args: string[]): void {
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: r, stdio: "ignore" });
+  }
+  function runCli(r: string, ...extra: string[]): void {
+    execFileSync("npx", ["tsx", CLI, "--cwd", r, ...extra], { cwd: SCRIPTS_DIR, stdio: "ignore" });
+  }
+  /** True iff git tracks `rel` (ls-files --error-unmatch exit 0) — the property under test. */
+  function tracked(r: string, rel: string): boolean {
+    return spawnSync("git", ["ls-files", "--error-unmatch", "--", rel], { cwd: r, stdio: "ignore" }).status === 0;
+  }
+  const KG = (r: string) => path.join(r, ".guild", "indexes", "knowledge-graph.json");
+  const CACHE = (r: string) => `${KG(r)}.structural-cache.json`;
+  const META = (r: string) => `${KG(r)}.meta.json`;
+  const readJ = (p: string) => JSON.parse(fs.readFileSync(p, "utf8"));
+
+  let repo: string;
+  beforeAll(() => {
+    repo = tmpRepo("g4-r7-track-");
+    fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "src", "a.ts"), "export function foo(): number { return 1; }\n", "utf8");
+    fs.writeFileSync(path.join(repo, "src", "b.ts"), "export function bar(): number { return 2; }\n", "utf8");
+    // A .gitignore that ignores the sidecar (mirrors the shipped r6 rule) so the
+    // `git add -f` below is a GENUINE force-add past an ignore rule — the exact attack.
+    fs.writeFileSync(path.join(repo, ".gitignore"), "**/*.structural-cache.json\n", "utf8");
+    git(repo, ["init"]);
+    git(repo, ["add", "-A"]);
+    git(repo, ["commit", "-m", "fixture"]);
+    runCli(repo); // full run → seeds graph + cache (cache is gitignored + untracked)
+  });
+  afterAll(() => {
+    if (repo) fs.rmSync(repo, { recursive: true, force: true });
+  });
+
+  test("the cache sidecar exists after the full run", () => {
+    expect(fs.existsSync(CACHE(repo))).toBe(true);
+  });
+
+  test("baseline: an UNTRACKED (gitignored) sidecar IS reused (incremental cache-hit)", () => {
+    expect(tracked(repo, REL_CACHE)).toBe(false); // precondition: not tracked
+    runCli(repo, "--incremental");
+    const meta = readJ(META(repo));
+    expect(meta.refresh_mode).toBe("incremental");      // cache was used
+    expect(meta.reextracted_file_count).toBe(0);        // nothing changed on disk
+    expect(meta.reused_file_count).toBeGreaterThanOrEqual(2); // both files served from cache
+  });
+
+  test("force-adding the sidecar (git add -f past .gitignore) → cache REFUSED → full rebuild", () => {
+    git(repo, ["add", "-f", REL_CACHE]);
+    expect(tracked(repo, REL_CACHE)).toBe(true);        // the attack: now committed/shareable
+    runCli(repo, "--incremental");
+    const meta = readJ(META(repo));
+    // The tracked (shareable) cache is untrusted → the run degrades to a full
+    // rebuild rather than trusting a potentially-committed-and-tampered cache.
+    expect(meta.refresh_mode).toBe("full");
+    expect(meta.reused_file_count).toBeUndefined();     // no incremental reuse stats emitted
+  });
+
+  test("removing the tracking (git rm --cached) → reuse restored (mutate-and-confirm)", () => {
+    git(repo, ["rm", "--cached", "-q", REL_CACHE]);
+    expect(tracked(repo, REL_CACHE)).toBe(false);       // untracked again (still gitignored)
+    runCli(repo, "--incremental");
+    const meta = readJ(META(repo));
+    // Proves the refusal above was DUE TO tracking, not a blanket disable: once
+    // untracked, the same intact cache is reused again.
+    expect(meta.refresh_mode).toBe("incremental");
+    expect(meta.reused_file_count).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX-T4.1-r7 — graceful degradation: a NON-git workspace still reuses the cache
+//   (the tracked-check is an ADDITIONAL gate, never a hard-fail). The isTracked
+//   probe errors with no git repo → falls back to the gitignore-convention +
+//   checksum trust, so a legitimate non-git project keeps its incremental speedup.
+// ---------------------------------------------------------------------------
+
+describe("FIX-T4.1-r7 — a NON-git workspace still reuses the cache (no hard-fail)", () => {
+  const SCRIPTS_DIR = path.resolve(__dirname, "..", "..");
+  const CLI = path.join(SCRIPTS_DIR, "understand", "extract-structural.ts");
+  function runCli(r: string, ...extra: string[]): void {
+    execFileSync("npx", ["tsx", CLI, "--cwd", r, ...extra], { cwd: SCRIPTS_DIR, stdio: "ignore" });
+  }
+  const KG = (r: string) => path.join(r, ".guild", "indexes", "knowledge-graph.json");
+  const META = (r: string) => `${KG(r)}.meta.json`;
+  const readJ = (p: string) => JSON.parse(fs.readFileSync(p, "utf8"));
+
+  let repo: string;
+  afterAll(() => {
+    if (repo) fs.rmSync(repo, { recursive: true, force: true });
+  });
+
+  test("incremental in a non-git dir reuses the cache (probe errors → fall back, not refuse)", () => {
+    repo = tmpRepo("g4-r7-nogit-");        // deliberately NO `git init`
+    fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "src", "a.ts"), "export function foo(): number { return 1; }\n", "utf8");
+    fs.writeFileSync(path.join(repo, "src", "b.ts"), "export function bar(): number { return 2; }\n", "utf8");
+    runCli(repo);                          // full → seeds graph + cache (no git)
+    runCli(repo, "--incremental");         // must reuse, must NOT hard-fail
+    const meta = readJ(META(repo));
+    expect(meta.refresh_mode).toBe("incremental");
+    expect(meta.reextracted_file_count).toBe(0);
+    expect(meta.reused_file_count).toBeGreaterThanOrEqual(2);
   });
 });
