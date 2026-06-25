@@ -358,9 +358,27 @@ function isValidFileNode(n: unknown, rel: string): boolean {
   return (n as Record<string, unknown>).id === `file:${rel}`;
 }
 
-/** A cached `symbolNodes` element: full GraphNode shape, type `function`/`class`. */
-function isValidSymbolNode(n: unknown): boolean {
-  return isValidGraphNode(n, SYMBOL_NODE_TYPES);
+/**
+ * A cached `symbolNodes` element: full GraphNode shape, type `function`/`class`,
+ * AND anchored to THIS bundle's `rel` (Codex FIX-T6.1-r4). A structural symbol id
+ * is `<type>:<rel>:<name>` and the node `name` IS that id suffix (structural.ts
+ * `symbolNodeName`: function name = the suffix after `function:<rel>:`, class name
+ * = simpleName == the suffix), so the single id-identity below pins the type
+ * prefix, the OWNING FILE, and name-consistency in one check. Every `source_ref`
+ * path (the part before `#Lx-Ly`) is also required to be this bundle's file, so a
+ * symbol that names a FOREIGN file can never ride in on a bundle keyed to `rel`
+ * (it would surface a node/edge that a full rebuild emits from a different bundle).
+ */
+function isValidSymbolNode(n: unknown, rel: string): boolean {
+  if (!isValidGraphNode(n, SYMBOL_NODE_TYPES)) return false;
+  const r = n as Record<string, unknown>;
+  // id is namespaced `<type>:<rel>:<name>` — pins type prefix + owning file + name.
+  if (r.id !== `${r.type as string}:${rel}:${r.name as string}`) return false;
+  // every source_ref's path component (before `#Lx-Ly`) is this bundle's file.
+  for (const ref of r.source_refs as unknown[]) {
+    if (typeof ref !== "string" || ref.split("#")[0] !== rel) return false;
+  }
+  return true;
 }
 
 /**
@@ -457,39 +475,54 @@ export function validateStructuralCache(cache: unknown): cache is StructuralCach
     ) {
       return false;
     }
-    // Element-level validation (Codex FIX-T6.1-r2 #2 + r3 #2/#3): the array-shape
-    // checks above pass even when an array holds MALFORMED entries.
+    // Element-level validation (Codex FIX-T6.1-r2 #2 + r3 #2/#3 + r4): the
+    // array-shape checks above pass even when an array holds MALFORMED entries.
     // `refreshStructuralIncremental()` reuses such a bundle and
     // `assembleStructuralGraph()` then emits these nodes/edges WHOLESALE — crashing,
-    // diverging from a full rebuild, or surfacing invalid/dangling edges. Validate
-    // the FULL node/edge shape + bundle cross-consistency so any defect rejects the
+    // diverging from a full rebuild, or surfacing invalid/dangling/mis-sourced
+    // edges. Validate the FULL node/edge shape AND deep bundle cross-consistency
+    // (id↔kind, id↔name, source_ref↔file, edge topology) so any defect rejects the
     // artifact and the CLI falls back to a full extraction.
     //
-    // symbolNodes: full GraphNode shape; collect ids for the cross-consistency checks.
-    const symbolIds = new Set<string>();
+    // symbolNodes: full GraphNode shape, anchored to THIS bundle's `rel`; INDEX by id
+    // so the classes/callables cross-checks below resolve the ACTUAL symbol node
+    // (its kind + name), not merely "some id is present" (Codex FIX-T6.1-r4).
+    const symbolById = new Map<string, Record<string, unknown>>();
     for (const n of b.symbolNodes as unknown[]) {
-      if (!isValidSymbolNode(n)) return false;
-      symbolIds.add((n as Record<string, unknown>).id as string);
+      if (!isValidSymbolNode(n, rel)) return false;
+      symbolById.set((n as Record<string, unknown>).id as string, n as Record<string, unknown>);
     }
     // contains edges: full GraphEdge shape + endpoints within this bundle's nodes
     // (fileNode + symbolNodes) — a phantom endpoint would emit a dangling edge.
-    const bundleNodeIds = new Set<string>(symbolIds);
+    const bundleNodeIds = new Set<string>(symbolById.keys());
     bundleNodeIds.add(`file:${rel}`);
     if (!(b.contains as unknown[]).every((e) => isValidContainsEdge(e, bundleNodeIds))) return false;
     if (!(b.importSpecs as unknown[]).every((s) => typeof s === "string")) return false;
-    // classes/callables: full shape AND each id MUST be a real cached symbol node in
-    // THIS bundle (Codex FIX-T6.1-r3 #3). Pass 1 registers `c.id` and Pass 2b/2c emit
-    // inherits/implements/calls edges with `c.id` as the SOURCE; a bogus id that does
-    // not correspond to a symbol node surfaces an invalid edge from a phantom node.
+    // classes: full shape AND the `id` MUST resolve to a real CLASS symbol node in
+    // THIS bundle whose NAME matches the entry's `simpleName` (Codex FIX-T6.1-r4).
+    // Pass 1 registers `c.simpleName`→`c.id`; Pass 2b emits inherits/implements edges
+    // with `c.id` as the SOURCE. An id that resolves to a FUNCTION node, or whose
+    // name disagrees, would register a mis-named symbol and emit a phantom-source /
+    // mis-resolved edge that diverges from a full rebuild. (A class symbol node's
+    // `name` IS its simpleName, so node.name === c.simpleName is the exact match.)
     for (const c of b.classes as unknown[]) {
-      if (!isValidClassEntry(c) || !symbolIds.has((c as Record<string, unknown>).id as string)) {
-        return false;
-      }
+      if (!isValidClassEntry(c)) return false;
+      const r = c as Record<string, unknown>;
+      const node = symbolById.get(r.id as string);
+      if (!node || node.type !== "class" || node.name !== r.simpleName) return false;
     }
+    // callables: full shape AND the `id` MUST resolve to a real FUNCTION symbol node
+    // in THIS bundle whose name's LAST dotted segment matches the entry's `simpleName`
+    // (top-level fn: node name == simpleName; method `Cls.method`: node name suffix ==
+    // method). Pass 2c emits calls edges with `c.id` as the SOURCE; an id that
+    // resolves to a class node — or a mismatched name — would emit a phantom-source /
+    // mis-registered edge diverging from a full rebuild (Codex FIX-T6.1-r4).
     for (const c of b.callables as unknown[]) {
-      if (!isValidCallableEntry(c) || !symbolIds.has((c as Record<string, unknown>).id as string)) {
-        return false;
-      }
+      if (!isValidCallableEntry(c)) return false;
+      const r = c as Record<string, unknown>;
+      const node = symbolById.get(r.id as string);
+      if (!node || node.type !== "function") return false;
+      if (r.simpleName !== (node.name as string).split(".").pop()) return false;
     }
   }
   return true;

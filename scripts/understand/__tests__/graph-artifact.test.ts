@@ -496,6 +496,104 @@ describe("G6 gate 2 — integrity / corrupt artifact rejected", () => {
     expect(JSON.stringify(structuralSubset(imported))).toBe(JSON.stringify(structuralSubset(scratch)));
     expect(imported.edges.some((e) => e.source === "class:a.ts:Ghost")).toBe(false);
   });
+
+  test("an EXISTING-but-wrong cached symbol (wrong kind / name / foreign file) is REJECTED (FIX-T6.1-r4)", () => {
+    // FIX-T6.1-r4 (MAJOR): the prior cross-consistency only checked that a
+    // class/callable id was PRESENT in the symbol-id set — it did NOT require the id
+    // to resolve to a node of the matching KIND, with a matching NAME, nor that
+    // symbol source_refs belong to the bundle's file. A checksum-valid-but-malformed
+    // artifact (a class entry pointing at a FUNCTION node, a wrong simpleName, or a
+    // foreign source_ref) was therefore ACCEPTED and Pass 2b/2c emitted bogus
+    // inherits/implements/calls edges. Each defect must now reject → full-extract.
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    const key = Object.keys(cache.files).find(
+      (k) =>
+        cache.files[k].classes.length > 0 &&
+        cache.files[k].callables.length > 0 &&
+        cache.files[k].symbolNodes.length > 0,
+    ) as string;
+    expect(key).toBeDefined();
+    const clone = () => JSON.parse(JSON.stringify(cache)) as StructuralCache;
+    const bundleOf = (c: StructuralCache) => c.files[key] as unknown as Record<string, unknown>;
+    const expectRejected = (c: StructuralCache) => {
+      expect(validateStructuralCache(c)).toBe(false);
+      expect(() => unpackGraphArtifact(packageGraphArtifact(graph, c).artifact)).toThrow(ArtifactError);
+    };
+
+    // anti-vacuity: the well-formed cache is accepted (every id resolves to a node
+    // of the right kind, name, and file), proving each rejection below truly bites.
+    expect(validateStructuralCache(cache)).toBe(true);
+
+    // pick ids that genuinely EXIST in this bundle so the defect is "existing-but-wrong",
+    // not "absent" (which the r3 #3 check already covered).
+    const aClassId = (bundleOf(cache).classes as Record<string, unknown>[])[0].id as string; // class:a.ts:Widget
+    const aFnId = (bundleOf(cache).callables as Record<string, unknown>[])[0].id as string; // function:a.ts:bar
+
+    // (a) a class entry whose id resolves to a real FUNCTION node (wrong KIND).
+    const classToFn = clone();
+    (bundleOf(classToFn).classes as Record<string, unknown>[])[0].id = aFnId;
+    expectRejected(classToFn);
+
+    // (b) a callable entry whose id resolves to a real CLASS node (wrong KIND).
+    const fnToClass = clone();
+    (bundleOf(fnToClass).callables as Record<string, unknown>[])[0].id = aClassId;
+    expectRejected(fnToClass);
+
+    // (c) a class entry pointing at its real class node but with a WRONG simpleName.
+    const wrongClassName = clone();
+    (bundleOf(wrongClassName).classes as Record<string, unknown>[])[0].simpleName = "NotWidget";
+    expectRejected(wrongClassName);
+
+    // (d) a callable entry pointing at its real function node but with a WRONG simpleName.
+    const wrongFnName = clone();
+    (bundleOf(wrongFnName).callables as Record<string, unknown>[])[0].simpleName = "notBar";
+    expectRejected(wrongFnName);
+
+    // (e) a symbol node whose source_ref names a FOREIGN file (not this bundle's rel).
+    const foreignRef = clone();
+    (bundleOf(foreignRef).symbolNodes as Record<string, unknown>[])[0].source_refs = ["other.ts#L1-L1"];
+    expectRejected(foreignRef);
+
+    // (f) a symbol node whose id is namespaced to a FOREIGN file (id↔file mismatch).
+    const foreignId = clone();
+    {
+      const sn = (bundleOf(foreignId).symbolNodes as Record<string, unknown>[])[0];
+      sn.id = `${sn.type as string}:other.ts:${sn.name as string}`;
+    }
+    expectRejected(foreignId);
+  });
+
+  test("CLI --import on a wrong-kind class-id artifact falls back == from-scratch, no bogus edge (FIX-T6.1-r4)", () => {
+    // The end-to-end proof: a class entry whose id resolves to a FUNCTION node must
+    // fall back to a clean full rebuild — and the imported graph must carry NO
+    // inherits/implements edge SOURCED from the misused (function) id.
+    const { graph, cache } = buildGraphAndCache(dir, ["a.ts", "b.ts"]);
+    const key = Object.keys(cache.files).find(
+      (k) => cache.files[k].classes.length > 0 && cache.files[k].callables.length > 0,
+    ) as string;
+    const fnId = (cache.files[key].callables as Record<string, unknown>[])[0].id as string; // function:a.ts:bar
+    const bad = JSON.parse(JSON.stringify(cache)) as StructuralCache;
+    (bad.files[key] as unknown as Record<string, unknown> & { classes: Record<string, unknown>[] })
+      .classes[0].id = fnId;
+    const { artifact } = packageGraphArtifact(graph, bad);
+    fs.mkdirSync(path.dirname(artifactPathOf(dir)), { recursive: true });
+    fs.writeFileSync(artifactPathOf(dir), artifact);
+
+    const imp = runCli(dir, ["--import"]);
+    expect(imp.status).toBe(0); // rejected the wrong-kind id, fell back, did not crash
+    const imported = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
+
+    const scratchPath = path.join(dir, ".guild", "indexes", "scratch-graph.json");
+    runExtractFull(dir, scratchPath);
+    const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
+    expect(JSON.stringify(structuralSubset(imported))).toBe(JSON.stringify(structuralSubset(scratch)));
+    // no inherits/implements edge sourced from the misused function id.
+    expect(
+      imported.edges.some(
+        (e) => e.source === fnId && (e.type === "inherits" || e.type === "implements"),
+      ),
+    ).toBe(false);
+  });
 });
 
 // ===========================================================================
