@@ -180,9 +180,12 @@ describe("[G9] hotspots — degree-ranked, non-vacuous ordering", () => {
 // ---------------------------------------------------------------------------
 // Gate 2b — self-call (recursion) policy: ONE consistent policy across degree +
 // clustering + counts (FIX-T9.2, closes the MAJOR self-call inconsistency).
-// Policy: a self-call (source === target) connects a function to NO OTHER symbol
-// and is EXCLUDED, in lock-step, from callEdgeCount, fan-in/out degree, AND
-// clustering — never counted in one view and missing from another.
+// Policy: a self-call (source === target) is RETAINED as call structure and
+// folded, in lock-step, into callEdgeCount, fan-in/out degree, AND clustering. A
+// recursive function is its OWN caller AND its OWN callee, so a self-call-only
+// node has fanIn 1, fanOut 1, degree 2, IS a hotspot participant, AND surfaces as
+// its own SINGLETON cluster — consistently present in EVERY view, never counted
+// in one while missing from another.
 // ---------------------------------------------------------------------------
 
 describe("[G9] self-call policy — recursion handled consistently", () => {
@@ -195,55 +198,70 @@ describe("[G9] self-call policy — recursion handled consistently", () => {
     type: "calls", direction: "out", weight: 1,
   });
 
-  test("a purely-recursive function (self-call only) is excluded from BOTH degree and clustering", () => {
+  test("a purely-recursive function (self-call only) IS a singleton cluster AND a degree participant", () => {
     // `rec` calls only itself; `a`→`b` is the one inter-symbol edge.
     const nodes = ["rec", "a", "b"].map(mk);
     const edges = [call("rec", "rec"), call("a", "b")];
     const arch = computeArchitecture({ nodes, edges });
 
-    // Excluded from clustering — rec is in NO cluster (a↔b is the only cluster).
+    // RETAINED in clustering — rec surfaces as its OWN singleton cluster; the
+    // a↔b edge forms the other. Two clusters total.
+    const recCluster = arch.clusters.find((c) => c.members.includes("function:src/r.ts:rec"));
+    expect(recCluster).toBeDefined();                       // FAILS if the singleton disappears
+    expect(recCluster!.members).toEqual(["function:src/r.ts:rec"]); // singleton, size 1
+    expect(recCluster!.size).toBe(1);
+    expect(recCluster!.id).toBe("function:src/r.ts:rec");
     const clustered = new Set(arch.clusters.flatMap((c) => c.members));
-    expect(clustered.has("function:src/r.ts:rec")).toBe(false);
     expect(clustered.has("function:src/r.ts:a")).toBe(true);
     expect(clustered.has("function:src/r.ts:b")).toBe(true);
+    expect(arch.clusters.length).toBe(2);
+    expect(arch.summary.clusterCount).toBe(2);
 
-    // Excluded from degree — rec is NOT a hotspot participant (degree 0).
-    expect(arch.hotspots.some((h) => h.id === "function:src/r.ts:rec")).toBe(false);
+    // RETAINED in degree — rec IS a hotspot participant: its own caller + callee.
+    const rec = arch.hotspots.find((h) => h.id === "function:src/r.ts:rec")!;
+    expect(rec).toBeDefined();                              // FAILS if rec is dropped from degree
+    expect(rec.fanIn).toBe(1);   // rec is its own caller
+    expect(rec.fanOut).toBe(1);  // rec is its own callee
+    expect(rec.degree).toBe(2);
 
-    // Excluded from the edge count — only the inter-symbol a→b edge is counted.
-    expect(arch.summary.callEdgeCount).toBe(1);
+    // RETAINED in the edge count — both the self-call and the a→b edge are counted.
+    expect(arch.summary.callEdgeCount).toBe(2);
   });
 
-  test("the self-loop does NOT inflate degree; a real edge still ranks AND clusters the node", () => {
-    // `f` recurses AND calls `g`. Its degree reflects ONLY the f→g edge.
+  test("a self-loop PLUS a real edge: the node carries both — own caller/callee AND clusters with the neighbour", () => {
+    // `f` recurses AND calls `g`. f's degree carries the self-loop (own
+    // caller/callee) AND the f→g edge; f and g cluster together.
     const nodes = ["f", "g"].map(mk);
     const arch = computeArchitecture({ nodes, edges: [call("f", "f"), call("f", "g")] });
     const f = arch.hotspots.find((h) => h.id === "function:src/r.ts:f")!;
     expect(f).toBeDefined();
-    expect(f.fanOut).toBe(1);  // g only — the self-loop is ignored
-    expect(f.fanIn).toBe(0);   // the self-loop does NOT make f its own caller
-    expect(f.degree).toBe(1);
-    expect(arch.summary.callEdgeCount).toBe(1);  // only the inter-symbol edge
-    // f and g land in the same single cluster.
+    expect(f.fanOut).toBe(2);  // itself (self-loop) + g
+    expect(f.fanIn).toBe(1);   // the self-loop makes f its own caller
+    expect(f.degree).toBe(3);
+    expect(arch.summary.callEdgeCount).toBe(2);  // self-call + inter-symbol edge
+    // f and g land in the same single cluster (size 2 — not a singleton).
     expect(arch.clusters.length).toBe(1);
     expect(arch.clusters[0].members).toEqual([
       "function:src/r.ts:f",
       "function:src/r.ts:g",
     ]);
+    expect(arch.clusters[0].size).toBe(2);
   });
 
-  test("consistency invariant: the degree-participant set EQUALS the clustered set (the old bug broke this)", () => {
-    // Under the OLD inconsistent policy a self-call-only node entered the degree
+  test("consistency invariant: the degree-participant set EQUALS the clustered set (rec is in BOTH)", () => {
+    // The bug this policy closes: a self-call-only node entered the degree
     // participants (callers/callees) but never `undirected`, so it appeared in
-    // hotspots yet vanished from clusters — breaking this equality. This invariant
-    // is the non-vacuous guard: mutate the policy back and it FAILS.
+    // hotspots yet vanished from clusters — breaking this equality. Under the new
+    // policy rec is RETAINED in BOTH. This invariant is the non-vacuous guard:
+    // mutate the policy (drop self-calls from either view) and it FAILS.
     const nodes = ["rec", "x", "y", "z"].map(mk);
     const edges = [call("rec", "rec"), call("x", "y"), call("y", "z")];
     const arch = computeArchitecture({ nodes, edges });
     const degreeParticipants = arch.hotspots.filter((h) => h.degree > 0).map((h) => h.id).sort();
     const clustered = [...new Set(arch.clusters.flatMap((c) => c.members))].sort();
     expect(degreeParticipants).toEqual(clustered);
-    expect(clustered).not.toContain("function:src/r.ts:rec");
+    expect(clustered).toContain("function:src/r.ts:rec");   // rec present in BOTH views
+    expect(degreeParticipants).toContain("function:src/r.ts:rec");
   });
 });
 

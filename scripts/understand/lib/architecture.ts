@@ -43,25 +43,28 @@
  *
  * ── Clustering scope (documented, EXPLICITLY SCOPED) ──
  *   Communities are detected over the UNDIRECTED graph induced by `calls` edges,
- *   restricted to nodes that PARTICIPATE in at least one INTER-SYMBOL `calls`
- *   edge (both endpoints present in the graph AND distinct). A symbol with no
- *   inter-symbol `calls` edge (e.g. a dead helper) is NOT part of any module's
- *   call structure and is therefore EXCLUDED from clustering — it is not assigned
- *   a spurious singleton cluster. Two call-disconnected modules thus yield exactly
- *   two clusters; bridging them with a call edge collapses them to one (the
- *   anti-vacuity gate).
+ *   restricted to nodes that PARTICIPATE in at least one `calls` edge (both
+ *   endpoints present in the graph) — INCLUDING a self-call (see the self-call
+ *   policy below). A symbol with NO `calls` edge AT ALL (e.g. a dead helper with
+ *   zero calls) is not part of any module's call structure and is therefore
+ *   EXCLUDED from clustering — it is not assigned a spurious singleton cluster.
+ *   Two call-disconnected modules thus yield exactly two clusters; bridging them
+ *   with a call edge collapses them to one (the anti-vacuity gate).
  *
  * ── Self-call (recursion) policy (CONSISTENT across every call view) ──
- *   A self-call edge (`source === target`, i.e. a recursive function) connects a
- *   function to NO OTHER symbol, so it is inter-symbol call structure for nothing.
- *   It is EXCLUDED, in lock-step, from EVERY call-structure view: the
- *   `summary.callEdgeCount`, fan-in/fan-out degree (hotspots), AND clustering.
- *   A function whose ONLY `calls` edge is a self-call therefore has degree 0 — it
- *   is neither a hotspot participant NOR a (singleton) cluster. This avoids the
- *   inconsistency of counting a recursive function in one view while dropping it
- *   from another. (A function with BOTH a self-call and a real call to another
- *   symbol is still ranked/clustered on its inter-symbol edges; only the self-loop
- *   is ignored.)
+ *   A self-call edge (`source === target`, i.e. a recursive function) is RETAINED
+ *   as call structure and folded, in lock-step, into EVERY call-structure view:
+ *   the `summary.callEdgeCount`, fan-in/fan-out degree (hotspots), AND clustering.
+ *   A recursive function is its OWN caller and its OWN callee, so a self-call adds
+ *   the node to both its caller set (fanIn) and its callee set (fanOut). A
+ *   function whose ONLY `calls` edge is a self-call therefore has fanIn 1, fanOut
+ *   1, degree 2 — it IS a hotspot participant AND surfaces as its own SINGLETON
+ *   cluster, consistently present in every view (never counted in one while
+ *   dropped from another — the bug this policy closes counted self-calls in
+ *   callEdgeCount + degree but dropped them from clustering). (A function with
+ *   BOTH a self-call and a real call to another symbol carries both: the self-loop
+ *   contributes itself to fanIn/fanOut and the inter-symbol edge clusters it with
+ *   its neighbour.)
  *
  * ── Entry-point rule (documented; the graph carries no `exported` flag) ──
  *   A `function` node is an entry point iff (a) its simple name is a conventional
@@ -281,8 +284,9 @@ interface CallsDegree {
   callees: Map<string, Set<string>>;
   /** undirected neighbour sets over `calls` (for clustering). */
   undirected: Map<string, Set<string>>;
-  /** count of INTER-SYMBOL `calls` edges (both endpoints present AND distinct;
-   * self-calls excluded — see the header self-call policy). */
+  /** count of `calls` edges with both endpoints present as nodes — INCLUDING
+   * self-calls (recursion), which are retained as call structure per the header
+   * self-call policy. */
   callEdgeCount: number;
 }
 
@@ -304,16 +308,16 @@ function buildCallsDegree(nodes: GraphNode[], edges: GraphEdge[]): CallsDegree {
     // Only edges whose BOTH endpoints exist as nodes — no phantom membership.
     if (!ids.has(e.source) || !ids.has(e.target)) continue;
     // Self-call policy (CONSISTENT, documented in the header): a self-call
-    // (recursion, source === target) connects a function to NO OTHER symbol, so
-    // it is inter-symbol call structure for nothing. We therefore exclude it from
-    // ALL call-structure views in lock-step — `callEdgeCount`, fan-in/fan-out
-    // degree (callers/callees → hotspots), AND clustering (undirected). The old
-    // bug counted a self-call in callEdgeCount + degree but dropped it from
-    // `undirected`, so a purely-recursive function "participated" in calls yet
-    // vanished from clusters. Skipping it here keeps every count in agreement: a
-    // self-call-only function has degree 0 (not a hotspot participant) and is
-    // absent from clustering — consistent, not counted-here-but-missing-there.
-    if (e.source === e.target) continue;
+    // (recursion, source === target) is RETAINED as call structure and folded
+    // into EVERY call-structure view in lock-step — `callEdgeCount`, fan-in/
+    // fan-out degree (callers/callees → hotspots), AND clustering (undirected).
+    // A recursive function is its own caller AND its own callee, so a self-call
+    // adds the node to both its caller set (fanIn) and its callee set (fanOut)
+    // and to its own undirected neighbour set. A function whose ONLY `calls` edge
+    // is a self-call is therefore a degree participant (fanIn 1, fanOut 1, degree
+    // 2) AND surfaces as its OWN singleton cluster — not counted in one view yet
+    // missing from another. (A function with a self-call AND a real call to
+    // another symbol carries both: the self-loop and the inter-symbol edge.)
     callEdgeCount++;
     addTo(callees, e.source, e.target);
     addTo(callers, e.target, e.source);
