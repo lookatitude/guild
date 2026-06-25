@@ -30,6 +30,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import * as ts from "typescript";
 
 import { analyzeSource, type ImportInfo } from "../lib/extract";
 import {
@@ -1540,29 +1541,87 @@ describe("[G14-sec] scrub/audit share-set — ONE canonical source, no mirror dr
   ]);
 
   /**
-   * The EFFECTIVE share-set key set a module would apply, DERIVED from its source:
-   *   - a LOCAL mirror (the deleted `SCRUB_SHARED_NAMES` / a re-declared
-   *     `SHARED_SCRUBBED_NAMES = new Set([...])`) takes precedence — that IS the
-   *     drift vector, so it is what the module would really use; parse its literals.
-   *   - else, if it imports `inShareSet` from the canonical `lib/shared/share-set`
-   *     module, it uses the canonical set.
-   *   - else, no coverage → empty set (a coverage gap).
+   * AST-bound share-set derivation. The prior version was a source-TEXT heuristic
+   * (`/\binShareSet\b/.test(src)`) — an UNUSED import or a comment that merely names
+   * `inShareSet` would have satisfied it while the real module stopped delegating to
+   * the canonical set (vacuity). We now parse each source with the TypeScript compiler
+   * and decide on real AST nodes — import bindings, `new Set([...])` declarations, and
+   * genuine `inShareSet(...)` CallExpressions — so comments / strings / dead imports
+   * can never pass.
    */
-  // An actual LOCAL-mirror DECLARATION (not a comment/help-string mention of the
-  // deleted symbols, which audit.ts legitimately still references in prose).
-  const LOCAL_MIRROR_DECL =
-    /(?:const|let|var)\s+(?:SCRUB_SHARED_NAMES|SHARED_SCRUBBED_NAMES)\s*=\s*new Set\s*\(/;
+  const MIRROR_DECL_NAMES = new Set(["SCRUB_SHARED_NAMES", "SHARED_SCRUBBED_NAMES"]);
+  const CANON_MODULE = /(?:^|\/)lib\/shared\/share-set$/;
+
+  const parseTs = (src: string): ts.SourceFile =>
+    ts.createSourceFile("probe.ts", src, ts.ScriptTarget.Latest, /*setParentNodes*/ true);
+
+  // A real LOCAL mirror declaration `const NAME = new Set([...string literals...])`
+  // (the drift vector). Returns its parsed key set, or null if no such declaration.
+  // A comment / help-string that merely names the deleted symbols is NOT a node, so
+  // it is correctly ignored.
+  const localMirrorSet = (sf: ts.SourceFile): Set<string> | null => {
+    let found: Set<string> | null = null;
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        MIRROR_DECL_NAMES.has(node.name.text) &&
+        node.initializer &&
+        ts.isNewExpression(node.initializer) &&
+        ts.isIdentifier(node.initializer.expression) &&
+        node.initializer.expression.text === "Set"
+      ) {
+        const keys = new Set<string>();
+        const arg = node.initializer.arguments?.[0];
+        if (arg && ts.isArrayLiteralExpression(arg)) {
+          for (const el of arg.elements) {
+            if (ts.isStringLiteralLike(el)) keys.add(el.text);
+          }
+        }
+        found = keys;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return found;
+  };
+
+  // Genuine delegation to the canonical module: a named import of `inShareSet` FROM
+  // `lib/shared/share-set` AND at least one real `inShareSet(...)` call. An unused
+  // import alone (no call) or a call without the import both fail this.
+  const delegatesToCanonical = (sf: ts.SourceFile): boolean => {
+    let imported = false;
+    let called = false;
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isImportDeclaration(node) &&
+        ts.isStringLiteral(node.moduleSpecifier) &&
+        CANON_MODULE.test(node.moduleSpecifier.text)
+      ) {
+        const nb = node.importClause?.namedBindings;
+        if (nb && ts.isNamedImports(nb)) {
+          for (const e of nb.elements) {
+            // `e.name` is the local binding; `e.propertyName` the original when aliased.
+            if ((e.propertyName ?? e.name).text === "inShareSet") imported = true;
+          }
+        }
+      }
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "inShareSet") {
+        called = true;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return imported && called;
+  };
+
+  const hasLocalMirror = (src: string): boolean => localMirrorSet(parseTs(src)) !== null;
 
   const effectiveShareSet = (src: string): Set<string> => {
-    const local = src.match(
-      /(?:const|let|var)\s+(?:SCRUB_SHARED_NAMES|SHARED_SCRUBBED_NAMES)\s*=\s*new Set\s*\(\s*\[([\s\S]*?)\]/,
-    );
-    if (local) {
-      return new Set([...local[1].matchAll(/["'`]([^"'`]+)["'`]/g)].map((m) => m[1]));
-    }
-    const importsCanonical =
-      /from\s+["'][^"']*lib\/shared\/share-set["']/.test(src) && /\binShareSet\b/.test(src);
-    return importsCanonical ? new Set(EXPECTED_CANON) : new Set<string>();
+    const sf = parseTs(src);
+    const local = localMirrorSet(sf); // a local mirror takes precedence — it IS what runs
+    if (local) return local;
+    return delegatesToCanonical(sf) ? new Set(EXPECTED_CANON) : new Set<string>();
   };
 
   test("the canonical share-set is the expected per-run artifact set (locked, non-empty)", () => {
@@ -1581,17 +1640,22 @@ describe("[G14-sec] scrub/audit share-set — ONE canonical source, no mirror dr
     // Neither file re-DECLARES a local share-set mirror (a comment/help-string
     // that merely names the deleted symbols is fine — only a declaration drifts).
     for (const src of [scrubSrc, auditSrc]) {
-      expect(LOCAL_MIRROR_DECL.test(src)).toBe(false);
+      expect(hasLocalMirror(src)).toBe(false);
     }
   });
 
   test("inShareSet covers handoffs + summary artifacts + (flagged) payloads — real, non-empty wiring", () => {
-    expect(inShareSet("handoffs/backend-T1.md", false)).toBe(true);
+    // Build run-relative paths with path.join so the assertions track the impl's
+    // path.sep matching on every platform (no POSIX-literal Windows skew).
+    const handoff = path.join("handoffs", "backend-T1.md");
+    const payload = path.join("logs", "payloads", "p.json");
+    const outside = path.join("some", "other", "file.txt");
+    expect(inShareSet(handoff, false)).toBe(true);
     expect(inShareSet("verify.md", false)).toBe(true);
-    expect(inShareSet("logs/payloads/p.json", false)).toBe(false); // payload, no flag
-    expect(inShareSet("logs/payloads/p.json", true)).toBe(true); // payload, flag present
+    expect(inShareSet(payload, false)).toBe(false); // payload, no flag
+    expect(inShareSet(payload, true)).toBe(true); // payload, flag present
     expect(isPayloadFile("events.ndjson")).toBe(true);
-    expect(inShareSet("some/other/file.txt", true)).toBe(false); // out of set
+    expect(inShareSet(outside, true)).toBe(false); // out of set
   });
 
   test("anti-vacuity: a drifted mirror (dropped key) OR a removed canonical import breaks set-equality (gate bites)", () => {
@@ -1599,7 +1663,7 @@ describe("[G14-sec] scrub/audit share-set — ONE canonical source, no mirror dr
     const driftedAudit = auditSrc + '\nconst SCRUB_SHARED_NAMES = new Set(["verify.md"]);\n';
     const driftedKeys = effectiveShareSet(driftedAudit);
     expect([...driftedKeys].sort()).not.toEqual([...effectiveShareSet(scrubSrc)].sort());
-    expect(LOCAL_MIRROR_DECL.test(driftedAudit)).toBe(true); // the no-mirror declaration guard also fires
+    expect(hasLocalMirror(driftedAudit)).toBe(true); // the no-mirror declaration guard also fires
 
     // (b) audit.ts loses the canonical import entirely → empty coverage → diverges.
     const noImportAudit = auditSrc.replace(
@@ -1608,5 +1672,19 @@ describe("[G14-sec] scrub/audit share-set — ONE canonical source, no mirror dr
     );
     expect(effectiveShareSet(noImportAudit).size).toBe(0);
     expect([...effectiveShareSet(noImportAudit)].sort()).not.toEqual([...EXPECTED_CANON].sort());
+
+    // (c) AST non-vacuity — the precise hole the text heuristic had: an UNUSED import
+    // (binding present, but every real inShareSet(...) call removed) must NOT count as
+    // delegation. The old `/\binShareSet\b/` token test passed this; the AST test must
+    // not. Strip the call args so `inShareSet(` no longer appears as a CallExpression.
+    const importedButUncalled = auditSrc.replace(/\binShareSet\s*\(/g, "noop123(");
+    expect(/inShareSet/.test(importedButUncalled)).toBe(true); // the import token still present
+    expect(delegatesToCanonical(parseTs(importedButUncalled))).toBe(false); // but no real call → not delegation
+    expect(effectiveShareSet(importedButUncalled).size).toBe(0); // → empty coverage (gate bites)
+
+    // (d) AST non-vacuity — a COMMENT that names inShareSet (no import, no call) is inert.
+    const commentOnly = "// scrub used to call inShareSet(rel, flag) here\nexport const x = 1;\n";
+    expect(delegatesToCanonical(parseTs(commentOnly))).toBe(false);
+    expect(hasLocalMirror(commentOnly)).toBe(false);
   });
 });
