@@ -49,6 +49,7 @@ import {
   assembleStructuralGraph,
   structuralSubset,
 } from "../lib/structural";
+import { doImport } from "../graph-artifact";
 import { contentHash } from "../lib/fingerprint";
 import {
   ARTIFACT_BASENAME,
@@ -927,6 +928,111 @@ describe("G6 CLI import cache-clearance (containment-before-delete + fail-closed
         JSON.stringify(structuralSubset(scratch)),
       );
     } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // #4 MAJOR (FIX-T6.1-r9) — the lstat-based gone-check must FAIL CLOSED on a
+  // DANGLING-symlink sidecar whose unlink FAILS. This is the one case that the
+  // un-removable-DIRECTORY test (#2) above CANNOT exercise: for a directory BOTH
+  // `lstatSync` and `existsSync` report present, so swapping `sidecarPresent` back to
+  // `existsSync` still yields "unremovable" and #2 still passes (vacuous w.r.t. the
+  // lstat choice). A surviving DANGLING symlink is the discriminator: `lstatSync`
+  // sees the link (present → "unremovable" → forced no-cache full rebuild), while
+  // `existsSync` dereferences to the absent target (gone → "cleared" → the
+  // cache-reading incremental path). We force `rmSync` to FAIL only on the sidecar
+  // (in-process stub) so the dangling symlink survives, then drive the REAL `doImport`
+  // and assert the forced-full-rebuild branch fired. MUTATE-AND-CONFIRM: reverting
+  // `sidecarPresent` to `existsSync` (or dropping the lstat gone-check) flips the
+  // clearance to "cleared", the "forcing a no-cache full rebuild" diagnostic vanishes,
+  // and this test FAILS.
+  test("dangling-symlink sidecar whose unlink FAILS → lstat sees it present → forced no-cache full rebuild (FIX-T6.1-r9)", () => {
+    const dir = tmpRepo("g6-r9-");
+    const cachePath = `${graphPathOf(dir)}.structural-cache.json`;
+    const danglingTarget = path.join(dir, ".guild", "indexes", "nonexistent-cache-target.json");
+    const stderrChunks: string[] = [];
+    const origRmSync = fs.rmSync;
+    let rmSpy: jest.SpyInstance | undefined;
+    let errSpy: jest.SpyInstance | undefined;
+    try {
+      write(dir, "a.ts", A_TS);
+      write(dir, "b.ts", B_TS);
+
+      // 1) Seed a real V1 graph + cache, export the V1 snapshot (so import has a
+      //    valid artifact to bootstrap the LLM tier from).
+      runExtractFull(dir, graphPathOf(dir));
+      expect(fs.existsSync(cachePath)).toBe(true); // setup is valid
+      const exp = runCli(dir, ["--export", "--force"]);
+      expect(exp.status).toBe(0);
+
+      // 2) Evolve a.ts to a structurally DIFFERENT V2 (adds exported `baz`). If a
+      //    stale cache were reused the post-import graph would lack `baz`.
+      const A_V2 = A_TS + "export function baz(): number { return 42; }\n";
+      write(dir, "a.ts", A_V2);
+
+      // 3) Wipe the local graph; replace the cache FILE with a DANGLING symlink whose
+      //    target does not exist (but is itself contained under .guild/indexes). The
+      //    symlink is the sidecar `removeStaleLocalCache` will try to remove.
+      fs.rmSync(graphPathOf(dir), { force: true });
+      fs.rmSync(cachePath, { force: true });
+      expect(fs.existsSync(danglingTarget)).toBe(false); // target truly absent
+      fs.symlinkSync(danglingTarget, cachePath);
+      expect(fs.lstatSync(cachePath).isSymbolicLink()).toBe(true); // setup is valid
+      expect(fs.existsSync(cachePath)).toBe(false); // existsSync dereferences → dangling → gone
+
+      // 4) Force the sidecar unlink to FAIL so the dangling symlink SURVIVES the
+      //    `rmSync(force)`. Stub only the sidecar path; every other `rmSync` (e.g.
+      //    cleanup) delegates to the real implementation. `removeStaleLocalCache`
+      //    operates on the LEXICAL link path (FIX-T6.1-r8), so the stub keys on it —
+      //    proving the clearance never dereferenced the symlink before deleting.
+      rmSpy = jest.spyOn(fs, "rmSync").mockImplementation(((p: fs.PathLike, opts?: fs.RmOptions): void => {
+        if (String(p) === cachePath) throw new Error("EPERM: simulated unlink failure (test)");
+        origRmSync(p, opts);
+      }) as typeof fs.rmSync);
+      // Capture the CLI's in-process diagnostics (the forced-full-rebuild log).
+      errSpy = jest.spyOn(process.stderr, "write").mockImplementation(((chunk: string | Uint8Array): boolean => {
+        stderrChunks.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+        return true;
+      }) as typeof process.stderr.write);
+
+      // 5) Import via the REAL doImport. The dangling symlink survives the failed
+      //    unlink; the lstat gone-check sees it present → "unremovable" → fail closed.
+      const status = doImport(dir, ["--import"]);
+
+      // Capture the recorded rmSync calls BEFORE restore (mockRestore clears them).
+      const rmCalls = rmSpy.mock.calls.map((c) => String(c[0]));
+      rmSpy.mockRestore();
+      errSpy.mockRestore();
+      const out = stderrChunks.join("");
+
+      expect(status).toBe(0);
+
+      // ── MUTATION CATCH ──────────────────────────────────────────────────────
+      // The lstat gone-check classified the surviving dangling symlink as PRESENT →
+      // forced a no-cache full rebuild. With `existsSync` it would read GONE →
+      // "cleared" → this branch (and its log) would NEVER fire → assertion FAILS.
+      expect(out).toContain("forcing a no-cache full rebuild");
+
+      // The clearance operated on the LEXICAL link path, never a dereferenced target
+      // (FIX-T6.1-r8): the failed unlink targeted the link itself, so the symlink's
+      // (still-nonexistent-at-clearance) target was never created/followed by the
+      // clearance step.
+      expect(rmCalls.includes(cachePath)).toBe(true);
+      expect(fs.lstatSync(cachePath).isSymbolicLink()).toBe(true); // the LINK survived (not its target)
+      expect(fs.readlinkSync(cachePath)).toBe(danglingTarget); // still points where it did
+
+      // NO cache reuse: the post-import structural tier equals a from-scratch build
+      // on the SAME live V2 tree, and carries `baz` (which the stale V1 cache lacked).
+      const imported = JSON.parse(readFile(graphPathOf(dir))) as KnowledgeGraph;
+      const scratchPath = path.join(dir, ".guild", "indexes", "scratch-graph.json");
+      runExtractFull(dir, scratchPath);
+      const scratch = JSON.parse(readFile(scratchPath)) as KnowledgeGraph;
+      const importedSubset = JSON.stringify(structuralSubset(imported));
+      expect(importedSubset).toBe(JSON.stringify(structuralSubset(scratch)));
+      expect(importedSubset).toContain("baz");
+    } finally {
+      rmSpy?.mockRestore();
+      errSpy?.mockRestore();
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
