@@ -724,6 +724,80 @@ function structuralBranch(
   return { source: "structural", chunks, directive };
 }
 
+// ── G7 finding-3 (FIX-T7.1-r2): corpus-aware SQLite bypass for identifier parity ──
+//
+// The file-BM25 path (index:off — the SOURCE OF TRUTH) tokenizes documents
+// identifier-aware: a camelCase/Pascal/acronym run like `processOrder` yields the
+// split sub-words `process` + `order` IN ADDITION to the concatenated
+// `processorder`. The SQLite FTS path does NOT split camelCase — it indexes only
+// `processorder`. So a PLAIN multi-word query (`process order`) — which is itself
+// NOT identifier-shaped, so `isIdentifierAwareQuery` returns false — matches the
+// doc via file-BM25 but NOT via FTS, breaking the core `index:on == index:off`
+// invariant. `isIdentifierAwareQuery` keys off the QUERY shape and so cannot see
+// this: `process order` and the prose query `invoice settlement` look identical at
+// the query layer. The distinguishing signal is the CORPUS — whether a candidate
+// doc carries a camelCase identifier whose split a query term relies on.
+//
+// This predicate supplies exactly that signal. SQLite is bypassed iff some
+// candidate wiki doc carries a camelCase/Pascal/acronym identifier whose split
+// sub-words intersect the query's identifier-aware token set — i.e. precisely the
+// case where doc-side splitting changes the match. snake_case is NOT a divergence
+// source (both TOKEN_RE and FTS5's tokenizer split on `_`), so only camel/acronym
+// runs are inspected. Bypassing is ALWAYS parity-safe (both modes then read
+// file-BM25); only NOT bypassing when divergence is possible is unsafe — so this
+// must over-approximate, never under-approximate, the divergence set. A doc whose
+// split term is ALSO present standalone would still match FTS (so the bypass was
+// not strictly needed), but routing it through file-BM25 is harmless.
+//
+// Cost: the divergence only exists once SQLite actually engages — i.e. the wiki
+// file count exceeds `wikiFileThreshold` (below it `ensureWikiFtsIndex` returns
+// null and BOTH modes use file-BM25, so parity holds trivially and no read is
+// needed). Below threshold this returns after a cheap readdir-only walk; above it,
+// it reads candidate `.md` files and SHORT-CIRCUITS at the first proven divergence
+// (a code-bearing wiki stops at its first identifier). The pure-prose worst case
+// reads the corpus once — strictly cheaper than the file-BM25 ranking that runs
+// when it returns true, and it preserves the parity invariant over the scan cost.
+const CAMEL_OR_ACRONYM_BOUNDARY = /[a-z0-9][A-Z]|[A-Z]{2,}[a-z]/;
+
+function corpusForcesIdentifierBypass(
+  query: string,
+  cwd: string,
+  category: string | undefined,
+  wikiFileThreshold: number,
+): boolean {
+  const wikiBase = path.join(cwd, ".guild", "wiki");
+  const scanDir = category ? path.join(wikiBase, category) : wikiBase;
+  const files = walkMdFiles(scanDir); // readdir-only enumeration (no content read yet)
+  // Below the SQLite engagement threshold the FTS cache never populates, so the
+  // `on` path also falls through to file-BM25 → parity holds without any bypass.
+  if (files.length <= wikiFileThreshold) return false;
+
+  const querySet = new Set(tokenizeIdentifierAware(query));
+  if (querySet.size === 0) return false;
+
+  for (const f of files) {
+    let content: string;
+    try {
+      content = fs.readFileSync(f, "utf8");
+    } catch {
+      continue;
+    }
+    const runs = content.match(/[A-Za-z0-9]+/g);
+    if (!runs) continue;
+    for (const run of runs) {
+      // Only camelCase/Pascal/acronym runs can tokenize differently between
+      // file-BM25 (splits) and FTS5 (does not). Skip everything else cheaply.
+      if (!CAMEL_OR_ACRONYM_BOUNDARY.test(run)) continue;
+      const lowerFull = run.toLowerCase();
+      // The split sub-words that file-BM25 emits but FTS cannot reproduce.
+      for (const t of tokenizeIdentifierAware(run)) {
+        if (t !== lowerFull && querySet.has(t)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
@@ -783,11 +857,25 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   // importance + the gate is applied in the file-BM25 branch, which owns the
   // raw relevance score. (The sqlite cache returns pre-ranked chunks without
   // exposed scores.) Default mode is unchanged → byte-identical.
-  // G7 finding-4: identifier-shaped queries (camel/snake) ALSO bypass the sqlite
-  // branch — the FTS path tokenizes them differently from the identifier-aware
-  // file-BM25 path, so routing them through file-BM25 keeps index:on == index:off.
+  // G7 finding-4: identifier-shaped QUERIES (camel/snake) bypass the sqlite branch —
+  // the FTS path tokenizes them differently from the identifier-aware file-BM25
+  // path, so routing them through file-BM25 keeps index:on == index:off.
   const identifierAware = isIdentifierAwareQuery(query);
-  const bypassSqlite = composite || identifierAware;
+  // G7 finding-3 (FIX-T7.1-r2): a PLAIN query (`process order`) is not itself
+  // identifier-shaped, yet still diverges when a DOC carries a camelCase identifier
+  // (`processOrder`) that file-BM25 splits and FTS does not. Consult the corpus to
+  // catch that case too. Computed lazily — ONLY when the cheaper signals have not
+  // already forced a bypass AND a real wiki sweep (not a structural answer, not the
+  // bm25-disabled test seam) would otherwise reach SQLite — so the scan cost is
+  // never paid on the structural / identifier / composite / bm25-off paths.
+  const corpusBypass =
+    !structuralAnswered &&
+    !composite &&
+    !identifierAware &&
+    !_bm25Disabled &&
+    indexConfig.enabled !== false &&
+    corpusForcesIdentifierBypass(query, cwd, category, indexConfig.wiki_file_threshold);
+  const bypassSqlite = composite || identifierAware || corpusBypass;
   const sqlite = structuralAnswered || bypassSqlite
     ? null
     : sqliteBranch(query, cwd, indexConfig, limit, runDir, runId);

@@ -91,15 +91,17 @@ export interface ProtectChunksOpts {
    */
   callerTool?: string;
   /**
-   * D-RECALL (G7 finding-2): NO-OPERATOR mode. When true, any chunk that would
-   * classify "operator" (unwrapped, authoritative) is FORCED down to "trusted"
-   * and WRAPPED instead. Graph-derived channels (structural / KG) pass this so a
-   * node whose `source_path` happens to match an operator allowlist pattern
-   * (e.g. a code file under a `principles/` dir, or a node id containing
-   * `goals.md`) can NEVER land as raw operator content. Operator tier is
-   * legitimate ONLY for the wiki branches (real operator pages); a structural/KG
-   * hit must always stay trust-tier wrapped. Default (false) preserves the wiki
-   * path's operator behaviour byte-for-byte.
+   * D-RECALL (G7 finding-2; hardened in FIX-T7.1-r2): NO-OPERATOR mode. When true,
+   * a chunk is classified with the operator PATH-allowlist DISABLED, so a node
+   * whose `source_path` happens to match an operator allowlist pattern (e.g. a code
+   * file under a `principles/` dir, or a node id containing `goals.md`) can NEVER
+   * land as raw operator content. It is NOT blindly mapped to "trusted": the tier
+   * is re-derived from frontmatter alone, so a synthetic / no-provenance graph node
+   * stays DEFAULT-DENY "untrusted" and reaches wrapped "trusted" ONLY when its own
+   * content carries real provenance (confidence:high + source_refs, owner:reviewed).
+   * Graph-derived channels (structural / KG) pass this; operator tier stays
+   * legitimate ONLY for the wiki branches (real operator pages). Default (false)
+   * preserves the wiki path's operator behaviour byte-for-byte.
    */
   noOperator?: boolean;
 }
@@ -177,6 +179,22 @@ function isOperatorPath(relPath: string): boolean {
   return OPERATOR_PATH_PATTERNS.some((re) => re.test(relPath));
 }
 
+/** Options for {@link classifyTrustTier}. */
+export interface ClassifyOpts {
+  /**
+   * G7 finding-2 (FIX-T7.1-r2): skip the operator PATH-allowlist layer (step 1),
+   * so the tier is decided by FRONTMATTER ALONE. Graph-derived channels (KG /
+   * structural) pass this in NO-OPERATOR mode: a synthetic graph `source_path`
+   * that merely *looks* like an operator path (a node id containing `principles`
+   * / `goals.md`, a code file under a `principles/` dir) must NOT be promoted —
+   * it earns "trusted" ONLY if its own content carries real provenance
+   * (confidence:high + source_refs, or owner:reviewed); otherwise it stays
+   * DEFAULT-DENY "untrusted". This downgrades a path-shaped impostor to its true
+   * non-path tier instead of blindly trusting it.
+   */
+  ignoreOperatorPath?: boolean;
+}
+
 /**
  * Classify the trust tier of a wiki chunk.
  *
@@ -184,9 +202,15 @@ function isOperatorPath(relPath: string): boolean {
  * ONLY (`isOperatorPath`). Frontmatter `owner: operator` is downgraded to
  * "trusted" (wrapped) to prevent trust-escalation forgery.
  */
-export function classifyTrustTier(relPath: string, content: string): TrustTier {
+export function classifyTrustTier(
+  relPath: string,
+  content: string,
+  opts: ClassifyOpts = {},
+): TrustTier {
   // 1. Path layer — operator pages are authoritative regardless of frontmatter.
-  if (isOperatorPath(relPath)) return "operator";
+  //    SKIPPED in NO-OPERATOR mode so a path-shaped graph impostor can never reach
+  //    "operator" via the allowlist; it must earn its tier from frontmatter below.
+  if (!opts.ignoreOperatorPath && isOperatorPath(relPath)) return "operator";
 
   const fm = parseFrontmatter(content);
 
@@ -325,12 +349,17 @@ export function protectChunks(
     }
 
     // Step 2: Trust-tier classify + wrap (clean chunks only).
-    // G7 finding-2: NO-OPERATOR mode forces a would-be "operator" classification
-    // (granted by the path allowlist) down to wrapped "trusted" for graph-derived
-    // channels, so a structural/KG hit can never escape the trust-tier wrapper as
-    // raw operator content — even when its source_path matches an operator pattern.
-    const rawTier = classifyTrustTier(source_path, content);
-    const tier: TrustTier = opts.noOperator && rawTier === "operator" ? "trusted" : rawTier;
+    // G7 finding-2 (FIX-T7.1-r2): NO-OPERATOR mode classifies graph-derived channels
+    // with the operator PATH-allowlist DISABLED, so a hit can never escape the
+    // trust-tier wrapper as raw operator content — even when its source_path matches
+    // an operator pattern. Critically, it is NOT blindly mapped to "trusted": the
+    // tier is re-derived from frontmatter alone, so a synthetic/no-provenance node
+    // whose path merely looks operator-shaped stays DEFAULT-DENY "untrusted" and is
+    // promoted to wrapped "trusted" ONLY when its own content carries real
+    // provenance (confidence:high + source_refs, or owner:reviewed).
+    const tier: TrustTier = opts.noOperator
+      ? classifyTrustTier(source_path, content, { ignoreOperatorPath: true })
+      : classifyTrustTier(source_path, content);
     let rendered: string;
     if (tier === "operator") {
       // Operator pages are authoritative — include without wrapping.

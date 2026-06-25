@@ -332,6 +332,12 @@ export function normalizeFtsQuery(query: string): string {
  * a camelCase / PascalCase / acronym boundary inside a run. Plain prose (no such
  * boundary) is NOT flagged → the SQLite path is used exactly as before (no
  * behaviour change for ordinary recall).
+ *
+ * FIX-T7.1-r2 finding-3: this is a QUERY-shape detector and so does NOT catch a
+ * PLAIN query (`process order`) whose terms only diverge because a DOC carries a
+ * camelCase identifier (`processOrder`) the file-BM25 path splits and FTS does not.
+ * That corpus-driven case is handled by `corpusForcesIdentifierBypass` in recall.ts,
+ * which complements this query-side check; the two together close the parity gap.
  */
 export function isIdentifierAwareQuery(query: string): boolean {
   if (/[A-Za-z0-9]_[A-Za-z0-9]/.test(query)) return true; // snake_case: a_b

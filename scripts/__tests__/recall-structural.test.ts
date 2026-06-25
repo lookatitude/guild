@@ -310,19 +310,96 @@ describe("G7 F2 — a structural hit on an operator-allowlist path stays WRAPPED
   });
 });
 
+// ── FIX-T7.1-r2 finding-2: a no-provenance operator-SHAPED graph node is NOT over-trusted ─
+//
+// The r1 no-operator guard mapped ANY would-be operator hit straight to "trusted".
+// That is still an over-trust: a SYNTHETIC graph node with NO provenance whose
+// source_path merely looks operator-shaped (a node id containing `principles` /
+// `goals.md`) was promoted to "trusted" — human-reviewed-grade — purely on its path.
+// The fix re-derives the tier from frontmatter alone (operator path layer disabled),
+// so such a node stays DEFAULT-DENY "untrusted"; only a node carrying REAL provenance
+// (confidence:high + source_refs) earns wrapped "trusted".
+
+// forge() has NO line provenance (source_refs lack #Lx-Ly) but its id sits on an
+// operator-shaped path (`principles`); it CALLS processOrder().
+function operatorImpostorCallGraph(): { nodes: GNode[]; edges: GEdge[] } {
+  const nodes: GNode[] = [
+    { id: "function:src/order.ts:processOrder", type: "function", name: "processOrder", source_refs: ["src/order.ts#L10-L20"] },
+    // No #Lx-Ly anchor → graph-query down-tiers to untrusted + filters refs to []
+    // → structural source_path falls back to knowledge-graph.json#<id>, which
+    // contains `principles` and so MATCHES the operator allowlist pattern.
+    { id: "function:src/principles/forge.ts:forge", type: "function", name: "forge", source_refs: ["src/principles/forge.ts"] },
+  ];
+  const edges: GEdge[] = [
+    { source: "function:src/principles/forge.ts:forge", target: "function:src/order.ts:processOrder", type: "calls" },
+  ];
+  return { nodes, edges };
+}
+
+describe("G7 finding-2 — a no-provenance operator-shaped graph node stays untrusted (not over-trusted)", () => {
+  test("a path-shaped synthetic caller with NO provenance is wrapped 'untrusted', never promoted to trusted/operator", () => {
+    const repo = mkTmpRepo();
+    const { nodes, edges } = operatorImpostorCallGraph();
+    writeGraph(repo, nodes, edges);
+
+    const result = recall("what calls processOrder", { cwd: repo, _bm25Disabled: true, _kgDisabled: true });
+
+    const impostor = result.chunks.find((c) => c.source_path.includes("forge"));
+    expect(impostor).toBeDefined();
+
+    // NON-VACUITY: that source_path WOULD classify "operator" through the default
+    // (path-allowlist) classifier — so the guard is doing real work, and the r1
+    // behaviour would have force-promoted it to "trusted".
+    expect(classifyTrustTier(impostor!.source_path, impostor!.rendered)).toBe("operator");
+
+    // The fix: re-derived from frontmatter alone → DEFAULT-DENY untrusted.
+    expect(impostor!.trust_tier).not.toBe("operator");
+    expect(impostor!.trust_tier).not.toBe("trusted"); // ← the over-trust the fix closes
+    expect(impostor!.trust_tier).toBe("untrusted");
+    expect(impostor!.quarantined).toBe(false);
+    expect(impostor!.rendered).toContain('<guild:recall trust_tier="untrusted">');
+    // Raw node content is NOT emitted unwrapped.
+    expect(impostor!.rendered.startsWith("<guild:recall")).toBe(true);
+  });
+
+  test("CONTRAST: an operator-shaped caller WITH real #Lx-Ly provenance still earns wrapped 'trusted'", () => {
+    // Same operator path, but now carrying a real line anchor → genuine evidence.
+    const repo = mkTmpRepo();
+    const nodes: GNode[] = [
+      { id: "function:src/order.ts:processOrder", type: "function", name: "processOrder", source_refs: ["src/order.ts#L10-L20"] },
+      { id: "function:src/principles/loader.ts:loadPrinciples", type: "function", name: "loadPrinciples", source_refs: ["src/principles/loader.ts#L1-L9"] },
+    ];
+    const edges: GEdge[] = [
+      { source: "function:src/principles/loader.ts:loadPrinciples", target: "function:src/order.ts:processOrder", type: "calls" },
+    ];
+    writeGraph(repo, nodes, edges);
+
+    const result = recall("what calls processOrder", { cwd: repo, _bm25Disabled: true, _kgDisabled: true });
+    const evidence = result.chunks.find((c) => c.source_path.includes("principles/loader.ts"));
+    expect(evidence).toBeDefined();
+    expect(evidence!.trust_tier).toBe("trusted"); // earned via provenance, NOT path
+    expect(evidence!.rendered).toContain('<guild:recall trust_tier="trusted">');
+  });
+});
+
 // ── FIX-T7.1 F3: structural runs BEFORE the wiki sweep (0 file-sweep, 0 LLM) ───
 //
-// Proven BEHAVIOURALLY (cross-module fs spies don't survive ts-jest's __importStar,
-// so a readdir spy would pass vacuously): a wiki page that PROVABLY matches the
-// query (see the anti-vacuity test) is ABSENT from a structural answer's bundle —
-// the only way that happens is the wiki file sweep never ran. `fetch` (a real
-// global) is spied to prove 0 LLM tokens.
+// FIX-T7.1-r2 finding-1: the old proof was BEHAVIOURAL only (the matching wiki page
+// is absent from the bundle), which a sweep-then-discard regression would pass. We
+// now ALSO instrument the file sweep directly: `fs.readdirSync` is the dir-walk that
+// BOTH wiki sweeps perform — the file-BM25 branch walks `.guild/wiki/**`, and the
+// SQLite branch's `ensureWikiFtsIndex` enumerates the wiki dir to count/fingerprint
+// files; the structural and KG branches read named JSON files and never readdir. So
+// a structural answer must trigger ZERO `readdirSync`. The cross-module spy is
+// proven LIVE (not vacuous) by the anti-vacuity test below, which asserts the SAME
+// spy DOES fire (≥1) once the wiki sweep actually runs — and by a direct in-window
+// control call. `fetch` (a real global) proves 0 LLM tokens.
 
 const F3_WIKI = "decisions/order-flow.md";
 const F3_WIKI_BODY = "# Order flow\n\ncheckout and processOrder settlement.\n";
 
 describe("G7 F3 — a structural query resolves from the graph with 0 file-sweep / 0 LLM tokens", () => {
-  test("structural fully answers → a matching wiki page is NOT swept into the bundle, no network", () => {
+  test("structural fully answers → NO readdir sweep, matching wiki page absent, no network", () => {
     const repo = mkTmpRepo();
     const { nodes, edges } = callGraph();
     writeGraph(repo, nodes, edges);
@@ -333,41 +410,64 @@ describe("G7 F3 — a structural query resolves from the graph with 0 file-sweep
     const fetchSpy = jest.fn();
     const origFetch = (globalThis as unknown as { fetch?: unknown }).fetch;
     (globalThis as unknown as { fetch?: unknown }).fetch = fetchSpy;
+    // Instrumented sweep denial: count every directory walk during the recall.
+    const readdirSpy = jest.spyOn(fs, "readdirSync");
     let result: RecallResult;
     try {
-      // index:off → IF the wiki waterfall ran it would be file-bm25 and the .md page
-      // would appear. It does not → the sweep was skipped.
+      // index:on with threshold 0 → IF the wiki waterfall ran it would readdir the
+      // wiki dir (to populate the FTS cache OR to walk it for file-BM25), and the
+      // .md page would surface. Neither happens → the sweep never STARTED.
       result = recall("what calls processOrder", {
         cwd: repo,
-        _indexConfig: { enabled: false },
+        _indexConfig: { enabled: true, wiki_file_threshold: 0 },
         _kgDisabled: true,
       });
     } finally {
       (globalThis as unknown as { fetch?: unknown }).fetch = origFetch;
+      readdirSpy.mockRestore();
     }
 
     // Structural fully answered → wiki waterfall skipped → structural-only source.
     expect(result.source).toBe("structural");
     expect(result.chunks.length).toBeGreaterThan(0);
-    // 0 file-sweep: the matching wiki page was NOT pulled in.
+    // 0 file-sweep — INSTRUMENTED: no directory walk ran at all (proves the wiki
+    // sweep was never STARTED, not merely that its output was discarded).
+    expect(readdirSpy).not.toHaveBeenCalled();
+    // 0 file-sweep — BEHAVIOURAL corroboration: the matching wiki page is absent.
     expect(result.chunks.some((c) => c.source_path.endsWith(".md"))).toBe(false);
     // 0 LLM tokens: no network call.
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  test("ANTI-VACUITY: the SAME wiki page + query DOES match when there is no structural answer", () => {
+  test("ANTI-VACUITY: with no structural answer the wiki sweep DOES readdir + match the page", () => {
     const repo = mkTmpRepo();
     // No graph → structural is a no-op → the wiki waterfall runs and matches the page.
     writeWikiFile(repo, F3_WIKI, F3_WIKI_BODY);
 
-    const result = recall("what calls processOrder", {
-      cwd: repo,
-      _indexConfig: { enabled: false },
-      _kgDisabled: true,
-    });
+    const readdirSpy = jest.spyOn(fs, "readdirSync");
+    let recallReaddirCalls = 0;
+    let result: RecallResult;
+    try {
+      result = recall("what calls processOrder", {
+        cwd: repo,
+        _indexConfig: { enabled: false },
+        _kgDisabled: true,
+      });
+      recallReaddirCalls = readdirSpy.mock.calls.length;
+      // Spy-liveness control: a direct call inside the SAME window must register,
+      // proving the spy is intercepting (so a 0 from recall above is meaningful).
+      fs.readdirSync(repo);
+      expect(readdirSpy.mock.calls.length).toBe(recallReaddirCalls + 1);
+    } finally {
+      readdirSpy.mockRestore();
+    }
 
     expect(result.source).toBe("file-bm25");
     expect(result.chunks.some((c) => c.source_path.endsWith(".md"))).toBe(true);
+    // Proves the readdir spy is LIVE on the cross-module path: the SAME spy that
+    // read 0 in the structural test fires here when the sweep actually runs — so the
+    // "0 readdir" sweep-denial assertion above is non-vacuous.
+    expect(recallReaddirCalls).toBeGreaterThan(0);
   });
 });
 
@@ -424,5 +524,69 @@ describe("G7 F4 — identifier (camel/snake) query bypasses SQLite for index:on=
     expect(outcome.engagement.off).toBe(false);
     expect(outcome.engagement.on).toBe(true);
     expect(isIdentifierAwareQuery("invoice settlement")).toBe(false);
+  });
+});
+
+// ── FIX-T7.1-r2 finding-3: PLAIN-word query parity via corpus-aware bypass ─────
+//
+// `isIdentifierAwareQuery` keys off the QUERY shape, so a plain query like
+// `process order` (no `_`, no camelCase) returns false and still hit SQLite — yet
+// it diverges whenever a DOC carries a camelCase identifier (`processOrder`) that
+// the file-BM25 (index:off, source-of-truth) path splits into `process`+`order` but
+// FTS5 does not. The corpus-aware bypass detects that the query's terms rely on a
+// doc-side camelCase split and routes BOTH modes through file-BM25 → byte-identical.
+
+describe("G7 finding-3 — a plain (non-identifier) query whose terms split a doc identifier stays parity-safe", () => {
+  test("a 'process order' query returns byte-identical results index:on == index:off", () => {
+    const repo = mkTmpRepo();
+    // a.md carries the camelCase symbol the plain query relies on splitting;
+    // b.md is padding so the corpus exceeds the (lowered) engagement threshold.
+    writeWikiFile(repo, "a.md", "# Order\n\nThe processOrder function settles the invoice.\n");
+    writeWikiFile(repo, "b.md", "# Other\n\nbilling cycles and dunning content.\n");
+
+    // The query itself is NOT identifier-shaped — only the corpus signal can catch it.
+    expect(isIdentifierAwareQuery("process order")).toBe(false);
+
+    const outcome = runBothIndexModes((ctx) => {
+      const r = recall("process order", {
+        cwd: repo,
+        _indexConfig: { ...ctx.config, wiki_file_threshold: 1 },
+        _kgDisabled: true,
+      });
+      // Corpus-aware bypass → BOTH modes read file-BM25, never the FTS cache.
+      ctx.reportEngagement(r.source === "sqlite");
+      return { source: r.source, paths: r.chunks.map((c) => c.source_path).sort() };
+    });
+
+    expect(outcome.ranBoth).toBe(true);
+    expect(outcome.identical).toBe(true);            // byte-identical across modes
+    expect(outcome.off.source).toBe("file-bm25");
+    expect(outcome.on.source).toBe("file-bm25");      // bypass → NOT sqlite
+    // Non-vacuous: the plain `process order` query DID match the camelCase doc.
+    expect(outcome.off.paths.some((p) => p.endsWith("a.md"))).toBe(true);
+  });
+
+  test("PRECISION: a plain query whose terms do NOT split any doc identifier still engages SQLite", () => {
+    // SAME corpus shape (a.md has `processOrder`), but the query `invoice` does not
+    // rely on splitting it → the bypass must NOT fire → SQLite engages at index:on.
+    // Proves the corpus bypass is query-term-specific, not a blanket "any compound
+    // in the corpus → always bypass".
+    const repo = mkTmpRepo();
+    writeWikiFile(repo, "a.md", "# Order\n\nThe processOrder function settles the invoice.\n");
+    writeWikiFile(repo, "b.md", "# Other\n\nthe invoice ledger and dunning content.\n");
+
+    const outcome = runBothIndexModes((ctx) => {
+      const r = recall("invoice", {
+        cwd: repo,
+        _indexConfig: { ...ctx.config, wiki_file_threshold: 1 },
+        _kgDisabled: true,
+      });
+      ctx.reportEngagement(r.source === "sqlite");
+      return { source: r.source };
+    });
+
+    // Not bypassed → index:on engages the FTS cache, index:off does not.
+    expect(outcome.engagement.off).toBe(false);
+    expect(outcome.engagement.on).toBe(true);
   });
 });
