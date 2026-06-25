@@ -516,6 +516,66 @@ describe("FIX-T4.1-r2 — a malformed nested cache element forces re-extract (in
       name: "importSpecs element non-string",
       corrupt: (b) => { (b.importSpecs as unknown as unknown[]).push(123); },
     },
+    // ── FIX-T4.1-r3: VALID-SHAPED but cross-inconsistent elements ──────────────
+    // Each element below is individually well-SHAPED (passes the per-element
+    // field guards) yet violates the bundle's CROSS-consistency, so only the
+    // deepened shared validator (`isValidBundle`) rejects it. Reusing it emits a
+    // dropped/dangling/divergent node or edge — the divergence check proves it.
+    {
+      // phantom callable id: `bar`'s callable id names a symbol node that does
+      // NOT exist in this bundle. Pass 2c emits `foo→bar` with the PHANTOM target.
+      name: "callables phantom id (no backing symbol node)",
+      corrupt: (b) => {
+        const c = (b.callables as Record<string, unknown>[]).find((x) => x.simpleName === "bar")!;
+        c.id = "function:a.py:ghost";
+      },
+    },
+    {
+      // wrong kind: `foo`'s callable id resolves to a CLASS node. Pass 2c would
+      // emit a `calls` edge whose SOURCE is the class node, not `foo`.
+      name: "callables id resolves to a class node (wrong kind)",
+      corrupt: (b) => {
+        const c = (b.callables as Record<string, unknown>[]).find((x) => x.simpleName === "foo")!;
+        c.id = "class:a.py:Base";
+      },
+    },
+    {
+      // wrong name: `bar`'s callable simpleName no longer matches its symbol
+      // node. `foo`'s call to `bar` then resolves to nothing → the `foo→bar`
+      // calls edge VANISHES (divergence by omission).
+      name: "callables simpleName mismatch (wrong name)",
+      corrupt: (b) => {
+        const c = (b.callables as Record<string, unknown>[]).find((x) => x.simpleName === "bar")!;
+        c.simpleName = "Wrong";
+      },
+    },
+    {
+      // phantom class id: `Base`'s class id names a symbol node that does NOT
+      // exist. `Derived`'s `inherits → Base` resolution still finds `Base` by
+      // NAME, but registers the phantom id → the inherits TARGET diverges.
+      name: "classes phantom id (no backing symbol node)",
+      corrupt: (b) => {
+        const c = (b.classes as Record<string, unknown>[]).find((x) => x.simpleName === "Base")!;
+        c.id = "class:a.py:ghost";
+      },
+    },
+    {
+      // cross-bundle endpoint: a `contains` edge target points at a node OWNED BY
+      // ANOTHER bundle (b.py) — outside THIS bundle's node set. Reuse emits a
+      // cross-file `contains` edge a full rebuild never produces.
+      name: "contains endpoint outside this bundle's nodes (cross-bundle)",
+      corrupt: (b) => {
+        (b.contains as Record<string, unknown>[])[0].target = "function:b.py:baz";
+      },
+    },
+    {
+      // bad provenance: a symbol node's `source_refs` names a FOREIGN file. Reuse
+      // surfaces a node whose provenance points outside the file it claims to own.
+      name: "symbolNode source_ref names a foreign file (bad provenance)",
+      corrupt: (b) => {
+        (b.symbolNodes as Record<string, unknown>[])[0].source_refs = ["b.py#L1-L2"];
+      },
+    },
   ];
 
   for (const c of cases) {

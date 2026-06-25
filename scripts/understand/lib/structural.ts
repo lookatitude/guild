@@ -31,6 +31,7 @@ import { loadTsAliases, resolveImportSpec } from "./import-map";
 import { detectLanguage, isCodeLanguage } from "./languages";
 import { analyzeSource } from "./extract";
 import { contentHash } from "./fingerprint";
+import { isValidBundle } from "./bundle-validate";
 import type { GraphEdge, GraphNode } from "./schema";
 
 // ---------------------------------------------------------------------------
@@ -488,69 +489,29 @@ export interface StructuralCache {
   files: Record<string, FileBundle>;
 }
 
-// Element-level runtime schema guards (FIX-T4.1-r2). `isReusableBundle` must
-// validate every NESTED element of a cached bundle, not just the top-level array
-// shape: `assembleStructuralGraph` dereferences `.id`/`.simpleName`/`.callees`/
-// `.bases`/`.ifaces`/edge endpoints on each element, so a current-version /
-// matching-hash bundle carrying a malformed (or `null`) element would crash or
-// silently diverge from a full rebuild. Any malformed element invalidates the
-// whole bundle → re-extract that file.
-const isStr = (x: unknown): x is string => typeof x === "string";
-const isNonEmptyStr = (x: unknown): x is string => typeof x === "string" && x !== "";
-const isStrArray = (x: unknown): x is string[] => Array.isArray(x) && x.every(isStr);
-
-/** A symbol node element must carry the identity fields assemble adds/keys on. */
-function isValidSymbolNode(n: unknown): boolean {
-  if (!n || typeof n !== "object") return false;
-  const r = n as Record<string, unknown>;
-  return isNonEmptyStr(r.id) && isStr(r.type) && isStr(r.name) && Array.isArray(r.source_refs);
-}
-
-/** A contains/structural edge element must carry string endpoints + type. */
-function isValidEdgeEl(e: unknown): boolean {
-  if (!e || typeof e !== "object") return false;
-  const r = e as Record<string, unknown>;
-  return isNonEmptyStr(r.source) && isNonEmptyStr(r.target) && isStr(r.type);
-}
-
-/** A class element must carry id/simpleName + string-array bases & ifaces. */
-function isValidClassEl(c: unknown): boolean {
-  if (!c || typeof c !== "object") return false;
-  const r = c as Record<string, unknown>;
-  return isNonEmptyStr(r.id) && isStr(r.simpleName) && isStrArray(r.bases) && isStrArray(r.ifaces);
-}
-
-/** A callable element must carry id/simpleName + a string-array callee list. */
-function isValidCallableEl(c: unknown): boolean {
-  if (!c || typeof c !== "object") return false;
-  const r = c as Record<string, unknown>;
-  return isNonEmptyStr(r.id) && isStr(r.simpleName) && isStrArray(r.callees);
-}
-
 /**
- * A cached bundle may be reused ONLY if its shape is intact — top-level AND every
- * nested element — and it is keyed to the file it claims (FIX-T4.1-3, deepened in
- * FIX-T4.1-r2). Guards against a truncated/tampered cache entry whose
- * `contentHash` happens to match: a structurally-broken bundle (e.g. a malformed
- * or `null` `callables`/`classes`/`symbolNodes`/`contains` element) is rejected
- * and the file re-extracted, so incremental stays == full (never a crash, never a
- * divergence).
+ * A cached bundle may be reused ONLY if it passes the shared comprehensive
+ * validator (`lib/bundle-validate.ts` `isValidBundle`) — top-level shape, the
+ * FULL GraphNode/GraphEdge schema of every nested element, AND the bundle's
+ * cross-consistency (id↔kind, id↔name, id↔owning-file, source_ref↔file, edge
+ * endpoints within this bundle). `assembleStructuralGraph` dereferences and
+ * emits this data WHOLESALE, so a current-version / matching-hash bundle that is
+ * shaped-invalid (a phantom symbol id, a `contains` endpoint outside the bundle,
+ * a `source_ref` for a foreign file, a class id resolving to a function node, a
+ * `null`/malformed element, …) would otherwise crash or silently diverge from a
+ * full rebuild. Any violation rejects the bundle → re-extract that file, so
+ * incremental stays == full.
+ *
+ * FIX-T4.1-r3: the validator is the SINGLE source of truth shared with the
+ * artifact-bootstrap path (`graph-artifact.ts` `validateStructuralCache`) so the
+ * two reuse paths cannot diverge. We additionally require a non-empty
+ * `contentHash` here — the reuse caller below only trusts a bundle whose
+ * `contentHash` equals the live file's, which is never "".
  */
 function isReusableBundle(rel: string, b: unknown): b is FileBundle {
   if (!b || typeof b !== "object") return false;
-  const r = b as Record<string, unknown>;
-  if (r.rel !== rel) return false; // entry must be keyed to its own file
-  if (typeof r.contentHash !== "string" || r.contentHash === "") return false;
-  if (typeof r.language !== "string" || typeof r.isCode !== "boolean") return false;
-  const fileNode = r.fileNode as Record<string, unknown> | undefined;
-  if (!fileNode || typeof fileNode !== "object" || fileNode.id !== `file:${rel}`) return false;
-  return (
-    Array.isArray(r.symbolNodes) && r.symbolNodes.every(isValidSymbolNode) &&
-    Array.isArray(r.contains) && r.contains.every(isValidEdgeEl) &&
-    isStrArray(r.importSpecs) &&
-    Array.isArray(r.classes) && r.classes.every(isValidClassEl) &&
-    Array.isArray(r.callables) && r.callables.every(isValidCallableEl)
-  );
+  if ((b as Record<string, unknown>).contentHash === "") return false;
+  return isValidBundle(rel, b);
 }
 
 function symbolNodeName(sym: Symbol): string {
