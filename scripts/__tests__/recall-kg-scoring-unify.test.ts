@@ -30,7 +30,7 @@ import { spawnSync } from "node:child_process";
 import { recall } from "../lib/recall";
 import { rankKgNodes } from "../lib/shared/graph-scoring";
 import { runBothIndexModes } from "../understand/lib/parity-harness";
-import type { GraphNode } from "../understand/lib/schema";
+import type { GraphNode, GraphEdge } from "../understand/lib/schema";
 
 const KG_QUERY_SCRIPT = path.resolve(__dirname, "../understand/kg-query.ts");
 const TEMP_DIRS: string[] = [];
@@ -73,6 +73,49 @@ function makeFixtureRepo(): string {
     },
   ];
   const doc = { schema_version: "guild.knowledge_links.v2", nodes, edges: [] };
+  const idxDir = path.join(dir, ".guild", "indexes");
+  fs.mkdirSync(idxDir, { recursive: true });
+  fs.writeFileSync(path.join(idxDir, "knowledge-recall.json"), JSON.stringify(doc), "utf8");
+  return dir;
+}
+
+// ---------------------------------------------------------------------------
+// Fixture: topic-proximity REORDERS the top-N. All nodes match "payment":
+//   child-topic   exact name match (+5), type topic, importance 0.9/high → clear
+//                 #1; emits a subtopic_of edge to parent-topic, so parent earns a
+//                 proximity bonus = child.score × PROXIMITY_WEIGHT(0.1) ≈ 0.98.
+//   parent-topic  haystack match (+1), type topic, importance 0.05/low → base
+//                 score 1.05; with proximity 1.05 + 0.98 ≈ 2.03.
+//   rival-file    haystack match (+1), type file, importance 0.4/low → score 1.4;
+//                 receives NO proximity (not a subtopic_of target).
+// → edges ON  : [child, parent, rival]   (parent lifted above rival by proximity)
+// → edges OFF : [child, rival, parent]    (rival's 1.4 > parent's 1.05)
+// Positions 2/3 swap on edges, so dropping `proj.edges` (recall.ts) OR
+// `graph.edges` (kg-query.ts) changes the top-N order and fails parity below.
+// ---------------------------------------------------------------------------
+
+function makeProximityFixtureRepo(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "g15-prox-"));
+  TEMP_DIRS.push(dir);
+  const nodes = [
+    {
+      id: "node:child-topic", type: "topic", name: "payment",
+      confidence: "high", source_refs: ["src/payment/index.ts"], importance_score: 0.9,
+    },
+    {
+      id: "node:parent-topic", type: "topic", name: "ledger",
+      confidence: "low", source_refs: ["src/payment/ledger.ts"], importance_score: 0.05,
+    },
+    {
+      id: "node:rival-file", type: "file", name: "receipts",
+      confidence: "low", source_refs: ["src/payment/receipt.ts"], importance_score: 0.4,
+    },
+  ];
+  // child-topic --subtopic_of--> parent-topic (single-parent tree; SC-2 valid).
+  const edges = [
+    { source: "node:child-topic", target: "node:parent-topic", type: "subtopic_of", direction: "out" },
+  ];
+  const doc = { schema_version: "guild.knowledge_links.v2", nodes, edges };
   const idxDir = path.join(dir, ".guild", "indexes");
   fs.mkdirSync(idxDir, { recursive: true });
   fs.writeFileSync(path.join(idxDir, "knowledge-recall.json"), JSON.stringify(doc), "utf8");
@@ -197,5 +240,40 @@ describe("G15 — bundle KG ranking == kg-query CLI ranking", () => {
     }
     // Integrity directive is present when wrapped chunks exist.
     expect(bundle.directive).not.toBeNull();
+  });
+
+  test("5. TOPIC-PROXIMITY PARITY: subtopic_of edges reorder the top-N identically on both paths", () => {
+    const cwd = makeProximityFixtureRepo();
+    const LIMIT = 3;
+
+    const doc = JSON.parse(
+      fs.readFileSync(path.join(cwd, ".guild", "indexes", "knowledge-recall.json"), "utf8"),
+    ) as { nodes: GraphNode[]; edges: GraphEdge[] };
+    const terms = QUERY.split(/\s+/);
+
+    // The proximity-ON order: child #1, then parent LIFTED above rival by its
+    // subtopic_of bonus. This is the order a correct (edge-aware) pipeline yields.
+    const PROX_ON = ["node:child-topic", "node:parent-topic", "node:rival-file"];
+    // The proximity-OFF order: with no edges, rival's higher base score outranks
+    // parent — positions 2/3 swap.
+    const PROX_OFF = ["node:child-topic", "node:rival-file", "node:parent-topic"];
+
+    // Sanity on the shared scorer itself: edges genuinely change the order.
+    const withEdges = rankKgNodes(doc.nodes, doc.edges, terms, LIMIT).map((x) => x.n.id);
+    const withoutEdges = rankKgNodes(doc.nodes, [], terms, LIMIT).map((x) => x.n.id);
+    expect(withEdges).toEqual(PROX_ON);
+    expect(withoutEdges).toEqual(PROX_OFF);
+    expect(withEdges).not.toEqual(withoutEdges); // proximity is non-vacuous
+
+    // Both REAL paths consume the edges and must produce the proximity-ON order.
+    const bundle = recall(QUERY, { cwd, limit: LIMIT, _bm25Disabled: true });
+    const bundleIds = kgIdsFromRecall(bundle.chunks);
+    const cliIds = kgQueryCliIds(cwd, QUERY, LIMIT);
+
+    // Parity (order-sensitive): dropping edges on EITHER side diverges the two → fails here.
+    expect(bundleIds).toEqual(cliIds);
+    // Exact order: dropping edges on BOTH sides yields PROX_OFF → fails here.
+    expect(bundleIds).toEqual(PROX_ON);
+    expect(cliIds).toEqual(PROX_ON);
   });
 });
