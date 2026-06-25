@@ -133,6 +133,57 @@ export function scoreNode(node: GraphNode, terms: string[]): number {
  */
 export const PROXIMITY_WEIGHT = 0.1;
 
+/**
+ * Rank KnowledgeGraph nodes for recall — the SINGLE canonical ranking pipeline
+ * shared by BOTH `kg-query.ts` (the CLI) and `recall.ts`'s KG branch (the
+ * context bundle), so an agent gets IDENTICAL KG recall ordering through either
+ * surface (G15 — closes the bundle-vs-CLI scoring drift documented in
+ * goals.md §2.2).
+ *
+ * Before G15 the bundle KG branch ranked on flat `termMatchScore` + id tiebreak
+ * while the CLI used the full `scoreNode` (importance + confidence) plus
+ * topic-proximity — so the bundle silently gave WORSE KG recall. This function
+ * is the one ranking both now call.
+ *
+ * Pipeline (byte-identical to the former kg-query.ts inline steps 1–3):
+ *   1. score every candidate with `scoreNode` (importance + confidence baked
+ *      in), drop zero-score nodes;
+ *   2. build topic-proximity bonuses over `subtopic_of` edges (SC-13);
+ *   3. add the proximity bonus, sort by score desc then id asc, cap at `limit`.
+ *
+ * Determinism (SC-9): pure arithmetic; no LLM calls; stable id tiebreak.
+ *
+ * @param candidates  nodes to score (caller MAY pre-filter by type, e.g. the
+ *                    CLI's `--type`; recall passes the whole projection).
+ * @param edges       graph edges (used for `subtopic_of` proximity). `[]` is fine.
+ * @param terms       lowercased query terms.
+ * @param limit       max ranked results.
+ * @param allNodes    full node set for the proximity target-type guard;
+ *                    defaults to `candidates` (correct when no pre-filtering).
+ */
+export function rankKgNodes(
+  candidates: GraphNode[],
+  edges: GraphEdge[],
+  terms: string[],
+  limit: number,
+  allNodes: GraphNode[] = candidates,
+): Array<{ n: GraphNode; s: number }> {
+  // Step 1: score all candidates (importance + confidence baked in), drop zeros.
+  const candidateScored = candidates
+    .map((n) => ({ n, s: scoreNode(n, terms) }))
+    .filter((x) => x.s > 0);
+
+  // Step 2: topic-proximity bonuses (subtopic_of traversal). Pass allNodes so the
+  // target-side type guard can identify non-topic targets absent from the scored set.
+  const proximityBonuses = buildProximityBonuses(candidateScored, edges, allNodes);
+
+  // Step 3: apply proximity bonus, final sort (score desc, id asc), cap.
+  return candidateScored
+    .map((x) => ({ n: x.n, s: x.s + (proximityBonuses.get(x.n.id) ?? 0) }))
+    .sort((a, b) => b.s - a.s || a.n.id.localeCompare(b.n.id))
+    .slice(0, limit);
+}
+
 export function buildProximityBonuses(
   scored: Array<{ n: GraphNode; s: number }>,
   edges: GraphEdge[],

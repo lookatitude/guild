@@ -55,9 +55,9 @@ import { wikiRecall } from "./wiki-recall";
 import { fsScan } from "./fs-scanner";
 import { protectChunks, type ProtectedChunk } from "./recall-protect";
 import { tokenize, bm25Score } from "../../knowledge";
-import { termMatchScore } from "../../knowledge";
-import type { GraphNode } from "../../understanding";
-import type { KnowledgeLinksDoc, CanonicalNode } from "../../knowledge";
+import { rankKgNodes } from "../../knowledge";
+import type { GraphNode, GraphEdge } from "../../understanding";
+import type { KnowledgeLinksDoc } from "../../knowledge";
 import {
   ingestImportanceScore,
   resolveRecallImportance,
@@ -247,10 +247,12 @@ function walkMdFiles(dir: string): string[] {
 
 // ── Internal: KG node scorer ─────────────────────────────────────────────────
 //
-// Re-arch WAVE 1: the term-match primitive is now the canonical
-// `termMatchScore` from scripts/lib/shared/graph-scoring.ts — the same loop
-// kg-query.ts uses. recall's KG branch intentionally ranks on term match alone
-// (no importance/confidence), so it calls the shared primitive directly.
+// G15: the KG branch now ranks via the SHARED `rankKgNodes` pipeline from
+// src/modules/knowledge/workflows/graph-scoring.ts — the SAME ranking kg-query.ts
+// uses (scoreNode importance+confidence + topic-proximity, then score-desc/id-asc).
+// This closes the bundle-vs-CLI scoring drift (goals.md §2.2): an agent now gets
+// identical KG recall ordering through the context bundle and the CLI. Previously
+// this branch ranked on flat termMatchScore + id tiebreak, silently worse.
 
 // ── Branch A: SQLite FTS (wiki-recall.ts) ─────────────────────────────────────
 //
@@ -390,9 +392,8 @@ function fsScanBranch(
 //
 // METRIC 6 (DECISION=B): reads .guild/indexes/knowledge-recall.json — the
 // recall-OPTIMISED projection written by understand/write-knowledge-links.ts.
-// Nodes are pre-sorted by recall score (importance desc → confidence desc → id asc)
-// so this branch scores with termMatchScore and the projection's ordering is the
-// tiebreaker rather than re-sorting from scratch.
+// G15: this branch ranks the projection nodes via the shared rankKgNodes pipeline
+// (importance + confidence + topic-proximity) — identical to the kg-query CLI.
 //
 // Falls back gracefully when the projection file is absent: returns null (same
 // behaviour as the previous absent-graph path). Never throws.
@@ -429,14 +430,16 @@ function kgQueryBranch(
     .split(/\s+/)
     .filter(Boolean);
 
-  // The projection nodes are pre-sorted by recall score; we still apply
-  // termMatchScore so only relevant nodes surface, but we preserve the
-  // projection's pre-computed ordering as the tiebreaker.
-  const ranked = (proj.nodes as CanonicalNode[])
-    .map((n) => ({ n, s: termMatchScore(n as unknown as GraphNode, terms) }))
-    .filter((x) => x.s > 0)
-    .sort((a, b) => b.s - a.s || a.n.id.localeCompare(b.n.id))
-    .slice(0, limit);
+  // G15: rank via the shared pipeline (importance + confidence + topic-proximity),
+  // identical to kg-query.ts. The projection carries nodes AND subtopic_of edges,
+  // so proximity applies here exactly as it does in the CLI. SQLite-optional: this
+  // reads the knowledge-recall.json projection directly and never requires the cache.
+  const ranked = rankKgNodes(
+    proj.nodes as unknown as GraphNode[],
+    (proj.edges ?? []) as unknown as GraphEdge[],
+    terms,
+    limit,
+  );
 
   if (ranked.length === 0) return null;
 
