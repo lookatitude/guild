@@ -27,8 +27,10 @@
  * by id, edges sorted by `type|source|target`.
  */
 
-import { buildImportMap } from "./import-map";
+import { loadTsAliases, resolveImportSpec } from "./import-map";
 import { detectLanguage, isCodeLanguage } from "./languages";
+import { analyzeSource } from "./extract";
+import { contentHash } from "./fingerprint";
 import type { GraphEdge, GraphNode } from "./schema";
 
 // ---------------------------------------------------------------------------
@@ -425,21 +427,170 @@ function edge(source: string, target: string, type: string, weight: number, desc
 // Top-level extraction (two-pass: symbols, then calls/inheritance)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Per-file bundle — the incremental-refresh unit (G4)
+// ---------------------------------------------------------------------------
+
 /**
- * Build the structural subset of the knowledge graph for a set of repo-relative
- * code files. Pure + deterministic: same (tree, file list) → byte-identical
- * (after canonicalization). `readFile(abs)` is injected for testability.
+ * Everything the global resolution passes need from ONE file, computed once.
+ * A bundle is a pure function of (rel, content). For unchanged files an
+ * incremental refresh REUSES the cached bundle (keyed by `contentHash`) so the
+ * file is never re-read/re-parsed; the global assemble then produces output
+ * byte-identical to a full rebuild (cross-file resolution still runs over the
+ * whole bundle set, so adding/removing/renaming a symbol in one file correctly
+ * updates edges owned by OTHER, unchanged files).
+ *
+ * The bundle carries the IMPORT SPECIFIERS (raw, not resolved) and the per-
+ * callable CALLEE NAMES (not resolved ids) — resolution is deferred to assemble
+ * so it always reflects the current whole-tree symbol tables.
  */
-export function extractStructuralGraph(
+export interface FileBundle {
+  rel: string;
+  language: string;
+  /** true iff this file contributed code symbols (function/class) */
+  isCode: boolean;
+  /** SHA-256 of file content ("" if unreadable) — the incremental fingerprint key */
+  contentHash: string;
+  fileNode: GraphNode;
+  symbolNodes: GraphNode[];
+  contains: GraphEdge[];
+  /** raw import source specifiers (re-resolved at assemble time) */
+  importSpecs: string[];
+  classes: Array<{ id: string; simpleName: string; bases: string[]; ifaces: string[] }>;
+  callables: Array<{ id: string; simpleName: string; callees: string[] }>;
+}
+
+/** Persisted bundle cache — the reuse baseline for `--incremental` runs. */
+export interface StructuralCache {
+  schema: "guild.structural_cache.v1";
+  files: Record<string, FileBundle>;
+}
+
+function symbolNodeName(sym: Symbol): string {
+  return sym.id.startsWith("function:") ? sym.id.split(":").slice(2).join(":") : sym.simpleName;
+}
+
+/** Sorted, deduped callee simple-names within a callable body (matches Pass 2c). */
+function computeCallees(lines: string[], sym: Symbol): string[] {
+  // scan the body AFTER the signature line to avoid self-signature matches
+  const body = lines.slice(sym.range[0], sym.range[1]).map(stripStringsAndComments).join("\n");
+  const callees = new Set<string>();
+  let m: RegExpExecArray | null;
+  CALL_RE.lastIndex = 0;
+  while ((m = CALL_RE.exec(body)) !== null) {
+    const name = m[1];
+    if (NON_CALL_NAMES.has(name)) continue;
+    if (name === sym.simpleName) continue; // skip recursion / self-signature noise
+    callees.add(name);
+  }
+  return [...callees].sort();
+}
+
+function importSpecsFor(rel: string, lang: string, content: string): string[] {
+  if (lang !== "typescript" && lang !== "javascript" && lang !== "python") return [];
+  const a = analyzeSource(rel, content);
+  return a ? a.imports.map((i) => i.source) : [];
+}
+
+/**
+ * Build the bundle for one file from its content (`null` = unreadable). Pure +
+ * deterministic. A non-code (or unreadable, or unparseable) file yields just the
+ * file node — exactly what the full Pass 1 emits for the same file.
+ */
+export function makeBundle(rel: string, content: string | null): FileBundle {
+  const lang = detectLanguage(rel);
+  const fileNode: GraphNode = {
+    id: `file:${rel}`,
+    type: "file",
+    name: rel.split("/").pop() ?? rel,
+    source_refs: [rel],
+    confidence: "high",
+    language: lang,
+    extractor: STRUCTURAL_EXTRACTOR,
+  };
+  const hash = content === null ? "" : contentHash(content);
+  const empty: FileBundle = {
+    rel, language: lang, isCode: false, contentHash: hash, fileNode,
+    symbolNodes: [], contains: [], importSpecs: [], classes: [], callables: [],
+  };
+  if (content === null || !isCodeLanguage(lang)) return empty;
+
+  const fe = extractFile(rel, content);
+  if (!fe) return empty;
+
+  const lines = content.split("\n");
+  const symbolNodes: GraphNode[] = fe.symbols.map((sym) => {
+    const slice = lines.slice(sym.range[0] - 1, sym.range[1]);
+    const sigLine = lines[sym.range[0] - 1] ?? "";
+    return {
+      id: sym.id,
+      type: sym.kind,
+      name: symbolNodeName(sym),
+      source_refs: [`${rel}#L${sym.range[0]}-L${sym.range[1]}`],
+      confidence: "high",
+      sp: computeProfile(slice, sigLine),
+      extractor: STRUCTURAL_EXTRACTOR,
+    } as GraphNode;
+  });
+  return {
+    rel,
+    language: lang,
+    isCode: true,
+    contentHash: hash,
+    fileNode,
+    symbolNodes,
+    contains: fe.contains,
+    importSpecs: importSpecsFor(rel, lang, content),
+    classes: fe.classes.map((c) => ({
+      id: c.id, simpleName: c.simpleName, bases: c.bases ?? [], ifaces: c.ifaces ?? [],
+    })),
+    callables: fe.callables.map((c) => ({
+      id: c.id, simpleName: c.simpleName, callees: computeCallees(lines, c),
+    })),
+  };
+}
+
+/** Read + bundle one file (`readFile` injected for testability). */
+export function extractFileBundle(
+  repoRoot: string,
+  rel: string,
+  readFile: (abs: string) => string,
+): FileBundle {
+  let content: string | null;
+  try {
+    content = readFile(`${repoRoot}/${rel}`);
+  } catch {
+    content = null;
+  }
+  return makeBundle(rel, content);
+}
+
+/** Bundle every file (the full-extraction Pass 1, factored out). */
+export function buildBundles(
   repoRoot: string,
   relFiles: string[],
   readFile: (abs: string) => string,
-): StructuralGraph {
+): FileBundle[] {
+  return [...relFiles].sort().map((rel) => extractFileBundle(repoRoot, rel, readFile));
+}
+
+// ---------------------------------------------------------------------------
+// Global assemble — Pass 2 resolution over a bundle set
+// ---------------------------------------------------------------------------
+
+/**
+ * Assemble the structural graph from a set of per-file bundles. This is the
+ * SINGLE resolution implementation shared by the full and incremental paths:
+ * given the same final bundle set it always produces byte-identical output,
+ * regardless of whether each bundle was freshly extracted or reused from cache.
+ */
+export function assembleStructuralGraph(repoRoot: string, bundles: FileBundle[]): StructuralGraph {
+  const sorted = [...bundles].sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+
   const nodes: GraphNode[] = [];
   const nodeIds = new Set<string>();
   const edges: GraphEdge[] = [];
   const edgeKeys = new Set<string>();
-
   const addNode = (n: GraphNode) => {
     if (nodeIds.has(n.id)) return;
     nodeIds.add(n.id);
@@ -453,75 +604,38 @@ export function extractStructuralGraph(
   };
 
   // Global resolution tables.
-  const fnNameToIds = new Map<string, Set<string>>();   // simple name → callable ids
-  const fnIdToFile = new Map<string, string>();          // callable id → rel
-  const classNameToIds = new Map<string, Set<string>>(); // simple name → class ids
+  const fnNameToIds = new Map<string, Set<string>>();
+  const fnIdToFile = new Map<string, string>();
+  const classNameToIds = new Map<string, Set<string>>();
   const classIdToFile = new Map<string, string>();
-  const fileExtracts: FileExtract[] = [];
-  const fileLinesCache = new Map<string, string[]>();
-
   const register = (map: Map<string, Set<string>>, name: string, id: string) => {
     if (!map.has(name)) map.set(name, new Set());
     map.get(name)!.add(id);
   };
 
-  // ── Pass 1: file/function/class nodes + structural profiles ───────────────
-  for (const rel of [...relFiles].sort()) {
-    const lang = detectLanguage(rel);
-    const fileId = `file:${rel}`;
-    addNode({
-      id: fileId,
-      type: "file",
-      name: rel.split("/").pop() ?? rel,
-      source_refs: [rel],
-      confidence: "high",
-      language: lang,
-      extractor: STRUCTURAL_EXTRACTOR,
-    });
-    if (!isCodeLanguage(lang)) continue;
-
-    let content: string;
-    try {
-      content = readFile(`${repoRoot}/${rel}`);
-    } catch {
-      continue;
-    }
-    const fe = extractFile(rel, content);
-    if (!fe) continue;
-    const lines = content.split("\n");
-    fileLinesCache.set(rel, lines);
-    fileExtracts.push(fe);
-
-    for (const sym of fe.symbols) {
-      const slice = lines.slice(sym.range[0] - 1, sym.range[1]);
-      const sigLine = lines[sym.range[0] - 1] ?? "";
-      const node: GraphNode = {
-        id: sym.id,
-        type: sym.kind,
-        name: sym.id.startsWith("function:") ? sym.id.split(":").slice(2).join(":") : sym.simpleName,
-        source_refs: [`${rel}#L${sym.range[0]}-L${sym.range[1]}`],
-        confidence: "high",
-        sp: computeProfile(slice, sigLine),
-        extractor: STRUCTURAL_EXTRACTOR,
-      };
-      addNode(node);
-      if (sym.kind === "function") {
-        register(fnNameToIds, sym.simpleName, sym.id);
-        fnIdToFile.set(sym.id, rel);
-      } else {
-        register(classNameToIds, sym.simpleName, sym.id);
-        classIdToFile.set(sym.id, rel);
-      }
-    }
-    for (const c of fe.contains) addEdge(c);
+  // ── Pass 1: nodes + contains + symbol-table registration ───────────────────
+  for (const b of sorted) {
+    addNode(b.fileNode);
+    if (!b.isCode) continue;
+    for (const n of b.symbolNodes) addNode(n);
+    for (const c of b.callables) { register(fnNameToIds, c.simpleName, c.id); fnIdToFile.set(c.id, b.rel); }
+    for (const c of b.classes) { register(classNameToIds, c.simpleName, c.id); classIdToFile.set(c.id, b.rel); }
+    for (const e of b.contains) addEdge(e);
   }
 
-  // ── Pass 2a: imports edges (ground truth from the import map) ──────────────
-  for (const ie of buildImportMap(repoRoot, relFiles, readFile)) {
-    const s = `file:${ie.from}`;
-    const t = `file:${ie.to}`;
-    if (nodeIds.has(s) && nodeIds.has(t)) {
-      addEdge(edge(s, t, "imports", 0.7, ie.kind === "alias" ? "alias import" : undefined));
+  // ── Pass 2a: imports edges (re-resolved against the current file set) ──────
+  const known = new Set(sorted.map((b) => b.rel.replace(/\\/g, "/")));
+  const aliases = loadTsAliases(repoRoot);
+  for (const b of sorted) {
+    if (!b.isCode) continue;
+    for (const spec of b.importSpecs) {
+      const ie = resolveImportSpec(repoRoot, b.rel, spec, known, aliases);
+      if (!ie) continue;
+      const s = `file:${ie.from}`;
+      const t = `file:${ie.to}`;
+      if (nodeIds.has(s) && nodeIds.has(t)) {
+        addEdge(edge(s, t, "imports", 0.7, ie.kind === "alias" ? "alias import" : undefined));
+      }
     }
   }
 
@@ -543,19 +657,20 @@ export function extractStructuralGraph(
   };
 
   // ── Pass 2b: inherits / implements edges ──────────────────────────────────
-  for (const fe of fileExtracts) {
-    for (const c of fe.classes) {
-      for (const base of c.bases ?? []) {
-        const targetId = resolve(classNameToIds, classIdToFile, base, fe.rel);
+  for (const b of sorted) {
+    if (!b.isCode) continue;
+    for (const c of b.classes) {
+      for (const base of c.bases) {
+        const targetId = resolve(classNameToIds, classIdToFile, base, b.rel);
         if (targetId && targetId !== c.id) {
-          const w = classIdToFile.get(targetId) === fe.rel ? 0.9 : 0.6;
+          const w = classIdToFile.get(targetId) === b.rel ? 0.9 : 0.6;
           addEdge(edge(c.id, targetId, "inherits", w));
         }
       }
-      for (const iface of c.ifaces ?? []) {
-        const targetId = resolve(classNameToIds, classIdToFile, iface, fe.rel);
+      for (const iface of c.ifaces) {
+        const targetId = resolve(classNameToIds, classIdToFile, iface, b.rel);
         if (targetId && targetId !== c.id) {
-          const w = classIdToFile.get(targetId) === fe.rel ? 0.9 : 0.6;
+          const w = classIdToFile.get(targetId) === b.rel ? 0.9 : 0.6;
           addEdge(edge(c.id, targetId, "implements", w));
         }
       }
@@ -563,32 +678,148 @@ export function extractStructuralGraph(
   }
 
   // ── Pass 2c: calls edges ──────────────────────────────────────────────────
-  for (const fe of fileExtracts) {
-    const lines = fileLinesCache.get(fe.rel)!;
-    for (const sym of fe.callables) {
-      // scan the body AFTER the signature line to avoid self-signature matches
-      const bodyStart = sym.range[0]; // 0-indexed line just after signature (range[0] is 1-indexed sig line)
-      const body = lines.slice(bodyStart, sym.range[1]).map(stripStringsAndComments).join("\n");
-      const callees = new Set<string>();
-      let m: RegExpExecArray | null;
-      CALL_RE.lastIndex = 0;
-      while ((m = CALL_RE.exec(body)) !== null) {
-        const name = m[1];
-        if (NON_CALL_NAMES.has(name)) continue;
-        if (name === sym.simpleName) continue; // skip recursion / self-signature noise
-        callees.add(name);
-      }
-      for (const name of [...callees].sort()) {
-        const targetId = resolve(fnNameToIds, fnIdToFile, name, fe.rel);
-        if (targetId && targetId !== sym.id) {
-          const w = fnIdToFile.get(targetId) === fe.rel ? 0.9 : 0.6;
-          addEdge(edge(sym.id, targetId, "calls", w));
+  for (const b of sorted) {
+    if (!b.isCode) continue;
+    for (const c of b.callables) {
+      for (const name of c.callees) {
+        const targetId = resolve(fnNameToIds, fnIdToFile, name, b.rel);
+        if (targetId && targetId !== c.id) {
+          const w = fnIdToFile.get(targetId) === b.rel ? 0.9 : 0.6;
+          addEdge(edge(c.id, targetId, "calls", w));
         }
       }
     }
   }
 
   return canonicalize({ nodes, edges });
+}
+
+/**
+ * Build the structural subset of the knowledge graph for a set of repo-relative
+ * code files. Pure + deterministic: same (tree, file list) → byte-identical
+ * (after canonicalization). `readFile(abs)` is injected for testability.
+ *
+ * Equivalent to `assembleStructuralGraph(repoRoot, buildBundles(...))` — the
+ * full path and the incremental path (`refreshStructuralIncremental`) share the
+ * one resolution implementation.
+ */
+export function extractStructuralGraph(
+  repoRoot: string,
+  relFiles: string[],
+  readFile: (abs: string) => string,
+): StructuralGraph {
+  return assembleStructuralGraph(repoRoot, buildBundles(repoRoot, relFiles, readFile));
+}
+
+// ---------------------------------------------------------------------------
+// Incremental git-aware refresh (G4)
+// ---------------------------------------------------------------------------
+
+/** Serialize bundles into the persisted cache (rel-sorted, deterministic). */
+export function bundlesToCache(bundles: FileBundle[]): StructuralCache {
+  const files: Record<string, FileBundle> = {};
+  for (const b of [...bundles].sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0))) {
+    files[b.rel] = b;
+  }
+  return { schema: "guild.structural_cache.v1", files };
+}
+
+export interface RefreshStats {
+  mode: "incremental";
+  /** previously-cached files whose content changed → re-extracted */
+  reExtracted: string[];
+  /** unchanged files served from cache (never re-read/re-parsed) */
+  reused: string[];
+  /** files absent from the cache → freshly extracted */
+  newFiles: string[];
+  /** files in the cache but no longer in the tree → bundle dropped */
+  deleted: string[];
+}
+
+/**
+ * Incremental structural refresh: diff the current file set against a prior
+ * bundle cache (by SHA-256 content hash), reuse cached bundles for unchanged
+ * files, re-extract only changed/new files, drop deleted files, then re-assemble
+ * the WHOLE structural graph. The cascade is implicit: a deleted/changed file's
+ * nodes & edges vanish from the new assemble, and cross-file edges owned by
+ * unchanged files are re-resolved against the new symbol tables — so the result
+ * is byte-identical to a full rebuild of the final tree.
+ */
+export function refreshStructuralIncremental(
+  repoRoot: string,
+  relFiles: string[],
+  readFile: (abs: string) => string,
+  prior: StructuralCache,
+): { structural: StructuralGraph; bundles: FileBundle[]; stats: RefreshStats } {
+  const priorFiles = prior.files ?? {};
+  const stats: RefreshStats = { mode: "incremental", reExtracted: [], reused: [], newFiles: [], deleted: [] };
+
+  const currentSet = new Set(relFiles);
+  for (const rel of Object.keys(priorFiles)) {
+    if (!currentSet.has(rel)) stats.deleted.push(rel);
+  }
+  stats.deleted.sort();
+
+  const bundles: FileBundle[] = [];
+  for (const rel of [...relFiles].sort()) {
+    let content: string | null;
+    try {
+      content = readFile(`${repoRoot}/${rel}`);
+    } catch {
+      content = null;
+    }
+    const hash = content === null ? "" : contentHash(content);
+    const cached = priorFiles[rel];
+    if (cached && hash !== "" && cached.contentHash === hash) {
+      bundles.push(cached);
+      stats.reused.push(rel);
+    } else {
+      bundles.push(makeBundle(rel, content));
+      if (cached) stats.reExtracted.push(rel);
+      else stats.newFiles.push(rel);
+    }
+  }
+
+  const structural = assembleStructuralGraph(repoRoot, bundles);
+  return { structural, bundles, stats };
+}
+
+/**
+ * Strip THIS extractor's structural items from an existing graph so a freshly
+ * assembled structural subgraph can be spliced in to yield a graph identical to
+ * a clean full rebuild + that same LLM tier.
+ *
+ *  - Pure structural nodes/edges (`extractor === STRUCTURAL_EXTRACTOR`) are
+ *    removed wholesale (they are fully replaced by the new assemble).
+ *  - Collided LLM-tier nodes (carry additive `structural: true` from FIX G1-5)
+ *    are KEPT but reverted to pure-LLM: the additive `structural` flag and the
+ *    structural-owned `sp` profile are dropped, so the re-merge re-applies them
+ *    only if the symbol still exists. NEVER deletes a foreign (LLM/other-
+ *    producer) node or edge.
+ *
+ * Assumption (documented): `sp` is owned exclusively by the structural extractor
+ * (LLM nodes do not author `sp`); a node carrying `structural: true` had its `sp`
+ * stamped by FIX G1-5, so reverting it is loss-free.
+ */
+export function stripStructural(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+): { nodes: GraphNode[]; edges: GraphEdge[] } {
+  const keptNodes: GraphNode[] = [];
+  for (const n of nodes) {
+    const rec = n as Record<string, unknown>;
+    if (rec.extractor === STRUCTURAL_EXTRACTOR) continue; // pure structural — replaced wholesale
+    if (rec.structural === true) {
+      const copy = { ...n } as Record<string, unknown>;
+      delete copy.structural;
+      delete copy.sp;
+      keptNodes.push(copy as unknown as GraphNode);
+    } else {
+      keptNodes.push(n);
+    }
+  }
+  const keptEdges = edges.filter((e) => (e as Record<string, unknown>).extractor !== STRUCTURAL_EXTRACTOR);
+  return { nodes: keptNodes, edges: keptEdges };
 }
 
 // ---------------------------------------------------------------------------

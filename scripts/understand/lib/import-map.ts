@@ -76,7 +76,7 @@ function resolveJsFile(target: string): string | null {
   return null;
 }
 
-function loadTsAliases(repoRoot: string): Array<{ prefix: string; targets: string[] }> {
+export function loadTsAliases(repoRoot: string): Array<{ prefix: string; targets: string[] }> {
   const tsconfigPath = path.join(repoRoot, "tsconfig.json");
   try {
     const raw = fs
@@ -140,6 +140,43 @@ export function buildImportMap(
     }
   }
   return edges;
+}
+
+/**
+ * Resolve ONE import specifier from a single importer to a repo-relative target,
+ * sharing the exact resolution path `buildImportMap` uses. Exposed so the
+ * incremental structural refresh (G4) can re-resolve a cached file's import
+ * specifiers against the CURRENT file set + working tree WITHOUT re-reading or
+ * re-parsing that file's body — the result is byte-identical to what
+ * buildImportMap would emit for the same specifier.
+ *
+ * `known` must be the current repo-relative file set (POSIX-separated); `aliases`
+ * the tsconfig path aliases from `loadTsAliases(repoRoot)`. Returns null for
+ * external/unresolvable specifiers or self-imports (matching `pushEdge`).
+ */
+export function resolveImportSpec(
+  repoRoot: string,
+  importerRel: string,
+  spec: string,
+  known: Set<string>,
+  aliases: Array<{ prefix: string; targets: string[] }>,
+): ImportEdge | null {
+  const lang = detectLanguage(importerRel);
+  const from = importerRel.replace(/\\/g, "/");
+  if (lang === "python") {
+    const to = resolvePython(importerRel, spec, known);
+    if (!to || to === from) return null;
+    return { from, to, kind: "static" };
+  }
+  if (lang === "typescript" || lang === "javascript") {
+    const abs = path.join(repoRoot, importerRel);
+    const r = resolveJs(abs, spec, repoRoot, aliases);
+    if (!r) return null;
+    const to = path.relative(repoRoot, r.abs).replace(/\\/g, "/");
+    if (!known.has(to) || to === from) return null;
+    return { from, to, kind: r.kind };
+  }
+  return null;
 }
 
 function resolvePython(

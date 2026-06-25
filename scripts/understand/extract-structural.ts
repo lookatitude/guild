@@ -14,8 +14,17 @@
  * non-deterministic facts (wall-clock, generated_at) go to a sidecar
  * `<out>.meta.json`, never into the graph.
  *
+ * Incremental refresh (LANE G4): `--incremental` diffs the working tree against
+ * the per-file SHA-256 fingerprints stored in the bundle cache
+ * (`<out>.structural-cache.json`) from the last run, re-extracts ONLY changed/new
+ * files, drops deleted files, and re-assembles. The global cross-file resolution
+ * still runs over the whole (cached + fresh) bundle set, so the output is
+ * byte-identical to a full rebuild. No watcher/daemon — invocation-driven, run on
+ * demand and by learn-diff. First run (no cache) falls back to a full build and
+ * seeds the cache; subsequent `--incremental` runs reuse it.
+ *
  * Usage:
- *   npx tsx extract-structural.ts --cwd <root> [--out <path>] [--print]
+ *   npx tsx extract-structural.ts --cwd <root> [--out <path>] [--incremental] [--print]
  * Exit: 0 ok · 1 write/error.
  */
 
@@ -24,9 +33,17 @@ import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA }
 import { headSha } from "./lib/git";
 import { walkRepo } from "./lib/walk";
 import {
-  extractStructuralGraph,
+  assembleStructuralGraph,
+  buildBundles,
+  bundlesToCache,
   mergeStructuralInto,
+  refreshStructuralIncremental,
+  stripStructural,
   structuralSubset,
+  type FileBundle,
+  type RefreshStats,
+  type StructuralCache,
+  type StructuralGraph,
 } from "./lib/structural";
 import { validateGraph } from "./lib/schema";
 import type { GraphEdge, GraphNode } from "./lib/schema";
@@ -50,23 +67,51 @@ function main(): void {
   const gp = guildPaths(cwd);
   const repoRoot = gp.repoRoot;
   const outPath = parseFlag(argv, "out") ?? gp.knowledgeGraph;
+  const cachePath = `${outPath}.structural-cache.json`;
+  const incremental = hasFlag(argv, "incremental");
   const started = Date.now();
 
   // File list: prefer the deterministic scan's inventory, else a fresh walk.
   const cm = readJson<{ files: { path: string }[] }>(gp.codebaseMap);
   const relFiles = cm?.files?.map((f) => f.path) ?? walkRepo(repoRoot).files;
+  const readFile = (abs: string) => fs.readFileSync(abs, "utf8");
 
-  const structural = extractStructuralGraph(
-    repoRoot,
-    relFiles,
-    (abs) => fs.readFileSync(abs, "utf8"),
-  );
+  const existing = readJson<ExistingGraph>(outPath);
+
+  // ── Extract: incremental (reuse cache) or full (rebuild + seed cache) ───────
+  let structural: StructuralGraph;
+  let bundles: FileBundle[];
+  let stats: RefreshStats | { mode: "full" } = { mode: "full" };
+  // The merge base: a full run unions structural into the existing graph as-is
+  // (preserves the long-standing full-path behavior). An incremental run first
+  // STRIPS this extractor's prior structural items so the freshly assembled
+  // subgraph replaces them wholesale (cascade-delete of changed/deleted files),
+  // while every foreign (LLM-tier) node/edge is preserved.
+  let mergeNodes = existing?.nodes ?? [];
+  let mergeEdges = existing?.edges ?? [];
+
+  const prior = incremental ? readJson<StructuralCache>(cachePath) : null;
+  if (incremental && prior && prior.files && Object.keys(prior.files).length > 0) {
+    const r = refreshStructuralIncremental(repoRoot, relFiles, readFile, prior);
+    structural = r.structural;
+    bundles = r.bundles;
+    stats = r.stats;
+    const stripped = stripStructural(mergeNodes, mergeEdges);
+    mergeNodes = stripped.nodes;
+    mergeEdges = stripped.edges;
+  } else {
+    if (incremental) {
+      process.stderr.write(
+        `[extract-structural] --incremental: no usable cache at ` +
+        `${path.relative(repoRoot, cachePath)} → full rebuild (seeding cache)\n`,
+      );
+    }
+    bundles = buildBundles(repoRoot, relFiles, readFile);
+    structural = assembleStructuralGraph(repoRoot, bundles);
+  }
 
   // Merge into the existing graph (if any) without clobbering LLM-tier nodes.
-  const existing = readJson<ExistingGraph>(outPath);
-  const existingNodes = existing?.nodes ?? [];
-  const existingEdges = existing?.edges ?? [];
-  const merged = mergeStructuralInto(existingNodes, existingEdges, structural);
+  const merged = mergeStructuralInto(mergeNodes, mergeEdges, structural);
 
   const out: Record<string, unknown> = {
     version: existing?.version ?? SCHEMA.knowledgeGraph,
@@ -112,9 +157,26 @@ function main(): void {
     process.exit(1);
   }
 
+  // Bundle cache — the reuse baseline + per-file SHA-256 fingerprints for the
+  // NEXT `--incremental` run. Deterministic (no timestamps/commit); not the
+  // graph and never validated — purely a metadata sidecar. Best-effort: a failed
+  // cache write only forfeits the next incremental speedup, never corrupts state.
+  try {
+    writeJson(cachePath, bundlesToCache(bundles));
+  } catch { /* cache best-effort */ }
+
   // Sidecar — non-deterministic facts ONLY (never in the graph).
   const elapsedMs = Date.now() - started;
   const subset = structuralSubset(out as { nodes: GraphNode[]; edges: GraphEdge[] });
+  const refresh =
+    stats.mode === "incremental"
+      ? {
+          reextracted_file_count: stats.reExtracted.length,
+          reused_file_count: stats.reused.length,
+          new_file_count: stats.newFiles.length,
+          deleted_file_count: stats.deleted.length,
+        }
+      : {};
   const sidecar = {
     schema: "guild.structural_extraction_meta.v1",
     generated_at: new Date(started).toISOString(),
@@ -123,6 +185,8 @@ function main(): void {
     file_count: relFiles.length,
     structural_node_count: subset.nodes.length,
     structural_edge_count: subset.edges.length,
+    refresh_mode: stats.mode,
+    ...refresh,
     model_calls: 0,
     network_calls: 0,
   };
@@ -130,9 +194,14 @@ function main(): void {
     writeJson(`${outPath}.meta.json`, sidecar);
   } catch { /* sidecar best-effort */ }
 
+  const modeNote =
+    stats.mode === "incremental"
+      ? `incremental (${stats.reExtracted.length} changed, ${stats.newFiles.length} new, ` +
+        `${stats.deleted.length} deleted, ${stats.reused.length} reused)`
+      : "full";
   process.stderr.write(
     `[extract-structural] ${subset.nodes.length} structural nodes · ` +
-    `${subset.edges.length} structural edges · ${relFiles.length} files · ` +
+    `${subset.edges.length} structural edges · ${relFiles.length} files · ${modeNote} · ` +
     `${elapsedMs}ms · 0 model calls → ${path.relative(repoRoot, outPath)}\n`,
   );
   if (hasFlag(argv, "print")) process.stdout.write(JSON.stringify(out, null, 2) + "\n");
