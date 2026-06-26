@@ -97,19 +97,29 @@ export interface GuildStateResult {
  * Detect Guild install state + workspace topology from `cwd`. Pure, read-only,
  * crash-free (all fs/JSON access wrapped; malformed → installed_needs_repair).
  *
+ * Detection and the resolver MUST agree on what "a workspace root" is. L2 implements
+ * BOTH against ONE shared `parseWorkspaceManifest(path)` helper (extract from the
+ * resolver's `discoverWorkspace`, settings-reader.ts) so the two never diverge; the
+ * rules below mirror that helper's CURRENT behavior exactly (parse-error vs is_workspace).
+ *
  * Algorithm (L2 implements; pinned here as the contract):
- *  1. Discover the nearest workspace root: walk up INCLUSIVE of cwd for
- *     `.guild/workspace.json`. For a workspace.json AT cwd, presence COMMITS to the
- *     workspace-root interpretation — it is NEVER reinterpreted as single_project:
- *       - unparseable JSON  → installed_needs_repair{malformed_workspace_json, path}.
- *       - parseable but INVALID SHAPE (missing `is_workspace:true`, wrong/extra-typed
- *         required fields per guild.workspace.v1) → installed_needs_repair{
- *         malformed_workspace_json, path}. (Closes the V1 silent-fallback hole — a
- *         present-but-invalid workspace.json must NOT fall through to step 4.)
- *     A malformed/invalid workspace.json in an ANCESTOR (not at cwd) is skipped
- *     (continue up) — matches the resolver's F4 rule.
- *  2. cwd has a VALID `.guild/workspace.json` (is_workspace:true + shape ok) →
- *     workspace_root; verify requiredEntriesFor("workspace_root"); first missing →
+ *  1a. cwd `.guild/workspace.json` is the INSTALL/REPAIR target — presence COMMITS to
+ *     the workspace-root interpretation; it is NEVER reinterpreted as single_project:
+ *       - JSON parse error            → installed_needs_repair{malformed_workspace_json, path}.
+ *       - parsed, `is_workspace` !== true (false or missing) → installed_needs_repair{
+ *         malformed_workspace_json, path}. (Closes the V1 hole — a present-but-invalid
+ *         workspace.json at cwd must NOT fall through to step 4/single_project.)
+ *       - parsed, `is_workspace === true` → go to step 2.
+ *     (Deeper field validation beyond `is_workspace` is whatever the shared
+ *     `parseWorkspaceManifest` enforces — keep cwd and ancestor on the SAME validator;
+ *     do not add cwd-only shape checks the resolver won't also apply.)
+ *  1b. ANCESTOR walk (EXCLUSIVE of cwd) — mirror the resolver's `discoverWorkspace`:
+ *       - JSON parse error            → SKIP, continue up (F4).
+ *       - parsed, `is_workspace === true`  → ancestor workspace root → cwd is workspace_child.
+ *       - parsed, `is_workspace` !== true  → STOP the walk (deliberate opt-out; returns
+ *         no ancestor) — cwd is NOT a child; fall through to step 4/5.
+ *  2. cwd has a VALID `.guild/workspace.json` (is_workspace === true) → workspace_root;
+ *     verify requiredEntriesFor("workspace_root"); first missing →
  *     needs_repair{missing_required_manifest_entry, path}.
  *  3. cwd is under an ancestor workspace root → workspace_child; verify
  *     requiredEntriesFor("workspace_child"); first missing → needs_repair.
