@@ -10,7 +10,10 @@
  *   §E12 persist — planConfigUiEdit gates on the metadata's confirmation-strength and
  *     scope_support and performs NO write; the `config ui set` CLI routes the write through
  *     the plugin config API (validate-before-write, never-clobber) and reloads.
- *   V10 — the surface module does NO file mutation (no `fs` import / use).
+ *   V10 boundary — `config ui set` is dispatched with a SPIED config-write seam, proving it
+ *     (a) invokes the write API exactly once with the resolved scope/key/value and (b) the
+ *     adapter path mutates no fs itself; a direct-fs rewire COUNTEREXAMPLE proves the assertions
+ *     are non-vacuous. Plus validate-before-persist and reload-failure→NONZERO (V12).
  */
 
 import { spawnSync } from "child_process";
@@ -29,6 +32,7 @@ import {
   CONFIG_UI_GROUP_ORDER,
 } from "../lib/config-ui-surface";
 import type { ConfigSource } from "../lib/config-render";
+import { cmdUiSet, type UiSetDeps } from "../config-cmd";
 
 const NOW = "2026-06-26T00:00:00Z";
 
@@ -220,11 +224,109 @@ describe("planConfigUiEdit — §E12 confirmation gate (no mutation)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// V10 — the surface module performs NO file mutation
+// V10 — `config ui set` routes its write THROUGH the config API; the adapter
+// mutates no fs of its own. This is the real boundary proof: it injects/spies the
+// config write seam and asserts (a) it is invoked exactly once with the resolved
+// scope/key/value, and (b) the adapter/command path performs NO direct fs write.
+// A COUNTEREXAMPLE proves the assertions are non-vacuous: a direct-fs rewire is caught.
 // ---------------------------------------------------------------------------
 
-describe("V10 — config-ui-surface owns no writes", () => {
-  it("the module source imports no fs / writeFile surface", () => {
+describe("V10 — `config ui set` routes through the config API (boundary proof)", () => {
+  /** A reload seam that returns a synthetic resolved config (no I/O) — keeps the unit pure. */
+  function fakeReload(value: unknown): UiSetDeps["reload"] {
+    return () => ({ config: { rigor: value }, sources: { rigor: "project" } });
+  }
+
+  it("invokes the config write API EXACTLY once with the resolved scope/key/value, and the adapter writes no fs itself", () => {
+    const dir = mkProject({});
+    // Spy fs.writeFileSync AFTER project scaffolding so only adapter-path writes are observed.
+    const fsWriteSpy = jest.spyOn(fs, "writeFileSync");
+    const persistSpy = jest.fn<number, [string, string, "workspace" | "project" | "local", string]>(() => 0);
+
+    const rc = cmdUiSet(dir, "rigor", "deep", "project", undefined, undefined, {
+      persist: persistSpy,
+      reload: fakeReload("deep"),
+    });
+
+    expect(rc).toBe(0);
+    // (a) the config write API was invoked exactly once with the resolved scope/key/value
+    expect(persistSpy).toHaveBeenCalledTimes(1);
+    expect(persistSpy).toHaveBeenCalledWith("rigor", "deep", "project", dir);
+    // (b) the adapter/command path performed NO direct fs mutation — the seam owns every write
+    expect(fsWriteSpy).not.toHaveBeenCalled();
+
+    fsWriteSpy.mockRestore();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("COUNTEREXAMPLE — a direct-fs `ui set` rewire FAILS the same boundary assertions (proof is non-vacuous)", () => {
+    const dir = mkProject({});
+    const fsWriteSpy = jest.spyOn(fs, "writeFileSync");
+    // A persist seam standing in for a REWIRED `ui set` that bypasses the config API and writes
+    // settings.json DIRECTLY — the exact V10 anti-pattern. It is NOT the routed config API.
+    const directFsRewire = jest.fn<number, [string, string, "workspace" | "project" | "local", string]>((k, v, _s, c) => {
+      fs.writeFileSync(
+        path.join(c, ".guild", "settings.json"),
+        JSON.stringify({ [k]: v }, null, 2)
+      );
+      return 0;
+    });
+
+    cmdUiSet(dir, "rigor", "deep", "project", undefined, undefined, {
+      persist: directFsRewire,
+      reload: fakeReload("deep"),
+    });
+
+    // The rewire DID mutate fs directly — so the "(b) no direct fs mutation" assertion that the
+    // real routed path PASSES would FAIL here. Assert that failure explicitly: the boundary test
+    // genuinely distinguishes routed-through-API from a direct-fs write (it is not vacuous).
+    expect(fsWriteSpy).toHaveBeenCalled();
+    expect(() => expect(fsWriteSpy).not.toHaveBeenCalled()).toThrow();
+
+    fsWriteSpy.mockRestore();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("VALIDATE-BEFORE-PERSIST — an invalid candidate is rejected BEFORE the write API is called (no half-applied state)", () => {
+    const dir = mkProject({});
+    const persistSpy = jest.fn<number, [string, string, "workspace" | "project" | "local", string]>(() => 0);
+
+    const rc = cmdUiSet(dir, "rigor", "bogus", "project", undefined, undefined, {
+      persist: persistSpy,
+      reload: fakeReload("bogus"),
+    });
+
+    expect(rc).toBe(1); // rejected by validate-before-persist
+    expect(persistSpy).not.toHaveBeenCalled(); // the write API was NEVER reached
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("RELOAD FAILURE (V12) — a post-write reload error returns NONZERO, never a swallowed warn", () => {
+    const dir = mkProject({});
+    const persistSpy = jest.fn<number, [string, string, "workspace" | "project" | "local", string]>(() => 0);
+    const writes: string[] = [];
+    const stdoutSpy = jest
+      .spyOn(process.stdout, "write")
+      .mockImplementation((s: string | Uint8Array) => {
+        writes.push(String(s));
+        return true;
+      });
+
+    const rc = cmdUiSet(dir, "rigor", "deep", "project", undefined, undefined, {
+      persist: persistSpy,
+      reload: () => {
+        throw new Error("settings file vanished mid-reload");
+      },
+    });
+
+    stdoutSpy.mockRestore();
+    expect(persistSpy).toHaveBeenCalledTimes(1); // the write DID land
+    expect(rc).toBe(1); // …but the swallowed reload failure now surfaces as NONZERO
+    expect(writes.join("")).toMatch(/post-write reload failed/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("the surface module imports no fs / writeFile surface (secondary static check)", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "..", "lib", "config-ui-surface.ts"), "utf8");
     expect(src).not.toMatch(/from\s+["']fs["']/);
     expect(src).not.toMatch(/writeFileSync|mkdirSync|appendFileSync/);

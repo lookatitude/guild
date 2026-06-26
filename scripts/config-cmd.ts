@@ -1657,22 +1657,63 @@ function cmdUiSources(cwd: string, uiHost: string | undefined, group: string | u
 }
 
 /**
+ * The plugin config WRITE API the `ui set` adapter delegates ALL persistence to (V10).
+ * Default = `cmdSet` (validate-before-write, never-clobber read-modify-write, scoped file).
+ * Injectable so the V10 boundary test can SPY the route and prove the adapter performs no
+ * `fs` write of its own — and that a direct-fs rewire is caught (the counterexample).
+ */
+export type ConfigWriteApi = (
+  key: string,
+  rawValue: string,
+  scope: "workspace" | "project" | "local",
+  cwd: string
+) => number;
+
+/** Reload the resolved config after a successful write. Default = a fresh `resolveSettings`. */
+export type ConfigReload = (cwd: string) => {
+  config: Record<string, unknown>;
+  sources: Record<string, string>;
+};
+
+/** Injectable seams for {@link cmdUiSet} — default to the real config API + resolver. */
+export interface UiSetDeps {
+  readonly persist: ConfigWriteApi;
+  readonly reload: ConfigReload;
+}
+
+const DEFAULT_UI_SET_DEPS: UiSetDeps = {
+  persist: (key, rawValue, scope, cwd) => cmdSet(key, rawValue, scope, cwd),
+  reload: (cwd) => {
+    const { config, sources } = resolveSettings({ cwd });
+    return {
+      config: config as unknown as Record<string, unknown>,
+      sources: sources as Record<string, string>,
+    };
+  },
+};
+
+/**
  * `config ui set <key> <value> --scope <s> [--confirm <strength>]` — the §E12 persistence path.
  *
  * The surface (config-ui-surface.ts) PLANS the edit: it validates the key + scope and computes
  * the confirmation the metadata DECLARES (advanced/danger/strongest keys require an explicit
- * `--confirm`). The WRITE itself is delegated to `cmdSet` — the plugin config API
- * (validate-before-write, never-clobber read-modify-write, scoped file). The UI layer does NO
- * `fs` write of its own (V10). On success it IMMEDIATELY RELOADS via a fresh `resolveSettings`
- * and prints the key's new value + winning layer. App/connector hosts report `blocked`.
+ * `--confirm`). The WRITE itself is delegated to the plugin config API (`deps.persist`, default
+ * `cmdSet`: validate-before-write, never-clobber read-modify-write, scoped file). The UI adapter
+ * does NO `fs` write of its own (V10) — the injectable seam makes that boundary provable.
+ *
+ * Sequence: PLAN → VALIDATE-BEFORE-PERSIST (reject an invalid candidate before any write, so
+ * there is no half-applied state) → PERSIST via the config API → IMMEDIATE RELOAD. A post-write
+ * reload failure is a HARD error: it returns NONZERO (V12), never a swallowed WARN. App/connector
+ * hosts report `blocked`.
  */
-function cmdUiSet(
+export function cmdUiSet(
   cwd: string,
   key: string,
   rawValue: string,
   scope: "workspace" | "project" | "local",
   uiHost: string | undefined,
-  uiConfirm: string | undefined
+  uiConfirm: string | undefined,
+  deps: UiSetDeps = DEFAULT_UI_SET_DEPS
 ): number {
   const hostRes = resolveUiHost(uiHost);
   if ("error" in hostRes) {
@@ -1706,22 +1747,43 @@ function cmdUiSet(
     return 1;
   }
 
-  // 2. PERSIST through the plugin config API (cmdSet: validate-before-write, never-clobber).
-  const setRc = cmdSet(key, rawValue, scope, cwd);
+  // 2. VALIDATE-BEFORE-PERSIST — reject an invalid candidate edit BEFORE any write, so an
+  // invalid value can never leave a half-applied state. (The config API re-validates too;
+  // this surfaces the rejection at the adapter boundary and keeps the write strictly gated.)
+  const keyErr = validateKeyPath(key);
+  if (keyErr) {
+    process.stdout.write(`[config-cmd] ERROR: ${keyErr}\n`);
+    return 1;
+  }
+  const valErr = validateValue(key, rawValue);
+  if (valErr) {
+    process.stdout.write(`[config-cmd] ERROR: ${valErr}\n`);
+    return 1;
+  }
+
+  // 3. PERSIST through the plugin config API (validate-before-write, never-clobber). The adapter
+  // itself writes NOTHING — every byte of mutation goes through this delegated seam (V10).
+  const setRc = deps.persist(key, rawValue, scope, cwd);
   if (setRc !== 0) return setRc;
 
-  // 3. IMMEDIATE RELOAD — fresh resolveSettings; show the key's new value + winning layer.
+  // 4. IMMEDIATE RELOAD (V12) — a post-write reload failure is a HARD error, not a swallowed
+  // WARN: the write landed but the config could not be re-resolved, so return NONZERO and say so.
+  let reloaded: { config: Record<string, unknown>; sources: Record<string, string> };
   try {
-    const { config, sources } = resolveSettings({ cwd });
-    const newVal = getByPathLocal(config as unknown as Record<string, unknown>, key);
-    const layer = nearestSource(key, sources as Record<string, string>);
-    process.stdout.write(
-      `[config-cmd] ui set — reloaded: ${key} = ${JSON.stringify(newVal)}  [${layer}]\n` +
-        `  confirmation: ${plan.required_confirmation}${plan.confirmation_required ? " (satisfied)" : " (implicit — standard settings-write ask)"}\n`
-    );
+    reloaded = deps.reload(cwd);
   } catch (e) {
-    process.stdout.write(`[config-cmd] WARN: write succeeded but reload failed — ${(e as Error).message}\n`);
+    process.stdout.write(
+      `[config-cmd] ERROR: write succeeded but the post-write reload failed — ${(e as Error).message}\n` +
+        `  the on-disk write landed but the config could not be re-resolved; run \`config show\` to inspect\n`
+    );
+    return 1;
   }
+  const newVal = getByPathLocal(reloaded.config, key);
+  const layer = nearestSource(key, reloaded.sources);
+  process.stdout.write(
+    `[config-cmd] ui set — reloaded: ${key} = ${JSON.stringify(newVal)}  [${layer}]\n` +
+      `  confirmation: ${plan.required_confirmation}${plan.confirmation_required ? " (satisfied)" : " (implicit — standard settings-write ask)"}\n`
+  );
   return 0;
 }
 

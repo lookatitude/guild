@@ -24,8 +24,12 @@
  * `buildHostConfigUiSurface` returns `blocked: true` (mirrors `hostOpenPreflight`'s
  * `action:"blocked"` for a non-`CLI_NATIVE_HOSTS` id) — never a false-native render.
  *
- * CONTRACT: PURE. No I/O, no clock (the caller supplies `renderedAt`). Never throws.
- * Module: config. Owned by command-builder (L4).
+ * CONTRACT: PURE. No I/O, no clock (the caller supplies `renderedAt`). Never throws —
+ * the two throw-capable steps are guarded: `displayValue` falls back to
+ * {@link UNRENDERABLE_VALUE} on an unserializable value, and a throwing embedded
+ * `renderHostConfig` is caught and surfaced structurally (`native_render:null` +
+ * `render_error`) instead of propagating. Hostile input yields a degraded surface, never
+ * an exception. Module: config. Owned by command-builder (L4).
  */
 
 import {
@@ -142,8 +146,15 @@ export interface HostConfigUiSurface {
    * The reused `config-render.ts` host-native config projection (models / permission
    * decisions / role pins / fail-closed redactions). Null when blocked. This is the
    * SAME object `config show --render` emits — the surface never re-derives it.
+   * Null when blocked OR when the embedded render threw (see `render_error`).
    */
   readonly native_render: HostConfigRender | null;
+  /**
+   * Present (and `native_render` is null) ONLY when the embedded `renderHostConfig`
+   * threw on hostile input — a STRUCTURED error surface instead of a thrown exception,
+   * so the module honors its "never throws" contract. Absent on success and when blocked.
+   */
+  readonly render_error?: string;
   readonly _rendered_at: string;
 }
 
@@ -183,13 +194,34 @@ export function sourceForKey(
   return "builtin";
 }
 
+/**
+ * The placeholder shown when a value cannot be serialized (circular ref, BigInt,
+ * a throwing `toJSON`/getter). Keeps {@link displayValue} total — it NEVER throws,
+ * so the surface contract ("Never throws") holds even on hostile input.
+ */
+export const UNRENDERABLE_VALUE = "(unrenderable)" as const;
+
 /** Render a resolved value for display (objects/arrays JSON-compacted; null/undefined explicit). */
 function displayValue(v: unknown): string {
   if (v === undefined) return "(unset)";
   if (v === null) return "null";
   if (typeof v === "string") return v;
-  if (typeof v === "object") return JSON.stringify(v);
-  return String(v);
+  if (typeof v === "object") {
+    // JSON.stringify throws on circular refs / BigInt / a throwing toJSON — guard it
+    // so a single hostile value can never blow up the whole render (V10 purity claim).
+    try {
+      const json = JSON.stringify(v);
+      // stringify returns undefined for a value that serializes to nothing (e.g. a function).
+      return json === undefined ? UNRENDERABLE_VALUE : json;
+    } catch {
+      return UNRENDERABLE_VALUE;
+    }
+  }
+  try {
+    return String(v);
+  } catch {
+    return UNRENDERABLE_VALUE;
+  }
 }
 
 /** Is the key visible to this host given its host_visibility allow-list? */
@@ -319,17 +351,27 @@ export function buildHostConfigUiSurface(input: BuildSurfaceInput): HostConfigUi
   }
 
   // Reuse config-render.ts verbatim for the host-native config projection (Surface "config").
-  const native_render = renderHostConfig(host as HostId, {
-    config,
-    permissions,
-    sources,
-    options: {
-      renderedAt,
-      sourceVersion: input.renderOptions?.sourceVersion,
-      redactionPatterns: input.renderOptions?.redactionPatterns,
-      failMode: input.renderOptions?.failMode,
-    },
-  });
+  // Guard it: a hostile config could make the embedded render throw — surface that as a
+  // STRUCTURED error (native_render:null + render_error) rather than throwing out of a module
+  // whose contract is "never throws".
+  let native_render: HostConfigRender | null;
+  let render_error: string | undefined;
+  try {
+    native_render = renderHostConfig(host as HostId, {
+      config,
+      permissions,
+      sources,
+      options: {
+        renderedAt,
+        sourceVersion: input.renderOptions?.sourceVersion,
+        redactionPatterns: input.renderOptions?.redactionPatterns,
+        failMode: input.renderOptions?.failMode,
+      },
+    });
+  } catch (e) {
+    native_render = null;
+    render_error = e instanceof Error ? e.message : String(e);
+  }
 
   return {
     schema_version: "guild.host_config_ui.v1",
@@ -342,6 +384,7 @@ export function buildHostConfigUiSurface(input: BuildSurfaceInput): HostConfigUi
     groups,
     key_count: keyCount,
     native_render,
+    ...(render_error !== undefined ? { render_error } : {}),
     _rendered_at: renderedAt,
   };
 }
