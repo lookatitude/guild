@@ -350,7 +350,8 @@ export interface WorkspaceSuggestion {
   readonly root_kind: RootKind;
   /** Recommended INIT mode (see {@link InitMode}). */
   readonly recommended_mode: InitMode;
-  /** Absolute paths of immediate child directories that are their own git repos. */
+  /** Absolute paths of descendant directories (immediate OR nested, depth-bounded;
+   *  not descended into once a `.git` is found) that are their own git repos. */
   readonly child_git_repos: readonly string[];
   /** The init branches an adapter must offer (always includes "skip"). */
   readonly branches: readonly ("single_project" | "multiple_repo_workspace" | "skip")[];
