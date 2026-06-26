@@ -7,7 +7,7 @@
  *      backlog note + the install recommendation rather than failing.
  *   2. LAYERING (STRICT): scripts/lib/shared/ is the dependency FLOOR — modules there
  *      may import only from shared/, node builtins, or external packages. They MUST NOT
- *      runtime-import upward (../recall, ../../understand/lib/schema, ../../config-cmd …).
+ *      runtime-import upward (../recall, ../../learn/lib/schema, ../../config-cmd …).
  *
  *      EXCEPTION — type-only imports. `import type { … } from "<upward>"` and
  *      `export type { … } from "<upward>"` carry ZERO runtime coupling (erased by the
@@ -15,7 +15,7 @@
  *      A RUNTIME (value) upward import is a strict violation → pass:false.
  *
  *      Compatibility shims are allowed to re-export implementations from src/modules
- *      when they contain no local logic. A runtime `import { x } from "../../understand/…"`
+ *      when they contain no local logic. A runtime `import { x } from "../../learn/…"`
  *      MUST still fail.
  *
  * Anti-vacuity: `--prove` runs the pure layering detector against (a) a synthetic shared
@@ -186,7 +186,7 @@ function prove(): void {
   //     graph-scoring.ts case.
   const typeOnly = detectUpwardImports(
     "scripts/lib/shared/graph-scoring.ts",
-    'import type { GraphNode, GraphEdge } from "../../understand/lib/schema";\n',
+    'import type { GraphNode, GraphEdge } from "../../learn/lib/schema";\n',
   );
   proveAssert(
     typeOnly.length === 0,
@@ -209,29 +209,29 @@ function prove(): void {
   //      is the keyword, not the path).
   const valueSamePath = detectUpwardImports(
     "scripts/lib/shared/graph-scoring.ts",
-    'import { validateGraph } from "../../understand/lib/schema";\n',
+    'import { validateGraph } from "../../learn/lib/schema";\n',
   );
   proveAssert(
     valueSamePath.length === 1,
-    "PLANTED CONTROL: a RUNTIME value import of the SAME upward path (../../understand/lib/schema) TRIPS the rail",
+    "PLANTED CONTROL: a RUNTIME value import of the SAME upward path (../../learn/lib/schema) TRIPS the rail",
   );
 
   // (d) a `export type { … } from` upward re-export → allowed
   const exportType = detectUpwardImports(
     "scripts/lib/shared/graph-scoring.ts",
-    'export type { GraphNode } from "../../understand/lib/schema";\n',
+    'export type { GraphNode } from "../../learn/lib/schema";\n',
   );
   proveAssert(exportType.length === 0, "layering detector ALLOWS `export type {…}` upward re-export");
 
   // (e) inline-typed clause `{ type A, type B }` → allowed; mixed `{ type A, b }` → forbidden
   const inlineType = detectUpwardImports(
     "scripts/lib/shared/graph-scoring.ts",
-    'import { type GraphNode, type GraphEdge } from "../../understand/lib/schema";\n',
+    'import { type GraphNode, type GraphEdge } from "../../learn/lib/schema";\n',
   );
   proveAssert(inlineType.length === 0, "layering detector ALLOWS a fully inline-typed clause `{ type A, type B }`");
   const mixed = detectUpwardImports(
     "scripts/lib/shared/graph-scoring.ts",
-    'import { type GraphNode, validateGraph } from "../../understand/lib/schema";\n',
+    'import { type GraphNode, validateGraph } from "../../learn/lib/schema";\n',
   );
   proveAssert(mixed.length === 1, "layering detector FLAGS a MIXED clause `{ type A, runtimeB }` (one runtime binding leaks)");
 }

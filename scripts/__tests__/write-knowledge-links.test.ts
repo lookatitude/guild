@@ -19,7 +19,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import type { GraphNode, GraphEdge } from "../understand/lib/schema";
+import type { GraphNode, GraphEdge } from "../learn/lib/schema";
 
 // The module under test — does NOT exist yet. This import fails until
 // write-knowledge-links.ts is written (the expected RED state).
@@ -33,7 +33,7 @@ import {
   type WriteKnowledgeLinksOptions,
   type WriteKnowledgeLinksResult,
   type KnowledgeLinksDoc,
-} from "../understand/write-knowledge-links";
+} from "../learn/write-knowledge-links";
 
 // ---------------------------------------------------------------------------
 // Helpers

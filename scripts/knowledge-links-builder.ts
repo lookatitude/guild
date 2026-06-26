@@ -818,7 +818,7 @@ export function buildKnowledgeLinks(opts: BuildOptions): BuildResult {
   ];
 
   // ── Preserve existing engine-produced edges (stage-5 `touches` from
-  //    understand/derive-domain.ts) if the index already exists. These are
+  //    learn/derive-domain.ts) if the index already exists. These are
   //    canonical-store-derived too (from code scan), so NN#8 holds as long as
   //    the engine can re-derive them. Here we MERGE to avoid stomping the
   //    domain.file edges the engine wrote; a full rebuild (--rebuild-all) would

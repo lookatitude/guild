@@ -33,12 +33,12 @@ graph nodes/layers, not printing hunks.
 - A `base` commit (merge-base with the integration branch) and optional `head`.
 - The active `run-id` (from `.guild/runs/current-run-id`).
 - Frozen contract: `guild.diff_understanding.v1` (schema canonical in
-  `scripts/understand/lib/schema.ts`; do not re-spell field names or version
+  `scripts/learn/lib/schema.ts`; do not re-spell field names or version
   strings). Output-locations table is owned by `guild:learn-map`.
 
 # Output format
 
-- `.guild/runs/<run-id>/diff-understanding.json` — `guild.diff_understanding.v1`:
+- `.guild/runs/<run-id>/diff-learn.json` — `guild.diff_understanding.v1`:
   the changed-file set, the `affected_layers` / affected nodes per file, and
   `untraced_files` (changed files no graph node explains). Field names /
   `version` are canonical and frozen — conform by pointer, never copy the
@@ -47,20 +47,20 @@ graph nodes/layers, not printing hunks.
 # Workflow steps
 
 1. Assert the knowledge graph exists and is readable; escalate if not.
-2. Run `diff-understanding.ts --cwd <root> --base <sha> [--head <sha>]
-   [--run-id <id>]` (under `plugin/scripts/understand/`) → the deterministic
+2. Run `diff-learn.ts --cwd <root> --base <sha> [--head <sha>]
+   [--run-id <id>]` (under `plugin/scripts/learn/`) → the deterministic
    diff→node mapping.
 3. LLM half (bounded, *trust the script — do not re-read source*): confirm the
    `affected_layers` reading and characterise the blast radius for the plan;
    flag `untraced_files` prominently — they are the scope-creep signal P3 acts
    on.
-4. Write `.guild/runs/<run-id>/diff-understanding.json`. Surface the path; do
+4. Write `.guild/runs/<run-id>/diff-learn.json`. Surface the path; do
    not consume it here — `guild:plan` (P2) and `guild:verify-done` (P3) own
    their consumption.
 
 # Cost tiering
 
-The deterministic **script half** (`diff-understanding.ts`, the diff→node
+The deterministic **script half** (`diff-learn.ts`, the diff→node
 mapping) is **LLM-free** and unchanged. This skill's LLM half — confirming the
 `affected_layers` reading and characterising blast radius — is bounded
 single-document judgment over the script's output, so it runs at **`mid`** (per
@@ -79,7 +79,7 @@ not the whole project. The `models.recallScoreThreshold` gate governs any
 incidental wiki recall for context; the script half is unaffected.
 
 **One-pass three-store update (candidates only).** This skill writes one
-per-run artifact (`diff-understanding.json`); it does **not** mutate memory,
+per-run artifact (`diff-learn.json`); it does **not** mutate memory,
 wiki, or KG — those one-pass writes belong to `guild:learn-graph`. It
 self-promotes nothing.
 
@@ -110,7 +110,7 @@ scope. **No interactive web dashboard** — this skill produces filesystem artif
 
 # Eval cases
 
-- Plan needs P2 plan-impact, graph present → `diff-understanding.json` written
+- Plan needs P2 plan-impact, graph present → `diff-learn.json` written
   with `affected_layers` per changed file and an `untraced_files` list.
 - Changed file no node explains → appears in `untraced_files`; P3 scope-check
   later treats it as a scope-creep signal.

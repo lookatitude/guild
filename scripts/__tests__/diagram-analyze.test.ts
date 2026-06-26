@@ -3,9 +3,9 @@
  *
  * L3 TDD-first tests — SC-7: K3 diagram analysis
  *
- * Tests `plugin/scripts/understand/diagram-analyze.ts` against the frozen
+ * Tests `plugin/scripts/learn/diagram-analyze.ts` against the frozen
  * L0f knowledge fixture corpus at
- * `scripts/understand/__tests__/fixtures/knowledge/`.
+ * `scripts/learn/__tests__/fixtures/knowledge/`.
  *
  * Sections:
  *   A — mermaid block extraction + parse (deterministic)
@@ -31,20 +31,20 @@
  */
 
 import * as path from "path";
-import type { GraphNode } from "../understand/lib/schema";
+import type { GraphNode } from "../learn/lib/schema";
 
 // ── Import under test ─────────────────────────────────────────────────────────
 import {
   analyzeDiagrams,
   parseMermaidBlock,
   parseSvgFile,
-} from "../understand/diagram-analyze";
+} from "../learn/diagram-analyze";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
 const CORPUS_DIR = path.resolve(
   __dirname,
-  "../understand/__tests__/fixtures/knowledge"
+  "../learn/__tests__/fixtures/knowledge"
 );
 
 /**

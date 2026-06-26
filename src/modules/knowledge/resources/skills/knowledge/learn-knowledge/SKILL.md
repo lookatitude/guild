@@ -47,13 +47,13 @@ the cheap-scan tier; this is lazy + gated like the deep graph).
 - The resolved knowledge config — `resolveSettings({ cwd }).models.knowledge.*`
   (`maxDepth 8`, `maxBranching 12`, `minTopicImportance 0.4`, `relMinConf 0.5`,
   `maxFiles 3000`, `maxTokens 1_000_000`, `batchSize 20`; defaults in
-  `scripts/understand/lib/schema.ts KNOWLEDGE_CONFIG_DEFAULTS`, overridable in
+  `scripts/learn/lib/schema.ts KNOWLEDGE_CONFIG_DEFAULTS`, overridable in
   `.guild/settings.json`). Read it; never re-spell the numbers in prose.
 - The **cost gate + lazy consent** (SC-15) and the **per-K-stage staleness**
   verdict (SC-14) — both are deterministic scripts (below); the skill calls
   them and consumes their JSON verbatim, never re-deriving the decision.
 - Frozen contracts bound **by pointer only**: `guild.knowledge_graph.v2`
-  (`scripts/understand/lib/schema.ts`; schema is canonical in
+  (`scripts/learn/lib/schema.ts`; schema is canonical in
   the source — do not re-spell field names or version strings). The output-locations table
   is owned by `guild:learn-map` — referenced, never re-spelled.
 
@@ -85,7 +85,7 @@ schema into this body.
 # Workflow steps
 
 The knowledge tier is realized by **one deterministic orchestrator**
-(`scripts/understand/knowledge-orchestrator.ts`) that all three triggers drive
+(`scripts/learn/knowledge-orchestrator.ts`) that all three triggers drive
 **identically** via the same CLI — that single-path orchestration is the SC-8
 byte-identity guarantee, not this skill's prose. Because the model **is** the
 LLM (no in-TS model call), each K-stage's judgment reaches the orchestrator
@@ -103,7 +103,7 @@ staleness state (that lives only in step 1) — which is what makes SC-8
 byte-identity unconditional.
 
 0. **Lazy consent + cost gate (SC-15) — BEFORE any deep work.** Run
-   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/understand/cost-gate.ts --cwd <root> --json`.
+   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/learn/cost-gate.ts --cwd <root> --json`.
    Consume `gate` verbatim: `pass` → proceed silently; `confirm` → surface the
    `estimate` (`files`, `tokens_est`) + `reason` to the operator and continue
    only on approval; `abort` (exit 1) → hard-stop and surface `reason` — never a
@@ -111,7 +111,7 @@ byte-identity unconditional.
 
 1. **Staleness gate (SC-14) — this skill's coarse gate is the ONLY staleness
    mechanism.** Run
-   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/understand/k-stage-staleness.ts --cwd <root> --json`
+   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/learn/k-stage-staleness.ts --cwd <root> --json`
    and consume the booleans `{ k1..k6, structuralSkip }` to decide **whether to
    run the knowledge tier at all**: if **no** K-stage is stale (e.g. a code-only
    change → all `k1..k6` false), **skip** the orchestrator entirely (the

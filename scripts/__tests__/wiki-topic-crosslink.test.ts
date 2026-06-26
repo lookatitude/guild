@@ -21,14 +21,14 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import type { GraphNode, GraphEdge } from "../understand/lib/schema";
+import type { GraphNode, GraphEdge } from "../learn/lib/schema";
 import {
   proposeCandidates,
   buildCrossLinks,
   distinctLowerKeyTerms,
   extractHeadingTexts,
   ConfirmCrossLinksFn,
-} from "../understand/cross-link";
+} from "../learn/cross-link";
 
 // ---------------------------------------------------------------------------
 // Temp-dir corpus (real files — Rule 6 reads wiki BODY + topic SOURCE)

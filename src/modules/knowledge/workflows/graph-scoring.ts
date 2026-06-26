@@ -3,7 +3,7 @@
  *
  * CANONICAL, single-source KnowledgeGraph node-scoring helpers (re-arch WAVE 1,
  * M9 single-source floor). The ONE place these scorers live. Consumers:
- *   - scripts/understand/kg-query.ts  (re-exports + uses the full scoreNode path)
+ *   - scripts/learn/kg-query.ts  (re-exports + uses the full scoreNode path)
  *   - scripts/lib/recall.ts           (uses termMatchScore for its KG branch)
  *
  * Determinism (SC-9): every field here is deterministic-script; no LLM calls.
@@ -12,7 +12,7 @@
  * `termMatchScore` primitive. Guarded by scripts/__tests__/graph-scoring-parity.test.ts.
  */
 
-import type { GraphNode, GraphEdge } from "../../understanding";
+import type { GraphNode, GraphEdge } from "../../learning";
 
 /**
  * Compute an importance multiplier in [0, 1] from a node's fields.

@@ -247,7 +247,7 @@ Usage:
 
 All skill logic and `.guild/` writes live in the `learn-*` skill bodies and the
 `guild:learn` smart-learn skill (A1's skill logic; clean-room re-authored from the
-former `understand-engine` / `understand-onboard` per D4). This command file only
+former `learn-engine` / `understand-onboard` per D4). This command file only
 dispatches.
 
 ---
@@ -285,7 +285,7 @@ extraction, which Init's scoped pipeline does not do.
   knowledge candidate extraction all live in the skill, not here.
 - `skill-author`: author the `learn-*` family (`guild:learn-map`,
   `learn-graph`, `learn-onboard`, `learn-diff`, `learn-explain`) as
-  clean-room re-implementations of the former `understand-engine` /
+  clean-room re-implementations of the former `learn-engine` /
   `understand-onboard` concepts (D3/D4). One implementation; this command
   dispatches to them; `init --learn` also dispatches to them.
 - `skill-author` (`learn-knowledge-tier` L6): author the `guild:learn-knowledge`

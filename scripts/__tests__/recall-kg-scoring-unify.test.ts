@@ -29,10 +29,10 @@ import { spawnSync } from "node:child_process";
 
 import { recall } from "../lib/recall";
 import { rankKgNodes } from "../lib/shared/graph-scoring";
-import { runBothIndexModes } from "../understand/lib/parity-harness";
-import type { GraphNode, GraphEdge } from "../understand/lib/schema";
+import { runBothIndexModes } from "../learn/lib/parity-harness";
+import type { GraphNode, GraphEdge } from "../learn/lib/schema";
 
-const KG_QUERY_SCRIPT = path.resolve(__dirname, "../understand/kg-query.ts");
+const KG_QUERY_SCRIPT = path.resolve(__dirname, "../learn/kg-query.ts");
 const TEMP_DIRS: string[] = [];
 afterAll(() => {
   for (const d of TEMP_DIRS) fs.rmSync(d, { recursive: true, force: true });

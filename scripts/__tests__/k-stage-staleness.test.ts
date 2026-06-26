@@ -37,9 +37,9 @@ import {
   readKStageTree,
   writeKStageBaseline,
   runKStageStaleness,
-} from "../understand/k-stage-staleness";
+} from "../learn/k-stage-staleness";
 
-import type { KStageStore, KHashDelta, KStageStaleness } from "../understand/k-stage-staleness";
+import type { KStageStore, KHashDelta, KStageStaleness } from "../learn/k-stage-staleness";
 
 // ---------------------------------------------------------------------------
 // Section A — file type classifiers + new helpers

@@ -5,7 +5,7 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Builds bounded per-agent context bundles, recall-before-read payloads, and context budget linting.",
-  "depends_on": ["config", "knowledge", "state", "telemetry", "understanding"],
+  "depends_on": ["config", "knowledge", "state", "telemetry", "learning"],
   "owns": {
     "skills": ["guild-context-assemble"],
     "scripts": [

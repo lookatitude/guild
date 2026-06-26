@@ -4,7 +4,7 @@
  * Re-arch WAVE 1 (M9 single-source floor) — PARITY GUARD for the KG scorer.
  *
  * Unit 2 collapsed the KnowledgeGraph node-scoring logic that lived in
- * scripts/understand/kg-query.ts plus the term-match copy inlined in
+ * scripts/learn/kg-query.ts plus the term-match copy inlined in
  * scripts/lib/recall.ts (`scoreKgNode`) into ONE canonical module at
  * scripts/lib/shared/graph-scoring.ts.
  *
@@ -28,7 +28,7 @@ import {
   importanceMultiplier as canonicalImportanceMultiplier,
   confidenceBonus as canonicalConfidenceBonus,
 } from "../lib/shared/graph-scoring";
-import type { GraphNode } from "../understand/lib/schema";
+import type { GraphNode } from "../learn/lib/schema";
 
 // ── Frozen reference: the verbatim pre-collapse algorithm. ───────────────────
 function refImportanceMultiplier(node: GraphNode): number {
@@ -77,7 +77,7 @@ const NODES: GraphNode[] = [
   { id: "n1", type: "topic", name: "recall", source_refs: ["scripts/lib/recall.ts"], confidence: "high", importance: "high" },
   { id: "n2", type: "file", name: "bm25 scorer", source_refs: ["a.ts", "b.ts"], confidence: "medium", importance_score: 0.5 },
   { id: "n3", type: "function", name: "tokenize", source_refs: [], confidence: "low" },
-  { id: "n4", type: "topic", name: "graph", source_refs: ["scripts/understand/kg-query.ts"], confidence: "high", importance: "medium" },
+  { id: "n4", type: "topic", name: "graph", source_refs: ["scripts/learn/kg-query.ts"], confidence: "high", importance: "medium" },
   { id: "n5", type: "concept", name: "Prototype Pollution", source_refs: ["safe-object.ts"], confidence: "low", importance_score: 1 },
   { id: "n6", type: "file", name: "unrelated", source_refs: [], confidence: "high", importance_score: 1.7 /* clamps to 1 */ },
 ];

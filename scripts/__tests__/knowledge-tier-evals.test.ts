@@ -3,7 +3,7 @@
  *
  * L9 — per-SC eval assertions for the knowledge tier (guild.knowledge_graph.v2).
  * One named eval per SC-1…SC-15 "Check", anchored on the committed L0f corpus at
- * `scripts/understand/__tests__/fixtures/knowledge/`. This is the per-SC rollup the
+ * `scripts/learn/__tests__/fixtures/knowledge/`. This is the per-SC rollup the
  * L12 integration gate reads.
  *
  * Landing strategy (per plan §L9: "each assertion lands as its owning lane completes"):
@@ -26,22 +26,22 @@ import * as os from "os";
 import * as path from "path";
 import { spawnSync } from "child_process";
 
-import { validateGraphV2, KNOWLEDGE_CONFIG_DEFAULTS, NODE_CATEGORIES, resolveAnchor, GraphNode, GraphEdge } from "../understand/lib/schema";
-import { scoreNode } from "../understand/kg-query";
-import { analyzeDiagrams } from "../understand/diagram-analyze";
-import { indexWiki, ClassifyPageFn, WikiPageClassification } from "../understand/wiki-index";
-import { lintKnowledgeNodes } from "../understand/wiki-lint-knowledge";
+import { validateGraphV2, KNOWLEDGE_CONFIG_DEFAULTS, NODE_CATEGORIES, resolveAnchor, GraphNode, GraphEdge } from "../learn/lib/schema";
+import { scoreNode } from "../learn/kg-query";
+import { analyzeDiagrams } from "../learn/diagram-analyze";
+import { indexWiki, ClassifyPageFn, WikiPageClassification } from "../learn/wiki-index";
+import { lintKnowledgeNodes } from "../learn/wiki-lint-knowledge";
 import { lintWiki } from "../wiki-lint-checks";
-import { analyzeContent, ProposeConceptsFn, ProposeClaimsAndEntitiesFn } from "../understand/content-analyze";
-import { buildKStageStore, analyzeHashDelta, classifyKStages } from "../understand/k-stage-staleness";
-import { buildTaxonomy, ProposeTaxonomyFn } from "../understand/taxonomy-build";
-import { buildCrossLinks, ConfirmCrossLinksFn, proposeCandidates } from "../understand/cross-link";
+import { analyzeContent, ProposeConceptsFn, ProposeClaimsAndEntitiesFn } from "../learn/content-analyze";
+import { buildKStageStore, analyzeHashDelta, classifyKStages } from "../learn/k-stage-staleness";
+import { buildTaxonomy, ProposeTaxonomyFn } from "../learn/taxonomy-build";
+import { buildCrossLinks, ConfirmCrossLinksFn, proposeCandidates } from "../learn/cross-link";
 
 // ---------------------------------------------------------------------------
 // Fixture loaders — the committed L0f corpus is the oracle.
 // ---------------------------------------------------------------------------
 
-const FIX = path.join(__dirname, "../understand/__tests__/fixtures/knowledge");
+const FIX = path.join(__dirname, "../learn/__tests__/fixtures/knowledge");
 const load = (f: string) => JSON.parse(fs.readFileSync(path.join(FIX, f), "utf8"));
 
 const expected = load("expected-output.json");
@@ -209,7 +209,7 @@ describe("SC-1 — content-analyze: concept/claim/entity extraction", () => {
 // ===========================================================================
 
 describe("SC-9 — determinism responsibility table is present + honest", () => {
-  const src = fs.readFileSync(path.join(__dirname, "../understand/content-analyze.ts"), "utf8");
+  const src = fs.readFileSync(path.join(__dirname, "../learn/content-analyze.ts"), "utf8");
 
   it("content-analyze.ts carries a determinism responsibility table", () => {
     expect(src).toMatch(/determinism responsibility table/i);
@@ -875,7 +875,7 @@ describe("SC-14 — per-K-stage staleness classifier", () => {
 // ===========================================================================
 
 describe("SC-15 — cost-gate CLI: over-maxFiles aborts, under-budget passes", () => {
-  const CLI = path.join(__dirname, "../understand/cost-gate.ts");
+  const CLI = path.join(__dirname, "../learn/cost-gate.ts");
   const runCli = (dir: string) => {
     const r = spawnSync("npx", ["tsx", CLI, "--cwd", dir, "--json"], { encoding: "utf8" });
     return { status: r.status, result: JSON.parse((r.stdout || "").trim()) };
@@ -924,7 +924,7 @@ describe("SC-15 — cost-gate CLI: over-maxFiles aborts, under-budget passes", (
 // ===========================================================================
 
 describe("SC-8 — byte-identical projection across all 3 triggers (real orchestrator CLI)", () => {
-  const CLI = path.join(__dirname, "../understand/knowledge-orchestrator.ts");
+  const CLI = path.join(__dirname, "../learn/knowledge-orchestrator.ts");
   const CORPUS = [
     "index.md", "docs/overview.md", "docs/ingestion.md", "docs/validation.md",
     "docs/storage.md", "docs/concepts.md", "src/ingest.ts", "src/validate.ts",

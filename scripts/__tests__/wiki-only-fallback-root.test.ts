@@ -33,14 +33,14 @@ import {
   FALLBACK_ROOT_TOPIC_SEED,
   FALLBACK_ROOT_TOPIC_NAME,
   type KnowledgeLLMSeams,
-} from "../understand/knowledge-orchestrator";
+} from "../learn/knowledge-orchestrator";
 import {
   makeTopicId,
   makeWikiPageId,
   type GraphNode,
   type GraphEdge,
-} from "../understand/lib/schema";
-import { proposeCandidates } from "../understand/cross-link";
+} from "../learn/lib/schema";
+import { proposeCandidates } from "../learn/cross-link";
 
 // ---------------------------------------------------------------------------
 const TEMP_DIRS: string[] = [];

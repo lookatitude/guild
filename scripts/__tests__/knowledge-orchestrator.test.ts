@@ -28,22 +28,22 @@ import {
   type K2JudgmentsDoc,
   type K4JudgmentsDoc,
   type K5JudgmentsDoc,
-} from "../understand/knowledge-orchestrator";
+} from "../learn/knowledge-orchestrator";
 
 import type {
   ProposeConceptsFn,
   ProposeClaimsAndEntitiesFn,
-} from "../understand/content-analyze";
-import type { ClassifyPageFn } from "../understand/wiki-index";
-import type { ProposeTaxonomyFn } from "../understand/taxonomy-build";
-import type { ConfirmCrossLinksFn } from "../understand/cross-link";
+} from "../learn/content-analyze";
+import type { ClassifyPageFn } from "../learn/wiki-index";
+import type { ProposeTaxonomyFn } from "../learn/taxonomy-build";
+import type { ConfirmCrossLinksFn } from "../learn/cross-link";
 
 // ---------------------------------------------------------------------------
 // Shared constants
 // ---------------------------------------------------------------------------
 
 const FIXTURE_ROOT = path.join(
-  __dirname, "../understand/__tests__/fixtures/knowledge"
+  __dirname, "../learn/__tests__/fixtures/knowledge"
 );
 const CODE_PATHS = ["src/validate.ts", "src/store.ts", "src/ingest.ts"];
 const DOC_PATHS = [

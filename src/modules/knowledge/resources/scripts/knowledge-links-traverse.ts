@@ -12,7 +12,7 @@
  *   - Stage-5 engine `touches` batch: codebase-understanding.md §"5 Domain".
  *
  * The full `knowledge-links.json` is built APPEND-ONLY from two sources: the
- * stage-5 brownfield engine (understand/derive-domain.ts → domain↔file
+ * stage-5 brownfield engine (learn/derive-domain.ts → domain↔file
  * `touches`) and the per-phase LearningCheckpoint `knowledge_links_batch`
  * (task↔decision/skill/component, component↔wiki). This module loads that
  * union, appends a checkpoint batch (append-only, dedupe by from|to|type,

@@ -30,9 +30,9 @@ import {
   parseClassifyResponse,
   makeClassifier,
   defaultFallbackClassifier,
-} from "../understand/classify-wiki-pages";
-import { NODE_CATEGORIES } from "../understand/lib/schema";
-import type { WikiPageDescriptor, WikiPageClassification } from "../understand/wiki-index";
+} from "../learn/classify-wiki-pages";
+import { NODE_CATEGORIES } from "../learn/lib/schema";
+import type { WikiPageDescriptor, WikiPageClassification } from "../learn/wiki-index";
 
 // ---------------------------------------------------------------------------
 // Helpers

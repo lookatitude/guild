@@ -31,17 +31,17 @@ import * as path from "path";
 import {
   indexWiki,
   type ClassifyPageFn,
-} from "../understand/wiki-index";
+} from "../learn/wiki-index";
 
 import {
   runKnowledgeStages,
   type KnowledgeLLMSeams,
-} from "../understand/knowledge-orchestrator";
+} from "../learn/knowledge-orchestrator";
 
 import {
   makeWikiPageId,
   type KnowledgeSuppressed,
-} from "../understand/lib/schema";
+} from "../learn/lib/schema";
 
 // ---------------------------------------------------------------------------
 // Shared test helpers

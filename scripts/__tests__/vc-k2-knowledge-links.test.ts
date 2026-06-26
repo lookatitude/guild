@@ -33,7 +33,7 @@ import {
   type KnowledgeLink,
 } from "../knowledge-links-traverse";
 
-const UD = path.resolve(__dirname, "../understand");
+const UD = path.resolve(__dirname, "../learn");
 const ENV = { ...process.env, NODE_NO_WARNINGS: "1" } as NodeJS.ProcessEnv;
 
 function tsx(script: string, args: string[]): { code: number; out: string; err: string } {

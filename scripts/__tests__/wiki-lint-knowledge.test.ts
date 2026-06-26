@@ -27,14 +27,14 @@
 
 import * as path from "path";
 import * as fs from "fs";
-import { lintKnowledgeNodes, KnowledgeLintFinding } from "../understand/wiki-lint-knowledge";
-import type { GraphNode } from "../understand/lib/schema";
+import { lintKnowledgeNodes, KnowledgeLintFinding } from "../learn/wiki-lint-knowledge";
+import type { GraphNode } from "../learn/lib/schema";
 
 // ---------------------------------------------------------------------------
 // Load L0f oracle fixtures
 // ---------------------------------------------------------------------------
 
-const FIX = path.join(__dirname, "../understand/__tests__/fixtures/knowledge");
+const FIX = path.join(__dirname, "../learn/__tests__/fixtures/knowledge");
 const bad = JSON.parse(fs.readFileSync(path.join(FIX, "bad-nodes.json"), "utf8"));
 
 // The seeded negative from bad-nodes.json, flagged_by_wiki_lint section.

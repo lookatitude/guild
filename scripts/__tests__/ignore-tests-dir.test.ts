@@ -17,9 +17,9 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
-import { DEFAULT_IGNORE_PATTERNS, createIgnoreFilter } from "../understand/lib/ignore";
-import { walkRepo } from "../understand/lib/walk";
-import { discoverFilePaths } from "../understand/knowledge-orchestrator";
+import { DEFAULT_IGNORE_PATTERNS, createIgnoreFilter } from "../learn/lib/ignore";
+import { walkRepo } from "../learn/lib/walk";
+import { discoverFilePaths } from "../learn/knowledge-orchestrator";
 
 // ---------------------------------------------------------------------------
 // Temp repo lifecycle
@@ -144,7 +144,7 @@ describe("Section B2 — createIgnoreFilter excludes generated module-resource m
   it("M2: a mirrored script under resources/ → isIgnored true", () => {
     const filter = createIgnoreFilter(repo);
     expect(
-      filter.isIgnored("src/modules/understanding/resources/scripts/understand/lib/structural.ts"),
+      filter.isIgnored("src/modules/learning/resources/scripts/learn/lib/structural.ts"),
     ).toBe(true);
   });
 
@@ -163,7 +163,7 @@ describe("Section B2 — createIgnoreFilter excludes generated module-resource m
 
   it("M5 (non-vacuity): canonical source the mirror copies FROM is KEPT", () => {
     const filter = createIgnoreFilter(repo);
-    expect(filter.isIgnored("scripts/understand/lib/structural.ts")).toBe(false);
+    expect(filter.isIgnored("scripts/learn/lib/structural.ts")).toBe(false);
   });
 });
 

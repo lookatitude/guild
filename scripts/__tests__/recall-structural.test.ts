@@ -35,7 +35,7 @@ import * as path from "node:path";
 import { recall, type RecallResult } from "../lib/recall";
 import { classifyStructuralIntent } from "../../src/modules/context/workflows/recall";
 import { classifyTrustTier, isIdentifierAwareQuery } from "../lib/wiki-recall";
-import { runBothIndexModes } from "../understand/lib/parity-harness";
+import { runBothIndexModes } from "../learn/lib/parity-harness";
 
 const TEMP_DIRS: string[] = [];
 afterAll(() => {

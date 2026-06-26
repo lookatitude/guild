@@ -3,9 +3,9 @@
  *
  * L4 TDD-first tests — SC-2 + SC-5: K4 taxonomy-build
  *
- * Tests `plugin/scripts/understand/taxonomy-build.ts` against the frozen
+ * Tests `plugin/scripts/learn/taxonomy-build.ts` against the frozen
  * L0f knowledge fixture at
- * `scripts/understand/__tests__/fixtures/knowledge/`.
+ * `scripts/learn/__tests__/fixtures/knowledge/`.
  *
  * Sections:
  *   A — collectTopicInputs + addHubTopics: deterministic cluster→TopicInput (no LLM)
@@ -19,7 +19,7 @@
  *   I — buildTaxonomy integration: oracle-backed mock, SC-2+SC-5 assertions
  *
  * TDD RED confirmed before implementation:
- *   TS2307 — Cannot find module '../understand/taxonomy-build'
+ *   TS2307 — Cannot find module '../learn/taxonomy-build'
  *
  * Usage: npx jest --testPathPattern=taxonomy-build --no-coverage
  */
@@ -37,7 +37,7 @@ import {
   validateAcyclicity,
   isForbiddenDomainName,
   buildTaxonomy,
-} from "../understand/taxonomy-build";
+} from "../learn/taxonomy-build";
 
 import type {
   TopicInput,
@@ -46,11 +46,11 @@ import type {
   TaxonomyBuildOptions,
   TaxonomyBuildResult,
   ProposeTaxonomyFn,
-} from "../understand/taxonomy-build";
+} from "../learn/taxonomy-build";
 
-import type { ClusterGroup } from "../understand/content-analyze";
+import type { ClusterGroup } from "../learn/content-analyze";
 
-import { makeTopicId } from "../understand/lib/schema";
+import { makeTopicId } from "../learn/lib/schema";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -58,7 +58,7 @@ import { makeTopicId } from "../understand/lib/schema";
 
 const CORPUS_DIR = path.resolve(
   __dirname,
-  "../understand/__tests__/fixtures/knowledge"
+  "../learn/__tests__/fixtures/knowledge"
 );
 
 // K1 oracle clusters (from expected-output.json topic_member_sets — all sorted)

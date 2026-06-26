@@ -252,7 +252,7 @@ function prove(): void {
   const canonical = new Set(["bm25", "graph-scoring", "share-set", "safe-object"]);
 
   const planted = detectNonCanonicalImports(
-    "scripts/understand/kg-query.ts",
+    "scripts/learn/kg-query.ts",
     'import { bm25Score } from "../dup/bm25";\n', // a left-behind duplicate copy
     canonical,
   );
@@ -262,7 +262,7 @@ function prove(): void {
   );
 
   const canonicalImport = detectNonCanonicalImports(
-    "scripts/understand/kg-query.ts",
+    "scripts/learn/kg-query.ts",
     'import { bm25Score } from "../lib/shared/bm25";\n', // resolves into scripts/lib/shared/
     canonical,
   );
@@ -312,7 +312,7 @@ function prove(): void {
     "isReExportShim rejects a file carrying a local implementation (a real duplicate)",
   );
   const viaDup = detectNonCanonicalImports(
-    "scripts/understand/kg-query.ts",
+    "scripts/learn/kg-query.ts",
     'import { bm25Score } from "../dup/bm25";\n',
     canonical,
     (t) => (t === "scripts/dup/bm25.ts" ? realDup : null),

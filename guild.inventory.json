@@ -1193,6 +1193,261 @@
       "kind": "cli"
     },
     {
+      "id": "learn/analyze-structural",
+      "source_path": "scripts/learn/analyze-structural.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/architecture",
+      "source_path": "scripts/learn/architecture.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/assign-layers",
+      "source_path": "scripts/learn/assign-layers.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/build-tour",
+      "source_path": "scripts/learn/build-tour.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/classify-wiki-pages",
+      "source_path": "scripts/learn/classify-wiki-pages.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/content-analyze",
+      "source_path": "scripts/learn/content-analyze.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/cost-gate",
+      "source_path": "scripts/learn/cost-gate.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/cross-link",
+      "source_path": "scripts/learn/cross-link.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/derive-domain",
+      "source_path": "scripts/learn/derive-domain.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/diagram-analyze",
+      "source_path": "scripts/learn/diagram-analyze.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/diff-learn",
+      "source_path": "scripts/learn/diff-learn.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/extract-structural",
+      "source_path": "scripts/learn/extract-structural.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/graph-artifact",
+      "source_path": "scripts/learn/graph-artifact.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/graph-query",
+      "source_path": "scripts/learn/graph-query.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/impact",
+      "source_path": "scripts/learn/impact.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/k-stage-staleness",
+      "source_path": "scripts/learn/k-stage-staleness.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/kg-query",
+      "source_path": "scripts/learn/kg-query.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/knowledge-orchestrator",
+      "source_path": "scripts/learn/knowledge-orchestrator.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/architecture",
+      "source_path": "scripts/learn/lib/architecture.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/bundle-validate",
+      "source_path": "scripts/learn/lib/bundle-validate.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/domain",
+      "source_path": "scripts/learn/lib/domain.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/extract",
+      "source_path": "scripts/learn/lib/extract.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/fingerprint",
+      "source_path": "scripts/learn/lib/fingerprint.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/git",
+      "source_path": "scripts/learn/lib/git.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/graph",
+      "source_path": "scripts/learn/lib/graph.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/graph-artifact",
+      "source_path": "scripts/learn/lib/graph-artifact.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/graph-query",
+      "source_path": "scripts/learn/lib/graph-query.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/graph-query-projection",
+      "source_path": "scripts/learn/lib/graph-query-projection.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/ignore",
+      "source_path": "scripts/learn/lib/ignore.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/impact",
+      "source_path": "scripts/learn/lib/impact.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/import-map",
+      "source_path": "scripts/learn/lib/import-map.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/languages",
+      "source_path": "scripts/learn/lib/languages.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/layers",
+      "source_path": "scripts/learn/lib/layers.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/parity-harness",
+      "source_path": "scripts/learn/lib/parity-harness.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/paths",
+      "source_path": "scripts/learn/lib/paths.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/resolve-calls-py",
+      "source_path": "scripts/learn/lib/resolve-calls-py.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/resolve-calls-ts",
+      "source_path": "scripts/learn/lib/resolve-calls-ts.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/resolved-call",
+      "source_path": "scripts/learn/lib/resolved-call.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/schema",
+      "source_path": "scripts/learn/lib/schema.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/similarity",
+      "source_path": "scripts/learn/lib/similarity.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/structural",
+      "source_path": "scripts/learn/lib/structural.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/tour",
+      "source_path": "scripts/learn/lib/tour.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/lib/walk",
+      "source_path": "scripts/learn/lib/walk.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/resolve-calls",
+      "source_path": "scripts/learn/resolve-calls.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/scan",
+      "source_path": "scripts/learn/scan.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/staleness",
+      "source_path": "scripts/learn/staleness.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/taxonomy-build",
+      "source_path": "scripts/learn/taxonomy-build.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/validate-graph",
+      "source_path": "scripts/learn/validate-graph.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/wiki-index",
+      "source_path": "scripts/learn/wiki-index.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/wiki-lint-knowledge",
+      "source_path": "scripts/learn/wiki-lint-knowledge.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "learn/write-knowledge-links",
+      "source_path": "scripts/learn/write-knowledge-links.ts",
+      "kind": "cli"
+    },
+    {
       "id": "lib/adapter-fallback-ladders",
       "source_path": "scripts/lib/adapter-fallback-ladders.ts",
       "kind": "lib"
@@ -1935,261 +2190,6 @@
     {
       "id": "types/js-yaml.d",
       "source_path": "scripts/types/js-yaml.d.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/analyze-structural",
-      "source_path": "scripts/understand/analyze-structural.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/architecture",
-      "source_path": "scripts/understand/architecture.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/assign-layers",
-      "source_path": "scripts/understand/assign-layers.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/build-tour",
-      "source_path": "scripts/understand/build-tour.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/classify-wiki-pages",
-      "source_path": "scripts/understand/classify-wiki-pages.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/content-analyze",
-      "source_path": "scripts/understand/content-analyze.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/cost-gate",
-      "source_path": "scripts/understand/cost-gate.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/cross-link",
-      "source_path": "scripts/understand/cross-link.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/derive-domain",
-      "source_path": "scripts/understand/derive-domain.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/diagram-analyze",
-      "source_path": "scripts/understand/diagram-analyze.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/diff-understanding",
-      "source_path": "scripts/understand/diff-understanding.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/extract-structural",
-      "source_path": "scripts/understand/extract-structural.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/graph-artifact",
-      "source_path": "scripts/understand/graph-artifact.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/graph-query",
-      "source_path": "scripts/understand/graph-query.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/impact",
-      "source_path": "scripts/understand/impact.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/k-stage-staleness",
-      "source_path": "scripts/understand/k-stage-staleness.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/kg-query",
-      "source_path": "scripts/understand/kg-query.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/knowledge-orchestrator",
-      "source_path": "scripts/understand/knowledge-orchestrator.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/architecture",
-      "source_path": "scripts/understand/lib/architecture.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/bundle-validate",
-      "source_path": "scripts/understand/lib/bundle-validate.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/domain",
-      "source_path": "scripts/understand/lib/domain.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/extract",
-      "source_path": "scripts/understand/lib/extract.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/fingerprint",
-      "source_path": "scripts/understand/lib/fingerprint.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/git",
-      "source_path": "scripts/understand/lib/git.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/graph",
-      "source_path": "scripts/understand/lib/graph.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/graph-artifact",
-      "source_path": "scripts/understand/lib/graph-artifact.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/graph-query",
-      "source_path": "scripts/understand/lib/graph-query.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/graph-query-projection",
-      "source_path": "scripts/understand/lib/graph-query-projection.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/ignore",
-      "source_path": "scripts/understand/lib/ignore.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/impact",
-      "source_path": "scripts/understand/lib/impact.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/import-map",
-      "source_path": "scripts/understand/lib/import-map.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/languages",
-      "source_path": "scripts/understand/lib/languages.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/layers",
-      "source_path": "scripts/understand/lib/layers.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/parity-harness",
-      "source_path": "scripts/understand/lib/parity-harness.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/paths",
-      "source_path": "scripts/understand/lib/paths.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/resolve-calls-py",
-      "source_path": "scripts/understand/lib/resolve-calls-py.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/resolve-calls-ts",
-      "source_path": "scripts/understand/lib/resolve-calls-ts.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/resolved-call",
-      "source_path": "scripts/understand/lib/resolved-call.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/schema",
-      "source_path": "scripts/understand/lib/schema.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/similarity",
-      "source_path": "scripts/understand/lib/similarity.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/structural",
-      "source_path": "scripts/understand/lib/structural.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/tour",
-      "source_path": "scripts/understand/lib/tour.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/lib/walk",
-      "source_path": "scripts/understand/lib/walk.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/resolve-calls",
-      "source_path": "scripts/understand/resolve-calls.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/scan",
-      "source_path": "scripts/understand/scan.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/staleness",
-      "source_path": "scripts/understand/staleness.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/taxonomy-build",
-      "source_path": "scripts/understand/taxonomy-build.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/validate-graph",
-      "source_path": "scripts/understand/validate-graph.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/wiki-index",
-      "source_path": "scripts/understand/wiki-index.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/wiki-lint-knowledge",
-      "source_path": "scripts/understand/wiki-lint-knowledge.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "understand/write-knowledge-links",
-      "source_path": "scripts/understand/write-knowledge-links.ts",
       "kind": "cli"
     },
     {

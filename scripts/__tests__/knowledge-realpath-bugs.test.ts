@@ -5,7 +5,7 @@
  * gate found in the v2 knowledge tier. On the real plugin corpus the production
  * path produced a DEGENERATE graph (826 nodes = claim+entity only, all edges
  * claim→claim, ZERO topic/domain/subtopic_of/wiki_page/diagram). All 3 bugs live
- * in scripts/understand/ and were masked by injected-seam / shadow-file fixtures.
+ * in scripts/learn/ and were masked by injected-seam / shadow-file fixtures.
  *
  * Each test FAILS on the pre-fix code and PASSES after the fix (verified by
  * git-stashing the two source files and running this suite — see handoff).
@@ -26,9 +26,9 @@ import {
   emitRound1Candidates,
   runKnowledgeStages,
   type KnowledgeLLMSeams,
-} from "../understand/knowledge-orchestrator";
-import { indexWiki, type ClassifyPageFn } from "../understand/wiki-index";
-import { resolveAnchor } from "../understand/lib/schema";
+} from "../learn/knowledge-orchestrator";
+import { indexWiki, type ClassifyPageFn } from "../learn/wiki-index";
+import { resolveAnchor } from "../learn/lib/schema";
 
 // ---------------------------------------------------------------------------
 // Temp repo lifecycle

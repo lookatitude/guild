@@ -121,11 +121,11 @@ When a brownfield `KnowledgeGraph` index exists
 before finalizing lanes (codebase-understanding spec §"Where it sits" plug point P2):
 
 ```
-npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/understand/diff-understanding.ts --cwd <repo-root> \
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/learn/diff-learn.ts --cwd <repo-root> \
   --base <merge-base-with-integration-branch> [--head HEAD] [--run-id <id>]
 ```
 
-This writes `.guild/runs/<run-id>/diff-understanding.json`
+This writes `.guild/runs/<run-id>/diff-learn.json`
 (`guild.diff_understanding.v1` — bound by pointer to the implementation contract map, row 13; never re-spell the schema). Consume it to sharpen the plan, not to replace judgement:
 
 - `affected_layers` / `affected_nodes` → which specialist lanes the change

@@ -113,7 +113,7 @@ export interface FederationWikiCacheResult {
 
 /**
  * Resolve the canonical MAIN repo root worktree-safely.
- * Mirrors understand/lib/paths.ts:resolveMainRepoRoot — duplicated here
+ * Mirrors learn/lib/paths.ts:resolveMainRepoRoot — duplicated here
  * to avoid cross-directory coupling at runtime.
  */
 export function resolveMainRepoRoot(cwd: string): string {

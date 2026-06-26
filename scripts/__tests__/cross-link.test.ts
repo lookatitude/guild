@@ -13,7 +13,7 @@
 
 import * as path from "path";
 import * as fs from "fs";
-import type { GraphNode, GraphEdge } from "../understand/lib/schema";
+import type { GraphNode, GraphEdge } from "../learn/lib/schema";
 import {
   fileFromSourceRef,
   funcNameFromId,
@@ -26,13 +26,13 @@ import {
   buildCrossLinks,
   CrossLinkCandidate,
   ConfirmCrossLinksFn,
-} from "../understand/cross-link";
+} from "../learn/cross-link";
 
 // ---------------------------------------------------------------------------
 // Shared fixture paths
 // ---------------------------------------------------------------------------
 
-const FIXTURE_ROOT = path.join(__dirname, "../understand/__tests__/fixtures/knowledge");
+const FIXTURE_ROOT = path.join(__dirname, "../learn/__tests__/fixtures/knowledge");
 
 // Load oracle graph once (shared across integration tests)
 const ORACLE_GRAPH = JSON.parse(
@@ -652,7 +652,7 @@ describe("F — integration oracle (SC-4)", () => {
     for (const edge of evidencedBy) {
       const targetNode = ALL_NODES.find((n) => n.id === edge.target);
       expect(targetNode).toBeDefined();
-      const { resolveAnchor } = await import("../understand/lib/schema");
+      const { resolveAnchor } = await import("../learn/lib/schema");
       const anyResolves = (targetNode!.source_refs ?? []).some((r) =>
         resolveAnchor(FIXTURE_ROOT, r)
       );

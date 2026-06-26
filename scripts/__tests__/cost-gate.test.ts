@@ -1,7 +1,7 @@
 /**
  * __tests__/cost-gate.test.ts — TDD-first tests for SC-15 cost-gate.ts
  *
- * RED: import fails until understand/cost-gate.ts is created.
+ * RED: import fails until learn/cost-gate.ts is created.
  *
  * Tests cover pure-function units (no FS) and a minimal FS smoke-check.
  * All SC-15 acceptance criteria exercised:
@@ -23,9 +23,9 @@ import {
   gateExitCode,
   runCostGate,
   scanCorpusFiles,
-} from "../understand/cost-gate";
+} from "../learn/cost-gate";
 
-import type { CostGateEstimate, CostGateResult } from "../understand/cost-gate";
+import type { CostGateEstimate, CostGateResult } from "../learn/cost-gate";
 
 // ---------------------------------------------------------------------------
 // Fixture config — matches KNOWLEDGE_CONFIG_DEFAULTS

@@ -33,10 +33,10 @@ import {
   discoverFilePaths,
   runKnowledgeStages,
   type KnowledgeLLMSeams,
-} from "../understand/knowledge-orchestrator";
-import { resolveAnchor } from "../understand/lib/schema";
-import { createIgnoreFilter } from "../understand/lib/ignore";
-import { walkRepo } from "../understand/lib/walk";
+} from "../learn/knowledge-orchestrator";
+import { resolveAnchor } from "../learn/lib/schema";
+import { createIgnoreFilter } from "../learn/lib/ignore";
+import { walkRepo } from "../learn/lib/walk";
 
 // ---------------------------------------------------------------------------
 // Temp repo lifecycle
@@ -60,8 +60,8 @@ function write(repo: string, rel: string, content: string): void {
 }
 
 const TSX_BIN = path.join(__dirname, "..", "node_modules", ".bin", "tsx");
-const WIKI_INDEX_CLI = path.join(__dirname, "..", "understand", "wiki-index.ts");
-const CLASSIFY_CLI = path.join(__dirname, "..", "understand", "classify-wiki-pages.ts");
+const WIKI_INDEX_CLI = path.join(__dirname, "..", "learn", "wiki-index.ts");
+const CLASSIFY_CLI = path.join(__dirname, "..", "learn", "classify-wiki-pages.ts");
 
 // ---------------------------------------------------------------------------
 // BLOCKER 1 — CLI entry points thread repoRoot (resolve --cwd → repoRoot)

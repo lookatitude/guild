@@ -39,8 +39,8 @@ import {
   confidenceBonus,
   scoreNode,
   buildProximityBonuses,
-} from "../understand/kg-query";
-import type { GraphNode, GraphEdge } from "../understand/lib/schema";
+} from "../learn/kg-query";
+import type { GraphNode, GraphEdge } from "../learn/lib/schema";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -106,7 +106,7 @@ function makeTopicNode(
   };
 }
 
-const KG_QUERY_SCRIPT = path.resolve(__dirname, "../understand/kg-query.ts");
+const KG_QUERY_SCRIPT = path.resolve(__dirname, "../learn/kg-query.ts");
 
 function runKgQuery(
   repo: string,

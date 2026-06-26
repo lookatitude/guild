@@ -12,7 +12,7 @@ derived_from_template: guild.skill_template.v1
 
 Use to build the **deep semantic `KnowledgeGraph`** + `OnboardingTour`
 skeleton + reverse-spec — stages 2–7 of the authoritative 7-stage spec
-(see `scripts/understand/` for the implementation). This is the **deep
+(see `scripts/learn/` for the implementation). This is the **deep
 tier** of the learn-* family: lazy and **ask-before-deep-scan gated**, built
 when the first plan that needs **P2 plan-impact** or **P3 scope-check** is
 created, or on an explicit user/reflection refresh after the staleness
@@ -36,7 +36,7 @@ the bounded `kg-query` retrieval path (wired into `guild:context-assemble`) /
 - The **ask-before-deep-scan consent gate** (skip only with an explicit
   `--learn` / approved autonomy policy).
 - Frozen contracts bound **by pointer only**: `guild.knowledge_graph.v1`
-  (schema canonical in `scripts/understand/lib/schema.ts`; do not re-spell
+  (schema canonical in `scripts/learn/lib/schema.ts`; do not re-spell
   field names or version strings). The output-locations table is owned by
   `guild:learn-map` (referenced, not re-spelled). `OnboardingTour` is the 4th
   artifact (Markdown, no JSON schema) — shape defined in the skill body of
@@ -65,7 +65,7 @@ never copy a schema into this body.
 
 # Workflow steps
 
-Each stage = deterministic **script half** (`plugin/scripts/understand/`, run
+Each stage = deterministic **script half** (`plugin/scripts/learn/`, run
 `npx tsx … --cwd <root>`) then an **LLM semantic half** under the strict
 *"trust the script, do not re-read source"* constraint:
 

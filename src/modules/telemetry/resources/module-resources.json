@@ -64,7 +64,7 @@
       "id": "lib/telemetry-redirect",
       "source_path": "scripts/lib/telemetry-redirect.ts",
       "resource_path": "resources/scripts/lib/telemetry-redirect.ts",
-      "sha256": "45886ab80380be882dd6a9fef65fe3a4caf4a2a8753fa01ff6983eb131a4d988"
+      "sha256": "a0e8b6eff417d531061ea1c487ea6cca1d694505df148b7c53273c2743214f7a"
     },
     {
       "category": "scripts",

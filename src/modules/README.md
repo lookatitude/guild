@@ -15,7 +15,7 @@ Manifests declare ownership over existing neutral inventory ids:
 - `commands`, `skills`, `agents`, `hooks`, `mcp_servers`, and `scripts` use
   inventory ids, not file paths.
 - Prefix selectors are allowed only for stable families such as
-  `scripts/understand/*` or specialist skill prefixes.
+  `scripts/learn/*` or specialist skill prefixes.
 - Every live inventory id must be owned by exactly one module.
 - Any implementation import from one `src/modules/<module>/` tree into another
   module must target that module's public `index.ts` and must be declared in

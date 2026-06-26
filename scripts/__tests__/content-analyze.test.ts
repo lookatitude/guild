@@ -3,9 +3,9 @@
  *
  * L1 TDD-first tests — SC-1: K1 content-analyze
  *
- * Tests `plugin/scripts/understand/content-analyze.ts` against the frozen
+ * Tests `plugin/scripts/learn/content-analyze.ts` against the frozen
  * L0f knowledge fixture corpus at
- * `scripts/understand/__tests__/fixtures/knowledge/`.
+ * `scripts/learn/__tests__/fixtures/knowledge/`.
  *
  * Sections:
  *   A — extractDocCommentCandidates: file-level doc-comment extraction (deterministic)
@@ -24,7 +24,7 @@
  *   • node.confidence  — ENUM-PRESENT (high|medium|low), not pinned
  *
  * TDD RED confirmed before implementation:
- *   TS2307 — Cannot find module '../understand/content-analyze'
+ *   TS2307 — Cannot find module '../learn/content-analyze'
  *
  * Usage: npx jest --testPathPattern=content-analyze --no-coverage
  */
@@ -43,7 +43,7 @@ import {
   buildContentClusters,
   extractFunctionIds,
   extractMermaidEntries,
-} from "../understand/content-analyze";
+} from "../learn/content-analyze";
 
 import type {
   DocCommentCandidate,
@@ -54,14 +54,14 @@ import type {
   MermaidEntry,
   ProposeConceptsFn,
   ProposeClaimsAndEntitiesFn,
-} from "../understand/content-analyze";
+} from "../learn/content-analyze";
 
 import {
   makeConceptId,
   makeClaimId,
   makeEntityId,
   makeTopicId,
-} from "../understand/lib/schema";
+} from "../learn/lib/schema";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -69,7 +69,7 @@ import {
 
 const CORPUS_DIR = path.resolve(
   __dirname,
-  "../understand/__tests__/fixtures/knowledge"
+  "../learn/__tests__/fixtures/knowledge"
 );
 
 const EXPECTED = JSON.parse(

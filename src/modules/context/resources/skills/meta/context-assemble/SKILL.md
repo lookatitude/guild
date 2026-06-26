@@ -99,7 +99,7 @@ bounded graph sub-source. Rules are fixed by the codebase-understanding spec §"
   token-scored, hard-capped graph traversal **and** runs the nodes through
   `protect-chunks` before returning them as protected `chunks[]` (tagged
   `source: knowledge_graph`). The bundle **never** invokes
-  `scripts/understand/kg-query.ts` directly for bundle content (that would be a
+  `scripts/learn/kg-query.ts` directly for bundle content (that would be a
   raw, unprotected node path) and never reads the whole graph file. (`kg-query.ts`
   remains available for the model's **ad-hoc** relationship queries — not the
   bundle path.)

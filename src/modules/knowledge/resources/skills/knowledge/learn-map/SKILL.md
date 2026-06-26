@@ -11,7 +11,7 @@ derived_from_template: guild.skill_template.v1
 # When to use it
 
 Use to produce the **cheap-scan tier** of the brownfield derived indexes
-(the authoritative 7-stage spec is implemented in `scripts/understand/`) and to
+(the authoritative 7-stage spec is implemented in `scripts/learn/`) and to
 anchor the rest of the `learn-*` family.
 This skill is invoked two ways, running the **same implementation** (D3):
 
@@ -41,7 +41,7 @@ rebuildable and deletable with zero data loss.
 - The consuming repo root (resolved worktree-safe to the **main** repo root;
   the scripts' `lib/paths.ts` redirects ephemeral worktrees).
 - The frozen contracts are bound **by pointer only**, never re-spelled:
-  `guild.codebase_map.v1` (schema canonical in `scripts/understand/lib/schema.ts`;
+  `guild.codebase_map.v1` (schema canonical in `scripts/learn/lib/schema.ts`;
   do not re-spell field names or version strings).
 
 # Output format
@@ -56,7 +56,7 @@ This skill owns the **canonical output-locations table** for the whole family
 | architecture-map stub | `.guild/wiki/concepts/architecture-map.md` | confidence-tagged; wiki **candidate** only |
 | workspace manifest | `.guild/workspace.json` | `guild.workspace.v1` (federation registry; written via `write-manifest.ts` on a **workspace** only — see step 0) |
 | OnboardingTour | `.guild/indexes/onboarding-tour.md` | Markdown (`guild:learn-onboard`) |
-| DiffUnderstanding | `.guild/runs/<run-id>/diff-understanding.json` | `guild.diff_understanding.v1` (`guild:learn-diff`) |
+| DiffUnderstanding | `.guild/runs/<run-id>/diff-learn.json` | `guild.diff_understanding.v1` (`guild:learn-diff`) |
 | reverse-spec | `.guild/spec/<slug>.md` | every claim carries `source_refs` + `confidence` (`guild:learn-graph`) |
 
 The three `.guild/indexes/` **graph/recall/edge artifacts** are easy to conflate,
@@ -68,7 +68,7 @@ skills bind to this table **by pointer** and must not re-describe these three
 |---|---|---|---|---|---|
 | **KnowledgeGraph (v2)** | `.guild/indexes/knowledge-graph.json` | `guild.knowledge_graph.v2` (structural v1 enriched to v2) | `guild:learn-graph` (structural stages 2–7) → `guild:learn-knowledge` (K1–K6 multi-modal enrichment) | derived, deletable, rebuildable; absence ⇒ re-scan | the repo + `.guild/wiki/` (full learn pipeline) |
 | **knowledge-recall.json** — the **recall projection** | `.guild/indexes/knowledge-recall.json` | nonce-free RECALL PROJECTION of the v2 graph (no `run_id`/timestamp; sidecar `knowledge-recall-provenance.json` holds those) | `guild:learn-knowledge` K6 finalize (`write-knowledge-links.ts`) | derived; SC-8 byte-identical given `(graph, config)`; **the live recall source** read by `guild:context-assemble`'s `kg-query` | pure function of the v2 graph + knowledge config |
-| **knowledge-links.json** — the **learning-loop edge index** | `.guild/indexes/knowledge-links.json` | `guild.knowledge_links.v1` — append-only work/decision-space edge index (closed-9 + extended-6 edge types) | **three producers:** `scripts/knowledge-links-builder.ts` (canonical full rebuild, overwrites) · `hooks/emit-learning-checkpoint.ts` (per-phase append) · `scripts/understand/lib/domain.ts` (stage-5 initial batch) | derived, deletable; append-only between rebuilds; full-rebuildable **lossless** (every appended closed-9 edge is re-derivable, builder.ts:303-327) | provenance + wiki + raw + handoffs + decisions + open-questions (the builder's canonical fact sources) |
+| **knowledge-links.json** — the **learning-loop edge index** | `.guild/indexes/knowledge-links.json` | `guild.knowledge_links.v1` — append-only work/decision-space edge index (closed-9 + extended-6 edge types) | **three producers:** `scripts/knowledge-links-builder.ts` (canonical full rebuild, overwrites) · `hooks/emit-learning-checkpoint.ts` (per-phase append) · `scripts/learn/lib/domain.ts` (stage-5 initial batch) | derived, deletable; append-only between rebuilds; full-rebuildable **lossless** (every appended closed-9 edge is re-derivable, builder.ts:303-327) | provenance + wiki + raw + handoffs + decisions + open-questions (the builder's canonical fact sources) |
 
 **Do not call `knowledge-links.json` "the recall projection"** — that name is
 reserved for `knowledge-recall.json` (the v2 graph's recall projection, the live
@@ -87,7 +87,7 @@ copy a schema into a skill body. The architecture-map stub is emitted as a
 # Workflow steps
 
 Each stage = a deterministic **script half** (shipped under
-`plugin/scripts/understand/`, run via `npx tsx … --cwd <repo-root>`) followed
+`plugin/scripts/learn/`, run via `npx tsx … --cwd <repo-root>`) followed
 by an **LLM semantic half** under the strict *"trust the script, do not re-read
 source"* constraint.
 

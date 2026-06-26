@@ -30,8 +30,8 @@ import {
   fmValue,
   isProvenance,
 } from "../../../../scripts/dot-guild/convert/wiki-importance";
-import { lintKnowledgeNodes } from "../../../../scripts/understand/wiki-lint-knowledge";
-import type { GraphNode } from "../../../../scripts/understand/lib/schema";
+import { lintKnowledgeNodes } from "../../../../scripts/learn/wiki-lint-knowledge";
+import type { GraphNode } from "../../../../scripts/learn/lib/schema";
 import { loadYamlApi } from "../../kernel";
 
 const yaml = loadYamlApi();

@@ -227,7 +227,7 @@ has **three producers**, split by role
 |---|---|
 | `scripts/knowledge-links-builder.ts` | **CANONICAL full rebuild** — re-derives the entire edge set from the canonical fact sources (provenance, wiki, raw, handoffs, decisions, open-questions). Authoritative; overwrites. |
 | `hooks/emit-learning-checkpoint.ts` (this checkpoint) | **incremental append-only** — appends the phase's batch between rebuilds so edges are live immediately. |
-| `scripts/understand/lib/domain.ts` | **incremental append-only** — stage-5 initial domain/component batch at learn/init. |
+| `scripts/learn/lib/domain.ts` | **incremental append-only** — stage-5 initial domain/component batch at learn/init. |
 
 The checkpoint is **one incremental append-only producer, not the sole writer.**
 The model is sound **iff every appended edge is re-derivable by the builder** —

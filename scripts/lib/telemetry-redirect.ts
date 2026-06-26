@@ -10,7 +10,7 @@
  * root's .guild/ directory, never the worktree's - so nothing is lost when the
  * worktree is cleaned up.
  *
- * The SHIPPED redirect is graph-family-only (scripts/understand/lib/paths.ts
+ * The SHIPPED redirect is graph-family-only (scripts/learn/lib/paths.ts
  * resolves the main root via "git rev-parse --git-common-dir"); the hook-side
  * writers anchor at the nearest .git entry (hooks/lib/guild-root.ts).
  *
@@ -111,7 +111,7 @@ export function validateEventClass(eventClass: string): ValidationResult {
  *   - Paths with a run_id segment use the placeholder "<run-id>" - callers
  *     must substitute the actual run id before use.
  *   - The graph-family classes (knowledge_graph, knowledge_links, codebase_map)
- *     already have a shipped redirect in understand/lib/paths.ts; they are
+ *     already have a shipped redirect in learn/lib/paths.ts; they are
  *     included here so the full-class map is complete and callers can enumerate
  *     all durable classes uniformly.
  *   - The placeholder "<run-id>" uses angle brackets, not a glob, to avoid the
@@ -232,7 +232,7 @@ export interface TelemetryTargetResult {
  * This is the central routing function for the full-class worktree redirect.
  * It is PURE - no I/O, no Date.now(), no randomness. The caller is responsible
  * for resolving the actual main repo root path (via resolveMainRepoRoot from
- * understand/lib/paths.ts or equivalent) and for substituting the "<run-id>"
+ * learn/lib/paths.ts or equivalent) and for substituting the "<run-id>"
  * placeholder in partialPath when the class includes one.
  *
  * @param eventClass  A DurableEventClass string (or any string - malformed

@@ -41,8 +41,8 @@ import {
   indexWiki,
   type WikiPageClassification,
   type ClassifyPageFn,
-} from "../understand/wiki-index";
-import { NODE_CATEGORIES } from "../understand/lib/schema";
+} from "../learn/wiki-index";
+import { NODE_CATEGORIES } from "../learn/lib/schema";
 
 // ---------------------------------------------------------------------------
 // Fixture paths + oracle data
@@ -50,7 +50,7 @@ import { NODE_CATEGORIES } from "../understand/lib/schema";
 
 const FIXTURE_DIR = path.resolve(
   __dirname,
-  "../understand/__tests__/fixtures/knowledge",
+  "../learn/__tests__/fixtures/knowledge",
 );
 
 // Pinned SC-3 classification oracle from expected-output.json

@@ -19,7 +19,7 @@
  *     C. fsScan (fs-scanner.ts):
  *          Last-resort fallback. Always returns (may be empty array).
  *   KG (additive — always appended when knowledge-graph.json exists):
- *     D. kg-query (understand/lib/schema.ts KnowledgeGraph):
+ *     D. kg-query (learn/lib/schema.ts KnowledgeGraph):
  *          2-hop node scoring over .guild/indexes/knowledge-graph.json.
  *          KG nodes are ALWAYS classified untrusted (DEFAULT-DENY; not wiki operator paths).
  *          Returns null when KG file absent or no matching nodes.
@@ -57,11 +57,11 @@ import { fsScan } from "./fs-scanner";
 import { protectChunks, type ProtectedChunk } from "./recall-protect";
 import { tokenize, tokenizeIdentifierAware, bm25Score } from "../../knowledge";
 import { rankKgNodes } from "../../knowledge";
-import type { GraphNode, GraphEdge } from "../../understanding";
+import type { GraphNode, GraphEdge } from "../../learning";
 // G7 structural channel: reuse the COMMITTED model-free graph-query lib (G3) —
 // kgTrace/kgNeighbors/kgDeadCode read the FROZEN knowledge-graph.json with
 // per-node file:line provenance + trust tiering. Same cross-module import shape
-// docs-sync/workflows already uses for scripts/understand/lib/*.
+// docs-sync/workflows already uses for scripts/learn/lib/*.
 import {
   kgTrace,
   kgNeighbors,
@@ -69,7 +69,7 @@ import {
   type GraphView as StructuralGraphView,
   type EvidenceNode,
   type Direction as StructuralDirection,
-} from "../../../../scripts/understand/lib/graph-query";
+} from "../../../../scripts/learn/lib/graph-query";
 import type { KnowledgeLinksDoc } from "../../knowledge";
 import {
   ingestImportanceScore,
@@ -465,7 +465,7 @@ function fsScanBranch(
 // ── Branch D: kg-query (knowledge-recall.json projection) ────────────────────
 //
 // METRIC 6 (DECISION=B): reads .guild/indexes/knowledge-recall.json — the
-// recall-OPTIMISED projection written by understand/write-knowledge-links.ts.
+// recall-OPTIMISED projection written by learn/write-knowledge-links.ts.
 // G15: this branch ranks the projection nodes via the shared rankKgNodes pipeline
 // (importance + confidence + topic-proximity) — identical to the kg-query CLI.
 //

@@ -3,7 +3,7 @@
  *
  * FIX-T4.1-r6 — close the Codex MAJOR on the structural-cache trust model.
  *
- * The cache validator (scripts/understand/lib/bundle-validate.ts) trusts the
+ * The cache validator (scripts/learn/lib/bundle-validate.ts) trusts the
  * per-file structural cache on PROVENANCE + INTEGRITY (checksum) alone, which is
  * sound ONLY because the cache is a LOCAL-ONLY, never-shared derived artifact.
  * Codex flagged that this assumption was FALSE: `!.guild/indexes/**` re-includes
