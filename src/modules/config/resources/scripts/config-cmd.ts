@@ -89,6 +89,19 @@ import type {
   ConfigSource,
 } from "./lib/config-render";
 import type { FieldProvenance } from "./lib/config-reconcile-contract";
+// L4 (§E11/§E12): the host-adapter CONFIG-UI presentation core. The surface RENDERS the
+// metadata-driven grouped settings panels + plans an edit's confirmation-strength gate; the
+// PERSIST step is delegated to `cmdSet` below (the plugin config API — never the surface, V10).
+import {
+  buildHostConfigUiSurface,
+  planConfigUiEdit,
+  parseConfirmation,
+  type HostConfigUiSurface,
+  type ConfigUiKeyView,
+} from "./lib/config-ui-surface";
+import type { ConfigScope } from "./lib/config-ui-metadata";
+// CLI/agents-file native-host set — drives the per-host `blocked` decision (app/connector → blocked).
+import { CLI_NATIVE_HOSTS } from "./lib/host-open-preflight";
 
 // ---------------------------------------------------------------------------
 // Prototype-pollution guard — PROTO_POISON_KEYS is the canonical single-source
@@ -186,6 +199,10 @@ const MODELS_KEYS = new Set([
   "importanceAtIngest",
   "ingestSimilarityGate",
   "shortOutputThreshold",
+  // L5 (V12): models.knowledge.* is a CONFIG_SCHEMA + CONFIG_UI_METADATA key block the
+  // resolver already round-trips (settings-reader VALID_MODELS_KEYS) — it MUST be writable
+  // via `config set` / `config ui set` too, else the knowledge-tier knobs are uneditable.
+  "knowledge",
 ]);
 
 /** Valid sub-keys for models.tiers.* */
@@ -196,6 +213,17 @@ const MODELS_THRESHOLDS_KEYS = new Set(["mid", "powerful"]);
 
 /** Valid sub-keys for models.cacheTTL.* */
 const MODELS_CACHETL_KEYS = new Set(["coordinator", "leaf"]);
+
+/** Valid sub-keys for models.knowledge.* (mirrors KnowledgeConfigBlock in settings-reader). */
+const MODELS_KNOWLEDGE_KEYS = new Set([
+  "maxDepth",
+  "maxBranching",
+  "minTopicImportance",
+  "relMinConf",
+  "maxFiles",
+  "maxTokens",
+  "batchSize",
+]);
 
 /** Valid sub-keys for security.* */
 const SECURITY_KEYS = new Set(["bypass_permissions_policy"]);
@@ -351,6 +379,15 @@ function validateKeyPath(keyPath: string): string | null {
         if (!MODELS_CACHETL_KEYS.has(seg2)) {
           return `unknown models.cacheTTL key "${seg2}" (valid: coordinator|leaf)`;
         }
+      } else if (seg1 === "knowledge") {
+        if (!MODELS_KNOWLEDGE_KEYS.has(seg2)) {
+          return `unknown models.knowledge key "${seg2}" (valid: ${[...MODELS_KNOWLEDGE_KEYS].join("|")})`;
+        }
+        // knowledge leaves are scalars — reject any deeper path (e.g.
+        // models.knowledge.maxDepth.foo) so an unknown nested key can't be persisted.
+        if (parts.length > 3) {
+          return `models.knowledge.${seg2} is a scalar — "${keyPath}" has an invalid deeper path`;
+        }
       }
       // scoreWeights, shortOutputThreshold accept arbitrary sub-keys
     }
@@ -500,6 +537,8 @@ const BOOLEAN_PATHS = new Set([
   "models.enabled",
   "models.recallBeforeRead",
   "models.structuredOutputRequired",
+  "models.compositeRecall",       // boolean control in CONFIG_UI_METADATA — was uncoerced (persisted a string the resolver rejects)
+  "models.importanceAtIngest",
 ]);
 
 /** Paths that must be integers (whole number strings). */
@@ -519,6 +558,13 @@ const INTEGER_PATHS = new Set([
   "models.importanceGate",
   "models.thresholds.mid",
   "models.thresholds.powerful",
+  // L5 (V12): knowledge-tier integer knobs — coerce so the resolver (which requires a
+  // number) keeps them instead of dropping a string value.
+  "models.knowledge.maxDepth",
+  "models.knowledge.maxBranching",
+  "models.knowledge.maxFiles",
+  "models.knowledge.maxTokens",
+  "models.knowledge.batchSize",
 ]);
 
 /** Paths that must be numbers (possibly non-integer). */
@@ -527,7 +573,67 @@ const NUMBER_PATHS = new Set([
   "defaults.capability_manifest_ttl_s",    // R-018: positive number (seconds)
   "models.recallScoreThreshold",
   "models.ingestSimilarityGate",
+  // L5 (V12): knowledge-tier [0,1] ratio knobs.
+  "models.knowledge.minTopicImportance",
+  "models.knowledge.relMinConf",
 ]);
+
+/**
+ * Numeric RANGE constraints — write-time validation MUST mirror the resolver's accepted
+ * range, else the config API persists a value that fresh resolveSettings silently drops to
+ * default (validate-before-persist would be a lie). Mirrors KnowledgeConfigBlock parsing in
+ * settings-reader.ts: depth/branching/files/tokens/batch are `>= 1`; the two ratios are [0,1].
+ */
+/**
+ * EXHAUSTIVE mirror of every numeric range/clamp the resolver enforces
+ * (lib/core/config-cli.ts — the real resolveSettings merge path). Write-time validation
+ * must reject out-of-range so the config API can't accept-then-silently-drop/clamp a value
+ * (validate-before-persist). `exclusiveMin` marks a strict `> min` bound ("positive number").
+ * Audited against config-cli.ts: only these keys are bounded; the other INTEGER/NUMBER
+ * paths (team.size, quality.budget.*, index.*_threshold, retry, heartbeat, recallScore…)
+ * are UNbounded in the resolver and are correctly left unbounded here.
+ */
+const NUMERIC_RANGE: Record<string, { min: number; max?: number; exclusiveMin?: boolean }> = {
+  // startup caps — resolver CLAMPS (config-cli.ts:1539-1540); reject so persisted == effective.
+  "loop_cap": { min: 1, max: 256 },
+  "codex_cap": { min: 1, max: 10 },
+  // models scalars — resolver drops-to-default if out of range (config-cli.ts:1432,1453).
+  "models.advisorRounds": { min: 1 },
+  "models.importanceGate": { min: 1, max: 5 },
+  "models.ingestSimilarityGate": { min: 0, max: 1 },        // config-cli.ts:1456
+  // knowledge tier (config-cli.ts:1484-1496).
+  "models.knowledge.maxDepth": { min: 1 },
+  "models.knowledge.maxBranching": { min: 1 },
+  "models.knowledge.maxFiles": { min: 1 },
+  "models.knowledge.maxTokens": { min: 1 },
+  "models.knowledge.batchSize": { min: 1 },
+  "models.knowledge.minTopicImportance": { min: 0, max: 1 },
+  "models.knowledge.relMinConf": { min: 0, max: 1 },
+  "models.recallScoreThreshold": { min: 0, max: 1 },        // validate: float 0–1 (config-cli.ts:992)
+  // "positive number" keys (fractional ok) — resolver REJECTS <= 0 (config-cli.ts:1249,1276).
+  "defaults.index.kg_size_threshold_mb": { min: 0, exclusiveMin: true },
+  "defaults.capability_manifest_ttl_s": { min: 0, exclusiveMin: true },
+  // "positive integer" keys (smallest is 1) — validate REJECTS < 1 (config-cli.ts:1221,1243,1269).
+  "defaults.retry.max_attempts": { min: 1 },
+  "defaults.heartbeat_timeout_ms": { min: 1 },
+  "defaults.index.kg_node_threshold": { min: 1 },
+  "defaults.index.links_edge_threshold": { min: 1 },
+  "defaults.index.runs_threshold": { min: 1 },
+  "defaults.index.wiki_file_threshold": { min: 1 },
+};
+
+/** Range-check `n` for `keyPath`; returns an error string or null. */
+function rangeError(keyPath: string, n: number, raw: string): string | null {
+  const r = NUMERIC_RANGE[keyPath];
+  if (!r) return null;
+  const belowMin = r.exclusiveMin ? n <= r.min : n < r.min;
+  if (belowMin || (r.max !== undefined && n > r.max)) {
+    const lo = r.exclusiveMin ? `> ${r.min}` : `>= ${r.min}`;
+    const bound = r.max !== undefined ? `in ${r.exclusiveMin ? "(" : "["}${r.min}, ${r.max}]` : lo;
+    return `value for "${keyPath}" must be ${bound} (got "${raw}") — the resolver rejects/drops out-of-range values`;
+  }
+  return null;
+}
 
 /** Valid values for each closed-enum key. */
 const VALID_VALUES: Record<string, Set<string>> = {
@@ -630,7 +736,7 @@ function validateValue(keyPath: string, rawValue: string): string | null {
     if (!Number.isFinite(n) || !Number.isInteger(n)) {
       return `value for "${keyPath}" must be an integer (got "${rawValue}")`;
     }
-    return null;
+    return rangeError(keyPath, n, rawValue);
   }
 
   // Numeric (possibly non-integer) keys
@@ -639,7 +745,7 @@ function validateValue(keyPath: string, rawValue: string): string | null {
     if (!Number.isFinite(n)) {
       return `value for "${keyPath}" must be a number (got "${rawValue}")`;
     }
-    return null;
+    return rangeError(keyPath, n, rawValue);
   }
 
   // Null keyword for nullable keys
@@ -888,9 +994,11 @@ function validateResolved(config: Record<string, unknown>, selfBuild = false): s
 // ---------------------------------------------------------------------------
 
 interface ParsedArgs {
-  subcommand: "set" | "role" | "show" | "validate" | "providers" | "update-mcp-hashes" | "reconcile";
+  subcommand: "set" | "role" | "show" | "validate" | "providers" | "update-mcp-hashes" | "reconcile" | "ui";
   /** For subcommand=providers: the sub-verb (e.g. "detect"). */
   providersVerb?: string;
+  /** For subcommand=ui: the sub-verb (list|get|sources|set). */
+  uiVerb?: string;
   /** For subcommand=reconcile: the mode (check|sync|repair). */
   reconcileMode?: ReconcileMode;
   /** For subcommand=update-mcp-hashes: path to JSON file with tool-name→description map. */
@@ -906,6 +1014,12 @@ interface ParsedArgs {
   showRender: boolean;
   validateEffective: boolean;
   selfBuild: boolean;
+  /** For subcommand=ui: the registry host id the surface renders for (--host). */
+  uiHost?: string;
+  /** For subcommand=ui: restrict to one config group (--group). */
+  uiGroup?: string;
+  /** For subcommand=ui set: the operator-supplied confirmation token (--confirm). */
+  uiConfirm?: string;
 }
 
 function parseArgs(argv: string[]): ParsedArgs | { error: string } {
@@ -913,21 +1027,23 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   if (args.length === 0) {
     return {
       error:
-        "Usage: config-cmd.ts <set|role|show|validate|providers> [options...]\n" +
+        "Usage: config-cmd.ts <set|role|show|validate|providers|ui> [options...]\n" +
         "  set <key> <value> --scope workspace|project|local [--cwd <p>]\n" +
         "  role <host|advisory|adversarial> <host_id|null> --scope workspace|project|local [--cwd <p>]\n" +
         "  show --sources [--render] [--cwd <p>]\n" +
         "  show --render [--cwd <p>]\n" +
         "  validate --effective [--cwd <p>]\n" +
         "  providers detect [--cwd <p>]\n" +
+        "  ui <list|get|sources|set> [--host <id>] [--group <g>] [--cwd <p>]\n" +
+        "  ui set <key> <value> --scope workspace|project|local [--confirm <strength>] [--host <id>] [--cwd <p>]\n" +
         "  update-mcp-hashes --tools <json-file> --scope workspace|project|local [--cwd <p>]\n" +
         "  reconcile <check|sync|repair> [--cwd <p>]   (config init = reconcile sync)",
     };
   }
 
   const sub = args[0];
-  if (sub !== "set" && sub !== "role" && sub !== "show" && sub !== "validate" && sub !== "providers" && sub !== "update-mcp-hashes" && sub !== "reconcile") {
-    return { error: `unknown subcommand "${sub}" — expected: set, role, show, validate, providers, update-mcp-hashes, reconcile` };
+  if (sub !== "set" && sub !== "role" && sub !== "show" && sub !== "validate" && sub !== "providers" && sub !== "update-mcp-hashes" && sub !== "reconcile" && sub !== "ui") {
+    return { error: `unknown subcommand "${sub}" — expected: set, role, show, validate, providers, ui, update-mcp-hashes, reconcile` };
   }
 
   // P1-L9: reconcile takes a required mode positional (check|sync|repair).
@@ -949,6 +1065,10 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   let validateEffective = false;
   let selfBuild = false;
   let providersVerb: string | undefined;
+  let uiVerb: string | undefined;
+  let uiHost: string | undefined;
+  let uiGroup: string | undefined;
+  let uiConfirm: string | undefined;
 
   // For `providers`, the second positional is the sub-verb (e.g. "detect")
   if (sub === "providers") {
@@ -962,8 +1082,20 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     }
   }
 
-  // Parse flags from the rest of the args (skip the sub-verb/mode for providers/reconcile)
-  const flagStart = sub === "providers" || sub === "reconcile" ? 2 : 1;
+  // For `ui`, the second positional is the sub-verb (list|get|sources|set).
+  if (sub === "ui") {
+    if (args[1] && !args[1].startsWith("--")) {
+      uiVerb = args[1];
+      if (uiVerb !== "list" && uiVerb !== "get" && uiVerb !== "sources" && uiVerb !== "set") {
+        return { error: `unknown ui sub-verb "${uiVerb}" — expected: list, get, sources, set` };
+      }
+    } else {
+      return { error: "ui requires a sub-verb — expected: ui <list|get|sources|set> [options...]" };
+    }
+  }
+
+  // Parse flags from the rest of the args (skip the sub-verb/mode for providers/reconcile/ui)
+  const flagStart = sub === "providers" || sub === "reconcile" || sub === "ui" ? 2 : 1;
   const positionals: string[] = [];
   let toolsFile: string | undefined;
   for (let i = flagStart; i < args.length; i++) {
@@ -996,6 +1128,18 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
       toolsFile = args[++i];
     } else if (arg.startsWith("--tools=")) {
       toolsFile = arg.slice("--tools=".length);
+    } else if (arg === "--host" && args[i + 1]) {
+      uiHost = args[++i];
+    } else if (arg.startsWith("--host=")) {
+      uiHost = arg.slice("--host=".length);
+    } else if (arg === "--group" && args[i + 1]) {
+      uiGroup = args[++i];
+    } else if (arg.startsWith("--group=")) {
+      uiGroup = arg.slice("--group=".length);
+    } else if (arg === "--confirm" && args[i + 1]) {
+      uiConfirm = args[++i];
+    } else if (arg.startsWith("--confirm=")) {
+      uiConfirm = arg.slice("--confirm=".length);
     } else if (!arg.startsWith("--")) {
       positionals.push(arg);
     }
@@ -1026,9 +1170,26 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     return { error: "update-mcp-hashes requires --scope workspace|project|local" };
   }
 
+  // `ui get` / `ui set` positionals (key, and value for set) + scope requirement for `ui set`.
+  if (sub === "ui") {
+    if (uiVerb === "get") {
+      [key] = positionals;
+      if (!key) return { error: "ui get requires: <key> [--host <id>] [--cwd <p>]" };
+    } else if (uiVerb === "set") {
+      [key, rawValue] = positionals;
+      if (!key || rawValue === undefined) {
+        return { error: "ui set requires: <key> <value> [--scope workspace|project|local] [--confirm <strength>]" };
+      }
+      // §E12: default child-session writes target PROJECT scope; an explicit `local`
+      // scope writes the gitignored settings.local.json. Workspace must be explicit.
+      if (!scope) scope = "project";
+    }
+  }
+
   return {
     subcommand: sub,
     providersVerb,
+    uiVerb,
     reconcileMode,
     toolsFile,
     key,
@@ -1040,6 +1201,9 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     showRender,
     validateEffective,
     selfBuild,
+    uiHost,
+    uiGroup,
+    uiConfirm,
   };
 }
 
@@ -1088,6 +1252,32 @@ function cmdSet(
 
   // 4. Coerce value
   const coerced = coerceValue(keyPath, rawValue);
+
+  // 4b. AUTHORITATIVE validate-before-persist (completeness guarantee). Build the post-set
+  // candidate for THIS file and run the resolver's OWN validator (validateResolved — the same
+  // checks `config validate` uses). Reject only a violation the SET INTRODUCES, so a pre-existing
+  // file issue never blocks an unrelated edit. This catches any resolver bound not mirrored in the
+  // NUMERIC_RANGE fast-path table, so the UI/CLI set can't persist a value `config validate` rejects.
+  try {
+    let current: Record<string, unknown> = {};
+    if (fs.existsSync(targetFile)) {
+      try {
+        current = JSON.parse(fs.readFileSync(targetFile, "utf8")) as Record<string, unknown>;
+      } catch {
+        current = {}; // malformed file → step 5's readModifyWrite fails closed
+      }
+    }
+    const before = validateResolved(current);
+    const candidate = JSON.parse(JSON.stringify(current)) as Record<string, unknown>;
+    deepSet(candidate, writeKeyPath, coerced);
+    const introduced = validateResolved(candidate).filter((v) => !before.includes(v));
+    if (introduced.length > 0) {
+      process.stdout.write(`[config-cmd] ERROR: ${introduced[0]}\n`);
+      return 1;
+    }
+  } catch {
+    /* a validation-harness failure must never block a legitimate write — fall through */
+  }
 
   // 5. Read-modify-write — FAIL CLOSED on malformed JSON
   try {
@@ -1391,6 +1581,349 @@ function cmdShowRender(cwd: string): number {
 
   process.stdout.write(lines.join("\n") + "\n");
   return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: ui (§E11/§E12) — native CLI/agents-file settings render + edit
+// ---------------------------------------------------------------------------
+
+/** Default registry host for the UI surface when --host is omitted (this CLI host). */
+const DEFAULT_UI_HOST = "claude-code-cli";
+
+/** Resolve + validate the --host id (any registry id; app/connector ids render `blocked`). */
+function resolveUiHost(uiHost: string | undefined): { host: string } | { error: string } {
+  const host = uiHost ?? DEFAULT_UI_HOST;
+  if (!(HOST_IDS as readonly string[]).includes(host)) {
+    return {
+      error:
+        `unknown --host "${host}" — valid registry host ids: ${HOST_IDS.join(", ")}`,
+    };
+  }
+  return { host };
+}
+
+/**
+ * Resolve settings and build the host config-UI surface for `host` (optionally one group).
+ * Reuses the same permission-block derivation as `show --render` so the embedded
+ * `native_render` is identical to that command's output (single SoT).
+ */
+function buildUiSurfaceFor(
+  cwd: string,
+  host: string,
+  group: string | undefined
+): { surface: HostConfigUiSurface } | { error: string } {
+  let result: ReturnType<typeof resolveSettings>;
+  try {
+    result = resolveSettings({ cwd });
+  } catch (e) {
+    return { error: `could not resolve settings — ${(e as Error).message}` };
+  }
+  const { config, sources } = result;
+  const { auto_approve, bypass_permissions_policy } = permissionInputs(config);
+  const permissions = resolveBaselineGolden({ auto_approve, bypass_permissions_policy });
+  const surface = buildHostConfigUiSurface({
+    host,
+    config: config as unknown as RenderConfigLike & Record<string, unknown>,
+    sources: sources as unknown as Record<string, ConfigSource>,
+    permissions,
+    renderedAt: new Date().toISOString(),
+    groupFilter: group,
+  });
+  return { surface };
+}
+
+/** One key row, formatted for the panel. Confirmation/safety annotations are always shown. */
+function formatKeyRow(v: ConfigUiKeyView): string[] {
+  const lines: string[] = [];
+  const dep = v.deprecated ? " (deprecated)" : "";
+  lines.push(`  • ${v.key}${dep}`);
+  lines.push(`      ${v.label}  ·  ${v.control}  ·  value=${v.value}  [${v.source}]${v.unset ? " (default)" : ""}`);
+  lines.push(
+    `      safety=${v.safety_class}  confirm=${v.confirmation_strength}  ` +
+      `scopes=${v.scope_support.join("/")}  edit=${v.editability}  component=${v.native_component}`
+  );
+  return lines;
+}
+
+/** Print a blocked-host advisory panel (app/connector hosts — no native surface). */
+function printBlockedSurface(s: HostConfigUiSurface, lines: string[]): void {
+  lines.push(`[config-cmd] ui — host "${s.host_id}" (family=${s.family} surface=${s.surface_kind})`);
+  lines.push(`  ⚠ BLOCKED — no native config surface for this host in this build.`);
+  lines.push(
+    `  App/connector hosts are an OPEN blocker (L0): only CLI/agents-file hosts ` +
+      `(${[...CLI_NATIVE_HOSTS].join(", ")}) have a native render/edit surface.`
+  );
+}
+
+/**
+ * `config ui list` — the native grouped settings panel (§E11): config groups → keys, each
+ * with its CONFIG_UI_METADATA (label/control/scope/safety/confirmation/component) + the
+ * resolved value and the layer it won from. App/connector hosts report `blocked`.
+ */
+function cmdUiList(cwd: string, uiHost: string | undefined, group: string | undefined): number {
+  const hostRes = resolveUiHost(uiHost);
+  if ("error" in hostRes) {
+    process.stdout.write(`[config-cmd] ERROR: ${hostRes.error}\n`);
+    return 1;
+  }
+  const built = buildUiSurfaceFor(cwd, hostRes.host, group);
+  if ("error" in built) {
+    process.stdout.write(`[config-cmd] ERROR: ${built.error}\n`);
+    return 1;
+  }
+  const s = built.surface;
+  const lines: string[] = [];
+  if (s.blocked) {
+    printBlockedSurface(s, lines);
+    process.stdout.write(lines.join("\n") + "\n");
+    return 0;
+  }
+
+  lines.push(
+    `[config-cmd] ui list — host "${s.host_id}" (family=${s.family} surface=${s.surface_kind} provenance=${s.provenance})`
+  );
+  lines.push(`  ${s.key_count} key(s) across ${s.groups.length} group(s)${group ? ` (group=${group})` : ""}`);
+  if (group && s.groups.length === 0) {
+    lines.push(`  (no keys for group "${group}")`);
+  }
+  for (const g of s.groups) {
+    lines.push("");
+    lines.push(`▸ ${g.group}  (${g.keys.length})`);
+    for (const v of g.keys) lines.push(...formatKeyRow(v));
+  }
+  // Reuse the embedded host-native render summary (models / permission-cell count).
+  const r = s.native_render;
+  if (r) {
+    lines.push("");
+    const modelStr = r.models
+      ? `cheap=${r.models.cheap ?? "—"} mid=${r.models.mid ?? "—"} powerful=${r.models.powerful ?? "—"}`
+      : "(none)";
+    lines.push(`  native projection: models[${modelStr}]  permissions=${r.permissions ? Object.keys(r.permissions).length : 0} cell(s)`);
+  }
+  process.stdout.write(lines.join("\n") + "\n");
+  return 0;
+}
+
+/** `config ui get <key>` — render a single key row (§E11). */
+function cmdUiGet(cwd: string, key: string, uiHost: string | undefined): number {
+  const hostRes = resolveUiHost(uiHost);
+  if ("error" in hostRes) {
+    process.stdout.write(`[config-cmd] ERROR: ${hostRes.error}\n`);
+    return 1;
+  }
+  const built = buildUiSurfaceFor(cwd, hostRes.host, undefined);
+  if ("error" in built) {
+    process.stdout.write(`[config-cmd] ERROR: ${built.error}\n`);
+    return 1;
+  }
+  const s = built.surface;
+  const lines: string[] = [];
+  if (s.blocked) {
+    printBlockedSurface(s, lines);
+    process.stdout.write(lines.join("\n") + "\n");
+    return 0;
+  }
+  let found: ConfigUiKeyView | undefined;
+  for (const g of s.groups) {
+    found = g.keys.find((k) => k.key === key);
+    if (found) break;
+  }
+  if (!found) {
+    process.stdout.write(
+      `[config-cmd] ERROR: unknown config key "${key}" — not in the CONFIG_UI_METADATA table (or not visible to host "${s.host_id}")\n`
+    );
+    return 1;
+  }
+  lines.push(`[config-cmd] ui get — host "${s.host_id}"`);
+  lines.push(...formatKeyRow(found));
+  process.stdout.write(lines.join("\n") + "\n");
+  return 0;
+}
+
+/**
+ * `config ui sources` — the value/layer panel (§E11), grouped: every visible key with its
+ * resolved value and the inheritance layer it won from. Compact form of `ui list` focused
+ * on the source column. App/connector hosts report `blocked`.
+ */
+function cmdUiSources(cwd: string, uiHost: string | undefined, group: string | undefined): number {
+  const hostRes = resolveUiHost(uiHost);
+  if ("error" in hostRes) {
+    process.stdout.write(`[config-cmd] ERROR: ${hostRes.error}\n`);
+    return 1;
+  }
+  const built = buildUiSurfaceFor(cwd, hostRes.host, group);
+  if ("error" in built) {
+    process.stdout.write(`[config-cmd] ERROR: ${built.error}\n`);
+    return 1;
+  }
+  const s = built.surface;
+  const lines: string[] = [];
+  if (s.blocked) {
+    printBlockedSurface(s, lines);
+    process.stdout.write(lines.join("\n") + "\n");
+    return 0;
+  }
+  lines.push(`[config-cmd] ui sources — host "${s.host_id}" (${s.key_count} key(s))`);
+  for (const g of s.groups) {
+    lines.push("");
+    lines.push(`▸ ${g.group}`);
+    for (const v of g.keys) {
+      lines.push(`    ${v.key} = ${v.value}  [${v.source}]`);
+    }
+  }
+  process.stdout.write(lines.join("\n") + "\n");
+  return 0;
+}
+
+/**
+ * The plugin config WRITE API the `ui set` adapter delegates ALL persistence to (V10).
+ * Default = `cmdSet` (validate-before-write, never-clobber read-modify-write, scoped file).
+ * Injectable so the V10 boundary test can SPY the route and prove the adapter performs no
+ * `fs` write of its own — and that a direct-fs rewire is caught (the counterexample).
+ */
+export type ConfigWriteApi = (
+  key: string,
+  rawValue: string,
+  scope: "workspace" | "project" | "local",
+  cwd: string
+) => number;
+
+/** Reload the resolved config after a successful write. Default = a fresh `resolveSettings`. */
+export type ConfigReload = (cwd: string) => {
+  config: Record<string, unknown>;
+  sources: Record<string, string>;
+};
+
+/** Injectable seams for {@link cmdUiSet} — default to the real config API + resolver. */
+export interface UiSetDeps {
+  readonly persist: ConfigWriteApi;
+  readonly reload: ConfigReload;
+}
+
+const DEFAULT_UI_SET_DEPS: UiSetDeps = {
+  persist: (key, rawValue, scope, cwd) => cmdSet(key, rawValue, scope, cwd),
+  reload: (cwd) => {
+    const { config, sources } = resolveSettings({ cwd });
+    return {
+      config: config as unknown as Record<string, unknown>,
+      sources: sources as Record<string, string>,
+    };
+  },
+};
+
+/**
+ * `config ui set <key> <value> --scope <s> [--confirm <strength>]` — the §E12 persistence path.
+ *
+ * The surface (config-ui-surface.ts) PLANS the edit: it validates the key + scope and computes
+ * the confirmation the metadata DECLARES (advanced/danger/strongest keys require an explicit
+ * `--confirm`). The WRITE itself is delegated to the plugin config API (`deps.persist`, default
+ * `cmdSet`: validate-before-write, never-clobber read-modify-write, scoped file). The UI adapter
+ * does NO `fs` write of its own (V10) — the injectable seam makes that boundary provable.
+ *
+ * Sequence: PLAN → VALIDATE-BEFORE-PERSIST (reject an invalid candidate before any write, so
+ * there is no half-applied state) → PERSIST via the config API → IMMEDIATE RELOAD. A post-write
+ * reload failure is a HARD error: it returns NONZERO (V12), never a swallowed WARN. App/connector
+ * hosts report `blocked`.
+ */
+export function cmdUiSet(
+  cwd: string,
+  key: string,
+  rawValue: string,
+  scope: "workspace" | "project" | "local",
+  uiHost: string | undefined,
+  uiConfirm: string | undefined,
+  deps: UiSetDeps = DEFAULT_UI_SET_DEPS
+): number {
+  const hostRes = resolveUiHost(uiHost);
+  if ("error" in hostRes) {
+    process.stdout.write(`[config-cmd] ERROR: ${hostRes.error}\n`);
+    return 1;
+  }
+  // App/connector host → no native edit surface (mirrors hostOpenPreflight blocked).
+  if (!CLI_NATIVE_HOSTS.has(hostRes.host)) {
+    process.stdout.write(
+      `[config-cmd] ERROR: host "${hostRes.host}" has no native config-edit surface in this build ` +
+        `(app/connector hosts are blocked; only ${[...CLI_NATIVE_HOSTS].join(", ")} can edit natively)\n`
+    );
+    return 1;
+  }
+
+  // 1. PLAN the edit — confirmation-strength gate (NO write here, V10).
+  const plan = planConfigUiEdit({
+    key,
+    scope: scope as ConfigScope,
+    providedConfirmation: parseConfirmation(uiConfirm),
+  });
+  if (!plan.ok) {
+    process.stdout.write(`[config-cmd] ERROR: ${plan.reason}\n`);
+    // Print the confirmation hint ONLY when the confirmation gate is the actual blocker
+    // (a scope-support rejection has its own reason and must not also nag about --confirm).
+    if ((plan.reason ?? "").includes("confirmation")) {
+      process.stdout.write(
+        `  This is a ${plan.safety_class} key; re-run with --confirm ${plan.required_confirmation}\n`
+      );
+    }
+    return 1;
+  }
+
+  // 2. VALIDATE-BEFORE-PERSIST — reject an invalid candidate edit BEFORE any write, so an
+  // invalid value can never leave a half-applied state. (The config API re-validates too;
+  // this surfaces the rejection at the adapter boundary and keeps the write strictly gated.)
+  const keyErr = validateKeyPath(key);
+  if (keyErr) {
+    process.stdout.write(`[config-cmd] ERROR: ${keyErr}\n`);
+    return 1;
+  }
+  const valErr = validateValue(key, rawValue);
+  if (valErr) {
+    process.stdout.write(`[config-cmd] ERROR: ${valErr}\n`);
+    return 1;
+  }
+
+  // 3. PERSIST through the plugin config API (validate-before-write, never-clobber). The adapter
+  // itself writes NOTHING — every byte of mutation goes through this delegated seam (V10).
+  const setRc = deps.persist(key, rawValue, scope, cwd);
+  if (setRc !== 0) return setRc;
+
+  // 4. IMMEDIATE RELOAD (V12) — a post-write reload failure is a HARD error, not a swallowed
+  // WARN: the write landed but the config could not be re-resolved, so return NONZERO and say so.
+  let reloaded: { config: Record<string, unknown>; sources: Record<string, string> };
+  try {
+    reloaded = deps.reload(cwd);
+  } catch (e) {
+    process.stdout.write(
+      `[config-cmd] ERROR: write succeeded but the post-write reload failed — ${(e as Error).message}\n` +
+        `  the on-disk write landed but the config could not be re-resolved; run \`config show\` to inspect\n`
+    );
+    return 1;
+  }
+  const newVal = getByPathLocal(reloaded.config, key);
+  const layer = nearestSource(key, reloaded.sources);
+  process.stdout.write(
+    `[config-cmd] ui set — reloaded: ${key} = ${JSON.stringify(newVal)}  [${layer}]\n` +
+      `  confirmation: ${plan.required_confirmation}${plan.confirmation_required ? " (satisfied)" : " (implicit — standard settings-write ask)"}\n`
+  );
+  return 0;
+}
+
+/** Local dotted-path read for the post-write reload print (kept inline; no surface dependency). */
+function getByPathLocal(obj: Record<string, unknown>, dottedKey: string): unknown {
+  let cursor: unknown = obj;
+  for (const part of dottedKey.split(".")) {
+    if (cursor === null || typeof cursor !== "object" || Array.isArray(cursor)) return undefined;
+    cursor = (cursor as Record<string, unknown>)[part];
+  }
+  return cursor;
+}
+
+/** Nearest inheritance layer for a dotted key (key → ancestors → "builtin"). */
+function nearestSource(dottedKey: string, sources: Record<string, string>): string {
+  const parts = dottedKey.split(".");
+  for (let i = parts.length; i >= 1; i--) {
+    const src = sources[parts.slice(0, i).join(".")];
+    if (src) return src;
+  }
+  return "builtin";
 }
 
 // ---------------------------------------------------------------------------
@@ -1893,6 +2426,47 @@ function main(): void {
         process.exit(1);
       }
       exitCode = cmdReconcile(parsed.reconcileMode, parsed.cwd);
+      break;
+    }
+
+    case "ui": {
+      // §E11/§E12: native CLI/agents-file settings render (list/get/sources) + edit (set).
+      switch (parsed.uiVerb) {
+        case "list":
+          exitCode = cmdUiList(parsed.cwd, parsed.uiHost, parsed.uiGroup);
+          break;
+        case "sources":
+          exitCode = cmdUiSources(parsed.cwd, parsed.uiHost, parsed.uiGroup);
+          break;
+        case "get":
+          if (!parsed.key) {
+            process.stdout.write("[config-cmd] ERROR: ui get requires <key>\n");
+            process.exit(1);
+          }
+          exitCode = cmdUiGet(parsed.cwd, parsed.key, parsed.uiHost);
+          break;
+        case "set":
+          if (!parsed.key || parsed.rawValue === undefined || !parsed.scope) {
+            process.stdout.write(
+              "[config-cmd] ERROR: ui set requires <key> <value> --scope workspace|project|local\n"
+            );
+            process.exit(1);
+          }
+          exitCode = cmdUiSet(
+            parsed.cwd,
+            parsed.key,
+            parsed.rawValue,
+            parsed.scope,
+            parsed.uiHost,
+            parsed.uiConfirm
+          );
+          break;
+        default:
+          process.stdout.write(
+            "[config-cmd] ERROR: ui requires a sub-verb — list|get|sources|set\n"
+          );
+          exitCode = 1;
+      }
       break;
     }
 

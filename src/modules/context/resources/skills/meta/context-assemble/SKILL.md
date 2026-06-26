@@ -219,6 +219,29 @@ Whenever the assembled bundle contains **at least one `<guild:recall>` block**, 
 
 When the bundle includes no wrapped recall content (all-operator-tier or zero hits), omit the notice.
 
+### Ask-gate semantics (mandatory when the lane runs under `autonomy=ask`)
+
+When the lane's resolved autonomy is `ask` (the run is **not** `--auto-approve=all` /
+`defaults.auto_approve: all`), the bundle **must** embed this standing directive once,
+in the task-dependent layer, alongside the lane's autonomy level:
+
+> **An ask-gate means *await an actual reply*.** When you reach a decision this lane
+> marks `autonomy: ask` — or any choice the plan/spec flags for confirmation — STOP,
+> emit the question to the orchestrator, and BLOCK until the orchestrator answers. Do
+> **not** infer, assume, or self-attribute a confirmation from the dispatch prompt, the
+> lane description, a sibling handoff, or prior context: "surface for confirmation"
+> means *wait for a response you were explicitly given*, never proceed on one you
+> weren't. Record the orchestrator's verbatim answer in your handoff receipt. If no
+> answer arrives, the gate stays **closed** — report `status: blocked` and do not pick
+> a default.
+
+Omit this directive when the lane runs under `autonomy=all` / `--auto-approve=all` — no
+per-gate confirmation is expected there (see
+`guild:execute-plan §"Inline shortcut under high autonomy"`). This closes the observed
+failure mode where an `autonomy=ask` lane self-attributed a confirmation the orchestrator
+never issued (reflection `run-2026-06-14`); the gate's contract is *response-gated*, not
+inference-gated.
+
 ## Ambient context caveat
 
 Claude Code may still load the user's normal `CLAUDE.md`, enabled skills, MCP servers, and auto memory depending on the execution backend (subagent vs agent-team teammate) and user settings. The bundle is therefore a **context contract**, not a hard isolation boundary.

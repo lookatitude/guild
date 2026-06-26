@@ -8,14 +8,14 @@
       "id": "config",
       "source_path": "commands/config.md",
       "resource_path": "resources/commands/config.md",
-      "sha256": "7da0b649448f74d383c704e3e7129623300b73e71136791e749d7e1489e3035c"
+      "sha256": "14e01341a0aef4f5545a47bfab0b943ee5ddfb42aa2f3fea89ec5d6507e829c7"
     },
     {
       "category": "scripts",
       "id": "config-cmd",
       "source_path": "scripts/config-cmd.ts",
       "resource_path": "resources/scripts/config-cmd.ts",
-      "sha256": "b2d7a232b6f6fd6c9045ac13ea9258ffc259170dd8b05972f07e5368ed91c44b"
+      "sha256": "abe6ad676ae65c2f89ef060e2a93ee7f2accb6f022e0fc1e3c543c77453bb371"
     },
     {
       "category": "scripts",
@@ -47,6 +47,20 @@
     },
     {
       "category": "scripts",
+      "id": "lib/config-ui-metadata",
+      "source_path": "scripts/lib/config-ui-metadata.ts",
+      "resource_path": "resources/scripts/lib/config-ui-metadata.ts",
+      "sha256": "181748380c7ec71137c547613accddc2669d8e406fe3783d6160f0bfe66e2a55"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/config-ui-surface",
+      "source_path": "scripts/lib/config-ui-surface.ts",
+      "resource_path": "resources/scripts/lib/config-ui-surface.ts",
+      "sha256": "0df7620b2042a0131bba60f8c12bfa91992c96b83b637ff37555995a6dadff11"
+    },
+    {
+      "category": "scripts",
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
       "resource_path": "resources/scripts/lib/core/config-cli.ts",
@@ -58,6 +72,27 @@
       "source_path": "scripts/lib/core/settings-reader.ts",
       "resource_path": "resources/scripts/lib/core/settings-reader.ts",
       "sha256": "f7a091982783ff06044e5d3276a4c2dea0fc80b31847e3ba087bb6296f1f73e0"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-open-preflight",
+      "source_path": "scripts/lib/host-open-preflight.ts",
+      "resource_path": "resources/scripts/lib/host-open-preflight.ts",
+      "sha256": "0799b6b18a39b26a962d3465b24236abb6980974368b6c41e3db90e9486d52c9"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/init-guild",
+      "source_path": "scripts/lib/init-guild.ts",
+      "resource_path": "resources/scripts/lib/init-guild.ts",
+      "sha256": "6eb55b5120a547050a4482f1b8f6f448abe698e1a434e4931f88e14b02f7c4f2"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/init-scaffold-manifest",
+      "source_path": "scripts/lib/init-scaffold-manifest.ts",
+      "resource_path": "resources/scripts/lib/init-scaffold-manifest.ts",
+      "sha256": "de4435063fa91b6cd2751be25222580472f6b0ed8b65b7f6b5b016a6b9a198b3"
     },
     {
       "category": "scripts",
