@@ -498,57 +498,11 @@ export function rigorProfile(rigor: ResolvedConfig["rigor"]): RigorProfile {
 // Workspace discovery
 // ---------------------------------------------------------------------------
 
-interface WorkspaceManifest {
-  is_workspace: boolean;
-  sub_guilds?: Array<{ name: string; path: string; kind?: string }>;
-}
-
-interface DiscoveredWorkspace {
-  /** Absolute path to the workspace root directory. */
-  rootDir: string;
-  /** The parsed workspace.json manifest. */
-  manifest: WorkspaceManifest;
-}
-
-/**
- * Walk up from `startDir` (exclusive) to find the nearest ancestor with
- * `.guild/workspace.json` where `is_workspace: true`.
- *
- * Returns null when no valid workspace root is found up to the filesystem root.
- *
- * FIX (F4): a malformed workspace.json (JSON parse error) no longer stops
- * the walk — we continue up to the next ancestor. Only `is_workspace: false`
- * (a deliberate opt-out) stops the walk early.
- */
-function discoverWorkspace(startDir: string): DiscoveredWorkspace | null {
-  let current = path.dirname(startDir);
-  const fsRoot = path.parse(current).root;
-
-  while (current !== fsRoot) {
-    const manifestPath = path.join(current, ".guild", "workspace.json");
-    if (fs.existsSync(manifestPath)) {
-      let manifest: WorkspaceManifest | null = null;
-      try {
-        manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as WorkspaceManifest;
-      } catch {
-        // Malformed JSON — skip this entry and keep walking up (F4 fix).
-        const parent = path.dirname(current);
-        if (parent === current) break;
-        current = parent;
-        continue;
-      }
-      if (manifest.is_workspace === true) {
-        return { rootDir: current, manifest };
-      }
-      // is_workspace is false or missing — deliberate stop, do NOT continue.
-      return null;
-    }
-    const parent = path.dirname(current);
-    if (parent === current) break; // reached fs root
-    current = parent;
-  }
-  return null;
-}
+// Workspace-manifest parsing + ancestor discovery are extracted to the shared
+// sibling module so detection (host-open-preflight) and this resolver bind to ONE
+// classifier (§E3/§E8). Imported (NOT re-exported) to keep the settings-resolver
+// shim surface unchanged (parity guard).
+import { discoverWorkspace } from "./workspace-manifest";
 
 // ---------------------------------------------------------------------------
 // Settings file loading

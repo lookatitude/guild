@@ -14,7 +14,15 @@
  * Module: config — pure detection + node builtins; no host/runtime imports.
  */
 
+import * as fs from "fs";
+import * as path from "path";
 import type { ScaffoldEntry } from "./init-scaffold-manifest";
+import { requiredEntriesFor } from "./init-scaffold-manifest";
+import {
+  discoverWorkspace,
+  parseWorkspaceManifest,
+} from "./workspace-manifest";
+import { advisoryMessage } from "./init-config-copy";
 
 // ===========================================================================
 // detectGuildState — install-state + workspace-mode detection from cwd
@@ -130,10 +138,287 @@ export interface GuildStateResult {
  *  5. No `.guild/` at cwd and no ancestor workspace → not_installed.
  * Never silently fall back to single_project on malformed/incomplete (V1).
  */
-export function detectGuildState(_cwd: string): GuildStateResult {
-  throw new Error(
-    "L1 design stub: detectGuildState is implemented in L2 (init-config-goal §E step 3).",
-  );
+export function detectGuildState(cwd: string): GuildStateResult {
+  const evidence: GuildStateEvidence[] = [];
+  const guildDir = path.join(cwd, ".guild");
+  const guildDirPresent = safeIsDir(guildDir);
+  evidence.push({ kind: "guild_dir", path: guildDir, present: guildDirPresent });
+
+  // -- Step 1a: cwd's OWN .guild/workspace.json (INCLUSIVE of cwd) ----------
+  // Presence COMMITS to the workspace-root interpretation; a present-but-invalid
+  // manifest at cwd is needs_repair, never a silent single_project fallback (V1).
+  const cwdManifestPath = path.join(guildDir, "workspace.json");
+  const cwdParsed = parseWorkspaceManifest(cwdManifestPath);
+
+  if (cwdParsed.status === "parse_error") {
+    evidence.push({
+      kind: "workspace_json",
+      path: cwdManifestPath,
+      present: true,
+      detail: `JSON parse error: ${cwdParsed.error}`,
+    });
+    return repairResult(
+      cwd,
+      "workspace_root",
+      { problem: "malformed_workspace_json", path: cwdManifestPath, detail: cwdParsed.error },
+      evidence,
+    );
+  }
+  if (cwdParsed.status === "not_workspace") {
+    evidence.push({
+      kind: "workspace_json",
+      path: cwdManifestPath,
+      present: true,
+      detail: "present but is_workspace !== true",
+    });
+    return repairResult(
+      cwd,
+      "workspace_root",
+      {
+        problem: "malformed_workspace_json",
+        path: cwdManifestPath,
+        detail: "workspace.json present but is_workspace !== true",
+      },
+      evidence,
+    );
+  }
+  if (cwdParsed.status === "workspace") {
+    evidence.push({
+      kind: "workspace_json",
+      path: cwdManifestPath,
+      present: true,
+      detail: "is_workspace:true",
+    });
+    // Step 2: valid workspace_root — verify the workspace-root required floor.
+    return verifyFloor(cwd, "workspace_root", cwd, evidence);
+  }
+
+  // cwdParsed.status === "absent" → no workspace.json at cwd.
+  evidence.push({ kind: "workspace_json", path: cwdManifestPath, present: false });
+
+  // -- Step 1b/3: ancestor walk (EXCLUSIVE of cwd) -------------------------
+  // Shares the resolver's discoverWorkspace (same parseWorkspaceManifest classifier):
+  // parse_error skips, is_workspace!==true stops, is_workspace===true → ancestor.
+  const ancestor = discoverWorkspace(cwd);
+  if (ancestor) {
+    const ancestorManifestPath = path.join(ancestor.rootDir, ".guild", "workspace.json");
+    evidence.push({
+      kind: "ancestor_workspace",
+      path: ancestorManifestPath,
+      present: true,
+      detail: "is_workspace:true",
+    });
+    if (guildDirPresent) {
+      // Step 3: cwd is a workspace_child (under an ancestor; owns its own .guild/).
+      return verifyFloor(cwd, "workspace_child", ancestor.rootDir, evidence);
+    }
+    // Under a workspace but cwd has no .guild/ of its own → not yet installed
+    // here. Init will offer to create the child project (workspaceRoot carried so
+    // the prompt can default to a child under the ancestor).
+    return notInstalledResult(cwd, ancestor.rootDir, evidence);
+  }
+
+  // -- Step 4: single_project (cwd has .guild/, no workspace.json, no ancestor) --
+  if (guildDirPresent) {
+    return verifyFloor(cwd, "single_project", null, evidence);
+  }
+
+  // -- Step 5: nothing at cwd and no ancestor workspace → not_installed -----
+  return notInstalledResult(cwd, null, evidence);
+}
+
+// ---------------------------------------------------------------------------
+// detectGuildState helpers (pure, crash-free)
+// ---------------------------------------------------------------------------
+
+function safeStat(p: string): fs.Stats | null {
+  try {
+    return fs.statSync(p);
+  } catch {
+    return null;
+  }
+}
+function safeIsDir(p: string): boolean {
+  const s = safeStat(p);
+  return s !== null && s.isDirectory();
+}
+function safeExistsForEntry(absPath: string, kind: ScaffoldEntry["kind"]): boolean {
+  const s = safeStat(absPath);
+  if (s === null) return false;
+  return kind === "dir" ? s.isDirectory() : s.isFile();
+}
+
+/** Resolve a manifest entry's repo-root-relative POSIX path against an absolute root. */
+function resolveEntryPath(root: string, entry: ScaffoldEntry): string {
+  const segments = entry.path.replace(/\/+$/, "").split("/");
+  return path.join(root, ...segments);
+}
+
+/**
+ * Verify the mode's required floor (`requiredEntriesFor(mode)`) on disk. First
+ * missing required entry → installed_needs_repair{missing_required_manifest_entry};
+ * else the clean `state`.
+ */
+function verifyFloor(
+  cwd: string,
+  mode: "single_project" | "workspace_root" | "workspace_child",
+  workspaceRoot: string | null,
+  evidence: GuildStateEvidence[],
+): GuildStateResult {
+  const checkedRequired = requiredEntriesFor(mode);
+  let firstMissing: ScaffoldEntry | null = null;
+  for (const entry of checkedRequired) {
+    const abs = resolveEntryPath(cwd, entry);
+    const present = safeExistsForEntry(abs, entry.kind);
+    evidence.push({ kind: "manifest_entry", path: abs, present, detail: entry.path });
+    if (!present && firstMissing === null) firstMissing = entry;
+  }
+
+  if (firstMissing !== null) {
+    const missingAbs = resolveEntryPath(cwd, firstMissing);
+    return {
+      schema_version: GUILD_STATE_SCHEMA_VERSION,
+      state: "installed_needs_repair",
+      cwd,
+      projectRoot: cwd,
+      workspaceRoot,
+      checkedRequired,
+      evidence,
+      problem: {
+        problem: "missing_required_manifest_entry",
+        path: missingAbs,
+        detail: `required ${firstMissing.kind} '${firstMissing.path}' is missing`,
+      },
+    };
+  }
+
+  const state: GuildState = mode;
+  return {
+    schema_version: GUILD_STATE_SCHEMA_VERSION,
+    state,
+    cwd,
+    projectRoot: cwd,
+    workspaceRoot,
+    checkedRequired,
+    evidence,
+    problem: null,
+  };
+}
+
+/** Build an installed_needs_repair result for a malformed-manifest problem. */
+function repairResult(
+  cwd: string,
+  mode: "single_project" | "workspace_root" | "workspace_child",
+  problem: GuildStateProblem,
+  evidence: GuildStateEvidence[],
+): GuildStateResult {
+  return {
+    schema_version: GUILD_STATE_SCHEMA_VERSION,
+    state: "installed_needs_repair",
+    cwd,
+    projectRoot: cwd,
+    workspaceRoot: mode === "workspace_root" ? cwd : null,
+    checkedRequired: requiredEntriesFor(mode),
+    evidence,
+    problem,
+  };
+}
+
+function notInstalledResult(
+  cwd: string,
+  workspaceRoot: string | null,
+  evidence: GuildStateEvidence[],
+): GuildStateResult {
+  return {
+    schema_version: GUILD_STATE_SCHEMA_VERSION,
+    state: "not_installed",
+    cwd,
+    projectRoot: null,
+    workspaceRoot,
+    checkedRequired: [],
+    evidence,
+    problem: null,
+  };
+}
+
+// ===========================================================================
+// Workspace suggestion (spec §E6 / V4) — structured data only
+// ===========================================================================
+
+/** Suggestion for how init should scaffold a not_installed root (§E6 / V4). */
+export interface WorkspaceSuggestion {
+  readonly root_kind: RootKind;
+  /** Recommended INIT mode (see {@link InitMode}). */
+  readonly recommended_mode: InitMode;
+  /** Absolute paths of immediate child directories that are their own git repos. */
+  readonly child_git_repos: readonly string[];
+  /** The init branches an adapter must offer (always includes "skip"). */
+  readonly branches: readonly ("single_project" | "multiple_repo_workspace" | "skip")[];
+}
+
+/** Detect immediate child directories (depth 1) that contain their own `.git`. */
+export function detectChildGitRepos(root: string): string[] {
+  const out: string[] = [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue;
+    if (ent.name === ".git" || ent.name === ".guild" || ent.name === "node_modules") continue;
+    const childGit = path.join(root, ent.name, ".git");
+    // A git repo marks itself with a `.git` dir (normal clone) or `.git` file (worktree/submodule).
+    if (safeStat(childGit) !== null) out.push(path.join(root, ent.name));
+  }
+  return out.sort();
+}
+
+/** True iff `root` has no entries other than an (optional) `.git` of its own. */
+function rootIsEmpty(root: string): boolean {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(root);
+  } catch {
+    return false;
+  }
+  return entries.filter((e) => e !== ".git" && e !== ".DS_Store").length === 0;
+}
+
+/**
+ * Compute the §E6 workspace suggestion for a root being initialized:
+ *  - child git repos present  → recommend `workspace` (root_kind: has_child_repos).
+ *  - empty root               → ask single vs workspace (root_kind: empty;
+ *                               recommended_mode defaults to single_project, adapter shows both).
+ *  - non-empty, no child repos → recommend `single_project` (still confirmed).
+ * Returns structured data only — the prompt UI is the adapter's (L4) job.
+ */
+export function suggestWorkspaceMode(root: string): WorkspaceSuggestion {
+  const childRepos = detectChildGitRepos(root);
+  const branches = ["single_project", "multiple_repo_workspace", "skip"] as const;
+  if (childRepos.length > 0) {
+    return {
+      root_kind: "has_child_repos",
+      recommended_mode: "workspace",
+      child_git_repos: childRepos,
+      branches,
+    };
+  }
+  if (rootIsEmpty(root)) {
+    return {
+      root_kind: "empty",
+      recommended_mode: "single_project",
+      child_git_repos: [],
+      branches,
+    };
+  }
+  return {
+    root_kind: "non_empty_no_child_repos",
+    recommended_mode: "single_project",
+    child_git_repos: [],
+    branches,
+  };
 }
 
 // ===========================================================================
@@ -226,8 +511,75 @@ export interface HostOpenPreflightResult {
  *
  * Returns structured data only — the adapter renders it through its native surface.
  */
-export function hostOpenPreflight(_cwd: string, _host: string): HostOpenPreflightResult {
-  throw new Error(
-    "L1 design stub: hostOpenPreflight is implemented in L2 (init-config-goal §E step 3).",
-  );
+export function hostOpenPreflight(cwd: string, host: string): HostOpenPreflightResult {
+  const detection = detectGuildState(cwd);
+
+  // Hosts without a native config surface in this build (the 4 app/connector
+  // platforms + any unknown id) → blocked, no false-native path (L0 OPEN blocker).
+  if (!CLI_NATIVE_HOSTS.has(host)) {
+    return {
+      schema_version: HOST_OPEN_PREFLIGHT_SCHEMA_VERSION,
+      host,
+      cwd,
+      detection,
+      action: "blocked",
+      lifecycle_available: false,
+      advisory: { code: "host_unsupported", message: advisoryMessage("host_unsupported") },
+      init_prompt: null,
+      repair_hint: null,
+      cache_fingerprint: null,
+    };
+  }
+
+  switch (detection.state) {
+    case "not_installed": {
+      const suggestion = suggestWorkspaceMode(cwd);
+      return {
+        schema_version: HOST_OPEN_PREFLIGHT_SCHEMA_VERSION,
+        host,
+        cwd,
+        detection,
+        action: "offer_init",
+        lifecycle_available: false,
+        advisory: { code: "not_installed", message: advisoryMessage("not_installed") },
+        init_prompt: {
+          recommended_mode: suggestion.recommended_mode,
+          root_kind: suggestion.root_kind,
+          child_git_repos: suggestion.child_git_repos,
+          branches: suggestion.branches,
+        },
+        repair_hint: null,
+        cache_fingerprint: null,
+      };
+    }
+    case "installed_needs_repair":
+      return {
+        schema_version: HOST_OPEN_PREFLIGHT_SCHEMA_VERSION,
+        host,
+        cwd,
+        detection,
+        action: "offer_repair",
+        lifecycle_available: false,
+        advisory: { code: "needs_repair", message: advisoryMessage("needs_repair") },
+        init_prompt: null,
+        repair_hint: detection.problem,
+        cache_fingerprint: null,
+      };
+    case "single_project":
+    case "workspace_root":
+    case "workspace_child":
+    default:
+      return {
+        schema_version: HOST_OPEN_PREFLIGHT_SCHEMA_VERSION,
+        host,
+        cwd,
+        detection,
+        action: "proceed",
+        lifecycle_available: true,
+        advisory: { code: "ready", message: advisoryMessage("ready") },
+        init_prompt: null,
+        repair_hint: null,
+        cache_fingerprint: null,
+      };
+  }
 }
