@@ -18,7 +18,12 @@
       "lib/core/config-cli",
       "lib/core/settings-reader",
       "lib/shared/config-defaults",
-      "lib/settings-resolver"
+      "lib/settings-resolver",
+      "lib/config-ui-metadata",
+      "lib/config-ui-surface",
+      "lib/host-open-preflight",
+      "lib/init-guild",
+      "lib/init-scaffold-manifest"
     ]
   }
 }

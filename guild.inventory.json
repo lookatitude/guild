@@ -39,7 +39,7 @@
     {
       "id": "config",
       "source_path": "commands/config.md",
-      "description": "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki, per-run role pins). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key AND each phase-permission decision (host_mode/guild_gates/bypass) with its inheritance layer; `config show --render` renders the resolved config into each of the 5 host-native config shapes (fail-closed on local/secret leaks); `config set` performs a scoped hard-set write; `config role <host|advisory|adversarial> <host_id|null>` pins a per-run role to a registry host (scoped, provenance-stamped, never-clobber); `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
+      "description": "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki, per-run role pins). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key AND each phase-permission decision (host_mode/guild_gates/bypass) with its inheritance layer; `config show --render` renders the resolved config into each of the 5 host-native config shapes (fail-closed on local/secret leaks); `config set` performs a scoped hard-set write; `config role <host|advisory|adversarial> <host_id|null>` pins a per-run role to a registry host (scoped, provenance-stamped, never-clobber); `config ui list|get|sources|set` is the native CLI/agents-file settings render/edit surface — driven by CONFIG_UI_METADATA it lists config groups/keys/values/sources and edits any key, honoring the metadata's confirmation-strength (a danger/strongest key needs `--confirm`), routing every write through the config API; app/connector hosts report blocked; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
     },
     {
       "id": "dashboard",
@@ -1278,6 +1278,16 @@
       "kind": "lib"
     },
     {
+      "id": "lib/config-ui-metadata",
+      "source_path": "scripts/lib/config-ui-metadata.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/config-ui-surface",
+      "source_path": "scripts/lib/config-ui-surface.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
       "kind": "lib"
@@ -1453,6 +1463,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/host-open-preflight",
+      "source_path": "scripts/lib/host-open-preflight.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/host-profiles-validate",
       "source_path": "scripts/lib/host-profiles-validate.ts",
       "kind": "lib"
@@ -1513,6 +1528,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/init-guild",
+      "source_path": "scripts/lib/init-guild.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/init-offer-initiative",
       "source_path": "scripts/lib/init-offer-initiative.ts",
       "kind": "lib"
@@ -1520,6 +1540,11 @@
     {
       "id": "lib/init-resume-repair",
       "source_path": "scripts/lib/init-resume-repair.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/init-scaffold-manifest",
+      "source_path": "scripts/lib/init-scaffold-manifest.ts",
       "kind": "lib"
     },
     {
