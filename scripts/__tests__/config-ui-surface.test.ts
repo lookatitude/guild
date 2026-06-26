@@ -419,3 +419,24 @@ describe("config ui — CLI surface (§E11/§E12)", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+// L4-r2b: the render-guard's error formatter must NEVER re-throw — even on a hostile
+// non-Error thrown value whose String()/toString/Symbol.toPrimitive throws (G-lane MINOR).
+describe("safeErrorMessage — total even on non-coercible thrown values", () => {
+  const { safeErrorMessage, UNRENDERABLE_ERROR } = require("../lib/config-ui-surface");
+  it("returns the message for a normal Error", () => {
+    expect(safeErrorMessage(new Error("boom"))).toBe("boom");
+  });
+  it("does NOT throw on a non-Error whose String() coercion throws", () => {
+    const hostile = {
+      toString() { throw new Error("evil toString"); },
+      [Symbol.toPrimitive]() { throw new Error("evil toPrimitive"); },
+    };
+    let out: string | undefined;
+    expect(() => { out = safeErrorMessage(hostile); }).not.toThrow();
+    expect(out).toBe(UNRENDERABLE_ERROR);
+  });
+  it("anti-vacuity: a plain string coerces normally (guard not masking real values)", () => {
+    expect(safeErrorMessage("plain")).toBe("plain");
+  });
+});

@@ -224,6 +224,25 @@ function displayValue(v: unknown): string {
   }
 }
 
+/**
+ * Total error-message extractor: NEVER throws, even on a hostile non-Error thrown
+ * value whose `message` getter or `toString`/`Symbol.toPrimitive` throws. Falls back
+ * to a constant so the {@link buildHostConfigUiSurface} render-guard can't re-throw
+ * while formatting a caught value.
+ */
+export const UNRENDERABLE_ERROR = "(unrenderable error)" as const;
+export function safeErrorMessage(e: unknown): string {
+  try {
+    if (e instanceof Error) {
+      const m = e.message;
+      if (typeof m === "string") return m;
+    }
+    return String(e);
+  } catch {
+    return UNRENDERABLE_ERROR;
+  }
+}
+
 /** Is the key visible to this host given its host_visibility allow-list? */
 function visibleToHost(meta: ConfigUiMeta, host: string): boolean {
   if (meta.host_visibility === "all") return true;
@@ -370,7 +389,7 @@ export function buildHostConfigUiSurface(input: BuildSurfaceInput): HostConfigUi
     });
   } catch (e) {
     native_render = null;
-    render_error = e instanceof Error ? e.message : String(e);
+    render_error = safeErrorMessage(e);
   }
 
   return {
