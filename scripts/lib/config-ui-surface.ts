@@ -325,9 +325,36 @@ export interface BuildSurfaceInput {
 
 /**
  * Build the native settings surface for one host. App/connector hosts (∉ CLI_NATIVE_HOSTS)
- * return `blocked:true` with no groups — never a false-native edit path. Pure; never throws.
+ * return `blocked:true` with no groups — never a false-native edit path.
+ *
+ * TOTAL: a belt-and-suspenders outer guard catches ANY throw from the build (e.g. a hostile
+ * `config`/`sources` Proxy `get`-trap reached via getByPath/sourceForKey before the inner
+ * render guard) and degrades to a structured error surface instead of propagating. Real
+ * inputs are resolver-produced plain JSON; this guarantees the contract regardless.
  */
 export function buildHostConfigUiSurface(input: BuildSurfaceInput): HostConfigUiSurface {
+  try {
+    return buildHostConfigUiSurfaceUnsafe(input);
+  } catch (e) {
+    const row = HOST_REGISTRY_ROWS[input.host as HostId];
+    return {
+      schema_version: "guild.host_config_ui.v1",
+      host_id: input.host,
+      family: row?.family ?? "unknown",
+      surface_kind: row?.surface_kind ?? "app",
+      provenance: row?.provenance ?? "inferred",
+      blocked: false,
+      advisory: "ready",
+      groups: [],
+      key_count: 0,
+      native_render: null,
+      render_error: safeErrorMessage(e),
+      _rendered_at: input.renderedAt,
+    };
+  }
+}
+
+function buildHostConfigUiSurfaceUnsafe(input: BuildSurfaceInput): HostConfigUiSurface {
   const { host, config, sources, permissions, renderedAt } = input;
   const registryRow = HOST_REGISTRY_ROWS[host as HostId];
 

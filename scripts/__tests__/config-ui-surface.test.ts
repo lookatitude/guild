@@ -455,3 +455,26 @@ describe("getByPath — total against a throwing Proxy get-trap", () => {
     expect(getByPath({ a: { b: { c: 7 } } } as Record<string, unknown>, "a.b.c")).toBe(7);
   });
 });
+
+// L4-r2d: the WHOLE builder is total — a hostile `sources` Proxy (get-trap reached via
+// sourceForKey before the render guard) degrades structurally, never throws out (codex).
+describe("buildHostConfigUiSurface — total against a hostile sources Proxy", () => {
+  const mod = require("../lib/config-ui-surface");
+  const NOW = "2026-06-26T00:00:00.000Z";
+  it("no throw + structured degraded surface (render_error set) on a throwing sources get-trap", () => {
+    const hostileSources = new Proxy({}, { get() { throw new Error("evil sources get"); } });
+    let s: any;
+    expect(() => {
+      s = mod.buildHostConfigUiSurface({
+        host: "claude-code-cli",
+        config: { defaults: { team: { size: 3 } } },
+        sources: hostileSources,
+        renderedAt: NOW,
+      });
+    }).not.toThrow();
+    expect(s.blocked).toBe(false);
+    expect(s.native_render).toBeNull();
+    expect(typeof s.render_error).toBe("string");
+    expect(s._rendered_at).toBe(NOW);
+  });
+});
