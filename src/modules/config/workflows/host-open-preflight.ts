@@ -356,26 +356,53 @@ export interface WorkspaceSuggestion {
   readonly branches: readonly ("single_project" | "multiple_repo_workspace" | "skip")[];
 }
 
-/** Detect immediate child directories (depth 1) that contain their own `.git`. */
+/** Dir names never descended into during the child-repo walk (noise / non-source). */
+const CHILD_SCAN_SKIP_DIRS = new Set([".git", ".guild", "node_modules", ".hg", ".svn"]);
+/** Bound the descent so a pathological deep tree can't stall detection (immediate + nested). */
+const CHILD_SCAN_MAX_DEPTH = 6;
+
+/**
+ * Detect descendant directories that are their OWN git repo — immediate OR nested
+ * (e.g. `packages/foo/.git`), per spec §E6/V4. A directory that IS a git repo is
+ * recorded and NOT descended into (a repo nested inside a repo is that repo's
+ * submodule/worktree, not a separate workspace child). `root` itself is never a child.
+ */
 export function detectChildGitRepos(root: string): string[] {
   const out: string[] = [];
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(root, { withFileTypes: true });
-  } catch {
-    return out;
-  }
-  for (const ent of entries) {
-    if (!ent.isDirectory()) continue;
-    if (ent.name === ".git" || ent.name === ".guild" || ent.name === "node_modules") continue;
-    const childGit = path.join(root, ent.name, ".git");
-    // A git repo marks itself with a `.git` dir (normal clone) or `.git` file (worktree/submodule).
-    if (safeStat(childGit) !== null) out.push(path.join(root, ent.name));
-  }
+  const walk = (dir: string, depth: number): void => {
+    if (depth > CHILD_SCAN_MAX_DEPTH) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const ent of entries) {
+      if (!ent.isDirectory() || CHILD_SCAN_SKIP_DIRS.has(ent.name)) continue;
+      const childDir = path.join(dir, ent.name);
+      // A git repo marks itself with a `.git` dir (normal clone) or `.git` file (worktree/submodule).
+      if (safeStat(path.join(childDir, ".git")) !== null) {
+        out.push(childDir); // it's a repo — record and DO NOT descend into it
+      } else {
+        walk(childDir, depth + 1); // keep looking for nested repos
+      }
+    }
+  };
+  walk(root, 1);
   return out.sort();
 }
 
-/** True iff `root` has no entries other than an (optional) `.git` of its own. */
+/**
+ * Entries that do NOT make a root "non-empty" for init purposes: the root's own VCS
+ * dir, OS cruft, a bare `.gitignore`, and editor metadata. Per spec §E6/V4 an "empty"
+ * root may legitimately carry these and still be offered single-vs-workspace.
+ */
+const EMPTY_ROOT_IGNORED = new Set([
+  ".git", ".gitignore", ".gitattributes", ".DS_Store",
+  ".vscode", ".idea", ".editorconfig", "Thumbs.db",
+]);
+
+/** True iff `root` has no entries other than the EMPTY_ROOT_IGNORED allowlist. */
 function rootIsEmpty(root: string): boolean {
   let entries: string[];
   try {
@@ -383,7 +410,7 @@ function rootIsEmpty(root: string): boolean {
   } catch {
     return false;
   }
-  return entries.filter((e) => e !== ".git" && e !== ".DS_Store").length === 0;
+  return entries.filter((e) => !EMPTY_ROOT_IGNORED.has(e)).length === 0;
 }
 
 /**
