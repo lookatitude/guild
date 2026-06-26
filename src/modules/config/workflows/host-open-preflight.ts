@@ -14,7 +14,7 @@
  * Module: config — pure detection + node builtins; no host/runtime imports.
  */
 
-import type { ScaffoldEntry, ScaffoldMode } from "./init-scaffold-manifest";
+import type { ScaffoldEntry } from "./init-scaffold-manifest";
 
 // ===========================================================================
 // detectGuildState — install-state + workspace-mode detection from cwd
@@ -99,15 +99,24 @@ export interface GuildStateResult {
  *
  * Algorithm (L2 implements; pinned here as the contract):
  *  1. Discover the nearest workspace root: walk up INCLUSIVE of cwd for
- *     `.guild/workspace.json`. A malformed workspace.json AT cwd →
- *     installed_needs_repair{malformed_workspace_json, path}. A malformed one in
- *     an ancestor is skipped (continue up) — matches the resolver's F4 rule.
- *  2. cwd has `.guild/workspace.json` is_workspace:true → workspace_root; verify
- *     requiredEntriesFor("workspace_root"); first missing → needs_repair.
+ *     `.guild/workspace.json`. For a workspace.json AT cwd, presence COMMITS to the
+ *     workspace-root interpretation — it is NEVER reinterpreted as single_project:
+ *       - unparseable JSON  → installed_needs_repair{malformed_workspace_json, path}.
+ *       - parseable but INVALID SHAPE (missing `is_workspace:true`, wrong/extra-typed
+ *         required fields per guild.workspace.v1) → installed_needs_repair{
+ *         malformed_workspace_json, path}. (Closes the V1 silent-fallback hole — a
+ *         present-but-invalid workspace.json must NOT fall through to step 4.)
+ *     A malformed/invalid workspace.json in an ANCESTOR (not at cwd) is skipped
+ *     (continue up) — matches the resolver's F4 rule.
+ *  2. cwd has a VALID `.guild/workspace.json` (is_workspace:true + shape ok) →
+ *     workspace_root; verify requiredEntriesFor("workspace_root"); first missing →
+ *     needs_repair{missing_required_manifest_entry, path}.
  *  3. cwd is under an ancestor workspace root → workspace_child; verify
  *     requiredEntriesFor("workspace_child"); first missing → needs_repair.
- *  4. cwd has `.guild/` (no workspace.json, no ancestor workspace) → single_project;
- *     verify requiredEntriesFor("single_project"); first missing → needs_repair.
+ *  4. cwd has `.guild/` AND NO workspace.json at cwd AND no ancestor workspace →
+ *     single_project; verify requiredEntriesFor("single_project"); first missing →
+ *     needs_repair. (Only reachable when no workspace.json exists at cwd — a present
+ *     one was already resolved in step 1/2.)
  *  5. No `.guild/` at cwd and no ancestor workspace → not_installed.
  * Never silently fall back to single_project on malformed/incomplete (V1).
  */
@@ -150,10 +159,20 @@ export interface PreflightAdvisory {
 /** Classification of the opened root for the init prompt (spec lines 85-92). */
 export type RootKind = "empty" | "non_empty_no_child_repos" | "has_child_repos";
 
+/**
+ * The mode vocabulary `initializeGuild(cwd, mode)` accepts (spec §E step 4 / line 100):
+ * `single_project | workspace`. DISTINCT from the detection/scaffold vocabulary
+ * `ScaffoldMode` (whose workspace value is `workspace_root`) — the init prompt must speak
+ * the initializer's language so L3/L4 never pass `workspace_root` into `initializeGuild`.
+ * Mapping: detected `workspace_root` ⇄ init `workspace`; `single_project` is identical.
+ */
+export type InitMode = "single_project" | "workspace";
+
 /** Init-prompt data for adapters to render natively (action === "offer_init"). */
 export interface InitPromptData {
-  /** Recommended mode given root_kind (has_child_repos → workspace; else single_project). */
-  readonly recommended_mode: ScaffoldMode;
+  /** Recommended INIT mode given root_kind (has_child_repos → "workspace"; else "single_project").
+   *  This is the `initializeGuild` mode, NOT ScaffoldMode — see {@link InitMode}. */
+  readonly recommended_mode: InitMode;
   readonly root_kind: RootKind;
   /** Absolute paths of detected immediate/nested child `.git/` repos (drives the workspace recommendation). */
   readonly child_git_repos: readonly string[];
