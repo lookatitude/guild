@@ -361,3 +361,41 @@ describe("V12.4 — the round-trip is non-vacuous (mutate-and-confirm)", () => {
     expect(() => expect(config.loop_cap).toBe(16)).toThrow();
   });
 });
+
+// L5-r2: the models.knowledge.* editability fix must be TIGHT (G-lane MAJORs) — reject
+// (a) deeper paths and (b) out-of-range values write-time, so nothing invalid is persisted
+// (validate-before-write must mirror the resolver, which would silently drop these).
+describe("config ui set — models.knowledge.* validation is tight (no invalid write)", () => {
+  const NOOP = () => undefined;
+  const quietRc = (fn: () => number): number => {
+    const e = console.error; console.error = NOOP as typeof console.error;
+    try { return fn(); } finally { console.error = e; }
+  };
+  it("rejects a DEEPER path (models.knowledge.maxDepth.foo) and writes nothing", () => {
+    const dir = mkProject({});
+    const before = readSettings(dir);
+    const rc = quietRc(() => cmdUiSet(dir, "models.knowledge.maxDepth.foo", "5", "project", undefined, "strongest"));
+    expect(rc).not.toBe(0);
+    expect(readSettings(dir)).toEqual(before); // never-clobber: tree byte-identical
+  });
+  it("rejects OUT-OF-RANGE integer (maxDepth=0; resolver requires >=1) and writes nothing", () => {
+    const dir = mkProject({});
+    const before = readSettings(dir);
+    const rc = quietRc(() => cmdUiSet(dir, "models.knowledge.maxDepth", "0", "project", undefined, "strongest"));
+    expect(rc).not.toBe(0);
+    expect(readSettings(dir)).toEqual(before);
+  });
+  it("rejects OUT-OF-RANGE ratio (minTopicImportance=2; resolver requires [0,1]) and writes nothing", () => {
+    const dir = mkProject({});
+    const before = readSettings(dir);
+    const rc = quietRc(() => cmdUiSet(dir, "models.knowledge.minTopicImportance", "2", "project", undefined, "strongest"));
+    expect(rc).not.toBe(0);
+    expect(readSettings(dir)).toEqual(before);
+  });
+  it("anti-vacuity: an IN-RANGE value (maxDepth=4) still WRITES (rc 0, persisted)", () => {
+    const dir = mkProject({});
+    const rc = quietRc(() => cmdUiSet(dir, "models.knowledge.maxDepth", "4", "project", undefined, "strongest"));
+    expect(rc).toBe(0);
+    expect(deepGet(readSettings(dir), "models.knowledge.maxDepth")).toBe(4);
+  });
+});

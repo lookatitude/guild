@@ -383,6 +383,11 @@ function validateKeyPath(keyPath: string): string | null {
         if (!MODELS_KNOWLEDGE_KEYS.has(seg2)) {
           return `unknown models.knowledge key "${seg2}" (valid: ${[...MODELS_KNOWLEDGE_KEYS].join("|")})`;
         }
+        // knowledge leaves are scalars — reject any deeper path (e.g.
+        // models.knowledge.maxDepth.foo) so an unknown nested key can't be persisted.
+        if (parts.length > 3) {
+          return `models.knowledge.${seg2} is a scalar — "${keyPath}" has an invalid deeper path`;
+        }
       }
       // scoreWeights, shortOutputThreshold accept arbitrary sub-keys
     }
@@ -571,6 +576,33 @@ const NUMBER_PATHS = new Set([
   "models.knowledge.relMinConf",
 ]);
 
+/**
+ * Numeric RANGE constraints — write-time validation MUST mirror the resolver's accepted
+ * range, else the config API persists a value that fresh resolveSettings silently drops to
+ * default (validate-before-persist would be a lie). Mirrors KnowledgeConfigBlock parsing in
+ * settings-reader.ts: depth/branching/files/tokens/batch are `>= 1`; the two ratios are [0,1].
+ */
+const NUMERIC_RANGE: Record<string, { min: number; max?: number }> = {
+  "models.knowledge.maxDepth": { min: 1 },
+  "models.knowledge.maxBranching": { min: 1 },
+  "models.knowledge.maxFiles": { min: 1 },
+  "models.knowledge.maxTokens": { min: 1 },
+  "models.knowledge.batchSize": { min: 1 },
+  "models.knowledge.minTopicImportance": { min: 0, max: 1 },
+  "models.knowledge.relMinConf": { min: 0, max: 1 },
+};
+
+/** Range-check `n` for `keyPath`; returns an error string or null. */
+function rangeError(keyPath: string, n: number, raw: string): string | null {
+  const r = NUMERIC_RANGE[keyPath];
+  if (!r) return null;
+  if (n < r.min || (r.max !== undefined && n > r.max)) {
+    const bound = r.max !== undefined ? `in [${r.min}, ${r.max}]` : `>= ${r.min}`;
+    return `value for "${keyPath}" must be ${bound} (got "${raw}") — the resolver drops out-of-range values to default`;
+  }
+  return null;
+}
+
 /** Valid values for each closed-enum key. */
 const VALID_VALUES: Record<string, Set<string>> = {
   rigor: new Set(["quick", "standard", "deep"]),
@@ -672,7 +704,7 @@ function validateValue(keyPath: string, rawValue: string): string | null {
     if (!Number.isFinite(n) || !Number.isInteger(n)) {
       return `value for "${keyPath}" must be an integer (got "${rawValue}")`;
     }
-    return null;
+    return rangeError(keyPath, n, rawValue);
   }
 
   // Numeric (possibly non-integer) keys
@@ -681,7 +713,7 @@ function validateValue(keyPath: string, rawValue: string): string | null {
     if (!Number.isFinite(n)) {
       return `value for "${keyPath}" must be a number (got "${rawValue}")`;
     }
-    return null;
+    return rangeError(keyPath, n, rawValue);
   }
 
   // Null keyword for nullable keys
