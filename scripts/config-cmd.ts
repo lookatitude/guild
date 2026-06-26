@@ -199,6 +199,10 @@ const MODELS_KEYS = new Set([
   "importanceAtIngest",
   "ingestSimilarityGate",
   "shortOutputThreshold",
+  // L5 (V12): models.knowledge.* is a CONFIG_SCHEMA + CONFIG_UI_METADATA key block the
+  // resolver already round-trips (settings-reader VALID_MODELS_KEYS) — it MUST be writable
+  // via `config set` / `config ui set` too, else the knowledge-tier knobs are uneditable.
+  "knowledge",
 ]);
 
 /** Valid sub-keys for models.tiers.* */
@@ -209,6 +213,17 @@ const MODELS_THRESHOLDS_KEYS = new Set(["mid", "powerful"]);
 
 /** Valid sub-keys for models.cacheTTL.* */
 const MODELS_CACHETL_KEYS = new Set(["coordinator", "leaf"]);
+
+/** Valid sub-keys for models.knowledge.* (mirrors KnowledgeConfigBlock in settings-reader). */
+const MODELS_KNOWLEDGE_KEYS = new Set([
+  "maxDepth",
+  "maxBranching",
+  "minTopicImportance",
+  "relMinConf",
+  "maxFiles",
+  "maxTokens",
+  "batchSize",
+]);
 
 /** Valid sub-keys for security.* */
 const SECURITY_KEYS = new Set(["bypass_permissions_policy"]);
@@ -363,6 +378,10 @@ function validateKeyPath(keyPath: string): string | null {
       } else if (seg1 === "cacheTTL") {
         if (!MODELS_CACHETL_KEYS.has(seg2)) {
           return `unknown models.cacheTTL key "${seg2}" (valid: coordinator|leaf)`;
+        }
+      } else if (seg1 === "knowledge") {
+        if (!MODELS_KNOWLEDGE_KEYS.has(seg2)) {
+          return `unknown models.knowledge key "${seg2}" (valid: ${[...MODELS_KNOWLEDGE_KEYS].join("|")})`;
         }
       }
       // scoreWeights, shortOutputThreshold accept arbitrary sub-keys
@@ -532,6 +551,13 @@ const INTEGER_PATHS = new Set([
   "models.importanceGate",
   "models.thresholds.mid",
   "models.thresholds.powerful",
+  // L5 (V12): knowledge-tier integer knobs — coerce so the resolver (which requires a
+  // number) keeps them instead of dropping a string value.
+  "models.knowledge.maxDepth",
+  "models.knowledge.maxBranching",
+  "models.knowledge.maxFiles",
+  "models.knowledge.maxTokens",
+  "models.knowledge.batchSize",
 ]);
 
 /** Paths that must be numbers (possibly non-integer). */
@@ -540,6 +566,9 @@ const NUMBER_PATHS = new Set([
   "defaults.capability_manifest_ttl_s",    // R-018: positive number (seconds)
   "models.recallScoreThreshold",
   "models.ingestSimilarityGate",
+  // L5 (V12): knowledge-tier [0,1] ratio knobs.
+  "models.knowledge.minTopicImportance",
+  "models.knowledge.relMinConf",
 ]);
 
 /** Valid values for each closed-enum key. */

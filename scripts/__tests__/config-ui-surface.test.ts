@@ -497,3 +497,41 @@ describe("buildHostConfigUiSurface — total even on a hostile/absent input argu
     expect(() => mod.buildHostConfigUiSurface(hostileInput)).not.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// L5 EXTENSION (§E11 / §V) — cross-host structural parity of the rendered surface.
+// The metadata is host-agnostic, so every CLI/agents-file native host must render the
+// SAME group/key structure (only the embedded native_render's host_id differs). This
+// complements the multi-host V10 boundary proof in host-native-settings-ui.test.ts —
+// it does NOT duplicate the single-host L4 boundary test above.
+// ---------------------------------------------------------------------------
+
+describe("L5 extension — native hosts render identical surface STRUCTURE", () => {
+  const NATIVE = ["claude-code-cli", "codex-cli", "pi-cli", "antigravity-cli", "agents-file"];
+
+  function keyStructure(host: string): string[] {
+    const s = buildHostConfigUiSurface({ host, config: baseConfig(), renderedAt: NOW });
+    return s.groups.flatMap((g) => g.keys.map((k) => `${g.group}/${k.key}`));
+  }
+
+  it("every native host exposes the same ordered group/key set", () => {
+    const reference = keyStructure("claude-code-cli");
+    expect(reference.length).toBeGreaterThan(0);
+    for (const host of NATIVE) {
+      expect(keyStructure(host)).toEqual(reference);
+    }
+  });
+
+  it("the embedded native_render is host-specific (host_id tracks the requested host)", () => {
+    for (const host of NATIVE) {
+      const s = buildHostConfigUiSurface({ host, config: baseConfig(), renderedAt: NOW });
+      expect(s.native_render!.host_id).toBe(host);
+    }
+  });
+
+  it("anti-vacuity: a blocked app host does NOT share the native key structure", () => {
+    const blocked = buildHostConfigUiSurface({ host: "claude-code-app", config: baseConfig(), renderedAt: NOW });
+    expect(blocked.groups).toEqual([]);
+    expect(keyStructure("claude-code-cli").length).toBeGreaterThan(blocked.groups.length);
+  });
+});
