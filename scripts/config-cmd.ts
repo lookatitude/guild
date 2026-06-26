@@ -89,6 +89,19 @@ import type {
   ConfigSource,
 } from "./lib/config-render";
 import type { FieldProvenance } from "./lib/config-reconcile-contract";
+// L4 (§E11/§E12): the host-adapter CONFIG-UI presentation core. The surface RENDERS the
+// metadata-driven grouped settings panels + plans an edit's confirmation-strength gate; the
+// PERSIST step is delegated to `cmdSet` below (the plugin config API — never the surface, V10).
+import {
+  buildHostConfigUiSurface,
+  planConfigUiEdit,
+  parseConfirmation,
+  type HostConfigUiSurface,
+  type ConfigUiKeyView,
+} from "./lib/config-ui-surface";
+import type { ConfigScope } from "./lib/config-ui-metadata";
+// CLI/agents-file native-host set — drives the per-host `blocked` decision (app/connector → blocked).
+import { CLI_NATIVE_HOSTS } from "./lib/host-open-preflight";
 
 // ---------------------------------------------------------------------------
 // Prototype-pollution guard — PROTO_POISON_KEYS is the canonical single-source
@@ -888,9 +901,11 @@ function validateResolved(config: Record<string, unknown>, selfBuild = false): s
 // ---------------------------------------------------------------------------
 
 interface ParsedArgs {
-  subcommand: "set" | "role" | "show" | "validate" | "providers" | "update-mcp-hashes" | "reconcile";
+  subcommand: "set" | "role" | "show" | "validate" | "providers" | "update-mcp-hashes" | "reconcile" | "ui";
   /** For subcommand=providers: the sub-verb (e.g. "detect"). */
   providersVerb?: string;
+  /** For subcommand=ui: the sub-verb (list|get|sources|set). */
+  uiVerb?: string;
   /** For subcommand=reconcile: the mode (check|sync|repair). */
   reconcileMode?: ReconcileMode;
   /** For subcommand=update-mcp-hashes: path to JSON file with tool-name→description map. */
@@ -906,6 +921,12 @@ interface ParsedArgs {
   showRender: boolean;
   validateEffective: boolean;
   selfBuild: boolean;
+  /** For subcommand=ui: the registry host id the surface renders for (--host). */
+  uiHost?: string;
+  /** For subcommand=ui: restrict to one config group (--group). */
+  uiGroup?: string;
+  /** For subcommand=ui set: the operator-supplied confirmation token (--confirm). */
+  uiConfirm?: string;
 }
 
 function parseArgs(argv: string[]): ParsedArgs | { error: string } {
@@ -913,21 +934,23 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   if (args.length === 0) {
     return {
       error:
-        "Usage: config-cmd.ts <set|role|show|validate|providers> [options...]\n" +
+        "Usage: config-cmd.ts <set|role|show|validate|providers|ui> [options...]\n" +
         "  set <key> <value> --scope workspace|project|local [--cwd <p>]\n" +
         "  role <host|advisory|adversarial> <host_id|null> --scope workspace|project|local [--cwd <p>]\n" +
         "  show --sources [--render] [--cwd <p>]\n" +
         "  show --render [--cwd <p>]\n" +
         "  validate --effective [--cwd <p>]\n" +
         "  providers detect [--cwd <p>]\n" +
+        "  ui <list|get|sources|set> [--host <id>] [--group <g>] [--cwd <p>]\n" +
+        "  ui set <key> <value> --scope workspace|project|local [--confirm <strength>] [--host <id>] [--cwd <p>]\n" +
         "  update-mcp-hashes --tools <json-file> --scope workspace|project|local [--cwd <p>]\n" +
         "  reconcile <check|sync|repair> [--cwd <p>]   (config init = reconcile sync)",
     };
   }
 
   const sub = args[0];
-  if (sub !== "set" && sub !== "role" && sub !== "show" && sub !== "validate" && sub !== "providers" && sub !== "update-mcp-hashes" && sub !== "reconcile") {
-    return { error: `unknown subcommand "${sub}" — expected: set, role, show, validate, providers, update-mcp-hashes, reconcile` };
+  if (sub !== "set" && sub !== "role" && sub !== "show" && sub !== "validate" && sub !== "providers" && sub !== "update-mcp-hashes" && sub !== "reconcile" && sub !== "ui") {
+    return { error: `unknown subcommand "${sub}" — expected: set, role, show, validate, providers, ui, update-mcp-hashes, reconcile` };
   }
 
   // P1-L9: reconcile takes a required mode positional (check|sync|repair).
@@ -949,6 +972,10 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   let validateEffective = false;
   let selfBuild = false;
   let providersVerb: string | undefined;
+  let uiVerb: string | undefined;
+  let uiHost: string | undefined;
+  let uiGroup: string | undefined;
+  let uiConfirm: string | undefined;
 
   // For `providers`, the second positional is the sub-verb (e.g. "detect")
   if (sub === "providers") {
@@ -962,8 +989,20 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     }
   }
 
-  // Parse flags from the rest of the args (skip the sub-verb/mode for providers/reconcile)
-  const flagStart = sub === "providers" || sub === "reconcile" ? 2 : 1;
+  // For `ui`, the second positional is the sub-verb (list|get|sources|set).
+  if (sub === "ui") {
+    if (args[1] && !args[1].startsWith("--")) {
+      uiVerb = args[1];
+      if (uiVerb !== "list" && uiVerb !== "get" && uiVerb !== "sources" && uiVerb !== "set") {
+        return { error: `unknown ui sub-verb "${uiVerb}" — expected: list, get, sources, set` };
+      }
+    } else {
+      return { error: "ui requires a sub-verb — expected: ui <list|get|sources|set> [options...]" };
+    }
+  }
+
+  // Parse flags from the rest of the args (skip the sub-verb/mode for providers/reconcile/ui)
+  const flagStart = sub === "providers" || sub === "reconcile" || sub === "ui" ? 2 : 1;
   const positionals: string[] = [];
   let toolsFile: string | undefined;
   for (let i = flagStart; i < args.length; i++) {
@@ -996,6 +1035,18 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
       toolsFile = args[++i];
     } else if (arg.startsWith("--tools=")) {
       toolsFile = arg.slice("--tools=".length);
+    } else if (arg === "--host" && args[i + 1]) {
+      uiHost = args[++i];
+    } else if (arg.startsWith("--host=")) {
+      uiHost = arg.slice("--host=".length);
+    } else if (arg === "--group" && args[i + 1]) {
+      uiGroup = args[++i];
+    } else if (arg.startsWith("--group=")) {
+      uiGroup = arg.slice("--group=".length);
+    } else if (arg === "--confirm" && args[i + 1]) {
+      uiConfirm = args[++i];
+    } else if (arg.startsWith("--confirm=")) {
+      uiConfirm = arg.slice("--confirm=".length);
     } else if (!arg.startsWith("--")) {
       positionals.push(arg);
     }
@@ -1026,9 +1077,26 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     return { error: "update-mcp-hashes requires --scope workspace|project|local" };
   }
 
+  // `ui get` / `ui set` positionals (key, and value for set) + scope requirement for `ui set`.
+  if (sub === "ui") {
+    if (uiVerb === "get") {
+      [key] = positionals;
+      if (!key) return { error: "ui get requires: <key> [--host <id>] [--cwd <p>]" };
+    } else if (uiVerb === "set") {
+      [key, rawValue] = positionals;
+      if (!key || rawValue === undefined) {
+        return { error: "ui set requires: <key> <value> [--scope workspace|project|local] [--confirm <strength>]" };
+      }
+      // §E12: default child-session writes target PROJECT scope; an explicit `local`
+      // scope writes the gitignored settings.local.json. Workspace must be explicit.
+      if (!scope) scope = "project";
+    }
+  }
+
   return {
     subcommand: sub,
     providersVerb,
+    uiVerb,
     reconcileMode,
     toolsFile,
     key,
@@ -1040,6 +1108,9 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     showRender,
     validateEffective,
     selfBuild,
+    uiHost,
+    uiGroup,
+    uiConfirm,
   };
 }
 
@@ -1391,6 +1462,287 @@ function cmdShowRender(cwd: string): number {
 
   process.stdout.write(lines.join("\n") + "\n");
   return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: ui (§E11/§E12) — native CLI/agents-file settings render + edit
+// ---------------------------------------------------------------------------
+
+/** Default registry host for the UI surface when --host is omitted (this CLI host). */
+const DEFAULT_UI_HOST = "claude-code-cli";
+
+/** Resolve + validate the --host id (any registry id; app/connector ids render `blocked`). */
+function resolveUiHost(uiHost: string | undefined): { host: string } | { error: string } {
+  const host = uiHost ?? DEFAULT_UI_HOST;
+  if (!(HOST_IDS as readonly string[]).includes(host)) {
+    return {
+      error:
+        `unknown --host "${host}" — valid registry host ids: ${HOST_IDS.join(", ")}`,
+    };
+  }
+  return { host };
+}
+
+/**
+ * Resolve settings and build the host config-UI surface for `host` (optionally one group).
+ * Reuses the same permission-block derivation as `show --render` so the embedded
+ * `native_render` is identical to that command's output (single SoT).
+ */
+function buildUiSurfaceFor(
+  cwd: string,
+  host: string,
+  group: string | undefined
+): { surface: HostConfigUiSurface } | { error: string } {
+  let result: ReturnType<typeof resolveSettings>;
+  try {
+    result = resolveSettings({ cwd });
+  } catch (e) {
+    return { error: `could not resolve settings — ${(e as Error).message}` };
+  }
+  const { config, sources } = result;
+  const { auto_approve, bypass_permissions_policy } = permissionInputs(config);
+  const permissions = resolveBaselineGolden({ auto_approve, bypass_permissions_policy });
+  const surface = buildHostConfigUiSurface({
+    host,
+    config: config as unknown as RenderConfigLike & Record<string, unknown>,
+    sources: sources as unknown as Record<string, ConfigSource>,
+    permissions,
+    renderedAt: new Date().toISOString(),
+    groupFilter: group,
+  });
+  return { surface };
+}
+
+/** One key row, formatted for the panel. Confirmation/safety annotations are always shown. */
+function formatKeyRow(v: ConfigUiKeyView): string[] {
+  const lines: string[] = [];
+  const dep = v.deprecated ? " (deprecated)" : "";
+  lines.push(`  • ${v.key}${dep}`);
+  lines.push(`      ${v.label}  ·  ${v.control}  ·  value=${v.value}  [${v.source}]${v.unset ? " (default)" : ""}`);
+  lines.push(
+    `      safety=${v.safety_class}  confirm=${v.confirmation_strength}  ` +
+      `scopes=${v.scope_support.join("/")}  edit=${v.editability}  component=${v.native_component}`
+  );
+  return lines;
+}
+
+/** Print a blocked-host advisory panel (app/connector hosts — no native surface). */
+function printBlockedSurface(s: HostConfigUiSurface, lines: string[]): void {
+  lines.push(`[config-cmd] ui — host "${s.host_id}" (family=${s.family} surface=${s.surface_kind})`);
+  lines.push(`  ⚠ BLOCKED — no native config surface for this host in this build.`);
+  lines.push(
+    `  App/connector hosts are an OPEN blocker (L0): only CLI/agents-file hosts ` +
+      `(${[...CLI_NATIVE_HOSTS].join(", ")}) have a native render/edit surface.`
+  );
+}
+
+/**
+ * `config ui list` — the native grouped settings panel (§E11): config groups → keys, each
+ * with its CONFIG_UI_METADATA (label/control/scope/safety/confirmation/component) + the
+ * resolved value and the layer it won from. App/connector hosts report `blocked`.
+ */
+function cmdUiList(cwd: string, uiHost: string | undefined, group: string | undefined): number {
+  const hostRes = resolveUiHost(uiHost);
+  if ("error" in hostRes) {
+    process.stdout.write(`[config-cmd] ERROR: ${hostRes.error}\n`);
+    return 1;
+  }
+  const built = buildUiSurfaceFor(cwd, hostRes.host, group);
+  if ("error" in built) {
+    process.stdout.write(`[config-cmd] ERROR: ${built.error}\n`);
+    return 1;
+  }
+  const s = built.surface;
+  const lines: string[] = [];
+  if (s.blocked) {
+    printBlockedSurface(s, lines);
+    process.stdout.write(lines.join("\n") + "\n");
+    return 0;
+  }
+
+  lines.push(
+    `[config-cmd] ui list — host "${s.host_id}" (family=${s.family} surface=${s.surface_kind} provenance=${s.provenance})`
+  );
+  lines.push(`  ${s.key_count} key(s) across ${s.groups.length} group(s)${group ? ` (group=${group})` : ""}`);
+  if (group && s.groups.length === 0) {
+    lines.push(`  (no keys for group "${group}")`);
+  }
+  for (const g of s.groups) {
+    lines.push("");
+    lines.push(`▸ ${g.group}  (${g.keys.length})`);
+    for (const v of g.keys) lines.push(...formatKeyRow(v));
+  }
+  // Reuse the embedded host-native render summary (models / permission-cell count).
+  const r = s.native_render;
+  if (r) {
+    lines.push("");
+    const modelStr = r.models
+      ? `cheap=${r.models.cheap ?? "—"} mid=${r.models.mid ?? "—"} powerful=${r.models.powerful ?? "—"}`
+      : "(none)";
+    lines.push(`  native projection: models[${modelStr}]  permissions=${r.permissions ? Object.keys(r.permissions).length : 0} cell(s)`);
+  }
+  process.stdout.write(lines.join("\n") + "\n");
+  return 0;
+}
+
+/** `config ui get <key>` — render a single key row (§E11). */
+function cmdUiGet(cwd: string, key: string, uiHost: string | undefined): number {
+  const hostRes = resolveUiHost(uiHost);
+  if ("error" in hostRes) {
+    process.stdout.write(`[config-cmd] ERROR: ${hostRes.error}\n`);
+    return 1;
+  }
+  const built = buildUiSurfaceFor(cwd, hostRes.host, undefined);
+  if ("error" in built) {
+    process.stdout.write(`[config-cmd] ERROR: ${built.error}\n`);
+    return 1;
+  }
+  const s = built.surface;
+  const lines: string[] = [];
+  if (s.blocked) {
+    printBlockedSurface(s, lines);
+    process.stdout.write(lines.join("\n") + "\n");
+    return 0;
+  }
+  let found: ConfigUiKeyView | undefined;
+  for (const g of s.groups) {
+    found = g.keys.find((k) => k.key === key);
+    if (found) break;
+  }
+  if (!found) {
+    process.stdout.write(
+      `[config-cmd] ERROR: unknown config key "${key}" — not in the CONFIG_UI_METADATA table (or not visible to host "${s.host_id}")\n`
+    );
+    return 1;
+  }
+  lines.push(`[config-cmd] ui get — host "${s.host_id}"`);
+  lines.push(...formatKeyRow(found));
+  process.stdout.write(lines.join("\n") + "\n");
+  return 0;
+}
+
+/**
+ * `config ui sources` — the value/layer panel (§E11), grouped: every visible key with its
+ * resolved value and the inheritance layer it won from. Compact form of `ui list` focused
+ * on the source column. App/connector hosts report `blocked`.
+ */
+function cmdUiSources(cwd: string, uiHost: string | undefined, group: string | undefined): number {
+  const hostRes = resolveUiHost(uiHost);
+  if ("error" in hostRes) {
+    process.stdout.write(`[config-cmd] ERROR: ${hostRes.error}\n`);
+    return 1;
+  }
+  const built = buildUiSurfaceFor(cwd, hostRes.host, group);
+  if ("error" in built) {
+    process.stdout.write(`[config-cmd] ERROR: ${built.error}\n`);
+    return 1;
+  }
+  const s = built.surface;
+  const lines: string[] = [];
+  if (s.blocked) {
+    printBlockedSurface(s, lines);
+    process.stdout.write(lines.join("\n") + "\n");
+    return 0;
+  }
+  lines.push(`[config-cmd] ui sources — host "${s.host_id}" (${s.key_count} key(s))`);
+  for (const g of s.groups) {
+    lines.push("");
+    lines.push(`▸ ${g.group}`);
+    for (const v of g.keys) {
+      lines.push(`    ${v.key} = ${v.value}  [${v.source}]`);
+    }
+  }
+  process.stdout.write(lines.join("\n") + "\n");
+  return 0;
+}
+
+/**
+ * `config ui set <key> <value> --scope <s> [--confirm <strength>]` — the §E12 persistence path.
+ *
+ * The surface (config-ui-surface.ts) PLANS the edit: it validates the key + scope and computes
+ * the confirmation the metadata DECLARES (advanced/danger/strongest keys require an explicit
+ * `--confirm`). The WRITE itself is delegated to `cmdSet` — the plugin config API
+ * (validate-before-write, never-clobber read-modify-write, scoped file). The UI layer does NO
+ * `fs` write of its own (V10). On success it IMMEDIATELY RELOADS via a fresh `resolveSettings`
+ * and prints the key's new value + winning layer. App/connector hosts report `blocked`.
+ */
+function cmdUiSet(
+  cwd: string,
+  key: string,
+  rawValue: string,
+  scope: "workspace" | "project" | "local",
+  uiHost: string | undefined,
+  uiConfirm: string | undefined
+): number {
+  const hostRes = resolveUiHost(uiHost);
+  if ("error" in hostRes) {
+    process.stdout.write(`[config-cmd] ERROR: ${hostRes.error}\n`);
+    return 1;
+  }
+  // App/connector host → no native edit surface (mirrors hostOpenPreflight blocked).
+  if (!CLI_NATIVE_HOSTS.has(hostRes.host)) {
+    process.stdout.write(
+      `[config-cmd] ERROR: host "${hostRes.host}" has no native config-edit surface in this build ` +
+        `(app/connector hosts are blocked; only ${[...CLI_NATIVE_HOSTS].join(", ")} can edit natively)\n`
+    );
+    return 1;
+  }
+
+  // 1. PLAN the edit — confirmation-strength gate (NO write here, V10).
+  const plan = planConfigUiEdit({
+    key,
+    scope: scope as ConfigScope,
+    providedConfirmation: parseConfirmation(uiConfirm),
+  });
+  if (!plan.ok) {
+    process.stdout.write(`[config-cmd] ERROR: ${plan.reason}\n`);
+    // Print the confirmation hint ONLY when the confirmation gate is the actual blocker
+    // (a scope-support rejection has its own reason and must not also nag about --confirm).
+    if ((plan.reason ?? "").includes("confirmation")) {
+      process.stdout.write(
+        `  This is a ${plan.safety_class} key; re-run with --confirm ${plan.required_confirmation}\n`
+      );
+    }
+    return 1;
+  }
+
+  // 2. PERSIST through the plugin config API (cmdSet: validate-before-write, never-clobber).
+  const setRc = cmdSet(key, rawValue, scope, cwd);
+  if (setRc !== 0) return setRc;
+
+  // 3. IMMEDIATE RELOAD — fresh resolveSettings; show the key's new value + winning layer.
+  try {
+    const { config, sources } = resolveSettings({ cwd });
+    const newVal = getByPathLocal(config as unknown as Record<string, unknown>, key);
+    const layer = nearestSource(key, sources as Record<string, string>);
+    process.stdout.write(
+      `[config-cmd] ui set — reloaded: ${key} = ${JSON.stringify(newVal)}  [${layer}]\n` +
+        `  confirmation: ${plan.required_confirmation}${plan.confirmation_required ? " (satisfied)" : " (implicit — standard settings-write ask)"}\n`
+    );
+  } catch (e) {
+    process.stdout.write(`[config-cmd] WARN: write succeeded but reload failed — ${(e as Error).message}\n`);
+  }
+  return 0;
+}
+
+/** Local dotted-path read for the post-write reload print (kept inline; no surface dependency). */
+function getByPathLocal(obj: Record<string, unknown>, dottedKey: string): unknown {
+  let cursor: unknown = obj;
+  for (const part of dottedKey.split(".")) {
+    if (cursor === null || typeof cursor !== "object" || Array.isArray(cursor)) return undefined;
+    cursor = (cursor as Record<string, unknown>)[part];
+  }
+  return cursor;
+}
+
+/** Nearest inheritance layer for a dotted key (key → ancestors → "builtin"). */
+function nearestSource(dottedKey: string, sources: Record<string, string>): string {
+  const parts = dottedKey.split(".");
+  for (let i = parts.length; i >= 1; i--) {
+    const src = sources[parts.slice(0, i).join(".")];
+    if (src) return src;
+  }
+  return "builtin";
 }
 
 // ---------------------------------------------------------------------------
@@ -1893,6 +2245,47 @@ function main(): void {
         process.exit(1);
       }
       exitCode = cmdReconcile(parsed.reconcileMode, parsed.cwd);
+      break;
+    }
+
+    case "ui": {
+      // §E11/§E12: native CLI/agents-file settings render (list/get/sources) + edit (set).
+      switch (parsed.uiVerb) {
+        case "list":
+          exitCode = cmdUiList(parsed.cwd, parsed.uiHost, parsed.uiGroup);
+          break;
+        case "sources":
+          exitCode = cmdUiSources(parsed.cwd, parsed.uiHost, parsed.uiGroup);
+          break;
+        case "get":
+          if (!parsed.key) {
+            process.stdout.write("[config-cmd] ERROR: ui get requires <key>\n");
+            process.exit(1);
+          }
+          exitCode = cmdUiGet(parsed.cwd, parsed.key, parsed.uiHost);
+          break;
+        case "set":
+          if (!parsed.key || parsed.rawValue === undefined || !parsed.scope) {
+            process.stdout.write(
+              "[config-cmd] ERROR: ui set requires <key> <value> --scope workspace|project|local\n"
+            );
+            process.exit(1);
+          }
+          exitCode = cmdUiSet(
+            parsed.cwd,
+            parsed.key,
+            parsed.rawValue,
+            parsed.scope,
+            parsed.uiHost,
+            parsed.uiConfirm
+          );
+          break;
+        default:
+          process.stdout.write(
+            "[config-cmd] ERROR: ui requires a sub-verb — list|get|sources|set\n"
+          );
+          exitCode = 1;
+      }
       break;
     }
 

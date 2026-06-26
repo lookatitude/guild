@@ -1,7 +1,7 @@
 ---
 name: config
-description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki, per-run role pins). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key AND each phase-permission decision (host_mode/guild_gates/bypass) with its inheritance layer; `config show --render` renders the resolved config into each of the 5 host-native config shapes (fail-closed on local/secret leaks); `config set` performs a scoped hard-set write; `config role <host|advisory|adversarial> <host_id|null>` pins a per-run role to a registry host (scoped, provenance-stamped, never-clobber); `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
-argument-hint: "<init|set|role|show|validate|providers|update-mcp-hashes|reconcile> [show: --sources|--render] [role: <host|advisory|adversarial> <host_id|null> --scope <s>] [reconcile: <check|sync|repair>] [--cwd <repo-root>] [--force]"
+description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki, per-run role pins). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key AND each phase-permission decision (host_mode/guild_gates/bypass) with its inheritance layer; `config show --render` renders the resolved config into each of the 5 host-native config shapes (fail-closed on local/secret leaks); `config set` performs a scoped hard-set write; `config role <host|advisory|adversarial> <host_id|null>` pins a per-run role to a registry host (scoped, provenance-stamped, never-clobber); `config ui list|get|sources|set` is the native CLI/agents-file settings render/edit surface — driven by CONFIG_UI_METADATA it lists config groups/keys/values/sources and edits any key, honoring the metadata's confirmation-strength (a danger/strongest key needs `--confirm`), routing every write through the config API; app/connector hosts report blocked; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
+argument-hint: "<init|set|role|show|validate|providers|ui|update-mcp-hashes|reconcile> [show: --sources|--render] [role: <host|advisory|adversarial> <host_id|null> --scope <s>] [ui: <list|get|sources|set> --host <id> --group <g> --confirm <strength>] [reconcile: <check|sync|repair>] [--cwd <repo-root>] [--force]"
 allowed-tools: Read, Write, Bash
 ---
 
@@ -134,6 +134,68 @@ npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts role advisory null --scope p
 (`config set host …`) is the dispatch-host **selector** (`claude|codex|auto`). The 5 registry
 ids live only under `roles.*` / `host_profiles.*`. The host-id value is validated against the
 closed registry set — a typo (`claudee`) is rejected, not silently written.
+
+## `ui` — native CLI/agents-file settings render + edit surface (§E11/§E12)
+
+The host-native **settings UI** for the CLI and `.agents`-file host families. Driven entirely
+by the hand-authored `CONFIG_UI_METADATA` table (`scripts/lib/config-ui-metadata.ts`), it
+renders every config key grouped into panels (`startup`, `host_roles`, `models`,
+`knowledge_recall`, `team_gates`, `wiki_quality`, `indexing`, `cross_host_runtime`,
+`safety_platform`, `workspace`) with its **label, control, scope-support, safety-class,
+confirmation-strength, native-component hint**, the **resolved value**, and the **inheritance
+layer** the value won from — and lets you edit any key.
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts ui <list|get|sources|set> [--host <id>] [--group <g>] [--cwd <p>]
+```
+
+| Sub-verb | What it does |
+|---|---|
+| `list` | Full grouped panel: every visible key with metadata + value + source, plus the embedded host-native projection (models / permission-cell count). |
+| `get <key>` | Render a single key's row. |
+| `sources` | Compact value/layer panel: `key = value  [layer]` per group. |
+| `set <key> <value> --scope <s> [--confirm <strength>]` | Edit a key — see §E12 persistence below. |
+
+**`--host <id>`** selects the registry host the surface renders for (default `claude-code-cli`;
+valid ids are the 9 registry hosts). **`--group <g>`** restricts `list`/`sources` to one group.
+
+**App/connector hosts report `blocked`.** Only the CLI/agents-file native hosts
+(`claude-code-cli`, `codex-cli`, `pi-cli`, `antigravity-cli`, `agents-file`) have a native
+config surface in this build; passing an app/connector id (`claude-code-app`,
+`claude-code-web`, `codex-app`, `claude-ai-connector`) renders a **BLOCKED** advisory (mirrors
+`hostOpenPreflight`'s `action:"blocked"` — never a false-native edit path).
+
+**Secrets never echo.** A `replace_only` / `secret` key (e.g. `secrets_policy.redaction_patterns`)
+is masked to `‹redacted — replace-only›`; the raw value never appears in the rendered surface.
+
+### `ui set` — edit any key through the config API (§E12)
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts ui set <key> <value> --scope workspace|project|local [--confirm <strength>] [--host <id>] [--cwd <p>]
+```
+
+The edit is **planned** by the surface (validate the key + scope, compute the required
+confirmation) and then **persisted by the plugin config API** — the surface itself performs
+**no file writes** (V10). The write routes through the same `config set` path as a hard-set
+(validate-before-write, never-clobber read-modify-write, scoped file), then the command does an
+**immediate reload** via a fresh `resolveSettings` and prints the key's new value + winning layer.
+
+- **Confirmation-strength is honored.** Each key declares a confirmation in the metadata
+  (`none` < `normal` < `advanced` < `danger` < `strongest`). A `normal`/`none` key is covered by
+  the standard always-ask settings write; an **`advanced`/`danger`/`strongest`** key **requires an
+  explicit `--confirm <strength>`** that meets-or-exceeds the declared level, else the edit is
+  **refused and nothing is written**. Example: `review` (dangerous) needs `--confirm danger`;
+  `codex_skip_enforcement` (security_sensitive) needs `--confirm strongest`.
+- **Scope-support is enforced.** A scope not in the key's `scope_support` is rejected (e.g.
+  `workspace.mode` supports only `project`/`local`). Default child-session writes target
+  `project`; an explicit `local` scope writes the gitignored `.guild/settings.local.json`.
+
+```bash
+# render the startup panel for the default CLI host
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts ui list --group startup --cwd "$(pwd)"
+# edit a dangerous key (refused without the declared confirmation)
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts ui set review off --scope project --confirm danger --cwd "$(pwd)"
+```
 
 ## `show` — print the resolved config
 
