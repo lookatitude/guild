@@ -333,13 +333,26 @@ export interface BuildSurfaceInput {
  * inputs are resolver-produced plain JSON; this guarantees the contract regardless.
  */
 export function buildHostConfigUiSurface(input: BuildSurfaceInput): HostConfigUiSurface {
+  // Snapshot the identity fields up front, null-safe, so the error fallback NEVER re-reads a
+  // hostile or absent `input` (the catch must itself be total). A throwing `input` getter, or
+  // a null/undefined `input` from untyped JS, lands on the safe defaults.
+  let hostId = "unknown";
+  let renderedAt = "";
+  try {
+    if (input != null) {
+      if (typeof input.host === "string") hostId = input.host;
+      if (typeof input.renderedAt === "string") renderedAt = input.renderedAt;
+    }
+  } catch {
+    /* hostile input getter — keep the safe defaults */
+  }
   try {
     return buildHostConfigUiSurfaceUnsafe(input);
   } catch (e) {
-    const row = HOST_REGISTRY_ROWS[input.host as HostId];
+    const row = HOST_REGISTRY_ROWS[hostId as HostId];
     return {
       schema_version: "guild.host_config_ui.v1",
-      host_id: input.host,
+      host_id: hostId,
       family: row?.family ?? "unknown",
       surface_kind: row?.surface_kind ?? "app",
       provenance: row?.provenance ?? "inferred",
@@ -349,7 +362,7 @@ export function buildHostConfigUiSurface(input: BuildSurfaceInput): HostConfigUi
       key_count: 0,
       native_render: null,
       render_error: safeErrorMessage(e),
-      _rendered_at: input.renderedAt,
+      _rendered_at: renderedAt,
     };
   }
 }

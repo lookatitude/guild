@@ -478,3 +478,22 @@ describe("buildHostConfigUiSurface — total against a hostile sources Proxy", (
     expect(s._rendered_at).toBe(NOW);
   });
 });
+
+// L4-r2e: the error fallback itself is total — a null/undefined or hostile-Proxy `input`
+// argument does not throw out of the catch (codex: catch must not re-read a hostile input).
+describe("buildHostConfigUiSurface — total even on a hostile/absent input argument", () => {
+  const mod = require("../lib/config-ui-surface");
+  it("null/undefined input → no throw, safe degraded surface", () => {
+    for (const bad of [null, undefined]) {
+      let s: any;
+      expect(() => { s = mod.buildHostConfigUiSurface(bad); }).not.toThrow();
+      expect(s.blocked).toBe(false);
+      expect(typeof s.host_id).toBe("string");
+      expect(typeof s.render_error).toBe("string");
+    }
+  });
+  it("a hostile top-level input Proxy (throwing get) → no throw", () => {
+    const hostileInput = new Proxy({}, { get() { throw new Error("evil input get"); } });
+    expect(() => mod.buildHostConfigUiSurface(hostileInput)).not.toThrow();
+  });
+});
