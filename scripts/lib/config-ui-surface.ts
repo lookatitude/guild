@@ -24,12 +24,13 @@
  * `buildHostConfigUiSurface` returns `blocked: true` (mirrors `hostOpenPreflight`'s
  * `action:"blocked"` for a non-`CLI_NATIVE_HOSTS` id) — never a false-native render.
  *
- * CONTRACT: PURE. No I/O, no clock (the caller supplies `renderedAt`). Never throws —
- * the two throw-capable steps are guarded: `displayValue` falls back to
- * {@link UNRENDERABLE_VALUE} on an unserializable value, and a throwing embedded
- * `renderHostConfig` is caught and surfaced structurally (`native_render:null` +
- * `render_error`) instead of propagating. Hostile input yields a degraded surface, never
- * an exception. Module: config. Owned by command-builder (L4).
+ * CONTRACT: PURE. No I/O, no clock (the caller supplies `renderedAt`). TOTAL — every
+ * throw-capable step is guarded so the surface degrades rather than throwing: `getByPath`
+ * traversal (returns `undefined` even on a Proxy `get` trap), `displayValue` (falls back to
+ * {@link UNRENDERABLE_VALUE}), the embedded `renderHostConfig` (caught → `native_render:null`
+ * + `render_error`), and the error formatter itself ({@link safeErrorMessage}). The real
+ * input is resolver-produced plain JSON; these guards harden the boundary against hostile
+ * inputs too. Module: config. Owned by command-builder (L4).
  */
 
 import {
@@ -162,17 +163,25 @@ export interface HostConfigUiSurface {
 // Value + source resolution (pure)
 // ---------------------------------------------------------------------------
 
-/** Read a dotted path out of the resolved config object. Defensive (never throws). */
+/**
+ * Read a dotted path out of the resolved config object. Total — returns `undefined`
+ * rather than throwing, even if a property access throws (e.g. a Proxy `get` trap;
+ * resolver-produced config is plain JSON, but stay defensive at the boundary).
+ */
 export function getByPath(config: Record<string, unknown>, dottedKey: string): unknown {
-  const parts = dottedKey.split(".");
-  let cursor: unknown = config;
-  for (const part of parts) {
-    if (cursor === null || typeof cursor !== "object" || Array.isArray(cursor)) {
-      return undefined;
+  try {
+    const parts = dottedKey.split(".");
+    let cursor: unknown = config;
+    for (const part of parts) {
+      if (cursor === null || typeof cursor !== "object" || Array.isArray(cursor)) {
+        return undefined;
+      }
+      cursor = (cursor as Record<string, unknown>)[part];
     }
-    cursor = (cursor as Record<string, unknown>)[part];
+    return cursor;
+  } catch {
+    return undefined;
   }
-  return cursor;
 }
 
 /**

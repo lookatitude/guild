@@ -440,3 +440,18 @@ describe("safeErrorMessage — total even on non-coercible thrown values", () =>
     expect(safeErrorMessage("plain")).toBe("plain");
   });
 });
+
+// L4-r2c: getByPath must be TOTAL even on a hostile config (Proxy get-trap that throws)
+// — codex found buildHostConfigUiSurface could throw via unguarded getByPath access.
+describe("getByPath — total against a throwing Proxy get-trap", () => {
+  const { getByPath } = require("../lib/config-ui-surface");
+  it("returns undefined (no throw) when a property access throws", () => {
+    const hostile = new Proxy({}, { get() { throw new Error("evil get"); } }) as Record<string, unknown>;
+    let out: unknown;
+    expect(() => { out = getByPath(hostile, "a.b.c"); }).not.toThrow();
+    expect(out).toBeUndefined();
+  });
+  it("anti-vacuity: a normal nested object still reads through", () => {
+    expect(getByPath({ a: { b: { c: 7 } } } as Record<string, unknown>, "a.b.c")).toBe(7);
+  });
+});
