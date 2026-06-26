@@ -582,10 +582,24 @@ const NUMBER_PATHS = new Set([
  * default (validate-before-persist would be a lie). Mirrors KnowledgeConfigBlock parsing in
  * settings-reader.ts: depth/branching/files/tokens/batch are `>= 1`; the two ratios are [0,1].
  */
-const NUMERIC_RANGE: Record<string, { min: number; max?: number }> = {
-  // resolver enforces [0,1] (settings-reader.ts: ingestSimilarityGate guard) — mirror it so an
-  // out-of-range value is rejected write-time, not accepted-then-silently-dropped (V12).
-  "models.ingestSimilarityGate": { min: 0, max: 1 },
+/**
+ * EXHAUSTIVE mirror of every numeric range/clamp the resolver enforces
+ * (lib/core/config-cli.ts — the real resolveSettings merge path). Write-time validation
+ * must reject out-of-range so the config API can't accept-then-silently-drop/clamp a value
+ * (validate-before-persist). `exclusiveMin` marks a strict `> min` bound ("positive number").
+ * Audited against config-cli.ts: only these keys are bounded; the other INTEGER/NUMBER
+ * paths (team.size, quality.budget.*, index.*_threshold, retry, heartbeat, recallScore…)
+ * are UNbounded in the resolver and are correctly left unbounded here.
+ */
+const NUMERIC_RANGE: Record<string, { min: number; max?: number; exclusiveMin?: boolean }> = {
+  // startup caps — resolver CLAMPS (config-cli.ts:1539-1540); reject so persisted == effective.
+  "loop_cap": { min: 1, max: 256 },
+  "codex_cap": { min: 1, max: 10 },
+  // models scalars — resolver drops-to-default if out of range (config-cli.ts:1432,1453).
+  "models.advisorRounds": { min: 1 },
+  "models.importanceGate": { min: 1, max: 5 },
+  "models.ingestSimilarityGate": { min: 0, max: 1 },        // config-cli.ts:1456
+  // knowledge tier (config-cli.ts:1484-1496).
   "models.knowledge.maxDepth": { min: 1 },
   "models.knowledge.maxBranching": { min: 1 },
   "models.knowledge.maxFiles": { min: 1 },
@@ -593,15 +607,20 @@ const NUMERIC_RANGE: Record<string, { min: number; max?: number }> = {
   "models.knowledge.batchSize": { min: 1 },
   "models.knowledge.minTopicImportance": { min: 0, max: 1 },
   "models.knowledge.relMinConf": { min: 0, max: 1 },
+  // "positive number" keys — resolver REJECTS <= 0 (config-cli.ts:1248,1275).
+  "defaults.index.kg_size_threshold_mb": { min: 0, exclusiveMin: true },
+  "defaults.capability_manifest_ttl_s": { min: 0, exclusiveMin: true },
 };
 
 /** Range-check `n` for `keyPath`; returns an error string or null. */
 function rangeError(keyPath: string, n: number, raw: string): string | null {
   const r = NUMERIC_RANGE[keyPath];
   if (!r) return null;
-  if (n < r.min || (r.max !== undefined && n > r.max)) {
-    const bound = r.max !== undefined ? `in [${r.min}, ${r.max}]` : `>= ${r.min}`;
-    return `value for "${keyPath}" must be ${bound} (got "${raw}") — the resolver drops out-of-range values to default`;
+  const belowMin = r.exclusiveMin ? n <= r.min : n < r.min;
+  if (belowMin || (r.max !== undefined && n > r.max)) {
+    const lo = r.exclusiveMin ? `> ${r.min}` : `>= ${r.min}`;
+    const bound = r.max !== undefined ? `in ${r.exclusiveMin ? "(" : "["}${r.min}, ${r.max}]` : lo;
+    return `value for "${keyPath}" must be ${bound} (got "${raw}") — the resolver rejects/drops out-of-range values`;
   }
   return null;
 }

@@ -231,10 +231,17 @@ describe("V12.2 — validate-before-write rejects invalid values (nothing persis
     { key: "defaults.index.enabled", value: "yes", why: "boolean must be true|false" },
     { key: "roles.host", value: "claudee", confirm: "advanced", why: "unknown host id" },
     { key: "mcp.tool_description_hashes", value: "{bad json", confirm: "strongest", why: "malformed JSON" },
-    // numeric OUT-OF-RANGE (the resolver enforces [0,1]; write-time must reject, not accept-then-drop)
+    // numeric OUT-OF-RANGE — EVERY resolver-bounded numeric key; write-time must reject, not
+    // accept-then-silently-drop/clamp. Mirrors config-cli.ts bounds exactly.
     { key: "models.ingestSimilarityGate", value: "5", confirm: "advanced", why: "number out of [0,1] range" },
     { key: "models.ingestSimilarityGate", value: "-1", confirm: "advanced", why: "number below [0,1] range" },
     { key: "models.knowledge.maxDepth", value: "0", confirm: "advanced", why: "integer below resolver min (>=1)" },
+    { key: "loop_cap", value: "1000", why: "above resolver clamp max (256) — smoke subset" },
+    { key: "codex_cap", value: "50", why: "above resolver clamp max (10) — smoke subset" },
+    { key: "loop_cap", value: "0", why: "below resolver clamp min (1)" },
+    { key: "models.importanceGate", value: "10", confirm: "advanced", why: "above resolver [1,5]" },
+    { key: "models.importanceGate", value: "0", confirm: "advanced", why: "below resolver [1,5]" },
+    { key: "models.advisorRounds", value: "0", confirm: "advanced", why: "below resolver min (>=1)" },
   ];
 
   for (const c of INVALID) {
