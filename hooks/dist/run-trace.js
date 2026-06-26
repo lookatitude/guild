@@ -49,13 +49,13 @@ function resolveGuildRoot(startCwd) {
 }
 
 // lib/run-trace.ts
-var fs9 = __toESM(require("fs"));
-var path12 = __toESM(require("path"));
+var fs11 = __toESM(require("fs"));
+var path14 = __toESM(require("path"));
 
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
 var crypto3 = __toESM(require("crypto"));
 var fsNode = __toESM(require("fs"));
-var path10 = __toESM(require("path"));
+var path11 = __toESM(require("path"));
 
 // ../src/modules/config/workflows/config-defaults.ts
 var DEFAULT_ESCALATION_MARKERS = [
@@ -172,12 +172,12 @@ var DEFAULTS = {
 };
 
 // ../src/modules/config/workflows/settings-resolver.ts
-var path5 = __toESM(require("path"));
+var path6 = __toESM(require("path"));
 var crypto = __toESM(require("crypto"));
 
 // ../src/modules/config/workflows/settings-reader.ts
-var fs2 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var fs3 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
 var CLAUDE_CAPABILITIES = {
@@ -939,6 +939,47 @@ function loadYamlApi() {
   throw new Error(`Cannot resolve js-yaml from plugin scripts roots: ${tried.join(", ")}`);
 }
 
+// ../src/modules/config/workflows/workspace-manifest.ts
+var fs2 = __toESM(require("fs"));
+var path3 = __toESM(require("path"));
+function parseWorkspaceManifest(manifestPath) {
+  let raw;
+  try {
+    if (!fs2.existsSync(manifestPath)) return { status: "absent" };
+    raw = fs2.readFileSync(manifestPath, "utf8");
+  } catch (e) {
+    return { status: "parse_error", error: e instanceof Error ? e.message : String(e) };
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(raw);
+  } catch (e) {
+    return { status: "parse_error", error: e instanceof Error ? e.message : String(e) };
+  }
+  if (manifest && manifest.is_workspace === true) {
+    return { status: "workspace", manifest };
+  }
+  return { status: "not_workspace" };
+}
+function discoverWorkspace(startDir) {
+  let current = path3.dirname(startDir);
+  const fsRoot = path3.parse(current).root;
+  while (current !== fsRoot) {
+    const manifestPath = path3.join(current, ".guild", "workspace.json");
+    const parsed = parseWorkspaceManifest(manifestPath);
+    if (parsed.status === "workspace") {
+      return { rootDir: current, manifest: parsed.manifest };
+    }
+    if (parsed.status === "not_workspace") {
+      return null;
+    }
+    const parent = path3.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return null;
+}
+
 // ../src/modules/config/workflows/settings-reader.ts
 var yaml = loadYamlApi();
 var DEFAULTS2 = DEFAULTS;
@@ -1062,37 +1103,11 @@ function rigorProfile(rigor) {
       return { loops: "spec,plan", loop_cap: 16, review: "local" };
   }
 }
-function discoverWorkspace(startDir) {
-  let current = path3.dirname(startDir);
-  const fsRoot = path3.parse(current).root;
-  while (current !== fsRoot) {
-    const manifestPath = path3.join(current, ".guild", "workspace.json");
-    if (fs2.existsSync(manifestPath)) {
-      let manifest = null;
-      try {
-        manifest = JSON.parse(fs2.readFileSync(manifestPath, "utf8"));
-      } catch {
-        const parent2 = path3.dirname(current);
-        if (parent2 === current) break;
-        current = parent2;
-        continue;
-      }
-      if (manifest.is_workspace === true) {
-        return { rootDir: current, manifest };
-      }
-      return null;
-    }
-    const parent = path3.dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-  return null;
-}
 function parseSettingsFile(filePath) {
-  if (!fs2.existsSync(filePath)) return {};
+  if (!fs3.existsSync(filePath)) return {};
   let parsed;
   try {
-    parsed = JSON.parse(fs2.readFileSync(filePath, "utf8"));
+    parsed = JSON.parse(fs3.readFileSync(filePath, "utf8"));
   } catch {
     return {};
   }
@@ -1255,11 +1270,11 @@ function parseSettingsFile(filePath) {
   return out;
 }
 function parseLocalFile(guildDir) {
-  const localPath = path3.join(guildDir, "settings.local.json");
-  if (!fs2.existsSync(localPath)) return {};
+  const localPath = path4.join(guildDir, "settings.local.json");
+  if (!fs3.existsSync(localPath)) return {};
   let localParsed;
   try {
-    localParsed = JSON.parse(fs2.readFileSync(localPath, "utf8"));
+    localParsed = JSON.parse(fs3.readFileSync(localPath, "utf8"));
   } catch {
     return {};
   }
@@ -1445,22 +1460,22 @@ function isValidInitiativeId(id) {
   return true;
 }
 function isContainedIn(candidatePath, baseDir) {
-  const resolved = path3.resolve(candidatePath);
-  const resolvedBase = path3.resolve(baseDir);
-  return resolved.startsWith(resolvedBase + path3.sep);
+  const resolved = path4.resolve(candidatePath);
+  const resolvedBase = path4.resolve(baseDir);
+  return resolved.startsWith(resolvedBase + path4.sep);
 }
 function initiativeIsWorkspaceScoped(workspaceRoot, id) {
   try {
     if (!isValidInitiativeId(id)) return false;
-    const registryPath = path3.join(
+    const registryPath = path4.join(
       workspaceRoot,
       ".guild",
       "indexes",
       "initiatives-registry.yaml"
     );
-    if (fs2.existsSync(registryPath)) {
+    if (fs3.existsSync(registryPath)) {
       try {
-        const raw = fs2.readFileSync(registryPath, "utf8");
+        const raw = fs3.readFileSync(registryPath, "utf8");
         const parsed = yaml.load(raw);
         if (isPlainObject2(parsed)) {
           const list = parsed["initiatives"];
@@ -1478,33 +1493,33 @@ function initiativeIsWorkspaceScoped(workspaceRoot, id) {
         return false;
       }
     }
-    const initiativesBase = path3.join(workspaceRoot, ".guild", "initiatives");
-    const activePath = path3.join(
+    const initiativesBase = path4.join(workspaceRoot, ".guild", "initiatives");
+    const activePath = path4.join(
       initiativesBase,
       "active",
       id,
       "initiative.yaml"
     );
-    const archivedPath = path3.join(
+    const archivedPath = path4.join(
       initiativesBase,
       "archived",
       id,
       "initiative.yaml"
     );
-    const activeBase = path3.join(initiativesBase, "active");
-    const archivedBase = path3.join(initiativesBase, "archived");
+    const activeBase = path4.join(initiativesBase, "active");
+    const archivedBase = path4.join(initiativesBase, "archived");
     if (!isContainedIn(activePath, activeBase) && !isContainedIn(archivedPath, archivedBase)) {
       return false;
     }
     let yamlPath = null;
-    if (isContainedIn(activePath, activeBase) && fs2.existsSync(activePath)) {
+    if (isContainedIn(activePath, activeBase) && fs3.existsSync(activePath)) {
       yamlPath = activePath;
-    } else if (isContainedIn(archivedPath, archivedBase) && fs2.existsSync(archivedPath)) {
+    } else if (isContainedIn(archivedPath, archivedBase) && fs3.existsSync(archivedPath)) {
       yamlPath = archivedPath;
     }
     if (yamlPath !== null) {
       try {
-        const raw = fs2.readFileSync(yamlPath, "utf8");
+        const raw = fs3.readFileSync(yamlPath, "utf8");
         const parsed = yaml.load(raw);
         if (isPlainObject2(parsed)) {
           const doc = parsed["initiative"];
@@ -1535,8 +1550,8 @@ function resolveSettings(opts) {
   let wsSettings = {};
   let wsLocalSettings = {};
   if (ws !== null) {
-    const wsGuildDir = path3.join(ws.rootDir, ".guild");
-    const rawWsSettings = parseSettingsFile(path3.join(wsGuildDir, "settings.json"));
+    const wsGuildDir = path4.join(ws.rootDir, ".guild");
+    const rawWsSettings = parseSettingsFile(path4.join(wsGuildDir, "settings.json"));
     const wsInheritable = {};
     for (const [k, v] of Object.entries(rawWsSettings)) {
       const key = k;
@@ -1572,8 +1587,8 @@ function resolveSettings(opts) {
     } catch {
     }
   }
-  const projectGuildDir = path3.join(cwd, ".guild");
-  const projectSettings = parseSettingsFile(path3.join(projectGuildDir, "settings.json"));
+  const projectGuildDir = path4.join(cwd, ".guild");
+  const projectSettings = parseSettingsFile(path4.join(projectGuildDir, "settings.json"));
   for (const key of Object.keys(projectSettings)) {
     if (key === "workspace") {
       sources["workspace.mode"] = "project";
@@ -1705,8 +1720,8 @@ function resolveSettings(opts) {
 }
 
 // ../src/modules/telemetry/workflows/guild-trace-emit.ts
-var fs3 = __toESM(require("node:fs"));
-var path4 = __toESM(require("node:path"));
+var fs4 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
 
 // ../src/modules/telemetry/workflows/guild-trace-events.ts
 var GUILD_TRACE_SCHEMA_VERSIONS = [
@@ -1949,7 +1964,7 @@ function makeConfigResolutionEvent(fields) {
 
 // ../src/modules/telemetry/workflows/guild-trace-emit.ts
 function liveLogPath(runDir3) {
-  return path4.join(runDir3, "logs", "v1.4-events.jsonl");
+  return path5.join(runDir3, "logs", "v1.4-events.jsonl");
 }
 function emitTraceEvent(event, runDir3) {
   if (!runDir3) return;
@@ -1965,10 +1980,10 @@ function emitTraceEvent(event, runDir3) {
   }
   try {
     const live = liveLogPath(runDir3);
-    const dir = path4.dirname(live);
-    fs3.mkdirSync(dir, { recursive: true });
+    const dir = path5.dirname(live);
+    fs4.mkdirSync(dir, { recursive: true });
     const line = JSON.stringify(event) + "\n";
-    fs3.appendFileSync(live, line, "utf8");
+    fs4.appendFileSync(live, line, "utf8");
   } catch (err) {
     process.stderr.write(
       `[guild-trace-emit] WARN: could not write trace event to ${runDir3}/logs/v1.4-events.jsonl: ${err instanceof Error ? err.message : String(err)}
@@ -1985,7 +2000,7 @@ function resolveSettings2(opts) {
     const { cwd, flags = {} } = opts;
     const assembled = result.config;
     const _traceRunId = process.env["GUILD_RUN_ID"] ?? "";
-    const _traceRunDir = _traceRunId && cwd ? path5.join(cwd, ".guild", "runs", _traceRunId) : void 0;
+    const _traceRunDir = _traceRunId && cwd ? path6.join(cwd, ".guild", "runs", _traceRunId) : void 0;
     if (_traceRunDir) {
       const _fingerprint = crypto.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
       const sources = result.sources;
@@ -2050,8 +2065,8 @@ function replaceTopLevelLine(text, key, replacementLine) {
 
 // ../src/modules/migrations/workflows/index-migrate.ts
 var import_node_child_process = require("node:child_process");
-var fs4 = __toESM(require("node:fs"));
-var path6 = __toESM(require("node:path"));
+var fs5 = __toESM(require("node:fs"));
+var path7 = __toESM(require("node:path"));
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(dbPath);
@@ -2066,12 +2081,12 @@ function resolveGuildRoot2(cwd) {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
     }).trim();
-    const abs = path6.isAbsolute(raw) ? raw : path6.resolve(cwd, raw);
-    const root = path6.dirname(abs);
-    if (fs4.existsSync(root)) return root;
+    const abs = path7.isAbsolute(raw) ? raw : path7.resolve(cwd, raw);
+    const root = path7.dirname(abs);
+    if (fs5.existsSync(root)) return root;
   } catch {
   }
-  return path6.resolve(cwd);
+  return path7.resolve(cwd);
 }
 var MIGRATIONS = [
   // ── v1: core tables ───────────────────────────────────────────────────────
@@ -2235,7 +2250,7 @@ function runMigrations(dbPath) {
   let db;
   let fromVersion = 0;
   try {
-    fs4.mkdirSync(path6.dirname(dbPath), { recursive: true });
+    fs5.mkdirSync(path7.dirname(dbPath), { recursive: true });
     db = openDatabase(dbPath);
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA synchronous = NORMAL");
@@ -2300,7 +2315,7 @@ function runIndexMigrateCli() {
   }
   if (!dbPath) {
     const guildRoot = resolveGuildRoot2(cwd);
-    dbPath = path6.join(guildRoot, ".guild", "index.sqlite");
+    dbPath = path7.join(guildRoot, ".guild", "index.sqlite");
   }
   const result = runMigrations(dbPath);
   if (result.ok) {
@@ -2319,8 +2334,8 @@ if (typeof module !== "undefined" && require.main === module) {
 }
 
 // lib/security/scrubbed-write.ts
-var fs7 = __toESM(require("node:fs"));
-var path9 = __toESM(require("node:path"));
+var fs8 = __toESM(require("node:fs"));
+var path10 = __toESM(require("node:path"));
 var crypto2 = __toESM(require("node:crypto"));
 
 // lib/v1.4/redact-log.ts
@@ -2427,8 +2442,8 @@ function applySecretsPolicy(value, policy, opts) {
 }
 
 // lib/security/config.ts
-var fs5 = __toESM(require("node:fs"));
-var path7 = __toESM(require("node:path"));
+var fs6 = __toESM(require("node:fs"));
+var path8 = __toESM(require("node:path"));
 function securityDefaults() {
   return {
     bypass_permissions_policy: "audit",
@@ -2503,10 +2518,10 @@ function parseSecurityConfig(parsed) {
   return out;
 }
 function readSecurityConfig(cwd) {
-  const settingsPath = path7.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path8.join(resolveGuildRoot(cwd), ".guild", "settings.json");
   let raw;
   try {
-    raw = fs5.readFileSync(settingsPath, "utf8");
+    raw = fs6.readFileSync(settingsPath, "utf8");
   } catch {
     return securityDefaults();
   }
@@ -2520,8 +2535,8 @@ function readSecurityConfig(cwd) {
 }
 
 // lib/security/events.ts
-var fs6 = __toESM(require("node:fs"));
-var path8 = __toESM(require("node:path"));
+var fs7 = __toESM(require("node:fs"));
+var path9 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
 var KNOWN_GUILD_HOST_KINDS = [
   "claude",
@@ -2579,9 +2594,9 @@ function buildSecurityEvent(input) {
 }
 function appendSecurityEvent(runDir3, record) {
   try {
-    const logsDir2 = path8.join(runDir3, "logs");
-    fs6.mkdirSync(logsDir2, { recursive: true });
-    fs6.appendFileSync(path8.join(logsDir2, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    const logsDir2 = path9.join(runDir3, "logs");
+    fs7.mkdirSync(logsDir2, { recursive: true });
+    fs7.appendFileSync(path9.join(logsDir2, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -2594,12 +2609,12 @@ function appendSecurityEvent(runDir3, record) {
 
 // lib/security/scrubbed-write.ts
 function guildRootFromRunDir(runDir3) {
-  return path9.resolve(runDir3, "../../..");
+  return path10.resolve(runDir3, "../../..");
 }
 function writeScrubApprovalRequest(runDir3, runId, surface, outPath, laneId) {
   try {
-    const approvalDir = path9.join(runDir3, "agent-bus", "approvals");
-    fs7.mkdirSync(approvalDir, { recursive: true });
+    const approvalDir = path10.join(runDir3, "agent-bus", "approvals");
+    fs8.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
     const fileName = `${safeTs}-scrub-blocked.json`;
@@ -2608,7 +2623,7 @@ function writeScrubApprovalRequest(runDir3, runId, surface, outPath, laneId) {
       ts,
       run_id: runId,
       tool: "scrubbedWrite",
-      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path9.basename(outPath)}`,
+      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path10.basename(outPath)}`,
       permission_mode: "blocked",
       surface
     };
@@ -2621,7 +2636,7 @@ function writeScrubApprovalRequest(runDir3, runId, surface, outPath, laneId) {
       content = scrubResult.value;
     } catch {
     }
-    fs7.writeFileSync(path9.join(approvalDir, fileName), content, "utf8");
+    fs8.writeFileSync(path10.join(approvalDir, fileName), content, "utf8");
   } catch {
   }
 }
@@ -2643,8 +2658,8 @@ function scrubbedWrite(outPath, content, opts) {
   const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
   if (scrubResult.ok) {
     try {
-      fs7.mkdirSync(path9.dirname(outPath), { recursive: true });
-      fs7.writeFileSync(outPath, scrubResult.value, "utf8");
+      fs8.mkdirSync(path10.dirname(outPath), { recursive: true });
+      fs8.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
         `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
@@ -2660,12 +2675,12 @@ function scrubbedWrite(outPath, content, opts) {
   }
   if (failMode === "open") {
     process.stderr.write(
-      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path9.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
+      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path10.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
 `
     );
     try {
-      fs7.mkdirSync(path9.dirname(outPath), { recursive: true });
-      fs7.writeFileSync(outPath, scrubResult.value, "utf8");
+      fs8.mkdirSync(path10.dirname(outPath), { recursive: true });
+      fs8.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
         `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
@@ -2680,7 +2695,7 @@ function scrubbedWrite(outPath, content, opts) {
         event_type: "secret_scrub_blocked",
         decision: "degraded",
         tool: "scrubbedWrite",
-        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path9.basename(outPath)}. Built-in-redacted content written.`,
+        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path10.basename(outPath)}. Built-in-redacted content written.`,
         permission_mode: "degraded"
       });
       appendSecurityEvent(opts.runDir, evt);
@@ -2703,7 +2718,7 @@ function scrubbedWrite(outPath, content, opts) {
       event_type: "secret_scrub_blocked",
       decision: "blocked",
       tool: "scrubbedWrite",
-      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path9.basename(outPath)} \u2014 write blocked (fail-closed).`,
+      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path10.basename(outPath)} \u2014 write blocked (fail-closed).`,
       permission_mode: "blocked"
     });
     appendSecurityEvent(opts.runDir, evt);
@@ -2715,22 +2730,22 @@ function scrubbedWrite(outPath, content, opts) {
 
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
 function runDir(root, runId) {
-  return path10.join(root, ".guild", "runs", runId);
+  return path11.join(root, ".guild", "runs", runId);
 }
 function runYamlPath(root, runId) {
-  return path10.join(runDir(root, runId), "run.yaml");
+  return path11.join(runDir(root, runId), "run.yaml");
 }
 function provenancePath(root, runId) {
-  return path10.join(runDir(root, runId), "provenance.json");
+  return path11.join(runDir(root, runId), "provenance.json");
 }
 function logsDir(root, runId) {
-  return path10.join(runDir(root, runId), "logs");
+  return path11.join(runDir(root, runId), "logs");
 }
 function resolvedSettingsPath(root, runId) {
-  return path10.join(runDir(root, runId), "resolved-settings.json");
+  return path11.join(runDir(root, runId), "resolved-settings.json");
 }
 function sentinelPath(root) {
-  return path10.join(root, ".guild", "runs", "current-run-id");
+  return path11.join(root, ".guild", "runs", "current-run-id");
 }
 function logRefFor(runId) {
   return `.guild/runs/${runId}/logs/v1.4-events.jsonl`;
@@ -2973,7 +2988,7 @@ function createRunLifecycle(env) {
       const provPath = provenancePath(root, runId);
       const provenanceContent = JSON.stringify(provenance, null, 2) + "\n";
       if (env.fs.scrubbedWriteDurable) {
-        const runDir3 = path10.join(root, ".guild", "runs", runId);
+        const runDir3 = path11.join(root, ".guild", "runs", runId);
         const result = env.fs.scrubbedWriteDurable(provPath, provenanceContent, "provenance", runDir3, runId);
         if (result.blocked) {
           process.stderr.write(
@@ -3003,7 +3018,7 @@ function createRealEnv(root, resolveHost) {
         fsNode.mkdirSync(absPath, { recursive: true });
       },
       writeFile(absPath, contents) {
-        fsNode.mkdirSync(path10.dirname(absPath), { recursive: true });
+        fsNode.mkdirSync(path11.dirname(absPath), { recursive: true });
         fsNode.writeFileSync(absPath, contents, "utf8");
       },
       readFile(absPath) {
@@ -3037,9 +3052,9 @@ function validateRunId(runId) {
   return true;
 }
 function assertContained(target, base, label) {
-  const resolvedTarget = path10.resolve(target);
-  const resolvedBase = path10.resolve(base);
-  if (!resolvedTarget.startsWith(resolvedBase + path10.sep)) {
+  const resolvedTarget = path11.resolve(target);
+  const resolvedBase = path11.resolve(base);
+  if (!resolvedTarget.startsWith(resolvedBase + path11.sep)) {
     throw new Error(
       `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" escapes runs base "${resolvedBase}"`
     );
@@ -3048,7 +3063,7 @@ function assertContained(target, base, label) {
 function realProvenanceFsSeam() {
   return {
     writeFile(absPath, contents) {
-      fsNode.mkdirSync(path10.dirname(absPath), { recursive: true });
+      fsNode.mkdirSync(path11.dirname(absPath), { recursive: true });
       fsNode.writeFileSync(absPath, contents, "utf8");
     },
     readFile(absPath) {
@@ -3071,18 +3086,18 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     );
   }
   const { cwd, fs: fsSeam, resolvedAtRef } = opts;
-  const fs10 = fsSeam ?? realProvenanceFsSeam();
+  const fs12 = fsSeam ?? realProvenanceFsSeam();
   const outPath = resolvedSettingsPath(cwd, runId);
-  const runsBase = path10.resolve(cwd, ".guild", "runs");
+  const runsBase = path11.resolve(cwd, ".guild", "runs");
   assertContained(outPath, runsBase, "writeResolvedSettingsSnapshot");
   const onDisk = {
     ...snapshot,
     resolved_at_ref: resolvedAtRef ?? runId
   };
   const serialized = JSON.stringify(onDisk, null, 2) + "\n";
-  if (fs10.scrubbedWriteDurable) {
-    const runDir3 = path10.join(cwd, ".guild", "runs", runId);
-    const result = fs10.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
+  if (fs12.scrubbedWriteDurable) {
+    const runDir3 = path11.join(cwd, ".guild", "runs", runId);
+    const result = fs12.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
     if (result.blocked) {
       process.stderr.write(
         `[run-lifecycle] WARN: resolved-settings.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
@@ -3090,7 +3105,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
       );
     }
   } else {
-    fs10.writeFile(outPath, serialized);
+    fs12.writeFile(outPath, serialized);
   }
   return outPath;
 }
@@ -3104,8 +3119,8 @@ function readRecordStatusRuns(root) {
 }
 
 // emit-learning-checkpoint.ts
-var fs8 = __toESM(require("fs"));
-var path11 = __toESM(require("path"));
+var fs9 = __toESM(require("fs"));
+var path12 = __toESM(require("path"));
 
 // ../src/modules/initiatives/workflows/classify-proposal.ts
 function classifyProposal(input) {
@@ -3613,12 +3628,12 @@ function buildYaml(opts) {
 }
 function appendKnowledgeLinksIndex(guildRoot, links) {
   if (links.length === 0) return;
-  const indexDir = path11.join(guildRoot, ".guild", "indexes");
-  const indexPath = path11.join(indexDir, "knowledge-links.json");
+  const indexDir = path12.join(guildRoot, ".guild", "indexes");
+  const indexPath = path12.join(indexDir, "knowledge-links.json");
   let existing = [];
-  if (fs8.existsSync(indexPath)) {
+  if (fs9.existsSync(indexPath)) {
     try {
-      const raw = fs8.readFileSync(indexPath, "utf8");
+      const raw = fs9.readFileSync(indexPath, "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed["links"])) {
         existing = parsed["links"];
@@ -3640,8 +3655,8 @@ function appendKnowledgeLinksIndex(guildRoot, links) {
   if (novel.length === 0) return;
   const merged = [...existing, ...novel];
   try {
-    fs8.mkdirSync(indexDir, { recursive: true });
-    fs8.writeFileSync(
+    fs9.mkdirSync(indexDir, { recursive: true });
+    fs9.writeFileSync(
       indexPath,
       JSON.stringify(
         { schema_version: "guild.knowledge_links.v1", links: merged },
@@ -3660,14 +3675,14 @@ function appendKnowledgeLinksIndex(guildRoot, links) {
 function appendReflections(guildRoot, runId, phase, decisions) {
   const nonNone = DECISION_TARGETS.filter((k) => decisions[k] !== "none");
   if (nonNone.length === 0) return;
-  const reflectionsDir = path11.join(guildRoot, ".guild", "reflections");
-  fs8.mkdirSync(reflectionsDir, { recursive: true });
-  const reflPath = path11.join(reflectionsDir, `${runId}.md`);
+  const reflectionsDir = path12.join(guildRoot, ".guild", "reflections");
+  fs9.mkdirSync(reflectionsDir, { recursive: true });
+  const reflPath = path12.join(reflectionsDir, `${runId}.md`);
   const entry = `
 ## Phase: ${phase} (${runId})
 
 ` + nonNone.map((k) => `- ${k}: ${decisions[k]}`).join("\n") + "\n";
-  fs8.appendFileSync(reflPath, entry, "utf8");
+  fs9.appendFileSync(reflPath, entry, "utf8");
 }
 function writeCheckpoint(opts) {
   assertPhase(opts.phase);
@@ -3676,11 +3691,11 @@ function writeCheckpoint(opts) {
   assertNodePrefixes(links);
   const guildRoot = opts.guildRoot ?? process.cwd();
   const decisions = opts.decisions ?? { ...ALL_NONE_DECISIONS };
-  const learningDir = path11.join(guildRoot, ".guild", "runs", opts.runId, "learning");
-  fs8.mkdirSync(learningDir, { recursive: true });
-  const checkpointFile = path11.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
+  const learningDir = path12.join(guildRoot, ".guild", "runs", opts.runId, "learning");
+  fs9.mkdirSync(learningDir, { recursive: true });
+  const checkpointFile = path12.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
   const reflectionsRelPath = `.guild/reflections/${opts.runId}.md`;
-  const reflectionsAbsPath = path11.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
+  const reflectionsAbsPath = path12.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
   const observed = opts.observed ?? [];
   const yaml2 = buildYaml({
     runId: opts.runId,
@@ -3692,7 +3707,7 @@ function writeCheckpoint(opts) {
     knowledgeLinksBatch: links,
     ...opts.backstop === true ? { backstop: true } : {}
   });
-  fs8.writeFileSync(checkpointFile, yaml2, "utf8");
+  fs9.writeFileSync(checkpointFile, yaml2, "utf8");
   appendReflections(guildRoot, opts.runId, opts.phase, decisions);
   appendKnowledgeLinksIndex(guildRoot, links);
   void reflectionsAbsPath;
@@ -3717,7 +3732,7 @@ function main() {
   let decisions;
   if (verdictPath) {
     try {
-      const raw = fs8.readFileSync(verdictPath, "utf8");
+      const raw = fs9.readFileSync(verdictPath, "utf8");
       decisions = JSON.parse(raw);
     } catch (e) {
       process.stderr.write(
@@ -3728,7 +3743,7 @@ function main() {
   }
   if (decisions === void 0 && artifactsJsonPath) {
     try {
-      const rawArtifacts = fs8.readFileSync(artifactsJsonPath, "utf8");
+      const rawArtifacts = fs9.readFileSync(artifactsJsonPath, "utf8");
       const artifacts = JSON.parse(rawArtifacts);
       if (!artifacts.runId) artifacts.runId = runId;
       if (!artifacts.phase) artifacts.phase = phase ?? void 0;
@@ -3749,7 +3764,7 @@ function main() {
   let knowledgeLinksBatch = [];
   if (linksPath) {
     try {
-      const raw = fs8.readFileSync(linksPath, "utf8");
+      const raw = fs9.readFileSync(linksPath, "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         knowledgeLinksBatch = parsed;
@@ -3805,6 +3820,54 @@ var PHASE_TOKEN_TO_CHECKPOINT = {
   reflection: "reflection"
 };
 
+// lib/heartbeat.ts
+var fs10 = __toESM(require("node:fs"));
+var path13 = __toESM(require("node:path"));
+var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
+var TIER_HEARTBEAT_TIMEOUTS_MS = {
+  cheap: 18e4,
+  // 3 min
+  mid: 6e5,
+  // 10 min — equals DEFAULT_HEARTBEAT_TIMEOUT_MS
+  powerful: 12e5
+  // 20 min
+};
+function isLaneTier(t) {
+  return t === "cheap" || t === "mid" || t === "powerful";
+}
+function readExplicitHeartbeatTimeoutMs(cwd) {
+  const settingsPath = path13.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  let raw;
+  try {
+    raw = fs10.readFileSync(settingsPath, "utf8");
+  } catch {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return null;
+  }
+  const defaults = parsed["defaults"];
+  if (typeof defaults !== "object" || defaults === null || Array.isArray(defaults)) {
+    return null;
+  }
+  const val = defaults["heartbeat_timeout_ms"];
+  if (typeof val === "number" && Number.isFinite(val) && val > 0) {
+    return val;
+  }
+  return null;
+}
+function resolveHeartbeatTimeoutMs(cwd, tier) {
+  const explicit = readExplicitHeartbeatTimeoutMs(cwd);
+  if (explicit !== null) return explicit;
+  return TIER_HEARTBEAT_TIMEOUTS_MS[isLaneTier(tier) ? tier : "mid"];
+}
+
 // lib/handoff-v2.ts
 function extractHandoffEnvelope(content) {
   const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/;
@@ -3819,29 +3882,29 @@ function extractHandoffEnvelope(content) {
 
 // lib/run-trace.ts
 function runDir2(root, runId) {
-  return path12.join(root, ".guild", "runs", runId);
+  return path14.join(root, ".guild", "runs", runId);
 }
 function liveLogPath2(root, runId) {
-  return path12.join(runDir2(root, runId), "logs", "v1.4-events.jsonl");
+  return path14.join(runDir2(root, runId), "logs", "v1.4-events.jsonl");
 }
 function provenancePath2(root, runId) {
-  return path12.join(runDir2(root, runId), "provenance.json");
+  return path14.join(runDir2(root, runId), "provenance.json");
 }
 function skippedFilesPath(root, runId) {
-  return path12.join(runDir2(root, runId), "learn", "skipped-files.json");
+  return path14.join(runDir2(root, runId), "learn", "skipped-files.json");
 }
 function resolveRunIdForTrace(root, env) {
   const fromEnv = env.GUILD_RUN_ID;
   if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
-  const legacy = readSentinel(path12.join(root, ".guild", "runs", "current-run-id"));
+  const legacy = readSentinel(path14.join(root, ".guild", "runs", "current-run-id"));
   if (legacy) return legacy;
-  const b2 = readSentinel(path12.join(root, ".guild", "current-run-id"));
+  const b2 = readSentinel(path14.join(root, ".guild", "current-run-id"));
   if (b2) return b2;
   return null;
 }
 function readSentinel(p) {
   try {
-    const v = fs9.readFileSync(p, "utf8").trim();
+    const v = fs11.readFileSync(p, "utf8").trim();
     return v.length > 0 ? v : null;
   } catch {
     return null;
@@ -3853,8 +3916,8 @@ function defaultResolveHost(requested) {
   return { requested, resolved };
 }
 function appendTraceLine(file, event) {
-  fs9.mkdirSync(path12.dirname(file), { recursive: true });
-  fs9.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
+  fs11.mkdirSync(path14.dirname(file), { recursive: true });
+  fs11.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
 }
 function emitRunClosed(root, runId, resolveHost, opts = {}) {
   try {
@@ -3866,7 +3929,7 @@ function emitRunClosed(root, runId, resolveHost, opts = {}) {
       final_learning_checkpoint: opts.final_learning_checkpoint,
       artifacts: opts.artifacts
     });
-    const prov = JSON.parse(fs9.readFileSync(provenancePath2(root, runId), "utf8"));
+    const prov = JSON.parse(fs11.readFileSync(provenancePath2(root, runId), "utf8"));
     const pointer = prov.terminal_trace_event;
     if (!pointer || typeof pointer.event_id !== "string") {
       process.stderr.write(
@@ -3889,8 +3952,52 @@ function emitRunClosed(root, runId, resolveHost, opts = {}) {
     );
   }
 }
+var STALE_RUN_GRACE_MULTIPLIER = 3;
+function newestRunActivityMs(root, runId) {
+  const dir = runDir2(root, runId);
+  const candidates = [
+    liveLogPath2(root, runId),
+    path14.join(dir, "events.ndjson"),
+    path14.join(dir, "run.yaml")
+  ];
+  try {
+    const inProgress = path14.join(dir, "in-progress");
+    for (const name of fs11.readdirSync(inProgress)) {
+      candidates.push(path14.join(inProgress, name));
+    }
+  } catch {
+  }
+  let newest = 0;
+  for (const p of candidates) {
+    try {
+      newest = Math.max(newest, fs11.statSync(p).mtimeMs);
+    } catch {
+    }
+  }
+  return newest;
+}
+function closeStalePriorOpenRun(root, resolveHost, now = Date.now) {
+  try {
+    const priorId = resolveRunIdForTrace(root, {});
+    if (!priorId) return;
+    let runYaml;
+    try {
+      runYaml = fs11.readFileSync(path14.join(runDir2(root, priorId), "run.yaml"), "utf8");
+    } catch {
+      return;
+    }
+    if (!/^status:\s*open\b/m.test(runYaml)) return;
+    const lastActivityMs = newestRunActivityMs(root, priorId);
+    if (lastActivityMs === 0) return;
+    const graceMs = resolveHeartbeatTimeoutMs(root, "powerful") * STALE_RUN_GRACE_MULTIPLIER;
+    if (now() - lastActivityMs <= graceMs) return;
+    emitRunClosed(root, priorId, resolveHost, { status: "closed" });
+  } catch {
+  }
+}
 function startRunOnly(root, resolveHost, opts = {}) {
   try {
+    closeStalePriorOpenRun(root, resolveHost);
     const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
     return lifecycle.startRun(buildStartRunOpts(root, opts));
   } catch (err) {
@@ -3931,12 +4038,12 @@ function buildStartRunOpts(root, opts) {
 function buildPhaseArtifacts(root, runId) {
   const artifacts = { runId };
   try {
-    const hDir = path12.join(runDir2(root, runId), "handoffs");
+    const hDir = path14.join(runDir2(root, runId), "handoffs");
     const blocks = [];
     const texts = [];
-    for (const f of fs9.readdirSync(hDir)) {
+    for (const f of fs11.readdirSync(hDir)) {
       if (!f.endsWith(".md")) continue;
-      const content = fs9.readFileSync(path12.join(hDir, f), "utf8");
+      const content = fs11.readFileSync(path14.join(hDir, f), "utf8");
       texts.push(content);
       const env = extractHandoffEnvelope(content);
       if (env && typeof env === "object") blocks.push(env);
@@ -3946,7 +4053,7 @@ function buildPhaseArtifacts(root, runId) {
   } catch {
   }
   try {
-    const prov = JSON.parse(fs9.readFileSync(provenancePath2(root, runId), "utf8"));
+    const prov = JSON.parse(fs11.readFileSync(provenancePath2(root, runId), "utf8"));
     if (prov && typeof prov.touched === "object") artifacts.provenanceTouched = prov.touched;
   } catch {
   }
@@ -3956,7 +4063,7 @@ function emitPhaseCheckpoint(root, runId, phase) {
   try {
     const checkpointPhase = PHASE_TOKEN_TO_CHECKPOINT[phase];
     if (checkpointPhase === void 0) return;
-    const checkpointFile = path12.join(
+    const checkpointFile = path14.join(
       root,
       ".guild",
       "runs",
@@ -3964,7 +4071,7 @@ function emitPhaseCheckpoint(root, runId, phase) {
       "learning",
       `${checkpointPhase}-${runId}.yaml`
     );
-    if (fs9.existsSync(checkpointFile)) return;
+    if (fs11.existsSync(checkpointFile)) return;
     let decisions;
     try {
       const verdict = classifyPhase(buildPhaseArtifacts(root, runId));
@@ -4000,6 +4107,7 @@ function recordPhase(root, phase, opts = {}) {
 }
 function startAndCloseRun(root, resolveHost, opts = {}) {
   try {
+    closeStalePriorOpenRun(root, resolveHost);
     const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
     const runId = lifecycle.startRun(buildStartRunOpts(root, opts));
     emitRunClosed(root, runId, resolveHost, { status: "closed" });
@@ -4030,8 +4138,8 @@ function writeSkippedFiles(root, runId, entries) {
     skipped_count: entries.length,
     skipped: entries
   };
-  fs9.mkdirSync(path12.dirname(out), { recursive: true });
-  fs9.writeFileSync(out, JSON.stringify(body, null, 2) + "\n", "utf8");
+  fs11.mkdirSync(path14.dirname(out), { recursive: true });
+  fs11.writeFileSync(out, JSON.stringify(body, null, 2) + "\n", "utf8");
   return out;
 }
 

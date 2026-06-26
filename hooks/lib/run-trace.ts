@@ -67,6 +67,7 @@ import {
 
 import { writeCheckpoint } from "../emit-learning-checkpoint.js";
 import { PHASE_TOKEN_TO_CHECKPOINT } from "./learning-backstop.js";
+import { resolveHeartbeatTimeoutMs } from "./heartbeat.js";
 // Deterministic classification at phase close: build the ArtifactSet from the run's
 // already-written artifacts and run the pure 12-target classifier, so the checkpoint
 // carries a REAL verdict (not all-none) WITHOUT depending on the model running a CLI.
@@ -341,12 +342,111 @@ export interface StartAndCloseOpts {
  *
  * Best-effort; returns null on error (never throws).
  */
+/**
+ * Self-heal multiplier (#13). The finalize grace window is the MOST-PERMISSIVE
+ * lane-idle timeout (`resolveHeartbeatTimeoutMs(root, "powerful")` — 20 min by
+ * default, or an explicit `defaults.heartbeat_timeout_ms` override) times this
+ * factor. The window is deliberately MUCH larger than any single timeout so the
+ * guard only ever finalizes a LONG-abandoned run, never an active-but-slow one
+ * (a 19-min powerful-tier think, a long in-flight tool call, a brief operator
+ * wait). Bias is intentional: leaving an orphan open a while longer is cheap;
+ * closing a live run loses its real terminal context.
+ */
+const STALE_RUN_GRACE_MULTIPLIER = 3;
+
+/**
+ * Newest liveness signal (epoch ms) for a run: the freshest mtime across its
+ * trace files AND the repo's OWN structured-heartbeat surface
+ * (`<runDir>/in-progress/*` — written per active lane on every PostToolUse). An
+ * active run with live lanes keeps these fresh even when the top-level event log
+ * is momentarily quiet. Returns 0 when no signal exists.
+ */
+function newestRunActivityMs(root: string, runId: string): number {
+  const dir = runDir(root, runId);
+  const candidates = [
+    liveLogPath(root, runId),
+    path.join(dir, "events.ndjson"),
+    path.join(dir, "run.yaml"),
+  ];
+  try {
+    const inProgress = path.join(dir, "in-progress");
+    for (const name of fs.readdirSync(inProgress)) {
+      candidates.push(path.join(inProgress, name)); // structured heartbeats + legacy .log
+    }
+  } catch {
+    /* no in-progress dir — fine */
+  }
+  let newest = 0;
+  for (const p of candidates) {
+    try {
+      newest = Math.max(newest, fs.statSync(p).mtimeMs);
+    } catch {
+      /* file absent — skip */
+    }
+  }
+  return newest;
+}
+
+/**
+ * Self-heal interrupted sessions (issue #13). Before a new run claims the
+ * current-run-id sentinel, finalize the IMMEDIATELY-PRIOR sentinel run IF it is
+ * (a) still `status: open` AND (b) abandoned — no liveness signal (trace mtimes
+ * OR structured heartbeat) within the conservative grace window.
+ *
+ * The staleness guard is load-bearing and deliberately conservative: a genuinely
+ * active run (an in-flight `/guild:build` with live lanes while the operator runs
+ * `/guild:status`) keeps a fresh event log or heartbeat and is LEFT OPEN. Only a
+ * run whose owning session died long ago is closed. Best-effort and never-throwing
+ * (a failure here must never block the new run). O(1) — checks only the one
+ * sentinel run, not every run dir (this runs on every command start).
+ *
+ * Residual limitation (accepted): a SOLO main run with no lanes that sits idle —
+ * e.g. waiting on the operator — longer than the grace window has no liveness
+ * signal and would be finalized. The window is sized (3× the max lane timeout, 60
+ * min default) so this is rare, and the cost is bounded: the run's artifacts
+ * remain; only a synthetic terminal status is written.
+ */
+function closeStalePriorOpenRun(
+  root: string,
+  resolveHost: ResolveHost,
+  now: () => number = Date.now,
+): void {
+  try {
+    // Resolve the run the SENTINEL currently points to (the prior run, before the
+    // new run claims it). Pass {} so env GUILD_RUN_ID never short-circuits the
+    // sentinel read — the staleness guard below protects any genuinely-live run.
+    const priorId = resolveRunIdForTrace(root, {});
+    if (!priorId) return;
+    // run.yaml must exist and be status:open (already-closed / missing → nothing to do).
+    let runYaml: string;
+    try {
+      runYaml = fs.readFileSync(path.join(runDir(root, priorId), "run.yaml"), "utf8");
+    } catch {
+      return; // no run.yaml (legacy/host-adapter dir) — not ours to finalize
+    }
+    if (!/^status:\s*open\b/m.test(runYaml)) return;
+
+    const lastActivityMs = newestRunActivityMs(root, priorId);
+    if (lastActivityMs === 0) return; // no activity signal at all — leave it alone
+
+    // Grace = the most-permissive lane timeout (powerful, or explicit config) × margin.
+    const graceMs = resolveHeartbeatTimeoutMs(root, "powerful") * STALE_RUN_GRACE_MULTIPLIER;
+    if (now() - lastActivityMs <= graceMs) return; // within grace — DO NOT close
+
+    // Abandoned + open → finalize through the normal close path (terminal record + provenance).
+    emitRunClosed(root, priorId, resolveHost, { status: "closed" });
+  } catch {
+    /* best-effort self-heal — never block a new run start */
+  }
+}
+
 export function startRunOnly(
   root: string,
   resolveHost: ResolveHost,
   opts: StartAndCloseOpts = {},
 ): string | null {
   try {
+    closeStalePriorOpenRun(root, resolveHost);
     const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
     return lifecycle.startRun(buildStartRunOpts(root, opts));
   } catch (err) {
@@ -559,6 +659,7 @@ export function startAndCloseRun(
   opts: StartAndCloseOpts = {},
 ): string | null {
   try {
+    closeStalePriorOpenRun(root, resolveHost); // #13: self-heal a stale orphan before claiming the sentinel
     const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
     const runId = lifecycle.startRun(buildStartRunOpts(root, opts));
     // Close via emitRunClosed so the run_closed JSONL line is appended with the

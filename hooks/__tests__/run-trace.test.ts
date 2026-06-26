@@ -655,4 +655,77 @@ describe("run-trace lib (Lane B3)", () => {
       expect(runYamlFields(runYaml)).toMatchObject({ phase: "ideate" });
     });
   });
+
+  // ── #13 — startRun self-heals a STALE prior open run ───────────────────────
+  describe("#13 — startRun finalizes a stale prior open run (interrupted-session self-heal)", () => {
+    // Grace = resolveHeartbeatTimeoutMs(root,"powerful") × 3 = 20min × 3 = 60min
+    // (no settings.json in temp root → powerful tier default). Age past it to abandon.
+    const ABANDONED_MS = 61 * 60 * 1000;
+    const runRel = (r: string, id: string, rel: string) =>
+      path.join(r, ".guild", "runs", id, rel);
+    const statusOf = (r: string, id: string) =>
+      (runYamlFields(fs.readFileSync(runRel(r, id, "run.yaml"), "utf8")) ?? {})["status"];
+
+    /** Backdate the run's TRACE files (not the heartbeat surface) to age it. */
+    function backdateTrace(r: string, id: string, ageMs: number): void {
+      const t = (Date.now() - ageMs) / 1000;
+      for (const rel of ["logs/v1.4-events.jsonl", "events.ndjson", "run.yaml"]) {
+        const p = runRel(r, id, rel);
+        if (fs.existsSync(p)) fs.utimesSync(p, t, t);
+      }
+    }
+
+    it("closes an ABANDONED open prior run when a new run starts, and still starts the new run", () => {
+      const prior = startedRun(root, "full"); // status:open, sentinel -> prior
+      expect(statusOf(root, prior)).toBe("open");
+      backdateTrace(root, prior, ABANDONED_MS);
+
+      const next = startRunOnly(root, resolveHost, { command: "/guild:evolve" }) as string;
+      expect(next).toBeTruthy();
+      expect(next).not.toBe(prior);
+
+      // prior finalized through the REAL close path: status flipped + provenance minted
+      expect(statusOf(root, prior)).toBe("closed");
+      expect(fs.existsSync(runRel(root, prior, "provenance.json"))).toBe(true);
+      // and the new run is open and owns the sentinel
+      expect(statusOf(root, next)).toBe("open");
+      expect(resolveRunIdForTrace(root, {})).toBe(next);
+    });
+
+    it("ANTI-VACUITY: a FRESH open prior run is LEFT OPEN — an active run is never closed", () => {
+      const prior = startedRun(root, "full"); // just started → live (not backdated)
+      const next = startRunOnly(root, resolveHost, { command: "/guild:evolve" }) as string;
+      expect(next).not.toBe(prior);
+      expect(statusOf(root, prior)).toBe("open");
+    });
+
+    it("ANTI-VACUITY (the risky case): stale TRACE mtimes but a FRESH structured heartbeat → LEFT OPEN", () => {
+      const prior = startedRun(root, "full");
+      // age the top-level trace files well past the grace window…
+      backdateTrace(root, prior, ABANDONED_MS);
+      // …but the run has a LIVE lane: write a fresh in-progress/<specialist> heartbeat.
+      const hbDir = runRel(root, prior, "in-progress");
+      fs.mkdirSync(hbDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(hbDir, "backend.json"),
+        JSON.stringify({ timestamp: new Date().toISOString() }),
+      );
+
+      const next = startRunOnly(root, resolveHost, { command: "/guild:evolve" }) as string;
+      expect(next).not.toBe(prior);
+      // the heartbeat surface proves liveness → the run must NOT be finalized
+      expect(statusOf(root, prior)).toBe("open");
+    });
+
+    it("the lightweight /guild:status path (startAndCloseRun) also heals an abandoned orphan", () => {
+      const prior = startedRun(root, "full");
+      backdateTrace(root, prior, ABANDONED_MS);
+      const statusRun = startAndCloseRun(root, resolveHost, {
+        command: "/guild:status",
+        run_class: "lightweight",
+      }) as string;
+      expect(statusRun).toBeTruthy();
+      expect(statusOf(root, prior)).toBe("closed");
+    });
+  });
 });

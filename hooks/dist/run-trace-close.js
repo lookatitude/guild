@@ -2494,6 +2494,9 @@ if (process.argv[1] !== void 0 && (process.argv[1].endsWith("emit-learning-check
   main();
 }
 
+// lib/heartbeat.ts
+var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
+
 // lib/run-trace.ts
 function runDir2(root, runId) {
   return path9.join(root, ".guild", "runs", runId);
