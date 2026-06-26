@@ -112,6 +112,8 @@ const VALUE_OVERRIDES: Record<string, string> = {
   "defaults.reporting": "verbose",
   "defaults.wiki.share_mode": "private",
   "defaults.retry.backoff": "exponential",
+  "defaults.wiki.autopromote": "false", // always-false invariant (agents emit candidates only) — true is rejected
+
   "security.bypass_permissions_policy": "allow",
   "secrets_policy.fail_mode_durable": "open",
   "secrets_policy.fail_mode_telemetry": "closed",
@@ -242,6 +244,10 @@ describe("V12.2 — validate-before-write rejects invalid values (nothing persis
     { key: "models.importanceGate", value: "10", confirm: "advanced", why: "above resolver [1,5]" },
     { key: "models.importanceGate", value: "0", confirm: "advanced", why: "below resolver [1,5]" },
     { key: "models.advisorRounds", value: "0", confirm: "advanced", why: "below resolver min (>=1)" },
+    { key: "models.recallScoreThreshold", value: "5", confirm: "advanced", why: "above resolver [0,1] (validate-path)" },
+    { key: "defaults.retry.max_attempts", value: "0", why: "below resolver min (validate rejects <1)" },
+    { key: "defaults.heartbeat_timeout_ms", value: "0", why: "not a positive integer (validate-path)" },
+    { key: "defaults.index.kg_node_threshold", value: "0", why: "not a positive integer (validate-path)" },
   ];
 
   for (const c of INVALID) {

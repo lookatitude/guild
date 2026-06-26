@@ -537,6 +537,8 @@ const BOOLEAN_PATHS = new Set([
   "models.enabled",
   "models.recallBeforeRead",
   "models.structuredOutputRequired",
+  "models.compositeRecall",       // boolean control in CONFIG_UI_METADATA — was uncoerced (persisted a string the resolver rejects)
+  "models.importanceAtIngest",
 ]);
 
 /** Paths that must be integers (whole number strings). */
@@ -607,9 +609,17 @@ const NUMERIC_RANGE: Record<string, { min: number; max?: number; exclusiveMin?: 
   "models.knowledge.batchSize": { min: 1 },
   "models.knowledge.minTopicImportance": { min: 0, max: 1 },
   "models.knowledge.relMinConf": { min: 0, max: 1 },
-  // "positive number" keys — resolver REJECTS <= 0 (config-cli.ts:1248,1275).
+  "models.recallScoreThreshold": { min: 0, max: 1 },        // validate: float 0–1 (config-cli.ts:992)
+  // "positive number" keys (fractional ok) — resolver REJECTS <= 0 (config-cli.ts:1249,1276).
   "defaults.index.kg_size_threshold_mb": { min: 0, exclusiveMin: true },
   "defaults.capability_manifest_ttl_s": { min: 0, exclusiveMin: true },
+  // "positive integer" keys (smallest is 1) — validate REJECTS < 1 (config-cli.ts:1221,1243,1269).
+  "defaults.retry.max_attempts": { min: 1 },
+  "defaults.heartbeat_timeout_ms": { min: 1 },
+  "defaults.index.kg_node_threshold": { min: 1 },
+  "defaults.index.links_edge_threshold": { min: 1 },
+  "defaults.index.runs_threshold": { min: 1 },
+  "defaults.index.wiki_file_threshold": { min: 1 },
 };
 
 /** Range-check `n` for `keyPath`; returns an error string or null. */
@@ -1242,6 +1252,32 @@ function cmdSet(
 
   // 4. Coerce value
   const coerced = coerceValue(keyPath, rawValue);
+
+  // 4b. AUTHORITATIVE validate-before-persist (completeness guarantee). Build the post-set
+  // candidate for THIS file and run the resolver's OWN validator (validateResolved — the same
+  // checks `config validate` uses). Reject only a violation the SET INTRODUCES, so a pre-existing
+  // file issue never blocks an unrelated edit. This catches any resolver bound not mirrored in the
+  // NUMERIC_RANGE fast-path table, so the UI/CLI set can't persist a value `config validate` rejects.
+  try {
+    let current: Record<string, unknown> = {};
+    if (fs.existsSync(targetFile)) {
+      try {
+        current = JSON.parse(fs.readFileSync(targetFile, "utf8")) as Record<string, unknown>;
+      } catch {
+        current = {}; // malformed file → step 5's readModifyWrite fails closed
+      }
+    }
+    const before = validateResolved(current);
+    const candidate = JSON.parse(JSON.stringify(current)) as Record<string, unknown>;
+    deepSet(candidate, writeKeyPath, coerced);
+    const introduced = validateResolved(candidate).filter((v) => !before.includes(v));
+    if (introduced.length > 0) {
+      process.stdout.write(`[config-cmd] ERROR: ${introduced[0]}\n`);
+      return 1;
+    }
+  } catch {
+    /* a validation-harness failure must never block a legitimate write — fall through */
+  }
 
   // 5. Read-modify-write — FAIL CLOSED on malformed JSON
   try {
