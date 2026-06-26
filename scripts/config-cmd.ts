@@ -583,6 +583,9 @@ const NUMBER_PATHS = new Set([
  * settings-reader.ts: depth/branching/files/tokens/batch are `>= 1`; the two ratios are [0,1].
  */
 const NUMERIC_RANGE: Record<string, { min: number; max?: number }> = {
+  // resolver enforces [0,1] (settings-reader.ts: ingestSimilarityGate guard) — mirror it so an
+  // out-of-range value is rejected write-time, not accepted-then-silently-dropped (V12).
+  "models.ingestSimilarityGate": { min: 0, max: 1 },
   "models.knowledge.maxDepth": { min: 1 },
   "models.knowledge.maxBranching": { min: 1 },
   "models.knowledge.maxFiles": { min: 1 },

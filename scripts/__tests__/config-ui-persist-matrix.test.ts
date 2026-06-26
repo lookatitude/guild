@@ -231,6 +231,10 @@ describe("V12.2 — validate-before-write rejects invalid values (nothing persis
     { key: "defaults.index.enabled", value: "yes", why: "boolean must be true|false" },
     { key: "roles.host", value: "claudee", confirm: "advanced", why: "unknown host id" },
     { key: "mcp.tool_description_hashes", value: "{bad json", confirm: "strongest", why: "malformed JSON" },
+    // numeric OUT-OF-RANGE (the resolver enforces [0,1]; write-time must reject, not accept-then-drop)
+    { key: "models.ingestSimilarityGate", value: "5", confirm: "advanced", why: "number out of [0,1] range" },
+    { key: "models.ingestSimilarityGate", value: "-1", confirm: "advanced", why: "number below [0,1] range" },
+    { key: "models.knowledge.maxDepth", value: "0", confirm: "advanced", why: "integer below resolver min (>=1)" },
   ];
 
   for (const c of INVALID) {
