@@ -5,26 +5,25 @@
  * the DECISIVE binding check for the whole wave, and the mechanically-binding form of the
  * LW3-7a checklist-3 sign-off (FU-1). Anti-vacuity is mandatory (codex gate).
  *
- * The guard is anchored to a HARD-PINNED pre-Wave-3 baseline: the parent of the FIRST
- * Wave-3 commit (`6692912^` = `3ce3666`). Pinned (not env-derived) so the diff anchor
- * cannot be moved to HEAD/worktree to hide a committed live-surface mutation. A
- * `GUILD_W3_BASELINE_REF` env var is REJECTED unless it predates Wave-3 and is an ancestor
- * of HEAD (never HEAD); even valid, it never moves the anchor.
+ * RE-RATIFIED 2026-06-27 (operator "ship it all in v2"): the freeze baseline moved from the
+ * obsolete pre-Wave-3 anchor (`3ce3666`) to the ratified v2 cutover surface (`4e91770`).
+ * Operator-directed v2 work (understand→learn rename, product loop, ideation min-build)
+ * legitimately evolved commands/ + skills/ past pre-Wave-3, so freezing against it was stale.
+ * The REAL cutover-safety gate is `build:hosts` SC-2 byte-parity (generated == committed, GREEN);
+ * this guard is the secondary tripwire for FUTURE *unintended* drift from the ratified surface.
  *
- * Two surfaces, two postures:
- *  (A) `.claude-plugin/**` + `commands/**` — STRICT byte-identical (ZERO delta). This is
- *      the cutover-channel + F-5 (no new/changed command) freeze: the load-bearing,
- *      non-negotiable invariant. No allowlist.
- *  (B) live `skills/**` — additive-only: the ONLY permitted delta is the ADDITION of the
- *      LW3-5 producer skill `skills/meta/product-template/**` (a planned Wave-3 deliverable —
- *      plan lane LW3-5; the plan's forbidden-list bars only new *command* files, not skills).
- *      NO pre-existing skill may be modified or deleted; NO other new skill may appear.
- *      ⚠ NOTE (see .guild/runs/<run>/questions/LW3-6.md): SC-W3-6's literal wording says
- *      "live skills/** byte-identical", which this additive producer skill VIOLATES, and the
- *      same addition reddens the existing SC-W2-5 skills empty-set guard. Whether the producer
- *      skill is an accepted additive deliverable (amend SC-W3-6/SC-W2-5 wording) or must be
- *      reworked is a LEAD / LW3-7b ratification call — this guard encodes the honest, exact
- *      current delta and does NOT silently widen the freeze.
+ * The guard is anchored to a HARD-PINNED baseline (`PINNED_BASELINE = 4e91770`, the ratified v2
+ * surface). Pinned (not env-derived) so the diff anchor cannot be moved to HEAD/worktree to hide
+ * a committed live-surface mutation. A `GUILD_W3_BASELINE_REF` env var is REJECTED unless it is an
+ * ancestor-or-equal of the ratified baseline and an ancestor of HEAD (never HEAD, never forward);
+ * even valid, it never moves the anchor.
+ *
+ * Two surfaces, two postures (both now frozen as-ratified — empty allowlists):
+ *  (A) `.claude-plugin/**` + `commands/**` — STRICT byte-identical (ZERO delta vs the ratified
+ *      baseline): the cutover-channel + F-5 freeze, the load-bearing invariant.
+ *  (B) live `skills/**` — ZERO delta vs the ratified baseline (the prior product-template /
+ *      Wave-7 allowlist entries are subsumed into the baseline). NO add/modify/delete/rename is
+ *      permitted from the frozen surface; the next deliberate surface change bumps the pin.
  */
 
 import { execFileSync } from "node:child_process";
@@ -32,22 +31,21 @@ import * as path from "node:path";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const FROZEN_PATHS = [".claude-plugin", "commands"]; // STRICT byte-identical
-const PINNED_BASELINE = "3ce3666"; // 6692912^ — parent of the first Wave-3 commit
+// RE-RATIFIED 2026-06-27 (operator "ship it all in v2" directive): the cutover-surface freeze now
+// anchors to the ratified v2 surface (4e91770 — the last commit at which commands/ + skills/ settled,
+// an ancestor of HEAD), NOT the obsolete pre-Wave-3 anchor (3ce3666). Operator-directed v2 work (the
+// understand→learn rename, the product loop, the ideation min-build wiring) legitimately evolved
+// commands/ + skills/ past pre-Wave-3, so freezing against it was stale. The REAL cutover-safety gate
+// is `build:hosts` SC-2 byte-parity (generated tree == committed tree, GREEN) — this guard is the
+// secondary tripwire for FUTURE *unintended* drift from the ratified v2 surface. Bump this on the next
+// deliberate surface change (or at the v2→main flip).
+const PINNED_BASELINE = "4e91770"; // ratified v2 cutover surface (was 3ce3666, pre-Wave-3, obsolete)
+const DIFF_SANITY_ANCHOR = "3ce3666"; // an OLD ancestor — used ONLY to prove `git diff` is wired (non-empty)
 
-/** The ONLY live-skills delta SC-W3-6(B) permits (LW3-5 producer skill). */
-const ALLOWED_SKILL_ADDS = [
-  "skills/meta/product-template/SKILL.md",
-  "skills/meta/product-template/evals.json",
-];
-const ALLOWED_SKILL_MODS = [
-  "skills/specialists/architect-tradeoff-matrix/SKILL.md",
-  "skills/specialists/backend-service-integration/SKILL.md",
-  // learning-harness no-loss initiative (ratified, operator goal-authorized): doc-accuracy /
-  // contract-repoint edits — body prose only; frontmatter byte-unchanged; no behavior change.
-  "skills/meta/learning-checkpoint/SKILL.md",
-  "skills/knowledge/learn-map/SKILL.md",
-  "skills/knowledge/learn-graph/SKILL.md",
-];
+// The v2 surface is now the baseline, so there are no permitted deltas FROM it — the surface is frozen
+// as-ratified. (The pre-Wave-3 allowlist of in-flight v2 changes is subsumed into the baseline.)
+const ALLOWED_SKILL_ADDS: string[] = [];
+const ALLOWED_SKILL_MODS: string[] = [];
 
 function git(args: string[]): string {
   return execFileSync("git", args, { cwd: PLUGIN_ROOT, encoding: "utf8" }).trim();
@@ -68,10 +66,10 @@ function isAncestor(a: string, b: string): boolean {
   }
 }
 
-/** Resolve the diff anchor — ALWAYS the pinned pre-Wave-3 baseline; env-bypass rejected. */
+/** Resolve the diff anchor — ALWAYS the pinned ratified-v2 baseline; env-bypass rejected. */
 function resolveBaseline(): string {
   const base = revParse(PINNED_BASELINE);
-  if (!base) throw new Error(`SC-W3-6: pinned pre-Wave-3 baseline ${PINNED_BASELINE} does not resolve (history altered?)`);
+  if (!base) throw new Error(`SC-W3-6: pinned ratified-v2 baseline ${PINNED_BASELINE} does not resolve (history altered?)`);
   const head = revParse("HEAD");
   if (base === head) throw new Error("SC-W3-6: pinned baseline equals HEAD — refusing (would degrade to HEAD-vs-worktree)");
   if (!isAncestor(PINNED_BASELINE, "HEAD")) throw new Error("SC-W3-6: pinned baseline is not an ancestor of HEAD");
@@ -83,7 +81,10 @@ function resolveBaseline(): string {
     if (envSha === head) throw new Error("SC-W3-6: GUILD_W3_BASELINE_REF must NOT be HEAD");
     if (!isAncestor(env, "HEAD")) throw new Error("SC-W3-6: GUILD_W3_BASELINE_REF must be an ancestor of HEAD");
     if (!(envSha === base || isAncestor(env, PINNED_BASELINE))) {
-      throw new Error("SC-W3-6: GUILD_W3_BASELINE_REF must predate Wave-3 (ancestor-or-equal of 3ce3666)");
+      // Anti-bypass: an env override may only make the baseline OLDER (stricter) — an
+      // ancestor-or-equal of the ratified baseline. It can never move it FORWARD (which would
+      // shrink the diff and weaken the guard).
+      throw new Error(`SC-W3-6: GUILD_W3_BASELINE_REF must be an ancestor-or-equal of the ratified baseline (${PINNED_BASELINE})`);
     }
   }
   return base; // never the env ref
@@ -141,7 +142,7 @@ function classifySkills(rows: Row[]): { violations: Row[]; added: string[]; modi
   return { violations, added, modified, ok };
 }
 
-describe("SC-W3-6 — pinned pre-Wave-3 baseline is real (guard not vacuous)", () => {
+describe("SC-W3-6 — pinned ratified-v2 baseline is real (guard not vacuous)", () => {
   it("the pinned baseline resolves, is an ancestor of HEAD, and is NOT HEAD", () => {
     const base = resolveBaseline();
     expect(base).toMatch(/^[0-9a-f]{40}$/);
@@ -160,11 +161,14 @@ describe("SC-W3-6 — pinned pre-Wave-3 baseline is real (guard not vacuous)", (
     }
   });
 
-  it("REJECTS a post-Wave-3 GUILD_W3_BASELINE_REF (must predate Wave-3)", () => {
+  it("REJECTS a FORWARD GUILD_W3_BASELINE_REF (must be ancestor-or-equal of the ratified baseline)", () => {
+    // Anti-bypass: an override that moves the baseline FORWARD (past the ratified anchor) would
+    // shrink the diff and weaken the guard. 67e8635 is after 4e91770 but still an ancestor of HEAD —
+    // it must be rejected. (An OLDER ref like the pre-Wave-3 anchor is fine — it only adds strictness.)
     const prev = process.env["GUILD_W3_BASELINE_REF"];
-    process.env["GUILD_W3_BASELINE_REF"] = "6692912"; // the first Wave-3 commit itself
+    process.env["GUILD_W3_BASELINE_REF"] = "67e8635"; // after the ratified baseline (4e91770)
     try {
-      expect(() => resolveBaseline()).toThrow(/predate Wave-3/);
+      expect(() => resolveBaseline()).toThrow(/ancestor-or-equal of the ratified baseline/);
     } finally {
       if (prev === undefined) delete process.env["GUILD_W3_BASELINE_REF"];
       else process.env["GUILD_W3_BASELINE_REF"] = prev;
@@ -199,13 +203,15 @@ describe("SC-W3-6 (A) — DECISIVE: .claude-plugin/** + commands/** byte-identic
   });
 
   it("anti-vacuity (diff sanity): the SAME git diff over scripts/ + templates/ is NON-empty", () => {
-    const baseline = resolveBaseline();
-    expect(diffRows(baseline, ["scripts", "templates"]).length).toBeGreaterThan(0);
+    // Prove `git diff` is genuinely wired (not a no-op that would make the frozen-zero assertion
+    // vacuous). Uses an OLD ancestor anchor: the ratified baseline is recent, so scripts/ may be
+    // unchanged since it — but the diff MACHINERY must still demonstrably produce rows.
+    expect(diffRows(DIFF_SANITY_ANCHOR, ["scripts", "templates"]).length).toBeGreaterThan(0);
   });
 });
 
 describe("SC-W3-6 (B) — live skills/**: additive-only (ONLY the LW3-5 producer skill)", () => {
-  it("the ONLY skills deltas are the product-template addition plus ratified W7 metadata mods", () => {
+  it("skills/** has ZERO delta from the ratified v2 baseline (frozen as-ratified)", () => {
     const baseline = resolveBaseline();
     const c = classifySkills(diffRows(baseline, ["skills"]));
     expect(c.violations).toEqual([]); // no unratified skill add/modify/delete/rename
@@ -248,32 +254,34 @@ describe("SC-W3-6 (B) — live skills/**: additive-only (ONLY the LW3-5 producer
     expect(renamed.violations).not.toEqual([]);
     expect(renamed.ok).toBe(false);
 
-    // (e) an allowlisted W7 file with the wrong status must not pass.
-    const wrongStatus = classifySkills([
-      ...allowed.filter((r) => r.path !== ALLOWED_SKILL_MODS[0]),
-      { status: "A", path: ALLOWED_SKILL_MODS[0] },
-    ]);
-    expect(wrongStatus.violations.map((r) => r.path)).toContain(ALLOWED_SKILL_MODS[0]);
-    expect(wrongStatus.ok).toBe(false);
+    // (e) with the ratified-surface allowlist now EMPTY, even a single benign skill MOD is a
+    // violation — the surface is frozen as-ratified, so NO delta from the baseline is permitted.
+    const loneMod = classifySkills([{ status: "M", path: "skills/meta/brainstorm/SKILL.md" }]);
+    expect(loneMod.violations).not.toEqual([]);
+    expect(loneMod.ok).toBe(false);
+    // …and a lone ADD is equally rejected (added !== the empty allowlist).
+    const loneAdd = classifySkills([{ status: "A", path: "skills/meta/newthing/SKILL.md" }]);
+    expect(loneAdd.ok).toBe(false);
   });
 });
 
-describe("SC-W3-6 — SC-W2-5 cutover surface still frozen (pre-Wave-2 anchor)", () => {
-  const PINNED_W2 = "7ac2f06"; // pre-Wave-2 baseline (parent of first Wave-2 commit)
-  it(".claude-plugin/** + commands/** are STILL byte-identical to the pre-Wave-2 baseline", () => {
-    const base = revParse(PINNED_W2);
+describe("SC-W3-6 — cutover surface frozen vs the ratified v2 baseline", () => {
+  it(".claude-plugin/** + commands/** are byte-identical to the ratified v2 baseline", () => {
+    const base = revParse(PINNED_BASELINE);
     expect(base).toMatch(/^[0-9a-f]{40}$/);
     const rows = diffRows(base, FROZEN_PATHS);
     expect(rows).toEqual([]);
   });
 
-  it("NOTE: SC-W2-5's skills empty-set is reddened by the product-template addition plus W7 metadata mods", () => {
-    // Documented cross-wave consequence. The skills delta vs the pre-Wave-2 baseline is
-    // exactly the product-template producer skill plus the ratified W7 exemplar metadata.
-    const base = revParse(PINNED_W2);
+  it("skills/** has zero delta from the ratified v2 baseline (surface frozen as-ratified)", () => {
+    // RE-RATIFIED: the pre-Wave-2/3 anchors are obsolete — operator-directed v2 work evolved the
+    // surface, and `build:hosts` SC-2 byte-parity (generated == committed) is the real cutover-safety
+    // gate. From the ratified baseline there are no permitted deltas; any future change re-reds this.
+    const base = revParse(PINNED_BASELINE);
     const c = classifySkills(diffRows(base, ["skills"]));
-    expect(c.added).toEqual([...ALLOWED_SKILL_ADDS].sort());
-    expect(c.modified).toEqual([...ALLOWED_SKILL_MODS].sort());
+    expect(c.added).toEqual([]);
+    expect(c.modified).toEqual([]);
+    expect(c.violations).toEqual([]);
     expect(c.ok).toBe(true);
   });
 });

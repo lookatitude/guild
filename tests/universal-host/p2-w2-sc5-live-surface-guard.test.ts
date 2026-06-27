@@ -2,24 +2,33 @@
  * tests/universal-host/p2-w2-sc5-live-surface-guard.test.ts
  *
  * AUTHORITATIVE acceptance test for SC-W2-5 (DEFERRAL GUARD) — the install/runtime
- * surface is UNCHANGED by Wave-2 (the channel was NOT flipped). This guard protects
- * the DEFERRED cutover, so it is airtight against vacuity (codex anti-vacuity gate).
+ * surface is UNCHANGED since the ratified v2 baseline (the channel is NOT flipped).
+ * This guard protects the DEFERRED cutover, so it is airtight against vacuity
+ * (codex anti-vacuity gate).
+ *
+ * RE-RATIFIED 2026-06-27 (operator "ship it all in v2"): the freeze baseline moved from
+ * the obsolete pre-Wave-2 anchor (7ac2f06) to the ratified v2 cutover surface (4e91770) —
+ * operator-directed v2 work (understand→learn rename, product loop, ideation min-build)
+ * legitimately evolved commands/ + skills/ past pre-Wave-2. The REAL cutover-safety gate
+ * is `build:hosts` SC-2 byte-parity (generated == committed, GREEN); this guard is the
+ * secondary tripwire for FUTURE *unintended* drift from the ratified surface. Bump the
+ * pin on the next deliberate surface change (or at the v2→main flip). The skill allowlists
+ * are now EMPTY — the surface is frozen as-ratified, with NO permitted deltas.
  *
  * Two halves:
- *  (1) EMPTY-SET live-surface guard, anchored to a PINNED pre-Wave-2 baseline.
- *      `git diff --name-status 7ac2f06 -- .claude-plugin commands skills` (the parent
- *      of the first Wave-2 commit f226a8e) vs the WORKING TREE must show ZERO entries.
- *      The baseline is HARD-PINNED — it can NEVER be HEAD/worktree (which would turn
- *      the diff into HEAD-vs-worktree and hide a COMMITTED live-surface mutation). A
- *      `GUILD_W2_BASELINE_REF` env var is REJECTED (throw) unless it names a commit
- *      that predates Wave-2 and is an ancestor of HEAD (never HEAD); even when valid
- *      it does NOT move the diff anchor — the diff is ALWAYS against the pinned tree.
+ *  (1) EMPTY-SET live-surface guard, anchored to the PINNED ratified-v2 baseline (4e91770).
+ *      `git diff --name-status 4e91770 -- .claude-plugin commands skills` vs the WORKING
+ *      TREE must show ZERO entries. The baseline is HARD-PINNED — it can NEVER be
+ *      HEAD/worktree (which would turn the diff into HEAD-vs-worktree and hide a COMMITTED
+ *      live-surface mutation). A `GUILD_W2_BASELINE_REF` env var is REJECTED (throw) unless
+ *      it is an ancestor-or-equal of the ratified baseline and an ancestor of HEAD (never
+ *      HEAD, never forward); even when valid it does NOT move the diff anchor — the diff is
+ *      ALWAYS against the pinned tree.
  *  (2) build-inventory RESOLVED-ENTRY A/B — a GENUINE pre/post comparison. The SAME
- *      `discoverSurfaces` resolver is run against the PRE-Wave-2 tree (extracted from
- *      the pinned baseline via `git archive`) AND the current tree; the resolved
- *      skill/command runtime set must be byte-identical. A Wave-2 surface ADD/CHANGE
- *      under live skills/ or commands/ would make the two sets differ → caught (this
- *      is NOT a current-vs-current determinism check).
+ *      `discoverSurfaces` resolver is run against the ratified-baseline tree (extracted via
+ *      `git archive`) AND the current tree; the resolved skill/command runtime set must be
+ *      byte-identical. Any surface ADD/CHANGE under live skills/ or commands/ since the
+ *      ratified baseline would make the two sets differ → caught.
  */
 
 import { execFileSync } from "node:child_process";
@@ -33,28 +42,16 @@ const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const LIVE_PATHS = [".claude-plugin", "commands", "skills"];
 
 /**
- * Wave-3 RATIFIED additive allowlist (operator decision 2026-06-17): the LW3-5 product-loop
- * template producer ships its invocation skill as an ADDITIVE new skill. `.claude-plugin/**`
- * and `commands/**` remain STRICT byte-frozen (the cutover + F-5 freeze, ZERO delta); live
- * `skills/**` is additive-only — a NEW skill is permitted, but NO existing skill may change.
- * The allowlist is exactly these two files; everything else under skills/ stays frozen.
+ * Skill allowlists — now EMPTY (RE-RATIFIED 2026-06-27, "ship it all in v2"). The baseline anchors
+ * to the ratified v2 surface (4e91770), so the prior in-flight Wave-3 additive (product-template) +
+ * Wave-7 metadata-mod entries are SUBSUMED into the baseline. `.claude-plugin/**` + `commands/**`
+ * stay STRICT byte-frozen, and live `skills/**` is now ZERO-delta too: with an empty allowlist, ANY
+ * add/modify/delete/rename from the ratified baseline is a violation. (See the SC-W3-6 guard header
+ * for the full rationale; `build:hosts` SC-2 byte-parity is the real cutover-safety gate.) Bump the
+ * pin on the next deliberate surface change rather than re-populating these.
  */
-// EXACT two-file allowlist (not a directory prefix — a prefix would let a third file like
-// product-template/README.md or product-template/extra/SKILL.md slip through; codex G-lane LW3-6).
-const WAVE3_SKILL_ADDITION_FILES = [
-  "skills/meta/product-template/SKILL.md",
-  "skills/meta/product-template/evals.json",
-];
-const WAVE7_SKILL_MODIFICATION_FILES = [
-  "skills/specialists/architect-tradeoff-matrix/SKILL.md",
-  "skills/specialists/backend-service-integration/SKILL.md",
-  // learning-harness no-loss initiative (ratified, operator goal-authorized): doc-accuracy /
-  // contract-repoint edits — body prose only; frontmatter (name/description/when_to_use/type)
-  // byte-unchanged; no trigger/dispatch behavior change.
-  "skills/meta/learning-checkpoint/SKILL.md",
-  "skills/knowledge/learn-map/SKILL.md",
-  "skills/knowledge/learn-graph/SKILL.md",
-];
+const WAVE3_SKILL_ADDITION_FILES: string[] = [];
+const WAVE7_SKILL_MODIFICATION_FILES: string[] = [];
 const isAllowlistedSkillAddition = (p: string): boolean => WAVE3_SKILL_ADDITION_FILES.includes(p);
 const isAllowlistedSkillModification = (p: string): boolean => WAVE7_SKILL_MODIFICATION_FILES.includes(p);
 
@@ -81,7 +78,7 @@ function evaluateLiveSurfaceRows(rows: DiffRow[]): {
 	  const violations = rows.filter(({ status, path: p }) => {
     // .claude-plugin/** and commands/** are STRICT — any delta is a violation.
     if (p.startsWith(".claude-plugin/") || p.startsWith("commands/")) return true;
-	    // skills/** is additive-only for Wave 3 plus exact ratified Wave 7 metadata mods.
+	    // skills/** is frozen as-ratified (empty allowlist) — ANY add/modify/delete/rename is a violation.
 	    // Any delete/rename, non-allowlisted add, or non-allowlisted modify remains a violation.
 	    if (p.startsWith("skills/")) {
 	      return !(
@@ -114,16 +111,12 @@ function evaluateLiveSurfaceRows(rows: DiffRow[]): {
 	  };
 	}
 
-function subtractAllowlistedResolvedSkills<T extends ResolvedSkill>(skills: T[]): T[] {
-  return skills.filter((s) => !isAllowlistedSkillAddition(s.source_path));
-}
-
 /**
- * The HARD-PINNED pre-Wave-2 baseline: the parent of the first Wave-2 commit
- * (`f226a8e^`). Pinned (not env-derived) so the guard's diff anchor cannot be
+ * The HARD-PINNED ratified-v2 baseline (4e91770 — the commit at which commands/ + skills/ settled;
+ * an ancestor of HEAD, not HEAD). Pinned (not env-derived) so the guard's diff anchor cannot be
  * moved to HEAD/worktree to hide a committed live-surface mutation.
  */
-const PINNED_BASELINE = "7ac2f06";
+const PINNED_BASELINE = "4e91770"; // RE-RATIFIED to the v2 surface (was 7ac2f06, pre-Wave-2, obsolete)
 
 function git(args: string[]): string {
   return execFileSync("git", args, { cwd: PLUGIN_ROOT, encoding: "utf8" }).trim();
@@ -145,16 +138,16 @@ function isAncestor(a: string, b: string): boolean {
 }
 
 /**
- * Resolve the diff anchor. ALWAYS the pinned pre-Wave-2 baseline. Validates the pin
+ * Resolve the diff anchor. ALWAYS the pinned ratified-v2 baseline. Validates the pin
  * is real (resolves, is an ancestor of HEAD, is NOT HEAD), and REJECTS a tampered
  * `GUILD_W2_BASELINE_REF` (the bypass vector): it may never be HEAD, must be an
- * ancestor of HEAD, and must predate Wave-2 (ancestor-or-equal of the pinned base).
+ * ancestor of HEAD, and must be an ancestor-or-equal of the ratified baseline.
  * Even a *valid* override does not move the anchor — the diff is always the pin.
  */
 function resolveBaseline(): string {
   const base = revParse(PINNED_BASELINE);
   if (!base) {
-    throw new Error(`SC-W2-5: pinned pre-Wave-2 baseline ${PINNED_BASELINE} does not resolve (history altered?)`);
+    throw new Error(`SC-W2-5: pinned ratified-v2 baseline ${PINNED_BASELINE} does not resolve (history altered?)`);
   }
   const head = revParse("HEAD");
   if (base === head) {
@@ -174,16 +167,17 @@ function resolveBaseline(): string {
     if (!isAncestor(env, "HEAD")) {
       throw new Error("SC-W2-5: GUILD_W2_BASELINE_REF must be an ancestor of HEAD");
     }
-    // predates Wave-2 ⇔ ancestor-or-equal of the pinned pre-Wave-2 baseline.
+    // Anti-bypass: an override may only make the baseline OLDER (stricter) — ancestor-or-equal of the
+    // ratified baseline. It can never move FORWARD (which would shrink the diff and weaken the guard).
     if (!(envSha === base || isAncestor(env, PINNED_BASELINE))) {
-      throw new Error("SC-W2-5: GUILD_W2_BASELINE_REF must predate Wave-2 (ancestor-or-equal of 7ac2f06)");
+      throw new Error(`SC-W2-5: GUILD_W2_BASELINE_REF must be an ancestor-or-equal of the ratified baseline (${PINNED_BASELINE})`);
     }
   }
   // The anchor is ALWAYS the pinned pre-Wave-2 tree — never the (possibly newer) env ref.
   return base;
 }
 
-describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned pre-Wave-2 baseline)", () => {
+describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned ratified-v2 baseline)", () => {
   it("the pinned baseline is real, an ancestor of HEAD, and NOT HEAD (guard not vacuous)", () => {
     const base = resolveBaseline();
     expect(base).toMatch(/^[0-9a-f]{40}$/);
@@ -202,12 +196,13 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned pre-Wave-2 baseli
     }
   });
 
-  it("REJECTS a post-Wave-2 GUILD_W2_BASELINE_REF (must predate Wave-2)", () => {
+  it("REJECTS a FORWARD GUILD_W2_BASELINE_REF (must be ancestor-or-equal of the ratified baseline)", () => {
     const prev = process.env["GUILD_W2_BASELINE_REF"];
-    // The first Wave-2 commit itself does NOT predate Wave-2 → must be rejected.
-    process.env["GUILD_W2_BASELINE_REF"] = "f226a8e";
+    // 67e8635 is AFTER the ratified baseline (4e91770) but an ancestor of HEAD — a forward move that
+    // would shrink the diff/weaken the guard, so it must be rejected. (Older refs only add strictness.)
+    process.env["GUILD_W2_BASELINE_REF"] = "67e8635";
     try {
-      expect(() => resolveBaseline()).toThrow(/predate Wave-2/);
+      expect(() => resolveBaseline()).toThrow(/ancestor-or-equal of the ratified baseline/);
     } finally {
       if (prev === undefined) delete process.env["GUILD_W2_BASELINE_REF"];
       else process.env["GUILD_W2_BASELINE_REF"] = prev;
@@ -264,23 +259,20 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned pre-Wave-2 baseli
     expect(thirdFile.violations.map((v) => v.path)).toContain("skills/meta/product-template/README.md");
     expect(thirdFile.ok).toBe(false);
 
-	    for (const required of WAVE3_SKILL_ADDITION_FILES) {
-	      const missingRequired = evaluateLiveSurfaceRows(allowedRows.filter((r) => r.path !== required));
-	      expect(missingRequired.addedSkillFiles).not.toEqual([...WAVE3_SKILL_ADDITION_FILES].sort());
-	      expect(missingRequired.ok).toBe(false);
-	    }
-	    for (const required of WAVE7_SKILL_MODIFICATION_FILES) {
-	      const missingRequired = evaluateLiveSurfaceRows(allowedRows.filter((r) => r.path !== required));
-	      expect(missingRequired.modifiedSkillFiles).not.toEqual([...WAVE7_SKILL_MODIFICATION_FILES].sort());
-	      expect(missingRequired.ok).toBe(false);
-	    }
-
-	    const wrongStatus = evaluateLiveSurfaceRows([
-	      ...allowedRows.filter((r) => r.path !== WAVE7_SKILL_MODIFICATION_FILES[0]),
-	      { status: "A", path: WAVE7_SKILL_MODIFICATION_FILES[0], raw: `A\t${WAVE7_SKILL_MODIFICATION_FILES[0]}` },
+	    // With the ratified-surface allowlist now EMPTY, EVERY skills delta is a violation — a lone add
+	    // and a lone modify are both rejected (the surface is frozen as-ratified).
+	    const loneAdd = evaluateLiveSurfaceRows([{ status: "A", path: "skills/meta/newthing/SKILL.md", raw: "A\tskills/meta/newthing/SKILL.md" }]);
+	    expect(loneAdd.ok).toBe(false);
+	    const loneMod = evaluateLiveSurfaceRows([{ status: "M", path: "skills/meta/brainstorm/SKILL.md", raw: "M\tskills/meta/brainstorm/SKILL.md" }]);
+	    expect(loneMod.ok).toBe(false);
+	    // A delete and a rename are always violations under skills/ too.
+	    const loneDel = evaluateLiveSurfaceRows([{ status: "D", path: "skills/core/init/SKILL.md", raw: "D\tskills/core/init/SKILL.md" }]);
+	    expect(loneDel.ok).toBe(false);
+	    const loneRename = evaluateLiveSurfaceRows([
+	      { status: "R100", path: "skills/meta/a/SKILL.md skills/meta/b/SKILL.md", raw: "R100\tskills/meta/a/SKILL.md\tskills/meta/b/SKILL.md" },
 	    ]);
-	    expect(wrongStatus.violations.map((v) => v.path)).toContain(WAVE7_SKILL_MODIFICATION_FILES[0]);
-	    expect(wrongStatus.ok).toBe(false);
+	    expect(loneRename.violations).not.toEqual([]);
+	    expect(loneRename.ok).toBe(false);
 
 	    const frozenMutation = evaluateLiveSurfaceRows([
 	      ...allowedRows,
@@ -331,34 +323,21 @@ describe("SC-W2-5 (2) — build-inventory resolved-entry A/B (GENUINE pre/post)"
     expect((pre.commands as unknown[]).length).toBeGreaterThan(0);
   });
 
-  it("the RESOLVED SKILL set is byte-identical pre/post EXCEPT the ratified additive skill", () => {
-    // Current minus the ratified Wave-3 addition must byte-equal the pre-Wave-2 resolved set —
-    // i.e. NOTHING changed about any pre-existing skill; the only delta is the allowed new one.
-    const curMinusAdditions = subtractAllowlistedResolvedSkills(cur.skills as { source_path: string }[]);
-    expect(JSON.stringify(curMinusAdditions)).toBe(JSON.stringify(pre.skills));
-    // And the allowlisted addition IS actually present in current (the delta is real, not vacuous).
-    // Subtraction is by EXACT source_path membership (not a dir prefix), so a resolved skill living
-    // under the dir but NOT one of the two ratified files would survive in curMinusAdditions and
-    // break the equality above — i.e. the allowlist can't be silently widened.
-    const additions = (cur.skills as { source_path: string }[]).filter((s) =>
-      isAllowlistedSkillAddition(s.source_path),
-    );
-    expect(additions.length).toBeGreaterThan(0);
-    expect(additions.every((s) => WAVE3_SKILL_ADDITION_FILES.includes(s.source_path))).toBe(true);
+  it("the RESOLVED SKILL set is byte-identical pre/post the ratified v2 baseline (zero delta)", () => {
+    // The cutover surface is frozen as-ratified, so the REAL resolver (`discoverSurfaces`) over the
+    // baseline tree must byte-equal the current resolved set — NOTHING changed since the ratified
+    // baseline. (Pre-ratification this permitted exactly the product-template addition; that delta is
+    // now subsumed into the baseline, so the expected delta is ZERO.)
+    expect(JSON.stringify(cur.skills)).toBe(JSON.stringify(pre.skills));
   });
 
-  it("anti-vacuity: resolved-skill subtraction is exact source_path equality, not a product-template prefix", () => {
-    const resolved = [
-      { id: "allowed", source_path: "skills/meta/product-template/SKILL.md" },
-      { id: "readme", source_path: "skills/meta/product-template/README.md" },
-      { id: "nested", source_path: "skills/meta/product-template/extra/SKILL.md" },
-      { id: "existing", source_path: "skills/core/init/SKILL.md" },
-    ];
-    expect(subtractAllowlistedResolvedSkills(resolved).map((s) => s.source_path)).toEqual([
-      "skills/meta/product-template/README.md",
-      "skills/meta/product-template/extra/SKILL.md",
-      "skills/core/init/SKILL.md",
-    ]);
+  it("anti-vacuity: the resolved-skill comparison is capable of detecting a perturbation", () => {
+    // Prove the byte-identical comparison can FAIL — mutating a single resolved source_path makes the
+    // JSON differ from the baseline. Guards against a vacuous always-equal comparison.
+    const skills = cur.skills as { source_path: string }[];
+    expect(skills.length).toBeGreaterThan(0);
+    const perturbed = skills.map((s, i) => (i === 0 ? { ...s, source_path: s.source_path + ".MUTATED" } : s));
+    expect(JSON.stringify(perturbed)).not.toBe(JSON.stringify(pre.skills));
   });
 
   it("the RESOLVED COMMAND set is byte-identical pre/post Wave-2", () => {
