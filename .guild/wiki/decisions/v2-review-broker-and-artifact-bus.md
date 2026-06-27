@@ -297,9 +297,9 @@ CR-D ownership-map rows afterward — this ADR touches none of those files.
 
 | # | Contract | schema_version | Status | Canonical body | `.guild/` path | Realizing / consuming |
 |---|---|---|---|---|---|---|
-| 1 | BusEvent | `guild.bus_event.v1` | `[post-v2]` | this ADR §D-BUS-1 (below) | `.guild/runs/<run-id>/bus/log.jsonl` (NDJSON) | specialist agents + orchestrator (publishers); `TaskCompleted` hook + poll subscribers (readers) |
-| 2 | CasMeta | `guild.cas_meta.v1` | `[post-v2]` | this ADR §D-BUS-3 (below) | `.guild/runs/<run-id>/bus/cas/<sha256[0:2]>/<sha256>.meta.yaml` | publishers (idempotent write); integrity verify + cross-host cache (readers) |
-| 3 | BusSubscriber | `guild.bus_subscriber.v1` | `[post-v2]` | this ADR §D-BUS-2 (below) | `.guild/runs/<run-id>/bus/subscribers/<subscriber-id>.yaml` | orchestrator (writer); `TaskCompleted` hook (reader/fan-out) |
+| 1 | BusEvent | `guild.bus_event.v1` | `[v2]` shipped | this ADR §D-BUS-1 (below) | `.guild/runs/<run-id>/bus/log.jsonl` (NDJSON) | specialist agents + orchestrator (publishers); `TaskCompleted` hook + poll subscribers (readers) |
+| 2 | CasMeta | `guild.cas_meta.v1` | `[v2]` shipped | this ADR §D-BUS-3 (below) | `.guild/runs/<run-id>/bus/cas/<sha256[0:2]>/<sha256>.meta.yaml` | publishers (idempotent write); integrity verify + cross-host cache (readers) |
+| 3 | BusSubscriber | `guild.bus_subscriber.v1` | `[v2]` shipped | this ADR §D-BUS-2 (below) | `.guild/runs/<run-id>/bus/subscribers/<subscriber-id>.yaml` | orchestrator (writer); `TaskCompleted` hook (reader/fan-out) |
 
 **Canonical bodies (frozen here for registration):**
 
