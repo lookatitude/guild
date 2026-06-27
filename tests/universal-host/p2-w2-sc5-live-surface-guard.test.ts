@@ -1,10 +1,13 @@
 /**
  * tests/universal-host/p2-w2-sc5-live-surface-guard.test.ts
  *
- * AUTHORITATIVE acceptance test for SC-W2-5 (DEFERRAL GUARD) — the install/runtime
- * surface is UNCHANGED since the ratified v2 baseline (the channel is NOT flipped).
- * This guard protects the DEFERRED cutover, so it is airtight against vacuity
- * (codex anti-vacuity gate).
+ * AUTHORITATIVE acceptance test for SC-W2-5 (DRIFT GUARD) — the install/runtime
+ * surface is UNCHANGED since the ratified v2 baseline. The install-channel flip (G7)
+ * is now ACTIVE (operator-authorized 2026-06-27): the generated tree is the authoritative
+ * install surface, enforced by the `verify:host-packages` CI gate (`--check-claude-install`
+ * + SC-2 + SC-7b). This guard is the complementary tripwire — it ensures the frozen surface
+ * does not DRIFT from the ratified baseline; the channel gate ensures it equals the inventory
+ * render. Airtight against vacuity (codex anti-vacuity gate).
  *
  * RE-RATIFIED 2026-06-27 (operator "ship it all in v2"): the freeze baseline moved from
  * the obsolete pre-Wave-2 anchor (7ac2f06) to the ratified v2 cutover surface (4e91770) —

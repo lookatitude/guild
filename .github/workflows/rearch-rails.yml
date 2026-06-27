@@ -56,3 +56,12 @@ jobs:
       - name: Run architecture rails (STRICT rails gate; advisory rails report)
         run: |
           cd tests && npx tsx rearch/run-all.ts
+
+      # Install-channel flip (G7) — the generated tree is now the AUTHORITATIVE install surface.
+      # Enforces SC-2 full-tree equivalence + SC-7b subset + the Claude install-surface render
+      # (.claude-plugin/plugin.json + marketplace.json must equal the inventory render) + the
+      # host-package verifier. Any hand-edit to .claude-plugin metadata that diverges from
+      # guild.inventory.v1 now FAILS CI: the install surface is generated, not hand-maintained.
+      - name: Install-channel gate (G7 flip) — generated tree is the authoritative install surface
+        run: |
+          cd scripts && npm run verify:host-packages
