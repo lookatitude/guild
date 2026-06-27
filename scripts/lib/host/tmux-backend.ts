@@ -56,6 +56,12 @@ export function paneCommand(
     specialist !== undefined && specialist.length > 0
       ? `export GUILD_SPECIALIST=${shellQuote(specialist)}; `
       : "";
+  // guild.task_assignment.v1 — point the pane at its own assignment file so it can
+  // read its bounded task via readTaskAssignment (docs/v2 §08). Run-relative path.
+  const assignmentFragment =
+    specialist !== undefined && specialist.length > 0
+      ? `export GUILD_TASK_ASSIGNMENT=${shellQuote(`.guild/runs/${runId}/tasks/${specialist}.json`)}; `
+      : "";
   const statuslineFragment =
     process.env["GUILD_STATUSLINE"] === "1" ? `export GUILD_STATUSLINE=1; ` : "";
   const scopeFragment =
@@ -67,6 +73,7 @@ export function paneCommand(
     `export GUILD_RUN_ID=${shellQuote(runId)}; ` +
     taskFragment +
     specialistFragment +
+    assignmentFragment +
     statuslineFragment +
     scopeFragment +
     `claude ${shellQuote(prompt)}; ` +

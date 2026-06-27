@@ -82,6 +82,10 @@ import { normalizeHostId, registryIdToCanonicalHostKind, hostKindToRegistryId } 
 import { isClaudeCli } from "./lib/capability/rank";
 // U5: typed settings projection via the resolver (replaces direct settings slice reads)
 import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
+import {
+  buildTaskAssignment,
+  writeTaskAssignment,
+} from "../src/modules/dispatch/workflows/task-assignment";
 // R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
 import { runWithRetry, loadRetryOpts } from "./retry-lane";
 // R-016 bridge: on retry exhaustion, mark each remote lane dead via the shared writer.
@@ -526,6 +530,59 @@ function writeManifest(cwd: string, manifest: Manifest): string {
   const out = path.join(dir, "session.json");
   fs.writeFileSync(out, JSON.stringify(manifest, null, 2) + "\n", "utf8");
   return out;
+}
+
+/**
+ * Write the cross-host work-assignment channel: one `guild.task_assignment.v1`
+ * per specialist at `.guild/runs/<run-id>/tasks/<specialist>.json` (launcher writes,
+ * specialist pane reads via `readTaskAssignment`; docs/v2 §08).
+ *
+ * MUST run in the pre-routing block over the FULL specialist list, BEFORE any
+ * local/remote dispatch — so (a) remote/cross-host specialists (the whole point of
+ * the channel) get their file even though they are later filtered out of the local
+ * tmux pool, and (b) every pane's file exists on disk before its process spawns and
+ * tries to read it. `ownerMap` resolves the plan task-id (and thus the context-bundle
+ * pointer). Best-effort + non-throwing — a write failure is logged, never aborts.
+ */
+function writeTaskAssignments(
+  cwd: string,
+  runId: string,
+  specialists: Specialist[],
+  ownerMap: Map<string, string[]>,
+  orchestratorHostKind: string,
+): number {
+  const runDir = path.join(cwd, ".guild", "runs", runId);
+  let written = 0;
+  for (const s of specialists) {
+    const taskIds = ownerMap.get(s.name);
+    const repTaskId = taskIds && taskIds.length > 0 ? taskIds[0] : null;
+    // Context-bundle pointer: the conventional per-specialist bundle path
+    // (.guild/context/<run-id>/<specialist>-<task-id>.md) when a plan task-id exists.
+    const contextRef = repTaskId
+      ? path.join(".guild", "context", runId, `${s.name}-${repTaskId}.md`)
+      : null;
+    try {
+      const assignment = buildTaskAssignment({
+        runId,
+        specialist: s.name,
+        taskId: repTaskId,
+        scope: s.scope ?? "",
+        dependsOn: s.dependsOn ?? [],
+        contextRef,
+        hostKind: s.host_kind ?? orchestratorHostKind,
+        adapterVersion: ADAPTER_VERSION,
+        now: () => new Date().toISOString(),
+      });
+      if (writeTaskAssignment(runDir, assignment)) written += 1;
+    } catch (err) {
+      process.stderr.write(
+        `[agent-team-launcher] WARN: task-assignment write for ${s.name} failed: ${
+          err instanceof Error ? err.message : String(err)
+        }\n`,
+      );
+    }
+  }
+  return written;
 }
 
 // ── Cross-host routing inputs (CH-1) ─────────────────────────────────────────
@@ -1028,6 +1085,25 @@ async function main(): Promise<void> {
         }
       }
     }
+    // ── guild.task_assignment.v1: cross-host work-assignment channel (docs/v2 §08) ──
+    // Write ALL assignments here — full pre-routing list, BEFORE any local/remote
+    // dispatch — so remote specialists (later filtered out of the local tmux pool)
+    // still get their file, and every file is on disk before its pane spawns.
+    {
+      const taWritten = writeTaskAssignments(
+        cwd,
+        runId,
+        team.specialists,
+        preRoutingOwnerMap,
+        orchestratorHostKind,
+      );
+      if (taWritten > 0) {
+        process.stdout.write(
+          `[agent-team-launcher] wrote ${taWritten} task assignment(s) → .guild/runs/${runId}/tasks/\n`,
+        );
+      }
+    }
+
     // Read back from each specialist's representative task_run file and update the
     // in-memory specialist object. planTeamRouting then routes from disk-sourced data.
     //

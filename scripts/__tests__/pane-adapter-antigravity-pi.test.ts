@@ -55,6 +55,12 @@ describe("AntigravityPaneAdapter (agy)", () => {
     expect(cmd).toContain("exec $SHELL");
     expect(cmd).not.toContain("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS");
   });
+  it("exports GUILD_TASK_ASSIGNMENT in command + env when a specialist is set (cross-host channel)", () => {
+    const s = spec({ specialist: "researcher", runId: "run-xyz" });
+    const rel = ".guild/runs/run-xyz/tasks/researcher.json";
+    expect(new AntigravityPaneAdapter().command(s)).toContain(rel);
+    expect(new AntigravityPaneAdapter().env(s).GUILD_TASK_ASSIGNMENT).toBe(rel);
+  });
   it("expectedOutputs: file-bus receipts + approvals, NO heartbeat", () => {
     expect(new AntigravityPaneAdapter().expectedOutputs()).toEqual(["handoff_receipt", "approval_request"]);
   });
@@ -70,6 +76,12 @@ describe("PiPaneAdapter", () => {
     expect(cmd).toContain("pi -p go");
     expect(cmd).toContain("export GUILD_TASK_ID=t1");
     expect(cmd).toContain("exec $SHELL");
+  });
+  it("exports GUILD_TASK_ASSIGNMENT in command + env when a specialist is set (cross-host channel)", () => {
+    const s = spec({ hostKind: "pi", specialist: "researcher", runId: "run-xyz" });
+    const rel = ".guild/runs/run-xyz/tasks/researcher.json";
+    expect(new PiPaneAdapter().command(s)).toContain(rel);
+    expect(new PiPaneAdapter().env(s).GUILD_TASK_ASSIGNMENT).toBe(rel);
   });
   it("expectedOutputs excludes heartbeat (no Claude hooks)", () => {
     expect(new PiPaneAdapter().expectedOutputs()).toEqual(["handoff_receipt", "approval_request"]);

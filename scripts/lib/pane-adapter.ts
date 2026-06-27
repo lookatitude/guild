@@ -75,6 +75,25 @@ export interface AdapterOpts {
 // ── ClaudePaneAdapter ─────────────────────────────────────────────────────────
 
 /**
+ * guild.task_assignment.v1 — the run-relative path to a pane's own assignment file.
+ * Shared by every non-Claude adapter so the cross-host channel reaches Codex /
+ * Antigravity / Pi panes too (the Claude adapter gets it via `paneCommand`). docs/v2 §08.
+ */
+function taskAssignmentPathFor(spec: PaneSpec): string {
+  return `.guild/runs/${spec.runId}/tasks/${spec.specialist}.json`;
+}
+/** `export GUILD_TASK_ASSIGNMENT=…; ` fragment, or "" when no specialist is set. */
+function taskAssignmentExport(spec: PaneSpec): string {
+  return spec.specialist
+    ? `export GUILD_TASK_ASSIGNMENT=${shellQuote(taskAssignmentPathFor(spec))}; `
+    : "";
+}
+/** The `GUILD_TASK_ASSIGNMENT` entry for an adapter's env map, or {} when no specialist. */
+function taskAssignmentEnv(spec: PaneSpec): Record<string, string> {
+  return spec.specialist ? { GUILD_TASK_ASSIGNMENT: taskAssignmentPathFor(spec) } : {};
+}
+
+/**
  * Claude Code pane. `command()` delegates to the shared `paneCommand`, so a
  * Claude-only team built through the adapter path is byte-identical to the
  * legacy inline path (the launcher regression anchor).
@@ -223,6 +242,7 @@ export class CodexPaneAdapter implements PaneAdapter {
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       taskFragment +
       specialistFragment +
+      taskAssignmentExport(spec) +
       scopeFragment +
       `codex exec ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
@@ -239,6 +259,7 @@ export class CodexPaneAdapter implements PaneAdapter {
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
         : {}),
+      ...taskAssignmentEnv(spec),
     };
   }
 
@@ -296,7 +317,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
       ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
-      taskFragment + specialistFragment + scopeFragment +
+      taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
       `agy ${AGY_PROMPT_FLAG} ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
     );
@@ -309,6 +330,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}),
+      ...taskAssignmentEnv(spec),
     };
   }
 
@@ -364,7 +386,7 @@ export class PiPaneAdapter implements PaneAdapter {
       ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
-      taskFragment + specialistFragment + scopeFragment +
+      taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
       `pi -p ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
     );
@@ -377,6 +399,7 @@ export class PiPaneAdapter implements PaneAdapter {
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}),
+      ...taskAssignmentEnv(spec),
     };
   }
 

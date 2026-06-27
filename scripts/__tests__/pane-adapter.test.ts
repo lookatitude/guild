@@ -73,6 +73,30 @@ function spec(overrides: Partial<PaneSpec> = {}): PaneSpec {
   };
 }
 
+describe("guild.task_assignment.v1 — GUILD_TASK_ASSIGNMENT export (cross-host channel)", () => {
+  const s = spec({ specialist: "backend", runId: "run-xyz" });
+  const rel = ".guild/runs/run-xyz/tasks/backend.json";
+
+  it("Claude adapter (via paneCommand) exports the assignment path", () => {
+    const c = new ClaudePaneAdapter().command(s);
+    expect(c).toContain("GUILD_TASK_ASSIGNMENT=");
+    expect(c).toContain(rel);
+  });
+
+  it("Codex adapter exports it in command AND env", () => {
+    const c = new CodexPaneAdapter().command(s);
+    expect(c).toContain("GUILD_TASK_ASSIGNMENT=");
+    expect(c).toContain(rel);
+    expect(new CodexPaneAdapter().env(s).GUILD_TASK_ASSIGNMENT).toBe(rel);
+  });
+
+  it("omits GUILD_TASK_ASSIGNMENT when no specialist is set", () => {
+    const c = new CodexPaneAdapter().command(spec({ runId: "r" }));
+    expect(c).not.toContain("GUILD_TASK_ASSIGNMENT");
+    expect(new CodexPaneAdapter().env(spec({ runId: "r" })).GUILD_TASK_ASSIGNMENT).toBeUndefined();
+  });
+});
+
 describe("resolveAdapter — selection by host_kind", () => {
   it("returns the Claude adapter for claude and the Codex adapter for codex", () => {
     const r = resolveAdapter();

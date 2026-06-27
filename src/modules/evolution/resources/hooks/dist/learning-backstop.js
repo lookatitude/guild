@@ -1810,6 +1810,9 @@ function runLearningBackstop(opts) {
   }
 }
 
+// lib/heartbeat.ts
+var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
+
 // lib/run-trace.ts
 function resolveRunIdForTrace(root, env) {
   const fromEnv = env.GUILD_RUN_ID;

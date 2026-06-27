@@ -228,6 +228,50 @@ describe("agent-team-launcher.ts", () => {
       expect(specialists).toContain("qa");
     });
 
+    it("writes guild.task_assignment.v1 for ALL specialists in the pre-routing block", () => {
+      // Locks the cross-host fix: assignments are written for the FULL team in the
+      // pre-routing block (before any dispatch / remote-filtering), so every
+      // specialist — including ones that would route remote — gets its file.
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      runScript([
+        "--team",
+        teamPath,
+        "--session-name",
+        "guild-test-ta",
+        "--cwd",
+        tmpDir,
+        "--dry-run",
+      ]);
+      const sessionJson = findSessionJson(tmpDir)!;
+      // .../runs/<id>/agent-team/session.json → .../runs/<id>
+      const runDir = path.dirname(path.dirname(sessionJson));
+      const tasksDir = path.join(runDir, "tasks");
+      expect(fs.existsSync(tasksDir)).toBe(true);
+      for (const spec of ["architect", "backend", "qa"]) {
+        const p = path.join(tasksDir, `${spec}.json`);
+        expect(fs.existsSync(p)).toBe(true);
+        const a = JSON.parse(fs.readFileSync(p, "utf8"));
+        expect(a.schema_version).toBe("guild.task_assignment.v1");
+        expect(a.specialist).toBe(spec);
+        expect(typeof a.written_at).toBe("string");
+      }
+    });
+
+    it("exports GUILD_TASK_ASSIGNMENT into each pane command", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { stdout } = runScript([
+        "--team",
+        teamPath,
+        "--session-name",
+        "guild-test-ta-env",
+        "--cwd",
+        tmpDir,
+        "--dry-run",
+      ]);
+      expect(stdout).toMatch(/GUILD_TASK_ASSIGNMENT=/);
+      expect(stdout).toMatch(/tasks\/(architect|backend|qa)\.json/);
+    });
+
     it("prints tmux commands to stdout in dry-run mode", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const { stdout } = runScript([
