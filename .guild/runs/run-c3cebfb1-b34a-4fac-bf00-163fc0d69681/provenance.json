@@ -1,0 +1,30 @@
+{
+  "schema_version": "guild.provenance.v1",
+  "run_id": "run-c3cebfb1-b34a-4fac-bf00-163fc0d69681",
+  "command": "/guild:evolve",
+  "initiative": null,
+  "retention_class": "one-off-90d",
+  "started_at": "2026-06-26T00:09:06Z",
+  "closed_at": "2026-06-26T00:19:24Z",
+  "status": "closed",
+  "run_class": "full",
+  "terminal_trace_event": {
+    "event_id": "evt-9f540fc8-e74d-4864-b253-078c5d517d0f",
+    "event_name": "run_closed",
+    "at": "2026-06-26T00:19:24Z",
+    "log_ref": ".guild/runs/run-c3cebfb1-b34a-4fac-bf00-<HIGH_ENTROPY_REDACTED>.4-events.jsonl"
+  },
+  "final_learning_checkpoint": null,
+  "gates": {},
+  "touched": {
+    "tasks": [],
+    "agents": [],
+    "skills": [],
+    "decisions": [],
+    "features": [],
+    "files": [],
+    "runs": []
+  },
+  "artifacts": {},
+  "benchmark_eligible": true
+}

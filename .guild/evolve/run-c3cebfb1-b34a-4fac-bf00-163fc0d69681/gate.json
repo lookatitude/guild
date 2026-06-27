@@ -1,0 +1,13 @@
+{
+  "run_id": "run-c3cebfb1-b34a-4fac-bf00-163fc0d69681",
+  "command": "/guild:evolve guild:context-assemble",
+  "skill": "guild:context-assemble",
+  "outcome": "promoted",
+  "condition": "doc-only-fast-path",
+  "user_approved_at": "2026-06-26",
+  "approval_source": "explicit run-time prompt — operator selected 'Promote (doc-only fast-path)' after the paired-eval result was surfaced; targeted invocation /guild:evolve guild:context-assemble",
+  "flip_summary": "regressions: 0, fixes: 0, flip: P->P (eval-invisible), token_delta: +~120 tokens when autonomy=ask only",
+  "rationale": "Additive mandatory bundle directive codifying ask-gate=await-reply (block, never self-confirm). Frontmatter byte-identical -> trigger-neutral, 0 routing regressions (shadow accuracy unchanged by construction). Paired eval: both A and B BLOCK; B cites the governing rule, A had none. Grounds correct behavior + closes the documented run-2026-06-14 self-confirm lapse.",
+  "version_path": ".guild/skill-versions/context-assemble/v1/ (pre-edit snapshot = rollback target)",
+  "description_optimizer": "no-op (frontmatter description unchanged; no trigger-case change)"
+}

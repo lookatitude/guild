@@ -1,0 +1,25 @@
+schema_version: guild.run.v1
+run_id: run-98b39921-f34f-43dd-82ce-789f46a31144
+command: /guild:status
+arguments: {}
+cwd: /Users/miguelp/Projects/guild/plugin
+target_kind: existing_guild_project
+workspace:
+  is_workspace: false
+  root: /Users/miguelp/Projects/guild/plugin
+project: status
+host:
+  requested: auto
+  resolved: claude
+model_tier_policy: n/a (read-only lightweight run)
+started_at: 2026-06-27T11:11:32Z
+ignore_policy: n/a (no scan)
+scan_policy: n/a (no scan)
+initiative_attachment: null
+phase: status
+run_class: lightweight
+gates: {}
+status: closed
+phases_log:
+  - phase: status
+    at: 2026-06-27T11:11:32Z

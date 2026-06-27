@@ -1,0 +1,33 @@
+{
+  "run_id": "run-df41d54d-278b-4176-b7bb-fc23d9fe8665",
+  "command": "/guild:evolve",
+  "trigger": "auto (no <id> supplied) — pick next eligible from reflection backlog",
+  "outcome": "no-op",
+  "condition": "backlog-already-satisfied",
+  "skill_mutated": null,
+  "rationale": "The >=3-reflection auto-trigger targets all resolve to proposals ALREADY implemented by prior evolve runs; no promotable edit exists. Gatekeeper rule: never mutate a live skill without a real, gate-passing edit. No paired-eval/shadow run executed (no edit to evaluate).",
+  "eligible_targets": [
+    {
+      "skill": "guild:execute-plan",
+      "reflection_count": 4,
+      "status": "ALREADY-ADDRESSED",
+      "evidence": "skills/meta/execute-plan/SKILL.md L242-306 '## Inline shortcut under high autonomy' codifies when inline is valid/forbidden + audit trail; its own '### Why this clarification exists' names the SAME driving reflections (run-2b531201, run-0c8ae3ca, run-b6337cbc)."
+    },
+    {
+      "skill": "guild:context-assemble",
+      "reflection_count": 4,
+      "status": "MOSTLY-ADDRESSED",
+      "evidence": "Inline-cluster -> '## Mandatory-invocation threshold' (L230, a prior §11.1 evolve outcome). Fail-loud-on-missing-bundle -> execute-plan L27 + context-assemble L290. OPEN (1 reflection only, sub-threshold): ask-gate must AWAIT an actual orchestrator reply, not self-confirm (run-2026-06-14)."
+    },
+    {
+      "skill": "guild:codex-review",
+      "reflection_count": 3,
+      "status": "NOT-A-SKILL-EDIT",
+      "evidence": "Proposals concern codex-host-unavailable skip-warn discipline; the 'CODEX UNAVAILABLE' banner is a known false-negative (codex reachable via stored auth) — a host-detection issue, not a skill-body change."
+    }
+  ],
+  "recommendations": [
+    "Backlog hygiene: mark/clear the satisfied reflections (run-2b531201, run-0c8ae3ca, run-b6337cbc, run-2026-06-15, the inline-cluster part of run-2026-06-14) as addressed so the §11.1 >=3 auto-trigger stops re-firing on done work.",
+    "If desired, run a TARGETED evolve on the lone open item via /guild:evolve guild:context-assemble (ask-gate-await-reply) — note this is a BEHAVIOR change, so the full paired-eval promotion gate applies, not the doc-only fast-path."
+  ]
+}
