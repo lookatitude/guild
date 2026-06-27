@@ -52,10 +52,17 @@ const VALID_REVIEW_RESULT = {
   blocking_findings: [],
 };
 
-describe("SC-6 registry — closed Phase-1 normalizer target set", () => {
-  it("targets EXACTLY the two existing wire strings", () => {
+describe("SC-6 registry — normalizer target set (all six contracts shipped in v2)", () => {
+  it("targets EXACTLY the six wire strings (the 4 formerly-deferred now ship)", () => {
     expect([...PHASE1_NORMALIZER_TARGETS].sort()).toEqual(
-      ["guild.handoff.v2", "review_result.v1"].sort()
+      [
+        "guild.handoff.v2",
+        "review_result.v1",
+        "guild.phase_result.v1",
+        "guild.permission_receipt.v1",
+        "guild.host_event.v1",
+        "guild.qa_result.v1",
+      ].sort()
     );
   });
 
@@ -65,11 +72,16 @@ describe("SC-6 registry — closed Phase-1 normalizer target set", () => {
     expect(PHASE1_NORMALIZER_TARGETS.has("guild.review_result.v1")).toBe(false);
   });
 
-  it("deferred contracts are NOT normalizer targets (no premature schema)", () => {
-    for (const c of DEFERRED_CONTRACTS) {
-      expect(PHASE1_NORMALIZER_TARGETS.has(c.wire_schema_version)).toBe(false);
-      expect(CONTRACT_VALIDATORS[c.wire_schema_version]).toBeUndefined();
-      expect(c.validator_kind).toBe("none");
+  it("no contracts remain deferred — all four formerly-deferred now ship with validators", () => {
+    expect(DEFERRED_CONTRACTS).toEqual([]);
+    for (const wire of [
+      "guild.phase_result.v1",
+      "guild.permission_receipt.v1",
+      "guild.host_event.v1",
+      "guild.qa_result.v1",
+    ]) {
+      expect(PHASE1_NORMALIZER_TARGETS.has(wire)).toBe(true);
+      expect(typeof CONTRACT_VALIDATORS[wire]).toBe("function");
     }
   });
 
@@ -77,6 +89,41 @@ describe("SC-6 registry — closed Phase-1 normalizer target set", () => {
     for (const c of EXISTING_CONTRACTS) {
       expect(typeof CONTRACT_VALIDATORS[c.wire_schema_version]).toBe("function");
     }
+  });
+});
+
+describe("SC-6 — the four formerly-deferred contracts (strict validators)", () => {
+  const VALID: Record<string, Record<string, unknown>> = {
+    "guild.phase_result.v1": { schema_version: "guild.phase_result.v1", run_id: "run-x", phase: "build", status: "complete", gate_passed: true, outputs: [".guild/runs/run-x/handoffs/backend-T2.md"], ts: "2026-06-27T00:00:00Z" },
+    "guild.permission_receipt.v1": { schema_version: "guild.permission_receipt.v1", run_id: "run-x", requested_mode: "team", selected_mode: "team", gate_policy: "prompted_inline", scope: ["Read", "Write"], ts: "2026-06-27T00:00:00Z" },
+    "guild.host_event.v1": { schema_version: "guild.host_event.v1", run_id: "run-x", host_id: "claude-local", event_type: "tool", name: "Edit", ts: "2026-06-27T00:00:00Z" },
+    "guild.qa_result.v1": { schema_version: "guild.qa_result.v1", run_id: "run-x", checks: [{ id: "SC-1", status: "pass" }], gaps: [], failures: [], release_ok: true, ts: "2026-06-27T00:00:00Z" },
+  };
+
+  for (const wire of Object.keys(VALID)) {
+    const validate = CONTRACT_VALIDATORS[wire]!;
+    it(`${wire}: a valid object passes`, () => {
+      const res = validate(VALID[wire]);
+      expect(res.errors).toEqual([]);
+      expect(res.valid).toBe(true);
+    });
+    it(`${wire}: wrong schema_version FAILS closed`, () => {
+      expect(validate({ ...VALID[wire], schema_version: "guild.bogus.v9" }).valid).toBe(false);
+    });
+    it(`${wire}: free-form prose FAILS (not a JSON object)`, () => {
+      expect(validate("done, all good" as unknown).valid).toBe(false);
+    });
+  }
+
+  it("phase_result rejects an unknown phase + non-boolean gate", () => {
+    const v = CONTRACT_VALIDATORS["guild.phase_result.v1"]!;
+    expect(v({ ...VALID["guild.phase_result.v1"], phase: "deploy" }).valid).toBe(false);
+    expect(v({ ...VALID["guild.phase_result.v1"], gate_passed: "yes" }).valid).toBe(false);
+  });
+
+  it("qa_result rejects a malformed check entry", () => {
+    const v = CONTRACT_VALIDATORS["guild.qa_result.v1"]!;
+    expect(v({ ...VALID["guild.qa_result.v1"], checks: [{ id: "", status: "maybe" }] }).valid).toBe(false);
   });
 });
 
@@ -191,10 +238,22 @@ describe("SC-6 L3 normalizeResult — extract + validate + fail-closed (real pat
     expect(typeof r.repair_prompt).toBe("string");
   });
 
-  it("a DEFERRED contract is not a target and fails closed", () => {
+  it("a genuinely-UNKNOWN contract is not a target and fails closed", () => {
+    const r = normalizeResult(FENCE("guild.totally_unknown.v9", { x: 1 }), "guild.totally_unknown.v9");
+    expect(r.ok).toBe(false);
+  });
+
+  it("a formerly-deferred contract (guild.qa_result.v1) now normalizes when valid", () => {
+    const valid = { schema_version: "guild.qa_result.v1", run_id: "run-x", checks: [{ id: "SC-1", status: "pass" }], gaps: [], failures: [], release_ok: true, ts: "2026-06-27T00:00:00Z" };
+    const r = normalizeResult(FENCE("guild.qa_result.v1", valid), "guild.qa_result.v1");
+    expect(r.ok).toBe(true);
+  });
+
+  it("a formerly-deferred contract with an invalid payload fails on SCHEMA (not 'deferred')", () => {
     const r = normalizeResult(FENCE("guild.qa_result.v1", { x: 1 }), "guild.qa_result.v1");
     expect(r.ok).toBe(false);
-    expect(r.errors.some((e) => e.toLowerCase().includes("deferred"))).toBe(true);
+    // It is now a real target → the failure is schema validation, never the old "deferred" reason.
+    expect(r.errors.some((e) => e.toLowerCase().includes("deferred"))).toBe(false);
   });
 });
 

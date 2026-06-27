@@ -37,6 +37,12 @@
 
 import { validateHandoffV2 } from "../../../../hooks/lib/handoff-v2";
 import { parseReviewResult } from "./review-result";
+import {
+  validatePhaseResultV1,
+  validatePermissionReceiptV1,
+  validateHostEventV1,
+  validateQaResultV1,
+} from "./result-contracts-v2";
 
 // ---------------------------------------------------------------------------
 // Registry types
@@ -67,7 +73,13 @@ export interface ResultContractEntry {
 // THE REGISTRY (closed set)
 // ---------------------------------------------------------------------------
 
-/** The two contracts with a real producer/validator today — L3's target set. */
+/**
+ * The orchestration-result contracts with a real validator. The first two have
+ * live producers (handoff.v2, review_result.v1); the other four were previously
+ * deferred and now ship in v2 (validators defined in `result-contracts-v2.ts`) so
+ * a host emitting one is normalized the moment its producer lands — no
+ * fail-closed "unknown contract" gap. All six are valid normalizer targets.
+ */
 export const EXISTING_CONTRACTS: ResultContractEntry[] = [
   {
     wire_schema_version: "guild.handoff.v2",
@@ -83,47 +95,42 @@ export const EXISTING_CONTRACTS: ResultContractEntry[] = [
     source_path: "plugin/scripts/verify-gate-pass.ts", // correction #2.
     purpose: "Advisory/adversarial review result (gate-pass binding).",
   },
-];
-
-/**
- * Contracts named in the ADR table that have NO producer yet. Do NOT design
- * these ahead of their producer (premature churn). Listed so L3 has a closed
- * negative set and L6 can assert Phase-1 normalizers do NOT cover them.
- */
-export const DEFERRED_CONTRACTS: ResultContractEntry[] = [
   {
     wire_schema_version: "guild.phase_result.v1",
-    status: "deferred",
-    validator_kind: "none",
-    source_path: "",
+    status: "exists",
+    validator_kind: "strict",
+    source_path: "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
     purpose: "Phase close summary and gate predicate.",
-    deferred_until: "the phase that first emits a phase-close result.",
   },
   {
     wire_schema_version: "guild.permission_receipt.v1",
-    status: "deferred",
-    validator_kind: "none",
-    source_path: "",
+    status: "exists",
+    validator_kind: "strict",
+    source_path: "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
     purpose: "Requested/selected host mode and gate policy.",
-    deferred_until: "migration step 10 (phase-scoped permission policy).",
   },
   {
     wire_schema_version: "guild.host_event.v1",
-    status: "deferred",
-    validator_kind: "none",
-    source_path: "",
+    status: "exists",
+    validator_kind: "strict",
+    source_path: "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
     purpose: "Normalized hook/tool/session event.",
-    deferred_until: "when a normalized host event is first emitted.",
   },
   {
     wire_schema_version: "guild.qa_result.v1",
-    status: "deferred",
-    validator_kind: "none",
-    source_path: "",
+    status: "exists",
+    validator_kind: "strict",
+    source_path: "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
     purpose: "Test matrix execution, gaps, failures, release predicate.",
-    deferred_until: "qa / product-loop phase.",
   },
 ];
+
+/**
+ * No result contracts remain deferred — the four formerly-deferred contracts now
+ * ship (above). Kept as an empty closed set so downstream code (`RESULT_CONTRACTS`,
+ * the L6 negative-set assertions) keeps a stable shape.
+ */
+export const DEFERRED_CONTRACTS: ResultContractEntry[] = [];
 
 /** Full registry (exists + deferred). */
 export const RESULT_CONTRACTS: ResultContractEntry[] = [
@@ -160,6 +167,11 @@ export const CONTRACT_VALIDATORS: Record<
     const { result, reasons } = parseReviewResult(raw);
     return { valid: result !== null, errors: reasons };
   },
+  // The four formerly-deferred contracts — now shipped (result-contracts-v2.ts).
+  "guild.phase_result.v1": validatePhaseResultV1,
+  "guild.permission_receipt.v1": validatePermissionReceiptV1,
+  "guild.host_event.v1": validateHostEventV1,
+  "guild.qa_result.v1": validateQaResultV1,
 };
 
 /** Lookup a registry entry by its wire schema_version. */
