@@ -1008,6 +1008,11 @@
       "kind": "cli"
     },
     {
+      "id": "artifact-bus-cli",
+      "source_path": "scripts/artifact-bus-cli.ts",
+      "kind": "cli"
+    },
+    {
       "id": "build-host-packages",
       "source_path": "scripts/build-host-packages.ts",
       "kind": "cli"
@@ -1170,6 +1175,11 @@
     {
       "id": "guild-run",
       "source_path": "scripts/guild-run.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "ideation-min-build-cli",
+      "source_path": "scripts/ideation-min-build-cli.ts",
       "kind": "cli"
     },
     {
@@ -1455,6 +1465,11 @@
     {
       "id": "lib/advisory-record",
       "source_path": "scripts/lib/advisory-record.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/artifact-bus",
+      "source_path": "scripts/lib/artifact-bus.ts",
       "kind": "lib"
     },
     {
@@ -2282,27 +2297,27 @@
     },
     {
       "id": "guild.host_event.v1",
-      "source_path": "",
-      "status": "deferred",
-      "validator_kind": "none"
+      "source_path": "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+      "status": "exists",
+      "validator_kind": "strict"
     },
     {
       "id": "guild.permission_receipt.v1",
-      "source_path": "",
-      "status": "deferred",
-      "validator_kind": "none"
+      "source_path": "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+      "status": "exists",
+      "validator_kind": "strict"
     },
     {
       "id": "guild.phase_result.v1",
-      "source_path": "",
-      "status": "deferred",
-      "validator_kind": "none"
+      "source_path": "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+      "status": "exists",
+      "validator_kind": "strict"
     },
     {
       "id": "guild.qa_result.v1",
-      "source_path": "",
-      "status": "deferred",
-      "validator_kind": "none"
+      "source_path": "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+      "status": "exists",
+      "validator_kind": "strict"
     },
     {
       "id": "review_result.v1",
