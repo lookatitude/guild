@@ -9,7 +9,7 @@
  * obsolete pre-Wave-3 anchor (`3ce3666`) to the ratified v2 cutover surface (`4e91770`).
  * Operator-directed v2 work (understand→learn rename, product loop, ideation min-build)
  * legitimately evolved commands/ + skills/ past pre-Wave-3, so freezing against it was stale.
- * The REAL cutover-safety gate is `build:hosts` SC-2 byte-parity (generated == committed, GREEN);
+ * The REAL cutover-safety gate is `build:hosts` SC-2 normalized equivalence (generated ≡ committed, GREEN);
  * this guard is the secondary tripwire for FUTURE *unintended* drift from the ratified surface.
  *
  * The guard is anchored to a HARD-PINNED baseline (`PINNED_BASELINE = 4e91770`, the ratified v2
@@ -36,7 +36,7 @@ const FROZEN_PATHS = [".claude-plugin", "commands"]; // STRICT byte-identical
 // an ancestor of HEAD), NOT the obsolete pre-Wave-3 anchor (3ce3666). Operator-directed v2 work (the
 // understand→learn rename, the product loop, the ideation min-build wiring) legitimately evolved
 // commands/ + skills/ past pre-Wave-3, so freezing against it was stale. The REAL cutover-safety gate
-// is `build:hosts` SC-2 byte-parity (generated tree == committed tree, GREEN) — this guard is the
+// is `build:hosts` SC-2 normalized equivalence (generated tree ≡ committed tree, GREEN) — this guard is the
 // secondary tripwire for FUTURE *unintended* drift from the ratified v2 surface. Bump this on the next
 // deliberate surface change (or at the v2→main flip).
 const PINNED_BASELINE = "4e91770"; // ratified v2 cutover surface (was 3ce3666, pre-Wave-3, obsolete)
@@ -276,7 +276,7 @@ describe("SC-W3-6 — cutover surface frozen vs the ratified v2 baseline", () =>
 
   it("skills/** has zero delta from the ratified v2 baseline (surface frozen as-ratified)", () => {
     // RE-RATIFIED: the pre-Wave-2/3 anchors are obsolete — operator-directed v2 work evolved the
-    // surface, and `build:hosts` SC-2 byte-parity (generated == committed) is the real cutover-safety
+    // surface, and `build:hosts` SC-2 normalized equivalence (generated ≡ committed) is the real cutover-safety
     // gate. From the ratified baseline there are no permitted deltas; any future change re-reds this.
     const base = revParse(PINNED_BASELINE);
     const c = classifySkills(diffRows(base, ["skills"]));

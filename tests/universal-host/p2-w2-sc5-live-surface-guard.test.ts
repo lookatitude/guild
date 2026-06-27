@@ -4,16 +4,17 @@
  * AUTHORITATIVE acceptance test for SC-W2-5 (DRIFT GUARD) — the install/runtime
  * surface is UNCHANGED since the ratified v2 baseline. The install-channel flip (G7)
  * is now ACTIVE (operator-authorized 2026-06-27): the generated tree is the authoritative
- * install surface, enforced by the `verify:host-packages` CI gate (`--check-claude-install`
- * + SC-2 + SC-7b). This guard is the complementary tripwire — it ensures the frozen surface
- * does not DRIFT from the ratified baseline; the channel gate ensures it equals the inventory
- * render. Airtight against vacuity (codex anti-vacuity gate).
+ * install surface, enforced by the `verify:host-packages` CI gate — `--check-claude-install`
+ * (BYTE-compares the `.claude-plugin` metadata against the inventory render) + SC-2 (full-tree
+ * NORMALIZED equivalence, not byte-identity) + SC-7b (subset). This guard is the complementary
+ * tripwire — it ensures the frozen surface does not DRIFT from the ratified baseline; the channel
+ * gate ensures it equals the inventory render. Airtight against vacuity (codex anti-vacuity gate).
  *
  * RE-RATIFIED 2026-06-27 (operator "ship it all in v2"): the freeze baseline moved from
  * the obsolete pre-Wave-2 anchor (7ac2f06) to the ratified v2 cutover surface (4e91770) —
  * operator-directed v2 work (understand→learn rename, product loop, ideation min-build)
  * legitimately evolved commands/ + skills/ past pre-Wave-2. The REAL cutover-safety gate
- * is `build:hosts` SC-2 byte-parity (generated == committed, GREEN); this guard is the
+ * is `build:hosts` SC-2 normalized equivalence (generated ≡ committed, GREEN); this guard is the
  * secondary tripwire for FUTURE *unintended* drift from the ratified surface. Bump the
  * pin on the next deliberate surface change (or at the v2→main flip). The skill allowlists
  * are now EMPTY — the surface is frozen as-ratified, with NO permitted deltas.
@@ -50,7 +51,7 @@ const LIVE_PATHS = [".claude-plugin", "commands", "skills"];
  * Wave-7 metadata-mod entries are SUBSUMED into the baseline. `.claude-plugin/**` + `commands/**`
  * stay STRICT byte-frozen, and live `skills/**` is now ZERO-delta too: with an empty allowlist, ANY
  * add/modify/delete/rename from the ratified baseline is a violation. (See the SC-W3-6 guard header
- * for the full rationale; `build:hosts` SC-2 byte-parity is the real cutover-safety gate.) Bump the
+ * for the full rationale; `build:hosts` SC-2 normalized equivalence is the real cutover-safety gate.) Bump the
  * pin on the next deliberate surface change rather than re-populating these.
  */
 const WAVE3_SKILL_ADDITION_FILES: string[] = [];
