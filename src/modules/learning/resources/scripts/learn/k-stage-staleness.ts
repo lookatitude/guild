@@ -73,7 +73,9 @@ export function isWikiPath(relPath: string): boolean {
   return relPath.startsWith(".guild/wiki/");
 }
 
-/** True when path is under docs/knowledge/ (docs KB). */
+/** True when path is under docs/knowledge/ (the retired docs KB). Distinct from
+ *  isWikiPath (.guild/wiki); the docs-only check ORs both. docs/knowledge is retired
+ *  (2026-06-27) so this is dead-but-harmless; .guild/wiki is covered by isWikiPath. */
 export function isKnowledgePath(relPath: string): boolean {
   return relPath.startsWith("docs/knowledge/");
 }

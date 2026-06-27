@@ -67,7 +67,8 @@ const WORKSPACE = workspaceArg
   ? workspaceArg.split("=")[1]
   : path.resolve(__dirname, "../../..");
 
-const DOCS_KNOWLEDGE = path.join(WORKSPACE, "docs/knowledge");
+const DOCS_KNOWLEDGE = path.join(WORKSPACE, "docs/knowledge"); // retired 2026-06-27 (empty/absent after deletion — walkFiles guards)
+const UMBRELLA_WIKI = path.join(WORKSPACE, ".guild/wiki"); // v2 canonical cross-cutting KB (workspace-v2-compliance)
 const PLUGIN_WIKI = path.join(WORKSPACE, "plugin/.guild/wiki");
 const PLUGIN_DOCS = path.join(WORKSPACE, "plugin/docs");
 const MIGRATION_MD = path.join(WORKSPACE, "MIGRATION.md");
@@ -121,6 +122,7 @@ function walkFiles(dir: string, filter = /\.md$/): string[] {
   const results: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
+    if (entry.isDirectory() && entry.name === "_archive") continue; // skip v2-design archive (historical, not canonical)
     if (entry.isDirectory()) {
       results.push(...walkFiles(full, filter));
     } else if (entry.isFile() && filter.test(entry.name)) {
@@ -542,10 +544,17 @@ function scanProgressMsg(corpus: string[]) {
 }
 
 // ---- 3. Dangling related: slugs --------------------------------------------
-// Extract all page slugs from docs/knowledge (full set), then check related: values
+// Extract all page slugs from the canonical KB (umbrella .guild/wiki + the retired
+// docs/knowledge while present), then check related: values against the full set.
 function buildSlugSet(): Set<string> {
   const slugs = new Set<string>();
-  for (const fpath of walkFiles(DOCS_KNOWLEDGE)) {
+  // Index every corpus the related: scan runs over (allCorpus): docs/knowledge (retired) +
+  // umbrella .guild/wiki + plugin .guild/wiki — else cross-page related: slugs falsely flag dangling.
+  for (const fpath of [
+    ...walkFiles(DOCS_KNOWLEDGE),
+    ...walkFiles(UMBRELLA_WIKI),
+    ...walkFiles(PLUGIN_WIKI),
+  ]) {
     const slug = path.basename(fpath, ".md");
     slugs.add(slug);
   }
@@ -679,11 +688,12 @@ function checkSourceRef(ref: string, sourceFile: string, lineLabel: string) {
   if (!clean || !clean.includes("/")) return; // slug-only refs are handled by dangling-related check
 
   // F-4 EXEMPTION (explicit, 2026-05-28): paths starting with .guild/ or pointing INTO
-  // a .guild/ directory (e.g. plugin/.guild/architecture-research-*/) are self-build
-  // provenance refs — they point into gitignored .guild/ runtime state which is
-  // legitimately absent from the committed tree. These are NOT drift.
-  if (clean.startsWith(".guild/")) return;
-  if (clean.includes("/.guild/")) return;
+  // a .guild/ directory are self-build provenance refs into gitignored runtime state
+  // (runs, indexes, …) legitimately absent from the committed tree — NOT drift.
+  // EXCEPTION (2026-06-27, workspace-v2-compliance): .guild/wiki/ is committed canonical
+  // knowledge, so dangling refs INTO it ARE validated (not exempt).
+  if (clean.startsWith(".guild/") && !clean.startsWith(".guild/wiki/")) return;
+  if (clean.includes("/.guild/") && !clean.includes("/.guild/wiki/")) return;
 
   // Resolve: if starts with . or /, treat as relative to workspace
   let checkPath: string;
@@ -717,7 +727,9 @@ function checkSourceRef(ref: string, sourceFile: string, lineLabel: string) {
 // ---- 5. Missing importance: ------------------------------------------------
 function isCanonicalPage(fpath: string): boolean {
   const rel = relPath(fpath);
-  if (!rel.startsWith("docs/knowledge/")) return false;
+  // v2: canonical pages live under .guild/wiki/ (or the retired docs/knowledge/, additive).
+  if (!rel.startsWith("docs/knowledge/") && !rel.includes(".guild/wiki/")) return false;
+  if (rel.includes("/_archive/")) return false; // historical v2-design, not canonical
   if (rel.includes("/research/")) return false;
   if (rel.includes("/ideation/")) return false;
   const bname = path.basename(fpath);
@@ -849,6 +861,7 @@ if (require.main === module) {
 // ---------------------------------------------------------------------------
 
 const docsKnowledgeFiles = walkFiles(DOCS_KNOWLEDGE);
+const umbrellaWikiFiles = walkFiles(UMBRELLA_WIKI);
 const pluginWikiFiles = walkFiles(PLUGIN_WIKI);
 const pluginDocsFiles = walkFiles(PLUGIN_DOCS);
 const rootFiles = [MIGRATION_MD, AGENTS_MD, ROOT_README, PLUGIN_README, PLUGIN_CLAUDE].filter(
@@ -858,13 +871,16 @@ const rootFiles = [MIGRATION_MD, AGENTS_MD, ROOT_README, PLUGIN_README, PLUGIN_C
 // Full in-scope corpus
 const allCorpus = [
   ...docsKnowledgeFiles,
+  ...umbrellaWikiFiles,
   ...pluginWikiFiles,
   ...pluginDocsFiles,
   ...rootFiles,
 ];
 
 // Canonical corpus (for missing-importance)
-const canonicalCorpus = docsKnowledgeFiles.filter((f) => isCanonicalPage(f));
+const canonicalCorpus = [...docsKnowledgeFiles, ...umbrellaWikiFiles].filter((f) =>
+  isCanonicalPage(f),
+);
 
 // ---------------------------------------------------------------------------
 // Run scans
@@ -886,7 +902,7 @@ console.error("Running dangling-source-refs scan...");
 scanDanglingSourceRefs(allCorpus);
 
 console.error("Running missing-importance scan...");
-scanMissingImportance(docsKnowledgeFiles);
+scanMissingImportance(canonicalCorpus);
 
 console.error("Running secrets scan...");
 scanSecrets(allCorpus);

@@ -8,7 +8,7 @@
       "id": "docs-hygiene/docs-code-audit",
       "source_path": "scripts/docs-hygiene/docs-code-audit.ts",
       "resource_path": "resources/scripts/docs-hygiene/docs-code-audit.ts",
-      "sha256": "901663c17ae6e806bd9d87a9b7e47c93aa929a7512a9ac3d060348a3ba6e33f1"
+      "sha256": "b050038a50b9a7b8405efb1b6da4468172d5e8b7f295e671f3ac2703004c660d"
     },
     {
       "category": "scripts",
@@ -22,7 +22,7 @@
       "id": "docs-hygiene/scan",
       "source_path": "scripts/docs-hygiene/scan.ts",
       "resource_path": "resources/scripts/docs-hygiene/scan.ts",
-      "sha256": "04140e0a48b58216e54ed5c6eaf30b8184e987a42f4133f9e06303ec9282c03c"
+      "sha256": "ba3f469fcef63b41098ed8723fa4fafeefa2263f29878943b5e811cc74ef6f7e"
     },
     {
       "category": "scripts",

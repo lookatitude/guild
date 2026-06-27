@@ -109,9 +109,14 @@ function isCommandFile(filePath: string): boolean {
   );
 }
 
-/** Returns true iff the file path is under docs/knowledge/. */
+/** Returns true iff the file path is a canonical reference-doc: under the umbrella
+ *  .guild/wiki/ (v2) or the retired docs/knowledge/ (kept additively for back-compat). */
 function isRootDocFile(filePath: string): boolean {
-  return filePath.startsWith("docs/knowledge/");
+  return (
+    filePath.startsWith(".guild/wiki/") ||
+    filePath.includes("/.guild/wiki/") ||
+    filePath.startsWith("docs/knowledge/")
+  );
 }
 
 /**

@@ -244,11 +244,14 @@ function isExemptFixture(filePath: string): boolean {
     n.includes("/__tests__/");
 }
 
-/** True if the file path is a .md under docs/knowledge/. */
+/** True if the file path is a .md knowledge page: under .guild/wiki/ (v2) or the
+ *  retired docs/knowledge/ (kept additively for back-compat). */
 function isDocsKnowledgeMd(filePath: string): boolean {
   const n = normPath(filePath);
-  return (n.includes("/docs/knowledge/") || n.startsWith("docs/knowledge/")) &&
-    n.endsWith(".md");
+  const underKb =
+    n.includes("/.guild/wiki/") || n.startsWith(".guild/wiki/") ||
+    n.includes("/docs/knowledge/") || n.startsWith("docs/knowledge/");
+  return underKb && n.endsWith(".md");
 }
 
 // ── Surface checkers ──────────────────────────────────────────────────────

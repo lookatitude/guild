@@ -53,7 +53,8 @@ const WORKSPACE = workspaceArg
   ? workspaceArg.split("=")[1]
   : path.resolve(__dirname, "../../..");
 
-const DOCS_KNOWLEDGE = path.join(WORKSPACE, "docs/knowledge");
+const DOCS_KNOWLEDGE = path.join(WORKSPACE, "docs/knowledge"); // retired 2026-06-27 (absent after deletion — walkFiles guards)
+const UMBRELLA_WIKI = path.join(WORKSPACE, ".guild/wiki"); // v2 canonical cross-cutting KB
 const PLUGIN_COMMANDS = path.join(WORKSPACE, "plugin/commands");
 const PLUGIN_SKILLS = path.join(WORKSPACE, "plugin/skills");
 const PLUGIN_AGENTS = path.join(WORKSPACE, "plugin/agents");
@@ -154,6 +155,7 @@ function walkFiles(dir: string, filter = /\.md$/): string[] {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
+    if (entry.isDirectory() && entry.name === "_archive") continue; // skip v2-design archive (historical)
     if (entry.isDirectory()) {
       results.push(...walkFiles(full, filter));
     } else if (entry.isFile() && filter.test(entry.name)) {
@@ -377,10 +379,11 @@ function countCommands(): number {
 /** Build the corpus: docs/knowledge (all .md) + plugin/commands/*.md + plugin/CLAUDE.md */
 function buildCorpus(): string[] {
   const docsKnowledge = walkFiles(DOCS_KNOWLEDGE);
+  const umbrellaWiki = walkFiles(UMBRELLA_WIKI);
   const commandsDocs = walkFiles(PLUGIN_COMMANDS);
   const extra: string[] = [];
   if (fs.existsSync(PLUGIN_CLAUDE_MD)) extra.push(PLUGIN_CLAUDE_MD);
-  return [...docsKnowledge, ...commandsDocs, ...extra];
+  return [...docsKnowledge, ...umbrellaWiki, ...commandsDocs, ...extra];
 }
 
 // ---------------------------------------------------------------------------
