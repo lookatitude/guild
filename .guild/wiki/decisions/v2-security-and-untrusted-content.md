@@ -4,8 +4,8 @@ owner: architect
 confidence: high
 importance: critical
 source_refs:
-  - docs/knowledge/research/sec-permission-model.md
-  - docs/knowledge/research/prompt-injection-defenses.md
+  - .guild/wiki/research/sec-permission-model.md
+  - plugin/.guild/wiki/standards/prompt-injection-defenses.md
 created_at: 2026-05-26
 updated_at: 2026-05-26
 expires_at: null
@@ -28,8 +28,8 @@ program: T2 (v2.0 full-scope)
 ## Status
 
 Accepted (operator-ratified 2026-05-26; v2.0-full-scope program). Consolidates the two Wave-1 T2 briefs
-[`sec-permission-model.md`](../research/sec-permission-model.md) (SEC-1..6)
-and [`prompt-injection-defenses.md`](../research/prompt-injection-defenses.md)
+[`sec-permission-model.md`](../../../../.guild/wiki/research/sec-permission-model.md) (SEC-1..6)
+and [`prompt-injection-defenses.md`](../standards/prompt-injection-defenses.md)
 (PI-1..6) into ONE decision set. The briefs are filed as ONE ADR because they
 share a single highest-severity vector — **KB-recall injection** (SEC-5 ≡
 PI-1/PI-4; SEC-6 ≡ PI-6) — and resolving them separately would split that

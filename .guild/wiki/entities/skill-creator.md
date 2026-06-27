@@ -55,7 +55,7 @@ shipped as **static, read-only plugin install state**. It pins the
 frontmatter keys + the required section-heading set only — no body prose.
 The version string, `derived_from_template` invariant, and the `.guild/`
 instance boundary are stated once in
-[`target-architecture.md` → Canonical template-version strings](../architecture/target-architecture.md)
+[`target-architecture.md` → Canonical template-version strings](../../../../.guild/wiki/entities/target-architecture.md)
 and cited here by pointer, never re-spelled.
 
 Creation-from-template is a fill, not a fork:
@@ -94,7 +94,7 @@ A good Guild skill is a playbook, not a vague persona. It should include:
 A skill **instance** issue and a skill **template** defect are different
 problems with one shared classifier (the one-vs-template classifier, stated canonically
 in
-[`target-architecture.md` → Canonical template-version strings](../architecture/target-architecture.md)
+[`target-architecture.md` → Canonical template-version strings](../../../../.guild/wiki/entities/target-architecture.md)
 and cited here by pointer):
 
 - A single classifier step in `guild:reflect` — and, per phase, the
@@ -153,7 +153,7 @@ flowchart TD
 > `derived_from_template: guild.{skill,agent}_template.vN`; the
 > session-restart/registration note is unchanged. The single enforceable
 > boundary rule + the PreToolUse signature guard are stated once in
-> [`target-architecture.md`](../architecture/target-architecture.md) and the
+> [`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) and the
 > ownership-map ADR — cited here by pointer.
 
 ## Boundary Scan

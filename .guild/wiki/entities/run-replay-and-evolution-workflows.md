@@ -95,7 +95,7 @@ run:
 ## Event Model (frozen contract — do not re-spell)
 
 The trace event is **frozen** as `guild.trace_event.v1` in
-[`data-model.md`](data-model.md) and
+[`data-model.md`](../../../../.guild/wiki/entities/data-model.md) and
 [`observability-tracing-replay.md`](observability-tracing-replay.md): canonical
 sink `.guild/runs/<run-id>/logs/v1.4-events.jsonl`, `events.ndjson` legacy
 mirror, with `host` and `loop_event` (payload
@@ -205,14 +205,14 @@ permission/sandbox/runtime policy — proposal-only, human-gated.
 The queue is fed **per-phase**, not only once at Stop: the single
 per-phase LearningCheckpoint (`guild.learning_checkpoint.v1`, stated
 canonically in
-[`target-architecture.md`](../architecture/target-architecture.md), cited by
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md), cited by
 pointer) appends every non-`none` verdict to the **existing**
 `.guild/reflections/<run-id>.md` at each phase's review boundary —
 attributed per phase, no new gate, no new promotion path.
 
 A **template-defect proposal** is a first-class evolution input alongside
 reflections: when the one-vs-template classifier (also cited from
-[`target-architecture.md`](../architecture/target-architecture.md)) buckets a
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)) buckets a
 proposal as *systemic*, it enters as a human-gated template-change at the
 interactive template-change gate.
 For a **breaking** template change, a **conformance scan** runs as a

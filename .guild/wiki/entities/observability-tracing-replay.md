@@ -66,7 +66,7 @@ flowchart TB
 | Codex review trail | `.guild/runs/<run-id>/codex-review/*.md` | Adversarial review artifacts when enabled. |
 | Broker packets/results | `.guild/runs/<run-id>/review/packets/*.yaml`, `.../review/results/*.yaml` | Cross-host broker frozen packet/result records. |
 | Reflections | `.guild/reflections/*.md` | Proposed learnings and improvement candidates; fed **per-phase** by the LearningCheckpoint, not only once at Stop. |
-| Per-phase learning checkpoints (`[v2]`) | `.guild/runs/<run-id>/learning/<phase>-<run-id>.yaml` | `guild.learning_checkpoint.v1` — the single learning loop's 12-target verdict + edge-batch; advisory, no new gate (cited from [`target-architecture.md`](../architecture/target-architecture.md)). |
+| Per-phase learning checkpoints (`[v2]`) | `.guild/runs/<run-id>/learning/<phase>-<run-id>.yaml` | `guild.learning_checkpoint.v1` — the single learning loop's 12-target verdict + edge-batch; advisory, no new gate (cited from [`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)). |
 | Per-run provenance (`[v2]`) | `.guild/runs/<run-id>/provenance.json` | `guild.provenance.v1` — per-run continuity fact source written once at run-close, every run incl. one-off. |
 | Derived knowledge/initiative indexes (`[v2]`) | `.guild/indexes/knowledge-links.json`, `.guild/indexes/initiatives-registry.yaml` | `guild.knowledge_links.v1` / `guild.initiatives_registry.v1` — derived, rebuildable, deletable projections of provenance + learning + wiki + initiatives; filesystem-canonical, no MCP/embeddings (derived-index discipline). |
 | Optional read-through index (`[v2]`) | `.guild/index.sqlite` | Local query convenience for status / stats / initiative status; rebuildable from the canonical JSONL + run files; deletable; gitignored. **NOT the plugin↔benchmark contract** — that stays the canonical JSONL (Invariant NO-CONTRACT-DRIFT). Never authoritative; on any staleness doubt the filesystem scan answers (Invariant FS-CANONICAL). |
@@ -113,7 +113,7 @@ threshold, and uses no MCP and no embeddings. The
 query-fallback diagram has a `.mmd` companion and an exported SVG at
 `diagrams/<n>-sqlite-read-through-index.{mmd,svg}`, cited by id. Full
 data-model detail and Invariant FS-CANONICAL live in
-[`data-model.md`](data-model.md).
+[`data-model.md`](../../../../.guild/wiki/entities/data-model.md).
 
 ## Artifact Lineage
 

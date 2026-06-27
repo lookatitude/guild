@@ -77,7 +77,7 @@ resolves to them.
   [continuous-knowledge-and-learning-loop](continuous-knowledge-and-learning-loop.md).
 - **CR-D — one `.guild/` ownership + config + boundary-enforcement model.**
   One ownership map (the normative table lives in
-  [guild-boundary-config-and-tracking](guild-boundary-config-and-tracking.md)),
+  [guild-boundary-config-and-tracking](../../../../.guild/wiki/decisions/guild-boundary-config-and-tracking.md)),
   one optional closed-key `defaults:` config block, one PreToolUse
   Guild-owned-file boundary guard + a `/guild:audit` boundary-check (no new
   gate — reuses the existing always-ask channel).
@@ -157,5 +157,5 @@ independent; P6 interleaved; P7 last. No concept mechanism is `[v2.x]`.
   decisions/wiki-ingest promote" holds.
 - See [continuous-knowledge-and-learning-loop](continuous-knowledge-and-learning-loop.md),
   [templates-and-migration](templates-and-migration.md), and
-  [guild-boundary-config-and-tracking](guild-boundary-config-and-tracking.md)
+  [guild-boundary-config-and-tracking](../../../../.guild/wiki/decisions/guild-boundary-config-and-tracking.md)
   for the per-area decisions and validation criteria.

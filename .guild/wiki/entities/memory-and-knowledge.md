@@ -68,9 +68,9 @@ SQLite-as-record). Contradiction policy unchanged: prefer the wiki; the graph
 wins only when `confidence=high` + a direct `source_ref`; log for `wiki-lint`.
 
 See [`knowledge-and-advisory.md`](knowledge-and-advisory.md),
-[`../architecture/codebase-understanding.md`](../architecture/codebase-understanding.md),
+[`../architecture/codebase-understanding.md`](codebase-understanding.md),
 and the canonical schema rows in
-[`../architecture/target-architecture.md`](../architecture/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
 (`guild.knowledge_links.v1`, `guild.provenance.v1`,
 `guild.initiatives_registry.v1`, `guild.learning_checkpoint.v1`).
 
@@ -117,9 +117,9 @@ labels:
 
 The canonical `labels:` block + the `label_taxonomy:` closed-set source are
 defined verbatim in
-[`../architecture/target-architecture.md`](../architecture/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
 and persisted by the engine per
-[`../architecture/codebase-understanding.md`](../architecture/codebase-understanding.md);
+[`../architecture/codebase-understanding.md`](codebase-understanding.md);
 this section is the durable-memory classification contract that consumes them.
 
 ## Memory Levels
@@ -251,7 +251,7 @@ prefer the wiki **unless** the graph node has `confidence=high` + a direct
 `source_ref`; log the contradiction for `wiki-lint`. The graph is a
 **grep-first, droppable** retrieval source bounded by the 1200-token task-layer
 sub-cap. See
-[`../architecture/codebase-understanding.md`](../architecture/codebase-understanding.md)
+[`../architecture/codebase-understanding.md`](codebase-understanding.md)
 and diagram
 [`D-18`](../architecture/diagrams/18-knowledge-layer.mmd).
 

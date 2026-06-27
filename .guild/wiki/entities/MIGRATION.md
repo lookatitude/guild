@@ -18,7 +18,7 @@ related: [command-surface, v2-index, phase-entrypoints]
 > migration and the exact user-visible behavior of every removed/renamed
 > command. It does not execute the migration and does not edit anything under
 > `plugin/`. The canonical, authoritative copy lives **here at
-> `docs/knowledge/MIGRATION.md`**; all cross-reference links in this file are
+> `plugin/.guild/wiki/entities/MIGRATION.md`**; all cross-reference links in this file are
 > relative to this location (`architecture/…`, `lifecycle/…`) and resolve
 > from it. **This is the single source of truth — edit only this file.** The
 > two discoverable copies are *generated* from it and carry a "do not edit by
@@ -57,7 +57,7 @@ verb is `ops`, and `--rigor=deep` auto-implies `--review=cross`.
   help only.
 <!-- STUB-DIGEST:END -->
 
-Full design spec: [architecture/command-surface.md](architecture/command-surface.md).
+Full design spec: [architecture/command-surface.md](command-surface.md).
 
 ---
 
@@ -186,7 +186,7 @@ The `.guild/config.yml` runtime fallback reader (`read-guild-config.ts` back-com
 **Migration path:** run `/guild:migrate` (dry-run by default, safe) to detect a v1 `.guild/`
 layout and convert it to v2. The converter snapshots the existing `.guild/` before
 writing anything. See the migrate command reference in
-[architecture/command-surface.md §3.5](architecture/command-surface.md).
+[architecture/command-surface.md §3.5](command-surface.md).
 
 ### 3.3 Worked example
 
@@ -224,7 +224,7 @@ v2 adds an **optional** top-level `defaults:` block to `.guild/settings.json`
 team size/always-include, review workflow, skill policy, soft-gate
 auto-approve, wiki share-mode, reporting verbosity, **`auto_learn`**). The exact
 key set and the extended precedence ladder are specified in
-[architecture/command-surface.md](architecture/command-surface.md) §4.4 (the
+[architecture/command-surface.md](command-surface.md) §4.4 (the
 canonical schema — not re-spelled here).
 
 > **v2.0 amendment (D5 dispatch ladder — shipped in this release).** The
@@ -238,7 +238,7 @@ canonical schema — not re-spelled here).
 > `/guild:migrate`. The new `defaults.auto_learn` bool (default `false`) gates
 > whether `/guild:init` runs the full `learn-*` pipeline at bootstrap. Both are
 > closed-key additions; the reject rules are unchanged. See
-> [decisions/v2x-command-surface-dispatch-and-internalization.md](decisions/v2x-command-surface-dispatch-and-internalization.md).
+> [decisions/v2x-command-surface-dispatch-and-internalization.md](../decisions/v2x-command-surface-dispatch-and-internalization.md).
 
 What a v1 user needs to know for migration:
 
@@ -299,7 +299,7 @@ frontmatter block if absent and are marked `importance_draft: true` +
 `--mode=dry-run` lists every planned grade without writing anything. The
 snapshot taken before conversion holds the original ungraded pages, so the
 documented restore command rolls the wiki back along with everything else.
-Grading taxonomy: `docs/knowledge/decisions/knowledge-base-hygiene-and-grading.md`.
+Grading taxonomy: `.guild/wiki/decisions/knowledge-base-hygiene-and-grading.md`.
 
 ---
 
@@ -356,7 +356,7 @@ biases cheap; absent `models:` block ⇒ current v2 behavior except cheaper
 **Precedence ladder (normative):** `--model-tier` CLI flag > per-lane plan
 override (`model_tier:`) > `settings.json models:` block > built-in default.
 
-Full specification: `docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §10`
+Full specification: `plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md §10`
 (config keys) and §1–§6 (tier ladder, auto-score, advisor escalation, lean
 lead, `guild.handoff.v2` schema, §task§agent lifecycle).
 
@@ -364,7 +364,7 @@ lead, `guild.handoff.v2` schema, §task§agent lifecycle).
 
 - **Phase entrypoints + surfaced smart detection** — start at any phase;
   bare `/guild:guild` proposes a phase and asks before proceeding (never silent).
-  See [lifecycle/phase-entrypoints.md](lifecycle/phase-entrypoints.md).
+  See [lifecycle/phase-entrypoints.md](phase-entrypoints.md).
 - **Flat-token command surface + de-listed skills (D1/D2).** Beyond the
   prefix-drop (§1), v2.x normalizes the surface to Claude Code's real mechanics:
   commands are **flat** `/guild:<verb>` (colon-namespaced — the `:` stays) and
@@ -403,7 +403,7 @@ lead, `guild.handoff.v2` schema, §task§agent lifecycle).
   **only** when `defaults.auto_learn: true` or a `--learn` flag is passed —
   `--learn` folds in the old `--deep-scan` (one trigger name; one
   implementation, two triggers). See
-  [decisions/v2x-command-surface-dispatch-and-internalization.md](decisions/v2x-command-surface-dispatch-and-internalization.md).
+  [decisions/v2x-command-surface-dispatch-and-internalization.md](../decisions/v2x-command-surface-dispatch-and-internalization.md).
 - **`--rigor` profile** — one three-valued knob ("how careful should I be?")
   replaces five tuning flags.
 - **Quality + Operations are full `[v2]` skills.** `/guild:qa` was a
@@ -442,9 +442,9 @@ lead, `guild.handoff.v2` schema, §task§agent lifecycle).
   never runtime-written. The single normative ownership map and the
   enforcement model (one PreToolUse approval guard reusing the existing
   always-ask sandbox prompt — no new gate) are specified in
-  [architecture/architecture-overview.md](architecture/architecture-overview.md)
+  [architecture/architecture-overview.md](../../../../.guild/wiki/entities/architecture-overview.md)
   and the boundary ADR it points to; the canonical config/boundary contract
-  is in [architecture/command-surface.md](architecture/command-surface.md)
+  is in [architecture/command-surface.md](command-surface.md)
   §4.4/§3.5. **Migration impact for v1 users:** project-authored or evolved
   agents and skills now live at `.guild/agents/` and `.guild/skills/` (with a
   `derived_from_template:` stamp) rather than anywhere under the plugin
@@ -532,9 +532,9 @@ flags (config keys persist them).
 
 ## Cross-references
 
-- [architecture/command-surface.md](architecture/command-surface.md) — the
+- [architecture/command-surface.md](command-surface.md) — the
   full clean-slate v2 command spec (the design source for this migration).
-- [architecture/v2-index.md](architecture/v2-index.md) — v2 architecture
+- [architecture/v2-index.md](../context/v2-index.md) — v2 architecture
   index; links this guide from the command-surface reading-order entry.
-- [lifecycle/phase-entrypoints.md](lifecycle/phase-entrypoints.md) — binds
+- [lifecycle/phase-entrypoints.md](phase-entrypoints.md) — binds
   each phase concept to its v2 command verb.

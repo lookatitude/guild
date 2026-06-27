@@ -166,7 +166,7 @@ is added**. **Execute** is the headline local-Codex deliverable. For
 creator is `claude-code` (and vice-versa) via the already-`[v2]` cross-host
 review broker — `review_packet.creator_host` / `review_result.reviewer_host`
 carry attribution, frozen and unchanged (see
-[Cross-Host Review](../adversarial-review/cross-host-review-and-loop-control.md)).
+[Cross-Host Review](cross-host-review-and-loop-control.md)).
 
 **Degrade-not-block when Codex absent (`[v2]`).** `probe()` returns
 `available:false` → the deterministic router never selects `codex-local`. If
@@ -183,7 +183,7 @@ Codex approval modes are mapped *onto* the existing frozen
 `task_run.permissions` + `autonomy_policy` + the immutable always-ask hard
 set. The canonical 3-level `autonomy_policy` enum and the always-ask hard set
 are stated once in
-[`target-architecture.md` §autonomy_policy](../architecture/target-architecture.md)
+[`target-architecture.md` §autonomy_policy](../../../../.guild/wiki/entities/target-architecture.md)
 and **referenced, never re-spelled** here. The hard set
 (destructive / network / spend ALWAYS prompt) overrides every level and
 `--auto-approve`.
@@ -201,7 +201,7 @@ and **referenced, never re-spelled** here. The hard set
 
 A per-lane `autonomy_contract` (additive optional key on `task_run`, the pure
 AND-mask defined canonically in
-[`target-architecture.md` §autonomy_policy](../architecture/target-architecture.md),
+[`target-architecture.md` §autonomy_policy](../../../../.guild/wiki/entities/target-architecture.md),
 Invariant AC-1) can only **further-restrict** what this mapping permits; it
 never relaxes the always-ask hard set. The Codex adapter consumes it by
 pointer, never re-spelling its schema.
@@ -219,7 +219,7 @@ The **only** thing transmitted off-box is a **new sibling artifact**,
 `guild.cloud_task_packet.v1` — it carries its own `schema_version`,
 **references frozen ids by ref, and never re-spells them** (the six-sibling
 registry of record is the Artifact Model in
-[`target-architecture.md`](../architecture/target-architecture.md);
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md);
 this doc references it). Built by the Codex adapter from a local
 `task_run.yaml`. Path: `.guild/runs/<run-id>/cloud-packets/<task-run-id>.yaml`.
 Per-run **opt-in**, **never default**, **never router-auto-selected**;
@@ -307,7 +307,7 @@ crosses the box boundary**, so the **immutable always-ask hard set fires
 regardless of `--auto-approve`**. The human sees the `included_artifacts` list
 + sha256s before egress; deny → degrade (record), never silent cloud
 dispatch. This is the same always-ask hard set canonically stated in
-[`target-architecture.md` §autonomy_policy](../architecture/target-architecture.md)
+[`target-architecture.md` §autonomy_policy](../../../../.guild/wiki/entities/target-architecture.md)
 — referenced here, not re-spelled.
 
 The v2 cloud egress-safety boundary **IS** the human-gated always-ask

@@ -6,7 +6,7 @@ importance: medium
 source_refs:
   - plugin/scripts/understand/validate-graph.ts
   - plugin/scripts/understand/knowledge-orchestrator.ts
-  - docs/knowledge/architecture/codebase-understanding.md
+  - plugin/.guild/wiki/entities/codebase-understanding.md
 created_at: 2026-06-13
 updated_at: 2026-06-13
 expires_at: null

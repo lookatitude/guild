@@ -5,7 +5,7 @@ confidence: high
 importance: medium
 source_refs:
   - "plugin/.guild/architecture-research-2026-05-10/architecture/05-claude-code-adapter.md"
-  - docs/knowledge/audits/compatibility-2026-05-28/cross-platform-compatibility-report.md
+  - .guild/wiki/_archive/v2-design/audits/cross-platform-compatibility-report.md
 created_at: 2026-05-16
 updated_at: 2026-05-28
 expires_at: null
@@ -214,10 +214,10 @@ ref, never re-spells them); the bus also introduces siblings
 `guild.lane_status.v1` (`status/<lane>.yaml`, heartbeat-carrying, mutable) and
 `guild.approval_request.v1` (`approvals/<id>.yaml`, surfaced by the
 orchestrator). The six-sibling registry of record is the Artifact Model in
-[`target-architecture.md`](../architecture/target-architecture.md) (Cluster
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) (Cluster
 A); this doc references it. Mixed-host gated lanes reuse the already-`[v2]`
 cross-host review broker unchanged (cross-pane host = STRONG independence; see
-[Cross-Host Review](../adversarial-review/cross-host-review-and-loop-control.md)).
+[Cross-Host Review](cross-host-review-and-loop-control.md)).
 
 **Preflight / env-var scoping.** The existing tmux preflight is reused
 **verbatim, team-level, host-neutral, with no relaxation**: tmux present;
@@ -289,7 +289,7 @@ must live in the capability mapping table, never in the interface.
 ---
 
 <!-- SC-4 claude-code-reconcile: sections below added 2026-05-28 per
-     docs/knowledge/decisions/host-adapter-contract.md (Lane A).
+     .guild/wiki/decisions/host-adapter-contract.md (Lane A).
      Existing content above is preserved unchanged. -->
 
 ## Target host capabilities
@@ -297,7 +297,7 @@ must live in the capability mapping table, never in the interface.
 Claude Code CLI is the **reference implementation** for the host-adapter
 contract. The advertisement below is the canonical `host_capabilities.v1`
 for this host. Schema and field semantics are defined in
-[`decisions/host-adapter-contract.md`](../decisions/host-adapter-contract.md)
+[`decisions/host-adapter-contract.md`](../../../../.guild/wiki/decisions/host-adapter-contract.md)
 Decision 2.
 
 ```yaml
@@ -376,7 +376,7 @@ ttl_seconds: 3600
 
 Claude Code CLI is the **reference implementation** for all 8 contract
 surfaces defined in
-[`decisions/host-adapter-contract.md`](../decisions/host-adapter-contract.md)
+[`decisions/host-adapter-contract.md`](../../../../.guild/wiki/decisions/host-adapter-contract.md)
 Decision 1. It implements every surface at full capability; no degradation
 paths are taken by default.
 
@@ -408,7 +408,7 @@ both tmux and Agent tool dispatch are explicitly disabled via settings.
 ## Per-feature degradation matrix
 
 Claude Code CLI is the **reference baseline** for all 16 FDC rows defined in
-[`decisions/feature-degradation-contracts.md`](../decisions/feature-degradation-contracts.md).
+[`decisions/feature-degradation-contracts.md`](../../../../.guild/wiki/decisions/feature-degradation-contracts.md).
 For each row the baseline behavior is the full behavior; Claude Code CLI does
 not introduce degradation for any FDC row by default.
 
@@ -448,7 +448,7 @@ source-of-truth is the disk: `skills/**/SKILL.md`, `agents/*.md`,
 Per the contract (Surface 1), the renderer derives the manifest from the
 inventory; it does NOT define the inventory.
 
-Reference: [`decisions/host-adapter-contract.md`](../decisions/host-adapter-contract.md)
+Reference: [`decisions/host-adapter-contract.md`](../../../../.guild/wiki/decisions/host-adapter-contract.md)
 Surface 1; audit §"Package and surface" (manifest inventory drift — 14 agents
 declared vs 17 on disk; 100 skills found).
 

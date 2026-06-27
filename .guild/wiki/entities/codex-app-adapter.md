@@ -4,10 +4,10 @@ owner: architect
 confidence: high
 importance: high
 source_refs:
-  - docs/knowledge/audits/compatibility-2026-05-28/cross-platform-compatibility-report.md
-  - docs/knowledge/decisions/host-adapter-contract.md
-  - docs/knowledge/decisions/feature-degradation-contracts.md
-  - docs/knowledge/decisions/phase-continuity-requirements.md
+  - .guild/wiki/_archive/v2-design/audits/cross-platform-compatibility-report.md
+  - .guild/wiki/decisions/host-adapter-contract.md
+  - .guild/wiki/decisions/feature-degradation-contracts.md
+  - .guild/wiki/decisions/phase-continuity-requirements.md
 related: [host-adapter-contract, feature-degradation-contracts, phase-continuity-requirements, claude-code-adapter, codex-adapter, gemini-cli-adapter, pi-adapter, claude-code-desktop-adapter, claude-code-web-adapter, codex-app-adapter, antigravity-2-adapter, claude-ai-connector-adapter]
 applies_to: [plugin]
 created_at: 2026-05-28

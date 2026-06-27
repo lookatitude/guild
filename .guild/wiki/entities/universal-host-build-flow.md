@@ -51,7 +51,7 @@ sensitivity: public
 How Guild turns its single source tree into per-host packages, and how it negotiates
 host capabilities, roles, config, permissions, and runtime adapters at run time. This
 documents the universal-host migration (ADR
-[universal-host-plugin-architecture](../decisions/universal-host-plugin-architecture.md))
+[universal-host-plugin-architecture](../../../../.guild/wiki/decisions/universal-host-plugin-architecture.md))
 in two shipped slices:
 
 - **P0 (migration steps 1–5)** — the package + bootstrap surface for **Claude and Codex
@@ -487,7 +487,7 @@ all **additive and behavior-preserving** (run `…20260617-152632`; `tests/unive
 The live install surface stays byte-identical: **no new or changed `commands/*.md`**, and the only
 `skills/**` delta is the ratified producer skill below. Four subsystems plus a docs reconcile —
 stamped in the ADR
-([universal-host-plugin-architecture](../decisions/universal-host-plugin-architecture.md), steps
+([universal-host-plugin-architecture](../../../../.guild/wiki/decisions/universal-host-plugin-architecture.md), steps
 18 and 19):
 
 - **Product templates + producer (step 18 / AC37).** A `guild.template.v1` set

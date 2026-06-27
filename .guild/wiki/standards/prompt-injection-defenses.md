@@ -4,10 +4,10 @@ owner: architect
 confidence: high
 importance: critical
 source_refs:
-  - docs/knowledge/research/packets/prompt-injection-defenses.md
-  - docs/knowledge/research/packets/sec-permission-model.md
-  - docs/knowledge/research/01-security-sandboxing-permissions.md
-  - docs/knowledge/research/02-prompt-injection-untrusted-content.md
+  - plugin/.guild/wiki/standards/prompt-injection-defenses.md
+  - .guild/wiki/research/sec-permission-model.md
+  - .guild/wiki/_archive/v2-design/sources/01-security-sandboxing-permissions.md
+  - .guild/wiki/_archive/v2-design/sources/02-prompt-injection-untrusted-content.md
 applies_to: [plugin]
 related:
   - runtime-security-permissions

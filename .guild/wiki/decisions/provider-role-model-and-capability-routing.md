@@ -4,10 +4,10 @@ owner: architect
 confidence: medium
 importance: high
 source_refs:
-  - docs/knowledge/research/17-provider-role-model-and-capability-routing.md  # §Role Model, §Routing Rules, §Edge Cases (the role taxonomy + locality findings)
-  - docs/knowledge/decisions/v2-cross-host-orchestration.md                    # CR-1..6 routing, CH-4 orchestrator-owns-approval, CR-4 work-type affinity (routing bound by pointer)
-  - docs/knowledge/decisions/host-adapter-contract.md                          # host_capabilities.v1, 4-rung backend ladder (capability carrier bound by pointer)
-  - docs/knowledge/decisions/v2-runtime-and-execution-model.md                 # ADR-RE-5 guild.host_capability.v1, ADR-RE-4 TeamBackend seam (bound by pointer)
+  - .guild/wiki/_archive/v2-design/sources/17-provider-role-model-and-capability-routing.md  # §Role Model, §Routing Rules, §Edge Cases (the role taxonomy + locality findings)
+  - plugin/.guild/wiki/decisions/v2-cross-host-orchestration.md                    # CR-1..6 routing, CH-4 orchestrator-owns-approval, CR-4 work-type affinity (routing bound by pointer)
+  - .guild/wiki/decisions/host-adapter-contract.md                          # host_capabilities.v1, 4-rung backend ladder (capability carrier bound by pointer)
+  - plugin/.guild/wiki/decisions/v2-runtime-and-execution-model.md                 # ADR-RE-5 guild.host_capability.v1, ADR-RE-4 TeamBackend seam (bound by pointer)
 created_at: 2026-06-14
 updated_at: 2026-06-14
 expires_at: null
@@ -62,7 +62,7 @@ unnamed:
   model)` compose function), CR-2..6 (pre-check, fallback chain, work-type
   affinity, manifest freshness, deferred budget cap), and CH-1..6 (mixed-host
   tmux composition). That is the *routing* layer.
-- [`host-adapter-contract.md`](host-adapter-contract.md) decides the
+- [`host-adapter-contract.md`](../../../../.guild/wiki/decisions/host-adapter-contract.md) decides the
   **capability advertisement** (`host_capabilities.v1`) and the **4-rung
   backend ladder** every host resolves against. That is the *capability carrier*
   layer.
@@ -140,7 +140,7 @@ How a non-pinned role is *assigned to a concrete `(host, tier, model)`* is
   CR-1..CR-6 in
   [`v2-cross-host-orchestration.md`](v2-cross-host-orchestration.md).
 - The capability advertisement (`host_capabilities.v1`) and 4-rung backend
-  ladder are in [`host-adapter-contract.md`](host-adapter-contract.md).
+  ladder are in [`host-adapter-contract.md`](../../../../.guild/wiki/decisions/host-adapter-contract.md).
 - The carrier manifest (`guild.host_capability.v1`) and `TeamBackend` seam are
   ADR-RE-5 / ADR-RE-4 in
   [`v2-runtime-and-execution-model.md`](v2-runtime-and-execution-model.md).

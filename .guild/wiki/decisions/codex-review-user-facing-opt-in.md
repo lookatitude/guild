@@ -36,5 +36,5 @@ stay independent of Codex availability and cost.
 Codex review trails are durable under `.guild/runs/<run-id>/codex-review/*.md`.
 The feature must skip cleanly when Codex is unavailable, and schema support must
 cover every documented gate. The `--codex-review` flag is superseded by
-`--review=local|cross|off` (see `docs/knowledge/architecture/command-surface.md §D`).
+`--review=local|cross|off` (see `plugin/.guild/wiki/entities/command-surface.md §D`).
 

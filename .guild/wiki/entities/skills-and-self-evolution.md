@@ -67,7 +67,7 @@ flowchart TD
 
 The LearningCheckpoint is the **single learning loop**
 (`guild.learning_checkpoint.v1`, stated canonically in
-[`target-architecture.md`](../architecture/target-architecture.md), cited by
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md), cited by
 pointer — automatic, advisory, no new user gate). Its `skill_def` /
 `agent_def` / `skill_template` / `agent_template` columns invoke the
 **one-vs-template classifier** (also cited by pointer): each proposal
@@ -204,7 +204,7 @@ sequenceDiagram
 - Every project-authored or evolved instance is written under the consuming
   repo's `.guild/{skills,agents}/`, never plugin state, never outside
   `.guild/` (the `.guild/` instance boundary; rule + guard cited from
-  [`target-architecture.md`](../architecture/target-architecture.md)).
+  [`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)).
 - Keep old versions addressable and inspectable.
 
 ## Metrics

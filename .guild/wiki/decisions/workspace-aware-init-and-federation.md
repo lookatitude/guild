@@ -6,8 +6,8 @@ importance: high
 source_refs:
   - .guild/spec/workspace-aware-init-and-federated-guild.md
   - .guild/plan/workspace-aware-init-and-federated-guild.md
-  - docs/knowledge/decisions/guild-boundary-config-and-tracking.md   # CR-D .guild/ ownership map
-  - docs/knowledge/implementation/contract-map.md
+  - .guild/wiki/decisions/guild-boundary-config-and-tracking.md   # CR-D .guild/ ownership map
+  - .guild/wiki/_archive/v2-design/implementation-plans/contract-map.md
   - plugin/mcp-servers/guild-memory   # cwd / GUILD_MEMORY_WIKI_ROOT per-query override
 created_at: 2026-05-26
 updated_at: 2026-05-26

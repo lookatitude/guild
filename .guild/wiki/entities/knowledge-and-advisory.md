@@ -99,7 +99,7 @@ The `KnowledgeGraph` (`.guild/indexes/knowledge-graph.json`) and `CodebaseMap`
 (`.guild/indexes/codebase-map.json`) are **derived indexes over
 `.guild/wiki/` (canonical) + the repo**, produced by the brownfield
 codebase-understanding engine (see
-[`codebase-understanding.md`](../architecture/codebase-understanding.md)).
+[`codebase-understanding.md`](codebase-understanding.md)).
 They are **not a competing memory store**:
 
 - `.guild/wiki/` stays canonical; `guild-memory` BM25 is unchanged.

@@ -6,14 +6,14 @@ importance: critical
 source_refs:
   - .guild/spec/cost-aware-tiering-and-lean-context.md            # goal, D1/D2/D3, SC-1..12, non-goals, constraints
   - .guild/research/cost-techniques.md                            # cost claims + recommended-defaults table (cited)
-  - docs/knowledge/decisions/config-surface-settings-json.md      # settings.json closed-key surface + reject rules
-  - docs/knowledge/architecture/command-surface.md                # §4.4 settings schema (canonical key-set ref)
-  - docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md  # D5 agent_mode dispatch ladder
-  - docs/knowledge/architecture/target-architecture.md            # §handoff_receipt contract (frozen guild.handoff_receipt.v1)
-  - docs/knowledge/decisions/guild-boundary-config-and-tracking.md # CR-D .guild/ ownership map + closed-key config
+  - plugin/.guild/wiki/decisions/config-surface-settings-json.md      # settings.json closed-key surface + reject rules
+  - plugin/.guild/wiki/entities/command-surface.md                # §4.4 settings schema (canonical key-set ref)
+  - plugin/.guild/wiki/decisions/v2x-command-surface-dispatch-and-internalization.md  # D5 agent_mode dispatch ladder
+  - .guild/wiki/entities/target-architecture.md            # §handoff_receipt contract (frozen guild.handoff_receipt.v1)
+  - .guild/wiki/decisions/guild-boundary-config-and-tracking.md # CR-D .guild/ ownership map + closed-key config
   - plugin/skills/meta/context-assemble/SKILL.md                  # 3-layer bundle, ~3k target / 6k hard cap
   - plugin/skills/knowledge/learn-map/SKILL.md                    # two-phase script+LLM learn pipeline
-  - docs/knowledge/implementation/contract-map.md                 # contract registry (new schema registered here)
+  - .guild/wiki/_archive/v2-design/implementation-plans/contract-map.md                 # contract registry (new schema registered here)
 created_at: 2026-05-26
 updated_at: 2026-05-26
 expires_at: null
@@ -237,7 +237,7 @@ review/verify — the two compose (in-flight envelope → durable receipt), they
 not compete. The exact compose relationship in the durable receipt — v1
 frontmatter as the human-review wrapper that **embeds exactly ONE** fenced
 `guild.handoff.v2` block as the machine truth — is fixed by
-[`communication-format-policy.md`](communication-format-policy.md)
+[`communication-format-policy.md`](../../../../.guild/wiki/decisions/communication-format-policy.md)
 §"Handoff contract"; this section defines only the in-flight envelope body.
 
 ### 6. §task§agent lifecycle — ephemeral, one-per-task (D3)
@@ -285,7 +285,7 @@ DO-NOT-TRIGGER scans kept clean (SC-9):
 > (`advisor` / `developer` / `doc-writer`) — roles that are NOT among the 14 shipping
 > specialists. The canonical **full-14 per-specialist default-tier table** (including
 > `researcher` and `architect`, which are shipping specialists) lives in
-> [`canonical-specialist-roster-groups-and-tiers.md`](./canonical-specialist-roster-groups-and-tiers.md)
+> [`canonical-specialist-roster-groups-and-tiers.md`](canonical-specialist-roster-groups-and-tiers.md)
 > (D2) — it derives each specialist's default tier from its agent-file `model:`
 > frontmatter via the §1 ladder. Not duplicated here (single-source per that ADR's
 > D4 enumeration rule). Per D3 the default tier is a single value; `cheap→mid` notation

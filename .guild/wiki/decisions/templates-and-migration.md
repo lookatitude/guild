@@ -103,7 +103,7 @@ instance is next evolved for its own reasons, or when an instance is
 **explicitly selected for migration via the `/guild evolve` maintenance verb's
 `<id>` positional + `--to-template=vN` flag**. That migration trigger is the
 *only* lazy/staged trigger; its CLI surface is **canonically defined in
-[command-surface.md](../architecture/command-surface.md) §3.5** (this ADR cites
+[command-surface.md](../entities/command-surface.md) §3.5** (this ADR cites
 it by pointer and does not re-spell the command spec — the ADR's trigger
 description and the canonical command must not diverge). Migration is never a
 bulk find-replace and never auto-applied.

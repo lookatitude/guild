@@ -6,8 +6,8 @@ importance: critical
 source_refs:
   - .guild/research/cost-techniques.md
   - .guild/research/persistence-schema.md
-  - docs/knowledge/research/12-knowledge-graph-semantic-indexing.md
-  - docs/knowledge/research/14-session-learning-extraction.md
+  - .guild/wiki/_archive/v2-design/sources/12-knowledge-graph-semantic-indexing.md
+  - .guild/wiki/_archive/v2-design/sources/14-session-learning-extraction.md
 applies_to: [plugin]
 related:
   - knowledge-and-advisory
@@ -71,7 +71,7 @@ node in top-3 on > 20% of sampled queries.
 
 ## Knowledge Graph Schema and Retrieval Planner
 
-The graph schema connects Guild's structured entities [source: `docs/knowledge/research/12-knowledge-graph-semantic-indexing.md §Guild Implications`]:
+The graph schema connects Guild's structured entities [source: `.guild/wiki/_archive/v2-design/sources/12-knowledge-graph-semantic-indexing.md §Guild Implications`]:
 
 ```
 Feature → Task → Artifact → Source
@@ -119,7 +119,7 @@ Agent memory recall is scored by a weighted mix of [source: `.guild/research/cos
 
 ## Session Learning Extraction and Promotion
 
-Guild extracts durable knowledge from runs through a typed candidate queue [source: `docs/knowledge/research/14-session-learning-extraction.md §Guild Implications`]:
+Guild extracts durable knowledge from runs through a typed candidate queue [source: `.guild/wiki/_archive/v2-design/sources/14-session-learning-extraction.md §Guild Implications`]:
 
 ```
 Run traces + artifacts

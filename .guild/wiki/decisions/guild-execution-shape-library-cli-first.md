@@ -3,7 +3,7 @@ type: decision
 owner: architect
 confidence: high
 importance: high
-source_refs: ["docs/knowledge/research/research-backlog.md#open-decisions-d1"]
+source_refs: [".guild/wiki/_archive/v2-design/sources/research-backlog.md#open-decisions-d1"]
 created_at: 2026-05-26
 updated_at: 2026-05-26
 expires_at: null

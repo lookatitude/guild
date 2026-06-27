@@ -63,7 +63,7 @@ window (`interactive_until` / `autonomous_after`).
 
 The single canonical `phase_entry` field body (frozen `guild.phase_entry.v1`,
 lenient-reader) is defined **once** in
-[`../architecture/target-architecture.md`](../architecture/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
 §`phase_entry` contract (Phase Output Contracts) and enumerated in its
 Frozen-Contract Registry. This page consumes it **by pointer** and never
 re-spells the field body — same pattern this doc already uses for
@@ -133,7 +133,7 @@ abort / force-takeover prompt (surfaced, never silent); a stale lock (holder
 force-takeover. The lock filename, the `heartbeat-at`/`stale_after_minutes`
 stale predicate, the validity definition, and the atomic-write rule are
 specified once in
-[`../architecture/target-architecture.md`](../architecture/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
 (Persistence discipline); this section consumes them by pointer and states
 the entry-contract behavior.
 
@@ -152,7 +152,7 @@ bare `/guild` smart-detect path.
    (`built-in < workspace settings < workspace local < project settings <
    project local < rigor-expansion < CLI`). Every key is tagged with its
    source layer in a per-key source map. See
-   [`../architecture/command-surface.md §4.4`](../architecture/command-surface.md)
+   [`../architecture/command-surface.md §4.4`](command-surface.md)
    for the full chain. All behavior lives in `settings.json`; `project.yaml`
    stays identity-only.
 2. **Validate** closed keys (`defaults.*`, `models.*`, etc.). Unknown keys are
@@ -187,9 +187,9 @@ to include the source annotations when `config show --sources` is active. An
 unknown `defaults:` key is rejected at this point — no new user gate.
 
 For the canonical precedence ladder see
-[`../architecture/command-surface.md §4.4`](../architecture/command-surface.md)
+[`../architecture/command-surface.md §4.4`](command-surface.md)
 §4.4; for the provider selection rules see
-[`../adversarial-review/cross-host-review-and-loop-control.md`](../adversarial-review/cross-host-review-and-loop-control.md).
+[`../adversarial-review/cross-host-review-and-loop-control.md`](cross-host-review-and-loop-control.md).
 
 ## D-13 — Phase Entrypoint Resolution (embedded)
 
@@ -346,7 +346,7 @@ within the `task_run.autonomy_policy` level
 levels' fixed built-in meaning and the immutable always-ask hard set
 (destructive / network / spend ALWAYS prompt regardless of level or
 `--auto-approve`) are specified once in
-[`../architecture/target-architecture.md`](../architecture/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
 (`autonomy_policy` — fixed 3-level semantics). The richer per-lane
 `autonomy_contract` is an **additive optional key on `task_run`**, `[v2]`
 (canonical shape — closed op-class enum, Invariant AC-1 AND-mask,
@@ -384,7 +384,7 @@ hard set (destructive/network/spend) is unconditional even inside an
 `approved:true` runbook even under `--auto-approve=all`; a mandatory
 pre-flight dry-run. Runbook approval lowers the soft gate only — never the
 hard set; the canonical `autonomy_contract`/enum/hard-set text lives in
-[`../architecture/target-architecture.md`](../architecture/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
 and is consumed by pointer. `/guild:ops` consumes Quality and feeds the D8
 release leg. Output: `.guild/runs/<run-id>/ops/<run-id>.md` (frozen
 `guild.ops.v1`) + class-applicable `guild.incident.v1`/`guild.release.v1`.

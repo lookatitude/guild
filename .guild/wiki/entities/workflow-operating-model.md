@@ -150,7 +150,7 @@ until execution is verified, release readiness is resolved, and documentation
 sync is resolved. The close-gate *contract* is frozen `[v2]`; the close-gate
 *automation* (definition-ledger + release/docs machinery) is `[v2.x]`. Release
 and docs are separate gates, not collapsed into one. See
-[../initiatives/initiative-lifecycle-and-release-doc-sync.md](../initiatives/initiative-lifecycle-and-release-doc-sync.md).
+[../initiatives/initiative-lifecycle-and-release-doc-sync.md](../../../../.guild/wiki/entities/initiative-lifecycle-and-release-doc-sync.md).
 
 ## Session Intake
 
@@ -278,7 +278,7 @@ which phases read via `readResolvedSettingsSnapshot`; absent ⇒ `auto`, which
 resolves the strongest available backend (tmux team → independent agent →
 subagent). The
 `agent_mode` ladder and the closed-key `defaults:` schema are canonical in
-[`../architecture/command-surface.md`](../architecture/command-surface.md)
+[`../architecture/command-surface.md`](command-surface.md)
 §4.4 and [`../decisions/v2x-command-surface-dispatch-and-internalization.md`](../decisions/v2x-command-surface-dispatch-and-internalization.md)
 D5; this page consumes them by pointer. With `agent_mode: auto` (the default),
 the ladder resolves the strongest available backend per context:
@@ -306,7 +306,7 @@ is the **derived, rebuildable** `.guild/indexes/initiatives-registry.yaml`
 deleting it loses nothing (rebuilt by re-scan). Both the registry and
 `.guild/indexes/knowledge-links.json` are projections of the same provenance
 facts (one model, not two). The canonical schemas live in
-[`../architecture/target-architecture.md`](../architecture/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
 (`Provenance`, `InitiativesRegistry`, `KnowledgeLinks`); this page references
 them by pointer and never re-spells them.
 
@@ -320,7 +320,7 @@ rebuildable index STATE, and they exist for every run.
 ## Status Axes
 
 > **Supersession note (2026-06-11): v2 keeps four axes.**
-> [`docs/v2/06-initiatives.md`](../../v2/06-initiatives.md) fixes the initiative manifest
+> [`docs/v2/06-initiatives.md`](../../../../docs/v2/06-initiatives.md) fixes the initiative manifest
 > (`guild.initiative.v1`) at the **4-axis model** — `definition_status` /
 > `execution_status` / `release_status` / `documentation_status`. The `review_status` and
 > `evolution_status` rows below were **folded into that model**: review evidence is

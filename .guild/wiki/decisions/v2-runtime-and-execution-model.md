@@ -4,13 +4,13 @@ owner: architect
 confidence: high
 importance: high
 source_refs:
-  - docs/knowledge/research/runtime-execution-model.md                            # T2-4 brief — G-1..7, §4 approach, §5 ADR-RE-1..6, §6 cross-topic
-  - docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md  # D5 agent_mode dispatch ladder (bound by pointer, not replaced)
-  - docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md               # tier ladder §1/§2, §task§agent lifecycle §6, guild.handoff.v2 §5 (bound by pointer)
-  - docs/knowledge/decisions/guild-boundary-config-and-tracking.md                # CR-D .guild/ ownership map + atomic-write/.lock + closed-key config
-  - docs/knowledge/decisions/config-surface-settings-json.md                      # closed-key settings.json reject regime (new defaults.* land here)
-  - docs/knowledge/architecture/target-architecture.md                            # frozen guild.handoff_receipt.v1; sibling-schema registry (new siblings land here)
-  - docs/knowledge/implementation/contract-map.md                                 # contract registry — the three new schemas register here (lead registers after)
+  - plugin/.guild/wiki/entities/runtime-execution-model.md                            # T2-4 brief — G-1..7, §4 approach, §5 ADR-RE-1..6, §6 cross-topic
+  - plugin/.guild/wiki/decisions/v2x-command-surface-dispatch-and-internalization.md  # D5 agent_mode dispatch ladder (bound by pointer, not replaced)
+  - plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md               # tier ladder §1/§2, §task§agent lifecycle §6, guild.handoff.v2 §5 (bound by pointer)
+  - .guild/wiki/decisions/guild-boundary-config-and-tracking.md                # CR-D .guild/ ownership map + atomic-write/.lock + closed-key config
+  - plugin/.guild/wiki/decisions/config-surface-settings-json.md                      # closed-key settings.json reject regime (new defaults.* land here)
+  - .guild/wiki/entities/target-architecture.md                            # frozen guild.handoff_receipt.v1; sibling-schema registry (new siblings land here)
+  - .guild/wiki/_archive/v2-design/implementation-plans/contract-map.md                                 # contract registry — the three new schemas register here (lead registers after)
 created_at: 2026-05-26
 updated_at: 2026-05-26
 expires_at: null
@@ -26,7 +26,7 @@ related: [cost-aware-tiering-and-lean-context, v2x-command-surface-dispatch-and-
 
 Accepted (operator-ratified 2026-05-26; v2.0-full-scope program). Binding for implementation. This ADR
 resolves the six decisions ADR-RE-1..6 surfaced by the foundational research
-brief [`research/runtime-execution-model.md`](../research/runtime-execution-model.md)
+brief [`research/runtime-execution-model.md`](../entities/runtime-execution-model.md)
 (T2-4 Runtime/Execution, the layer that underpins Track 3 cross-host). It is a
 **decision record**: it does not write hook scripts, the launcher, config
 schema, command files, or migration prose — each decision is handed to its
@@ -113,7 +113,7 @@ moment** (brief §4.1) — it is extended to persist lane state after each lane
 terminates; dispatch writes the `in_progress` transition. Writes are
 **atomic** (write-temp-then-`rename`) under the existing `.guild/.lock` +
 atomic-write discipline established by CR-D
-([`guild-boundary-config-and-tracking.md`](guild-boundary-config-and-tracking.md)) —
+([`guild-boundary-config-and-tracking.md`](../../../../.guild/wiki/decisions/guild-boundary-config-and-tracking.md)) —
 this ADR reuses that rule, it does not invent a new one.
 
 **Resume protocol.** `/guild:resume` reads `run-state.json` to reconstruct
@@ -138,7 +138,7 @@ deleted/superseded once provenance lands.
 
 **Decision.** Add an **additive optional** `retry:` block to the `team.yaml`
 lane schema (lenient-reader rule — additive optional key, **no
-`schema_version` bump**, [`contract-map.md §C`](../implementation/contract-map.md)):
+`schema_version` bump**, [`contract-map.md §C`](../../../../.guild/wiki/_archive/v2-design/implementation-plans/contract-map.md)):
 
 ```jsonc
 "retry": {
@@ -289,7 +289,7 @@ manifest.
 
 ## New contracts (for the lead to register — bodies frozen here)
 
-These three siblings are **additive, post-v2** (the [`contract-map.md §B-post`](../implementation/contract-map.md)
+These three siblings are **additive, post-v2** (the [`contract-map.md §B-post`](../../../../.guild/wiki/_archive/v2-design/implementation-plans/contract-map.md)
 pattern set by `guild.workspace.v1` / `guild.handoff.v2`). They do **not**
 change the locked frozen/sibling counts or the §G predicate.
 *(SC-12 context, 2026-05-30: the locked baseline is now 13-frozen + 14-sibling /
@@ -412,7 +412,7 @@ established `--rigor`/per-lane override precedence of the cost ADR.)
   the §4 compaction-not-summarization discipline stands; `tier_models` in the
   host manifest fills the §1 `null` host slots. This ADR adds **durability and a
   host axis around** that model; it changes none of its frozen surfaces.
-- **CR-D** ([`guild-boundary-config-and-tracking.md`](guild-boundary-config-and-tracking.md)):
+- **CR-D** ([`guild-boundary-config-and-tracking.md`](../../../../.guild/wiki/decisions/guild-boundary-config-and-tracking.md)):
   all new paths sit under `.guild/`; atomic-write + `.lock` rules are **reused,
   not reinvented**; `run-state`/`run-manifest` are derived/rebuildable
   (deletable with zero data loss), `run-state` composing with the terminal
@@ -470,7 +470,7 @@ established `--rigor`/per-lane override precedence of the cost ADR.)
 ## Open items / open questions (for the lead + adjacent ADR owners)
 
 - **OQ-1 (lead — contract registration):** register the three siblings in
-  [`contract-map.md §B-post`](../implementation/contract-map.md) + the
+  [`contract-map.md §B-post`](../../../../.guild/wiki/_archive/v2-design/implementation-plans/contract-map.md) + the
   `target-architecture.md` sibling-schema registry. (Lead said "I register
   after" — flagged, not done here.)
 - **OQ-2 (CR-D owner — ownership map):** add ownership rows for

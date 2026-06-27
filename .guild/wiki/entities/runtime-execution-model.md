@@ -4,7 +4,7 @@ owner: architect
 confidence: high
 importance: high
 source_refs:
-  - docs/knowledge/research/packets/runtime-execution-model.md
+  - plugin/.guild/wiki/entities/runtime-execution-model.md
   - plugin/scripts/lib/settings-resolver.ts
   - plugin/scripts/lib/runstart-preflight.ts
   - plugin/scripts/lib/run-lifecycle.ts
@@ -93,7 +93,7 @@ This lifecycle is orthogonal to D5 — applies on any backend.
   new / post-effective-date receipt (grandfathered/indeterminate-date receipts
   routed leniently via the OD-4 discriminator — grandfathering applies only to the
   missing case). Extracts learnings; signals §task§agent dismiss. Format
-  contract: [`../decisions/communication-format-policy.md`](../decisions/communication-format-policy.md)
+  contract: [`../decisions/communication-format-policy.md`](../../../../.guild/wiki/decisions/communication-format-policy.md)
   §"Handoff contract".
 - **TeammateIdle** (`teammate-idle.ts`): nudges stale teammates via stdout message to
   orchestrator; checks receipt absence and in-progress log freshness (10-min stale

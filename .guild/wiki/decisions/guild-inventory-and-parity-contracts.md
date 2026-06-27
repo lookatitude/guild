@@ -5,7 +5,7 @@ confidence: high
 importance: critical
 applies_to: [plugin]
 source_refs:
-  - docs/knowledge/decisions/universal-host-plugin-architecture.md
+  - .guild/wiki/decisions/universal-host-plugin-architecture.md
   - .guild/spec/universal-host-p0.md
   - .guild/plan/universal-host-p0.md
   - plugin/.claude-plugin/plugin.json
@@ -40,7 +40,7 @@ sensitivity: public
 
 **Status:** IMPLEMENTED (load-bearing shapes now have module-owned
 implementations plus stable compatibility shims). Parent SoT:
-[universal-host-plugin-architecture](universal-host-plugin-architecture.md).
+[universal-host-plugin-architecture](../../../../.guild/wiki/decisions/universal-host-plugin-architecture.md).
 
 This ADR is the **foundation** of universal-host Phase 1. It pins the precise
 schemas and contracts that every other lane consumes, so L1–L6 can build with no

@@ -4,8 +4,8 @@ owner: architect
 confidence: high
 importance: critical
 source_refs:
-  - docs/knowledge/architecture/command-surface.md §1
-  - docs/knowledge/architecture/command-surface.md §6
+  - plugin/.guild/wiki/entities/command-surface.md §1
+  - plugin/.guild/wiki/entities/command-surface.md §6
   - guild-plan.md §7.3
   - plugin/CLAUDE.md
   - plugin/scripts/agent-team-launcher.ts
@@ -204,7 +204,7 @@ or conceptual dependency** on `superpowers` or `understand-anything`.
   §5`'s T4 "FORK / attribution preserved" framing is superseded.)
 - **Wire learning + these skills into Guild's loops at all levels:** memory /
   recall (wiki + knowledge-links per
-  [`guild-boundary-config-and-tracking`](guild-boundary-config-and-tracking.md)
+  [`guild-boundary-config-and-tracking`](../../../../.guild/wiki/decisions/guild-boundary-config-and-tracking.md)
   and CR-A in [`concept-integration`](concept-integration.md)),
   skill-evolution (`evolve` / shadow / flip-gate), and agent-evolution
   (`create-specialist` / DH-3).

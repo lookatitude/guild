@@ -3,7 +3,7 @@ type: concept
 owner: architect
 confidence: high
 importance: high
-source_refs: ["docs/knowledge/research/23-codebase-understanding-knowledge-graph.md", "docs/knowledge/research/24-existing-process-brownfield-analysis.md", "docs/knowledge/research/25-external-plugin-internalization-policy.md"]
+source_refs: [".guild/wiki/_archive/v2-design/sources/23-codebase-understanding-knowledge-graph.md", ".guild/wiki/_archive/v2-design/sources/24-existing-process-brownfield-analysis.md", ".guild/wiki/_archive/v2-design/sources/25-external-plugin-internalization-policy.md"]
 created_at: 2026-05-17
 updated_at: 2026-06-12
 expires_at: null
@@ -19,7 +19,7 @@ related: [v2-index, target-architecture, architecture-overview, lifecycle-overvi
 Guild v2 natively analyses an existing system (a codebase, or a process
 expressed in repo/docs) by producing typed, evidence-linked indexes. Per the
 external-plugin policy
-([25-external-plugin-internalization-policy.md](../research/25-external-plugin-internalization-policy.md)),
+([25-external-plugin-internalization-policy.md](../../../../.guild/wiki/_archive/v2-design/sources/25-external-plugin-internalization-policy.md)),
 the engine is **Guild-owned skills + scripts**, not a runtime dependency on the
 `understand-anything` plugin.
 
@@ -102,7 +102,7 @@ All under `.guild/` — **never** `.understand-anything/` (that path belongs to
 the external plugin and using it would re-introduce a dependency). These
 schemas are FROZEN; field names and `version`/`schema_version` strings are
 canonical and must not be re-spelled (the sibling-schema registry in
-[`target-architecture.md`](target-architecture.md) is the single source).
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) is the single source).
 
 **`CodebaseMap`** — `.guild/indexes/codebase-map.json`:
 ```json
@@ -249,14 +249,14 @@ and the missing invariant checks. The **durable WHY** behind the bump — the
 v1-read/v2-write boundary, the three closed-set traps (alias collapse, no
 `subtopic` type, edge-alias fallthrough), and the determinism contract — is the
 ADR
-[`../decisions/knowledge-graph-v2-schema-boundary.md`](../decisions/knowledge-graph-v2-schema-boundary.md).
+[`../decisions/knowledge-graph-v2-schema-boundary.md`](../../../../.guild/wiki/decisions/knowledge-graph-v2-schema-boundary.md).
 **Defined in code** —
 [`plugin/scripts/understand/lib/schema.ts`](../../../plugin/scripts/understand/lib/schema.ts)
 (`NODE_TYPES_V2`, `EDGE_TYPES_V2`, `NODE_CATEGORIES`, `validateGraphV2`); the
 node metadata contract in
 [`knowledge-classification-schema.md`](knowledge-classification-schema.md); the
 contract-map row in
-[`../implementation/contract-map.md`](../implementation/contract-map.md) §B-post.
+[`../implementation/contract-map.md`](../../../../.guild/wiki/_archive/v2-design/implementation-plans/contract-map.md) §B-post.
 Not re-spelled here:
 
 - **Added node types (closed):** `topic` (carries `topic_path`), `concept`,
@@ -344,7 +344,7 @@ Stage notes:
 Every emitted field is classified `deterministic-script` or `LLM-judged`. No
 field claimed deterministic may call a model. The **canonical durable copy** is
 ADR
-[`../decisions/knowledge-graph-v2-schema-boundary.md`](../decisions/knowledge-graph-v2-schema-boundary.md)
+[`../decisions/knowledge-graph-v2-schema-boundary.md`](../../../../.guild/wiki/decisions/knowledge-graph-v2-schema-boundary.md)
 §D-4 (it survives skill evolution); this table and the `guild:learn-knowledge`
 skill-body copy (SC-9, operational) must not contradict it.
 
@@ -466,8 +466,8 @@ materialized into the derived `.guild/indexes/knowledge-links.json`
 derived-index discipline — rebuildable by re-scanning, deletable with zero data loss,
 filesystem-canonical, no MCP, no embeddings, no new store. The canonical label
 schema + the closed edge-type set live in
-[`../knowledge-memory/knowledge-and-advisory.md`](../knowledge-memory/knowledge-and-advisory.md);
-the schemas in [`target-architecture.md`](target-architecture.md). The graph
+[`../knowledge-memory/knowledge-and-advisory.md`](knowledge-and-advisory.md);
+the schemas in [`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md). The graph
 remains the **code/wiki derived index**; `knowledge-links.json` is the
 **work/decision derived index**; they do not overlap node-space (graph =
 file/function/concept/domain/component; links = task/run/decision/skill/agent/

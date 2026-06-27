@@ -4,13 +4,13 @@ owner: architect
 confidence: medium
 importance: high
 source_refs:
-  - docs/knowledge/research/capability-routing.md                  # D-CR-1..6, gaps G-A..G-F, §5 routing policy
-  - docs/knowledge/research/tmux-cross-host.md                     # CH-1..6, gaps CH-G1..G6, §4 mixed-host launcher design
-  - docs/knowledge/decisions/v2-runtime-and-execution-model.md     # ADR-RE-4 TeamBackend seam, ADR-RE-5 host-capability manifest (bound by pointer)
-  - docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md # §1 tier ladder + null codex/gemini slots, §2 auto-score, §5 guild.handoff.v2 (bound by pointer)
-  - docs/knowledge/decisions/v2x-command-surface-dispatch-and-internalization.md # D5 agent_mode dispatch ladder (bound by pointer)
-  - docs/knowledge/decisions/guild-boundary-config-and-tracking.md # CR-D .guild/ ownership map + atomic-write/.lock
-  - docs/knowledge/decisions/config-surface-settings-json.md       # closed-key settings.json reject regime (new defaults.* land here)
+  - .guild/wiki/_archive/v2-design/sources/capability-routing.md                  # D-CR-1..6, gaps G-A..G-F, §5 routing policy
+  - .guild/wiki/research/tmux-cross-host.md                     # CH-1..6, gaps CH-G1..G6, §4 mixed-host launcher design
+  - plugin/.guild/wiki/decisions/v2-runtime-and-execution-model.md     # ADR-RE-4 TeamBackend seam, ADR-RE-5 host-capability manifest (bound by pointer)
+  - plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md # §1 tier ladder + null codex/gemini slots, §2 auto-score, §5 guild.handoff.v2 (bound by pointer)
+  - plugin/.guild/wiki/decisions/v2x-command-surface-dispatch-and-internalization.md # D5 agent_mode dispatch ladder (bound by pointer)
+  - .guild/wiki/decisions/guild-boundary-config-and-tracking.md # CR-D .guild/ ownership map + atomic-write/.lock
+  - plugin/.guild/wiki/decisions/config-surface-settings-json.md       # closed-key settings.json reject regime (new defaults.* land here)
 created_at: 2026-05-26
 updated_at: 2026-05-26
 expires_at: null
@@ -27,8 +27,8 @@ related: [v2-runtime-and-execution-model, cost-aware-tiering-and-lean-context, v
 **Accepted (operator-ratified 2026-05-26; v2.0-full-scope program).**
 
 This ADR consolidates the two Track-3 research briefs —
-[`research/capability-routing.md`](../research/capability-routing.md) (decisions
-D-CR-1..6) and [`research/tmux-cross-host.md`](../research/tmux-cross-host.md)
+[`research/capability-routing.md`](../../../../.guild/wiki/_archive/v2-design/sources/capability-routing.md) (decisions
+D-CR-1..6) and [`research/tmux-cross-host.md`](../../../../.guild/wiki/research/tmux-cross-host.md)
 (decisions CH-1..6) — into one coherent cross-host decision set. It is the
 **policy + launcher layer that sits on top of the Track-3 gate** opened by the
 ratified runtime ADR: ADR-RE-4 (`TeamBackend` seam) and **ADR-RE-5**
@@ -339,7 +339,7 @@ same way once a Gemini manifest + adapter exist (CH-2 extension point).
 ## New contracts (proposed — for the lead to register if approved)
 
 These follow the additive `[post-v2]` sibling pattern
-([`contract-map.md §B-post`](../implementation/contract-map.md)). **This ADR is
+([`contract-map.md §B-post`](../../../../.guild/wiki/_archive/v2-design/implementation-plans/contract-map.md)). **This ADR is
 their single canonical body**; skills/scripts bind by pointer. **The team lead
 registers contract-map + target-architecture sibling-registry + CR-D
 ownership-map rows after approval** — this ADR does not touch those files. The
@@ -425,7 +425,7 @@ config/override → manifest → built-in default.)
   picks the *mode*; CR-1 adds *host* as the orthogonal third axis (mode × tier ×
   host). `TmuxTeamBackend` preserves one-team-per-session, collision-refuse, and
   the env gate verbatim for Claude panes.
-- **CR-D** ([`guild-boundary-config-and-tracking.md`](guild-boundary-config-and-tracking.md)):
+- **CR-D** ([`guild-boundary-config-and-tracking.md`](../../../../.guild/wiki/decisions/guild-boundary-config-and-tracking.md)):
   all new paths sit under `.guild/runs/<run-id>/`; atomic-write + `.lock` rules
   are reused, not reinvented; `tasks/`/`approvals/` are rebuildable operational
   artifacts.
@@ -445,7 +445,7 @@ config/override → manifest → built-in default.)
   `.guild/runs/<run-id>/`; `capture-telemetry.ts` indexes them with no new
   top-level path; `host_kind` in `session.json` (CH-5) lets `guild-telemetry`
   correlate events by CLI brand for mixed-team diagnostics
-  ([`v2-observability-and-replay.md`](v2-observability-and-replay.md)).
+  ([`v2-observability-and-replay.md`](../../../../.guild/wiki/decisions/v2-observability-and-replay.md)).
 
 ## Validation criteria
 

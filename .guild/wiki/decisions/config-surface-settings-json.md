@@ -4,7 +4,7 @@ owner: architect
 confidence: high
 importance: high
 source_refs:
-  - docs/knowledge/architecture/command-surface.md §4.4
+  - plugin/.guild/wiki/entities/command-surface.md §4.4
   - plugin/scripts/read-guild-config.ts
   - plugin/scripts/lib/settings-resolver.ts
   - plugin/scripts/config-cmd.ts
@@ -216,4 +216,4 @@ review.adversarial.provider <id> --scope workspace`). The `auto` value never
 silently persists the recommended provider; the selected provider is recorded
 only in run provenance (`resolved-settings.json`). See the canonical provider
 detection and selection rules in
-`docs/knowledge/adversarial-review/cross-host-review-and-loop-control.md`.
+`plugin/.guild/wiki/entities/cross-host-review-and-loop-control.md`.

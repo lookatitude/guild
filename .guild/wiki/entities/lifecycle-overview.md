@@ -309,7 +309,7 @@ Process:
    + a confidence-tagged `.guild/wiki/concepts/architecture-map.md` stub; the
    full semantic graph + onboarding tour are built lazily (gated,
    ask-before-deep-scan) when the first plan needing P2/P3 is created. See
-   [codebase-understanding.md](../architecture/codebase-understanding.md).
+   [codebase-understanding.md](codebase-understanding.md).
 3. If it is new, ask high-level questions about product type, users, value
    proposition, constraints, non-goals, and success horizon.
 4. Create foundational wiki pages: context, goals, non-goals, standards,
@@ -535,7 +535,7 @@ Process:
    budget is the canonical `defaults.quality.budget` block in
    `.guild/settings.json` (`per_class_minutes` + `total_minutes`), defined once
    with its built-in defaults in
-   [`../architecture/command-surface.md`](../architecture/command-surface.md)
+   [`../architecture/command-surface.md`](command-surface.md)
    (§4.4); an absent `defaults:` block applies those built-in defaults
    unchanged. This phase consumes those values by pointer and never
    re-states the numbers. Quality orchestrates discovered harnesses under
@@ -583,7 +583,7 @@ results, journeys, challenger trail, release decision). Per-class evidence
 lives under `.guild/runs/<run-id>/quality/evidence/`. The autonomy hard set,
 the 3-level `autonomy_policy` enum, and the additive-optional
 `autonomy_contract` shape are stated once in
-[`../architecture/target-architecture.md`](../architecture/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
 (`autonomy_policy` / `task_run`); this section consumes them by pointer and
 never re-spells them.
 
@@ -640,7 +640,7 @@ and the additive-optional `autonomy_contract` (`[v2]`). The canonical
 `runbook_approved`/`approved_ref` Operations-only extension keys), the fixed
 3-level `autonomy_policy` enum, the immutable always-ask hard set, and the
 hard-set-∉-allowlist plan-validate reject rule are all stated once in
-[`../architecture/target-architecture.md`](../architecture/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
 (`autonomy_policy` / `task_run`). Operations is the first real consumer and
 references that text by pointer; it never re-spells the schema. Runbook
 approval lowers the **soft** gate only — it never touches the **hard** set;
@@ -721,7 +721,7 @@ initiative close gate (exec + release + docs). Operations supplies the
 release-readiness *evidence*; `InitiativeCloseout` still owns initiative
 closure (state machine unchanged). The D8 close-gate contract is frozen
 `[v2]`; its automation is `[v2.x]`. See
-[../initiatives/initiative-lifecycle-and-release-doc-sync.md](../initiatives/initiative-lifecycle-and-release-doc-sync.md).
+[../initiatives/initiative-lifecycle-and-release-doc-sync.md](../../../../.guild/wiki/entities/initiative-lifecycle-and-release-doc-sync.md).
 
 Outputs:
 
@@ -788,7 +788,7 @@ packets to `.guild/runs/<run-id>/review/packets/<pkt-id>.yaml` and results to
 set, the expanded profile — including the cross-host Codex review — is printed
 before the first gate; no separate explicit flag is required.
 Cross-model adversarial selection is defined in
-[adversarial-review.md](../adversarial-review/adversarial-review.md).
+[adversarial-review.md](../../../../.guild/wiki/entities/adversarial-review.md).
 
 ## Initiative Wrapper (opt-in)
 
@@ -804,7 +804,7 @@ release + docs) applies — the close-gate *contract* is frozen `[v2]`, the
 `definition_status`, `execution_status`, `release_status`,
 `documentation_status`. See
 [workflow-operating-model.md](workflow-operating-model.md) and
-[../initiatives/initiative-lifecycle-and-release-doc-sync.md](../initiatives/initiative-lifecycle-and-release-doc-sync.md).
+[../initiatives/initiative-lifecycle-and-release-doc-sync.md](../../../../.guild/wiki/entities/initiative-lifecycle-and-release-doc-sync.md).
 
 ## Resumption
 
@@ -828,7 +828,7 @@ run is active" with the standard resume / abort / force-takeover prompt
 `.guild/settings.json`, default 30 min) offers force-takeover. The lock
 filename, the `heartbeat-at`/`stale_after_minutes` stale predicate, the
 validity definition, and the atomic-write rule are specified once in
-[`target-architecture.md`](../architecture/target-architecture.md) (Persistence
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) (Persistence
 discipline); this section states the lifecycle behavior.
 
 Brownfield work adds a **graph-staleness probe**:

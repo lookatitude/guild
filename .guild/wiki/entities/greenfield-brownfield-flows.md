@@ -104,7 +104,7 @@ flowchart TD
 
 Brownfield scanning layers (implemented by the internalized
 knowledge-graph engine — see
-[codebase-understanding.md](../architecture/codebase-understanding.md); the
+[codebase-understanding.md](codebase-understanding.md); the
 engine is Guild-owned, never a runtime dependency on the `understand-anything`
 plugin):
 
@@ -156,7 +156,7 @@ task/run/decision/skill/agent/feature ↔ those). All additions obey the locked
 derived-deletable-filesystem-canonical discipline: no new store, no MCP, no
 embeddings, no SQLite-as-record. The label schema, edge-type set, and
 `knowledge-links.json` schema are canonical in
-[../architecture/target-architecture.md](../architecture/target-architecture.md)
+[../architecture/target-architecture.md](../../../../.guild/wiki/entities/target-architecture.md)
 and consumed here by pointer (never re-spelled).
 
 ## Brownfield Evidence Map
@@ -253,7 +253,7 @@ flowchart TD
 The brownfield reverse-spec engine is a **full Guild-owned analyzer engine**,
 not a thin harness. It is the internalized Guild-owned knowledge-graph
 engine specified in
-[../architecture/codebase-understanding.md](../architecture/codebase-understanding.md)
+[../architecture/codebase-understanding.md](codebase-understanding.md)
 — forked from the Understand-Anything methodology (MIT, attribution
 preserved), built as Guild-owned skills/scripts, never a runtime plugin
 dependency. Per the v2-EPP-1 (G6-amended) external-plugin policy, Codex

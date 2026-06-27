@@ -6,9 +6,9 @@ importance: critical
 applies_to: [plugin]
 source_refs:
   - .guild/runs/run-learn-knowledge-convergence-20260529-094021/run.yaml
-  - docs/knowledge/decisions/host-adapter-contract.md
-  - docs/knowledge/decisions/continuous-knowledge-and-learning-loop.md
-  - docs/knowledge/architecture/target-architecture.md
+  - .guild/wiki/decisions/host-adapter-contract.md
+  - plugin/.guild/wiki/decisions/continuous-knowledge-and-learning-loop.md
+  - .guild/wiki/entities/target-architecture.md
   - plugin/scripts/lib/host-types.ts
 related:
   - workspace-knowledge-model
@@ -39,7 +39,7 @@ trace events against.
 
 - **Host resolution is NOT re-decided here.** `host:` in `run.yaml` is resolved
   via the FROZEN host-adapter contract
-  (`docs/knowledge/decisions/host-adapter-contract.md`). `HostKind` is the
+  (`.guild/wiki/decisions/host-adapter-contract.md`). `HostKind` is the
   canonical 9-value union in `plugin/scripts/lib/host-types.ts`. The wrapper is
   **host-neutral**: it records `{requested, resolved}` and never hard-codes
   `claude`. See §"Host resolution" below.
@@ -62,7 +62,7 @@ trace events against.
   (a human-reviewed lifecycle manifest — category 3) and `provenance.json` is
   **JSON** (machine-only derived state — category 4); both are exactly the
   boundary-based choices fixed by
-  [`communication-format-policy.md`](communication-format-policy.md)
+  [`communication-format-policy.md`](../../../../.guild/wiki/decisions/communication-format-policy.md)
   §"The policy — format by artifact category", not a per-file preference. Note
   that **`run.yaml.started_at`** (§1 field table) is the field the policy's
   §"OD-4 discriminator" reads as the post-effective-date enforcement boundary

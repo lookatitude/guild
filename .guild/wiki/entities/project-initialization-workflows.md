@@ -19,7 +19,7 @@ related: [greenfield-brownfield-flows, lifecycle-overview, codebase-understandin
 
 `/guild:init` is the **Init phase** of the one state machine with six phase
 entrypoints (see
-[../lifecycle/lifecycle-overview.md](../lifecycle/lifecycle-overview.md)). It
+[../lifecycle/lifecycle-overview.md](lifecycle-overview.md)). It
 establishes the project-level memory and policy that every future run uses. It
 must handle three cases:
 
@@ -35,7 +35,7 @@ The v2 grammar is `/guild:init` — the `:` namespace is retained by Claude
 Code; v2 drops only the redundant `guild-` prefix (D1:
 [`v2x-command-surface-dispatch-and-internalization.md`](../decisions/v2x-command-surface-dispatch-and-internalization.md)).
 It binds to the Init phase entrypoint contract in
-[../lifecycle/phase-entrypoints.md](../lifecycle/phase-entrypoints.md).
+[../lifecycle/phase-entrypoints.md](phase-entrypoints.md).
 
 ```text
 /guild:init [--new|--existing|--resume] [--share-mode=local|shared|hybrid]
@@ -138,7 +138,7 @@ consuming repo's `.guild/`. Every instance carries
 template strings, the instance/override placement rule, and the
 `indexes/knowledge-links.json` / `indexes/initiatives-registry.yaml` schemas
 are canonical in
-[../architecture/target-architecture.md](../architecture/target-architecture.md)
+[../architecture/target-architecture.md](../../../../.guild/wiki/entities/target-architecture.md)
 and consumed here by pointer (never re-spelled). The two `indexes/*` rollups
 are derived projections of `runs/**/provenance.json` + `runs/**/learning/*` +
 wiki + `initiatives/*` — deleting either loses nothing (rebuilt by re-scan).
@@ -175,8 +175,8 @@ via `project.yaml`). All **behavior** — including `share_mode` — lives in
 `.guild/settings.json`, never in `project.yaml`; `share_mode` is
 `settings.json → defaults.wiki.share_mode`. The split rule and the label
 taxonomy are canonical in
-[../architecture/command-surface.md](../architecture/command-surface.md) §4.4
-and [../architecture/target-architecture.md](../architecture/target-architecture.md);
+[../architecture/command-surface.md](command-surface.md) §4.4
+and [../architecture/target-architecture.md](../../../../.guild/wiki/entities/target-architecture.md);
 this page consumes them by pointer.
 
 ## Init Done-Criteria (aligned to lifecycle §2.1)
@@ -285,7 +285,7 @@ flowchart TB
 Reverse-engineering is performed by the **internalized Guild-owned
 knowledge-graph engine** (forked from the Understand-Anything methodology,
 MIT attribution preserved, never a runtime plugin dependency) — see
-[../architecture/codebase-understanding.md](../architecture/codebase-understanding.md)
+[../architecture/codebase-understanding.md](codebase-understanding.md)
 and [greenfield-brownfield-flows.md](greenfield-brownfield-flows.md). For
 Init-done only the cheap inventory tier (`CodebaseMap`) plus the
 confidence-tagged `architecture-map.md` stub are required; the passes below

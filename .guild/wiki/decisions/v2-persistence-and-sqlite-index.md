@@ -4,13 +4,13 @@ owner: architect
 confidence: high
 importance: high
 source_refs:
-  - docs/knowledge/research/persistence-schema.md                  # D-PS-1..6 decision surface + §4.2 schema body (cited inline)
-  - docs/knowledge/decisions/guild-boundary-config-and-tracking.md # CR-D .guild/ ownership map; the `.lock, index.sqlite` cache row (bound by pointer)
-  - docs/knowledge/decisions/config-surface-settings-json.md       # settings.json closed-key surface + reject rules (defaults.index.*)
-  - docs/knowledge/decisions/workspace-aware-init-and-federation.md # D-OQ1/2/3 + depth-1 + query-don't-duplicate (federation cache dependency)
-  - docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md # recall-before-read BM25 path (wiki_fts consumer); guild.handoff.v2
-  - docs/knowledge/decisions/v2-scope-and-risk-g1-g8.md            # G3 (filesystem-only durable state) + DH-3 (no new MCP)
-  - docs/knowledge/implementation/contract-map.md                  # B-post additive-contract registry (team-lead registers the 3 new schemas after)
+  - .guild/wiki/research/persistence-schema.md                  # D-PS-1..6 decision surface + §4.2 schema body (cited inline)
+  - .guild/wiki/decisions/guild-boundary-config-and-tracking.md # CR-D .guild/ ownership map; the `.lock, index.sqlite` cache row (bound by pointer)
+  - plugin/.guild/wiki/decisions/config-surface-settings-json.md       # settings.json closed-key surface + reject rules (defaults.index.*)
+  - plugin/.guild/wiki/decisions/workspace-aware-init-and-federation.md # D-OQ1/2/3 + depth-1 + query-don't-duplicate (federation cache dependency)
+  - plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md # recall-before-read BM25 path (wiki_fts consumer); guild.handoff.v2
+  - plugin/.guild/wiki/decisions/v2-scope-and-risk-g1-g8.md            # G3 (filesystem-only durable state) + DH-3 (no new MCP)
+  - .guild/wiki/_archive/v2-design/implementation-plans/contract-map.md                  # B-post additive-contract registry (team-lead registers the 3 new schemas after)
 created_at: 2026-05-26
 updated_at: 2026-05-26
 expires_at: null

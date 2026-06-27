@@ -4,12 +4,12 @@ owner: architect
 confidence: high
 importance: high
 source_refs:
-  - docs/knowledge/research/20-review-independence-and-dual-review-policy.md      # independence gradient, risk-based policy, dual-review for critical, escalation
-  - docs/knowledge/adversarial-review/cross-host-review-and-loop-control.md       # D-16 policy gate, FROZEN review_packet/result, AC-8 same-family guard, gate-pass rule
-  - docs/knowledge/decisions/v2-review-broker-and-artifact-bus.md                 # D-BR-A reviewer selection (STRONG/WEAK stamp), D-BR-E cloud consent
-  - docs/knowledge/decisions/v2-cross-host-orchestration.md                       # CR-4 review→cross-host affinity; CR-2/CH-4 security delegation
-  - docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md               # tier ladder; advisor escalation vs adversarial review
-  - docs/knowledge/decisions/autonomy-locking-validity.md                         # immutable always-ask hard set (destructive / network / spend)
+  - .guild/wiki/_archive/v2-design/sources/20-review-independence-and-dual-review-policy.md      # independence gradient, risk-based policy, dual-review for critical, escalation
+  - plugin/.guild/wiki/entities/cross-host-review-and-loop-control.md       # D-16 policy gate, FROZEN review_packet/result, AC-8 same-family guard, gate-pass rule
+  - plugin/.guild/wiki/decisions/v2-review-broker-and-artifact-bus.md                 # D-BR-A reviewer selection (STRONG/WEAK stamp), D-BR-E cloud consent
+  - plugin/.guild/wiki/decisions/v2-cross-host-orchestration.md                       # CR-4 review→cross-host affinity; CR-2/CH-4 security delegation
+  - plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md               # tier ladder; advisor escalation vs adversarial review
+  - plugin/.guild/wiki/decisions/autonomy-locking-validity.md                         # immutable always-ask hard set (destructive / network / spend)
 created_at: 2026-06-14
 updated_at: 2026-06-14
 expires_at: null
@@ -50,7 +50,7 @@ reality (verified 2026-06-14 against `plugin/scripts/lib/host-router.ts`,
 
 Guild ships cross-family adversarial review: a host drafts an artifact and a
 **different provider family** critiques it. The research brief
-([`20-review-independence-and-dual-review-policy.md`](../research/20-review-independence-and-dual-review-policy.md))
+([`20-review-independence-and-dual-review-policy.md`](../../../../.guild/wiki/_archive/v2-design/sources/20-review-independence-and-dual-review-policy.md))
 establishes four things that must hold for that review to be trustworthy and
 records one consequence the shipped policy does not yet implement:
 
@@ -92,7 +92,7 @@ binds them by pointer; it does not restate or change them.
   same-family fresh-context subagent = **WEAK**, marked `independence: weak` and
   recorded in the trail. Codex/other host unavailable ⇒ **degrade to WEAK, never
   hard-block**. Reviewer is **read-only**, sees the packet + artifact only.
-  Source: [`cross-host-review-and-loop-control.md`](../adversarial-review/cross-host-review-and-loop-control.md)
+  Source: [`cross-host-review-and-loop-control.md`](../entities/cross-host-review-and-loop-control.md)
   §"Independence rules" + §"Sentinel Hardening"; realized by D-BR-A in
   [`v2-review-broker-and-artifact-bus.md`](v2-review-broker-and-artifact-bus.md).
   Shipped in `host-router.ts` (`independence: "strong" | "weak"`) and the

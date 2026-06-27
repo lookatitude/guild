@@ -79,7 +79,7 @@ auto-selects E2E / smoke / a11y / perf / integration from CodebaseMap + plan
 signals; surfaced + overridable matrix (never silent); executes discovered
 harnesses under the run sandbox + wall-clock budgets (the canonical
 `defaults.quality.budget` block — `per_class_minutes` / `total_minutes` — is
-defined once in [`../architecture/command-surface.md`](../architecture/command-surface.md)
+defined once in [`../architecture/command-surface.md`](../entities/command-surface.md)
 §4.4 and cited here by pointer, not re-spelled; OQ-3);
 `qa-test-strategy` producer vs `security+architect` `G-quality` challenger.
 Frozen contract `guild.quality.v1`, path UNCHANGED

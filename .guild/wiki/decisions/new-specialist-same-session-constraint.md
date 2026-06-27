@@ -3,7 +3,7 @@ type: decision
 owner: architect
 confidence: medium
 importance: medium
-source_refs: ["docs/knowledge/decisions/current-project-implementation-plan.md#new-specialist-same-session-constraint"]
+source_refs: ["plugin/.guild/wiki/decisions/current-project-implementation-plan.md#new-specialist-same-session-constraint"]
 created_at: 2026-05-26
 updated_at: 2026-05-26
 expires_at: null

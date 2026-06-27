@@ -31,7 +31,7 @@ Add a user-facing diagnose command backed by `guild:diagnose` skill - because
 self-fix should be dogfooded through the same command/skill/plugin surface users
 operate, and edits must remain gated by explicit user approval. In v2 this command
 is `/guild fix` (renamed from `/guild:diagnose`; see
-`docs/knowledge/architecture/command-surface.md §5`).
+`plugin/.guild/wiki/entities/command-surface.md §5`).
 
 ## Consequences
 Guild has a standard way to inspect recent `.guild/runs` evidence, accept

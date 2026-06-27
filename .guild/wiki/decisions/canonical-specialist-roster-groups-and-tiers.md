@@ -7,9 +7,9 @@ source_refs:
   - .guild/initiatives/active/plugin-docs-code-reconciliation/audit/reconciliation-ledger.md   # R-003 (tier drift), R-010 (group drift)
   - .guild/initiatives/active/plugin-docs-code-reconciliation/audit/dynamic-team-composition.md # filesystem-enumeration rule (Decision §4) — input
   - plugin/agents/                                                                              # the 14 agent files — canonical per-specialist self-declaration (group + model:)
-  - docs/knowledge/team-and-routing/team-composition.md                                         # the 4-group table this ADR supersedes
+  - plugin/.guild/wiki/entities/team-composition.md                                         # the 4-group table this ADR supersedes
   - plugin/skills/meta/team-compose/SKILL.md                                                    # §7 default_tier table — conform-target
-  - docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md                             # §1 tier ladder, §2 auto-score, §3 advisor, §7 (5-row augmenting table)
+  - plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md                             # §1 tier ladder, §2 auto-score, §3 advisor, §7 (5-row augmenting table)
 created_at: 2026-06-07
 updated_at: 2026-06-07
 sensitivity: internal
@@ -150,9 +150,9 @@ This ADR creates the following conform obligations. Each is a Wave-2 lane; this 
 | Target | Owner (lane) | Action |
 |---|---|---|
 | `plugin/agents/*.md` | specialist-agent-writer (**L-ROSTER-CONFORM**, Wave 2) | Verify each body `Default tier` + group line matches D1/D2 (they are the source — mostly already correct; tidy `seo`'s "commercial-flavored" aside so it doesn't read as a group reassignment). |
-| `docs/knowledge/team-and-routing/team-composition.md` | docs-writer / specialist-agent-writer | Replace the 4-group table with the D1 3-group table; move `social-media`/`seo` back to content & comms; drop `ops`/`writing`. |
+| `plugin/.guild/wiki/entities/team-composition.md` | docs-writer / specialist-agent-writer | Replace the 4-group table with the D1 3-group table; move `social-media`/`seo` back to content & comms; drop `ops`/`writing`. |
 | `plugin/skills/meta/team-compose/SKILL.md §7` | skill-author | Per D4, **read tiers from frontmatter** rather than maintaining a table; if a table is kept it must mirror the D2 values (`security`=powerful; content/commercial=mid). Remove the `cheap→mid` default notation (replace with D3's single-default + §2-floor framing). |
-| `docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §7` | docs-writer | Add a pointer: §7 tabulates only the 5 augmenting types; the canonical full-14 default-tier table lives in **this ADR**. |
+| `plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md §7` | docs-writer | Add a pointer: §7 tabulates only the 5 augmenting types; the canonical full-14 default-tier table lives in **this ADR**. |
 | Any standalone roster doc | docs-writer | **N/A — no separate `specialist-roster.md` exists.** The roster grouping (3-group) + tier reflection is carried by `team-and-routing/team-composition.md` (row above, conformed). Resolved there; no additional roster doc to update. |
 | Website specialist/roster pages | followup | L5-verified to already follow the agent files (3-group, frontmatter tiers) — **verify** no residual `cheap→mid`/4-group copy; likely no-op. |
 

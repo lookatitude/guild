@@ -5,8 +5,8 @@ confidence: high
 importance: high
 source_refs:
   - /Users/miguelp/Projects/guild/docs/v2/README.md
-  - /Users/miguelp/Projects/guild/docs/knowledge/README.md
-  - /Users/miguelp/Projects/guild/docs/knowledge/decisions/workspace-knowledge-flow.md
+  - /Users/miguelp/Projects/guild/.guild/wiki/_archive/v2-design/scaffolding/README.md
+  - /Users/miguelp/Projects/guild/.guild/wiki/decisions/workspace-knowledge-flow.md
   - /Users/miguelp/Projects/guild/plugin/install.sh
   - /Users/miguelp/Projects/guild/plugin/scripts/lib/per-host-packaging.ts
 created_at: 2026-06-18

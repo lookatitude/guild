@@ -4,12 +4,12 @@ owner: architect
 confidence: high
 importance: high
 source_refs:
-  - docs/knowledge/research/cross-host-review-broker.md          # D-BR-1..6
-  - docs/knowledge/research/artifact-bus.md                      # AB-1..6
-  - docs/knowledge/decisions/v2-runtime-and-execution-model.md   # ADR-RE-5 host_capability.v1; RE-1/RE-6 run-state/run-manifest
-  - docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md  # guild.handoff.v2 §5
-  - docs/knowledge/decisions/v2-security-and-untrusted-content.md    # packet egress / cross-host trust
-  - docs/knowledge/adversarial-review/cross-host-review-and-loop-control.md  # FROZEN review_packet.v1 / review_result.v1 + D-16
+  - .guild/wiki/research/cross-host-review-broker.md          # D-BR-1..6
+  - .guild/wiki/research/artifact-bus.md                      # AB-1..6
+  - plugin/.guild/wiki/decisions/v2-runtime-and-execution-model.md   # ADR-RE-5 host_capability.v1; RE-1/RE-6 run-state/run-manifest
+  - plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md  # guild.handoff.v2 §5
+  - plugin/.guild/wiki/decisions/v2-security-and-untrusted-content.md    # packet egress / cross-host trust
+  - plugin/.guild/wiki/entities/cross-host-review-and-loop-control.md  # FROZEN review_packet.v1 / review_result.v1 + D-16
 created_at: 2026-05-26
 updated_at: 2026-05-26
 expires_at: null
@@ -36,8 +36,8 @@ program: T3 (v2.0 full-scope)
 **Accepted (operator-ratified 2026-05-26; v2.0-full-scope program).**
 
 Consolidates the two Track-3 briefs
-[`artifact-bus.md`](../research/artifact-bus.md) (AB-1..6) and
-[`cross-host-review-broker.md`](../research/cross-host-review-broker.md)
+[`artifact-bus.md`](../../../../.guild/wiki/research/artifact-bus.md) (AB-1..6) and
+[`cross-host-review-broker.md`](../../../../.guild/wiki/research/cross-host-review-broker.md)
 (D-BR-1..6) into ONE decision set. They are filed as one ADR because they
 describe **two layers of a single coordination substrate**: how agents —
 possibly cross-host — *publish and consume* artifacts (the bus), and how
@@ -118,7 +118,7 @@ The coordination substrate is the `.guild/` filesystem (blackboard topology,
 `artifact-bus.md §1.1`). The **artifact bus** is the publish/consume layer; the
 **review broker** is a policy consumer that rides it. Both obey CR-D atomic-write
 + `.guild/.lock` discipline
-([`guild-boundary-config-and-tracking.md`](guild-boundary-config-and-tracking.md))
+([`guild-boundary-config-and-tracking.md`](../../../../.guild/wiki/decisions/guild-boundary-config-and-tracking.md))
 and add **no daemon, socket, or HTTP server** (DH-3 / G3). All new paths sit
 under `.guild/runs/<run-id>/bus/` (local, gitignored, derived/rebuildable from
 receipts + the existing review trail).
@@ -189,7 +189,7 @@ null/unused in v2.0. MCP is an alternative future carrier for the same seam.
 #### D-BR-A (← D-BR-1) — `guild:review-broker` is the new abstraction; `guild:codex-review` becomes an internal adapter
 
 Author a new skill `guild:review-broker` implementing the D-16 policy
-([`cross-host-review-and-loop-control.md`](../adversarial-review/cross-host-review-and-loop-control.md)):
+([`cross-host-review-and-loop-control.md`](../entities/cross-host-review-and-loop-control.md)):
 policy gate → capability probe → reviewer selection (creator_host ≠
 reviewer_host ⇒ STRONG; same-host ⇒ WEAK, stamped) → `review_packet.v1` build +
 redaction → adapter dispatch → `review_result.v1` parse → checksum-bound
@@ -356,16 +356,16 @@ lenient-reader rule — listed so the lead has the full registration picture):
 
 | Contract | Canonical body pointer | Touched by |
 |---|---|---|
-| `guild.review_packet.v1` (FROZEN) | [`cross-host-review-and-loop-control.md §"ReviewPacket"`](../adversarial-review/cross-host-review-and-loop-control.md) | D-BR-A (published as `review/*` bus artifact; fields unchanged) |
-| `guild.review_result.v1` (FROZEN) | [`cross-host-review-and-loop-control.md §"ReviewResult"`](../adversarial-review/cross-host-review-and-loop-control.md) | D-BR-A, D-BR-C, D-BR-D (parsed; fields unchanged) |
+| `guild.review_packet.v1` (FROZEN) | [`cross-host-review-and-loop-control.md §"ReviewPacket"`](../entities/cross-host-review-and-loop-control.md) | D-BR-A (published as `review/*` bus artifact; fields unchanged) |
+| `guild.review_result.v1` (FROZEN) | [`cross-host-review-and-loop-control.md §"ReviewResult"`](../entities/cross-host-review-and-loop-control.md) | D-BR-A, D-BR-C, D-BR-D (parsed; fields unchanged) |
 | `guild.host_capability.v1` | [`v2-runtime-and-execution-model.md §ADR-RE-5`](v2-runtime-and-execution-model.md) | D-BR-B (probe/bootstrap), D-XHOST (two additive-optional fields) |
 | `guild.run_state.v1` | [`v2-runtime-and-execution-model.md §ADR-RE-1`](v2-runtime-and-execution-model.md) | orthogonal — DAG/lane checkpoint vs bus publication record (no overlap) |
 | `guild.run_manifest.v1` | [`v2-runtime-and-execution-model.md §ADR-RE-6`](v2-runtime-and-execution-model.md) | multi-wave: per-wave `bus/log.jsonl`; program-level `bus_log_refs[]` for replay |
 | `guild.handoff.v2` | [`cost-aware-tiering-and-lean-context.md §5`](cost-aware-tiering-and-lean-context.md) | unchanged — bus entry appended AFTER the envelope is emitted + receipt written |
 | `guild.handoff_receipt.v1` (FROZEN) | `architecture/target-architecture.md §"Frozen-Contract Registry"` | unchanged — bus entry records receipt path + SHA-256; CAS indexes it |
 | `guild.security_event.v1` | [`v2-security-and-untrusted-content.md §D-AUDIT`](v2-security-and-untrusted-content.md) | egress/consent decisions on the remote seam emit security events |
-| `guild.trace_event.v2` / `events.jsonl` | [`v2-observability-and-replay.md`](v2-observability-and-replay.md) | distinct from `bus/log.jsonl`; optional `bus.event` span only |
-| CR-D atomic-write + `.lock` | [`guild-boundary-config-and-tracking.md`](guild-boundary-config-and-tracking.md) | reused for CAS/subscriber writes; `bus/log.jsonl` `O_APPEND` ≤ PIPE_BUF, else temp-rename |
+| `guild.trace_event.v2` / `events.jsonl` | [`v2-observability-and-replay.md`](../../../../.guild/wiki/decisions/v2-observability-and-replay.md) | distinct from `bus/log.jsonl`; optional `bus.event` span only |
+| CR-D atomic-write + `.lock` | [`guild-boundary-config-and-tracking.md`](../../../../.guild/wiki/decisions/guild-boundary-config-and-tracking.md) | reused for CAS/subscriber writes; `bus/log.jsonl` `O_APPEND` ≤ PIPE_BUF, else temp-rename |
 
 ## Consequences
 

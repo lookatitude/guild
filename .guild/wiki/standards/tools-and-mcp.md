@@ -177,7 +177,7 @@ Advisory agents attach to both producers and reviewers. They default to:
   work). This reuses the existing always-ask surface; it is not a new gate.
   The single enforceable boundary rule + the normative ownership map are
   stated once in
-  [`target-architecture.md`](../architecture/target-architecture.md) and the
+  [`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) and the
   ownership-map ADR; cited here by pointer.
 - The `audit` maintenance verb surfaces script hashes, filesystem writes,
   and network behavior for installed plugin code, **plus a static

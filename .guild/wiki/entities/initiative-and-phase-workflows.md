@@ -20,7 +20,7 @@ related: [initiative-lifecycle-and-release-doc-sync, workflow-operating-model, l
 > Archive/Close) are the **internal stages of the OPT-IN initiative wrapper**.
 > They are **NOT the six lifecycle phases** (Init / Ideation / Planning /
 > Development / Quality / Operations) defined in
-> [../lifecycle/lifecycle-overview.md](../lifecycle/lifecycle-overview.md).
+> [../lifecycle/lifecycle-overview.md](lifecycle-overview.md).
 > The six lifecycle phases are the one state machine; an initiative is an
 > opt-in wrapper that owns cross-phase progress and the D8 close gate. When
 > this doc says "Phase N" below, it means an *initiative sub-phase*, not a
@@ -91,7 +91,7 @@ narrative. The opt-in initiative posture and the interactive-by-default
 gate posture are unchanged: the rollup is read-only and adds no new
 user gate. The `Provenance` / `InitiativesRegistry` / `KnowledgeLinks`
 schemas are canonical in
-[../architecture/target-architecture.md](../architecture/target-architecture.md)
+[../architecture/target-architecture.md](../../../../.guild/wiki/entities/target-architecture.md)
 and consumed here by pointer (never re-spelled).
 
 Ambiguity handling:
@@ -407,7 +407,7 @@ Release record: the per-run release artifact is the frozen
 `guild.release.v1` contract — its single canonical field body (including the
 closed `outcome.status` enum `completed | rolled_back | aborted | partial`
 and `schema_version: guild.release.v1`) is defined once in
-[`../architecture/target-architecture.md`](../architecture/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
 §`guild.release.v1` and read field-for-field by the D8 close-gate release +
 doc-sync legs. This workflow cites that contract **by pointer** and does not
 re-spell a divergent release body; there is no separate initiative-scoped

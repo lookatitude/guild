@@ -3,7 +3,7 @@ type: concept
 owner: architect
 confidence: high
 importance: high
-source_refs: ["plugin/scripts/understand/lib/schema.ts", "docs/knowledge/architecture/codebase-understanding.md"]
+source_refs: ["plugin/scripts/understand/lib/schema.ts", "plugin/.guild/wiki/entities/codebase-understanding.md"]
 created_at: 2026-06-12
 updated_at: 2026-06-12
 expires_at: null
@@ -29,10 +29,10 @@ is the source of truth.** Field names and enum members are cited from
 v1-read/v2-write boundary live in
 [`codebase-understanding.md`](codebase-understanding.md) §"The knowledge tier"
 and in the contract-map row
-[`implementation/contract-map.md`](../implementation/contract-map.md) §B-post;
+[`implementation/contract-map.md`](../../../../.guild/wiki/_archive/v2-design/implementation-plans/contract-map.md) §B-post;
 the durable WHY (and the D-4 determinism contract this schema's consumers bind
 to) is ADR
-[`../decisions/knowledge-graph-v2-schema-boundary.md`](../decisions/knowledge-graph-v2-schema-boundary.md).
+[`../decisions/knowledge-graph-v2-schema-boundary.md`](../../../../.guild/wiki/decisions/knowledge-graph-v2-schema-boundary.md).
 
 ## Why a separate contract
 
@@ -131,9 +131,9 @@ conflated**:
 | Wiki-page `labels:` frontmatter (`domain` / `feature` / `component` / `concern` / `status` / `relevance`) | Canonical `.guild/wiki/` pages | `.guild/project.yaml → label_taxonomy:` (project-scoped, human-gated) | Classify **canonical wiki pages** for advisory-agent retrieval. |
 
 The canonical wiki `labels:` axis is defined in
-[`../knowledge-memory/memory-and-knowledge.md`](../knowledge-memory/memory-and-knowledge.md)
+[`../knowledge-memory/memory-and-knowledge.md`](memory-and-knowledge.md)
 and
-[`../knowledge-memory/knowledge-and-advisory.md`](../knowledge-memory/knowledge-and-advisory.md).
+[`../knowledge-memory/knowledge-and-advisory.md`](knowledge-and-advisory.md).
 A `wiki_page` knowledge node is a **derived projection** of a canonical wiki
 page; its node `category`/`importance`/`labels[]` are computed by K2
 (wiki/KB index) and do **not** overwrite the page's canonical `labels:`
@@ -146,7 +146,7 @@ frontmatter (the wiki stays canonical, the graph is the derived index).
 `kg-query` extends scoring beyond name/id/`source_refs` to use **importance +
 confidence + topic proximity**, within the existing graph retrieval sub-budget
 (1200 tokens, unchanged — see
-[`knowledge-and-advisory.md`](../knowledge-memory/knowledge-and-advisory.md)
+[`knowledge-and-advisory.md`](knowledge-and-advisory.md)
 §"Graph-retrieval budget sub-policy"). The shipped formula
 (`kg-query.ts`, deterministic — no LLM):
 

@@ -159,7 +159,7 @@ dir, never outside `.guild/`. The plugin ships only the canonical
 read-only base library + template; project specialists are project state.
 The version string, the `derived_from_template` invariant, and the single
 enforceable boundary rule are stated once in
-[`target-architecture.md`](../architecture/target-architecture.md) and the
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) and the
 ownership-map ADR; cited here by pointer, never re-spelled.
 
 ## Tools and MCP in Team Compose

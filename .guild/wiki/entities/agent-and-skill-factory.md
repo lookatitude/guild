@@ -106,7 +106,7 @@ Create a new specialist only when all extraction signals pass:
 > `.guild/skills/` — never plugin state, never outside `.guild/`. A runtime
 > write into plugin state is a v2 defect. The single enforceable boundary
 > rule + the PreToolUse signature guard are stated once in
-> [`target-architecture.md`](../architecture/target-architecture.md) and the
+> [`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) and the
 > ownership-map ADR; cited here by pointer.
 
 ## Canonical Agent Template
@@ -115,7 +115,7 @@ There is exactly **one** canonical agent skeleton:
 `plugin/templates/agents/AGENT.template.md` (`guild.agent_template.v1`),
 shipped as **static, read-only plugin install state**; the version string,
 `derived_from_template` invariant, and the `.guild/` instance boundary are stated once in
-[`target-architecture.md` → Canonical template-version strings](../architecture/target-architecture.md)
+[`target-architecture.md` → Canonical template-version strings](../../../../.guild/wiki/entities/target-architecture.md)
 and cited here by pointer. It pins the frontmatter keys + the required
 section-heading set only — no body prose. Every project specialist is a
 *fill* of this skeleton written to `.guild/agents/`.
@@ -138,7 +138,7 @@ formerly-missing fields, both first-class slots):
   the prose line is length-capped and **never trigger-bearing**. Free-text
   persona paragraphs are banned (prompt-bloat / routing-ambiguity). The
   canonical enum lives in
-  [`target-architecture.md`](../architecture/target-architecture.md);
+  [`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md);
   cited here, never re-spelled.
 
 Personas should not duplicate long skill instructions. Agents select and
@@ -149,7 +149,7 @@ sequence skills; skills encode the repeatable method.
 A specialist **instance** issue and the agent **template** itself being
 wrong are different problems sharing the **same** one-vs-template classifier as skills
 (stated canonically in
-[`target-architecture.md`](../architecture/target-architecture.md), cited by
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md), cited by
 pointer):
 
 - A single classifier in `guild:reflect` — and the per-phase
@@ -175,7 +175,7 @@ pointer):
 The factory is not a separate loop. It is wired into the **single
 per-phase LearningCheckpoint** (`guild.learning_checkpoint.v1`, stated
 canonically in
-[`target-architecture.md`](../architecture/target-architecture.md) and cited
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) and cited
 by pointer — no new gate, no new prompt):
 
 - The factory's systemic-vs-specific bucketing is **not** a separate loop —

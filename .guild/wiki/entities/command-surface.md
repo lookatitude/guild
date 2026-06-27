@@ -47,7 +47,7 @@ frozen v1 plan and this v2 spec disagree, this v2 spec plus the more-specific
 checked-in artifacts win. The v1 `§13.1` table also omitted `/guild:diagnose`
 (a shipped-but-undocumented drift); the clean-slate redesign here closes that
 drift by mapping `/guild:diagnose` → `/guild fix` (see
-[MIGRATION.md](../MIGRATION.md)).
+[MIGRATION.md](MIGRATION.md)).
 
 ## The one mental model
 
@@ -88,7 +88,7 @@ six phase entrypoints, three lenses (linear / phase / initiative)*.
   are durable subsystems. For `initiative`, `new|status|resume|update|close`
   are the primary user-facing lifecycle sub-verbs and `list|archive|restore`
   are operational sub-verbs on the same noun (full set enumerated in
-  [`../initiatives/initiative-and-phase-workflows.md`](../initiatives/initiative-and-phase-workflows.md)).
+  [`../initiatives/initiative-and-phase-workflows.md`](initiative-and-phase-workflows.md)).
 - **Maintenance verbs**: `evolve rollback stats audit fix` — Guild-on-Guild,
   rarely run by an end user mid-task.
 - **Bare**: `/guild [brief]` → smart phase detection (always surfaced and
@@ -99,7 +99,7 @@ advances a phase artifact. Everything else is a noun or a maintenance verb.
 
 **Canonical token set (these are the canonical verbs; `initiative`'s
 `list|archive|restore` are operational sub-verbs on the same noun, enumerated
-in [`../initiatives/initiative-and-phase-workflows.md`](../initiatives/initiative-and-phase-workflows.md)):**
+in [`../initiatives/initiative-and-phase-workflows.md`](initiative-and-phase-workflows.md)):**
 
 | Class | Tokens | Maps to |
 |---|---|---|
@@ -324,7 +324,7 @@ documented command surface.
 `/guild team` is **not a command**. Team composition is strictly a step
 *inside* `/guild plan` with its own approval gate, plus inspection via
 `/guild status` and edits via the plan-approval `[edit]` response. Migration
-in [MIGRATION.md](../MIGRATION.md).
+in [MIGRATION.md](MIGRATION.md).
 
 ---
 
@@ -480,7 +480,7 @@ mapped onto the current schema — no schema migration, display only.
 At run-start preflight, the author host and available review providers are
 detected via `plugin/scripts/lib/provider-detect.ts` (called by the preflight,
 not by a `config` subcommand). See
-`docs/knowledge/adversarial-review/cross-host-review-and-loop-control.md`
+`plugin/.guild/wiki/entities/cross-host-review-and-loop-control.md`
 §"Provider Detection and Selection" for the full selection policy and
 same-family degradation rules. The communication contract (`review_result.v1`,
 packet/result/trail paths) is **unchanged** regardless of which provider is
@@ -571,7 +571,7 @@ rejected for Guild self-build; `defaults.wiki.autopromote: true` is rejected
 always.
 
 Migration of an existing v1 `config.yml` is mechanical and documented in
-[MIGRATION.md](../MIGRATION.md) §3 (old
+[MIGRATION.md](MIGRATION.md) §3 (old
 `loops/loop_cap/auto_approve/codex_review/codex_cap` → new keys; the on-open
 converter / `/guild:migrate` rewrites a v1 `config.yml` to `settings.json` —
 the runtime `config.yml` reader was removed in v2.0; the new `defaults:` block
@@ -809,7 +809,7 @@ Every gate uses the same three-choice shape (consistency = learnability):
   **authored in `/guild plan` and approved at the existing plan gate — NO new
   gate**. Canonical schema + composition rules (the closed enum, AC-1, the
   hard-set-∉-allowlist plan-validate reject, the lenient-reader rule) live
-  once in [`target-architecture.md`](target-architecture.md)
+  once in [`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
   (§`autonomy_policy` → `autonomy_contract` subsection); this section states
   only the gate behavior. **Collapsed-by-default rendering:** the plan-gate
   one-screen summary prints **one line per lane only when that lane's contract
@@ -832,7 +832,7 @@ Every gate uses the same three-choice shape (consistency = learnability):
   forward-compat posture already ratified for `guild.trace_event.v1`,
   generalized to all `guild.*.v1`; `autonomy_contract` carries its own
   independent `contract_version: guild.autonomy_contract.v1`. Canonical text:
-  [`target-architecture.md`](target-architecture.md) (§`autonomy_policy`).
+  [`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) (§`autonomy_policy`).
 - Mid-execution medium/high-significance questions surface inline via
   `guild:decisions`, unchanged from v1.
 - `--auto-approve=spec,plan` collapses those two gates to a printed line;
@@ -885,7 +885,7 @@ Another Guild run is active in this repo.
 
 The lock filename, the `heartbeat-at`/`stale_after_minutes` stale predicate,
 the validity definition, and the atomic-write rule are specified once in
-[`target-architecture.md`](target-architecture.md)
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
 (Persistence discipline); this section states the command behavior.
 
 **Optional read-through index (`[v2]`).** `/guild status`, `/guild
@@ -903,15 +903,15 @@ invocation with `--no-index` on `/guild status`, `/guild resume`, and
 `/guild stats` (one-shot filesystem scan, the cache untouched);
 `index: off` or `rm .guild/index.sqlite` are the persistent escapes (always
 safe — the index is never authoritative). Canonical text:
-[`target-architecture.md`](target-architecture.md) (Persistence discipline) +
-[`../observability/data-model.md`](../observability/data-model.md).
+[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) (Persistence discipline) +
+[`../observability/data-model.md`](../../../../.guild/wiki/entities/data-model.md).
 
 ### 5.4 Error shapes (all actionable)
 
 1. **Missing upstream artifact** → refusal + exact reproduction command
    (§5.1 example). Never a stack trace.
 2. **Removed v1 command** → the migration redirect message (see §7 and
-   [MIGRATION.md](../MIGRATION.md)) — names the v2 replacement, exits
+   [MIGRATION.md](MIGRATION.md)) — names the v2 replacement, exits
    non-zero, runs nothing.
 3. **Phase produced a gap** (e.g. a plan lane with no validation criteria) →
    the phase **does not advance**; it surfaces the specific gap and routes
@@ -984,11 +984,11 @@ period — this was documentation, not a functional shim (ran nothing,
 advanced nothing). **Redirect stubs were deleted in v2.0 (this release).**
 A bare unknown subcommand now prints usage help only. The complete
 command-by-command mapping and flag cheat-sheets live in
-[MIGRATION.md](../MIGRATION.md).
+[MIGRATION.md](MIGRATION.md).
 
 The complete command-by-command mapping, every printed redirect message, the
 config and flag cheat-sheets, the deprecation timeline, and the
-self-build/CI caller fix list live in **[MIGRATION.md](../MIGRATION.md)**
+self-build/CI caller fix list live in **[MIGRATION.md](MIGRATION.md)**
 (repo-root, the most discoverable location). This design-spec doc does not
 duplicate that table; it is the single migration reference.
 
@@ -1013,13 +1013,13 @@ standard rigor); **every efficiency lever is opt-in and discoverable** via
 
 ## Cross-references
 
-- [phase-entrypoints.md](../lifecycle/phase-entrypoints.md) — binds each
+- [phase-entrypoints.md](phase-entrypoints.md) — binds each
   phase concept to its C1 command verb; owns the per-phase upstream-resolution
   contract and the auto-detect contract surface.
-- [v2-index.md](v2-index.md) — v2 architecture index and reading order; links
+- [v2-index.md](../context/v2-index.md) — v2 architecture index and reading order; links
   this doc and `MIGRATION.md` from the command-surface reading-order entry.
-- [MIGRATION.md](../MIGRATION.md) — the v1 → v2 migration reference.
-- [lifecycle-overview.md](../lifecycle/lifecycle-overview.md) — the six-phase
+- [MIGRATION.md](MIGRATION.md) — the v1 → v2 migration reference.
+- [lifecycle-overview.md](lifecycle-overview.md) — the six-phase
   state machine these verbs drive.
 
 ---
@@ -1030,6 +1030,6 @@ The Tier-2 `defaults:` closed-key block, the `settings.json`/`project.yaml` spli
 rule, the extended precedence ladder, and the PreToolUse / `/guild audit`
 boundary enforcement are summarized here for the command surface; the **single
 normative `.guild/` ownership map** lives in the ADR
-[`decisions/guild-boundary-config-and-tracking.md`](../decisions/guild-boundary-config-and-tracking.md)
+[`decisions/guild-boundary-config-and-tracking.md`](../../../../.guild/wiki/decisions/guild-boundary-config-and-tracking.md)
 and is pointed at from
-[architecture-overview.md](architecture-overview.md) State Boundaries.
+[architecture-overview.md](../../../../.guild/wiki/entities/architecture-overview.md) State Boundaries.

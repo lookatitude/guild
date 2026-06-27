@@ -182,7 +182,7 @@ This file captures failure modes that should shape v2 implementation and review.
 
 The verbatim `v2-EPP-1 (G6-amended)` policy that governs the row above
 (reproduced byte-for-byte from
-[`research/25`](../research/25-external-plugin-internalization-policy.md), not
+[`research/25`](../../../../.guild/wiki/_archive/v2-design/sources/25-external-plugin-internalization-policy.md), not
 paraphrased):
 
 > **v2-EPP-1 (G6-amended):** Codex (`openai-codex`) is the **sole permitted
@@ -199,7 +199,7 @@ paraphrased):
 | Edge case | Handling |
 |---|---|
 | Second `/guild` invocation while a run is active in the same repo | The single-writer advisory lock `.guild/.lock` (holds `run-id` + `pid` + `started-at` + `heartbeat-at`, acquired at Session Intake) is held. Surface "another run is active" with the standard resume / abort / force-takeover prompt — surfaced, never silent. Never silently block; never silently overwrite. |
-| Stale lock (`.guild/.lock` holder `pid` not a live process, **OR** `now - heartbeat-at` exceeds `lock.stale_after_minutes` in `.guild/settings.json`, default 30 min — canonical predicate in [`target-architecture.md`](target-architecture.md) Persistence §) | Treat the lock as stale and offer **force-takeover** (acquire the lock for the new run); never auto-steal without surfacing. |
+| Stale lock (`.guild/.lock` holder `pid` not a live process, **OR** `now - heartbeat-at` exceeds `lock.stale_after_minutes` in `.guild/settings.json`, default 30 min — canonical predicate in [`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) Persistence §) | Treat the lock as stale and offer **force-takeover** (acquire the lock for the new run); never auto-steal without surfacing. |
 | `/guild resume` reaches an invalid or truncated artifact | An artifact is **invalid** unless (schema/frontmatter parses) AND (required frontmatter fields present) AND (where applicable, the `approved:` flag check passes). On invalid/missing, resume rebuilds from the first invalid/missing step (existing resume-ladder behavior) — never builds on a corrupt upstream. |
 | Write interrupted mid-flush | Atomic writes (write temp file then `rename()`) are mandatory for all `.guild/` artifacts, so a reader never sees a half-written file; an interrupted write leaves the prior valid file or nothing, never a truncated artifact. |
 

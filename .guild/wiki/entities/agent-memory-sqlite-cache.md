@@ -5,7 +5,7 @@ confidence: high
 importance: high
 source_refs:
   - .guild/research/persistence-schema.md
-  - docs/knowledge/research/12-knowledge-graph-semantic-indexing.md
+  - .guild/wiki/_archive/v2-design/sources/12-knowledge-graph-semantic-indexing.md
 applies_to: [plugin]
 related:
   - agent-memory-systems
@@ -173,7 +173,7 @@ safe FTS rebuild — the column addition requires no schema break.
 
 ## Contract Map Registrations Required
 
-Three schema IDs must be registered in `docs/knowledge/implementation/contract-map.md`
+Three schema IDs must be registered in `.guild/wiki/_archive/v2-design/implementation-plans/contract-map.md`
 before implementation:
 - `guild.index_sqlite.v1` (the cache schema; version = `PRAGMA user_version`)
 - `guild.federation_wiki_cache.v1`
