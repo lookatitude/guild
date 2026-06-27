@@ -88,8 +88,15 @@ export function populateReleaseDocsWorkItems(
       // The docs work item can only start once release is resolved (D8 order).
       depends_on: d8.legs.release ? [] : [`${initiativeId}-wi-release`],
       acceptance: needsAssessment
-        ? ["documentation_status resolved to update_required or no_update_required"]
-        : ["docs-update work item verified", "documentation_status = updated"],
+        ? [
+            "documentation_status resolved to update_required or no_update_required",
+            "docs/v2 design-set impact assessed: confirm whether this initiative changed/added a feature surface that the docs/v2 canonical design set must reflect",
+          ]
+        : [
+            "docs-update work item verified",
+            "documentation_status = updated",
+            "docs/v2 design set reconciled in the same rollout (or 'docs/v2: n/a <reason>' recorded when the change does not touch a docs/v2-covered surface)",
+          ],
     });
   }
 

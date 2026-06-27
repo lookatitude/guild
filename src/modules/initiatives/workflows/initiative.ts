@@ -186,6 +186,11 @@ export interface D8Result {
  *   1. exec    — verify.md PASS + execution_status done.
  *   2. release — release_status released (rollback_required does NOT close).
  *   3. docs    — documentation_status resolved (updated | no_update_required).
+ *               The docs leg's work-item acceptance (initiative-workitems.ts)
+ *               requires the consumer-facing docs/v2 design set to be reconciled
+ *               in the same rollout whenever the initiative changed/added a
+ *               feature surface — an initiative that ships a feature cannot close
+ *               on a stale docs/v2 set.
  * Pure function; the sub-verb supplies the run evidence.
  */
 export function d8CloseGate(i: D8Input): D8Result {

@@ -1,7 +1,7 @@
 # Guild — repo orientation
 
 Guild is a cross-host plugin that ships 17 registered agents (14 product specialists
-plus advisor, developer, and doc-writer) and 110 skills across a
+plus advisor, developer, and doc-writer) and 109 skills across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
 capture, and a self-evolution loop with shadow-mode gating.
 

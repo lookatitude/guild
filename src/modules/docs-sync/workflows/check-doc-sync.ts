@@ -110,11 +110,17 @@ function isCommandFile(filePath: string): boolean {
 }
 
 /** Returns true iff the file path is a canonical reference-doc: under the umbrella
- *  .guild/wiki/ (v2) or the retired docs/knowledge/ (kept additively for back-compat). */
+ *  .guild/wiki/ (v2 KB), the consumer-facing v2 design set docs/v2/ (the single
+ *  guideline for plugin/website/benchmark), or the retired docs/knowledge/ (kept
+ *  additively for back-compat). A feature change that updates docs/v2/ satisfies
+ *  the rollout-coupling gate; the initiative D8 docs leg additionally requires the
+ *  docs/v2/ design set specifically (see initiative-workitems.ts). */
 function isRootDocFile(filePath: string): boolean {
   return (
     filePath.startsWith(".guild/wiki/") ||
     filePath.includes("/.guild/wiki/") ||
+    filePath.startsWith("docs/v2/") ||
+    filePath.includes("/docs/v2/") ||
     filePath.startsWith("docs/knowledge/")
   );
 }
