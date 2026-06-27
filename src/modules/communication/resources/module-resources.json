@@ -15,7 +15,7 @@
       "id": "TaskCompleted:task-completed.js",
       "source_path": "hooks/agent-team/dist/task-completed.js",
       "resource_path": "resources/hooks/agent-team/dist/task-completed.js",
-      "sha256": "1268705f0a5e7065ad2972a10afca5b3210ccd44d7b812bf6486fcfd34a29f64"
+      "sha256": "947755a150b36983326fafa3f0a8d58bfb30bf539e8ab9733bd9580fc004f8ff"
     },
     {
       "category": "hooks",
@@ -30,6 +30,13 @@
       "source_path": "hooks/agent-team/dist/teammate-idle.js",
       "resource_path": "resources/hooks/agent-team/dist/teammate-idle.js",
       "sha256": "c78161b759343dc5df73cc294d4211871dc61bb49fab0039abb6e544dc18e392"
+    },
+    {
+      "category": "scripts",
+      "id": "artifact-bus-cli",
+      "source_path": "scripts/artifact-bus-cli.ts",
+      "resource_path": "resources/scripts/artifact-bus-cli.ts",
+      "sha256": "96da8030629109ba2495ba2ee6208e5f24c15bc5f83554b29b7dc1fba5d7952a"
     },
     {
       "category": "scripts",
@@ -58,6 +65,13 @@
       "source_path": "scripts/comms/no-accidental-write.cli.ts",
       "resource_path": "resources/scripts/comms/no-accidental-write.cli.ts",
       "sha256": "a5ad351d7450528b26ce3bd7a17a21e0a2cc7686a532a4f017c52aca47d90a55"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/artifact-bus",
+      "source_path": "scripts/lib/artifact-bus.ts",
+      "resource_path": "resources/scripts/lib/artifact-bus.ts",
+      "sha256": "ac14f5bdfe34b7bf7a041e00f48893cd1d04241113bc3d4c1a70c8c21381f935"
     }
   ]
 }

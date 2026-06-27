@@ -75,6 +75,7 @@ import { scrubbedWrite, writeScrubApprovalRequest } from "../lib/security/scrubb
 import { applySecretsPolicy } from "../lib/security/secrets.js";
 import { readSecurityConfig } from "../lib/security/config.js";
 import { emitBusEvent } from "../lib/bus-emit.js";
+import { processFanout } from "../../scripts/lib/artifact-bus";
 import {
   evaluateContextCompliance,
   recordContextCompliance,
@@ -658,6 +659,20 @@ async function main(): Promise<void> {
     team_name: (payload.team_name ?? "").trim() || undefined,
     detail: laneStatus === "done" ? undefined : `lane status: ${laneStatus}`,
   });
+
+  // ── D-BUS-2: generalized artifact-bus fan-out ─────────────────────────────
+  // After each bus-log append, the TaskCompleted hook scans the subscriber
+  // registry and fires matching `hook` callbacks (records the delivery in
+  // bus/fanout.jsonl); `poll` subscribers tail the log themselves; `webhook-url`
+  // is the deferred D-XHOST remote seam. Distinct from the agent_bus_event stream
+  // above (different log/schema). Best-effort + non-throwing — never blocks.
+  try {
+    processFanout(runDir, () => new Date().toISOString());
+  } catch (err) {
+    process.stderr.write(
+      `[task-completed] WARN: artifact-bus fan-out failed: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  }
 
   // ── Context-assemble compliance (deterministic enforcement) ───────────────
   // Closes the recurring `all-lanes/no-assemble` gap (evolve run-5e445ca4
