@@ -113,7 +113,7 @@
       "id": "sync-migration",
       "source_path": "scripts/sync-migration.ts",
       "resource_path": "resources/scripts/sync-migration.ts",
-      "sha256": "61b094703391087b3d62e128676bc0a80a3425e97907ffd33d12f9097d45b47b"
+      "sha256": "c167d38cf300038d46c36fcd20592f1cfae90d4e620b08a46883a5a77be0edc2"
     },
     {
       "category": "scripts",

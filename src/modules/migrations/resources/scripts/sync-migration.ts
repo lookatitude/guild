@@ -3,13 +3,13 @@
  * scripts/sync-migration.ts
  *
  * F7 fix: single-source generator for MIGRATION.md.
- * Canonical: docs/knowledge/MIGRATION.md  (hand-authored by docs-writer)
- * Targets:
- *   plugin/MIGRATION.md  — full copy, links rewritten for plugin/, banner injected.
+ * Canonical: plugin/.guild/wiki/entities/MIGRATION.md  (hand-authored by docs-writer)
+ * Target (what main() writes/checks):
  *   MIGRATION.md (root)  — pointer stub with digest extracted from canonical.
+ * `generatePluginCopy()` is a retained-but-uninvoked helper for a plugin/MIGRATION.md full copy.
  *
  * Usage (run from repo root):
- *   npx tsx plugin/scripts/sync-migration.ts          # write both targets
+ *   npx tsx plugin/scripts/sync-migration.ts          # write the root stub
  *   npx tsx plugin/scripts/sync-migration.ts --check  # drift-detect, exit 1 if stale
  *   npx tsx plugin/scripts/sync-migration.ts --cwd <repo-root>
  *
@@ -35,21 +35,28 @@ import { hasTopLevelKey, replaceTopLevelLine } from "./lib/frontmatter";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const CANONICAL_REL = path.join("docs", "knowledge", "MIGRATION.md");
+const CANONICAL_REL = path.join("plugin", ".guild", "wiki", "entities", "MIGRATION.md");
 const PLUGIN_TARGET_REL = path.join("plugin", "MIGRATION.md");
 const ROOT_TARGET_REL = "MIGRATION.md";
 
 const LINK_DIRS = ["architecture", "lifecycle", "decisions"] as const;
 type LinkDir = (typeof LINK_DIRS)[number];
+// Where each old docs/knowledge link-dir landed in the v2 plugin wiki (harvest 2026-06-27).
+// (The real canonical's digest carries no such links; this only rewrites any that appear.)
+const WIKI_SUBDIR: Record<LinkDir, string> = {
+  architecture: "entities",
+  lifecycle: "entities",
+  decisions: "decisions",
+};
 
-/** Prefix map for plugin/ target: canonical-relative → plugin/-relative. */
+/** Prefix map for plugin/ target (at plugin/): link-dir → .guild/wiki/<subdir>/. */
 const PLUGIN_PREFIX_MAP: Record<string, string> = Object.fromEntries(
-  LINK_DIRS.map((d) => [`](${d}/`, `](../docs/knowledge/${d}/`])
+  LINK_DIRS.map((d) => [`](${d}/`, `](.guild/wiki/${WIKI_SUBDIR[d]}/`])
 );
 
-/** Prefix map for root target: canonical-relative → repo-root-relative. */
+/** Prefix map for root target (at repo root): link-dir → plugin/.guild/wiki/<subdir>/. */
 const ROOT_PREFIX_MAP: Record<string, string> = Object.fromEntries(
-  LINK_DIRS.map((d) => [`](${d}/`, `](docs/knowledge/${d}/`])
+  LINK_DIRS.map((d) => [`](${d}/`, `](plugin/.guild/wiki/${WIKI_SUBDIR[d]}/`])
 );
 
 const STUB_DIGEST_START = "<!-- STUB-DIGEST:START -->";
@@ -96,7 +103,7 @@ function parseFrontMatter(content: string): { fmRaw: string; body: string } {
  * Replace (or insert) `source_refs:` in fmRaw to point at the canonical.
  */
 function overrideSourceRefs(fmRaw: string): string {
-  const replacement = `source_refs: ["docs/knowledge/MIGRATION.md"]`;
+  const replacement = `source_refs: ["plugin/.guild/wiki/entities/MIGRATION.md"]`;
   // Byte-preserving top-level line swap via the shared helper (OD-3).
   if (hasTopLevelKey(fmRaw, "source_refs")) {
     return replaceTopLevelLine(fmRaw, "source_refs", replacement).text;
@@ -171,12 +178,12 @@ function stripFenceMarkers(body: string): string {
 // ── Generator: plugin/ full copy ─────────────────────────────────────────
 
 const PLUGIN_BANNER = `<!-- GENERATED FILE — DO NOT EDIT BY HAND.
-     Source: docs/knowledge/MIGRATION.md (canonical).
+     Source: plugin/.guild/wiki/entities/MIGRATION.md (canonical).
      Regenerate from the umbrella repo root: npx tsx plugin/scripts/sync-migration.ts   (drift-check: --check).
      Only link-path prefixes differ from canonical (rewritten for plugin/). -->`;
 
 const PLUGIN_BLOCKQUOTE = `> **Generated copy — do not edit by hand.** Canonical source:
-> [\`docs/knowledge/MIGRATION.md\`](../docs/knowledge/MIGRATION.md). This package
+> [\`plugin/.guild/wiki/entities/MIGRATION.md\`](plugin/.guild/wiki/entities/MIGRATION.md). This package
 > copy is regenerated from it (only link paths are rewritten). Edit the
 > canonical, then regenerate.`;
 
@@ -207,20 +214,19 @@ export function generatePluginCopy(canonical: string): string {
 // ── Generator: root pointer stub ─────────────────────────────────────────
 
 const ROOT_BANNER = `<!-- GENERATED FILE — DO NOT EDIT BY HAND.
-     Source: docs/knowledge/MIGRATION.md (canonical). Repo-root pointer stub.
+     Source: plugin/.guild/wiki/entities/MIGRATION.md (canonical). Repo-root pointer stub.
      Regenerate from the umbrella repo root: npx tsx plugin/scripts/sync-migration.ts   (drift-check: --check). -->`;
 
 const ROOT_POINTER_BLOCKQUOTE = `> **This is a pointer.** The canonical, maintained v1 → v2 migration guide
-> lives at **[\`docs/knowledge/MIGRATION.md\`](docs/knowledge/MIGRATION.md)** (the
+> lives at **[\`plugin/.guild/wiki/entities/MIGRATION.md\`](plugin/.guild/wiki/entities/MIGRATION.md)** (the
 > source of truth, and the target of every in-docs \`MIGRATION.md\` cross-link).
-> The copy that ships inside the plugin package is
-> **[\`plugin/MIGRATION.md\`](plugin/MIGRATION.md)**. This repo-root file is a
+> This repo-root file is a
 > generated pointer stub — do not edit it by hand.`;
 
 /**
  * Derive the root stub front-matter from canonical's FM.
  * Carries all fields verbatim EXCEPT:
- *   source_refs → ["docs/knowledge/MIGRATION.md"]
+ *   source_refs → ["plugin/.guild/wiki/entities/MIGRATION.md"]
  *   supersedes  → null  (canonical points at plugin/guild-plan.md; root stub doesn't)
  */
 function deriveRootFrontMatter(fmRaw: string): string {
@@ -258,7 +264,7 @@ export function generateRootStub(canonical: string): string {
     "",
     "For the complete removed/renamed-command table, config key mapping, flag",
     "cheat-sheet, and worked examples, see",
-    "**[`docs/knowledge/MIGRATION.md`](docs/knowledge/MIGRATION.md)**.",
+    "**[`plugin/.guild/wiki/entities/MIGRATION.md`](plugin/.guild/wiki/entities/MIGRATION.md)**.",
     "",
   ].join("\n");
 }

@@ -3,12 +3,10 @@
  *
  * TDD for sync-migration.ts — F7 MIGRATION.md single-source generator.
  *
- * Verifies:
- *  - plugin/ full copy: banner injected, blockquote injected, fence markers
- *    stripped, links rewritten (architecture/ lifecycle/ decisions/), body
- *    content preserved, source_refs overridden.
+ * Verifies (main() generates only the root stub; generatePluginCopy is a
+ * retained-but-uninvoked helper, not exercised here):
  *  - root stub: pointer structure, digest extracted (no fence markers), digest
- *    links root-rewritten, canonical body NOT copied verbatim.
+ *    links root-rewritten, canonical body NOT copied verbatim, source_refs overridden.
  *  - --check mode: in-sync → exit 0; stale → exit 1.
  *  - Missing canonical → exit 1 with message.
  *  - Missing STUB-DIGEST fences → exit 1 with message.
@@ -36,13 +34,12 @@ function runScript(args: string[]): { exitCode: number; stdout: string; stderr: 
   };
 }
 
-/** Seed a minimal repo layout in tmpDir: docs/knowledge/MIGRATION.md + target dirs. */
+/** Seed a minimal repo layout in tmpDir: plugin/.guild/wiki/entities/MIGRATION.md + target dirs. */
 function seedRepo(tmpDir: string, canonicalFixture = CANONICAL_FIXTURE): void {
-  const knowledgeDir = path.join(tmpDir, "docs", "knowledge");
-  const pluginDir = path.join(tmpDir, "plugin");
-  fs.mkdirSync(knowledgeDir, { recursive: true });
-  fs.mkdirSync(pluginDir, { recursive: true });
-  fs.copyFileSync(canonicalFixture, path.join(knowledgeDir, "MIGRATION.md"));
+  const canonicalDir = path.join(tmpDir, "plugin", ".guild", "wiki", "entities");
+  fs.mkdirSync(canonicalDir, { recursive: true });
+  fs.mkdirSync(path.join(tmpDir, "plugin"), { recursive: true });
+  fs.copyFileSync(canonicalFixture, path.join(canonicalDir, "MIGRATION.md"));
 }
 
 describe("sync-migration.ts", () => {
@@ -73,11 +70,11 @@ describe("sync-migration.ts", () => {
       expect(content).toMatch(/pointer/i);
     });
 
-    it("contains a reference to the canonical docs/knowledge/MIGRATION.md", () => {
+    it("contains a reference to the canonical plugin/.guild/wiki/entities/MIGRATION.md", () => {
       seedRepo(tmpDir);
       runScript(["--cwd", tmpDir]);
       const content = fs.readFileSync(path.join(tmpDir, "MIGRATION.md"), "utf8");
-      expect(content).toContain("docs/knowledge/MIGRATION.md");
+      expect(content).toContain("plugin/.guild/wiki/entities/MIGRATION.md");
     });
 
     it("contains the digest lines (extracted from canonical)", () => {
@@ -95,8 +92,8 @@ describe("sync-migration.ts", () => {
       runScript(["--cwd", tmpDir]);
       const content = fs.readFileSync(path.join(tmpDir, "MIGRATION.md"), "utf8");
       // Original digest link: ](lifecycle/phase-entrypoints.md)
-      // Root-rewritten: ](docs/knowledge/lifecycle/phase-entrypoints.md)
-      expect(content).toContain("](docs/knowledge/lifecycle/phase-entrypoints.md)");
+      // Root-rewritten: ](plugin/.guild/wiki/entities/phase-entrypoints.md)
+      expect(content).toContain("](plugin/.guild/wiki/entities/phase-entrypoints.md)");
       expect(content).not.toMatch(/\]\(lifecycle\//);
     });
 
@@ -104,7 +101,7 @@ describe("sync-migration.ts", () => {
       seedRepo(tmpDir);
       runScript(["--cwd", tmpDir]);
       const content = fs.readFileSync(path.join(tmpDir, "MIGRATION.md"), "utf8");
-      expect(content).toContain("](docs/knowledge/decisions/v2x-command-surface.md)");
+      expect(content).toContain("](plugin/.guild/wiki/decisions/v2x-command-surface.md)");
       expect(content).not.toMatch(/\]\(decisions\//);
     });
 
@@ -129,7 +126,7 @@ describe("sync-migration.ts", () => {
       seedRepo(tmpDir);
       runScript(["--cwd", tmpDir]);
       const content = fs.readFileSync(path.join(tmpDir, "MIGRATION.md"), "utf8");
-      expect(content).toContain('source_refs: ["docs/knowledge/MIGRATION.md"]');
+      expect(content).toContain('source_refs: ["plugin/.guild/wiki/entities/MIGRATION.md"]');
     });
 
     it("has generated-file banner comment", () => {
@@ -171,7 +168,7 @@ describe("sync-migration.ts", () => {
       runScript(["--cwd", tmpDir]);
       const content = fs.readFileSync(path.join(tmpDir, "MIGRATION.md"), "utf8");
       expect(content).toContain("> **This is a pointer.** The canonical, maintained v1 → v2 migration guide");
-      expect(content).toContain("> lives at **[`docs/knowledge/MIGRATION.md`](docs/knowledge/MIGRATION.md)**");
+      expect(content).toContain("> lives at **[`plugin/.guild/wiki/entities/MIGRATION.md`](plugin/.guild/wiki/entities/MIGRATION.md)**");
       expect(content).toContain("> generated pointer stub — do not edit it by hand.");
     });
 
@@ -196,7 +193,7 @@ describe("sync-migration.ts", () => {
       runScript(["--cwd", tmpDir]);
       const content = fs.readFileSync(path.join(tmpDir, "MIGRATION.md"), "utf8");
       expect(content).toContain(
-        "**[`docs/knowledge/MIGRATION.md`](docs/knowledge/MIGRATION.md)**."
+        "**[`plugin/.guild/wiki/entities/MIGRATION.md`](plugin/.guild/wiki/entities/MIGRATION.md)**."
       );
       // Must reference the full mapping / worked examples in the trailing text
       expect(content).toMatch(/removed\/renamed-command|full mapping|cheat-sheet/i);
@@ -206,7 +203,7 @@ describe("sync-migration.ts", () => {
   // ── Check mode ────────────────────────────────────────────────────────────
 
   describe("--check mode", () => {
-    it("exits 0 when both targets are in-sync with canonical", () => {
+    it("exits 0 when the root target is in-sync with canonical", () => {
       seedRepo(tmpDir);
       // Write first to populate targets
       runScript(["--cwd", tmpDir]);
@@ -249,11 +246,10 @@ describe("sync-migration.ts", () => {
 
     it("exits 1 when canonical has no STUB-DIGEST fences", () => {
       // Seed a canonical without fence markers
-      const knowledgeDir = path.join(tmpDir, "docs", "knowledge");
-      fs.mkdirSync(knowledgeDir, { recursive: true });
-      fs.mkdirSync(path.join(tmpDir, "plugin"), { recursive: true });
+      const canonicalDir = path.join(tmpDir, "plugin", ".guild", "wiki", "entities");
+      fs.mkdirSync(canonicalDir, { recursive: true });
       fs.writeFileSync(
-        path.join(knowledgeDir, "MIGRATION.md"),
+        path.join(canonicalDir, "MIGRATION.md"),
         "---\nsource_refs: [\"x\"]\n---\n\n# Migration\n\nNo fence markers here.\n",
         "utf8"
       );

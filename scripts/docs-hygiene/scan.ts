@@ -15,7 +15,7 @@
  *   6. Secrets grep — API keys, tokens, PEM blocks, password= lines
  *   7. Pending grade review — pages still carrying `importance_draft: true` (a
  *      v1→v2 migration drafted the grade; the operator has not accepted it via
- *      `migrate-guild.ts --accept-grades` yet — see plugin/MIGRATION.md)
+ *      `migrate-guild.ts --accept-grades` yet — see MIGRATION.md)
  *
  * RECALIBRATION (2026-05-28, Lane D-validate, docs-clean-up initiative):
  *   Lane C revealed high false-positive rates in the original rules:
@@ -989,7 +989,7 @@ output += `
 4. For each **dangling-source-refs** flag: verify the path is still at the declared location; correct or remove.
 5. For each **missing-importance** flag: apply the A.2 level definitions to assign \`importance: critical|high|medium|low\`. Marquee features default to \`critical\`.
 6. For each **secrets** flag: investigate; if genuine secret, rotate + remove immediately.
-7. For each **pending-grade-review** flag: the page carries a migration-drafted \`importance:\` grade (\`importance_draft: true\`). Review/edit the grade, then accept with \`npx tsx plugin/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo>\` (see \`plugin/MIGRATION.md\`).
+7. For each **pending-grade-review** flag: the page carries a migration-drafted \`importance:\` grade (\`importance_draft: true\`). Review/edit the grade, then accept with \`npx tsx plugin/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo>\` (see \`MIGRATION.md\`).
 
 ---
 

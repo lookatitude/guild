@@ -18,15 +18,13 @@ related: [command-surface, v2-index, phase-entrypoints]
 > migration and the exact user-visible behavior of every removed/renamed
 > command. It does not execute the migration and does not edit anything under
 > `plugin/`. The canonical, authoritative copy lives **here at
-> `plugin/.guild/wiki/entities/MIGRATION.md`**; all cross-reference links in this file are
-> relative to this location (`architecture/…`, `lifecycle/…`) and resolve
-> from it. **This is the single source of truth — edit only this file.** The
-> two discoverable copies are *generated* from it and carry a "do not edit by
-> hand" banner: `plugin/MIGRATION.md` (the package copy — a full copy with
-> links rewritten to `../docs/knowledge/…`) and `./MIGRATION.md` (a repo-root
-> pointer stub whose 30-second digest is extracted from this file's §1). A
-> drift `--check` mode re-derives both and fails on any divergence, so they
-> cannot silently fall out of sync.
+> `plugin/.guild/wiki/entities/MIGRATION.md`** (v2 — moved from the retired root
+> docs KB on 2026-06-27); cross-reference links resolve to the v2 wiki
+> (`../decisions/…`, sibling `entities/…`). **This is the single source of truth
+> — edit only this file.** The repo-root **`./MIGRATION.md`** is a *generated*
+> pointer stub (carries a "do not edit by hand" banner; its 30-second digest is
+> extracted from this file's §1). A drift `--check` mode re-derives it and fails
+> on any divergence, so it cannot silently fall out of sync.
 
 This is the definitive v2 migration guide: it documents every removed/renamed
 command, the config and flag changes, and the new-in-v2 surfaces a v1 user
