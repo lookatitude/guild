@@ -173,7 +173,7 @@ function resolveBaseline(): string {
       throw new Error(`SC-W2-5: GUILD_W2_BASELINE_REF must be an ancestor-or-equal of the ratified baseline (${PINNED_BASELINE})`);
     }
   }
-  // The anchor is ALWAYS the pinned pre-Wave-2 tree — never the (possibly newer) env ref.
+  // The anchor is ALWAYS the pinned ratified-v2 tree — never the (possibly newer) env ref.
   return base;
 }
 
@@ -225,7 +225,7 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned ratified-v2 basel
     }
   });
 
-  it("strict ZERO delta under .claude-plugin/ + commands/; skills/ additive-only (ratified allowlist)", () => {
+  it("strict ZERO delta under .claude-plugin/ + commands/ + skills/ vs the ratified v2 baseline (frozen as-ratified)", () => {
     const baseline = resolveBaseline();
     // `git diff <ref> -- paths` spans <ref>..WORKING TREE, so it catches BOTH a
     // committed AND an uncommitted live-surface mutation (the committed case is the

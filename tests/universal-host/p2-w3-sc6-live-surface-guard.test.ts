@@ -117,7 +117,8 @@ function classifyFrozen(rows: Row[]): Row[] {
 }
 
 /**
- * Pure classifier for the live `skills/**` additive-only rule. Returns the non-addition rows
+ * Pure classifier for the live `skills/**` rule (frozen as-ratified: empty allowlist ⇒ additive-only
+ * degenerates to ZERO permitted deltas). Returns the non-addition rows
  * (any M/D/R is a violation) + the sorted added paths + an `ok` verdict that is true ONLY when
  * nonAdds is empty AND added === ALLOWED_SKILL_ADDS exactly. The real Part-B assertion AND the
  * perturbation controls both route through this single helper, so the controls exercise the
@@ -210,7 +211,7 @@ describe("SC-W3-6 (A) — DECISIVE: .claude-plugin/** + commands/** byte-identic
   });
 });
 
-describe("SC-W3-6 (B) — live skills/**: additive-only (ONLY the LW3-5 producer skill)", () => {
+describe("SC-W3-6 (B) — live skills/**: ZERO delta vs the ratified v2 baseline (frozen as-ratified)", () => {
   it("skills/** has ZERO delta from the ratified v2 baseline (frozen as-ratified)", () => {
     const baseline = resolveBaseline();
     const c = classifySkills(diffRows(baseline, ["skills"]));
@@ -222,7 +223,7 @@ describe("SC-W3-6 (B) — live skills/**: additive-only (ONLY the LW3-5 producer
 
   it("anti-vacuity (REAL): the SAME classifier REJECTS each forbidden perturbation", () => {
     // Feed the SAME classifySkills the real assertion uses a perturbed added-set and prove the
-    // additive-only verdict FLIPS to false for every forbidden delta (codex must-fix #2).
+    // frozen-surface verdict FLIPS to false for every forbidden delta (codex must-fix #2).
     const allowed: Row[] = [
       ...ALLOWED_SKILL_ADDS.map((p) => ({ status: "A", path: p })),
       ...ALLOWED_SKILL_MODS.map((p) => ({ status: "M", path: p })),
