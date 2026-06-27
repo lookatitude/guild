@@ -13,6 +13,29 @@ This is the first step of every `/guild` task — ambiguity is front-loaded here
 
 Run a short Socratic conversation organized into **clusters** — not a flat questionnaire. Each cluster groups related §8.1 fields so the user answers one coherent set at a time (e.g. goal + audience + outcome together, constraints + autonomy + risks together). Reflect back each cluster in one sentence before moving on, so the user can correct drift early. When every §8.1 field has a confirmed answer (or an explicit assumption), write `.guild/spec/<slug>.md` and hand off to `guild:team-compose`.
 
+## Knowledge-binding — min-build resolver (run FIRST, deterministic)
+
+Ideation's required upstream is an init wiki. Before the Socratic flow, run the
+**deterministic** resolver — never eyeball whether init ran:
+
+```bash
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/ideation-min-build-cli.ts --cwd "$(pwd)" [--description "<one-line brief>"]
+```
+
+- `{"needsMinBuild": false}` → an init wiki exists; proceed normally.
+- `{"needsMinBuild": true, "spec": …, "frontmatter": …}` → **no init wiki**. Do
+  **not** refuse and do **not** silently invent project knowledge. Instead, this
+  is the `build-minimal` continuity case (03-lifecycle §"A min-build spec"): seed
+  the spec from the resolver baseline (its `goal`/`audience`/`constraints` are
+  clearly-marked placeholders to confirm with the user during the clusters), and
+  **stamp the spec frontmatter** with the returned `frontmatter` block —
+  `grounded_in: init_minimal`, `resolver_built: true`, the `gap` notice, and
+  `resolved_at`. **Surface the `gap` to the user verbatim** ("this spec was
+  resolver-built and lacks real project knowledge; run `/guild:init` to replace
+  it"). The G-knowledge-binding step is non-blocking — it marks the missing-init
+  risk, it does not stop ideation. A later `/guild:init` replaces the baseline; it
+  is never a silent substitute for real project knowledge.
+
 ## Required capture (per §8.1)
 
 The spec is not approved until every item below is either answered or explicitly converted to an assumption:

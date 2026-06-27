@@ -17,6 +17,7 @@
     "scripts": [
       "classify-proposal",
       "lib/ideation-min-build",
+      "ideation-min-build-cli",
       "lib/init-offer-initiative",
       "lib/init-resume-repair",
       "lib/init-staging-gate",

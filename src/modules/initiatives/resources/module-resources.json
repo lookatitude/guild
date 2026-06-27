@@ -19,6 +19,13 @@
     },
     {
       "category": "scripts",
+      "id": "ideation-min-build-cli",
+      "source_path": "scripts/ideation-min-build-cli.ts",
+      "resource_path": "resources/scripts/ideation-min-build-cli.ts",
+      "sha256": "3f13d0c5a9cbab5658a381e6a9d45f77cdc2789f03ade49803842b2735e223c9"
+    },
+    {
+      "category": "scripts",
       "id": "lib/ideation-min-build",
       "source_path": "scripts/lib/ideation-min-build.ts",
       "resource_path": "resources/scripts/lib/ideation-min-build.ts",
