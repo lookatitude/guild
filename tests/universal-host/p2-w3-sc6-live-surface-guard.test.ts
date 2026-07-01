@@ -164,10 +164,15 @@ describe("SC-W3-6 — pinned ratified-v2 baseline is real (guard not vacuous)", 
 
   it("REJECTS a FORWARD GUILD_W3_BASELINE_REF (must be ancestor-or-equal of the ratified baseline)", () => {
     // Anti-bypass: an override that moves the baseline FORWARD (past the ratified anchor) would
-    // shrink the diff and weaken the guard. 67e8635 is after 4e91770 but still an ancestor of HEAD —
-    // it must be rejected. (An OLDER ref like the pre-Wave-3 anchor is fine — it only adds strictness.)
+    // shrink the diff and weaken the guard, so it must be rejected. Derive the forward ref (the
+    // first commit AFTER the pin that is not HEAD) rather than hardcode a SHA, so it stays valid
+    // across pin bumps. (An OLDER ref only adds strictness and is accepted — proven below.)
+    const head = revParse("HEAD");
+    const forwardRef = git(["rev-list", "--reverse", `${PINNED_BASELINE}..HEAD`])
+      .split("\n").map((s) => s.trim()).filter(Boolean).find((s) => s !== head);
+    expect(forwardRef).toBeTruthy(); // anti-vacuity: a real forward commit must exist to test with
     const prev = process.env["GUILD_W3_BASELINE_REF"];
-    process.env["GUILD_W3_BASELINE_REF"] = "67e8635"; // after the ratified baseline (4e91770)
+    process.env["GUILD_W3_BASELINE_REF"] = forwardRef!; // forward of the pin ⇒ must be rejected
     try {
       expect(() => resolveBaseline()).toThrow(/ancestor-or-equal of the ratified baseline/);
     } finally {

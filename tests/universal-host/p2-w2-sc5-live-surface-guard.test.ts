@@ -201,10 +201,15 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned ratified-v2 basel
   });
 
   it("REJECTS a FORWARD GUILD_W2_BASELINE_REF (must be ancestor-or-equal of the ratified baseline)", () => {
+    // A forward move (past the ratified anchor) would shrink the diff/weaken the guard, so it must
+    // be rejected. Derive the forward ref (first commit AFTER the pin that is not HEAD) rather than
+    // hardcode a SHA, so it stays valid across pin bumps. (Older refs only add strictness.)
+    const head = revParse("HEAD");
+    const forwardRef = git(["rev-list", "--reverse", `${PINNED_BASELINE}..HEAD`])
+      .split("\n").map((s) => s.trim()).filter(Boolean).find((s) => s !== head);
+    expect(forwardRef).toBeTruthy(); // anti-vacuity: a real forward commit must exist to test with
     const prev = process.env["GUILD_W2_BASELINE_REF"];
-    // 67e8635 is AFTER the ratified baseline (4e91770) but an ancestor of HEAD — a forward move that
-    // would shrink the diff/weaken the guard, so it must be rejected. (Older refs only add strictness.)
-    process.env["GUILD_W2_BASELINE_REF"] = "67e8635";
+    process.env["GUILD_W2_BASELINE_REF"] = forwardRef!;
     try {
       expect(() => resolveBaseline()).toThrow(/ancestor-or-equal of the ratified baseline/);
     } finally {
@@ -290,11 +295,13 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned ratified-v2 basel
     expect(frozenMutation.ok).toBe(false);
   });
 
-  it("the guard is anti-vacuous: the SAME diff over Wave-2-CHANGED trees is NON-empty", () => {
+  it("the guard is anti-vacuous: the SAME diff over CHANGED trees is NON-empty", () => {
     // Proves the diff command actually detects change — the empty live-surface result
-    // is a real 'unchanged', not a no-op/broken invocation.
-    const baseline = resolveBaseline();
-    const changedElsewhere = git(["diff", "--name-status", baseline, "--", "scripts", "skill-src", "command-src"])
+    // is a real 'unchanged', not a no-op/broken invocation. Anchored to a STABLE old ancestor
+    // (the previous ratified baseline) rather than the current pin, so the diff-is-wired proof
+    // stays non-vacuous no matter how close the current pin sits to HEAD.
+    const PRIOR_RATIFIED = "4e91770"; // previous pin — a real ancestor with changes vs the worktree
+    const changedElsewhere = git(["diff", "--name-status", PRIOR_RATIFIED, "--", "scripts", "skill-src", "command-src"])
       .split("\n").map((l) => l.trim()).filter(Boolean);
     expect(changedElsewhere.length).toBeGreaterThan(0);
   });
