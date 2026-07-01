@@ -8,21 +8,21 @@
       "id": "SessionStart:bootstrap.sh",
       "source_path": "hooks/bootstrap.sh",
       "resource_path": "resources/hooks/bootstrap.sh",
-      "sha256": "a60f8ac5a0d023ef11b3bcca6a1707b71af6dc79aff898570d3ecb94144b3265"
+      "sha256": "d47cf2353ab4c8f163b19095eead65b57ee7549d804fb0a75655078ab8008c21"
     },
     {
       "category": "hooks",
       "id": "SessionStart:detect-guild-version.js",
       "source_path": "hooks/dist/detect-guild-version.js",
       "resource_path": "resources/hooks/dist/detect-guild-version.js",
-      "sha256": "17ca76b7ce288b0fe8467c3f923cb52979964f234823f5a87dc73ec685296d35"
+      "sha256": "5c9fded5c7560fe384345e0dfc0fc47fe1be12aeaa7f66eb1612e9f3470f2085"
     },
     {
       "category": "hooks",
       "id": "SessionStart:using-guild-bootstrap.js",
       "source_path": "hooks/dist/using-guild-bootstrap.js",
       "resource_path": "resources/hooks/dist/using-guild-bootstrap.js",
-      "sha256": "dc9ab9ed191125c5043a6a675d07c81058f51b7c2538ef2fee5b7c4a72a626bf"
+      "sha256": "37e7ea2a9900bd3a9ceaea3728fc8eff3c0abb572c096c854577f819b0c54403"
     },
     {
       "category": "hooks",
@@ -57,7 +57,7 @@
       "id": "using-guild",
       "source_path": "skills/meta/using-guild/SKILL.src.md",
       "resource_path": "resources/skills/meta/using-guild/SKILL.src.md",
-      "sha256": "ed4d2293ce349ab04d1282b6d203169a8ae4a331b0a77783ed0408cf32a84e3d"
+      "sha256": "19f8ba9ff731e9d5ce5a82f3145943c4e4952433b9b2e71b6d3f70dcb223378a"
     }
   ]
 }

@@ -35,6 +35,7 @@
     "./commands/dashboard.md",
     "./commands/evolve.md",
     "./commands/fix.md",
+    "./commands/goal.md",
     "./commands/guild.md",
     "./commands/ideate.md",
     "./commands/init.md",

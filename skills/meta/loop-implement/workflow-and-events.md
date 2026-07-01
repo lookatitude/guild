@@ -17,7 +17,7 @@ For each lane the orchestrator dispatches with `loops_applicable ≠ "none"`:
        security-review).
      - Emit `loop_round_start` event via `scripts/emit-loop-event.ts`:
        ```bash
-       npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/emit-loop-event.ts \
+       npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/emit-loop-event.ts \
          --event loop_round_start --layer <L3|L4|security-review> \
          --lane <lane-id> --round <N> --cap <cap> \
          [--run-id <run-id>] [--cwd <repo-root>]
@@ -29,7 +29,7 @@ For each lane the orchestrator dispatches with `loops_applicable ≠ "none"`:
      - Inspect the challenger's body with `detectSentinel(...)`.
      - Emit `loop_round_end` event via `scripts/emit-loop-event.ts`:
        ```bash
-       npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/emit-loop-event.ts \
+       npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/emit-loop-event.ts \
          --event loop_round_end --layer <L3|L4|security-review> \
          --lane <lane-id> --round <N> \
          --terminated <satisfied|malformed_termination|cap_hit|escalation|error> \

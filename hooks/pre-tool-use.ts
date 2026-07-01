@@ -151,22 +151,41 @@ interface HostCapabilitySlice {
  * the manifest cannot be read (missing file, bad JSON) — callers treat null
  * as "capabilities unknown; assume ask is supported" (safe fallback).
  *
- * Manifest path: <cwd>/.guild/hosts/<host-id>/capability.json where
- * host-id = GUILD_HOST_ID env || GUILD_HOST env || "claude" (default).
+ * Manifest path: <cwd>/.guild/hosts/<host-id>/capability.json where host-id
+ * resolves through the same registry-id resolver used by security events.
+ * Legacy family dirs (`claude`, `codex`, etc.) are also tried for compatibility.
  */
 function readHostCapability(cwd: string): HostCapabilitySlice | null {
-  try {
-    const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
-    const hostKind = rawHost === "codex" || rawHost === "gemini" || rawHost === "pi"
-      ? rawHost
-      : "claude";
-    const hostId = (process.env["GUILD_HOST_ID"] ?? "").trim() || hostKind;
-    const manifestPath = path.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
-    const raw = fs.readFileSync(manifestPath, "utf8");
-    return JSON.parse(raw) as HostCapabilitySlice;
-  } catch {
-    return null; // absent or unreadable manifest — safe fallback
+  const addCandidate = (out: string[], value: string | undefined): void => {
+    const v = (value ?? "").trim();
+    if (v.length > 0 && !out.includes(v)) out.push(v);
+  };
+
+  const hostRes = resolveHostResolution(process.env);
+  const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
+  const candidates: string[] = [];
+  addCandidate(candidates, hostRes.id);
+  addCandidate(candidates, process.env["GUILD_HOST_ID"]);
+  addCandidate(candidates, rawHost);
+  const legacyByRegistry: Record<string, string> = {
+    "claude-code-cli": "claude",
+    "codex-cli": "codex",
+    "pi-cli": "pi",
+    "antigravity-cli": "antigravity-2",
+    "claude-code-app": "claude-code-desktop",
+  };
+  addCandidate(candidates, legacyByRegistry[hostRes.id]);
+
+  for (const hostId of candidates) {
+    try {
+      const manifestPath = path.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
+      const raw = fs.readFileSync(manifestPath, "utf8");
+      return JSON.parse(raw) as HostCapabilitySlice;
+    } catch {
+      // Try the next compatibility candidate.
+    }
   }
+  return null; // absent or unreadable manifest — safe fallback
 }
 
 /**
@@ -598,8 +617,8 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
       tool: "",
       detail:
         `Host resolution degraded (HK-10): GUILD_HOST="${hostRes.rawUnknown}" is not a ` +
-        `recognized canonical host kind — defaulted to "claude". Security-event host: ` +
-        `fields in this session may be misattributed. Set GUILD_HOST_ID or use a ` +
+        `recognized registry host id or alias. Security-event host is preserved as ` +
+        `"${hostRes.id}" with degraded attribution. Set GUILD_HOST_ID or use a ` +
         `canonical GUILD_HOST value.`,
       permission_mode: permissionMode,
     });

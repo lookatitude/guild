@@ -507,34 +507,41 @@ var fs3 = __toESM(require("node:fs"));
 var path3 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
 var KNOWN_GUILD_HOST_KINDS = [
-  "claude",
-  // Claude Code (reference impl)
-  "codex",
-  // OpenAI Codex CLI
-  "gemini",
-  // Google Gemini CLI
-  "pi",
-  // Pi (Inflection AI)
-  "antigravity-2",
-  // Antigravity 2.0
-  "claude-code-desktop",
-  // Claude Code Desktop app
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
   "claude-code-web",
-  // Claude Code Web (cloud VM)
   "codex-app",
-  // Codex desktop app
   "claude-ai-connector"
-  // claude.ai connector (remote MCP control plane)
 ];
+var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+var LEGACY_HOST_ALIASES = {
+  claude: "claude-code-cli",
+  "claude-code-desktop": "claude-code-app",
+  codex: "codex-cli",
+  "codex-plugin": "codex-cli",
+  agents: "agents-file",
+  ".agents": "agents-file",
+  pi: "pi-cli",
+  antigravity: "antigravity-cli",
+  "antigravity-2": "antigravity-cli"
+};
+function normalizeSecurityHostId(value) {
+  const s = value.trim();
+  if (KNOWN_GUILD_HOST_ID_SET.has(s)) return s;
+  return LEGACY_HOST_ALIASES[s] ?? null;
+}
 function resolveHostResolution(env) {
   const explicit = (env["GUILD_HOST_ID"] ?? "").trim();
   if (explicit.length > 0) return { id: explicit, degraded: false, rawUnknown: "" };
   const rawHost = (env["GUILD_HOST"] ?? "").trim().toLowerCase();
-  if (rawHost.length === 0) return { id: "claude", degraded: false, rawUnknown: "" };
-  if (KNOWN_GUILD_HOST_KINDS.includes(rawHost)) {
-    return { id: rawHost, degraded: false, rawUnknown: "" };
-  }
-  return { id: "claude", degraded: true, rawUnknown: rawHost };
+  if (rawHost.length === 0) return { id: "claude-code-cli", degraded: false, rawUnknown: "" };
+  const normalized = normalizeSecurityHostId(rawHost);
+  if (normalized) return { id: normalized, degraded: false, rawUnknown: "" };
+  return { id: rawHost, degraded: true, rawUnknown: rawHost };
 }
 function resolveHostId() {
   return resolveHostResolution(process.env).id;
@@ -915,16 +922,33 @@ function resolveRunId(cwd) {
   return readCurrentRunId(cwd);
 }
 function readHostCapability(cwd) {
-  try {
-    const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
-    const hostKind = rawHost === "codex" || rawHost === "gemini" || rawHost === "pi" ? rawHost : "claude";
-    const hostId = (process.env["GUILD_HOST_ID"] ?? "").trim() || hostKind;
-    const manifestPath = path5.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
-    const raw = fs6.readFileSync(manifestPath, "utf8");
-    return JSON.parse(raw);
-  } catch {
-    return null;
+  const addCandidate = (out, value) => {
+    const v = (value ?? "").trim();
+    if (v.length > 0 && !out.includes(v)) out.push(v);
+  };
+  const hostRes = resolveHostResolution(process.env);
+  const rawHost = (process.env["GUILD_HOST"] ?? "").trim().toLowerCase();
+  const candidates = [];
+  addCandidate(candidates, hostRes.id);
+  addCandidate(candidates, process.env["GUILD_HOST_ID"]);
+  addCandidate(candidates, rawHost);
+  const legacyByRegistry = {
+    "claude-code-cli": "claude",
+    "codex-cli": "codex",
+    "pi-cli": "pi",
+    "antigravity-cli": "antigravity-2",
+    "claude-code-app": "claude-code-desktop"
+  };
+  addCandidate(candidates, legacyByRegistry[hostRes.id]);
+  for (const hostId of candidates) {
+    try {
+      const manifestPath = path5.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
+      const raw = fs6.readFileSync(manifestPath, "utf8");
+      return JSON.parse(raw);
+    } catch {
+    }
   }
+  return null;
 }
 function writeApprovalRequest(runDir, opts) {
   try {
@@ -1151,7 +1175,7 @@ function runSecurityEnforcement(payload, cwd) {
       event_type: "capability_scope_degrade",
       decision: "degraded",
       tool: "",
-      detail: `Host resolution degraded (HK-10): GUILD_HOST="${hostRes.rawUnknown}" is not a recognized canonical host kind \u2014 defaulted to "claude". Security-event host: fields in this session may be misattributed. Set GUILD_HOST_ID or use a canonical GUILD_HOST value.`,
+      detail: `Host resolution degraded (HK-10): GUILD_HOST="${hostRes.rawUnknown}" is not a recognized registry host id or alias. Security-event host is preserved as "${hostRes.id}" with degraded attribution. Set GUILD_HOST_ID or use a canonical GUILD_HOST value.`,
       permission_mode: permissionMode
     });
   }

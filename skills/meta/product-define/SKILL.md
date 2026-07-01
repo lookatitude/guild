@@ -27,7 +27,7 @@ lifecycle, downstream).
 
 ## Required inputs
 - The validated `.guild/explore/<slug>.json` (`guild.explore.v1`) from `guild:product-explore`.
-- The canonical shape: `guild.define.v1` (`${CLAUDE_PLUGIN_ROOT}/scripts/lib/define-schema.ts`),
+- The canonical shape: `guild.define.v1` (`${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/define-schema.ts`),
   whose `DEFINE_V1_EXAMPLE` is the golden shape to mirror.
 
 ## Output contract — `guild.define.v1`
@@ -62,7 +62,7 @@ Mirror `DEFINE_V1_EXAMPLE` for the exact shape. Emit ONLY the allowed keys (stri
 4. Write `.guild/define/<slug>.json` with the shape above.
 5. **Self-validate (fail closed)** — run the real validator on the file you wrote:
    ```
-   npx tsx -e 'const {validateDefineV1}=require(process.env.CLAUDE_PLUGIN_ROOT+"/scripts/lib/define-schema.ts");const fs=require("fs");console.log(JSON.stringify(validateDefineV1(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))),null,2))' .guild/define/<slug>.json
+   npx tsx -e 'const root=process.env.GUILD_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;const {validateDefineV1}=require(root+"/scripts/lib/define-schema.ts");const fs=require("fs");console.log(JSON.stringify(validateDefineV1(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))),null,2))' .guild/define/<slug>.json
    ```
    If `valid` is not `true`, fix the reported field(s) (a duplicate AC id is a common cause)
    and re-validate. Do NOT hand off an artifact that fails validation.

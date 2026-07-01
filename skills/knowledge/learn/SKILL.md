@@ -53,7 +53,7 @@ mixed_or_uncertain      children found but ambiguous (some have .git/, some have
                         .guild/, workspace/detect.ts reports "uncertain")
 ```
 
-Detection script: `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/workspace/detect.ts --cwd <root>` (depth-1
+Detection script: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/workspace/detect.ts --cwd <root>` (depth-1
 fixed, no knob). For `mixed_or_uncertain` surface one targeted question before
 proceeding; never silent-proceed on uncertainty. Mirror the bare `/guild:guild`
 §5.1 confirm contract: show detection → ask proceed / pick / explain.
@@ -61,7 +61,7 @@ proceeding; never silent-proceed on uncertainty. Mirror the bare `/guild:guild`
 After user confirmation, start the run before scanning:
 
 ```
-npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/lib/run-lifecycle.ts startRun
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/run-lifecycle.ts startRun
   --command "/guild:learn"
   --args ""
   --cwd <root>

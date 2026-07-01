@@ -96,7 +96,7 @@ describe("buildSecurityEvent", () => {
       }
     });
 
-    it("defaults host to 'claude' when no env vars set", () => {
+    it("defaults host to 'claude-code-cli' when no env vars set", () => {
       delete process.env["GUILD_HOST_ID"];
       delete process.env["GUILD_HOST"];
       const ev = buildSecurityEvent({
@@ -105,7 +105,7 @@ describe("buildSecurityEvent", () => {
         decision: "ask",
         tool: "Bash",
       });
-      expect(ev.host).toBe("claude");
+      expect(ev.host).toBe("claude-code-cli");
     });
 
     it("uses GUILD_HOST_ID when set", () => {
@@ -120,7 +120,7 @@ describe("buildSecurityEvent", () => {
       expect(ev.host).toBe("codex-host-42");
     });
 
-    it("resolves GUILD_HOST=codex → host 'codex' when no GUILD_HOST_ID", () => {
+    it("resolves GUILD_HOST=codex -> registry host 'codex-cli' when no GUILD_HOST_ID", () => {
       delete process.env["GUILD_HOST_ID"];
       process.env["GUILD_HOST"] = "codex";
       const ev = buildSecurityEvent({
@@ -129,7 +129,7 @@ describe("buildSecurityEvent", () => {
         decision: "deny",
         tool: "",
       });
-      expect(ev.host).toBe("codex");
+      expect(ev.host).toBe("codex-cli");
     });
 
     it("host is present on the on-disk JSON record", () => {
@@ -169,16 +169,16 @@ describe("HK-10: resolveHostResolution — 9-host canonical set + degradation fl
     expect(r.degraded).toBe(false);
   });
 
-  it("returns id='claude' + degraded=false when GUILD_HOST absent", () => {
+  it("returns id='claude-code-cli' + degraded=false when GUILD_HOST absent", () => {
     const r = resolveHostResolution({});
-    expect(r.id).toBe("claude");
+    expect(r.id).toBe("claude-code-cli");
     expect(r.degraded).toBe(false);
     expect(r.rawUnknown).toBe("");
   });
 
-  it("returns id='claude' + degraded=true + rawUnknown when GUILD_HOST is unrecognized", () => {
+  it("returns raw id + degraded=true + rawUnknown when GUILD_HOST is unrecognized", () => {
     const r = resolveHostResolution({ GUILD_HOST: "unknown-ai-fork" });
-    expect(r.id).toBe("claude");
+    expect(r.id).toBe("unknown-ai-fork");
     expect(r.degraded).toBe(true);
     expect(r.rawUnknown).toBe("unknown-ai-fork");
   });

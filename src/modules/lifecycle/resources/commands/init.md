@@ -88,7 +88,7 @@ As part of bootstrap, Init scaffolds the project config surface
 clobber operator config):
 
 ```bash
-test -f .guild/settings.json || npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/read-guild-config.ts --scaffold > .guild/settings.json
+test -f .guild/settings.json || npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/read-guild-config.ts --scaffold > .guild/settings.json
 ```
 
 It is written with every option = its default + a self-documenting `_help`
@@ -116,7 +116,7 @@ preflight (`scripts/lib/runstart-preflight.ts`; canonical contract in
    inheritance chain + validates + probes tmux + detects providers
    (full chain: see `/guild:guild §Run-start preflight`).
 2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
-   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
    on NO continue with the resolved backend.
 3. Pass `result.snapshot` to `startRun` — U6 writes
    `.guild/runs/<id>/resolved-settings.json` + `settings_ref` in `run.yaml`.
@@ -132,7 +132,7 @@ already on disk (or inherited from the workspace root).
 Before any `.guild/` inspection, start a run (SC-B, §435):
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js start \
   --command=/guild:init \
   --cwd "$(pwd)"
 # If --initiative=<id> was supplied by the user, add: --initiative=<id>
@@ -144,7 +144,7 @@ the lifecycle; `start` writes `current-run-id` synchronously so `phase`
 resolves the open run):
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js phase \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js phase \
   --phase=init \
   --cwd "$(pwd)"
 ```

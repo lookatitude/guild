@@ -8,7 +8,7 @@
       "id": "initiative",
       "source_path": "commands/initiative.md",
       "resource_path": "resources/commands/initiative.md",
-      "sha256": "10cb0a60a3a3bf2cff0d68b71ab9ff1a6eac9bbb26b5f0a9ea21d9724c541810"
+      "sha256": "4cf4137292d62ece238ce4cc5f3d8029e052de2eb184e5c52060d4ba8b1038d6"
     },
     {
       "category": "scripts",
@@ -85,21 +85,21 @@
       "id": "guild-product-define",
       "source_path": "skills/meta/product-define/SKILL.md",
       "resource_path": "resources/skills/meta/product-define/SKILL.md",
-      "sha256": "1a5438b1900e5ee5f74a17603feecff7a574ca17d8b7011e77c077831b64249d"
+      "sha256": "77e97ed3f2219c0ce900b45e1438496160cb17f2ed118948e88cfb796a504818"
     },
     {
       "category": "skills",
       "id": "guild-product-explore",
       "source_path": "skills/meta/product-explore/SKILL.md",
       "resource_path": "resources/skills/meta/product-explore/SKILL.md",
-      "sha256": "a221e9082a062fc0b7a351f6099e9f6cbd6213adae3d66c5d76d6eb45be01967"
+      "sha256": "fc37708ae71d421277c12a024b8fac29f1124ab82ee409b51f44fac0ad0f7b4e"
     },
     {
       "category": "skills",
       "id": "guild-product-template",
       "source_path": "skills/meta/product-template/SKILL.md",
       "resource_path": "resources/skills/meta/product-template/SKILL.md",
-      "sha256": "092ba8133c66d9290d101302f8bae7be8b8cd4a0a2d2def7b8ad94914e596555"
+      "sha256": "adb6dfb5a8fef6c01b3ca5adc375404530c7bc290d15fc3784b81bc8c3ddefda"
     }
   ]
 }

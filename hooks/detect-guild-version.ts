@@ -84,8 +84,8 @@ async function readStdin(): Promise<string> {
 // ── Migrate CLI path resolution (Fix B redo / F4) ────────────────────────
 //
 // Priority:
-//   1. ${CLAUDE_PLUGIN_ROOT}/scripts/dot-guild/migrate-guild.ts  — installed path
-//      (CLAUDE_PLUGIN_ROOT is injected by Claude Code for all installed plugins).
+//   1. ${GUILD_PLUGIN_ROOT}/scripts/dot-guild/migrate-guild.ts  — installed path
+//      (CLAUDE_PLUGIN_ROOT remains supported as a Claude compatibility alias).
 //      Return even if the file doesn't exist yet — it's the canonical path.
 //   2. __dirname fallback — try two candidates and pick the first that exists:
 //        a. <plugin>/hooks/dist → ../../scripts/...  (bundled runtime: __dirname
@@ -99,8 +99,8 @@ async function readStdin(): Promise<string> {
 // --root is appended, so the command is unambiguous regardless of cwd.
 
 function resolveMigratePath(): string {
-  // Option 1: CLAUDE_PLUGIN_ROOT env.
-  const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
+  // Option 1: host-neutral plugin root env, with Claude compatibility fallback.
+  const pluginRoot = process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
   if (pluginRoot) {
     const candidate = path.resolve(pluginRoot, "scripts/dot-guild/migrate-guild.ts");
     if (fs.existsSync(candidate)) return candidate;

@@ -6,8 +6,8 @@
 #          Does not assume a skill can be forcibly invoked; /guild loads the full workflow.
 #          (§13.2: "does not assume a skill can be forcibly invoked; /guild loads the full workflow")
 #
-# Stdin:   JSON — Claude Code SessionStart hook payload (may be empty / ignored).
-# Stdout:  1-screen Guild status block (Claude Code displays this at session start).
+# Stdin:   JSON — host SessionStart hook payload (may be empty / ignored).
+# Stdout:  1-screen Guild status block (hosts with SessionStart support display this).
 # Stderr:  Error messages on failure.
 # Exit:    Always 0 — non-interactive.
 
@@ -19,15 +19,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PLUGIN_JSON="${PLUGIN_ROOT}/.claude-plugin/plugin.json"
 
-# ── Failure guard: validate CLAUDE_PLUGIN_ROOT ────────────────────────────
-# If CLAUDE_PLUGIN_ROOT is set but invalid, reset it to our resolved path so
-# downstream hooks that export ${CLAUDE_PLUGIN_ROOT} don't silently fail.
-if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" ]] && [[ ! -d "${CLAUDE_PLUGIN_ROOT}" ]]; then
-  echo "[Guild] warn: CLAUDE_PLUGIN_ROOT (${CLAUDE_PLUGIN_ROOT}) is not a directory; resetting to resolved plugin root." >&2
-  export CLAUDE_PLUGIN_ROOT="${PLUGIN_ROOT}"
-elif [[ -z "${CLAUDE_PLUGIN_ROOT:-}" ]]; then
-  export CLAUDE_PLUGIN_ROOT="${PLUGIN_ROOT}"
+# ── Failure guard: validate plugin-root environment ───────────────────────
+# GUILD_PLUGIN_ROOT is Guild's host-neutral variable. Claude Code still injects
+# CLAUDE_PLUGIN_ROOT, so keep it as a compatibility alias for Claude hooks.
+ROOT_FROM_ENV="${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}"
+if [[ -n "${ROOT_FROM_ENV}" ]] && [[ ! -d "${ROOT_FROM_ENV}" ]]; then
+  echo "[Guild] warn: plugin root env (${ROOT_FROM_ENV}) is not a directory; resetting to resolved plugin root." >&2
+  export GUILD_PLUGIN_ROOT="${PLUGIN_ROOT}"
+elif [[ -z "${ROOT_FROM_ENV}" ]]; then
+  export GUILD_PLUGIN_ROOT="${PLUGIN_ROOT}"
+else
+  export GUILD_PLUGIN_ROOT="${ROOT_FROM_ENV}"
 fi
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${GUILD_PLUGIN_ROOT}}"
 
 # If plugin.json is missing the install is broken — emit a diagnostic and
 # print a minimal banner so the session doesn't appear blank.
@@ -69,7 +73,7 @@ fi
 # ── Print status block ─────────────────────────────────────────────────────
 cat <<STATUS
 ┌─────────────────────────────────────────────────────────────────┐
-│  Guild ${GUILD_VERSION} — self-evolving specialist teams for Claude Code   │
+│  Guild ${GUILD_VERSION} — self-evolving specialist teams for AI hosts      │
 ├─────────────────────────────────────────────────────────────────┤
 │  Commands (daily tier — full surface via /guild:status)         │
 │                                                                 │

@@ -1019,6 +1019,20 @@ if (typeof module !== "undefined" && require.main === module) {
 // lib/v1.4/redact-log.ts
 var FIELD_SIZE_CAP_BYTES = 4 * 1024;
 
+// lib/security/events.ts
+var KNOWN_GUILD_HOST_KINDS = [
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector"
+];
+var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+
 // emit-learning-checkpoint.ts
 var fs3 = __toESM(require("fs"));
 var path4 = __toESM(require("path"));

@@ -8,14 +8,14 @@
       "id": "config",
       "source_path": "commands/config.md",
       "resource_path": "resources/commands/config.md",
-      "sha256": "14e01341a0aef4f5545a47bfab0b943ee5ddfb42aa2f3fea89ec5d6507e829c7"
+      "sha256": "d468de9f9aeef6e0e3fbca837b45b54779b8eee1493d2def8a13695075956077"
     },
     {
       "category": "scripts",
       "id": "config-cmd",
       "source_path": "scripts/config-cmd.ts",
       "resource_path": "resources/scripts/config-cmd.ts",
-      "sha256": "abe6ad676ae65c2f89ef060e2a93ee7f2accb6f022e0fc1e3c543c77453bb371"
+      "sha256": "f60f75e6399817ddaa41ec7ecc26edc3366469677d4d74820c7124bf0c3bbeae"
     },
     {
       "category": "scripts",

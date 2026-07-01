@@ -29,7 +29,7 @@ You produce the **explore artifact only**. You do NOT write the PRD (that is
 
 ## Required inputs
 - The user's product idea (verbatim prompt + any clarifying answers).
-- The canonical shape: `guild.explore.v1` (`${CLAUDE_PLUGIN_ROOT}/scripts/lib/explore-schema.ts`),
+- The canonical shape: `guild.explore.v1` (`${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/explore-schema.ts`),
   whose `EXPLORE_V1_EXAMPLE` is the golden shape to mirror.
 
 ## Output contract — `guild.explore.v1`
@@ -58,7 +58,7 @@ Mirror `EXPLORE_V1_EXAMPLE` for the exact shape. Emit ONLY the allowed keys (str
 3. Choose a slug and write `.guild/explore/<slug>.json` with the shape above.
 4. **Self-validate (fail closed)** — run the real validator on the file you wrote:
    ```
-   npx tsx -e 'const {validateExploreV1}=require(process.env.CLAUDE_PLUGIN_ROOT+"/scripts/lib/explore-schema.ts");const fs=require("fs");console.log(JSON.stringify(validateExploreV1(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))),null,2))' .guild/explore/<slug>.json
+   npx tsx -e 'const root=process.env.GUILD_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;const {validateExploreV1}=require(root+"/scripts/lib/explore-schema.ts");const fs=require("fs");console.log(JSON.stringify(validateExploreV1(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))),null,2))' .guild/explore/<slug>.json
    ```
    If `valid` is not `true`, fix the reported field(s) and re-validate. Do NOT hand off an
    artifact that fails validation.

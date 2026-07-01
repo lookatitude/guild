@@ -80,7 +80,7 @@ Record the final token estimate in the bundle's frontmatter so `guild:review` an
 **Mandatory post-write lint (deterministic — the cap is code-enforced, not model-judged).** Immediately after writing the bundle file, run the budget linter on it and consume its verdict:
 
 ```bash
-npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/lint-context-bundle.ts --bundle .guild/context/<run-id>/<specialist>-<task-id>.md
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lint-context-bundle.ts --bundle .guild/context/<run-id>/<specialist>-<task-id>.md
 ```
 
 It estimates tokens deterministically (`ceil(chars/4)`, cross-checked against the frontmatter `token_estimate` when present) and prints `{ pass, est_tokens, graph_est_tokens, has_dropped_for_budget, frontmatter_token_estimate, reasons[] }` to stdout — exit `0` pass, `2` fail. It FAILs when the estimate exceeds the 6k hard cap, or when a knowledge-graph section exceeds the 1200-token sub-cap (`## Graph retrieval`) with no `dropped_for_budget:` line recording the drop. On fail: trim per the summarization rules above (graph nodes drop first, per `source_priority`), record a `dropped_for_budget:` line for what was cut, rewrite the bundle, and **re-run the linter until it passes**. A bundle that has not passed the lint MUST NOT be handed to `guild:execute-plan` for dispatch — the model never self-certifies the budget.
@@ -148,7 +148,7 @@ Implements the cost-aware-tiering ADR (§4) and the persistence/SQLite-index pol
 The **recall-before-read rule** (`cost-techniques.md §3`, surfaced in ADR §4 + D-PS-2): before an agent reads a file, recall the task description against the wiki — through the **single config-aware recall entry-point** `scripts/lib/recall.ts`. There is **one** bundle-recall call; the CLI picks the mechanism internally and protects every chunk intrinsically.
 
 ```
-npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/lib/recall.ts --query "<task description>" --cwd <repo-root> --run-id <run-id> [--category <cat>] [--limit 10]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/recall.ts --query "<task description>" --cwd <repo-root> --run-id <run-id> [--category <cat>] [--limit 10]
 ```
 
 **`recall.ts` is the only recall path for bundle content** — it unifies **all four** sources: wiki via SQLite FTS5/BM25 (when `defaults.index` is at/above threshold), wiki via BM25-over-files / `guild-memory` semantics (below threshold), `fsScan` (when the MCP stdio transport is unavailable), **and** the `knowledge_graph` sub-source (bounded, token-scored graph traversal — formerly a direct `kg-query.ts` call). It resolves the wiki mechanism from config **internally**, traverses the graph, and runs **every** source's hits through `protect-chunks` (probe → quarantine → classify → trust-tier wrap) **before returning**. So the output is **intrinsically protected** — there is no raw-hits branch and no separate protect step for the skill to remember (the prior model-prose protect-pipe was skippable; this isn't). Graph-sourced chunks arrive tagged `source: knowledge_graph` and obey the `## Graph retrieval` sub-cap + drop-first priority.

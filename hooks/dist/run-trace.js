@@ -2539,34 +2539,41 @@ var fs7 = __toESM(require("node:fs"));
 var path9 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
 var KNOWN_GUILD_HOST_KINDS = [
-  "claude",
-  // Claude Code (reference impl)
-  "codex",
-  // OpenAI Codex CLI
-  "gemini",
-  // Google Gemini CLI
-  "pi",
-  // Pi (Inflection AI)
-  "antigravity-2",
-  // Antigravity 2.0
-  "claude-code-desktop",
-  // Claude Code Desktop app
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
   "claude-code-web",
-  // Claude Code Web (cloud VM)
   "codex-app",
-  // Codex desktop app
   "claude-ai-connector"
-  // claude.ai connector (remote MCP control plane)
 ];
+var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+var LEGACY_HOST_ALIASES2 = {
+  claude: "claude-code-cli",
+  "claude-code-desktop": "claude-code-app",
+  codex: "codex-cli",
+  "codex-plugin": "codex-cli",
+  agents: "agents-file",
+  ".agents": "agents-file",
+  pi: "pi-cli",
+  antigravity: "antigravity-cli",
+  "antigravity-2": "antigravity-cli"
+};
+function normalizeSecurityHostId(value) {
+  const s = value.trim();
+  if (KNOWN_GUILD_HOST_ID_SET.has(s)) return s;
+  return LEGACY_HOST_ALIASES2[s] ?? null;
+}
 function resolveHostResolution(env) {
   const explicit = (env["GUILD_HOST_ID"] ?? "").trim();
   if (explicit.length > 0) return { id: explicit, degraded: false, rawUnknown: "" };
   const rawHost = (env["GUILD_HOST"] ?? "").trim().toLowerCase();
-  if (rawHost.length === 0) return { id: "claude", degraded: false, rawUnknown: "" };
-  if (KNOWN_GUILD_HOST_KINDS.includes(rawHost)) {
-    return { id: rawHost, degraded: false, rawUnknown: "" };
-  }
-  return { id: "claude", degraded: true, rawUnknown: rawHost };
+  if (rawHost.length === 0) return { id: "claude-code-cli", degraded: false, rawUnknown: "" };
+  const normalized = normalizeSecurityHostId(rawHost);
+  if (normalized) return { id: normalized, degraded: false, rawUnknown: "" };
+  return { id: rawHost, degraded: true, rawUnknown: rawHost };
 }
 function resolveHostId() {
   return resolveHostResolution(process.env).id;

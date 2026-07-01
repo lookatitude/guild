@@ -33,8 +33,8 @@ describe("bootstrap.sh — host-capability manifest (RE-5)", () => {
       encoding: "utf8",
       env: {
         ...process.env,
-        // Override CLAUDE_PLUGIN_ROOT so bootstrap.sh finds the plugin at the right path.
-        CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT,
+        // Override GUILD_PLUGIN_ROOT so bootstrap.sh finds the plugin at the right path.
+        GUILD_PLUGIN_ROOT: PLUGIN_ROOT,
         // Set PWD to tmpDir so write-host-capability.ts writes there.
         PWD: tmpDir,
         HOME: process.env["HOME"] ?? tmpDir,
@@ -84,7 +84,7 @@ describe("bootstrap.sh — host-capability manifest (RE-5)", () => {
       encoding: "utf8",
       env: {
         ...process.env,
-        CLAUDE_PLUGIN_ROOT: fakePluginRoot,
+        GUILD_PLUGIN_ROOT: fakePluginRoot,
         PWD: tmpDir,
         HOME: process.env["HOME"] ?? tmpDir,
       },

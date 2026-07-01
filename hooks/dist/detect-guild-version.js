@@ -3209,7 +3209,7 @@ async function readStdin() {
   });
 }
 function resolveMigratePath() {
-  const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
+  const pluginRoot = process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
   if (pluginRoot) {
     const candidate = path4.resolve(pluginRoot, "scripts/dot-guild/migrate-guild.ts");
     if (fs3.existsSync(candidate)) return candidate;

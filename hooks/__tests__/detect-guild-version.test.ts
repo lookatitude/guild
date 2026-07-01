@@ -304,6 +304,20 @@ describe("detect-guild-version hook", () => {
     expect(res.stdout).toContain(expectedPath);
   });
 
+  test("Fix B: GUILD_PLUGIN_ROOT takes precedence over CLAUDE_PLUGIN_ROOT", () => {
+    const root = makeV1GuildDir(tmpBase);
+    const guildRoot = path.join(tmpBase, "guild-plugin-root");
+    const claudeRoot = path.join(tmpBase, "claude-plugin-root");
+    const expectedPath = path.join(guildRoot, "scripts/dot-guild/migrate-guild.ts");
+    const res = runScript(makePayload(root), {
+      GUILD_PLUGIN_ROOT: guildRoot,
+      CLAUDE_PLUGIN_ROOT: claudeRoot,
+    });
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toContain(expectedPath);
+    expect(res.stdout).not.toContain(path.join(claudeRoot, "scripts/dot-guild/migrate-guild.ts"));
+  });
+
   test("Fix B: dist build uses absolute path (not relative plugin/...)", () => {
     // The dist build must never surface the old hardcoded relative path.
     if (!fs.existsSync(DIST_JS)) {

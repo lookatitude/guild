@@ -8,14 +8,14 @@
       "id": "PostToolUse:post-tool-use.js",
       "source_path": "hooks/dist/post-tool-use.js",
       "resource_path": "resources/hooks/dist/post-tool-use.js",
-      "sha256": "f236c34447c0883c4b6bbea8e0949bd13be13310d322742f4ee07a2d2e738424"
+      "sha256": "5c830281f8eeca3c1a74eb8f8012b7d7cb8460cd86558957e0d68b63dd1774d1"
     },
     {
       "category": "hooks",
       "id": "PreToolUse:pre-tool-use.js",
       "source_path": "hooks/dist/pre-tool-use.js",
       "resource_path": "resources/hooks/dist/pre-tool-use.js",
-      "sha256": "3243f8321b50cf3f4274a09d31a97d8817d138af788a3e1357d2e3479e3547be"
+      "sha256": "b54603ea810117b216de0087aeaee1fe8058d19345623d9f54bec98d912037a5"
     },
     {
       "category": "scripts",

@@ -58,7 +58,7 @@ own `query_recipe` block (the recipe is self-documented in the manifest):
 2. For each, recall from **its** wiki via the existing guild-memory MCP `cwd`
    override (`wiki_search`/`wiki_get`/`wiki_list` with `cwd: <sub.path>`, or
    `GUILD_MEMORY_WIKI_ROOT=<sub.path>/.guild/wiki`) — no new MCP, no index copy.
-   The shipped helper `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/workspace/federated-query.ts` performs
+   The shipped helper `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/workspace/federated-query.ts` performs
    this read-only fan-out + merge for you.
 3. **Tag each hit with its source sub-guild** (`sub_guild.name`) and merge into
    one ranked list (same ranking/contradiction rules as above, applied across

@@ -15,7 +15,7 @@
       "id": "TaskCompleted:task-completed.js",
       "source_path": "hooks/agent-team/dist/task-completed.js",
       "resource_path": "resources/hooks/agent-team/dist/task-completed.js",
-      "sha256": "947755a150b36983326fafa3f0a8d58bfb30bf539e8ab9733bd9580fc004f8ff"
+      "sha256": "75bf441a304bedeeba80746b0eff576e67d612bd349d713a29ca70b34e443551"
     },
     {
       "category": "hooks",

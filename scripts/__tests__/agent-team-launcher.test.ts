@@ -826,6 +826,19 @@ describe("agent-team-launcher.ts", () => {
       expect(stderr).toMatch(/codex-remote/);
     });
 
+    it("enabled + unmapped starting host refuses instead of defaulting local routing to Claude", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      const { exitCode, stderr } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST: "gemini" }
+      );
+      expect(exitCode).toBe(1);
+      expect(stderr).toMatch(/cannot infer a local registry host id/i);
+      expect(stderr).toMatch(/GUILD_HOST_ID/);
+    });
+
     it("enabled + remote manifest + endpoint configured → dispatches via RemoteTeamBackend (dry-run, exit 0)", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
       writeHostManifest(tmpDir, "claude", "claude");

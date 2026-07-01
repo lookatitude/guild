@@ -8,21 +8,21 @@
       "id": "evolve",
       "source_path": "commands/evolve.md",
       "resource_path": "resources/commands/evolve.md",
-      "sha256": "d4f7acd92609acf7656ccb6e0fafea25c87d4a4c8f51ca8a5e03a6b1eaed81ba"
+      "sha256": "dbc8dd5d110f48fefd18135ee0922bdb6d5d0af7485204babc72397c2d6816eb"
     },
     {
       "category": "commands",
       "id": "rollback",
       "source_path": "commands/rollback.md",
       "resource_path": "resources/commands/rollback.md",
-      "sha256": "f8a82aa0f176f0c9c2907fa8225ecdcb020ea0fe1f0c8f5ddabf0aa49e7409e4"
+      "sha256": "950fe7bd1b0867cdc3bc3e2d945fb69cb883cc0fd6ca8661b4f13e471646f0e6"
     },
     {
       "category": "hooks",
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "708142252683f410a966e9307f53a44db21c3d2c139b80d65ac3fe0a11fa2b40"
+      "sha256": "9ac45667e25b851aa69c1303526314392edd9cd1720126f8ce21497942cf1ffc"
     },
     {
       "category": "hooks",
@@ -106,7 +106,7 @@
       "id": "guild-learning-checkpoint",
       "source_path": "skills/meta/learning-checkpoint/SKILL.md",
       "resource_path": "resources/skills/meta/learning-checkpoint/SKILL.md",
-      "sha256": "7898988d21ab03d48f34d27ea6c3c3baed549a6b1238aa1f12f08a4ac8a91279"
+      "sha256": "2f671d8015830d7eada1e952f4caece58dfdfec501805ce6088641abeff5a90b"
     },
     {
       "category": "skills",

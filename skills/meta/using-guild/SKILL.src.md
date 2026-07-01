@@ -81,7 +81,7 @@ normal lifecycle, unchanged.
 the user's verbatim prompt and route on its `intake` field ONLY:
 
 ```
-echo "<the user's verbatim prompt>" | npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/lib/classify-intake.ts
+echo "<the user's verbatim prompt>" | npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/classify-intake.ts
 ```
 
 - `intake === "product_loop"` → route to the **product-loop intake**: invoke

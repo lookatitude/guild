@@ -76,9 +76,9 @@ export interface SecurityEventV1 {
    */
   dispatch_rung?: string;
   /**
-   * HK-05 (D-AUDIT): execution host id for cross-host forensics.
+   * HK-05 (D-AUDIT): registry host id for cross-host forensics.
    * Auto-resolved by `buildSecurityEvent` from:
-   *   GUILD_HOST_ID env  >  GUILD_HOST env (normalised to kind)  >  "claude" (default).
+   *   GUILD_HOST_ID env  >  GUILD_HOST env (normalized to registry id)  >  "claude-code-cli" (default).
    * Carried on EVERY security event so audit consumers can correlate events
    * across hosts (capability_scope_deviation, bypass, secret_scrub_blocked, etc.).
    */
@@ -95,39 +95,57 @@ export const SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1" as const;
  */
 export type SecurityEventInput = Omit<SecurityEventV1, "schema_version" | "ts" | "detail" | "host"> & {
   detail?: string;
-  /** Override the auto-resolved host id. Defaults to GUILD_HOST_ID / GUILD_HOST / "claude". */
+  /** Override the auto-resolved host id. Defaults to GUILD_HOST_ID / GUILD_HOST / "claude-code-cli". */
   host?: string;
 };
 
 /**
- * The 9 canonical host kinds Guild's host-adapter contract supports (HK-10).
- * Mirrors `HostKind` in `scripts/lib/host-types.ts` — update both when adding
- * a new host (extend the union there first, then add the string here).
+ * The 9 canonical registry host ids Guild's host-adapter contract supports (HK-10).
+ * This intentionally mirrors the host registry, not the legacy HostKind union.
  */
 export const KNOWN_GUILD_HOST_KINDS = [
-  "claude",               // Claude Code (reference impl)
-  "codex",                // OpenAI Codex CLI
-  "gemini",               // Google Gemini CLI
-  "pi",                   // Pi (Inflection AI)
-  "antigravity-2",        // Antigravity 2.0
-  "claude-code-desktop",  // Claude Code Desktop app
-  "claude-code-web",      // Claude Code Web (cloud VM)
-  "codex-app",            // Codex desktop app
-  "claude-ai-connector",  // claude.ai connector (remote MCP control plane)
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
 ] as const;
+
+const KNOWN_GUILD_HOST_ID_SET = new Set<string>(KNOWN_GUILD_HOST_KINDS);
+const LEGACY_HOST_ALIASES: Record<string, string> = {
+  claude: "claude-code-cli",
+  "claude-code-desktop": "claude-code-app",
+  codex: "codex-cli",
+  "codex-plugin": "codex-cli",
+  agents: "agents-file",
+  ".agents": "agents-file",
+  pi: "pi-cli",
+  antigravity: "antigravity-cli",
+  "antigravity-2": "antigravity-cli",
+};
+
+function normalizeSecurityHostId(value: string): string | null {
+  const s = value.trim();
+  if (KNOWN_GUILD_HOST_ID_SET.has(s)) return s;
+  return LEGACY_HOST_ALIASES[s] ?? null;
+}
 
 /**
  * Result of host-id resolution with degradation detection (HK-10).
  * Callers that need to emit an observable degradation event check `degraded`.
  */
 export interface HostResolution {
-  /** Resolved host id to stamp on the security event. Defaults to "claude". */
+  /** Resolved host id to stamp on the security event. Defaults to "claude-code-cli". */
   id: string;
   /**
-   * True when GUILD_HOST was set to an unrecognized value (not in the 9-host
-   * canonical set). The `id` is still "claude" (safe default) but the mismatch
-   * should be observable on disk so audit consumers know the attribution may be
-   * wrong. Pre-tool-use.ts emits a `capability_scope_degrade` event when true.
+   * True when GUILD_HOST was set to an unrecognized value (not a registry host
+   * id or supported alias). The `id` preserves the raw host value so audit
+   * consumers never see a false Claude attribution. Pre-tool-use.ts emits a
+   * `capability_scope_degrade` event when true.
    */
   degraded: boolean;
   /** The unrecognized raw GUILD_HOST value. Non-empty only when degraded=true. */
@@ -138,9 +156,9 @@ export interface HostResolution {
  * Resolve the execution host from an env bag with full degradation detection.
  * Resolution order:
  *   1. GUILD_HOST_ID env (explicit, any string) → id=value, degraded=false
- *   2. GUILD_HOST env matched against the 9-host canonical set → id=host, degraded=false
- *   3. GUILD_HOST env set but NOT in canonical set → id="claude", degraded=true
- *   4. GUILD_HOST absent/empty → id="claude", degraded=false
+ *   2. GUILD_HOST env normalized to the registry HostId namespace → id=host_id, degraded=false
+ *   3. GUILD_HOST env set but not recognized → id=raw host, degraded=true
+ *   4. GUILD_HOST absent/empty → id="claude-code-cli", degraded=false
  *
  * Exported for callers that need to detect and emit degradation (HK-10).
  * `buildSecurityEvent` uses this via the internal `resolveHostId()` wrapper.
@@ -149,12 +167,11 @@ export function resolveHostResolution(env: NodeJS.ProcessEnv): HostResolution {
   const explicit = (env["GUILD_HOST_ID"] ?? "").trim();
   if (explicit.length > 0) return { id: explicit, degraded: false, rawUnknown: "" };
   const rawHost = (env["GUILD_HOST"] ?? "").trim().toLowerCase();
-  if (rawHost.length === 0) return { id: "claude", degraded: false, rawUnknown: "" };
-  if ((KNOWN_GUILD_HOST_KINDS as readonly string[]).includes(rawHost)) {
-    return { id: rawHost, degraded: false, rawUnknown: "" };
-  }
-  // GUILD_HOST set but not a recognized canonical host kind → safe default + flag.
-  return { id: "claude", degraded: true, rawUnknown: rawHost };
+  if (rawHost.length === 0) return { id: "claude-code-cli", degraded: false, rawUnknown: "" };
+  const normalized = normalizeSecurityHostId(rawHost);
+  if (normalized) return { id: normalized, degraded: false, rawUnknown: "" };
+  // GUILD_HOST set but not recognized: preserve raw attribution and flag degradation.
+  return { id: rawHost, degraded: true, rawUnknown: rawHost };
 }
 
 /**

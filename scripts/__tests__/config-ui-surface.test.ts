@@ -340,8 +340,12 @@ describe("V10 — `config ui set` routes through the config API (boundary proof)
 const SCRIPT = path.resolve(__dirname, "..", "config-cmd.ts");
 const ENV = { ...process.env, NODE_NO_WARNINGS: "1" } as NodeJS.ProcessEnv;
 
-function runCli(args: string[]): { status: number; out: string; err: string } {
-  const r = spawnSync("npx", ["tsx", SCRIPT, ...args], { encoding: "utf8", env: ENV });
+function runCli(
+  args: string[],
+  env: Record<string, string | undefined> = {}
+): { status: number; out: string; err: string } {
+  const mergedEnv = { ...ENV, ...env } as NodeJS.ProcessEnv;
+  const r = spawnSync("npx", ["tsx", SCRIPT, ...args], { encoding: "utf8", env: mergedEnv });
   return { status: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
 
@@ -360,6 +364,17 @@ describe("config ui — CLI surface (§E11/§E12)", () => {
     expect(r.out).toMatch(/ui list — host "claude-code-cli"/);
     expect(r.out).toMatch(/rigor/);
     expect(r.out).toMatch(/value=deep\s+\[project\]/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("ui list defaults to the active host env when --host is omitted", () => {
+    const dir = mkProject({ rigor: "standard" });
+    const r = runCli(["ui", "list", "--group", "startup", "--cwd", dir], {
+      GUILD_HOST: "codex",
+      GUILD_HOST_ID: undefined,
+    });
+    expect(r.status).toBe(0);
+    expect(r.out).toMatch(/ui list — host "codex-cli"/);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

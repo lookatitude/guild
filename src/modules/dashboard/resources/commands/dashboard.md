@@ -50,7 +50,7 @@ confirmed `--install`).
 Before launch, start a lightweight run (SC-B, §435):
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js start \
   --command=/guild:dashboard \
   --run-class=lightweight \
   --cwd "$(pwd)"

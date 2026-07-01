@@ -103,7 +103,7 @@ staleness state (that lives only in step 1) — which is what makes SC-8
 byte-identity unconditional.
 
 0. **Lazy consent + cost gate (SC-15) — BEFORE any deep work.** Run
-   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/learn/cost-gate.ts --cwd <root> --json`.
+   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/learn/cost-gate.ts --cwd <root> --json`.
    Consume `gate` verbatim: `pass` → proceed silently; `confirm` → surface the
    `estimate` (`files`, `tokens_est`) + `reason` to the operator and continue
    only on approval; `abort` (exit 1) → hard-stop and surface `reason` — never a
@@ -111,7 +111,7 @@ byte-identity unconditional.
 
 1. **Staleness gate (SC-14) — this skill's coarse gate is the ONLY staleness
    mechanism.** Run
-   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/learn/k-stage-staleness.ts --cwd <root> --json`
+   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/learn/k-stage-staleness.ts --cwd <root> --json`
    and consume the booleans `{ k1..k6, structuralSkip }` to decide **whether to
    run the knowledge tier at all**: if **no** K-stage is stale (e.g. a code-only
    change → all `k1..k6` false), **skip** the orchestrator entirely (the

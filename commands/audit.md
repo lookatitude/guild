@@ -36,7 +36,7 @@ preflight (`scripts/lib/runstart-preflight.ts`; canonical contract in
    inheritance chain + validates + probes tmux + detects providers
    (full chain: see `/guild:guild §Run-start preflight`).
 2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
-   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
    on NO continue with the resolved backend.
 3. Pass `result.snapshot` to `startRun` — U6 writes
    `.guild/runs/<id>/resolved-settings.json` + `settings_ref` in `run.yaml`.
@@ -47,7 +47,7 @@ preflight (`scripts/lib/runstart-preflight.ts`; canonical contract in
 Before the audit skill is invoked, start a run (SC-B, §435):
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js start \
   --command=/guild:audit \
   --cwd "$(pwd)"
 ```

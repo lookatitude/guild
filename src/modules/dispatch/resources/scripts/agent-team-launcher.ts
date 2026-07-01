@@ -369,22 +369,31 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
 
 function parseHostKind(value: string): HostKind | undefined {
   const v = stripQuotes(value).trim().toLowerCase();
-  if (v === "claude" || v === "codex" || v === "pi" || v === "antigravity-2") return v;
+  if (v === "claude" || v === "codex" || v === "gemini" || v === "pi" || v === "antigravity-2") return v;
   if (v === "antigravity" || v === "antigravity-cli") return "antigravity-2";
   if (v === "claude-code-cli" || v === "claude-code-app" || v === "claude-code-desktop") return "claude";
+  if (v === "claude-code-web" || v === "claude-ai-connector") return "claude";
   if (v === "codex-cli" || v === "codex-app") return "codex";
   if (v === "pi-cli") return "pi";
   return undefined;
 }
 
-function paneHostKindForStartingHost(value: string | undefined): HostKind {
+function paneHostKindForStartingHost(value: string | undefined): HostKind | null {
   const raw = (value ?? "").trim();
   if (!raw) return "claude";
   const parsed = parseHostKind(raw);
   if (parsed) return parsed;
   const normalized = normalizeHostId(raw);
   const registryKind = normalized ? registryIdToCanonicalHostKind(normalized) : null;
-  if (!registryKind) return "claude";
+  const lower = raw.toLowerCase();
+  if (!registryKind) {
+    if (lower.startsWith("claude")) return "claude";
+    if (lower.startsWith("codex")) return "codex";
+    if (lower.startsWith("gemini")) return "gemini";
+    if (lower.startsWith("pi")) return "pi";
+    if (lower.startsWith("antigravity")) return "antigravity-2";
+  }
+  if (!registryKind) return null;
   if (
     registryKind === "claude-code-desktop" ||
     registryKind === "claude-code-web" ||
@@ -396,7 +405,7 @@ function paneHostKindForStartingHost(value: string | undefined): HostKind {
   return registryKind;
 }
 
-function resolveOrchestratorHostKind(env: NodeJS.ProcessEnv = process.env): HostKind {
+function resolveOrchestratorHostKind(env: NodeJS.ProcessEnv = process.env): HostKind | null {
   return paneHostKindForStartingHost(
     env["GUILD_ORCHESTRATOR_HOST"] ?? env["GUILD_HOST_ID"] ?? env["GUILD_HOST"]
   );
@@ -1017,6 +1026,18 @@ async function main(): Promise<void> {
       : `guild-${slug}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
   const cwd = path.resolve(args.cwd);
   const orchestratorHostKind = resolveOrchestratorHostKind(process.env);
+  if (!orchestratorHostKind) {
+    const rawHost =
+      process.env["GUILD_ORCHESTRATOR_HOST"] ??
+      process.env["GUILD_HOST_ID"] ??
+      process.env["GUILD_HOST"] ??
+      "";
+    process.stderr.write(
+      `[agent-team-launcher] unsupported starting host "${rawHost}". Set ` +
+        "GUILD_HOST_ID to a registered Guild host id, or add a PaneAdapter before launching a team.\n"
+    );
+    process.exit(1);
+  }
 
   // R-009: apply statusline env gate before pane commands are composed.
   // If settings.json resolves statusline: true (via --statusline flag or
@@ -1145,13 +1166,22 @@ async function main(): Promise<void> {
   if (crossHostEnabled(process.env, cwd)) {
     const manifests = loadHostManifests(cwd);
     if (manifests.length > 0) {
-      const explicitLocalHostId = (process.env["GUILD_HOST_ID"] ?? process.env["GUILD_HOST"] ?? "").trim();
+      const explicitLocalHostId = (process.env["GUILD_HOST_ID"] ?? "").trim();
+      const localHostFromKind = normalizeHostId((process.env["GUILD_HOST"] ?? "").trim());
       // W4 D1: registry bridge — hostKindToRegistryId replaces the inline switch of
-      // `=== "codex"` / `=== "pi"` / `=== "antigravity-2"` literals. Fallback to
-      // "claude-code-cli" when the registry has no row (e.g. gemini). Behavior-neutral.
+      // `=== "codex"` / `=== "pi"` / `=== "antigravity-2"` literals. Unknown or
+      // dropped host kinds must not silently become Claude; require an explicit local id.
       const localHostId =
         explicitLocalHostId ||
-        (hostKindToRegistryId(orchestratorHostKind) ?? "claude-code-cli");
+        localHostFromKind ||
+        hostKindToRegistryId(orchestratorHostKind);
+      if (!localHostId) {
+        process.stderr.write(
+          `[agent-team-launcher] cross-host routing cannot infer a local registry host id from ` +
+            `GUILD_HOST="${orchestratorHostKind}". Set GUILD_HOST_ID to the local capability manifest id.\n`
+        );
+        process.exit(1);
+      }
       try {
         // Load cross-host config here so R-015/R-018 values are available
         // for both the routing decision AND the endpoint lookup below.

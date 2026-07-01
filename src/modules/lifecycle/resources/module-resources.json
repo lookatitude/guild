@@ -8,7 +8,7 @@
       "id": "build",
       "source_path": "commands/build.md",
       "resource_path": "resources/commands/build.md",
-      "sha256": "bad6ab642cb85d2838944903823c5b9c0630d6db5b1d97c3da77a22f28e8da7a"
+      "sha256": "c57c5d7dac06a03675b335df321f384cef653b671b012cc0aa34952f04ef92fa"
     },
     {
       "category": "commands",
@@ -22,56 +22,56 @@
       "id": "guild",
       "source_path": "commands/guild.md",
       "resource_path": "resources/commands/guild.md",
-      "sha256": "575de82d53eab6ac7487310197bce89d5ec0dc81980e403200fbad4c2658d657"
+      "sha256": "3876957790ae368bf2c78581269ab45378abe2d3fe1188ab5edcbe526989dbfb"
     },
     {
       "category": "commands",
       "id": "ideate",
       "source_path": "commands/ideate.md",
       "resource_path": "resources/commands/ideate.md",
-      "sha256": "bd1c2fabb2b80d6d30fc65e29979ab60f256f48fc7c31f9292c1883f72d255e1"
+      "sha256": "7111d4e51c8997886cb1ab4d6e4697921aea8814d663062301da937e7e3f774b"
     },
     {
       "category": "commands",
       "id": "init",
       "source_path": "commands/init.md",
       "resource_path": "resources/commands/init.md",
-      "sha256": "70a651f49966e5811d68396675e1590f502193c0fe143a887a7176bbf794e7c4"
+      "sha256": "298038cec3d0b69920512fba85bfeea3992d0bc4fbaecb89a69fe2bcfd5ff199"
     },
     {
       "category": "commands",
       "id": "ops",
       "source_path": "commands/ops.md",
       "resource_path": "resources/commands/ops.md",
-      "sha256": "a30604f99457582b8445daad9f59553222882e56e606a7f73d873b3ffb53e2a3"
+      "sha256": "d01d3ba12d5b78e2923f7f5efd043f290cca7078c8c1501efddb98f4a6451a17"
     },
     {
       "category": "commands",
       "id": "plan",
       "source_path": "commands/plan.md",
       "resource_path": "resources/commands/plan.md",
-      "sha256": "f328e5fee1df7a6dfd7c337939fa3091b8524cf8ec5bd8e4a4a989056c69ce9f"
+      "sha256": "c04dbca64741662b3d04b60b46ea8a72cedf3c6cfaa9c980234965782acb5729"
     },
     {
       "category": "commands",
       "id": "qa",
       "source_path": "commands/qa.md",
       "resource_path": "resources/commands/qa.md",
-      "sha256": "6fce154f71680e82600ea8d50dadcabfc14382511c464a83a9f968874ab6873a"
+      "sha256": "5c10c89eedd48d154355c6021ee28d3acca304cf753cab855a0f788df21f5191"
     },
     {
       "category": "commands",
       "id": "resume",
       "source_path": "commands/resume.md",
       "resource_path": "resources/commands/resume.md",
-      "sha256": "4483403eaeaeecbce14187c67cdf71214ad6e6ed489aff6a645b1d91c944a898"
+      "sha256": "e17c6bb2b07ea682f58115b3d3bf9db89d1a787cab0a6f8959530d84f9a1aeef"
     },
     {
       "category": "commands",
       "id": "status",
       "source_path": "commands/status.md",
       "resource_path": "resources/commands/status.md",
-      "sha256": "fa3f3f1d4022477348b81049694c72556702cac09d3c88914f6e8014b00078c6"
+      "sha256": "03eaae3a714994975594ddf50b73beed4c7dd019948cfd212288386f77365d1f"
     },
     {
       "category": "scripts",
@@ -148,28 +148,28 @@
       "id": "guild-brainstorm",
       "source_path": "skills/meta/brainstorm/SKILL.md",
       "resource_path": "resources/skills/meta/brainstorm/SKILL.md",
-      "sha256": "f8192c5726749aaf1714e23e14b734766dba56ce2925b38820a8bf8623cfa126"
+      "sha256": "128cd7c8f2b1c53655d001cc9271c9ed710d63256bbb0e6e61257a6e11c5dfbc"
     },
     {
       "category": "skills",
       "id": "guild-execute-plan",
       "source_path": "skills/meta/execute-plan/SKILL.md",
       "resource_path": "resources/skills/meta/execute-plan/SKILL.md",
-      "sha256": "54ec156a33cc483ea2fcdbc487dc5b7f22d6381d001051e9bf6739c8872637cf"
+      "sha256": "d09892ee1afcbd0185d67889e01091f5c110f8b303da156264fe4daf579e1d98"
     },
     {
       "category": "skills",
       "id": "guild-execute-plan/dispatch.md",
       "source_path": "skills/meta/execute-plan/dispatch.md",
       "resource_path": "resources/skills/meta/execute-plan/dispatch.md",
-      "sha256": "b5a27a42102fc43625c319d3c66d0af19a73a94484ff32f11f28899eb211dfc1"
+      "sha256": "3c6482df8fca58dec48561622b866411254381d4ef6362f32c371665babb8260"
     },
     {
       "category": "skills",
       "id": "guild-plan",
       "source_path": "skills/meta/plan/SKILL.md",
       "resource_path": "resources/skills/meta/plan/SKILL.md",
-      "sha256": "69a872939450c7230d58756f099b83468524ee01888b7dbf8af1b64d5eb60bda"
+      "sha256": "39ef3dd75bf83b38dac9f137e4bd4ed02f481bbc6f7161f6f4df96a7e9f64e13"
     },
     {
       "category": "skills",
@@ -183,7 +183,7 @@
       "id": "init",
       "source_path": "skills/meta/init/SKILL.md",
       "resource_path": "resources/skills/meta/init/SKILL.md",
-      "sha256": "f95a001185ac5d6e63cfe94b2d7f0e04bc2e28a1ba466cbb4661993d99aa0cd7"
+      "sha256": "e85737d406a17a3cb7c6743524e3e14d2b8e9a6c57ff4690aee1452a1bd0cea9"
     }
   ]
 }

@@ -96,7 +96,7 @@ review the diagnosis and fix plan before asking the user to approve edits.
 Config resolution:
 
 ```bash
-npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/read-guild-config.ts [--cwd <repo-root>] [raw /guild:fix flags]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/read-guild-config.ts [--cwd <repo-root>] [raw /guild:fix flags]
 ```
 
 When `codex_review` resolves true the G-diagnose review is **required**, so the

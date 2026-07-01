@@ -66,7 +66,7 @@ drafted-grades review table. Review each grade (edit the `importance:` value
 in place where the heuristic is wrong), then accept:
 
 ```bash
-npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo>
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo>
 ```
 
 Until accepted, wiki lint (`/guild:wiki lint` check #9 and the docs-hygiene
@@ -84,7 +84,7 @@ Before the migration begins — and before run-trace start — run the preflight
    inheritance chain + validates + probes tmux + detects providers
    (full chain: see `/guild:guild §Run-start preflight`).
 2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
-   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
    on NO continue with the resolved backend.
 3. Pass `result.snapshot` to `startRun` — U6 writes
    `.guild/runs/<id>/resolved-settings.json` + `settings_ref` in `run.yaml`.
@@ -95,7 +95,7 @@ Before the migration begins — and before run-trace start — run the preflight
 Before the converter is invoked, start a lightweight run (SC-B, §435):
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace.js start \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js start \
   --command=/guild:migrate \
   --run-class=lightweight \
   --cwd "$(pwd)"
@@ -109,10 +109,10 @@ No `--initiative` flag (NN#5).
 Invoke the migrate-guild CLI directly:
 
 ```bash
-npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/dot-guild/migrate-guild.ts \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/dot-guild/migrate-guild.ts \
   [--root=<path>] [--mode=migrate|dry-run|skip] [--workspace]
 ```
 
-`CLAUDE_PLUGIN_ROOT` resolves to the plugin install root (the directory that
-contains this `commands/` folder). Default mode is `dry-run` — the command is
-always safe to run without arguments.
+`${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}` resolves to the plugin install
+root (the directory that contains this `commands/` folder). Default mode is
+`dry-run` — the command is always safe to run without arguments.

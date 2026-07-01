@@ -62,7 +62,7 @@ var USING_GUILD_SRC_REL = path.join(
   "SKILL.src.md"
 );
 function resolveUsingGuildSrc() {
-  const fromEnv = process.env["CLAUDE_PLUGIN_ROOT"];
+  const fromEnv = process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
   if (typeof fromEnv === "string" && fromEnv.length > 0) {
     const candidate = path.join(fromEnv, USING_GUILD_SRC_REL);
     if (fs.existsSync(candidate)) return candidate;
@@ -121,13 +121,15 @@ async function main() {
   process.stdout.write(buildSessionStartInjection(context));
   process.exit(0);
 }
-main().catch((err) => {
-  process.stderr.write(
-    `[using-guild-bootstrap] FATAL: ${err instanceof Error ? err.message : String(err)}
+if (require.main === module) {
+  main().catch((err) => {
+    process.stderr.write(
+      `[using-guild-bootstrap] FATAL: ${err instanceof Error ? err.message : String(err)}
 `
-  );
-  process.exit(0);
-});
+    );
+    process.exit(0);
+  });
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   buildSessionStartInjection,

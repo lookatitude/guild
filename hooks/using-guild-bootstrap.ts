@@ -55,11 +55,12 @@ const USING_GUILD_SRC_REL = path.join(
 /**
  * Resolve the absolute path to `skills/meta/using-guild/SKILL.src.md`, robust to
  * BOTH execution shapes (source via tsx = `hooks/`, compiled via node =
- * `hooks/dist/`): honor `CLAUDE_PLUGIN_ROOT` first, then walk up from this file's
- * directory until the skill source is found. Returns null if it cannot be located.
+ * `hooks/dist/`): honor `GUILD_PLUGIN_ROOT` first, fall back to Claude's
+ * compatibility alias, then walk up from this file's directory until the skill
+ * source is found. Returns null if it cannot be located.
  */
 function resolveUsingGuildSrc(): string | null {
-  const fromEnv = process.env["CLAUDE_PLUGIN_ROOT"];
+  const fromEnv = process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
   if (typeof fromEnv === "string" && fromEnv.length > 0) {
     const candidate = path.join(fromEnv, USING_GUILD_SRC_REL);
     if (fs.existsSync(candidate)) return candidate;
@@ -141,9 +142,11 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-main().catch((err: unknown) => {
-  process.stderr.write(
-    `[using-guild-bootstrap] FATAL: ${err instanceof Error ? err.message : String(err)}\n`,
-  );
-  process.exit(0); // never block the session
-});
+if (require.main === module) {
+  main().catch((err: unknown) => {
+    process.stderr.write(
+      `[using-guild-bootstrap] FATAL: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    process.exit(0); // never block the session
+  });
+}

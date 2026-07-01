@@ -2,7 +2,7 @@
 /**
  * hooks/comms-format-lint.ts
  *
- * Runner:    node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/comms-format-lint.js
+ * Runner:    node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/comms-format-lint.js
  *            (compiled via esbuild; see package.json "build" script)
  *            For dev/test: npx tsx hooks/comms-format-lint.ts
  *

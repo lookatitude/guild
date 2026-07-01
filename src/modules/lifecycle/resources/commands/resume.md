@@ -40,7 +40,7 @@ Before locating the next pending gate — run the preflight
    inheritance chain + validates + probes tmux + detects providers
    (full chain: see `/guild:guild §Run-start preflight`).
 2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
-   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
+   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
    on NO continue with the resolved backend.
 3. `resume` continues an existing run: the snapshot for the active run is
    already on disk (written at the original run-start). Read it back with
@@ -49,7 +49,7 @@ Before locating the next pending gate — run the preflight
    replace the locked-in snapshot for the resumed run.
 4. **Re-enter resumable dead lanes (R-016).** Before locating the next pending
    gate, list any resumable dead lanes for the active run:
-   `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/resume-lanes.ts <runDir> --json` (the
+   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/resume-lanes.ts <runDir> --json` (the
    `--json` flag is required for the parseable bare array; without it the CLI
    prints a human table — scans
    `<runDir>/lanes/*/resume.json`, applies the `guild.lane_resume.v1` version

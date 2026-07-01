@@ -13,7 +13,7 @@
  * discipline). A source-path sanity check runs the exported helpers via ts-jest.
  *
  * To regenerate the golden after an INTENTIONAL L4 SKILL.src.md change:
- *   cat fixtures/session-start.json | CLAUDE_PLUGIN_ROOT=<plugin-root> \
+ *   cat fixtures/session-start.json | GUILD_PLUGIN_ROOT=<plugin-root> \
  *     node dist/using-guild-bootstrap.js > __tests__/golden/using-guild-session-start.json
  */
 import { spawnSync } from "node:child_process";
@@ -90,10 +90,24 @@ describe("using-guild-bootstrap.ts (L5b SessionStart injection)", () => {
     expect(golden.hookSpecificOutput.additionalContext).toContain("Product-loop intake");
   });
 
+  it("prefers GUILD_PLUGIN_ROOT over the Claude compatibility alias", () => {
+    const badClaudeRoot = fs.mkdtempSync(path.join(require("os").tmpdir(), "ug-bad-claude-"));
+    const { stdout, status } = runHook(fixture, {
+      GUILD_PLUGIN_ROOT: PLUGIN_ROOT,
+      CLAUDE_PLUGIN_ROOT: badClaudeRoot,
+    });
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout);
+    expect(parsed.hookSpecificOutput.additionalContext).toBe(
+      gatewayContext(fs.readFileSync(SKILL_SRC, "utf8"))
+    );
+    fs.rmSync(badClaudeRoot, { recursive: true, force: true });
+  });
+
   it("is a silent no-op (no stdout, exit 0) when the skill source is absent everywhere", () => {
     // Run the SELF-CONTAINED bundled dist from an isolated temp dir whose
-    // ancestors have NO using-guild skill, and point CLAUDE_PLUGIN_ROOT at an
-    // equally-empty dir — so neither the env nor the walk-up fallback resolves it
+    // ancestors have NO using-guild skill, and point the plugin-root env at an
+    // equally-empty dir, so neither the env nor the walk-up fallback resolves it
     // (a genuinely partial install). The robust walk-up otherwise finds the real
     // skill from the real dist/ location, which is correct production behavior.
     const isoDir = fs.mkdtempSync(path.join(require("os").tmpdir(), "ug-iso-"));

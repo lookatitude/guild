@@ -137,7 +137,7 @@ gate. The finding records page path, the drafted grade, and the accept
 command:
 
 ```bash
-npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo-root>
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo-root>
 ```
 
 Do not edit the grade yourself (the non-destructive rule applies) — the

@@ -371,7 +371,11 @@ function main(): void {
 
   // Environment defaults are resolved HERE (parseProducerArgs stays pure).
   const cwd = args.cwd ?? process.env.PWD ?? process.cwd();
-  const pluginRoot = args.pluginRoot ?? process.env.CLAUDE_PLUGIN_ROOT ?? path.resolve(__dirname, "..");
+  const pluginRoot =
+    args.pluginRoot ??
+    process.env.GUILD_PLUGIN_ROOT ??
+    process.env.CLAUDE_PLUGIN_ROOT ??
+    path.resolve(__dirname, "..");
   const templatePath = resolveTemplatePath(args.ref, pluginRoot, cwd);
 
   try {

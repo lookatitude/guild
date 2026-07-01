@@ -41,7 +41,7 @@ On a **workspace** root (detected per the step below): `.guild/workspace.json`
 (`guild.workspace.v1` — bound by pointer to the contract map, never
 schema-copied here; canonical body defined in the workspace-aware-init-and-federation ADR). It is
 written by the Lane-B script, not hand-built: `npx tsx
-${CLAUDE_PLUGIN_ROOT}/scripts/workspace/write-manifest.ts --cwd <workspace-root>`. A workspace builds
+${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/workspace/write-manifest.ts --cwd <workspace-root>`. A workspace builds
 its **own** `.guild/wiki/**` **only if** `root_wiki` is true (D-OQ2 — the
 workspace root itself has scannable top-level code); a pure federation root
 (e.g. just `docs/` + sub-repos) gets `root_wiki: false` and **no** root wiki.
@@ -53,7 +53,7 @@ is byte-for-byte unchanged:
 `.guild/init/<slug>.md` (the Init record), `.guild/wiki/**`, `.guild/raw/**`,
 `.guild/settings.json` (the project config surface — scaffolded
 fully-documented **if absent**, idempotent, via
-`npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/read-guild-config.ts --scaffold > .guild/settings.json`;
+`npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/read-guild-config.ts --scaffold > .guild/settings.json`;
 never clobbered; regenerate/inspect with `/guild:config init|show|validate`),
 and — brownfield, **cheap scan tier only** — `.guild/indexes/codebase-map.json`
 plus a **confidence-tagged** `wiki/concepts/architecture-map.md` **stub**.
@@ -69,7 +69,7 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
 1. Resolve `guild.phase_entry.v1` (pointer) and fold the Tier-2 `defaults:`.
 2. Detect mode: brownfield vs new-product (`--new`).
 2a. **Detect repo kind (workspace vs regular).** Run `npx tsx
-   ${CLAUDE_PLUGIN_ROOT}/scripts/workspace/detect.ts --cwd <root>` — it classifies the target
+   ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/workspace/detect.ts --cwd <root>` — it classifies the target
    `regular` or `workspace` by stat-ing **immediate children only** (depth
    fixed at 1, no nesting, no knob) for a nested `.git/` **or** `.guild/`, and
    honors `settings.json` `workspace.mode: auto | on | off`. Plain dirs (e.g.
@@ -81,7 +81,7 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
    only under `--learn` or `defaults.auto_learn: true` (D3) — no
    ask-before-deep-scan gate.
 4. **Workspace path (federation, not duplication):** write the federation
-   manifest with `npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/workspace/write-manifest.ts --cwd
+   manifest with `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/workspace/write-manifest.ts --cwd
    <workspace-root>` → `.guild/workspace.json` (`guild.workspace.v1`, by
    pointer). The writer sets `root_wiki` per D-OQ2 (true iff the root itself has
    scannable top-level code) and enumerates each detected sub-guild. Build a

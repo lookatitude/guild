@@ -161,6 +161,17 @@ describe("pre-tool-use.ts — boundary-guard degrade path (HK-07 second ask)", (
     expect(req["permission_mode"]).toBe("degraded");
   });
 
+  it("boundary-guard: resolves registry host aliases before reading capability manifests", () => {
+    writeCapabilityManifest(tmp, "antigravity-cli", false);
+    run(
+      makeWritePayload(path.join(tmp, "some-file.md")),
+      baseEnv({ GUILD_HOST: "antigravity" }),
+    );
+    const approvals = approvalRequests(tmp);
+    expect(approvals.length).toBeGreaterThanOrEqual(1);
+    expect(approvals[0]!["permission_mode"]).toBe("degraded");
+  });
+
   it("boundary-guard: logs capability_scope_degrade security event when host lacks ask", () => {
     writeCapabilityManifest(tmp, "codex", false);
     run(

@@ -1587,12 +1587,18 @@ function cmdShowRender(cwd: string): number {
 // Subcommand: ui (§E11/§E12) — native CLI/agents-file settings render + edit
 // ---------------------------------------------------------------------------
 
-/** Default registry host for the UI surface when --host is omitted (this CLI host). */
+/** Back-compat default when neither --host nor host env identifies this CLI host. */
 const DEFAULT_UI_HOST = "claude-code-cli";
+
+function defaultUiHostFromEnv(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = (env["GUILD_HOST_ID"] ?? env["GUILD_HOST"] ?? "").trim();
+  if (!raw || raw === "auto") return DEFAULT_UI_HOST;
+  return normalizeHostId(raw) ?? raw;
+}
 
 /** Resolve + validate the --host id (any registry id; app/connector ids render `blocked`). */
 function resolveUiHost(uiHost: string | undefined): { host: string } | { error: string } {
-  const host = uiHost ?? DEFAULT_UI_HOST;
+  const host = uiHost ?? defaultUiHostFromEnv();
   if (!(HOST_IDS as readonly string[]).includes(host)) {
     return {
       error:
