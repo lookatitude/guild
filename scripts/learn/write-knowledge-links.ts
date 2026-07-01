@@ -39,14 +39,14 @@ import * as fs from "fs";
 import * as path from "path";
 import type { GraphNode, GraphEdge } from "./lib/schema";
 import {
-  KNOWLEDGE_LINKS_SCHEMA_VERSION,
+  KNOWLEDGE_RECALL_SCHEMA_VERSION,
   KNOWLEDGE_LINKS_PROVENANCE_SCHEMA_VERSION,
   type KnowledgeLinksDoc,
   type CanonicalNode,
   type CanonicalEdge,
 } from "../../src/modules/knowledge/workflows/knowledge-links-contract";
 export {
-  KNOWLEDGE_LINKS_SCHEMA_VERSION,
+  KNOWLEDGE_RECALL_SCHEMA_VERSION,
   KNOWLEDGE_LINKS_PROVENANCE_SCHEMA_VERSION,
   type KnowledgeLinksDoc,
   type CanonicalNode,
@@ -221,7 +221,7 @@ export function writeKnowledgeLinks(opts: WriteKnowledgeLinksOptions): WriteKnow
 
   // ── Step 5: build nonce-free doc — NO run_id, NO timestamp ──
   const linksDoc: KnowledgeLinksDoc = {
-    schema_version: KNOWLEDGE_LINKS_SCHEMA_VERSION,
+    schema_version: KNOWLEDGE_RECALL_SCHEMA_VERSION,
     nodes: canonNodes,
     edges: canonEdges,
   };

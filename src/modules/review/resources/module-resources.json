@@ -78,7 +78,7 @@
       "id": "guild-codex-review",
       "source_path": "skills/meta/codex-review/SKILL.md",
       "resource_path": "resources/skills/meta/codex-review/SKILL.md",
-      "sha256": "52784d3d1d10a5909915a003d347115dbfa0b25642a41b8ac361b1814702bb08"
+      "sha256": "5a27a380d5a0c104631425f66cfed46b241b632159c2e6154494375a761f6c64"
     },
     {
       "category": "skills",
@@ -103,6 +103,27 @@
     },
     {
       "category": "skills",
+      "id": "guild-review/code-review-loop.md",
+      "source_path": "skills/meta/review/code-review-loop.md",
+      "resource_path": "resources/skills/meta/review/code-review-loop.md",
+      "sha256": "1b9e06095ae2a4cb3a4af100ac87bb230247b67ca09c4c420418c6d9e8e987ac"
+    },
+    {
+      "category": "skills",
+      "id": "guild-review/code-reviewer.md",
+      "source_path": "skills/meta/review/code-reviewer.md",
+      "resource_path": "resources/skills/meta/review/code-reviewer.md",
+      "sha256": "db35fe591d7670846cb27efa05b4c01e7a403469510ef8b634dd202ce471754c"
+    },
+    {
+      "category": "skills",
+      "id": "guild-review/rubric.md",
+      "source_path": "skills/meta/review/rubric.md",
+      "resource_path": "resources/skills/meta/review/rubric.md",
+      "sha256": "41c788a4a7455ed1bd70db9ffeac4bd3509719bc35ea0bb3e78710b8333cf4fa"
+    },
+    {
+      "category": "skills",
       "id": "guild-systematic-debug",
       "source_path": "skills/meta/systematic-debug/SKILL.md",
       "resource_path": "resources/skills/meta/systematic-debug/SKILL.md",
@@ -110,10 +131,52 @@
     },
     {
       "category": "skills",
+      "id": "guild-systematic-debug/condition-based-waiting-example.ts",
+      "source_path": "skills/meta/systematic-debug/condition-based-waiting-example.ts",
+      "resource_path": "resources/skills/meta/systematic-debug/condition-based-waiting-example.ts",
+      "sha256": "0715bff7cceb6264328728fe250df1148041266344185f53fce301939e2de0af"
+    },
+    {
+      "category": "skills",
+      "id": "guild-systematic-debug/condition-based-waiting.md",
+      "source_path": "skills/meta/systematic-debug/condition-based-waiting.md",
+      "resource_path": "resources/skills/meta/systematic-debug/condition-based-waiting.md",
+      "sha256": "453cd7b4ea319e72978b67eebdaa8a705b912814ac3d7fd12879453e597880a7"
+    },
+    {
+      "category": "skills",
+      "id": "guild-systematic-debug/defense-in-depth.md",
+      "source_path": "skills/meta/systematic-debug/defense-in-depth.md",
+      "resource_path": "resources/skills/meta/systematic-debug/defense-in-depth.md",
+      "sha256": "425eaa0d76285209b8becb27f346e4408fe6f2e3aa11f1de1fb04f19af174403"
+    },
+    {
+      "category": "skills",
+      "id": "guild-systematic-debug/find-polluter.sh",
+      "source_path": "skills/meta/systematic-debug/find-polluter.sh",
+      "resource_path": "resources/skills/meta/systematic-debug/find-polluter.sh",
+      "sha256": "06bbfb3384ef3076f3848bf45bdede3f51c4ad8abcd650ce9d4daddf1352246c"
+    },
+    {
+      "category": "skills",
+      "id": "guild-systematic-debug/root-cause-tracing.md",
+      "source_path": "skills/meta/systematic-debug/root-cause-tracing.md",
+      "resource_path": "resources/skills/meta/systematic-debug/root-cause-tracing.md",
+      "sha256": "02ffad6457405c559f9a03fe508720dd4009eaa7318257f3893dae91d3b5bae5"
+    },
+    {
+      "category": "skills",
       "id": "guild-tdd",
       "source_path": "skills/meta/tdd/SKILL.md",
       "resource_path": "resources/skills/meta/tdd/SKILL.md",
       "sha256": "192b335fad63b3b52badc40fdd0b009b254be31ddbec828a95087b18ed116ca8"
+    },
+    {
+      "category": "skills",
+      "id": "guild-tdd/testing-anti-patterns.md",
+      "source_path": "skills/meta/tdd/testing-anti-patterns.md",
+      "resource_path": "resources/skills/meta/tdd/testing-anti-patterns.md",
+      "sha256": "60f4421d1589764185fbee76e8e92e8645533822b8560ea69f3db39a4652145c"
     }
   ]
 }

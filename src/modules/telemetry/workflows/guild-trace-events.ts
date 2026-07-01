@@ -1,9 +1,9 @@
 /**
  * src/modules/telemetry/workflows/guild-trace-events.ts
  *
- * R-TRACE (Wave 6 observability) — 5 structured trace event schemas.
+ * R-TRACE (Wave 6 observability) — 6 structured trace event schemas.
  *
- * Defines typed interfaces + lightweight validator functions for the 5
+ * Defines typed interfaces + lightweight validator functions for the 6
  * structured events that Guild emits at key hot-path boundaries:
  *
  *   guild.trace.dispatch.v1         — specialist/lane dispatch
@@ -11,6 +11,7 @@
  *   guild.trace.config_resolution.v1 — resolveSettings() completion
  *   guild.trace.security_decision.v1 — PreToolUse scope enforcement decision
  *   guild.trace.degradation.v1      — host-capability degradation / fallback
+ *   guild.trace.recall_decision.v1  — recall-quality decision for G10 tuning
  *
  * Design principles:
  * - ADDITIVE only: emitting an event MUST NOT change existing return values.

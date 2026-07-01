@@ -29,7 +29,7 @@
       "id": "knowledge-links-builder",
       "source_path": "scripts/knowledge-links-builder.ts",
       "resource_path": "resources/scripts/knowledge-links-builder.ts",
-      "sha256": "0e188b17e80692e35a7a776bfae7469225f07bab0ed7a4896ea95647c4133465"
+      "sha256": "4237707639ab888dcc95bc46a28058144dba30918506aef0d729a70e13f16c33"
     },
     {
       "category": "scripts",
@@ -92,7 +92,7 @@
       "id": "guild-learn",
       "source_path": "skills/knowledge/learn/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn/SKILL.md",
-      "sha256": "95842fbd02aa8a7e6a0114553523cbc53b42e5b180ad8e6ac4d4c870a35915d0"
+      "sha256": "992f89da226e464c23b43cfa88eddac5d1e3313c941563986fb4db5f44f04fab"
     },
     {
       "category": "skills",
@@ -152,6 +152,13 @@
     },
     {
       "category": "skills",
+      "id": "guild-wiki-ingest/ingest-reference.md",
+      "source_path": "skills/knowledge/wiki-ingest/ingest-reference.md",
+      "resource_path": "resources/skills/knowledge/wiki-ingest/ingest-reference.md",
+      "sha256": "bdcf8b7ea958e2d7e09c541d0906d940011a19becaca5239588ef73caafa82c3"
+    },
+    {
+      "category": "skills",
       "id": "guild-wiki-lint",
       "source_path": "skills/knowledge/wiki-lint/SKILL.md",
       "resource_path": "resources/skills/knowledge/wiki-lint/SKILL.md",
@@ -159,10 +166,24 @@
     },
     {
       "category": "skills",
+      "id": "guild-wiki-lint/lint-rules.md",
+      "source_path": "skills/knowledge/wiki-lint/lint-rules.md",
+      "resource_path": "resources/skills/knowledge/wiki-lint/lint-rules.md",
+      "sha256": "323ccc43aaf0250a6ba39dfd74013db2937628a7080a2514e25d47c1484101ab"
+    },
+    {
+      "category": "skills",
       "id": "guild-wiki-query",
       "source_path": "skills/knowledge/wiki-query/SKILL.md",
       "resource_path": "resources/skills/knowledge/wiki-query/SKILL.md",
       "sha256": "68da21ae21d9b9136c87bbdf2ba47e9f3204b37f4b75cdcfbb2002d88c74e870"
+    },
+    {
+      "category": "skills",
+      "id": "guild-wiki-query/query-modes.md",
+      "source_path": "skills/knowledge/wiki-query/query-modes.md",
+      "resource_path": "resources/skills/knowledge/wiki-query/query-modes.md",
+      "sha256": "2c102e4321ee2eaebd922bc271c21e82c14e599f3c3ebf8a33326a277bf1ab2e"
     }
   ]
 }

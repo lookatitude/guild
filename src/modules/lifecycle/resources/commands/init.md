@@ -42,8 +42,9 @@ All five global flags + `--dry-run` apply.
 - Args: — (no positional)
 - Local flags:
   - `--learn` — run the full `learn-*` pipeline now (`guild:learn-map` /
-    `learn-graph` / `learn-onboard` / `learn-diff` / `learn-explain`),
-    the same skills `/guild:learn` invokes. Also triggered automatically
+    `learn-graph` / `learn-knowledge` (cost-gated knowledge tier) /
+    `learn-onboard` / `learn-diff` / `learn-explain`), the same skills
+    `/guild:learn` invokes. Also triggered automatically
     when `defaults.auto_learn: true` is set in `.guild/settings.json`.
     Folds in the former `--deep-scan` flag (D3).
   - `--new` — force the new-product scaffold path.
@@ -164,10 +165,15 @@ invoking, in order:
 3. **Full `learn-*` pipeline** — runs **ONLY when** `--learn` is passed
    **OR** `defaults.auto_learn: true` is set in `.guild/settings.json`.
    Invokes the same skills as `/guild:learn` (one implementation, two
-   triggers — D3): `guild:learn-map` / `guild:learn-graph` /
-   `guild:learn-onboard` / `guild:learn-diff` / `guild:learn-explain`.
-   Without this trigger, the deep `KnowledgeGraph` + onboarding tour remain
-   lazy and are never produced at Init.
+   triggers — D3): `guild:learn-map` → `guild:learn-graph` →
+   `guild:learn-knowledge` (knowledge tier — K1–K6; lazy + cost-gated) →
+   `guild:learn-onboard` (`guild:learn-diff` / `guild:learn-explain` are
+   change-analysis and query-time skills, not part of the bootstrap sub-set).
+   `guild:learn-knowledge` runs here byte-identically to its `/guild:learn
+   knowledge` and full `/guild:learn` triggers (SC-8 one-implementation /
+   two-triggers) — see `commands/learn.md` "Relation to `/guild:init --learn`".
+   Without this trigger, the deep `KnowledgeGraph`, knowledge tier, and
+   onboarding tour remain lazy and are never produced at Init.
 
 Input gate: a brownfield repo, or `--new` for the greenfield scaffold path.
 Output gate (Init-DONE): the **Output artifact** set above is written.

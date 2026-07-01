@@ -29,7 +29,7 @@
       "id": "init",
       "source_path": "commands/init.md",
       "resource_path": "resources/commands/init.md",
-      "sha256": "79124b9ea2f6b2a99633bc353b5d3799e90e6f63b59df009f046c5de7e1ec0a5"
+      "sha256": "70a651f49966e5811d68396675e1590f502193c0fe143a887a7176bbf794e7c4"
     },
     {
       "category": "commands",
@@ -149,6 +149,13 @@
       "source_path": "skills/meta/execute-plan/SKILL.md",
       "resource_path": "resources/skills/meta/execute-plan/SKILL.md",
       "sha256": "54ec156a33cc483ea2fcdbc487dc5b7f22d6381d001051e9bf6739c8872637cf"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/dispatch.md",
+      "source_path": "skills/meta/execute-plan/dispatch.md",
+      "resource_path": "resources/skills/meta/execute-plan/dispatch.md",
+      "sha256": "b5a27a42102fc43625c319d3c66d0af19a73a94484ff32f11f28899eb211dfc1"
     },
     {
       "category": "skills",

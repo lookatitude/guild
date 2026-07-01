@@ -43,6 +43,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { readScalarField } from "./lib/frontmatter";
+import { KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION } from "../src/modules/knowledge/workflows/knowledge-links-contract";
 
 // ── Extended node-kind type ───────────────────────────────────────────────────
 
@@ -181,7 +182,7 @@ export interface KnowledgeLink {
 }
 
 export interface KnowledgeLinkDoc {
-  schema_version: "guild.knowledge_links.v1";
+  schema_version: typeof KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION;
   links: KnowledgeLink[];
 }
 
@@ -860,7 +861,7 @@ export function buildKnowledgeLinks(opts: BuildOptions): BuildResult {
   }
 
   const doc: KnowledgeLinkDoc = {
-    schema_version: "guild.knowledge_links.v1",
+    schema_version: KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION,
     links: merged,
   };
 

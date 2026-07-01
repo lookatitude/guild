@@ -172,6 +172,37 @@ export function buildModuleResourcePlan(root: string = PLUGIN_ROOT): ModuleResou
         resource_path: resourcePath,
         sha256: sha256(content),
       });
+
+      // RV-1/RV-2: a skill's SKILL.md is its only inventory entry, but the skill
+      // directory also holds progressive-disclosure companion files (e.g.
+      // quality-mechanics.md, loop-mechanics.md, io-contract.md) plus evals.json
+      // that SKILL.md references and the host must therefore ship. Enumerate the
+      // immediate sibling files (everything but SKILL.md / SKILL.src.md) so they
+      // are tracked, SHA-pinned, mirrored into resources/, and rendered into host
+      // packages alongside the skill. Same owner as the parent skill.
+      if (category === "skills") {
+        const skillDir = path.dirname(sourceAbs);
+        for (const sib of fs.readdirSync(skillDir).sort()) {
+          // SKILL.md/.src.md are the inventory entry itself; evals.json is a
+          // dev-time eval fixture (NOT a runtime/progressive-disclosure reference)
+          // and must NOT ship in host packages (PA ruling, lane TE).
+          if (sib === "SKILL.md" || sib === "SKILL.src.md" || sib === "evals.json") continue;
+          const sibAbs = path.join(skillDir, sib);
+          if (!fs.statSync(sibAbs).isFile()) continue; // immediate files only
+          const sibSourcePath = toPosix(path.relative(root, sibAbs));
+          const sibResourcePath = resourcePathFor("skills", sibSourcePath);
+          const sibKey = `${owner}:${sibResourcePath}`;
+          if (seen.has(sibKey)) continue;
+          seen.add(sibKey);
+          plans.get(owner)!.entries.push({
+            category: "skills",
+            id: `${entry.id}/${sib}`,
+            source_path: sibSourcePath,
+            resource_path: sibResourcePath,
+            sha256: sha256(fs.readFileSync(sibAbs)),
+          });
+        }
+      }
     }
   }
 

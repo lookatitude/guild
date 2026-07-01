@@ -19,6 +19,13 @@
     },
     {
       "category": "skills",
+      "id": "guild-create-specialist/workflow.md",
+      "source_path": "skills/meta/create-specialist/workflow.md",
+      "resource_path": "resources/skills/meta/create-specialist/workflow.md",
+      "sha256": "54af2eb2ad1d8ae45a6fec46512bf68a7e897b6861516fe084666b0f15dd2988"
+    },
+    {
+      "category": "skills",
       "id": "guild-finish-branch",
       "source_path": "skills/meta/finish-branch/SKILL.md",
       "resource_path": "resources/skills/meta/finish-branch/SKILL.md",
@@ -30,6 +37,13 @@
       "source_path": "skills/meta/team-compose/SKILL.md",
       "resource_path": "resources/skills/meta/team-compose/SKILL.md",
       "sha256": "b9cc0b8e5037a3d013847a9f36a1a01b476d503c48bac132c1da174c94fa09a2"
+    },
+    {
+      "category": "skills",
+      "id": "guild-team-compose/gap-handling.md",
+      "source_path": "skills/meta/team-compose/gap-handling.md",
+      "resource_path": "resources/skills/meta/team-compose/gap-handling.md",
+      "sha256": "3de9cd32875aa0325720459ff1d10c2ff8511a53861e8d376e0a1c4bc923c8e6"
     },
     {
       "category": "skills",

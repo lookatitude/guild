@@ -28,7 +28,7 @@ import {
   canonicalizeEdge,
   sortNodesByRecall,
   writeKnowledgeLinks,
-  KNOWLEDGE_LINKS_SCHEMA_VERSION,
+  KNOWLEDGE_RECALL_SCHEMA_VERSION,
   KNOWLEDGE_LINKS_PROVENANCE_SCHEMA_VERSION,
   type WriteKnowledgeLinksOptions,
   type WriteKnowledgeLinksResult,
@@ -298,7 +298,7 @@ describe("D — writeKnowledgeLinks output shape", () => {
     const doc = JSON.parse(
       fs.readFileSync(path.join(repo, ".guild", "indexes", "knowledge-recall.json"), "utf8"),
     ) as KnowledgeLinksDoc;
-    expect(doc.schema_version).toBe(KNOWLEDGE_LINKS_SCHEMA_VERSION);
+    expect(doc.schema_version).toBe(KNOWLEDGE_RECALL_SCHEMA_VERSION);
   });
 
   test("D4: result.nodeCount and result.edgeCount match input graph", () => {

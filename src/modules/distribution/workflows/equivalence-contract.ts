@@ -12,7 +12,7 @@
  * manifest, commands, skills, agents, hooks+bootstrap, MCP refs, scripts refs —
  * OR every omitted/changed surface is explicitly enumerated as an INTENTIONAL
  * exclusion. Checking only plugin.json + skills/ would pass VACUOUSLY; the
- * contract spans all seven logical surfaces below.
+ * contract spans all eight logical surfaces below.
  *
  * EQUIVALENCE ≠ byte-identity. It is content equivalence after canonical
  * normalization: JSON is key-sorted and render-provenance fields are stripped;
@@ -27,7 +27,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// Logical package view — the seven full-tree surfaces (decoupled from dist layout)
+// Logical package view — the eight full-tree surfaces (decoupled from dist layout)
 // ---------------------------------------------------------------------------
 
 /**
@@ -58,7 +58,7 @@ export interface LogicalPackage {
   script_refs: string[];
 }
 
-/** The seven logical surfaces, in scope for SC-2. Iterated by the checker. */
+/** The eight logical surfaces, in scope for SC-2. Iterated by the checker. */
 export const EQUIVALENCE_SURFACES = [
   "manifest",
   "commands",
@@ -244,7 +244,7 @@ function compareIdMap(
 }
 
 /**
- * SC-2 full-tree equivalence. Compares all seven logical surfaces. The caller is
+ * SC-2 full-tree equivalence. Compares all eight logical surfaces. The caller is
  * responsible for having already applied the INTENTIONAL_EXCLUSIONS that change a
  * surface's expected content (e.g. for the L5b SessionStart delta, the caller
  * compares hooks_json with that injection masked, since it is golden-tested

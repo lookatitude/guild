@@ -24,7 +24,7 @@ import {
   rungLoss,
   FALLBACK_LADDER_TABLE,
   INFERRED_HOSTS,
-  isInferredRung,
+  isHostInferred,
   resolveRung,
   validateDegradationReceipt,
   validateLadderTableComplete,
@@ -154,9 +154,9 @@ describe("P1 SC-8 — resolveRung produces correct receipts for known hosts", ()
       "codex-app",
       "pi-cli",
     ]);
-    expect(isInferredRung("interaction", "claude-code-cli")).toBe(false);
-    expect(isInferredRung("interaction", "codex-cli")).toBe(false);
-    expect(isInferredRung("browser", "agents-file")).toBe(true);
+    expect(isHostInferred("claude-code-cli")).toBe(false);
+    expect(isHostInferred("codex-cli")).toBe(false);
+    expect(isHostInferred("agents-file")).toBe(true);
   });
 
   it("a degraded inferred cell carries the INFERRED note in its reason", () => {

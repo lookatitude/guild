@@ -10,7 +10,7 @@ describe("adapter-fallback-ladders compatibility shim", () => {
     expect(shim.FALLBACK_LADDER_TABLE).toBe(moduleImpl.FALLBACK_LADDER_TABLE);
     expect(shim.INFERRED_HOSTS).toBe(moduleImpl.INFERRED_HOSTS);
     expect(shim.rungLoss).toBe(moduleImpl.rungLoss);
-    expect(shim.isInferredRung).toBe(moduleImpl.isInferredRung);
+    expect(shim.isHostInferred).toBe(moduleImpl.isHostInferred);
     expect(shim.resolveRung).toBe(moduleImpl.resolveRung);
     expect(shim.validateDegradationReceipt).toBe(moduleImpl.validateDegradationReceipt);
     expect(shim.validateLadderTableComplete).toBe(moduleImpl.validateLadderTableComplete);

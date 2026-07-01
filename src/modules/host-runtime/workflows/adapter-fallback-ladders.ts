@@ -98,7 +98,7 @@ export const INFERRED_HOSTS = new Set<HostId>([
   "claude-ai-connector",
 ]);
 
-export function isInferredRung(surface: AdapterSurface, host: HostId): boolean {
+export function isHostInferred(host: HostId): boolean {
   return INFERRED_HOSTS.has(host);
 }
 
@@ -139,7 +139,7 @@ export function resolveRung(surface: AdapterSurface, host: HostId | string): Deg
   }
   const hid = host as HostId;
   const rung = FALLBACK_LADDER_TABLE[surface][hid];
-  const inferred = isInferredRung(surface, hid);
+  const inferred = isHostInferred(hid);
   return {
     schema_version: "guild.degradation_receipt.v1",
     surface,

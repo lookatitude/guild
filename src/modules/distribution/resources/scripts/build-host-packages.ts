@@ -5,7 +5,7 @@
  * L2 — host package generator. Renders BOTH host packages from ONE
  * guild.inventory.v1 (SC-1) into `dist/`, then self-enforces the gates:
  *   - SC-2  Claude full-tree EQUIVALENCE (generated dist/claude-code == committed
- *           plugin tree, across all seven logical surfaces, with the
+ *           plugin tree, across all eight logical surfaces, with the
  *           inventory-derived ExpectedSurfaces floor so it cannot pass vacuously).
  *   - SC-7b SUBSET (no rendered package references an id/schema absent from the
  *           inventory).
@@ -147,6 +147,34 @@ class ModuleResourceResolver {
   copy(category: ResourceCategory, entry: InventoryResourceEntry, destAbs: string): void {
     if (!copyFileEnsured(this.resolve(category, entry), destAbs)) {
       throw new Error(`failed to copy module resource for ${category}:${entry.id}`);
+    }
+  }
+
+  /**
+   * RV-1/RV-2: every tracked source_path for a category, including skill
+   * companion siblings (quality-mechanics.md, loop-mechanics.md, evals.json, …)
+   * that are NOT standalone inventory entries. The render iterates this so host
+   * packages ship a skill's progressive-disclosure references, not just SKILL.md.
+   * Sorted for deterministic render order.
+   */
+  sourcePathsForCategory(category: ResourceCategory): string[] {
+    const prefix = `${category}:`;
+    const out: string[] = [];
+    for (const [key, resource] of this.byCategoryAndSource) {
+      if (key.startsWith(prefix)) out.push(resource.source_path);
+    }
+    return out.sort();
+  }
+
+  /** Copy a tracked resource addressed by its source_path to destAbs. */
+  copyBySourcePath(category: ResourceCategory, sourcePath: string, destAbs: string): void {
+    const resource = this.byCategoryAndSource.get(this.key(category, sourcePath));
+    if (!resource) {
+      throw new Error(`missing module resource for ${category}:${sourcePath}`);
+    }
+    const abs = path.join(this.root, "src", "modules", resource.module_id, resource.resource_path);
+    if (!copyFileEnsured(abs, destAbs)) {
+      throw new Error(`failed to copy module resource for ${category}:${sourcePath}`);
     }
   }
 }
@@ -338,7 +366,12 @@ export function writeClaudeTree(
 
   // Full-tree body copy from module-owned resources, preserving host-facing paths.
   for (const e of inv.commands) resources.copy("commands", e, path.join(dest, e.source_path));
-  for (const e of inv.skills) resources.copy("skills", e, path.join(dest, e.source_path));
+  // RV-1/RV-2: ship SKILL.md AND every tracked companion sibling (loaded-on-demand
+  // reference files + evals.json), addressed by source_path so the references a
+  // skill points to are present on the host.
+  for (const sp of resources.sourcePathsForCategory("skills")) {
+    resources.copyBySourcePath("skills", sp, path.join(dest, sp));
+  }
   for (const e of inv.agents) resources.copy("agents", e, path.join(dest, e.source_path));
   for (const e of inv.scripts) resources.copy("scripts", e, path.join(dest, e.source_path));
   copyClaudeHooks(root, dest, inv, resources);
@@ -424,9 +457,11 @@ export function writeCodexTree(
   writeFileEnsured(path.join(dest, ".codex-plugin", "plugin.json"), stableJson(codexJson));
 
   // Expose skills (incl. the using-guild bootstrap) under Codex's skill dir.
-  for (const s of inv.skills) {
-    const underSkills = s.source_path.replace(/^skills\//, "");
-    resources.copy("skills", s, path.join(dest, ".agents", "skills", "guild", underSkills));
+  // RV-1/RV-2: ship SKILL.md AND every tracked companion sibling under the guild
+  // skill tree (addressed by source_path), so loaded-on-demand references resolve.
+  for (const sp of resources.sourcePathsForCategory("skills")) {
+    const underSkills = sp.replace(/^skills\//, "");
+    resources.copyBySourcePath("skills", sp, path.join(dest, ".agents", "skills", "guild", underSkills));
   }
   // Bundle the guild-run CLI (scripts/) so the Codex launcher is self-contained,
   // plus the stdio MCP server runtime Codex can bundle.
@@ -480,9 +515,11 @@ export function writeCodexMarketplaceTree(codexDir: string, distRoot: string): s
  * CLI (scripts/) + the stdio MCP runtime. Identical to the Codex skill/script exposure.
  */
 function exposeGuildSkillTree(root: string, inv: GuildInventoryV1, dest: string, resources: ModuleResourceResolver): void {
-  for (const s of inv.skills) {
-    const underSkills = s.source_path.replace(/^skills\//, "");
-    resources.copy("skills", s, path.join(dest, ".agents", "skills", "guild", underSkills));
+  // RV-1/RV-2: ship SKILL.md AND every tracked companion sibling under the guild
+  // skill tree (addressed by source_path), so loaded-on-demand references resolve.
+  for (const sp of resources.sourcePathsForCategory("skills")) {
+    const underSkills = sp.replace(/^skills\//, "");
+    resources.copyBySourcePath("skills", sp, path.join(dest, ".agents", "skills", "guild", underSkills));
   }
   for (const s of inv.scripts) {
     resources.copy("scripts", s, path.join(dest, s.source_path));

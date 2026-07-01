@@ -23,6 +23,13 @@
       "source_path": "skills/meta/create-skill/SKILL.md",
       "resource_path": "resources/skills/meta/create-skill/SKILL.md",
       "sha256": "f44aa2629a30a66a2a7721d569092fe55d28816a6eea89a4a4f5175a70b59904"
+    },
+    {
+      "category": "skills",
+      "id": "guild-create-skill/workflow.md",
+      "source_path": "skills/meta/create-skill/workflow.md",
+      "resource_path": "resources/skills/meta/create-skill/workflow.md",
+      "sha256": "4cbcbdd8249d6dacb9f056351c596e225556515d68c5876f28fb41fa7a325795"
     }
   ]
 }

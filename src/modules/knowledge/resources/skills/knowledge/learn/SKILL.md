@@ -102,20 +102,30 @@ Implements brief §178-201 ordered flow, SC-A:
    2–7 (if approved at step 7).
 9. **Build or refresh `knowledge-links.json`.**  Stage 5 output from
    `guild:learn-graph`; E1 extended edge set when available.
-10. **Produce onboarding tour.** Invoke `guild:learn-onboard` (lazy — skipped if
+10. **Build the deep knowledge tier (knowledge tier — K1–K6; lazy + cost-gated).**
+    Invoke `guild:learn-knowledge` — the topic→subtopic taxonomy, classified
+    `wiki_page` + `diagram` nodes, and cross-modal `evidenced_by` edges into
+    `guild.knowledge_graph.v2`, then the nonce-free knowledge-links recall
+    projection. This is the deep K1–K6 tier and is **distinct** from step 9's
+    structural `knowledge-links.json` (a `guild:learn-graph` stage-5 output) — do
+    not conflate the two. `guild:learn-knowledge` runs here **byte-identically** to
+    its `/guild:learn knowledge` and `/guild:init --learn` triggers (SC-8
+    one-implementation / two-triggers); it is **never auto-run by a plain init** —
+    lazy and cost-gated.
+11. **Produce onboarding tour.** Invoke `guild:learn-onboard` (lazy — skipped if
     graph was not approved).
-11. **Extract durable knowledge candidates.** Emit wiki-page candidates, decision
+12. **Extract durable knowledge candidates.** Emit wiki-page candidates, decision
     candidates, open questions, risks, standards, patterns, anti-patterns to
     `.guild/runs/<run-id>/learn/candidates.json`.
-12. **Update derived indexes.** Write/refresh `codebase-map.json`,
+13. **Update derived indexes.** Write/refresh `codebase-map.json`,
     `knowledge-graph.json`, `knowledge-links.json`.
-13. **Write provenance.** Close the run with `closeRun`; provenance.json carries
+14. **Write provenance.** Close the run with `closeRun`; provenance.json carries
     scanned_count, skipped_count, skipped_files_ref (B3 handoff §4).
-14. **Emit learning checkpoint.** Route to `guild:learn-harvest` if signal
+15. **Emit learning checkpoint.** Route to `guild:learn-harvest` if signal
     detected (see §"Learning checkpoint routing" below).
-15. **Emit reflection candidates.** Write
+16. **Emit reflection candidates.** Write
     `.guild/runs/<run-id>/learn/reflection-candidates.md`.
-16. **Close the run.** `closeRun` (B2 API), terminal trace event via B3.
+17. **Close the run.** `closeRun` (B2 API), terminal trace event via B3.
 
 All wiki/decision/evolve promotions stay **human-gated**. This skill emits
 **candidates only** (non-negotiables #1 and #2).

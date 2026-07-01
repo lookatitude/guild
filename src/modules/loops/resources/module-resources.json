@@ -19,6 +19,20 @@
     },
     {
       "category": "skills",
+      "id": "guild-loop-clarify/io-contract.md",
+      "source_path": "skills/meta/loop-clarify/io-contract.md",
+      "resource_path": "resources/skills/meta/loop-clarify/io-contract.md",
+      "sha256": "9fe9aa2da0fb0bd5bc31c5a7a28bd9a51d46b058a8ea5cb7f37adef56d6c188d"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-clarify/loop-mechanics.md",
+      "source_path": "skills/meta/loop-clarify/loop-mechanics.md",
+      "resource_path": "resources/skills/meta/loop-clarify/loop-mechanics.md",
+      "sha256": "6ec46f2a46976b0bbfc39333d9234d4971f251c693fc702786b53c88f9eb64ee"
+    },
+    {
+      "category": "skills",
       "id": "guild-loop-implement",
       "source_path": "skills/meta/loop-implement/SKILL.md",
       "resource_path": "resources/skills/meta/loop-implement/SKILL.md",
@@ -26,10 +40,59 @@
     },
     {
       "category": "skills",
+      "id": "guild-loop-implement/counters-and-concurrency.md",
+      "source_path": "skills/meta/loop-implement/counters-and-concurrency.md",
+      "resource_path": "resources/skills/meta/loop-implement/counters-and-concurrency.md",
+      "sha256": "80cc613871cd3a109ce3ff91153e61fc2259c2e558473913ea85b1acaef0e58d"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-implement/io-contract.md",
+      "source_path": "skills/meta/loop-implement/io-contract.md",
+      "resource_path": "resources/skills/meta/loop-implement/io-contract.md",
+      "sha256": "c40ed42255f07e5153ca58ee169f1b594d597a2068b05da9fda95b8330e9b3e2"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-implement/loops-applicable-enum.md",
+      "source_path": "skills/meta/loop-implement/loops-applicable-enum.md",
+      "resource_path": "resources/skills/meta/loop-implement/loops-applicable-enum.md",
+      "sha256": "e2c6973f5c435c088576c9f6ed32f967cd6d8b3b99a2f8839513c9cc2b568b9b"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-implement/security-review-restart.md",
+      "source_path": "skills/meta/loop-implement/security-review-restart.md",
+      "resource_path": "resources/skills/meta/loop-implement/security-review-restart.md",
+      "sha256": "0675c89f4e35615eec1871715ee9ed35e2f740561130a33807bc116e85e8b0b9"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-implement/workflow-and-events.md",
+      "source_path": "skills/meta/loop-implement/workflow-and-events.md",
+      "resource_path": "resources/skills/meta/loop-implement/workflow-and-events.md",
+      "sha256": "820a4b57f8324e92ee05d68bccd306a5d97abd1468923fdbdebe0cc4199ad0fe"
+    },
+    {
+      "category": "skills",
       "id": "guild-loop-plan-review",
       "source_path": "skills/meta/loop-plan-review/SKILL.md",
       "resource_path": "resources/skills/meta/loop-plan-review/SKILL.md",
       "sha256": "d71f3c26d7130d28cb06d46584c96a2ebeba924eec63fab1feaceda203740d76"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-plan-review/io-contract.md",
+      "source_path": "skills/meta/loop-plan-review/io-contract.md",
+      "resource_path": "resources/skills/meta/loop-plan-review/io-contract.md",
+      "sha256": "0eceea4774516c33f95c898ad584090cfda3518f232dcdd75445d1fa53eb09ce"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-plan-review/loop-mechanics.md",
+      "source_path": "skills/meta/loop-plan-review/loop-mechanics.md",
+      "resource_path": "resources/skills/meta/loop-plan-review/loop-mechanics.md",
+      "sha256": "52ce41dff28cfd2c0c3d3eb34f1cfdd32942d6e15a2f4bc42302b96e8cf93203"
     }
   ]
 }

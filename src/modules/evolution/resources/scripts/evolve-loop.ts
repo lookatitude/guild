@@ -196,7 +196,7 @@ function buildPipelineMd(params: {
     );
   }
   lines.push(
-    "8. **Promotion gate.** HUMAN DECISION. Promote if ANY of: (a) 0 regressions AND ≥ 1 fix, (b) no flip change AND tokens ↓ ≥ 10%, (c) regressions present AND user approves via review viewer. Gate result goes to `gate.json`. This wrapper stops here — it does NOT auto-promote."
+    "8. **Promotion gate.** HUMAN DECISION. Promote if ANY of the four conditions holds: (a) 0 regressions AND ≥ 1 fix, (b) no flip change AND tokens ↓ ≥ 10%, (c) regressions present AND user approves via review viewer, (d) doc-only fast-path — the proposed edit is doc-only (no trigger-phrasing, body-algorithm, or eval-case change; prose/description/comments only, so paired evals show no delta) AND the user approves (a blanket session directive or a run-time prompt qualifies); recorded as `condition: doc-only-fast-path` (+ `user_approved_at`) in `gate.json`. The doc-only path is NOT a fallback for behavior-change edits. Gate result goes to `gate.json`. This wrapper stops here — it does NOT auto-promote."
   );
   lines.push(
     `9. **On promote: description optimizer + commit.** Call: \`npx tsx scripts/description-optimizer.ts --skill ${slug} --cwd ${cwd}\`. Orchestrator applies the emitted \`description:\` YAML to the live skill, bumps the version folder, and updates \`evals.json\` if new cases were bootstrapped in step 2.`

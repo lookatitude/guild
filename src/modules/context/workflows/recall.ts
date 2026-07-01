@@ -94,7 +94,9 @@ export type RecallSource =
   | "fs-scan"
   | "kg-query"
   | "structural"
-  | "combined";
+  | "combined"
+  // DE-4: emitted by the CLI's gate-disabled full-read path (models.recallBeforeRead=false).
+  | "disabled";
 
 export interface RecallResult {
   /** Protected chunks — each passed through protectChunks on every branch. */
@@ -112,6 +114,13 @@ export interface RecallResult {
    * Undefined when the branch does not expose a numeric score (sqlite/fs-scan).
    */
   topScore?: number;
+  /**
+   * DE-4: present (and `false`) ONLY on the CLI's gate-disabled output, when
+   * `models.recallBeforeRead` is `false`. Signals the consumer to fall back to the
+   * prior full-read assembly (no recall-before-read skip). Absent on the normal
+   * recall path (gate on, the default).
+   */
+  recallBeforeRead?: boolean;
 }
 
 export interface RecallOpts {
@@ -241,6 +250,29 @@ export function resolveRecallScoreThreshold(cwd: string): number {
     }
   } catch { /* settings unreadable → default */ }
   return DEFAULT_RECALL_SCORE_THRESHOLD;
+}
+
+/**
+ * DE-4: resolve `models.recallBeforeRead` from settings for a cwd. The canonical
+ * contract (docs/v2/08, context-assemble/SKILL.md) is: the recall-before-read rule
+ * is GATED by this key (default `true`); when `false`, the consumer falls back to
+ * the prior full-read assembly. Kept out of the pure recall() path (which never
+ * loads the settings resolver) — the CLI reads it and short-circuits to the
+ * full-read path so an operator who sets `false` actually gets the documented
+ * fallback. Defaults to `true` (gate on) when unset/unreadable.
+ */
+export function resolveRecallBeforeRead(cwd: string): boolean {
+  try {
+    // Lazy require so the pure library path never loads the settings resolver.
+    const { resolveSettings } = require("../../config") as typeof import("../../config");
+    const models = (resolveSettings({ cwd }).config as {
+      models?: { recallBeforeRead?: boolean };
+    }).models;
+    if (typeof models?.recallBeforeRead === "boolean") {
+      return models.recallBeforeRead;
+    }
+  } catch { /* settings unreadable → default on */ }
+  return true;
 }
 
 /**
@@ -1066,6 +1098,16 @@ export function runRecallCli(): void {
   if (!query) {
     process.stderr.write("[recall] ERROR: --query <text> is required\n");
     process.exit(1);
+  }
+
+  // DE-4: enforce the `models.recallBeforeRead` gate (canonical: gated, default
+  // true). When an operator sets it false, skip recall entirely and emit the
+  // full-read path — an empty recall result — so the consumer reads the source
+  // file fully (the prior full-read assembly), instead of a silently-ignored key.
+  if (!resolveRecallBeforeRead(cwd)) {
+    const disabled = { chunks: [], directive: null, source: "disabled", recallBeforeRead: false };
+    process.stdout.write(JSON.stringify(disabled) + "\n");
+    return;
   }
 
   // Allow test seams via env.

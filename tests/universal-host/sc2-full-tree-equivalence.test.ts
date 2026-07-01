@@ -117,7 +117,7 @@ describe("SC-2 ExpectedSurfaces FLOOR — anti-vacuity (MUST-encode #1)", () => 
 });
 
 describe("SC-2 surface coverage + normalization", () => {
-  it("the contract spans all seven logical surfaces", () => {
+  it("the contract spans all eight logical surfaces", () => {
     expect([...EQUIVALENCE_SURFACES].sort()).toEqual(
       ["agents", "bootstrap_sh", "commands", "hooks_json", "manifest", "mcp_json", "script_refs", "skills"].sort()
     );

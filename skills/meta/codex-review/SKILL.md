@@ -164,7 +164,7 @@ The sentinel is **hook-maintained**, so the durable clear is to make the hook re
 
 Coordinate with the hook semantics: the hook counts **consecutive** skips and re-derives the streak every Stop, so the gate-read trusts the hook-maintained `blocked` flag rather than maintaining its own counter.
 
-> **NOTE (followup — config schema):** `codex_skip_enforcement` (`warn` | `block`, default `warn`) is REFERENCED here but not yet registered in the `.guild/settings.json` schema. Registering the key + its closed-value validation is owned by tooling-engineer / `guild:config` (see the Guild docs site → `https://guildstack.dev/docs/configuration`). See `followups:` in the handoff.
+> **NOTE (config schema):** `codex_skip_enforcement` (`warn` | `block`, default `warn`) is **registered** in the config schema as a security-sensitive closed key — `config-schema.ts` declares it in `SECURITY_ENUM_OVERRIDES` (`enum_values: ["warn", "block"]`, `most_restrictive: "block"`), `config-defaults.ts` defaults it to `warn`, and `guild:config` validates the closed enum (an out-of-range value is rejected). See the Guild docs site → `https://guildstack.dev/docs/configuration`.
 
 ## Dispatch
 
@@ -247,7 +247,7 @@ gate: G-spec
 run_id: <run-id>
 artifact: .guild/spec/<slug>.md
 started_at: <ISO-8601>
-status: satisfied  # or: cap_hit | force_passed | skipped
+final_status: satisfied
 rounds: 2
 ---
 
@@ -263,6 +263,25 @@ rounds: 2
 **Codex response:**
 ## SATISFIED
 ```
+
+**`final_status:` is the trail-completeness field** read by the SC11 validator
+`scripts/verify-codex-review-trail.ts` (per
+`.guild/wiki/standards/codex-adversarial-review.md`). It is the **persisted**
+disposition and is **distinct** from the in-memory `status` of the output shape.
+The validator accepts **exactly two clean terminal values** — write one of these:
+
+| in-memory `status` | trail `final_status:` |
+|---|---|
+| `satisfied` / `force_passed` *with a real sign-off* | `satisfied` |
+| `skipped` (codex unavailable / unauthenticated) | `skipped-codex-unavailable` |
+
+A gate that ends **without** a clean disposition (`cap_hit`, or a `force_passed`
+operator override **without** Codex sign-off) writes that terminal value verbatim
+and **deliberately fails** the completeness validator — it is an audit exception
+that must be resolved, not papered over. When the availability check skips the
+gate (returns `status: "skipped"`), still write the trail with
+`final_status: skipped-codex-unavailable` so the per-gate trail exists and
+validates.
 
 ## Telemetry
 
