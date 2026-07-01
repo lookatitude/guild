@@ -39,7 +39,7 @@ const FROZEN_PATHS = [".claude-plugin", "commands"]; // STRICT byte-identical
 // is `build:hosts` SC-2 normalized equivalence (generated tree ≡ committed tree, GREEN) — this guard is the
 // secondary tripwire for FUTURE *unintended* drift from the ratified v2 surface. Bump this on the next
 // deliberate surface change (or at the v2→main flip).
-const PINNED_BASELINE = "4e91770"; // ratified v2 cutover surface (was 3ce3666, pre-Wave-3, obsolete)
+const PINNED_BASELINE = "4833f69"; // RE-RATIFIED 2026-07-01 to the settled dv2-reconciliation+init/config surface (was 4e91770; operator-directed "full green" — the dv2 docs↔code reconciliation deliberately evolved commands/init.md + skills/{learn,codex-review} and the init/config guild.yaml rename settled commands/init.md; SC-2 equivalence remains the real cutover gate, GREEN)
 const DIFF_SANITY_ANCHOR = "3ce3666"; // an OLD ancestor — used ONLY to prove `git diff` is wired (non-empty)
 
 // The v2 surface is now the baseline, so there are no permitted deltas FROM it — the surface is frozen

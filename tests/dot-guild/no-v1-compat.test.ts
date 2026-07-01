@@ -242,6 +242,13 @@ const ALLOWLIST = [
   path.join(PLUGIN_ROOT, "scripts/dot-guild/convert"),
   path.join(PLUGIN_ROOT, "scripts/dot-guild/migrate-guild.ts"),
   path.join(PLUGIN_ROOT, "scripts/dot-guild/migrate.ts"),
+  // Module-source mirror of the same converter+wiring bundle (the module-tree
+  // reorg, 27a388f, duplicated scripts/dot-guild/ under src/modules/migrations/).
+  // Same D1 accepted boundary — mirror the three converter entries exactly (NOT
+  // the sibling audit.ts/scrub.ts, which stay scanned).
+  path.join(PLUGIN_ROOT, "src/modules/migrations/resources/scripts/dot-guild/convert"),
+  path.join(PLUGIN_ROOT, "src/modules/migrations/resources/scripts/dot-guild/migrate-guild.ts"),
+  path.join(PLUGIN_ROOT, "src/modules/migrations/resources/scripts/dot-guild/migrate.ts"),
   path.join(PLUGIN_ROOT, "hooks/detect-guild-version.ts"),
   path.join(PLUGIN_ROOT, "hooks/dist"), // dist scanned separately via scanDistForPattern
   // Test SUITES (D3): narrowed — only the test-runner files + fixtures.

@@ -120,7 +120,7 @@ function evaluateLiveSurfaceRows(rows: DiffRow[]): {
  * an ancestor of HEAD, not HEAD). Pinned (not env-derived) so the guard's diff anchor cannot be
  * moved to HEAD/worktree to hide a committed live-surface mutation.
  */
-const PINNED_BASELINE = "4e91770"; // RE-RATIFIED to the v2 surface (was 7ac2f06, pre-Wave-2, obsolete)
+const PINNED_BASELINE = "4833f69"; // RE-RATIFIED 2026-07-01 to the settled dv2-reconciliation+init/config surface (was 4e91770; operator-directed "full green" — deliberate dv2 surface evolution + guild.yaml init/config rename; SC-2 equivalence remains the real cutover gate, GREEN)
 
 function git(args: string[]): string {
   return execFileSync("git", args, { cwd: PLUGIN_ROOT, encoding: "utf8" }).trim();
