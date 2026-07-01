@@ -12,6 +12,13 @@
     },
     {
       "category": "commands",
+      "id": "goal",
+      "source_path": "commands/goal.md",
+      "resource_path": "resources/commands/goal.md",
+      "sha256": "461680348369dd865507561d3ddce7e15bbc9f5f0d918a00acf1973f63730f28"
+    },
+    {
+      "category": "commands",
       "id": "guild",
       "source_path": "commands/guild.md",
       "resource_path": "resources/commands/guild.md",

@@ -54,6 +54,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/goal-task-schema",
+      "source_path": "scripts/lib/goal-task-schema.ts",
+      "resource_path": "resources/scripts/lib/goal-task-schema.ts",
+      "sha256": "33051e2c2665a3b53e47b4fc7eba980643144c4fd17886d1d52b9a5d9326603c"
+    },
+    {
+      "category": "scripts",
       "id": "lib/routing-ab-contract",
       "source_path": "scripts/lib/routing-ab-contract.ts",
       "resource_path": "resources/scripts/lib/routing-ab-contract.ts",

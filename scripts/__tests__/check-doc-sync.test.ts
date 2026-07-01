@@ -8,7 +8,7 @@
  *
  * Covers (Lane D spec, SC-5):
  *   1. Command change + no root-doc change → flagged.
- *   2. Command change + a docs/knowledge change → clean.
+ *   2. Command change + a docs/v2 or umbrella .guild/wiki change → clean.
  *   3. Command change + commit msg containing "docs-sync: n/a" → clean.
  *   4. Non-surface change only (test file / internal script) → clean.
  *   5. user_facing:true skill change + no root-doc → flagged.
@@ -18,7 +18,7 @@
  *   9. Escape is case-insensitive regex: /docs-sync:\s*n\/a/i
  *  10. Mixed surface and non-surface files → flagged (surface wins).
  *  11. Multiple commit messages — escape in ANY message clears the flag.
- *  12. docs/knowledge change + no surface → clean (root doc updated without surface change).
+ *  12. docs/v2 change + no surface → clean (root doc updated without surface change).
  *  13. (Finding #7) isUserFacingSkill handles quoted "true" values.
  *  14. (Finding #1) Cross-repo: plugin surface + root-repo docs → CLEAN (combined lists).
  *  15. (Finding #1) Cross-repo: plugin surface + no root docs → FLAGGED even with combined lists.
@@ -69,11 +69,11 @@ describe("evaluateDocSync — command surface triggers", () => {
 
   // ── 2. Command change + root-doc change → clean ──────────────────────────────
 
-  test("command change + docs/knowledge change → clean", () => {
+  test("command change + docs/v2 change → clean", () => {
     const result = evaluateDocSync({
       changedFiles: [
         "plugin/commands/guild-build.md",
-        "docs/knowledge/architecture/build-command.md",
+        "docs/v2/03-lifecycle.md",
       ],
       commitMessages: ["feat: add --rigor flag; update docs"],
       userFacingSkillPaths: [],
@@ -151,11 +151,11 @@ describe("evaluateDocSync — command surface triggers", () => {
     expect(result.surfaceFiles).toContain("plugin/skills/meta/plan/SKILL.md");
   });
 
-  test("user_facing:true skill change + docs/knowledge change → clean", () => {
+  test("user_facing:true skill change + umbrella wiki change → clean", () => {
     const result = evaluateDocSync({
       changedFiles: [
         "plugin/skills/meta/plan/SKILL.md",
-        "docs/knowledge/decisions/planning-guide.md",
+        ".guild/wiki/decisions/planning-guide.md",
       ],
       commitMessages: ["feat: update plan skill and docs"],
       userFacingSkillPaths: ["plugin/skills/meta/plan/SKILL.md"],
@@ -226,11 +226,11 @@ describe("evaluateDocSync — command surface triggers", () => {
     expect(result.flagged).toBe(false);
   });
 
-  // ── 10. docs/knowledge change + no surface → clean ───────────────────────────
+  // ── 10. docs/v2 change + no surface → clean ─────────────────────────────────
 
-  test("docs/knowledge change with no surface change → clean", () => {
+  test("docs/v2 change with no surface change → clean", () => {
     const result = evaluateDocSync({
-      changedFiles: ["docs/knowledge/architecture/workspace.md"],
+      changedFiles: ["docs/v2/03-lifecycle.md"],
       commitMessages: ["docs: update workspace architecture page"],
       userFacingSkillPaths: [],
     });
@@ -245,7 +245,7 @@ describe("evaluateDocSync — command surface triggers", () => {
       changedFiles: [
         "plugin/commands/guild-init.md",   // surface
         "plugin/scripts/detect.ts",        // non-surface
-        "docs/knowledge/init-guide.md",    // root doc (makes it clean actually)
+        "docs/v2/03-lifecycle.md",        // root doc (makes it clean actually)
       ],
       commitMessages: ["feat: improve init"],
       userFacingSkillPaths: [],
@@ -254,6 +254,19 @@ describe("evaluateDocSync — command surface triggers", () => {
     expect(result.flagged).toBe(false);
     expect(result.surfaceFiles).toContain("plugin/commands/guild-init.md");
     expect(result.surfaceFiles).not.toContain("plugin/scripts/detect.ts");
+  });
+
+  test("docs/knowledge no longer satisfies the docs-sync gate", () => {
+    const result = evaluateDocSync({
+      changedFiles: [
+        "plugin/commands/guild-build.md",
+        "docs/knowledge/architecture/build-command.md",
+      ],
+      commitMessages: ["feat: add lifecycle routing"],
+      userFacingSkillPaths: [],
+    });
+    expect(result.flagged).toBe(true);
+    expect(result.reason).toMatch(/docs\/v2/);
   });
 
   // ── 12. result.reason is set when flagged ────────────────────────────────────
@@ -382,13 +395,13 @@ describe("evaluateDocSync — cross-repo combined file lists (Finding #1)", () =
   // The pure function itself is repo-agnostic — it only cares about path prefixes.
   // These tests verify it correctly handles inputs that come from two separate repos.
 
-  test("plugin surface change + root docs/knowledge change → CLEAN (combined lists)", () => {
+  test("plugin surface change + root docs/v2 change → CLEAN (combined lists)", () => {
     // Simulate: plugin-repo diff saw commands/guild-build.md (normalised to commands/...)
-    // Root-repo diff saw docs/knowledge/arch.md
+    // Root-repo diff saw docs/v2/03-lifecycle.md
     const result = evaluateDocSync({
       changedFiles: [
         "commands/guild-build.md",           // from plugin repo, normalised
-        "docs/knowledge/arch/build.md",      // from root repo
+        "docs/v2/03-lifecycle.md",           // from root repo
       ],
       commitMessages: ["feat: update build command and docs"],
       userFacingSkillPaths: [],
@@ -528,14 +541,14 @@ describe("gatherCrossRepoInputs — two-git-repo cross-repo scenario (Finding #6
     fs.rmSync(pluginRepo, { recursive: true, force: true });
   });
 
-  test("plugin command change + root docs change → CLEAN (cross-repo combined)", () => {
+  test("plugin command change + root docs/v2 change → CLEAN (cross-repo combined)", () => {
     // Add a command in plugin repo
     gitCommit(pluginRepo, "feat: add build command", {
       "commands/guild-build.md": "# Build command\n",
     });
-    // Add a docs/knowledge file in root repo
+    // Add a docs/v2 file in root repo
     gitCommit(rootRepo, "docs: update build reference", {
-      "docs/knowledge/arch/build.md": "# Build\n",
+      "docs/v2/03-lifecycle.md": "# Lifecycle\n",
     });
 
     // gatherCrossRepoInputs: diff each repo against its previous commit
@@ -549,7 +562,7 @@ describe("gatherCrossRepoInputs — two-git-repo cross-repo scenario (Finding #6
     expect(fatal).toBe(false);
     // Combined changedFiles should include both
     expect(input.changedFiles).toContain("commands/guild-build.md");
-    expect(input.changedFiles.some((f) => f.startsWith("docs/knowledge/"))).toBe(true);
+    expect(input.changedFiles.some((f) => f.startsWith("docs/v2/"))).toBe(true);
 
     const result = evaluateDocSync(input);
     expect(result.flagged).toBe(false);
@@ -606,7 +619,7 @@ describe("gatherCrossRepoInputs — two-git-repo cross-repo scenario (Finding #6
 
   test("same repo for plugin+root (CI advisory mode) → no duplicate files", () => {
     // When --plugin-repo and --root-repo point at the SAME checkout (the plugin-repo
-    // CI advisory mode, where docs/knowledge/ isn't present), the same diff would be
+    // CI advisory mode, where docs/v2/ isn't present), the same diff would be
     // gathered twice. gatherCrossRepoInputs must dedup so the surface list/count is honest.
     gitCommit(pluginRepo, "feat: add ops command", {
       "commands/guild-ops.md": "# Ops command\n",

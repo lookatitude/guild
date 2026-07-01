@@ -3,16 +3,16 @@
  * src/modules/docs-sync/workflows/check-doc-sync.ts
  *
  * Automated doc-sync check: flags when a changeset touches the plugin's
- * user-facing surface with no matching root docs/knowledge/ change and no
- * escape hatch in the commit messages.
+ * user-facing surface with no matching docs/v2/ or umbrella .guild/wiki/
+ * reference update and no escape hatch in the commit messages.
  *
- * Enforces Rule 2 from docs/knowledge/decisions/workspace-knowledge-flow.md:
+ * Enforces Rule 2 from the workspace knowledge flow and the D8 docs leg:
  *   "When the plugin's user-facing surface changes, the root reference docs
  *    must update in the same rollout."
  *
  * CROSS-REPO ARCHITECTURE (Finding #1):
- *   plugin/commands/ lives in the PLUGIN repo; docs/knowledge/ lives in the
- *   UMBRELLA (root) repo — they are separate git repos. A single-repo diff
+ *   plugin/commands/ lives in the PLUGIN repo; docs/v2/ and .guild/wiki/
+ *   live in the UMBRELLA (root) repo. A single-repo diff
  *   can never see both sides. The CLI therefore diffs BOTH repos separately,
  *   normalises all paths, and combines them before calling evaluateDocSync().
  *   The pure evaluateDocSync() function is repo-agnostic — it only inspects
@@ -109,19 +109,13 @@ function isCommandFile(filePath: string): boolean {
   );
 }
 
-/** Returns true iff the file path is a canonical reference-doc: under the umbrella
- *  .guild/wiki/ (v2 KB), the consumer-facing v2 design set docs/v2/ (the single
- *  guideline for plugin/website/benchmark), or the retired docs/knowledge/ (kept
- *  additively for back-compat). A feature change that updates docs/v2/ satisfies
- *  the rollout-coupling gate; the initiative D8 docs leg additionally requires the
- *  docs/v2/ design set specifically (see initiative-workitems.ts). */
+/** Returns true iff the file path is a current reference-doc target. */
 function isRootDocFile(filePath: string): boolean {
   return (
     filePath.startsWith(".guild/wiki/") ||
     filePath.includes("/.guild/wiki/") ||
     filePath.startsWith("docs/v2/") ||
-    filePath.includes("/docs/v2/") ||
-    filePath.startsWith("docs/knowledge/")
+    filePath.includes("/docs/v2/")
   );
 }
 
@@ -145,7 +139,7 @@ export function isUserFacingSkill(_skillMdPath: string, contents: string): boole
  *
  * Input is the COMBINED file list from both plugin and root repos (normalised paths).
  * "User-facing surface touched" = any changedFile is a command file OR in userFacingSkillPaths.
- * "Root docs updated" = any changedFile starts with docs/knowledge/.
+ * "Root docs updated" = any changedFile is under docs/v2/ or .guild/wiki/.
  * "Escape present" = any commitMessage matches /docs-sync:\s*n\/a/i.
  * flagged = surfaceTouched && !rootDocsUpdated && !escape.
  */
@@ -168,9 +162,9 @@ export function evaluateDocSync(input: DocSyncInput): DocSyncResult {
   let reason = "";
   if (flagged) {
     reason =
-      `User-facing surface changed (${surfaceFiles.length} file(s)) with no root docs/knowledge/ update and no docs-sync: n/a escape.` +
+      `User-facing surface changed (${surfaceFiles.length} file(s)) with no docs/v2/ or .guild/wiki/ update and no docs-sync: n/a escape.` +
       ` Surface files: ${surfaceFiles.join(", ")}.` +
-      ` To fix: update a docs/knowledge/ page in this changeset, or add "docs-sync: n/a <reason>" to any commit message.`;
+      ` To fix: update docs/v2/** or .guild/wiki/** in this changeset, or add "docs-sync: n/a <reason>" to any commit message.`;
   }
 
   return { flagged, reason, surfaceFiles };

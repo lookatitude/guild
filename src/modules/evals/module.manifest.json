@@ -15,6 +15,7 @@
       "lib/define-test-matrix.import-contract",
       "lib/define-traceability",
       "lib/explore-schema",
+      "lib/goal-task-schema",
       "lib/routing-ab-contract"
     ]
   }

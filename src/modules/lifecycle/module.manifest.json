@@ -8,7 +8,7 @@
   "depends_on": ["capability", "config", "context", "dispatch", "host-runtime", "kernel", "review", "state", "teams", "telemetry"],
   "lifecycle_slots": ["init", "ideate", "plan", "build", "qa", "ops"],
   "owns": {
-    "commands": ["build", "guild", "ideate", "init", "ops", "plan", "qa", "resume", "status"],
+    "commands": ["build", "goal", "guild", "ideate", "init", "ops", "plan", "qa", "resume", "status"],
     "skills": [
       "guild-brainstorm",
       "guild-execute-plan",

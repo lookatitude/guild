@@ -57,6 +57,11 @@
       "description": "Maintenance — diagnose a failed/suspicious Guild run, produce a fix plan, and optionally apply approved fixes. The v2 surface of the v1 diagnose command (verb rename diagnose→fix; --codex-review→--review=cross). Requires an explicit edit-approval gate."
     },
     {
+      "id": "goal",
+      "source_path": "commands/goal.md",
+      "description": "Planning - create or inspect P.O.V.E.R. goals and host-portable task groups from an approved spec. Uses host-native /goal when available, /guild:goal as the portable surface, and guild.task_group.v1 as the fallback when goals are unavailable."
+    },
+    {
       "id": "guild",
       "source_path": "commands/guild.md",
       "description": "Bare Guild entry — smart phase detection. /guild:guild [brief] inspects .guild/ state and surfaces the proposed lifecycle phase (init · ideate · plan · build · qa · ops), always confirmed never silent. Named phase verbs, nouns (wiki, initiative), maintenance verbs (evolve, rollback, stats, audit, fix), and observability (dashboard) are separate commands. v1→v2: https://guildstack.dev/docs/migration-v1-to-v2"
@@ -1645,6 +1650,11 @@
     {
       "id": "lib/fs-scanner",
       "source_path": "scripts/lib/fs-scanner.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/goal-task-schema",
+      "source_path": "scripts/lib/goal-task-schema.ts",
       "kind": "lib"
     },
     {
