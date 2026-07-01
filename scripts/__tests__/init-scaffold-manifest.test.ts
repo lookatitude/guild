@@ -57,14 +57,18 @@ describe("initializeGuild — full scaffold materialization (V5/V6)", () => {
     expect(result.mode).toBe("single_project");
   });
 
-  it("workspace creates the workspace-only entries (workspace.json, workspace-knowledge/, registry)", () => {
+  it("workspace creates the workspace-only entries (workspace.json, workspace descriptors, registry)", () => {
     const root = mkRoot();
     const result = initializeGuild(root, "workspace", { now: NOW });
     for (const entry of scaffoldFor("workspace_root")) {
       expect(entryExists(root, entry)).toBe(true);
     }
     expect(fs.existsSync(path.join(root, ".guild", "workspace.json"))).toBe(true);
+    expect(fs.existsSync(path.join(root, ".guild", "workspace", "workspace.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(root, ".guild", "workspace", "children.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(root, ".guild", "workspace", "relationships.yaml"))).toBe(true);
     expect(fs.existsSync(path.join(root, ".guild", "workspace-knowledge"))).toBe(true);
+    expect(fs.existsSync(path.join(root, ".guild", "initiatives", "registry.yaml"))).toBe(true);
     expect(fs.existsSync(path.join(root, ".guild", "indexes", "initiatives-registry.yaml"))).toBe(true);
     expect(result.mode).toBe("workspace");
     expect(Object.keys(result.sources).length).toBeGreaterThan(0);
@@ -87,15 +91,15 @@ describe("initializeGuild — re-run is never-clobber (V5/V6 anti-vacuity)", () 
     const root = mkRoot();
     initializeGuild(root, "single_project", { now: NOW });
 
-    const projectYaml = path.join(root, ".guild", "project.yaml");
-    const userContent = "# my hand-edited project file\nname: custom\n# (marker removed on purpose)\n";
-    fs.writeFileSync(projectYaml, userContent);
+    const guildYaml = path.join(root, ".guild", "guild.yaml");
+    const userContent = "# my hand-edited Guild root file\nname: custom\n# (marker removed on purpose)\n";
+    fs.writeFileSync(guildYaml, userContent);
 
     const re = initializeGuild(root, "single_project", { now: NOW });
-    const entry = re.entries.find((e) => e.path === ".guild/project.yaml");
+    const entry = re.entries.find((e) => e.path === ".guild/guild.yaml");
     expect(entry?.status).toBe("skipped_user_modified");
     expect(entry?.action).toBe("manual_review");
     // the central anti-vacuity claim: the user's bytes survive untouched
-    expect(fs.readFileSync(projectYaml, "utf8")).toBe(userContent);
+    expect(fs.readFileSync(guildYaml, "utf8")).toBe(userContent);
   });
 });

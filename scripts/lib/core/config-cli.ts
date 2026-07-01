@@ -422,7 +422,7 @@ export const HELP: Record<string, string> = {
   "defaults.gates.auto_approve":
     "[] | [spec,plan,build,qa,all] — default approval-gate posture. " +
     "qa auto-proceeds ONLY on a computed ReleaseGate PASS (BLOCK-override still prompts); never ops",
-  "defaults.wiki.share_mode": "team | private — wiki share mode (moved here from project.yaml)",
+  "defaults.wiki.share_mode": "team | private — wiki share mode (moved here from legacy project.yaml)",
   "defaults.wiki.autopromote": "false ALWAYS (true REJECTED — agents emit candidates only)",
   "defaults.quality.budget.per_class_minutes": "int > 0 — per-check-class wall-clock cap",
   "defaults.quality.budget.total_minutes": "int > 0 — whole-phase wall-clock cap",

@@ -284,8 +284,21 @@ const GUILD_MANAGED_END = "# END Guild managed";
 const GUILD_MANAGED_LINES: readonly string[] = [
   ".guild",
   "!/.guild/",
+  "!.guild/guild.yaml",
+  "!.guild/agents/",
+  "!.guild/agents/**",
+  "!.guild/skills/",
+  "!.guild/skills/**",
+  "!.guild/workflows/",
+  "!.guild/workflows/**",
+  "!.guild/loops/",
+  "!.guild/loops/**",
   "!.guild/wiki/",
   "!.guild/wiki/**",
+  "!.guild/knowledge/",
+  "!.guild/knowledge/**",
+  "!.guild/memory/",
+  "!.guild/memory/**",
   "!.guild/initiatives/",
   "!.guild/initiatives/**",
   "!.guild/spec/",
@@ -296,12 +309,20 @@ const GUILD_MANAGED_LINES: readonly string[] = [
   "!.guild/prd/**",
   "!.guild/team/",
   "!.guild/team/**",
+  "!.guild/teams/",
+  "!.guild/teams/**",
+  "!.guild/artifacts/",
+  "!.guild/artifacts/**",
   "!.guild/reflections/",
   "!.guild/reflections/**",
   "!.guild/evolve/",
   "!.guild/evolve/**",
   "!.guild/indexes/",
   "!.guild/indexes/**",
+  "!.guild/workspace/",
+  "!.guild/workspace/**",
+  "!.guild/workspace-knowledge/",
+  "!.guild/workspace-knowledge/**",
   "!.guild/workspace.json",
   "!.guild/settings.json",
   "!.guild/runs/",
@@ -471,24 +492,51 @@ export interface InitGuildOptions {
 
 const SETTINGS_REL = ".guild/settings.json";
 
-function seedContentFor(root: string, entry: ScaffoldEntry): string {
+function emptyRegistry(version: string, key: string): string {
+  return [`# schema_version: ${version}`, `${key}: []`, ""].join("\n");
+}
+
+function seedContentFor(root: string, entry: ScaffoldEntry, mode: ScaffoldMode): string {
   switch (entry.path) {
-    case ".guild/project.yaml":
+    case ".guild/guild.yaml":
       return [
-        "# Guild project manifest",
-        "schema_version: guild.project.v1",
+        "# Guild root manifest",
+        "schema_version: guild.root.v1",
+        `kind: ${mode === "workspace_root" ? "workspace" : "project"}`,
         `name: ${JSON.stringify(path.basename(root))}`,
+        `scope: ${mode === "workspace_root" ? "workspace" : "project"}`,
+        "parent: null",
         "created_by: guild.init",
         "",
       ].join("\n");
+    case ".guild/agents/registry.yaml":
+      return emptyRegistry("guild.agents_registry.v1", "agents");
+    case ".guild/skills/registry.yaml":
+      return emptyRegistry("guild.skills_registry.v1", "skills");
+    case ".guild/workflows/registry.yaml":
+      return emptyRegistry("guild.workflows_registry.v1", "workflows");
+    case ".guild/loops/registry.yaml":
+      return emptyRegistry("guild.loops_registry.v1", "loops");
     case ".guild/wiki/index.md":
       return [
         "<!-- schema_version: guild.wiki_index.v1 -->",
-        "# Project Wiki",
+        mode === "workspace_root" ? "# Workspace Wiki" : "# Project Wiki",
         "",
         "Guild knowledge base entrypoint. Synthesized memory, decisions, and standards accrete here.",
         "",
       ].join("\n");
+    case ".guild/memory/recall-index.json":
+      return (
+        JSON.stringify(
+          { schema_version: "guild.recall_index.v1", generated_by: "guild.init", entries: [] },
+          null,
+          2,
+        ) + "\n"
+      );
+    case ".guild/initiatives/registry.yaml":
+      return emptyRegistry("guild.initiatives_registry.v1", "initiatives");
+    case ".guild/teams/registry.yaml":
+      return emptyRegistry("guild.teams_registry.v1", "teams");
     case ".guild/indexes/codebase-map.json":
       return (
         JSON.stringify(
@@ -513,6 +561,18 @@ function seedContentFor(root: string, entry: ScaffoldEntry): string {
           2,
         ) + "\n"
       );
+    case ".guild/workspace/workspace.yaml":
+      return [
+        "# Guild workspace descriptor",
+        "schema_version: guild.workspace_root.v1",
+        "kind: workspace",
+        "children_source: .guild/workspace.json",
+        "",
+      ].join("\n");
+    case ".guild/workspace/children.yaml":
+      return ["# schema_version: guild.workspace_children.v1", "children: []", ""].join("\n");
+    case ".guild/workspace/relationships.yaml":
+      return ["# schema_version: guild.workspace_relationships.v1", "relationships: []", ""].join("\n");
     case ".guild/indexes/initiatives-registry.yaml":
       return ["# schema_version: guild.initiatives_registry.v1", "initiatives: []", ""].join("\n");
     default:
@@ -535,7 +595,7 @@ function resolveEntryPath(root: string, entry: ScaffoldEntry): string {
  * Create-if-missing / classify-if-present for ONE manifest entry. Never overwrites.
  * settings.json is excluded (the reconciler owns it) — callers skip it.
  */
-function materializeEntry(root: string, entry: ScaffoldEntry, io: InitGuildIO): ReportEntry {
+function materializeEntry(root: string, entry: ScaffoldEntry, io: InitGuildIO, mode: ScaffoldMode): ReportEntry {
   const abs = resolveEntryPath(root, entry);
   try {
     if (entry.kind === "dir") {
@@ -559,7 +619,7 @@ function materializeEntry(root: string, entry: ScaffoldEntry, io: InitGuildIO): 
     // file
     if (!io.exists(abs)) {
       io.ensureDir(path.dirname(abs));
-      io.writeText(abs, seedContentFor(root, entry));
+      io.writeText(abs, seedContentFor(root, entry, mode));
       return { path: entry.path, status: "created", reason: "seeded from manifest", action: "create", error: null };
     }
 
@@ -627,7 +687,7 @@ export function initializeGuild(
 
   for (const entry of entries) {
     if (entry.path === SETTINGS_REL) continue; // reconciler owns it
-    reportEntries.push(materializeEntry(root, entry, io));
+    reportEntries.push(materializeEntry(root, entry, io, scaffoldMode));
   }
 
   // settings.json — config reconcile sync (fill defaults, never clobber user values).
@@ -727,7 +787,7 @@ export function repairGuildInstall(cwd: string, opts: InitGuildOptions = {}): Re
       });
       continue;
     }
-    reportEntries.push(materializeEntry(cwd, entry, io));
+    reportEntries.push(materializeEntry(cwd, entry, io, scaffoldMode));
   }
 
   // settings.json — config reconcile REPAIR (sync + coerce malformed default/reconciled;

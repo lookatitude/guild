@@ -95,20 +95,27 @@ All project-created Guild state lives in the active root's `.guild/`:
 
 ```
 .guild/
+├── guild.yaml                 # root identity: workspace or project
 ├── settings.json              # project/workspace behavior
-├── workspace.json             # workspace federation manifest, when present
-├── agents/                    # project-created agents/specialists
-├── skills/                    # project-created skills/tools/workflows
-├── tools/                     # project-created tool wrappers/adapters
+├── workspace.json             # workspace federation manifest, workspace roots only
+├── workspace/                 # workspace metadata, workspace roots only
+├── agents/registry.yaml       # project/workspace-created agents/specialists
+├── skills/registry.yaml       # project/workspace-created skills
+├── workflows/registry.yaml    # reusable workflows
+├── loops/registry.yaml        # custom review/build/learning loops
+├── wiki/                      # synthesized knowledge, decisions, standards
+├── knowledge/                 # graph, indexes, sources, promotion candidates
+├── memory/                    # summaries, lessons, recall index
+├── initiatives/               # initiative registry, active, archived
+├── teams/registry.yaml        # reusable team definitions
+├── artifacts/                 # reports, audits, handoffs, generated outputs
 ├── raw/                       # immutable source inputs + checksums
-├── wiki/                      # synthesized memory, decisions, standards
-├── indexes/                   # codebase map, knowledge graph, links, sqlite index
-├── initiatives/               # initiative registries and phase progress
+├── indexes/                   # codebase map and compatibility indexes
+├── runs/                      # run traces and shareable run-summary subset
 ├── spec/                      # approved specs
 ├── plan/                      # per-task plans
-├── team/                      # resolved specialist teams
+├── team/                      # resolved specialist teams, legacy path
 ├── context/                   # per-run specialist context bundles
-├── runs/                      # run traces, handoffs, prompts, responses, tool logs
 ├── reflections/               # proposed learnings and improvements
 ├── evolve/                    # shadow-mode eval runs and reports
 └── skill-versions/            # rollback snapshots

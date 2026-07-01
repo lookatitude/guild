@@ -99,11 +99,11 @@ describe("detectGuildState — the 6-fixture matrix (V1)", () => {
   it("6. incomplete .guild/ (missing required manifest entry) → installed_needs_repair{missing_required_manifest_entry}", () => {
     const root = mkRoot();
     installSingle(root);
-    fs.rmSync(path.join(root, ".guild", "project.yaml"));
+    fs.rmSync(path.join(root, ".guild", "guild.yaml"));
     const r = detectGuildState(root);
     expect(r.state).toBe("installed_needs_repair");
     expect(r.problem?.problem).toBe("missing_required_manifest_entry");
-    expect(r.problem?.path.endsWith("project.yaml")).toBe(true);
+    expect(r.problem?.path.endsWith("guild.yaml")).toBe(true);
   });
 });
 

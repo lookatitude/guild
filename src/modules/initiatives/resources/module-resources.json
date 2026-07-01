@@ -22,14 +22,14 @@
       "id": "ideation-min-build-cli",
       "source_path": "scripts/ideation-min-build-cli.ts",
       "resource_path": "resources/scripts/ideation-min-build-cli.ts",
-      "sha256": "3f13d0c5a9cbab5658a381e6a9d45f77cdc2789f03ade49803842b2735e223c9"
+      "sha256": "8ab568c3a817fd531c376e5d94aadf272452ebb79ed0e5baa2774769eec72748"
     },
     {
       "category": "scripts",
       "id": "lib/ideation-min-build",
       "source_path": "scripts/lib/ideation-min-build.ts",
       "resource_path": "resources/scripts/lib/ideation-min-build.ts",
-      "sha256": "e4f28fe6a2320201c4095d75f969e354fa8663a19aa9fd68dc5ca5c02cad689a"
+      "sha256": "9f2bc07381dd3b12d31a35e882a4cbef15342bb6a48ee619b8e1f3ff2d552ed2"
     },
     {
       "category": "scripts",
@@ -43,7 +43,7 @@
       "id": "lib/init-resume-repair",
       "source_path": "scripts/lib/init-resume-repair.ts",
       "resource_path": "resources/scripts/lib/init-resume-repair.ts",
-      "sha256": "f78e22d82831ed8ca3d6fb762ddb95d12fc9e39e364d07e04c471dd4f251a5a5"
+      "sha256": "98b725d84e7232beddc73cfb14ce18cedecc2f241f8cd554306ccf2d5330d5e0"
     },
     {
       "category": "scripts",

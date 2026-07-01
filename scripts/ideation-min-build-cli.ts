@@ -46,10 +46,10 @@ function parseArgs(argv: string[]): Record<string, string> {
 /** Observe init state on disk — the canonical baseline is `.guild/wiki/index.md`. */
 function observeInitState(cwd: string): InitState {
   const wikiIndex = path.join(cwd, ".guild", "wiki", "index.md");
-  const projectYaml = path.join(cwd, ".guild", "project.yaml");
+  const guildYaml = path.join(cwd, ".guild", "guild.yaml");
   return {
     hasInitWiki: fs.existsSync(wikiIndex),
-    hasProjectYaml: fs.existsSync(projectYaml),
+    hasGuildYaml: fs.existsSync(guildYaml),
   };
 }
 

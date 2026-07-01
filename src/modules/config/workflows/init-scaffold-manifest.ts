@@ -81,24 +81,64 @@ export interface ScaffoldEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Shared single-project floor (spec §O line 110 — "current Init must-exist floor")
+// Shared Guild root floor
 // ---------------------------------------------------------------------------
 
 /**
- * The must-exist floor for ANY Guild install (single-project and the project
- * portion of a workspace root). `architecture-map.md` is brownfield-only, so it
- * is seeded but `repair_required:false` (its absence on a greenfield project is
- * legitimate, not a broken install).
+ * The must-exist floor for ANY Guild root, whether it is a workspace root,
+ * workspace child, or standalone project. The shape is intentionally consistent:
+ * a workspace and a project both know where shared agents, skills, workflows,
+ * loops, knowledge, memory, initiatives, teams, artifacts, and run records live.
+ *
+ * `.guild/indexes/` remains as a compatibility location for existing Guild
+ * readers/writers while `.guild/knowledge/indexes/` becomes the structured
+ * knowledge-layer home for new consumers.
  */
-const PROJECT_FLOOR: readonly ScaffoldEntry[] = [
+const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = [
   {
-    path: ".guild/project.yaml",
+    path: ".guild/guild.yaml",
     kind: "file",
     source: "generated",
     clobber: "never",
     repair_required: true,
-    version: "guild.project.v1",
-    description: "Project identity + Guild metadata; user-editable after seeding.",
+    version: "guild.root.v1",
+    description: "Guild root identity and kind (workspace or project).",
+  },
+  {
+    path: ".guild/agents/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.agents_registry.v1",
+    description: "Project/workspace-shared specialist agent registry.",
+  },
+  {
+    path: ".guild/skills/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.skills_registry.v1",
+    description: "Project/workspace-shared skill registry.",
+  },
+  {
+    path: ".guild/workflows/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.workflows_registry.v1",
+    description: "Repeatable project/workspace workflow registry.",
+  },
+  {
+    path: ".guild/loops/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.loops_registry.v1",
+    description: "Custom loop registry.",
   },
   {
     path: ".guild/init/",
@@ -135,6 +175,161 @@ const PROJECT_FLOOR: readonly ScaffoldEntry[] = [
     description: "Project settings. ONLY config reconcile/sync/repair + scoped write APIs may change it (never init/repair wholesale).",
   },
   {
+    path: ".guild/knowledge/graph/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Structured knowledge graph artifacts.",
+  },
+  {
+    path: ".guild/knowledge/indexes/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Structured knowledge indexes.",
+  },
+  {
+    path: ".guild/knowledge/sources/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Source material and checksums promoted into knowledge.",
+  },
+  {
+    path: ".guild/knowledge/candidates/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Human-gated knowledge promotion candidates.",
+  },
+  {
+    path: ".guild/memory/summaries/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Durable summarized memory promoted from runs.",
+  },
+  {
+    path: ".guild/memory/lessons/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Reusable lessons promoted from reflections and run analysis.",
+  },
+  {
+    path: ".guild/memory/recall-index.json",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.recall_index.v1",
+    description: "Project/workspace recall index placeholder.",
+  },
+  {
+    path: ".guild/initiatives/active/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Active initiative records.",
+  },
+  {
+    path: ".guild/initiatives/archived/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Archived initiative records.",
+  },
+  {
+    path: ".guild/initiatives/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.initiatives_registry.v1",
+    description: "Initiative registry for this Guild root.",
+  },
+  {
+    path: ".guild/runs/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Run records and replay evidence.",
+  },
+  {
+    path: ".guild/teams/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.teams_registry.v1",
+    description: "Reusable team composition registry.",
+  },
+  {
+    path: ".guild/artifacts/reports/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Shared reports not yet promoted to wiki/memory.",
+  },
+  {
+    path: ".guild/artifacts/audits/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Shared audit outputs.",
+  },
+  {
+    path: ".guild/artifacts/handoffs/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Shared handoff artifacts.",
+  },
+  {
+    path: ".guild/artifacts/generated/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Generated artifacts reviewed for sharing.",
+  },
+  {
+    path: ".guild/workspace/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Workspace relationship files; inert for standalone projects.",
+  },
+  {
+    path: ".guild/hosts/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    description: "Host-local capability state. Usually ignored unless explicitly shared.",
+  },
+  {
+    path: ".guild/indexes/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: true,
+    description: "Compatibility home for existing Guild index artifacts.",
+  },
+  {
     path: ".guild/indexes/codebase-map.json",
     kind: "file",
     source: "generated",
@@ -169,6 +364,33 @@ const WORKSPACE_EXTRAS: readonly ScaffoldEntry[] = [
     description: "Workspace federation manifest. Its presence + is_workspace:true is what makes this root a workspace_root.",
   },
   {
+    path: ".guild/workspace/workspace.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.workspace_root.v1",
+    description: "Human-readable workspace root descriptor.",
+  },
+  {
+    path: ".guild/workspace/children.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.workspace_children.v1",
+    description: "Workspace child project registry.",
+  },
+  {
+    path: ".guild/workspace/relationships.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.workspace_relationships.v1",
+    description: "Cross-project relationship and release-coupling registry.",
+  },
+  {
     path: ".guild/workspace-knowledge/",
     kind: "dir",
     source: "empty-dir",
@@ -192,14 +414,14 @@ const WORKSPACE_EXTRAS: readonly ScaffoldEntry[] = [
 // ---------------------------------------------------------------------------
 
 /** Complete scaffold for a single-project install. */
-export const singleProject: readonly ScaffoldEntry[] = [...PROJECT_FLOOR];
+export const singleProject: readonly ScaffoldEntry[] = [...STANDARD_ROOT_FLOOR];
 
 /**
- * Complete scaffold for a workspace-root install — the shared project floor PLUS
+ * Complete scaffold for a workspace-root install — the standard root floor PLUS
  * the workspace-only additions. Self-contained: consumers do not concat with
  * `singleProject`.
  */
-export const workspaceRoot: readonly ScaffoldEntry[] = [...PROJECT_FLOOR, ...WORKSPACE_EXTRAS];
+export const workspaceRoot: readonly ScaffoldEntry[] = [...STANDARD_ROOT_FLOOR, ...WORKSPACE_EXTRAS];
 
 /**
  * The mode-independent required floor — entries whose absence marks ANY install
@@ -211,7 +433,7 @@ export const workspaceRoot: readonly ScaffoldEntry[] = [...PROJECT_FLOOR, ...WOR
  * Note `.guild/workspace.json` is NOT here: its presence is the very signal that
  * selects workspace_root mode, so it is required only in that mode.
  */
-export const repairRequired: readonly ScaffoldEntry[] = PROJECT_FLOOR.filter(
+export const repairRequired: readonly ScaffoldEntry[] = STANDARD_ROOT_FLOOR.filter(
   (e) => e.repair_required,
 );
 

@@ -64,7 +64,7 @@
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
       "resource_path": "resources/scripts/lib/core/config-cli.ts",
-      "sha256": "f66ad24553bacd5fa665e21a93a62358132d02ff87a2b9660069e7250655d8bc"
+      "sha256": "c7ebf1ed385b3a27b3b2fbcba490bb44f3edb6b8971530813fe2784744012205"
     },
     {
       "category": "scripts",
@@ -85,7 +85,7 @@
       "id": "lib/init-guild",
       "source_path": "scripts/lib/init-guild.ts",
       "resource_path": "resources/scripts/lib/init-guild.ts",
-      "sha256": "6eb55b5120a547050a4482f1b8f6f448abe698e1a434e4931f88e14b02f7c4f2"
+      "sha256": "6d5fccf666f733c60709934ee64c95ab5c025bf77153749591d5f1b08d8fcfa5"
     },
     {
       "category": "scripts",

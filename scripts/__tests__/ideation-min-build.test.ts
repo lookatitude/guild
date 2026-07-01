@@ -46,14 +46,14 @@ describe("needsMinBuild", () => {
     expect(needsMinBuild(state)).toBe(false);
   });
 
-  it("returns true when hasInitWiki is false even if hasProjectYaml is true (partial-init)", () => {
-    const state: InitState = { hasInitWiki: false, hasProjectYaml: true };
+  it("returns true when hasInitWiki is false even if hasGuildYaml is true (partial-init)", () => {
+    const state: InitState = { hasInitWiki: false, hasGuildYaml: true };
     expect(needsMinBuild(state)).toBe(true);
   });
 
-  it("returns false when hasInitWiki is true regardless of hasProjectYaml", () => {
-    const stateWithYaml: InitState = { hasInitWiki: true, hasProjectYaml: true };
-    const stateNoYaml: InitState = { hasInitWiki: true, hasProjectYaml: false };
+  it("returns false when hasInitWiki is true regardless of hasGuildYaml", () => {
+    const stateWithYaml: InitState = { hasInitWiki: true, hasGuildYaml: true };
+    const stateNoYaml: InitState = { hasInitWiki: true, hasGuildYaml: false };
     expect(needsMinBuild(stateWithYaml)).toBe(false);
     expect(needsMinBuild(stateNoYaml)).toBe(false);
   });

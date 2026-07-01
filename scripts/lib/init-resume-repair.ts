@@ -4,7 +4,7 @@
  * Init Resume-Repair Station (v2.x deferred — item 1).
  *
  * Implements the brownfield validate-and-repair path that the `guild:init` skill
- * invokes when `.guild/project.yaml` already exists.  The station runs BEFORE any
+ * invokes when `.guild/guild.yaml` already exists.  The station runs BEFORE any
  * write touches the user's `.guild/` tree and emits a deterministic repair plan
  * that the caller may execute.
  *

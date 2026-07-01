@@ -38,10 +38,10 @@ describe("repairGuildInstall — restore-missing + keep-modified byte-identical 
     const root = mkRoot();
     initializeGuild(root, "single_project", { now: NOW });
 
-    // A user hand-edited project.yaml (marker removed) — repair must NOT clobber it.
-    const projectYaml = path.join(root, ".guild", "project.yaml");
+    // A user hand-edited guild.yaml (marker removed) — repair must NOT clobber it.
+    const guildYaml = path.join(root, ".guild", "guild.yaml");
     const userContent = "# hand-edited\nname: my-project\nnotes: do not overwrite me\n";
-    fs.writeFileSync(projectYaml, userContent);
+    fs.writeFileSync(guildYaml, userContent);
 
     // A required floor file is missing → install is installed_needs_repair.
     const codebaseMap = path.join(root, ".guild", "indexes", "codebase-map.json");
@@ -60,9 +60,9 @@ describe("repairGuildInstall — restore-missing + keep-modified byte-identical 
     expect(restored?.status).toBe("created");
 
     // PRESERVED — the user's modified bytes are untouched (skipped_user_modified)
-    const kept = result.entries.find((e) => e.path === ".guild/project.yaml");
+    const kept = result.entries.find((e) => e.path === ".guild/guild.yaml");
     expect(kept?.status).toBe("skipped_user_modified");
-    expect(fs.readFileSync(projectYaml, "utf8")).toBe(userContent);
+    expect(fs.readFileSync(guildYaml, "utf8")).toBe(userContent);
 
     // fail-closed security reconcile ran as part of repair
     expect(result.security).toBeDefined();

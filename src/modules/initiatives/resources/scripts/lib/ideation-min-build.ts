@@ -38,11 +38,11 @@ export type GroundedIn = typeof GROUNDED_IN_INIT_MINIMAL;
 
 /**
  * Facts the caller can supply from whatever context is available (CLI args,
- * partial project.yaml, conversation context).  All fields are optional —
+ * partial guild.yaml, conversation context).  All fields are optional —
  * the resolver fills in sensible placeholders for missing values.
  */
 export interface ProjectFacts {
-  /** Best-effort project name (e.g. from cwd basename or partial project.yaml). */
+  /** Best-effort project name (e.g. from cwd basename or partial guild.yaml). */
   name?: string;
   /** Brief description of the project if known. */
   description?: string;
@@ -126,10 +126,10 @@ export interface InitState {
   /** Whether a .guild/wiki/index.md (or equivalent wiki scaffold) exists. */
   hasInitWiki: boolean;
   /**
-   * Whether .guild/project.yaml exists (a weaker signal than hasInitWiki,
+   * Whether .guild/guild.yaml exists (a weaker signal than hasInitWiki,
    * but relevant when partial init ran without completing the wiki scaffold).
    */
-  hasProjectYaml?: boolean;
+  hasGuildYaml?: boolean;
 }
 
 // ── Internal constants ────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ const GAP_NOTICE =
 /**
  * Predicate: true when `/guild:ideate` should trigger the min-build resolver.
  *
- * The sole trigger is the absence of a usable init wiki.  A partial project.yaml
+ * The sole trigger is the absence of a usable init wiki.  A partial guild.yaml
  * without a wiki still returns true — the wiki is the canonical knowledge
  * baseline for ideation (ref: 03-lifecycle.md §Ideation row, "Required upstream").
  *
@@ -164,7 +164,7 @@ export function needsMinBuild(initState: InitState): boolean {
  * Resolve a minimal spec baseline for ideation when no init wiki is present.
  *
  * The caller supplies any project facts already gathered (from CLI args, partial
- * project.yaml, or conversation context); the resolver fills placeholders for
+ * guild.yaml, or conversation context); the resolver fills placeholders for
  * missing values.  The returned spec is stamped `grounded_in: "init_minimal"`
  * and includes a `gap` field that downstream ideation skills must surface to
  * the user.

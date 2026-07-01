@@ -60,7 +60,7 @@ ask-before-deep-scan interactive gate is removed (D3).
 
 ## Output artifact
 
-`.guild/project.yaml`, `.guild/init/<slug>.md`, `.guild/wiki/**`,
+`.guild/guild.yaml`, `.guild/init/<slug>.md`, `.guild/wiki/**`,
 `.guild/raw/**`, `.guild/settings.json` (the project config surface,
 scaffolded fully-documented if absent — see below), and (brownfield, cheap
 scan tier = Init-DONE) `.guild/indexes/codebase-map.json` + confidence-tagged
@@ -68,10 +68,16 @@ scan tier = Init-DONE) `.guild/indexes/codebase-map.json` + confidence-tagged
 `onboarding-tour.md` are **deferred** — lazy, produced only under `--learn` /
 `defaults.auto_learn` by the `learn-*` pipeline, never at Init by default.
 
-PCR-Init must-exist floor: `.guild/project.yaml`, `.guild/wiki/index.md`
-(scaffold), `.guild/raw/`, `.guild/settings.json` (scaffold),
-`.guild/init/<slug>.md`; brownfield: `.guild/indexes/codebase-map.json`,
-`.guild/wiki/architecture-map.md` stub. Binding:
+PCR-Init must-exist floor: `.guild/guild.yaml`, `.guild/wiki/index.md`
+(scaffold), `.guild/agents/registry.yaml`, `.guild/skills/registry.yaml`,
+`.guild/workflows/registry.yaml`, `.guild/loops/registry.yaml`,
+`.guild/knowledge/**`, `.guild/memory/**`, `.guild/raw/`,
+`.guild/settings.json` (scaffold), `.guild/init/<slug>.md`,
+`.guild/initiatives/**`, `.guild/runs/`, `.guild/teams/registry.yaml`,
+`.guild/artifacts/**`; brownfield: `.guild/indexes/codebase-map.json`,
+`.guild/wiki/architecture-map.md` stub. Workspace roots additionally include
+`.guild/workspace.json`, `.guild/workspace/**`, and
+`.guild/workspace-knowledge/**`. Binding:
 `docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
 CMD-006.
 
