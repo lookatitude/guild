@@ -1,0 +1,8 @@
+# Guild root manifest
+schema_version: guild.root.v1
+kind: project
+name: "plugin"
+scope: project
+parent: ".."
+children: []
+created_by: guild.init

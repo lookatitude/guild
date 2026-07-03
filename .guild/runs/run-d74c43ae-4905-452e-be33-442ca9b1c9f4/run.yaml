@@ -1,0 +1,23 @@
+schema_version: guild.run.v1
+run_id: run-d74c43ae-4905-452e-be33-442ca9b1c9f4
+command: /guild:learn
+arguments: {}
+cwd: /Users/miguelp/Projects/guild/plugin
+target_kind: existing_guild_project
+workspace:
+  is_workspace: false
+  root: /Users/miguelp/Projects/guild/plugin
+project: project
+host:
+  requested: auto
+  resolved: claude
+model_tier_policy: default (full run)
+started_at: 2026-06-27T20:37:03Z
+ignore_policy: default
+scan_policy: default
+initiative_attachment: null
+phase: null
+run_class: full
+gates: {}
+status: closed
+phases_log: []

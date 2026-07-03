@@ -1,6 +1,6 @@
 {
   "version": "guild.codebase_map.v1",
-  "generated_from_commit": "bf80bcb883455c2a0330d410c00297980846f10a",
+  "generated_from_commit": "2c5372611c7881d02fb7087a869bff28d45c99ca",
   "project": {
     "root": "/Users/miguelp/Projects/guild/plugin",
     "languages": [
@@ -656,7 +656,7 @@
     {
       "path": "hooks/agent-team/task-completed.ts",
       "language": "typescript",
-      "loc": 669,
+      "loc": 683,
       "complexity": 0.83,
       "module": "hooks",
       "is_entrypoint": false
@@ -832,8 +832,8 @@
     {
       "path": "hooks/lib/run-trace.ts",
       "language": "typescript",
-      "loc": 585,
-      "complexity": 0.84,
+      "loc": 680,
+      "complexity": 0.93,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -1112,7 +1112,7 @@
     {
       "path": "scripts/agent-team-launcher.ts",
       "language": "typescript",
-      "loc": 1409,
+      "loc": 1483,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
@@ -1122,6 +1122,14 @@
       "language": "typescript",
       "loc": 505,
       "complexity": 0.87,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/artifact-bus-cli.ts",
+      "language": "typescript",
+      "loc": 164,
+      "complexity": 0.24,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1208,7 +1216,7 @@
     {
       "path": "scripts/config-cmd.ts",
       "language": "typescript",
-      "loc": 1729,
+      "loc": 2275,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
@@ -1240,7 +1248,7 @@
     {
       "path": "scripts/docs-hygiene/docs-code-audit.ts",
       "language": "typescript",
-      "loc": 1088,
+      "loc": 1091,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
@@ -1256,7 +1264,7 @@
     {
       "path": "scripts/docs-hygiene/scan.ts",
       "language": "typescript",
-      "loc": 892,
+      "loc": 908,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
@@ -1398,6 +1406,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/ideation-min-build-cli.ts",
+      "language": "typescript",
+      "loc": 85,
+      "complexity": 0.11,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/index-migrate.ts",
       "language": "typescript",
       "loc": 19,
@@ -1430,6 +1446,422 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/learn/LICENSE-attribution.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/analyze-structural.ts",
+      "language": "typescript",
+      "loc": 51,
+      "complexity": 0.06,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/architecture.ts",
+      "language": "typescript",
+      "loc": 161,
+      "complexity": 0.23,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/assign-layers.ts",
+      "language": "typescript",
+      "loc": 48,
+      "complexity": 0.07,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/build-tour.ts",
+      "language": "typescript",
+      "loc": 34,
+      "complexity": 0.04,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/classify-wiki-pages.ts",
+      "language": "typescript",
+      "loc": 297,
+      "complexity": 0.42,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/content-analyze.ts",
+      "language": "typescript",
+      "loc": 768,
+      "complexity": 0.98,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/cost-gate.ts",
+      "language": "typescript",
+      "loc": 208,
+      "complexity": 0.27,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/cross-link.ts",
+      "language": "typescript",
+      "loc": 860,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/derive-domain.ts",
+      "language": "typescript",
+      "loc": 61,
+      "complexity": 0.1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/diagram-analyze.ts",
+      "language": "typescript",
+      "loc": 317,
+      "complexity": 0.44,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/diff-learn.ts",
+      "language": "typescript",
+      "loc": 88,
+      "complexity": 0.14,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/extract-structural.ts",
+      "language": "typescript",
+      "loc": 270,
+      "complexity": 0.37,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/graph-artifact.ts",
+      "language": "typescript",
+      "loc": 406,
+      "complexity": 0.66,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/graph-query.ts",
+      "language": "typescript",
+      "loc": 133,
+      "complexity": 0.2,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/impact.ts",
+      "language": "typescript",
+      "loc": 190,
+      "complexity": 0.27,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/k-stage-staleness.ts",
+      "language": "typescript",
+      "loc": 433,
+      "complexity": 0.72,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/kg-query.ts",
+      "language": "typescript",
+      "loc": 152,
+      "complexity": 0.21,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/knowledge-orchestrator.ts",
+      "language": "typescript",
+      "loc": 1230,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/architecture.ts",
+      "language": "typescript",
+      "loc": 503,
+      "complexity": 0.73,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/bundle-validate.ts",
+      "language": "typescript",
+      "loc": 142,
+      "complexity": 0.24,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/domain.ts",
+      "language": "typescript",
+      "loc": 136,
+      "complexity": 0.19,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/extract.ts",
+      "language": "typescript",
+      "loc": 279,
+      "complexity": 0.55,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/fingerprint.ts",
+      "language": "typescript",
+      "loc": 161,
+      "complexity": 0.28,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/git.ts",
+      "language": "typescript",
+      "loc": 64,
+      "complexity": 0.13,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/graph-artifact.ts",
+      "language": "typescript",
+      "loc": 524,
+      "complexity": 0.84,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/graph-query-projection.ts",
+      "language": "typescript",
+      "loc": 271,
+      "complexity": 0.44,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/graph-query.ts",
+      "language": "typescript",
+      "loc": 534,
+      "complexity": 0.82,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/graph.ts",
+      "language": "typescript",
+      "loc": 146,
+      "complexity": 0.23,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/ignore.ts",
+      "language": "typescript",
+      "loc": 167,
+      "complexity": 0.28,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/impact.ts",
+      "language": "typescript",
+      "loc": 476,
+      "complexity": 0.72,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/import-map.ts",
+      "language": "typescript",
+      "loc": 204,
+      "complexity": 0.41,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/languages.ts",
+      "language": "typescript",
+      "loc": 99,
+      "complexity": 0.16,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/layers.ts",
+      "language": "typescript",
+      "loc": 71,
+      "complexity": 0.12,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/parity-harness.ts",
+      "language": "typescript",
+      "loc": 166,
+      "complexity": 0.25,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/paths.ts",
+      "language": "typescript",
+      "loc": 104,
+      "complexity": 0.17,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/resolve-calls-py.ts",
+      "language": "typescript",
+      "loc": 439,
+      "complexity": 0.85,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/resolve-calls-ts.ts",
+      "language": "typescript",
+      "loc": 172,
+      "complexity": 0.38,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/resolved-call.ts",
+      "language": "typescript",
+      "loc": 21,
+      "complexity": 0.02,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/schema.ts",
+      "language": "typescript",
+      "loc": 1140,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/similarity.ts",
+      "language": "typescript",
+      "loc": 613,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/structural.ts",
+      "language": "typescript",
+      "loc": 886,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/tour.ts",
+      "language": "typescript",
+      "loc": 54,
+      "complexity": 0.1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/walk.ts",
+      "language": "typescript",
+      "loc": 40,
+      "complexity": 0.09,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/resolve-calls.ts",
+      "language": "typescript",
+      "loc": 208,
+      "complexity": 0.31,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/scan.ts",
+      "language": "typescript",
+      "loc": 95,
+      "complexity": 0.13,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/staleness.ts",
+      "language": "typescript",
+      "loc": 82,
+      "complexity": 0.12,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/taxonomy-build.ts",
+      "language": "typescript",
+      "loc": 513,
+      "complexity": 0.78,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/validate-graph.ts",
+      "language": "typescript",
+      "loc": 65,
+      "complexity": 0.09,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/wiki-index.ts",
+      "language": "typescript",
+      "loc": 406,
+      "complexity": 0.58,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/wiki-lint-knowledge.ts",
+      "language": "typescript",
+      "loc": 200,
+      "complexity": 0.26,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/write-knowledge-links.ts",
+      "language": "typescript",
+      "loc": 224,
+      "complexity": 0.28,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/lib/adapter-fallback-ladders.ts",
       "language": "typescript",
       "loc": 7,
@@ -1442,6 +1874,14 @@
       "language": "typescript",
       "loc": 436,
       "complexity": 0.6,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/artifact-bus.ts",
+      "language": "typescript",
+      "loc": 550,
+      "complexity": 0.95,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1562,6 +2002,22 @@
       "language": "typescript",
       "loc": 167,
       "complexity": 0.28,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/config-ui-metadata.ts",
+      "language": "typescript",
+      "loc": 313,
+      "complexity": 0.33,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/config-ui-surface.ts",
+      "language": "typescript",
+      "loc": 541,
+      "complexity": 0.89,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1846,6 +2302,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/lib/host-open-preflight.ts",
+      "language": "typescript",
+      "loc": 10,
+      "complexity": 0.01,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/lib/host-profiles-validate.ts",
       "language": "typescript",
       "loc": 7,
@@ -1904,7 +2368,7 @@
     {
       "path": "scripts/lib/host/tmux-backend.ts",
       "language": "typescript",
-      "loc": 304,
+      "loc": 311,
       "complexity": 0.51,
       "module": "scripts",
       "is_entrypoint": false
@@ -1942,6 +2406,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/lib/init-guild.ts",
+      "language": "typescript",
+      "loc": 681,
+      "complexity": 0.95,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/lib/init-offer-initiative.ts",
       "language": "typescript",
       "loc": 256,
@@ -1954,6 +2426,14 @@
       "language": "typescript",
       "loc": 499,
       "complexity": 0.69,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/init-scaffold-manifest.ts",
+      "language": "typescript",
+      "loc": 10,
+      "complexity": 0.01,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2088,8 +2568,8 @@
     {
       "path": "scripts/lib/pane-adapter.ts",
       "language": "typescript",
-      "loc": 425,
-      "complexity": 0.58,
+      "loc": 447,
+      "complexity": 0.62,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2568,8 +3048,8 @@
     {
       "path": "scripts/sync-migration.ts",
       "language": "typescript",
-      "loc": 289,
-      "complexity": 0.45,
+      "loc": 295,
+      "complexity": 0.46,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2594,422 +3074,6 @@
       "language": "typescript",
       "loc": 6,
       "complexity": 0.01,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/LICENSE-attribution.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/analyze-structural.ts",
-      "language": "typescript",
-      "loc": 51,
-      "complexity": 0.06,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/architecture.ts",
-      "language": "typescript",
-      "loc": 161,
-      "complexity": 0.23,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/assign-layers.ts",
-      "language": "typescript",
-      "loc": 48,
-      "complexity": 0.07,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/build-tour.ts",
-      "language": "typescript",
-      "loc": 34,
-      "complexity": 0.04,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/classify-wiki-pages.ts",
-      "language": "typescript",
-      "loc": 297,
-      "complexity": 0.42,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/content-analyze.ts",
-      "language": "typescript",
-      "loc": 768,
-      "complexity": 0.98,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/cost-gate.ts",
-      "language": "typescript",
-      "loc": 208,
-      "complexity": 0.27,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/cross-link.ts",
-      "language": "typescript",
-      "loc": 860,
-      "complexity": 1,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/derive-domain.ts",
-      "language": "typescript",
-      "loc": 61,
-      "complexity": 0.1,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/diagram-analyze.ts",
-      "language": "typescript",
-      "loc": 317,
-      "complexity": 0.44,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/diff-understanding.ts",
-      "language": "typescript",
-      "loc": 88,
-      "complexity": 0.14,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/extract-structural.ts",
-      "language": "typescript",
-      "loc": 270,
-      "complexity": 0.37,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/graph-artifact.ts",
-      "language": "typescript",
-      "loc": 406,
-      "complexity": 0.66,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/graph-query.ts",
-      "language": "typescript",
-      "loc": 133,
-      "complexity": 0.2,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/impact.ts",
-      "language": "typescript",
-      "loc": 190,
-      "complexity": 0.27,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/k-stage-staleness.ts",
-      "language": "typescript",
-      "loc": 431,
-      "complexity": 0.72,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/kg-query.ts",
-      "language": "typescript",
-      "loc": 152,
-      "complexity": 0.21,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/knowledge-orchestrator.ts",
-      "language": "typescript",
-      "loc": 1230,
-      "complexity": 1,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/architecture.ts",
-      "language": "typescript",
-      "loc": 503,
-      "complexity": 0.73,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/bundle-validate.ts",
-      "language": "typescript",
-      "loc": 142,
-      "complexity": 0.24,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/domain.ts",
-      "language": "typescript",
-      "loc": 136,
-      "complexity": 0.19,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/extract.ts",
-      "language": "typescript",
-      "loc": 279,
-      "complexity": 0.55,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/fingerprint.ts",
-      "language": "typescript",
-      "loc": 161,
-      "complexity": 0.28,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/git.ts",
-      "language": "typescript",
-      "loc": 64,
-      "complexity": 0.13,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/graph-artifact.ts",
-      "language": "typescript",
-      "loc": 524,
-      "complexity": 0.84,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/graph-query-projection.ts",
-      "language": "typescript",
-      "loc": 271,
-      "complexity": 0.44,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/graph-query.ts",
-      "language": "typescript",
-      "loc": 534,
-      "complexity": 0.82,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/graph.ts",
-      "language": "typescript",
-      "loc": 146,
-      "complexity": 0.23,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/ignore.ts",
-      "language": "typescript",
-      "loc": 167,
-      "complexity": 0.28,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/impact.ts",
-      "language": "typescript",
-      "loc": 476,
-      "complexity": 0.72,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/import-map.ts",
-      "language": "typescript",
-      "loc": 204,
-      "complexity": 0.41,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/languages.ts",
-      "language": "typescript",
-      "loc": 99,
-      "complexity": 0.16,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/layers.ts",
-      "language": "typescript",
-      "loc": 71,
-      "complexity": 0.12,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/parity-harness.ts",
-      "language": "typescript",
-      "loc": 166,
-      "complexity": 0.25,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/paths.ts",
-      "language": "typescript",
-      "loc": 104,
-      "complexity": 0.17,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/resolve-calls-py.ts",
-      "language": "typescript",
-      "loc": 439,
-      "complexity": 0.85,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/resolve-calls-ts.ts",
-      "language": "typescript",
-      "loc": 172,
-      "complexity": 0.38,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/resolved-call.ts",
-      "language": "typescript",
-      "loc": 21,
-      "complexity": 0.02,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/schema.ts",
-      "language": "typescript",
-      "loc": 1140,
-      "complexity": 1,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/similarity.ts",
-      "language": "typescript",
-      "loc": 613,
-      "complexity": 1,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/structural.ts",
-      "language": "typescript",
-      "loc": 886,
-      "complexity": 1,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/tour.ts",
-      "language": "typescript",
-      "loc": 54,
-      "complexity": 0.1,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/lib/walk.ts",
-      "language": "typescript",
-      "loc": 40,
-      "complexity": 0.09,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/resolve-calls.ts",
-      "language": "typescript",
-      "loc": 208,
-      "complexity": 0.31,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/scan.ts",
-      "language": "typescript",
-      "loc": 95,
-      "complexity": 0.13,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/staleness.ts",
-      "language": "typescript",
-      "loc": 82,
-      "complexity": 0.12,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/taxonomy-build.ts",
-      "language": "typescript",
-      "loc": 513,
-      "complexity": 0.78,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/validate-graph.ts",
-      "language": "typescript",
-      "loc": 65,
-      "complexity": 0.09,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/wiki-index.ts",
-      "language": "typescript",
-      "loc": 406,
-      "complexity": 0.58,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/wiki-lint-knowledge.ts",
-      "language": "typescript",
-      "loc": 200,
-      "complexity": 0.26,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/understand/write-knowledge-links.ts",
-      "language": "typescript",
-      "loc": 224,
-      "complexity": 0.28,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -5248,7 +5312,7 @@
     {
       "path": "src/modules/communication/workflows/no-accidental-write.ts",
       "language": "typescript",
-      "loc": 569,
+      "loc": 572,
       "complexity": 0.88,
       "module": "src",
       "is_entrypoint": false
@@ -5278,9 +5342,33 @@
       "is_entrypoint": false
     },
     {
+      "path": "src/modules/config/workflows/host-open-preflight.ts",
+      "language": "typescript",
+      "loc": 572,
+      "complexity": 0.84,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
+      "path": "src/modules/config/workflows/init-config-copy.ts",
+      "language": "typescript",
+      "loc": 31,
+      "complexity": 0.05,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
+      "path": "src/modules/config/workflows/init-scaffold-manifest.ts",
+      "language": "typescript",
+      "loc": 224,
+      "complexity": 0.26,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
       "path": "src/modules/config/workflows/settings-reader.ts",
       "language": "typescript",
-      "loc": 1329,
+      "loc": 1286,
       "complexity": 1,
       "module": "src",
       "is_entrypoint": false
@@ -5297,6 +5385,14 @@
       "path": "src/modules/config/workflows/tier-model.ts",
       "language": "typescript",
       "loc": 80,
+      "complexity": 0.16,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
+      "path": "src/modules/config/workflows/workspace-manifest.ts",
+      "language": "typescript",
+      "loc": 108,
       "complexity": 0.16,
       "module": "src",
       "is_entrypoint": false
@@ -5414,6 +5510,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "src/modules/dispatch/workflows/task-assignment.ts",
+      "language": "typescript",
+      "loc": 135,
+      "complexity": 0.24,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
       "path": "src/modules/distribution/index.ts",
       "language": "typescript",
       "loc": 13,
@@ -5494,10 +5598,18 @@
       "is_entrypoint": false
     },
     {
+      "path": "src/modules/distribution/workflows/result-contracts-v2.ts",
+      "language": "typescript",
+      "loc": 110,
+      "complexity": 0.21,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
       "path": "src/modules/distribution/workflows/result-contracts.ts",
       "language": "typescript",
-      "loc": 156,
-      "complexity": 0.16,
+      "loc": 168,
+      "complexity": 0.17,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5560,7 +5672,7 @@
     {
       "path": "src/modules/docs-sync/workflows/check-doc-sync.ts",
       "language": "typescript",
-      "loc": 450,
+      "loc": 455,
       "complexity": 0.72,
       "module": "src",
       "is_entrypoint": false
@@ -5918,6 +6030,30 @@
       "is_entrypoint": false
     },
     {
+      "path": "src/modules/learning/index.ts",
+      "language": "typescript",
+      "loc": 1,
+      "complexity": 0,
+      "module": "src",
+      "is_entrypoint": true
+    },
+    {
+      "path": "src/modules/learning/module.manifest.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
+      "path": "src/modules/learning/workflows/knowledge-graph-contract.ts",
+      "language": "typescript",
+      "loc": 28,
+      "complexity": 0.03,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
       "path": "src/modules/lifecycle/index.ts",
       "language": "typescript",
       "loc": 10,
@@ -6056,8 +6192,8 @@
     {
       "path": "src/modules/migrations/workflows/index-migrate.ts",
       "language": "typescript",
-      "loc": 392,
-      "complexity": 0.51,
+      "loc": 401,
+      "complexity": 0.53,
       "module": "src",
       "is_entrypoint": false
     },
@@ -6366,30 +6502,6 @@
       "is_entrypoint": false
     },
     {
-      "path": "src/modules/understanding/index.ts",
-      "language": "typescript",
-      "loc": 1,
-      "complexity": 0,
-      "module": "src",
-      "is_entrypoint": true
-    },
-    {
-      "path": "src/modules/understanding/module.manifest.json",
-      "language": "json",
-      "loc": 0,
-      "complexity": 0,
-      "module": "src",
-      "is_entrypoint": false
-    },
-    {
-      "path": "src/modules/understanding/workflows/knowledge-graph-contract.ts",
-      "language": "typescript",
-      "loc": 28,
-      "complexity": 0.03,
-      "module": "src",
-      "is_entrypoint": false
-    },
-    {
       "path": "src/modules/workspace/index.ts",
       "language": "typescript",
       "loc": 6,
@@ -6487,6 +6599,11 @@
     }
   ],
   "import_map": [
+    {
+      "from": "hooks/agent-team/task-completed.ts",
+      "to": "scripts/lib/artifact-bus.ts",
+      "kind": "static"
+    },
     {
       "from": "hooks/emit-learning-checkpoint.ts",
       "to": "scripts/lib/learning-signatures.ts",
@@ -6635,6 +6752,16 @@
     {
       "from": "scripts/config-cmd.ts",
       "to": "scripts/lib/config-render.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/config-cmd.ts",
+      "to": "scripts/lib/config-ui-metadata.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/config-cmd.ts",
+      "to": "scripts/lib/host-open-preflight.ts",
       "kind": "static"
     },
     {
@@ -6803,6 +6930,546 @@
       "kind": "static"
     },
     {
+      "from": "scripts/learn/analyze-structural.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/analyze-structural.ts",
+      "to": "scripts/learn/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/analyze-structural.ts",
+      "to": "scripts/learn/lib/walk.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/analyze-structural.ts",
+      "to": "scripts/learn/lib/graph.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/architecture.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/assign-layers.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/assign-layers.ts",
+      "to": "scripts/learn/lib/layers.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/assign-layers.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/build-tour.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/build-tour.ts",
+      "to": "scripts/learn/lib/tour.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/build-tour.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/classify-wiki-pages.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/content-analyze.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/content-analyze.ts",
+      "to": "scripts/learn/lib/extract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/cost-gate.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/cost-gate.ts",
+      "to": "scripts/learn/lib/walk.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/cost-gate.ts",
+      "to": "scripts/lib/settings-resolver.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/cost-gate.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/cross-link.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/derive-domain.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/derive-domain.ts",
+      "to": "scripts/learn/lib/domain.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/derive-domain.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/diagram-analyze.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/diff-learn.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/diff-learn.ts",
+      "to": "scripts/learn/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/diff-learn.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/extract-structural.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/extract-structural.ts",
+      "to": "scripts/learn/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/extract-structural.ts",
+      "to": "scripts/learn/lib/walk.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/extract-structural.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/graph-artifact.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/graph-artifact.ts",
+      "to": "scripts/learn/lib/walk.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/graph-artifact.ts",
+      "to": "scripts/learn/lib/fingerprint.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/graph-artifact.ts",
+      "to": "scripts/learn/lib/structural.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/graph-artifact.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/graph-query.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/impact.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/impact.ts",
+      "to": "scripts/learn/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/impact.ts",
+      "to": "scripts/learn/lib/impact.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/k-stage-staleness.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/k-stage-staleness.ts",
+      "to": "scripts/learn/lib/walk.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/kg-query.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/kg-query.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/kg-query.ts",
+      "to": "scripts/learn/write-knowledge-links.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/kg-query.ts",
+      "to": "scripts/lib/shared/graph-scoring.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/knowledge-orchestrator.ts",
+      "to": "scripts/learn/diagram-analyze.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/knowledge-orchestrator.ts",
+      "to": "scripts/learn/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/knowledge-orchestrator.ts",
+      "to": "scripts/learn/lib/ignore.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/knowledge-orchestrator.ts",
+      "to": "scripts/learn/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/architecture.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/bundle-validate.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/bundle-validate.ts",
+      "to": "scripts/learn/lib/structural.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/domain.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/domain.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/extract.ts",
+      "to": "scripts/learn/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/fingerprint.ts",
+      "to": "scripts/learn/lib/extract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/graph-artifact.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/graph-artifact.ts",
+      "to": "scripts/docs-hygiene/scan.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/graph-query-projection.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/graph-query-projection.ts",
+      "to": "src/modules/kernel/index.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/graph-query.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/graph.ts",
+      "to": "scripts/learn/lib/extract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/graph.ts",
+      "to": "scripts/learn/lib/import-map.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/graph.ts",
+      "to": "scripts/learn/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/graph.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/impact.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/import-map.ts",
+      "to": "scripts/learn/lib/extract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/import-map.ts",
+      "to": "scripts/learn/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/layers.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/resolve-calls-py.ts",
+      "to": "scripts/learn/lib/resolved-call.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/resolve-calls-ts.ts",
+      "to": "scripts/learn/lib/resolved-call.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/similarity.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/similarity.ts",
+      "to": "scripts/learn/lib/structural.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/structural.ts",
+      "to": "scripts/learn/lib/import-map.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/structural.ts",
+      "to": "scripts/learn/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/structural.ts",
+      "to": "scripts/learn/lib/extract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/structural.ts",
+      "to": "scripts/learn/lib/fingerprint.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/structural.ts",
+      "to": "scripts/learn/lib/bundle-validate.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/structural.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/tour.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/lib/walk.ts",
+      "to": "scripts/learn/lib/ignore.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/resolve-calls.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/resolve-calls.ts",
+      "to": "scripts/learn/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/resolve-calls.ts",
+      "to": "scripts/learn/lib/walk.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/resolve-calls.ts",
+      "to": "scripts/learn/lib/structural.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/resolve-calls.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/resolve-calls.ts",
+      "to": "scripts/learn/lib/resolve-calls-ts.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/resolve-calls.ts",
+      "to": "scripts/learn/lib/resolve-calls-py.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/resolve-calls.ts",
+      "to": "scripts/learn/lib/resolved-call.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/scan.ts",
+      "to": "scripts/learn/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/scan.ts",
+      "to": "scripts/learn/lib/walk.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/scan.ts",
+      "to": "scripts/learn/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/scan.ts",
+      "to": "scripts/learn/lib/extract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/scan.ts",
+      "to": "scripts/learn/lib/import-map.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/scan.ts",
+      "to": "scripts/learn/lib/ignore.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/staleness.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/staleness.ts",
+      "to": "scripts/learn/lib/git.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/staleness.ts",
+      "to": "scripts/learn/lib/walk.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/staleness.ts",
+      "to": "scripts/learn/lib/languages.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/staleness.ts",
+      "to": "scripts/learn/lib/fingerprint.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/taxonomy-build.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/taxonomy-build.ts",
+      "to": "scripts/learn/content-analyze.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/validate-graph.ts",
+      "to": "scripts/learn/lib/paths.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/validate-graph.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/wiki-index.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/wiki-lint-knowledge.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/write-knowledge-links.ts",
+      "to": "scripts/learn/lib/schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/learn/write-knowledge-links.ts",
+      "to": "scripts/learn/kg-query.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/lib/autonomy-presets.ts",
       "to": "scripts/lib/config-schema.ts",
       "kind": "static"
@@ -6835,6 +7502,26 @@
     {
       "from": "scripts/lib/config-schema.ts",
       "to": "scripts/read-guild-config.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/config-ui-metadata.ts",
+      "to": "scripts/lib/config-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/config-ui-surface.ts",
+      "to": "scripts/lib/config-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/config-ui-surface.ts",
+      "to": "scripts/lib/host-open-preflight.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/config-ui-surface.ts",
+      "to": "scripts/lib/permission-policy-schema.ts",
       "kind": "static"
     },
     {
@@ -7118,6 +7805,11 @@
       "kind": "static"
     },
     {
+      "from": "scripts/lib/init-guild.ts",
+      "to": "scripts/lib/config-schema.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/lib/memory-adapter.ts",
       "to": "src/modules/context/workflows/memory-adapter.ts",
       "kind": "static"
@@ -7265,546 +7957,6 @@
     {
       "from": "scripts/sync-module-resources.ts",
       "to": "src/modules/distribution/workflows/module-resources.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/analyze-structural.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/analyze-structural.ts",
-      "to": "scripts/understand/lib/git.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/analyze-structural.ts",
-      "to": "scripts/understand/lib/walk.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/analyze-structural.ts",
-      "to": "scripts/understand/lib/graph.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/architecture.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/assign-layers.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/assign-layers.ts",
-      "to": "scripts/understand/lib/layers.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/assign-layers.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/build-tour.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/build-tour.ts",
-      "to": "scripts/understand/lib/tour.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/build-tour.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/classify-wiki-pages.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/content-analyze.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/content-analyze.ts",
-      "to": "scripts/understand/lib/extract.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/cost-gate.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/cost-gate.ts",
-      "to": "scripts/understand/lib/walk.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/cost-gate.ts",
-      "to": "scripts/lib/settings-resolver.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/cost-gate.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/cross-link.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/derive-domain.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/derive-domain.ts",
-      "to": "scripts/understand/lib/domain.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/derive-domain.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/diagram-analyze.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/diff-understanding.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/diff-understanding.ts",
-      "to": "scripts/understand/lib/git.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/diff-understanding.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/extract-structural.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/extract-structural.ts",
-      "to": "scripts/understand/lib/git.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/extract-structural.ts",
-      "to": "scripts/understand/lib/walk.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/extract-structural.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/graph-artifact.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/graph-artifact.ts",
-      "to": "scripts/understand/lib/walk.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/graph-artifact.ts",
-      "to": "scripts/understand/lib/fingerprint.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/graph-artifact.ts",
-      "to": "scripts/understand/lib/structural.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/graph-artifact.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/graph-query.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/impact.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/impact.ts",
-      "to": "scripts/understand/lib/git.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/impact.ts",
-      "to": "scripts/understand/lib/impact.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/k-stage-staleness.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/k-stage-staleness.ts",
-      "to": "scripts/understand/lib/walk.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/kg-query.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/kg-query.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/kg-query.ts",
-      "to": "scripts/understand/write-knowledge-links.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/kg-query.ts",
-      "to": "scripts/lib/shared/graph-scoring.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/knowledge-orchestrator.ts",
-      "to": "scripts/understand/diagram-analyze.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/knowledge-orchestrator.ts",
-      "to": "scripts/understand/lib/languages.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/knowledge-orchestrator.ts",
-      "to": "scripts/understand/lib/ignore.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/knowledge-orchestrator.ts",
-      "to": "scripts/understand/lib/git.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/architecture.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/bundle-validate.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/bundle-validate.ts",
-      "to": "scripts/understand/lib/structural.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/domain.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/domain.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/extract.ts",
-      "to": "scripts/understand/lib/languages.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/fingerprint.ts",
-      "to": "scripts/understand/lib/extract.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/graph-artifact.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/graph-artifact.ts",
-      "to": "scripts/docs-hygiene/scan.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/graph-query-projection.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/graph-query-projection.ts",
-      "to": "src/modules/kernel/index.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/graph-query.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/graph.ts",
-      "to": "scripts/understand/lib/extract.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/graph.ts",
-      "to": "scripts/understand/lib/import-map.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/graph.ts",
-      "to": "scripts/understand/lib/languages.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/graph.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/impact.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/import-map.ts",
-      "to": "scripts/understand/lib/extract.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/import-map.ts",
-      "to": "scripts/understand/lib/languages.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/layers.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/resolve-calls-py.ts",
-      "to": "scripts/understand/lib/resolved-call.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/resolve-calls-ts.ts",
-      "to": "scripts/understand/lib/resolved-call.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/similarity.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/similarity.ts",
-      "to": "scripts/understand/lib/structural.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/structural.ts",
-      "to": "scripts/understand/lib/import-map.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/structural.ts",
-      "to": "scripts/understand/lib/languages.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/structural.ts",
-      "to": "scripts/understand/lib/extract.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/structural.ts",
-      "to": "scripts/understand/lib/fingerprint.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/structural.ts",
-      "to": "scripts/understand/lib/bundle-validate.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/structural.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/tour.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/lib/walk.ts",
-      "to": "scripts/understand/lib/ignore.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/resolve-calls.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/resolve-calls.ts",
-      "to": "scripts/understand/lib/git.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/resolve-calls.ts",
-      "to": "scripts/understand/lib/walk.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/resolve-calls.ts",
-      "to": "scripts/understand/lib/structural.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/resolve-calls.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/resolve-calls.ts",
-      "to": "scripts/understand/lib/resolve-calls-ts.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/resolve-calls.ts",
-      "to": "scripts/understand/lib/resolve-calls-py.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/resolve-calls.ts",
-      "to": "scripts/understand/lib/resolved-call.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/scan.ts",
-      "to": "scripts/understand/lib/git.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/scan.ts",
-      "to": "scripts/understand/lib/walk.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/scan.ts",
-      "to": "scripts/understand/lib/languages.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/scan.ts",
-      "to": "scripts/understand/lib/extract.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/scan.ts",
-      "to": "scripts/understand/lib/import-map.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/scan.ts",
-      "to": "scripts/understand/lib/ignore.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/staleness.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/staleness.ts",
-      "to": "scripts/understand/lib/git.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/staleness.ts",
-      "to": "scripts/understand/lib/walk.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/staleness.ts",
-      "to": "scripts/understand/lib/languages.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/staleness.ts",
-      "to": "scripts/understand/lib/fingerprint.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/taxonomy-build.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/taxonomy-build.ts",
-      "to": "scripts/understand/content-analyze.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/validate-graph.ts",
-      "to": "scripts/understand/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/validate-graph.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/wiki-index.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/wiki-lint-knowledge.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/write-knowledge-links.ts",
-      "to": "scripts/understand/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/understand/write-knowledge-links.ts",
-      "to": "scripts/understand/kg-query.ts",
       "kind": "static"
     },
     {
@@ -7983,6 +8135,16 @@
       "kind": "static"
     },
     {
+      "from": "src/modules/config/workflows/host-open-preflight.ts",
+      "to": "src/modules/config/workflows/init-scaffold-manifest.ts",
+      "kind": "static"
+    },
+    {
+      "from": "src/modules/config/workflows/host-open-preflight.ts",
+      "to": "src/modules/config/workflows/init-config-copy.ts",
+      "kind": "static"
+    },
+    {
       "from": "src/modules/config/workflows/settings-reader.ts",
       "to": "src/modules/host-runtime/index.ts",
       "kind": "static"
@@ -8000,6 +8162,11 @@
     {
       "from": "src/modules/config/workflows/settings-reader.ts",
       "to": "src/modules/kernel/index.ts",
+      "kind": "static"
+    },
+    {
+      "from": "src/modules/config/workflows/settings-reader.ts",
+      "to": "src/modules/config/workflows/workspace-manifest.ts",
       "kind": "static"
     },
     {
@@ -8074,7 +8241,7 @@
     },
     {
       "from": "src/modules/context/workflows/recall.ts",
-      "to": "src/modules/understanding/index.ts",
+      "to": "src/modules/learning/index.ts",
       "kind": "static"
     },
     {
@@ -8154,12 +8321,12 @@
     },
     {
       "from": "src/modules/docs-sync/workflows/wiki-lint-checks.ts",
-      "to": "scripts/understand/wiki-lint-knowledge.ts",
+      "to": "scripts/learn/wiki-lint-knowledge.ts",
       "kind": "static"
     },
     {
       "from": "src/modules/docs-sync/workflows/wiki-lint-checks.ts",
-      "to": "scripts/understand/lib/schema.ts",
+      "to": "scripts/learn/lib/schema.ts",
       "kind": "static"
     },
     {
@@ -8234,7 +8401,7 @@
     },
     {
       "from": "src/modules/knowledge/workflows/graph-scoring.ts",
-      "to": "src/modules/understanding/index.ts",
+      "to": "src/modules/learning/index.ts",
       "kind": "static"
     },
     {
@@ -8369,7 +8536,7 @@
     }
   ],
   "stats": {
-    "file_count": 809,
+    "file_count": 823,
     "module_count": 17
   }
 }
