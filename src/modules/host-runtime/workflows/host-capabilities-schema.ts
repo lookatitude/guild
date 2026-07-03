@@ -73,7 +73,8 @@ export interface CommandsCaps {
   slash_commands: boolean;
   /**
    * Command file format the host consumes natively:
-   *   "markdown" (Claude .md), "toml" (Gemini), "none" (Codex → workflow descriptors).
+   *   "markdown" (Claude .md), "toml" (the format the sunset Gemini host used),
+   *   "none" (Codex → workflow descriptors).
    */
   command_files: "markdown" | "toml" | "none";
 }

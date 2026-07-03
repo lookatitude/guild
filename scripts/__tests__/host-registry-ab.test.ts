@@ -88,8 +88,10 @@ const PROBE_SCENARIOS: Record<string, ProbeFacts> = {
   detectOnlyTrio: {
     // Antigravity's CLI is `agy` (verified on-host 2026-06-16), not `antigravity` — the
     // detector probes `agy`, so the fake PATH must expose `agy` for detection to fire.
-    onPath: { gemini: true, pi: true, agy: true },
-    versionOk: { gemini: true, pi: true, agy: true },
+    // (gemini was sunset 2026-06-14 — no longer a detectable provider; the scenario name
+    // is retained for golden-key stability.)
+    onPath: { pi: true, agy: true },
+    versionOk: { pi: true, agy: true },
   },
   empty: {},
 };
@@ -147,7 +149,7 @@ function runRoutingAbMatrix(): Record<string, string> {
     ["cross-auto", { mode: "cross", provider: "auto" }],
     ["cross-pin-codex-plugin", { mode: "cross", provider: "codex-plugin" }],
     ["cross-pin-codex-cli", { mode: "cross", provider: "codex-cli" }],
-    ["cross-pin-gemini-cli", { mode: "cross", provider: "gemini-cli" }],
+    // (cross-pin-gemini-cli removed — gemini was sunset 2026-06-14, no such provider.)
     ["local-auto", { mode: "local", provider: "auto" }],
     ["off-auto", { mode: "off", provider: "auto" }],
   ];
@@ -206,10 +208,15 @@ function runRoutingAbMatrix(): Record<string, string> {
 const GOLDEN_PATH = path.join(__dirname, "fixtures", "routing-ab-golden.json");
 
 describe("P1-L7 host-registry A/B (SC-4 — byte-identical Claude/Codex)", () => {
+  const actual = runRoutingAbMatrix();
+  // Regenerate the golden after an intentional registry change (e.g. the gemini
+  // sunset removed the gemini-cli provider + cross-pin case): UPDATE_GOLDEN=1.
+  if (process.env.UPDATE_GOLDEN) {
+    fs.writeFileSync(GOLDEN_PATH, JSON.stringify(actual, null, 2) + "\n");
+  }
   const golden: Record<string, string> = JSON.parse(
     fs.readFileSync(GOLDEN_PATH, "utf8")
   );
-  const actual = runRoutingAbMatrix();
 
   it("captured a non-trivial matrix (route + select + detect cases)", () => {
     const keys = Object.keys(golden);
@@ -245,10 +252,14 @@ describe("P1-L7 host-registry A/B (SC-4 — byte-identical Claude/Codex)", () =>
       expect(codexSel.provider).toBe("codex-plugin");
       expect(codexSel.status).toBe("selected");
 
-      const geminiPin = JSON.parse(
-        src["select:claude:detectOnlyTrio:cross-pin-gemini-cli"]
+      // A pin that cannot be satisfied is skipped (anti-vacuity: proves the matrix
+      // exercises the skipped path). In detectOnlyTrio codex is NOT on PATH, so pinning
+      // codex-cli is unsatisfiable → skipped. (Was the gemini-cli pin before the 2026-06-14
+      // gemini sunset removed that provider.)
+      const unsatisfiablePin = JSON.parse(
+        src["select:claude:detectOnlyTrio:cross-pin-codex-cli"]
       );
-      expect(geminiPin.status).toBe("skipped"); // detect-only ⇒ never selectable
+      expect(unsatisfiablePin.status).toBe("skipped");
     }
     expect(
       deepEqualCanonical(
@@ -263,7 +274,7 @@ describe("P1-L7 result_adapter column sourcing (the hasAdapter replacement)", ()
   it("maps families to the registry result_adapter column, byte-aligned with the old literals", () => {
     expect(resultAdapterForFamily("claude")).toBe(false);
     expect(resultAdapterForFamily("codex")).toBe(true);
-    expect(resultAdapterForFamily("gemini")).toBe(false); // no registry row (D10)
+    expect(resultAdapterForFamily("gemini")).toBe(false); // the sunset gemini family (2026-06-14) has no registry row → no adapter
     expect(resultAdapterForFamily("pi")).toBe(false);
     expect(resultAdapterForFamily("antigravity")).toBe(false);
     expect(resultAdapterForFamily("unknown")).toBe(false); // safe default

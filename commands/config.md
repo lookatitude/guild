@@ -313,12 +313,12 @@ group and `detect` is its sub-verb.
 
   | Column | Meaning |
   |---|---|
-  | `PROVIDER` | Stable provider id (`codex-plugin`, `codex-cli`, `gemini-cli`, `pi`, `antigravity`). |
+  | `PROVIDER` | Stable provider id (`codex-plugin`, `codex-cli`, `pi`, `antigravity`). |
   | `KIND` | Reachability class: `host`, `plugin-adapter`, or `cli`. |
   | `FAMILY` | Host family used for the cross-independence check. |
   | `DETECTED` | `yes` if the provider's CLI is on PATH + version probe passed, or a `.guild/hosts/**/capability.json` manifest declares it, or (for plugin-adapters) the native plugin is installed. |
   | `AUTHED` | `yes` if the provider's auth probe passed (codex stored-auth or `OPENAI_API_KEY`; equivalent per provider). |
-  | `SELECTABLE` | `yes` only when a real cross-review adapter exists AND detection + auth requirements are met. `gemini-cli`, `pi`, `antigravity` are detect-only (selectable=no) until their adapters ship. |
+  | `SELECTABLE` | `yes` only when a real cross-review adapter exists AND detection + auth requirements are met. `pi`, `antigravity` are detect-only (selectable=no) until their adapters ship. |
   | `DETAIL` | Human-readable probe findings. |
 
 - The recommended cross-review provider + reason (re-detected fresh each call; never reads persisted state).
@@ -335,7 +335,6 @@ group and `detect` is its sub-verb.
   claude             host             claude       yes       no      no          current author host
   codex-plugin       plugin-adapter   codex        yes       yes     yes         native plugin adapter 'codex-plugin' installed; authed
   codex-cli          cli              codex        no        no      no          not detected; adapter present but not yet usable (detection/auth incomplete)
-  gemini-cli         cli              gemini       no        no      no          not detected; detect-only (no adapter yet — not selectable)
   ...
 
   recommended cross-review : codex-plugin

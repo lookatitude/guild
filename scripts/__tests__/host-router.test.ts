@@ -5,7 +5,7 @@
  *
  * Covers the decision matrix:
  *   - 3-axis filter (mode→backend × tier × host) + capability pre-check (CR-1/CR-2).
- *   - null codex/gemini tier-slot fill via the merge precedence (CR-1 step 4 /
+ *   - null codex tier-slot fill via the merge precedence (CR-1 step 4 /
  *     "Null tier-slot fill"): settings override → manifest tiers → built-in.
  *   - ranked fallback chain with NO silent tier downgrade (CR-3).
  *   - work-type → host affinity soft ranking (CR-4).

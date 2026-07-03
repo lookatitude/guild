@@ -2,8 +2,8 @@
  * src/modules/host-runtime/workflows/host-id-namespace.ts
  *
  * P1-L0 FOUNDATION - namespace reconciliation contract between the legacy
- * `HostKind` union (`host-types.ts` - 9 surfaces incl. `antigravity-2`, `gemini`,
- * the claude-* desktop/web/connector variants) and the P1 registry `HostId`
+ * `HostKind` union (`host-types.ts` - the `antigravity-2` and claude-* desktop/web/
+ * connector variants; the `gemini` surface was sunset 2026-06-14) and the P1 registry `HostId`
  * namespace (`host-registry-schema.ts` - v2 canonical ids such as
  * `claude-code-cli`, `codex-cli`, and `agents-file`).
  *
@@ -37,8 +37,10 @@ import { HOST_IDS, type HostId } from "./host-registry-schema";
 // ---------------------------------------------------------------------------
 
 /**
- * Explicit, exhaustive map of every legacy `HostKind` to its registry `HostId`
- * (or `null` when the host has no registry row - `gemini`, dropped per D10).
+ * Explicit, exhaustive map of every legacy `HostKind` to its registry `HostId`.
+ * (`gemini` was a dropped host with no registry row; it was sunset 2026-06-14 and
+ * removed from `HostKind`, so it no longer appears here. A legacy `"gemini"` string
+ * input still resolves to `null` via the fallback + `isDroppedHostKind`.)
  *
  * The exhaustive literal doubles as documentation: extending `HostKind` without
  * adding an entry here is caught by `hostKindToRegistryId`'s prefix fallback, but the
@@ -53,14 +55,14 @@ export const HOSTKIND_TO_REGISTRY_ID: Record<HostKind, HostId | null> = {
   "codex-app": "codex-app",
   pi: "pi-cli",
   "antigravity-2": "antigravity-cli",
-  gemini: null, // DROPPED (D10) - no registry row; routing degrades/records (matches today: detect-only, not selectable)
 };
 
 /**
  * Map a legacy `HostKind` to its registry `HostId`. Returns `null` for a host with
- * no registry row (`gemini`, D10). Prefix-collapse (mirrors `resolveAuthorHost`) is
- * the fallback for any future `claude-*` / `codex-*` / `antigravity*` surface so a
- * new variant maps correctly without a map edit. Never throws.
+ * no registry row (including a legacy `"gemini"` string — the sunset host). Prefix-
+ * collapse (mirrors `resolveAuthorHost`) is the fallback for any future `claude-*` /
+ * `codex-*` / `antigravity*` surface so a new variant maps correctly without a map
+ * edit. Never throws.
  */
 export function hostKindToRegistryId(hk: HostKind | string): HostId | null {
   if (hk in HOSTKIND_TO_REGISTRY_ID) {
@@ -70,8 +72,7 @@ export function hostKindToRegistryId(hk: HostKind | string): HostId | null {
   const s = String(hk);
   const normalized = normalizeHostId(s);
   if (normalized) return normalized;
-  if (s.startsWith("gemini")) return null; // dropped (D10)
-  return null; // unknown => no registry row (safe: forces degrade/record, never a false capability)
+  return null; // unknown / dropped (e.g. "gemini") => no registry row (safe: forces degrade/record)
 }
 
 const HOST_ID_SET = new Set<string>(HOST_IDS);
@@ -134,7 +135,12 @@ export function registryIdToCanonicalHostKind(id: HostId | string): HostKind | n
   }
 }
 
-/** True iff the legacy `HostKind` is dropped from the P1 registry (gemini, D10). */
+/**
+ * True iff a legacy host string is the dropped `gemini` host (sunset 2026-06-14 in
+ * favour of Antigravity — no registry row). `gemini` is no longer a `HostKind` member,
+ * so this only fires for a raw legacy `"gemini"` string input; retained as the explicit
+ * drop guard the registry re-exports.
+ */
 export function isDroppedHostKind(hk: HostKind | string): boolean {
   return hostKindToRegistryId(hk) === null && String(hk).startsWith("gemini");
 }

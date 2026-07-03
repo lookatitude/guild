@@ -199,7 +199,7 @@ function validateRoleResolution(x: unknown, expectedRole: Role, errors: string[]
     errors.push(`${expectedRole}.role must be "${expectedRole}"; got ${JSON.stringify(r["role"])}`);
   }
   // substrate must be null or a KNOWN registry host id (the HostId|null type) — an
-  // unknown host like "gemini" must be rejected (codex G-lane finding).
+  // unknown host (e.g. the sunset "gemini") must be rejected (codex G-lane finding).
   if (!(r["substrate"] === null || (typeof r["substrate"] === "string" && HOST_ID_SET.has(r["substrate"] as string)))) {
     errors.push(
       `${expectedRole}.substrate must be one of ${HOST_IDS.join("|")} or null; got ${JSON.stringify(r["substrate"])}`

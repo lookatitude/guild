@@ -17,7 +17,7 @@
  * its `hasAdapter` is now sourced from `result_adapter` via `resultAdapterForFamily`.
  *
  * BEHAVIOR-PRESERVING (SC-4): the column values for Claude/Codex are byte-aligned
- * with today's literals (claude -> no adapter; codex -> adapter; gemini/pi/antigravity
+ * with today's literals (claude -> no adapter; codex -> adapter; pi/antigravity
  * -> detect-only), and the family collapse used to resolve a HostKind to a row is the
  * same collapse `resolveAuthorHost()` already performs (proven in `host-id-namespace`).
  * So `route()` + `selectReviewer()` produce byte-identical decisions pre/post - the

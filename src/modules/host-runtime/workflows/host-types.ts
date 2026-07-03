@@ -25,10 +25,11 @@
  */
 // PHASE-1-DISPATCH-WAVE-1: canonical HostKind owner; replaces the prior
 // duplication between write-host-capability.ts and team-backend.ts.
+// `gemini` (Google Gemini CLI) was a HostKind member; it was sunset 2026-06-14 in
+// favour of Antigravity and is no longer a supported host (purged from the union).
 export type HostKind =
   | "claude"               // Claude Code (current default; reference impl)
   | "codex"                // OpenAI Codex CLI
-  | "gemini"               // Google Gemini CLI
   | "pi"                   // Pi (Inflection AI)
   | "antigravity-2"        // Antigravity 2.0
   | "claude-code-desktop"  // Claude Code Desktop app

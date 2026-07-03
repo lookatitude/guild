@@ -75,7 +75,7 @@ re-implement detection in a prompt):
   version/auth probe passes, **or** a `.guild/hosts/**/capability.json` declares
   it. A provider is `selectable` for cross-review **only when a real adapter
   exists**: `codex-plugin` (the `codex:codex-rescue` reference adapter) and
-  `codex-cli` (when authed) are selectable; `gemini-cli` / `pi` / `antigravity`
+  `codex-cli` (when authed) are selectable; `pi` / `antigravity`
   are **detect-only** (NOT selectable) until their adapters ship.
 - `recommendProvider(detection, review)` → `{ recommended, reason }`. **AC-7:**
   a **Claude author with `codex-plugin` available recommends `codex-plugin`** for

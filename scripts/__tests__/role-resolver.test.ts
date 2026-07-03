@@ -63,7 +63,9 @@ describe("P1-L8 role resolver — contract + default==today (SC-5)", () => {
       authorHost: "claude",
       providers: [
         host(),
-        { id: "gemini-cli", kind: "cli", detected: true, authed: false, selectable: false, family: "gemini", detail: "" },
+        // gemini family was dropped (D10) — it is no longer a HostFamily, so cast a
+        // raw legacy "gemini" string to exercise the "no registry row ⇒ dropped" path.
+        { id: "gemini-cli", kind: "cli", detected: true, authed: false, selectable: false, family: "gemini" as unknown as DetectedProvider["family"], detail: "" },
         codex(true),
       ],
     };

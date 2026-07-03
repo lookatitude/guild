@@ -163,9 +163,6 @@ describe("team-backend shim — parity after W3 split", () => {
   it("binaryForHostKind('antigravity-2') = 'agy'", () => {
     expect(binaryForHostKind("antigravity-2")).toBe("agy");
   });
-  it("binaryForHostKind('gemini') = 'gemini'", () => {
-    expect(binaryForHostKind("gemini")).toBe("gemini");
-  });
   it("binaryForHostKind('claude') = 'claude'", () => {
     expect(binaryForHostKind("claude")).toBe("claude");
   });

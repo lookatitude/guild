@@ -22,7 +22,7 @@
       "id": "lib/cloud-consent-gate",
       "source_path": "scripts/lib/cloud-consent-gate.ts",
       "resource_path": "resources/scripts/lib/cloud-consent-gate.ts",
-      "sha256": "c86eb6cb41418b40b7bebd69aa4adcd4cadb2022df58e83e1dae4837992a2aac"
+      "sha256": "4332f7a146abdffa35d64b12abef2cb8dd5dbd438173a0d07a21181de388fec3"
     },
     {
       "category": "scripts",

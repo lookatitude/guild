@@ -40,7 +40,7 @@ The lane's resolved tier (`guild:execute-plan §"Tier resolution"`; ADR §2) map
 | `mid` | `sonnet` | draft, reason, plan, extract relationships |
 | `powerful` | `opus` | architecture, security review, advisor pass |
 
-**Wiring.** For the subagent backend, pass the resolved model on the Agent tool: `Agent({ subagent_type: <owner_role>, model: <resolved-model>, ... })`. For agent-team teammates, the resolved model is set on the spawned teammate definition. The `model` param is the **only** tiering lever — tiering does not change `subagent_type` (the named agent is unchanged) and is orthogonal to the backend D5 selected. A `null` host slot in `models.tiers` means "this host has no model for this tier — fall through to the selected host's mapping" (the Codex/Gemini seam is config + an adapter later; both are `null` now).
+**Wiring.** For the subagent backend, pass the resolved model on the Agent tool: `Agent({ subagent_type: <owner_role>, model: <resolved-model>, ... })`. For agent-team teammates, the resolved model is set on the spawned teammate definition. The `model` param is the **only** tiering lever — tiering does not change `subagent_type` (the named agent is unchanged) and is orthogonal to the backend D5 selected. A `null` host slot in `models.tiers` means "this host has no model for this tier — fall through to the selected host's mapping" (the Codex seam is config + an adapter later; it is `null` now).
 
 **Precedence at dispatch** (normative, ADR §2/§10): `--model-tier=` (pins every lane in the run) > per-lane plan `tier:` pin > `settings.json` `models.tiers`/`models.thresholds` > built-in default. Scoring is deterministic, so a dispatch trace is reproducible; the score + resolved tier + model are printed and recorded in the run record.
 

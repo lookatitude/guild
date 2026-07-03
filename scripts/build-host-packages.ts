@@ -21,8 +21,9 @@
  *
  * REUSE vs ADD (per L2 scope): the Codex renderer is REUSED from
  * per-host-packaging.ts (renderCodexPluginJson); the Claude renderer is the new
- * renderClaudePluginPackage ADDED in that same module (the file shipped
- * Codex/Gemini/Pi renderers but no Claude renderer).
+ * renderClaudePluginPackage ADDED in that same module (the file originally shipped
+ * Codex/Pi renderers but no Claude renderer; a Gemini renderer also existed then and
+ * was removed when Gemini was sunset 2026-06-14).
  *
  * Contract authority (consumed, never redefined):
  *   scripts/lib/per-host-packaging.ts  — renderClaudePluginPackage + renderCodexPluginJson

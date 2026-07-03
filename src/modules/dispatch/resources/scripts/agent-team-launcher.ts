@@ -369,7 +369,7 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
 
 function parseHostKind(value: string): HostKind | undefined {
   const v = stripQuotes(value).trim().toLowerCase();
-  if (v === "claude" || v === "codex" || v === "gemini" || v === "pi" || v === "antigravity-2") return v;
+  if (v === "claude" || v === "codex" || v === "pi" || v === "antigravity-2") return v; // gemini sunset 2026-06-14
   if (v === "antigravity" || v === "antigravity-cli") return "antigravity-2";
   if (v === "claude-code-cli" || v === "claude-code-app" || v === "claude-code-desktop") return "claude";
   if (v === "claude-code-web" || v === "claude-ai-connector") return "claude";
@@ -389,7 +389,6 @@ function paneHostKindForStartingHost(value: string | undefined): HostKind | null
   if (!registryKind) {
     if (lower.startsWith("claude")) return "claude";
     if (lower.startsWith("codex")) return "codex";
-    if (lower.startsWith("gemini")) return "gemini";
     if (lower.startsWith("pi")) return "pi";
     if (lower.startsWith("antigravity")) return "antigravity-2";
   }

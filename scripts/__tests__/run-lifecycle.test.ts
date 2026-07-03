@@ -219,15 +219,15 @@ describe("run-lifecycle — host neutrality (SC-B §4)", () => {
     expect(raw).not.toContain("resolved: claude");
   });
 
-  it("records a gemini host + capabilities_ref pointer", () => {
+  it("records a non-Claude host + capabilities_ref pointer", () => {
     const mem = memFs();
     const lc = createRunLifecycle(
-      makeEnv(mem, { resolved: "gemini" as HostKind, capabilities_ref: ".guild/hosts/gemini/capability.json" })
+      makeEnv(mem, { resolved: "pi" as HostKind, capabilities_ref: ".guild/hosts/pi/capability.json" })
     );
     const runId = lc.startRun(baseStartOpts({ host_requested: "auto" }));
     const raw = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
-    expect(raw).toContain("resolved: gemini");
-    expect(raw).toContain("capabilities_ref: .guild/hosts/gemini/capability.json");
+    expect(raw).toContain("resolved: pi");
+    expect(raw).toContain("capabilities_ref: .guild/hosts/pi/capability.json");
   });
 });
 

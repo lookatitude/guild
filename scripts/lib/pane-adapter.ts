@@ -19,7 +19,7 @@
  *     where usable auth = a non-empty auth.json at CODEX_HOME/auth.json OR a
  *     non-empty OPENAI_API_KEY (refuses to spawn if both are absent — CH-6).
  *
- * Adding a future host (Gemini, …) is one new adapter file + one ADAPTERS row —
+ * Adding a future host is one new adapter file + one ADAPTERS row —
  * no launcher-core change (CH-2 extension point).
  *
  * Invariant: never writes anything. Adapters are pure command/env builders plus

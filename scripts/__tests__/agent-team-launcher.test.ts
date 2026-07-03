@@ -835,7 +835,9 @@ describe("agent-team-launcher.ts", () => {
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST: "gemini" }
       );
       expect(exitCode).toBe(1);
-      expect(stderr).toMatch(/cannot infer a local registry host id/i);
+      // gemini is now a dropped/unsupported host kind — it refuses at the
+      // starting-host guard instead of defaulting local routing to Claude.
+      expect(stderr).toMatch(/unsupported starting host/i);
       expect(stderr).toMatch(/GUILD_HOST_ID/);
     });
 

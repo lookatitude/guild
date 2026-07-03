@@ -83,11 +83,10 @@ export interface BuildCapabilityOpts {
   env?: NodeJS.ProcessEnv;
 }
 
-/** All 9 HostKind values from host-types.ts — kept in sync by type. */
+/** All HostKind values from host-types.ts — kept in sync by type. (gemini was sunset 2026-06-14.) */
 const ALL_HOST_KINDS: readonly HostKind[] = [
   "claude",
   "codex",
-  "gemini",
   "pi",
   "antigravity-2",
   "claude-code-desktop",
@@ -192,7 +191,7 @@ export function buildCapability(opts: BuildCapabilityOpts): HostCapabilityManife
       tmux,
       mcp: true, // Claude Code MCP loader is available on supported hosts.
       // HK-07: Claude Code natively supports PreToolUse ask; other hosts
-      // (codex, gemini, pi) must degrade to the file-bus approval_request path.
+      // (codex, pi) must degrade to the file-bus approval_request path.
       // W4 D1: registry bridge — EXACT isClaudeCli replaces the `=== "claude"` literal.
       // Behavior-neutral: Claude Code CLI is the ONLY host with native PreToolUse ask; the
       // desktop/web/app variants degrade to the file-bus path (isClaudeHost would wrongly include them).

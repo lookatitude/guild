@@ -8,7 +8,7 @@
  * reviewer NEVER satisfies review=cross) is the false-signoff guard and is
  * pinned by dedicated tests below.
  *
- * All probes are INJECTED — no test depends on a real codex/gemini/pi binary
+ * All probes are INJECTED — no test depends on a real codex/pi binary
  * being installed. The injectable `ProbeEnv` lets us simulate PATH presence,
  * version/auth probe results, env vars, and capability manifests deterministically.
  *
@@ -16,7 +16,7 @@
  *  - detectProviders: author-host family resolution (claude / codex / unknown).
  *  - Tiered detection (OD-6): CLI-on-PATH + auth probe  vs  capability.json declare.
  *  - selectable gating (OD-6): codex-plugin & authed codex-cli selectable;
- *    gemini/pi/antigravity detect-only (never selectable until adapters ship).
+ *    pi/antigravity detect-only (never selectable until adapters ship).
  *  - recommendProvider (AC-7): Claude host + codex-plugin ⇒ recommend codex-plugin.
  *  - recommendProvider: provider=auto RE-DETECTS each call (OD-5), never persists.
  *  - selectReviewer (AC-8 HARD RULE): same-family reviewer ⇒ degraded-local/skipped,
@@ -197,51 +197,6 @@ describe("Claude host + codex-cli only (authed via OPENAI_API_KEY)", () => {
     const sel = selectReviewer(detection, review());
     expect(sel.status).toBe("selected");
     expect(sel.provider).toBe("codex-cli");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 4. Operator picks gemini (not selectable yet) → degrade/skip with reason
-// ---------------------------------------------------------------------------
-
-describe("operator picks gemini (detect-only, no adapter yet)", () => {
-  it("detects gemini-cli but never marks it selectable", () => {
-    const world = makeProbe({
-      onPath: ["gemini"],
-      versionOk: ["gemini"],
-      env: { GEMINI_API_KEY: "g-test" },
-    });
-    const { providers } = detectProviders({ cwd: CWD, probe: world });
-    const g = byId(providers, "gemini-cli");
-    expect(g.detected).toBe(true);
-    expect(g.selectable).toBe(false); // OD-6: detect-only until adapter ships
-  });
-
-  it("skips with reason when the operator pins gemini for review=cross (no adapter)", () => {
-    const world = makeProbe({ onPath: ["gemini"], versionOk: ["gemini"] });
-    const detection = detectProviders({ cwd: CWD, probe: world });
-    const sel = selectReviewer(detection, review({ provider: "gemini-cli" }));
-    // Pinned provider has no real adapter ⇒ cannot satisfy cross ⇒ skipped, not selected.
-    expect(sel.status).toBe("skipped");
-    expect(sel.provider).toBeNull();
-    expect(sel.reason).toMatch(/adapter|selectable|gemini/i);
-  });
-
-  it("falls through to an auto recommendation when gemini is pinned but a codex adapter exists", () => {
-    // Operator pinned gemini, but gemini can't satisfy cross. A codex-plugin IS
-    // available. The pin is honored only if selectable; otherwise we skip the pin —
-    // we must NEVER silently substitute a same-family or a non-selectable provider.
-    const world = makeProbe({
-      onPath: ["codex", "gemini"],
-      versionOk: ["codex", "gemini"],
-      codexStoredAuth: true,
-      pluginAdapters: ["codex-plugin"],
-    });
-    const detection = detectProviders({ cwd: CWD, probe: world });
-    const sel = selectReviewer(detection, review({ provider: "gemini-cli" }));
-    // Honor-the-pin-or-skip: a non-selectable pin must NOT silently fall to codex.
-    expect(sel.status).toBe("skipped");
-    expect(sel.reason).toMatch(/gemini/i);
   });
 });
 

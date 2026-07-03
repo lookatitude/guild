@@ -42,9 +42,14 @@ function baseInput(over: Partial<RenderConfigInput> = {}): RenderConfigInput {
 }
 
 describe("SC-W1-8 — per-host render golden (5 hosts)", () => {
-  it("renders byte-identically to the committed golden for all five hosts", () => {
-    const golden = JSON.parse(fs.readFileSync(GOLDEN_PATH, "utf8"));
+  it("renders byte-identically to the committed golden for all hosts", () => {
     const rendered = renderAllHostConfigs(baseInput());
+    // Regenerate after an intentional registry change (e.g. the verified-multi-host
+    // new hosts were added to HOST_IDS): UPDATE_GOLDEN=1.
+    if (process.env.UPDATE_GOLDEN) {
+      fs.writeFileSync(GOLDEN_PATH, JSON.stringify(rendered, null, 2) + "\n");
+    }
+    const golden = JSON.parse(fs.readFileSync(GOLDEN_PATH, "utf8"));
     expect(rendered).toEqual(golden);
     expect(Object.keys(golden).sort()).toEqual([...HOST_IDS].sort()); // anti-vacuity
   });

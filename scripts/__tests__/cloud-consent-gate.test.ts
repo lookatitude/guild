@@ -40,10 +40,6 @@ describe("Section A — isCloudReviewer", () => {
     expect(isCloudReviewer("codex-cloud")).toBe(true);
   });
 
-  it("A2: gemini-cloud is recognized as a cloud reviewer", () => {
-    expect(isCloudReviewer("gemini-cloud")).toBe(true);
-  });
-
   it("A3: codex-plugin is NOT a cloud reviewer (local adapter)", () => {
     expect(isCloudReviewer("codex-plugin")).toBe(false);
   });
@@ -74,8 +70,7 @@ describe("Section A — isCloudReviewer", () => {
 
   it("A10: CLOUD_REVIEWER_HOSTS contains exactly the recognized cloud set", () => {
     expect(Array.isArray(CLOUD_REVIEWER_HOSTS)).toBe(true);
-    expect(CLOUD_REVIEWER_HOSTS).toContain("codex-cloud");
-    expect(CLOUD_REVIEWER_HOSTS).toContain("gemini-cloud");
+    expect(CLOUD_REVIEWER_HOSTS).toEqual(["codex-cloud"]);
     // Ensure local adapters are NOT in the set
     expect(CLOUD_REVIEWER_HOSTS).not.toContain("codex-plugin");
     expect(CLOUD_REVIEWER_HOSTS).not.toContain("codex-cli");
@@ -90,11 +85,6 @@ describe("Section A — isCloudReviewer", () => {
 describe("Section B — Happy path (allowed)", () => {
   it("B1: codex-cloud + cloud_opt_in=true → allowed: true", () => {
     const result = cloudConsentGate({ cloud_opt_in: true, reviewerHost: "codex-cloud" });
-    expect(result.allowed).toBe(true);
-  });
-
-  it("B2: gemini-cloud + cloud_opt_in=true → allowed: true", () => {
-    const result = cloudConsentGate({ cloud_opt_in: true, reviewerHost: "gemini-cloud" });
     expect(result.allowed).toBe(true);
   });
 
@@ -379,26 +369,6 @@ describe("Section H — Edge cases and malformed inputs", () => {
     const withCtx    = cloudConsentGate({ cloud_opt_in: true, reviewerHost: "codex-cloud", context: "test" });
     const withoutCtx = cloudConsentGate({ cloud_opt_in: true, reviewerHost: "codex-cloud" });
     expect(withCtx.allowed).toBe(withoutCtx.allowed);
-  });
-
-  it("H4: gemini-cloud + opt-in=true → allowed (second cloud host in closed set)", () => {
-    const result = cloudConsentGate({ cloud_opt_in: true, reviewerHost: "gemini-cloud" });
-    expect(result.allowed).toBe(true);
-    expect(result.isCloudHost).toBe(true);
-  });
-
-  it("H5: codex-cloud and gemini-cloud are the only cloud hosts that can be allowed", () => {
-    // Verify that only the two closed-set members can produce allowed=true
-    for (const host of CLOUD_REVIEWER_HOSTS) {
-      const result = cloudConsentGate({ cloud_opt_in: true, reviewerHost: host });
-      expect(result.allowed).toBe(true);
-    }
-    // Non-members cannot
-    const nonCloud = ["codex-plugin", "codex-cli", "claude", "gemini-local", "unknown-host"];
-    for (const host of nonCloud) {
-      const result = cloudConsentGate({ cloud_opt_in: true, reviewerHost: host });
-      expect(result.allowed).toBe(false);
-    }
   });
 
   it("H6: denial reason always mentions the host id when reviewerHost is provided", () => {

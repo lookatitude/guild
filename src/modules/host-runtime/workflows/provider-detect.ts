@@ -30,7 +30,7 @@
  *       * codex-plugin (the `codex:codex-rescue` reference adapter) — selectable
  *         when detected + authed (the plugin dispatch path works today).
  *       * codex-cli — selectable when detected + authed.
- *       * gemini-cli / pi / antigravity — detect-only (NOT selectable) until
+ *       * pi / antigravity — detect-only (NOT selectable) until
  *         their adapters ship. Detecting them is informational, never a cross-gate
  *         satisfier.
  *
@@ -57,7 +57,7 @@ import * as path from "path";
 // `result_adapter` independent column read off `guild.host_registry.v1`. The family
 // collapse the registry uses is byte-aligned with resolveAuthorHost() (proven in
 // host-id-namespace.ts), so the selectable/detail outputs are unchanged for every
-// family (claude → false, codex → true, gemini/pi/antigravity → false). SC-4 A/B.
+// family (claude → false, codex → true, pi/antigravity → false). SC-4 A/B.
 import { resultAdapterForFamily } from "./host-registry";
 
 // ---------------------------------------------------------------------------
@@ -71,10 +71,10 @@ import { resultAdapterForFamily } from "./host-registry";
  * unknown author family means we cannot prove independence by family name, so a
  * cross gate degrades rather than guessing.
  */
+// `gemini` was a HostFamily; sunset 2026-06-14 (Antigravity replaced it) — purged.
 export type HostFamily =
   | "claude"
   | "codex"
-  | "gemini"
   | "pi"
   | "antigravity"
   | "unknown";
@@ -84,7 +84,7 @@ export type ProviderKind = "host" | "plugin-adapter" | "cli";
 
 /** A single provider's detection state. */
 export interface DetectedProvider {
-  /** Stable provider id (e.g. "codex-plugin", "codex-cli", "gemini-cli"). */
+  /** Stable provider id (e.g. "codex-plugin", "codex-cli", "pi"). */
   id: string;
   /** Reachability class. */
   kind: ProviderKind;
@@ -94,7 +94,7 @@ export interface DetectedProvider {
   authed: boolean;
   /**
    * True iff this provider can ACTUALLY satisfy a cross gate (a real adapter
-   * exists AND it is detected/authed as required). gemini/pi/antigravity are
+   * exists AND it is detected/authed as required). pi/antigravity are
    * detect-only (selectable=false) until their adapters ship (OD-6).
    */
   selectable: boolean;
@@ -117,7 +117,7 @@ export interface DetectionResult {
  * current settings keys — see the "Deferred config wiring" note at the bottom.
  *   - mode:     from `review` (local | cross | off).
  *   - provider: the operator's choice; "auto" ⇒ re-detect+recommend (OD-5), or an
- *               explicit provider id pin (e.g. "codex-plugin", "gemini-cli").
+ *               explicit provider id pin (e.g. "codex-plugin", "codex-cli").
  */
 export interface ResolvedReview {
   mode: "local" | "cross" | "off";
@@ -190,7 +190,7 @@ interface ProviderSpec {
   /**
    * Whether a real cross-review adapter exists for this provider TODAY. When
    * false, the provider is detect-only — `selectable` is forced false regardless
-   * of detection/auth (OD-6 gemini/pi/antigravity).
+   * of detection/auth (OD-6 pi/antigravity).
    *
    * P1-L7: sourced from the `result_adapter` independent column on
    * `guild.host_registry.v1` (via `resultAdapterForFamily`), NOT a hand-kept
@@ -206,7 +206,7 @@ interface ProviderSpec {
  * native plugin adapter BEFORE the raw CLI (codex-plugin > codex-cli).
  *
  * P1-L7: each entry's `hasAdapter` is read from the host registry's `result_adapter`
- * column by family — claude→false, codex→true, gemini/pi/antigravity→false — so the
+ * column by family — claude→false, codex→true, pi/antigravity→false — so the
  * detect-only posture is owned in ONE place (the registry rows) instead of being
  * duplicated as literals here. Behavior is byte-identical (SC-4 A/B).
  */
@@ -217,8 +217,8 @@ const PROVIDER_REGISTRY: ProviderSpec[] = [
   // Codex reference adapters (the only selectable cross reviewers today).
   { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
   { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
-  // Detect-only until adapters ship (OD-6) — no registry row for gemini (D10); pi/antigravity rows carry result_adapter:false.
-  { id: "gemini-cli", kind: "cli", family: "gemini", bin: "gemini", hasAdapter: resultAdapterForFamily("gemini"), requiresAuth: false },
+  // Detect-only until adapters ship (OD-6) — pi/antigravity rows carry result_adapter:false.
+  // (The former `gemini-cli` provider was removed when Gemini was sunset 2026-06-14.)
   { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
   // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
   { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false },
@@ -231,7 +231,6 @@ const PROVIDER_REGISTRY: ProviderSpec[] = [
 const KNOWN_FAMILIES = new Set<HostFamily>([
   "claude",
   "codex",
-  "gemini",
   "pi",
   "antigravity",
 ]);
@@ -262,8 +261,7 @@ function probeAuth(spec: ProviderSpec, probe: ProbeEnv): boolean {
       // BOTH paths (never env-var-only — that produces a false negative for the
       // stored-creds `codex login` flow; see codex-review SKILL availability note).
       return probe.readStoredCodexAuth() || !!probe.readEnv("OPENAI_API_KEY");
-    case "gemini":
-      return !!(probe.readEnv("GEMINI_API_KEY") || probe.readEnv("GOOGLE_API_KEY"));
+    // (The `gemini` auth case was removed when Gemini was sunset 2026-06-14.)
     default:
       return false;
   }
@@ -402,7 +400,7 @@ export function recommendProvider(
       recommended: null,
       reason:
         `no selectable different-family reviewer available for a ${detection.authorHost} author ` +
-        `(gemini/pi/antigravity are detect-only until their adapters ship)`,
+        `(pi/antigravity are detect-only until their adapters ship)`,
     };
   }
 

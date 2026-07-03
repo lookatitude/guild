@@ -43,9 +43,9 @@ const PRIOR_CLAUDE_DEFAULTS = { cheap: "haiku", mid: "sonnet", powerful: "opus" 
 
 /** The prior DEFAULT_TIERS from score-tier.ts. */
 const PRIOR_DEFAULT_TIERS = {
-  cheap:    { claude: "haiku",  codex: null, gemini: null },
-  mid:      { claude: "sonnet", codex: null, gemini: null },
-  powerful: { claude: "opus",   codex: null, gemini: null },
+  cheap:    { claude: "haiku",  codex: null },
+  mid:      { claude: "sonnet", codex: null },
+  powerful: { claude: "opus",   codex: null },
 };
 
 // ── Parity: tierDefaultsForHost() matches prior literals ─────────────────────
@@ -54,7 +54,7 @@ describe("W4 D2 parity: tierDefaultsForHost() == prior hand-typed claudeDefaults
   const ALL_HOST_KINDS = [
     "claude",
     "codex",
-    "gemini",
+    "gemini", // the sunset host (2026-06-14) — retained to verify a DROPPED kind still falls back to claudeDefaults
     "pi",
     "antigravity-2",
     "claude-code-desktop",
@@ -66,8 +66,8 @@ describe("W4 D2 parity: tierDefaultsForHost() == prior hand-typed claudeDefaults
   for (const hk of ALL_HOST_KINDS) {
     it(`${hk}: computed == prior claudeDefaults for all 3 tiers`, () => {
       const computed = tierDefaultsForHost(hk as never);
-      // All 9 hosts previously returned claudeDefaults regardless of host.
-      // Verify the computed result matches that expectation.
+      // Every host kind (including the sunset gemini, as a dropped-kind fallback) returns
+      // claudeDefaults regardless of host. Verify the computed result matches that expectation.
       expect(computed.cheap).toBe(PRIOR_CLAUDE_DEFAULTS.cheap);
       expect(computed.mid).toBe(PRIOR_CLAUDE_DEFAULTS.mid);
       expect(computed.powerful).toBe(PRIOR_CLAUDE_DEFAULTS.powerful);
@@ -96,11 +96,6 @@ describe("W4 D2 parity: defaultTiersMap() slots match prior DEFAULT_TIERS", () =
   it("cheap.codex == prior null (no Guild model mapped)",    () => expect(computed.cheap["codex"]).toBeNull());
   it("mid.codex == prior null",   () => expect(computed.mid["codex"]).toBeNull());
   it("powerful.codex == prior null", () => expect(computed.powerful["codex"]).toBeNull());
-
-  // gemini: dropped (D10), no registry row → falls back to null (no model in registry)
-  it("cheap.gemini == prior null (dropped D10)",   () => expect(computed.cheap["gemini"]).toBeNull());
-  it("mid.gemini == prior null",   () => expect(computed.mid["gemini"]).toBeNull());
-  it("powerful.gemini == prior null", () => expect(computed.powerful["gemini"]).toBeNull());
 });
 
 // ── CLAUDE_TIER_FALLBACK matches the Claude registry row ─────────────────────

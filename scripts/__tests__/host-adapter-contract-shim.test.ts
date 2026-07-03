@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/host-adapter-contract";
 import * as moduleImpl from "../../src/modules/host-runtime/workflows/host-adapter-contract";
+import { createHostAdapter as createRoutedHostAdapter } from "../lib/host-adapter-factory";
 
 describe("host-adapter-contract compatibility shim", () => {
   test("scripts/lib/host-adapter-contract re-exports src/modules/host-runtime", () => {
@@ -29,7 +30,14 @@ describe("host-adapter-contract compatibility shim", () => {
       "claude-code-web",
       "codex-app",
       "codex-cli",
+      "cursor",
+      "github-copilot",
+      "kiro",
+      "opencode",
       "pi-cli",
+      "qoder",
+      "rovo-dev",
+      "trae",
     ]);
   });
 
@@ -44,5 +52,29 @@ describe("host-adapter-contract compatibility shim", () => {
     expect(modulePath).toMatch(/from\s+["']\.\/host-registry-schema["']/);
     expect(modulePath).toMatch(/from\s+["']\.\/host-id-namespace["']/);
     expect(modulePath).toMatch(/from\s+["']\.\/adapter-fallback-ladders["']/);
+  });
+});
+
+// L0 ADR §3.1 / codex C-B2: the REAL factory MUST dereference adapter_binding:"agents-file"
+// (the IDE file-surface rows) to the universal agents-file adapter BEFORE the default
+// fail-closed fallback — otherwise kiro/qoder/trae mis-route to a degraded default adapter.
+describe("host-adapter-factory adapter_binding dereference (IDE rows → agents-file)", () => {
+  const agentsFile = createRoutedHostAdapter("agents-file");
+
+  for (const ide of ["kiro", "qoder", "trae"] as const) {
+    test(`createHostAdapter("${ide}") returns the agents-file adapter, not the default`, () => {
+      const a = createRoutedHostAdapter(ide);
+      // Same identity as the agents-file adapter (NOT the default, which would stamp the
+      // IDE's own id — proving the factory branched on adapter_binding, not fell through).
+      expect(a.hostId).toBe("agents-file");
+      expect(a.hostId).toBe(agentsFile.hostId);
+      expect(a.hostId).not.toBe(ide);
+    });
+  }
+
+  test("a genuinely unknown id still falls through to the default (branch is registry-keyed)", () => {
+    // Anti-vacuity: the dereference is keyed on the registry adapter_binding, not a blanket
+    // catch — an id with no "agents-file"-bound registry row must NOT become agents-file.
+    expect(createRoutedHostAdapter("totally-unknown").hostId).not.toBe("agents-file");
   });
 });

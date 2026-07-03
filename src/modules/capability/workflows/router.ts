@@ -9,7 +9,7 @@
  *   §CR-3 (ranked fallback chain — NO silent tier downgrade),
  *   §CR-4 (work-type → host affinity), §CR-5 (manifest freshness TTL),
  *   §CR-6 (budget cap deferred — telemetry spend stub only; issue: oc-budget-cap),
- *   §"Null codex/gemini tier-slot fill" (merge precedence).
+ *   §"Null codex tier-slot fill" (merge precedence).
  * Tier ladder is canonical in cost-aware-tiering-and-lean-context.md §1/§2.
  * The D5 `agent_mode` ladder (mode axis) is canonical in
  *   v2x-command-surface-dispatch-and-internalization.md.

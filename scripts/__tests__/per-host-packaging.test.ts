@@ -15,12 +15,7 @@
  *     - hooks flagged in _unsupported (hook taxonomy differs)
  *     - schema_version is exactly "codex-plugin.v1"
  *     - _rendered_at comes from caller opts, not the clock
- *   renderGeminiToml:
- *     - happy path: produces valid TOML structure with required sections
- *     - commands render as [[commands]] blocks
- *     - MCP stdio + HTTP both rendered (Gemini supports both)
- *     - agents/skills/hooks flagged as UNSUPPORTED comments
- *     - _rendered_at comes from caller opts, not the clock
+ *   (renderGeminiToml coverage was removed when Gemini was sunset 2026-06-14.)
  *   renderPiManifest:
  *     - happy path: required fields present, commands and skills rendered
  *     - MCP ALWAYS flagged in _unsupported (Pi core omits MCP)
@@ -44,7 +39,6 @@
 
 import {
   renderCodexPluginJson,
-  renderGeminiToml,
   renderPiManifest,
   validateManifest,
   type GuildPluginManifest,
@@ -252,150 +246,6 @@ describe("renderCodexPluginJson — edge cases", () => {
 });
 
 // ---------------------------------------------------------------------------
-// renderGeminiToml — happy path
-// ---------------------------------------------------------------------------
-
-describe("renderGeminiToml — happy path", () => {
-  it("produces a string output", () => {
-    const out = renderGeminiToml(minimalManifest, opts);
-    expect(typeof out).toBe("string");
-    expect(out.length).toBeGreaterThan(0);
-  });
-
-  it("includes the [extension] section with required fields", () => {
-    const out = renderGeminiToml(minimalManifest, opts);
-    expect(out).toContain("[extension]");
-    expect(out).toContain('name = "guild"');
-    expect(out).toContain('version = "2.0.0"');
-    expect(out).toContain("description =");
-  });
-
-  it("includes optional metadata when present", () => {
-    const out = renderGeminiToml(fullManifest, opts);
-    expect(out).toContain('homepage = "https://guildstack.dev/"');
-    expect(out).toContain('repository = "https://github.com/lookatitude/guild"');
-    expect(out).toContain('license = "MIT"');
-  });
-
-  it("includes keywords as a TOML array", () => {
-    const out = renderGeminiToml(fullManifest, opts);
-    expect(out).toContain("keywords = [");
-    expect(out).toContain('"agents"');
-  });
-
-  it("renders the [extension.author] section when author is present", () => {
-    const out = renderGeminiToml(fullManifest, opts);
-    expect(out).toContain("[extension.author]");
-    expect(out).toContain('name = "Miguel Pinto"');
-    expect(out).toContain('email = "guild@lookatitude.com"');
-  });
-
-  it("renders commands as [[commands]] blocks", () => {
-    const out = renderGeminiToml(fullManifest, opts);
-    expect(out).toContain("[[commands]]");
-    expect(out).toContain('name = "guild"');
-    expect(out).toContain('name = "init"');
-    expect(out).toContain('name = "plan"');
-  });
-
-  it("each command block includes source_path", () => {
-    const out = renderGeminiToml(fullManifest, opts);
-    expect(out).toContain('source_path = "./commands/guild.md"');
-  });
-
-  it("renders stdio MCP servers as [[mcp_servers]] blocks", () => {
-    const out = renderGeminiToml(fullManifest, opts);
-    expect(out).toContain("[[mcp_servers]]");
-    expect(out).toContain('id = "guild-memory"');
-    expect(out).toContain('transport = "stdio"');
-    expect(out).toContain('command = "node"');
-  });
-
-  it("renders HTTP MCP servers (Gemini supports both transports)", () => {
-    const manifest: GuildPluginManifest = {
-      ...minimalManifest,
-      mcpServers: [
-        { id: "remote-srv", transport: "http", url: "https://example.com/mcp", description: "Remote" },
-      ],
-    };
-    const out = renderGeminiToml(manifest, opts);
-    expect(out).toContain('transport = "http"');
-    expect(out).toContain('url = "https://example.com/mcp"');
-    expect(out).not.toContain("UNSUPPORTED");
-  });
-
-  it("embeds _rendered_at from caller opts", () => {
-    const out = renderGeminiToml(minimalManifest, opts);
-    expect(out).toContain(`_rendered_at = "${FIXED_TS}"`);
-  });
-
-  it("embeds _source_version from the manifest version", () => {
-    const out = renderGeminiToml(minimalManifest, opts);
-    expect(out).toContain('_source_version = "2.0.0"');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// renderGeminiToml — render-or-degrade
-// ---------------------------------------------------------------------------
-
-describe("renderGeminiToml — render-or-degrade", () => {
-  it("flags agents as an UNSUPPORTED comment", () => {
-    const out = renderGeminiToml(fullManifest, opts);
-    expect(out).toContain("UNSUPPORTED");
-    expect(out).toContain("agents");
-  });
-
-  it("flags skills as an UNSUPPORTED comment", () => {
-    const out = renderGeminiToml(fullManifest, opts);
-    expect(out).toContain("UNSUPPORTED");
-    expect(out).toContain("skills");
-  });
-
-  it("flags hooks as an UNSUPPORTED comment", () => {
-    const out = renderGeminiToml(fullManifest, opts);
-    expect(out).toContain("UNSUPPORTED");
-    expect(out).toContain("hooks");
-  });
-
-  it("does not produce UNSUPPORTED for a minimal manifest with no unsupported fields", () => {
-    const out = renderGeminiToml(minimalManifest, opts);
-    expect(out).not.toContain("UNSUPPORTED");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// renderGeminiToml — edge cases
-// ---------------------------------------------------------------------------
-
-describe("renderGeminiToml — edge cases", () => {
-  it("is deterministic — same input + same opts always produces byte-identical output", () => {
-    const a = renderGeminiToml(fullManifest, opts);
-    const b = renderGeminiToml(fullManifest, opts);
-    expect(a).toBe(b);
-  });
-
-  it("handles description with double-quotes via TOML escaping", () => {
-    const manifest: GuildPluginManifest = {
-      name: "guild",
-      version: "1.0.0",
-      description: 'A plugin with "quotes" in the description.',
-    };
-    const out = renderGeminiToml(manifest, opts);
-    // The output must be valid TOML (quotes escaped) and must contain the escaped form
-    expect(out).toContain('\\"quotes\\"');
-    // The [extension] block must still be present
-    expect(out).toContain("[extension]");
-  });
-
-  it("two different renderedAt values produce different TOML output", () => {
-    const out1 = renderGeminiToml(minimalManifest, { renderedAt: "2026-01-01T00:00:00Z" });
-    const out2 = renderGeminiToml(minimalManifest, { renderedAt: "2026-06-13T00:00:00Z" });
-    expect(out1).not.toBe(out2);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // renderPiManifest — happy path
 // ---------------------------------------------------------------------------
 
@@ -530,47 +380,37 @@ describe("renderPiManifest — edge cases", () => {
 // ---------------------------------------------------------------------------
 
 describe("cross-renderer contract", () => {
-  it("all three renderers accept the same GuildPluginManifest without throwing", () => {
+  it("both renderers accept the same GuildPluginManifest without throwing", () => {
     expect(() => renderCodexPluginJson(fullManifest, opts)).not.toThrow();
-    expect(() => renderGeminiToml(fullManifest, opts)).not.toThrow();
     expect(() => renderPiManifest(fullManifest, opts)).not.toThrow();
   });
 
-  it("all three renderers preserve name, version, description from the source manifest", () => {
+  it("both renderers preserve name, version, description from the source manifest", () => {
     const codex = renderCodexPluginJson(fullManifest, opts);
     const pi = renderPiManifest(fullManifest, opts);
-    const gemini = renderGeminiToml(fullManifest, opts);
 
     expect(codex.name).toBe(fullManifest.name);
     expect(codex.version).toBe(fullManifest.version);
     expect(pi.name).toBe(fullManifest.name);
     expect(pi.version).toBe(fullManifest.version);
-    // TOML output must contain the name and version strings
-    expect(gemini).toContain(`"${fullManifest.name}"`);
-    expect(gemini).toContain(`"${fullManifest.version}"`);
   });
 
-  it("Codex emits live schema while Pi/Gemini retain render-or-degrade diagnostics", () => {
+  it("Codex emits live schema while Pi retains render-or-degrade diagnostics", () => {
     const codex = renderCodexPluginJson(fullManifest, opts);
     const pi = renderPiManifest(fullManifest, opts);
-    const gemini = renderGeminiToml(fullManifest, opts);
 
     // Codex: strict live plugin.json shape, with Guild skills as the supported surface.
     expect(codex.skills).toBe("./.agents/skills/");
     expect("_unsupported" in codex).toBe(false);
     // Pi: agents + hooks + MCP flagged
     expect(pi._unsupported?.some((f) => f.field === "agents")).toBe(true);
-    // Gemini: UNSUPPORTED comment block present for agents/skills/hooks
-    expect(gemini).toContain("UNSUPPORTED");
   });
 
   it("_rendered_at remains on renderers whose live formats allow provenance fields", () => {
     const codex = renderCodexPluginJson(fullManifest, opts);
     const pi = renderPiManifest(fullManifest, opts);
-    const gemini = renderGeminiToml(fullManifest, opts);
 
     expect("_rendered_at" in codex).toBe(false);
     expect(pi._rendered_at).toBe(FIXED_TS);
-    expect(gemini).toContain(`_rendered_at = "${FIXED_TS}"`);
   });
 });

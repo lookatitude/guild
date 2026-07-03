@@ -50,7 +50,7 @@
       "id": "lib/host-adapter-factory",
       "source_path": "scripts/lib/host-adapter-factory.ts",
       "resource_path": "resources/scripts/lib/host-adapter-factory.ts",
-      "sha256": "d4794cd012ff99df51f35aafdc23979f46e4b7a0f344bd095c72bc90b4b3db39"
+      "sha256": "9a6fe3519608c5ebc76f07045d5881142f1ea079fb825eb31dfd0fba19a9a255"
     },
     {
       "category": "scripts",
@@ -155,7 +155,7 @@
       "id": "lib/pane-adapter",
       "source_path": "scripts/lib/pane-adapter.ts",
       "resource_path": "resources/scripts/lib/pane-adapter.ts",
-      "sha256": "556249798594eb175229a19d9f16a7ddcab07961028d71c1babfa8e51f87e9c7"
+      "sha256": "f1f056b9c63bf76b7e560c7ad5990351236e7a1a8b68a622f44f728ccf51ca9d"
     },
     {
       "category": "scripts",
@@ -190,7 +190,7 @@
       "id": "write-host-capability",
       "source_path": "scripts/write-host-capability.ts",
       "resource_path": "resources/scripts/write-host-capability.ts",
-      "sha256": "f7de6897e917c9a7645de10122e08bcf1a4f50f4e7361b7c861e132aedd55d7b"
+      "sha256": "28e34c2c167fa9e6081b7929b65ebc571c67e5f6673b863694858ecb2ae012c9"
     }
   ]
 }

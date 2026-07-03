@@ -131,7 +131,6 @@ describe("write-host-capability — buildCapability (RE-5)", () => {
       buildCapability({ cwd: mkRoot(), host, env: {}, probeTmux: () => false }).tool_support.pre_tool_use_ask;
     expect(mk("claude")).toBe(true);
     expect(mk("codex")).toBe(false);
-    expect(mk("gemini")).toBe(false);
     expect(mk("pi")).toBe(false);
     expect(mk("antigravity-2")).toBe(false);
     expect(mk("claude-code-desktop")).toBe(false);
@@ -140,18 +139,10 @@ describe("write-host-capability — buildCapability (RE-5)", () => {
     expect(mk("claude-ai-connector")).toBe(false);
   });
 
-  it("pre_tool_use_ask: resolves via GUILD_HOST env (gemini→false, pi→false)", () => {
-    expect(
-      buildCapability({ cwd: mkRoot(), env: { GUILD_HOST: "gemini" }, probeTmux: () => false }).tool_support.pre_tool_use_ask
-    ).toBe(false);
+  it("pre_tool_use_ask: resolves via GUILD_HOST env (pi→false)", () => {
     expect(
       buildCapability({ cwd: mkRoot(), env: { GUILD_HOST: "pi" }, probeTmux: () => false }).tool_support.pre_tool_use_ask
     ).toBe(false);
-  });
-
-  it("resolves host_kind=gemini from --host arg and GUILD_HOST env", () => {
-    expect(buildCapability({ cwd: mkRoot(), host: "gemini", env: {}, probeTmux: () => false }).host_kind).toBe("gemini");
-    expect(buildCapability({ cwd: mkRoot(), env: { GUILD_HOST: "gemini" }, probeTmux: () => false }).host_kind).toBe("gemini");
   });
 
   it("resolves host_kind=pi from --host arg and GUILD_HOST env", () => {
@@ -246,9 +237,9 @@ describe("write-host-capability — G-11 tier value union", () => {
     const root = mkRoot();
     writeModels(root, {
       tiers: {
-        cheap: { claude: "haiku-3.5", codex: null, gemini: null },
-        mid: { claude: "sonnet-4", codex: null, gemini: null },
-        powerful: { claude: "opus-4.5", codex: null, gemini: null },
+        cheap: { claude: "haiku-3.5", codex: null },
+        mid: { claude: "sonnet-4", codex: null },
+        powerful: { claude: "opus-4.5", codex: null },
       },
     });
     const m = buildCapability({ cwd: root, env: {}, probeTmux: () => false });
@@ -260,7 +251,7 @@ describe("write-host-capability — G-11 tier value union", () => {
     const root = mkRoot();
     writeModels(root, {
       tiers: {
-        powerful: { claude: { model: "opus-4.5", effort: "high" }, codex: null, gemini: null },
+        powerful: { claude: { model: "opus-4.5", effort: "high" }, codex: null },
       },
     });
     const m = buildCapability({ cwd: root, env: {}, probeTmux: () => false });
@@ -272,7 +263,7 @@ describe("write-host-capability — G-11 tier value union", () => {
 
   it("null host slot for the active host falls back to the built-in ladder", () => {
     const root = mkRoot();
-    writeModels(root, { tiers: { powerful: { claude: null, codex: "o3", gemini: null } } });
+    writeModels(root, { tiers: { powerful: { claude: null, codex: "o3" } } });
     const m = buildCapability({ cwd: root, env: {}, probeTmux: () => false });
     expect(m.tier_models.powerful).toBe("opus"); // claude slot null → default
   });
@@ -280,7 +271,7 @@ describe("write-host-capability — G-11 tier value union", () => {
   it("codex host resolves its own slot from the host-map shape", () => {
     const root = mkRoot();
     writeModels(root, {
-      tiers: { powerful: { claude: "opus", codex: { model: "o3-pro", effort: "high" }, gemini: null } },
+      tiers: { powerful: { claude: "opus", codex: { model: "o3-pro", effort: "high" } } },
     });
     const m = buildCapability({ cwd: root, host: "codex", env: {}, probeTmux: () => false });
     expect(m.tier_models.powerful).toBe("o3-pro");

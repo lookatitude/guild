@@ -32,7 +32,8 @@ describe("registry — antigravity-2 + pi registered, gemini discarded", () => {
   it("buildAdapters serves claude/codex/antigravity-2/pi (no gemini)", () => {
     const a = buildAdapters();
     expect(Object.keys(a).sort()).toEqual(["antigravity-2", "claude", "codex", "pi"]);
-    expect(a.gemini).toBeUndefined();
+    // gemini was discarded (no longer a HostKind) — cast to probe the discarded key.
+    expect((a as Record<string, unknown>).gemini).toBeUndefined();
   });
   it("resolveAdapter returns the right hostKind", () => {
     expect(resolveAdapter()("antigravity-2").hostKind).toBe("antigravity-2");

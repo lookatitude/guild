@@ -9,7 +9,8 @@
  *   checkpoint in the host-adapter-router flowchart).
  *
  * This module implements the **pre-dispatch consent gate** that MUST fire before
- * any packet is sent to a cloud reviewer (`codex-cloud`, future `gemini-cloud`).
+ * any packet is sent to a cloud reviewer (`codex-cloud`).
+ * (A speculative `gemini-cloud` endpoint was removed when Gemini was sunset 2026-06-14.)
  * The gate is a hard always-ask checkpoint: it fires regardless of
  * `--auto-approve`. Absent explicit cloud_opt_in, the result is DENY and the
  * broker degrades to the local/weak path.
@@ -51,7 +52,7 @@
  * Closed set: new cloud reviewers must be added here explicitly — an
  * unrecognized host string is never silently promoted to cloud status.
  */
-export const CLOUD_REVIEWER_HOSTS = ["codex-cloud", "gemini-cloud"] as const;
+export const CLOUD_REVIEWER_HOSTS = ["codex-cloud"] as const;
 
 /** A member of the closed cloud-reviewer host set. */
 export type CloudReviewerHost = (typeof CLOUD_REVIEWER_HOSTS)[number];

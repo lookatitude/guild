@@ -568,7 +568,7 @@ function parseSettingsFile(filePath: string): Partial<ResolvedConfig> {
       const sparseTiers: Partial<TiersBlock> = {};
       for (const tier of ["cheap", "mid", "powerful"] as const) {
         if (isPlainObject(rt[tier])) {
-          // G-lane rework: strip unknown host keys (closed set: claude|codex|gemini)
+          // G-lane rework: strip unknown host keys (closed set: claude|codex)
           sparseTiers[tier] = sparseTierHostMap(rt[tier] as Record<string, unknown>);
         }
       }
@@ -765,7 +765,7 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
       const rt = rawModels["tiers"] as Record<string, unknown>;
       const sparseTiers: Partial<TiersBlock> = {};
       for (const tier of ["cheap", "mid", "powerful"] as const) {
-        // G-lane rework: strip unknown host keys (closed set: claude|codex|gemini)
+        // G-lane rework: strip unknown host keys (closed set: claude|codex)
         if (isPlainObject(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier] as Record<string, unknown>);
       }
       sparse.tiers = sparseTiers as TiersBlock;

@@ -35,6 +35,12 @@ export function rungLoss(r: Rung): number {
 // ---------------------------------------------------------------------------
 // The rung table (verbatim from the gated C3 contract)
 //   agents-file / pi-cli / antigravity-cli / app-host rungs are INFERRED.
+//   The verified-multi-host new hosts (cursor / github-copilot / opencode / rovo-dev
+//   new-CLI; kiro / qoder / trae new-IDE) are ALSO INFERRED — off-box target rows with
+//   no live-host verification yet (L0 ADR §1.2). New-CLI hosts take the wrapped-CLI
+//   posture from their inferred capability row; new-IDE hosts DEREFERENCE agents-file
+//   (adapter_binding: "agents-file") so their rungs mirror agents-file exactly. L2/L7
+//   refine these once an operator box verifies the host.
 // ---------------------------------------------------------------------------
 
 export const FALLBACK_LADDER_TABLE: Record<AdapterSurface, Record<HostId, Rung>> = {
@@ -48,6 +54,15 @@ export const FALLBACK_LADDER_TABLE: Record<AdapterSurface, Record<HostId, Rung>>
     "claude-code-web": "degraded",
     "codex-app": "degraded",
     "claude-ai-connector": "degraded",
+    // new-CLI (INFERRED) — wrapper CLI prompt
+    cursor: "wrapped",
+    "github-copilot": "wrapped",
+    opencode: "wrapped",
+    "rovo-dev": "wrapped",
+    // new-IDE (INFERRED) — dereference agents-file (bridged file-bus / instruction file)
+    kiro: "bridged",
+    qoder: "bridged",
+    trae: "bridged",
   },
   session: {
     "claude-code-cli": "native", // session id/resume
@@ -59,6 +74,15 @@ export const FALLBACK_LADDER_TABLE: Record<AdapterSurface, Record<HostId, Rung>>
     "claude-code-web": "degraded",
     "codex-app": "degraded",
     "claude-ai-connector": "degraded",
+    // new-CLI (INFERRED) — no native session in the inferred caps row; re-bootstrap
+    cursor: "emulated",
+    "github-copilot": "emulated",
+    opencode: "emulated",
+    "rovo-dev": "emulated",
+    // new-IDE (INFERRED) — mirror agents-file (re-bootstrap through the instruction file)
+    kiro: "emulated",
+    qoder: "emulated",
+    trae: "emulated",
   },
   semantic_tool: {
     "claude-code-cli": "native", // tool names
@@ -70,6 +94,15 @@ export const FALLBACK_LADDER_TABLE: Record<AdapterSurface, Record<HostId, Rung>>
     "claude-code-web": "degraded",
     "codex-app": "degraded",
     "claude-ai-connector": "degraded",
+    // new-CLI (INFERRED) — tool-name map over the wrapper
+    cursor: "bridged",
+    "github-copilot": "bridged",
+    opencode: "bridged",
+    "rovo-dev": "bridged",
+    // new-IDE (INFERRED) — mirror agents-file (instruction/file-bus name map)
+    kiro: "bridged",
+    qoder: "bridged",
+    trae: "bridged",
   },
   browser: {
     "claude-code-cli": "bridged", // chrome-devtools MCP
@@ -81,6 +114,15 @@ export const FALLBACK_LADDER_TABLE: Record<AdapterSurface, Record<HostId, Rung>>
     "claude-code-web": "degraded",
     "codex-app": "degraded",
     "claude-ai-connector": "degraded",
+    // new-CLI (INFERRED) — inferred caps row has no browser tool
+    cursor: "degraded",
+    "github-copilot": "degraded",
+    opencode: "degraded",
+    "rovo-dev": "degraded",
+    // new-IDE (INFERRED) — mirror agents-file (none)
+    kiro: "degraded",
+    qoder: "degraded",
+    trae: "degraded",
   },
 };
 
@@ -96,6 +138,14 @@ export const INFERRED_HOSTS = new Set<HostId>([
   "claude-code-web",
   "codex-app",
   "claude-ai-connector",
+  // verified-multi-host new hosts — off-box target rows, no live-host verification yet.
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  "kiro",
+  "qoder",
+  "trae",
 ]);
 
 export function isHostInferred(host: HostId): boolean {

@@ -647,7 +647,7 @@ describe("unknown authorHost — no selected reviewer synthesized", () => {
   // string that resolveAuthorHost maps to "unknown".
   //
   // resolveAuthorHost("unknown") → "unknown" (it IS in KNOWN_FAMILIES? No:
-  // KNOWN_FAMILIES = {claude,codex,gemini,pi,antigravity}. "unknown" is not in it,
+  // KNOWN_FAMILIES = {claude,codex,pi,antigravity}. "unknown" is not in it,
   // so it returns "unknown". BUT the resolver only accepts "claude"|"codex"|"auto"
   // for the `host` field (parseSettingsFile validates). So we cannot inject
   // host="unknown" through settings. Instead, we verify the safeProbe fallback:
@@ -656,7 +656,7 @@ describe("unknown authorHost — no selected reviewer synthesized", () => {
   // Practical approach: use a custom probe whose providerProbe.readCapabilityProviders
   // throws — but detectProviders wraps with safe() so it would still work.
   //
-  // Best approach: pass host="gemini" (the author) with only same-family or
+  // Best approach: pass host="pi" (the author) with only same-family or
   // no reviewers, which causes recommended=null. But for "unknown" specifically:
   // we can inject via the probe's readPluginAdapter returning true for a bad id.
   //

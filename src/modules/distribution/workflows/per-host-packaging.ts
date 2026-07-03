@@ -2,9 +2,12 @@
  * src/modules/distribution/workflows/per-host-packaging.ts
  *
  * Surface 1 of the host-adapter contract — per-host packaging renderers.
- * Contract (BY POINTER): docs/knowledge/decisions/host-adapter-contract.md
- *   §Decision 1 / Surface 1 (Packaging)
- * Distribution doc (BY POINTER): docs/v2/15-distribution.md §Per-host packaging
+ * Contract (BY POINTER) — the retired `docs/knowledge/` store was harvested into the
+ * canonical wiki (workspace-v2-compliance, 2026-06-27):
+ *   .guild/wiki/decisions/host-adapter-contract.md §Decision 1 / Surface 1 (Packaging)
+ *   .guild/wiki/decisions/verified-multi-host-support.md (the L0 ADR — §4.2 renderer base)
+ * Distribution doc (BY POINTER): docs/v2/16-host-adapter-migration-spec.md,
+ *   docs/v2/15-distribution.md §Per-host packaging
  *
  * Status: [v2] — wired render surfaces. These renderers are called by
  * build-host-packages.ts and the repo-hosted installer dry-runs for the CLI/file
@@ -16,8 +19,10 @@
  * input (the neutral inventory). Each renders the host-native package format:
  *
  *   renderCodexPluginJson(manifest) → .codex-plugin/plugin.json object
- *   renderGeminiToml(manifest)      → TOML string
  *   renderPiManifest(manifest)      → Pi package.json pi-block object
+ *
+ * (A `renderGeminiToml` renderer was removed when Gemini was sunset 2026-06-14 in
+ * favour of Antigravity — the live build never wired it.)
  *
  * CONTRACT:
  *   - All exported functions are PURE (no I/O, no filesystem, no network,
@@ -446,146 +451,6 @@ export function renderClaudeMarketplacePackage(
     owner,
     plugins: [plugin],
   };
-}
-
-// ---------------------------------------------------------------------------
-// renderGeminiToml — minimal TOML serializer (subset sufficient for Gemini)
-// ---------------------------------------------------------------------------
-
-/**
- * Render a Gemini extension manifest as a TOML string.
- *
- * Gemini extension format (from the host-adapter contract):
- *   gemini-extension.json + commands/<group>/<name>.toml + GEMINI.md
- *
- * This renderer emits the top-level TOML block (the gemini-extension equivalent).
- * Individual command TOML files are derived from the commands array but the
- * multi-file output is represented here as a single TOML document for the
- * primary manifest. The caller is responsible for splitting out per-command
- * files.
- *
- * Gemini capabilities:
- *  - Native TOML command format (toml_commands: true in host_capabilities.v1).
- *  - No native skill directory support; flagged if present.
- *  - No direct agent equivalent; flagged if present.
- *  - Hooks require a dedicated HookEmitter; flagged if present.
- *  - MCP support in gemini-extension.json; HTTP and stdio both representable.
- *
- * @param manifest - The neutral Guild plugin manifest.
- * @param opts - Render options (caller supplies renderedAt).
- * @returns A TOML string ready to write as the primary Gemini extension manifest.
- */
-export function renderGeminiToml(
-  manifest: GuildPluginManifest,
-  opts: RenderOptions
-): string {
-  const lines: string[] = [];
-  const unsupportedComments: string[] = [];
-
-  // [extension] header
-  lines.push("[extension]");
-  lines.push(`name = ${tomlString(manifest.name)}`);
-  lines.push(`version = ${tomlString(manifest.version)}`);
-  lines.push(`description = ${tomlString(manifest.description)}`);
-  if (manifest.homepage) {
-    lines.push(`homepage = ${tomlString(manifest.homepage)}`);
-  }
-  if (manifest.repository) {
-    lines.push(`repository = ${tomlString(manifest.repository)}`);
-  }
-  if (manifest.license) {
-    lines.push(`license = ${tomlString(manifest.license)}`);
-  }
-  if (manifest.keywords && manifest.keywords.length > 0) {
-    lines.push(`keywords = [${manifest.keywords.map(tomlString).join(", ")}]`);
-  }
-  lines.push(`_rendered_at = ${tomlString(opts.renderedAt)}`);
-  lines.push(`_source_version = ${tomlString(manifest.version)}`);
-
-  // [author]
-  if (manifest.author) {
-    lines.push("");
-    lines.push("[extension.author]");
-    lines.push(`name = ${tomlString(manifest.author.name)}`);
-    if (manifest.author.email) {
-      lines.push(`email = ${tomlString(manifest.author.email)}`);
-    }
-  }
-
-  // [[commands]] — Gemini TOML command entries
-  const cmds = manifest.commands ?? [];
-  if (cmds.length > 0) {
-    for (const cmdPath of cmds) {
-      const name = commandNameFromPath(cmdPath);
-      lines.push("");
-      lines.push("[[commands]]");
-      lines.push(`name = ${tomlString(name)}`);
-      lines.push(`source_path = ${tomlString(cmdPath)}`);
-    }
-  }
-
-  // [[mcp_servers]] — MCP entries (Gemini supports both stdio and HTTP)
-  const servers = manifest.mcpServers ?? [];
-  for (const srv of servers) {
-    lines.push("");
-    lines.push("[[mcp_servers]]");
-    lines.push(`id = ${tomlString(srv.id)}`);
-    lines.push(`transport = ${tomlString(srv.transport)}`);
-    if (srv.transport === "stdio" && srv.command) {
-      lines.push(`command = ${tomlString(srv.command)}`);
-      if (srv.args && srv.args.length > 0) {
-        lines.push(`args = [${srv.args.map(tomlString).join(", ")}]`);
-      }
-    } else if (srv.transport === "http" && srv.url) {
-      lines.push(`url = ${tomlString(srv.url)}`);
-    }
-    if (srv.description) {
-      lines.push(`description = ${tomlString(srv.description)}`);
-    }
-  }
-
-  // Unsupported fields — agents, hooks, skills each have no Gemini equivalent
-  if (manifest.agents && manifest.agents.length > 0) {
-    unsupportedComments.push(
-      "# UNSUPPORTED: agents — Gemini has no direct equivalent of Guild agent definition files"
-    );
-  }
-  if (manifest.hooks && manifest.hooks.length > 0) {
-    unsupportedComments.push(
-      "# UNSUPPORTED: hooks — hooks require a dedicated HookEmitter adapter (ADR Surface 3)"
-    );
-  }
-  if (manifest.skills && manifest.skills.length > 0) {
-    unsupportedComments.push(
-      "# UNSUPPORTED: skills — Gemini has no equivalent of Guild skill directories"
-    );
-  }
-
-  if (unsupportedComments.length > 0) {
-    lines.push("");
-    lines.push("# Per-host packaging render-or-degrade (ADR Surface 1):");
-    lines.push("# The following source manifest fields have no Gemini equivalent.");
-    lines.push("# The installer must surface these gaps to the operator.");
-    for (const c of unsupportedComments) {
-      lines.push(c);
-    }
-  }
-
-  return lines.join("\n") + "\n";
-}
-
-/**
- * Minimal TOML string literal encoder (single-line strings only).
- * Escapes backslashes, double quotes, and the standard TOML control characters.
- */
-function tomlString(value: string): string {
-  const escaped = value
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "\\r")
-    .replace(/\t/g, "\\t");
-  return `"${escaped}"`;
 }
 
 // ---------------------------------------------------------------------------

@@ -35,10 +35,10 @@ import { canonicalJSON } from "../lib/routing-ab-contract";
 const NOW = Date.parse("2026-06-15T12:00:00Z");
 const FRESH = "2026-06-15T11:59:00Z";
 
+// gemini was sunset 2026-06-14 and removed from HostKind — no longer in the matrix.
 const KINDS: HostKind[] = [
   "claude",
   "codex",
-  "gemini",
   "pi",
   "antigravity-2",
   "claude-code-desktop",
@@ -98,11 +98,16 @@ function runExpandedMatrix(): Record<string, string> {
 
 const GOLDEN_PATH = path.join(__dirname, "fixtures", "routing-expanded-golden.json");
 
-describe("P1-L7 expanded host-identity unification (all 9 HostKinds)", () => {
-  const golden: Record<string, string> = JSON.parse(fs.readFileSync(GOLDEN_PATH, "utf8"));
+describe("P1-L7 expanded host-identity unification (all 8 HostKinds)", () => {
   const actual = runExpandedMatrix();
+  // Regenerate after an intentional HostKind change (the gemini sunset dropped a kind):
+  // UPDATE_GOLDEN=1.
+  if (process.env.UPDATE_GOLDEN) {
+    fs.writeFileSync(GOLDEN_PATH, JSON.stringify(actual, null, 2) + "\n");
+  }
+  const golden: Record<string, string> = JSON.parse(fs.readFileSync(GOLDEN_PATH, "utf8"));
 
-  it("matches the POST golden (regression guard, 81 cases)", () => {
+  it("matches the POST golden (regression guard)", () => {
     expect(Object.keys(actual).sort()).toEqual(Object.keys(golden).sort());
     const drift: string[] = [];
     for (const [k, v] of Object.entries(golden)) if (actual[k] !== v) drift.push(k);
@@ -111,11 +116,10 @@ describe("P1-L7 expanded host-identity unification (all 9 HostKinds)", () => {
 
   // binaryForHostKind is registry-anchored with 3 documented overrides — byte-identical
   // to the ORIGINAL literal switch for every HostKind.
-  it("binaryForHostKind is byte-identical to the pre-registry literals (all 9 kinds)", () => {
+  it("binaryForHostKind is byte-identical to the pre-registry literals (all 8 kinds)", () => {
     const expected: Record<HostKind, string> = {
       claude: "claude",
       codex: "codex",
-      gemini: "gemini",
       pi: "pi",
       "antigravity-2": "agy",
       "claude-code-desktop": "claude",
@@ -133,7 +137,7 @@ describe("P1-L7 expanded host-identity unification (all 9 HostKinds)", () => {
     expect(affinityBoost("adversarial_review", "claude")).toBe(0);
     expect(affinityBoost("adversarial_review", "codex")).toBe(10);
     expect(affinityBoost("background_implementation", "codex")).toBe(10);
-    // gemini/pi/antigravity-2 are non-claude, non-codex → unchanged by the collapse.
+    // pi/antigravity-2 are non-claude, non-codex → unchanged by the collapse.
     expect(affinityBoost("adversarial_review", "antigravity-2")).toBe(10);
     expect(affinityBoost("background_implementation", "antigravity-2")).toBe(0);
     expect(affinityBoost("interactive_lifecycle", "pi")).toBe(0);

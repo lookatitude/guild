@@ -457,9 +457,13 @@ export function suggestWorkspaceMode(root: string): WorkspaceSuggestion {
 export const HOST_OPEN_PREFLIGHT_SCHEMA_VERSION = "guild.host_open_preflight.v1" as const;
 
 /**
- * The CLI/agents-file hosts that have a native config surface in THIS build.
- * App/connector hosts are OPEN blockers (L0 verdict) → preflight returns
- * action:"blocked" for them, never a false-native render path.
+ * The CLI/file hosts that have a native config surface (NOT app/connector-blocked).
+ * The blocked set is EXACTLY the 4 app/connector refuse hosts (OPEN blockers, L0
+ * verdict) → preflight returns action:"blocked" for those, never a false-native render
+ * path. Every other host id — the keep-CLI/file set PLUS the verified-multi-host new-CLI
+ * (cursor / github-copilot / opencode / rovo-dev) and new-IDE (kiro / qoder / trae,
+ * file-surface via agents-file) — is non-blocked (its native render degrades honestly
+ * when unverified, but it is not an app/connector refusal).
  */
 export const CLI_NATIVE_HOSTS: ReadonlySet<string> = new Set([
   "claude-code-cli",
@@ -467,6 +471,15 @@ export const CLI_NATIVE_HOSTS: ReadonlySet<string> = new Set([
   "pi-cli",
   "antigravity-cli",
   "agents-file",
+  // verified-multi-host new-CLI hosts
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  // verified-multi-host new-IDE hosts (file surface, agents-file bound)
+  "kiro",
+  "qoder",
+  "trae",
 ]);
 
 /** What the adapter should do next — DATA, not a rendered surface. */

@@ -247,9 +247,9 @@ describe("scoreTier — model resolution", () => {
   test("custom tiers map is respected", () => {
     const opts: ScorerOpts = {
       tiers: {
-        cheap:    { claude: "haiku-3",  codex: null, gemini: null },
-        mid:      { claude: "sonnet-4", codex: null, gemini: null },
-        powerful: { claude: "opus-4",   codex: null, gemini: null },
+        cheap:    { claude: "haiku-3",  codex: null },
+        mid:      { claude: "sonnet-4", codex: null },
+        powerful: { claude: "opus-4",   codex: null },
       },
     };
     const r = scoreTier({ workType: "draft" }, opts);

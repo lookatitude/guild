@@ -8,7 +8,7 @@
       "id": "build-host-packages",
       "source_path": "scripts/build-host-packages.ts",
       "resource_path": "resources/scripts/build-host-packages.ts",
-      "sha256": "859a1feaf3be16ee7117c0be6b39c09989ea3cddb4a8c718d8c40bcfd7733cb6"
+      "sha256": "243dcf3d47b4aafbb4fae4f1d448e911459e64fde9a9475ba8a368f894c945cd"
     },
     {
       "category": "scripts",

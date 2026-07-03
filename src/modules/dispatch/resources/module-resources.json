@@ -8,7 +8,7 @@
       "id": "agent-team-launcher",
       "source_path": "scripts/agent-team-launcher.ts",
       "resource_path": "resources/scripts/agent-team-launcher.ts",
-      "sha256": "d0bc5ea039bfda4b3bb7aa8d9a6cd0d92958bae727ec3bdccde75d4e7e778443"
+      "sha256": "02c04a09ea55ddde47f591c467a82c2de32fca5456676b8540da562f42c8f8f9"
     },
     {
       "category": "scripts",
@@ -36,7 +36,7 @@
       "id": "lib/host/tmux-backend",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "a090695dec815ac2e00475e4c7751dbf3f7bd0e4ed8dcbddfdd4f81858ff95d7"
+      "sha256": "252eb9a3b69bff79945a05c970f15ba5bba0d9a89000be7f8f8580e7429424ce"
     },
     {
       "category": "scripts",

@@ -7,7 +7,6 @@ describe("per-host-packaging compatibility shim", () => {
   test("scripts/lib/per-host-packaging re-exports src/modules/distribution", () => {
     expect(shim.validateManifest).toBe(moduleImpl.validateManifest);
     expect(shim.renderCodexPluginJson).toBe(moduleImpl.renderCodexPluginJson);
-    expect(shim.renderGeminiToml).toBe(moduleImpl.renderGeminiToml);
     expect(shim.renderPiManifest).toBe(moduleImpl.renderPiManifest);
     expect(shim.renderClaudePluginPackage).toBe(moduleImpl.renderClaudePluginPackage);
     expect(shim.renderAntigravityManifest).toBe(moduleImpl.renderAntigravityManifest);

@@ -332,7 +332,6 @@ export class TmuxTeamBackend implements TeamBackend {
 
 export function binaryForHostKind(hostKind: HostKind): string {
   if (hostKind === "antigravity-2") return "agy";
-  if (hostKind === "gemini") return "gemini";
   if (hostKind === "codex-app") return "claude";
   const id = hostKindToRegistryId(hostKind);
   const bin = id ? getRegistryEntry(id)?.detection.bin : null;

@@ -5,10 +5,11 @@
  * for host identity, detection, and the **independent capability columns**, wrapping
  * the existing P0 `guild.host_capabilities.v1` row.
  *
- * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §Capability Matrix
- *   docs/knowledge/decisions/universal-host-p1-l0-foundation-contracts.md (this lane's ADR-addendum)
- *   .guild/plan/universal-host-p1.md §"Foundation-contract specifications" (G-plan codex-gated, 3 rounds)
+ * Contract authority (SoT) — the retired `docs/knowledge/` store was harvested
+ * into the canonical wiki (workspace-v2-compliance, 2026-06-27):
+ *   .guild/wiki/decisions/host-adapter-contract.md §Capability Matrix (FROZEN successor)
+ *   .guild/wiki/decisions/verified-multi-host-support.md (the L0 ADR — registry §2, adapter_binding §3)
+ *   docs/v2/16-host-adapter-migration-spec.md (the canonical design set)
  *
  * WHY (ADR §capability matrix): the new hosts carry **independent capability columns**,
  * NOT a single "detect-only" flag. Today the detect-only assumption is encoded as the
@@ -51,20 +52,47 @@ import {
  * host-id-namespace.ts; legacy aliases are never authoritative registry ids.
  */
 export const HOST_IDS = [
+  // keep CLI/file (5)
   "claude-code-cli",
   "codex-cli",
   "pi-cli",
   "antigravity-cli",
   "agents-file",
+  // keep-as-refuse (4) — RETAINED verbatim
   "claude-code-app",
   "claude-code-web",
   "codex-app",
   "claude-ai-connector",
+  // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
+  // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
+  "kiro",
+  "qoder",
+  "trae",
 ] as const;
 export type HostId = (typeof HOST_IDS)[number];
 
-/** Host families for the independence axis (adversarial different-family rule). */
-export const HOST_FAMILIES = ["claude", "codex", "agents", "pi", "antigravity"] as const;
+/**
+ * Host families for the independence axis (adversarial different-family rule).
+ * One family per new-CLI host; the IDE rows SHARE `family: "agents"` (no new family) —
+ * verified_multi_host L0 ADR §2.2. `FAMILY_SET` below is `new Set(HOST_FAMILIES)`, so it
+ * auto-derives — no separate edit. `gemini` was sunset 2026-06-14 (Antigravity replaced it).
+ */
+export const HOST_FAMILIES = [
+  "claude",
+  "codex",
+  "agents",
+  "pi",
+  "antigravity",
+  "cursor",
+  "copilot",
+  "opencode",
+  "rovo",
+] as const;
 export type HostFamilyId = (typeof HOST_FAMILIES)[number];
 
 // ---------------------------------------------------------------------------
@@ -83,24 +111,69 @@ export type HostFamilyId = (typeof HOST_FAMILIES)[number];
 export type Installability = "native" | "target" | "none";
 
 /**
+ * The named auth-probe recipe the detector runs (kept as a token so the runtime
+ * registry — L7 — binds it to the real probe; L0 does not shell out). Closed union;
+ * `AUTH_PROBE_SET` below auto-derives via `new Set(AUTH_PROBES)`.
+ *   - "codex_stored_or_env":    ~/.codex/auth.json non-empty OR $OPENAI_API_KEY (the
+ *                               verified codex recipe — never env-only, avoids the
+ *                               stored-creds false-negative).
+ *   - "none":                   no auth needed (file surface / detect-only).
+ *   - "cursor_stored":          Cursor login present (~/.cursor / cursor-agent auth check).
+ *   - "gh_auth":                `gh auth status` exits 0 AND the `gh copilot` extension is available.
+ *   - "opencode_stored_or_env": opencode auth config present OR a provider env key set.
+ *   - "acli_stored":            `acli` Atlassian auth present (`acli rovodev` reachable).
+ */
+export const AUTH_PROBES = [
+  "codex_stored_or_env",
+  "none",
+  "cursor_stored",
+  "gh_auth",
+  "opencode_stored_or_env",
+  "acli_stored",
+] as const;
+export type AuthProbe = (typeof AUTH_PROBES)[number];
+
+/** The file/IDE detection recipe for `adapter_binding: "agents-file"` rows (null for CLI hosts). */
+export interface HostMarker {
+  /** The marker dir probed to recognize the editor on a box (e.g. `.kiro`). */
+  config_dir: string;
+  /** Where the marker is looked for. */
+  scope: "project" | "home" | "either";
+  /** Where Guild writes the instruction file (root `AGENTS.md` for the Phase-1 IDE set). */
+  agents_placement: string;
+}
+
+/**
  * Detection metadata — how the registry recognizes the host on a box. Replaces the
  * scattered probe knowledge in provider-detect.ts (ProviderSpec.bin/requiresAuth).
  */
 export interface HostDetection {
-  /** CLI binary probed on PATH, or null for a non-CLI surface (e.g. `.agents` file target). */
+  /** CLI binary probed on PATH, or null for a non-CLI surface (e.g. an `agents-file` target). */
   bin: string | null;
   /** Selectability additionally requires a passing auth probe. */
   requires_auth: boolean;
+  /** The named auth-probe recipe (token; L7 binds it to the real probe). */
+  auth_probe: AuthProbe;
   /**
-   * Named auth-probe recipe the detector runs (kept as a token so the runtime
-   * registry — L7 — binds it to the real probe; L0 does not shell out).
-   *   - "codex_stored_or_env": ~/.codex/auth.json non-empty OR $OPENAI_API_KEY (the
-   *                            verified codex recipe — never env-only, avoids the
-   *                            stored-creds false-negative).
-   *   - "none":                no auth needed (host provider / detect-only).
+   * ADDITIVE OPTIONAL — the capability is a subcommand of a shared bin (`gh copilot`,
+   * `acli rovodev`). null/absent for others; existing rows validate unchanged.
    */
-  auth_probe: "codex_stored_or_env" | "none";
+  subcommand?: string | null;
+  /**
+   * ADDITIVE OPTIONAL — the file/IDE recipe for `adapter_binding: "agents-file"` hosts.
+   * null/absent for CLI hosts; existing rows validate unchanged.
+   */
+  marker?: HostMarker | null;
 }
+
+/**
+ * How a host binds its adapter + renderer (verified_multi_host L0 ADR §3.1):
+ *   - "self":         the host has its OWN adapter + renderer (all CLI hosts).
+ *   - "agents-file":  the host DEREFERENCES the universal agents-file adapter/renderer
+ *                     (IDE file-surface rows). It MUST NOT carry a per-host adapter — the
+ *                     factory routing + AC-REG-4 forbid a hidden per-host chain (R2).
+ */
+export type AdapterBinding = "self" | "agents-file";
 
 // ---------------------------------------------------------------------------
 // Registry entry — `guild.host_registry.v1`
@@ -114,6 +187,12 @@ export interface HostRegistryEntry {
   family: HostFamilyId;
   /** Surface kind (cli | app | file). */
   surface_kind: "cli" | "app" | "file";
+  /**
+   * How the host binds its adapter + renderer (L0 ADR §3.1). "self" for every CLI host
+   * (its own adapter); "agents-file" for IDE file-surface rows (dereference the universal
+   * agents-file adapter — MUST NOT carry a per-host adapter, AC-REG-4).
+   */
+  adapter_binding: AdapterBinding;
   /** How the host is detected on a box. */
   detection: HostDetection;
 
@@ -142,6 +221,7 @@ const CLAUDE_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
   host_id: "claude-code-cli",
   family: "claude",
+  adapter_binding: "self",
   surface_kind: "cli",
   detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
   installability: "native",
@@ -155,6 +235,7 @@ const CODEX_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
   host_id: "codex-cli",
   family: "codex",
+  adapter_binding: "self",
   surface_kind: "cli",
   detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
   // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
@@ -246,6 +327,9 @@ const AGENTS_FILE_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
   host_id: "agents-file",
   family: "agents",
+  // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
+  // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
+  adapter_binding: "self",
   // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
   surface_kind: "file",
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
@@ -260,6 +344,7 @@ const PI_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
   host_id: "pi-cli",
   family: "pi",
+  adapter_binding: "self",
   surface_kind: "cli",
   detection: { bin: "pi", requires_auth: false, auth_probe: "none" }, // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
   installability: "target", // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
@@ -278,6 +363,7 @@ const ANTIGRAVITY_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
   host_id: "antigravity-cli",
   family: "antigravity",
+  adapter_binding: "self",
   surface_kind: "cli",
   // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
   detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
@@ -301,6 +387,7 @@ const CLAUDE_APP_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
   host_id: "claude-code-app",
   family: "claude",
+  adapter_binding: "self",
   surface_kind: "app",
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
   installability: "none",
@@ -314,6 +401,7 @@ const CLAUDE_WEB_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
   host_id: "claude-code-web",
   family: "claude",
+  adapter_binding: "self",
   surface_kind: "app",
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
   installability: "none",
@@ -327,6 +415,7 @@ const CODEX_APP_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
   host_id: "codex-app",
   family: "codex",
+  adapter_binding: "self",
   surface_kind: "app",
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
   installability: "none",
@@ -340,6 +429,7 @@ const CLAUDE_AI_CONNECTOR_ENTRY: HostRegistryEntry = {
   schema_version: "guild.host_registry.v1",
   host_id: "claude-ai-connector",
   family: "claude",
+  adapter_binding: "self",
   surface_kind: "app",
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
   installability: "none",
@@ -349,7 +439,142 @@ const CLAUDE_AI_CONNECTOR_ENTRY: HostRegistryEntry = {
   provenance: "inferred",
 };
 
-/** The Phase-1 registry rows, keyed by host_id. The single design-time SoT for L7. */
+// ---------------------------------------------------------------------------
+// New-CLI rows (verified_multi_host L0 ADR §2.3) — full 11-concern chain on the
+// shared wrapped-CLI base. adapter_binding "self"; installability "target";
+// result_adapter false; dispatch_selectable true; provenance "inferred" until an
+// operator-box receipt flips the DERIVED public state (registry provenance is
+// decoupled from runtime support — L0 ADR §5.2; L1 does NOT mutate provenance).
+// Each bootstraps via the guild-run wrapper (inferredCaps → wrapper_injection: true).
+// ---------------------------------------------------------------------------
+
+const CURSOR_ENTRY: HostRegistryEntry = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "cursor",
+  family: "cursor",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("cursor", "cursor", "cli"),
+  provenance: "inferred",
+};
+
+const GITHUB_COPILOT_ENTRY: HostRegistryEntry = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "github-copilot",
+  family: "copilot",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  // capability is a subcommand of the shared `gh` bin (`gh copilot`).
+  detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("github-copilot", "copilot", "cli"),
+  provenance: "inferred",
+};
+
+const OPENCODE_ENTRY: HostRegistryEntry = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "opencode",
+  family: "opencode",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("opencode", "opencode", "cli"),
+  provenance: "inferred",
+};
+
+const ROVO_DEV_ENTRY: HostRegistryEntry = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "rovo-dev",
+  family: "rovo",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
+  detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
+  provenance: "inferred",
+};
+
+// ---------------------------------------------------------------------------
+// New-IDE rows (verified_multi_host L0 ADR §2.4) — file surface, family "agents".
+// adapter_binding "agents-file": they DEREFERENCE the universal agents-file
+// adapter/renderer and MUST NOT carry a per-host adapter (AC-REG-4 + AC-ADP-1, R2).
+// detection.bin null (excluded from install.sh PATH auto-detect, AC-INS-3); detection
+// is the project marker dir. All three read root AGENTS.md. `trae-cn` folds into `trae`.
+// ---------------------------------------------------------------------------
+
+const KIRO_ENTRY: HostRegistryEntry = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "kiro",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" },
+  },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("kiro", "agents", "file"),
+  provenance: "inferred",
+};
+
+const QODER_ENTRY: HostRegistryEntry = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "qoder",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" },
+  },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("qoder", "agents", "file"),
+  provenance: "inferred",
+};
+
+const TRAE_ENTRY: HostRegistryEntry = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "trae",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" },
+  },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("trae", "agents", "file"),
+  provenance: "inferred",
+};
+
+/** The registry rows, keyed by host_id. The single design-time SoT for L7 (16 hosts). */
 export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = {
   "claude-code-cli": CLAUDE_ENTRY,
   "codex-cli": CODEX_ENTRY,
@@ -360,6 +585,13 @@ export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = {
   "claude-code-web": CLAUDE_WEB_ENTRY,
   "codex-app": CODEX_APP_ENTRY,
   "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
+  cursor: CURSOR_ENTRY,
+  "github-copilot": GITHUB_COPILOT_ENTRY,
+  opencode: OPENCODE_ENTRY,
+  "rovo-dev": ROVO_DEV_ENTRY,
+  kiro: KIRO_ENTRY,
+  qoder: QODER_ENTRY,
+  trae: TRAE_ENTRY,
 };
 
 // ---------------------------------------------------------------------------
@@ -375,7 +607,10 @@ const HOST_ID_SET = new Set<string>(HOST_IDS);
 const FAMILY_SET = new Set<string>(HOST_FAMILIES);
 const INSTALLABILITY_SET = new Set<string>(["native", "target", "none"]);
 const SURFACE_SET = new Set<string>(["cli", "app", "file"]);
-const AUTH_PROBE_SET = new Set<string>(["codex_stored_or_env", "none"]);
+// Auto-derives from the closed AUTH_PROBES union — no separate edit when a probe is added.
+const AUTH_PROBE_SET = new Set<string>(AUTH_PROBES);
+const ADAPTER_BINDING_SET = new Set<string>(["self", "agents-file"]);
+const MARKER_SCOPE_SET = new Set<string>(["project", "home", "either"]);
 
 /**
  * Validator for a `guild.host_registry.v1` entry. Checks the discriminator, the
@@ -419,7 +654,29 @@ export function validateHostRegistryEntry(value: unknown): ValidationResult {
       errors.push("detection.requires_auth must be a boolean");
     }
     if (typeof d["auth_probe"] !== "string" || !AUTH_PROBE_SET.has(d["auth_probe"] as string)) {
-      errors.push(`detection.auth_probe must be codex_stored_or_env|none; got ${JSON.stringify(d["auth_probe"])}`);
+      errors.push(`detection.auth_probe must be one of ${[...AUTH_PROBE_SET].join("|")}; got ${JSON.stringify(d["auth_probe"])}`);
+    }
+    // ADDITIVE OPTIONAL: subcommand — checked only when present (existing rows omit it).
+    if ("subcommand" in d && !(d["subcommand"] === null || typeof d["subcommand"] === "string")) {
+      errors.push("detection.subcommand must be a string or null when present");
+    }
+    // ADDITIVE OPTIONAL: marker — the file/IDE detection recipe; checked only when present.
+    if ("marker" in d && d["marker"] !== null && d["marker"] !== undefined) {
+      const m = d["marker"];
+      if (typeof m !== "object" || Array.isArray(m)) {
+        errors.push("detection.marker must be an object or null");
+      } else {
+        const mo = m as Record<string, unknown>;
+        if (typeof mo["config_dir"] !== "string" || mo["config_dir"].length === 0) {
+          errors.push("detection.marker.config_dir must be a non-empty string");
+        }
+        if (typeof mo["scope"] !== "string" || !MARKER_SCOPE_SET.has(mo["scope"] as string)) {
+          errors.push(`detection.marker.scope must be project|home|either; got ${JSON.stringify(mo["scope"])}`);
+        }
+        if (typeof mo["agents_placement"] !== "string" || mo["agents_placement"].length === 0) {
+          errors.push("detection.marker.agents_placement must be a non-empty string");
+        }
+      }
     }
   }
 
@@ -436,6 +693,38 @@ export function validateHostRegistryEntry(value: unknown): ValidationResult {
 
   if (o["provenance"] !== "verified" && o["provenance"] !== "inferred") {
     errors.push(`provenance must be "verified" or "inferred"; got ${JSON.stringify(o["provenance"])}`);
+  }
+
+  // ── adapter_binding + AC-REG-4 (L0 ADR §3.1) ────────────────────────────────
+  // AC-REG-4: a supported host MUST carry a valid adapter_binding, and an IDE row that
+  // DEREFERENCES the universal agents-file adapter must NOT masquerade as its own
+  // per-host adapter (R2 — no second support system, no hidden per-host chain).
+  const binding = o["adapter_binding"];
+  if (typeof binding !== "string" || !ADAPTER_BINDING_SET.has(binding)) {
+    // A supported host (installability !== "none") that lacks a legal adapter_binding fails.
+    errors.push(`adapter_binding must be self|agents-file; got ${JSON.stringify(binding)}`);
+  } else if (binding === "agents-file") {
+    // The IDE dereference contract: file surface, no CLI binary (excluded from PATH
+    // auto-detect, AC-INS-3), detected by a marker recipe, and NOT claiming a per-host
+    // result adapter. Any of these being wrong means the row would spawn a parallel
+    // chain instead of binding the shared agents-file adapter.
+    if (o["surface_kind"] !== "file") {
+      errors.push(
+        `adapter_binding "agents-file" requires surface_kind "file"; got ${JSON.stringify(o["surface_kind"])}`
+      );
+    }
+    if (typeof det === "object" && det !== null && !Array.isArray(det)) {
+      const d = det as Record<string, unknown>;
+      if (d["bin"] !== null) {
+        errors.push(`adapter_binding "agents-file" requires detection.bin null (file surface); got ${JSON.stringify(d["bin"])}`);
+      }
+      if (d["marker"] === null || d["marker"] === undefined) {
+        errors.push('adapter_binding "agents-file" requires a detection.marker recipe (how the IDE is detected)');
+      }
+    }
+    if (o["result_adapter"] !== false) {
+      errors.push('adapter_binding "agents-file" must not carry a per-host result_adapter (AC-REG-4 / R2)');
+    }
   }
 
   // Embedded capability row — delegate to the P0 validator.
