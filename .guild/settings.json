@@ -1,1 +1,10 @@
-{}
+{
+  "models": {
+    "tiers": {
+      "mid": { "claude-code-cli": "claude-sonnet-5" }
+    }
+  },
+  "_help": {
+    "models.tiers": "per-tier host->model map (cheap|mid|powerful) x (claude-code-cli|codex-cli|...). Sparse override; deep-merges over config-defaults. mid pinned to claude-sonnet-5 (Sonnet 5) here, replacing the bare 'sonnet' alias. cheap=haiku, powerful=opus inherited from defaults."
+  }
+}
