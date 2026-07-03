@@ -1728,8 +1728,33 @@
       "kind": "lib"
     },
     {
+      "id": "lib/host-adapters/cursor",
+      "source_path": "scripts/lib/host-adapters/cursor.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-adapters/github-copilot",
+      "source_path": "scripts/lib/host-adapters/github-copilot.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-adapters/opencode",
+      "source_path": "scripts/lib/host-adapters/opencode.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/host-adapters/pi-cli",
       "source_path": "scripts/lib/host-adapters/pi-cli.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-adapters/rovo-dev",
+      "source_path": "scripts/lib/host-adapters/rovo-dev.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-adapters/wrapped-cli-base",
+      "source_path": "scripts/lib/host-adapters/wrapped-cli-base.ts",
       "kind": "lib"
     },
     {

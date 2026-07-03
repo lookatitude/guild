@@ -50,7 +50,7 @@
       "id": "lib/host-adapter-factory",
       "source_path": "scripts/lib/host-adapter-factory.ts",
       "resource_path": "resources/scripts/lib/host-adapter-factory.ts",
-      "sha256": "9a6fe3519608c5ebc76f07045d5881142f1ea079fb825eb31dfd0fba19a9a255"
+      "sha256": "dd8cd32ad87637b4016cec7a147f2489329fda33f716e987b069d5daab2331ed"
     },
     {
       "category": "scripts",
@@ -89,10 +89,45 @@
     },
     {
       "category": "scripts",
+      "id": "lib/host-adapters/cursor",
+      "source_path": "scripts/lib/host-adapters/cursor.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/cursor.ts",
+      "sha256": "af9cbf00b239faceb292b0f8420ee4ec81ef1cd39cf364cd975753266d545f93"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/github-copilot",
+      "source_path": "scripts/lib/host-adapters/github-copilot.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/github-copilot.ts",
+      "sha256": "a978b65965cfd3780527ff709c2107bd7149c93fd2c23d208a1777089b738b43"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/opencode",
+      "source_path": "scripts/lib/host-adapters/opencode.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/opencode.ts",
+      "sha256": "ba1c98c9759b6b8515741d531173c531273ee626b749a6d928bcf21f8c0f2f63"
+    },
+    {
+      "category": "scripts",
       "id": "lib/host-adapters/pi-cli",
       "source_path": "scripts/lib/host-adapters/pi-cli.ts",
       "resource_path": "resources/scripts/lib/host-adapters/pi-cli.ts",
       "sha256": "e53901985fb55c03da3bdc5681932803af4741241dd1d2d7213b26d68800eb55"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/rovo-dev",
+      "source_path": "scripts/lib/host-adapters/rovo-dev.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/rovo-dev.ts",
+      "sha256": "6ece416a5101e9602960c8ab847edc72ebea86dc473b7127b7dd40769b99b3ef"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/wrapped-cli-base",
+      "source_path": "scripts/lib/host-adapters/wrapped-cli-base.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/wrapped-cli-base.ts",
+      "sha256": "fbb4e03acc4a580f9a308f5e3b18103387e6e782b7f61a944d23819310595dc3"
     },
     {
       "category": "scripts",
