@@ -19,16 +19,20 @@
       "lib/host-capabilities-schema",
       "lib/host-id-namespace",
       "lib/host-profiles-validate",
+      "lib/host-public-state",
       "lib/host-registry",
       "lib/host-registry-schema",
       "lib/host-router",
+      "lib/host-smoke-store",
       "lib/host-types",
       "lib/mixed-host-contracts",
       "lib/pane-adapter",
       "lib/provider-detect",
       "lib/result-normalizer",
       "lib/runtime-adapters",
-      "lib/support-matrix"
+      "lib/support-matrix",
+      "host-smoke",
+      "generate-support-matrix"
     ],
     "script_id_prefixes": ["lib/host-adapters/"]
   }

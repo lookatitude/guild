@@ -1,6 +1,6 @@
 {
   "schema_version": "guild.inventory.v1",
-  "generated_at": "1970-01-01T00:00:00.000Z",
+  "generated_at": "2026-07-04T02:38:41Z",
   "plugin_version": "2.0.0",
   "manifest": {
     "name": "guild",
@@ -1178,8 +1178,18 @@
       "kind": "cli"
     },
     {
+      "id": "generate-support-matrix",
+      "source_path": "scripts/generate-support-matrix.ts",
+      "kind": "cli"
+    },
+    {
       "id": "guild-run",
       "source_path": "scripts/guild-run.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "host-smoke",
+      "source_path": "scripts/host-smoke.ts",
       "kind": "cli"
     },
     {
@@ -1778,6 +1788,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/host-public-state",
+      "source_path": "scripts/lib/host-public-state.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/host-registry",
       "source_path": "scripts/lib/host-registry.ts",
       "kind": "lib"
@@ -1790,6 +1805,11 @@
     {
       "id": "lib/host-router",
       "source_path": "scripts/lib/host-router.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host-smoke-store",
+      "source_path": "scripts/lib/host-smoke-store.ts",
       "kind": "lib"
     },
     {

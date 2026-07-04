@@ -62,7 +62,7 @@ describe("verify installer dry-runs", () => {
       "pi-cli",
       "Pi CLI selected (dry-run; pi binary not required for planning)\n"
     );
-    expect(errors.join("\n")).toContain("pi-cli: missing dry-run output snippet: would run: pi install ./dist/pi");
+    expect(errors.join("\n")).toContain("pi-cli: missing dry-run output snippet: would run: pi install dist/pi");
   });
 
   it("CONTROL: fails if dry-run emits a real generated timestamp", () => {

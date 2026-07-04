@@ -1,5 +1,6 @@
 import { HOST_IDS } from "../lib/host-registry-schema";
 import { REVIEW_PROGRESS_STATES, validateReviewProgressEvent } from "../lib/review-progress";
+import { loadCommittedReceipts } from "../lib/host-smoke-store";
 import {
   FORBIDDEN_FINAL_STATES,
   LIFECYCLE_PHASES,
@@ -11,7 +12,10 @@ import {
 } from "../lib/support-matrix";
 
 describe("R12 generated support matrix", () => {
-  const matrix: SupportMatrix = generateSupportMatrix("2026-06-18T10:30:00Z");
+  // verified-multi-host-support §6.5: the matrix reads the COMMITTED smoke receipts
+  // (never re-runs smoke). generatedAt on/after the receipts' capture keeps staleness
+  // honest; the two-field host-support gate then promotes any host with a valid receipt.
+  const matrix: SupportMatrix = generateSupportMatrix("2026-07-04T10:30:00Z", loadCommittedReceipts());
 
   it("is generated for every canonical host id from adapter outputs", () => {
     expect(matrix.schema_version).toBe("guild.support_matrix.v1");

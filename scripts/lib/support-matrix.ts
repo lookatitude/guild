@@ -12,6 +12,19 @@ import {
   validateReviewProgressEvent,
   type ReviewProgressEvent,
 } from "./review-progress";
+import {
+  HOST_EXPECTED_STATE,
+  PUBLIC_STATES,
+  VERIFICATION_STATUS,
+  bucketForRow,
+  deriveCurrentPublicState,
+  deriveVerificationStatus,
+  hostSupportGate,
+  selectValidReceipt,
+  type HostSmokeReceipt,
+  type PublicState,
+  type VerificationStatus,
+} from "./host-public-state";
 
 export const SUPPORT_MATRIX_SCHEMA = "guild.support_matrix.v1";
 
@@ -74,6 +87,21 @@ export interface HostSupportRow {
   registry_provenance: string;
   final_state: SupportState;
   final_reason: string;
+  // ── verified-multi-host-support §5 two-field honesty model (ADDITIVE) ──────────
+  /** Aspirational public state echoed from the manifest (a GOAL, for display + the gate). */
+  target_state: PublicState;
+  /** The highest public state actually reached (committed manifest floor; null until first receipt). */
+  achieved_floor: PublicState | null;
+  /** Evidence-derived public state — the ONLY column docs/website surface (verified_* iff a valid receipt). */
+  current_public_state: PublicState;
+  /** Internal diagnostics + fraud axis — NEVER public (R3). */
+  verification_status: VerificationStatus;
+  /** True iff a valid committed verified receipt promoted this row. */
+  has_valid_receipt: boolean;
+  /** The chosen receipt is past the 180d age horizon (annotated; still evidence). */
+  receipt_stale?: boolean;
+  /** Two non-stale boxes attest different public states → the gate FAILS. */
+  receipt_conflict?: string | null;
   operations: Record<MatrixOperation, SupportCell>;
   lifecycle_smoke: {
     state: SupportState;
@@ -222,7 +250,17 @@ function lifecycleFor(host: HostId, baseCells: Record<MatrixOperation, SupportCe
   return { state: finalStateFor(Object.values(phases)), phases };
 }
 
-export function generateSupportMatrix(generatedAt = "2026-06-18T00:00:00Z"): SupportMatrix {
+/**
+ * Generate the support matrix. PURE — the committed receipts are passed in
+ * (`receiptsByHost`, loaded by `host-smoke-store.ts` in CI); the generator NEVER
+ * re-runs smoke or reads the binary (ADR §6.5). `generatedAt` is the build-supplied
+ * "now" used for receipt-age-only staleness (§6.3). With no receipts every target
+ * host derives honest `unsupported` — a PASS unless a committed floor says otherwise.
+ */
+export function generateSupportMatrix(
+  generatedAt = "2026-06-18T00:00:00Z",
+  receiptsByHost: Record<string, HostSmokeReceipt[]> = {},
+): SupportMatrix {
   const progressEvents = reviewProgressScenarios();
   const rows: HostSupportRow[] = [];
   for (const host of HOST_IDS) {
@@ -267,6 +305,22 @@ export function generateSupportMatrix(generatedAt = "2026-06-18T00:00:00Z"): Sup
       ...Object.values(operations),
       receiptCell(lifecycle_smoke.state, "lifecycle smoke aggregate", ["lifecycle_smoke"], lifecycle_smoke),
     ]);
+
+    // ── verified-multi-host-support §5 — derive the two-field honesty model from
+    // the committed receipts (never re-run smoke). bucket + derivations are pure. ──
+    const derivable = {
+      host_id: host,
+      surface_kind: entry.surface_kind,
+      installability: entry.installability,
+      registry_provenance: entry.provenance,
+      final_state,
+    };
+    const bucket = bucketForRow(derivable);
+    const selection = selectValidReceipt(host, bucket, receiptsByHost[host] ?? [], generatedAt);
+    const verification_status = deriveVerificationStatus(derivable, bucket, selection.has_valid_receipt);
+    const current_public_state = deriveCurrentPublicState(host, bucket, verification_status);
+    const expected = HOST_EXPECTED_STATE[host];
+
     rows.push({
       host_id: host,
       family: entry.family,
@@ -277,6 +331,13 @@ export function generateSupportMatrix(generatedAt = "2026-06-18T00:00:00Z"): Sup
       final_reason: final_state === "verified"
         ? "all required cells and lifecycle phases are verified"
         : `host is ${final_state}; matrix contains executable receipts for the unsupported/degraded cells`,
+      target_state: expected.target_state,
+      achieved_floor: expected.achieved_floor,
+      current_public_state,
+      verification_status,
+      has_valid_receipt: selection.has_valid_receipt,
+      receipt_stale: selection.stale,
+      receipt_conflict: selection.conflict,
       operations,
       lifecycle_smoke,
     });
@@ -321,11 +382,29 @@ export function validateSupportMatrix(matrix: SupportMatrix): MatrixValidationRe
       if (!cell) errors.push(`${row.host_id} missing lifecycle phase ${phase}`);
       else if (cell.state !== "verified" && cell.receipt === undefined) errors.push(`${row.host_id}.${phase} lifecycle has no receipt`);
     }
+    // Two-field honesty model — the derived columns must be TOTAL + in-enum.
+    if (!(PUBLIC_STATES as readonly string[]).includes(row.current_public_state)) {
+      errors.push(`${row.host_id} invalid current_public_state ${String(row.current_public_state)}`);
+    }
+    if (!(PUBLIC_STATES as readonly string[]).includes(row.target_state)) {
+      errors.push(`${row.host_id} invalid target_state ${String(row.target_state)}`);
+    }
+    if (!(VERIFICATION_STATUS as readonly string[]).includes(row.verification_status)) {
+      errors.push(`${row.host_id} invalid verification_status ${String(row.verification_status)}`);
+    }
+    if (!(row.achieved_floor === null || (PUBLIC_STATES as readonly string[]).includes(row.achieved_floor))) {
+      errors.push(`${row.host_id} invalid achieved_floor ${String(row.achieved_floor)}`);
+    }
   }
   for (const event of matrix.review_progress_scenarios) {
     const validation = validateReviewProgressEvent(event);
     if (!validation.valid) errors.push(...validation.errors.map((e) => `review_progress: ${e}`));
   }
+  // The AC-RUN-3 two-field host-support gate (ADR §5.3) — anti-fraud + regression +
+  // floor-coupling + conflict. Reads committed receipts (already stamped on the rows);
+  // does NOT fail an honest target host still `unsupported`.
+  const gate = hostSupportGate(matrix.rows);
+  if (!gate.valid) errors.push(...gate.errors.map((e) => `host-support-gate: ${e}`));
   return { valid: errors.length === 0, errors };
 }
 
@@ -337,11 +416,17 @@ export function renderSupportMatrixMarkdown(matrix: SupportMatrix): string {
     "",
     "This file is generated from host-adapter outputs and review-progress schema validation. Do not hand-edit support cells.",
     "",
-    "| Host | Surface | Installability | Final State | Reason |",
-    "|---|---|---|---|---|",
+    "**Public State** is the only column docs/website surface (native / verified_wrapped / verified_bridged / unsupported).",
+    "**Target** is aspirational; **Verification** + **Floor** are DOCS-internal diagnostics (never a public claim).",
+    "",
+    "| Host | Surface | Installability | Public State | Target | Verification | Floor | Final State |",
+    "|---|---|---|---|---|---|---|---|",
   ];
   for (const row of matrix.rows) {
-    lines.push(`| ${row.host_id} | ${row.surface_kind} | ${row.installability} | ${row.final_state} | ${row.final_reason.replace(/\|/g, "/")} |`);
+    const stale = row.receipt_stale ? " (stale)" : "";
+    lines.push(
+      `| ${row.host_id} | ${row.surface_kind} | ${row.installability} | ${row.current_public_state} | ${row.target_state} | ${row.verification_status}${stale} | ${row.achieved_floor ?? "—"} | ${row.final_state} |`,
+    );
   }
   lines.push("", "## Coverage Operations", "");
   for (const row of matrix.rows) {

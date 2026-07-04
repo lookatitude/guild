@@ -5,10 +5,24 @@
   "entries": [
     {
       "category": "scripts",
+      "id": "generate-support-matrix",
+      "source_path": "scripts/generate-support-matrix.ts",
+      "resource_path": "resources/scripts/generate-support-matrix.ts",
+      "sha256": "9dda69323ae5a78c5226197d0e15cd3c3481a61c9f58c229780313e6ba38d7c9"
+    },
+    {
+      "category": "scripts",
       "id": "guild-run",
       "source_path": "scripts/guild-run.ts",
       "resource_path": "resources/scripts/guild-run.ts",
       "sha256": "a74e9ed8001cc70d20346e1297765494435c85649ced859b51e2e138c5647826"
+    },
+    {
+      "category": "scripts",
+      "id": "host-smoke",
+      "source_path": "scripts/host-smoke.ts",
+      "resource_path": "resources/scripts/host-smoke.ts",
+      "sha256": "68eabfa3d4e61e5d7f731583aa55244f6e8d545163948af5fa52a86b0dc3a4ed"
     },
     {
       "category": "scripts",
@@ -152,6 +166,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/host-public-state",
+      "source_path": "scripts/lib/host-public-state.ts",
+      "resource_path": "resources/scripts/lib/host-public-state.ts",
+      "sha256": "996d3714b32667d5e4a613950d61d472a67d90ddc85133e7a36c52b1f9e2b817"
+    },
+    {
+      "category": "scripts",
       "id": "lib/host-registry",
       "source_path": "scripts/lib/host-registry.ts",
       "resource_path": "resources/scripts/lib/host-registry.ts",
@@ -170,6 +191,13 @@
       "source_path": "scripts/lib/host-router.ts",
       "resource_path": "resources/scripts/lib/host-router.ts",
       "sha256": "1784d929b03d7416832c77661e037a4e346c143ce5a601208f65298f398a1e97"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-smoke-store",
+      "source_path": "scripts/lib/host-smoke-store.ts",
+      "resource_path": "resources/scripts/lib/host-smoke-store.ts",
+      "sha256": "509ac722b76522de35365117d0fc878153c620fd12624360de75c322683b3778"
     },
     {
       "category": "scripts",
@@ -218,7 +246,7 @@
       "id": "lib/support-matrix",
       "source_path": "scripts/lib/support-matrix.ts",
       "resource_path": "resources/scripts/lib/support-matrix.ts",
-      "sha256": "e714155b3bcd3d3ce329bc4e1e9e1e74f8147601579ada0b36e9971f997d0a6f"
+      "sha256": "b062f6e1e302773967e10bd364674d92d43c3d2fb4830169a71934b235db4379"
     },
     {
       "category": "scripts",

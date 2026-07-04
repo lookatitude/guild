@@ -14,11 +14,21 @@ import * as path from "node:path";
 import { PLUGIN_ROOT } from "./build-inventory";
 
 export type InstallerHost =
+  // keep/CLI+file (ADR §1.1)
   | "claude-code-cli"
   | "codex-cli"
   | "agents-file"
   | "pi-cli"
-  | "antigravity-cli";
+  | "antigravity-cli"
+  // new-CLI (installability: target — no native plugin manager; ADR §4)
+  | "cursor"
+  | "github-copilot"
+  | "opencode"
+  | "rovo-dev"
+  // new-IDE (file surface, adapter_binding: agents-file; ADR §3.1)
+  | "kiro"
+  | "qoder"
+  | "trae";
 
 export interface InstallerHostExpectation {
   host: InstallerHost;
@@ -39,14 +49,20 @@ interface VerifyOptions {
   executeLiveIsolated?: boolean;
 }
 
+// The build-once render step every dry-run schedules exactly once (ADR §8 step 3).
+// Run from the plugin root, RENDERED_DIST resolves to the repo-relative `dist`, so
+// every host path below is `dist/...` (never `./dist/...`; L4 dropped the `./`).
+const BUILD_ONCE_SNIPPET =
+  "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>";
+
 export const INSTALLER_HOST_EXPECTATIONS: InstallerHostExpectation[] = [
+  // ── keep/CLI+file ───────────────────────────────────────────────────────────
   {
     host: "claude-code-cli",
     snippets: [
-      "Claude Code selected (dry-run; claude binary not required for planning)",
-      "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>",
-      "would run: claude plugin validate ./dist/claude-code",
-      "would run: claude plugin marketplace add ./dist/claude-code",
+      BUILD_ONCE_SNIPPET,
+      "would run: claude plugin validate dist/claude-code",
+      "would run: claude plugin marketplace add dist/claude-code",
       "would run: claude plugin marketplace update guild",
       "would run: claude plugin install guild@guild",
       "Guild installed into Claude Code.",
@@ -55,29 +71,18 @@ export const INSTALLER_HOST_EXPECTATIONS: InstallerHostExpectation[] = [
   {
     host: "codex-cli",
     snippets: [
-      "Codex CLI selected (dry-run; codex binary not required for planning)",
-      "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>",
+      BUILD_ONCE_SNIPPET,
       "would run: codex plugin marketplace remove guild || true",
-      "would run: codex plugin marketplace add ./dist/codex-marketplace",
+      "would run: codex plugin marketplace add dist/codex-marketplace",
       "would run: codex plugin add guild@guild",
       "Package bootstrap: AGENTS.md plus .agents/skills/guild.",
     ],
   },
   {
-    host: "agents-file",
-    snippets: [
-      "Universal AGENTS.md package target selected.",
-      "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>",
-      "dist/agents/AGENTS.md",
-      "dist/agents/.agents/skills/guild",
-    ],
-  },
-  {
     host: "pi-cli",
     snippets: [
-      "Pi CLI selected (dry-run; pi binary not required for planning)",
-      "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>",
-      "would run: pi install ./dist/pi",
+      BUILD_ONCE_SNIPPET,
+      "would run: pi install dist/pi",
       "pi-manifest.json",
       "guild-run --host pi",
     ],
@@ -85,45 +90,158 @@ export const INSTALLER_HOST_EXPECTATIONS: InstallerHostExpectation[] = [
   {
     host: "antigravity-cli",
     snippets: [
-      "Antigravity CLI selected (dry-run; agy binary not required for planning)",
-      "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>",
-      "would run: agy plugin validate ./dist/antigravity",
-      "would run: agy plugin install ./dist/antigravity",
+      BUILD_ONCE_SNIPPET,
+      "would run: agy plugin validate dist/antigravity",
+      "would run: agy plugin install dist/antigravity",
       "plugin.json",
       "antigravity-manifest.json",
       "guild-run --host antigravity",
+    ],
+  },
+  {
+    host: "agents-file",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "Universal AGENTS.md package rendered at:",
+      "dist/agents/AGENTS.md",
+      "dist/agents/.agents/skills/guild",
+    ],
+  },
+  // ── new-CLI (installability: target — package tree is the deliverable; ADR §4) ─
+  {
+    host: "cursor",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "cursor (new-CLI)",
+      "would prepare package tree: dist/cursor",
+      "would wire launcher: dist/cursor/bin/guild-run --host cursor",
+      "Guild package prepared for cursor.",
+      "cursor-manifest.json (installability: target).",
+      "dist/cursor/bin/guild-run --host cursor --prompt",
+    ],
+  },
+  {
+    host: "github-copilot",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "github-copilot (new-CLI)",
+      "would prepare package tree: dist/github-copilot",
+      "would wire launcher: dist/github-copilot/bin/guild-run --host github-copilot",
+      "Guild package prepared for github-copilot.",
+      "github-copilot-manifest.json (installability: target).",
+      "dist/github-copilot/bin/guild-run --host github-copilot --prompt",
+    ],
+  },
+  {
+    host: "opencode",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "opencode (new-CLI)",
+      "would prepare package tree: dist/opencode",
+      "would wire launcher: dist/opencode/bin/guild-run --host opencode",
+      "Guild package prepared for opencode.",
+      "opencode-manifest.json (installability: target).",
+      "dist/opencode/bin/guild-run --host opencode --prompt",
+    ],
+  },
+  {
+    host: "rovo-dev",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "rovo-dev (new-CLI)",
+      "would prepare package tree: dist/rovo-dev",
+      "would wire launcher: dist/rovo-dev/bin/guild-run --host rovo-dev",
+      "Guild package prepared for rovo-dev.",
+      "rovo-dev-manifest.json (installability: target).",
+      "dist/rovo-dev/bin/guild-run --host rovo-dev --prompt",
+    ],
+  },
+  // ── new-IDE (adapter_binding: agents-file — REUSE dist/agents; ADR §3.1) ───────
+  {
+    host: "kiro",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "kiro (new-IDE, agents-file binding)",
+      "Guild package for kiro is the universal AGENTS.md package (adapter_binding: agents-file):",
+      "dist/agents/AGENTS.md",
+      "dist/agents/.agents/skills/guild",
+      "Copy it into your kiro project root (marker: .kiro/). kiro reads root AGENTS.md.",
+    ],
+  },
+  {
+    host: "qoder",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "qoder (new-IDE, agents-file binding)",
+      "Guild package for qoder is the universal AGENTS.md package (adapter_binding: agents-file):",
+      "dist/agents/AGENTS.md",
+      "dist/agents/.agents/skills/guild",
+      "Copy it into your qoder project root (marker: .qoder/). qoder reads root AGENTS.md.",
+    ],
+  },
+  {
+    host: "trae",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "trae (new-IDE, agents-file binding)",
+      "Guild package for trae is the universal AGENTS.md package (adapter_binding: agents-file):",
+      "dist/agents/AGENTS.md",
+      "dist/agents/.agents/skills/guild",
+      "Copy it into your trae project root (marker: .trae/). trae reads root AGENTS.md.",
     ],
   },
 ];
 
 const REAL_TIMESTAMP = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/;
 
+// Host-binary calls the install path actually invokes (fake-bin log lines,
+// "<binary>\t<args>"). Run from root, RENDERED_DIST is `dist` so paths carry no
+// `./`. new-CLI (installability: target) and new-IDE (agents-file binding) hosts
+// invoke NO host binary — the rendered package tree is the whole deliverable — so
+// their expected call log is empty.
 const INSTALLER_EXECUTION_CALLS: Record<InstallerHost, string[]> = {
   "claude-code-cli": [
-    "claude\tplugin validate ./dist/claude-code",
-    "claude\tplugin marketplace add ./dist/claude-code",
+    "claude\tplugin validate dist/claude-code",
+    "claude\tplugin marketplace add dist/claude-code",
     "claude\tplugin marketplace update guild",
     "claude\tplugin install guild@guild",
   ],
   "codex-cli": [
     "codex\tplugin marketplace remove guild",
-    "codex\tplugin marketplace add ./dist/codex-marketplace",
+    "codex\tplugin marketplace add dist/codex-marketplace",
     "codex\tplugin add guild@guild",
   ],
   "agents-file": [],
-  "pi-cli": ["pi\tinstall ./dist/pi"],
+  "pi-cli": ["pi\tinstall dist/pi"],
   "antigravity-cli": [
-    "agy\tplugin validate ./dist/antigravity",
-    "agy\tplugin install ./dist/antigravity",
+    "agy\tplugin validate dist/antigravity",
+    "agy\tplugin install dist/antigravity",
   ],
+  cursor: [],
+  "github-copilot": [],
+  opencode: [],
+  "rovo-dev": [],
+  kiro: [],
+  qoder: [],
+  trae: [],
 };
 
+// A repo-relative artifact each host's render must have produced. new-CLI hosts
+// materialize dist/<id>/<id>-manifest.json + dist/<id>/bin/guild-run; new-IDE
+// hosts bind the universal dist/agents package (adapter_binding: agents-file).
 const INSTALLER_EXECUTION_FILES: Record<InstallerHost, string[]> = {
   "claude-code-cli": ["dist/claude-code/.claude-plugin/plugin.json"],
   "codex-cli": ["dist/codex-marketplace/.agents/plugins/marketplace.json"],
   "agents-file": ["dist/agents/AGENTS.md", "dist/agents/.agents/skills/guild/meta/using-guild/SKILL.src.md"],
   "pi-cli": ["dist/pi/pi-manifest.json"],
   "antigravity-cli": ["dist/antigravity/antigravity-manifest.json", "dist/antigravity/plugin.json"],
+  cursor: ["dist/cursor/cursor-manifest.json", "dist/cursor/bin/guild-run"],
+  "github-copilot": ["dist/github-copilot/github-copilot-manifest.json", "dist/github-copilot/bin/guild-run"],
+  opencode: ["dist/opencode/opencode-manifest.json", "dist/opencode/bin/guild-run"],
+  "rovo-dev": ["dist/rovo-dev/rovo-dev-manifest.json", "dist/rovo-dev/bin/guild-run"],
+  kiro: ["dist/agents/AGENTS.md"],
+  qoder: ["dist/agents/AGENTS.md"],
+  trae: ["dist/agents/AGENTS.md"],
 };
 
 export function verifyInstallerDryRunOutput(host: InstallerHost, stdout: string): string[] {
@@ -185,7 +303,17 @@ function hostBinaryFor(host: InstallerHost): string | null {
       return "pi";
     case "antigravity-cli":
       return "agy";
+    // agents-file renders a file package; new-CLI hosts render a package tree and
+    // call no binary; new-IDE hosts bind the universal agents-file package — none
+    // of these require a host binary on PATH to complete the install path.
     case "agents-file":
+    case "cursor":
+    case "github-copilot":
+    case "opencode":
+    case "rovo-dev":
+    case "kiro":
+    case "qoder":
+    case "trae":
       return null;
   }
 }
@@ -257,7 +385,13 @@ export function verifyInstallerFixtureExecutions(options: VerifyOptions = {}): I
     fs.mkdirSync(fakeBin, { recursive: true });
     fs.mkdirSync(fakeHome, { recursive: true });
     fs.mkdirSync(fakeConfig, { recursive: true });
-    for (const binary of ["claude", "codex", "pi", "agy"]) writeFakeHostBinary(fakeBin, binary);
+    // CLI-host binaries the install/detect paths may invoke. The keep hosts drive
+    // their native plugin managers (claude/codex/pi/agy); the new-CLI detection
+    // binaries (cursor-agent/gh/opencode/acli) round out the isolated fixture set
+    // even though the new-CLI install path renders a package tree and calls none.
+    for (const binary of ["claude", "codex", "pi", "agy", "cursor-agent", "gh", "opencode", "acli"]) {
+      writeFakeHostBinary(fakeBin, binary);
+    }
 
     for (const expectation of INSTALLER_HOST_EXPECTATIONS) {
       const logFile = path.join(tmp, `${expectation.host}.log`);
