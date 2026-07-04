@@ -1,6 +1,6 @@
 # Generated Host Support Matrix
 
-Generated: 2026-07-04T03:20:20.369Z
+Generated: 2026-07-04T05:09:44.738Z
 
 This file is generated from host-adapter outputs and review-progress schema validation. Do not hand-edit support cells.
 
@@ -9,8 +9,8 @@ This file is generated from host-adapter outputs and review-progress schema vali
 
 | Host | Surface | Installability | Public State | Target | Verification | Floor | Final State |
 |---|---|---|---|---|---|---|---|
-| claude-code-cli | cli | native | unsupported | native | degraded | — | degraded |
-| codex-cli | cli | target | unsupported | verified_wrapped | target | — | degraded |
+| claude-code-cli | cli | native | native | native | verified | native | degraded |
+| codex-cli | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
 | pi-cli | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
 | antigravity-cli | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
 | agents-file | file | target | unsupported | verified_bridged | target | — | degraded |

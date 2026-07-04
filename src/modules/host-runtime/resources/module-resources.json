@@ -22,7 +22,7 @@
       "id": "host-smoke",
       "source_path": "scripts/host-smoke.ts",
       "resource_path": "resources/scripts/host-smoke.ts",
-      "sha256": "68eabfa3d4e61e5d7f731583aa55244f6e8d545163948af5fa52a86b0dc3a4ed"
+      "sha256": "0669d3b305543087563926131e740ac24766feae72afe36f44ceba06c8674ecd"
     },
     {
       "category": "scripts",
@@ -169,7 +169,7 @@
       "id": "lib/host-public-state",
       "source_path": "scripts/lib/host-public-state.ts",
       "resource_path": "resources/scripts/lib/host-public-state.ts",
-      "sha256": "996d3714b32667d5e4a613950d61d472a67d90ddc85133e7a36c52b1f9e2b817"
+      "sha256": "51ac8517d5b934a350495b5faf40e776181fc1073cb986674c6f79635dbc5b04"
     },
     {
       "category": "scripts",

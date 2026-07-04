@@ -398,17 +398,19 @@ export interface HostExpectedState {
  * The SoT AC-RUN-3 enforces. `target_state` per ADR §1.2; `achieved_floor` starts
  * `null` and is set in the SAME change as the first valid receipt.
  *
- * On THIS operator box (2026-07-04) pi-cli (`pi` 0.79.3) and antigravity-cli
- * (`agy` 1.0.8) committed valid verified_wrapped receipts, so their floors are set
- * atomically here. github-copilot is NOT promoted: `gh` is present but the
- * `gh copilot` extension (the `gh_auth` probe's second half) is ABSENT on this box,
- * so an honest smoke cannot attest it → it stays a `target` (floor null). Every
- * other host lacks a reachable binary/editor here → honest `target`/`unsupported`
- * (a PASS, ADR §5.3).
+ * On THIS operator box (2026-07-04) the reference hosts committed valid receipts, so
+ * their floors are set atomically here (L5b + L5): claude-code-cli (`claude` 2.1.201) →
+ * `native` via the native plugin-load attestation (manifest + wired hooks/dist + skills +
+ * commands); codex-cli (`codex` 0.142.2) → `verified_wrapped` via the wrapped-CLI smoke
+ * (bin + version + stored-auth + wrapper dry-run); pi-cli (`pi` 0.79.3) and antigravity-cli
+ * (`agy` 1.0.8) → `verified_wrapped`. github-copilot is NOT promoted: `gh` is present but
+ * the `gh copilot` extension (the `gh_auth` probe's second half) is ABSENT on this box,
+ * so an honest smoke cannot attest it → it stays a `target` (floor null). Every other host
+ * lacks a reachable binary/editor here → honest `target`/`unsupported` (a PASS, ADR §5.3).
  */
 export const HOST_EXPECTED_STATE: Record<HostId, HostExpectedState> = {
-  "claude-code-cli": { target_state: "native", achieved_floor: null },
-  "codex-cli": { target_state: "verified_wrapped", achieved_floor: null },
+  "claude-code-cli": { target_state: "native", achieved_floor: "native" },
+  "codex-cli": { target_state: "verified_wrapped", achieved_floor: "verified_wrapped" },
   "pi-cli": { target_state: "verified_wrapped", achieved_floor: "verified_wrapped" },
   "antigravity-cli": { target_state: "verified_wrapped", achieved_floor: "verified_wrapped" },
   "agents-file": { target_state: "verified_bridged", achieved_floor: null },

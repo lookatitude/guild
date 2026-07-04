@@ -71,12 +71,22 @@ describe("host-public-state — two-field honesty model", () => {
 
   it("promotes exactly the hosts with a valid committed receipt (evidence-derived, not claimed)", () => {
     const promoted = matrix.rows.filter((r) => r.has_valid_receipt).map((r) => r.host_id).sort();
-    expect(promoted).toEqual(["antigravity-cli", "pi-cli"]);
+    // L5b added the native reference host (claude-code-cli → native) + codex-cli
+    // (verified_wrapped) alongside L5's pi/antigravity wrapped-CLI receipts.
+    expect(promoted).toEqual(["antigravity-cli", "claude-code-cli", "codex-cli", "pi-cli"]);
+    // The native host promotes to `native`; the wrapped hosts to `verified_wrapped` —
+    // each to its OWN bucket's verified state, with the floor committed atomically.
+    const expectedState: Record<string, string> = {
+      "claude-code-cli": "native",
+      "codex-cli": "verified_wrapped",
+      "pi-cli": "verified_wrapped",
+      "antigravity-cli": "verified_wrapped",
+    };
     for (const id of promoted) {
       const row = rowById.get(id as HostId)!;
-      expect(row.current_public_state).toBe("verified_wrapped");
+      expect(row.current_public_state).toBe(expectedState[id]);
       expect(row.verification_status).toBe("verified");
-      expect(row.achieved_floor).toBe("verified_wrapped"); // floor committed atomically
+      expect(row.achieved_floor).toBe(expectedState[id]); // floor === promoted state, committed atomically
     }
   });
 
