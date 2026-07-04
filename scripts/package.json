@@ -16,7 +16,9 @@
     "verify:host-packages": "npx tsx sync-live-resources.ts --check --root .. && npx tsx build-host-packages.ts --check-claude-install && npx tsx verify-host-packages.ts",
     "verify:installer": "npx tsx verify-installer.ts",
     "verify:installer-execution": "npx tsx verify-installer.ts --execute-fixtures",
-    "verify:installer-live": "npx tsx verify-installer.ts --execute-live-isolated"
+    "verify:installer-live": "npx tsx verify-installer.ts --execute-live-isolated",
+    "build:verify": "npx tsx build-verify.ts",
+    "build:verify:refresh": "npx tsx build-verify.ts --refresh-receipts"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"

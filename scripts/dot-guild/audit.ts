@@ -32,7 +32,7 @@ const repoList: string[] = reposArg
   : [WORKSPACE];
 const outputPath = outArg ? outArg.split("=")[1] : undefined;
 
-interface FileFlag { runId: string; file: string; kind: "operator-path" | "secret" | "payload-excluded" | "nested-guild" | "scrub-uncovered" | "receipt-operator-path" | "receipt-secret"; detail: string; }
+export interface FileFlag { runId: string; file: string; kind: "operator-path" | "secret" | "payload-excluded" | "nested-guild" | "scrub-uncovered" | "receipt-operator-path" | "receipt-secret"; detail: string; }
 
 // SC-7 blind-spot guard: scrub.ts's share-set is now the canonical single-source
 // module (scripts/lib/shared/share-set.ts, imported as inShareSet). audit.ts only
@@ -126,7 +126,7 @@ const PACKAGE_RECEIPT_SCAN_ROOTS = ["evidence/host-smoke"];
 // secret finding iff `secrets.length > 0` (round-2 minor: the two counters are
 // INDEPENDENT — never conflated; `out === content` is L8's separate no-op assertion,
 // NOT used here). On git status 128 (not a git repo) SKIP (additive, like the guard).
-function findPackageReceiptLeaks(repoPath: string): FileFlag[] {
+export function findPackageReceiptLeaks(repoPath: string): FileFlag[] {
   const flags: FileFlag[] = [];
   for (const rootRel of PACKAGE_RECEIPT_SCAN_ROOTS) {
     const scanRoot = path.join(repoPath, rootRel);
@@ -319,4 +319,7 @@ function main(): void {
   process.stderr.write(`[audit] No actionable flags. OK.\n`);
 }
 
-main();
+// Guarded so importing this module (e.g. build-verify.ts reusing the single-source
+// `findPackageReceiptLeaks` scan — verified-multi-host-support L6, ADR §8 step 6) does
+// NOT run the full audit. As a direct script (`npx tsx audit.ts`) it still runs main().
+if (require.main === module) main();

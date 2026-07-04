@@ -19,6 +19,13 @@
     },
     {
       "category": "scripts",
+      "id": "build-verify",
+      "source_path": "scripts/build-verify.ts",
+      "resource_path": "resources/scripts/build-verify.ts",
+      "sha256": "2955cee84700ff4e37feeef775726a6772487c00ea4f2a1273cb36252f821dd7"
+    },
+    {
+      "category": "scripts",
       "id": "check-module-ownership",
       "source_path": "scripts/check-module-ownership.ts",
       "resource_path": "resources/scripts/check-module-ownership.ts",

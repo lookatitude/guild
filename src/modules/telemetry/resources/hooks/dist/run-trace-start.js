@@ -436,21 +436,52 @@ var AGENTS_FILE_CAPABILITIES = {
 
 // ../src/modules/host-runtime/workflows/host-registry-schema.ts
 var HOST_IDS = [
+  // keep CLI/file (5)
   "claude-code-cli",
   "codex-cli",
   "pi-cli",
   "antigravity-cli",
   "agents-file",
+  // keep-as-refuse (4) — RETAINED verbatim
   "claude-code-app",
   "claude-code-web",
   "codex-app",
-  "claude-ai-connector"
+  "claude-ai-connector",
+  // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
+  // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
+  "kiro",
+  "qoder",
+  "trae"
 ];
-var HOST_FAMILIES = ["claude", "codex", "agents", "pi", "antigravity"];
+var HOST_FAMILIES = [
+  "claude",
+  "codex",
+  "agents",
+  "pi",
+  "antigravity",
+  "cursor",
+  "copilot",
+  "opencode",
+  "rovo"
+];
+var AUTH_PROBES = [
+  "codex_stored_or_env",
+  "none",
+  "cursor_stored",
+  "gh_auth",
+  "opencode_stored_or_env",
+  "acli_stored"
+];
 var CLAUDE_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "claude-code-cli",
   family: "claude",
+  adapter_binding: "self",
   surface_kind: "cli",
   detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
   installability: "native",
@@ -464,6 +495,7 @@ var CODEX_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "codex-cli",
   family: "codex",
+  adapter_binding: "self",
   surface_kind: "cli",
   detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
   // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
@@ -545,6 +577,9 @@ var AGENTS_FILE_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "agents-file",
   family: "agents",
+  // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
+  // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
+  adapter_binding: "self",
   // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
   surface_kind: "file",
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
@@ -561,6 +596,7 @@ var PI_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "pi-cli",
   family: "pi",
+  adapter_binding: "self",
   surface_kind: "cli",
   detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
   // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
@@ -585,6 +621,7 @@ var ANTIGRAVITY_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "antigravity-cli",
   family: "antigravity",
+  adapter_binding: "self",
   surface_kind: "cli",
   // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
   detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
@@ -613,6 +650,7 @@ var CLAUDE_APP_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "claude-code-app",
   family: "claude",
+  adapter_binding: "self",
   surface_kind: "app",
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
   installability: "none",
@@ -625,6 +663,7 @@ var CLAUDE_WEB_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "claude-code-web",
   family: "claude",
+  adapter_binding: "self",
   surface_kind: "app",
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
   installability: "none",
@@ -637,6 +676,7 @@ var CODEX_APP_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "codex-app",
   family: "codex",
+  adapter_binding: "self",
   surface_kind: "app",
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
   installability: "none",
@@ -649,12 +689,124 @@ var CLAUDE_AI_CONNECTOR_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "claude-ai-connector",
   family: "claude",
+  adapter_binding: "self",
   surface_kind: "app",
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
   installability: "none",
   result_adapter: false,
   dispatch_selectable: false,
   capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
+  provenance: "inferred"
+};
+var CURSOR_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "cursor",
+  family: "cursor",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("cursor", "cursor", "cli"),
+  provenance: "inferred"
+};
+var GITHUB_COPILOT_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "github-copilot",
+  family: "copilot",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  // capability is a subcommand of the shared `gh` bin (`gh copilot`).
+  detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("github-copilot", "copilot", "cli"),
+  provenance: "inferred"
+};
+var OPENCODE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "opencode",
+  family: "opencode",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("opencode", "opencode", "cli"),
+  provenance: "inferred"
+};
+var ROVO_DEV_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "rovo-dev",
+  family: "rovo",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
+  detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
+  provenance: "inferred"
+};
+var KIRO_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "kiro",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" }
+  },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("kiro", "agents", "file"),
+  provenance: "inferred"
+};
+var QODER_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "qoder",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" }
+  },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("qoder", "agents", "file"),
+  provenance: "inferred"
+};
+var TRAE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "trae",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" }
+  },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("trae", "agents", "file"),
   provenance: "inferred"
 };
 var HOST_REGISTRY_ROWS = {
@@ -666,10 +818,18 @@ var HOST_REGISTRY_ROWS = {
   "claude-code-app": CLAUDE_APP_ENTRY,
   "claude-code-web": CLAUDE_WEB_ENTRY,
   "codex-app": CODEX_APP_ENTRY,
-  "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY
+  "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
+  cursor: CURSOR_ENTRY,
+  "github-copilot": GITHUB_COPILOT_ENTRY,
+  opencode: OPENCODE_ENTRY,
+  "rovo-dev": ROVO_DEV_ENTRY,
+  kiro: KIRO_ENTRY,
+  qoder: QODER_ENTRY,
+  trae: TRAE_ENTRY
 };
 var HOST_ID_SET = new Set(HOST_IDS);
 var FAMILY_SET = new Set(HOST_FAMILIES);
+var AUTH_PROBE_SET = new Set(AUTH_PROBES);
 
 // ../src/modules/host-runtime/workflows/host-id-namespace.ts
 var HOST_ID_SET2 = new Set(HOST_IDS);
@@ -707,8 +867,8 @@ var PROVIDER_REGISTRY = [
   // Codex reference adapters (the only selectable cross reviewers today).
   { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
   { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
-  // Detect-only until adapters ship (OD-6) — no registry row for gemini (D10); pi/antigravity rows carry result_adapter:false.
-  { id: "gemini-cli", kind: "cli", family: "gemini", bin: "gemini", hasAdapter: resultAdapterForFamily("gemini"), requiresAuth: false },
+  // Detect-only until adapters ship (OD-6) — pi/antigravity rows carry result_adapter:false.
+  // (The former `gemini-cli` provider was removed when Gemini was sunset 2026-06-14.)
   { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
   // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
   { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }

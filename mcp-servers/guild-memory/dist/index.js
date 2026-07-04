@@ -21014,6 +21014,52 @@ var StdioServerTransport = class {
   }
 };
 
+// ../../src/modules/kernel/workflows/identifier-tokenize.ts
+var TOKEN_RE = /[A-Za-z0-9]+/g;
+
+// ../../src/modules/knowledge/workflows/bm25.ts
+function tokenize(s) {
+  const out = [];
+  const m = s.toLowerCase().match(TOKEN_RE);
+  if (!m) return out;
+  for (const tok of m) if (tok.length > 1) out.push(tok);
+  return out;
+}
+function bm25Score(queryTokens, docs) {
+  const k1 = 1.5;
+  const b = 0.75;
+  const N = docs.length;
+  if (N === 0) return [];
+  const avgdl = docs.reduce((s, d) => s + d.tokens.length, 0) / N;
+  const df = /* @__PURE__ */ new Map();
+  for (const q of new Set(queryTokens)) {
+    let count = 0;
+    for (const d of docs) {
+      if (d.tokens.includes(q)) count++;
+    }
+    df.set(q, count);
+  }
+  const scores = new Array(N).fill(0);
+  for (let i = 0; i < N; i++) {
+    const doc = docs[i];
+    const dl = doc.tokens.length || 1;
+    const tf = /* @__PURE__ */ new Map();
+    for (const t of doc.tokens) tf.set(t, (tf.get(t) ?? 0) + 1);
+    let s = 0;
+    for (const q of queryTokens) {
+      const f = tf.get(q) ?? 0;
+      if (f === 0) continue;
+      const n = df.get(q) ?? 0;
+      const idf = Math.log(1 + (N - n + 0.5) / (n + 0.5));
+      const num = f * (k1 + 1);
+      const den = f + k1 * (1 - b + b * (dl / avgdl));
+      s += idf * (num / den);
+    }
+    scores[i] = s;
+  }
+  return scores;
+}
+
 // src/index.ts
 function resolveWikiRoot(cwdArg) {
   if (process.env.GUILD_MEMORY_WIKI_ROOT) {
@@ -21092,48 +21138,6 @@ function loadAllPages(wikiRoot) {
     });
   }
   return pages;
-}
-var TOKEN_RE = /[A-Za-z0-9]+/g;
-function tokenize(s) {
-  const out = [];
-  const m = s.toLowerCase().match(TOKEN_RE);
-  if (!m) return out;
-  for (const tok of m) if (tok.length > 1) out.push(tok);
-  return out;
-}
-function bm25Score(queryTokens, docs) {
-  const k1 = 1.5;
-  const b = 0.75;
-  const N = docs.length;
-  if (N === 0) return [];
-  const avgdl = docs.reduce((s, d) => s + d.tokens.length, 0) / N;
-  const df = /* @__PURE__ */ new Map();
-  for (const q of new Set(queryTokens)) {
-    let count = 0;
-    for (const d of docs) {
-      if (d.tokens.includes(q)) count++;
-    }
-    df.set(q, count);
-  }
-  const scores = new Array(N).fill(0);
-  for (let i = 0; i < N; i++) {
-    const doc = docs[i];
-    const dl = doc.tokens.length || 1;
-    const tf = /* @__PURE__ */ new Map();
-    for (const t of doc.tokens) tf.set(t, (tf.get(t) ?? 0) + 1);
-    let s = 0;
-    for (const q of queryTokens) {
-      const f = tf.get(q) ?? 0;
-      if (f === 0) continue;
-      const n = df.get(q) ?? 0;
-      const idf = Math.log(1 + (N - n + 0.5) / (n + 0.5));
-      const num = f * (k1 + 1);
-      const den = f + k1 * (1 - b + b * (dl / avgdl));
-      s += idf * (num / den);
-    }
-    scores[i] = s;
-  }
-  return scores;
 }
 function rankPages(pages, query, limit) {
   const qTokens = tokenize(query);
