@@ -13,14 +13,19 @@ import {
   type ReviewProgressEvent,
 } from "./review-progress";
 import {
+  DISPLAY_SUPPORT,
   HOST_EXPECTED_STATE,
   PUBLIC_STATES,
   VERIFICATION_STATUS,
+  VERIFIED_PUBLIC_STATES,
   bucketForRow,
   deriveCurrentPublicState,
+  deriveDisplaySupport,
   deriveVerificationStatus,
   hostSupportGate,
+  renderDisplaySupport,
   selectValidReceipt,
+  type DisplaySupport,
   type HostSmokeReceipt,
   type PublicState,
   type VerificationStatus,
@@ -92,8 +97,15 @@ export interface HostSupportRow {
   target_state: PublicState;
   /** The highest public state actually reached (committed manifest floor; null until first receipt). */
   achieved_floor: PublicState | null;
-  /** Evidence-derived public state — the ONLY column docs/website surface (verified_* iff a valid receipt). */
+  /** Evidence-derived public state — the honesty column (verified_* iff a valid receipt). */
   current_public_state: PublicState;
+  /**
+   * PRESENTATION-ONLY roster label (operator policy 2026-07-04, amends R3 for display).
+   * `supported` (verified) | `supported_beta` (honest installable target, receipt
+   * pending) | `unsupported` (refuse / no path). Decoupled from the honesty column +
+   * NEVER fed to the gate.
+   */
+  display_support: DisplaySupport;
   /** Internal diagnostics + fraud axis — NEVER public (R3). */
   verification_status: VerificationStatus;
   /** True iff a valid committed verified receipt promoted this row. */
@@ -319,6 +331,7 @@ export function generateSupportMatrix(
     const selection = selectValidReceipt(host, bucket, receiptsByHost[host] ?? [], generatedAt);
     const verification_status = deriveVerificationStatus(derivable, bucket, selection.has_valid_receipt);
     const current_public_state = deriveCurrentPublicState(host, bucket, verification_status);
+    const display_support = deriveDisplaySupport(current_public_state, verification_status);
     const expected = HOST_EXPECTED_STATE[host];
 
     rows.push({
@@ -334,6 +347,7 @@ export function generateSupportMatrix(
       target_state: expected.target_state,
       achieved_floor: expected.achieved_floor,
       current_public_state,
+      display_support,
       verification_status,
       has_valid_receipt: selection.has_valid_receipt,
       receipt_stale: selection.stale,
@@ -389,6 +403,14 @@ export function validateSupportMatrix(matrix: SupportMatrix): MatrixValidationRe
     if (!(PUBLIC_STATES as readonly string[]).includes(row.target_state)) {
       errors.push(`${row.host_id} invalid target_state ${String(row.target_state)}`);
     }
+    if (!(DISPLAY_SUPPORT as readonly string[]).includes(row.display_support)) {
+      errors.push(`${row.host_id} invalid display_support ${String(row.display_support)}`);
+    }
+    // Presentation invariant: a verified public state MUST read "supported" (not beta),
+    // and a beta label MUST NOT sit on a verified public state (would hide a real receipt).
+    if (row.display_support === "supported_beta" && (VERIFIED_PUBLIC_STATES as readonly string[]).includes(row.current_public_state)) {
+      errors.push(`${row.host_id} display_support is supported_beta but current_public_state is verified ${row.current_public_state}`);
+    }
     if (!(VERIFICATION_STATUS as readonly string[]).includes(row.verification_status)) {
       errors.push(`${row.host_id} invalid verification_status ${String(row.verification_status)}`);
     }
@@ -416,16 +438,17 @@ export function renderSupportMatrixMarkdown(matrix: SupportMatrix): string {
     "",
     "This file is generated from host-adapter outputs and review-progress schema validation. Do not hand-edit support cells.",
     "",
-    "**Public State** is the only column docs/website surface (native / verified_wrapped / verified_bridged / unsupported).",
+    "**Support** is the human-facing roster label: `Supported` (a committed verified receipt), `Supported (beta)` (an honest installable target — full adapter chain, operator-box receipt pending), or `Unsupported` (a refuse app/connector surface). It is a PRESENTATION derivation only, decoupled from the honesty column and never an input to the gate.",
+    "**Public State** is the evidence-derived honesty column (native / verified_wrapped / verified_bridged / unsupported) — verified_* ONLY when a valid receipt exists.",
     "**Target** is aspirational; **Verification** + **Floor** are DOCS-internal diagnostics (never a public claim).",
     "",
-    "| Host | Surface | Installability | Public State | Target | Verification | Floor | Final State |",
-    "|---|---|---|---|---|---|---|---|",
+    "| Host | Support | Surface | Installability | Public State | Target | Verification | Floor | Final State |",
+    "|---|---|---|---|---|---|---|---|---|",
   ];
   for (const row of matrix.rows) {
     const stale = row.receipt_stale ? " (stale)" : "";
     lines.push(
-      `| ${row.host_id} | ${row.surface_kind} | ${row.installability} | ${row.current_public_state} | ${row.target_state} | ${row.verification_status}${stale} | ${row.achieved_floor ?? "—"} | ${row.final_state} |`,
+      `| ${row.host_id} | ${renderDisplaySupport(row.display_support)} | ${row.surface_kind} | ${row.installability} | ${row.current_public_state} | ${row.target_state} | ${row.verification_status}${stale} | ${row.achieved_floor ?? "—"} | ${row.final_state} |`,
     );
   }
   lines.push("", "## Coverage Operations", "");

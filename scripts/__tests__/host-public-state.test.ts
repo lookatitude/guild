@@ -11,17 +11,22 @@
  */
 
 import {
+  DISPLAY_SUPPORT,
   HOST_EXPECTED_STATE,
   PUBLIC_STATES,
   VERIFICATION_STATUS,
+  VERIFIED_PUBLIC_STATES,
   bucketForRow,
   deriveCurrentPublicState,
+  deriveDisplaySupport,
   deriveVerificationStatus,
   hostSupportGate,
   isValidVerifiedReceipt,
+  renderDisplaySupport,
   selectValidReceipt,
   validateSmokeReceipt,
   computeSmokeDigest,
+  type DisplaySupport,
   type GateableRow,
   type HostSmokeReceipt,
 } from "../lib/host-public-state";
@@ -166,5 +171,70 @@ describe("host-public-state — two-field honesty model", () => {
     const vs = deriveVerificationStatus(row, bucket, false);
     expect(vs).toBe("target"); // installability target checked BEFORE inferred
     expect(deriveCurrentPublicState("opencode", bucket, vs)).toBe("unsupported");
+  });
+});
+
+describe("display support — presentation-only beta label (amends R3 for display)", () => {
+  const GENERATED_AT = "2026-07-04T00:00:00Z";
+
+  it("deriveDisplaySupport is TOTAL over the public-state × verification-status product", () => {
+    for (const cps of PUBLIC_STATES) {
+      for (const vs of VERIFICATION_STATUS) {
+        expect(DISPLAY_SUPPORT).toContain(deriveDisplaySupport(cps, vs));
+      }
+    }
+  });
+
+  it("verified public state → Supported (never beta)", () => {
+    for (const cps of VERIFIED_PUBLIC_STATES) {
+      // verified state wins regardless of the diagnostic axis value
+      for (const vs of VERIFICATION_STATUS) {
+        expect(deriveDisplaySupport(cps, vs)).toBe("supported");
+      }
+    }
+  });
+
+  it("honest installable target (verification_status target) → supported_beta while still unsupported", () => {
+    expect(deriveDisplaySupport("unsupported", "target")).toBe("supported_beta");
+  });
+
+  it("refuse / non-target non-verified states → unsupported", () => {
+    for (const vs of ["enqueue_only", "manual_instruction", "unavailable", "no_receipt", "inferred", "degraded"] as const) {
+      expect(deriveDisplaySupport("unsupported", vs)).toBe("unsupported");
+    }
+  });
+
+  it("beta is DECOUPLED from the honesty column — the gate never sees display_support", () => {
+    // A beta row keeps current_public_state unsupported, so the fraud gate does not fire.
+    const beta: GateableRow = {
+      host_id: "cursor",
+      current_public_state: "unsupported",
+      verification_status: "target",
+      achieved_floor: null,
+      has_valid_receipt: false,
+    };
+    expect(deriveDisplaySupport(beta.current_public_state, beta.verification_status)).toBe("supported_beta");
+    expect(hostSupportGate([beta]).valid).toBe(true); // honest target still PASSES
+  });
+
+  it("the generated matrix stamps display_support and the gate stays green", () => {
+    // Load the committed receipts so the 4 verified hosts satisfy their committed
+    // floors (an empty-receipt matrix would honestly trip the floor-regression check).
+    const matrix = generateSupportMatrix(GENERATED_AT, loadCommittedReceipts());
+    const byHost = new Map(matrix.rows.map((r) => [r.host_id, r]));
+    // Verified hosts read Supported; honest installable targets read beta; refuse rows unsupported.
+    expect(byHost.get("claude-code-cli")!.display_support).toBe("supported");
+    expect(byHost.get("cursor")!.display_support).toBe("supported_beta");
+    expect(byHost.get("agents-file")!.display_support).toBe("supported_beta");
+    expect(byHost.get("claude-code-app")!.display_support).toBe("unsupported");
+    // Every row carries an in-enum display_support, and the two-field gate still validates.
+    for (const row of matrix.rows) expect(DISPLAY_SUPPORT).toContain(row.display_support);
+    expect(validateSupportMatrix(matrix).valid).toBe(true);
+  });
+
+  it("renderDisplaySupport maps to the human-facing strings", () => {
+    expect(renderDisplaySupport("supported")).toBe("Supported");
+    expect(renderDisplaySupport("supported_beta")).toBe("Supported (beta)");
+    expect(renderDisplaySupport("unsupported")).toBe("Unsupported");
   });
 });

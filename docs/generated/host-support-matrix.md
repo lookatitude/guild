@@ -1,30 +1,31 @@
 # Generated Host Support Matrix
 
-Generated: 2026-07-04T05:09:44.738Z
+Generated: 2026-07-04T18:01:23.357Z
 
 This file is generated from host-adapter outputs and review-progress schema validation. Do not hand-edit support cells.
 
-**Public State** is the only column docs/website surface (native / verified_wrapped / verified_bridged / unsupported).
+**Support** is the human-facing roster label: `Supported` (a committed verified receipt), `Supported (beta)` (an honest installable target — full adapter chain, operator-box receipt pending), or `Unsupported` (a refuse app/connector surface). It is a PRESENTATION derivation only, decoupled from the honesty column and never an input to the gate.
+**Public State** is the evidence-derived honesty column (native / verified_wrapped / verified_bridged / unsupported) — verified_* ONLY when a valid receipt exists.
 **Target** is aspirational; **Verification** + **Floor** are DOCS-internal diagnostics (never a public claim).
 
-| Host | Surface | Installability | Public State | Target | Verification | Floor | Final State |
-|---|---|---|---|---|---|---|---|
-| claude-code-cli | cli | native | native | native | verified | native | degraded |
-| codex-cli | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
-| pi-cli | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
-| antigravity-cli | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
-| agents-file | file | target | unsupported | verified_bridged | target | — | degraded |
-| claude-code-app | app | none | unsupported | unsupported | manual_instruction | — | manual_instruction |
-| claude-code-web | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
-| codex-app | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
-| claude-ai-connector | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
-| cursor | cli | target | unsupported | verified_wrapped | target | — | degraded |
-| github-copilot | cli | target | unsupported | verified_wrapped | target | — | degraded |
-| opencode | cli | target | unsupported | verified_wrapped | target | — | degraded |
-| rovo-dev | cli | target | unsupported | verified_wrapped | target | — | degraded |
-| kiro | file | target | unsupported | verified_bridged | target | — | degraded |
-| qoder | file | target | unsupported | verified_bridged | target | — | degraded |
-| trae | file | target | unsupported | verified_bridged | target | — | degraded |
+| Host | Support | Surface | Installability | Public State | Target | Verification | Floor | Final State |
+|---|---|---|---|---|---|---|---|---|
+| claude-code-cli | Supported | cli | native | native | native | verified | native | degraded |
+| codex-cli | Supported | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
+| pi-cli | Supported | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
+| antigravity-cli | Supported | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
+| agents-file | Supported (beta) | file | target | unsupported | verified_bridged | target | — | degraded |
+| claude-code-app | Unsupported | app | none | unsupported | unsupported | manual_instruction | — | manual_instruction |
+| claude-code-web | Unsupported | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
+| codex-app | Unsupported | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
+| claude-ai-connector | Unsupported | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
+| cursor | Supported (beta) | cli | target | unsupported | verified_wrapped | target | — | degraded |
+| github-copilot | Supported (beta) | cli | target | unsupported | verified_wrapped | target | — | degraded |
+| opencode | Supported (beta) | cli | target | unsupported | verified_wrapped | target | — | degraded |
+| rovo-dev | Supported (beta) | cli | target | unsupported | verified_wrapped | target | — | degraded |
+| kiro | Supported (beta) | file | target | unsupported | verified_bridged | target | — | degraded |
+| qoder | Supported (beta) | file | target | unsupported | verified_bridged | target | — | degraded |
+| trae | Supported (beta) | file | target | unsupported | verified_bridged | target | — | degraded |
 
 ## Coverage Operations
 

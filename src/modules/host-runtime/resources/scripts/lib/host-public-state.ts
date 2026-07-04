@@ -380,6 +380,53 @@ export function deriveCurrentPublicState(
 }
 
 // ---------------------------------------------------------------------------
+// The PRESENTATION-ONLY roster label (operator policy 2026-07-04, amends R3)
+// ---------------------------------------------------------------------------
+
+/**
+ * The human-facing support label the roster + website surface. This is a DISPLAY
+ * derivation ONLY — it is NEVER an input to `hostSupportGate`, never claims
+ * verification, and is decoupled from `current_public_state` (which stays the
+ * evidence-derived honesty column). Operator policy (2026-07-04) amends R3 for
+ * PRESENTATION so an installable target with a full adapter chain reads as a beta
+ * host rather than a bare "unsupported":
+ *   - `supported`      — a verified public state (native/verified_wrapped/verified_bridged);
+ *                        a valid committed receipt exists (promoted out of beta).
+ *   - `supported_beta` — an honest installable target (verification_status "target"):
+ *                        real adapter + renderer + installer path shipped, operator-box
+ *                        receipt still pending. Rendered "Supported (beta)".
+ *   - `unsupported`    — a refuse app/connector surface, or any other non-target
+ *                        non-verified state (no support path exists).
+ *
+ * Honesty is preserved: the underlying `current_public_state` and the anti-fraud /
+ * regression / floor-coupling gate are UNCHANGED. "(beta)" IS the caveat — it means
+ * "supported target, verification pending", never "verified".
+ */
+export const DISPLAY_SUPPORT = ["supported", "supported_beta", "unsupported"] as const;
+export type DisplaySupport = (typeof DISPLAY_SUPPORT)[number];
+
+export function deriveDisplaySupport(
+  currentPublicState: PublicState,
+  verificationStatus: VerificationStatus,
+): DisplaySupport {
+  if (isVerifiedPublic(currentPublicState)) return "supported";
+  if (verificationStatus === "target") return "supported_beta";
+  return "unsupported";
+}
+
+/** The human-facing rendering of a `DisplaySupport` value (roster/matrix/website). */
+export function renderDisplaySupport(value: DisplaySupport): string {
+  switch (value) {
+    case "supported":
+      return "Supported";
+    case "supported_beta":
+      return "Supported (beta)";
+    case "unsupported":
+      return "Unsupported";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // The target-state manifest (`guild.host_expected_state.v1`, ADR §1.2)
 // ---------------------------------------------------------------------------
 
