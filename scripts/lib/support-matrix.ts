@@ -102,8 +102,9 @@ export interface HostSupportRow {
   /**
    * PRESENTATION-ONLY roster label (operator policy 2026-07-04, amends R3 for display).
    * `supported` (verified) | `supported_beta` (honest installable target, receipt
-   * pending) | `unsupported` (refuse / no path). Decoupled from the honesty column +
-   * NEVER fed to the gate.
+   * pending) | `supported_app` (refuse app surface via bootstrap path) |
+   * `supported_connector` (claude-ai-connector via remote MCP) | `unsupported` (no path).
+   * Decoupled from the honesty column + NEVER fed to the gate.
    */
   display_support: DisplaySupport;
   /** Internal diagnostics + fraud axis — NEVER public (R3). */
@@ -331,7 +332,7 @@ export function generateSupportMatrix(
     const selection = selectValidReceipt(host, bucket, receiptsByHost[host] ?? [], generatedAt);
     const verification_status = deriveVerificationStatus(derivable, bucket, selection.has_valid_receipt);
     const current_public_state = deriveCurrentPublicState(host, bucket, verification_status);
-    const display_support = deriveDisplaySupport(current_public_state, verification_status);
+    const display_support = deriveDisplaySupport(current_public_state, verification_status, { bucket, hostId: host });
     const expected = HOST_EXPECTED_STATE[host];
 
     rows.push({
@@ -406,10 +407,17 @@ export function validateSupportMatrix(matrix: SupportMatrix): MatrixValidationRe
     if (!(DISPLAY_SUPPORT as readonly string[]).includes(row.display_support)) {
       errors.push(`${row.host_id} invalid display_support ${String(row.display_support)}`);
     }
-    // Presentation invariant: a verified public state MUST read "supported" (not beta),
-    // and a beta label MUST NOT sit on a verified public state (would hide a real receipt).
-    if (row.display_support === "supported_beta" && (VERIFIED_PUBLIC_STATES as readonly string[]).includes(row.current_public_state)) {
-      errors.push(`${row.host_id} display_support is supported_beta but current_public_state is verified ${row.current_public_state}`);
+    // Presentation invariant: `supported` MUST sit on a verified public state, and every
+    // caveated label (beta/app/connector) MUST NOT — else a label would hide, or forge,
+    // a real receipt. This keeps the display column honest w.r.t. the evidence column.
+    {
+      const cpsVerified = (VERIFIED_PUBLIC_STATES as readonly string[]).includes(row.current_public_state);
+      if (row.display_support === "supported" && !cpsVerified) {
+        errors.push(`${row.host_id} display_support is "supported" but current_public_state is not verified (${row.current_public_state})`);
+      }
+      if (row.display_support !== "supported" && row.display_support !== "unsupported" && cpsVerified) {
+        errors.push(`${row.host_id} caveated display_support "${row.display_support}" sits on a verified current_public_state ${row.current_public_state}`);
+      }
     }
     if (!(VERIFICATION_STATUS as readonly string[]).includes(row.verification_status)) {
       errors.push(`${row.host_id} invalid verification_status ${String(row.verification_status)}`);

@@ -388,29 +388,50 @@ export function deriveCurrentPublicState(
  * derivation ONLY — it is NEVER an input to `hostSupportGate`, never claims
  * verification, and is decoupled from `current_public_state` (which stays the
  * evidence-derived honesty column). Operator policy (2026-07-04) amends R3 for
- * PRESENTATION so an installable target with a full adapter chain reads as a beta
- * host rather than a bare "unsupported":
- *   - `supported`      — a verified public state (native/verified_wrapped/verified_bridged);
- *                        a valid committed receipt exists (promoted out of beta).
- *   - `supported_beta` — an honest installable target (verification_status "target"):
- *                        real adapter + renderer + installer path shipped, operator-box
- *                        receipt still pending. Rendered "Supported (beta)".
- *   - `unsupported`    — a refuse app/connector surface, or any other non-target
- *                        non-verified state (no support path exists).
+ * PRESENTATION so a host with a real (if degraded) support path reads as supported
+ * rather than a bare "unsupported":
+ *   - `supported`           — a verified public state (native/verified_wrapped/verified_bridged);
+ *                             a valid committed receipt exists (promoted out of beta).
+ *   - `supported_beta`      — an honest installable target (verification_status "target"):
+ *                             real adapter + renderer + installer path shipped, operator-box
+ *                             receipt still pending. Rendered "Supported (beta)".
+ *   - `supported_app`       — a refuse APP surface (`claude-code-app`, `claude-code-web`,
+ *                             `codex-app`): no CLI package install, but a real bootstrap path
+ *                             (the app receives pointers to `.guild` artifacts / queues a
+ *                             thread-worktree packet via the file bus). Rendered "Supported (app)".
+ *   - `supported_connector` — the `claude-ai-connector` surface: Guild exposed as remote
+ *                             MCP/connector instructions (serial/enqueue-only, egress-gated).
+ *                             Rendered "Supported (connector)".
+ *   - `unsupported`         — no support path at all.
  *
  * Honesty is preserved: the underlying `current_public_state` and the anti-fraud /
- * regression / floor-coupling gate are UNCHANGED. "(beta)" IS the caveat — it means
- * "supported target, verification pending", never "verified".
+ * regression / floor-coupling gate are UNCHANGED. The app/connector surfaces stay
+ * `current_public_state: unsupported` (they can never take a package-install smoke
+ * receipt); the label communicates the *degraded bootstrap* mechanism, not a verified
+ * claim. "(beta)" / "(app)" / "(connector)" ARE the caveats, never "verified".
  */
-export const DISPLAY_SUPPORT = ["supported", "supported_beta", "unsupported"] as const;
+export const DISPLAY_SUPPORT = [
+  "supported",
+  "supported_beta",
+  "supported_app",
+  "supported_connector",
+  "unsupported",
+] as const;
 export type DisplaySupport = (typeof DISPLAY_SUPPORT)[number];
 
 export function deriveDisplaySupport(
   currentPublicState: PublicState,
   verificationStatus: VerificationStatus,
+  opts?: { bucket?: HostBucket; hostId?: HostId },
 ): DisplaySupport {
   if (isVerifiedPublic(currentPublicState)) return "supported";
   if (verificationStatus === "target") return "supported_beta";
+  // Refuse app/connector surfaces run via a degraded bootstrap path (manual_instruction
+  // / enqueue_only), NOT a package install — present them honestly as app/connector-
+  // supported rather than bare "unsupported". The one connector row gets its own label.
+  if (opts?.bucket === "refuse") {
+    return opts.hostId === "claude-ai-connector" ? "supported_connector" : "supported_app";
+  }
   return "unsupported";
 }
 
@@ -421,6 +442,10 @@ export function renderDisplaySupport(value: DisplaySupport): string {
       return "Supported";
     case "supported_beta":
       return "Supported (beta)";
+    case "supported_app":
+      return "Supported (app)";
+    case "supported_connector":
+      return "Supported (connector)";
     case "unsupported":
       return "Unsupported";
   }

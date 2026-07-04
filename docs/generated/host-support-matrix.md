@@ -1,6 +1,6 @@
 # Generated Host Support Matrix
 
-Generated: 2026-07-04T18:01:23.357Z
+Generated: 2026-07-04T22:41:01.486Z
 
 This file is generated from host-adapter outputs and review-progress schema validation. Do not hand-edit support cells.
 
@@ -15,10 +15,10 @@ This file is generated from host-adapter outputs and review-progress schema vali
 | pi-cli | Supported | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
 | antigravity-cli | Supported | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
 | agents-file | Supported (beta) | file | target | unsupported | verified_bridged | target | — | degraded |
-| claude-code-app | Unsupported | app | none | unsupported | unsupported | manual_instruction | — | manual_instruction |
-| claude-code-web | Unsupported | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
-| codex-app | Unsupported | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
-| claude-ai-connector | Unsupported | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
+| claude-code-app | Supported (app) | app | none | unsupported | unsupported | manual_instruction | — | manual_instruction |
+| claude-code-web | Supported (app) | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
+| codex-app | Supported (app) | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
+| claude-ai-connector | Supported (connector) | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
 | cursor | Supported (beta) | cli | target | unsupported | verified_wrapped | target | — | degraded |
 | github-copilot | Supported (beta) | cli | target | unsupported | verified_wrapped | target | — | degraded |
 | opencode | Supported (beta) | cli | target | unsupported | verified_wrapped | target | — | degraded |

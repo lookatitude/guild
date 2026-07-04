@@ -169,7 +169,7 @@
       "id": "lib/host-public-state",
       "source_path": "scripts/lib/host-public-state.ts",
       "resource_path": "resources/scripts/lib/host-public-state.ts",
-      "sha256": "44c0bca4a8325aae57c3cbce8599b1fd5fef5b0fc1de7d30f69c3609e2b571b9"
+      "sha256": "3c06bca97a31cca31bf1f7c39540fea5c82004a7d4074bab66dd539bbd938498"
     },
     {
       "category": "scripts",
@@ -246,7 +246,7 @@
       "id": "lib/support-matrix",
       "source_path": "scripts/lib/support-matrix.ts",
       "resource_path": "resources/scripts/lib/support-matrix.ts",
-      "sha256": "48d23a35cd1d0bdd078bae7b0744519d7cdba0aa3dfbffd28aec944ef8bd4449"
+      "sha256": "2474aaa9177a7282836430655ad6dc67e74397d83a77236fedd5a20914c536a3"
     },
     {
       "category": "scripts",

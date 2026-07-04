@@ -174,7 +174,7 @@ describe("host-public-state — two-field honesty model", () => {
   });
 });
 
-describe("display support — presentation-only beta label (amends R3 for display)", () => {
+describe("display support — presentation-only support label (beta / app / connector; amends R3 for display)", () => {
   const GENERATED_AT = "2026-07-04T00:00:00Z";
 
   it("deriveDisplaySupport is TOTAL over the public-state × verification-status product", () => {
@@ -198,9 +198,19 @@ describe("display support — presentation-only beta label (amends R3 for displa
     expect(deriveDisplaySupport("unsupported", "target")).toBe("supported_beta");
   });
 
-  it("refuse / non-target non-verified states → unsupported", () => {
-    for (const vs of ["enqueue_only", "manual_instruction", "unavailable", "no_receipt", "inferred", "degraded"] as const) {
-      expect(deriveDisplaySupport("unsupported", vs)).toBe("unsupported");
+  it("refuse app surfaces → supported_app; the connector → supported_connector", () => {
+    // A refuse-bucket row (surface_kind app) runs via a degraded bootstrap path, not a
+    // package install → presented as app/connector-supported, NOT bare unsupported.
+    for (const vs of ["enqueue_only", "manual_instruction", "unavailable"] as const) {
+      expect(deriveDisplaySupport("unsupported", vs, { bucket: "refuse", hostId: "claude-code-app" })).toBe("supported_app");
+      expect(deriveDisplaySupport("unsupported", vs, { bucket: "refuse", hostId: "codex-app" })).toBe("supported_app");
+      expect(deriveDisplaySupport("unsupported", vs, { bucket: "refuse", hostId: "claude-ai-connector" })).toBe("supported_connector");
+    }
+  });
+
+  it("a non-refuse, non-target, non-verified state → unsupported (no path)", () => {
+    for (const vs of ["no_receipt", "inferred", "degraded", "unavailable"] as const) {
+      expect(deriveDisplaySupport("unsupported", vs, { bucket: "wrapped-cli", hostId: "opencode" })).toBe("unsupported");
     }
   });
 
@@ -222,11 +232,16 @@ describe("display support — presentation-only beta label (amends R3 for displa
     // floors (an empty-receipt matrix would honestly trip the floor-regression check).
     const matrix = generateSupportMatrix(GENERATED_AT, loadCommittedReceipts());
     const byHost = new Map(matrix.rows.map((r) => [r.host_id, r]));
-    // Verified hosts read Supported; honest installable targets read beta; refuse rows unsupported.
+    // Verified hosts read Supported; installable targets read beta; app surfaces read app;
+    // the connector reads connector. Every host presents as supported in some form.
     expect(byHost.get("claude-code-cli")!.display_support).toBe("supported");
     expect(byHost.get("cursor")!.display_support).toBe("supported_beta");
     expect(byHost.get("agents-file")!.display_support).toBe("supported_beta");
-    expect(byHost.get("claude-code-app")!.display_support).toBe("unsupported");
+    expect(byHost.get("claude-code-app")!.display_support).toBe("supported_app");
+    expect(byHost.get("codex-app")!.display_support).toBe("supported_app");
+    expect(byHost.get("claude-ai-connector")!.display_support).toBe("supported_connector");
+    // No host is bare "unsupported" any more (all four refuse rows are app/connector-supported).
+    expect(matrix.rows.every((r) => r.display_support !== "unsupported")).toBe(true);
     // Every row carries an in-enum display_support, and the two-field gate still validates.
     for (const row of matrix.rows) expect(DISPLAY_SUPPORT).toContain(row.display_support);
     expect(validateSupportMatrix(matrix).valid).toBe(true);
@@ -235,6 +250,8 @@ describe("display support — presentation-only beta label (amends R3 for displa
   it("renderDisplaySupport maps to the human-facing strings", () => {
     expect(renderDisplaySupport("supported")).toBe("Supported");
     expect(renderDisplaySupport("supported_beta")).toBe("Supported (beta)");
+    expect(renderDisplaySupport("supported_app")).toBe("Supported (app)");
+    expect(renderDisplaySupport("supported_connector")).toBe("Supported (connector)");
     expect(renderDisplaySupport("unsupported")).toBe("Unsupported");
   });
 });
