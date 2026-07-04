@@ -7,6 +7,17 @@ node_modules/
 # or mcp-servers/*/dist build artifacts. (universal-host-p0 L2; FU-3 resolved.)
 /dist/
 
+# Committed host-smoke verification receipts (verified-multi-host-support L0 §6.1/§7.5).
+# The evidence store is SHARED-SCRUBBED and tracked, but NARROWLY: only the receipt tree
+# under evidence/host-smoke/** is admitted. Everything else under evidence/ stays ignored
+# so a stray operator artifact placed ADJACENT can never be committed (SEC-m1). This
+# allow-list is DISJOINT from /dist/ above (packages are regenerated, never tracked) so the
+# two audit scans (`.guild/runs` share-set vs the package/receipt path-anchored scan)
+# neither overlap nor gap. The audit.ts §7.2 scan is anchored to exactly evidence/host-smoke.
+/evidence/**
+!/evidence/host-smoke/
+!/evidence/host-smoke/**
+
 # Fixture .guild/ dirs must be tracked (they are static test fixtures, not live runtime state).
 # These exemptions are non-negotiable — preserved verbatim per share-dot-guild constraints.
 # Keep this list in sync with FIXTURE_EXEMPT_PATTERNS in plugin/scripts/dot-guild/audit.ts (FU-F).

@@ -15,6 +15,10 @@ import { spawnSync } from "child_process";
 // Canonical single-source share-set membership (re-arch WAVE 1) — the former
 // "keep in sync" mirror of scrub.ts (SCRUB_SHARED_NAMES + inScrubShareSet) is gone.
 import { inShareSet } from "../lib/shared/share-set";
+// Canonical single-source redaction applier (verified-multi-host-support L0 §6.4).
+// The package/receipt leak scan (§7.2) runs the SAME `redact` the write path runs,
+// in-memory, so the scan and the scrub can never drift.
+import { redact } from "../lib/shared/scrub-redact";
 
 const args = process.argv.slice(2);
 const wsArg   = args.find(a => a.startsWith("--workspace="));
@@ -28,7 +32,7 @@ const repoList: string[] = reposArg
   : [WORKSPACE];
 const outputPath = outArg ? outArg.split("=")[1] : undefined;
 
-interface FileFlag { runId: string; file: string; kind: "operator-path" | "secret" | "payload-excluded" | "nested-guild" | "scrub-uncovered"; detail: string; }
+interface FileFlag { runId: string; file: string; kind: "operator-path" | "secret" | "payload-excluded" | "nested-guild" | "scrub-uncovered" | "receipt-operator-path" | "receipt-secret"; detail: string; }
 
 // SC-7 blind-spot guard: scrub.ts's share-set is now the canonical single-source
 // module (scripts/lib/shared/share-set.ts, imported as inShareSet). audit.ts only
@@ -98,6 +102,79 @@ function findScrubCoverageGaps(repoPath: string): FileFlag[] {
         kind: "scrub-uncovered",
         detail: "git-trackable (would be shared) but outside scrub.ts's share-set — no redaction pass; SC-7 blind spot",
       });
+    }
+  }
+  return flags;
+}
+
+// verified-multi-host-support L0 §7.2 — the REAL AC-SEC-1 package/receipt-tree leak
+// scan. SEPARATE, PATH-ANCHORED from scrub.ts's `.guild/runs`-scoped share-set: this
+// scan is anchored to the committed evidence store (`evidence/host-smoke`, ADR §6.1)
+// — it does NOT widen share-set.ts's SHARED_SCRUBBED_NAMES (that basename set is one
+// function on two call sites; widening it would leak these basenames into the runs
+// share-set — security round-3 F2). The narrow-allowlisted paths here are DISJOINT
+// from /dist/ (fully .gitignore-ignored, regenerated) so the runs scan and this scan
+// neither overlap nor gap.
+const PACKAGE_RECEIPT_SCAN_ROOTS = ["evidence/host-smoke"];
+
+// §7.2 exact file selection — mirrors the existing `.guild/runs` coverage guard
+// (findScrubCoverageGaps): walk the anchored root on disk (local build:verify sees
+// tracked+staged+untracked; CI's checkout has only tracked files, so the SAME code
+// naturally sees only tracked), then batch-query `git check-ignore --stdin -z` and
+// scan ONLY the files git would track (would be shared). Per non-ignored file run the
+// SHARED `redact` in-memory and flag an operator-path finding iff `opPaths > 0` and a
+// secret finding iff `secrets.length > 0` (round-2 minor: the two counters are
+// INDEPENDENT — never conflated; `out === content` is L8's separate no-op assertion,
+// NOT used here). On git status 128 (not a git repo) SKIP (additive, like the guard).
+function findPackageReceiptLeaks(repoPath: string): FileFlag[] {
+  const flags: FileFlag[] = [];
+  for (const rootRel of PACKAGE_RECEIPT_SCAN_ROOTS) {
+    const scanRoot = path.join(repoPath, rootRel);
+    if (!fs.existsSync(scanRoot)) continue;
+
+    const files: string[] = [];
+    (function walk(dir: string): void {
+      let entries: fs.Dirent[];
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (e.isFile()) files.push(full);
+      }
+    })(scanRoot);
+    if (files.length === 0) continue;
+
+    const rel = (p: string) => path.relative(repoPath, p);
+    const checked = spawnSync(
+      "git", ["-C", repoPath, "check-ignore", "--stdin", "-z"],
+      { input: files.map(rel).join("\0"), encoding: "utf8" },
+    );
+    // 0 (some ignored), 1 (none ignored), 128 (error e.g. not a git repo).
+    if (checked.status === 128) continue;
+    const ignored = new Set((checked.stdout ?? "").split("\0").filter(Boolean));
+
+    for (const abs of files) {
+      const relToRepo = rel(abs);
+      if (ignored.has(relToRepo)) continue; // ignored ⇒ not shared ⇒ skip
+      let content: string;
+      try { content = fs.readFileSync(abs, "utf8"); } catch { continue; }
+      const { opPaths, secrets } = redact(content);
+      if (opPaths > 0) {
+        flags.push({
+          runId: "(evidence)",
+          file: relToRepo,
+          kind: "receipt-operator-path",
+          detail: `${opPaths} operator path(s) present in a committed/shareable receipt — would leak on commit`,
+        });
+      }
+      if (secrets.length > 0) {
+        flags.push({
+          runId: "(evidence)",
+          file: relToRepo,
+          kind: "receipt-secret",
+          detail: `${secrets.length} secret pattern(s) present in a committed/shareable receipt — [${secrets.map(s => s.category).join(", ")}]`,
+        });
+      }
     }
   }
   return flags;
@@ -195,6 +272,8 @@ function renderReport(repoResults: Array<{ repo: string; flags: FileFlag[] }>, n
     for (const f of r.flags) {
       const action = f.kind === "operator-path" ? "Run scrub.ts before commit"
         : f.kind === "secret" ? "Rotate credential; scrub.ts will redact"
+        : f.kind === "receipt-operator-path" ? "Scrub the receipt at write time via the shared redact() (L5), OR remove it from the evidence/host-smoke allow-list so it is not shared"
+        : f.kind === "receipt-secret" ? "Rotate the credential; the receipt MUST be redacted (shared redact()) before it is staged — evidence receipts are shared-scrubbed"
         : f.kind === "nested-guild" ? "DELETE the nested .guild/ — it's a leftover; resolver enforces one-.guild-per-repo. If legitimate fixture, add its path to FIXTURE_EXEMPT_PATTERNS"
         : f.kind === "scrub-uncovered" ? "Add the file's basename to scrub.ts SHARED_SCRUBBED_NAMES (so it gets a redaction pass), OR exempt it in SCRUB_COVERAGE_EXEMPT_NAMES if it carries no operator content, OR remove it from the .gitignore allow-list so it is not shared"
         : "Informational — add share-payloads.flag to opt in";
@@ -216,7 +295,11 @@ function main(): void {
     const nestedLeaks = findNestedGuildLeaks(repo);
     // SC-7 blind-spot guard: flag git-trackable run files scrub doesn't cover.
     const coverageGaps = findScrubCoverageGaps(repo);
-    repoResults.push({ repo: path.relative(WORKSPACE, repo) || path.basename(repo), flags: [...flags, ...nestedLeaks, ...coverageGaps] });
+    // AC-SEC-1 (verified-multi-host-support §7.2): the REAL package/receipt-tree leak
+    // scan — a planted operator-path/secret in a committed evidence receipt is flagged
+    // non-vacuously. Path-anchored + independent of the runs share-set.
+    const receiptLeaks = findPackageReceiptLeaks(repo);
+    repoResults.push({ repo: path.relative(WORKSPACE, repo) || path.basename(repo), flags: [...flags, ...nestedLeaks, ...coverageGaps, ...receiptLeaks] });
   }
 
   const report = renderReport(repoResults, now);

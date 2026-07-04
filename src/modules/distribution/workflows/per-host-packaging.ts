@@ -632,6 +632,169 @@ export function renderAntigravityManifest(
 }
 
 // ---------------------------------------------------------------------------
+// SHARED renderer base (verified-multi-host-support L0 §4.2 / AC-PKG-3)
+// ---------------------------------------------------------------------------
+//
+// The 4 new-CLI hosts (cursor, github-copilot, opencode, rovo-dev) MUST be built
+// on ONE shared render-extension base — NOT copy-pasted. The 5 EXISTING bespoke
+// renderers (claude, codex, pi, antigravity, agents) stay as-is (A-m3 — the two
+// patterns coexist); only the NEW renderers are mandated onto this base. IDE hosts
+// (kiro/qoder/trae) carry NO per-host renderer — they REUSE renderAgentsPackage via
+// the registry `adapter_binding: "agents-file"` dereference (AC-REG-4 / AC-ADP-1).
+//
+// PURITY is preserved (§ CONTRACT): the renderer reads NO registry and does NO I/O.
+// The registry-derived host facts (the schema_version and host_id) are supplied by
+// the I/O caller (build-host-packages.ts, which reads the row) via WrappedCliRenderSpec
+// — mirroring the L2 adapter discipline "the renderer/adapter consumes the row, it
+// never re-declares host facts".
+
+/**
+ * Registry-derived host facts the pure wrapped-CLI renderer needs. The caller
+ * (build-host-packages.ts) reads these from the host's HostRegistryEntry:
+ *   - schemaVersion   ← capabilities.package.manifest_format  (e.g. "cursor-package")
+ *   - hostId          ← host_id                                (e.g. "cursor")
+ *   - agentsSkillRoot ← the packaging contract L2's adapter surfaces (".agents/skills/guild")
+ *   - launcher        ← the 11th-concern guild-run bin path    ("bin/guild-run")
+ */
+export interface WrappedCliRenderSpec {
+  /** The host's registry id, echoed for traceability (e.g. "cursor"). */
+  hostId: string;
+  /** The host's package schema id — capabilities.package.manifest_format (e.g. "cursor-package"). */
+  schemaVersion: string;
+  /** Where the Guild skill tree is exposed in the package (L2 packaging contract). */
+  agentsSkillRoot: string;
+  /** The bundled guild-run launcher path (AC-BOOT-1, the 11th concern). */
+  launcher: string;
+}
+
+/**
+ * The rendered wrapped-CLI package manifest — the shared shape all 4 new-CLI hosts
+ * emit. Modeled on the Pi/Antigravity extension surface (commands as descriptors,
+ * skill dirs passed through, native agents/hooks/MCP flagged in `_unsupported`).
+ * `schema_version` is the host's own `manifest_format` so each host's package is
+ * self-identifying. R1: a rendered manifest is NEVER support — `installability`
+ * stays "target" and `_provenance` "inferred" until an operator-box receipt promotes
+ * the derived public state (host-public-state.ts, L5/L7).
+ */
+export interface WrappedCliPackage {
+  /** Host-own package schema id, e.g. "cursor-package" (from manifest_format). */
+  schema_version: string;
+  /** Registry host id, e.g. "cursor". */
+  host_id: string;
+  name: string;
+  version: string;
+  description: string;
+  homepage?: string;
+  repository?: string;
+  author?: { name: string; email?: string };
+  license?: string;
+  keywords?: string[];
+  commands?: PiCommandEntry[];
+  skills?: string[];
+  /** Where the Guild skill tree lives in the package (L2 packaging contract). */
+  agents_skill_root: string;
+  /** The bundled guild-run launcher (11th concern, AC-BOOT-1). */
+  launcher: string;
+  /** Install semantics — target/unproven (R1: renderer ≠ support). */
+  installability: "target";
+  _unsupported?: UnsupportedField[];
+  _rendered_at: string;
+  _source_version: string;
+  /** Registry provenance for the row that backed the render (INFERRED until operator-box verify). */
+  _provenance: "inferred";
+}
+
+/**
+ * The near-identical extension body shared by the wrapped-CLI renderers: commands
+ * as descriptors, skills passed through, and native agents/hooks/MCP degraded to
+ * `_unsupported` (render-or-degrade). Factored out so the 4 new-CLI renderers carry
+ * ZERO copy-pasted logic — the ONE definition of "what a wrapped-CLI package can and
+ * cannot express" (AC-PKG-3).
+ */
+function buildWrappedCliExtensionBody(manifest: GuildPluginManifest): {
+  commands: PiCommandEntry[];
+  skills: string[];
+  unsupported: UnsupportedField[];
+} {
+  const unsupported: UnsupportedField[] = [];
+
+  const commands: PiCommandEntry[] = (manifest.commands ?? []).map((cmdPath) => ({
+    name: commandNameFromPath(cmdPath),
+    source_path: cmdPath,
+  }));
+  const skills = manifest.skills ?? [];
+
+  if (manifest.mcpServers && manifest.mcpServers.length > 0) {
+    for (const srv of manifest.mcpServers) {
+      unsupported.push({
+        field: `mcpServers[${srv.id}]`,
+        reason:
+          "Wrapped-CLI hosts have no confirmed native MCP surface in the package format; this server is " +
+          "reachable only when the host provides an MCP transport, else it degrades to the filesystem/BM25 " +
+          "fallback the guild-run wrapper coordinates (ADR Surface 1 + Surface 7 render-or-degrade).",
+      });
+    }
+  }
+  if (manifest.agents && manifest.agents.length > 0) {
+    unsupported.push({
+      field: "agents",
+      reason:
+        "Wrapped-CLI hosts have no native agent-definition mechanism; specialists are dispatched through the " +
+        "Guild skill tree exposed under agents_skill_root instead of a host-native agent format.",
+    });
+  }
+  if (manifest.hooks && manifest.hooks.length > 0) {
+    unsupported.push({
+      field: "hooks",
+      reason:
+        "Wrapped-CLI hosts have no native session-hook surface; lifecycle steps (run-start preflight + the " +
+        "using-guild gateway) are injected by the bundled bin/guild-run wrapper (AC-BOOT-1), not host hooks.",
+    });
+  }
+
+  return { commands, skills, unsupported };
+}
+
+/**
+ * Render a wrapped-CLI package manifest from a neutral GuildPluginManifest + the
+ * registry-derived spec. This is the ONE shared base the 4 new-CLI hosts render on
+ * (AC-PKG-3). The only per-host difference is the spec (schema_version + host_id) —
+ * every host-neutral fact comes from `manifest`, every host-specific fact comes from
+ * `spec` (read off the registry row by the caller), so a new wrapped-CLI host is a
+ * one-line call, never a copy-pasted renderer.
+ */
+export function renderWrappedCliPackage(
+  manifest: GuildPluginManifest,
+  opts: RenderOptions,
+  spec: WrappedCliRenderSpec
+): WrappedCliPackage {
+  const { commands, skills, unsupported } = buildWrappedCliExtensionBody(manifest);
+
+  const result: WrappedCliPackage = {
+    schema_version: spec.schemaVersion,
+    host_id: spec.hostId,
+    name: manifest.name,
+    version: manifest.version,
+    description: manifest.description,
+    agents_skill_root: spec.agentsSkillRoot,
+    launcher: spec.launcher,
+    installability: "target",
+    _rendered_at: opts.renderedAt,
+    _source_version: manifest.version,
+    _provenance: "inferred",
+  };
+  if (manifest.homepage !== undefined) result.homepage = manifest.homepage;
+  if (manifest.repository !== undefined) result.repository = manifest.repository;
+  if (manifest.author !== undefined) result.author = manifest.author;
+  if (manifest.license !== undefined) result.license = manifest.license;
+  if (manifest.keywords && manifest.keywords.length > 0) result.keywords = manifest.keywords;
+  if (commands.length > 0) result.commands = commands;
+  if (skills.length > 0) result.skills = skills;
+  if (unsupported.length > 0) result._unsupported = unsupported;
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // renderAgentsPackage (P1-L6) — the universal AGENTS.md instruction-file target
 // ---------------------------------------------------------------------------
 

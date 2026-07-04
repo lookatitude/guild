@@ -16,46 +16,11 @@ import * as path from "path";
 // Canonical single-source share-set membership (re-arch WAVE 1). audit.ts imports
 // the same module — no "keep in sync" duplicate.
 import { inShareSet, isPayloadFile } from "../lib/shared/share-set";
-
-// Import canonical secret patterns — do NOT re-spell the regexes (Decision H.3).
-// tsx handles .ts cross-imports at runtime.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { SECRET_PATTERNS } = require(
-  path.resolve(__dirname, "../docs-hygiene/scan.ts")
-) as { SECRET_PATTERNS: Array<[RegExp, string]> };
-
-// Operator-path patterns (Decision H.2 + Decision M relative-paths-policy).
-// Placeholders are idempotent — they won't re-match.
-const OPERATOR_PATH_RE = /\/Users\/[^/\s]+\/Projects\/[^/\s]+/g;
-const WORKSPACE_ROOT_MARKER = "<workspace-root>";
-// Decision M: tilde-prefixed Claude project paths leak the workspace via the
-// URL-encoded slug `~/.claude/projects/-Users-<NAME>-Projects-<WS>/...`.
-const TILDE_CLAUDE_PROJECT_RE = /~\/\.claude\/projects\/-Users-[^/\s]+-Projects-[^/\s]+/g;
-const OPERATOR_MEMORY_ROOT_MARKER = "<operator-memory-root>";
-
-interface SecretHit { category: string; line: number; }
-
-function redact(content: string): { out: string; opPaths: number; secrets: SecretHit[] } {
-  let opPaths = 0;
-  let out = content.replace(OPERATOR_PATH_RE, () => { opPaths++; return WORKSPACE_ROOT_MARKER; });
-  // Decision M: also redact tilde-prefixed Claude project paths.
-  out = out.replace(TILDE_CLAUDE_PROJECT_RE, () => { opPaths++; return OPERATOR_MEMORY_ROOT_MARKER; });
-  const secrets: SecretHit[] = [];
-  const lines = out.split("\n");
-  out = lines.map((line, i) => {
-    let l = line;
-    for (const [re, label] of SECRET_PATTERNS) {
-      const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
-      if (g.test(l)) {
-        secrets.push({ category: label, line: i + 1 });
-        l = l.replace(new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g"),
-          `<SECRET-REDACTED:${label}>`);
-      }
-    }
-    return l;
-  }).join("\n");
-  return { out, opPaths, secrets };
-}
+// Canonical single-source redaction applier (verified-multi-host-support L0 §6.4,
+// security F1). The operator-path + tilde-Claude-path + secret-pattern logic lives
+// in ONE module; audit.ts's package/receipt leak scan imports the SAME `redact` so
+// the write path and the scan can never drift.
+import { redact } from "../lib/shared/scrub-redact";
 
 function walkDir(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];

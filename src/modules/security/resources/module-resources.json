@@ -54,6 +54,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/shared/scrub-redact",
+      "source_path": "scripts/lib/shared/scrub-redact.ts",
+      "resource_path": "resources/scripts/lib/shared/scrub-redact.ts",
+      "sha256": "1ff274fdf9c4249f3aa124e169bcd62f7d99d01cc8ab102faaf758c713772381"
+    },
+    {
+      "category": "scripts",
       "id": "lib/shared/share-set",
       "source_path": "scripts/lib/shared/share-set.ts",
       "resource_path": "resources/scripts/lib/shared/share-set.ts",

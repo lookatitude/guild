@@ -60,10 +60,15 @@ import {
   renderPiManifest,
   renderAntigravityManifest,
   renderAgentsPackage,
+  renderWrappedCliPackage,
   type GuildPluginManifest,
   type McpServerEntry as NeutralMcpServerEntry,
   type HookEntry as NeutralHookEntry,
 } from "./lib/per-host-packaging";
+// verified-multi-host-support L0 §4.2 — the new-CLI package trees read their host
+// facts (schema_version, host_id) from the L1 registry row (the renderer never
+// re-declares host facts). The 4 new-CLI ids are installability:"target".
+import { HOST_REGISTRY_ROWS } from "./lib/host-registry-schema";
 import {
   checkClaudeEquivalence,
   type LogicalPackage,
@@ -586,6 +591,73 @@ export function writeAntigravityTree(
 }
 
 // ---------------------------------------------------------------------------
+// verified-multi-host-support L0 — new-CLI host trees (shared renderer base)
+// ---------------------------------------------------------------------------
+
+/**
+ * The 4 new-CLI installable hosts (ADR §1.1/§2.3). Each renders on the ONE shared
+ * wrapped-CLI renderer base (renderWrappedCliPackage, AC-PKG-3) — NOT a per-host
+ * copy. IDE hosts (kiro/qoder/trae) are ABSENT here: they dereference the agents-file
+ * renderer via adapter_binding (no per-host package tree).
+ */
+const NEW_CLI_HOST_IDS = ["cursor", "github-copilot", "opencode", "rovo-dev"] as const;
+type NewCliHostId = (typeof NEW_CLI_HOST_IDS)[number];
+
+/** The Guild skill-tree root inside a wrapped-CLI package (L2 packaging contract). */
+const WRAPPED_CLI_AGENTS_SKILL_ROOT = ".agents/skills/guild";
+/** The 11th-concern guild-run launcher path shipped in every package (AC-BOOT-1). */
+const GUILD_RUN_LAUNCHER = "bin/guild-run";
+
+/**
+ * Build the WrappedCliRenderSpec for a new-CLI host from its L1 registry row. The
+ * schema_version is the row's own capabilities.package.manifest_format (e.g.
+ * "cursor-package") — the renderer stays PURE and the host fact comes from the row.
+ */
+function wrappedCliSpec(hostId: NewCliHostId): {
+  hostId: string;
+  schemaVersion: string;
+  agentsSkillRoot: string;
+  launcher: string;
+} {
+  const row = HOST_REGISTRY_ROWS[hostId];
+  return {
+    hostId: row.host_id,
+    schemaVersion: row.capabilities.package.manifest_format,
+    agentsSkillRoot: WRAPPED_CLI_AGENTS_SKILL_ROOT,
+    launcher: GUILD_RUN_LAUNCHER,
+  };
+}
+
+/**
+ * Emit a new-CLI package: the shared wrapped-CLI manifest (`<host>-manifest.json`) +
+ * the Guild skill tree under .agents/skills/guild/** + the bundled guild-run CLI +
+ * the bin/guild-run launcher (the 11th concern). The manifest schema_version =
+ * capabilities.package.manifest_format so verify can find it deterministically. R1:
+ * the tree existing is NEVER support — installability stays "target".
+ */
+export function writeNewCliTree(
+  root: string,
+  inv: GuildInventoryV1,
+  distRoot: string,
+  generatedAt: string,
+  hostId: NewCliHostId,
+  resourceResolver?: ModuleResourceResolver
+): string {
+  const dest = path.join(distRoot, hostId);
+  rmrf(dest);
+  const resources = resourceResolver ?? loadModuleResourceResolver(root);
+  const manifest = renderWrappedCliPackage(
+    toNeutralManifest(inv),
+    { renderedAt: generatedAt },
+    wrappedCliSpec(hostId)
+  );
+  writeFileEnsured(path.join(dest, `${hostId}-manifest.json`), stableJson(manifest));
+  exposeGuildSkillTree(root, inv, dest, resources);
+  writeLauncher(dest, hostId);
+  return dest;
+}
+
+// ---------------------------------------------------------------------------
 // Gate references
 // ---------------------------------------------------------------------------
 
@@ -631,6 +703,8 @@ export interface BuildResult {
   agentsDir: string;
   piDir: string;
   antigravityDir: string;
+  /** verified-multi-host-support: the 4 new-CLI trees, keyed by host id. */
+  newCliDirs: Record<string, string>;
   gateOk: boolean;
   reasons: string[];
   claudeInstallSurface?: ClaudeInstallSurfaceCheck;
@@ -704,6 +778,11 @@ export function buildHostPackages(opts: {
   const agentsDir = writeAgentsTree(opts.root, inv, opts.distRoot, opts.generatedAt, resources);
   const piDir = writePiTree(opts.root, inv, opts.distRoot, opts.generatedAt, resources);
   const antigravityDir = writeAntigravityTree(opts.root, inv, opts.distRoot, opts.generatedAt, resources);
+  // verified-multi-host-support: the 4 new-CLI trees on the shared renderer base.
+  const newCliDirs: Record<string, string> = {};
+  for (const hostId of NEW_CLI_HOST_IDS) {
+    newCliDirs[hostId] = writeNewCliTree(opts.root, inv, opts.distRoot, opts.generatedAt, hostId, resources);
+  }
 
   const reasons: string[] = [];
   if (opts.syncClaudeInstall) {
@@ -741,6 +820,12 @@ export function buildHostPackages(opts: {
       checkSubset(newHostPackageRefs("pi", inv, (piManifest.commands ?? []).map((c) => c.name)), inv),
       checkSubset(newHostPackageRefs("antigravity", inv, (antigravityManifest.commands ?? []).map((c) => c.name)), inv),
     ];
+    // verified-multi-host-support: subset-gate the 4 new-CLI packages from their
+    // RENDERED command names (same discipline as the other new-host refs).
+    for (const hostId of NEW_CLI_HOST_IDS) {
+      const pkg = renderWrappedCliPackage(neutral, { renderedAt: opts.generatedAt }, wrappedCliSpec(hostId));
+      subsets.push(checkSubset(newHostPackageRefs(hostId, inv, (pkg.commands ?? []).map((c) => c.name)), inv));
+    }
     for (const s of subsets) if (!s.ok) reasons.push(...s.reasons);
   }
 
@@ -751,6 +836,7 @@ export function buildHostPackages(opts: {
     agentsDir,
     piDir,
     antigravityDir,
+    newCliDirs,
     gateOk: reasons.length === 0,
     reasons,
     claudeInstallSurface,
@@ -820,6 +906,7 @@ function main(): number {
     result.agentsDir,
     result.piDir,
     result.antigravityDir,
+    ...Object.values(result.newCliDirs),
   ]) {
     process.stdout.write(`build:hosts: wrote ${d}\n`);
   }

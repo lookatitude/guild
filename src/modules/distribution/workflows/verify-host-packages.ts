@@ -10,6 +10,19 @@ import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { PLUGIN_ROOT } from "./build-inventory";
+import { HOST_REGISTRY_ROWS } from "../../host-runtime";
+
+/**
+ * The 4 new-CLI installable hosts (verified-multi-host-support L0 §1.1/§2.3). They
+ * are verified at the CONTENTS level: manifest present + self-identifying
+ * schema_version (from the registry row's manifest_format) + installability "target"
+ * + the Guild skill tree + the bin/guild-run launcher (AC-BOOT-1). They are NOT
+ * driven through a `guild-run` runtime dry-run like the 5 proven hosts: these rows are
+ * installability:"target" (renderer exists, runtime install unproven), and the
+ * wrapper's HOST_CAPABILITY_ROWS is not yet wired for them (host-runtime followup) —
+ * so a runtime dry-run would (correctly) fail. R1: a package existing is not support.
+ */
+const NEW_CLI_HOST_IDS = ["cursor", "github-copilot", "opencode", "rovo-dev"] as const;
 
 export interface HostPackageVerification {
   ok: boolean;
@@ -157,6 +170,24 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
   verifyWrapper(distRoot, "codex", { host: "codex", command: "codex", adapter: "codex-cli" }, checks, errors);
   verifyWrapper(distRoot, "pi", { host: "pi", command: "pi", adapter: "pi-cli" }, checks, errors);
   verifyWrapper(distRoot, "antigravity", { host: "antigravity", command: "agy", adapter: "antigravity-cli" }, checks, errors);
+
+  // verified-multi-host-support — contents-level coverage per new-CLI installable host.
+  for (const hostId of NEW_CLI_HOST_IDS) {
+    const manifestRel = `${hostId}/${hostId}-manifest.json`;
+    requireFile(distRoot, manifestRel, checks, errors);
+    requireFile(distRoot, `${hostId}/bin/guild-run`, checks, errors);
+    // The Guild skill tree (incl. the using-guild bootstrap) is exposed under
+    // .agents/skills/guild/** — the L2 packaging contract's agents_skill_root.
+    requireFile(distRoot, `${hostId}/.agents/skills/guild/meta/using-guild/SKILL.src.md`, checks, errors);
+    // The bundled guild-run CLI the launcher forwards to (the 11th concern).
+    requireFile(distRoot, `${hostId}/scripts/guild-run.ts`, checks, errors);
+    // The manifest is self-identifying from the registry row's manifest_format, and
+    // honestly declares installability:"target" (renderer ≠ support, R1).
+    verifyJsonField(distRoot, manifestRel, "schema_version", HOST_REGISTRY_ROWS[hostId].capabilities.package.manifest_format, checks, errors);
+    verifyJsonField(distRoot, manifestRel, "host_id", hostId, checks, errors);
+    verifyJsonField(distRoot, manifestRel, "installability", "target", checks, errors);
+    verifyJsonField(distRoot, manifestRel, "launcher", "bin/guild-run", checks, errors);
+  }
 
   return { ok: errors.length === 0, checks, errors };
 }

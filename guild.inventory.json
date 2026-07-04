@@ -2083,6 +2083,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/shared/scrub-redact",
+      "source_path": "scripts/lib/shared/scrub-redact.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/shared/share-set",
       "source_path": "scripts/lib/shared/share-set.ts",
       "kind": "lib"
