@@ -12,7 +12,7 @@
  *     - HTTP MCP flagged in _unsupported (cannot be bundled in Codex manifest)
  *     - agents flagged in _unsupported (no Codex equivalent)
  *     - skills flagged in _unsupported (no Codex equivalent)
- *     - hooks flagged in _unsupported (hook taxonomy differs)
+ *     - hooks route to the Codex UserPromptSubmit bridge manifest
  *     - schema_version is exactly "codex-plugin.v1"
  *     - _rendered_at comes from caller opts, not the clock
  *   (renderGeminiToml coverage was removed when Gemini was sunset 2026-06-14.)
@@ -198,6 +198,11 @@ describe("renderCodexPluginJson — happy path", () => {
     expect(out.skills).toBe("./.agents/skills/");
   });
 
+  it("points Codex at the Guild prompt bridge hook manifest", () => {
+    const out = renderCodexPluginJson(fullManifest, opts);
+    expect(out.hooks).toBe("./hooks/codex-hooks.json");
+  });
+
   it("renders live Codex interface metadata", () => {
     const out = renderCodexPluginJson(fullManifest, opts);
     expect(out.interface.displayName).toBe("Guild Stack");
@@ -213,7 +218,7 @@ describe("renderCodexPluginJson — happy path", () => {
 // ---------------------------------------------------------------------------
 
 describe("renderCodexPluginJson — render-or-degrade", () => {
-  it("does not render unsupported command/MCP/agent/hook fields into Codex plugin.json", () => {
+  it("does not render unsupported command/MCP/agent fields into Codex plugin.json", () => {
     const manifest: GuildPluginManifest = {
       ...fullManifest,
       mcpServers: [{ id: "remote-srv", transport: "http", url: "https://example.com/mcp" }],
@@ -222,7 +227,7 @@ describe("renderCodexPluginJson — render-or-degrade", () => {
     expect("commands" in out).toBe(false);
     expect("mcpServers" in out).toBe(false);
     expect("agents" in out).toBe(false);
-    expect("hooks" in out).toBe(false);
+    expect(out.hooks).toBe("./hooks/codex-hooks.json");
     expect(out.skills).toBe("./.agents/skills/");
   });
 });

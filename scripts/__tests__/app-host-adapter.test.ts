@@ -52,6 +52,7 @@ describe("R10 app-host concrete adapters", () => {
       });
       expect(adapter.dispatch({ taskRun: { prompt: "Do work" } }).value).toHaveProperty("support_state");
       expect(adapter.renderCommandSurface({ commandIds: ["guild"] }).value).toHaveProperty("support_state");
+      expect(adapter.renderCommandSurface({ commandIds: ["guild"] }).value).toHaveProperty("desktop_command_guidance");
       expect(adapter.renderPermissionDecision({ decision: { host_mode: "ask" } })).toMatchObject({
         status: "degraded",
         value: { support_state: "manual_instruction" },
@@ -64,6 +65,45 @@ describe("R10 app-host concrete adapters", () => {
       expect(["degraded", "unavailable"]).toContain(memory.status);
       expect(memory.value).toHaveProperty("support_state");
     }
+  });
+
+  it("Codex App command surface names the local plugin bridge, slash probe, and explicit fallback", () => {
+    const commandSurface = createHostAdapter("codex-app").renderCommandSurface({ commandIds: ["guild"] });
+    expect(commandSurface).toMatchObject({
+      status: "degraded",
+      value: {
+        support_state: "manual_instruction",
+        desktop_command_guidance: {
+          invocation: "local_plugin_bridge",
+          primary: "/guild:status",
+          codex_app_local_plugin_link:
+            "codex://plugins/guild?marketplacePath=<absolute-path-to-dist/codex-marketplace/.agents/plugins/marketplace.json>",
+          codex_prompt_bridge: {
+            hook_event: "UserPromptSubmit",
+            accepted_forms: ["/guild", "/guild:<verb>", "/guild <verb>"],
+            unknown_verb_behavior: "block_with_known_command_list",
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(commandSurface.value)).toContain("@");
+    expect(JSON.stringify(commandSurface.value)).toContain("rejects unknown slash text before hooks run");
+  });
+
+  it("Claude desktop command surface names the native /guild expectation and CLI/manual fallback", () => {
+    const commandSurface = createHostAdapter("claude-code-app").renderCommandSurface({ commandIds: ["guild"] });
+    expect(commandSurface).toMatchObject({
+      status: "degraded",
+      value: {
+        support_state: "manual_instruction",
+        desktop_command_guidance: {
+          invocation: "native_slash",
+          primary: '/guild:guild "your task"',
+        },
+      },
+    });
+    expect(JSON.stringify(commandSurface.value)).toContain("Claude Code CLI Guild plugin install");
+    expect(JSON.stringify(commandSurface.value)).toContain("confirm /guild:guild appears and dispatches");
   });
 
   it("local app memory fails visibly when no memory transport is advertised", () => {
@@ -115,7 +155,7 @@ describe("R10 install.sh app/connector refusal", () => {
       cwd: PLUGIN_ROOT,
       env: { ...process.env, PATH: "/usr/bin:/bin" },
     });
-    expect(res.status).toBe(0);
+    expect(res.status).toBe(4);
     expect(res.stderr).toContain("not a CLI package install target");
     expect(res.stderr).toContain("connector/app bootstrap contract");
     expect(res.stderr).toContain("--host claude-code-cli");

@@ -310,6 +310,13 @@ run_allow_fail() {
   fi
 }
 
+abs_path() {
+  case "$1" in
+    /*) printf '%s\n' "$1" ;;
+    *) printf '%s/%s\n' "$(pwd)" "$1" ;;
+  esac
+}
+
 # ── Build once: render every host package a single time (ADR §8 step 3) ───────
 RENDERED_DIST=""
 RENDERED=0
@@ -376,7 +383,8 @@ install_claude_code_cli() {
 
 install_codex_cli() {
   say "Codex CLI — $1"
-  CODEX_MARKETPLACE_PATH="$RENDERED_DIST/codex-marketplace"
+  CODEX_MARKETPLACE_PATH="$(abs_path "$RENDERED_DIST/codex-marketplace")"
+  CODEX_MARKETPLACE_MANIFEST="$(abs_path "$CODEX_MARKETPLACE_PATH/.agents/plugins/marketplace.json")"
   run_allow_fail codex plugin marketplace remove guild
   run codex plugin marketplace add "$CODEX_MARKETPLACE_PATH"
   run codex plugin add "$PLUGIN_SPEC"
@@ -384,6 +392,10 @@ install_codex_cli() {
   say ""
   say "Guild installed into Codex CLI."
   say "Package bootstrap: AGENTS.md plus .agents/skills/guild."
+  say "Codex App local plugin link:"
+  say "    codex://plugins/guild?marketplacePath=$CODEX_MARKETPLACE_MANIFEST"
+  say "After installing/enabling Guild in Codex App, try /guild:status."
+  say "If the app slash parser rejects /guild before hooks run, invoke the Guild plugin or bundled guild skill explicitly."
   say "Use the bundled guild-run wrapper for structured Guild runs:"
   say "    guild-run --host codex --prompt \"your task\""
   say ""

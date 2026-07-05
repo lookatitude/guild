@@ -137,6 +137,8 @@ export interface CodexPluginJson {
   keywords?: string[];
   /** Codex skill root relative to the plugin package. */
   skills: string;
+  /** Codex hook manifest for the app/CLI prompt bridge. */
+  hooks: string;
   interface: {
     displayName: string;
     shortDescription: string;
@@ -288,7 +290,8 @@ function commandNameFromPath(commandPath: string): string {
  *
  * Codex capabilities:
  *  - Supports stdio MCP; HTTP MCP is unsupported → flagged in _unsupported.
- *  - No native slash-command .md format; commands are workflow descriptors.
+ *  - No native slash-command .md format; commands are routed through a
+ *    UserPromptSubmit bridge hook when the host submits `/guild...` as text.
  *  - Agents have no direct Codex equivalent; flagged if present.
  *  - Hooks are not rendered (Codex hook event taxonomy differs); flagged if present.
  *  - Skills directories have no direct Codex equivalent; flagged if present.
@@ -307,6 +310,7 @@ export function renderCodexPluginJson(
     version: manifest.version,
     description: manifest.description,
     skills: "./.agents/skills/",
+    hooks: "./hooks/codex-hooks.json",
     interface: {
       displayName: "Guild Stack",
       shortDescription: "Specialist agent teams for Codex",

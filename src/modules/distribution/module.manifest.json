@@ -13,6 +13,7 @@
       "build-verify",
       "check-module-ownership",
       "check-roster-consistency",
+      "codex-guild-prompt-bridge",
       "description-optimizer",
       "registry-rollup",
       "sync-live-resources",

@@ -109,13 +109,14 @@ function findScrubCoverageGaps(repoPath: string): FileFlag[] {
 
 // verified-multi-host-support L0 §7.2 — the REAL AC-SEC-1 package/receipt-tree leak
 // scan. SEPARATE, PATH-ANCHORED from scrub.ts's `.guild/runs`-scoped share-set: this
-// scan is anchored to the committed evidence store (`evidence/host-smoke`, ADR §6.1)
+// scan is anchored to the committed evidence stores (`evidence/host-smoke`, ADR §6.1,
+// plus desktop app command-smoke receipts under `evidence/desktop-app-smoke`)
 // — it does NOT widen share-set.ts's SHARED_SCRUBBED_NAMES (that basename set is one
 // function on two call sites; widening it would leak these basenames into the runs
 // share-set — security round-3 F2). The narrow-allowlisted paths here are DISJOINT
 // from /dist/ (fully .gitignore-ignored, regenerated) so the runs scan and this scan
 // neither overlap nor gap.
-const PACKAGE_RECEIPT_SCAN_ROOTS = ["evidence/host-smoke"];
+const PACKAGE_RECEIPT_SCAN_ROOTS = ["evidence/host-smoke", "evidence/desktop-app-smoke"];
 
 // §7.2 exact file selection — mirrors the existing `.guild/runs` coverage guard
 // (findScrubCoverageGaps): walk the anchored root on disk (local build:verify sees
@@ -272,7 +273,7 @@ function renderReport(repoResults: Array<{ repo: string; flags: FileFlag[] }>, n
     for (const f of r.flags) {
       const action = f.kind === "operator-path" ? "Run scrub.ts before commit"
         : f.kind === "secret" ? "Rotate credential; scrub.ts will redact"
-        : f.kind === "receipt-operator-path" ? "Scrub the receipt at write time via the shared redact() (L5), OR remove it from the evidence/host-smoke allow-list so it is not shared"
+        : f.kind === "receipt-operator-path" ? "Scrub the receipt at write time via the shared redact() (L5), OR remove it from the committed evidence receipt allow-list so it is not shared"
         : f.kind === "receipt-secret" ? "Rotate the credential; the receipt MUST be redacted (shared redact()) before it is staged — evidence receipts are shared-scrubbed"
         : f.kind === "nested-guild" ? "DELETE the nested .guild/ — it's a leftover; resolver enforces one-.guild-per-repo. If legitimate fixture, add its path to FIXTURE_EXEMPT_PATTERNS"
         : f.kind === "scrub-uncovered" ? "Add the file's basename to scrub.ts SHARED_SCRUBBED_NAMES (so it gets a redaction pass), OR exempt it in SCRUB_COVERAGE_EXEMPT_NAMES if it carries no operator content, OR remove it from the .gitignore allow-list so it is not shared"

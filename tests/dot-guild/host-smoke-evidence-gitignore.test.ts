@@ -55,6 +55,11 @@ describe("host-smoke evidence gitignore (SEC-m1 narrow allow-list, real .gitigno
     expect(isIgnored(dir, "evidence/host-smoke/rovo-dev/box-c.json")).toBe(false);
   });
 
+  test("evidence/desktop-app-smoke/<host>/<receipt>.json → ADMITTED (tracked)", () => {
+    expect(isIgnored(dir, "evidence/desktop-app-smoke/codex-app/local.json")).toBe(false);
+    expect(isIgnored(dir, "evidence/desktop-app-smoke/claude-code-app/local.json")).toBe(false);
+  });
+
   // ── 2. adjacent receipt-shaped files IGNORED (SEC-m1) ────────────────────
   test("evidence/<non-host-smoke>/box.json → IGNORED (adjacent, cannot leak)", () => {
     expect(isIgnored(dir, "evidence/scratch/box-a.json")).toBe(true);
@@ -66,6 +71,11 @@ describe("host-smoke evidence gitignore (SEC-m1 narrow allow-list, real .gitigno
     expect(isIgnored(dir, "evidence/host-smoke-backup/box-a.json")).toBe(true);
   });
 
+  test("evidence/desktop-app-smoke-backup/box.json → IGNORED (look-alike sibling dir)", () => {
+    // A prefix look-alike must NOT be caught by the desktop-app-smoke/ negation.
+    expect(isIgnored(dir, "evidence/desktop-app-smoke-backup/box-a.json")).toBe(true);
+  });
+
   // ── 3. disjoint from /dist/ (packages regenerated, never tracked) ────────
   test("dist/<host>/<host>-manifest.json → IGNORED (package output, disjoint)", () => {
     expect(isIgnored(dir, "dist/cursor/cursor-manifest.json")).toBe(true);
@@ -73,6 +83,10 @@ describe("host-smoke evidence gitignore (SEC-m1 narrow allow-list, real .gitigno
 
   test("dist/<host>/host-smoke/box.json → IGNORED (receipt-shaped under dist stays disjoint)", () => {
     expect(isIgnored(dir, "dist/cursor/host-smoke/box-a.json")).toBe(true);
+  });
+
+  test("dist/<host>/desktop-app-smoke/box.json → IGNORED (desktop receipt-shaped under dist stays disjoint)", () => {
+    expect(isIgnored(dir, "dist/codex-app/desktop-app-smoke/local.json")).toBe(true);
   });
 
   // ── 4. the share-dot-guild policy block survives (CI gitignore gate) ─────

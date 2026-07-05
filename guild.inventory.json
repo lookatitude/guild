@@ -1053,6 +1053,11 @@
       "kind": "cli"
     },
     {
+      "id": "codex-guild-prompt-bridge",
+      "source_path": "scripts/codex-guild-prompt-bridge.ts",
+      "kind": "cli"
+    },
+    {
       "id": "comms/comms-format-lint",
       "source_path": "scripts/comms/comms-format-lint.ts",
       "kind": "cli"
@@ -1085,6 +1090,11 @@
     {
       "id": "description-optimizer",
       "source_path": "scripts/description-optimizer.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "desktop-app-smoke",
+      "source_path": "scripts/desktop-app-smoke.ts",
       "kind": "cli"
     },
     {
@@ -2285,6 +2295,11 @@
     {
       "id": "verify-codex-review-trail",
       "source_path": "scripts/verify-codex-review-trail.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "verify-desktop-app-smoke",
+      "source_path": "scripts/verify-desktop-app-smoke.ts",
       "kind": "cli"
     },
     {

@@ -129,6 +129,9 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
     "claude-code/.claude-plugin/marketplace.json",
     "claude-code/bin/guild-run",
     "codex/.codex-plugin/plugin.json",
+    "codex/hooks/codex-hooks.json",
+    "codex/hooks/codex-guild-prompt-bridge.js",
+    "codex/command-src/command-registry.json",
     "codex/bin/guild-run",
     "codex/hooks/lib/handoff-v2.ts",
     "codex/scripts/guild-run.ts",
@@ -148,6 +151,7 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
 
   verifyJsonField(distRoot, "claude-code/.claude-plugin/plugin.json", "name", "guild", checks, errors);
   verifyJsonField(distRoot, "codex/.codex-plugin/plugin.json", "name", "guild", checks, errors);
+  verifyJsonField(distRoot, "codex/.codex-plugin/plugin.json", "hooks", "./hooks/codex-hooks.json", checks, errors);
   verifyJsonField(distRoot, "pi/pi-manifest.json", "schema_version", "pi-manifest.v1", checks, errors);
   verifyJsonField(
     distRoot,

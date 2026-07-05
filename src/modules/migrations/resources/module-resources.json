@@ -15,7 +15,7 @@
       "id": "dot-guild/audit",
       "source_path": "scripts/dot-guild/audit.ts",
       "resource_path": "resources/scripts/dot-guild/audit.ts",
-      "sha256": "9303cb0d5bcac61474b7ba009e7de3d1c442c4b92673f53a16d0f4e7cd767500"
+      "sha256": "9ec7d8b5152976b0467f856c2b9b6d34257f349f7b1e5a236b9ccf22cdd26ee4"
     },
     {
       "category": "scripts",

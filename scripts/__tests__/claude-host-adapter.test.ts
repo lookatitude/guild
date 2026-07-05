@@ -501,6 +501,12 @@ describe("Claude HostAdapter concrete parity", () => {
       const codexDir = writeCodexTree(PLUGIN_ROOT, inv, tmpDist, UNSTAMPED_GENERATED_AT);
       const marketplaceDir = writeCodexMarketplaceTree(codexDir, tmpDist);
       const pluginDir = path.join(marketplaceDir, "plugins", "guild");
+      const manifest = JSON.parse(fs.readFileSync(path.join(pluginDir, ".codex-plugin", "plugin.json"), "utf8"));
+      const codexHooks = JSON.parse(fs.readFileSync(path.join(pluginDir, "hooks", "codex-hooks.json"), "utf8"));
+      expect(manifest.hooks).toBe("./hooks/codex-hooks.json");
+      expect(codexHooks.hooks.UserPromptSubmit[0].hooks[0].command).toContain("codex-guild-prompt-bridge.js");
+      expect(fs.existsSync(path.join(pluginDir, "hooks", "codex-guild-prompt-bridge.js"))).toBe(true);
+      expect(fs.existsSync(path.join(pluginDir, "command-src", "command-registry.json"))).toBe(true);
       expect(fs.existsSync(path.join(pluginDir, "scripts", "node_modules", "js-yaml", "index.js"))).toBe(true);
       expect(require.resolve("js-yaml", { paths: [path.join(pluginDir, "scripts")] })).toContain(
         path.join(pluginDir, "scripts", "node_modules", "js-yaml")
@@ -568,8 +574,8 @@ describe("install.sh Claude host dry-run", () => {
     expect(res.stdout).toContain(
       "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>"
     );
-    expect(res.stdout).toContain("would run: claude plugin validate ./dist/claude-code");
-    expect(res.stdout).toContain("would run: claude plugin marketplace add ./dist/claude-code");
+    expect(res.stdout).toContain("would run: claude plugin validate dist/claude-code");
+    expect(res.stdout).toContain("would run: claude plugin marketplace add dist/claude-code");
     expect(res.stdout).toContain("would run: claude plugin install guild@guild");
     expect(res.stdout).toContain("CLAUDE.md imports AGENTS.md");
     expect(res.stdout).toContain("@AGENTS.md");

@@ -52,6 +52,11 @@ describe("package/receipt-tree leak scan (audit.ts §7.2, real CLI, non-vacuous)
     writeReceipt(repo, "evidence/host-smoke/cursor/box-a.json", {
       identity: { host_id: "cursor", box_id: "box-a", host_version: "1.2.3" },
     });
+    writeReceipt(repo, "evidence/desktop-app-smoke/codex-app/local.json", {
+      host_id: "codex-app",
+      result: "blocked",
+      public_state_effect: "none",
+    });
     const { status, out } = runAudit(repo);
     expect(status).toBe(0);
     expect(out).not.toMatch(/receipt-operator-path|receipt-secret/);
@@ -60,7 +65,7 @@ describe("package/receipt-tree leak scan (audit.ts §7.2, real CLI, non-vacuous)
 
   test("planted operator-path + secret in an admitted receipt → exit 1, BOTH flags", () => {
     const repo = tempRepo(); repos.push(repo);
-    writeReceipt(repo, "evidence/host-smoke/cursor/box-a.json", {
+    writeReceipt(repo, "evidence/desktop-app-smoke/claude-code-app/local.json", {
       identity: { host_id: "cursor", box_id: "box-a" },
       // operator path (redacted to <workspace-root>) + secret pattern.
       box_path: "/Users/alice/Projects/guildsecret/run",
@@ -71,7 +76,7 @@ describe("package/receipt-tree leak scan (audit.ts §7.2, real CLI, non-vacuous)
     expect(out).toMatch(/receipt-operator-path/);
     expect(out).toMatch(/receipt-secret/);
     // the flagged file is the planted receipt, not a false path.
-    expect(out).toMatch(/evidence\/host-smoke\/cursor\/box-a\.json/);
+    expect(out).toMatch(/evidence\/desktop-app-smoke\/claude-code-app\/local\.json/);
   });
 
   test("planted secret in an IGNORED adjacent file → NOT flagged (allow-list honoured)", () => {
@@ -83,6 +88,11 @@ describe("package/receipt-tree leak scan (audit.ts §7.2, real CLI, non-vacuous)
     });
     // and a clean admitted receipt so the tree is otherwise valid.
     writeReceipt(repo, "evidence/host-smoke/opencode/box-z.json", { identity: { host_id: "opencode", box_id: "box-z" } });
+    writeReceipt(repo, "evidence/desktop-app-smoke/codex-app/local.json", {
+      host_id: "codex-app",
+      result: "blocked",
+      public_state_effect: "none",
+    });
     const { status, out } = runAudit(repo);
     expect(status).toBe(0);
     expect(out).not.toMatch(/receipt-operator-path|receipt-secret/);

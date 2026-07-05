@@ -73,9 +73,15 @@ export const INSTALLER_HOST_EXPECTATIONS: InstallerHostExpectation[] = [
     snippets: [
       BUILD_ONCE_SNIPPET,
       "would run: codex plugin marketplace remove guild || true",
-      "would run: codex plugin marketplace add dist/codex-marketplace",
+      "would run: codex plugin marketplace add ",
+      "/dist/codex-marketplace",
       "would run: codex plugin add guild@guild",
       "Package bootstrap: AGENTS.md plus .agents/skills/guild.",
+      "Codex App local plugin link:",
+      "codex://plugins/guild?marketplacePath=",
+      "/dist/codex-marketplace/.agents/plugins/marketplace.json",
+      "After installing/enabling Guild in Codex App, try /guild:status.",
+      "If the app slash parser rejects /guild before hooks run",
     ],
   },
   {
@@ -208,7 +214,7 @@ const INSTALLER_EXECUTION_CALLS: Record<InstallerHost, string[]> = {
   ],
   "codex-cli": [
     "codex\tplugin marketplace remove guild",
-    "codex\tplugin marketplace add dist/codex-marketplace",
+    "codex\tplugin marketplace add <abs-dist-codex-marketplace>",
     "codex\tplugin add guild@guild",
   ],
   "agents-file": [],
@@ -264,12 +270,19 @@ export function verifyInstallerHostExecutionLog(host: InstallerHost, lines: stri
   const expected = INSTALLER_EXECUTION_CALLS[host];
   const errors: string[] = [];
   for (const call of expected) {
-    if (!lines.includes(call)) errors.push(`${host}: missing executed host call: ${call}`);
+    if (!lines.some((line) => installerCallMatches(call, line))) errors.push(`${host}: missing executed host call: ${call}`);
   }
   for (const line of lines) {
-    if (!expected.includes(line)) errors.push(`${host}: unexpected executed host call: ${line}`);
+    if (!expected.some((call) => installerCallMatches(call, line))) errors.push(`${host}: unexpected executed host call: ${line}`);
   }
   return errors;
+}
+
+function installerCallMatches(expected: string, actual: string): boolean {
+  if (expected === "codex\tplugin marketplace add <abs-dist-codex-marketplace>") {
+    return actual.startsWith("codex\tplugin marketplace add ") && actual.endsWith("/dist/codex-marketplace");
+  }
+  return actual === expected;
 }
 
 function writeFakeHostBinary(binDir: string, name: string): void {
@@ -504,6 +517,15 @@ export function verifyInstallerLiveIsolatedExecutions(options: VerifyOptions = {
         errors.push(`${expectation.host}: live isolated execution did not run host package generation`);
       }
       for (const call of INSTALLER_EXECUTION_CALLS[expectation.host]) {
+        if (call === "codex\tplugin marketplace add <abs-dist-codex-marketplace>") {
+          if (
+            !res.stdout.includes("running: codex plugin marketplace add ") ||
+            !res.stdout.includes("/dist/codex-marketplace")
+          ) {
+            errors.push(`${expectation.host}: live isolated output missing host command: codex plugin marketplace add <abs-dist-codex-marketplace>`);
+          }
+          continue;
+        }
         const rendered = call.replace("\t", " ");
         if (!res.stdout.includes(`running: ${rendered}`) && !res.stdout.includes(`running: ${call.split("\t")[0]}`)) {
           errors.push(`${expectation.host}: live isolated output missing host command: ${rendered}`);

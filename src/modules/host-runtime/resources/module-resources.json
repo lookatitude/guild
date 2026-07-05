@@ -5,6 +5,13 @@
   "entries": [
     {
       "category": "scripts",
+      "id": "desktop-app-smoke",
+      "source_path": "scripts/desktop-app-smoke.ts",
+      "resource_path": "resources/scripts/desktop-app-smoke.ts",
+      "sha256": "6d7bf596ab79613a5919d5961152b705699d6aa5c8a849ca9eeab30f880db33d"
+    },
+    {
+      "category": "scripts",
       "id": "generate-support-matrix",
       "source_path": "scripts/generate-support-matrix.ts",
       "resource_path": "resources/scripts/generate-support-matrix.ts",
@@ -85,7 +92,7 @@
       "id": "lib/host-adapters/app-host",
       "source_path": "scripts/lib/host-adapters/app-host.ts",
       "resource_path": "resources/scripts/lib/host-adapters/app-host.ts",
-      "sha256": "4e54374402578d777596994fc4d1d2158817fa8f530906756870bec0b028a3ab"
+      "sha256": "9593436c0ed51f0aa3834b83a1b1f059e61e3e2533667ab11a459dfc36845829"
     },
     {
       "category": "scripts",
@@ -247,6 +254,13 @@
       "source_path": "scripts/lib/support-matrix.ts",
       "resource_path": "resources/scripts/lib/support-matrix.ts",
       "sha256": "2474aaa9177a7282836430655ad6dc67e74397d83a77236fedd5a20914c536a3"
+    },
+    {
+      "category": "scripts",
+      "id": "verify-desktop-app-smoke",
+      "source_path": "scripts/verify-desktop-app-smoke.ts",
+      "resource_path": "resources/scripts/verify-desktop-app-smoke.ts",
+      "sha256": "8e1f2e780d6ef0865db155b198162364e356530ca3f847188152a74ace1347da"
     },
     {
       "category": "scripts",

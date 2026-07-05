@@ -46,6 +46,19 @@ interface AppHostBehavior {
   guidance: string;
 }
 
+interface AppCommandGuidance {
+  invocation: "native_slash" | "local_plugin_bridge" | "manual_instruction" | "connector_action";
+  primary: string;
+  fallback: string;
+  verification_required: string;
+  codex_app_local_plugin_link?: string;
+  codex_prompt_bridge?: {
+    hook_event: "UserPromptSubmit";
+    accepted_forms: string[];
+    unknown_verb_behavior: "block_with_known_command_list";
+  };
+}
+
 const BEHAVIOR: Record<AppHostId, AppHostBehavior> = {
   "claude-code-app": {
     supportState: "manual_instruction",
@@ -158,6 +171,46 @@ function requestedMemoryCapabilities(request: MemoryRequest): MemoryCapabilities
 
 function hasMemoryTransport(caps: MemoryCapabilities): boolean {
   return caps.mcp === true || caps.httpMcp === true || caps.bridgePackage === true || caps.filesystem === true;
+}
+
+function commandGuidance(hostId: AppHostId): AppCommandGuidance {
+  switch (hostId) {
+    case "claude-code-app":
+      return {
+        invocation: "native_slash",
+        primary: '/guild:guild "your task"',
+        fallback: "Use the Claude Code CLI Guild plugin install, or paste the Guild manual instruction packet that points at the current .guild run artifacts.",
+        verification_required: "Open a fresh Claude desktop/Claude Code app session after plugin install and confirm /guild:guild appears and dispatches.",
+      };
+    case "codex-app":
+      return {
+        invocation: "local_plugin_bridge",
+        primary: "/guild:status",
+        fallback: "Invoke the installed Guild plugin or bundled guild skill explicitly with @ if Codex App rejects unknown slash text before hooks run.",
+        verification_required: "Install Guild from the local marketplace link, enable the plugin, submit /guild:status in Codex App, and verify the UserPromptSubmit hook receives the prompt.",
+        codex_app_local_plugin_link:
+          "codex://plugins/guild?marketplacePath=<absolute-path-to-dist/codex-marketplace/.agents/plugins/marketplace.json>",
+        codex_prompt_bridge: {
+          hook_event: "UserPromptSubmit",
+          accepted_forms: ["/guild", "/guild:<verb>", "/guild <verb>"],
+          unknown_verb_behavior: "block_with_known_command_list",
+        },
+      };
+    case "claude-code-web":
+      return {
+        invocation: "manual_instruction",
+        primary: "Paste or attach the Guild app dispatch packet for the target run.",
+        fallback: "Use Claude Code CLI for local /guild execution when local filesystem artifacts are required.",
+        verification_required: "Confirm the web surface can receive the packet only after explicit egress approval and can write results back through the file bus.",
+      };
+    case "claude-ai-connector":
+      return {
+        invocation: "connector_action",
+        primary: "Use the configured Claude.ai connector/MCP action after connector authentication.",
+        fallback: "Emit a manual instruction packet and keep local execution in Claude Code CLI.",
+        verification_required: "Confirm connector auth, egress approval, and file-bus writeback before advertising connector execution.",
+      };
+  }
 }
 
 export function appHostReviewPacket(runId = "run-r10", gate = "G-implementation:codex-app") {
@@ -282,6 +335,7 @@ export function createAppHostAdapter(hostId: AppHostId, entry: HostRegistryEntry
     },
 
     renderCommandSurface(request?: RenderCommandSurfaceRequest): HostAdapterResult {
+      const guidance = commandGuidance(hostId);
       return result(
         hostId,
         "renderCommandSurface",
@@ -291,6 +345,7 @@ export function createAppHostAdapter(hostId: AppHostId, entry: HostRegistryEntry
           request: request ?? {},
           support_state: behavior.commandMode,
           command_surface: behavior.commandMode === "enqueue_only" ? "queued_action" : "manual_instruction",
+          desktop_command_guidance: guidance,
         },
         resolveRung("semantic_tool", hostId)
       );

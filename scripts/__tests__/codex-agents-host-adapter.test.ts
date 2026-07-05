@@ -142,9 +142,14 @@ describe("R4 install.sh host dry-runs", () => {
       "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>"
     );
     expect(res.stdout).toContain("would run: codex plugin marketplace remove guild || true");
-    expect(res.stdout).toContain("would run: codex plugin marketplace add ./dist/codex-marketplace");
+    expect(res.stdout).toContain(`would run: codex plugin marketplace add ${PLUGIN_ROOT}/dist/codex-marketplace`);
     expect(res.stdout).toContain("would run: codex plugin add guild@guild");
     expect(res.stdout).toContain("Package bootstrap: AGENTS.md plus .agents/skills/guild");
+    expect(res.stdout).toContain(
+      `codex://plugins/guild?marketplacePath=${PLUGIN_ROOT}/dist/codex-marketplace/.agents/plugins/marketplace.json`
+    );
+    expect(res.stdout).toContain("After installing/enabling Guild in Codex App, try /guild:status.");
+    expect(res.stdout).toContain("If the app slash parser rejects /guild before hooks run");
   });
 
   it("accepts --host codex-plugin as a legacy Codex alias", () => {
@@ -155,8 +160,11 @@ describe("R4 install.sh host dry-runs", () => {
       env: { ...process.env, PATH: "/usr/bin:/bin" },
     });
     expect(res.status).toBe(0);
-    expect(res.stdout).toContain("would run: codex plugin marketplace add ./dist/codex-marketplace");
+    expect(res.stdout).toContain(`would run: codex plugin marketplace add ${PLUGIN_ROOT}/dist/codex-marketplace`);
     expect(res.stdout).toContain("would run: codex plugin add guild@guild");
+    expect(res.stdout).toContain(
+      `codex://plugins/guild?marketplacePath=${PLUGIN_ROOT}/dist/codex-marketplace/.agents/plugins/marketplace.json`
+    );
   });
 
   it("accepts --host agents-file and prints universal AGENTS.md package guidance", () => {
@@ -170,7 +178,8 @@ describe("R4 install.sh host dry-runs", () => {
     expect(res.stdout).toContain(
       "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>"
     );
-    expect(res.stdout).toContain("Universal AGENTS.md package target selected");
+    expect(res.stdout).toContain("Universal AGENTS.md package — dry-run");
+    expect(res.stdout).toContain("Universal AGENTS.md package rendered at:");
     expect(res.stdout).toContain("dist/agents/AGENTS.md");
     expect(res.stdout).toContain("dist/agents/.agents/skills/guild");
     expect(res.stdout).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/);

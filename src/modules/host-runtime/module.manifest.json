@@ -9,6 +9,8 @@
   "owns": {
     "scripts": [
       "guild-run",
+      "desktop-app-smoke",
+      "verify-desktop-app-smoke",
       "write-host-capability",
       "lib/adapter-fallback-ladders",
       "lib/degradation-trace",

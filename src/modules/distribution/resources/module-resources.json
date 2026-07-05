@@ -8,7 +8,7 @@
       "id": "build-host-packages",
       "source_path": "scripts/build-host-packages.ts",
       "resource_path": "resources/scripts/build-host-packages.ts",
-      "sha256": "426b36efd4766611c8e28c47a7e7ea3384350d44b1b275f399e9547c726752bb"
+      "sha256": "303572ee37698b10b84911ec934afd6b6f6c32419ded53a1bf40178bf7e1bdf1"
     },
     {
       "category": "scripts",
@@ -37,6 +37,13 @@
       "source_path": "scripts/check-roster-consistency.ts",
       "resource_path": "resources/scripts/check-roster-consistency.ts",
       "sha256": "3ed28ffb9fa8908c1806a7bbd183caa2e91b631819cac0ffee555ea012f991d3"
+    },
+    {
+      "category": "scripts",
+      "id": "codex-guild-prompt-bridge",
+      "source_path": "scripts/codex-guild-prompt-bridge.ts",
+      "resource_path": "resources/scripts/codex-guild-prompt-bridge.ts",
+      "sha256": "58bbafa0b9f77caa21fd16bbc4f6fe760f05ff1ded02bee0414f8a39bafde6eb"
     },
     {
       "category": "scripts",

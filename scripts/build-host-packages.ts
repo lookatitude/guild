@@ -107,6 +107,36 @@ function writeLauncher(dest: string, host: string): void {
   writeFileEnsured(abs, renderLauncherScript(host));
   fs.chmodSync(abs, 0o755);
 }
+
+const CODEX_HOOK_COMMAND = 'node "${GUILD_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}}/hooks/codex-guild-prompt-bridge.js"';
+
+function writeCodexHookBridge(root: string, dest: string): void {
+  writeFileEnsured(
+    path.join(dest, "hooks", "codex-hooks.json"),
+    stableJson({
+      hooks: {
+        UserPromptSubmit: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command: CODEX_HOOK_COMMAND,
+              },
+            ],
+          },
+        ],
+      },
+    })
+  );
+  copyFileEnsured(
+    path.join(root, "scripts", "codex-guild-prompt-bridge.ts"),
+    path.join(dest, "hooks", "codex-guild-prompt-bridge.js")
+  );
+  copyFileEnsured(
+    path.join(root, "command-src", "command-registry.json"),
+    path.join(dest, "command-src", "command-registry.json")
+  );
+}
 function copyFileEnsured(srcAbs: string, destAbs: string): boolean {
   if (!fs.existsSync(srcAbs)) return false;
   fs.mkdirSync(path.dirname(destAbs), { recursive: true });
@@ -477,6 +507,7 @@ export function writeCodexTree(
   copyModuleRuntime(root, dest);
   copyScriptRuntime(root, dest);
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  writeCodexHookBridge(root, dest);
   writeLauncher(dest, "codex");
   return dest;
 }
