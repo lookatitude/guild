@@ -49,6 +49,23 @@ jobs:
             cd hooks && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
           fi
 
+      # One-shot R-DIST divergence diagnostic (non-gating). Committed hook
+      # bundles are built on the committer's host (macOS); R-DIST rebuilds them
+      # here (linux) and byte-compares. This surfaces the exact toolchain state
+      # so a "STALE" finding can be told apart from real staleness.
+      - name: R-DIST toolchain diagnostic (non-gating)
+        continue-on-error: true
+        run: |
+          echo "esbuild: $(cd hooks && npx esbuild --version)"
+          echo "js-yaml: $(node -e "console.log(require('./hooks/node_modules/js-yaml/package.json').version)" 2>&1)"
+          echo "js-yaml resolved from: $(cd hooks && node -e "console.log(require.resolve('js-yaml'))" 2>&1)"
+          for pair in "hooks/detect-guild-version.ts:hooks/dist/detect-guild-version.js" "hooks/agent-team/task-completed.ts:hooks/agent-team/dist/task-completed.js"; do
+            ts="${pair%%:*}"; js="${pair##*:}"
+            rel_ts="${ts#hooks/}"
+            (cd hooks && npx esbuild "$rel_ts" --bundle --platform=node --target=node18 --format=cjs --outfile=/tmp/fresh.js 2>/dev/null)
+            echo "$js  committed=$(shasum -a256 "$js" | cut -c1-16)  fresh=$(shasum -a256 /tmp/fresh.js | cut -c1-16)"
+          done
+
       - name: Prove rails are non-vacuous (a rail that cannot fail is worthless)
         run: |
           cd tests && npx tsx rearch/run-all.ts --prove

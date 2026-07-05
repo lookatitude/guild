@@ -36,6 +36,25 @@ export function bytesEqual(a: Buffer, b: Buffer): boolean {
   return a.length === b.length && a.equals(b);
 }
 
+/**
+ * Diagnostic for a STALE finding: pinpoint the FIRST differing byte and show a
+ * short context window from both sides. This turns an opaque "stale" into an
+ * actionable fact (path-comment? version string? whitespace? real code?), which
+ * is the only way to tell platform-noise from a genuinely un-rebuilt bundle when
+ * the divergence only reproduces in CI (different host than the committer).
+ */
+export function describeByteDiff(committed: Buffer, fresh: Buffer): string {
+  const n = Math.min(committed.length, fresh.length);
+  let i = 0;
+  while (i < n && committed[i] === fresh[i]) i++;
+  const win = (b: Buffer) =>
+    JSON.stringify(b.slice(Math.max(0, i - 20), i + 40).toString("utf8"));
+  return (
+    `committed=${committed.length}B fresh=${fresh.length}B first-diff@${i}; ` +
+    `committed…${win(committed)}… vs fresh…${win(fresh)}…`
+  );
+}
+
 interface Entry {
   entry: string;
   outfile: string;
@@ -196,8 +215,13 @@ export function run(): RailResult {
         continue;
       }
       checked++;
-      if (!bytesEqual(fs.readFileSync(committed), fs.readFileSync(tmpOut))) {
-        out.violations.push(`${outfile}: committed bundle is STALE vs fresh esbuild of ${entry} — run \`npm run build\` in hooks/`);
+      const committedBuf = fs.readFileSync(committed);
+      const freshBuf = fs.readFileSync(tmpOut);
+      if (!bytesEqual(committedBuf, freshBuf)) {
+        out.violations.push(
+          `${outfile}: committed bundle is STALE vs fresh esbuild of ${entry} — run \`npm run build\` in hooks/ ` +
+            `[${describeByteDiff(committedBuf, freshBuf)}]`
+        );
       }
     }
     fs.rmSync(tmp, { recursive: true, force: true });
