@@ -15,7 +15,7 @@
       "id": "SessionStart:detect-guild-version.js",
       "source_path": "hooks/dist/detect-guild-version.js",
       "resource_path": "resources/hooks/dist/detect-guild-version.js",
-      "sha256": "5c9fded5c7560fe384345e0dfc0fc47fe1be12aeaa7f66eb1612e9f3470f2085"
+      "sha256": "7fd89fc8ab397e776eca7feeea6f7036e577607e33f573988fa30ec22bdf40d4"
     },
     {
       "category": "hooks",
