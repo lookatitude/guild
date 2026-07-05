@@ -2,11 +2,11 @@ schema_version: guild.run.v1
 run_id: run-98b39921-f34f-43dd-82ce-789f46a31144
 command: /guild:status
 arguments: {}
-cwd: /Users/miguelp/Projects/guild/plugin
+cwd: <workspace-root>/plugin
 target_kind: existing_guild_project
 workspace:
   is_workspace: false
-  root: /Users/miguelp/Projects/guild/plugin
+  root: <workspace-root>/plugin
 project: status
 host:
   requested: auto

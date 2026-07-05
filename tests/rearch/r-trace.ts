@@ -49,8 +49,11 @@ interface EmitPoint {
 const EMIT_POINTS: EmitPoint[] = [
   {
     event: "guild.trace.dispatch.v1",
-    file: "scripts/write-task-run.ts",
-    line_hint: "~335",
+    // v2 reorg: the emit moved into the module tree; scripts/write-task-run.ts
+    // is now a back-compat shim that re-exports this file (which holds the
+    // real emitTraceEvent(makeDispatchEvent(...)) call ~L346).
+    file: "src/modules/lifecycle/workflows/write-task-run.ts",
+    line_hint: "~346",
     description: "emitted by writeTaskRun() after the task_run YAML is written (pre-dispatch gate)",
   },
   {

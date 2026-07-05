@@ -2,11 +2,11 @@ schema_version: guild.run.v1
 run_id: run-c3cebfb1-b34a-4fac-bf00-163fc0d69681
 command: /guild:evolve
 arguments: {}
-cwd: /Users/miguelp/Projects/guild/plugin
+cwd: <workspace-root>/plugin
 target_kind: existing_guild_project
 workspace:
   is_workspace: false
-  root: /Users/miguelp/Projects/guild/plugin
+  root: <workspace-root>/plugin
 project: project
 host:
   requested: auto

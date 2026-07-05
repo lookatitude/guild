@@ -32,6 +32,11 @@ permissions:
 
 jobs:
   comms-format:
+    # OD-4 gate premise is INCREMENTAL drift on a normal feature PR. A release/*
+    # PR is a corpus-wide integration merge (the whole v2 tree is the diff), so
+    # the incremental-scoping intent does not hold — skip rather than retro-fail
+    # the pre-existing corpus. The gate stays fully active for feature PRs.
+    if: ${{ !startsWith(github.head_ref, 'release/') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (full history for the PR diff range)
@@ -50,7 +55,7 @@ jobs:
             cd scripts && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
           fi
 
-      - name: Resolve PR diff (changed paths)
+      - name: Resolve PR diff range
         id: diff
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -59,66 +64,51 @@ jobs:
           # Three-dot for the diff (PR file changes vs merge-base).
           RANGE="${BASE_SHA}...${HEAD_SHA}"
           echo "comms-format PR range: $RANGE"
-          # Resolve changed paths to absolute paths for the lint core.
-          CHANGED="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}" | tr '\n' ',')"
-          echo "changed=${CHANGED}" >> "$GITHUB_OUTPUT"
           echo "range=${RANGE}" >> "$GITHUB_OUTPUT"
 
       - name: comms-format lint — enforce gate (blocking, OD-4 diff-range scoped)
         id: enforce
         env:
-          CHANGED_PATHS: ${{ steps.diff.outputs.changed }}
+          DIFF_RANGE: ${{ steps.diff.outputs.range }}
         run: |
           set -uo pipefail
-          if [ -z "${CHANGED_PATHS:-}" ]; then
-            echo "No changed paths detected — skipping enforce gate."
+          if [ -z "${DIFF_RANGE:-}" ] || [ "${DIFF_RANGE}" = "..." ]; then
+            echo "No PR diff range available — skipping enforce gate."
             exit 0
           fi
 
-          # Resolve relative paths to absolute (from repo root = $GITHUB_WORKSPACE).
-          ABS_PATHS=""
-          IFS=',' read -ra FILES <<< "${CHANGED_PATHS%,}"
-          for f in "${FILES[@]}"; do
-            [ -n "$f" ] && ABS_PATHS="${ABS_PATHS}${GITHUB_WORKSPACE}/${f},"
-          done
-          ABS_PATHS="${ABS_PATHS%,}"
-
-          # Run with --enforce: exits 1 on any finding, 0 if clean.
-          # Findings are printed to stdout/stderr by the CLI.
-          # This step is the gating step — no continue-on-error.
+          # Pass the git range directly — the lint core resolves changed paths
+          # internally via `git diff --name-only <range>` (OD-4 arm 1). This
+          # avoids the ARG_MAX ceiling that a comma-joined --paths argv hits on
+          # large (e.g. release-branch) diffs. Run from repo root so relative
+          # diff paths resolve against $GITHUB_WORKSPACE.
+          # --enforce: exits 1 on any finding, 0 if clean. Blocking gate.
           npx tsx scripts/comms/comms-format-lint.cli.ts \
-            --paths "${ABS_PATHS}" \
+            --diff-range "${DIFF_RANGE}" \
             --enforce
 
       - name: comms-format lint — advisory summary (always runs)
         if: always()
         env:
-          CHANGED_PATHS: ${{ steps.diff.outputs.changed }}
+          DIFF_RANGE: ${{ steps.diff.outputs.range }}
           ENFORCE_OUTCOME: ${{ steps.enforce.outcome }}
         run: |
           set -uo pipefail
-          if [ -z "${CHANGED_PATHS:-}" ]; then
+          if [ -z "${DIFF_RANGE:-}" ] || [ "${DIFF_RANGE}" = "..." ]; then
             {
               echo "## comms-format — communication-format lint (enforce mode)"
               echo ""
-              echo "_No changed paths detected — lint skipped._"
+              echo "_No PR diff range available — lint skipped._"
               echo ""
-              echo "_U5b enforce mode: new/changed files in PR diff range are gated. OD-4 scoped — pre-effective-date and grandfathered files are exempt. Canon: \`docs/knowledge/decisions/communication-format-policy.md\`._"
+              echo "_U5b enforce mode: new/changed files in PR diff range are gated. OD-4 scoped — pre-effective-date and grandfathered files are exempt. Canon: \`.guild/wiki/decisions/communication-format-policy.md\`._"
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          ABS_PATHS=""
-          IFS=',' read -ra FILES <<< "${CHANGED_PATHS%,}"
-          for f in "${FILES[@]}"; do
-            [ -n "$f" ] && ABS_PATHS="${ABS_PATHS}${GITHUB_WORKSPACE}/${f},"
-          done
-          ABS_PATHS="${ABS_PATHS%,}"
-
           # Capture output in warn mode (always exits 0) for the summary.
           set +e
           OUT="$(npx tsx scripts/comms/comms-format-lint.cli.ts \
-            --paths "${ABS_PATHS}" 2>&1)"
+            --diff-range "${DIFF_RANGE}" 2>&1)"
           set -e
 
           # Emit GitHub annotations for each warning line.
