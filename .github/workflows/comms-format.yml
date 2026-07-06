@@ -32,11 +32,6 @@ permissions:
 
 jobs:
   comms-format:
-    # OD-4 gate premise is INCREMENTAL drift on a normal feature PR. A release/*
-    # PR is a corpus-wide integration merge (the whole v2 tree is the diff), so
-    # the incremental-scoping intent does not hold — skip rather than retro-fail
-    # the pre-existing corpus. The gate stays fully active for feature PRs.
-    if: ${{ !startsWith(github.head_ref, 'release/') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (full history for the PR diff range)
