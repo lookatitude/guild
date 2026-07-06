@@ -168,3 +168,17 @@ Rails: strict exit code 0 (R-DUP R-DEP R-DIST R-HOST R-SEC R-PERF R-TRACE all GR
 ## followups
 
 None required for this wave.
+
+```guild.handoff.v2
+{
+  "schema_version": "guild.handoff.v2",
+  "task_id": "W4",
+  "tier": "mid",
+  "status": "done",
+  "summary": "W4 Capability-layer hardening (M3 prime directive): three deliverables, all behavior-neutral (M9), on branch arch/plugin-rearchitecture. Not committed (lead commits).",
+  "artifacts": [
+    ".guild/runs/run-rearch-w1-20260621/handoffs/tooling-engineer-W4.md"
+  ],
+  "issues": []
+}
+```

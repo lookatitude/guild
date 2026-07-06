@@ -158,3 +158,17 @@ Changed (production source): `scripts/lib/shared/{bm25,graph-scoring,share-set,s
 `scripts/{read-guild-config,config-cmd}.ts`.
 New tests: `scripts/__tests__/{bm25,graph-scoring,share-set,safe-object}-parity.test.ts`.
 Not rebuilt (intentional, zero-delta): `mcp-servers/guild-memory/dist/index.js`.
+
+```guild.handoff.v2
+{
+  "schema_version": "guild.handoff.v2",
+  "task_id": "W1-TOOL",
+  "tier": "mid",
+  "status": "done",
+  "summary": "Established scripts/lib/shared/ as the single canonical home for four duplicated concerns; every consumer repointed and each verbatim keep-in-sync copy deleted. Each unit carries a parity guard, an anti-vacuity control, and a single-impl grep assertion. Behavior-neutral (M9); zero live-surface delta; not committed (lead commits).",
+  "artifacts": [
+    ".guild/runs/run-rearch-w1-20260621/handoffs/tooling-engineer-W1.md"
+  ],
+  "issues": []
+}
+```

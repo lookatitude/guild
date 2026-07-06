@@ -18,12 +18,12 @@ emit hook, and repoints the dangling contract reference.
     "hooks/emit-learning-checkpoint.ts",
     "<HIGH_ENTROPY_REDACTED>-checkpoint/SKILL.md"
   ],
+  "issues": [],
   "learnings": [
     "R-DIST requires cd hooks && npm run build BEFORE running run-all.ts; the rail does a fresh esbuild comparison against committed dist — stale dist => RED.",
     "The emit hook's main() has a natural extension point for GUILD_CHECKPOINT_ARTIFACTS_JSON as a fallback after the verdictPath block — behavior-neutral when env var absent."
   ],
-  "followups": [],
-  "notes": "The eval-engineer lane builds the 12x3 fixtures + mutation tests against <HIGH_ENTROPY_REDACTED>-signatures.ts. Export API: 12 named predicates (classifyMemory, classifyWiki, <HIGH_ENTROPY_REDACTED>, classifyDomainModel, classifyAgentDef, classifySkillDef, <HIGH_ENTROPY_REDACTED>, <HIGH_ENTROPY_REDACTED>, classifyConfig, <HIGH_ENTROPY_REDACTED>, <HIGH_ENTROPY_REDACTED>, <HIGH_ENTROPY_REDACTED>) + classifyPhase(). All exported from <HIGH_ENTROPY_REDACTED>-signatures.ts. NEVER committed (lead commits)."
+  "notes": "The eval-engineer lane builds the 12x3 fixtures + mutation tests against the phase-signatures classifier. Export API: 12 named predicates + classifyPhase(). NEVER committed (lead commits)."
 }
 ```
 

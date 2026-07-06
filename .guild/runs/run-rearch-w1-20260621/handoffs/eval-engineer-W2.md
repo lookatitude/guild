@@ -136,3 +136,17 @@ RED on `run-trace.js` — rail working correctly, see followups.
 - <HIGH_ENTROPY_REDACTED>.md
 
 LANE W2-EVAL DONE.
+
+```guild.handoff.v2
+{
+  "schema_version": "guild.handoff.v2",
+  "task_id": "W2",
+  "tier": "mid",
+  "status": "done",
+  "summary": "Wave 2 — authored and hardened the enforcement-rails suite (rearch architecture rails), each with an anti-vacuity control proving the rail is non-vacuous. W1 production extraction already committed (94e7535); tree clean except tests/rearch/. Not committed (lead commits).",
+  "artifacts": [
+    ".guild/runs/run-rearch-w1-20260621/handoffs/eval-engineer-W2.md"
+  ],
+  "issues": []
+}
+```

@@ -105,42 +105,20 @@ none — all 4 assigned suites green; no source change required; no unexplained 
 
 ---
 
-```json
+```guild.handoff.v2
 {
   "schema_version": "guild.handoff.v2",
-  "run_id": "run-host-adapter-reconcile-20260621",
-  "lane": "HA-1",
-  "specialist": "eval-engineer",
-  "status": "complete",
-  "summary": "Reconciled 4 assigned suites to the landed canonical-9-host-id roster + modelParams routing upgrade; every golden/expectation delta verified as intended-migration, not regression. No source, live-surface, or other-lane changes.",
-  "changed_files": [
+  "task_id": "HA-1",
+  "tier": "mid",
+  "status": "done",
+  "summary": "Reconciled 4 assigned suites to the landed canonical-9-host-id roster + modelParams routing upgrade; every golden/expectation delta verified as intended migration, not regression. No source, live-surface, or other-lane changes. 4 suites passed, 67 tests.",
+  "artifacts": [
     "tests/universal-host/fixtures/sc4-routing-ab-golden.json",
     "tests/universal-host/p1-sc8-adapter-ladder.test.ts",
     "tests/universal-host/p1-sc5-role-resolution.test.ts",
-    "<HIGH_ENTROPY_REDACTED>-model-resolution.test.ts"
+    "tests/integration/tier-model-resolution.test.ts"
   ],
-  "verification": {
-    "command": "cd tests && npx jest --no-coverage --runInBand --watchman=false universal-host/p1-sc8-adapter-ladder universal-host/p1-sc5-role-resolution universal-host/p1-sc4-routing-ab-golden integration/tier-model-resolution",
-    "result": "4 suites passed, 67 tests passed, 0 failed",
-    "anti_vacuity": "sc4 golden regenerated from REAL route(); old-vs-new diff shows ONLY additive modelParams blocks mirroring existing model values — no id/value/logic drift. sc8 verified rung VALUES byte-identical for renamed hosts (pure key rename) + new app rows all 'degraded'. RED discriminators (unknown-host degrade, gemini-substrate reject) preserved."
-  },
-  "golden_deltas": [
-    {"suite": "p1-sc4", "delta": "additive modelParams:{model} on decision + fallback targets", "classification": "intended routing upgrade (f6f6152) — corroborated by host-router.ts source, sibling host-router.test.ts:665, routing-expanded-golden.json, R13 evidence", "is_regression": false},
-    {"suite": "p1-sc8", "delta": "5-key 'claude/codex/.<HIGH_ENTROPY_REDACTED>' table -> canonical 9 ids; values identical for renamed hosts; +4 app/connector rows (all degraded)", "classification": "intended canonical-roster rename + expansion", "is_regression": false},
-    {"suite": "p1-sc5", "delta": "substrate values now canonical host_ids; advisory enum = 9 canonical + 5 legacy aliases, default claude-code-cli", "classification": "intended rename + intended legacy-alias back-compat", "is_regression": false},
-    {"suite": "tier-model", "delta": "resolved tier map keyed by canonical 9 ids; gemini dropped (D10)", "classification": "intended canonical-keying; gemini removed per D10", "is_regression": false}
-  ],
-  "decision": {
-    "topic": "tier-model fix side",
-    "choice": "TEST-expectation update (source correct)",
-    "rationale": "resolved output is canonical-keyed by design + closed key-set; normalizeHostId aliases INPUT/lookup keys only, never injects legacy output keys; gemini dropped per D10 (normalizeHostId('gemini')===null), retargeted null-slot test to pi-cli."
-  },
-  "scope_guard": {
-    "touched_live_surface": false,
-    "touched_other_lane_suites": false,
-    "touched_source": false,
-    "committed": false
-  },
-  "followups": []
+  "issues": [],
+  "notes": "sc4 golden regenerated from real route() — additive modelParams only, no id/value/logic drift. sc8 rung values byte-identical for renamed hosts. TEST-expectation update; source canonical-keyed."
 }
 ```

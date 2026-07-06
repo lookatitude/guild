@@ -119,8 +119,11 @@ function normalisePath(p: string): string {
 function loadInventoryAllowList(): Set<string> {
   const inventoryPath = path.resolve(
     __dirname,
-    // workflows/ → communication/ → modules/ → src/ → plugin/ → guild-root/
-    "../../../../..",
+    // __dirname = <repo>/src/modules/communication/workflows; four `..` reach the
+    // repo root: workflows → communication → modules → src → <repo>. (The prior
+    // five-`..` overshot to the umbrella parent — a path that does not exist in a
+    // standalone plugin checkout, so the allow-list silently never loaded.)
+    "../../../..",
     ".guild/initiatives/active/communication-format-standardization/yaml-reader-inventory.json"
   );
   try {

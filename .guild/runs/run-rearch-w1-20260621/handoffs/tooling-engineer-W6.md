@@ -149,3 +149,17 @@ Modified:
 - `scripts/write-task-run.ts` — guild.trace.dispatch.v1 emit
 
 Zero live-surface delta (no .claude-plugin/commands/skills/agents/hooks.json changes).
+
+```guild.handoff.v2
+{
+  "schema_version": "guild.handoff.v2",
+  "task_id": "W6",
+  "tier": "mid",
+  "status": "done",
+  "summary": "Wave 6 — implemented the R-PERF and R-TRACE architecture rails (perf budgets plus the trace-schema emit-point manifest and per-schema validators). Not committed (lead commits).",
+  "artifacts": [
+    ".guild/runs/run-rearch-w1-20260621/handoffs/tooling-engineer-W6.md"
+  ],
+  "issues": []
+}
+```

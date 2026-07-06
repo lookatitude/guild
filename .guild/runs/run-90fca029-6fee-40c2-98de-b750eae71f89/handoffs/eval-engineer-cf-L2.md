@@ -14,7 +14,9 @@ owner: eval-engineer
   "tier": "mid",
   "status": "done",
   "summary": "Migrated all 16 check-b test files in the 3 L2 globs to L1's shared parser → 0 check-b in scripts/__tests__, tests/dot-guild, tests/universal-host. sc7 now GREEN: L1's readScalarField (2d1e4b5) fixed the build-inventory blocker I caught, and sc7 frontmatterName is reconciled to call shared readScalarField. All migrated suites green. Codex G-lane SATISFIED.",
-  "artifacts": [".guild/runs/run-90fca029-6fee-40c2-98de-b750eae71f89/handoffs/eval-engineer-cf-L2.md"],
+  "artifacts": [
+    ".guild/runs/run-90fca029-6fee-40c2-98de-b750eae71f89/handoffs/eval-engineer-cf-L2.md"
+  ],
   "issues": [
     "RESOLVED (L1 2d1e4b5): build-inventory.ts whole-block readFrontmatterString regression I flagged — now routed through sibling-tolerant readScalarField; loads all 107 skills; sc7 loads + passes.",
     "ORPHAN for L1 (not in my 3 globs, %225-acked): scripts/comms/__tests__/comms-format-lint.test.ts still trips check-b — all 32 idiom hits are intentional DETECTOR FIXTURES (fake-source strings fed to lintCommsFormat); NO real reader. Needs a detector self-exemption in comms-format-lint.ts (extend SELF_EXEMPT_SUFFIX), NOT migration. Passes 58/58; untouched. hooks/__tests__/* (4) — hook-engineer.",
@@ -25,7 +27,7 @@ owner: eval-engineer
     "~7 files only had ID-format assertions (/^domain:/, /^topic:/ — ':' is a namespace delimiter, not YAML) → YAML_SURFACE_SIGNAL false positives; cleared via behavior-preserving de-idiom (startsWith/slice), not the parser.",
     "Whole-block parse is a robustness regression vs per-field read when a sibling field is YAML-hostile — verify single-field migrations on the REAL corpus, not clean fixtures (this caught the build-inventory regression)."
   ],
-  "notes": "Readers: sqlite-projections getYaml (parseYaml + String-coerce, +pin) ; sc7 -> shared readScalarField. Assertions -> parseYaml/readFrontmatterField/readFrontmatterString/hasTopLevelKey/startsWith. NEVER committed — %225 gates."
+  "notes": "Readers: sqlite-projections getYaml (parseYaml+String-coerce,+pin); sc7 -> shared readScalarField. Assertions -> parseYaml/readFrontmatterField/hasTopLevelKey/startsWith. NEVER committed — %225 gates."
 }
 ```
 
