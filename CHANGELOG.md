@@ -8,22 +8,9 @@ from v1.0.0 onward.
 
 ## [Unreleased]
 
-### Added
+_Nothing yet._
 
-- Release-tagging automation at `.github/workflows/release.yml`. When a
-  PR from a `release/v*` branch merges to `main`, the workflow creates
-  an annotated tag at the merge commit and opens a GitHub Release with
-  the PR body as release notes. Idempotent (skips if the tag already
-  exists), shape-checked (refuses tags that do not match
-  `vMAJOR.MINOR.PATCH[-prerelease]`).
-
-### Changed
-
-- `release-discipline.md` rule 7 added: every release ships an annotated
-  tag + GitHub Release. Pre-v1.4 releases backfilled retroactively
-  (v1.1.0 / v1.2.0 / v1.3.0 tags + releases created 2026-04-27).
-
-## [2.0.0] — UNRELEASED (release/v2.0.0)
+## [2.0.0] — 2026-07-07
 
 Guild v2 — the full redesign: one state machine, six phases, specialist
 teams, durable knowledge, adversarial review, and a v1→v2 migrator.
@@ -32,6 +19,25 @@ completeness / code-conformance all adversarially gated.
 
 ### Added
 
+- **Verified multi-host support (16 canonical hosts)**: Claude Code
+  (CLI/Desktop/Web), Codex (CLI/app), Pi, Antigravity, Cursor, GitHub
+  Copilot, opencode, Rovo Dev, Kiro/Qoder/Trae (AGENTS-file bound), and
+  the Claude.ai connector — all through one host-adapter contract. Honest
+  **two-field support model** (presentation `Support` label vs
+  receipt-derived `Public State`) with an anti-fraud/regression/floor gate;
+  Support labels `Supported` / `Supported (beta)` / `Supported (app)` /
+  `Supported (connector)`, no bare "unsupported". Missing capabilities
+  degrade to a lesser substrate; the phase still runs and the degradation
+  is written to disk.
+- **4-layer harness + 9 CI-gated architecture rails** (the plugin
+  re-architecture): R-DUP, R-DEP, R-DIST, R-HOST, R-SEC, R-TRACE, R-DECL
+  (strict/blocking) plus R-PERF and R-VAC (advisory) — the re-architecture's
+  invariants are gated, not just checklisted.
+- **Release-tagging automation** at `.github/workflows/release.yml`: a
+  `release/v*` → `main` merge creates an annotated tag at the merge commit
+  and opens a GitHub Release with the PR body as notes (idempotent,
+  shape-checked). `release-discipline.md` rule 7 codifies it; pre-v1.4
+  releases backfilled retroactively.
 - **Single-verb lifecycle**: `/guild:guild [brief]` plus phase commands
   `init ideate plan build qa ops`, with `--rigor=quick|standard|deep`
   profile expansion, 5 global flags, universal `--dry-run`.

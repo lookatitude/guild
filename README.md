@@ -20,7 +20,7 @@ gate.
   security; content & communication: copywriter, doc-writer, technical-writer,
   social-media, seo; commercial: marketing, sales) plus three execution/tiered
   roles (advisor, developer, doc-writer). One `agents/*.md` per agent.
-- **106 skills** across six tiers — 1 core (`guild-principles`), meta
+- **109 skills** across six tiers — 1 core (`guild-principles`), meta
   (the workflow spine + decisions + reflect + evolve + create-specialist +
   rollback + audit + diagnose + v1.4 loop/review helpers), 3 knowledge (wiki ingest / query / lint),
   and specialist skills (2–5 per specialist).
@@ -31,6 +31,16 @@ gate.
   **stays** (Claude Code requires it) — v2 drops only the redundant `guild-`
   command prefix (v1 `/guild:guild-wiki` → v2 `/guild:wiki`); every command is
   `/guild:<verb>` (v1→v2: `https://guildstack.dev/docs/migration-v1-to-v2`).
+- **16 supported hosts, one adapter contract** — Guild runs across 16 canonical
+  hosts (Claude Code CLI/Desktop/Web, Codex CLI/app, Pi, Antigravity, Cursor,
+  GitHub Copilot, opencode, Rovo Dev, Kiro/Qoder/Trae via AGENTS-file, and the
+  Claude.ai connector) through a single host-adapter contract. Support is
+  described with an **honest two-field model** — the presentation *Support* label
+  (`Supported` / `Supported (beta)` / `Supported (app)` / `Supported (connector)`)
+  is kept separate from the receipt-derived *Public State*; no host is ever
+  claimed beyond its verified evidence. Missing capabilities **degrade** to a
+  lesser substrate — the phase still runs and the degradation is written to disk.
+  See the Guild docs site → `https://guildstack.dev/hosts`.
 - **10 hook events wired** — `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
   `PostToolUse`, `PreCompact`, `SubagentStop`, `Stop`, `TaskCreated`,
   `TaskCompleted`, `TeammateIdle`.
