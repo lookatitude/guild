@@ -1,0 +1,37 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "knowledge",
+  "title": "Knowledge",
+  "kind": "capability",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns wiki, recall, learn-* flows, knowledge graph outputs, links, and the guild-memory MCP surface.",
+  "depends_on": ["kernel", "state", "learning"],
+  "owns": {
+    "commands": ["learn", "wiki"],
+    "skills": [
+      "guild-learn",
+      "guild-learn-diff",
+      "guild-learn-explain",
+      "guild-learn-graph",
+      "guild-learn-harvest",
+      "guild-learn-knowledge",
+      "guild-learn-map",
+      "guild-learn-onboard",
+      "guild-wiki-ingest",
+      "guild-wiki-lint",
+      "guild-wiki-query"
+    ],
+    "mcp_servers": ["guild-memory"],
+    "scripts": [
+      "knowledge-links-builder",
+      "knowledge-links-traverse",
+      "lib/ingest-importance",
+      "lib/ingest-similarity",
+      "lib/kb-snapshot",
+      "lib/shared/bm25",
+      "lib/shared/graph-scoring",
+      "lib/sqlite-projections",
+      "lib/write-back-scored-tier"
+    ]
+  }
+}

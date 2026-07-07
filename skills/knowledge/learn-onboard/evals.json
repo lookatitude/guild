@@ -1,0 +1,19 @@
+{
+  "should_trigger": [
+    "Narrate the codebase tour for new contributors.",
+    "Build the onboarding guide from the knowledge graph.",
+    "Generate a guided walkthrough of this repo's architecture.",
+    "Write the new-hire tour for this project.",
+    "Produce ONBOARDING.md from the tour skeleton."
+  ],
+  "should_not_trigger": [
+    "Build the knowledge graph for this repo.",
+    "Run the cheap-scan codebase map.",
+    "Reverse-spec this codebase.",
+    "Analyze the diff blast radius.",
+    "Explain how the auth module works.",
+    "Query the graph for the auth module.",
+    "Set models.cacheTTL.leaf to 5m in settings.json.",
+    "Launch the interactive dashboard."
+  ]
+}

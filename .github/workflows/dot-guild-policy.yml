@@ -1,0 +1,71 @@
+# dot-guild-policy.yml — share-dot-guild policy enforcement (SC-11, CQ-C)
+#
+# Template: identical body across all 4 repos (CQ-B literal-block discipline).
+# Differences between repos are handled via conditionals within this file:
+#   - plugin repo: audit.ts is local → invoke directly.
+#   - umbrella/benchmark/website: audit.ts lives in the plugin repo which is not
+#     checked out here, so we skip the audit step with a clear log line.
+#     Decision: skip (not fetch+invoke) to keep the workflow self-contained and
+#     avoid hard dependencies on the plugin repo layout at CI time. Lane D's
+#     gitignore-equivalence test is the cross-repo drift enforcement.
+#
+# This file: plugin repo. Repo identity: REPO_KIND=plugin
+# audit.ts is LOCAL here — invoked directly.
+
+name: .guild/ policy check
+
+on:
+  pull_request:
+  push:
+    branches: ["**"]
+
+jobs:
+  dot-guild-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies (if package.json exists)
+        run: |
+          if [ -f package.json ]; then
+            npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+          else
+            echo "No package.json — skipping npm install"
+          fi
+
+      - name: Install scripts/ dependencies
+        run: |
+          if [ -f scripts/package.json ]; then
+            cd scripts && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+          fi
+
+      - name: Verify share-dot-guild block in .gitignore
+        run: |
+          node -e "
+            const {readFileSync} = require('fs');
+            const got = readFileSync('.gitignore', 'utf8');
+            if (!got.includes('share-dot-guild policy')) {
+              console.error('ERROR: share-dot-guild block missing from .gitignore');
+              process.exit(1);
+            }
+            console.log('share-dot-guild block present in .gitignore — OK');
+          "
+
+      - name: Run scrub audit (plugin — audit.ts is local)
+        run: |
+          # audit.ts lives here in the plugin repo — invoke directly.
+          # --dry-run: no writes; exits non-zero if actionable flags (operator-path or secret).
+          # payload-excluded items are informational (not failures).
+          npx tsx scripts/dot-guild/audit.ts --workspace=. 2>&1 || {
+            echo "share-dot-guild audit found flags — review the output above and resolve before merge."
+            exit 1
+          }
+
+      - name: Policy check OK
+        run: echo "share-dot-guild policy check OK"

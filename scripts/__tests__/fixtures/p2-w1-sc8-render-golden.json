@@ -1,0 +1,3433 @@
+{
+  "claude-code-cli": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "claude-code-cli",
+    "family": "claude",
+    "surface_kind": "cli",
+    "provenance": "verified",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "models": {
+      "cheap": "haiku",
+      "mid": "sonnet",
+      "powerful": "opus"
+    },
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "codex-cli": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "codex-cli",
+    "family": "codex",
+    "surface_kind": "cli",
+    "provenance": "verified",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"codex-cli\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"codex-cli\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"codex-cli\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "pi-cli": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "pi-cli",
+    "family": "pi",
+    "surface_kind": "cli",
+    "provenance": "verified",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"pi-cli\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"pi-cli\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"pi-cli\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "antigravity-cli": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "antigravity-cli",
+    "family": "antigravity",
+    "surface_kind": "cli",
+    "provenance": "verified",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"antigravity-cli\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"antigravity-cli\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"antigravity-cli\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "agents-file": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "agents-file",
+    "family": "agents",
+    "surface_kind": "file",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"agents-file\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"agents-file\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"agents-file\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "claude-code-app": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "claude-code-app",
+    "family": "claude",
+    "surface_kind": "app",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"claude-code-app\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"claude-code-app\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"claude-code-app\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "claude-code-web": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "claude-code-web",
+    "family": "claude",
+    "surface_kind": "app",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"claude-code-web\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"claude-code-web\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"claude-code-web\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "codex-app": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "codex-app",
+    "family": "codex",
+    "surface_kind": "app",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"codex-app\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"codex-app\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"codex-app\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "claude-ai-connector": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "claude-ai-connector",
+    "family": "claude",
+    "surface_kind": "app",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"claude-ai-connector\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"claude-ai-connector\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"claude-ai-connector\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "cursor": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "cursor",
+    "family": "cursor",
+    "surface_kind": "cli",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"cursor\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"cursor\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"cursor\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "github-copilot": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "github-copilot",
+    "family": "copilot",
+    "surface_kind": "cli",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"github-copilot\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"github-copilot\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"github-copilot\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "opencode": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "opencode",
+    "family": "opencode",
+    "surface_kind": "cli",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"opencode\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"opencode\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"opencode\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "rovo-dev": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "rovo-dev",
+    "family": "rovo",
+    "surface_kind": "cli",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"rovo-dev\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"rovo-dev\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"rovo-dev\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "kiro": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "kiro",
+    "family": "agents",
+    "surface_kind": "file",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"kiro\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"kiro\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"kiro\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "qoder": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "qoder",
+    "family": "agents",
+    "surface_kind": "file",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"qoder\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"qoder\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"qoder\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  },
+  "trae": {
+    "schema_version": "guild.host_config_render.v1",
+    "host_id": "trae",
+    "family": "agents",
+    "surface_kind": "file",
+    "provenance": "inferred",
+    "ok": false,
+    "blocked": true,
+    "_local_guard": "unverified",
+    "_rendered_at": "2026-06-17T00:00:00Z",
+    "_source_version": "2.0.0",
+    "permissions": {
+      "init.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "init.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ideate.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "plan.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "build.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "qa.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.plan": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.qa": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.release": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.ops": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.security": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      },
+      "ops.destructive": {
+        "host_mode": "ask",
+        "guild_gates": "ask",
+        "bypass": "audit"
+      }
+    },
+    "_unsupported": [
+      {
+        "field": "models",
+        "reason": "no model is mapped for host \"trae\" (no models.tiers slot and an empty capability-row model set)"
+      },
+      {
+        "field": "hooks",
+        "reason": "host \"trae\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
+      },
+      {
+        "field": "skills",
+        "reason": "host \"trae\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
+      }
+    ],
+    "_redactions": [
+      {
+        "field": "(sources)",
+        "reason": "local-scope",
+        "detail": "no sources map supplied — local-scope guard could not run (fail-closed)"
+      }
+    ]
+  }
+}

@@ -142,6 +142,71 @@ describe("description-optimizer.ts", () => {
     });
   });
 
+  // ── F2 regression: bare-string evals corpus ──────────────────────────────
+  // The shipped evals corpus uses bare strings (not {prompt} objects).
+  // The optimizer MUST accept both shapes without crashing (§11.2 step-6).
+  describe("F2 fix — bare-string evals corpus (evals-bare-strings.json)", () => {
+    it("exits 0 with bare-string corpus", () => {
+      seedSkill(tmpDir, "guild-brainstorm", "evals-bare-strings.json");
+      const { exitCode } = runScript([
+        "--skill",
+        "guild-brainstorm",
+        "--cwd",
+        tmpDir,
+      ]);
+      expect(exitCode).toBe(0);
+    });
+
+    it("emits YAML description to stdout with bare-string corpus", () => {
+      seedSkill(tmpDir, "guild-brainstorm", "evals-bare-strings.json");
+      const { stdout } = runScript([
+        "--skill",
+        "guild-brainstorm",
+        "--cwd",
+        tmpDir,
+      ]);
+      expect(stdout).toMatch(/^description:/m);
+    });
+
+    it("description from bare-string corpus captures brainstorm tokens", () => {
+      seedSkill(tmpDir, "guild-brainstorm", "evals-bare-strings.json");
+      const { stdout } = runScript([
+        "--skill",
+        "guild-brainstorm",
+        "--cwd",
+        tmpDir,
+      ]);
+      expect(stdout.toLowerCase()).toContain("brainstorm");
+    });
+
+    it("description from bare-string corpus is ≤ 1024 chars", () => {
+      seedSkill(tmpDir, "guild-brainstorm", "evals-bare-strings.json");
+      const { stdout } = runScript([
+        "--skill",
+        "guild-brainstorm",
+        "--cwd",
+        tmpDir,
+      ]);
+      const m = stdout.match(/^description:\s*(.+)$/m);
+      expect(m).not.toBeNull();
+      const desc = (m![1] || "").trim();
+      expect(desc.length).toBeLessThanOrEqual(1024);
+    });
+
+    it("{prompt}-object corpus still works after bare-string fix", () => {
+      // Guard: the {prompt} fixture must keep working — both shapes coexist.
+      seedSkill(tmpDir, "guild-brainstorm", "evals-for-optimizer.json");
+      const { exitCode, stdout } = runScript([
+        "--skill",
+        "guild-brainstorm",
+        "--cwd",
+        tmpDir,
+      ]);
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/^description:/m);
+    });
+  });
+
   describe("CLI errors", () => {
     it("exits 1 when --skill is missing", () => {
       const { exitCode, stderr } = runScript(["--cwd", tmpDir]);

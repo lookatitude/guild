@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Run the incident runbook — production is down.",
+    "The ops router selected class=incident — execute the incident playbook.",
+    "Sev-1 page: kick off incident response via the runbook.",
+    "Execute the incident-class operations playbook (interactive, never autonomous).",
+    "Run the incident response runbook for this outage."
+  ],
+  "should_not_trigger": [
+    "Roll back the last deploy to the previous version.",
+    "Run the release runbook and cut a release.",
+    "Set up monitoring dashboards and alerts.",
+    "Run the maintenance runbook for the dependency bump.",
+    "Compute the release-readiness gate — should we release?",
+    "Author the incident runbook content.",
+    "Close out the initiative."
+  ]
+}

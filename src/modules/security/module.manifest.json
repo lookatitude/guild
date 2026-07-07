@@ -1,0 +1,22 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "security",
+  "title": "Security",
+  "kind": "substrate",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns permissions, cloud egress checks, security hooks, scrub boundaries, and safe-object/share-set helpers.",
+  "depends_on": ["config", "state"],
+  "owns": {
+    "hooks": ["PostToolUse:post-tool-use.js", "PreToolUse:pre-tool-use.js"],
+    "scripts": [
+      "permission-policy",
+      "lib/cloud-consent-gate",
+      "lib/cloud-task-packet",
+      "lib/permission-policy",
+      "lib/permission-policy-schema",
+      "lib/shared/safe-object",
+      "lib/shared/scrub-redact",
+      "lib/shared/share-set"
+    ]
+  }
+}

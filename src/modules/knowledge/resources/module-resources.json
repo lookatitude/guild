@@ -1,0 +1,189 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "knowledge",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "commands",
+      "id": "learn",
+      "source_path": "commands/learn.md",
+      "resource_path": "resources/commands/learn.md",
+      "sha256": "e1cd4505cb054f7859755b02f60b99272adc8c0680865546e1e2db69952f9c2f"
+    },
+    {
+      "category": "commands",
+      "id": "wiki",
+      "source_path": "commands/wiki.md",
+      "resource_path": "resources/commands/wiki.md",
+      "sha256": "713704e16e1a0331c47463bf575965dc781de69ae495d0911db3ca9bbef84b80"
+    },
+    {
+      "category": "mcp_servers",
+      "id": "guild-memory",
+      "source_path": ".mcp.json",
+      "resource_path": "resources/mcp_servers/.mcp.json",
+      "sha256": "60091d773900b8e0796c2af42e2e032476732c4d120f7a7159470d966231eb33"
+    },
+    {
+      "category": "scripts",
+      "id": "knowledge-links-builder",
+      "source_path": "scripts/knowledge-links-builder.ts",
+      "resource_path": "resources/scripts/knowledge-links-builder.ts",
+      "sha256": "4237707639ab888dcc95bc46a28058144dba30918506aef0d729a70e13f16c33"
+    },
+    {
+      "category": "scripts",
+      "id": "knowledge-links-traverse",
+      "source_path": "scripts/knowledge-links-traverse.ts",
+      "resource_path": "resources/scripts/knowledge-links-traverse.ts",
+      "sha256": "9e6eceb9a25a335fbbff0c51bac4ecad1007966977cdf94b8827bbdb298f844e"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/ingest-importance",
+      "source_path": "scripts/lib/ingest-importance.ts",
+      "resource_path": "resources/scripts/lib/ingest-importance.ts",
+      "sha256": "b45895d63e1aabe27db41c6cc6cdfe49634b9c78bc0cd781672363eb1cb72e2c"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/ingest-similarity",
+      "source_path": "scripts/lib/ingest-similarity.ts",
+      "resource_path": "resources/scripts/lib/ingest-similarity.ts",
+      "sha256": "49996d2d58e6a2399d5328edf13661cc79ee730d140f435a8c0b4edd3f5eaac8"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/kb-snapshot",
+      "source_path": "scripts/lib/kb-snapshot.ts",
+      "resource_path": "resources/scripts/lib/kb-snapshot.ts",
+      "sha256": "a4ef1cc0edda6967cae64ee465114e099178a8a70adb7e18b33cfcec8b97b6cc"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/shared/bm25",
+      "source_path": "scripts/lib/shared/bm25.ts",
+      "resource_path": "resources/scripts/lib/shared/bm25.ts",
+      "sha256": "bdd615410809d36434cf50436b2e605b2d7bb4f1970686c62e08e9715b93e78c"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/shared/graph-scoring",
+      "source_path": "scripts/lib/shared/graph-scoring.ts",
+      "resource_path": "resources/scripts/lib/shared/graph-scoring.ts",
+      "sha256": "c85e4aed8c56b50e972b9043d677d09dc5e3428e001e020ceb474c594bb3913b"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/sqlite-projections",
+      "source_path": "scripts/lib/sqlite-projections.ts",
+      "resource_path": "resources/scripts/lib/sqlite-projections.ts",
+      "sha256": "8beefef6b7cfca96478441eea818909b83731cdc69a5003bf77382c8500892bb"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/write-back-scored-tier",
+      "source_path": "scripts/lib/write-back-scored-tier.ts",
+      "resource_path": "resources/scripts/lib/write-back-scored-tier.ts",
+      "sha256": "2393547db5b61fc22dea53e36db4bb3cf2d1226a80dc183d301896e6f21b6c3c"
+    },
+    {
+      "category": "skills",
+      "id": "guild-learn",
+      "source_path": "skills/knowledge/learn/SKILL.md",
+      "resource_path": "resources/skills/knowledge/learn/SKILL.md",
+      "sha256": "7cbf2ec05a60dec4d1fc10359718b5898e853552b1df20e815205eec13a1d74e"
+    },
+    {
+      "category": "skills",
+      "id": "guild-learn-diff",
+      "source_path": "skills/knowledge/learn-diff/SKILL.md",
+      "resource_path": "resources/skills/knowledge/learn-diff/SKILL.md",
+      "sha256": "15bc1f7acd420a60fc1124b953ea907938c447a33bfd62b5610929acfb5777d9"
+    },
+    {
+      "category": "skills",
+      "id": "guild-learn-explain",
+      "source_path": "skills/knowledge/learn-explain/SKILL.md",
+      "resource_path": "resources/skills/knowledge/learn-explain/SKILL.md",
+      "sha256": "a1cb07ff0fe2afa33d5ca3840ae0fb8e52f02b73c796d777889ea13cf08e8fbf"
+    },
+    {
+      "category": "skills",
+      "id": "guild-learn-graph",
+      "source_path": "skills/knowledge/learn-graph/SKILL.md",
+      "resource_path": "resources/skills/knowledge/learn-graph/SKILL.md",
+      "sha256": "4f6c89a24fdebef3766c3856484804f71ac635f502c6d4135e18590e51050645"
+    },
+    {
+      "category": "skills",
+      "id": "guild-learn-harvest",
+      "source_path": "skills/knowledge/learn-harvest/SKILL.md",
+      "resource_path": "resources/skills/knowledge/learn-harvest/SKILL.md",
+      "sha256": "a220cbb5885882048e4cb028a63b5623243b2edb234e6fea7e61811789b8d021"
+    },
+    {
+      "category": "skills",
+      "id": "guild-learn-knowledge",
+      "source_path": "skills/knowledge/learn-knowledge/SKILL.md",
+      "resource_path": "resources/skills/knowledge/learn-knowledge/SKILL.md",
+      "sha256": "05b780fbbdd72b62164a41930c9f45c2b3ff8e72d714ece78967df2c2fb38508"
+    },
+    {
+      "category": "skills",
+      "id": "guild-learn-map",
+      "source_path": "skills/knowledge/learn-map/SKILL.md",
+      "resource_path": "resources/skills/knowledge/learn-map/SKILL.md",
+      "sha256": "548c58e4c6057d448aec40e5dba758ebcce38aac445c131782f6726a060b520f"
+    },
+    {
+      "category": "skills",
+      "id": "guild-learn-onboard",
+      "source_path": "skills/knowledge/learn-onboard/SKILL.md",
+      "resource_path": "resources/skills/knowledge/learn-onboard/SKILL.md",
+      "sha256": "8318afe09081d3cd024f7648bac91422d282079351413ee60415c1d144ece590"
+    },
+    {
+      "category": "skills",
+      "id": "guild-wiki-ingest",
+      "source_path": "skills/knowledge/wiki-ingest/SKILL.md",
+      "resource_path": "resources/skills/knowledge/wiki-ingest/SKILL.md",
+      "sha256": "850ab30c7ba54657b94ab99a9a40b706e7ecc3b2645b8947a4bde647761bd178"
+    },
+    {
+      "category": "skills",
+      "id": "guild-wiki-ingest/ingest-reference.md",
+      "source_path": "skills/knowledge/wiki-ingest/ingest-reference.md",
+      "resource_path": "resources/skills/knowledge/wiki-ingest/ingest-reference.md",
+      "sha256": "bdcf8b7ea958e2d7e09c541d0906d940011a19becaca5239588ef73caafa82c3"
+    },
+    {
+      "category": "skills",
+      "id": "guild-wiki-lint",
+      "source_path": "skills/knowledge/wiki-lint/SKILL.md",
+      "resource_path": "resources/skills/knowledge/wiki-lint/SKILL.md",
+      "sha256": "7f2ff8b93f9f706445579dfede068065aa259862a4f60ceeae1b16ecce738915"
+    },
+    {
+      "category": "skills",
+      "id": "guild-wiki-lint/lint-rules.md",
+      "source_path": "skills/knowledge/wiki-lint/lint-rules.md",
+      "resource_path": "resources/skills/knowledge/wiki-lint/lint-rules.md",
+      "sha256": "c541bef223fd308c53d55acf96154c073d4921f185adaa965a39393c89d717cc"
+    },
+    {
+      "category": "skills",
+      "id": "guild-wiki-query",
+      "source_path": "skills/knowledge/wiki-query/SKILL.md",
+      "resource_path": "resources/skills/knowledge/wiki-query/SKILL.md",
+      "sha256": "c9112cd074d05280d3c1818728eee4fe2c34016ede78eddea81f9fd369839753"
+    },
+    {
+      "category": "skills",
+      "id": "guild-wiki-query/query-modes.md",
+      "source_path": "skills/knowledge/wiki-query/query-modes.md",
+      "resource_path": "resources/skills/knowledge/wiki-query/query-modes.md",
+      "sha256": "2c102e4321ee2eaebd922bc271c21e82c14e599f3c3ebf8a33326a277bf1ab2e"
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "schema_version": "guild.template.v1",
+  "id": "web-app",
+  "specialists": ["architect", "backend", "frontend", "qa", "devops"],
+  "context_questions": [
+    "Who are the primary users and what is the core job they hire the app to do?",
+    "What is the single most important user flow for the first release?",
+    "What data does the app store, and what are the privacy / auth constraints?"
+  ],
+  "artifact_skeletons": {
+    "explore": {
+      "assumptions": [
+        "users reach the app through a browser",
+        "the team can host a backend service and a database"
+      ],
+      "evidence_needs": [
+        "what conversion or activation metric proves the core flow works"
+      ],
+      "comparables": ["Linear", "Notion", "Vercel dashboard"],
+      "risks": [
+        "scope creep across too many flows before the core one is validated",
+        "auth and data-privacy surface is underestimated"
+      ],
+      "recommended_next_step": "prototype the single core flow end-to-end behind a feature flag"
+    },
+    "define": {
+      "acceptance_criteria": [
+        { "id": "AC-1", "text": "A new user completes the core flow without reading docs." },
+        { "id": "AC-2", "text": "Authenticated state survives a page refresh." },
+        { "id": "AC-3", "text": "The app degrades gracefully when the backend is unreachable." }
+      ],
+      "user_stories": [
+        "As a first-time visitor, I sign up and complete the core flow in one session.",
+        "As a returning user, I land directly in my workspace."
+      ],
+      "non_goals": [
+        "No native mobile app in the first release.",
+        "No multi-tenant billing in the first release."
+      ],
+      "risks": ["the core flow is not validated before secondary features are built"],
+      "affected_surfaces": [
+        "the frontend app shell",
+        "the API contract",
+        "the auth/session layer",
+        "the data layer"
+      ],
+      "test_implications": [
+        "an end-to-end test of the core flow",
+        "an auth-session persistence test",
+        "a backend-unreachable degradation test"
+      ]
+    }
+  },
+  "default_checks": [
+    "unit + integration tests green",
+    "the core-flow e2e test passes",
+    "a11y smoke check passes"
+  ],
+  "docs_expectations": [
+    "a README with local-dev setup",
+    "an architecture overview",
+    "an API reference for the public endpoints"
+  ],
+  "release_gates": [
+    "all tests pass",
+    "the core-flow e2e is green in CI",
+    "a rollback plan is documented"
+  ]
+}

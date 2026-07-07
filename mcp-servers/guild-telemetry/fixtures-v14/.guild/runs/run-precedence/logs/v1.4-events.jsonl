@@ -1,0 +1,2 @@
+{"ts":"2026-05-02T10:00:00.000Z","event":"phase_start","run_id":"run-precedence","phase":"plan","tier":"cheap","model":"haiku"}
+{"ts":"2026-05-02T10:00:01.000Z","event":"phase_end","run_id":"run-precedence","phase":"plan","duration_ms":1000,"status":"ok","tier":"cheap","model":"haiku"}

@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Where should the filter state live — local or global?",
+    "Set up TanStack Query to cache the orders list.",
+    "Design the Zustand store for the editor's shared state.",
+    "Normalise the cached comments by id and add selectors.",
+    "Share the selected-row state across the table and the detail pane."
+  ],
+  "should_not_trigger": [
+    "Design the Postgres schema and indexes for orders.",
+    "Define the REST endpoints that return the orders list.",
+    "Why is this React component re-rendering — should I memoize it?",
+    "Code-split the editor route in the Vite config.",
+    "Add focus management to the filter modal.",
+    "Build the offline-sync store for the React Native app."
+  ]
+}

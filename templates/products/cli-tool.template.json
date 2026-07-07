@@ -1,0 +1,40 @@
+{
+  "schema_version": "guild.template.v1",
+  "id": "cli-tool",
+  "specialists": ["architect", "backend", "qa", "doc-writer"],
+  "context_questions": [
+    "What is the primary command the tool exposes?",
+    "Who runs it — humans at a terminal, CI, or both?",
+    "What is the single most important output it must produce?"
+  ],
+  "artifact_skeletons": {
+    "explore": {
+      "assumptions": [
+        "users live in the terminal",
+        "the tool ships as a single self-contained binary or script"
+      ],
+      "evidence_needs": [
+        "how many target users prefer a CLI over a GUI for this task"
+      ],
+      "comparables": ["ripgrep", "fd", "gh"],
+      "risks": ["discoverability is lower than a GUI workflow"],
+      "recommended_next_step": "draft the command surface and run a 5-user dry-run"
+    },
+    "define": {
+      "acceptance_criteria": [
+        { "id": "AC-1", "text": "The tool runs its primary command with zero required config." },
+        { "id": "AC-2", "text": "`--help` documents every flag and subcommand." }
+      ],
+      "user_stories": [
+        "As an operator, I run one command and get the result on stdout."
+      ],
+      "non_goals": ["No GUI in the first release."],
+      "risks": ["the flag surface grows unbounded over time"],
+      "affected_surfaces": ["the CLI entrypoint", "argument parsing"],
+      "test_implications": ["a golden-output test per subcommand"]
+    }
+  },
+  "default_checks": ["unit tests green", "`--help` snapshot matches"],
+  "docs_expectations": ["a README with a quickstart", "a man-page / `--help` reference"],
+  "release_gates": ["all tests pass", "changelog entry written"]
+}

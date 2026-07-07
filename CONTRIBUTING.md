@@ -33,26 +33,23 @@ guide to getting set up, understanding the repo layout, and submitting changes.
    (cd mcp-servers/guild-telemetry && npx jest --no-coverage)
    ```
 
-   All 165 tests should pass on a clean checkout.
+   All tests should pass on a clean checkout.
 
 ## Repo layout
 
-- `guild-plan.md` — **single source of truth**. Every skill, agent,
-  command, hook, script, and doc cites it. If you're adding behavior that
-  isn't in §1–§16, open a discussion first.
 - `.claude-plugin/` — plugin + marketplace manifests.
-- `skills/` — 67 skills in five tiers (`core`, `meta`, `knowledge`,
-  `fallback`, `specialists`).
-- `agents/` — the 13 shipping specialist subagent definitions.
-- `commands/` — the 7 slash command files.
+- `skills/` — 106 skills across six tiers (`core`, `meta`, `knowledge`,
+  `specialists`, `guild-operations`, `guild-quality`).
+- `agents/` — 17 registered agents (14 product specialists + advisor, developer, doc-writer).
+- `commands/` — the v2 flat-token command files (`/guild:<verb>`).
 - `hooks/` — Claude Code hook scripts + manifest.
 - `scripts/` — tooling (evolve loop, flip report, shadow mode,
   description optimizer, rollback walker, trace summarizer,
-  agent-team launcher).
+  agent-team launcher, docs-hygiene scanner, dot-guild migrator).
 - `mcp-servers/` — two optional stdio MCP servers.
 - `tests/` — cross-cutting harness tests (evolve + shadow).
-- `docs/` — user-facing docs + phase-gate history + diagrams.
-- `.claude/agents/` — the **dev-team** of 8 Claude Code subagent
+- `docs/` — user-facing docs, diagrams, and release notes.
+- `.claude/agents/` — the **dev-team** of 10 Claude Code subagent
   definitions that built Guild itself (not the shipping specialists).
   Separate from `agents/` at the repo root.
 
@@ -62,8 +59,8 @@ Guild was built phase-by-phase (P0–P7) using superpowers-style
 brainstorm → plan → execute → review gates. Contributions should follow
 the same spirit:
 
-1. **Read the relevant `guild-plan.md` section first** and link to it
-   in your PR description.
+1. **Read the relevant docs at `https://guildstack.dev/docs` first** and link to
+   the relevant page in your PR description.
 2. **Keep changes surgical.** Match the existing file's style (pushy
    descriptions, structured `##` sections, YAML frontmatter where the
    pattern calls for it).
@@ -75,18 +72,18 @@ the same spirit:
 
 ### Adding a new skill
 
-- Author under the correct tier: `skills/{core,meta,knowledge,fallback,specialists}/<slug>/`.
+- Author under the correct tier: `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/<slug>/`.
 - Required files: `SKILL.md` + `evals.json`.
 - `SKILL.md` frontmatter: `name`, `description` (≤ 1024 chars, with
   `TRIGGER` and `DO NOT TRIGGER` clauses), `when_to_use`, and `type`
   matching the tier.
 - `evals.json`: ≥ 3 `should_trigger` + ≥ 3 `should_not_trigger` cases.
-- Cite the `guild-plan.md §N` section the skill implements at the top
-  of the body.
+- Add a one-line comment at the top of the body describing which feature
+  area the skill implements.
 
 ### Adding a new specialist
 
-Use the `guild:create-specialist` workflow (§12). The 7-step flow
+Use the `guild:create-specialist` workflow. The 7-step flow
 includes adjacent-boundary scans — new specialists must not silently
 steal triggers from existing ones.
 
@@ -94,7 +91,7 @@ steal triggers from existing ones.
 
 - TypeScript, direct-execution via `tsx` (no build step).
 - Log to stderr only — stdout is often consumed by Claude Code.
-- Never write to `.guild/wiki/` (that's skill territory; see §10.5.1).
+- Never write to `.guild/wiki/` (that's skill territory; use `guild:wiki-ingest` / `guild:decisions`).
 - Always add a Jest test.
 
 ## Commit conventions
@@ -102,7 +99,7 @@ steal triggers from existing ones.
 - First line: short imperative summary (≤ 72 chars).
 - Blank line.
 - Body: the "why", wrapped at 72.
-- Reference `guild-plan.md §N` anchors where relevant.
+- Reference the relevant `https://guildstack.dev/docs` page where relevant.
 
 ## Pre-merge review
 
@@ -111,7 +108,7 @@ Guild ships with a disciplined review discipline: significant changes
 should pass a **code-reviewer** pass before merge. In a consuming
 Claude Code session you can use `/ultrareview <PR#>` — locally,
 read your diff aloud and ask whether each change would survive
-[the v1 final review](docs/phase-gates/P7.md) flow.
+the review and quality gate (see `https://guildstack.dev/docs`).
 
 ## Release flow
 
@@ -132,6 +129,6 @@ read your diff aloud and ask whether each change would survive
 
 See [SECURITY.md](SECURITY.md) for the trust model and the process
 for reporting security-relevant issues. Short version: use
-`/guild:audit` before installing a Guild fork; don't open PRs that
+`/guild audit` before installing a Guild fork; don't open PRs that
 add network access to meta-skills or non-researcher specialists
 without an explicit `§15.1 #12` discussion.

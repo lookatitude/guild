@@ -11,6 +11,7 @@
     "Start a new brainstorm.",
     "Review the diff.",
     "Compose a team for this.",
-    "Run the tests."
+    "Run the tests.",
+    "Dispatch each lane at its resolved tier."
   ]
 }

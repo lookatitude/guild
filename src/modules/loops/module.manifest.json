@@ -1,0 +1,17 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "loops",
+  "title": "Loop Control",
+  "kind": "substrate",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns iterative clarification, plan review, implementation loop, and owner/architect loop helpers.",
+  "depends_on": ["communication", "review"],
+  "owns": {
+    "skills": [
+      "guild-loop-clarify",
+      "guild-loop-implement",
+      "guild-loop-plan-review"
+    ],
+    "scripts": ["lib/owner-architect-loop"]
+  }
+}

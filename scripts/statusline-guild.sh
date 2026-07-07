@@ -4,7 +4,7 @@
 # Outputs a single-line status string for the operator's status-line
 # integration: `phase | round | cap | loops-mode | restart-count`.
 #
-# Per architect's audit (`benchmark/plans/v1.4-claude-plugin-surface-audit.md`
+# Per architect's audit (`guild-benchmark/plans/v1.4-claude-plugin-surface-audit.md`
 # §"Status-line integration"), this script is opt-in via either:
 #   - `--statusline` CLI flag passed through Guild's runner, or
 #   - `GUILD_STATUSLINE=1` env var.
@@ -36,6 +36,15 @@
 #   0 — always (status-line scripts must not bubble failures up).
 
 set -u
+
+# Opt-in gate (R-009): only produce output when GUILD_STATUSLINE=1 is
+# explicitly set in the environment. Default is off — an absent or non-"1"
+# value exits immediately with no output so the status line stays clear for
+# non-Guild sessions and when the user hasn't opted in via --statusline or
+# by exporting GUILD_STATUSLINE=1 themselves.
+if [[ "${GUILD_STATUSLINE:-}" != "1" ]]; then
+  exit 0
+fi
 
 # Drain stdin per Claude Code convention. Claude Code passes a JSON
 # `input_json` blob on stdin describing the active session. We don't

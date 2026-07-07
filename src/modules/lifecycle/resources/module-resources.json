@@ -1,0 +1,189 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "lifecycle",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "commands",
+      "id": "build",
+      "source_path": "commands/build.md",
+      "resource_path": "resources/commands/build.md",
+      "sha256": "c57c5d7dac06a03675b335df321f384cef653b671b012cc0aa34952f04ef92fa"
+    },
+    {
+      "category": "commands",
+      "id": "goal",
+      "source_path": "commands/goal.md",
+      "resource_path": "resources/commands/goal.md",
+      "sha256": "461680348369dd865507561d3ddce7e15bbc9f5f0d918a00acf1973f63730f28"
+    },
+    {
+      "category": "commands",
+      "id": "guild",
+      "source_path": "commands/guild.md",
+      "resource_path": "resources/commands/guild.md",
+      "sha256": "3876957790ae368bf2c78581269ab45378abe2d3fe1188ab5edcbe526989dbfb"
+    },
+    {
+      "category": "commands",
+      "id": "ideate",
+      "source_path": "commands/ideate.md",
+      "resource_path": "resources/commands/ideate.md",
+      "sha256": "7111d4e51c8997886cb1ab4d6e4697921aea8814d663062301da937e7e3f774b"
+    },
+    {
+      "category": "commands",
+      "id": "init",
+      "source_path": "commands/init.md",
+      "resource_path": "resources/commands/init.md",
+      "sha256": "298038cec3d0b69920512fba85bfeea3992d0bc4fbaecb89a69fe2bcfd5ff199"
+    },
+    {
+      "category": "commands",
+      "id": "ops",
+      "source_path": "commands/ops.md",
+      "resource_path": "resources/commands/ops.md",
+      "sha256": "d01d3ba12d5b78e2923f7f5efd043f290cca7078c8c1501efddb98f4a6451a17"
+    },
+    {
+      "category": "commands",
+      "id": "plan",
+      "source_path": "commands/plan.md",
+      "resource_path": "resources/commands/plan.md",
+      "sha256": "c04dbca64741662b3d04b60b46ea8a72cedf3c6cfaa9c980234965782acb5729"
+    },
+    {
+      "category": "commands",
+      "id": "qa",
+      "source_path": "commands/qa.md",
+      "resource_path": "resources/commands/qa.md",
+      "sha256": "5c10c89eedd48d154355c6021ee28d3acca304cf753cab855a0f788df21f5191"
+    },
+    {
+      "category": "commands",
+      "id": "resume",
+      "source_path": "commands/resume.md",
+      "resource_path": "resources/commands/resume.md",
+      "sha256": "e17c6bb2b07ea682f58115b3d3bf9db89d1a787cab0a6f8959530d84f9a1aeef"
+    },
+    {
+      "category": "commands",
+      "id": "status",
+      "source_path": "commands/status.md",
+      "resource_path": "resources/commands/status.md",
+      "sha256": "03eaae3a714994975594ddf50b73beed4c7dd019948cfd212288386f77365d1f"
+    },
+    {
+      "category": "scripts",
+      "id": "check-lane-liveness",
+      "source_path": "scripts/check-lane-liveness.ts",
+      "resource_path": "resources/scripts/check-lane-liveness.ts",
+      "sha256": "dd53d5fd3912bfb13ac567b6bdf5b791d9d0d352e238026eef28ffdd784afcd3"
+    },
+    {
+      "category": "scripts",
+      "id": "emit-loop-event",
+      "source_path": "scripts/emit-loop-event.ts",
+      "resource_path": "resources/scripts/emit-loop-event.ts",
+      "sha256": "8aa5c41be5ef4b102cde59df63691016b80c4800d4cdbeb389f4f47460a4c7f9"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/run-lifecycle",
+      "source_path": "scripts/lib/run-lifecycle.ts",
+      "resource_path": "resources/scripts/lib/run-lifecycle.ts",
+      "sha256": "946473ab9d7647641041369f419a42b2f347b2f824c52e0c3b1268ec0f9cdb80"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/run-manifest-wiring",
+      "source_path": "scripts/lib/run-manifest-wiring.ts",
+      "resource_path": "resources/scripts/lib/run-manifest-wiring.ts",
+      "sha256": "13d4b146f608f6881056170c9d6626bc51d85fc603d10c0d5956123835bc4d89"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/runstart-preflight",
+      "source_path": "scripts/lib/runstart-preflight.ts",
+      "resource_path": "resources/scripts/lib/runstart-preflight.ts",
+      "sha256": "740854e73fd883fc5c3d1331a293863b39a28a0343788b558ded1e5af54c9457"
+    },
+    {
+      "category": "scripts",
+      "id": "mark-lane-dead",
+      "source_path": "scripts/mark-lane-dead.ts",
+      "resource_path": "resources/scripts/mark-lane-dead.ts",
+      "sha256": "fae20cec7792b0582c1b901fd640e99947903e1664d14c78482009d91839fb1a"
+    },
+    {
+      "category": "scripts",
+      "id": "resume-lanes",
+      "source_path": "scripts/resume-lanes.ts",
+      "resource_path": "resources/scripts/resume-lanes.ts",
+      "sha256": "004a626dbc937d8422b78d538338ccf7eb8318a1e821e2caf4f189bdcabd10b6"
+    },
+    {
+      "category": "scripts",
+      "id": "retry-lane",
+      "source_path": "scripts/retry-lane.ts",
+      "resource_path": "resources/scripts/retry-lane.ts",
+      "sha256": "ea24e018a111feef9bde91f08a462e107513e7f353c0ab1c229e3ce119ccd3ac"
+    },
+    {
+      "category": "scripts",
+      "id": "write-run-manifest",
+      "source_path": "scripts/write-run-manifest.ts",
+      "resource_path": "resources/scripts/write-run-manifest.ts",
+      "sha256": "dc3336ee1ae63e557669ad746b1c280c94176d5324bf1b6fdfd83892811ea589"
+    },
+    {
+      "category": "scripts",
+      "id": "write-task-run",
+      "source_path": "scripts/write-task-run.ts",
+      "resource_path": "resources/scripts/write-task-run.ts",
+      "sha256": "d558e01a45a09bf7f0e5debe10e18e4bfb8c83df91605d897525ab0722e14200"
+    },
+    {
+      "category": "skills",
+      "id": "guild-brainstorm",
+      "source_path": "skills/meta/brainstorm/SKILL.md",
+      "resource_path": "resources/skills/meta/brainstorm/SKILL.md",
+      "sha256": "128cd7c8f2b1c53655d001cc9271c9ed710d63256bbb0e6e61257a6e11c5dfbc"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan",
+      "source_path": "skills/meta/execute-plan/SKILL.md",
+      "resource_path": "resources/skills/meta/execute-plan/SKILL.md",
+      "sha256": "d09892ee1afcbd0185d67889e01091f5c110f8b303da156264fe4daf579e1d98"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/dispatch.md",
+      "source_path": "skills/meta/execute-plan/dispatch.md",
+      "resource_path": "resources/skills/meta/execute-plan/dispatch.md",
+      "sha256": "887366effe033b26c0e27b04be8d96c7e2e174c5f3556b3be12c3de5acdc8f83"
+    },
+    {
+      "category": "skills",
+      "id": "guild-plan",
+      "source_path": "skills/meta/plan/SKILL.md",
+      "resource_path": "resources/skills/meta/plan/SKILL.md",
+      "sha256": "39ef3dd75bf83b38dac9f137e4bd4ed02f481bbc6f7161f6f4df96a7e9f64e13"
+    },
+    {
+      "category": "skills",
+      "id": "guild-verify-done",
+      "source_path": "skills/meta/verify-done/SKILL.md",
+      "resource_path": "resources/skills/meta/verify-done/SKILL.md",
+      "sha256": "34b11fd24a1a184e381b16e1b6c8d7f3a4e929792917d7b253125fcd36b68006"
+    },
+    {
+      "category": "skills",
+      "id": "init",
+      "source_path": "skills/meta/init/SKILL.md",
+      "resource_path": "resources/skills/meta/init/SKILL.md",
+      "sha256": "e85737d406a17a3cb7c6743524e3e14d2b8e9a6c57ff4690aee1452a1bd0cea9"
+    }
+  ]
+}

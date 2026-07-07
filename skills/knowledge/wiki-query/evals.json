@@ -4,13 +4,18 @@
     "What do we have on our branding voice?",
     "Find all standards about coding conventions.",
     "Which decisions touched the pricing calculator product?",
-    "Show me recent competitor sources ingested in the last week."
+    "Show me recent competitor sources ingested in the last week.",
+    "Search across all sub-guilds in this workspace for the federation contract.",
+    "What does the plugin sub-guild know about the dispatch ladder?",
+    "Query every registered sub-guild and tag each hit by source."
   ],
   "should_not_trigger": [
     "Ingest this new research paper.",
     "Run wiki-lint.",
     "Capture this decision about Postgres.",
     "Grep the repo for 'TODO'.",
-    "Write a new wiki page from scratch."
+    "Write a new wiki page from scratch.",
+    "Detect whether this root is a workspace and write the manifest.",
+    "Build the codebase map for this single repo."
   ]
 }

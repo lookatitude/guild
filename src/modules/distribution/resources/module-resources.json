@@ -1,0 +1,161 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "distribution",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "build-host-packages",
+      "source_path": "scripts/build-host-packages.ts",
+      "resource_path": "resources/scripts/build-host-packages.ts",
+      "sha256": "303572ee37698b10b84911ec934afd6b6f6c32419ded53a1bf40178bf7e1bdf1"
+    },
+    {
+      "category": "scripts",
+      "id": "build-inventory",
+      "source_path": "scripts/build-inventory.ts",
+      "resource_path": "resources/scripts/build-inventory.ts",
+      "sha256": "726a56f836d7c4a9d3897725c2625b12cccd67c2d771e4c7f6a9a7a7012108ab"
+    },
+    {
+      "category": "scripts",
+      "id": "build-verify",
+      "source_path": "scripts/build-verify.ts",
+      "resource_path": "resources/scripts/build-verify.ts",
+      "sha256": "2955cee84700ff4e37feeef775726a6772487c00ea4f2a1273cb36252f821dd7"
+    },
+    {
+      "category": "scripts",
+      "id": "check-module-ownership",
+      "source_path": "scripts/check-module-ownership.ts",
+      "resource_path": "resources/scripts/check-module-ownership.ts",
+      "sha256": "451faa587a9c8234d45a7467015240d799e3a1fb68fe288ce4bb9acf378fda6e"
+    },
+    {
+      "category": "scripts",
+      "id": "check-roster-consistency",
+      "source_path": "scripts/check-roster-consistency.ts",
+      "resource_path": "resources/scripts/check-roster-consistency.ts",
+      "sha256": "3ed28ffb9fa8908c1806a7bbd183caa2e91b631819cac0ffee555ea012f991d3"
+    },
+    {
+      "category": "scripts",
+      "id": "codex-guild-prompt-bridge",
+      "source_path": "scripts/codex-guild-prompt-bridge.ts",
+      "resource_path": "resources/scripts/codex-guild-prompt-bridge.ts",
+      "sha256": "58bbafa0b9f77caa21fd16bbc4f6fe760f05ff1ded02bee0414f8a39bafde6eb"
+    },
+    {
+      "category": "scripts",
+      "id": "description-optimizer",
+      "source_path": "scripts/description-optimizer.ts",
+      "resource_path": "resources/scripts/description-optimizer.ts",
+      "sha256": "eab9971aee4bc25a1fc059fedfcadc2b6893934c51d36caf2c703a2fc74bab75"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/command-registry",
+      "source_path": "scripts/lib/command-registry.ts",
+      "resource_path": "resources/scripts/lib/command-registry.ts",
+      "sha256": "3dc6108d86d7ee18ad210d9e1bb388ccb40a40289846276dc51a8e191b771ef6"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/equivalence-contract",
+      "source_path": "scripts/lib/equivalence-contract.ts",
+      "resource_path": "resources/scripts/lib/equivalence-contract.ts",
+      "sha256": "37108e6a952ed1eb7a702d2f3d0a01a853b08a0514194d249f1e2e06df9f912d"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/installer-contract",
+      "source_path": "scripts/lib/installer-contract.ts",
+      "resource_path": "resources/scripts/lib/installer-contract.ts",
+      "sha256": "9fafbe616ff1e3e19be1905ea6db32741bd9d2f252e2cec8105b3fbfcdb6f0ab"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/inventory-schema",
+      "source_path": "scripts/lib/inventory-schema.ts",
+      "resource_path": "resources/scripts/lib/inventory-schema.ts",
+      "sha256": "bf9b6418e0b26b2c86e258a8fb309a7d51a9eb83584f78cc9a204afba00e9b33"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/module-resources",
+      "source_path": "scripts/lib/module-resources.ts",
+      "resource_path": "resources/scripts/lib/module-resources.ts",
+      "sha256": "d643523d78acb815ce3e855ca569ae9f6248bf96d2738cac747db3bff7749bc8"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/parity-contract",
+      "source_path": "scripts/lib/parity-contract.ts",
+      "resource_path": "resources/scripts/lib/parity-contract.ts",
+      "sha256": "05d5c9143fa7429069779f267a9e3cb1a18f948999051c062d4eefb3137b128b"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/per-host-packaging",
+      "source_path": "scripts/lib/per-host-packaging.ts",
+      "resource_path": "resources/scripts/lib/per-host-packaging.ts",
+      "sha256": "6175447c6f94ef8e58948ecd0ec37230f5b7c09e24d755aeecdad288cd5fa70e"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/result-contracts",
+      "source_path": "scripts/lib/result-contracts.ts",
+      "resource_path": "resources/scripts/lib/result-contracts.ts",
+      "sha256": "cac7fed8012017be5bcb6e9d13dea9156c56ad1eb386808302d6dd1463ec2966"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/skill-source-transform",
+      "source_path": "scripts/lib/skill-source-transform.ts",
+      "resource_path": "resources/scripts/lib/skill-source-transform.ts",
+      "sha256": "dac33c05be25426dc7e78b3c78c302a9c2fc989faa037d20a9cbcf5bd9f33ee2"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/surface-manifest",
+      "source_path": "scripts/lib/surface-manifest.ts",
+      "resource_path": "resources/scripts/lib/surface-manifest.ts",
+      "sha256": "1635fe25492848cfb8d913447e6ac68ad6f758c55d73463151f275504b6654dc"
+    },
+    {
+      "category": "scripts",
+      "id": "registry-rollup",
+      "source_path": "scripts/registry-rollup.ts",
+      "resource_path": "resources/scripts/registry-rollup.ts",
+      "sha256": "2663c774fc4d2d43762d23d5d50b2321c2363e2aded53630ea61e8cc6a8e09f2"
+    },
+    {
+      "category": "scripts",
+      "id": "sync-live-resources",
+      "source_path": "scripts/sync-live-resources.ts",
+      "resource_path": "resources/scripts/sync-live-resources.ts",
+      "sha256": "16c197d8499418ab5c1608240691e9f34e2e1d1baac0dc16d3d1c239c6eab744"
+    },
+    {
+      "category": "scripts",
+      "id": "sync-module-resources",
+      "source_path": "scripts/sync-module-resources.ts",
+      "resource_path": "resources/scripts/sync-module-resources.ts",
+      "sha256": "52cd6ebfdf7f6b778a5a97c73fbe48a5bf60c2d5da9da8e422c29990af4c6e51"
+    },
+    {
+      "category": "scripts",
+      "id": "verify-host-packages",
+      "source_path": "scripts/verify-host-packages.ts",
+      "resource_path": "resources/scripts/verify-host-packages.ts",
+      "sha256": "3590fba146998d0b0b32fe87261f5afadbebac42294f3bc58a8c17bb4f8e183e"
+    },
+    {
+      "category": "scripts",
+      "id": "verify-installer",
+      "source_path": "scripts/verify-installer.ts",
+      "resource_path": "resources/scripts/verify-installer.ts",
+      "sha256": "eb2733c288dad95a7d9643cab273226d31cdd2a1501a96d0f10700f4bfc76a89"
+    }
+  ]
+}

@@ -15,14 +15,18 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const SERVER = path.resolve(__dirname, "../src/index.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
+// ADR-OBS-4: isolated fixture root holding runs that record the v1.4 JSONL
+// live log (logs/v1.4-events.jsonl) so the legacy-shape assertions above stay
+// independent of these.
+const FIXTURES_V14 = path.resolve(__dirname, "../fixtures-v14");
 
-async function makeClient(): Promise<Client> {
+async function makeClientForCwd(cwd: string): Promise<Client> {
   const transport = new StdioClientTransport({
     command: "npx",
     args: ["-y", "tsx", SERVER],
     env: {
       ...(process.env as Record<string, string>),
-      GUILD_TELEMETRY_CWD: FIXTURES,
+      GUILD_TELEMETRY_CWD: cwd,
     },
   });
   const client = new Client(
@@ -31,6 +35,14 @@ async function makeClient(): Promise<Client> {
   );
   await client.connect(transport);
   return client;
+}
+
+async function makeClient(): Promise<Client> {
+  return makeClientForCwd(FIXTURES);
+}
+
+async function makeClientV14(): Promise<Client> {
+  return makeClientForCwd(FIXTURES_V14);
 }
 
 function textOf(result: any): string {
@@ -47,7 +59,7 @@ function parseJson(result: any): any {
 describe("guild-telemetry MCP server", () => {
   // ─── list tools ──────────────────────────────────────────────────
   describe("tools/list", () => {
-    it("exposes trace_summary, trace_query, trace_list_runs", async () => {
+    it("exposes trace_summary, trace_query, trace_list_runs, trace_cost_rollup", async () => {
       const client = await makeClient();
       try {
         const tools = await client.listTools();
@@ -55,6 +67,7 @@ describe("guild-telemetry MCP server", () => {
         expect(names).toContain("trace_summary");
         expect(names).toContain("trace_query");
         expect(names).toContain("trace_list_runs");
+        expect(names).toContain("trace_cost_rollup");
       } finally {
         await client.close();
       }
@@ -257,6 +270,123 @@ describe("guild-telemetry MCP server", () => {
         });
         const payload = parseJson(res);
         expect(payload.runs.length).toBe(1);
+      } finally {
+        await client.close();
+      }
+    });
+  });
+
+  // ─── ADR-OBS-4: v1.4-events.jsonl primary read ──────────────────────
+  describe("v1.4-events.jsonl primary read (ADR-OBS-4)", () => {
+    it("synthesizes a summary from logs/v1.4-events.jsonl (happy)", async () => {
+      const client = await makeClientV14();
+      try {
+        const res = await client.callTool({
+          name: "trace_summary",
+          arguments: { run_id: "run-cost" },
+        });
+        const payload = parseJson(res);
+        expect(payload.source).toBe("synthesized");
+        expect(payload.summary).toMatch(/run_id:\s*run-cost/);
+        // 4 events recorded in the v1.4 live log
+        expect(payload.summary).toMatch(/event_count:\s*4/);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("prefers v1.4-events.jsonl over legacy events.ndjson when both exist (edge)", async () => {
+      const client = await makeClientV14();
+      try {
+        const res = await client.callTool({
+          name: "trace_summary",
+          arguments: { run_id: "run-precedence" },
+        });
+        const payload = parseJson(res);
+        // v1.4 log has 2 events; legacy events.ndjson has 5 — primary wins
+        expect(payload.summary).toMatch(/event_count:\s*2/);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("trace_query reads v1.4 events and exposes event types (edge)", async () => {
+      const client = await makeClientV14();
+      try {
+        const res = await client.callTool({
+          name: "trace_query",
+          arguments: { run_id: "run-cost" },
+        });
+        const payload = parseJson(res);
+        expect(payload.events.length).toBe(4);
+        const types = payload.events.map((e: any) => e.event).sort();
+        expect(types).toContain("specialist_dispatch");
+        expect(types).toContain("tool_call");
+      } finally {
+        await client.close();
+      }
+    });
+  });
+
+  // ─── ADR-OBS-4: trace_cost_rollup ───────────────────────────────────
+  describe("trace_cost_rollup", () => {
+    it("rolls up token totals across a run, merging v2 tokens + tool_call scalars (happy)", async () => {
+      const client = await makeClientV14();
+      try {
+        const res = await client.callTool({
+          name: "trace_cost_rollup",
+          arguments: { run_id: "run-cost" },
+        });
+        const payload = parseJson(res);
+        // input  = 1000 (dispatch) + 50 (tool_call tokens_in) + 2000 = 3050
+        // output =  400 (dispatch) + 20 (tool_call tokens_out) + 900 = 1320
+        // cached =  200
+        expect(payload.totals.input).toBe(3050);
+        expect(payload.totals.output).toBe(1320);
+        expect(payload.totals.cached).toBe(200);
+        expect(payload.totals.total).toBe(4370);
+        expect(payload.event_count).toBe(4);
+        expect(payload.llm_event_count).toBe(3);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("breaks down by tier/model/specialist sorted by total desc (edge)", async () => {
+      const client = await makeClientV14();
+      try {
+        const res = await client.callTool({
+          name: "trace_cost_rollup",
+          arguments: { run_id: "run-cost" },
+        });
+        const payload = parseJson(res);
+        // powerful/opus (2900) outranks mid/sonnet (1470)
+        expect(payload.by_tier[0].tier).toBe("powerful");
+        expect(payload.by_tier[0].total).toBe(2900);
+        expect(payload.by_model[0].model).toBe("opus");
+        const backend = payload.by_specialist.find(
+          (r: any) => r.specialist === "backend"
+        );
+        expect(backend.input).toBe(1000);
+        expect(backend.cached).toBe(200);
+        // tool_call had no specialist → bucketed under its lane_id
+        const byLane = payload.by_specialist.find(
+          (r: any) => r.specialist === "L1"
+        );
+        expect(byLane.input).toBe(50);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("errors when an explicit run_id does not exist (edge)", async () => {
+      const client = await makeClientV14();
+      try {
+        const res = await client.callTool({
+          name: "trace_cost_rollup",
+          arguments: { run_id: "nope" },
+        });
+        expect(res.isError).toBe(true);
       } finally {
         await client.close();
       }

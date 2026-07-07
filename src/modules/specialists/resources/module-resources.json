@@ -1,0 +1,532 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "specialists",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "agents",
+      "id": "advisor",
+      "source_path": "agents/advisor.md",
+      "resource_path": "resources/agents/advisor.md",
+      "sha256": "e536cad8e42fb154bf017031895109d79cdcbfd642d619bb106f387e551bfa6a"
+    },
+    {
+      "category": "agents",
+      "id": "architect",
+      "source_path": "agents/architect.md",
+      "resource_path": "resources/agents/architect.md",
+      "sha256": "54d63c3e86a06334c718147da64102343d897a26c786ef321d6efa7badf18db6"
+    },
+    {
+      "category": "agents",
+      "id": "backend",
+      "source_path": "agents/backend.md",
+      "resource_path": "resources/agents/backend.md",
+      "sha256": "1b4538219ec04c5a6b45b2e26993e62e19e6d18cf7bdbf5fdc0a3f7f0dedd1e4"
+    },
+    {
+      "category": "agents",
+      "id": "copywriter",
+      "source_path": "agents/copywriter.md",
+      "resource_path": "resources/agents/copywriter.md",
+      "sha256": "0bb7e4281453dc0398d255182a4ab639a5d0a387e0f8e0b87302b08cb294b89a"
+    },
+    {
+      "category": "agents",
+      "id": "developer",
+      "source_path": "agents/developer.md",
+      "resource_path": "resources/agents/developer.md",
+      "sha256": "d20f4925dfd917aac1369142f3fae3eb674ebdeb39e160054c235a94db806562"
+    },
+    {
+      "category": "agents",
+      "id": "devops",
+      "source_path": "agents/devops.md",
+      "resource_path": "resources/agents/devops.md",
+      "sha256": "7d0af20bbe8db93eefb413b1fe036bc772a895aa7ef2b6414562d1295ccf098d"
+    },
+    {
+      "category": "agents",
+      "id": "doc-writer",
+      "source_path": "agents/doc-writer.md",
+      "resource_path": "resources/agents/doc-writer.md",
+      "sha256": "65d06e092899c6c0388efe9b83e5b3ef24c4640e9edb1fe1cc038e58e8c7239c"
+    },
+    {
+      "category": "agents",
+      "id": "frontend",
+      "source_path": "agents/frontend.md",
+      "resource_path": "resources/agents/frontend.md",
+      "sha256": "dd3bcb54a37c33152dc8b7a403c44c3c013ab7de28cd86b7a6c1aa875462b0a3"
+    },
+    {
+      "category": "agents",
+      "id": "marketing",
+      "source_path": "agents/marketing.md",
+      "resource_path": "resources/agents/marketing.md",
+      "sha256": "9f924405b5e862f8917853b6130a648dad9538be526f0878746f936978d2ae8d"
+    },
+    {
+      "category": "agents",
+      "id": "mobile",
+      "source_path": "agents/mobile.md",
+      "resource_path": "resources/agents/mobile.md",
+      "sha256": "6baee19b1976ba1a5119e643dfd3d5ff732f0726003379f06109200ff6ccc84a"
+    },
+    {
+      "category": "agents",
+      "id": "qa",
+      "source_path": "agents/qa.md",
+      "resource_path": "resources/agents/qa.md",
+      "sha256": "10c62da937249ab7f8a4c98b0ea93e352806df4e0907221aac62663bd15a572e"
+    },
+    {
+      "category": "agents",
+      "id": "researcher",
+      "source_path": "agents/researcher.md",
+      "resource_path": "resources/agents/researcher.md",
+      "sha256": "5caeeed3a1c6791d971c523b626b825b4af43cd3e2e20d95529c25b3ed344b6b"
+    },
+    {
+      "category": "agents",
+      "id": "sales",
+      "source_path": "agents/sales.md",
+      "resource_path": "resources/agents/sales.md",
+      "sha256": "b7199a99a664d558d55fd1c4eb778c592d2de3f214a22bd4288acaac35bf90c2"
+    },
+    {
+      "category": "agents",
+      "id": "security",
+      "source_path": "agents/security.md",
+      "resource_path": "resources/agents/security.md",
+      "sha256": "aac6fecddd11ec31c7a789c93e578910393f635bb37fdda3a97955f56904e172"
+    },
+    {
+      "category": "agents",
+      "id": "seo",
+      "source_path": "agents/seo.md",
+      "resource_path": "resources/agents/seo.md",
+      "sha256": "300bcca879f1b6fc141eef67a4f4efd3d7f84e5639d894aad6ad1021c88a5533"
+    },
+    {
+      "category": "agents",
+      "id": "social-media",
+      "source_path": "agents/social-media.md",
+      "resource_path": "resources/agents/social-media.md",
+      "sha256": "5250917d9b0dee6c84ae1bad3c380d8e20abdd832ab33407138edef954730d7f"
+    },
+    {
+      "category": "agents",
+      "id": "technical-writer",
+      "source_path": "agents/technical-writer.md",
+      "resource_path": "resources/agents/technical-writer.md",
+      "sha256": "f6312b487205c65240cbfec9d9677d04e849db0df565360242ce9dcce691f666"
+    },
+    {
+      "category": "skills",
+      "id": "architect-adr-writer",
+      "source_path": "skills/specialists/architect-adr-writer/SKILL.md",
+      "resource_path": "resources/skills/specialists/architect-adr-writer/SKILL.md",
+      "sha256": "29526e3ef198ca63b2be109039939bdd2fc7baa36b537af7d357038663d9631d"
+    },
+    {
+      "category": "skills",
+      "id": "architect-systems-design",
+      "source_path": "skills/specialists/architect-systems-design/SKILL.md",
+      "resource_path": "resources/skills/specialists/architect-systems-design/SKILL.md",
+      "sha256": "cb047ce587e22bf6e24989e20d414d9202021de86725aec39ba7335f5b866782"
+    },
+    {
+      "category": "skills",
+      "id": "architect-tradeoff-matrix",
+      "source_path": "skills/specialists/architect-tradeoff-matrix/SKILL.md",
+      "resource_path": "resources/skills/specialists/architect-tradeoff-matrix/SKILL.md",
+      "sha256": "31eb806332a2701bd6e182532d342fdabe3fcf12fdf779066661a58168083599"
+    },
+    {
+      "category": "skills",
+      "id": "backend-api-contract",
+      "source_path": "skills/specialists/backend-api-contract/SKILL.md",
+      "resource_path": "resources/skills/specialists/backend-api-contract/SKILL.md",
+      "sha256": "b6f594bbde080331fc9fd97ecfd2713c871f854edb0f100747182641a01cbb89"
+    },
+    {
+      "category": "skills",
+      "id": "backend-data-layer",
+      "source_path": "skills/specialists/backend-data-layer/SKILL.md",
+      "resource_path": "resources/skills/specialists/backend-data-layer/SKILL.md",
+      "sha256": "b3a416c110e904a9bab9d5933abf5ef8f3d1505294e32f2152601b30ee07fa60"
+    },
+    {
+      "category": "skills",
+      "id": "backend-migration-writer",
+      "source_path": "skills/specialists/backend-migration-writer/SKILL.md",
+      "resource_path": "resources/skills/specialists/backend-migration-writer/SKILL.md",
+      "sha256": "33179e04cd3ecfd1d0424ee39c6cfeb09bd57d1a24293842a60c358c148f0163"
+    },
+    {
+      "category": "skills",
+      "id": "backend-service-integration",
+      "source_path": "skills/specialists/backend-service-integration/SKILL.md",
+      "resource_path": "resources/skills/specialists/backend-service-integration/SKILL.md",
+      "sha256": "0022298cb34298f892fbb7373ec0cccb11b7c6413bdae9d01cbd36afe5579c0a"
+    },
+    {
+      "category": "skills",
+      "id": "copywriter-email-sequences",
+      "source_path": "skills/specialists/copywriter-email-sequences/SKILL.md",
+      "resource_path": "resources/skills/specialists/copywriter-email-sequences/SKILL.md",
+      "sha256": "8f23ff3ea783a0750efea26d01be7ce0983904659034bf696f6130fc5e8e0701"
+    },
+    {
+      "category": "skills",
+      "id": "copywriter-long-form",
+      "source_path": "skills/specialists/copywriter-long-form/SKILL.md",
+      "resource_path": "resources/skills/specialists/copywriter-long-form/SKILL.md",
+      "sha256": "9d282856328fafe55668764fb3998e6c157db9641f57736403dde2d3cef02cfa"
+    },
+    {
+      "category": "skills",
+      "id": "copywriter-product-microcopy",
+      "source_path": "skills/specialists/copywriter-product-microcopy/SKILL.md",
+      "resource_path": "resources/skills/specialists/copywriter-product-microcopy/SKILL.md",
+      "sha256": "938626a755e15b1a108fe25ceafbc14210e5e35db2c11154f7a59a97cd952f9a"
+    },
+    {
+      "category": "skills",
+      "id": "copywriter-voice-guide",
+      "source_path": "skills/specialists/copywriter-voice-guide/SKILL.md",
+      "resource_path": "resources/skills/specialists/copywriter-voice-guide/SKILL.md",
+      "sha256": "8e7915f4757cec16ea2657a97bda71972c9dac078a115fe7b6885d35d6bee0eb"
+    },
+    {
+      "category": "skills",
+      "id": "devops-ci-cd-pipeline",
+      "source_path": "skills/specialists/devops-ci-cd-pipeline/SKILL.md",
+      "resource_path": "resources/skills/specialists/devops-ci-cd-pipeline/SKILL.md",
+      "sha256": "5ca3aa9166e07724ca30dce0a4ef69939daac7d1a82b9bea8d366dacaa804721"
+    },
+    {
+      "category": "skills",
+      "id": "devops-incident-runbook",
+      "source_path": "skills/specialists/devops-incident-runbook/SKILL.md",
+      "resource_path": "resources/skills/specialists/devops-incident-runbook/SKILL.md",
+      "sha256": "f89ea6c5d934d7ea7086c5ca42317960be2d1af9e09878897563a895dabc6f9a"
+    },
+    {
+      "category": "skills",
+      "id": "devops-infrastructure-as-code",
+      "source_path": "skills/specialists/devops-infrastructure-as-code/SKILL.md",
+      "resource_path": "resources/skills/specialists/devops-infrastructure-as-code/SKILL.md",
+      "sha256": "ad792924ba7c9702e8cfcdc5652b4dd320efe41232f098379187b71cb823da02"
+    },
+    {
+      "category": "skills",
+      "id": "devops-observability-setup",
+      "source_path": "skills/specialists/devops-observability-setup/SKILL.md",
+      "resource_path": "resources/skills/specialists/devops-observability-setup/SKILL.md",
+      "sha256": "3da9022020575f8212cdb8e95f2b6a284a64f6d9385648ca73d2979177ae9de2"
+    },
+    {
+      "category": "skills",
+      "id": "doc-writer-doc-site",
+      "source_path": "skills/specialists/doc-writer-doc-site/SKILL.md",
+      "resource_path": "resources/skills/specialists/doc-writer-doc-site/SKILL.md",
+      "sha256": "47f513a2ba4a3241ebd4c223851d4a147e328c0a9b0c12141b13a6b9dfbce182"
+    },
+    {
+      "category": "skills",
+      "id": "doc-writer-onboarding-doc",
+      "source_path": "skills/specialists/doc-writer-onboarding-doc/SKILL.md",
+      "resource_path": "resources/skills/specialists/doc-writer-onboarding-doc/SKILL.md",
+      "sha256": "6711ef66fa5c59333e39de0fa0a9e994a1b8b366acf9e442a73f7ea012d98bc5"
+    },
+    {
+      "category": "skills",
+      "id": "doc-writer-product-guide",
+      "source_path": "skills/specialists/doc-writer-product-guide/SKILL.md",
+      "resource_path": "resources/skills/specialists/doc-writer-product-guide/SKILL.md",
+      "sha256": "0669a1e8dcb2e48d85a4ec535772f48b38c5e661555f8b89e5a26ca2cbc5ad8a"
+    },
+    {
+      "category": "skills",
+      "id": "doc-writer-readme",
+      "source_path": "skills/specialists/doc-writer-readme/SKILL.md",
+      "resource_path": "resources/skills/specialists/doc-writer-readme/SKILL.md",
+      "sha256": "2bd362c65f69c00b245f0978364f6b6a3a875ba056ff08a20af8eede91ae2e21"
+    },
+    {
+      "category": "skills",
+      "id": "frontend-a11y",
+      "source_path": "skills/specialists/frontend-a11y/SKILL.md",
+      "resource_path": "resources/skills/specialists/frontend-a11y/SKILL.md",
+      "sha256": "517efe78935cf591815052e7849225b991337e650b7e85ee379ba20aa4a01341"
+    },
+    {
+      "category": "skills",
+      "id": "frontend-bundler-config",
+      "source_path": "skills/specialists/frontend-bundler-config/SKILL.md",
+      "resource_path": "resources/skills/specialists/frontend-bundler-config/SKILL.md",
+      "sha256": "ea545a88c5815d2f87ce7b4f7d3adcf95d208bdcf2101a5ce8e22484df3584b7"
+    },
+    {
+      "category": "skills",
+      "id": "frontend-react",
+      "source_path": "skills/specialists/frontend-react/SKILL.md",
+      "resource_path": "resources/skills/specialists/frontend-react/SKILL.md",
+      "sha256": "e9236f6037707466427aad8b5941bbb2ba04db47647859b8054f461e615a6356"
+    },
+    {
+      "category": "skills",
+      "id": "frontend-state-management",
+      "source_path": "skills/specialists/frontend-state-management/SKILL.md",
+      "resource_path": "resources/skills/specialists/frontend-state-management/SKILL.md",
+      "sha256": "4e593fb6c6aea2ab08debf39a71aea328866418dacad2b675062d2e409c48b04"
+    },
+    {
+      "category": "skills",
+      "id": "marketing-ab-copy-variants",
+      "source_path": "skills/specialists/marketing-ab-copy-variants/SKILL.md",
+      "resource_path": "resources/skills/specialists/marketing-ab-copy-variants/SKILL.md",
+      "sha256": "412a0ecbe3d7a2ebd25992b865caf63dc15b752622960e803700ac444905bb54"
+    },
+    {
+      "category": "skills",
+      "id": "marketing-campaign-brief",
+      "source_path": "skills/specialists/marketing-campaign-brief/SKILL.md",
+      "resource_path": "resources/skills/specialists/marketing-campaign-brief/SKILL.md",
+      "sha256": "f42860e94353f99437fa6d8c2c6b0cfe2b400cbc0505026f9e05be9e03baa1ca"
+    },
+    {
+      "category": "skills",
+      "id": "marketing-launch-plan",
+      "source_path": "skills/specialists/marketing-launch-plan/SKILL.md",
+      "resource_path": "resources/skills/specialists/marketing-launch-plan/SKILL.md",
+      "sha256": "6336d7133158185956b9119b215e36b132c979f20e2cde9f0b3759ebd7bc5b6d"
+    },
+    {
+      "category": "skills",
+      "id": "marketing-positioning",
+      "source_path": "skills/specialists/marketing-positioning/SKILL.md",
+      "resource_path": "resources/skills/specialists/marketing-positioning/SKILL.md",
+      "sha256": "39c31b51709d97f039580e2163d2bc780fa0781ab658647210fd28952534c704"
+    },
+    {
+      "category": "skills",
+      "id": "mobile-android-kotlin",
+      "source_path": "skills/specialists/mobile-android-kotlin/SKILL.md",
+      "resource_path": "resources/skills/specialists/mobile-android-kotlin/SKILL.md",
+      "sha256": "0635cf57556c9b74bc1dc8bc745fa286f017645db7eb04d2d12308218718bbe4"
+    },
+    {
+      "category": "skills",
+      "id": "mobile-ios-swift",
+      "source_path": "skills/specialists/mobile-ios-swift/SKILL.md",
+      "resource_path": "resources/skills/specialists/mobile-ios-swift/SKILL.md",
+      "sha256": "fa41d4a4f7f170585939dc9bd4b2d19139b1a3e9b53f57e3713cda041bfcba5b"
+    },
+    {
+      "category": "skills",
+      "id": "mobile-performance-tuning",
+      "source_path": "skills/specialists/mobile-performance-tuning/SKILL.md",
+      "resource_path": "resources/skills/specialists/mobile-performance-tuning/SKILL.md",
+      "sha256": "ace130ea1d5c4e2f0df891e4509bbf0a309de4655257eaf1c77040863057e8a4"
+    },
+    {
+      "category": "skills",
+      "id": "mobile-react-native",
+      "source_path": "skills/specialists/mobile-react-native/SKILL.md",
+      "resource_path": "resources/skills/specialists/mobile-react-native/SKILL.md",
+      "sha256": "3e61191de4a595fcf09a2a2a21b37bdbe4b11d4e66c74ead09d9f4470839b3c7"
+    },
+    {
+      "category": "skills",
+      "id": "qa-flaky-test-hunter",
+      "source_path": "skills/specialists/qa-flaky-test-hunter/SKILL.md",
+      "resource_path": "resources/skills/specialists/qa-flaky-test-hunter/SKILL.md",
+      "sha256": "b8d16fdb9c953acccefaef527e2fec80528e8558ae865cb7436b4f784c5c402f"
+    },
+    {
+      "category": "skills",
+      "id": "qa-property-based-tests",
+      "source_path": "skills/specialists/qa-property-based-tests/SKILL.md",
+      "resource_path": "resources/skills/specialists/qa-property-based-tests/SKILL.md",
+      "sha256": "87bbd5ac17ec383c8e2c2f903fc7e0dc5dfd4d613230a0392474298d517dbba1"
+    },
+    {
+      "category": "skills",
+      "id": "qa-snapshot-tests",
+      "source_path": "skills/specialists/qa-snapshot-tests/SKILL.md",
+      "resource_path": "resources/skills/specialists/qa-snapshot-tests/SKILL.md",
+      "sha256": "3fa5b42f4bb4642018ab47589046110da60de8a983f37359203a5b69c9e83ef3"
+    },
+    {
+      "category": "skills",
+      "id": "qa-test-strategy",
+      "source_path": "skills/specialists/qa-test-strategy/SKILL.md",
+      "resource_path": "resources/skills/specialists/qa-test-strategy/SKILL.md",
+      "sha256": "74e0c45a8ef6b263385c12aba5e69276f7544846604a7835543b4c827928b1a3"
+    },
+    {
+      "category": "skills",
+      "id": "researcher-comparison-table",
+      "source_path": "skills/specialists/researcher-comparison-table/SKILL.md",
+      "resource_path": "resources/skills/specialists/researcher-comparison-table/SKILL.md",
+      "sha256": "277b4f44e8c68caf9cdf49aba27285712bca6f3fc4ef853a90ab98e3e1a58146"
+    },
+    {
+      "category": "skills",
+      "id": "researcher-deep-dive",
+      "source_path": "skills/specialists/researcher-deep-dive/SKILL.md",
+      "resource_path": "resources/skills/specialists/researcher-deep-dive/SKILL.md",
+      "sha256": "605d8b1a1950db8a385d08ab0713035653396594b4f0e3032ba88004bc709604"
+    },
+    {
+      "category": "skills",
+      "id": "researcher-paper-digest",
+      "source_path": "skills/specialists/researcher-paper-digest/SKILL.md",
+      "resource_path": "resources/skills/specialists/researcher-paper-digest/SKILL.md",
+      "sha256": "412117807891d9040e9e09b5fdc977a8bb05e56b685946cf1fc7db63794297d8"
+    },
+    {
+      "category": "skills",
+      "id": "sales-cold-outreach",
+      "source_path": "skills/specialists/sales-cold-outreach/SKILL.md",
+      "resource_path": "resources/skills/specialists/sales-cold-outreach/SKILL.md",
+      "sha256": "67090e4413ef3b213d3d1290389989e6d8ef9432bf35d2d77f8da77e20881a18"
+    },
+    {
+      "category": "skills",
+      "id": "sales-discovery-framework",
+      "source_path": "skills/specialists/sales-discovery-framework/SKILL.md",
+      "resource_path": "resources/skills/specialists/sales-discovery-framework/SKILL.md",
+      "sha256": "829e94fc65c5986112fc5088c9fcbef91979f5c2681bde53dfcbb54bd3de5834"
+    },
+    {
+      "category": "skills",
+      "id": "sales-follow-up-sequence",
+      "source_path": "skills/specialists/sales-follow-up-sequence/SKILL.md",
+      "resource_path": "resources/skills/specialists/sales-follow-up-sequence/SKILL.md",
+      "sha256": "ec5dc6d596164db2f376b6447ce2625af1dfead1c0469480be809e844f9d2a55"
+    },
+    {
+      "category": "skills",
+      "id": "sales-proposal-writer",
+      "source_path": "skills/specialists/sales-proposal-writer/SKILL.md",
+      "resource_path": "resources/skills/specialists/sales-proposal-writer/SKILL.md",
+      "sha256": "9270de1b48170ec4f3489546d80a17386f9aa826f8948664dc1ba767f7e0ad59"
+    },
+    {
+      "category": "skills",
+      "id": "security-auth-flow-review",
+      "source_path": "skills/specialists/security-auth-flow-review/SKILL.md",
+      "resource_path": "resources/skills/specialists/security-auth-flow-review/SKILL.md",
+      "sha256": "a787f57079a039ce7a0ee7069d0d96e7fc54ecf725bab39a75392480fff40afc"
+    },
+    {
+      "category": "skills",
+      "id": "security-dependency-audit",
+      "source_path": "skills/specialists/security-dependency-audit/SKILL.md",
+      "resource_path": "resources/skills/specialists/security-dependency-audit/SKILL.md",
+      "sha256": "136cee1d2a4342aba5e6c2dc7f8187f868ff0c1400e5460d8357f4f47bd3a7b9"
+    },
+    {
+      "category": "skills",
+      "id": "security-secrets-scan",
+      "source_path": "skills/specialists/security-secrets-scan/SKILL.md",
+      "resource_path": "resources/skills/specialists/security-secrets-scan/SKILL.md",
+      "sha256": "2ee4afad707bd1a0247bce7151ea46f06da384554a7ea44fec28df0d5326e326"
+    },
+    {
+      "category": "skills",
+      "id": "security-threat-modeling",
+      "source_path": "skills/specialists/security-threat-modeling/SKILL.md",
+      "resource_path": "resources/skills/specialists/security-threat-modeling/SKILL.md",
+      "sha256": "5de2aa6f50d8efad3d1625ffc6c5d4486c085a585c7b61787b10cd401e94bf37"
+    },
+    {
+      "category": "skills",
+      "id": "seo-internal-linking",
+      "source_path": "skills/specialists/seo-internal-linking/SKILL.md",
+      "resource_path": "resources/skills/specialists/seo-internal-linking/SKILL.md",
+      "sha256": "0c223454c96bda9d141ba96a9b8a914ce5727dda6d3417b1164663fced95449f"
+    },
+    {
+      "category": "skills",
+      "id": "seo-keyword-research",
+      "source_path": "skills/specialists/seo-keyword-research/SKILL.md",
+      "resource_path": "resources/skills/specialists/seo-keyword-research/SKILL.md",
+      "sha256": "ff75058a5049031d7da4bf7f05928309fc78ba3751ed93aed10872ac0adb1189"
+    },
+    {
+      "category": "skills",
+      "id": "seo-on-page-optimization",
+      "source_path": "skills/specialists/seo-on-page-optimization/SKILL.md",
+      "resource_path": "resources/skills/specialists/seo-on-page-optimization/SKILL.md",
+      "sha256": "e2f3f89c54f8c03f6469201e8f420c91ea0e87ce954d72df0947601e34d75072"
+    },
+    {
+      "category": "skills",
+      "id": "seo-technical-audit",
+      "source_path": "skills/specialists/seo-technical-audit/SKILL.md",
+      "resource_path": "resources/skills/specialists/seo-technical-audit/SKILL.md",
+      "sha256": "16af1a8936b3f8f0178fbd7a6e5f14ea4399954a488b67e360583e6e65cdc894"
+    },
+    {
+      "category": "skills",
+      "id": "social-media-content-calendar",
+      "source_path": "skills/specialists/social-media-content-calendar/SKILL.md",
+      "resource_path": "resources/skills/specialists/social-media-content-calendar/SKILL.md",
+      "sha256": "ff96e4948628c9112d3dca9c43fdc6d5dae784dc5d7d7bcd75aee2208663addd"
+    },
+    {
+      "category": "skills",
+      "id": "social-media-engagement-templates",
+      "source_path": "skills/specialists/social-media-engagement-templates/SKILL.md",
+      "resource_path": "resources/skills/specialists/social-media-engagement-templates/SKILL.md",
+      "sha256": "1ab5f176d1f60137f42a128b88ff430503208fedaf2bbb0aeef95b940dbae073"
+    },
+    {
+      "category": "skills",
+      "id": "social-media-platform-post",
+      "source_path": "skills/specialists/social-media-platform-post/SKILL.md",
+      "resource_path": "resources/skills/specialists/social-media-platform-post/SKILL.md",
+      "sha256": "76c0b74177d33f9d18ce0692b80a3cebc7080b9c28d594c72d697f0f765c453d"
+    },
+    {
+      "category": "skills",
+      "id": "social-media-thread",
+      "source_path": "skills/specialists/social-media-thread/SKILL.md",
+      "resource_path": "resources/skills/specialists/social-media-thread/SKILL.md",
+      "sha256": "e93ce4527e4932947b29a8b5c213a4ee8c770eaa19d153b9e4de4cffbfb1d227"
+    },
+    {
+      "category": "skills",
+      "id": "technical-writer-api-docs",
+      "source_path": "skills/specialists/technical-writer-api-docs/SKILL.md",
+      "resource_path": "resources/skills/specialists/technical-writer-api-docs/SKILL.md",
+      "sha256": "3e2e5592612fc2eb8b176978567e28162e735d39d166cd745f45a56618817923"
+    },
+    {
+      "category": "skills",
+      "id": "technical-writer-release-notes",
+      "source_path": "skills/specialists/technical-writer-release-notes/SKILL.md",
+      "resource_path": "resources/skills/specialists/technical-writer-release-notes/SKILL.md",
+      "sha256": "610c649aecfbd0c11b441a55d8fd73487ec6b973ac7c8cdde900d89c716bb71e"
+    },
+    {
+      "category": "skills",
+      "id": "technical-writer-tutorial",
+      "source_path": "skills/specialists/technical-writer-tutorial/SKILL.md",
+      "resource_path": "resources/skills/specialists/technical-writer-tutorial/SKILL.md",
+      "sha256": "fe87befddc1538086e98dcad3ebf96ad487e977f372b671a0ee46ffa962cc191"
+    },
+    {
+      "category": "skills",
+      "id": "technical-writer-user-manual",
+      "source_path": "skills/specialists/technical-writer-user-manual/SKILL.md",
+      "resource_path": "resources/skills/specialists/technical-writer-user-manual/SKILL.md",
+      "sha256": "0970e4e9fc3a566350b2ae79f596f03d42ad77a2833d32c6535884e6db75f52c"
+    }
+  ]
+}

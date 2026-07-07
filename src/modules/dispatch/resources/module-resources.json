@@ -1,0 +1,56 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "dispatch",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "agent-team-launcher",
+      "source_path": "scripts/agent-team-launcher.ts",
+      "resource_path": "resources/scripts/agent-team-launcher.ts",
+      "sha256": "02c04a09ea55ddde47f591c467a82c2de32fca5456676b8540da562f42c8f8f9"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/core/contracts/team-backend",
+      "source_path": "scripts/lib/core/contracts/team-backend.ts",
+      "resource_path": "resources/scripts/lib/core/contracts/team-backend.ts",
+      "sha256": "7c8eab40fbe9011765d13cef5d402d4f06e4a158a0d6bd3241f68c4fe1ff0ab7"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host/inprocess-backend",
+      "source_path": "scripts/lib/host/inprocess-backend.ts",
+      "resource_path": "resources/scripts/lib/host/inprocess-backend.ts",
+      "sha256": "a23f5ad186ea30ca226372206b3f92c26bb3a56281c951c4c5fd3b2f7c85fd62"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host/remote-backend",
+      "source_path": "scripts/lib/host/remote-backend.ts",
+      "resource_path": "resources/scripts/lib/host/remote-backend.ts",
+      "sha256": "6a6240f7007675c0fa2226c996152b6caf8ce3fc3172b17b987a8df3f5a1b448"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host/tmux-backend",
+      "source_path": "scripts/lib/host/tmux-backend.ts",
+      "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
+      "sha256": "252eb9a3b69bff79945a05c970f15ba5bba0d9a89000be7f8f8580e7429424ce"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/team-backend",
+      "source_path": "scripts/lib/team-backend.ts",
+      "resource_path": "resources/scripts/lib/team-backend.ts",
+      "sha256": "2aea429a4ca2b43b35b959964ea271ea772c991eb964b64294dc9846e4ddea70"
+    },
+    {
+      "category": "skills",
+      "id": "dispatching-parallel-agents",
+      "source_path": "skills/meta/dispatching-parallel-agents/SKILL.md",
+      "resource_path": "resources/skills/meta/dispatching-parallel-agents/SKILL.md",
+      "sha256": "8ba8e20827a6669ce9d8d24e8d47548a712de7a7a9b29e3be577a01aebb5c704"
+    }
+  ]
+}

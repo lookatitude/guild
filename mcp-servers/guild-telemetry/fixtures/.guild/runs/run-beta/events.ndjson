@@ -1,0 +1,5 @@
+{"ts":"2026-04-15T09:00:00.000Z","event":"PostToolUse","tool":"Read","specialist":"copywriter","payload_digest":"b1","ok":true,"ms":5}
+{"ts":"2026-04-15T09:00:01.000Z","event":"PostToolUse","tool":"Write","specialist":"copywriter","payload_digest":"b2","ok":true,"ms":15}
+{"ts":"2026-04-15T09:00:02.000Z","event":"PostToolUse","tool":"Edit","specialist":"copywriter","payload_digest":"b3","ok":true,"ms":10}
+{"ts":"2026-04-15T09:00:03.000Z","event":"PostToolUse","tool":"Bash","specialist":"copywriter","payload_digest":"b4","ok":true,"ms":20}
+{"ts":"2026-04-15T09:00:04.000Z","event":"SubagentStop","tool":"","specialist":"copywriter","payload_digest":"b5","ok":true,"ms":80}

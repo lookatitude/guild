@@ -1,0 +1,4 @@
+{"ts":"2026-05-01T10:00:00.000Z","event":"specialist_dispatch","run_id":"run-cost","lane_id":"L1","specialist":"backend","task_id":"T1","prompt_excerpt":"build the API","tier":"mid","model":"sonnet","tokens":{"input":1000,"output":400,"cached":200},"span_id":"abc123"}
+{"ts":"2026-05-01T10:00:05.000Z","event":"tool_call","run_id":"run-cost","lane_id":"L1","tool":"Bash","command_redacted":"npm test","status":"ok","latency_ms":1200,"result_excerpt_redacted":"ok","tokens_in":50,"tokens_out":20,"tier":"mid","model":"sonnet"}
+{"ts":"2026-05-01T10:00:10.000Z","event":"specialist_dispatch","run_id":"run-cost","lane_id":"L2","specialist":"architect","task_id":"T2","prompt_excerpt":"design schema","tier":"powerful","model":"opus","tokens":{"input":2000,"output":900},"span_id":"def456"}
+{"ts":"2026-05-01T10:00:20.000Z","event":"phase_end","run_id":"run-cost","phase":"execute","duration_ms":20000,"status":"ok","tier":"mid","model":"sonnet"}

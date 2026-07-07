@@ -1,0 +1,5273 @@
+{
+  "version": "guild.knowledge_links.v1",
+  "links": [
+    {
+      "from": "domain:.claude-plugin",
+      "to": "file:.claude-plugin/marketplace.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude-plugin",
+      "to": "file:.claude-plugin/plugin.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/_shared/.gitkeep",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/_shared/AUDIT.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/_shared/handoff-contract.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/_shared/methodology-skills.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/_shared/plan-anchors.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/command-builder.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/docs-writer.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/eval-engineer.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/hook-engineer.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/plugin-architect.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/research-digester.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/security-auditor.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/skill-author.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/specialist-agent-writer.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/agents/tooling-engineer.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.claude",
+      "to": "file:.claude/settings.local.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.githooks",
+      "to": "file:.githooks/pre-commit",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.githooks",
+      "to": "file:.githooks/pre-push",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.github",
+      "to": "file:.github/workflows/clra-gate.yml",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.github",
+      "to": "file:.github/workflows/comms-format.yml",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.github",
+      "to": "file:.github/workflows/comms-negative.yml",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.github",
+      "to": "file:.github/workflows/doc-sync.yml",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.github",
+      "to": "file:.github/workflows/dot-guild-policy.yml",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.github",
+      "to": "file:.github/workflows/rearch-rails.yml",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.github",
+      "to": "file:.github/workflows/release.yml",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:(root)",
+      "to": "file:.mcp.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:(root)",
+      "to": "file:AGENTS.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:(root)",
+      "to": "file:CHANGELOG.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:(root)",
+      "to": "file:CLAUDE.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:(root)",
+      "to": "file:CONTRIBUTING.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:(root)",
+      "to": "file:README.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:(root)",
+      "to": "file:SECURITY.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/.gitkeep",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/advisor.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/architect.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/backend.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/copywriter.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/developer.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/devops.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/doc-writer.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/frontend.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/marketing.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/mobile.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/qa.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/researcher.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/sales.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/security.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/seo.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/social-media.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:agents",
+      "to": "file:agents/technical-writer.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:command-src",
+      "to": "file:command-src/command-registry.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/.gitkeep",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/audit.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/build.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/config.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/dashboard.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/evolve.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/fix.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/guild.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/ideate.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/init.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/initiative.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/learn.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/migrate.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/ops.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/plan.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/qa.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/resume.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/rollback.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/stats.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/status.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/wiki.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:docs",
+      "to": "file:docs/knowledge/decisions/universal-host-p1-l0-foundation-contracts.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:docs",
+      "to": "file:docs/specialist-roster.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:generated",
+      "to": "file:generated/support-matrix.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:(root)",
+      "to": "file:guild.inventory.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/.gitkeep",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/agent-team/package.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/agent-team/task-completed.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/agent-team/task-created.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/agent-team/teammate-idle.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/bootstrap.sh",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/capture-telemetry.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/check-skill-coverage.sh",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/comms-format-lint.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/detect-guild-version.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/emit-learning-checkpoint.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/hooks.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/learning-backstop.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/bus-emit.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/context-compliance.FOLLOWUPS.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/context-compliance.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/guild-hook-event.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/guild-root.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/handoff-v2.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/heartbeat-write.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/heartbeat.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/learning-backstop.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/run-date.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/run-state.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/run-trace.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/security/config.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/security/enforce.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/security/events.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/security/injection-guard.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/security/mcp-hash-pin.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/security/scrubbed-write.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/security/secrets.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/trace-v2.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/v1.4/log-jsonl-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/v1.4/log-jsonl-sidecar.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/v1.4/log-jsonl-writer.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/v1.4/log-jsonl.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/v1.4/redact-log.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/v1.4/v1.4-lock.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/maybe-reflect.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/package.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/post-tool-use.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/pre-compact.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/pre-tool-use.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/run-trace-close.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/run-trace-start.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/run-trace.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/using-guild-bootstrap.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:(root)",
+      "to": "file:install.sh",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:mcp-servers",
+      "to": "file:mcp-servers/.gitkeep",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:mcp-servers",
+      "to": "file:mcp-servers/guild-memory/README.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:mcp-servers",
+      "to": "file:mcp-servers/guild-memory/package.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:mcp-servers",
+      "to": "file:mcp-servers/guild-memory/src/bm25.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:mcp-servers",
+      "to": "file:mcp-servers/guild-memory/src/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:mcp-servers",
+      "to": "file:mcp-servers/guild-telemetry/README.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:mcp-servers",
+      "to": "file:mcp-servers/guild-telemetry/package.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:mcp-servers",
+      "to": "file:mcp-servers/guild-telemetry/src/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/.gitkeep",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/README.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/agent-team-launcher.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/analyze-runs.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/artifact-bus-cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/build-host-packages.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/build-inventory.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/check-lane-liveness.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/check-module-ownership.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/check-roster-consistency.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/classify-proposal.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/comms/comms-format-lint.cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/comms/comms-format-lint.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/comms/no-accidental-write.cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/comms/no-accidental-write.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/config-cmd.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dashboard-launch.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/description-optimizer.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/docs-hygiene/.last-scan.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/docs-hygiene/docs-code-audit.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/docs-hygiene/memory-check.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/docs-hygiene/scan.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/audit.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/convert/convert.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/convert/detect.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/convert/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/convert/keymap.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/convert/report.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/convert/seams.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/convert/snapshot.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/convert/types.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/convert/wiki-importance.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/migrate-guild.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/migrate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/dot-guild/scrub.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/emit-loop-event.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/evolve-loop.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/flip-report.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/guild-run.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/ideation-min-build-cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/index-migrate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/instantiate-template.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/knowledge-links-builder.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/knowledge-links-traverse.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/LICENSE-attribution.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/analyze-structural.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/architecture.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/assign-layers.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/build-tour.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/classify-wiki-pages.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/content-analyze.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/cost-gate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/cross-link.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/derive-domain.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/diagram-analyze.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/diff-learn.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/extract-structural.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/graph-artifact.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/graph-query.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/impact.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/k-stage-staleness.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/kg-query.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/knowledge-orchestrator.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/architecture.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/bundle-validate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/domain.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/extract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/fingerprint.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/git.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/graph-artifact.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/graph-query-projection.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/graph-query.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/graph.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/ignore.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/impact.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/import-map.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/languages.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/layers.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/parity-harness.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/paths.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/resolve-calls-py.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/resolve-calls-ts.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/resolved-call.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/similarity.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/structural.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/tour.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/walk.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/resolve-calls.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/scan.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/staleness.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/taxonomy-build.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/validate-graph.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/wiki-index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/wiki-lint-knowledge.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/write-knowledge-links.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/adapter-fallback-ladders.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/advisory-record.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/artifact-bus.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/autonomy-presets.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/benchmark-guild-artifacts.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/capability/backend-factory.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/capability/rank.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/capability/router.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/capability/tiebreak.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/capability/tier-defaults.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/classify-intake.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/cloud-consent-gate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/cloud-task-packet.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/command-registry.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/config-reconcile-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/config-reconcile.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/config-render.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/config-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/config-ui-metadata.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/config-ui-surface.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/core/config-cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/core/contracts/team-backend.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/core/settings-reader.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/counterfactual-replay.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/dashboard-projector.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/define-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/define-test-matrix.import-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/define-test-matrix.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/define-traceability.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/degradation-trace.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/dependency-graph-reader.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/dependency-graph-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/emit-readback-degradation.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/equivalence-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/explore-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/failure-ingestion.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/frontmatter.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/fs-scanner.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/guild-artifact-paths.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/guild-discovery.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/guild-root.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/guild-run-wrapper.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/guild-trace-emit.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/guild-trace-events.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/heartbeat-write-side.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapter-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapter-factory.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapters/agents-file.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapters/antigravity-cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapters/app-host.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapters/claude-code-cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapters/codex-cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapters/pi-cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-capabilities-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-id-namespace.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-open-preflight.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-profiles-validate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-registry-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-registry.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-router.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-types.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host/inprocess-backend.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host/remote-backend.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host/tmux-backend.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/ideation-min-build.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/index-cache.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/ingest-importance.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/ingest-similarity.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/init-guild.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/init-offer-initiative.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/init-resume-repair.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/init-scaffold-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/init-staging-gate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/initiative-activity.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/initiative-workitems.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/initiative.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/installer-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/inventory-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/isolation-capability-set.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/kb-snapshot.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/lane-reserved-field.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/learning-candidate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/learning-signatures.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/memory-adapter.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/mixed-host-contracts.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/module-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/module-resources.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/owner-architect-loop.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/pane-adapter.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/parity-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/per-host-packaging.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/permission-policy-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/permission-policy.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/protect-chunks.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/provider-detect.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/reaping.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/recall-protect.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/recall.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/replay-rundir.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/result-contracts.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/result-normalizer.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/retention.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/review-pairing.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/review-progress.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/role-model-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/role-resolver.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/routing-ab-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/run-learning-classifier.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/run-lifecycle.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/run-manifest-wiring.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/runstart-preflight.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/runtime-adapters.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/sanitized-run-export.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/settings-resolver.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/shared/bm25.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/shared/config-defaults.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/shared/graph-scoring.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/shared/safe-object.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/shared/share-set.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/skill-source-transform.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/sqlite-projections.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/support-matrix.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/surface-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/team-backend.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/team-file.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/telemetry-redirect.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/template-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/trace-replay.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/wiki-recall.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/workspace-impact-detector.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/workspace-impact-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/write-back-scored-tier.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lint-context-bundle.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/mark-lane-dead.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/oq11-gate-check.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/package.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/permission-policy.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/read-guild-config.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/recall-stats.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/registry-rollup.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/resume-lanes.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/retry-lane.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/rollback-walker.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/score-tier.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/shadow-mode.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/stamp-recall-importance.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/statusline-guild.sh",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/sync-live-resources.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/sync-migration.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/sync-module-resources.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/trace-summarize.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/types/js-yaml.d.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/LICENSE-attribution.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/analyze-structural.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/architecture.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/assign-layers.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/build-tour.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/classify-wiki-pages.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/content-analyze.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/cost-gate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/cross-link.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/derive-domain.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/diagram-analyze.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/diff-understanding.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/extract-structural.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/graph-artifact.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/graph-query.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/impact.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/k-stage-staleness.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/kg-query.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/knowledge-orchestrator.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/architecture.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/bundle-validate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/domain.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/extract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/fingerprint.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/git.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/graph-artifact.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/graph-query-projection.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/graph-query.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/graph.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/ignore.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/impact.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/import-map.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/languages.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/layers.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/parity-harness.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/paths.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/resolve-calls-py.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/resolve-calls-ts.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/resolved-call.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/similarity.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/structural.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/tour.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/lib/walk.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/resolve-calls.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/scan.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/staleness.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/taxonomy-build.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/validate-graph.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/wiki-index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/wiki-lint-knowledge.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/understand/write-knowledge-links.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/v1.4-log-validator.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/v1.4-summary-md-regen.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/verify-codex-review-trail.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/verify-gate-pass.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/verify-host-packages.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/verify-installer.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/wiki-lint-checks.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/workspace/check-command-coverage.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/workspace/check-doc-sync.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/workspace/detect.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/workspace/doc-sync-prepush.sh",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/workspace/federated-query.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/workspace/promote-upstream.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/workspace/write-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/write-host-capability.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/write-run-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/write-task-run.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skill-src",
+      "to": "file:skill-src/skill-registry.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/core/.gitkeep",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/core/principles/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/core/principles/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/guild-operations/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/guild-quality/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/guild-quality/quality-mechanics.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/.gitkeep",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-diff/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-diff/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-explain/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-explain/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-graph/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-graph/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-harvest/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-harvest/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-knowledge/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-knowledge/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-map/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-map/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-onboard/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn-onboard/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/learn/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/wiki-ingest/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/wiki-ingest/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/wiki-ingest/ingest-reference.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/wiki-lint/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/wiki-lint/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/wiki-lint/lint-rules.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/wiki-query/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/wiki-query/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/knowledge/wiki-query/query-modes.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/.gitkeep",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/audit/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/audit/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/brainstorm/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/brainstorm/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/codex-review/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/codex-review/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/context-assemble/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/context-assemble/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/create-skill/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/create-skill/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/create-skill/workflow.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/create-specialist/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/create-specialist/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/create-specialist/workflow.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/dashboard/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/dashboard/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/decisions/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/decisions/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/diagnose/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/dispatching-parallel-agents/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/dispatching-parallel-agents/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/evolve-skill/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/evolve-skill/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/execute-plan/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/execute-plan/dispatch.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/execute-plan/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/finish-branch/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/finish-branch/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/init/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/init/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/learning-checkpoint/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/learning-checkpoint/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-clarify/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-clarify/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-clarify/io-contract.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-clarify/loop-mechanics.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-implement/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-implement/counters-and-concurrency.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-implement/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-implement/io-contract.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-implement/loops-applicable-enum.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-implement/security-review-restart.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-implement/workflow-and-events.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-plan-review/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-plan-review/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-plan-review/io-contract.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/loop-plan-review/loop-mechanics.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/ops-incident/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/ops-incident/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/ops-maintenance/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/ops-maintenance/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/ops-monitoring/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/ops-monitoring/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/ops-release/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/ops-release/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/ops-rollback/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/ops-rollback/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/plan/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/plan/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/product-define/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/product-define/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/product-explore/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/product-explore/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/product-template/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/product-template/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/reflect/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/reflect/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/review-broker/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/review-broker/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/review/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/review/code-review-loop.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/review/code-reviewer.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/review/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/review/rubric.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/rollback-skill/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/rollback-skill/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/systematic-debug/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/systematic-debug/condition-based-waiting-example.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/systematic-debug/condition-based-waiting.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/systematic-debug/defense-in-depth.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/systematic-debug/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/systematic-debug/find-polluter.sh",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/systematic-debug/root-cause-tracing.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/tdd/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/tdd/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/tdd/testing-anti-patterns.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/team-compose/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/team-compose/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/team-compose/gap-handling.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/using-guild/SKILL.src.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/using-guild/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/verify-done/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/verify-done/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/worktrees/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/worktrees/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/writing-skills/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/writing-skills/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/.gitkeep",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/architect-adr-writer/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/architect-adr-writer/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/architect-systems-design/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/architect-systems-design/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/architect-tradeoff-matrix/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/architect-tradeoff-matrix/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/backend-api-contract/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/backend-api-contract/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/backend-data-layer/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/backend-data-layer/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/backend-migration-writer/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/backend-migration-writer/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/backend-service-integration/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/backend-service-integration/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/copywriter-email-sequences/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/copywriter-email-sequences/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/copywriter-long-form/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/copywriter-long-form/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/copywriter-product-microcopy/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/copywriter-product-microcopy/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/copywriter-voice-guide/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/copywriter-voice-guide/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/devops-ci-cd-pipeline/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/devops-ci-cd-pipeline/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/devops-incident-runbook/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/devops-incident-runbook/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/devops-infrastructure-as-code/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/devops-infrastructure-as-code/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/devops-observability-setup/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/devops-observability-setup/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/doc-writer-doc-site/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/doc-writer-doc-site/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/doc-writer-onboarding-doc/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/doc-writer-onboarding-doc/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/doc-writer-product-guide/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/doc-writer-product-guide/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/doc-writer-readme/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/doc-writer-readme/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/frontend-a11y/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/frontend-a11y/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/frontend-bundler-config/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/frontend-bundler-config/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/frontend-react/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/frontend-react/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/frontend-state-management/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/frontend-state-management/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/marketing-ab-copy-variants/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/marketing-ab-copy-variants/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/marketing-campaign-brief/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/marketing-campaign-brief/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/marketing-launch-plan/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/marketing-launch-plan/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/marketing-positioning/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/marketing-positioning/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/mobile-android-kotlin/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/mobile-android-kotlin/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/mobile-ios-swift/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/mobile-ios-swift/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/mobile-performance-tuning/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/mobile-performance-tuning/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/mobile-react-native/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/mobile-react-native/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/qa-flaky-test-hunter/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/qa-flaky-test-hunter/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/qa-property-based-tests/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/qa-property-based-tests/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/qa-snapshot-tests/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/qa-snapshot-tests/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/qa-test-strategy/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/qa-test-strategy/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/researcher-comparison-table/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/researcher-comparison-table/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/researcher-deep-dive/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/researcher-deep-dive/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/researcher-paper-digest/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/researcher-paper-digest/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/sales-cold-outreach/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/sales-cold-outreach/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/sales-discovery-framework/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/sales-discovery-framework/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/sales-follow-up-sequence/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/sales-follow-up-sequence/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/sales-proposal-writer/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/sales-proposal-writer/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/security-auth-flow-review/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/security-auth-flow-review/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/security-dependency-audit/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/security-dependency-audit/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/security-secrets-scan/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/security-secrets-scan/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/security-threat-modeling/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/security-threat-modeling/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/seo-internal-linking/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/seo-internal-linking/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/seo-keyword-research/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/seo-keyword-research/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/seo-on-page-optimization/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/seo-on-page-optimization/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/seo-technical-audit/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/seo-technical-audit/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/social-media-content-calendar/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/social-media-content-calendar/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/social-media-engagement-templates/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/social-media-engagement-templates/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/social-media-platform-post/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/social-media-platform-post/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/social-media-thread/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/social-media-thread/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/technical-writer-api-docs/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/technical-writer-api-docs/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/technical-writer-release-notes/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/technical-writer-release-notes/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/technical-writer-tutorial/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/technical-writer-tutorial/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/technical-writer-user-manual/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/specialists/technical-writer-user-manual/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/README.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/capability/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/capability/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/capability/workflows/rank.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/capability/workflows/role-model-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/capability/workflows/role-resolver.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/capability/workflows/router.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/capability/workflows/tiebreak.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/capability/workflows/tier-defaults.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/communication/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/communication/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/communication/workflows/comms-format-lint.cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/communication/workflows/comms-format-lint.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/communication/workflows/no-accidental-write.cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/communication/workflows/no-accidental-write.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/config/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/config/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/config/workflows/config-defaults.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/config/workflows/host-open-preflight.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/config/workflows/init-config-copy.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/config/workflows/init-scaffold-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/config/workflows/settings-reader.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/config/workflows/settings-resolver.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/config/workflows/tier-model.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/config/workflows/workspace-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/context/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/context/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/context/workflows/fs-scanner.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/context/workflows/memory-adapter.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/context/workflows/protect-chunks-cli.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/context/workflows/recall-protect.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/context/workflows/recall.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/context/workflows/wiki-recall.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/dashboard/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/dashboard/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/dashboard/workflows/dashboard-projector.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/dispatch/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/dispatch/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/dispatch/workflows/specialist-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/dispatch/workflows/task-assignment.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/build-inventory.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/check-module-ownership.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/equivalence-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/installer-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/inventory-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/module-resources.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/parity-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/per-host-packaging.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/result-contracts-v2.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/result-contracts.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/review-result.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/surface-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/verify-host-packages.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/distribution/workflows/verify-installer.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/docs-sync/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/docs-sync/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/docs-sync/workflows/check-command-coverage.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/docs-sync/workflows/check-doc-sync.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/docs-sync/workflows/wiki-lint-checks.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/evals/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/evals/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/evals/workflows/define-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/evals/workflows/explore-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/evolution/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/evolution/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/evolution/workflows/learning-candidate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/evolution/workflows/learning-signatures.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/adapter-fallback-ladders.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/degradation-trace.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/host-adapter-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/host-capabilities-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/host-capability-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/host-id-namespace.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/host-profiles-validate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/host-registry-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/host-registry.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/host-types.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/mixed-host-contracts.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/provider-detect.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/host-runtime/workflows/runtime-adapters.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/initiatives/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/initiatives/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/initiatives/workflows/classify-proposal.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/initiatives/workflows/initiative-activity.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/initiatives/workflows/initiative-workitems.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/initiatives/workflows/initiative.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/intake/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/intake/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/intake/workflows/classify-intake.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/kernel/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/kernel/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/kernel/workflows/identifier-tokenize.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/kernel/workflows/module-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/kernel/workflows/yaml-loader.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/knowledge/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/knowledge/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/knowledge/workflows/bm25.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/knowledge/workflows/graph-scoring.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/knowledge/workflows/ingest-importance.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/knowledge/workflows/knowledge-links-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/learning/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/learning/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/learning/workflows/knowledge-graph-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/workflows/check-lane-liveness.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/workflows/emit-loop-event.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/workflows/mark-lane-dead.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/workflows/resume-lanes.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/workflows/retry-lane.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/workflows/run-lifecycle.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/workflows/run-manifest-wiring.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/workflows/runstart-preflight.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/workflows/write-run-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/lifecycle/workflows/write-task-run.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/loops/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/loops/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/loops/workflows/owner-architect-loop.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/migrations/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/migrations/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/migrations/workflows/index-migrate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/operations/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/operations/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/operations/workflows/operations-catalog.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/prompting/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/prompting/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/prompting/workflows/team-prompt.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/quality/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/quality/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/quality/workflows/quality-catalog.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/review/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/review/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/review/workflows/review-pairing.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/review/workflows/review-progress.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/security/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/security/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/security/workflows/safe-object.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/security/workflows/share-set.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/specialists/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/specialists/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/specialists/workflows/specialist-roster.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/state/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/state/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/state/workflows/dependency-graph-reader.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/state/workflows/dependency-graph-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/state/workflows/frontmatter.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/state/workflows/guild-discovery.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/state/workflows/guild-root.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/state/workflows/index-cache.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/teams/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/teams/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/teams/workflows/team-file.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/telemetry/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/telemetry/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/telemetry/workflows/guild-trace-emit.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/telemetry/workflows/guild-trace-events.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/templates/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/templates/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/templates/workflows/template-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/understanding/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/understanding/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/understanding/workflows/knowledge-graph-contract.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/workspace/index.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/workspace/module.manifest.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/workspace/workflows/detect.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/workspace/workflows/federated-query.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/workspace/workflows/promote-upstream.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/workspace/workflows/workspace-impact-detector.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/workspace/workflows/workspace-impact-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/workspace/workflows/write-manifest.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/agents/AGENT.template.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/products/cli-tool.template.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/products/web-app.template.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/skills/SKILL.template.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    }
+  ]
+}

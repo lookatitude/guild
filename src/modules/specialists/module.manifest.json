@@ -1,0 +1,47 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "specialists",
+  "title": "Specialists",
+  "kind": "capability",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns registered specialist agents and their reusable specialist skill resources.",
+  "depends_on": ["teams"],
+  "owns": {
+    "agents": [
+      "advisor",
+      "architect",
+      "backend",
+      "copywriter",
+      "developer",
+      "devops",
+      "doc-writer",
+      "frontend",
+      "marketing",
+      "mobile",
+      "qa",
+      "researcher",
+      "sales",
+      "security",
+      "seo",
+      "social-media",
+      "technical-writer"
+    ],
+    "skill_id_prefixes": [
+      "architect-",
+      "backend-",
+      "copywriter-",
+      "devops-",
+      "doc-writer-",
+      "frontend-",
+      "marketing-",
+      "mobile-",
+      "qa-",
+      "researcher-",
+      "sales-",
+      "security-",
+      "seo-",
+      "social-media-",
+      "technical-writer-"
+    ]
+  }
+}

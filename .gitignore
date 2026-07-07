@@ -2,8 +2,124 @@
 node_modules/
 *.log
 
-# Guild runtime state (project-local, never committed by Guild itself)
-.guild/
+# Host-package staging output (build:hosts → dist/{claude-code,codex}); regenerated,
+# never committed. Anchored to repo root so it does NOT match the tracked hooks/dist/
+# or mcp-servers/*/dist build artifacts. (universal-host-p0 L2; FU-3 resolved.)
+/dist/
+
+# Committed verification receipts (verified-multi-host-support L0 §6.1/§7.5 +
+# desktop-app smoke receipts). The evidence store is SHARED-SCRUBBED and tracked,
+# but NARROWLY: only the receipt trees under evidence/host-smoke/** and
+# evidence/desktop-app-smoke/** are admitted. Everything else under evidence/ stays
+# ignored so a stray operator artifact placed ADJACENT can never be committed
+# (SEC-m1). These allow-lists are DISJOINT from /dist/ above (packages are
+# regenerated, never tracked) so the two audit scans (`.guild/runs` share-set vs
+# the package/receipt path-anchored scan) neither overlap nor gap. The audit.ts
+# §7.2 scan is anchored to the same receipt trees.
+/evidence/**
+!/evidence/host-smoke/
+!/evidence/host-smoke/**
+!/evidence/desktop-app-smoke/
+!/evidence/desktop-app-smoke/**
+
+# Fixture .guild/ dirs must be tracked (they are static test fixtures, not live runtime state).
+# These exemptions are non-negotiable — preserved verbatim per share-dot-guild constraints.
+# Keep this list in sync with FIXTURE_EXEMPT_PATTERNS in plugin/scripts/dot-guild/audit.ts (FU-F).
+!benchmark/fixtures/**/.guild/
+!benchmark/fixtures/**/.guild/**
+!mcp-servers/guild-telemetry/fixtures/**/.guild/
+!mcp-servers/guild-telemetry/fixtures/**/.guild/**
+!mcp-servers/guild-telemetry/fixtures-v14/**/.guild/
+!mcp-servers/guild-telemetry/fixtures-v14/**/.guild/**
+!tests/dot-guild/fixtures/**/.guild/
+!tests/dot-guild/fixtures/**/.guild/**
+
+# Anchor to repo root: `!.guild/` (unanchored, no internal /) would re-include nested
+# dirs like hooks/.guild/ or scripts/.guild/. Leading / anchors to gitignore directory.
+# .guild/ — share-dot-guild policy (see docs/knowledge/decisions/guild-boundary-config-and-tracking.md Decision E)
+.guild
+!/.guild/
+!.guild/guild.yaml
+!.guild/agents/
+!.guild/agents/**
+!.guild/skills/
+!.guild/skills/**
+!.guild/workflows/
+!.guild/workflows/**
+!.guild/loops/
+!.guild/loops/**
+!.guild/wiki/
+!.guild/wiki/**
+!.guild/knowledge/
+!.guild/knowledge/**
+!.guild/memory/
+!.guild/memory/**
+!.guild/initiatives/
+!.guild/initiatives/**
+!.guild/spec/
+!.guild/spec/**
+!.guild/plan/
+!.guild/plan/**
+!.guild/prd/
+!.guild/prd/**
+!.guild/team/
+!.guild/team/**
+!.guild/teams/
+!.guild/teams/**
+!.guild/artifacts/
+!.guild/artifacts/**
+!.guild/reflections/
+!.guild/reflections/**
+!.guild/evolve/
+!.guild/evolve/**
+!.guild/indexes/
+!.guild/indexes/**
+!.guild/workspace/
+!.guild/workspace/**
+!.guild/workspace-knowledge/
+!.guild/workspace-knowledge/**
+!.guild/workspace.json
+!.guild/settings.json
+!.guild/runs/
+!.guild/runs/*/
+# Re-deny everything inside runs/<id>/ — FU-C: tighten to named-files-only.
+# Previously un-ignoring runs/<id>/ as a dir let any file through (run-state.json,
+# ad-hoc receipts). Now only the named handoffs/+files/dirs below are shared.
+.guild/runs/*/**
+!.guild/runs/*/handoffs/
+!.guild/runs/*/handoffs/**
+!.guild/runs/*/verify.md
+!.guild/runs/*/review.md
+!.guild/runs/*/provenance.json
+!.guild/runs/*/run.yaml
+!.guild/runs/*/summary.md
+!.guild/runs/*/share-payloads.flag
+
+# Re-deny operator-private / local-only sub-paths (D-SHR-4 + Decision G)
+.guild/settings.local.json
+.guild/hosts/
+# Re-deny the structural-cache sidecar: a LOCAL-ONLY, rebuildable, derived artifact (our deterministic extractor output) — never committed/exported/shared. This later rule wins over the !.guild/indexes/** re-include above, so even where .guild/indexes/** is tracked a tampered cache can never be committed (FIX-T4.1-r6; threat model in scripts/understand/lib/bundle-validate.ts).
+**/*.structural-cache.json
+
+# .claude/ — Claude Code config (FU-D: dev-team agents + settings.json default
+# to tracked when explicitly added; settings.local.json holds the operator's
+# permission allowlist and stays local). Content commit (`git add .claude/...`)
+# is a separate operator action — agents/ has drifted across workspace + plugin
+# and wants reconciliation first.
+.claude/settings.local.json
+
+# Nested .guild/ enforcement: ONE .guild/ per project (git repo) root.
+# The runtime resolver `plugin/hooks/lib/guild-root.ts` walks up to the
+# nearest .git/.guild/ so hooks never create nested .guild/. The static
+# check is `plugin/scripts/dot-guild/audit.ts` (FU-F) — CI fails on any
+# non-fixture nested .guild/. No gitignore safety net is needed.
+
+# Host-tool builtin-skill symlinks (operator-machine-specific; e.g. AionUI
+# builtins symlinked into ~/.aionui-config). Not Guild's multi-host adapter
+# layout — never part of the shipped plugin.
+.codex/skills/
+.gemini/skills/
+.claude/skills/
 
 # OS
 .DS_Store
@@ -22,3 +138,6 @@ benchmark/ui/coverage/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Script-local transient output
+scripts/docs-hygiene/.last-scan.md

@@ -1,0 +1,182 @@
+{
+  "init.plan": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "init.qa": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "init.release": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "init.ops": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "init.security": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "init.destructive": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ideate.plan": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ideate.qa": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ideate.release": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ideate.ops": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ideate.security": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ideate.destructive": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "plan.plan": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "plan.qa": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "plan.release": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "plan.ops": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "plan.security": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "plan.destructive": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "build.plan": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "build.qa": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "build.release": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "build.ops": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "build.security": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "build.destructive": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "qa.plan": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "qa.qa": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "qa.release": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "qa.ops": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "qa.security": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "qa.destructive": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ops.plan": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ops.qa": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ops.release": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ops.ops": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ops.security": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  },
+  "ops.destructive": {
+    "host_mode": "ask",
+    "guild_gates": "ask",
+    "bypass": "audit"
+  }
+}

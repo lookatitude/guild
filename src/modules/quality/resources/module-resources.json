@@ -1,0 +1,21 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "quality",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "skills",
+      "id": "guild-quality",
+      "source_path": "skills/guild-quality/SKILL.md",
+      "resource_path": "resources/skills/guild-quality/SKILL.md",
+      "sha256": "7d63563569b8bbdd9c68d0a0cb70408c2b718f8116a9b49931ae9aa194da16ad"
+    },
+    {
+      "category": "skills",
+      "id": "guild-quality/quality-mechanics.md",
+      "source_path": "skills/guild-quality/quality-mechanics.md",
+      "resource_path": "resources/skills/guild-quality/quality-mechanics.md",
+      "sha256": "9056d81aef921683d1612109dafd81e9971cc0e157601324db55b3d42101a3d5"
+    }
+  ]
+}

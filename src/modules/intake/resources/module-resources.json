@@ -1,0 +1,14 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "intake",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "lib/classify-intake",
+      "source_path": "scripts/lib/classify-intake.ts",
+      "resource_path": "resources/scripts/lib/classify-intake.ts",
+      "sha256": "d7a5f76097e988e5e7c85c226ce53b7733d16351a07e9b7f89860d713daeaf3c"
+    }
+  ]
+}

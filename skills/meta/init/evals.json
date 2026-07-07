@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Run /guild:init on this brownfield repo.",
+    "Onboard this repo — there's no wiki or init yet.",
+    "Init this workspace root that holds several sub-repos.",
+    "Detect whether this monorepo-of-repos is a workspace and write the federation manifest.",
+    "Scaffold new-product knowledge with --new.",
+    "Initialize Guild here and offer to init the sub-projects that have no .guild yet."
+  ],
+  "should_not_trigger": [
+    "Brainstorm a new feature spec.",
+    "Re-onboard an already-initialized repo without /guild:init — just show status.",
+    "Ingest this Stripe API doc into the wiki.",
+    "Search the wiki for our pricing knowledge.",
+    "Capture this architecture decision.",
+    "Build the deep knowledge graph for the codebase."
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Start from the CLI template — I want to build a command-line tool.",
+    "Scaffold a web-app product from the template before we explore it.",
+    "Use the cli-tool template to seed explore and define for this idea.",
+    "Seed the explore/define skeletons from a product template.",
+    "We have a houseplant tracker idea — instantiate it from the web-app template.",
+    "Which product templates exist, and can you scaffold one for this idea?"
+  ],
+  "should_not_trigger": [
+    "Fix the bug where the login button does nothing on mobile.",
+    "Plan this feature: add SSO to the admin dashboard.",
+    "I have an idea for an app that tracks houseplants.",
+    "Write the PRD and acceptance criteria for the houseplant app.",
+    "Review this PR and tell me if the migration is safe.",
+    "Compose a specialist team for the web-app build."
+  ]
+}

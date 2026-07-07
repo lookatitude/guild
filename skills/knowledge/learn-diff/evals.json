@@ -1,0 +1,18 @@
+{
+  "should_trigger": [
+    "Analyse this diff's blast radius against the graph.",
+    "What does this change affect — which layers and nodes?",
+    "Run learn diff for plan-impact on this PR.",
+    "Map the base→head change set onto the knowledge graph.",
+    "Which changed files aren't explained by any graph node?"
+  ],
+  "should_not_trigger": [
+    "Build the cheap-scan codebase map.",
+    "Build the deep knowledge graph.",
+    "Narrate the onboarding tour.",
+    "Explain how the rate-limiter module works.",
+    "Just show me git diff HEAD~1.",
+    "Set models.thresholds.powerful in settings.json.",
+    "Launch the interactive dashboard."
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "loops",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "lib/owner-architect-loop",
+      "source_path": "scripts/lib/owner-architect-loop.ts",
+      "resource_path": "resources/scripts/lib/owner-architect-loop.ts",
+      "sha256": "9a437b71d891bce8d6ed704ac50f700e2fa989374b058872f3436834be2e8894"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-clarify",
+      "source_path": "skills/meta/loop-clarify/SKILL.md",
+      "resource_path": "resources/skills/meta/loop-clarify/SKILL.md",
+      "sha256": "d84bbc87406ca21e9c164875eeabb6e2d24a8dcbcfcd24230b589c58357d0021"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-clarify/io-contract.md",
+      "source_path": "skills/meta/loop-clarify/io-contract.md",
+      "resource_path": "resources/skills/meta/loop-clarify/io-contract.md",
+      "sha256": "9fe9aa2da0fb0bd5bc31c5a7a28bd9a51d46b058a8ea5cb7f37adef56d6c188d"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-clarify/loop-mechanics.md",
+      "source_path": "skills/meta/loop-clarify/loop-mechanics.md",
+      "resource_path": "resources/skills/meta/loop-clarify/loop-mechanics.md",
+      "sha256": "18792c0830bd5cde2321ca07b6b28b8131288ce53ea559b8452c8a0b339516ea"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-implement",
+      "source_path": "skills/meta/loop-implement/SKILL.md",
+      "resource_path": "resources/skills/meta/loop-implement/SKILL.md",
+      "sha256": "d2c0292b63e70bc370ffb80e6de9dcc759cbc3698d12787094babb9d64863f34"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-implement/counters-and-concurrency.md",
+      "source_path": "skills/meta/loop-implement/counters-and-concurrency.md",
+      "resource_path": "resources/skills/meta/loop-implement/counters-and-concurrency.md",
+      "sha256": "80cc613871cd3a109ce3ff91153e61fc2259c2e558473913ea85b1acaef0e58d"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-implement/io-contract.md",
+      "source_path": "skills/meta/loop-implement/io-contract.md",
+      "resource_path": "resources/skills/meta/loop-implement/io-contract.md",
+      "sha256": "c40ed42255f07e5153ca58ee169f1b594d597a2068b05da9fda95b8330e9b3e2"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-implement/loops-applicable-enum.md",
+      "source_path": "skills/meta/loop-implement/loops-applicable-enum.md",
+      "resource_path": "resources/skills/meta/loop-implement/loops-applicable-enum.md",
+      "sha256": "e2c6973f5c435c088576c9f6ed32f967cd6d8b3b99a2f8839513c9cc2b568b9b"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-implement/security-review-restart.md",
+      "source_path": "skills/meta/loop-implement/security-review-restart.md",
+      "resource_path": "resources/skills/meta/loop-implement/security-review-restart.md",
+      "sha256": "0675c89f4e35615eec1871715ee9ed35e2f740561130a33807bc116e85e8b0b9"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-implement/workflow-and-events.md",
+      "source_path": "skills/meta/loop-implement/workflow-and-events.md",
+      "resource_path": "resources/skills/meta/loop-implement/workflow-and-events.md",
+      "sha256": "9329105479525041caa7f3afdb7f6e4e0c88be9dcb0ae8e24004ee8fd9ecbf93"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-plan-review",
+      "source_path": "skills/meta/loop-plan-review/SKILL.md",
+      "resource_path": "resources/skills/meta/loop-plan-review/SKILL.md",
+      "sha256": "d71f3c26d7130d28cb06d46584c96a2ebeba924eec63fab1feaceda203740d76"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-plan-review/io-contract.md",
+      "source_path": "skills/meta/loop-plan-review/io-contract.md",
+      "resource_path": "resources/skills/meta/loop-plan-review/io-contract.md",
+      "sha256": "0eceea4774516c33f95c898ad584090cfda3518f232dcdd75445d1fa53eb09ce"
+    },
+    {
+      "category": "skills",
+      "id": "guild-loop-plan-review/loop-mechanics.md",
+      "source_path": "skills/meta/loop-plan-review/loop-mechanics.md",
+      "resource_path": "resources/skills/meta/loop-plan-review/loop-mechanics.md",
+      "sha256": "3808ed4fa4572cc6da5c826be3c7f77e3973d248de09e3731913f7178e05175b"
+    }
+  ]
+}

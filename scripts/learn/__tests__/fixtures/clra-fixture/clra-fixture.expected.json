@@ -1,0 +1,52 @@
+{
+  "schema": "guild.clra_fixture_oracle.v1",
+  "description": "Hand-labeled ground truth for the CLRA shared fixture. Every node id follows the LOCKED convention <type>:<relpath>[:<name>] (relpath is fixture-root-relative). This oracle is the contract every CLRA validation gate (G1/G3/G8/G9) asserts against. See README.md for the format and scope rules.",
+  "fixtureRoot": ".",
+  "files": [
+    "file:src/a.ts",
+    "file:src/b.ts",
+    "file:src/shapes.ts",
+    "file:py/a.py",
+    "file:py/b.py",
+    "file:py/shapes.py"
+  ],
+  "calls": [
+    { "from": "function:src/a.ts:main", "to": "function:src/b.ts:add", "cross_file": true },
+    { "from": "function:src/a.ts:main", "to": "function:src/b.ts:multiply", "cross_file": true },
+    { "from": "function:src/a.ts:main", "to": "function:src/a.ts:sumList1", "cross_file": false },
+    { "from": "function:src/a.ts:main", "to": "function:src/a.ts:sumListTwo", "cross_file": false },
+    { "from": "function:py/a.py:main", "to": "function:py/b.py:add", "cross_file": true },
+    { "from": "function:py/a.py:main", "to": "function:py/b.py:multiply", "cross_file": true },
+    { "from": "function:py/a.py:main", "to": "function:py/a.py:sum_list_one", "cross_file": false },
+    { "from": "function:py/a.py:main", "to": "function:py/a.py:sum_list_two", "cross_file": false }
+  ],
+  "methodCalls": [
+    { "from": "function:src/a.ts:main", "to": "function:src/shapes.ts:Circle.draw", "cross_file": true },
+    { "from": "function:src/a.ts:main", "to": "function:src/shapes.ts:Circle.area", "cross_file": true }
+  ],
+  "imports": [
+    { "importer": "file:src/a.ts", "source": "./b", "symbols": ["add", "multiply"] },
+    { "importer": "file:src/a.ts", "source": "./shapes", "symbols": ["Circle"] },
+    { "importer": "file:py/a.py", "source": "b", "symbols": ["add", "multiply"] },
+    { "importer": "file:py/a.py", "source": "shapes", "symbols": ["Circle"] }
+  ],
+  "inherits": [
+    { "child": "class:src/shapes.ts:Circle", "parent": "class:src/shapes.ts:Shape" },
+    { "child": "class:py/shapes.py:Circle", "parent": "class:py/shapes.py:Shape" }
+  ],
+  "implements": [
+    { "class": "class:src/shapes.ts:Circle", "interface": "class:src/shapes.ts:Drawable" }
+  ],
+  "deadCode": [
+    "function:src/b.ts:unusedHelper",
+    "function:py/b.py:unused_helper"
+  ],
+  "entryPoints": [
+    "function:src/a.ts:main",
+    "function:py/a.py:main"
+  ],
+  "clonePairs": [
+    ["function:src/a.ts:sumList1", "function:src/a.ts:sumListTwo"],
+    ["function:py/a.py:sum_list_one", "function:py/a.py:sum_list_two"]
+  ]
+}

@@ -1,0 +1,92 @@
+# doc-sync.yml — rollout-coupling advisory (workspace-consolidation Lane D in CI)
+#
+# Enforces (advisory) Rule 2 of docs/knowledge/decisions/workspace-knowledge-flow.md:
+# when the plugin's USER-FACING SURFACE changes (commands/** or a skill whose SKILL.md
+# frontmatter carries `user_facing: true`), the root reference docs (docs/knowledge/ in
+# the umbrella repo) must update in the same rollout — the website generates final user
+# documentation FROM them.
+#
+# CROSS-REPO LIMITATION (by design — honest). This workflow runs in the PLUGIN repo,
+# which does NOT contain docs/knowledge/ (that lives in the umbrella repo
+# lookatitude/guild-workspace). So CI can DETECT the surface change but cannot VERIFY the
+# paired root-doc update landed. It therefore runs ADVISORY / NON-BLOCKING, matching
+# Rule 2's warn-by-default posture (the same self-containment stance as
+# dot-guild-policy.yml). The author resolves it by landing the docs/knowledge/ update in
+# the umbrella rollout and/or adding `docs-sync: n/a <reason>` to a commit. Full blocking
+# enforcement needs cross-repo PR correlation (future) or a monorepo. The check itself +
+# 42 unit/integration tests live at scripts/workspace/check-doc-sync.ts.
+#
+# Owner: tooling-engineer.
+
+name: doc-sync (rollout-coupling advisory)
+
+on:
+  pull_request:
+    # Only fire when the user-facing surface might be touched (keeps it quiet otherwise).
+    paths:
+      - "commands/**"
+      - "skills/**"
+
+permissions:
+  contents: read
+
+jobs:
+  doc-sync:
+    runs-on: ubuntu-latest
+    # Advisory: this job must NEVER block a PR. continue-on-error guarantees that even an
+    # infrastructure failure (npm registry outage, checkout hiccup) cannot turn the PR red.
+    continue-on-error: true
+    steps:
+      - name: Checkout (full history for the PR range)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install scripts/ dependencies
+        run: |
+          if [ -f scripts/package.json ]; then
+            cd scripts && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+          fi
+
+      - name: Doc-sync advisory (non-blocking)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          # Three-dot for the diff (PR file changes vs merge-base). The tool internally
+          # narrows the log range to two-dot for escape-token detection (Codex-CI MAJOR-1).
+          RANGE="${BASE_SHA}...${HEAD_SHA}"
+          echo "doc-sync PR range: $RANGE"
+          # Plugin repo is the only checkout here; docs/knowledge/ lives in the umbrella
+          # repo, so --root-repo=. finds no root-doc update by design. NO --strict → exit 0
+          # on a flagged advisory. Capture the exit code so a genuine git failure (exit 2)
+          # is surfaced as a ::warning:: rather than masquerading as a CLEAN result.
+          set +e
+          OUT="$(npx tsx scripts/workspace/check-doc-sync.ts \
+            --plugin-repo=. --root-repo=. \
+            --plugin-range="$RANGE" --root-range="$RANGE" 2>&1)"
+          CODE=$?
+          set -e
+          echo "$OUT"
+          if [ "$CODE" -eq 2 ]; then
+            echo "::warning::doc-sync could not evaluate (git error, exit 2) — advisory not computed"
+          fi
+          # Render OUT as 4-space-indented lines (NOT a ``` fence) so a crafted filename
+          # containing backticks cannot break out of the block in the step summary (MINOR-3).
+          {
+            echo "## doc-sync — rollout-coupling advisory"
+            echo ""
+            printf '%s\n' "$OUT" | sed 's/^/    /'
+            echo ""
+            if [ "$CODE" -eq 2 ]; then
+              echo "> ⚠️ doc-sync could not evaluate (git error). Advisory not computed."
+              echo ""
+            fi
+            echo "_If this PR changes the user-facing surface, ensure the matching root \`docs/knowledge/\` update lands in the umbrella repo (\`lookatitude/guild-workspace\`) in the **same rollout** — the website generates final user docs from it. If the change is genuinely doc-irrelevant, add \`docs-sync: n/a <reason>\` to a commit. This check is **advisory** (non-blocking); canon: \`docs/knowledge/decisions/workspace-knowledge-flow.md\` Rule 2._"
+          } >> "$GITHUB_STEP_SUMMARY"

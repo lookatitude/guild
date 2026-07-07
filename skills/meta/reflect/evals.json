@@ -4,7 +4,8 @@
     "What did we learn from this task?",
     "Run post-task reflection on run-XYZ.",
     "Capture lessons from the specialist outputs.",
-    "Any skill gaps in this run?"
+    "Any skill gaps in this run?",
+    "Reflect on this self-build run and record the codex_review marker."
   ],
   "should_not_trigger": [
     "Ingest this new source.",
@@ -12,6 +13,8 @@
     "Run wiki-lint.",
     "Start a new brainstorm.",
     "Verify we're done.",
-    "Promote this reflection to the wiki."
+    "Promote this reflection to the wiki.",
+    "Harvest the phase artifacts into structured candidates — run learn-harvest.",
+    "Extract wiki and decision candidates from the run closeout."
   ]
 }

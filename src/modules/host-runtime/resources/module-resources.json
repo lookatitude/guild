@@ -1,0 +1,273 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "host-runtime",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "desktop-app-smoke",
+      "source_path": "scripts/desktop-app-smoke.ts",
+      "resource_path": "resources/scripts/desktop-app-smoke.ts",
+      "sha256": "6d7bf596ab79613a5919d5961152b705699d6aa5c8a849ca9eeab30f880db33d"
+    },
+    {
+      "category": "scripts",
+      "id": "generate-support-matrix",
+      "source_path": "scripts/generate-support-matrix.ts",
+      "resource_path": "resources/scripts/generate-support-matrix.ts",
+      "sha256": "9dda69323ae5a78c5226197d0e15cd3c3481a61c9f58c229780313e6ba38d7c9"
+    },
+    {
+      "category": "scripts",
+      "id": "guild-run",
+      "source_path": "scripts/guild-run.ts",
+      "resource_path": "resources/scripts/guild-run.ts",
+      "sha256": "a74e9ed8001cc70d20346e1297765494435c85649ced859b51e2e138c5647826"
+    },
+    {
+      "category": "scripts",
+      "id": "host-smoke",
+      "source_path": "scripts/host-smoke.ts",
+      "resource_path": "resources/scripts/host-smoke.ts",
+      "sha256": "0669d3b305543087563926131e740ac24766feae72afe36f44ceba06c8674ecd"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/adapter-fallback-ladders",
+      "source_path": "scripts/lib/adapter-fallback-ladders.ts",
+      "resource_path": "resources/scripts/lib/adapter-fallback-ladders.ts",
+      "sha256": "607813a5add3265dddb1d73ecc441cb55cea6d6405da5eaca8e01cb922727c49"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/degradation-trace",
+      "source_path": "scripts/lib/degradation-trace.ts",
+      "resource_path": "resources/scripts/lib/degradation-trace.ts",
+      "sha256": "564577b045d676e43fc3aeda654ed3bb90ddcc0931b3acf31c7c689e11757daa"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/emit-readback-degradation",
+      "source_path": "scripts/lib/emit-readback-degradation.ts",
+      "resource_path": "resources/scripts/lib/emit-readback-degradation.ts",
+      "sha256": "a3865ce834cf0c0afe181980e52d52e966b19bc688880944e75a30f39c16910a"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/guild-run-wrapper",
+      "source_path": "scripts/lib/guild-run-wrapper.ts",
+      "resource_path": "resources/scripts/lib/guild-run-wrapper.ts",
+      "sha256": "347fe57ff68b5c0c93f11e286b884087faab660770037d16be7908df6d12da32"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapter-contract",
+      "source_path": "scripts/lib/host-adapter-contract.ts",
+      "resource_path": "resources/scripts/lib/host-adapter-contract.ts",
+      "sha256": "76368603384f94e16e24f0f9ea08cb78ca9905a55b2483d3f666098917cb5628"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapter-factory",
+      "source_path": "scripts/lib/host-adapter-factory.ts",
+      "resource_path": "resources/scripts/lib/host-adapter-factory.ts",
+      "sha256": "dd8cd32ad87637b4016cec7a147f2489329fda33f716e987b069d5daab2331ed"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/agents-file",
+      "source_path": "scripts/lib/host-adapters/agents-file.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/agents-file.ts",
+      "sha256": "073c01e1b8c88d3c511198e5e471e96efdfa02a00d07736f27c0f8cf3993f38d"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/antigravity-cli",
+      "source_path": "scripts/lib/host-adapters/antigravity-cli.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/antigravity-cli.ts",
+      "sha256": "f9af57b74377a27d839d18584a167d3b04872a3b76d7b7e2193883f52a9ce053"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/app-host",
+      "source_path": "scripts/lib/host-adapters/app-host.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/app-host.ts",
+      "sha256": "9593436c0ed51f0aa3834b83a1b1f059e61e3e2533667ab11a459dfc36845829"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/claude-code-cli",
+      "source_path": "scripts/lib/host-adapters/claude-code-cli.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/claude-code-cli.ts",
+      "sha256": "c0ef38cd7576a7159b419bfcfd1e8df4959b758ccd6bf737b5789e3880a4cd19"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/codex-cli",
+      "source_path": "scripts/lib/host-adapters/codex-cli.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/codex-cli.ts",
+      "sha256": "15d766bbd55caa016a5eeae234c195389dee0d11d09b25162360f59fd2ab423f"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/cursor",
+      "source_path": "scripts/lib/host-adapters/cursor.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/cursor.ts",
+      "sha256": "af9cbf00b239faceb292b0f8420ee4ec81ef1cd39cf364cd975753266d545f93"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/github-copilot",
+      "source_path": "scripts/lib/host-adapters/github-copilot.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/github-copilot.ts",
+      "sha256": "a978b65965cfd3780527ff709c2107bd7149c93fd2c23d208a1777089b738b43"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/opencode",
+      "source_path": "scripts/lib/host-adapters/opencode.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/opencode.ts",
+      "sha256": "ba1c98c9759b6b8515741d531173c531273ee626b749a6d928bcf21f8c0f2f63"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/pi-cli",
+      "source_path": "scripts/lib/host-adapters/pi-cli.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/pi-cli.ts",
+      "sha256": "e53901985fb55c03da3bdc5681932803af4741241dd1d2d7213b26d68800eb55"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/rovo-dev",
+      "source_path": "scripts/lib/host-adapters/rovo-dev.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/rovo-dev.ts",
+      "sha256": "6ece416a5101e9602960c8ab847edc72ebea86dc473b7127b7dd40769b99b3ef"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-adapters/wrapped-cli-base",
+      "source_path": "scripts/lib/host-adapters/wrapped-cli-base.ts",
+      "resource_path": "resources/scripts/lib/host-adapters/wrapped-cli-base.ts",
+      "sha256": "fbb4e03acc4a580f9a308f5e3b18103387e6e782b7f61a944d23819310595dc3"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-capabilities-schema",
+      "source_path": "scripts/lib/host-capabilities-schema.ts",
+      "resource_path": "resources/scripts/lib/host-capabilities-schema.ts",
+      "sha256": "fc65c2064bb332e2846b6af7d9c658ddfbc7e4935aaf59b6d7493ad48aed54ad"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-id-namespace",
+      "source_path": "scripts/lib/host-id-namespace.ts",
+      "resource_path": "resources/scripts/lib/host-id-namespace.ts",
+      "sha256": "3dfc8df099c16b32eb92e922b9ca95caa5687bea74ff5bcaf2089b00d4c77778"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-profiles-validate",
+      "source_path": "scripts/lib/host-profiles-validate.ts",
+      "resource_path": "resources/scripts/lib/host-profiles-validate.ts",
+      "sha256": "f5edbb7bc146115eb56422b62755ed7d6947875893f718fec9c9cf166bdeb21d"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-public-state",
+      "source_path": "scripts/lib/host-public-state.ts",
+      "resource_path": "resources/scripts/lib/host-public-state.ts",
+      "sha256": "3c06bca97a31cca31bf1f7c39540fea5c82004a7d4074bab66dd539bbd938498"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-registry",
+      "source_path": "scripts/lib/host-registry.ts",
+      "resource_path": "resources/scripts/lib/host-registry.ts",
+      "sha256": "211238deb83f36f52b0fd68a6d38ef099a2edc90b43f90f6a4642d640b66f57f"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-registry-schema",
+      "source_path": "scripts/lib/host-registry-schema.ts",
+      "resource_path": "resources/scripts/lib/host-registry-schema.ts",
+      "sha256": "71e618b57293a586e8233d9221c0464a8fa03bb9f1f0fd11f2263e49a193acab"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-router",
+      "source_path": "scripts/lib/host-router.ts",
+      "resource_path": "resources/scripts/lib/host-router.ts",
+      "sha256": "1784d929b03d7416832c77661e037a4e346c143ce5a601208f65298f398a1e97"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-smoke-store",
+      "source_path": "scripts/lib/host-smoke-store.ts",
+      "resource_path": "resources/scripts/lib/host-smoke-store.ts",
+      "sha256": "509ac722b76522de35365117d0fc878153c620fd12624360de75c322683b3778"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-types",
+      "source_path": "scripts/lib/host-types.ts",
+      "resource_path": "resources/scripts/lib/host-types.ts",
+      "sha256": "20be407854bcbb9abd085b4477fb251647fa8ca78c8ba566b4b48a857bf2e4a5"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/mixed-host-contracts",
+      "source_path": "scripts/lib/mixed-host-contracts.ts",
+      "resource_path": "resources/scripts/lib/mixed-host-contracts.ts",
+      "sha256": "718ee2d4836187e6c3379db71b63d60631849b5eb2790c9b2ac3d1095447a8a9"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/pane-adapter",
+      "source_path": "scripts/lib/pane-adapter.ts",
+      "resource_path": "resources/scripts/lib/pane-adapter.ts",
+      "sha256": "f1f056b9c63bf76b7e560c7ad5990351236e7a1a8b68a622f44f728ccf51ca9d"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/provider-detect",
+      "source_path": "scripts/lib/provider-detect.ts",
+      "resource_path": "resources/scripts/lib/provider-detect.ts",
+      "sha256": "0af058375ee4c291f875e8c4c04ab5e9c284200bfd9de3b02ab76f3937b08bc1"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/result-normalizer",
+      "source_path": "scripts/lib/result-normalizer.ts",
+      "resource_path": "resources/scripts/lib/result-normalizer.ts",
+      "sha256": "c8bef0b61739e8c4bc4f0fc33a5e644e9f773cc018fb19d8dea7dda57fffff02"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/runtime-adapters",
+      "source_path": "scripts/lib/runtime-adapters.ts",
+      "resource_path": "resources/scripts/lib/runtime-adapters.ts",
+      "sha256": "2a7740926bfca474c1b2d65eb7da7db39dfda7eecc00ccb312d218cfbc2b78d1"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/support-matrix",
+      "source_path": "scripts/lib/support-matrix.ts",
+      "resource_path": "resources/scripts/lib/support-matrix.ts",
+      "sha256": "2474aaa9177a7282836430655ad6dc67e74397d83a77236fedd5a20914c536a3"
+    },
+    {
+      "category": "scripts",
+      "id": "verify-desktop-app-smoke",
+      "source_path": "scripts/verify-desktop-app-smoke.ts",
+      "resource_path": "resources/scripts/verify-desktop-app-smoke.ts",
+      "sha256": "8e1f2e780d6ef0865db155b198162364e356530ca3f847188152a74ace1347da"
+    },
+    {
+      "category": "scripts",
+      "id": "write-host-capability",
+      "source_path": "scripts/write-host-capability.ts",
+      "resource_path": "resources/scripts/write-host-capability.ts",
+      "sha256": "28e34c2c167fa9e6081b7929b65ebc571c67e5f6673b863694858ecb2ae012c9"
+    }
+  ]
+}

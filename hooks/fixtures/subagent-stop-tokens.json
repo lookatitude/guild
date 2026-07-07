@@ -1,0 +1,16 @@
+{
+  "session_id": "sess-abc123",
+  "transcript_path": "/Users/example/.claude/projects/guild/session.jsonl",
+  "cwd": "/Users/example/Projects/guild",
+  "permission_mode": "default",
+  "hook_event_name": "SubagentStop",
+  "agent_name": "backend",
+  "stop_reason": "end_turn",
+  "model": "claude-sonnet-4-6",
+  "tokens": {
+    "input": 1200,
+    "output": 340,
+    "cached": 800,
+    "cost_usd": 0.0123
+  }
+}

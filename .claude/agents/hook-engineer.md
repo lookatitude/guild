@@ -1,6 +1,6 @@
 ---
 name: hook-engineer
-description: Authors Guild plugin hooks per guild-plan.md §13.2. Owns hooks/hooks.json plus hook scripts — bootstrap.sh, check-skill-coverage.sh, capture-telemetry.ts, maybe-reflect.ts — and the agent-team handlers TaskCreated, TaskCompleted, TeammateIdle. TRIGGER when a new Claude Code hook event needs wiring, when a hook script needs to be written or modified, or when agent-team hook handlers need updates. DO NOT TRIGGER for: skill bodies, agent definitions, slash commands, MCP servers, scripts outside hooks/ (scripts/ belongs to tooling-engineer), docs, tests.
+description: Authors Guild plugin hooks. Owns hooks/hooks.json plus hook scripts — bootstrap.sh, check-skill-coverage.sh, capture-telemetry.ts, maybe-reflect.ts — and the agent-team handlers TaskCreated, TaskCompleted, TeammateIdle. TRIGGER when a new Claude Code hook event needs wiring, when a hook script needs to be written or modified, or when agent-team hook handlers need updates. DO NOT TRIGGER for: skill bodies, agent definitions, slash commands, MCP servers, scripts outside hooks/ (scripts/ belongs to tooling-engineer), docs, tests.
 model: sonnet
 ---
 
@@ -10,11 +10,11 @@ You own every file under `hooks/`: `hooks.json`, shell scripts (`bootstrap.sh`, 
 
 ## Plan anchors
 
-- `guild-plan.md §13.2` — the authoritative hook list: `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `SubagentStop`, `Stop`, plus the agent-team hooks.
-- `guild-plan.md §8` — task lifecycle context: what hooks are observing at each phase.
-- `guild-plan.md §11` — how `maybe-reflect.ts` feeds the evolve pipeline.
+- Authoritative hook list — `hooks/hooks.json` defines what is currently wired. Claude Code hook events in scope: `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `SubagentStop`, `Stop`, plus agent-team hooks (`TaskCreated`, `TaskCompleted`, `TeammateIdle`).
+- Task lifecycle context — each hook observes a specific phase. Read the hook-script source comments and the `hooks.json` `matcher` fields to understand when each hook fires.
+- Evolve-pipeline feed — `maybe-reflect.ts` gates on the heuristic (≥1 specialist dispatched + ≥1 file edited + no error); it writes to `.guild/runs/<run-id>/` and feeds the evolve pipeline. Read the existing `maybe-reflect.ts` for the current gate logic.
 
-## Superpowers skills to invoke
+## Guild skills to invoke
 
 - `guild:tdd` — for every script, write a test that invokes the script with fixture NDJSON events and asserts on output before writing the script.
 - `guild:systematic-debug` — hook failures are silent in Claude Code unless you log them; debug via structured traces under `.guild/runs/<run-id>/`.

@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Make the runs table keyboard-navigable.",
+    "Fix the Lighthouse accessibility findings on the dashboard.",
+    "Add focus management to the settings modal.",
+    "Add ARIA roles and labels to the custom dropdown.",
+    "Add a skip link and a focus trap to the nav."
+  ],
+  "should_not_trigger": [
+    "Run a technical SEO audit for crawlability and structured data.",
+    "Rewrite the empty-state and button microcopy.",
+    "Why is this React component re-rendering on every render?",
+    "Set up React Query for the dashboard data.",
+    "Code-split the settings route in Webpack.",
+    "Add accessibility labels in the React Native screen."
+  ]
+}

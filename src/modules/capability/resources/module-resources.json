@@ -1,0 +1,84 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "capability",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "lib/autonomy-presets",
+      "source_path": "scripts/lib/autonomy-presets.ts",
+      "resource_path": "resources/scripts/lib/autonomy-presets.ts",
+      "sha256": "68d1d68670ce5e8932e1b518adc201cb90ce57aba9764f60a319f446b31e8265"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/backend-factory",
+      "source_path": "scripts/lib/capability/backend-factory.ts",
+      "resource_path": "resources/scripts/lib/capability/backend-factory.ts",
+      "sha256": "6cd82adf7c48161884c20a818ed9746fef4ccfd372335b2b5db7ded32d269b02"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/rank",
+      "source_path": "scripts/lib/capability/rank.ts",
+      "resource_path": "resources/scripts/lib/capability/rank.ts",
+      "sha256": "9dcbacfb5d7e27f94205a956d69554cc9c5e127d2e9ca78d692a92b0be4582fd"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/router",
+      "source_path": "scripts/lib/capability/router.ts",
+      "resource_path": "resources/scripts/lib/capability/router.ts",
+      "sha256": "64ce96c30861eb2240b55fea9dc24444c62adba5f5bb4329781450b4996b26dc"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/tiebreak",
+      "source_path": "scripts/lib/capability/tiebreak.ts",
+      "resource_path": "resources/scripts/lib/capability/tiebreak.ts",
+      "sha256": "91eb1e125334e6947ab8c63004615816d87cf46229d2c586254ff466c805befa"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/tier-defaults",
+      "source_path": "scripts/lib/capability/tier-defaults.ts",
+      "resource_path": "resources/scripts/lib/capability/tier-defaults.ts",
+      "sha256": "5ef101edf750f81174430e4a3d0ab1f865494e3153cdee0cc3ffadab5234b6be"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/isolation-capability-set",
+      "source_path": "scripts/lib/isolation-capability-set.ts",
+      "resource_path": "resources/scripts/lib/isolation-capability-set.ts",
+      "sha256": "6a2b1d0f50695a1c0619f5886ec9ca2cf30358cfa43bf58139f7dd3cf36df375"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/lane-reserved-field",
+      "source_path": "scripts/lib/lane-reserved-field.ts",
+      "resource_path": "resources/scripts/lib/lane-reserved-field.ts",
+      "sha256": "73f19367f594dccc4f26e6ad890b97e0fbd1152b1004d503a9dc2a196db16002"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/role-model-schema",
+      "source_path": "scripts/lib/role-model-schema.ts",
+      "resource_path": "resources/scripts/lib/role-model-schema.ts",
+      "sha256": "9626ddcdadfa937689d31632793374e5f7f27f7eb794d3d475e3ed9f74cbf348"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/role-resolver",
+      "source_path": "scripts/lib/role-resolver.ts",
+      "resource_path": "resources/scripts/lib/role-resolver.ts",
+      "sha256": "3940995252e92164002c13a9bbad401fd5170825474bc1bcd3ae6bf0f5fc1945"
+    },
+    {
+      "category": "scripts",
+      "id": "score-tier",
+      "source_path": "scripts/score-tier.ts",
+      "resource_path": "resources/scripts/score-tier.ts",
+      "sha256": "192b4d59b950b35bb072dc62d772f51089eebb112ad65d9c2eb5beb485c200cf"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "schema": "guild.structural_extraction_meta.v1",
+  "generated_at": "2026-06-27T20:37:43.086Z",
+  "generated_from_commit": "2c5372611c7881d02fb7087a869bff28d45c99ca",
+  "wall_clock_ms": 458,
+  "file_count": 823,
+  "structural_node_count": 4829,
+  "structural_edge_count": 7518,
+  "refresh_mode": "full",
+  "model_calls": 0,
+  "network_calls": 0
+}

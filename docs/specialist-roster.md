@@ -1,12 +1,22 @@
 # Specialist Roster
 
-Implements `guild-plan.md §6`. 13 shipping specialists across 3 groups, 50 T5 skills.
+17 registered agents across 3 groups plus tiered-worker roles (doc-writer promoted to
+first-class in v2.0; advisor and developer added as tiered-worker roles). See
+`https://guildstack.dev/docs/specialist-roster` for the full roster with trigger examples
+and DO NOT TRIGGER boundaries.
 
 Every specialist inherits `guild-principles` (T1) as a mandatory first load: the
 Karpathy 4 plus Guild's evidence rule. Per-specialist T5 skills live under
 `skills/specialists/<specialist>-<slug>/`.
 
-## Engineering group (7 specialists · 26 skills)
+**Model tiers (cost-aware-tiering-and-lean-context ADR §1/§7).** Each agent's
+frontmatter `model:` declares a **default tier** from the host-agnostic ladder
+`cheap (haiku) | mid (sonnet) | powerful (opus)`. The auto-scorer (ADR §2) picks
+the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
+**escalation to the `advisor`** (ADR §3), never a self-promotion. See the
+**Tiered-worker roster** section below.
+
+## Engineering group (8 specialists · 30 authored T5 skills)
 
 ### architect — `agents/architect.md`
 
@@ -68,10 +78,22 @@ Karpathy 4 plus Guild's evidence rule. Per-specialist T5 skills live under
 - **Skills:** `security-threat-modeling`, `security-dependency-audit`,
   `security-auth-flow-review`, `security-secrets-scan`.
 
+### frontend — `agents/frontend.md`
+
+- **Triggers:** React, Vue, Svelte, Solid, Vite config, Tailwind, a11y/accessibility,
+  Lighthouse, Core Web Vitals, component authoring, state management, client-side
+  routing, code splitting, frontend bundle size, design-system implementation.
+- **DO NOT trigger for:** cross-system architecture (architect), API contracts / data
+  layer (backend), test strategy and suite shape (qa), iOS/Android/RN (mobile),
+  CI/CD and infra (devops), UI microcopy (copywriter), SEO technical audits (seo).
+- **Skills:** `frontend-react`, `frontend-state-management`, `frontend-bundler-config`,
+  `frontend-a11y` — all authored under `skills/specialists/`; the main session may
+  also pull `guild:tdd` + `guild:systematic-debug` for methodology beyond them.
+
 Engineering-group principles: TDD-first, surgical diffs, evidence = passing tests
 plus diff trace.
 
-## Content & communication group (4 specialists · 16 skills)
+## Content & communication group (5 specialists · 20 skills)
 
 ### copywriter — `agents/copywriter.md`
 
@@ -82,11 +104,25 @@ plus diff trace.
 - **Skills:** `copywriter-long-form`, `copywriter-product-microcopy`,
   `copywriter-email-sequences`, `copywriter-voice-guide`.
 
+### doc-writer — `agents/doc-writer.md`
+
+- **Triggers:** "write a README", doc site, documentation page, product docs,
+  feature docs, how-to guide, getting-started guide (narrative), onboarding
+  documentation, wiki page, knowledge base, conceptual guide, contributor guide.
+- **DO NOT trigger for:** API reference, user manuals, changelogs, release notes
+  (technical-writer); blog posts, microcopy, email, voice guides (copywriter);
+  social posts (social-media); SEO mechanics (seo).
+- **Skills:** `doc-writer-readme`, `doc-writer-product-guide`,
+  `doc-writer-doc-site`, `doc-writer-onboarding-doc`.
+- **Default tier:** `cheap`→`mid` (sonnet).
+
 ### technical-writer — `agents/technical-writer.md`
 
-- **Triggers:** API docs, user manual, tutorial, how-to, changelog, release notes.
-- **DO NOT trigger for:** marketing / persuasive copy (copywriter / marketing),
-  short-form social posts (social-media).
+- **Triggers:** API docs, user manual, changelog, release notes, migration guide,
+  runbook prose.
+- **DO NOT trigger for:** product READMEs, doc-site pages, feature docs, how-to
+  guides, onboarding docs, wikis (doc-writer); marketing / persuasive copy
+  (copywriter / marketing); short-form social posts (social-media).
 - **Skills:** `technical-writer-api-docs`, `technical-writer-user-manual`,
   `technical-writer-tutorial`, `technical-writer-release-notes`.
 
@@ -137,25 +173,105 @@ outcome, data citation).
 Commercial-group principles: hypothesis-first, success = measurable outcome,
 evidence = data citation (search volume, A/B result, benchmark).
 
+## Tiered-worker roster (cost-aware-tiering-and-lean-context ADR §7)
+
+A thin **tiered-worker** layer **augments** the 14 product specialists and the
+dev-team agents (it does not replace either). Each role carries a **default
+tier**. Per the ADR's reconciliation rule, where an equivalent already ships, the
+existing specialist is **retiered** rather than duplicated; only genuinely-new
+types get a new file. Open Item **O-1 is resolved: no standalone reviewer type
+ships** — review/critic work folds into the `advisor` escalation pass plus the
+existing `guild:review` / `qa` lanes.
+
+| Role | Default tier | `model:` | Placement | One-line scope |
+|---|---|---|---|---|
+| `researcher` (per-topic) | `cheap`→`mid` | `sonnet` | **retiered** `agents/researcher.md` | Gather + digest sources for one topic; read/summarize cheap, synthesize mid. Pre-decision only — does not decide. |
+| `architect` | `powerful` | `opus` | **annotated** `agents/architect.md` (already powerful) | Shape systems, compare options, author ADRs (high-judgment, low frequency). |
+| `advisor` | `powerful` | `opus` | **NEW** `agents/advisor.md` | Answer one escalated sub-question seeing draft + question only (§3); never raw context. |
+| `developer` | `mid` | `sonnet` | **NEW** `agents/developer.md` | Implement a domain-*less* task lane (draft/reason/build); escalates to advisor when above tier. |
+| `doc-writer` | `cheap`→`mid` | `sonnet` | **PROMOTED** `agents/doc-writer.md` (first-class v2.0) | READMEs, doc-site pages, feature guides, how-tos, onboarding docs, wikis; cheap for mechanical edits, mid for synthesis. |
+
+Notes:
+
+- **`developer` vs domain implementers.** `developer` is the *generic* mid-tier
+  worker for lanes with no domain home. Any API/data-layer work is `backend`'s,
+  any web UI is `frontend`'s, any iOS/Android/RN is `mobile`'s — even when a lane
+  is phrased generically ("build this", "implement that"). Each domain agent's
+  boundary block now states this reciprocally so the `developer` trigger does not
+  poach (adjacent-boundary scan, SC-9).
+- **`advisor` vs `architect`.** Both are `powerful`, distinct roles: `architect`
+  is dispatched to *own a design/decision*; `advisor` answers a single in-flight
+  *escalation* on a draft. The architect boundary block now defers escalated
+  one-off critique to `advisor`.
+- **`doc-writer` promoted to first-class specialist (v2.0).** A standalone
+  `agents/doc-writer.md` ships — it is cleanly separated from `technical-writer`
+  (which keeps API reference / manuals / changelogs / release notes) by the boundary
+  in `doc-writer.md §Scope boundaries`. The §7 tiered-worker row is updated from
+  "reconciled onto technical-writer" to "PROMOTED `agents/doc-writer.md`".
+- **All 17 registered agents are now tiered** — every agent file carries an
+  explicit `model:` plus a `**Default tier:**` note, not just the §7 roster rows.
+  `architect` and `security` are `powerful` (`opus`); every other engineering /
+  content / commercial specialist defaults to `mid` (`sonnet`), with `researcher`
+  and `technical-writer` running a `cheap` sub-pass for pure read/summarize and
+  mechanical-edit work. The complete map is below.
+
+### Complete default-tier map (all 17 registered agents)
+
+Every role the orchestrator can dispatch, with its default tier and frontmatter
+`model:`. The auto-scorer (ADR §2) may drop a routine single-item lane below the
+default to `cheap`, or escalate one sub-question to the `powerful` `advisor`
+(ADR §3) — neither changes the agent's printed default.
+
+| Role | Group | Default tier | `model:` |
+|---|---|---|---|
+| `architect` | engineering | `powerful` | `opus` |
+| `security` | engineering | `powerful` | `opus` |
+| `advisor` | tiered-worker (NEW) | `powerful` | `opus` |
+| `researcher` | engineering | `cheap`→`mid` | `sonnet` |
+| `backend` | engineering | `mid` | `sonnet` |
+| `frontend` | engineering | `mid` | `sonnet` |
+| `mobile` | engineering | `mid` | `sonnet` |
+| `devops` | engineering | `mid` | `sonnet` |
+| `qa` | engineering | `mid` | `sonnet` |
+| `developer` | tiered-worker (NEW) | `mid` | `sonnet` |
+| `copywriter` | content & comms | `mid` | `sonnet` |
+| `doc-writer` | content & comms | `cheap`→`mid` | `sonnet` |
+| `technical-writer` | content & comms | `cheap`→`mid` | `sonnet` |
+| `social-media` | content & comms | `mid` | `sonnet` |
+| `seo` | content & comms | `mid` | `sonnet` |
+| `marketing` | commercial | `mid` | `sonnet` |
+| `sales` | commercial | `mid` | `sonnet` |
+
+14 product specialists + the 3 tiered-worker roles (`advisor`, `developer`, `doc-writer`)
+= 17. `powerful` is reserved for the three high-stakes / low-frequency roles
+(`architect`, `security`, `advisor`); no implementer or content/commercial role
+defaults to `powerful`.
+
+**No agent defaults to `cheap`.** The `cheap` tier (haiku) is still live and
+reachable two ways: (a) the auto-scorer drops a score-0 lane — a pure file read,
+summarize, classify, tag, or a single mechanical doc/microcopy edit — to `cheap`
+regardless of the owning agent's default; (b) `researcher` and `technical-writer`
+(both `cheap`→`mid`) run their read/summarize and mechanical-edit sub-passes at
+`cheap` before synthesizing at `mid`. The default-biases-cheap rule (ADR §10,
+zero-config) keeps a routine run trending cheap even though no agent's `model:`
+is `haiku`.
+
 ## Team composition rules
 
-From `guild-plan.md §7.2`:
-
 - **Recommended default: 3–4 specialists.** Hard cap of 6. Context fragmentation
-  kills coherence above that. `/guild:team edit --allow-larger` lifts the cap.
+  kills coherence above that. `/guild plan --team-size=N` lifts the cap.
 - **Implied specialists:** architect on any multi-component build; security on
   anything touching auth, secrets, or external integrations; qa whenever backend
   is present.
 - **Orchestrator is implicit** — the top-level session plays coordinator, not a
   separate specialist slot.
 - **Gap handling:** when team-compose surfaces a role with no matching specialist,
-  the user picks auto-create (`guild-create-specialist`), skip, substitute, or
+  the user picks auto-create (`guild:create-specialist`), skip, substitute, or
   compose-from-scratch. New specialists must pass the evolve gate before joining
-  the live team — see `self-evolution.md`.
+  the live team.
 
 ## See also
 
-- `guild-plan.md §6` — full roster rationale and trigger examples.
-- `guild-plan.md §7` — team composition flow.
-- `architecture.md` — where specialists sit in the layered system.
+- `https://guildstack.dev/docs/specialist-roster` — full roster rationale and trigger examples.
+- `https://guildstack.dev/docs/architecture` — where specialists sit in the layered system.
 - `agents/*.md` — the live trigger / DO-NOT-TRIGGER blocks and skill pulls.

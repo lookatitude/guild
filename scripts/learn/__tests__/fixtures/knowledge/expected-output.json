@@ -1,0 +1,259 @@
+{
+  "_doc": "L0f expected-output contract — the frozen TDD assertion skeleton for the knowledge-tier (guild.knowledge_graph.v2). Every K-lane (L1–L5, L8, L11) and the per-SC evals (L9) load THIS file and assert against the named section. The all-valid graph projection of this corpus is `expected-graph.v2.json` (passes validateGraphV2 with repoRoot = this directory). Negative fixtures live in `bad-nodes.json`.",
+  "_determinism_caveat": "IDs below are split into TWO classes. (1) FULLY DETERMINISTIC from the corpus alone — assert these EXACTLY: wiki_page:<relpath>, diagram:<anchor>, entity:<normalized-name>, code file/function ids, all `related` edges, the subtopic_of tree shape, anchors. (2) DERIVED FROM AN LLM-JUDGED INTERMEDIATE — topic ids (= makeTopicId(sortedMemberIds)) and claim/concept ids (= make*Id(anchor, extractedText)) are reproducible ONLY if the stage extracts the member-set / claim-text pinned here. K-lane tests should assert STRUCTURE + ANCHORS for these (min counts, depth, ordering, presence of a link by anchor-pair), and assert the exact hashed id ONLY in tests that also fix the membership/text input (i.e. when unit-testing the deterministic id helper, not the LLM stage). Do NOT fail a correct LLM stage because it named a topic differently.",
+
+  "corpus": {
+    "root_is_this_dir": true,
+    "markdown_pages": 6,
+    "code_files": 3,
+    "mermaid_blocks": 1,
+    "svg_files": 1,
+    "files": {
+      "wiki_pages": ["index.md", "docs/overview.md", "docs/ingestion.md", "docs/validation.md", "docs/storage.md", "docs/concepts.md"],
+      "code": ["src/ingest.ts", "src/validate.ts", "src/store.ts"],
+      "mermaid": "docs/ingestion.md#mermaid-0",
+      "svg": "diagrams/architecture.svg#svg"
+    }
+  },
+
+  "config": {
+    "_doc": "KNOWLEDGE_CONFIG_DEFAULTS the corpus was designed against.",
+    "maxDepth": 8, "maxBranching": 12, "minTopicImportance": 0.4,
+    "relMinConf": 0.5, "maxFiles": 3000, "maxTokens": 1000000, "batchSize": 20
+  },
+
+  "ids": {
+    "_doc": "Concrete deterministic ids computed by the real schema helpers against the pinned member-sets / claim-text. See _determinism_caveat for which to assert exactly.",
+    "topics": {
+      "event_pipeline_root": "topic:a81857d8",
+      "ingestion": "topic:79c825b8",
+      "validation": "topic:189866d8",
+      "source_adapters": "topic:2c7639cd",
+      "webhook_adapter": "topic:69b00735",
+      "storage": "topic:a21d1858"
+    },
+    "topic_member_sets": {
+      "_doc": "makeTopicId(sortedMemberIds) inputs — the pinned cluster membership behind each topic id.",
+      "topic:a81857d8": ["file:src/ingest.ts", "file:src/validate.ts", "file:src/store.ts"],
+      "topic:79c825b8": ["file:src/ingest.ts", "function:src/ingest.ts:ingestEvent"],
+      "topic:189866d8": ["file:src/validate.ts", "function:src/validate.ts:validateEvent"],
+      "topic:2c7639cd": ["function:src/ingest.ts:ingestEvent", "diagram:docs/ingestion.md#mermaid-0"],
+      "topic:69b00735": ["function:src/ingest.ts:ingestEvent"],
+      "topic:a21d1858": ["file:src/store.ts", "function:src/store.ts:storeEvent"]
+    },
+    "claims": {
+      "validated_before_persist": { "id": "claim:docs/ingestion.md#ingestion:0ee19523", "anchor": "docs/ingestion.md#ingestion", "text": "Every incoming event is validated before it is persisted." },
+      "append_only": { "id": "claim:docs/storage.md#storage:e8805bb0", "anchor": "docs/storage.md#storage", "text": "Events are stored append-only and never mutated." }
+    },
+    "entities": {
+      "event": "entity:event",
+      "validator": "entity:validator",
+      "event_store": "entity:event-store"
+    },
+    "concepts": {
+      "ingestion_front_door": { "id": "concept:src/ingest.ts#L1-L6:0086d04b", "anchor": "src/ingest.ts#L1-L6" },
+      "append_only_log": { "id": "concept:src/store.ts#L1-L6:fda0dd6b", "anchor": "src/store.ts#L1-L6" }
+    },
+    "diagrams": {
+      "mermaid_flow": "diagram:docs/ingestion.md#mermaid-0",
+      "architecture_svg": "diagram:diagrams/architecture.svg#svg"
+    },
+    "wiki_pages": {
+      "index.md": "wiki_page:index.md",
+      "docs/overview.md": "wiki_page:docs/overview.md",
+      "docs/ingestion.md": "wiki_page:docs/ingestion.md",
+      "docs/validation.md": "wiki_page:docs/validation.md",
+      "docs/storage.md": "wiki_page:docs/storage.md",
+      "docs/concepts.md": "wiki_page:docs/concepts.md"
+    },
+    "domain": "domain:event-ingestion"
+  },
+
+  "field_contract": {
+    "_doc": "Required-field match rules for EVERY asserted node/edge in this file (closes the oracle-tightness class flagged at codex G-lane round 1). schema.ts requires GraphEdge{source,target,type,direction,weight} and GraphNode{id,type,name,source_refs,confidence}. A per-SC block asserts the SC-discriminating SUBSET; this contract states how each required field must be checked so a wrong/missing required field can never silently pass. expected-graph.v2.json is the AUTHORITATIVE full-shape oracle — it carries every required field at its pinned value and round-trips validateGraphV2; per-SC subsets are read under these rules.",
+    "edge_required_fields": {
+      "source": "HARD — match exactly.",
+      "target": "HARD — match exactly.",
+      "type": "HARD — match exactly (closed v2 edge set).",
+      "direction": "HARD — match exactly. Every seeded edge is \"out\"; an edge with the right source/target/type but direction \"in\"/\"bi\" is WRONG and must fail. (This was the round-1 gap.)",
+      "weight": "RANGE/THRESHOLD, not exact. Required + numeric 0..1. Deterministic edges (related, subtopic_of, belongs_to_domain, defines) carry a pinned example value (1.0) but implementations need not reproduce the exact float — assert present + 0..1. LLM-scored edges (evidenced_by, relates_to) MUST satisfy weight >= relMinConf (0.5); the pinned value (e.g. 0.9/0.8/0.7/0.6) is one valid example — assert the >= relMinConf threshold, not equality."
+    },
+    "node_required_fields": {
+      "id": "Per _determinism_caveat: HARD-exact for fully-deterministic types (wiki_page/diagram/entity/file/function); STRUCTURAL for LLM-coupled types (topic/claim/concept — assert anchor + count + path/depth, not the hash).",
+      "type": "HARD — match exactly (closed v2 node set).",
+      "name": "HARD-exact for wiki_page (H1 text), diagram, entity, file, function. FREE (LLM) for topic/claim/concept — do NOT fail a correct stage on a differently-worded name; assert presence (non-empty string) only.",
+      "source_refs": "HARD — non-empty; every anchor must RESOLVE per-form at repoRoot (SC-12). Exact anchors are pinned in `ids` + `expectations.SC-12.sample_anchors` + expected-graph.v2.json. Knowledge nodes with zero/broken refs are invalid.",
+      "confidence": "ENUM-PRESENT, not pinned. Required + must be one of high|medium|low. May be LLM-assigned, so assert presence + enum membership (SC-1 nodes_missing_confidence==0), not a specific value. (Fixture uses \"high\" throughout as a valid example.)"
+    },
+    "applies_to": {
+      "edges": ["SC-3.expected_related_edges", "SC-4.seeded_claim_to_code.edge", "SC-4.seeded_topic_to_diagram.edge", "SC-4.additional_evidenced_by[]", "SC-5.belongs_to_domain_edges", "SC-7.seeded_topic_to_diagram_resolves"],
+      "nodes": ["SC-1.seeded.*", "SC-3.wiki_page_classification (asserts category/importance/labels SUBSET; type=wiki_page, source_refs=heading anchor, confidence=enum-present per node_required_fields; id in ids.wiki_pages)", "SC-13.sibling_pair_under_root (asserts id/name/importance/importance_score SUBSET)"]
+    }
+  },
+
+  "expectations": {
+    "SC-1": {
+      "check": "Article/topic extraction: concept/claim/entity nodes from md + doc-comments; every node carries >=1 resolvable anchor + confidence.",
+      "min_nodes_by_type": { "claim": 2, "entity": 3, "concept": 2 },
+      "every_node_has_resolvable_anchor": true,
+      "nodes_missing_confidence": 0,
+      "seeded": {
+        "claims_from_prose": ["claim:docs/ingestion.md#ingestion:0ee19523", "claim:docs/storage.md#storage:e8805bb0"],
+        "entities": ["entity:event", "entity:validator", "entity:event-store"],
+        "concepts_from_doc_comments": ["concept:src/ingest.ts#L1-L6:0086d04b", "concept:src/store.ts#L1-L6:fda0dd6b"]
+      }
+    },
+    "SC-2": {
+      "check": "Multi-level taxonomy: subtopic_of tree >=3 deep on the supported branch, <= maxDepth(8), fan-out <= maxBranching(12), no topic below minTopicImportance(0.4), acyclic + terminates.",
+      "max_subtopic_depth": 3,
+      "deepest_branch_topic_paths": [
+        ["event-pipeline"],
+        ["event-pipeline", "ingestion"],
+        ["event-pipeline", "ingestion", "source-adapters"],
+        ["event-pipeline", "ingestion", "source-adapters", "webhook-adapter"]
+      ],
+      "deepest_branch_ids": ["topic:a81857d8", "topic:79c825b8", "topic:2c7639cd", "topic:69b00735"],
+      "root_fanout": 3,
+      "no_topic_below_min_importance": true,
+      "all_importance_scores": {
+        "topic:a81857d8": 0.9, "topic:79c825b8": 0.85, "topic:189866d8": 0.45,
+        "topic:2c7639cd": 0.6, "topic:69b00735": 0.5, "topic:a21d1858": 0.55
+      }
+    },
+    "SC-3": {
+      "check": "Wiki indexed + labeled + classified: page_count == wiki_page node count; every [[wikilink]] -> a 1:1 `related` edge; every wiki_page has non-null category + importance + labels[].",
+      "page_count": 6,
+      "wiki_page_node_count": 6,
+      "wikilink_resolution_map": {
+        "_doc": "How each [[basename]] in the corpus resolves to a wiki_page relpath (basenames are unique).",
+        "overview": "docs/overview.md",
+        "ingestion": "docs/ingestion.md",
+        "validation": "docs/validation.md",
+        "storage": "docs/storage.md",
+        "concepts": "docs/concepts.md"
+      },
+      "expected_related_edges": [
+        { "source": "wiki_page:index.md", "target": "wiki_page:docs/overview.md", "type": "related", "direction": "out", "weight": 1.0 },
+        { "source": "wiki_page:index.md", "target": "wiki_page:docs/ingestion.md", "type": "related", "direction": "out", "weight": 1.0 },
+        { "source": "wiki_page:index.md", "target": "wiki_page:docs/validation.md", "type": "related", "direction": "out", "weight": 1.0 },
+        { "source": "wiki_page:index.md", "target": "wiki_page:docs/storage.md", "type": "related", "direction": "out", "weight": 1.0 },
+        { "source": "wiki_page:index.md", "target": "wiki_page:docs/concepts.md", "type": "related", "direction": "out", "weight": 1.0 },
+        { "source": "wiki_page:docs/overview.md", "target": "wiki_page:docs/ingestion.md", "type": "related", "direction": "out", "weight": 1.0 },
+        { "source": "wiki_page:docs/ingestion.md", "target": "wiki_page:docs/validation.md", "type": "related", "direction": "out", "weight": 1.0 },
+        { "source": "wiki_page:docs/validation.md", "target": "wiki_page:docs/concepts.md", "type": "related", "direction": "out", "weight": 1.0 }
+      ],
+      "total_wikilinks": 8,
+      "wiki_page_classification": {
+        "wiki_page:index.md": { "category": "index", "importance": "high", "labels": ["index", "map"] },
+        "wiki_page:docs/overview.md": { "category": "overview", "importance": "high", "labels": ["overview"] },
+        "wiki_page:docs/ingestion.md": { "category": "guide", "importance": "high", "labels": ["ingestion", "pipeline"] },
+        "wiki_page:docs/validation.md": { "category": "reference", "importance": "medium", "labels": ["validation", "rules"] },
+        "wiki_page:docs/storage.md": { "category": "guide", "importance": "medium", "labels": ["storage", "persistence"] },
+        "wiki_page:docs/concepts.md": { "category": "concept", "importance": "low", "labels": ["glossary", "vocabulary"] }
+      },
+      "every_wiki_page_has_category_and_importance": true
+    },
+    "SC-4": {
+      "check": "Cross-modal relations: evidenced_by links each claim/topic to its supporting artifact, keyed on a deterministic anchor; a traversal reaches the code node from its doc claim in <=2 hops.",
+      "seeded_claim_to_code": {
+        "edge": { "source": "claim:docs/ingestion.md#ingestion:0ee19523", "target": "function:src/validate.ts:validateEvent", "type": "evidenced_by", "direction": "out", "weight": 0.9 },
+        "hops_claim_to_code": 1,
+        "target_anchor": "src/validate.ts#L16-L20"
+      },
+      "seeded_topic_to_diagram": {
+        "edge": { "source": "topic:79c825b8", "target": "diagram:docs/ingestion.md#mermaid-0", "type": "evidenced_by", "direction": "out", "weight": 0.8 },
+        "target_anchor": "docs/ingestion.md#mermaid-0"
+      },
+      "additional_evidenced_by": [
+        { "source": "claim:docs/storage.md#storage:e8805bb0", "target": "function:src/store.ts:storeEvent", "type": "evidenced_by", "direction": "out", "weight": 0.9, "target_anchor": "src/store.ts#L16-L18" }
+      ],
+      "every_evidenced_by_target_anchor_resolves": true
+    },
+    "SC-5": {
+      "check": "Semantic domains: domains are behavioral and must NOT equal a bare top-level directory name; topics nest under domains via belongs_to_domain; each domain has >=1 topic.",
+      "top_level_dirs": ["docs", "diagrams", "src"],
+      "domains": [{ "id": "domain:event-ingestion", "name": "Event Ingestion" }],
+      "no_domain_named_after_top_level_dir": true,
+      "belongs_to_domain_edges": [
+        { "source": "topic:79c825b8", "target": "domain:event-ingestion", "type": "belongs_to_domain", "direction": "out", "weight": 1.0 },
+        { "source": "topic:2c7639cd", "target": "domain:event-ingestion", "type": "belongs_to_domain", "direction": "out", "weight": 1.0 }
+      ],
+      "min_topics_per_domain": 1
+    },
+    "SC-6": {
+      "check": "Classification + labeling schema: category (closed enum), importance (high|medium|low), confidence (0-1 string here), labels[], topic_path; validator rejects out-of-enum category; wiki-lint flags a node missing importance.",
+      "category_enum_is_closed": true,
+      "validator_rejects": "bad-nodes.json -> rejected_by_validator.out_of_enum_category",
+      "wiki_lint_flags": "bad-nodes.json -> flagged_by_wiki_lint.wiki_page_missing_importance",
+      "topic_path_present_on_all_topics": true
+    },
+    "SC-7": {
+      "check": "Diagram analysis v1: deterministic mermaid node/edge extraction + svg label text; diagram/concept nodes anchored path#mermaid-N / path#svg, linked to topics. Runs before cross-modal link (SC-4).",
+      "mermaid": {
+        "anchor": "docs/ingestion.md#mermaid-0",
+        "node_id": "diagram:docs/ingestion.md#mermaid-0",
+        "expected_mermaid_nodes": ["Adapter", "Ingest", "Validate", "Store"],
+        "expected_mermaid_edges": [
+          { "from": "Adapter", "to": "Ingest" },
+          { "from": "Ingest", "to": "Validate" },
+          { "from": "Validate", "to": "Store" }
+        ]
+      },
+      "svg": {
+        "anchor": "diagrams/architecture.svg#svg",
+        "node_id": "diagram:diagrams/architecture.svg#svg",
+        "expected_label_text": ["Ingest", "Validate", "Store"],
+        "expected_title": "Event Pipeline Architecture",
+        "element_ids": ["ingest-box", "validate-box", "store-box"]
+      },
+      "seeded_topic_to_diagram_resolves": { "source": "topic:79c825b8", "target": "diagram:docs/ingestion.md#mermaid-0", "type": "evidenced_by", "direction": "out", "weight": 0.8 }
+    },
+    "SC-9": {
+      "check": "Determinism boundary: a per-field responsibility table classifies every emitted field as deterministic-script or LLM-judged; no field claimed deterministic that calls a model.",
+      "deterministic_script": ["anchors", "wikilink->related edges", "cluster membership (TF/co-occurrence)", "mermaid node+edge extraction", "svg label text", "all node ids", "dedup keys", "heading/section/doc-comment parse"],
+      "llm_judged": ["claim extraction", "entity extraction + resolution", "topic naming", "subtopic_of parent selection", "implicit relates_to/evidenced_by judgment+scoring", "svg semantic description", "domain naming"]
+    },
+    "SC-11": {
+      "check": "Idempotent re-run + dedup: two consecutive runs on the fixture yield byte-identical artifacts (0 net node/edge delta). validateGraphV2 canonical-sorts before dedup so output is input-order-independent.",
+      "byte_identical_rerun": true,
+      "shuffle_invariant": true,
+      "reference_graph": "expected-graph.v2.json",
+      "expected_node_count": 28,
+      "expected_edge_count": 24
+    },
+    "SC-12": {
+      "check": "Deterministic anchors: every knowledge node resolves to a source artifact via a deterministic anchor — code path#Lx-Ly, doc/wiki path#heading-slug, diagram path#mermaid-N / path#svg.",
+      "all_anchors_resolve_at_repoRoot": true,
+      "anchor_forms_present": ["path#Lx-Ly", "path#heading-slug", "path#mermaid-N", "path#svg"],
+      "validator_rejects_unresolvable": "bad-nodes.json -> rejected_by_validator.unresolvable_anchor",
+      "sample_anchors": {
+        "code_line_range": "src/validate.ts#L16-L20",
+        "doc_heading": "docs/ingestion.md#ingestion",
+        "deep_heading": "docs/ingestion.md#webhook-adapter",
+        "mermaid": "docs/ingestion.md#mermaid-0",
+        "svg": "diagrams/architecture.svg#svg"
+      }
+    },
+    "SC-13": {
+      "check": "Recall-ranking: kg-query ranks knowledge nodes using importance + confidence + topic proximity; a recall query returns the high-importance topic above a low-importance sibling, under the budget cap.",
+      "sibling_pair_under_root": {
+        "parent": "topic:a81857d8",
+        "high_importance": { "id": "topic:79c825b8", "name": "Ingestion", "importance": "high", "importance_score": 0.85 },
+        "low_importance": { "id": "topic:189866d8", "name": "Validation", "importance": "low", "importance_score": 0.45 }
+      },
+      "expected_ranking": "topic:79c825b8 ranks above topic:189866d8 for a query touching both"
+    }
+  },
+
+  "notes_for_lane_owners": {
+    "_all_lanes": "Read `field_contract` before writing edge/node assertions: source/target/type/direction match exactly; edge weight is range/threshold (>= relMinConf for evidenced_by/relates_to); node name is FREE for topic/claim/concept; confidence is enum-present not pinned. expected-graph.v2.json is the authoritative full-shape oracle for every required field.",
+    "L1_content_analyze": "Assert SC-1 min_nodes_by_type + every_node_has_resolvable_anchor + nodes_missing_confidence==0. claim/concept ids are text-derived (see _determinism_caveat) — assert anchors + counts, not the hash, unless you fix the extracted text.",
+    "L2_wiki_index": "Assert SC-3: page_count==wiki_page_node_count(6), all 8 expected_related_edges present 1:1, every wiki_page classification matches. wiki_page ids are fully deterministic (wiki_page:<relpath>) — assert exactly.",
+    "L3_diagram_analyze": "Assert SC-7 mermaid nodes/edges + svg label text + element_ids; diagram ids are fully deterministic (diagram:<anchor>) — assert exactly. Must run before L5.",
+    "L4_taxonomy_build": "Assert SC-2 (max_subtopic_depth>=3, root_fanout<=12, all importance_scores>=0.4, acyclic) + SC-5 (no_domain_named_after_top_level_dir, belongs_to_domain edges, >=1 topic/domain). Topic ids hash member-sets — prefer asserting depth/path/ordering structure.",
+    "L5_cross_link": "Assert SC-4 seeded_claim_to_code (1-hop) + seeded_topic_to_diagram + every_evidenced_by_target_anchor_resolves. Code/function/diagram targets are deterministic — assert by anchor-pair.",
+    "L8_classify_wiki_lint": "Use bad-nodes.json: validator rejects out_of_enum_category; wiki-lint flags wiki_page_missing_importance.",
+    "L11_kg_query": "Assert SC-13 expected_ranking on the sibling_pair_under_root, under the token budget cap.",
+    "L0_validator": "expected-graph.v2.json passes validateGraphV2({repoRoot: <corpusDir>}); bad-nodes.json entries are each rejected per their `expect`."
+  }
+}

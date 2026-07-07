@@ -1,0 +1,67 @@
+# rearch-rails.yml — architecture enforcement rails (plugin re-architecture, W1-W7).
+#
+# Runs the 9 self-policing rails in tests/rearch/run-all.ts on every PR/push so the
+# re-architecture's invariants are GATED, not just checklisted:
+#   STRICT (block):  R-DUP (no duplication), R-DEP (inward layering law), R-DIST (hooks dist-sync
+#                    + import canonicality), R-HOST (add-a-host = registry row, zero core),
+#                    R-SEC (security controls are code + hostile-tested), R-TRACE (trace schemas),
+#                    R-DECL (declarative surface_manifest mirrors prose).
+#   ADVISORY (report): R-PERF (perf budgets — timing-variance-prone in CI), R-VAC (anti-vacuity backlog).
+# A non-zero exit means a STRICT rail is RED — the architecture invariant it guards was broken.
+#
+# `--prove` first asserts every rail is non-vacuous (a rail that cannot fail is worthless), then the
+# real run gates the tree.
+
+name: architecture rails
+
+on:
+  pull_request:
+  push:
+    branches: ["**"]
+
+jobs:
+  rearch-rails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install scripts/ dependencies (rail modules import scripts/lib)
+        run: |
+          if [ -f scripts/package.json ]; then
+            cd scripts && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+          fi
+
+      - name: Install tests/ dependencies (tsx + the rail runner)
+        run: |
+          if [ -f tests/package.json ]; then
+            cd tests && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+          fi
+
+      - name: Install hooks/ dependencies (R-DIST rebuilds the hook bundles)
+        run: |
+          if [ -f hooks/package.json ]; then
+            cd hooks && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+          fi
+
+      - name: Prove rails are non-vacuous (a rail that cannot fail is worthless)
+        run: |
+          cd tests && npx tsx rearch/run-all.ts --prove
+
+      - name: Run architecture rails (STRICT rails gate; advisory rails report)
+        run: |
+          cd tests && npx tsx rearch/run-all.ts
+
+      # Install-channel flip (G7) — the generated tree is now the AUTHORITATIVE install surface.
+      # Enforces SC-2 full-tree equivalence + SC-7b subset + the Claude install-surface render
+      # (.claude-plugin/plugin.json + marketplace.json must equal the inventory render) + the
+      # host-package verifier. Any hand-edit to .claude-plugin metadata that diverges from
+      # guild.inventory.v1 now FAILS CI: the install surface is generated, not hand-maintained.
+      - name: Install-channel gate (G7 flip) — generated tree is the authoritative install surface
+        run: |
+          cd scripts && npm run verify:host-packages

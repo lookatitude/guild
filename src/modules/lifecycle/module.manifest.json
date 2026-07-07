@@ -1,0 +1,32 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "lifecycle",
+  "title": "Lifecycle",
+  "kind": "capability",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns the user-visible phase command spine and phase producer skills.",
+  "depends_on": ["capability", "config", "context", "dispatch", "host-runtime", "kernel", "review", "state", "teams", "telemetry"],
+  "lifecycle_slots": ["init", "ideate", "plan", "build", "qa", "ops"],
+  "owns": {
+    "commands": ["build", "goal", "guild", "ideate", "init", "ops", "plan", "qa", "resume", "status"],
+    "skills": [
+      "guild-brainstorm",
+      "guild-execute-plan",
+      "guild-plan",
+      "guild-verify-done",
+      "init"
+    ],
+    "scripts": [
+      "check-lane-liveness",
+      "emit-loop-event",
+      "mark-lane-dead",
+      "resume-lanes",
+      "retry-lane",
+      "write-run-manifest",
+      "write-task-run",
+      "lib/run-lifecycle",
+      "lib/run-manifest-wiring",
+      "lib/runstart-preflight"
+    ]
+  }
+}

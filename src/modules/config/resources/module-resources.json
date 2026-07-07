@@ -1,0 +1,119 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "config",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "commands",
+      "id": "config",
+      "source_path": "commands/config.md",
+      "resource_path": "resources/commands/config.md",
+      "sha256": "88f8de815b7c4a9ec65c2ac4fc80256c23a387203b590efea819e4e99941432b"
+    },
+    {
+      "category": "scripts",
+      "id": "config-cmd",
+      "source_path": "scripts/config-cmd.ts",
+      "resource_path": "resources/scripts/config-cmd.ts",
+      "sha256": "f60f75e6399817ddaa41ec7ecc26edc3366469677d4d74820c7124bf0c3bbeae"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/config-reconcile",
+      "source_path": "scripts/lib/config-reconcile.ts",
+      "resource_path": "resources/scripts/lib/config-reconcile.ts",
+      "sha256": "937a772a95fa51d52b6ba9e0b25e2fbe30dc554b23bf8ae07245f0cc0482eb57"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/config-reconcile-contract",
+      "source_path": "scripts/lib/config-reconcile-contract.ts",
+      "resource_path": "resources/scripts/lib/config-reconcile-contract.ts",
+      "sha256": "45902750a44bf0f0d8811e0390782c2674cc360cf3132d9edf6d8838ffa4ac14"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/config-render",
+      "source_path": "scripts/lib/config-render.ts",
+      "resource_path": "resources/scripts/lib/config-render.ts",
+      "sha256": "96a9a5c6d78dc2750f08c1be366905fed449102a7f564a0da6b635344d30b84f"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/config-schema",
+      "source_path": "scripts/lib/config-schema.ts",
+      "resource_path": "resources/scripts/lib/config-schema.ts",
+      "sha256": "a7f2b1ce9c820370cd421e0b02c123cf22c205944e1be864d167517a1df0aaa4"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/config-ui-metadata",
+      "source_path": "scripts/lib/config-ui-metadata.ts",
+      "resource_path": "resources/scripts/lib/config-ui-metadata.ts",
+      "sha256": "181748380c7ec71137c547613accddc2669d8e406fe3783d6160f0bfe66e2a55"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/config-ui-surface",
+      "source_path": "scripts/lib/config-ui-surface.ts",
+      "resource_path": "resources/scripts/lib/config-ui-surface.ts",
+      "sha256": "0df7620b2042a0131bba60f8c12bfa91992c96b83b637ff37555995a6dadff11"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/core/config-cli",
+      "source_path": "scripts/lib/core/config-cli.ts",
+      "resource_path": "resources/scripts/lib/core/config-cli.ts",
+      "sha256": "c7ebf1ed385b3a27b3b2fbcba490bb44f3edb6b8971530813fe2784744012205"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/core/settings-reader",
+      "source_path": "scripts/lib/core/settings-reader.ts",
+      "resource_path": "resources/scripts/lib/core/settings-reader.ts",
+      "sha256": "f7a091982783ff06044e5d3276a4c2dea0fc80b31847e3ba087bb6296f1f73e0"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host-open-preflight",
+      "source_path": "scripts/lib/host-open-preflight.ts",
+      "resource_path": "resources/scripts/lib/host-open-preflight.ts",
+      "sha256": "0799b6b18a39b26a962d3465b24236abb6980974368b6c41e3db90e9486d52c9"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/init-guild",
+      "source_path": "scripts/lib/init-guild.ts",
+      "resource_path": "resources/scripts/lib/init-guild.ts",
+      "sha256": "6d5fccf666f733c60709934ee64c95ab5c025bf77153749591d5f1b08d8fcfa5"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/init-scaffold-manifest",
+      "source_path": "scripts/lib/init-scaffold-manifest.ts",
+      "resource_path": "resources/scripts/lib/init-scaffold-manifest.ts",
+      "sha256": "de4435063fa91b6cd2751be25222580472f6b0ed8b65b7f6b5b016a6b9a198b3"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/settings-resolver",
+      "source_path": "scripts/lib/settings-resolver.ts",
+      "resource_path": "resources/scripts/lib/settings-resolver.ts",
+      "sha256": "142c01860dbcc86b265e51fa65f7db0394d61dc173e3b40df8eba410e021b499"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/shared/config-defaults",
+      "source_path": "scripts/lib/shared/config-defaults.ts",
+      "resource_path": "resources/scripts/lib/shared/config-defaults.ts",
+      "sha256": "81b9105036253f314237756d6ed321e3d836b514795df925525adc2f653338ac"
+    },
+    {
+      "category": "scripts",
+      "id": "read-guild-config",
+      "source_path": "scripts/read-guild-config.ts",
+      "resource_path": "resources/scripts/read-guild-config.ts",
+      "sha256": "8e8c769ef7be896462a9be952f103a69636abd3b70350d5e92b209529f040692"
+    }
+  ]
+}

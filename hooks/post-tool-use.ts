@@ -23,45 +23,46 @@
  * Exit:    Always 0 — telemetry must not block.
  */
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { resolveGuildRoot } from "./lib/guild-root.js";
 import {
   appendEvent,
   buildToolCallFromPair,
   buildToolCallFromPostOnly,
   consumeSidecarPre,
+  isSafeLaneId,
+  isSafeRunId,
   sweepOrphanedSidecarFull,
   type SidecarMatchKey,
   type ToolCallEvent,
   TOOL_CALL_TOOL_VALUES,
   type ToolCallTool,
-} from "../benchmark/src/log-jsonl.js";
-
-interface PostToolUsePayload {
-  session_id?: string;
-  cwd?: string;
-  hook_event_name?: string;
-  tool_name?: string;
-  tool_input?: unknown;
-  tool_response?: { success?: boolean; error?: string } | unknown;
-  duration_ms?: number;
-}
-
-async function readStdin(): Promise<string> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = [];
-    process.stdin.on("data", (c: Buffer) => chunks.push(c));
-    process.stdin.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve(""));
-  });
-}
+} from "./lib/v1.4/log-jsonl.js";
+// guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
+// lib/trace-v2.ts header + contract-map §B-post.
+import { normalizeTokens, resolveTraceV2Fields, type TraceTokens } from "./lib/trace-v2.js";
+// HK-06: durable-surface (wiki/review/handoffs/provenance) PostToolUse scrub-in-place (D-SECRETS).
+import { scrubbedWrite, type ScrubSurface } from "./lib/security/scrubbed-write.js";
+import { buildSecurityEvent, appendSecurityEvent } from "./lib/security/events.js";
+// G-9 (SC-5): structured heartbeat WRITE side — backend-agnostic liveness.
+import { writeHeartbeatFromEnv } from "./lib/heartbeat-write.js";
+// L5a: host-neutral hook payload + Claude emitter. PostToolUsePayload is now the
+// shared `GuildHookEvent`; for Claude the emitter mapping is the identity, so the
+// PostToolUse behavior is preserved byte-for-byte.
+import {
+  emitClaudeHookEvent,
+  readHookStdin,
+  type GuildHookEvent,
+} from "./lib/guild-hook-event.js";
 
 function isKnownTool(name: string | undefined): name is ToolCallTool {
   if (typeof name !== "string") return false;
   return (TOOL_CALL_TOOL_VALUES as readonly string[]).includes(name);
 }
 
-function isOk(payload: PostToolUsePayload): "ok" | "err" {
+function isOk(payload: GuildHookEvent): "ok" | "err" {
   const resp = payload.tool_response;
   if (resp === null || resp === undefined) return "ok";
   if (typeof resp === "object") {
@@ -72,7 +73,7 @@ function isOk(payload: PostToolUsePayload): "ok" | "err" {
   return "ok";
 }
 
-function resultExcerpt(payload: PostToolUsePayload): string {
+function resultExcerpt(payload: GuildHookEvent): string {
   const resp = payload.tool_response;
   if (resp === null || resp === undefined) return "";
   if (typeof resp === "string") return resp;
@@ -83,19 +84,197 @@ function resultExcerpt(payload: PostToolUsePayload): string {
   }
 }
 
-export async function main(): Promise<void> {
-  const runId = process.env["GUILD_RUN_ID"];
-  if (typeof runId !== "string" || runId.length === 0) {
-    process.stderr.write(
-      "warn: [post-tool-use] GUILD_RUN_ID unset — falling through (no tool_call emit).\n",
-    );
-    return;
+// ── HK-06: durable-surface PostToolUse scrub-in-place helpers ────────────────
+
+/**
+ * Classify an absolute path as a scrub-target surface.
+ *   "wiki"       → .guild/wiki/**
+ *   "review"     → .guild/runs/<id>/review/**
+ *   "handoff"    → .guild/runs/<id>/handoffs/**   (D-SECRETS coverage fix:
+ *                  model-written handoff receipts via the Write tool — the
+ *                  subagent/in-process backends — previously bypassed the
+ *                  in-place scrub; only the team-backend hook path
+ *                  (task-completed.ts) covered handoffs)
+ *   "provenance" → .guild/runs/<id>/provenance.json
+ *   null         → not a target (no scrub)
+ */
+function classifyGuildScrubSurface(absPath: string, guildRoot: string): ScrubSurface | null {
+  const rel = path.relative(guildRoot, absPath);
+  const parts = rel.split(path.sep);
+  if (parts[0] === ".guild" && parts[1] === "wiki") return "wiki";
+  // .guild/runs/<runId>/<leaf>  (parts: [".guild", "runs", "<id>", <leaf>, ...])
+  if (parts[0] === ".guild" && parts[1] === "runs" && parts.length >= 4) {
+    if (parts[3] === "review") return "review";
+    if (parts[3] === "handoffs") return "handoff";
+    if (parts[3] === "provenance.json" && parts.length === 4) return "provenance";
+  }
+  return null;
+}
+
+/**
+ * HK-06: PostToolUse scrub-in-place for the durable surfaces (wiki, review, handoffs, provenance.json).
+ *
+ * When Write|Edit completes against .guild/wiki/** or .guild/runs/<id>/review/**,
+ * read the on-disk file (already written by the tool) and route it through
+ * scrubbedWrite. The file is replaced with scrubbed content (ok) or quarantined
+ * (ok=false → fail-CLOSED: file renamed to path+".quarantined" and
+ * secret_scrub_blocked event emitted via scrubbedWrite).
+ *
+ * `runDir` and `runId` may be undefined when invoked before the run-id gate
+ * (e.g., wiki writes that have no active run). In those cases synthetic
+ * fallback values are used so security events still land and the scrub fires.
+ *
+ * Non-blocking: PostToolUse always exits 0; this function never throws.
+ * "Sub-second pre-commit window" — runs synchronously before exit.
+ */
+function runGuildArtifactScrub(
+  payload: GuildHookEvent,
+  guildRoot: string,
+  runDir: string | undefined,
+  runId: string | undefined,
+  laneId: string | undefined,
+): void {
+  // Synthetic fallbacks for project-scoped writes (e.g. wiki) with no active run.
+  const effectiveRunId = typeof runId === "string" && runId.length > 0 ? runId : "no-active-run";
+  const effectiveRunDir =
+    typeof runDir === "string" && runDir.length > 0
+      ? runDir
+      : path.join(guildRoot, ".guild", "runs", effectiveRunId);
+  const toolName = payload.tool_name;
+  if (toolName !== "Write" && toolName !== "Edit") return;
+
+  const ti = payload.tool_input as Record<string, unknown> | null | undefined;
+  if (!ti || typeof ti !== "object") return;
+  const rawFilePath = ti["file_path"];
+  if (typeof rawFilePath !== "string" || rawFilePath.length === 0) return;
+
+  const absPath = path.isAbsolute(rawFilePath)
+    ? rawFilePath
+    : path.resolve(guildRoot, rawFilePath);
+
+  const surface = classifyGuildScrubSurface(absPath, guildRoot);
+  if (surface === null) return;
+
+  // Read the file as written by the tool (already on disk).
+  let diskContent: string;
+  try {
+    diskContent = fs.readFileSync(absPath, "utf8");
+  } catch {
+    return; // File missing/unreadable — nothing to scrub
   }
 
-  const raw = await readStdin();
-  let payload: PostToolUsePayload = {};
+  // Route through scrubbedWrite: scrub-then-overwrite, or block-and-event.
+  const result = scrubbedWrite(absPath, diskContent, {
+    surface,
+    runDir: effectiveRunDir,
+    runId: effectiveRunId,
+    laneId,
+  });
+
+  if (result.blocked) {
+    // fail-CLOSED: scrubbedWrite did NOT overwrite. The original file still
+    // exists at absPath with unredacted content.
+    //
+    // Failure ladder — raw MUST NOT survive at the canonical path:
+    //   STEP 1: Best-effort quarantine rename (preserves content for human review).
+    //   STEP 2: If rename failed, MUST destroy raw at canonical: overwrite then unlink.
+    //   HARD:   If canonical removal also fails → critical event + process.exit(1).
+
+    let quarantineDone = false;
+    try {
+      fs.renameSync(absPath, absPath + ".quarantined");
+      quarantineDone = true;
+    } catch {
+      // Rename failed — proceed to canonical removal.
+    }
+
+    if (!quarantineDone) {
+      let canonicalRemoved = false;
+      // Try overwrite with a safe redaction notice first.
+      try {
+        fs.writeFileSync(
+          absPath,
+          `[SCRUB-BLOCKED: ${surface} file content removed by Guild HK-06 secret scrub ` +
+            `— quarantine rename failed, raw destroyed at canonical path]\n`,
+          "utf8",
+        );
+        canonicalRemoved = true;
+      } catch {
+        // Try unlink as last resort.
+        try {
+          fs.unlinkSync(absPath);
+          canonicalRemoved = true;
+        } catch {
+          // All removal attempts exhausted.
+        }
+      }
+
+      if (!canonicalRemoved) {
+        // HARD FAILURE: raw secret persists at canonical path — critical breach.
+        // Emit critical event (best-effort), then exit non-zero.
+        process.stderr.write(
+          `[CRITICAL] [post-tool-use] HK-06: CANNOT remove raw secret from canonical ` +
+            `path "${path.basename(absPath)}" — quarantine AND canonical-removal ` +
+            `(overwrite+unlink) both failed. Exiting non-zero. Manual remediation required.\n`,
+        );
+        try {
+          const evt = buildSecurityEvent({
+            run_id: effectiveRunId,
+            lane_id: laneId,
+            event_type: "secret_scrub_blocked",
+            decision: "blocked",
+            tool: "post-tool-use/hk06-scrub",
+            detail:
+              `CRITICAL: Cannot remove raw ${surface} write from canonical path ` +
+              `"${path.basename(absPath)}" — quarantine AND canonical-removal both failed. ` +
+              `Raw secret may persist. Manual remediation required.`,
+            permission_mode: "blocked",
+          });
+          appendSecurityEvent(effectiveRunDir, evt);
+        } catch {}
+        process.exit(1);
+      }
+
+      process.stderr.write(
+        `warn: [post-tool-use] HK-06: quarantine rename failed but canonical ` +
+          `path overwritten/unlinked for ${path.basename(absPath)}.\n`,
+      );
+    }
+
+    process.stderr.write(
+      `warn: [post-tool-use] HK-06: ${surface} write BLOCKED by secret scrub at ` +
+        `${path.basename(absPath)} — quarantined/removed. secret_scrub_blocked event emitted.\n`,
+    );
+  } else if (result.written) {
+    process.stderr.write(
+      `info: [post-tool-use] HK-06: ${surface} file scrubbed in place: ${path.basename(absPath)}.\n`,
+    );
+  }
+}
+
+// ── Run ID helpers ────────────────────────────────────────────────────────────
+
+function readCurrentRunId(guildRoot: string): string | undefined {
+  const sentinelPath = path.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
-    payload = JSON.parse(raw.trim()) as PostToolUsePayload;
+    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    return value.length > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveRunId(guildRoot: string): string | undefined {
+  const envRunId = process.env["GUILD_RUN_ID"];
+  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
+  return readCurrentRunId(guildRoot);
+}
+
+export async function main(): Promise<void> {
+  const raw = await readHookStdin();
+  let payload: GuildHookEvent = {};
+  try {
+    payload = emitClaudeHookEvent(raw);
   } catch {
     process.stderr.write("warn: [post-tool-use] invalid JSON on stdin; skipping pairing.\n");
     return;
@@ -103,10 +282,88 @@ export async function main(): Promise<void> {
 
   const toolName = payload.tool_name ?? "";
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  // Walk up from cwd to find the repo root — ensures .guild/ always lands at
+  // the nearest .git / .guild ancestor, never in a subdirectory.
+  const guildRoot = resolveGuildRoot(cwd);
+
+  // ── G-9 (SC-5): structured heartbeat write ────────────────────────────────
+  // When GUILD_RUN_ID + GUILD_SPECIALIST are both exported (the dispatch path
+  // sets them per lane), every PostToolUse refreshes the lane's structured
+  // heartbeat at <runDir>/in-progress/<specialist>.json — the write side of
+  // ADR-RE-3 that makes stall detection backend-agnostic (not tmux-only).
+  // Fail-open by contract (writeHeartbeatFromEnv never throws) and near-zero
+  // cost when the env vars are absent. Placed BEFORE the run-id gate: the
+  // heartbeat keys off its own env contract, not the sentinel file.
+  {
+    const hb = writeHeartbeatFromEnv({ toolName: payload.tool_name, cwd });
+    if (!hb.written && hb.reason !== null && hb.reason !== "env-absent") {
+      process.stderr.write(
+        `warn: [post-tool-use] heartbeat write skipped (non-fatal): ${hb.reason}\n`,
+      );
+    }
+  }
+  // ── end G-9 ────────────────────────────────────────────────────────────────
+
+  // ── HK-06: durable-surface PostToolUse scrub-in-place ───────────────────
+  // Placed BEFORE the run-id gate: wiki pages (.guild/wiki/**) are project-
+  // scoped and have NO run-id — gating on runId permanently bypasses the wiki
+  // surface. The scrub uses synthetic fallback values when runId is absent.
+  // Non-blocking: always exits 0. Non-throwing by contract.
+  {
+    const earlyRunId = resolveRunId(guildRoot);
+    const earlyRunIdSafe =
+      typeof earlyRunId === "string" && earlyRunId.length > 0 && isSafeRunId(earlyRunId)
+        ? earlyRunId
+        : undefined;
+    const earlyRunDir = earlyRunIdSafe
+      ? (process.env["GUILD_RUN_DIR"] ?? path.join(guildRoot, ".guild", "runs", earlyRunIdSafe))
+      : undefined;
+    const earlyRawLaneId = process.env["GUILD_LANE_ID"];
+    const earlyLaneId =
+      typeof earlyRawLaneId === "string" &&
+      earlyRawLaneId.length > 0 &&
+      isSafeLaneId(earlyRawLaneId)
+        ? earlyRawLaneId
+        : undefined;
+    try {
+      runGuildArtifactScrub(payload, guildRoot, earlyRunDir, earlyRunIdSafe, earlyLaneId);
+    } catch (err) {
+      process.stderr.write(
+        `warn: [post-tool-use] HK-06 scrub threw (non-fatal): ${
+          err instanceof Error ? err.message : String(err)
+        }\n`,
+      );
+    }
+  }
+  // ── end HK-06 ────────────────────────────────────────────────────────────
+
+  const runId = resolveRunId(guildRoot);
+  if (typeof runId !== "string" || runId.length === 0) {
+    process.stderr.write(
+      "warn: [post-tool-use] GUILD_RUN_ID unset and current-run-id missing — falling through (no tool_call emit).\n",
+    );
+    return;
+  }
+  if (!isSafeRunId(runId)) {
+    process.stderr.write(
+      "warn: [post-tool-use] invalid GUILD_RUN_ID/current-run-id — falling through (no tool_call emit).\n",
+    );
+    return;
+  }
+
   const runDir =
     process.env["GUILD_RUN_DIR"] ??
-    path.join(cwd, ".guild", "runs", runId);
-  const laneId = process.env["GUILD_LANE_ID"];
+    path.join(guildRoot, ".guild", "runs", runId);
+  const rawLaneId = process.env["GUILD_LANE_ID"];
+  const laneId =
+    typeof rawLaneId === "string" && rawLaneId.length > 0 && isSafeLaneId(rawLaneId)
+      ? rawLaneId
+      : undefined;
+  if (typeof rawLaneId === "string" && rawLaneId.length > 0 && laneId === undefined) {
+    process.stderr.write(
+      "warn: [post-tool-use] invalid GUILD_LANE_ID — omitting lane_id.\n",
+    );
+  }
   const tsPost = new Date().toISOString();
 
   // Always run the orphan sweep first — flushes stale Pre entries from
@@ -146,7 +403,7 @@ export async function main(): Promise<void> {
     tool: toolName,
     post_ts: tsPost,
   };
-  if (typeof laneId === "string" && laneId.length > 0) {
+  if (laneId !== undefined) {
     matchKey.lane_id = laneId;
   }
 
@@ -166,9 +423,7 @@ export async function main(): Promise<void> {
         run_id: runId,
         tool: toolName,
         result_excerpt_redacted: resultExcerpt(payload),
-        ...(typeof laneId === "string" && laneId.length > 0
-          ? { lane_id: laneId }
-          : {}),
+        ...(laneId !== undefined ? { lane_id: laneId } : {}),
         ...(typeof payload.duration_ms === "number"
           ? { latency_ms_override: payload.duration_ms }
           : {}),
@@ -181,7 +436,20 @@ export async function main(): Promise<void> {
         result_excerpt_redacted: resultExcerpt(payload),
       });
     }
-    appendEvent(runDir, event);
+    // D-OBS-1/6: attach guild.trace_event.v2 fields. tokens only for LLM-call
+    // tools (Agent/Skill) and only when the payload actually carried usage.
+    const isLlmCallTool = toolName === "Agent" || toolName === "Skill";
+    const tokens: TraceTokens | undefined = isLlmCallTool
+      ? normalizeTokens(payload.tokens ?? payload.usage)
+      : undefined;
+    const traceV2 = resolveTraceV2Fields({
+      runId,
+      eventType: "tool_call",
+      ts: tsPost,
+      actorId: laneId ?? "main",
+      tokens,
+    });
+    appendEvent(runDir, event, { traceV2 });
   } catch (err) {
     process.stderr.write(
       `warn: [post-tool-use] tool_call emit failed: ${

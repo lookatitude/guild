@@ -1,0 +1,49 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "docs-sync",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "scripts",
+      "id": "docs-hygiene/docs-code-audit",
+      "source_path": "scripts/docs-hygiene/docs-code-audit.ts",
+      "resource_path": "resources/scripts/docs-hygiene/docs-code-audit.ts",
+      "sha256": "b050038a50b9a7b8405efb1b6da4468172d5e8b7f295e671f3ac2703004c660d"
+    },
+    {
+      "category": "scripts",
+      "id": "docs-hygiene/memory-check",
+      "source_path": "scripts/docs-hygiene/memory-check.ts",
+      "resource_path": "resources/scripts/docs-hygiene/memory-check.ts",
+      "sha256": "84846ef649e0bc910e0b49ca3fd3738b982abd4dfb9381666c14cc319c6af2d3"
+    },
+    {
+      "category": "scripts",
+      "id": "docs-hygiene/scan",
+      "source_path": "scripts/docs-hygiene/scan.ts",
+      "resource_path": "resources/scripts/docs-hygiene/scan.ts",
+      "sha256": "a12c35c2b2d4dab4b6665282b8a641d72f4885977de1b3025c3ec9a65e5dd9fc"
+    },
+    {
+      "category": "scripts",
+      "id": "wiki-lint-checks",
+      "source_path": "scripts/wiki-lint-checks.ts",
+      "resource_path": "resources/scripts/wiki-lint-checks.ts",
+      "sha256": "d7a2dd391f6395466acb775b1aa34b6204f001e916ae8b7c3f387fbf8009c5e5"
+    },
+    {
+      "category": "scripts",
+      "id": "workspace/check-command-coverage",
+      "source_path": "scripts/workspace/check-command-coverage.ts",
+      "resource_path": "resources/scripts/workspace/check-command-coverage.ts",
+      "sha256": "8c967e2584c3881ab9a068edfb577aad970552c567cdfa37e7c215044aeefbe8"
+    },
+    {
+      "category": "scripts",
+      "id": "workspace/check-doc-sync",
+      "source_path": "scripts/workspace/check-doc-sync.ts",
+      "resource_path": "resources/scripts/workspace/check-doc-sync.ts",
+      "sha256": "6a9bdbd198c2e7776ceb729dc5bb501d4e0c02d32d3ef75f4456c2fa2142dc08"
+    }
+  ]
+}

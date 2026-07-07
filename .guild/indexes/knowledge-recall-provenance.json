@@ -1,0 +1,7 @@
+{
+  "schema_version": "guild.knowledge_links.provenance.v1",
+  "run_id": "g16-clean",
+  "generated_at": "2026-06-25T00:00:00Z",
+  "node_count": 4057,
+  "edge_count": 6067
+}

@@ -5,7 +5,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap.sh"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/bootstrap.sh\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/detect-guild-version.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/using-guild-bootstrap.js\""
           }
         ]
       }
@@ -15,11 +23,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/check-skill-coverage.sh"
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/check-skill-coverage.sh\""
           },
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/capture-telemetry.js"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/capture-telemetry.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace-start.js\""
           }
         ]
       }
@@ -30,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/pre-tool-use.js"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/pre-tool-use.js\""
           }
         ]
       }
@@ -41,11 +53,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/capture-telemetry.js"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/capture-telemetry.js\""
           },
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/post-tool-use.js"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/post-tool-use.js\""
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/comms-format-lint.js\""
           }
         ]
       }
@@ -55,7 +76,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/pre-compact.js"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/pre-compact.js\""
           }
         ]
       }
@@ -65,7 +86,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/capture-telemetry.js"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/capture-telemetry.js\""
           }
         ]
       }
@@ -75,7 +96,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dist/maybe-reflect.js"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/maybe-reflect.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/run-trace-close.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/dist/learning-backstop.js\""
           }
         ]
       }
@@ -85,7 +114,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/agent-team/dist/task-created.js"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-team/dist/task-created.js\""
           }
         ]
       }
@@ -95,7 +124,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/agent-team/dist/task-completed.js"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-team/dist/task-completed.js\""
           }
         ]
       }
@@ -105,7 +134,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/agent-team/dist/teammate-idle.js"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-team/dist/teammate-idle.js\""
           }
         ]
       }

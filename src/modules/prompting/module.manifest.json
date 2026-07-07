@@ -1,0 +1,12 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "prompting",
+  "title": "Prompting",
+  "kind": "substrate",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns prompt-envelope conventions and future prompt rendering/templates shared by orchestrators and agents.",
+  "depends_on": ["context", "host-runtime"],
+  "owns": {
+    "scripts": []
+  }
+}

@@ -1,0 +1,42 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { buildPrompt as teamBackendBuildPrompt } from "../lib/team-backend";
+import { buildPrompt as tmuxBackendBuildPrompt } from "../lib/host/tmux-backend";
+import { buildPrompt as moduleBuildPrompt } from "../../src/modules/prompting/workflows/team-prompt";
+
+describe("team prompt module compatibility", () => {
+  test("legacy backend paths re-export the src/modules/prompting renderer", () => {
+    expect(teamBackendBuildPrompt).toBe(moduleBuildPrompt);
+    expect(tmuxBackendBuildPrompt).toBe(moduleBuildPrompt);
+  });
+
+  test("preserves orchestrator and teammate prompt wording", () => {
+    const orchestrator = teamBackendBuildPrompt("demo", "run-001", null, ".guild/team/demo.build.yaml");
+    expect(orchestrator).toContain("You are the Guild orchestrator for team `demo`, run-id `run-001`.");
+    expect(orchestrator).toContain("the team at `.guild/team/demo.build.yaml`");
+    expect(orchestrator).toContain("guild:review → guild:verify-done → guild:reflect");
+    expect(orchestrator).toContain("guild:context-assemble");
+
+    const teammate = teamBackendBuildPrompt("demo", "run-001", {
+      name: "backend",
+      scope: "api",
+      dependsOn: [],
+    });
+    expect(teammate).toContain("You are the `backend` teammate for run-id `run-001`.");
+    expect(teammate).toContain("Read your context bundle at `.guild/context/run-001/backend-<task-id>.md` —");
+    expect(teammate).toContain("auto-memory (§9.1)");
+    expect(teammate).toContain("§8.2 handoff receipt");
+  });
+
+  test("only the prompting module defines buildPrompt", () => {
+    const repoRoot = path.resolve(__dirname, "../..");
+    const tmuxBackend = fs.readFileSync(path.join(repoRoot, "scripts/lib/host/tmux-backend.ts"), "utf8");
+    const moduleFile = fs.readFileSync(path.join(repoRoot, "src/modules/prompting/workflows/team-prompt.ts"), "utf8");
+
+    expect(tmuxBackend).toMatch(/src\/modules\/prompting\/workflows\/team-prompt/);
+    expect(tmuxBackend).not.toMatch(/export\s+function\s+buildPrompt/);
+    expect(moduleFile).toMatch(/export\s+function\s+buildPrompt/);
+    expect(moduleFile).toMatch(/from\s+["']\.\.\/\.\.\/host-runtime["']/);
+    expect(moduleFile).not.toMatch(/host-runtime\/workflows\/host-registry/);
+  });
+});

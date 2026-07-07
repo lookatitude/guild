@@ -1,0 +1,17 @@
+spec: .guild/spec/gen-slug.md
+backend: agent-team
+allow_larger: false
+user_approved_agent_team: true
+specialists:
+  - name: architect
+    scope: "System boundaries and component split."
+    depends-on: []
+    default_tier: powerful
+  - name: backend
+    scope: "REST contract and data layer."
+    depends-on: [architect]
+    default_tier: mid
+  - name: qa
+    scope: "Property-based tests and regression suite."
+    depends-on: [backend]
+    default_tier: cheap

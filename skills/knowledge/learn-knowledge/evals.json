@@ -1,0 +1,20 @@
+{
+  "should_trigger": [
+    "Build the knowledge tier for this repo.",
+    "Learn knowledge — extract the topic taxonomy and index the wiki.",
+    "Enrich the knowledge graph with topics and cross-modal links.",
+    "Classify and label the knowledge nodes into the graph.",
+    "Index the wiki and docs/knowledge pages into the topic graph.",
+    "Run the deep multi-modal knowledge pass: topics, diagrams, wiki, cross-links."
+  ],
+  "should_not_trigger": [
+    "Build the cheap-scan codebase map for Init.",
+    "Build the structural knowledge graph and reverse-spec this repo.",
+    "Narrate the onboarding tour from the skeleton.",
+    "Analyze the diff's blast radius for this plan.",
+    "Explain how the payment retry module works.",
+    "Query the graph for the auth nodes.",
+    "Just adjust models.knowledge.maxDepth in settings.json.",
+    "Launch the interactive web dashboard to visualize the topic tree."
+  ]
+}

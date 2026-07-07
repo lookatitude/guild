@@ -7,7 +7,7 @@
 .claude/agents/_shared/AUDIT.md
 .claude/agents/_shared/handoff-contract.md
 .claude/agents/_shared/plan-anchors.md
-.claude/agents/_shared/superpowers-mapping.md
+.claude/agents/_shared/methodology-skills.md
 .claude/agents/command-builder.md
 .claude/agents/docs-writer.md
 .claude/agents/eval-engineer.md

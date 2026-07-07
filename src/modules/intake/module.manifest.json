@@ -1,0 +1,12 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "intake",
+  "title": "Intake",
+  "kind": "capability",
+  "implementation_mode": "workflow-backed",
+  "description": "Classifies user intent and routes requests into lifecycle, initiative, knowledge, or review paths.",
+  "depends_on": ["lifecycle", "initiatives", "review"],
+  "owns": {
+    "scripts": ["lib/classify-intake"]
+  }
+}

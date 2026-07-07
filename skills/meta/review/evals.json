@@ -4,13 +4,17 @@
     "Check if this matches the spec.",
     "Evaluate the handoffs.",
     "Run the two-stage review on this task.",
-    "Did the team's work pass?"
+    "Did the team's work pass?",
+    "Request a fresh-context code review of this lane's diff before handoff.",
+    "The reviewer found a timing-unsafe compare — how should I respond?",
+    "Get a second opinion on these changes before integration."
   ],
   "should_not_trigger": [
     "Write more code.",
     "Run the tests.",
     "Re-plan the work.",
     "Start a new brainstorm.",
-    "Verify we're done."
+    "Verify we're done.",
+    "Run the final done-gate on this run."
   ]
 }

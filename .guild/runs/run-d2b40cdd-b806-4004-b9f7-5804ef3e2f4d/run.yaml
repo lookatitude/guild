@@ -1,0 +1,25 @@
+schema_version: guild.run.v1
+run_id: run-d2b40cdd-b806-4004-b9f7-5804ef3e2f4d
+command: /guild:status
+arguments: {}
+cwd: <workspace-root>/plugin
+target_kind: existing_guild_project
+workspace:
+  is_workspace: false
+  root: <workspace-root>/plugin
+project: status
+host:
+  requested: auto
+  resolved: claude
+model_tier_policy: n/a (read-only lightweight run)
+started_at: 2026-06-26T00:25:37Z
+ignore_policy: n/a (no scan)
+scan_policy: n/a (no scan)
+initiative_attachment: null
+phase: status
+run_class: lightweight
+gates: {}
+status: closed
+phases_log:
+  - phase: status
+    at: 2026-06-26T00:25:37Z

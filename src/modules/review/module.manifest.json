@@ -1,0 +1,30 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "review",
+  "title": "Review",
+  "kind": "capability",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns audit, fix, review, review-broker, Codex review adapter, and gate-verification workflows.",
+  "depends_on": ["communication", "host-runtime", "security", "state"],
+  "owns": {
+    "commands": ["audit", "fix"],
+    "skills": [
+      "guild-audit",
+      "guild-codex-review",
+      "guild-diagnose",
+      "guild-review",
+      "guild-review-broker",
+      "guild-systematic-debug",
+      "guild-tdd"
+    ],
+    "scripts": [
+      "flip-report",
+      "oq11-gate-check",
+      "verify-codex-review-trail",
+      "verify-gate-pass",
+      "lib/advisory-record",
+      "lib/review-pairing",
+      "lib/review-progress"
+    ]
+  }
+}

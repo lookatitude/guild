@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Dispatch the independent lanes in parallel.",
+    "These three lanes have no depends-on edges between them — fan them out concurrently.",
+    "Run the team's lanes, respecting the depends-on graph.",
+    "Kick off the parallelizable specialist work and collect the receipts.",
+    "Fan out the independent build lanes and fan in their handoffs."
+  ],
+  "should_not_trigger": [
+    "Author the lane plan from the spec.",
+    "Brainstorm the feature scope.",
+    "Compose the team for this spec.",
+    "Review the handoff receipts for spec compliance.",
+    "Advance to the QA phase.",
+    "Run lane B before lane A's receipt lands."
+  ]
+}

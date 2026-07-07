@@ -1,0 +1,13 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "templates",
+  "title": "Templates",
+  "kind": "substrate",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns template instantiation and template schema helpers used by skills, agents, and product scaffolds.",
+  "depends_on": ["evals", "security"],
+  "owns": {
+    "skills": ["guild-create-skill"],
+    "scripts": ["instantiate-template", "lib/template-schema"]
+  }
+}

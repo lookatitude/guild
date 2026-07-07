@@ -2,7 +2,7 @@
 
 ## Overview
 
-These fixtures target `guild-plan.md §15.2 risk #1` — **cross-group trigger collisions**, the primary risk the Guild plan calls out around specialist descriptions:
+These fixtures target the **cross-group trigger collisions** risk — the primary risk around specialist descriptions:
 
 > Cross-group triggers collide (e.g., "content" fires both copywriter and marketing) — mitigated by pushy DO NOT TRIGGER blocks in every description; description optimizer catches overlap via eval flips.
 

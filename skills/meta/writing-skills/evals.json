@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Author a new skill instance from the canonical template.",
+    "Write the SKILL.md body for this new project specialist.",
+    "Fill in the nine required skill headings for this skill.",
+    "Mint a skill instance into .guild/skills/ with the derived_from_template stamp.",
+    "Rewrite this skill body to be concrete and evidence-bearing."
+  ],
+  "should_not_trigger": [
+    "Edit the canonical SKILL.template.md in the plugin.",
+    "Re-tune this skill's description and triggers only.",
+    "Author a new specialist agent definition.",
+    "Write a slash command.",
+    "Roll this skill back to a previous version.",
+    "Create a new specialist type for the team."
+  ]
+}

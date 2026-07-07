@@ -1,0 +1,77 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "communication",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "hooks",
+      "id": "PostToolUse:comms-format-lint.js",
+      "source_path": "hooks/dist/comms-format-lint.js",
+      "resource_path": "resources/hooks/dist/comms-format-lint.js",
+      "sha256": "cf2aba120c96ee5cac5e6f3dce207d590cb4ace85e789da4aa2ac6f87d0b7eea"
+    },
+    {
+      "category": "hooks",
+      "id": "TaskCompleted:task-completed.js",
+      "source_path": "hooks/agent-team/dist/task-completed.js",
+      "resource_path": "resources/hooks/agent-team/dist/task-completed.js",
+      "sha256": "c33e8233c98d05367d8e47c8a354a3a2926028e8af85167e90ca5ffd886137b6"
+    },
+    {
+      "category": "hooks",
+      "id": "TaskCreated:task-created.js",
+      "source_path": "hooks/agent-team/dist/task-created.js",
+      "resource_path": "resources/hooks/agent-team/dist/task-created.js",
+      "sha256": "3356640f04811e31e3a8afef700dde256561ee608399738b5320229c3612931d"
+    },
+    {
+      "category": "hooks",
+      "id": "TeammateIdle:teammate-idle.js",
+      "source_path": "hooks/agent-team/dist/teammate-idle.js",
+      "resource_path": "resources/hooks/agent-team/dist/teammate-idle.js",
+      "sha256": "c78161b759343dc5df73cc294d4211871dc61bb49fab0039abb6e544dc18e392"
+    },
+    {
+      "category": "scripts",
+      "id": "artifact-bus-cli",
+      "source_path": "scripts/artifact-bus-cli.ts",
+      "resource_path": "resources/scripts/artifact-bus-cli.ts",
+      "sha256": "96da8030629109ba2495ba2ee6208e5f24c15bc5f83554b29b7dc1fba5d7952a"
+    },
+    {
+      "category": "scripts",
+      "id": "comms/comms-format-lint",
+      "source_path": "scripts/comms/comms-format-lint.ts",
+      "resource_path": "resources/scripts/comms/comms-format-lint.ts",
+      "sha256": "e5610ef42ff0ce6aa791a88a93af9ff288353ff134fff003a2f7f7a82d2e71b2"
+    },
+    {
+      "category": "scripts",
+      "id": "comms/comms-format-lint.cli",
+      "source_path": "scripts/comms/comms-format-lint.cli.ts",
+      "resource_path": "resources/scripts/comms/comms-format-lint.cli.ts",
+      "sha256": "bec6272d2bb9113aacabde1129adc0d28af8ef5d7de54efaaa31f6347d46865e"
+    },
+    {
+      "category": "scripts",
+      "id": "comms/no-accidental-write",
+      "source_path": "scripts/comms/no-accidental-write.ts",
+      "resource_path": "resources/scripts/comms/no-accidental-write.ts",
+      "sha256": "f9b57bf5bb4e130cb8322b8cb54e9ddbe230d248cc1d15d5b1294a8ec6025aa8"
+    },
+    {
+      "category": "scripts",
+      "id": "comms/no-accidental-write.cli",
+      "source_path": "scripts/comms/no-accidental-write.cli.ts",
+      "resource_path": "resources/scripts/comms/no-accidental-write.cli.ts",
+      "sha256": "a5ad351d7450528b26ce3bd7a17a21e0a2cc7686a532a4f017c52aca47d90a55"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/artifact-bus",
+      "source_path": "scripts/lib/artifact-bus.ts",
+      "resource_path": "resources/scripts/lib/artifact-bus.ts",
+      "sha256": "ac14f5bdfe34b7bf7a041e00f48893cd1d04241113bc3d4c1a70c8c21381f935"
+    }
+  ]
+}

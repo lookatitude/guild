@@ -1,0 +1,24 @@
+{
+  "should_trigger": [
+    "Harvest lessons from the run closeout artifacts.",
+    "Extract knowledge candidates from these phase handoffs and verify report.",
+    "Run learn-harvest on run-learn-knowledge-convergence-20260529.",
+    "What did we learn from this phase — extract candidates from the receipts.",
+    "Extract decisions and wiki candidates from this initiative's artifacts.",
+    "Learn-harvest this run to feed reflect.",
+    "Run the extraction pipeline over the phase-1-dispatch closeout artifacts."
+  ],
+  "should_not_trigger": [
+    "Build the cheap-scan codebase map.",
+    "Build the deep knowledge graph.",
+    "Narrate the onboarding tour.",
+    "Analyse the diff blast radius.",
+    "Explain how the auth module works.",
+    "Ingest this Stripe API doc into the wiki.",
+    "Promote this candidate to the wiki.",
+    "Capture this decision as a permanent decision page.",
+    "Evolve guild:context-assemble based on the reflection.",
+    "Run the per-phase LearningCheckpoint classifier.",
+    "Just reflect on this run."
+  ]
+}

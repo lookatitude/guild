@@ -1,0 +1,63 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "kernel",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "hooks",
+      "id": "SessionStart:bootstrap.sh",
+      "source_path": "hooks/bootstrap.sh",
+      "resource_path": "resources/hooks/bootstrap.sh",
+      "sha256": "d47cf2353ab4c8f163b19095eead65b57ee7549d804fb0a75655078ab8008c21"
+    },
+    {
+      "category": "hooks",
+      "id": "SessionStart:detect-guild-version.js",
+      "source_path": "hooks/dist/detect-guild-version.js",
+      "resource_path": "resources/hooks/dist/detect-guild-version.js",
+      "sha256": "7fd89fc8ab397e776eca7feeea6f7036e577607e33f573988fa30ec22bdf40d4"
+    },
+    {
+      "category": "hooks",
+      "id": "SessionStart:using-guild-bootstrap.js",
+      "source_path": "hooks/dist/using-guild-bootstrap.js",
+      "resource_path": "resources/hooks/dist/using-guild-bootstrap.js",
+      "sha256": "37e7ea2a9900bd3a9ceaea3728fc8eff3c0abb572c096c854577f819b0c54403"
+    },
+    {
+      "category": "hooks",
+      "id": "UserPromptSubmit:check-skill-coverage.sh",
+      "source_path": "hooks/check-skill-coverage.sh",
+      "resource_path": "resources/hooks/check-skill-coverage.sh",
+      "sha256": "647a7140bd844da00b43d5451b4b89d48e3ab0654462a50b0c1e3aff5cdc3daa"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/module-manifest",
+      "source_path": "scripts/lib/module-manifest.ts",
+      "resource_path": "resources/scripts/lib/module-manifest.ts",
+      "sha256": "4a6affdbf4a05bec7191b796f8259fc9f475662ad3beae9df761a3e1f19a3d3f"
+    },
+    {
+      "category": "scripts",
+      "id": "types/js-yaml.d",
+      "source_path": "scripts/types/js-yaml.d.ts",
+      "resource_path": "resources/scripts/types/js-yaml.d.ts",
+      "sha256": "113c896eef0a94c313e1709dcae2f194afa1ecb4747b0c8f1e6459690e65a19c"
+    },
+    {
+      "category": "skills",
+      "id": "guild-principles",
+      "source_path": "skills/core/principles/SKILL.md",
+      "resource_path": "resources/skills/core/principles/SKILL.md",
+      "sha256": "8bb7c9fcad07b8e5256c30e5b32c3a5d7969745e60dbce931b0e78624b95ff61"
+    },
+    {
+      "category": "skills",
+      "id": "using-guild",
+      "source_path": "skills/meta/using-guild/SKILL.src.md",
+      "resource_path": "resources/skills/meta/using-guild/SKILL.src.md",
+      "sha256": "19f8ba9ff731e9d5ce5a82f3145943c4e4952433b9b2e71b6d3f70dcb223378a"
+    }
+  ]
+}

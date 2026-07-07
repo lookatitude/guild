@@ -3,7 +3,7 @@
 ## Purpose
 
 These fixtures and harness tests target the **shadow mode** implemented by
-`scripts/shadow-mode.ts` (guild-plan.md §11.2 step 7). They test whether a
+`scripts/shadow-mode.ts` (evolve pipeline step 7). They test whether a
 proposed skill's trigger behavior diverges from historical routing as recorded
 in trace files.
 

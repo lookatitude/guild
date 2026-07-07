@@ -1,0 +1,14 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "dashboard",
+  "title": "Dashboard",
+  "kind": "operator",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns dashboard command, projection logic, launch surfaces, and operator-facing status read models.",
+  "depends_on": ["state", "telemetry"],
+  "owns": {
+    "commands": ["dashboard"],
+    "skills": ["guild-dashboard"],
+    "scripts": ["dashboard-launch", "lib/dashboard-projector"]
+  }
+}

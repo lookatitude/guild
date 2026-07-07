@@ -1,0 +1,49 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "operations",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "skills",
+      "id": "guild-operations",
+      "source_path": "skills/guild-operations/SKILL.md",
+      "resource_path": "resources/skills/guild-operations/SKILL.md",
+      "sha256": "e9c73123578e6da0fdcc4bc0cad59580e78a88fa5dd69ccd4760be0c0d5c220e"
+    },
+    {
+      "category": "skills",
+      "id": "ops-incident",
+      "source_path": "skills/meta/ops-incident/SKILL.md",
+      "resource_path": "resources/skills/meta/ops-incident/SKILL.md",
+      "sha256": "4389a6780b3797433f925b032b49a36bf1ef5e0fdea406d295110e3ebb22fe16"
+    },
+    {
+      "category": "skills",
+      "id": "ops-maintenance",
+      "source_path": "skills/meta/ops-maintenance/SKILL.md",
+      "resource_path": "resources/skills/meta/ops-maintenance/SKILL.md",
+      "sha256": "d0dcc04c8413d6e95aa90cb67e8504e4592f3986c683206e2e034a21ea57d470"
+    },
+    {
+      "category": "skills",
+      "id": "ops-monitoring",
+      "source_path": "skills/meta/ops-monitoring/SKILL.md",
+      "resource_path": "resources/skills/meta/ops-monitoring/SKILL.md",
+      "sha256": "7f66af907e7bd5929553c3f0cffebfa079aadfbaca1feca87a7ddf3c6b41b23e"
+    },
+    {
+      "category": "skills",
+      "id": "ops-release",
+      "source_path": "skills/meta/ops-release/SKILL.md",
+      "resource_path": "resources/skills/meta/ops-release/SKILL.md",
+      "sha256": "295368f1ce0a85ea9d42d3ca54c2ef66c014ec0cad863c1806693997bc4e7b5e"
+    },
+    {
+      "category": "skills",
+      "id": "ops-rollback",
+      "source_path": "skills/meta/ops-rollback/SKILL.md",
+      "resource_path": "resources/skills/meta/ops-rollback/SKILL.md",
+      "sha256": "52773d0deb3eb92c1dc4e9b16427129fb4fdc9bd46be9f263e7f850cd4cfaaf7"
+    }
+  ]
+}

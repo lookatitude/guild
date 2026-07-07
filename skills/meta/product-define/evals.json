@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "We explored the houseplant-tracking app — now write the PRD and acceptance criteria.",
+    "Define the acceptance criteria for the PDF-summarizer idea we scoped.",
+    "Turn the explore artifact into a PRD nucleus with traceable acceptance criteria.",
+    "Set the user stories, non-goals, and test implications for the voice-notes-to-todo idea.",
+    "Define the product: stable AC ids the plan and release gate can resolve."
+  ],
+  "should_not_trigger": [
+    "Fix the bug where the login button does nothing on mobile.",
+    "Plan this feature: add SSO to the admin dashboard.",
+    "I have an idea for an app that helps people track their houseplants.",
+    "Refactor the payment module to use the new client.",
+    "Compose a team for the houseplant app build.",
+    "Deploy the release and roll back if it fails."
+  ]
+}

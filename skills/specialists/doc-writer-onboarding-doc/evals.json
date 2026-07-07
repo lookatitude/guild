@@ -1,0 +1,17 @@
+{
+  "should_trigger": [
+    "Write a getting-started guide for new developers joining the project.",
+    "Create a CONTRIBUTING.md with our branch naming conventions, PR process, and code review guidelines.",
+    "Write the onboarding documentation for new users of our open-source library.",
+    "Add a CODE_OF_CONDUCT.md and a GOVERNANCE.md for our community project.",
+    "Write a developer setup doc that walks through cloning the repo, installing dependencies, and running tests."
+  ],
+  "should_not_trigger": [
+    "Write the onboarding email sequence for new SaaS users after sign-up.",
+    "Write the API reference docs for the onboarding endpoints.",
+    "Write the project README overview and quick-start section.",
+    "Write a blog post about our new developer onboarding program.",
+    "Write the user manual for the admin dashboard onboarding wizard.",
+    "Write the release notes for the v2.0 onboarding improvements."
+  ]
+}

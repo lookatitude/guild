@@ -1,0 +1,98 @@
+{
+  "schema_version": "guild.module_resources.v1",
+  "module_id": "state",
+  "generated_from": "guild.inventory.v1",
+  "entries": [
+    {
+      "category": "hooks",
+      "id": "PreCompact:pre-compact.js",
+      "source_path": "hooks/dist/pre-compact.js",
+      "resource_path": "resources/hooks/dist/pre-compact.js",
+      "sha256": "a879beab00a6ac4727fff397a3390a3ee26a2332e0aef699844a52766d1a7150"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/dependency-graph-reader",
+      "source_path": "scripts/lib/dependency-graph-reader.ts",
+      "resource_path": "resources/scripts/lib/dependency-graph-reader.ts",
+      "sha256": "21cf0f247d36ac8e7dacd697755eee3424e9bfa358672ba107e538a6c78389d2"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/dependency-graph-schema",
+      "source_path": "scripts/lib/dependency-graph-schema.ts",
+      "resource_path": "resources/scripts/lib/dependency-graph-schema.ts",
+      "sha256": "fa34ac41780fec222d1cdda0bc822c95fb02a34e19d30086689ea7f53c3d87c4"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/frontmatter",
+      "source_path": "scripts/lib/frontmatter.ts",
+      "resource_path": "resources/scripts/lib/frontmatter.ts",
+      "sha256": "7e6d7a2039575c34be70bca568957f39802c9aca054c9272b1611f1be143a349"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/guild-artifact-paths",
+      "source_path": "scripts/lib/guild-artifact-paths.ts",
+      "resource_path": "resources/scripts/lib/guild-artifact-paths.ts",
+      "sha256": "eae33250989dc9228f7c48cf0a705c480468786494f6532ee1fe190f29bf2c87"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/guild-discovery",
+      "source_path": "scripts/lib/guild-discovery.ts",
+      "resource_path": "resources/scripts/lib/guild-discovery.ts",
+      "sha256": "b1a8f3cd580d72221ba8dabc4991e78b9ce6a97939ba0529cfb2d26b8436198e"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/guild-root",
+      "source_path": "scripts/lib/guild-root.ts",
+      "resource_path": "resources/scripts/lib/guild-root.ts",
+      "sha256": "731ebd68413cb36900d68cbbc75adcd0e8ee3f9372664e9ebdecacd17d5f16d7"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/heartbeat-write-side",
+      "source_path": "scripts/lib/heartbeat-write-side.ts",
+      "resource_path": "resources/scripts/lib/heartbeat-write-side.ts",
+      "sha256": "d97908c9ad5fc3eb4951b155fca75ca246cd3c27a67e2d910affe8e5ac47fcb9"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/index-cache",
+      "source_path": "scripts/lib/index-cache.ts",
+      "resource_path": "resources/scripts/lib/index-cache.ts",
+      "sha256": "af31b066cedcf28367c614dff43e6caefefee74d8c979d5bc86b51a686eac0aa"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/replay-rundir",
+      "source_path": "scripts/lib/replay-rundir.ts",
+      "resource_path": "resources/scripts/lib/replay-rundir.ts",
+      "sha256": "25ab6ffc19c709c25e02409dff8aab6a2af0e7b70f5f73ee7c520badcc713941"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/retention",
+      "source_path": "scripts/lib/retention.ts",
+      "resource_path": "resources/scripts/lib/retention.ts",
+      "sha256": "a105031e18c0eeed7c158523cef72803517fcc84ceb082e808a40e8f0ffffd85"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/sanitized-run-export",
+      "source_path": "scripts/lib/sanitized-run-export.ts",
+      "resource_path": "resources/scripts/lib/sanitized-run-export.ts",
+      "sha256": "bd9271402a2461150ac5442defbbd1c49b04c8703a7c852cb336b7f60846d72e"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/trace-replay",
+      "source_path": "scripts/lib/trace-replay.ts",
+      "resource_path": "resources/scripts/lib/trace-replay.ts",
+      "sha256": "087caa034e17592bd195d177d53e56fd64142f79da1f9dd130b1e7aee0173c8e"
+    }
+  ]
+}

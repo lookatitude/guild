@@ -23,13 +23,19 @@
  *
  * runDir resolution:
  *   1. process.env.GUILD_RUN_DIR
- *   2. process.env.GUILD_CWD + .guild/runs/<run-id>
- *   3. process.cwd() + .guild/runs/<run-id>
+ *   2. resolveGuildRoot(GUILD_CWD | payload.cwd | process.cwd()) + .guild/runs/<run-id>
+ *      resolveGuildRoot walks UP from the starting cwd to the nearest .git / .guild
+ *      ancestor so .guild/ always lands at the repo root, never in a subdirectory.
  */
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { appendEvent, type HookEvent } from "../benchmark/src/log-jsonl.js";
+import { resolveGuildRoot } from "./lib/guild-root.js";
+import { appendEvent, type HookEvent } from "./lib/v1.4/log-jsonl.js";
+// guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
+// lib/trace-v2.ts header. Hook events are not LLM calls → no tokens.
+import { resolveTraceV2Fields } from "./lib/trace-v2.js";
 
 interface PreCompactPayload {
   session_id?: string;
@@ -64,15 +70,23 @@ function payloadExcerpt(payload: unknown): string {
   }
 }
 
-export async function main(): Promise<void> {
-  const runId = process.env["GUILD_RUN_ID"];
-  if (typeof runId !== "string" || runId.length === 0) {
-    process.stderr.write(
-      "warn: [pre-compact] GUILD_RUN_ID unset — falling through (no log emit).\n",
-    );
-    return;
+function readCurrentRunId(guildRoot: string): string | undefined {
+  const sentinelPath = path.join(guildRoot, ".guild", "runs", "current-run-id");
+  try {
+    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    return value.length > 0 ? value : undefined;
+  } catch {
+    return undefined;
   }
+}
 
+function resolveRunId(guildRoot: string): string | undefined {
+  const envRunId = process.env["GUILD_RUN_ID"];
+  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
+  return readCurrentRunId(guildRoot);
+}
+
+export async function main(): Promise<void> {
   const raw = await readStdin();
   let payload: PreCompactPayload = {};
   try {
@@ -84,12 +98,24 @@ export async function main(): Promise<void> {
   }
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  // Walk up from cwd to find the repo root — ensures .guild/ always lands at
+  // the nearest .git / .guild ancestor, never in a subdirectory.
+  const guildRoot = resolveGuildRoot(cwd);
+  const runId = resolveRunId(guildRoot);
+  if (typeof runId !== "string" || runId.length === 0) {
+    process.stderr.write(
+      "warn: [pre-compact] GUILD_RUN_ID unset and current-run-id missing — falling through (no log emit).\n",
+    );
+    return;
+  }
+
   const runDir =
     process.env["GUILD_RUN_DIR"] ??
-    path.join(cwd, ".guild", "runs", runId);
+    path.join(guildRoot, ".guild", "runs", runId);
 
+  const ts = new Date().toISOString();
   const event: HookEvent = {
-    ts: new Date().toISOString(),
+    ts,
     event: "hook_event",
     run_id: runId,
     hook_name: "PreCompact",
@@ -97,9 +123,16 @@ export async function main(): Promise<void> {
     latency_ms: 0,
     status: "ok",
   };
+  // D-OBS-1/6: span_id + env-threaded tier/model/parent (no tokens for hooks).
+  const traceV2 = resolveTraceV2Fields({
+    runId,
+    eventType: "hook_event",
+    ts,
+    actorId: "main",
+  });
 
   try {
-    appendEvent(runDir, event);
+    appendEvent(runDir, event, { traceV2 });
   } catch (err) {
     process.stderr.write(
       `warn: [pre-compact] log emit failed: ${

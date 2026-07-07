@@ -1,0 +1,534 @@
+{
+  "version": "guild.knowledge_graph.v2",
+  "kind": "knowledge",
+  "generated_from_commit": "FIXTURE",
+  "project": {
+    "name": "event-pipeline-fixture",
+    "description": "Frozen L0f mini-corpus"
+  },
+  "nodes": [
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/ingestion.md#ingestion"
+      ],
+      "id": "claim:docs/ingestion.md#ingestion:0ee19523",
+      "type": "claim",
+      "name": "Every incoming event is validated before it is persisted.",
+      "category": "claim"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/storage.md#storage"
+      ],
+      "id": "claim:docs/storage.md#storage:e8805bb0",
+      "type": "claim",
+      "name": "Events are stored append-only and never mutated.",
+      "category": "claim"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "src/ingest.ts#L1-L6"
+      ],
+      "id": "concept:src/ingest.ts#L1-L6:0086d04b",
+      "type": "concept",
+      "name": "Ingestion is the front door of the event pipeline.",
+      "category": "concept"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "src/store.ts#L1-L6"
+      ],
+      "id": "concept:src/store.ts#L1-L6:fda0dd6b",
+      "type": "concept",
+      "name": "The event store is an append-only durable log.",
+      "category": "concept"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "diagrams/architecture.svg#svg"
+      ],
+      "id": "diagram:diagrams/architecture.svg#svg",
+      "type": "diagram",
+      "name": "Architecture (svg)",
+      "category": "diagram"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/ingestion.md#mermaid-0"
+      ],
+      "id": "diagram:docs/ingestion.md#mermaid-0",
+      "type": "diagram",
+      "name": "Ingestion flow (mermaid)",
+      "category": "diagram"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/ingestion.md#ingestion"
+      ],
+      "id": "domain:event-ingestion",
+      "type": "domain",
+      "name": "Event Ingestion"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/concepts.md#event"
+      ],
+      "id": "entity:event",
+      "type": "entity",
+      "name": "Event",
+      "category": "definition"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/concepts.md#event-store"
+      ],
+      "id": "entity:event-store",
+      "type": "entity",
+      "name": "Event Store",
+      "category": "definition"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/concepts.md#validator"
+      ],
+      "id": "entity:validator",
+      "type": "entity",
+      "name": "Validator",
+      "category": "definition"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "src/ingest.ts"
+      ],
+      "id": "file:src/ingest.ts",
+      "type": "file",
+      "name": "ingest.ts"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "src/store.ts"
+      ],
+      "id": "file:src/store.ts",
+      "type": "file",
+      "name": "store.ts"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "src/validate.ts"
+      ],
+      "id": "file:src/validate.ts",
+      "type": "file",
+      "name": "validate.ts"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "src/ingest.ts#L21-L25"
+      ],
+      "id": "function:src/ingest.ts:ingestEvent",
+      "type": "function",
+      "name": "ingestEvent"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "src/store.ts#L16-L18"
+      ],
+      "id": "function:src/store.ts:storeEvent",
+      "type": "function",
+      "name": "storeEvent"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "src/validate.ts#L16-L20"
+      ],
+      "id": "function:src/validate.ts:validateEvent",
+      "type": "function",
+      "name": "validateEvent"
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/validation.md#validation"
+      ],
+      "id": "topic:189866d8",
+      "type": "topic",
+      "name": "Validation",
+      "category": "concept",
+      "importance": "low",
+      "importance_score": 0.45,
+      "topic_path": [
+        "event-pipeline",
+        "validation"
+      ]
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/ingestion.md#source-adapters"
+      ],
+      "id": "topic:2c7639cd",
+      "type": "topic",
+      "name": "Source Adapters",
+      "category": "concept",
+      "importance": "medium",
+      "importance_score": 0.6,
+      "topic_path": [
+        "event-pipeline",
+        "ingestion",
+        "source-adapters"
+      ]
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/ingestion.md#webhook-adapter"
+      ],
+      "id": "topic:69b00735",
+      "type": "topic",
+      "name": "Webhook Adapter",
+      "category": "concept",
+      "importance": "medium",
+      "importance_score": 0.5,
+      "topic_path": [
+        "event-pipeline",
+        "ingestion",
+        "source-adapters",
+        "webhook-adapter"
+      ]
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/ingestion.md#ingestion"
+      ],
+      "id": "topic:79c825b8",
+      "type": "topic",
+      "name": "Ingestion",
+      "category": "concept",
+      "importance": "high",
+      "importance_score": 0.85,
+      "topic_path": [
+        "event-pipeline",
+        "ingestion"
+      ]
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/storage.md#storage"
+      ],
+      "id": "topic:a21d1858",
+      "type": "topic",
+      "name": "Storage",
+      "category": "concept",
+      "importance": "medium",
+      "importance_score": 0.55,
+      "topic_path": [
+        "event-pipeline",
+        "storage"
+      ]
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/overview.md#overview"
+      ],
+      "id": "topic:a81857d8",
+      "type": "topic",
+      "name": "Event Pipeline",
+      "category": "concept",
+      "importance": "high",
+      "importance_score": 0.9,
+      "topic_path": [
+        "event-pipeline"
+      ]
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/concepts.md#concepts"
+      ],
+      "id": "wiki_page:docs/concepts.md",
+      "type": "wiki_page",
+      "name": "Concepts",
+      "category": "concept",
+      "importance": "low",
+      "labels": [
+        "glossary",
+        "vocabulary"
+      ]
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/ingestion.md#ingestion"
+      ],
+      "id": "wiki_page:docs/ingestion.md",
+      "type": "wiki_page",
+      "name": "Ingestion",
+      "category": "guide",
+      "importance": "high",
+      "labels": [
+        "ingestion",
+        "pipeline"
+      ]
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/overview.md#overview"
+      ],
+      "id": "wiki_page:docs/overview.md",
+      "type": "wiki_page",
+      "name": "Overview",
+      "category": "overview",
+      "importance": "high",
+      "labels": [
+        "overview"
+      ]
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/storage.md#storage"
+      ],
+      "id": "wiki_page:docs/storage.md",
+      "type": "wiki_page",
+      "name": "Storage",
+      "category": "guide",
+      "importance": "medium",
+      "labels": [
+        "storage",
+        "persistence"
+      ]
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "docs/validation.md#validation"
+      ],
+      "id": "wiki_page:docs/validation.md",
+      "type": "wiki_page",
+      "name": "Validation",
+      "category": "reference",
+      "importance": "medium",
+      "labels": [
+        "validation",
+        "rules"
+      ]
+    },
+    {
+      "confidence": "high",
+      "source_refs": [
+        "index.md#event-pipeline-knowledge-base"
+      ],
+      "id": "wiki_page:index.md",
+      "type": "wiki_page",
+      "name": "Event Pipeline Knowledge Base",
+      "category": "index",
+      "importance": "high",
+      "labels": [
+        "index",
+        "map"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "topic:2c7639cd",
+      "target": "domain:event-ingestion",
+      "type": "belongs_to_domain",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "topic:79c825b8",
+      "target": "domain:event-ingestion",
+      "type": "belongs_to_domain",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "wiki_page:docs/concepts.md",
+      "target": "entity:event",
+      "type": "defines",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "wiki_page:docs/concepts.md",
+      "target": "entity:event-store",
+      "type": "defines",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "wiki_page:docs/concepts.md",
+      "target": "entity:validator",
+      "type": "defines",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "claim:docs/ingestion.md#ingestion:0ee19523",
+      "target": "function:src/validate.ts:validateEvent",
+      "type": "evidenced_by",
+      "direction": "out",
+      "weight": 0.9
+    },
+    {
+      "source": "claim:docs/storage.md#storage:e8805bb0",
+      "target": "function:src/store.ts:storeEvent",
+      "type": "evidenced_by",
+      "direction": "out",
+      "weight": 0.9
+    },
+    {
+      "source": "topic:79c825b8",
+      "target": "diagram:docs/ingestion.md#mermaid-0",
+      "type": "evidenced_by",
+      "direction": "out",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/validate.ts:validateEvent",
+      "target": "entity:validator",
+      "type": "mentions",
+      "direction": "out",
+      "weight": 0.6
+    },
+    {
+      "source": "wiki_page:docs/ingestion.md",
+      "target": "wiki_page:docs/validation.md",
+      "type": "related",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "wiki_page:docs/overview.md",
+      "target": "wiki_page:docs/ingestion.md",
+      "type": "related",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "wiki_page:docs/validation.md",
+      "target": "wiki_page:docs/concepts.md",
+      "type": "related",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "wiki_page:index.md",
+      "target": "wiki_page:docs/concepts.md",
+      "type": "related",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "wiki_page:index.md",
+      "target": "wiki_page:docs/ingestion.md",
+      "type": "related",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "wiki_page:index.md",
+      "target": "wiki_page:docs/overview.md",
+      "type": "related",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "wiki_page:index.md",
+      "target": "wiki_page:docs/storage.md",
+      "type": "related",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "wiki_page:index.md",
+      "target": "wiki_page:docs/validation.md",
+      "type": "related",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "entity:event-store",
+      "target": "topic:a21d1858",
+      "type": "relates_to",
+      "direction": "out",
+      "weight": 0.6
+    },
+    {
+      "source": "entity:validator",
+      "target": "topic:189866d8",
+      "type": "relates_to",
+      "direction": "out",
+      "weight": 0.7
+    },
+    {
+      "source": "topic:189866d8",
+      "target": "topic:a81857d8",
+      "type": "subtopic_of",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "topic:2c7639cd",
+      "target": "topic:79c825b8",
+      "type": "subtopic_of",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "topic:69b00735",
+      "target": "topic:2c7639cd",
+      "type": "subtopic_of",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "topic:79c825b8",
+      "target": "topic:a81857d8",
+      "type": "subtopic_of",
+      "direction": "out",
+      "weight": 1
+    },
+    {
+      "source": "topic:a21d1858",
+      "target": "topic:a81857d8",
+      "type": "subtopic_of",
+      "direction": "out",
+      "weight": 1
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:core",
+      "name": "Core",
+      "description": "Pipeline source files",
+      "nodeIds": [
+        "file:src/ingest.ts",
+        "file:src/validate.ts",
+        "file:src/store.ts"
+      ]
+    }
+  ],
+  "tour": []
+}

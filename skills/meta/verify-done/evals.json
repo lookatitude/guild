@@ -4,12 +4,14 @@
     "Run the final check.",
     "Verify the task is complete.",
     "Run the done-gate on this run.",
-    "Are we ready to close this out?"
+    "Are we ready to close this out?",
+    "I'm about to write 'done' — confirm the change is actually on disk first.",
+    "Tests pass and the lane is ready to hand off — verify the claim before the receipt."
   ],
   "should_not_trigger": [
     "Plan something new.",
     "Compose a team.",
-    "Review the diff.",
+    "Review the specialist handoffs for spec compliance.",
     "Run the tests only.",
     "Start a brainstorm."
   ]

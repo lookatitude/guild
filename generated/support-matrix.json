@@ -1,0 +1,4478 @@
+{
+  "schema_version": "guild.support_matrix.v1",
+  "generated_at": "2026-06-18T10:30:00Z",
+  "source": "host-adapter-results-and-review-progress-schema",
+  "forbidden_final_states": [
+    "contract-only",
+    "target",
+    "detect-only",
+    "deferred"
+  ],
+  "host_ids": [
+    "claude-code-cli",
+    "codex-cli",
+    "pi-cli",
+    "antigravity-cli",
+    "agents-file",
+    "claude-code-app",
+    "claude-code-web",
+    "codex-app",
+    "claude-ai-connector"
+  ],
+  "rows": [
+    {
+      "host_id": "claude-code-cli",
+      "family": "claude",
+      "surface_kind": "cli",
+      "installability": "native",
+      "registry_provenance": "verified",
+      "final_state": "degraded",
+      "final_reason": "host is degraded; matrix contains executable receipts for the unsupported/degraded cells",
+      "operations": {
+        "capability": {
+          "state": "verified",
+          "reason": "registry and adapter capability row resolved",
+          "evidence": [
+            "adapter.capabilities()",
+            "HOST_REGISTRY_ROWS"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_capabilities.v1",
+            "host": "claude-code-cli",
+            "host_id": "claude-code-cli",
+            "known": true,
+            "family": "claude",
+            "surface_kind": "cli",
+            "installability": "native",
+            "result_adapter": false,
+            "dispatch_selectable": true,
+            "provenance": "verified",
+            "runtime_surfaces": {
+              "interaction": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "interaction",
+                "host": "claude-code-cli",
+                "rung": "native",
+                "degraded": false,
+                "inferred": false,
+                "reason": "interaction@claude-code-cli resolves to \"native\""
+              },
+              "session": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "session",
+                "host": "claude-code-cli",
+                "rung": "native",
+                "degraded": false,
+                "inferred": false,
+                "reason": "session@claude-code-cli resolves to \"native\""
+              },
+              "semantic_tool": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "semantic_tool",
+                "host": "claude-code-cli",
+                "rung": "native",
+                "degraded": false,
+                "inferred": false,
+                "reason": "semantic_tool@claude-code-cli resolves to \"native\""
+              },
+              "browser": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "browser",
+                "host": "claude-code-cli",
+                "rung": "bridged",
+                "degraded": true,
+                "inferred": false,
+                "reason": "browser@claude-code-cli resolves to \"bridged\""
+              }
+            },
+            "unavailable_operations": []
+          }
+        },
+        "command_surface": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Claude Code exposes Guild commands as native markdown slash-command files",
+          "evidence": [
+            "adapter.renderCommandSurface()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-cli",
+            "operation": "renderCommandSurface",
+            "status": "ok",
+            "reason": "Claude Code exposes Guild commands as native markdown slash-command files",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-cli",
+              "rung": "native",
+              "degraded": false,
+              "inferred": false,
+              "reason": "semantic_tool@claude-code-cli resolves to \"native\""
+            }
+          }
+        },
+        "permission_decision": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Claude Code supports deny/ask/allow through PreToolUse and permission-mode launch flags",
+          "evidence": [
+            "adapter.renderPermissionDecision()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-cli",
+            "operation": "renderPermissionDecision",
+            "status": "ok",
+            "reason": "Claude Code supports deny/ask/allow through PreToolUse and permission-mode launch flags",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-cli",
+              "rung": "native",
+              "degraded": false,
+              "inferred": false,
+              "reason": "semantic_tool@claude-code-cli resolves to \"native\""
+            }
+          }
+        },
+        "preflight": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Claude Code hook preflight is registry-verified and includes using-guild SessionStart injection",
+          "evidence": [
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-cli",
+            "operation": "preflight",
+            "status": "ok",
+            "reason": "Claude Code hook preflight is registry-verified and includes using-guild SessionStart injection",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "claude-code-cli",
+              "rung": "native",
+              "degraded": false,
+              "inferred": false,
+              "reason": "session@claude-code-cli resolves to \"native\""
+            }
+          }
+        },
+        "model_params": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Claude CLI maps model/effort, but cannot enforce unsupported model param key(s): reasoning, thinking, verbosity",
+          "evidence": [
+            "adapter.resolveModelParams()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-cli",
+            "operation": "resolveModelParams",
+            "status": "degraded",
+            "reason": "Claude CLI maps model/effort, but cannot enforce unsupported model param key(s): reasoning, thinking, verbosity",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-cli",
+              "rung": "native",
+              "degraded": false,
+              "inferred": false,
+              "reason": "semantic_tool@claude-code-cli resolves to \"native\""
+            }
+          }
+        },
+        "memory": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Claude memory registry enables native stdio MCP first and records filesystem/BM25 fallback degradation",
+          "evidence": [
+            "adapter.memory()",
+            "scripts/lib/memory-adapter.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-cli",
+            "operation": "memory",
+            "status": "ok",
+            "reason": "Claude memory registry enables native stdio MCP first and records filesystem/BM25 fallback degradation",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-cli",
+              "rung": "native",
+              "degraded": false,
+              "inferred": false,
+              "reason": "semantic_tool@claude-code-cli resolves to \"native\""
+            }
+          }
+        },
+        "dispatch": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Claude dispatch uses the existing Claude pane/reference command builder",
+          "evidence": [
+            "adapter.dispatch()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-cli",
+            "operation": "dispatch",
+            "status": "ok",
+            "reason": "Claude dispatch uses the existing Claude pane/reference command builder",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "claude-code-cli",
+              "rung": "native",
+              "degraded": false,
+              "inferred": false,
+              "reason": "session@claude-code-cli resolves to \"native\""
+            }
+          }
+        },
+        "hook_normalization": {
+          "state": "verified",
+          "reason": "host has native hook capability in the registry row",
+          "evidence": [
+            "HOST_REGISTRY_ROWS[host].capabilities.hooks"
+          ],
+          "receipt": {
+            "schema_version": "guild.hook_normalization_receipt.v1",
+            "host": "claude-code-cli",
+            "native_hooks": true
+          }
+        },
+        "review_progress": {
+          "state": "verified",
+          "reason": "all 10 canonical review_progress.v1 states validate",
+          "evidence": [
+            "scripts/lib/review-progress.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.review_progress_coverage.v1",
+            "states": [
+              "launched",
+              "running",
+              "heartbeat",
+              "activity",
+              "no_output",
+              "reviewer_error",
+              "tool_error",
+              "cancelled",
+              "skipped",
+              "succeeded"
+            ],
+            "valid": true,
+            "errors": []
+          }
+        },
+        "install_or_app_refusal": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Claude Code has the verified native .claude-plugin package shape",
+          "evidence": [
+            "adapter.renderPackage()",
+            "plugin/install.sh"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-cli",
+            "operation": "renderPackage",
+            "status": "ok",
+            "reason": "Claude Code has the verified native .claude-plugin package shape",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-cli",
+              "rung": "native",
+              "degraded": false,
+              "inferred": false,
+              "reason": "semantic_tool@claude-code-cli resolves to \"native\""
+            }
+          }
+        }
+      },
+      "lifecycle_smoke": {
+        "state": "verified",
+        "phases": {
+          "idea": {
+            "state": "verified",
+            "reason": "idea lifecycle smoke has verified preflight, memory, dispatch",
+            "evidence": [
+              "lifecycle:idea",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-cli",
+              "phase": "idea",
+              "component_states": [
+                "verified",
+                "verified",
+                "verified"
+              ]
+            }
+          },
+          "research": {
+            "state": "verified",
+            "reason": "research lifecycle smoke has verified preflight, memory, dispatch",
+            "evidence": [
+              "lifecycle:research",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-cli",
+              "phase": "research",
+              "component_states": [
+                "verified",
+                "verified",
+                "verified"
+              ]
+            }
+          },
+          "brainstorm": {
+            "state": "verified",
+            "reason": "brainstorm lifecycle smoke has verified preflight, memory, dispatch",
+            "evidence": [
+              "lifecycle:brainstorm",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-cli",
+              "phase": "brainstorm",
+              "component_states": [
+                "verified",
+                "verified",
+                "verified"
+              ]
+            }
+          },
+          "spec": {
+            "state": "verified",
+            "reason": "spec lifecycle smoke has verified preflight, memory, dispatch",
+            "evidence": [
+              "lifecycle:spec",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-cli",
+              "phase": "spec",
+              "component_states": [
+                "verified",
+                "verified",
+                "verified"
+              ]
+            }
+          },
+          "plan": {
+            "state": "verified",
+            "reason": "plan lifecycle smoke has verified preflight, memory, dispatch",
+            "evidence": [
+              "lifecycle:plan",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-cli",
+              "phase": "plan",
+              "component_states": [
+                "verified",
+                "verified",
+                "verified"
+              ]
+            }
+          },
+          "build": {
+            "state": "verified",
+            "reason": "build lifecycle smoke has verified preflight, memory, dispatch",
+            "evidence": [
+              "lifecycle:build",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-cli",
+              "phase": "build",
+              "component_states": [
+                "verified",
+                "verified",
+                "verified"
+              ]
+            }
+          },
+          "qa": {
+            "state": "verified",
+            "reason": "qa lifecycle smoke has verified preflight, memory, dispatch",
+            "evidence": [
+              "lifecycle:qa",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-cli",
+              "phase": "qa",
+              "component_states": [
+                "verified",
+                "verified",
+                "verified"
+              ]
+            }
+          },
+          "review": {
+            "state": "verified",
+            "reason": "review lifecycle smoke has verified preflight, memory, dispatch, and review progress",
+            "evidence": [
+              "lifecycle:review",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()",
+              "scripts/lib/review-progress.ts"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-cli",
+              "phase": "review",
+              "component_states": [
+                "verified",
+                "verified",
+                "verified",
+                "verified"
+              ]
+            }
+          },
+          "ops": {
+            "state": "verified",
+            "reason": "ops lifecycle smoke has verified preflight, memory, dispatch",
+            "evidence": [
+              "lifecycle:ops",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-cli",
+              "phase": "ops",
+              "component_states": [
+                "verified",
+                "verified",
+                "verified"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "host_id": "codex-cli",
+      "family": "codex",
+      "surface_kind": "cli",
+      "installability": "target",
+      "registry_provenance": "verified",
+      "final_state": "degraded",
+      "final_reason": "host is degraded; matrix contains executable receipts for the unsupported/degraded cells",
+      "operations": {
+        "capability": {
+          "state": "verified",
+          "reason": "registry and adapter capability row resolved",
+          "evidence": [
+            "adapter.capabilities()",
+            "HOST_REGISTRY_ROWS"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_capabilities.v1",
+            "host": "codex-cli",
+            "host_id": "codex-cli",
+            "known": true,
+            "family": "codex",
+            "surface_kind": "cli",
+            "installability": "target",
+            "result_adapter": true,
+            "dispatch_selectable": true,
+            "provenance": "verified",
+            "runtime_surfaces": {
+              "interaction": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "interaction",
+                "host": "codex-cli",
+                "rung": "wrapped",
+                "degraded": true,
+                "inferred": false,
+                "reason": "interaction@codex-cli resolves to \"wrapped\""
+              },
+              "session": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "session",
+                "host": "codex-cli",
+                "rung": "wrapped",
+                "degraded": true,
+                "inferred": false,
+                "reason": "session@codex-cli resolves to \"wrapped\""
+              },
+              "semantic_tool": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "semantic_tool",
+                "host": "codex-cli",
+                "rung": "bridged",
+                "degraded": true,
+                "inferred": false,
+                "reason": "semantic_tool@codex-cli resolves to \"bridged\""
+              },
+              "browser": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "browser",
+                "host": "codex-cli",
+                "rung": "bridged",
+                "degraded": true,
+                "inferred": false,
+                "reason": "browser@codex-cli resolves to \"bridged\""
+              }
+            },
+            "unavailable_operations": []
+          }
+        },
+        "command_surface": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Codex plugin renders command descriptors but has no Claude-style slash markdown files",
+          "evidence": [
+            "adapter.renderCommandSurface()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-cli",
+            "operation": "renderCommandSurface",
+            "status": "degraded",
+            "reason": "Codex plugin renders command descriptors but has no Claude-style slash markdown files",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "codex-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": false,
+              "reason": "semantic_tool@codex-cli resolves to \"bridged\""
+            }
+          }
+        },
+        "permission_decision": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Codex permission mode maps through CLI approval/sandbox flags where available",
+          "evidence": [
+            "adapter.renderPermissionDecision()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-cli",
+            "operation": "renderPermissionDecision",
+            "status": "ok",
+            "reason": "Codex permission mode maps through CLI approval/sandbox flags where available",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "codex-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": false,
+              "reason": "semantic_tool@codex-cli resolves to \"bridged\""
+            }
+          }
+        },
+        "preflight": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Codex CLI has no native Guild hooks; preflight is wrapper/instruction-file based",
+          "evidence": [
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-cli",
+            "operation": "preflight",
+            "status": "degraded",
+            "reason": "Codex CLI has no native Guild hooks; preflight is wrapper/instruction-file based",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "codex-cli",
+              "rung": "wrapped",
+              "degraded": true,
+              "inferred": false,
+              "reason": "session@codex-cli resolves to \"wrapped\""
+            }
+          }
+        },
+        "model_params": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Codex CLI maps model plus effort/reasoning, but cannot enforce unsupported model param key(s): thinking, verbosity",
+          "evidence": [
+            "adapter.resolveModelParams()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-cli",
+            "operation": "resolveModelParams",
+            "status": "degraded",
+            "reason": "Codex CLI maps model plus effort/reasoning, but cannot enforce unsupported model param key(s): thinking, verbosity",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "codex-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": false,
+              "reason": "semantic_tool@codex-cli resolves to \"bridged\""
+            }
+          }
+        },
+        "memory": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Codex CLI uses filesystem/BM25 Guild memory until native MCP memory is available",
+          "evidence": [
+            "adapter.memory()",
+            "scripts/lib/memory-adapter.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-cli",
+            "operation": "memory",
+            "status": "degraded",
+            "reason": "Codex CLI uses filesystem/BM25 Guild memory until native MCP memory is available",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "codex-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": false,
+              "reason": "semantic_tool@codex-cli resolves to \"bridged\""
+            }
+          }
+        },
+        "dispatch": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Codex CLI dispatch uses codex exec with wrapper bootstrap when needed",
+          "evidence": [
+            "adapter.dispatch()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-cli",
+            "operation": "dispatch",
+            "status": "ok",
+            "reason": "Codex CLI dispatch uses codex exec with wrapper bootstrap when needed",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "codex-cli",
+              "rung": "wrapped",
+              "degraded": true,
+              "inferred": false,
+              "reason": "session@codex-cli resolves to \"wrapped\""
+            }
+          }
+        },
+        "hook_normalization": {
+          "state": "degraded",
+          "reason": "host has no native hooks; GuildHookEvent normalization uses forwarded/file-bus/preflight receipts",
+          "evidence": [
+            "hooks/lib/guild-hook-event.ts",
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.degradation_receipt.v1",
+            "surface": "session",
+            "host": "codex-cli",
+            "rung": "wrapped",
+            "degraded": true,
+            "inferred": false,
+            "reason": "session@codex-cli resolves to \"wrapped\""
+          }
+        },
+        "review_progress": {
+          "state": "verified",
+          "reason": "all 10 canonical review_progress.v1 states validate",
+          "evidence": [
+            "scripts/lib/review-progress.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.review_progress_coverage.v1",
+            "states": [
+              "launched",
+              "running",
+              "heartbeat",
+              "activity",
+              "no_output",
+              "reviewer_error",
+              "tool_error",
+              "cancelled",
+              "skipped",
+              "succeeded"
+            ],
+            "valid": true,
+            "errors": []
+          }
+        },
+        "install_or_app_refusal": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Codex package target renders .codex-plugin plus .agents skill tree; live install is target-level",
+          "evidence": [
+            "adapter.renderPackage()",
+            "plugin/install.sh"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-cli",
+            "operation": "renderPackage",
+            "status": "degraded",
+            "reason": "Codex package target renders .codex-plugin plus .agents skill tree; live install is target-level",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "codex-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": false,
+              "reason": "semantic_tool@codex-cli resolves to \"bridged\""
+            }
+          }
+        }
+      },
+      "lifecycle_smoke": {
+        "state": "degraded",
+        "phases": {
+          "idea": {
+            "state": "degraded",
+            "reason": "idea lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:idea",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-cli",
+              "phase": "idea",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "research": {
+            "state": "degraded",
+            "reason": "research lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:research",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-cli",
+              "phase": "research",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "brainstorm": {
+            "state": "degraded",
+            "reason": "brainstorm lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:brainstorm",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-cli",
+              "phase": "brainstorm",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "spec": {
+            "state": "degraded",
+            "reason": "spec lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:spec",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-cli",
+              "phase": "spec",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "plan": {
+            "state": "degraded",
+            "reason": "plan lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:plan",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-cli",
+              "phase": "plan",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "build": {
+            "state": "degraded",
+            "reason": "build lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:build",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-cli",
+              "phase": "build",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "qa": {
+            "state": "degraded",
+            "reason": "qa lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:qa",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-cli",
+              "phase": "qa",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "review": {
+            "state": "degraded",
+            "reason": "review lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:review",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()",
+              "scripts/lib/review-progress.ts"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-cli",
+              "phase": "review",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified",
+                "verified"
+              ]
+            }
+          },
+          "ops": {
+            "state": "degraded",
+            "reason": "ops lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:ops",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-cli",
+              "phase": "ops",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "host_id": "pi-cli",
+      "family": "pi",
+      "surface_kind": "cli",
+      "installability": "target",
+      "registry_provenance": "verified",
+      "final_state": "degraded",
+      "final_reason": "host is degraded; matrix contains executable receipts for the unsupported/degraded cells",
+      "operations": {
+        "capability": {
+          "state": "verified",
+          "reason": "registry and adapter capability row resolved",
+          "evidence": [
+            "adapter.capabilities()",
+            "HOST_REGISTRY_ROWS"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_capabilities.v1",
+            "host": "pi-cli",
+            "host_id": "pi-cli",
+            "known": true,
+            "family": "pi",
+            "surface_kind": "cli",
+            "installability": "target",
+            "result_adapter": false,
+            "dispatch_selectable": true,
+            "provenance": "verified",
+            "runtime_surfaces": {
+              "interaction": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "interaction",
+                "host": "pi-cli",
+                "rung": "wrapped",
+                "degraded": true,
+                "inferred": true,
+                "reason": "interaction@pi-cli resolves to \"wrapped\" (INFERRED — verify at live-host availability)"
+              },
+              "session": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "session",
+                "host": "pi-cli",
+                "rung": "native",
+                "degraded": false,
+                "inferred": true,
+                "reason": "session@pi-cli resolves to \"native\" (INFERRED — verify at live-host availability)"
+              },
+              "semantic_tool": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "semantic_tool",
+                "host": "pi-cli",
+                "rung": "bridged",
+                "degraded": true,
+                "inferred": true,
+                "reason": "semantic_tool@pi-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+              },
+              "browser": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "browser",
+                "host": "pi-cli",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "browser@pi-cli resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              }
+            },
+            "unavailable_operations": []
+          }
+        },
+        "command_surface": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Pi package renders Guild commands as extension command descriptors and AGENTS.md bootstrap instructions",
+          "evidence": [
+            "adapter.renderCommandSurface()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "pi-cli",
+            "operation": "renderCommandSurface",
+            "status": "ok",
+            "reason": "Pi package renders Guild commands as extension command descriptors and AGENTS.md bootstrap instructions",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "pi-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@pi-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "permission_decision": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Pi has no Guild permission hook; decisions render to pi tool allow/deny launch flags and recorded policy receipts",
+          "evidence": [
+            "adapter.renderPermissionDecision()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "pi-cli",
+            "operation": "renderPermissionDecision",
+            "status": "degraded",
+            "reason": "Pi has no Guild permission hook; decisions render to pi tool allow/deny launch flags and recorded policy receipts",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "pi-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@pi-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "preflight": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Pi has no native Guild hooks/MCP; preflight uses the CLI binary probe plus file-bus fallback receipts",
+          "evidence": [
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "pi-cli",
+            "operation": "preflight",
+            "status": "degraded",
+            "reason": "Pi has no native Guild hooks/MCP; preflight uses the CLI binary probe plus file-bus fallback receipts",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "pi-cli",
+              "rung": "native",
+              "degraded": false,
+              "inferred": true,
+              "reason": "session@pi-cli resolves to \"native\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "model_params": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Pi maps model/provider/effort, but cannot enforce unsupported model param key(s): reasoning, verbosity",
+          "evidence": [
+            "adapter.resolveModelParams()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "pi-cli",
+            "operation": "resolveModelParams",
+            "status": "degraded",
+            "reason": "Pi maps model/provider/effort, but cannot enforce unsupported model param key(s): reasoning, verbosity",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "pi-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@pi-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "memory": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Pi memory uses the package bridge when present and filesystem/BM25 fallback through the active .guild root",
+          "evidence": [
+            "adapter.memory()",
+            "scripts/lib/memory-adapter.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "pi-cli",
+            "operation": "memory",
+            "status": "degraded",
+            "reason": "Pi memory uses the package bridge when present and filesystem/BM25 fallback through the active .guild root",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "pi-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@pi-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "dispatch": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Pi dispatch uses pi -p through tmux/plain-process substrate and file-bus coordination",
+          "evidence": [
+            "adapter.dispatch()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "pi-cli",
+            "operation": "dispatch",
+            "status": "ok",
+            "reason": "Pi dispatch uses pi -p through tmux/plain-process substrate and file-bus coordination",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "pi-cli",
+              "rung": "native",
+              "degraded": false,
+              "inferred": true,
+              "reason": "session@pi-cli resolves to \"native\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "hook_normalization": {
+          "state": "degraded",
+          "reason": "host has no native hooks; GuildHookEvent normalization uses forwarded/file-bus/preflight receipts",
+          "evidence": [
+            "hooks/lib/guild-hook-event.ts",
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.degradation_receipt.v1",
+            "surface": "session",
+            "host": "pi-cli",
+            "rung": "native",
+            "degraded": false,
+            "inferred": true,
+            "reason": "session@pi-cli resolves to \"native\" (INFERRED — verify at live-host availability)"
+          }
+        },
+        "review_progress": {
+          "state": "verified",
+          "reason": "all 10 canonical review_progress.v1 states validate",
+          "evidence": [
+            "scripts/lib/review-progress.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.review_progress_coverage.v1",
+            "states": [
+              "launched",
+              "running",
+              "heartbeat",
+              "activity",
+              "no_output",
+              "reviewer_error",
+              "tool_error",
+              "cancelled",
+              "skipped",
+              "succeeded"
+            ],
+            "valid": true,
+            "errors": []
+          }
+        },
+        "install_or_app_refusal": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Pi package target renders pi-manifest.json plus Guild skill tree; installability remains target until live install evidence",
+          "evidence": [
+            "adapter.renderPackage()",
+            "plugin/install.sh"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "pi-cli",
+            "operation": "renderPackage",
+            "status": "degraded",
+            "reason": "Pi package target renders pi-manifest.json plus Guild skill tree; installability remains target until live install evidence",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "pi-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@pi-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        }
+      },
+      "lifecycle_smoke": {
+        "state": "degraded",
+        "phases": {
+          "idea": {
+            "state": "degraded",
+            "reason": "idea lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:idea",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "pi-cli",
+              "phase": "idea",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "research": {
+            "state": "degraded",
+            "reason": "research lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:research",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "pi-cli",
+              "phase": "research",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "brainstorm": {
+            "state": "degraded",
+            "reason": "brainstorm lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:brainstorm",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "pi-cli",
+              "phase": "brainstorm",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "spec": {
+            "state": "degraded",
+            "reason": "spec lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:spec",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "pi-cli",
+              "phase": "spec",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "plan": {
+            "state": "degraded",
+            "reason": "plan lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:plan",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "pi-cli",
+              "phase": "plan",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "build": {
+            "state": "degraded",
+            "reason": "build lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:build",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "pi-cli",
+              "phase": "build",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "qa": {
+            "state": "degraded",
+            "reason": "qa lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:qa",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "pi-cli",
+              "phase": "qa",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "review": {
+            "state": "degraded",
+            "reason": "review lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:review",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()",
+              "scripts/lib/review-progress.ts"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "pi-cli",
+              "phase": "review",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified",
+                "verified"
+              ]
+            }
+          },
+          "ops": {
+            "state": "degraded",
+            "reason": "ops lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:ops",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "pi-cli",
+              "phase": "ops",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "host_id": "antigravity-cli",
+      "family": "antigravity",
+      "surface_kind": "cli",
+      "installability": "target",
+      "registry_provenance": "verified",
+      "final_state": "degraded",
+      "final_reason": "host is degraded; matrix contains executable receipts for the unsupported/degraded cells",
+      "operations": {
+        "capability": {
+          "state": "verified",
+          "reason": "registry and adapter capability row resolved",
+          "evidence": [
+            "adapter.capabilities()",
+            "HOST_REGISTRY_ROWS"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_capabilities.v1",
+            "host": "antigravity-cli",
+            "host_id": "antigravity-cli",
+            "known": true,
+            "family": "antigravity",
+            "surface_kind": "cli",
+            "installability": "target",
+            "result_adapter": false,
+            "dispatch_selectable": true,
+            "provenance": "verified",
+            "runtime_surfaces": {
+              "interaction": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "interaction",
+                "host": "antigravity-cli",
+                "rung": "wrapped",
+                "degraded": true,
+                "inferred": true,
+                "reason": "interaction@antigravity-cli resolves to \"wrapped\" (INFERRED — verify at live-host availability)"
+              },
+              "session": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "session",
+                "host": "antigravity-cli",
+                "rung": "wrapped",
+                "degraded": true,
+                "inferred": true,
+                "reason": "session@antigravity-cli resolves to \"wrapped\" (INFERRED — verify at live-host availability)"
+              },
+              "semantic_tool": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "semantic_tool",
+                "host": "antigravity-cli",
+                "rung": "bridged",
+                "degraded": true,
+                "inferred": true,
+                "reason": "semantic_tool@antigravity-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+              },
+              "browser": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "browser",
+                "host": "antigravity-cli",
+                "rung": "native",
+                "degraded": false,
+                "inferred": true,
+                "reason": "browser@antigravity-cli resolves to \"native\" (INFERRED — verify at live-host availability)"
+              }
+            },
+            "unavailable_operations": []
+          }
+        },
+        "command_surface": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Antigravity package renders Guild commands as plugin command descriptors and AGENTS.md bootstrap instructions",
+          "evidence": [
+            "adapter.renderCommandSurface()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "antigravity-cli",
+            "operation": "renderCommandSurface",
+            "status": "ok",
+            "reason": "Antigravity package renders Guild commands as plugin command descriptors and AGENTS.md bootstrap instructions",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "antigravity-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@antigravity-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "permission_decision": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Antigravity has no per-tool Guild permission hook; sandbox/bypass are coarse launch modes recorded as degraded policy receipts",
+          "evidence": [
+            "adapter.renderPermissionDecision()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "antigravity-cli",
+            "operation": "renderPermissionDecision",
+            "status": "degraded",
+            "reason": "Antigravity has no per-tool Guild permission hook; sandbox/bypass are coarse launch modes recorded as degraded policy receipts",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "antigravity-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@antigravity-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "preflight": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Antigravity CLI has no native Guild hooks/MCP; preflight uses agy plus file-bus fallback receipts",
+          "evidence": [
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "antigravity-cli",
+            "operation": "preflight",
+            "status": "degraded",
+            "reason": "Antigravity CLI has no native Guild hooks/MCP; preflight uses agy plus file-bus fallback receipts",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "antigravity-cli",
+              "rung": "wrapped",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@antigravity-cli resolves to \"wrapped\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "model_params": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Antigravity maps model, but cannot enforce unsupported model param key(s): effort, reasoning, thinking, verbosity",
+          "evidence": [
+            "adapter.resolveModelParams()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "antigravity-cli",
+            "operation": "resolveModelParams",
+            "status": "degraded",
+            "reason": "Antigravity maps model, but cannot enforce unsupported model param key(s): effort, reasoning, thinking, verbosity",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "antigravity-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@antigravity-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "memory": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Antigravity memory uses the package bridge when present and filesystem/BM25 fallback through the active .guild root",
+          "evidence": [
+            "adapter.memory()",
+            "scripts/lib/memory-adapter.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "antigravity-cli",
+            "operation": "memory",
+            "status": "degraded",
+            "reason": "Antigravity memory uses the package bridge when present and filesystem/BM25 fallback through the active .guild root",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "antigravity-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@antigravity-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "dispatch": {
+          "state": "verified",
+          "status": "ok",
+          "reason": "Antigravity dispatch uses agy -p through tmux/plain-process substrate and file-bus coordination",
+          "evidence": [
+            "adapter.dispatch()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "antigravity-cli",
+            "operation": "dispatch",
+            "status": "ok",
+            "reason": "Antigravity dispatch uses agy -p through tmux/plain-process substrate and file-bus coordination",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "antigravity-cli",
+              "rung": "wrapped",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@antigravity-cli resolves to \"wrapped\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "hook_normalization": {
+          "state": "degraded",
+          "reason": "host has no native hooks; GuildHookEvent normalization uses forwarded/file-bus/preflight receipts",
+          "evidence": [
+            "hooks/lib/guild-hook-event.ts",
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.degradation_receipt.v1",
+            "surface": "session",
+            "host": "antigravity-cli",
+            "rung": "wrapped",
+            "degraded": true,
+            "inferred": true,
+            "reason": "session@antigravity-cli resolves to \"wrapped\" (INFERRED — verify at live-host availability)"
+          }
+        },
+        "review_progress": {
+          "state": "verified",
+          "reason": "all 10 canonical review_progress.v1 states validate",
+          "evidence": [
+            "scripts/lib/review-progress.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.review_progress_coverage.v1",
+            "states": [
+              "launched",
+              "running",
+              "heartbeat",
+              "activity",
+              "no_output",
+              "reviewer_error",
+              "tool_error",
+              "cancelled",
+              "skipped",
+              "succeeded"
+            ],
+            "valid": true,
+            "errors": []
+          }
+        },
+        "install_or_app_refusal": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "Antigravity package target renders antigravity-manifest.json plus Guild skill tree; installability remains target until live install evidence",
+          "evidence": [
+            "adapter.renderPackage()",
+            "plugin/install.sh"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "antigravity-cli",
+            "operation": "renderPackage",
+            "status": "degraded",
+            "reason": "Antigravity package target renders antigravity-manifest.json plus Guild skill tree; installability remains target until live install evidence",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "antigravity-cli",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@antigravity-cli resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        }
+      },
+      "lifecycle_smoke": {
+        "state": "degraded",
+        "phases": {
+          "idea": {
+            "state": "degraded",
+            "reason": "idea lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:idea",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "antigravity-cli",
+              "phase": "idea",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "research": {
+            "state": "degraded",
+            "reason": "research lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:research",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "antigravity-cli",
+              "phase": "research",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "brainstorm": {
+            "state": "degraded",
+            "reason": "brainstorm lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:brainstorm",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "antigravity-cli",
+              "phase": "brainstorm",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "spec": {
+            "state": "degraded",
+            "reason": "spec lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:spec",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "antigravity-cli",
+              "phase": "spec",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "plan": {
+            "state": "degraded",
+            "reason": "plan lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:plan",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "antigravity-cli",
+              "phase": "plan",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "build": {
+            "state": "degraded",
+            "reason": "build lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:build",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "antigravity-cli",
+              "phase": "build",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "qa": {
+            "state": "degraded",
+            "reason": "qa lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:qa",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "antigravity-cli",
+              "phase": "qa",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "review": {
+            "state": "degraded",
+            "reason": "review lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:review",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()",
+              "scripts/lib/review-progress.ts"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "antigravity-cli",
+              "phase": "review",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified",
+                "verified"
+              ]
+            }
+          },
+          "ops": {
+            "state": "degraded",
+            "reason": "ops lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:ops",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "antigravity-cli",
+              "phase": "ops",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "host_id": "agents-file",
+      "family": "agents",
+      "surface_kind": "file",
+      "installability": "target",
+      "registry_provenance": "inferred",
+      "final_state": "degraded",
+      "final_reason": "host is degraded; matrix contains executable receipts for the unsupported/degraded cells",
+      "operations": {
+        "capability": {
+          "state": "verified",
+          "reason": "registry and adapter capability row resolved",
+          "evidence": [
+            "adapter.capabilities()",
+            "HOST_REGISTRY_ROWS"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_capabilities.v1",
+            "host": "agents-file",
+            "host_id": "agents-file",
+            "known": true,
+            "family": "agents",
+            "surface_kind": "file",
+            "installability": "target",
+            "result_adapter": false,
+            "dispatch_selectable": true,
+            "provenance": "inferred",
+            "runtime_surfaces": {
+              "interaction": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "interaction",
+                "host": "agents-file",
+                "rung": "bridged",
+                "degraded": true,
+                "inferred": true,
+                "reason": "interaction@agents-file resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+              },
+              "session": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "session",
+                "host": "agents-file",
+                "rung": "emulated",
+                "degraded": true,
+                "inferred": true,
+                "reason": "session@agents-file resolves to \"emulated\" (INFERRED — verify at live-host availability)"
+              },
+              "semantic_tool": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "semantic_tool",
+                "host": "agents-file",
+                "rung": "bridged",
+                "degraded": true,
+                "inferred": true,
+                "reason": "semantic_tool@agents-file resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+              },
+              "browser": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "browser",
+                "host": "agents-file",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "browser@agents-file resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              }
+            },
+            "unavailable_operations": [
+              "renderPermissionDecision"
+            ]
+          }
+        },
+        "command_surface": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "agents-file exposes instructions and skills, not native command descriptors",
+          "evidence": [
+            "adapter.renderCommandSurface()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "agents-file",
+            "operation": "renderCommandSurface",
+            "status": "degraded",
+            "reason": "agents-file exposes instructions and skills, not native command descriptors",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "agents-file",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@agents-file resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "permission_decision": {
+          "state": "unavailable",
+          "status": "unavailable",
+          "reason": "agents-file has no permission API; consuming host policy owns approval",
+          "evidence": [
+            "adapter.renderPermissionDecision()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "agents-file",
+            "operation": "renderPermissionDecision",
+            "status": "unavailable",
+            "reason": "agents-file has no permission API; consuming host policy owns approval",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "agents-file",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@agents-file resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "preflight": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "agents-file has no host runtime hooks; the consuming host performs execution",
+          "evidence": [
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "agents-file",
+            "operation": "preflight",
+            "status": "degraded",
+            "reason": "agents-file has no host runtime hooks; the consuming host performs execution",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "agents-file",
+              "rung": "emulated",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@agents-file resolves to \"emulated\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "model_params": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "agents-file records desired model params but cannot enforce host-native model flags",
+          "evidence": [
+            "adapter.resolveModelParams()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "agents-file",
+            "operation": "resolveModelParams",
+            "status": "degraded",
+            "reason": "agents-file records desired model params but cannot enforce host-native model flags",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "agents-file",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@agents-file resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "memory": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "agents-file uses shared .guild memory through the consuming host",
+          "evidence": [
+            "adapter.memory()",
+            "scripts/lib/memory-adapter.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "agents-file",
+            "operation": "memory",
+            "status": "degraded",
+            "reason": "agents-file uses shared .guild memory through the consuming host",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "agents-file",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@agents-file resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "dispatch": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "agents-file is an instruction package target, not a process launcher",
+          "evidence": [
+            "adapter.dispatch()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "agents-file",
+            "operation": "dispatch",
+            "status": "degraded",
+            "reason": "agents-file is an instruction package target, not a process launcher",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "agents-file",
+              "rung": "emulated",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@agents-file resolves to \"emulated\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "hook_normalization": {
+          "state": "degraded",
+          "reason": "host has no native hooks; GuildHookEvent normalization uses forwarded/file-bus/preflight receipts",
+          "evidence": [
+            "hooks/lib/guild-hook-event.ts",
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.degradation_receipt.v1",
+            "surface": "session",
+            "host": "agents-file",
+            "rung": "emulated",
+            "degraded": true,
+            "inferred": true,
+            "reason": "session@agents-file resolves to \"emulated\" (INFERRED — verify at live-host availability)"
+          }
+        },
+        "review_progress": {
+          "state": "verified",
+          "reason": "all 10 canonical review_progress.v1 states validate",
+          "evidence": [
+            "scripts/lib/review-progress.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.review_progress_coverage.v1",
+            "states": [
+              "launched",
+              "running",
+              "heartbeat",
+              "activity",
+              "no_output",
+              "reviewer_error",
+              "tool_error",
+              "cancelled",
+              "skipped",
+              "succeeded"
+            ],
+            "valid": true,
+            "errors": []
+          }
+        },
+        "install_or_app_refusal": {
+          "state": "degraded",
+          "status": "degraded",
+          "reason": "agents-file renders AGENTS.md plus .agents/skills/guild for any AGENTS-consuming host",
+          "evidence": [
+            "adapter.renderPackage()",
+            "plugin/install.sh"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "agents-file",
+            "operation": "renderPackage",
+            "status": "degraded",
+            "reason": "agents-file renders AGENTS.md plus .agents/skills/guild for any AGENTS-consuming host",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "agents-file",
+              "rung": "bridged",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@agents-file resolves to \"bridged\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        }
+      },
+      "lifecycle_smoke": {
+        "state": "degraded",
+        "phases": {
+          "idea": {
+            "state": "degraded",
+            "reason": "idea lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:idea",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "agents-file",
+              "phase": "idea",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "degraded"
+              ]
+            }
+          },
+          "research": {
+            "state": "degraded",
+            "reason": "research lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:research",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "agents-file",
+              "phase": "research",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "degraded"
+              ]
+            }
+          },
+          "brainstorm": {
+            "state": "degraded",
+            "reason": "brainstorm lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:brainstorm",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "agents-file",
+              "phase": "brainstorm",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "degraded"
+              ]
+            }
+          },
+          "spec": {
+            "state": "degraded",
+            "reason": "spec lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:spec",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "agents-file",
+              "phase": "spec",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "degraded"
+              ]
+            }
+          },
+          "plan": {
+            "state": "degraded",
+            "reason": "plan lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:plan",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "agents-file",
+              "phase": "plan",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "degraded"
+              ]
+            }
+          },
+          "build": {
+            "state": "degraded",
+            "reason": "build lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:build",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "agents-file",
+              "phase": "build",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "degraded"
+              ]
+            }
+          },
+          "qa": {
+            "state": "degraded",
+            "reason": "qa lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:qa",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "agents-file",
+              "phase": "qa",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "degraded"
+              ]
+            }
+          },
+          "review": {
+            "state": "degraded",
+            "reason": "review lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:review",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()",
+              "scripts/lib/review-progress.ts"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "agents-file",
+              "phase": "review",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "degraded",
+                "verified"
+              ]
+            }
+          },
+          "ops": {
+            "state": "degraded",
+            "reason": "ops lifecycle smoke uses explicit degraded receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:ops",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "agents-file",
+              "phase": "ops",
+              "component_states": [
+                "degraded",
+                "degraded",
+                "degraded"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "host_id": "claude-code-app",
+      "family": "claude",
+      "surface_kind": "app",
+      "installability": "none",
+      "registry_provenance": "inferred",
+      "final_state": "manual_instruction",
+      "final_reason": "host is manual_instruction; matrix contains executable receipts for the unsupported/degraded cells",
+      "operations": {
+        "capability": {
+          "state": "verified",
+          "reason": "registry and adapter capability row resolved",
+          "evidence": [
+            "adapter.capabilities()",
+            "HOST_REGISTRY_ROWS"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_capabilities.v1",
+            "host": "claude-code-app",
+            "host_id": "claude-code-app",
+            "known": true,
+            "family": "claude",
+            "surface_kind": "app",
+            "installability": "none",
+            "result_adapter": false,
+            "dispatch_selectable": false,
+            "provenance": "inferred",
+            "runtime_surfaces": {
+              "interaction": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "interaction",
+                "host": "claude-code-app",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "interaction@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "session": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "session",
+                "host": "claude-code-app",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "session@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "semantic_tool": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "semantic_tool",
+                "host": "claude-code-app",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "semantic_tool@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "browser": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "browser",
+                "host": "claude-code-app",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "browser@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              }
+            },
+            "unavailable_operations": [
+              "renderPackage"
+            ]
+          }
+        },
+        "command_surface": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector host has no CLI slash-command package; commands render as instructions or MCP/connector actions",
+          "evidence": [
+            "adapter.renderCommandSurface()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-app",
+            "operation": "renderCommandSurface",
+            "status": "degraded",
+            "reason": "app/connector host has no CLI slash-command package; commands render as instructions or MCP/connector actions",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "permission_decision": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector approvals are host-native or manual; Guild records the requested policy and waits for operator/app approval",
+          "evidence": [
+            "adapter.renderPermissionDecision()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-app",
+            "operation": "renderPermissionDecision",
+            "status": "degraded",
+            "reason": "app/connector approvals are host-native or manual; Guild records the requested policy and waits for operator/app approval",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "preflight": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector host has no local Guild hook; preflight records no-local-hook and connector auth/egress requirements",
+          "evidence": [
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-app",
+            "operation": "preflight",
+            "status": "degraded",
+            "reason": "app/connector host has no local Guild hook; preflight records no-local-hook and connector auth/egress requirements",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "claude-code-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "model_params": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector model params are recorded for the host/app to apply; unsupported keys are explicit",
+          "evidence": [
+            "adapter.resolveModelParams()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-app",
+            "operation": "resolveModelParams",
+            "status": "degraded",
+            "reason": "app/connector model params are recorded for the host/app to apply; unsupported keys are explicit",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "memory": {
+          "state": "unavailable",
+          "status": "unavailable",
+          "reason": "local app host memory requires a local filesystem companion, MCP bridge, or file-bus import; none was advertised",
+          "evidence": [
+            "adapter.memory()",
+            "scripts/lib/memory-adapter.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-app",
+            "operation": "memory",
+            "status": "unavailable",
+            "reason": "local app host memory requires a local filesystem companion, MCP bridge, or file-bus import; none was advertised",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "dispatch": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector dispatch is not a local CLI process; it enqueues or emits manual instructions",
+          "evidence": [
+            "adapter.dispatch()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-app",
+            "operation": "dispatch",
+            "status": "degraded",
+            "reason": "app/connector dispatch is not a local CLI process; it enqueues or emits manual instructions",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "claude-code-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "hook_normalization": {
+          "state": "degraded",
+          "reason": "host has no native hooks; GuildHookEvent normalization uses forwarded/file-bus/preflight receipts",
+          "evidence": [
+            "hooks/lib/guild-hook-event.ts",
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.degradation_receipt.v1",
+            "surface": "session",
+            "host": "claude-code-app",
+            "rung": "degraded",
+            "degraded": true,
+            "inferred": true,
+            "reason": "session@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+          }
+        },
+        "review_progress": {
+          "state": "verified",
+          "reason": "all 10 canonical review_progress.v1 states validate",
+          "evidence": [
+            "scripts/lib/review-progress.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.review_progress_coverage.v1",
+            "states": [
+              "launched",
+              "running",
+              "heartbeat",
+              "activity",
+              "no_output",
+              "reviewer_error",
+              "tool_error",
+              "cancelled",
+              "skipped",
+              "succeeded"
+            ],
+            "valid": true,
+            "errors": []
+          }
+        },
+        "install_or_app_refusal": {
+          "state": "unavailable",
+          "status": "unavailable",
+          "reason": "app/connector hosts are not CLI package targets; installer must refuse and print connector guidance",
+          "evidence": [
+            "adapter.renderPackage()",
+            "plugin/install.sh"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-app",
+            "operation": "renderPackage",
+            "status": "unavailable",
+            "reason": "app/connector hosts are not CLI package targets; installer must refuse and print connector guidance",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-code-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        }
+      },
+      "lifecycle_smoke": {
+        "state": "manual_instruction",
+        "phases": {
+          "idea": {
+            "state": "manual_instruction",
+            "reason": "idea lifecycle smoke uses explicit manual_instruction receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:idea",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-app",
+              "phase": "idea",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "manual_instruction"
+              ]
+            }
+          },
+          "research": {
+            "state": "manual_instruction",
+            "reason": "research lifecycle smoke uses explicit manual_instruction receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:research",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-app",
+              "phase": "research",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "manual_instruction"
+              ]
+            }
+          },
+          "brainstorm": {
+            "state": "manual_instruction",
+            "reason": "brainstorm lifecycle smoke uses explicit manual_instruction receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:brainstorm",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-app",
+              "phase": "brainstorm",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "manual_instruction"
+              ]
+            }
+          },
+          "spec": {
+            "state": "manual_instruction",
+            "reason": "spec lifecycle smoke uses explicit manual_instruction receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:spec",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-app",
+              "phase": "spec",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "manual_instruction"
+              ]
+            }
+          },
+          "plan": {
+            "state": "manual_instruction",
+            "reason": "plan lifecycle smoke uses explicit manual_instruction receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:plan",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-app",
+              "phase": "plan",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "manual_instruction"
+              ]
+            }
+          },
+          "build": {
+            "state": "manual_instruction",
+            "reason": "build lifecycle smoke uses explicit manual_instruction receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:build",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-app",
+              "phase": "build",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "manual_instruction"
+              ]
+            }
+          },
+          "qa": {
+            "state": "manual_instruction",
+            "reason": "qa lifecycle smoke uses explicit manual_instruction receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:qa",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-app",
+              "phase": "qa",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "manual_instruction"
+              ]
+            }
+          },
+          "review": {
+            "state": "manual_instruction",
+            "reason": "review lifecycle smoke uses explicit manual_instruction receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:review",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()",
+              "scripts/lib/review-progress.ts"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-app",
+              "phase": "review",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "manual_instruction",
+                "verified"
+              ]
+            }
+          },
+          "ops": {
+            "state": "manual_instruction",
+            "reason": "ops lifecycle smoke uses explicit manual_instruction receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:ops",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-app",
+              "phase": "ops",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "manual_instruction"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "host_id": "claude-code-web",
+      "family": "claude",
+      "surface_kind": "app",
+      "installability": "none",
+      "registry_provenance": "inferred",
+      "final_state": "enqueue_only",
+      "final_reason": "host is enqueue_only; matrix contains executable receipts for the unsupported/degraded cells",
+      "operations": {
+        "capability": {
+          "state": "verified",
+          "reason": "registry and adapter capability row resolved",
+          "evidence": [
+            "adapter.capabilities()",
+            "HOST_REGISTRY_ROWS"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_capabilities.v1",
+            "host": "claude-code-web",
+            "host_id": "claude-code-web",
+            "known": true,
+            "family": "claude",
+            "surface_kind": "app",
+            "installability": "none",
+            "result_adapter": false,
+            "dispatch_selectable": false,
+            "provenance": "inferred",
+            "runtime_surfaces": {
+              "interaction": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "interaction",
+                "host": "claude-code-web",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "interaction@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "session": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "session",
+                "host": "claude-code-web",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "session@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "semantic_tool": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "semantic_tool",
+                "host": "claude-code-web",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "semantic_tool@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "browser": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "browser",
+                "host": "claude-code-web",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "browser@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              }
+            },
+            "unavailable_operations": [
+              "renderPackage"
+            ]
+          }
+        },
+        "command_surface": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector host has no CLI slash-command package; commands render as instructions or MCP/connector actions",
+          "evidence": [
+            "adapter.renderCommandSurface()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-web",
+            "operation": "renderCommandSurface",
+            "status": "degraded",
+            "reason": "app/connector host has no CLI slash-command package; commands render as instructions or MCP/connector actions",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-web",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "permission_decision": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector approvals are host-native or manual; Guild records the requested policy and waits for operator/app approval",
+          "evidence": [
+            "adapter.renderPermissionDecision()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-web",
+            "operation": "renderPermissionDecision",
+            "status": "degraded",
+            "reason": "app/connector approvals are host-native or manual; Guild records the requested policy and waits for operator/app approval",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-web",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "preflight": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector host has no local Guild hook; preflight records no-local-hook and connector auth/egress requirements",
+          "evidence": [
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-web",
+            "operation": "preflight",
+            "status": "degraded",
+            "reason": "app/connector host has no local Guild hook; preflight records no-local-hook and connector auth/egress requirements",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "claude-code-web",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "model_params": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector model params are recorded for the host/app to apply; unsupported keys are explicit",
+          "evidence": [
+            "adapter.resolveModelParams()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-web",
+            "operation": "resolveModelParams",
+            "status": "degraded",
+            "reason": "app/connector model params are recorded for the host/app to apply; unsupported keys are explicit",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-web",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "memory": {
+          "state": "unavailable",
+          "status": "unavailable",
+          "reason": "web/connector target has no local filesystem memory path; caller must provide a connector memory bridge or fail visibly",
+          "evidence": [
+            "adapter.memory()",
+            "scripts/lib/memory-adapter.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-web",
+            "operation": "memory",
+            "status": "unavailable",
+            "reason": "web/connector target has no local filesystem memory path; caller must provide a connector memory bridge or fail visibly",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-web",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "dispatch": {
+          "state": "enqueue_only",
+          "status": "degraded",
+          "reason": "app/connector dispatch is not a local CLI process; it enqueues or emits manual instructions",
+          "evidence": [
+            "adapter.dispatch()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-web",
+            "operation": "dispatch",
+            "status": "degraded",
+            "reason": "app/connector dispatch is not a local CLI process; it enqueues or emits manual instructions",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "claude-code-web",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "hook_normalization": {
+          "state": "degraded",
+          "reason": "host has no native hooks; GuildHookEvent normalization uses forwarded/file-bus/preflight receipts",
+          "evidence": [
+            "hooks/lib/guild-hook-event.ts",
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.degradation_receipt.v1",
+            "surface": "session",
+            "host": "claude-code-web",
+            "rung": "degraded",
+            "degraded": true,
+            "inferred": true,
+            "reason": "session@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+          }
+        },
+        "review_progress": {
+          "state": "verified",
+          "reason": "all 10 canonical review_progress.v1 states validate",
+          "evidence": [
+            "scripts/lib/review-progress.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.review_progress_coverage.v1",
+            "states": [
+              "launched",
+              "running",
+              "heartbeat",
+              "activity",
+              "no_output",
+              "reviewer_error",
+              "tool_error",
+              "cancelled",
+              "skipped",
+              "succeeded"
+            ],
+            "valid": true,
+            "errors": []
+          }
+        },
+        "install_or_app_refusal": {
+          "state": "unavailable",
+          "status": "unavailable",
+          "reason": "app/connector hosts are not CLI package targets; installer must refuse and print connector guidance",
+          "evidence": [
+            "adapter.renderPackage()",
+            "plugin/install.sh"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-code-web",
+            "operation": "renderPackage",
+            "status": "unavailable",
+            "reason": "app/connector hosts are not CLI package targets; installer must refuse and print connector guidance",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-code-web",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-code-web resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        }
+      },
+      "lifecycle_smoke": {
+        "state": "enqueue_only",
+        "phases": {
+          "idea": {
+            "state": "enqueue_only",
+            "reason": "idea lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:idea",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-web",
+              "phase": "idea",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "research": {
+            "state": "enqueue_only",
+            "reason": "research lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:research",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-web",
+              "phase": "research",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "brainstorm": {
+            "state": "enqueue_only",
+            "reason": "brainstorm lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:brainstorm",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-web",
+              "phase": "brainstorm",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "spec": {
+            "state": "enqueue_only",
+            "reason": "spec lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:spec",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-web",
+              "phase": "spec",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "plan": {
+            "state": "enqueue_only",
+            "reason": "plan lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:plan",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-web",
+              "phase": "plan",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "build": {
+            "state": "enqueue_only",
+            "reason": "build lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:build",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-web",
+              "phase": "build",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "qa": {
+            "state": "enqueue_only",
+            "reason": "qa lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:qa",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-web",
+              "phase": "qa",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "review": {
+            "state": "enqueue_only",
+            "reason": "review lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:review",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()",
+              "scripts/lib/review-progress.ts"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-web",
+              "phase": "review",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "enqueue_only",
+                "verified"
+              ]
+            }
+          },
+          "ops": {
+            "state": "enqueue_only",
+            "reason": "ops lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:ops",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-code-web",
+              "phase": "ops",
+              "component_states": [
+                "manual_instruction",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "host_id": "codex-app",
+      "family": "codex",
+      "surface_kind": "app",
+      "installability": "none",
+      "registry_provenance": "inferred",
+      "final_state": "enqueue_only",
+      "final_reason": "host is enqueue_only; matrix contains executable receipts for the unsupported/degraded cells",
+      "operations": {
+        "capability": {
+          "state": "verified",
+          "reason": "registry and adapter capability row resolved",
+          "evidence": [
+            "adapter.capabilities()",
+            "HOST_REGISTRY_ROWS"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_capabilities.v1",
+            "host": "codex-app",
+            "host_id": "codex-app",
+            "known": true,
+            "family": "codex",
+            "surface_kind": "app",
+            "installability": "none",
+            "result_adapter": false,
+            "dispatch_selectable": false,
+            "provenance": "inferred",
+            "runtime_surfaces": {
+              "interaction": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "interaction",
+                "host": "codex-app",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "interaction@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "session": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "session",
+                "host": "codex-app",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "session@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "semantic_tool": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "semantic_tool",
+                "host": "codex-app",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "semantic_tool@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "browser": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "browser",
+                "host": "codex-app",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "browser@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              }
+            },
+            "unavailable_operations": [
+              "renderPackage"
+            ]
+          }
+        },
+        "command_surface": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector host has no CLI slash-command package; commands render as instructions or MCP/connector actions",
+          "evidence": [
+            "adapter.renderCommandSurface()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-app",
+            "operation": "renderCommandSurface",
+            "status": "degraded",
+            "reason": "app/connector host has no CLI slash-command package; commands render as instructions or MCP/connector actions",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "codex-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "permission_decision": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector approvals are host-native or manual; Guild records the requested policy and waits for operator/app approval",
+          "evidence": [
+            "adapter.renderPermissionDecision()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-app",
+            "operation": "renderPermissionDecision",
+            "status": "degraded",
+            "reason": "app/connector approvals are host-native or manual; Guild records the requested policy and waits for operator/app approval",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "codex-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "preflight": {
+          "state": "enqueue_only",
+          "status": "degraded",
+          "reason": "app/connector host has no local Guild hook; preflight records no-local-hook and connector auth/egress requirements",
+          "evidence": [
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-app",
+            "operation": "preflight",
+            "status": "degraded",
+            "reason": "app/connector host has no local Guild hook; preflight records no-local-hook and connector auth/egress requirements",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "codex-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "model_params": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector model params are recorded for the host/app to apply; unsupported keys are explicit",
+          "evidence": [
+            "adapter.resolveModelParams()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-app",
+            "operation": "resolveModelParams",
+            "status": "degraded",
+            "reason": "app/connector model params are recorded for the host/app to apply; unsupported keys are explicit",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "codex-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "memory": {
+          "state": "unavailable",
+          "status": "unavailable",
+          "reason": "local app host memory requires a local filesystem companion, MCP bridge, or file-bus import; none was advertised",
+          "evidence": [
+            "adapter.memory()",
+            "scripts/lib/memory-adapter.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-app",
+            "operation": "memory",
+            "status": "unavailable",
+            "reason": "local app host memory requires a local filesystem companion, MCP bridge, or file-bus import; none was advertised",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "codex-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "dispatch": {
+          "state": "enqueue_only",
+          "status": "degraded",
+          "reason": "app/connector dispatch is not a local CLI process; it enqueues or emits manual instructions",
+          "evidence": [
+            "adapter.dispatch()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-app",
+            "operation": "dispatch",
+            "status": "degraded",
+            "reason": "app/connector dispatch is not a local CLI process; it enqueues or emits manual instructions",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "codex-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "hook_normalization": {
+          "state": "degraded",
+          "reason": "host has no native hooks; GuildHookEvent normalization uses forwarded/file-bus/preflight receipts",
+          "evidence": [
+            "hooks/lib/guild-hook-event.ts",
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.degradation_receipt.v1",
+            "surface": "session",
+            "host": "codex-app",
+            "rung": "degraded",
+            "degraded": true,
+            "inferred": true,
+            "reason": "session@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+          }
+        },
+        "review_progress": {
+          "state": "verified",
+          "reason": "all 10 canonical review_progress.v1 states validate",
+          "evidence": [
+            "scripts/lib/review-progress.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.review_progress_coverage.v1",
+            "states": [
+              "launched",
+              "running",
+              "heartbeat",
+              "activity",
+              "no_output",
+              "reviewer_error",
+              "tool_error",
+              "cancelled",
+              "skipped",
+              "succeeded"
+            ],
+            "valid": true,
+            "errors": []
+          }
+        },
+        "install_or_app_refusal": {
+          "state": "unavailable",
+          "status": "unavailable",
+          "reason": "app/connector hosts are not CLI package targets; installer must refuse and print connector guidance",
+          "evidence": [
+            "adapter.renderPackage()",
+            "plugin/install.sh"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "codex-app",
+            "operation": "renderPackage",
+            "status": "unavailable",
+            "reason": "app/connector hosts are not CLI package targets; installer must refuse and print connector guidance",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "codex-app",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@codex-app resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        }
+      },
+      "lifecycle_smoke": {
+        "state": "enqueue_only",
+        "phases": {
+          "idea": {
+            "state": "enqueue_only",
+            "reason": "idea lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:idea",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-app",
+              "phase": "idea",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "research": {
+            "state": "enqueue_only",
+            "reason": "research lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:research",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-app",
+              "phase": "research",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "brainstorm": {
+            "state": "enqueue_only",
+            "reason": "brainstorm lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:brainstorm",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-app",
+              "phase": "brainstorm",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "spec": {
+            "state": "enqueue_only",
+            "reason": "spec lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:spec",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-app",
+              "phase": "spec",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "plan": {
+            "state": "enqueue_only",
+            "reason": "plan lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:plan",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-app",
+              "phase": "plan",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "build": {
+            "state": "enqueue_only",
+            "reason": "build lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:build",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-app",
+              "phase": "build",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "qa": {
+            "state": "enqueue_only",
+            "reason": "qa lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:qa",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-app",
+              "phase": "qa",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "review": {
+            "state": "enqueue_only",
+            "reason": "review lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:review",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()",
+              "scripts/lib/review-progress.ts"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-app",
+              "phase": "review",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only",
+                "verified"
+              ]
+            }
+          },
+          "ops": {
+            "state": "enqueue_only",
+            "reason": "ops lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:ops",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "codex-app",
+              "phase": "ops",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "host_id": "claude-ai-connector",
+      "family": "claude",
+      "surface_kind": "app",
+      "installability": "none",
+      "registry_provenance": "inferred",
+      "final_state": "enqueue_only",
+      "final_reason": "host is enqueue_only; matrix contains executable receipts for the unsupported/degraded cells",
+      "operations": {
+        "capability": {
+          "state": "verified",
+          "reason": "registry and adapter capability row resolved",
+          "evidence": [
+            "adapter.capabilities()",
+            "HOST_REGISTRY_ROWS"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_capabilities.v1",
+            "host": "claude-ai-connector",
+            "host_id": "claude-ai-connector",
+            "known": true,
+            "family": "claude",
+            "surface_kind": "app",
+            "installability": "none",
+            "result_adapter": false,
+            "dispatch_selectable": false,
+            "provenance": "inferred",
+            "runtime_surfaces": {
+              "interaction": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "interaction",
+                "host": "claude-ai-connector",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "interaction@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "session": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "session",
+                "host": "claude-ai-connector",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "session@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "semantic_tool": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "semantic_tool",
+                "host": "claude-ai-connector",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "semantic_tool@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              },
+              "browser": {
+                "schema_version": "guild.degradation_receipt.v1",
+                "surface": "browser",
+                "host": "claude-ai-connector",
+                "rung": "degraded",
+                "degraded": true,
+                "inferred": true,
+                "reason": "browser@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+              }
+            },
+            "unavailable_operations": [
+              "renderPackage"
+            ]
+          }
+        },
+        "command_surface": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector host has no CLI slash-command package; commands render as instructions or MCP/connector actions",
+          "evidence": [
+            "adapter.renderCommandSurface()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-ai-connector",
+            "operation": "renderCommandSurface",
+            "status": "degraded",
+            "reason": "app/connector host has no CLI slash-command package; commands render as instructions or MCP/connector actions",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-ai-connector",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "permission_decision": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector approvals are host-native or manual; Guild records the requested policy and waits for operator/app approval",
+          "evidence": [
+            "adapter.renderPermissionDecision()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-ai-connector",
+            "operation": "renderPermissionDecision",
+            "status": "degraded",
+            "reason": "app/connector approvals are host-native or manual; Guild records the requested policy and waits for operator/app approval",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-ai-connector",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "preflight": {
+          "state": "enqueue_only",
+          "status": "degraded",
+          "reason": "app/connector host has no local Guild hook; preflight records no-local-hook and connector auth/egress requirements",
+          "evidence": [
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-ai-connector",
+            "operation": "preflight",
+            "status": "degraded",
+            "reason": "app/connector host has no local Guild hook; preflight records no-local-hook and connector auth/egress requirements",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "claude-ai-connector",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "model_params": {
+          "state": "manual_instruction",
+          "status": "degraded",
+          "reason": "app/connector model params are recorded for the host/app to apply; unsupported keys are explicit",
+          "evidence": [
+            "adapter.resolveModelParams()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-ai-connector",
+            "operation": "resolveModelParams",
+            "status": "degraded",
+            "reason": "app/connector model params are recorded for the host/app to apply; unsupported keys are explicit",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-ai-connector",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "memory": {
+          "state": "unavailable",
+          "status": "unavailable",
+          "reason": "web/connector target has no local filesystem memory path; caller must provide a connector memory bridge or fail visibly",
+          "evidence": [
+            "adapter.memory()",
+            "scripts/lib/memory-adapter.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-ai-connector",
+            "operation": "memory",
+            "status": "unavailable",
+            "reason": "web/connector target has no local filesystem memory path; caller must provide a connector memory bridge or fail visibly",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-ai-connector",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "dispatch": {
+          "state": "enqueue_only",
+          "status": "degraded",
+          "reason": "app/connector dispatch is not a local CLI process; it enqueues or emits manual instructions",
+          "evidence": [
+            "adapter.dispatch()"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-ai-connector",
+            "operation": "dispatch",
+            "status": "degraded",
+            "reason": "app/connector dispatch is not a local CLI process; it enqueues or emits manual instructions",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "session",
+              "host": "claude-ai-connector",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "session@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        },
+        "hook_normalization": {
+          "state": "degraded",
+          "reason": "host has no native hooks; GuildHookEvent normalization uses forwarded/file-bus/preflight receipts",
+          "evidence": [
+            "hooks/lib/guild-hook-event.ts",
+            "adapter.preflight()"
+          ],
+          "receipt": {
+            "schema_version": "guild.degradation_receipt.v1",
+            "surface": "session",
+            "host": "claude-ai-connector",
+            "rung": "degraded",
+            "degraded": true,
+            "inferred": true,
+            "reason": "session@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+          }
+        },
+        "review_progress": {
+          "state": "verified",
+          "reason": "all 10 canonical review_progress.v1 states validate",
+          "evidence": [
+            "scripts/lib/review-progress.ts"
+          ],
+          "receipt": {
+            "schema_version": "guild.review_progress_coverage.v1",
+            "states": [
+              "launched",
+              "running",
+              "heartbeat",
+              "activity",
+              "no_output",
+              "reviewer_error",
+              "tool_error",
+              "cancelled",
+              "skipped",
+              "succeeded"
+            ],
+            "valid": true,
+            "errors": []
+          }
+        },
+        "install_or_app_refusal": {
+          "state": "unavailable",
+          "status": "unavailable",
+          "reason": "app/connector hosts are not CLI package targets; installer must refuse and print connector guidance",
+          "evidence": [
+            "adapter.renderPackage()",
+            "plugin/install.sh"
+          ],
+          "receipt": {
+            "schema_version": "guild.host_adapter_receipt.v1",
+            "host": "claude-ai-connector",
+            "operation": "renderPackage",
+            "status": "unavailable",
+            "reason": "app/connector hosts are not CLI package targets; installer must refuse and print connector guidance",
+            "degradation_receipt": {
+              "schema_version": "guild.degradation_receipt.v1",
+              "surface": "semantic_tool",
+              "host": "claude-ai-connector",
+              "rung": "degraded",
+              "degraded": true,
+              "inferred": true,
+              "reason": "semantic_tool@claude-ai-connector resolves to \"degraded\" (INFERRED — verify at live-host availability)"
+            }
+          }
+        }
+      },
+      "lifecycle_smoke": {
+        "state": "enqueue_only",
+        "phases": {
+          "idea": {
+            "state": "enqueue_only",
+            "reason": "idea lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:idea",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-ai-connector",
+              "phase": "idea",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "research": {
+            "state": "enqueue_only",
+            "reason": "research lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:research",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-ai-connector",
+              "phase": "research",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "brainstorm": {
+            "state": "enqueue_only",
+            "reason": "brainstorm lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:brainstorm",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-ai-connector",
+              "phase": "brainstorm",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "spec": {
+            "state": "enqueue_only",
+            "reason": "spec lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:spec",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-ai-connector",
+              "phase": "spec",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "plan": {
+            "state": "enqueue_only",
+            "reason": "plan lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:plan",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-ai-connector",
+              "phase": "plan",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "build": {
+            "state": "enqueue_only",
+            "reason": "build lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:build",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-ai-connector",
+              "phase": "build",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "qa": {
+            "state": "enqueue_only",
+            "reason": "qa lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:qa",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-ai-connector",
+              "phase": "qa",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          },
+          "review": {
+            "state": "enqueue_only",
+            "reason": "review lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:review",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()",
+              "scripts/lib/review-progress.ts"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-ai-connector",
+              "phase": "review",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only",
+                "verified"
+              ]
+            }
+          },
+          "ops": {
+            "state": "enqueue_only",
+            "reason": "ops lifecycle smoke uses explicit enqueue_only receipt(s), not a verified claim",
+            "evidence": [
+              "lifecycle:ops",
+              "adapter.preflight()",
+              "adapter.memory()",
+              "scripts/lib/memory-adapter.ts",
+              "adapter.dispatch()"
+            ],
+            "receipt": {
+              "schema_version": "guild.lifecycle_smoke_receipt.v1",
+              "host": "claude-ai-connector",
+              "phase": "ops",
+              "component_states": [
+                "enqueue_only",
+                "unavailable",
+                "enqueue_only"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "review_progress_scenarios": [
+    {
+      "schema_version": "guild.review_progress.v1",
+      "run_id": "run-r12-support-matrix",
+      "gate": "G-implementation:run-r12-support-matrix",
+      "round_number": 1,
+      "author_host": "codex-app",
+      "reviewer_host": "claude-code-cli",
+      "independence": "strong",
+      "state": "launched",
+      "timestamp": "2026-06-18T00:00:00Z",
+      "sequence": 1,
+      "message": "review progress launched",
+      "artifact_path": ".guild/runs/run-r12/evidence.md",
+      "packet_path": ".guild/runs/run-r12/review/packet-1.md"
+    },
+    {
+      "schema_version": "guild.review_progress.v1",
+      "run_id": "run-r12-support-matrix",
+      "gate": "G-implementation:run-r12-support-matrix",
+      "round_number": 1,
+      "author_host": "codex-app",
+      "reviewer_host": "claude-code-cli",
+      "independence": "strong",
+      "state": "running",
+      "timestamp": "2026-06-18T00:00:00Z",
+      "sequence": 2,
+      "message": "review progress running",
+      "artifact_path": ".guild/runs/run-r12/evidence.md",
+      "packet_path": ".guild/runs/run-r12/review/packet-1.md"
+    },
+    {
+      "schema_version": "guild.review_progress.v1",
+      "run_id": "run-r12-support-matrix",
+      "gate": "G-implementation:run-r12-support-matrix",
+      "round_number": 1,
+      "author_host": "codex-app",
+      "reviewer_host": "claude-code-cli",
+      "independence": "strong",
+      "state": "heartbeat",
+      "timestamp": "2026-06-18T00:00:00Z",
+      "sequence": 3,
+      "message": "review progress heartbeat",
+      "artifact_path": ".guild/runs/run-r12/evidence.md",
+      "packet_path": ".guild/runs/run-r12/review/packet-1.md"
+    },
+    {
+      "schema_version": "guild.review_progress.v1",
+      "run_id": "run-r12-support-matrix",
+      "gate": "G-implementation:run-r12-support-matrix",
+      "round_number": 1,
+      "author_host": "codex-app",
+      "reviewer_host": "claude-code-cli",
+      "independence": "strong",
+      "state": "activity",
+      "timestamp": "2026-06-18T00:00:00Z",
+      "sequence": 4,
+      "message": "review progress activity",
+      "artifact_path": ".guild/runs/run-r12/evidence.md",
+      "packet_path": ".guild/runs/run-r12/review/packet-1.md"
+    },
+    {
+      "schema_version": "guild.review_progress.v1",
+      "run_id": "run-r12-support-matrix",
+      "gate": "G-implementation:run-r12-support-matrix",
+      "round_number": 1,
+      "author_host": "codex-app",
+      "reviewer_host": "claude-code-cli",
+      "independence": "strong",
+      "state": "no_output",
+      "timestamp": "2026-06-18T00:00:00Z",
+      "sequence": 5,
+      "message": "review progress no_output",
+      "artifact_path": ".guild/runs/run-r12/evidence.md",
+      "packet_path": ".guild/runs/run-r12/review/packet-1.md"
+    },
+    {
+      "schema_version": "guild.review_progress.v1",
+      "run_id": "run-r12-support-matrix",
+      "gate": "G-implementation:run-r12-support-matrix",
+      "round_number": 1,
+      "author_host": "codex-app",
+      "reviewer_host": "claude-code-cli",
+      "independence": "strong",
+      "state": "reviewer_error",
+      "timestamp": "2026-06-18T00:00:00Z",
+      "sequence": 6,
+      "message": "review progress reviewer_error",
+      "artifact_path": ".guild/runs/run-r12/evidence.md",
+      "packet_path": ".guild/runs/run-r12/review/packet-1.md",
+      "error_code": "reviewer_error"
+    },
+    {
+      "schema_version": "guild.review_progress.v1",
+      "run_id": "run-r12-support-matrix",
+      "gate": "G-implementation:run-r12-support-matrix",
+      "round_number": 1,
+      "author_host": "codex-app",
+      "reviewer_host": "claude-code-cli",
+      "independence": "strong",
+      "state": "tool_error",
+      "timestamp": "2026-06-18T00:00:00Z",
+      "sequence": 7,
+      "message": "review progress tool_error",
+      "artifact_path": ".guild/runs/run-r12/evidence.md",
+      "packet_path": ".guild/runs/run-r12/review/packet-1.md",
+      "error_code": "tool_error"
+    },
+    {
+      "schema_version": "guild.review_progress.v1",
+      "run_id": "run-r12-support-matrix",
+      "gate": "G-implementation:run-r12-support-matrix",
+      "round_number": 1,
+      "author_host": "codex-app",
+      "reviewer_host": "claude-code-cli",
+      "independence": "strong",
+      "state": "cancelled",
+      "timestamp": "2026-06-18T00:00:00Z",
+      "sequence": 8,
+      "message": "review progress cancelled",
+      "artifact_path": ".guild/runs/run-r12/evidence.md",
+      "packet_path": ".guild/runs/run-r12/review/packet-1.md"
+    },
+    {
+      "schema_version": "guild.review_progress.v1",
+      "run_id": "run-r12-support-matrix",
+      "gate": "G-implementation:run-r12-support-matrix",
+      "round_number": 1,
+      "author_host": "codex-app",
+      "reviewer_host": "claude-code-cli",
+      "independence": "strong",
+      "state": "skipped",
+      "timestamp": "2026-06-18T00:00:00Z",
+      "sequence": 9,
+      "message": "review progress skipped",
+      "artifact_path": ".guild/runs/run-r12/evidence.md",
+      "packet_path": ".guild/runs/run-r12/review/packet-1.md",
+      "policy_reason": "policy skip fixture"
+    },
+    {
+      "schema_version": "guild.review_progress.v1",
+      "run_id": "run-r12-support-matrix",
+      "gate": "G-implementation:run-r12-support-matrix",
+      "round_number": 1,
+      "author_host": "codex-app",
+      "reviewer_host": "claude-code-cli",
+      "independence": "strong",
+      "state": "succeeded",
+      "timestamp": "2026-06-18T00:00:00Z",
+      "sequence": 10,
+      "message": "review progress succeeded",
+      "artifact_path": ".guild/runs/run-r12/evidence.md",
+      "packet_path": ".guild/runs/run-r12/review/packet-1.md",
+      "exit_code": 0
+    }
+  ]
+}

@@ -43,6 +43,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
+import { resolveGuildRoot } from "../lib/guild-root.js";
+import { markLaneInProgress } from "../lib/run-state.js";
+import { emitBusEvent } from "../lib/bus-emit.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -77,7 +80,7 @@ function extractDependsOn(text: string): string[] {
 /** Return all task IDs found in a plan markdown file (lines like "- task-001:" or "id: task-001") */
 function loadPlanTaskIds(cwd: string): Set<string> | null {
   // Look for any .guild/plan/*.md
-  const planDir = path.join(cwd, ".guild", "plan");
+  const planDir = path.join(resolveGuildRoot(cwd), ".guild", "plan");
   if (!fs.existsSync(planDir)) return null;
   const files = fs.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   if (files.length === 0) return null;
@@ -156,7 +159,7 @@ async function main(): Promise<void> {
     if (planIds === null) {
       warn(
         `Task "${taskId}" has depends-on references [${deps.join(", ")}] ` +
-          `but no plan file found at ${path.join(cwd, ".guild/plan/")}. Skipping dependency check.`
+          `but no plan file found at ${path.join(resolveGuildRoot(cwd), ".guild/plan/")}. Skipping dependency check.`
       );
     } else {
       const missing = deps.filter((d) => !planIds.has(d.toLowerCase()));
@@ -169,7 +172,41 @@ async function main(): Promise<void> {
     }
   }
 
-  // All validations passed
+  // ── Seed run-state in_progress (ADR-RE-1 dispatch seam) ──────────────────
+  // TaskCreated is the closest hook-layer observable to a lane dispatch.
+  // There is no "TaskStarted" event, so this is the best proxy available.
+  // The agent-team launcher (scripts/agent-team-launcher.ts) MUST ALSO call
+  // `markLaneInProgress` per specialist pane before spawning so the transition
+  // is seeded from the launch side (launcher owns the authoritative write;
+  // this hook-side write is the earliest observable hook checkpoint).
+  // Non-fatal: run-state is a rebuildable cache, never the system of record.
+  // Use || so an empty GUILD_RUN_ID string also falls through to the fallback
+  // (matches task-completed.ts's deriveRunId() semantics for consistency).
+  const runId = process.env["GUILD_RUN_ID"] || `run-${(payload.session_id ?? "unknown")}`;
+  const runDir = path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  try {
+    markLaneInProgress(runDir, { runId }, taskId);
+    process.stderr.write(
+      `[task-created] run-state: lane "${taskId}" → in_progress ` +
+        `(${path.join(runDir, "run-state.json")}).\n`
+    );
+  } catch (err) {
+    process.stderr.write(
+      `[task-created] WARN: run-state in_progress write failed (non-fatal, ` +
+        `rebuildable cache): ${err instanceof Error ? err.message : String(err)}\n`
+    );
+  }
+
+  // All validations passed — emit bus event (SK-5 / CMD-007: agent-bus producer).
+  // Best-effort: a write failure logs a warning and never blocks the task.
+  emitBusEvent(runDir, {
+    run_id: runId,
+    event: "dispatched",
+    lane_id: owner,
+    task_id: taskId,
+    team_name: (payload.team_name ?? "").trim() || undefined,
+  });
+
   process.stderr.write(
     `[task-created] OK: task "${taskId}" owned by "${owner}" passed all validations.\n`
   );
