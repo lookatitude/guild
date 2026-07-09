@@ -257,7 +257,26 @@ function copyModuleRuntime(root: string, dest: string): void {
   copyDirExcludingNodeModules(path.join(root, "src"), path.join(dest, "src"));
 }
 
-const SCRIPT_RUNTIME_DEPENDENCIES = ["js-yaml", "argparse", "esprima", "sprintf-js"] as const;
+// The full production closure of scripts/package.json: js-yaml@4 plus its one
+// dependency. (esprima/sprintf-js were js-yaml@3-era strays — a prod install
+// never materializes them, so listing them would fail the closed vendor check.)
+const SCRIPT_RUNTIME_DEPENDENCIES = ["js-yaml", "argparse"] as const;
+
+/** Copy the vendored script runtime deps, failing CLOSED when one is missing.
+ * A silent skip here ships packages whose tsx scripts crash on import
+ * (issue #14: fresh `git clone` renders had no scripts/node_modules). */
+function copyScriptRuntimeDependencies(scriptsSrcRoot: string, scriptsDestRoot: string): void {
+  for (const name of SCRIPT_RUNTIME_DEPENDENCIES) {
+    const srcDir = path.join(scriptsSrcRoot, "node_modules", name);
+    if (!copyDirExcludingNodeModules(srcDir, path.join(scriptsDestRoot, "node_modules", name))) {
+      throw new Error(
+        `script runtime dependency "${name}" missing at ${srcDir} — ` +
+          `run \`npm ci --prefix ${scriptsSrcRoot}\` before rendering host packages ` +
+          `(install.sh does this automatically)`
+      );
+    }
+  }
+}
 
 /** Scripts are shipped as runnable TypeScript. Bundle their small production
  * runtime dependency closure so generated packages do not depend on ambient
@@ -268,12 +287,7 @@ function copyScriptRuntime(root: string, dest: string): void {
   if (fs.existsSync(lock)) {
     copyFileEnsured(lock, path.join(dest, "scripts", "package-lock.json"));
   }
-  for (const name of SCRIPT_RUNTIME_DEPENDENCIES) {
-    copyDirExcludingNodeModules(
-      path.join(root, "scripts", "node_modules", name),
-      path.join(dest, "scripts", "node_modules", name)
-    );
-  }
+  copyScriptRuntimeDependencies(path.join(root, "scripts"), path.join(dest, "scripts"));
   // Some script modules reuse hook-side runtime libraries, notably
   // result-contracts -> hooks/lib/handoff-v2. Packages that bundle scripts must
   // carry those libraries or guild-run fails before its dry-run path can load.
@@ -518,12 +532,7 @@ export function writeCodexMarketplaceTree(codexDir: string, distRoot: string): s
   rmrf(dest);
   const pluginDest = path.join(dest, "plugins", "guild");
   copyDirExcludingNodeModules(codexDir, pluginDest);
-  for (const name of SCRIPT_RUNTIME_DEPENDENCIES) {
-    copyDirExcludingNodeModules(
-      path.join(codexDir, "scripts", "node_modules", name),
-      path.join(pluginDest, "scripts", "node_modules", name)
-    );
-  }
+  copyScriptRuntimeDependencies(path.join(codexDir, "scripts"), path.join(pluginDest, "scripts"));
   writeFileEnsured(
     path.join(dest, ".agents", "plugins", "marketplace.json"),
     stableJson({

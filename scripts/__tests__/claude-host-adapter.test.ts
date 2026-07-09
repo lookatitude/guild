@@ -27,6 +27,16 @@ function copyPluginFixture(): string {
     });
   }
   fs.copyFileSync(path.join(PLUGIN_ROOT, ".mcp.json"), path.join(root, ".mcp.json"));
+  // The render path fails closed when the vendored script runtime deps are
+  // missing (issue #14), so the fixture must carry them like a real checkout
+  // after `npm ci --prefix scripts`.
+  for (const dep of ["js-yaml", "argparse"]) {
+    fs.cpSync(
+      path.join(PLUGIN_ROOT, "scripts", "node_modules", dep),
+      path.join(root, "scripts", "node_modules", dep),
+      { recursive: true }
+    );
+  }
   return root;
 }
 
@@ -245,9 +255,7 @@ describe("Claude HostAdapter concrete parity", () => {
       expect(fs.existsSync(path.join(dest, "scripts", "package.json"))).toBe(true);
       expect(fs.existsSync(path.join(dest, "scripts", "package-lock.json"))).toBe(true);
       expect(fs.existsSync(path.join(dest, "scripts", "node_modules", "js-yaml", "index.js"))).toBe(true);
-      expect(fs.existsSync(path.join(dest, "scripts", "node_modules", "argparse", "index.js"))).toBe(true);
-      expect(fs.existsSync(path.join(dest, "scripts", "node_modules", "esprima", "package.json"))).toBe(true);
-      expect(fs.existsSync(path.join(dest, "scripts", "node_modules", "sprintf-js", "package.json"))).toBe(true);
+      expect(fs.existsSync(path.join(dest, "scripts", "node_modules", "argparse", "argparse.js"))).toBe(true);
       expect(require.resolve("js-yaml", { paths: [path.join(dest, "scripts")] })).toContain(
         path.join(dest, "scripts", "node_modules", "js-yaml")
       );

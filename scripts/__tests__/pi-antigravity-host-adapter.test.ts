@@ -214,7 +214,7 @@ describe("R9 install.sh Pi/Antigravity dry-runs", () => {
     });
     expect(res.status).toBe(0);
     expect(res.stdout).toContain("would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>");
-    expect(res.stdout).toContain("would run: pi install ./dist/pi");
+    expect(res.stdout).toContain("would run: pi install dist/pi");
     expect(res.stdout).toContain("pi-manifest.json");
     expect(res.stdout).toContain("guild-run --host pi");
   });
@@ -228,8 +228,8 @@ describe("R9 install.sh Pi/Antigravity dry-runs", () => {
     });
     expect(res.status).toBe(0);
     expect(res.stdout).toContain("would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>");
-    expect(res.stdout).toContain("would run: agy plugin validate ./dist/antigravity");
-    expect(res.stdout).toContain("would run: agy plugin install ./dist/antigravity");
+    expect(res.stdout).toContain("would run: agy plugin validate dist/antigravity");
+    expect(res.stdout).toContain("would run: agy plugin install dist/antigravity");
     expect(res.stdout).toContain("plugin.json");
     expect(res.stdout).toContain("antigravity-manifest.json");
     expect(res.stdout).toContain("guild-run --host antigravity");

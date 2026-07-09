@@ -14,7 +14,7 @@ export interface YamlApi {
   dump(value: unknown, opts?: unknown): string;
 }
 
-function candidateScriptsRoots(): string[] {
+function pluginLocalScriptsRoots(): string[] {
   return [
     // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
     path.resolve(__dirname, "..", "..", "..", "..", "scripts"),
@@ -22,20 +22,46 @@ function candidateScriptsRoots(): string[] {
     path.resolve(__dirname, "..", "..", "scripts"),
     // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
     path.resolve(__dirname, "..", "..", "..", "scripts"),
-    path.resolve(process.cwd(), "scripts"),
   ];
 }
 
-export function loadYamlApi(): YamlApi {
-  const tried: string[] = [];
-  for (const scriptsRoot of candidateScriptsRoots()) {
-    tried.push(scriptsRoot);
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      return require(require.resolve("js-yaml", { paths: [scriptsRoot] })) as YamlApi;
-    } catch {
-      // Try the next known plugin layout.
-    }
+function tryScriptsRoot(scriptsRoot: string): YamlApi | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require(require.resolve("js-yaml", { paths: [scriptsRoot] })) as YamlApi;
+  } catch {
+    return null;
   }
-  throw new Error(`Cannot resolve js-yaml from plugin scripts roots: ${tried.join(", ")}`);
+}
+
+export function loadYamlApi(): YamlApi {
+  // Plugin-local roots first: a generated package must prefer its own vendored
+  // copy over anything ambient, so a consumer repo's node_modules can never
+  // shadow Guild's js-yaml (self-contained package invariant).
+  const tried: string[] = [];
+  for (const scriptsRoot of pluginLocalScriptsRoots()) {
+    tried.push(scriptsRoot);
+    const api = tryScriptsRoot(scriptsRoot);
+    if (api) return api;
+  }
+  // Literal specifier: esbuild statically inlines this into the compiled hook
+  // dists, so installed hooks carry js-yaml even when no node_modules exists on
+  // disk (issue #14 — fresh installs ship none). In unbundled layouts
+  // (tsx/ts-jest) this is plain node resolution and runs only after every
+  // plugin-local root failed.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("js-yaml") as YamlApi;
+  } catch {
+    // Fall through to the cwd-relative last resort.
+  }
+  // Last resort: a scripts/ dir under the consumer cwd (plugin-checkout runs).
+  const cwdRoot = path.resolve(process.cwd(), "scripts");
+  tried.push(cwdRoot);
+  const api = tryScriptsRoot(cwdRoot);
+  if (api) return api;
+  throw new Error(
+    `Guild needs the js-yaml package and could not resolve it. ` +
+      `Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
+  );
 }

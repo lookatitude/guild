@@ -45,6 +45,16 @@ BROKEN
   exit 0
 fi
 
+# ── Self-check: scripts runtime deps present (issue #14) ──────────────────
+# Compiled hooks bundle js-yaml, but the tsx scripts under scripts/ resolve it
+# from scripts/node_modules at runtime. Surface a one-line actionable warning
+# instead of letting every script die with a resolution stack trace.
+if [[ -f "${GUILD_PLUGIN_ROOT}/scripts/package.json" ]] \
+  && { [[ ! -d "${GUILD_PLUGIN_ROOT}/scripts/node_modules/js-yaml" ]] \
+    || [[ ! -d "${GUILD_PLUGIN_ROOT}/scripts/node_modules/argparse" ]]; }; then
+  echo "[Guild] warn: scripts runtime deps missing — run: npm install --prefix \"${GUILD_PLUGIN_ROOT}/scripts\" --omit=dev" >&2
+fi
+
 # ── Read Guild version from plugin.json ────────────────────────────────────
 GUILD_VERSION="(unknown)"
 if command -v python3 &>/dev/null && [[ -f "${PLUGIN_JSON}" ]]; then
