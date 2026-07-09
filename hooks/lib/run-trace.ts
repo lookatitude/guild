@@ -172,16 +172,25 @@ function readSentinel(p: string): string | null {
  * unless GUILD_HOST is unset/auto (the documented expected-host default, same as
  * resolveHostKind).
  */
+// Mirrors write-host-capability.ts's private ALL_HOST_KINDS (canonical union in
+// src/modules/host-runtime/workflows/host-types.ts). `gemini` was sunset
+// 2026-06-14 and purged from HostKind; unrecognized values resolve to claude.
+const KNOWN_HOST_KINDS = [
+  "claude",
+  "codex",
+  "pi",
+  "antigravity-2",
+  "claude-code-desktop",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+] as const;
+
 export function defaultResolveHost(requested: string): ReturnType<ResolveHost> {
   const raw = (process.env["GUILD_HOST"] ?? requested ?? "").trim().toLowerCase();
-  const resolved =
-    raw === "codex"
-      ? "codex"
-      : raw === "gemini"
-        ? "gemini"
-        : raw === "pi"
-          ? "pi"
-          : "claude";
+  const resolved = (KNOWN_HOST_KINDS as readonly string[]).includes(raw)
+    ? (raw as (typeof KNOWN_HOST_KINDS)[number])
+    : "claude";
   return { requested, resolved };
 }
 
