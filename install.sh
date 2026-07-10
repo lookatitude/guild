@@ -321,6 +321,23 @@ abs_path() {
 RENDERED_DIST=""
 RENDERED=0
 
+# Materialize the scripts/ runtime dependency closure (js-yaml et al.) in the
+# render source root so build-host-packages.ts can vendor it into every host
+# package. A fresh clone ships no node_modules; without this the render
+# fails closed (issue #14).
+ensure_script_runtime_deps() {
+  deps_root="$1/scripts"
+  [ -f "$deps_root/package.json" ] || return 0
+  # Full render closure — must match SCRIPT_RUNTIME_DEPENDENCIES in
+  # scripts/build-host-packages.ts, or a partial install skips the repair path.
+  [ -d "$deps_root/node_modules/js-yaml" ] && [ -d "$deps_root/node_modules/argparse" ] && return 0
+  if [ -f "$deps_root/package-lock.json" ]; then
+    run npm ci --prefix "$deps_root" --omit=dev --no-audit --no-fund
+  else
+    run npm install --prefix "$deps_root" --omit=dev --no-audit --no-fund
+  fi
+}
+
 render_host_packages_once() {
   [ "$RENDERED" -eq 1 ] && return
   RENDERED=1
@@ -332,6 +349,7 @@ render_host_packages_once() {
   fi
 
   if [ -f "$SCRIPT_DIR/scripts/build-host-packages.ts" ]; then
+    ensure_script_runtime_deps "$SCRIPT_DIR"
     if [ "$SCRIPT_DIR" = "$(pwd)" ]; then
       run npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at "$generated_at"
       RENDERED_DIST="dist"
@@ -353,6 +371,7 @@ render_host_packages_once() {
   cleanup() { rm -rf "$tmpdir"; }
   trap cleanup EXIT
   git clone --depth 1 "$SOURCE_REPO" "$tmpdir"
+  ensure_script_runtime_deps "$tmpdir"
   out_dir="$(pwd)/dist"
   (cd "$tmpdir" && npx tsx scripts/build-host-packages.ts --root . --out "$out_dir" --generated-at "$generated_at")
   RENDERED_DIST="$out_dir"

@@ -209,7 +209,16 @@ export function run(): RailResult {
         `--outfile=${tmpOut}`,
       ];
       try {
-        execFileSync(bin, args, { cwd: HOOKS, stdio: ["ignore", "ignore", "pipe"] });
+        // Replicate the hooks build script's `export NODE_PATH=node_modules`
+        // prefix (hooks/package.json): yaml-loader's literal require("js-yaml")
+        // is imported from src/, outside hooks/node_modules' resolution walk,
+        // so without NODE_PATH the fresh build leaves it external and the
+        // byte-compare false-flags every js-yaml-carrying bundle as stale.
+        execFileSync(bin, args, {
+          cwd: HOOKS,
+          stdio: ["ignore", "ignore", "pipe"],
+          env: { ...process.env, NODE_PATH: "node_modules" },
+        });
       } catch (e: any) {
         out.violations.push(`${outfile}: esbuild failed — ${String(e?.stderr ?? e).slice(0, 200)}`);
         continue;
