@@ -10,6 +10,35 @@ from v1.0.0 onward.
 
 _Nothing yet._
 
+## [2.0.1] — 2026-07-10
+
+Patch release: fresh installs no longer crash on a missing `js-yaml`
+(issue #14, PR #15).
+
+### Fixed
+
+- **Hooks crash on fresh install** (#14): every compiled hook died at load
+  with `Cannot resolve js-yaml from plugin scripts roots` and tsx scripts
+  crashed with `Cannot find module 'js-yaml'`. `loadYamlApi` now prefers the
+  plugin-local vendored copy (a consumer repo's `node_modules` can never
+  shadow it), falls back to a literal `require("js-yaml")` that esbuild
+  statically inlines into the compiled hook dists (immune to the
+  two-plugin-roots problem), and ends with a one-line actionable
+  npm-install hint instead of a stack trace.
+- **Silent broken renders**: `build-host-packages.ts` fails closed with an
+  actionable error when a vendored script runtime dep is missing instead of
+  silently emitting packages whose scripts crash; the vendor list is trimmed
+  to the real production closure (`js-yaml`, `argparse`).
+- **install.sh** materializes the scripts runtime deps
+  (`npm ci`/`install --omit=dev`) on the render source root — both the
+  checkout and tmp-clone paths — before rendering host packages.
+- **bootstrap.sh** self-check prints a one-line actionable warning when the
+  scripts runtime deps are missing.
+- **Sunset `gemini` host purged** from the hook-leg `defaultResolveHost`
+  mirror (latent type error that silently blocked 3 hook test suites).
+- **R-DIST rail** now replicates the hooks build's `NODE_PATH`, so the
+  dist-sync byte-compare rebuilds bundles the same way the real build does.
+
 ## [2.0.0] — 2026-07-07
 
 Guild v2 — the full redesign: one state machine, six phases, specialist
