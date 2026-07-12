@@ -1,10 +1,10 @@
 {
   "schema_version": "guild.inventory.v1",
   "generated_at": "1970-01-01T00:00:00.000Z",
-  "plugin_version": "2.0.1",
+  "plugin_version": "2.1.0",
   "manifest": {
     "name": "guild",
-    "version": "2.0.1",
+    "version": "2.1.0",
     "description": "A team-of-specialists plugin for Claude Code: 14 domain specialists across engineering, content, and commercial groups, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
     "homepage": "https://lookatitude.github.io/guild/",
     "repository": "https://github.com/lookatitude/guild",
