@@ -176,7 +176,16 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
   env.GUILD_TASK_ID = lane.taskId;                        // ← without this the file backstop is unlocatable
   if (lane.capability_scope) env.GUILD_CAPABILITY_SCOPE = JSON.stringify(lane.capability_scope);
   if (autonomyRules?.length)  env.GUILD_AUTONOMY_CONTRACT = JSON.stringify(autonomyRules);
-  Agent({ subagent_type: lane.owner, model: resolvedModel, prompt, env });
+  // (3) SPAWN — subagent_type is DEFINITION-SOURCE-RESOLVED (dispatch.md hard
+  //     constraint). Domain specialists are project instances: the host has no
+  //     registered agent under their name, so they dispatch as the host-generic
+  //     type with GUILD_AGENT_DEFINITION + the adoption prompt (already set on
+  //     the descriptor by the launcher). Only a SHIPPED machinery/dev-team agent
+  //     dispatches by bare name.
+  const subagentType =
+    lane.definition_source === "project" ? GENERIC_SUBAGENT_TYPE /* + definition env/prompt from the descriptor */
+                                         : lane.owner;
+  Agent({ subagent_type: subagentType, model: resolvedModel, prompt, env });
   ```
 
   **Absent `capability_scope` ⇒ write no file AND set no `GUILD_CAPABILITY_SCOPE`** (additive no-scoping; byte-identical to current). Still set `GUILD_RUN_ID`/`GUILD_TASK_ID` (they're harmless run-context, not scope) — but with no file and no scope env, the hook's `scope === null` clean fall-through applies. Omit each scope env key / the `autonomy_contract` value whose source field is absent — never set an empty/`"undefined"` value. The scope file is keyed by the lane's **task-id**, matching the hook's read path `.guild/runs/<run-id>/scope/<task-id>.json` (`hooks/pre-tool-use.ts` — it resolves that path from `GUILD_RUN_ID` + `GUILD_TASK_ID`).

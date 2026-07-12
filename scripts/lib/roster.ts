@@ -383,6 +383,27 @@ export function mintFromTemplate(opts: {
       reason: `no shipped template for "${name}" (templates/specialists/${name}.md not found)`,
     };
   }
+  // Source-side safety: only a REAL file inside the shipped template library
+  // is mintable. A symlinked <role>.md — or a symlinked templates/ ancestor —
+  // could smuggle a non-template body in; refuse both (codex G-lane finding).
+  let srcSt: fs.Stats;
+  try {
+    srcSt = fs.lstatSync(src);
+  } catch {
+    return { path: src, action: "refused", reason: `cannot stat template ${src}` };
+  }
+  if (!srcSt.isFile() || srcSt.isSymbolicLink()) {
+    return { path: src, action: "refused", reason: `template ${src} is not a regular file` };
+  }
+  const realSrc = fs.realpathSync(src);
+  const realPluginRoot = fs.realpathSync(pluginRoot);
+  if (realSrc !== path.join(realPluginRoot, "templates", "specialists", `${name}.md`)) {
+    return {
+      path: src,
+      action: "refused",
+      reason: `template ${src} resolves outside the shipped template library (${realSrc})`,
+    };
+  }
   const raw = fs.readFileSync(src, "utf8");
   const fm = parseFrontmatter(raw);
   if (!fm || asString(fm["template_version"]) !== SPECIALIST_TEMPLATE_VERSION) {
@@ -391,6 +412,27 @@ export function mintFromTemplate(opts: {
       action: "refused",
       reason: `template ${name}.md does not carry 'template_version: ${SPECIALIST_TEMPLATE_VERSION}'`,
     };
+  }
+
+  // Reuse-never-re-create is a ROSTER-NAME invariant, not a filename one: a
+  // project instance under any filename whose frontmatter `name:` matches the
+  // role already covers it (codex G-lane finding — a second `frontend` under a
+  // different filename would produce duplicate registry ids).
+  const projWarnings: string[] = [];
+  for (const f of listAgentFiles(path.join(projectRoot, ".guild", "agents"))) {
+    const existing = readAgentEntry(
+      projectRoot,
+      path.join(".guild", "agents", f),
+      "project",
+      projWarnings
+    );
+    if (existing && existing.name === name) {
+      return {
+        path: existing.definition_abs,
+        action: "exists",
+        reason: `instance already minted as ${existing.definition} (reuse, never re-create)`,
+      };
+    }
   }
 
   const target = path.join(projectRoot, ".guild", "agents", `${name}.md`);
@@ -426,12 +468,26 @@ export function mintFromTemplate(opts: {
     }
   }
 
-  // The one-line provenance transform. The stamp line is guaranteed present by
-  // the template_version check above; keep every other byte as authored.
-  const minted = raw.replace(
-    new RegExp(`^template_version:\\s*${SPECIALIST_TEMPLATE_VERSION}\\s*$`, "m"),
-    `derived_from_template: ${SPECIALIST_TEMPLATE_VERSION}`
-  );
+  // The one-line provenance transform, bounded to the frontmatter block (the
+  // text between the leading `---` fences) so a body occurrence can never be
+  // swapped, and verified: exactly one stamp must be replaced and none may
+  // survive — otherwise fail closed (a YAML-quoted/odd stamp that satisfied
+  // parseFrontmatter but not the raw line would silently mint with the wrong
+  // provenance key).
+  const fmEnd = raw.indexOf("\n---", 3);
+  const fmBlock = fmEnd === -1 ? raw : raw.slice(0, fmEnd + 4);
+  const stampRe = new RegExp(`^template_version:\\s*${SPECIALIST_TEMPLATE_VERSION}\\s*$`, "gm");
+  const matches = fmBlock.match(stampRe) ?? [];
+  if (matches.length !== 1) {
+    return {
+      path: src,
+      action: "refused",
+      reason: `template ${name}.md must carry exactly one literal 'template_version: ${SPECIALIST_TEMPLATE_VERSION}' frontmatter line (found ${matches.length})`,
+    };
+  }
+  const minted =
+    fmBlock.replace(stampRe, `derived_from_template: ${SPECIALIST_TEMPLATE_VERSION}`) +
+    raw.slice(fmBlock.length);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, minted, "utf8");
   return { path: target, action: "written" };

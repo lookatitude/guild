@@ -186,9 +186,9 @@ evidence = data citation (search volume, A/B result, benchmark).
 
 ## Tiered-worker roster (cost-aware-tiering-and-lean-context ADR §7)
 
-A thin **tiered-worker** layer **augments** the 14 product specialists and the
-dev-team agents (it does not replace either). Each role carries a **default
-tier**. Per the ADR's reconciliation rule, where an equivalent already ships, the
+A thin **tiered-worker** layer — the 2 machinery agents — **augments** the 15
+domain type templates and the dev-team agents (it does not replace either).
+Each role carries a **default tier**. Per the ADR's reconciliation rule, where an equivalent already ships, the
 existing specialist is **retiered** rather than duplicated; only genuinely-new
 types get a new file. Open Item **O-1 is resolved: no standalone reviewer type
 ships** — review/critic work folds into the `advisor` escalation pass plus the
@@ -256,10 +256,10 @@ the `powerful` `advisor` (ADR §3) — neither changes the role's printed defaul
 | `marketing` | commercial | `mid` | `sonnet` |
 | `sales` | commercial | `mid` | `sonnet` |
 
-14 product specialists + the 3 tiered-worker roles (`advisor`, `developer`, `doc-writer`)
-= 17. `powerful` is reserved for the three high-stakes / low-frequency roles
-(`architect`, `security`, `advisor`); no implementer or content/commercial role
-defaults to `powerful`.
+15 domain type templates (incl. `doc-writer`) + the 2 machinery agents
+(`advisor`, `developer`) = 17 roles. `powerful` is reserved for the three
+high-stakes / low-frequency roles (`architect`, `security`, `advisor`); no
+implementer or content/commercial role defaults to `powerful`.
 
 **No agent defaults to `cheap`.** The `cheap` tier (haiku) is still live and
 reachable two ways: (a) the auto-scorer drops a score-0 lane — a pure file read,

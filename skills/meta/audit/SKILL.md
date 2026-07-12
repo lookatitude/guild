@@ -45,7 +45,7 @@ One row per audited script, with the following fields:
 State plainly in the generated report:
 
 - **Meta-skills are filesystem-restricted by convention.** The meta-skills under `skills/meta/` operate on `.guild/` and repo files only. None of them should have network-capable tools declared. Any network-evidence match in a script called by a meta-skill's hook/tooling is a red flag.
-- **Only `agents/researcher.md` has web access by default.** It's the only specialist whose frontmatter declares `WebFetch` / `WebSearch`. Any new specialist requesting network access must be surfaced in this audit, and must be user-approved before it ships. The audit lists every `agents/*.md` whose frontmatter declares a network tool (by parsing the `tools:` frontmatter field if present) and flags any that are not `researcher.md`.
+- **Only the `researcher` role has web access by default.** It's the only specialist whose definition declares `WebFetch` / `WebSearch`. Any new specialist requesting network access must be surfaced in this audit, and must be user-approved before it ships. The audit scans ALL THREE specialist definition surfaces — machinery `agents/*.md`, the shipped type templates `templates/specialists/*.md`, and the consuming repo's minted instances `.guild/agents/*.md` — parsing each `tools:` frontmatter field, and flags any network-tool declaration that is not the `researcher` role (a minted instance inherits its template's tools; a PROJECT-EDITED instance that gained a network tool is exactly what this catches).
 - **Plugin is only as safe as its installed-from source (§15.2).** Echo Anthropic's guidance: *only install Claude Code plugins from trusted sources.* The report includes a one-paragraph trust-reminder section at the top, above the per-script table, so the user re-reads it every audit.
 
 ## Output
@@ -57,7 +57,7 @@ Structure:
 1. **Trust reminder** — one paragraph, per the Trust boundary section above.
 2. **Summary table** — one row per script, with `path`, `sha256` (short, first 12 chars), `network: yes/no`, `writes_outside_guild: yes/no`, `loc`.
 3. **Per-script detail** — the full fields from the Per-script report shape, one section per script.
-4. **Specialists with network access** — a short list of `agents/*.md` files whose frontmatter declares `WebFetch` or `WebSearch`. Expected: only `researcher.md`. Any other entry is flagged.
+4. **Specialists with network access** — a short list across `agents/*.md` + `templates/specialists/*.md` + `.guild/agents/*.md` whose frontmatter declares `WebFetch` or `WebSearch`. Expected: only the `researcher` role (template and/or its minted instance). Any other entry is flagged.
 5. **Drift against previous audit** — compare the sha256s against the most recent prior audit in `.guild/audit/`. Any changed hash is surfaced with the old/new values and the script's path. New scripts are flagged as `NEW since last audit`. Deleted scripts are flagged as `REMOVED since last audit`.
 
 ## Handoff

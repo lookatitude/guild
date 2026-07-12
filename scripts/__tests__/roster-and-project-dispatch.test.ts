@@ -406,6 +406,65 @@ describe("specialist type templates + deterministic mint (machinery-vs-template-
     expect(mintFromTemplate({ pluginRoot, projectRoot, name: "../escape" }).action).toBe("refused");
   });
 
+  it("treats an instance under ANY filename with a matching roster name as exists (name-identity reuse)", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    // A pre-existing project specialist named `frontend` under a DIFFERENT
+    // filename must block the mint — roster identity is frontmatter name.
+    writeAgent(path.join(projectRoot, ".guild", "agents"), "custom-frontend", {
+      description: "hand-rolled frontend",
+      model: "sonnet",
+    });
+    fs.renameSync(
+      path.join(projectRoot, ".guild", "agents", "custom-frontend.md"),
+      path.join(projectRoot, ".guild", "agents", "our-frontend.md")
+    );
+    // Rewrite its name to collide with the template role.
+    const p = path.join(projectRoot, ".guild", "agents", "our-frontend.md");
+    fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace("name: custom-frontend", "name: frontend"));
+    const res = mintFromTemplate({ pluginRoot, projectRoot, name: "frontend" });
+    expect(res.action).toBe("exists");
+    expect(res.reason).toContain("our-frontend.md");
+    expect(fs.existsSync(path.join(projectRoot, ".guild", "agents", "frontend.md"))).toBe(false);
+  });
+
+  it("refuses a symlinked template source (no smuggled non-template mint)", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    // A stamped file OUTSIDE the library, reached via a symlinked <role>.md.
+    const outside = path.join(path.dirname(pluginRoot), "outside.md");
+    fs.writeFileSync(
+      outside,
+      `---\ntemplate_version: ${SPECIALIST_TEMPLATE_VERSION}\nname: rogue\nmodel: opus\n---\n# rogue\n`
+    );
+    fs.symlinkSync(outside, path.join(pluginRoot, "templates", "specialists", "rogue.md"));
+    expect(mintFromTemplate({ pluginRoot, projectRoot, name: "rogue" }).action).toBe("refused");
+  });
+
+  it("fails closed when the literal stamp line is not exactly-once in the frontmatter", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    // YAML-quoted stamp satisfies the parser but not the literal line — refuse
+    // rather than mint with the wrong provenance key.
+    fs.writeFileSync(
+      path.join(pluginRoot, "templates", "specialists", "quoted.md"),
+      `---\ntemplate_version: "${SPECIALIST_TEMPLATE_VERSION}"\nname: quoted\nmodel: sonnet\n---\n# quoted\n`
+    );
+    const res = mintFromTemplate({ pluginRoot, projectRoot, name: "quoted" });
+    expect(res.action).toBe("refused");
+    expect(res.reason).toContain("exactly one literal");
+  });
+
+  it("never swaps a template_version line that lives in the BODY", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    const body = `\nDocs note:\n\ntemplate_version: ${SPECIALIST_TEMPLATE_VERSION}\n`;
+    const p = path.join(pluginRoot, "templates", "specialists", "frontend.md");
+    fs.appendFileSync(p, body);
+    const res = mintFromTemplate({ pluginRoot, projectRoot, name: "frontend" });
+    expect(res.action).toBe("written");
+    const minted = fs.readFileSync(res.path, "utf8");
+    // Frontmatter stamp swapped; the body occurrence untouched.
+    expect(minted).toContain(`derived_from_template: ${SPECIALIST_TEMPLATE_VERSION}`);
+    expect(minted).toContain(`\nDocs note:\n\ntemplate_version: ${SPECIALIST_TEMPLATE_VERSION}\n`);
+  });
+
   it("roster-resolve CLI mint writes the instance and refreshes the derived registry (exit 0 / 3)", () => {
     const { projectRoot, pluginRoot } = fixtureRoots();
     const cli = path.resolve(__dirname, "../roster-resolve.ts");
