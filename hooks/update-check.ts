@@ -128,7 +128,7 @@ function main(): void {
     spawnDetached(process.execPath, [__filename, "--refresh"]);
   }
 
-  const signal = computeSignal({ state, cache, hostKind: "claude" });
+  const signal = computeSignal({ state, cache, hostKind: "claude", hostId: "claude-code-cli" });
   const line = renderSignalLine(signal);
   if (!line) return;
 
