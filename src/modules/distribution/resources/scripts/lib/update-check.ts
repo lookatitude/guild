@@ -389,16 +389,21 @@ export function computeSignal(opts: {
     return { ...base, update_available: false, reason: "no-cache" };
   }
 
-  // Command resolution: the AC-7 capability row wins; the coarse hostKind
-  // mapping is the fallback for callers without a registry id.
+  // Command resolution: the AC-7 capability row wins. The coarse hostKind
+  // mapping applies ONLY when the caller supplied no registry id at all — a
+  // SUPPLIED-but-unknown id fails closed (command: null; the signal still
+  // notifies but claims no mechanism for an unverifiable host).
   const rowCaps = updateCapsForHost(opts.hostId);
-  const command = rowCaps
-    ? rowCaps.command
-    : opts.hostKind === "wrapper"
-      ? "guild-run update"
-      : opts.hostKind === "agents-file"
-        ? "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
-        : "claude plugin marketplace update guild && claude plugin update guild@guild";
+  const command =
+    opts.hostId !== undefined
+      ? rowCaps
+        ? rowCaps.command
+        : null
+      : opts.hostKind === "wrapper"
+        ? "guild-run update"
+        : opts.hostKind === "agents-file"
+          ? "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
+          : "claude plugin marketplace update guild && claude plugin update guild@guild";
 
   if (state.channel === "beta") {
     const remoteSha = cache.remote.next_head_sha;

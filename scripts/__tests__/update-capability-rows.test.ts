@@ -103,6 +103,22 @@ describe("runtime wiring — the row is the SoT", () => {
     expect(updateCapsForHost("nonexistent-host")).toBeNull();
   });
 
+  it("a SUPPLIED-but-unknown hostId fails closed: no command claim, no wrapper fallback", () => {
+    const cache = {
+      schema_version: CACHE_SCHEMA,
+      checked_at: new Date().toISOString(),
+      source_repo: "r",
+      remote: { latest_tag: "v9.9.9", next_head_sha: null, main_head_sha: null },
+    };
+    const state = { channel: "stable" as const, version: "2.0.1", commit: null, source: "receipt" as const };
+    const unknown = computeSignal({ state, cache, hostKind: "wrapper", hostId: "totally-unknown-host" });
+    expect(unknown.update_available).toBe(true);
+    expect(unknown.command).toBeNull(); // NOT "guild-run update"
+    // Coarse mapping still applies when NO hostId was supplied at all.
+    const coarse = computeSignal({ state, cache, hostKind: "wrapper" });
+    expect(coarse.command).toBe(UPDATE_COMMANDS.self_update);
+  });
+
   it("the schema validator rejects a row missing or violating the update shape (AC-7 fail-closed)", () => {
     const { validateHostCapabilitiesV1 } = require("../../src/modules/host-runtime/workflows/host-capabilities-schema");
     const good = JSON.parse(JSON.stringify(HOST_REGISTRY_ROWS["claude-code-cli"].capabilities));

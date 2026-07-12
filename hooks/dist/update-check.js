@@ -5636,7 +5636,7 @@ function computeSignal(opts) {
     return { ...base, update_available: false, reason: "no-cache" };
   }
   const rowCaps = updateCapsForHost(opts.hostId);
-  const command = rowCaps ? rowCaps.command : opts.hostKind === "wrapper" ? "guild-run update" : opts.hostKind === "agents-file" ? "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update" : "claude plugin marketplace update guild && claude plugin update guild@guild";
+  const command = opts.hostId !== void 0 ? rowCaps ? rowCaps.command : null : opts.hostKind === "wrapper" ? "guild-run update" : opts.hostKind === "agents-file" ? "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update" : "claude plugin marketplace update guild && claude plugin update guild@guild";
   if (state.channel === "beta") {
     const remoteSha = cache.remote.next_head_sha;
     if (remoteSha && state.commit && remoteSha !== state.commit) {
