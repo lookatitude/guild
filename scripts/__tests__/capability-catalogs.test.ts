@@ -85,4 +85,40 @@ describe("capability module catalogs", () => {
     expect(isSpecialistSkillId("qa-test-strategy")).toBe(true);
     expect(isSpecialistSkillId("guild-quality")).toBe(false);
   });
+
+  it("every shipped definition carries the closed persona enums (AGENT.template.v1 slots)", () => {
+    // Canonical value vocabulary: target-architecture.md §Agent personality
+    // (umbrella wiki). Closed sets — any new value must be ratified there first.
+    const OPERATING_STYLE = new Set(["methodical", "pragmatic", "exploratory"]);
+    const TERSENESS = new Set(["terse", "balanced", "expansive"]);
+    const PUSHBACK = new Set(["deferential", "evidence-led", "assertive"]);
+    const ESCALATION = new Set(["conservative", "balanced", "eager"]);
+    const definitionPaths = [
+      ...listMachineryAgentIds().map((n) => path.join(pluginRoot, "agents", `${n}.md`)),
+      ...listSpecialistTemplateIds().map((n) =>
+        path.join(pluginRoot, "templates", "specialists", `${n}.md`)
+      ),
+    ];
+    expect(definitionPaths).toHaveLength(17);
+    for (const p of definitionPaths) {
+      const fm = parseFrontmatter(fs.readFileSync(p, "utf8")) ?? {};
+      expect({ file: p, v: fm["operating_style"] }).toEqual({
+        file: p,
+        v: expect.stringMatching(/./),
+      });
+      expect(OPERATING_STYLE.has(String(fm["operating_style"]))).toBe(true);
+      const persona = fm["personality"] as Record<string, unknown> | undefined;
+      expect(persona && typeof persona === "object").toBe(true);
+      expect(TERSENESS.has(String(persona?.["terseness"]))).toBe(true);
+      expect(PUSHBACK.has(String(persona?.["pushback_posture"]))).toBe(true);
+      expect(ESCALATION.has(String(persona?.["escalation_bias"]))).toBe(true);
+      // flavor is optional but when present must be a single short line.
+      const flavor = persona?.["flavor"];
+      if (flavor !== undefined && flavor !== null) {
+        expect(typeof flavor).toBe("string");
+        expect(String(flavor)).not.toContain("\n");
+        expect(String(flavor).length).toBeLessThanOrEqual(80);
+      }
+    }
+  });
 });

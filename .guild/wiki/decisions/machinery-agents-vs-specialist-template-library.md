@@ -94,3 +94,30 @@ as the read-only skill library that templates (and their minted instances) refer
   template.
 - A project may still override or specialize any role — the project instance always wins
   the merged roster.
+
+## Addendum (2026-07-12, follow-ups F2–F6)
+
+- **D6 — team-file migration is code.** `roster-resolve.ts migrate-team-roster` is the
+  one-shot v2.1→v2.2 fixer: entries with `definition_source: shipped` naming a DOMAIN
+  role are minted (idempotent) and re-pointed at `.guild/agents/<role>.md`; machinery
+  and novel project roles are untouched; unparseable team files are refused, never
+  guessed at. Recorded in the canonical MIGRATION.md §5a.
+- **D7 — host-native projection is opt-in.** `mint <role> --host-native`
+  (`projectInstanceToHostNative`) copies the instance into `.claude/agents/<role>.md`
+  with a `generated_by: guild.roster_resolve.v1` frontmatter marker so Claude hosts can
+  auto-route natively. It never clobbers a file lacking the marker; the `.guild/`
+  instance stays the source of truth.
+- **D8 — templates stay OUT of guild.inventory.v1.** The v1 category list is CLOSED;
+  adding a `templates` category means an inventory v2 bump across every consumer.
+  Template integrity is enforced instead by: the capability-catalog directory pin, the
+  roster-consistency validator, and the packaging byte rail (`verifyTemplateTree` in
+  verify-host-packages — every `templates/**` file in every installable package must be
+  byte-identical to source; missing/stale/extra files fail). Revisit as part of any
+  future inventory v2.
+- **D9 — persona slots are live.** All 17 shipped definitions now carry
+  `operating_style` + the closed `personality` axes. The value vocabulary is pinned in
+  the umbrella `target-architecture.md` §Agent personality (operating_style:
+  methodical|pragmatic|exploratory; terseness: terse|balanced|expansive;
+  pushback_posture: deferential|evidence-led|assertive; escalation_bias:
+  conservative|balanced|eager) and enforced by the capability-catalogs enum test.
+  Minted instances inherit the template's persona verbatim.

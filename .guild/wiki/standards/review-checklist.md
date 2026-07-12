@@ -45,7 +45,7 @@ Use this checklist before treating v2 architecture documentation or implementati
 | Skills short, concise, Claude Code-first, Codex parity when possible | `agent-and-skill-factory.md`, `architecture.md` |
 | Documentation organized under `/docs/v2` | This folder |
 | Clean review by another agent | `review-trail.md` |
-| Current repo surface reflected | `.claude-plugin` generated compatibility manifest, 20 commands, 110 inventory skills, 17 registered specialists, 18 hook bindings, 2 MCP servers, 231 scripts, module-source `src/modules/*` ownership manifests/resources, clean-slate command verbs, `fix` maintenance verb (supersedes legacy diagnose), canonical `logs/v1.4-events.jsonl` + `events.ndjson` legacy mirror |
+| Current repo surface reflected | `.claude-plugin` generated compatibility manifest, 20 commands, 110 inventory skills, 2 machinery agents + 15 specialist type templates, 18 hook bindings, 2 MCP servers, 231 scripts, module-source `src/modules/*` ownership manifests/resources, clean-slate command verbs, `fix` maintenance verb (supersedes legacy diagnose), canonical `logs/v1.4-events.jsonl` + `events.ndjson` legacy mirror |
 | Cross-host broker placed in every gate's review step | `cross-host-review-and-loop-control.md`, `adversarial-review.md` |
 | Weak-independence (same-host) reviews are stamped and recorded | `cross-host-review-and-loop-control.md`, `review-trail.md` |
 

@@ -24,8 +24,11 @@ import {
   deriveAgentsRegistry,
   deriveSkillsRegistry,
   GENERATED_MARKER,
+  HOST_NATIVE_MARKER,
   listSpecialistTemplates,
+  migrateTeamRoster,
   mintFromTemplate,
+  projectInstanceToHostNative,
   resolveRoster,
   SPECIALIST_TEMPLATE_VERSION,
   tierForModel,
@@ -351,6 +354,163 @@ function launchReq(specialists: Specialist[]): TeamLaunchRequest {
     dryRun: true,
   };
 }
+
+describe("migrate-team-roster — shipped domain lanes → project instances (v2.2 fixer)", () => {
+  function writeTeamFile(projectRoot: string, name: string, doc: string): string {
+    const dir = path.join(projectRoot, ".guild", "team");
+    fs.mkdirSync(dir, { recursive: true });
+    const p = path.join(dir, name);
+    fs.writeFileSync(p, doc, "utf8");
+    return p;
+  }
+
+  it("mints + rewrites shipped DOMAIN entries, leaves machinery and project entries alone", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    const teamPath = writeTeamFile(
+      projectRoot,
+      "demo.build.yaml",
+      [
+        "spec: .guild/spec/demo.md",
+        "phase: build",
+        "specialists:",
+        "  - name: frontend", // domain role WITH a template → migrate
+        "    definition: agents/frontend.md",
+        "    definition_source: shipped",
+        "  - name: advisor", // machinery → untouched
+        "    definition: agents/advisor.md",
+        "    definition_source: shipped",
+        "  - name: kb-viz-engineer", // already project → untouched
+        "    definition: .guild/agents/kb-viz-engineer.md",
+        "    definition_source: project",
+        "",
+      ].join("\n")
+    );
+    const results = migrateTeamRoster({ pluginRoot, projectRoot });
+    expect(results).toHaveLength(1);
+    expect(results[0].action).toBe("rewritten");
+    expect(results[0].migrated).toEqual(["frontend"]);
+    expect(results[0].minted).toEqual(["frontend"]);
+    // The instance exists and the team entry points at it.
+    expect(fs.existsSync(path.join(projectRoot, ".guild", "agents", "frontend.md"))).toBe(true);
+    const rewritten = fs.readFileSync(teamPath, "utf8");
+    expect(rewritten).toContain(`definition: ${path.join(".guild", "agents", "frontend.md")}`);
+    // Machinery + project entries keep their sources.
+    expect(rewritten.match(/definition_source: shipped/g)).toHaveLength(1); // advisor only
+    expect(rewritten.match(/definition_source: project/g)).toHaveLength(2); // frontend + kb-viz
+    // Idempotent: a second run is a no-op.
+    const again = migrateTeamRoster({ pluginRoot, projectRoot });
+    expect(again[0].action).toBe("unchanged");
+  });
+
+  it("dry-run reports without writing; unparseable files are refused not guessed", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    const teamPath = writeTeamFile(
+      projectRoot,
+      "demo.build.yaml",
+      "spec: x\nspecialists:\n  - name: frontend\n    definition: agents/frontend.md\n    definition_source: shipped\n"
+    );
+    const before = fs.readFileSync(teamPath, "utf8");
+    const dry = migrateTeamRoster({ pluginRoot, projectRoot, dryRun: true });
+    expect(dry[0].action).toBe("rewritten");
+    expect(fs.readFileSync(teamPath, "utf8")).toBe(before); // nothing written
+    expect(fs.existsSync(path.join(projectRoot, ".guild", "agents", "frontend.md"))).toBe(false);
+
+    writeTeamFile(projectRoot, "broken.yaml", "specialists: [unclosed\n  - oops: {");
+    const res = migrateTeamRoster({ pluginRoot, projectRoot });
+    const broken = res.find((r) => r.path.endsWith("broken.yaml"))!;
+    expect(broken.action).toBe("refused");
+  });
+
+  it("surfaces a REFUSED mint as file-level failure instead of silently leaving the lane broken", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    // Symlink the WHOLE templates/specialists dir: entries still enumerate
+    // (regular files through the linked dir), but mintFromTemplate's realpath
+    // containment refuses each source — the refused-mint path.
+    const tplDir = path.join(pluginRoot, "templates", "specialists");
+    const moved = path.join(path.dirname(pluginRoot), "specialists-moved");
+    fs.renameSync(tplDir, moved);
+    fs.symlinkSync(moved, tplDir);
+    writeTeamFile(
+      projectRoot,
+      "demo.build.yaml",
+      "specialists:\n  - name: frontend\n    definition: agents/frontend.md\n    definition_source: shipped\n"
+    );
+    const res = migrateTeamRoster({ pluginRoot, projectRoot });
+    expect(res[0].action).toBe("refused");
+    expect(res[0].failed.map((x) => x.role)).toEqual(["frontend"]);
+    // The entry stays shipped — but loudly, not silently.
+    const raw = fs.readFileSync(path.join(projectRoot, ".guild", "team", "demo.build.yaml"), "utf8");
+    expect(raw).toContain("definition_source: shipped");
+    // Dry-run reports the SAME refusal (probe runs the real checks).
+    const dry = migrateTeamRoster({ pluginRoot, projectRoot, dryRun: true });
+    expect(dry[0].failed.map((x) => x.role)).toEqual(["frontend"]);
+  });
+
+  it("a domain role WITHOUT a template (novel project type) is never migrated", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    const teamPath = writeTeamFile(
+      projectRoot,
+      "demo.build.yaml",
+      "specialists:\n  - name: data-scientist\n    definition: agents/data-scientist.md\n    definition_source: shipped\n"
+    );
+    const res = migrateTeamRoster({ pluginRoot, projectRoot });
+    expect(res[0].action).toBe("unchanged");
+    expect(fs.readFileSync(teamPath, "utf8")).toContain("definition_source: shipped");
+  });
+});
+
+describe("projectInstanceToHostNative — opt-in .claude/agents projection", () => {
+  it("projects a minted instance with the marker; refuses hand-authored targets; overwrites its own output", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    expect(mintFromTemplate({ pluginRoot, projectRoot, name: "frontend" }).action).toBe("written");
+
+    const first = projectInstanceToHostNative({ projectRoot, name: "frontend" });
+    expect(first.action).toBe("written");
+    const projected = fs.readFileSync(first.path, "utf8");
+    expect(projected.split("\n")[1]).toBe(HOST_NATIVE_MARKER);
+    // Body is the instance byte-for-byte after the marker line.
+    const instance = fs.readFileSync(path.join(projectRoot, ".guild", "agents", "frontend.md"), "utf8");
+    expect(projected.replace(`${HOST_NATIVE_MARKER}\n`, "")).toBe(instance);
+
+    // Re-projection over its own output is allowed (marker present).
+    expect(projectInstanceToHostNative({ projectRoot, name: "frontend" }).action).toBe("written");
+
+    // A hand-authored file (no marker) is never clobbered.
+    const hand = path.join(projectRoot, ".claude", "agents", "custom.md");
+    fs.mkdirSync(path.dirname(hand), { recursive: true });
+    fs.writeFileSync(hand, "---\nname: custom\nmodel: sonnet\n---\n# custom\n");
+    fs.writeFileSync(path.join(projectRoot, ".guild", "agents", "custom.md"),
+      "---\nname: custom\nmodel: sonnet\n---\n# custom instance\n");
+    expect(projectInstanceToHostNative({ projectRoot, name: "custom" }).action).toBe("refused");
+
+    // No instance → refused with a mint hint.
+    const missing = projectInstanceToHostNative({ projectRoot, name: "qa" });
+    expect(missing.action).toBe("refused");
+    expect(missing.reason).toContain("mint it first");
+  });
+
+  it("refuses a symlinked .claude ancestor (no write outside the project)", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    expect(mintFromTemplate({ pluginRoot, projectRoot, name: "frontend" }).action).toBe("written");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-hostnative-escape-"));
+    fs.symlinkSync(outside, path.join(projectRoot, ".claude"));
+    const res = projectInstanceToHostNative({ projectRoot, name: "frontend" });
+    expect(res.action).toBe("refused");
+    expect(res.reason).toContain("outside the project root");
+    expect(fs.readdirSync(outside)).toEqual([]);
+  });
+
+  it("stamps the marker on CRLF instances too (never a silent unmarked projection)", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    expect(mintFromTemplate({ pluginRoot, projectRoot, name: "frontend" }).action).toBe("written");
+    const inst = path.join(projectRoot, ".guild", "agents", "frontend.md");
+    fs.writeFileSync(inst, fs.readFileSync(inst, "utf8").replace(/\n/g, "\r\n"));
+    const res = projectInstanceToHostNative({ projectRoot, name: "frontend" });
+    expect(res.action).toBe("written");
+    const projected = fs.readFileSync(res.path, "utf8");
+    expect(projected.startsWith(`---\r\n${HOST_NATIVE_MARKER}\r\n`)).toBe(true);
+  });
+});
 
 describe("specialist type templates + deterministic mint (machinery-vs-template-library ADR)", () => {
   it("enumerates stamped templates only; templates never join the dispatchable roster", () => {
