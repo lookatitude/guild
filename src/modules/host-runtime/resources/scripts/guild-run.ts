@@ -38,6 +38,14 @@ import {
   type WrapperRequest,
   type WrapperPlan,
 } from "./lib/guild-run-wrapper";
+import { runSelfUpdate } from "./lib/self-update";
+import {
+  cachePath,
+  computeSignal,
+  readCache,
+  renderSignalLine,
+  resolveInstallState,
+} from "./lib/update-check";
 import { normalizeWithRepair, type BoundedRepairResult } from "./lib/result-normalizer";
 import type { PermissionMode } from "./lib/host-capabilities-schema";
 import { createHostAdapter } from "./lib/host-adapter-factory";
@@ -63,6 +71,10 @@ interface CliArgs {
   record?: string;
   dryRun: boolean;
   modelParams?: Record<string, string>;
+  /** `guild-run update` — self-update this wrapper package (lib/self-update.ts). */
+  update: boolean;
+  /** With `update`: re-render even when the check says up-to-date. */
+  force: boolean;
 }
 
 const VALID_MODES = new Set<PermissionMode>([
@@ -85,6 +97,8 @@ export function parseArgs(argv: string[]): CliArgs | { error: string } {
   let resume: string | undefined;
   let record: string | undefined;
   let dryRun = false;
+  let update = false;
+  let force = false;
   const modelParams: Record<string, string> = {};
 
   const next = (i: number): string | undefined => argv[i + 1];
@@ -107,14 +121,17 @@ export function parseArgs(argv: string[]): CliArgs | { error: string } {
     else if (a === "--thinking" && next(i) !== undefined) modelParams.thinking = argv[++i];
     else if (a === "--verbosity" && next(i) !== undefined) modelParams.verbosity = argv[++i];
     else if (a === "--dry-run") dryRun = true;
+    else if (a === "update") update = true;
+    else if (a === "--force") force = true;
     else return { error: `unknown or incomplete argument: ${a}` };
   }
 
-  if (!host) return { error: "--host is required (claude | codex)" };
+  if (!host && !update) return { error: "--host is required (claude | codex)" };
+  if (!host) host = "self"; // `guild-run update` needs no host — the receipt names it
   if (!VALID_MODES.has(mode)) return { error: `--mode must be one of ${[...VALID_MODES].join(", ")}` };
   if (!Number.isInteger(maxRepair) || maxRepair < 0) return { error: "--max-repair must be a non-negative integer" };
 
-  const out: CliArgs = { host, mode, cwd, writableRoots, maxRepair, dryRun };
+  const out: CliArgs = { host, mode, cwd, writableRoots, maxRepair, dryRun, update, force };
   if (bootstrap !== undefined) out.bootstrap = bootstrap;
   if (prompt !== undefined) out.prompt = prompt;
   if (contract !== undefined) out.contract = contract;
@@ -278,6 +295,26 @@ function main(): number {
   if ("error" in parsed) {
     process.stderr.write(parsed.error + "\n");
     return 1;
+  }
+
+  // `guild-run update` — wrapper-host self-update (plugin-update-lifecycle G1-ALL).
+  if (parsed.update) {
+    return runSelfUpdate({ pkgRoot: path.resolve(__dirname, ".."), force: parsed.force });
+  }
+
+  // Offline launch notice (AC-3): one stderr line when the machine cache says
+  // this package's channel has moved. Never blocks, never touches the network.
+  try {
+    const pkgRoot = path.resolve(__dirname, "..");
+    const state = resolveInstallState(pkgRoot);
+    if (state.channel !== "dev") {
+      const line = renderSignalLine(
+        computeSignal({ state, cache: readCache(cachePath()), hostKind: "wrapper" })
+      );
+      if (line) process.stderr.write(`[guild-run] ${line}\n`);
+    }
+  } catch {
+    // notice is best-effort
   }
 
   const request: WrapperRequest = {

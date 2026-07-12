@@ -68,6 +68,8 @@ SOURCE_REPO="${GUILD_SOURCE_REPO:-https://github.com/lookatitude/guild.git}"
 # GUILD_SOURCE_REF overrides both for an arbitrary ref.
 CHANNEL="${GUILD_CHANNEL:-stable}"
 SOURCE_REF="${GUILD_SOURCE_REF:-}"
+# --update: re-render + reinstall every host with a receipt under ~/.guild/receipts
+UPDATE_MODE=0
 PLUGIN_SPEC="guild@guild"
 DRY_RUN=0
 ASSUME_YES=0
@@ -101,6 +103,9 @@ Options (pass after `bash -s --`):
   --channel C     release channel for the no-checkout clone fallback:
                   stable (main — released versions, default) or
                   beta (next — integration builds ahead of release)
+  --update        re-render + reinstall every host recorded under
+                  ~/.guild/receipts (each install writes a receipt); channel
+                  comes from the receipts unless --channel overrides
 
 Bare auto-detect installs every supported host found on PATH (+ IDE project
 markers). Writing to MORE THAN ONE host needs --yes or an interactive y/N;
@@ -184,6 +189,7 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
     --channel=*) CHANNEL="${arg#--channel=}" ;;
+    --update) UPDATE_MODE=1 ;;
     -h|--help) usage; exit 0 ;;
     *)
       printf 'guild-install: unknown option: %s\n' "$arg" >&2
@@ -202,6 +208,40 @@ case "$CHANNEL" in
     exit 1
     ;;
 esac
+
+# ── Update mode: hosts + channels come from the install receipts (G1-ALL) ────
+# Each receipted host is re-rendered AT ITS OWN recorded channel (a stable
+# claude install and a beta codex install update independently in one run).
+# An explicit --channel / GUILD_CHANNEL overrides every receipt. Receipts are
+# prior consent: the multi-host consent gate is auto-satisfied in update mode.
+UPDATE_STABLE_HOSTS=""
+UPDATE_BETA_HOSTS=""
+if [ "$UPDATE_MODE" -eq 1 ]; then
+  RECEIPTS_GLOB="${GUILD_RECEIPTS_DIR:-$HOME/.guild/receipts}"
+  if [ ! -d "$RECEIPTS_GLOB" ] || [ -z "$(ls "$RECEIPTS_GLOB"/*.json 2>/dev/null)" ]; then
+    printf 'guild-install: --update found no install receipts under %s\n' "$RECEIPTS_GLOB" >&2
+    printf '  Receipts are written by installs from this version onward; run a normal install once first.\n' >&2
+    exit 1
+  fi
+  for rf in "$RECEIPTS_GLOB"/*.json; do
+    rh="$(sed -n 's/^[[:space:]]*"host":[[:space:]]*"\([^"]*\)".*$/\1/p' "$rf" | head -1)"
+    rc="$(sed -n 's/^[[:space:]]*"channel":[[:space:]]*"\([^"]*\)".*$/\1/p' "$rf" | head -1)"
+    [ -z "$rh" ] && continue
+    if [ -n "${GUILD_CHANNEL:-}" ] || [ "$CHANNEL" != "stable" ]; then
+      # Explicit channel override → one group at the overridden channel.
+      UPDATE_STABLE_HOSTS="$UPDATE_STABLE_HOSTS $rh"
+    elif [ "$rc" = "beta" ]; then
+      UPDATE_BETA_HOSTS="$UPDATE_BETA_HOSTS $rh"
+    else
+      UPDATE_STABLE_HOSTS="$UPDATE_STABLE_HOSTS $rh"
+    fi
+    REQUESTED_HOSTS="$REQUESTED_HOSTS $rh"
+  done
+  ASSUME_YES=1
+  say "update mode: re-installing receipted hosts:$REQUESTED_HOSTS"
+  [ -n "${UPDATE_BETA_HOSTS# }" ] && say "  beta (next):$UPDATE_BETA_HOSTS"
+  [ -n "${UPDATE_STABLE_HOSTS# }" ] && say "  $( [ -n "${GUILD_CHANNEL:-}" ] || [ "$CHANNEL" != "stable" ] && printf '%s' "$CHANNEL (override)" || printf 'stable' ):$UPDATE_STABLE_HOSTS"
+fi
 
 # ── Host detection (bare auto-detect mode) ───────────────────────────────────
 # PATH probe of CLI-host binaries only (ADR §3.3); IDE hosts have no bin and are
@@ -385,6 +425,7 @@ render_host_packages_once() {
     if [ "$CHANNEL" != "stable" ]; then
       say "note: --channel $CHANNEL ignored — installing from the local checkout at $SCRIPT_DIR (check out the 'next' branch there to test beta)"
     fi
+    SOURCE_COMMIT="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || true)"
     ensure_script_runtime_deps "$SCRIPT_DIR"
     if [ "$SCRIPT_DIR" = "$(pwd)" ]; then
       run npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at "$generated_at"
@@ -408,10 +449,43 @@ render_host_packages_once() {
   trap cleanup EXIT
   say "channel: $CHANNEL (ref: $SOURCE_REF)"
   git clone --depth 1 --branch "$SOURCE_REF" "$SOURCE_REPO" "$tmpdir"
+  SOURCE_COMMIT="$(git -C "$tmpdir" rev-parse HEAD 2>/dev/null || true)"
   ensure_script_runtime_deps "$tmpdir"
   out_dir="$(pwd)/dist"
   (cd "$tmpdir" && npx tsx scripts/build-host-packages.ts --root . --out "$out_dir" --generated-at "$generated_at")
   RENDERED_DIST="$out_dir"
+}
+
+# ── Install receipts (guild.install_receipt.v1) ──────────────────────────────
+# One JSON receipt per installed host at ~/.guild/receipts/<host>.json, plus a
+# copy inside package-style installs so guild-run / the update-check hook can
+# resolve the channel without the machine registry. Receipts are what make
+# `install.sh --update` and channel-aware staleness checks possible (G1-ALL).
+RECEIPTS_DIR="${GUILD_RECEIPTS_DIR:-$HOME/.guild/receipts}"
+SOURCE_COMMIT=""
+
+plugin_version_from() {
+  # $1 = dir containing .claude-plugin/plugin.json
+  sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*$/\1/p' \
+    "$1/.claude-plugin/plugin.json" 2>/dev/null | head -1
+}
+
+write_receipt() {
+  # $1 = host id, $2 = optional package dir to drop a copy into
+  [ "$DRY_RUN" -eq 1 ] && return 0
+  host_id="$1"; pkg_dir="${2:-}"
+  version="$(plugin_version_from "$SCRIPT_DIR")"
+  [ -z "$version" ] && [ -n "$RENDERED_DIST" ] && version="$(plugin_version_from "$RENDERED_DIST/claude-code" 2>/dev/null)"
+  installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  receipt=$(printf '{\n  "schema_version": "guild.install_receipt.v1",\n  "host": "%s",\n  "channel": "%s",\n  "ref": "%s",\n  "commit": %s,\n  "version": "%s",\n  "installed_at": "%s"\n}\n' \
+    "$host_id" "$CHANNEL" "$SOURCE_REF" \
+    "$([ -n "$SOURCE_COMMIT" ] && printf '"%s"' "$SOURCE_COMMIT" || printf 'null')" \
+    "${version:-unknown}" "$installed_at")
+  mkdir -p "$RECEIPTS_DIR"
+  printf '%s' "$receipt" > "$RECEIPTS_DIR/$host_id.json"
+  if [ -n "$pkg_dir" ] && [ -d "$pkg_dir" ]; then
+    printf '%s' "$receipt" > "$pkg_dir/guild-install-receipt.json"
+  fi
 }
 
 # ── Per-host install (from the single pre-rendered dist tree) ─────────────────
@@ -429,6 +503,7 @@ install_claude_code_cli() {
     run claude plugin install "$PLUGIN_SPEC"
   fi
   installed_any=1
+  write_receipt claude-code-cli
   say ""
   say "Guild installed into Claude Code."
   say "Package wrapper: CLAUDE.md imports AGENTS.md via @AGENTS.md."
@@ -445,6 +520,7 @@ install_codex_cli() {
   run codex plugin marketplace add "$CODEX_MARKETPLACE_PATH"
   run codex plugin add "$PLUGIN_SPEC"
   installed_any=1
+  write_receipt codex-cli "$CODEX_MARKETPLACE_PATH"
   say ""
   say "Guild installed into Codex CLI."
   say "Package bootstrap: AGENTS.md plus .agents/skills/guild."
@@ -462,6 +538,7 @@ install_pi_cli() {
   PI_PACKAGE_PATH="$RENDERED_DIST/pi"
   run pi install "$PI_PACKAGE_PATH"
   installed_any=1
+  write_receipt pi-cli "$PI_PACKAGE_PATH"
   say ""
   say "Guild package prepared for Pi CLI."
   say "Package bootstrap: AGENTS.md plus .agents/skills/guild and pi-manifest.json."
@@ -477,6 +554,7 @@ install_antigravity_cli() {
   run agy plugin validate "$ANTIGRAVITY_PACKAGE_PATH"
   run agy plugin install "$ANTIGRAVITY_PACKAGE_PATH"
   installed_any=1
+  write_receipt antigravity-cli "$ANTIGRAVITY_PACKAGE_PATH"
   say ""
   say "Guild package prepared for Antigravity CLI."
   say "Package bootstrap: AGENTS.md plus .agents/skills/guild, plugin.json, and antigravity-manifest.json."
@@ -489,6 +567,7 @@ install_antigravity_cli() {
 install_agents_file() {
   say "Universal AGENTS.md package — $1"
   installed_any=1
+  write_receipt agents-file "$RENDERED_DIST/agents"
   say ""
   say "Universal AGENTS.md package rendered at:"
   say "  $RENDERED_DIST/agents/AGENTS.md"
@@ -515,6 +594,7 @@ install_new_cli() {
     say "Package tree prepared: $NEW_CLI_PATH"
   fi
   installed_any=1
+  write_receipt "$host" "$NEW_CLI_PATH"
   say ""
   say "Guild package prepared for $host."
   say "Package bootstrap: AGENTS.md plus .agents/skills/guild and $host-manifest.json (installability: target)."
@@ -541,6 +621,7 @@ install_new_ide() {
     return 1
   fi
   installed_any=1
+  write_receipt "$host" "$IDE_PATH"
   say ""
   say "Guild package for $host is the universal AGENTS.md package (adapter_binding: agents-file):"
   say "  $IDE_PATH/AGENTS.md"
@@ -567,12 +648,33 @@ dispatch_host() {
   esac
 }
 
-# ── Render once, then install every resolved host ────────────────────────────
-render_host_packages_once
+# ── Render, then install ─────────────────────────────────────────────────────
+# Normal mode: one render at the selected channel, every resolved host.
+# Update mode: one render PER RECEIPT CHANNEL, each group installed from its
+# own render (G1-ALL: hosts stay on the channel they were installed from).
+install_channel_group() {
+  # $1 = channel, $2 = ref, $3 = host list
+  CHANNEL="$1"; SOURCE_REF="$2"
+  RENDERED=0; RENDERED_DIST=""
+  render_host_packages_once
+  for host in $3; do
+    dispatch_host "$host"
+  done
+}
 
-for host in $RESOLVED_HOSTS; do
-  dispatch_host "$host"
-done
+if [ "$UPDATE_MODE" -eq 1 ]; then
+  if [ -n "${UPDATE_STABLE_HOSTS# }" ]; then
+    install_channel_group "$CHANNEL" "$SOURCE_REF" "${UPDATE_STABLE_HOSTS# }"
+  fi
+  if [ -n "${UPDATE_BETA_HOSTS# }" ]; then
+    install_channel_group "beta" "next" "${UPDATE_BETA_HOSTS# }"
+  fi
+else
+  render_host_packages_once
+  for host in $RESOLVED_HOSTS; do
+    dispatch_host "$host"
+  done
+fi
 
 if [ "$installed_any" -eq 0 ] && [ "$DRY_RUN" -eq 0 ]; then
   exit 1

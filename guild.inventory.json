@@ -922,6 +922,11 @@
       "event": "SessionStart"
     },
     {
+      "id": "SessionStart:update-check.js",
+      "source_path": "hooks/dist/update-check.js",
+      "event": "SessionStart"
+    },
+    {
       "id": "SessionStart:using-guild-bootstrap.js",
       "source_path": "hooks/dist/using-guild-bootstrap.js",
       "event": "SessionStart"
@@ -2098,6 +2103,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/self-update",
+      "source_path": "scripts/lib/self-update.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/settings-resolver",
       "source_path": "scripts/lib/settings-resolver.ts",
       "kind": "lib"
@@ -2175,6 +2185,11 @@
     {
       "id": "lib/trace-replay",
       "source_path": "scripts/lib/trace-replay.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/update-check",
+      "source_path": "scripts/lib/update-check.ts",
       "kind": "lib"
     },
     {

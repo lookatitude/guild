@@ -95,6 +95,7 @@ function confirmTokenFor(strength: ConfirmationStrength): string | undefined {
  */
 const VALUE_OVERRIDES: Record<string, string> = {
   // closed-enum keys
+  "defaults.update.mode": "auto",
   rigor: "deep",
   review: "off",
   index: "auto",
@@ -179,7 +180,7 @@ function writePathFor(key: string): string {
 describe("V12.0 — the persist matrix covers every CONFIG_UI_METADATA key", () => {
   it("one edit per metadata key, no gaps (generated, so it can't silently drift)", () => {
     expect(KEY_EDITS.length).toBe(Object.keys(CONFIG_UI_METADATA).length);
-    expect(KEY_EDITS.length).toBe(109);
+    expect(KEY_EDITS.length).toBe(111);
     // every enum/object_editor key resolved to a concrete value (no generator throw)
     for (const e of KEY_EDITS) expect(typeof e.value).toBe("string");
   });
@@ -190,7 +191,7 @@ describe("V12.0 — the persist matrix covers every CONFIG_UI_METADATA key", () 
 // ===========================================================================
 
 describe("V12.1 — every key persists to the intended scoped file", () => {
-  it("edits all 109 keys into one project settings.json; each lands, all coexist", () => {
+  it("edits all 111 keys into one project settings.json; each lands, all coexist", () => {
     const dir = mkProject({});
     quiet(() => {
       for (const e of KEY_EDITS) {
