@@ -138,6 +138,56 @@ describe("lib/roster resolveRoster (D4 enumeration)", () => {
     expect(r.project_skills.map((s) => s.id)).toEqual(["kb-viz-render"]);
   });
 
+  it("passes project metadata (owns/external_skills/reusable_in/consistency_source, skill type/used_by) through to the derived registries", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    const agentPath = path.join(projectRoot, ".guild", "agents", "kb-viz-engineer.md");
+    const raw = fs.readFileSync(agentPath, "utf8");
+    fs.writeFileSync(
+      agentPath,
+      raw.replace(
+        "---\n\n# kb-viz-engineer",
+        [
+          "owns: [kb_viz, dashboards]",
+          "external_skills: [impeccable]",
+          "reusable_in: [benchmark]",
+          "consistency_source: ../website/.guild/agents/kb-viz-engineer.md",
+          "---",
+          "",
+          "# kb-viz-engineer",
+        ].join("\n")
+      )
+    );
+    const skillMd = path.join(projectRoot, ".guild", "skills", "kb-viz-render", "SKILL.md");
+    fs.writeFileSync(
+      skillMd,
+      `---\nname: kb-viz-render\ndescription: render KB graphs\ntype: production\nused_by: [kb-viz-engineer]\nexternal_skills: [impeccable]\n---\nbody\n`
+    );
+
+    const r = resolveRoster({ projectRoot, pluginRoot });
+    const agent = r.project.find((a) => a.name === "kb-viz-engineer")!;
+    expect(agent.owns).toEqual(["kb_viz", "dashboards"]);
+    expect(agent.reusable_in).toEqual(["benchmark"]);
+    expect(agent.consistency_source).toBe("../website/.guild/agents/kb-viz-engineer.md");
+    expect(r.project_skills[0].type).toBe("production");
+    expect(r.project_skills[0].used_by).toEqual(["kb-viz-engineer"]);
+
+    expect(deriveAgentsRegistry(r).action).toBe("written");
+    const reg = fs.readFileSync(
+      path.join(projectRoot, ".guild", "agents", "registry.yaml"),
+      "utf8"
+    );
+    expect(reg).toContain("owns:");
+    expect(reg).toContain("kb_viz");
+    expect(reg).toContain("consistency_source: ../website/.guild/agents/kb-viz-engineer.md");
+    expect(deriveSkillsRegistry(r).action).toBe("written");
+    const sreg = fs.readFileSync(
+      path.join(projectRoot, ".guild", "skills", "registry.yaml"),
+      "utf8"
+    );
+    expect(sreg).toContain("type: production");
+    expect(sreg).toContain("used_by:");
+  });
+
   it("flags the augmenting registered types (advisor/developer/doc-writer)", () => {
     const { projectRoot, pluginRoot } = fixtureRoots();
     writeAgent(path.join(pluginRoot, "agents"), "developer", {

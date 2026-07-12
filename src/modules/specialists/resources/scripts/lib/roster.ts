@@ -64,6 +64,12 @@ export interface RosterAgentEntry {
   specialist_type: string | null;
   host_preference: string | null;
   model_params: Record<string, unknown> | null;
+  /** Optional project metadata passed through from frontmatter into the derived registry. */
+  owns: string[];
+  external_skills: string[];
+  reusable_in: string[];
+  /** Cross-repo consistency pointer (workspace-relative, e.g. ../website/.guild/agents/<x>.md). */
+  consistency_source: string | null;
   /** true on a project entry whose name collides with a shipped type (the project instance wins in the merged roster). */
   overrides_shipped: boolean;
   /**
@@ -80,6 +86,11 @@ export interface RosterSkillEntry {
   file: string;
   name: string | null;
   description: string | null;
+  /** Optional project metadata passed through from frontmatter into the derived registry. */
+  type: string | null;
+  used_by: string[];
+  external_skills: string[];
+  consistency_source: string | null;
 }
 
 export interface RosterResolution {
@@ -195,6 +206,10 @@ function readAgentEntry(
       modelParams && typeof modelParams === "object" && !Array.isArray(modelParams)
         ? (modelParams as Record<string, unknown>)
         : null,
+    owns: asStringList(fm["owns"]),
+    external_skills: asStringList(fm["external_skills"]),
+    reusable_in: asStringList(fm["reusable_in"]),
+    consistency_source: asString(fm["consistency_source"]),
     overrides_shipped: false,
     augmenting: AUGMENTING_AGENT_IDS.has(name),
   };
@@ -215,6 +230,10 @@ function listProjectSkills(projectRoot: string): RosterSkillEntry[] {
       file: path.join(".guild", "skills", e.name, "SKILL.md"),
       name: asString(fm["name"]),
       description: asString(fm["description"]),
+      type: asString(fm["type"]),
+      used_by: asStringList(fm["used_by"]),
+      external_skills: asStringList(fm["external_skills"]),
+      consistency_source: asString(fm["consistency_source"]),
     });
   }
   return entries;
@@ -395,6 +414,10 @@ export function deriveAgentsRegistry(
       specialist_type: a.specialist_type,
       derived_from_template: a.derived_from_template,
       skills: a.skills,
+      owns: a.owns,
+      external_skills: a.external_skills,
+      reusable_in: a.reusable_in,
+      consistency_source: a.consistency_source,
       overrides_shipped: a.overrides_shipped ? true : undefined,
     })
   );
@@ -417,7 +440,16 @@ export function deriveSkillsRegistry(
 ): DeriveResult {
   const target = path.join(resolution.project_root, ".guild", "skills", "registry.yaml");
   const items = resolution.project_skills.map((s) =>
-    pruneNulls({ id: s.id, file: s.file, name: s.name, description: s.description })
+    pruneNulls({
+      id: s.id,
+      file: s.file,
+      name: s.name,
+      description: s.description,
+      type: s.type,
+      used_by: s.used_by,
+      external_skills: s.external_skills,
+      consistency_source: s.consistency_source,
+    })
   );
   const doc = registryDoc(
     [
