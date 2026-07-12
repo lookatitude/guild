@@ -209,7 +209,13 @@ case "$CHANNEL" in
     ;;
 esac
 
-# ── Update mode: hosts + channel come from the install receipts (G1-ALL) ────
+# ── Update mode: hosts + channels come from the install receipts (G1-ALL) ────
+# Each receipted host is re-rendered AT ITS OWN recorded channel (a stable
+# claude install and a beta codex install update independently in one run).
+# An explicit --channel / GUILD_CHANNEL overrides every receipt. Receipts are
+# prior consent: the multi-host consent gate is auto-satisfied in update mode.
+UPDATE_STABLE_HOSTS=""
+UPDATE_BETA_HOSTS=""
 if [ "$UPDATE_MODE" -eq 1 ]; then
   RECEIPTS_GLOB="${GUILD_RECEIPTS_DIR:-$HOME/.guild/receipts}"
   if [ ! -d "$RECEIPTS_GLOB" ] || [ -z "$(ls "$RECEIPTS_GLOB"/*.json 2>/dev/null)" ]; then
@@ -217,26 +223,24 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
     printf '  Receipts are written by installs from this version onward; run a normal install once first.\n' >&2
     exit 1
   fi
-  receipt_channels=""
   for rf in "$RECEIPTS_GLOB"/*.json; do
     rh="$(sed -n 's/^[[:space:]]*"host":[[:space:]]*"\([^"]*\)".*$/\1/p' "$rf" | head -1)"
     rc="$(sed -n 's/^[[:space:]]*"channel":[[:space:]]*"\([^"]*\)".*$/\1/p' "$rf" | head -1)"
-    [ -n "$rh" ] && REQUESTED_HOSTS="$REQUESTED_HOSTS $rh"
-    [ -n "$rc" ] && receipt_channels="$receipt_channels $rc"
-  done
-  # Explicit --channel/GUILD_CHANNEL wins; otherwise adopt the receipts' channel
-  # (uniform), refusing a silent pick on a mixed set.
-  if [ -z "${GUILD_CHANNEL:-}" ] && [ "$CHANNEL" = "stable" ]; then
-    uniq_channels="$(printf '%s\n' $receipt_channels | sort -u)"
-    if [ "$(printf '%s\n' "$uniq_channels" | grep -c .)" -gt 1 ]; then
-      printf 'guild-install: --update receipts span multiple channels (%s) — pass --channel explicitly\n' "$(printf '%s' "$uniq_channels" | tr '\n' ' ')" >&2
-      exit 1
+    [ -z "$rh" ] && continue
+    if [ -n "${GUILD_CHANNEL:-}" ] || [ "$CHANNEL" != "stable" ]; then
+      # Explicit channel override → one group at the overridden channel.
+      UPDATE_STABLE_HOSTS="$UPDATE_STABLE_HOSTS $rh"
+    elif [ "$rc" = "beta" ]; then
+      UPDATE_BETA_HOSTS="$UPDATE_BETA_HOSTS $rh"
+    else
+      UPDATE_STABLE_HOSTS="$UPDATE_STABLE_HOSTS $rh"
     fi
-    case "$uniq_channels" in
-      beta) CHANNEL="beta"; SOURCE_REF="next" ;;
-    esac
-  fi
-  say "update mode: re-installing hosts:$REQUESTED_HOSTS (channel: $CHANNEL)"
+    REQUESTED_HOSTS="$REQUESTED_HOSTS $rh"
+  done
+  ASSUME_YES=1
+  say "update mode: re-installing receipted hosts:$REQUESTED_HOSTS"
+  [ -n "${UPDATE_BETA_HOSTS# }" ] && say "  beta (next):$UPDATE_BETA_HOSTS"
+  [ -n "${UPDATE_STABLE_HOSTS# }" ] && say "  $( [ -n "${GUILD_CHANNEL:-}" ] || [ "$CHANNEL" != "stable" ] && printf '%s' "$CHANNEL (override)" || printf 'stable' ):$UPDATE_STABLE_HOSTS"
 fi
 
 # ── Host detection (bare auto-detect mode) ───────────────────────────────────
@@ -644,12 +648,33 @@ dispatch_host() {
   esac
 }
 
-# ── Render once, then install every resolved host ────────────────────────────
-render_host_packages_once
+# ── Render, then install ─────────────────────────────────────────────────────
+# Normal mode: one render at the selected channel, every resolved host.
+# Update mode: one render PER RECEIPT CHANNEL, each group installed from its
+# own render (G1-ALL: hosts stay on the channel they were installed from).
+install_channel_group() {
+  # $1 = channel, $2 = ref, $3 = host list
+  CHANNEL="$1"; SOURCE_REF="$2"
+  RENDERED=0; RENDERED_DIST=""
+  render_host_packages_once
+  for host in $3; do
+    dispatch_host "$host"
+  done
+}
 
-for host in $RESOLVED_HOSTS; do
-  dispatch_host "$host"
-done
+if [ "$UPDATE_MODE" -eq 1 ]; then
+  if [ -n "${UPDATE_STABLE_HOSTS# }" ]; then
+    install_channel_group "$CHANNEL" "$SOURCE_REF" "${UPDATE_STABLE_HOSTS# }"
+  fi
+  if [ -n "${UPDATE_BETA_HOSTS# }" ]; then
+    install_channel_group "beta" "next" "${UPDATE_BETA_HOSTS# }"
+  fi
+else
+  render_host_packages_once
+  for host in $RESOLVED_HOSTS; do
+    dispatch_host "$host"
+  done
+fi
 
 if [ "$installed_any" -eq 0 ] && [ "$DRY_RUN" -eq 0 ]; then
   exit 1

@@ -126,7 +126,8 @@ export function parseArgs(argv: string[]): CliArgs | { error: string } {
     else return { error: `unknown or incomplete argument: ${a}` };
   }
 
-  if (!host) return { error: "--host is required (claude | codex)" };
+  if (!host && !update) return { error: "--host is required (claude | codex)" };
+  if (!host) host = "self"; // `guild-run update` needs no host — the receipt names it
   if (!VALID_MODES.has(mode)) return { error: `--mode must be one of ${[...VALID_MODES].join(", ")}` };
   if (!Number.isInteger(maxRepair) || maxRepair < 0) return { error: "--max-repair must be a non-negative integer" };
 

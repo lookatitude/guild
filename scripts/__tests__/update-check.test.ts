@@ -101,6 +101,28 @@ describe("readGitHead + channel resolution", () => {
     expect(readGitHead(dir)).toEqual({ branch: null, sha: SHA_A });
   });
 
+  it("resolves a WORKTREE-shaped .git FILE (gitdir pointer + commondir refs)", () => {
+    // Real git worktree: .git is a FILE → gitdir → private dir with HEAD +
+    // commondir → shared refs. A misread here silently downgraded beta→stable
+    // (codex G-lane MAJOR).
+    const repo = mkTmp("guild-wtrepo-");
+    const common = path.join(repo, ".git");
+    fs.mkdirSync(path.join(common, "refs", "heads"), { recursive: true });
+    fs.writeFileSync(path.join(common, "refs", "heads", "next"), `${SHA_B}\n`);
+    const wtGit = path.join(common, "worktrees", "wt1");
+    fs.mkdirSync(wtGit, { recursive: true });
+    fs.writeFileSync(path.join(wtGit, "HEAD"), "ref: refs/heads/next\n");
+    fs.writeFileSync(path.join(wtGit, "commondir"), "../..\n");
+
+    const wt = mkTmp("guild-wt-");
+    fs.writeFileSync(path.join(wt, ".git"), `gitdir: ${wtGit}\n`);
+
+    const { resolveGitDir } = require("../lib/update-check");
+    const resolved = resolveGitDir(path.join(wt, ".git"));
+    expect(resolved).toBe(wtGit);
+    expect(readGitHead(resolved!)).toEqual({ branch: "next", sha: SHA_B });
+  });
+
   it("maps branches to channels: next → beta, anything else → stable", () => {
     expect(branchToChannel("next")).toBe("beta");
     expect(branchToChannel("main")).toBe("stable");

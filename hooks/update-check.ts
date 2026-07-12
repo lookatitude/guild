@@ -37,8 +37,13 @@ import {
 function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number } {
   const defaults = { mode: "notify" as UpdateMode, cadenceHours: 24 };
   try {
-    const raw = fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8");
-    const parsed = JSON.parse(raw) as {
+    // The REAL config source of truth (AC-6): workspace + local + project
+    // layering with deep merge — never a raw single-file read (codex G-lane
+    // MAJOR: a workspace-level `defaults.update.mode: off` must be honored).
+    const { resolveSettings } = require("../src/modules/config/workflows/settings-resolver") as {
+      resolveSettings: (o: { cwd: string }) => { config: Record<string, unknown> };
+    };
+    const parsed = resolveSettings({ cwd }).config as {
       defaults?: { update?: { mode?: string; cadence_hours?: number } };
     };
     const u = parsed.defaults?.update ?? {};

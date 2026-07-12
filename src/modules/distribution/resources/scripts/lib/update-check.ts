@@ -108,6 +108,31 @@ export interface InstallState {
   source: "dev-checkout" | "marketplace-clone" | "receipt" | "default";
 }
 
+/**
+ * Resolve a `.git` PATH to the real git directory: a normal clone has a `.git`
+ * DIR; a git worktree (and some marketplace layouts) has a `.git` FILE whose
+ * content is `gitdir: <path>` — follow it (one level; relative paths resolve
+ * against the file's parent). Returns null when neither shape matches.
+ */
+export function resolveGitDir(
+  gitPath: string,
+  fsi: Pick<typeof fs, "existsSync" | "readFileSync" | "statSync"> = fs
+): string | null {
+  try {
+    const st = fsi.statSync(gitPath);
+    if (st.isDirectory()) return gitPath;
+    if (st.isFile()) {
+      const m = /^gitdir:\s*(.+)\s*$/m.exec(fsi.readFileSync(gitPath, "utf8"));
+      if (!m) return null;
+      const target = m[1].trim();
+      return path.isAbsolute(target) ? target : path.resolve(path.dirname(gitPath), target);
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
 /** Read `.git/HEAD` (+ resolve the ref) with plain fs — no git exec. */
 export function readGitHead(gitDir: string, fsi: Pick<typeof fs, "existsSync" | "readFileSync"> = fs): {
   branch: string | null;
@@ -122,16 +147,25 @@ export function readGitHead(gitDir: string, fsi: Pick<typeof fs, "existsSync" | 
     return { branch: null, sha: /^[0-9a-f]{40}$/.test(head) ? head : null };
   }
   const branch = refMatch[1];
-  const looseRef = path.join(gitDir, "refs", "heads", branch);
-  if (fsi.existsSync(looseRef)) {
-    const sha = fsi.readFileSync(looseRef, "utf8").trim();
-    return { branch, sha: /^[0-9a-f]{40}$/.test(sha) ? sha : null };
+  // A worktree gitdir keeps HEAD locally but shares refs via `commondir`.
+  const refRoots = [gitDir];
+  const commondirFile = path.join(gitDir, "commondir");
+  if (fsi.existsSync(commondirFile)) {
+    const common = fsi.readFileSync(commondirFile, "utf8").trim();
+    refRoots.push(path.isAbsolute(common) ? common : path.resolve(gitDir, common));
   }
-  const packed = path.join(gitDir, "packed-refs");
-  if (fsi.existsSync(packed)) {
-    for (const line of fsi.readFileSync(packed, "utf8").split("\n")) {
-      const m = /^([0-9a-f]{40})\s+refs\/heads\/(\S+)$/.exec(line.trim());
-      if (m && m[2] === branch) return { branch, sha: m[1] };
+  for (const root of refRoots) {
+    const looseRef = path.join(root, "refs", "heads", branch);
+    if (fsi.existsSync(looseRef)) {
+      const sha = fsi.readFileSync(looseRef, "utf8").trim();
+      return { branch, sha: /^[0-9a-f]{40}$/.test(sha) ? sha : null };
+    }
+    const packed = path.join(root, "packed-refs");
+    if (fsi.existsSync(packed)) {
+      for (const line of fsi.readFileSync(packed, "utf8").split("\n")) {
+        const m = /^([0-9a-f]{40})\s+refs\/heads\/(\S+)$/.exec(line.trim());
+        if (m && m[2] === branch) return { branch, sha: m[1] };
+      }
     }
   }
   return { branch, sha: null };
@@ -188,13 +222,15 @@ export function resolveInstallState(
     (m) => real === m || real.startsWith(m + path.sep)
   );
 
-  const gitDir = path.join(real, ".git");
-  if (fsi.existsSync(gitDir)) {
+  // Handles both clone shape (.git dir) and worktree shape (.git FILE with a
+  // gitdir: pointer) — a worktree misread as no-git would silently fall to the
+  // stable default and defeat beta SHA staleness (codex G-lane MAJOR).
+  const gitDir = resolveGitDir(path.join(real, ".git"), fsi);
+  if (gitDir) {
+    const { branch, sha } = readGitHead(gitDir, fsi);
     if (!isManaged) {
-      const { branch, sha } = readGitHead(gitDir, fsi);
       return { channel: "dev", version, commit: sha, source: "dev-checkout" };
     }
-    const { branch, sha } = readGitHead(gitDir, fsi);
     return {
       channel: branchToChannel(branch),
       version,

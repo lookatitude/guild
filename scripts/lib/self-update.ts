@@ -146,10 +146,11 @@ export function runSelfUpdate(opts: {
       return 1;
     }
 
-    // Staged swap: copy the fresh tree over the package root only after a
-    // successful render. The receipt is rewritten last.
-    log(`swapping into ${pkgRoot} …`);
-    fsi.cpSync(rendered, pkgRoot, { recursive: true, force: true });
+    // REAL staged swap (codex G-lane MAJOR): build the complete replacement
+    // tree in a SIBLING dir (same filesystem → atomic renames), receipt
+    // included, then old→aside / new→live / drop-aside. Deleted upstream files
+    // cannot survive (the whole tree is replaced), and a failure between the
+    // two renames is recovered by putting the old tree back.
     const newVersion = (() => {
       try {
         return (
@@ -167,11 +168,31 @@ export function runSelfUpdate(opts: {
       version: newVersion,
       installed_at: deps.now().toISOString(),
     };
+    const staging = `${pkgRoot}.update-staging`;
+    const aside = `${pkgRoot}.update-old`;
+    fsi.rmSync(staging, { recursive: true, force: true });
+    fsi.rmSync(aside, { recursive: true, force: true });
+    log(`staging new tree at ${staging} …`);
+    fsi.cpSync(rendered, staging, { recursive: true });
     fsi.writeFileSync(
-      path.join(pkgRoot, RECEIPT_BASENAME),
+      path.join(staging, RECEIPT_BASENAME),
       JSON.stringify(newReceipt, null, 2) + "\n",
       "utf8"
     );
+    log(`swapping ${pkgRoot} …`);
+    fsi.renameSync(pkgRoot, aside);
+    try {
+      fsi.renameSync(staging, pkgRoot);
+    } catch (e) {
+      // Second rename failed — put the old tree back before surfacing.
+      fsi.renameSync(aside, pkgRoot);
+      throw e;
+    }
+    try {
+      fsi.rmSync(aside, { recursive: true, force: true });
+    } catch {
+      log(`note: could not remove the previous tree at ${aside} — safe to delete manually.`);
+    }
     log(`updated to ${newCommit.slice(0, 7)} (v${newVersion}). Start a fresh ${receipt.host} session to pick it up.`);
     return 0;
   } catch (e) {
