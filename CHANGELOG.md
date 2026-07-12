@@ -10,6 +10,50 @@ from v1.0.0 onward.
 
 _Nothing yet._
 
+## [2.1.0] — 2026-07-12
+
+Project-local specialists become first-class citizens, and Guild gets a real
+release process: a beta channel (`next`), a stable channel (`main`), and this
+changelog is now generated from merged PRs at release-cut time.
+
+### Added
+
+- **Release channels + process** ([#19](https://github.com/lookatitude/guild/pull/19)):
+  branches are distribution channels — `main` = stable (default installs),
+  `next` = beta (`claude plugin marketplace add lookatitude/guild@next`, or
+  `install.sh --channel beta`). All feature PRs land on `next`; `main` only
+  accepts `release/vX.Y.Z` PRs (enforced by the new `branch-policy` CI gate),
+  which auto-tag and publish the GitHub Release on merge. Prerelease tags
+  (`-rcN`) publish as GitHub prereleases. New `scripts/release-changelog.ts`
+  generates this changelog section from the PRs merged since the last tag.
+  Canonical ruleset: `.guild/wiki/standards/release-discipline.md`.
+- **Deterministic roster resolution** ([#17](https://github.com/lookatitude/guild/pull/17)):
+  `scripts/roster-resolve.ts` is the code-backed D4 enumeration of the
+  specialist roster — shipped `plugin/agents/*.md` ∪ project `.guild/agents/*.md`
+  (project wins name collisions, `proposed/` excluded, tiers derived from
+  frontmatter) — and derives `.guild/{agents,skills}/registry.yaml` as generated
+  projections (files stay the source of truth; hand-authored registries are
+  never clobbered).
+
+### Changed
+
+- **Project-local specialists are now dispatchable** ([#17](https://github.com/lookatitude/guild/pull/17)):
+  team files carry `definition:` + `definition_source:`; a specialist minted
+  into `.guild/agents/` dispatches through the definition-path mechanism at its
+  own tier, in the same session it was created — the old "degraded, mid-tier,
+  restart-first" story is retired. Project skills under `.guild/skills/` are
+  now read back by the evolve loop (`findLiveSkillDir` resolves the project
+  instance first — the DH-3 gap is closed).
+
+### Fixed
+
+- **Learn: structural onboarding tour preserved** ([#18](https://github.com/lookatitude/guild/pull/18)):
+  K-tier knowledge finalization no longer overwrites the structural graph
+  nodes, layers, and tour produced by the deep-graph stages; monotonic flow
+  weights are validated within linear connected flows only.
+
+**Full Changelog**: https://github.com/lookatitude/guild/compare/v2.0.1...v2.1.0
+
 ## [2.0.1] — 2026-07-10
 
 Patch release: fresh installs no longer crash on a missing `js-yaml`

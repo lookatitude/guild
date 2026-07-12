@@ -67,7 +67,12 @@ the same spirit:
 3. **Add tests** for hooks, scripts, and MCP-server changes. Skills
    and agent files use `evals.json` fixtures.
 4. **Run all 5 test suites** before opening a PR.
-5. **Explain the "why" in the commit message**, not the "what"
+5. **Target `next`, not `main`.** All feature/fix PRs go to the `next`
+   integration branch (`gh pr create --base next`) — `main` is the stable
+   release channel and only accepts `release/vX.Y.Z` PRs (enforced by the
+   `branch-policy` CI gate; full rules in
+   `.guild/wiki/standards/release-discipline.md`).
+6. **Explain the "why" in the commit message**, not the "what"
    (the diff shows the what).
 
 ### Adding a new skill
@@ -112,11 +117,19 @@ the review and quality gate (see `https://guildstack.dev/docs`).
 
 ## Release flow
 
-- `main` is always green.
+- Branches are channels: `main` = stable (always green, always releasable),
+  `next` = beta/integration (all merged PRs collect and get tested here).
+- Releases are cut **from `next`** as a `release/vX.Y.Z` branch → PR into
+  `main` → on merge, CI tags and publishes the GitHub Release automatically
+  (PR body = release notes). Then `main` is merged back into `next`.
 - Tags are `vMAJOR.MINOR.PATCH` (SemVer) with optional `-beta<N>`
   pre-release suffix.
-- Update `CHANGELOG.md` as part of the release PR.
-- Bump `.claude-plugin/plugin.json` `version` to match the tag.
+- Update `CHANGELOG.md` as part of the release PR — generate the section with
+  `npx tsx scripts/release-changelog.ts --version vX.Y.Z --write` (groups the
+  PRs merged since the last tag; `--notes` seeds the PR body), then polish.
+- Bump `.claude-plugin/plugin.json` **and** `.claude-plugin/marketplace.json`
+  `version` to match the tag.
+- Full ruleset: `.guild/wiki/standards/release-discipline.md`.
 
 ## Reporting issues
 
