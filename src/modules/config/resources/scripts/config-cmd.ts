@@ -262,6 +262,7 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "heartbeat_timeout_ms",      // R-017
   "capability_manifest_ttl_s", // R-018
   "allowed_tools",             // R-020
+  "update",                    // plugin-update-lifecycle AC-6
 ]);
 
 /** Valid sub-keys for defaults.team.* */
@@ -504,6 +505,13 @@ function validateKeyPath(keyPath: string): string | null {
       }
       return null;
     }
+    // plugin-update-lifecycle AC-6: defaults.update.{mode,cadence_hours}
+    if (seg1 === "update") {
+      if (parts.length > 2 && seg2 !== "mode" && seg2 !== "cadence_hours") {
+        return `unknown defaults.update key "${seg2}" (valid: mode, cadence_hours)`;
+      }
+      return null;
+    }
     // R-017/R-018/R-020: scalar keys — no sub-paths allowed
     if (seg1 === "heartbeat_timeout_ms" || seg1 === "capability_manifest_ttl_s" || seg1 === "allowed_tools") {
       if (parts.length > 2) {
@@ -569,6 +577,7 @@ const INTEGER_PATHS = new Set([
 
 /** Paths that must be numbers (possibly non-integer). */
 const NUMBER_PATHS = new Set([
+  "defaults.update.cadence_hours",
   "defaults.index.kg_size_threshold_mb",
   "defaults.capability_manifest_ttl_s",    // R-018: positive number (seconds)
   "models.recallScoreThreshold",
@@ -613,6 +622,7 @@ const NUMERIC_RANGE: Record<string, { min: number; max?: number; exclusiveMin?: 
   // "positive number" keys (fractional ok) — resolver REJECTS <= 0 (config-cli.ts:1249,1276).
   "defaults.index.kg_size_threshold_mb": { min: 0, exclusiveMin: true },
   "defaults.capability_manifest_ttl_s": { min: 0, exclusiveMin: true },
+  "defaults.update.cadence_hours": { min: 0, exclusiveMin: true },
   // "positive integer" keys (smallest is 1) — validate REJECTS < 1 (config-cli.ts:1221,1243,1269).
   "defaults.retry.max_attempts": { min: 1 },
   "defaults.heartbeat_timeout_ms": { min: 1 },
@@ -645,6 +655,7 @@ const VALID_VALUES: Record<string, Set<string>> = {
   codex_skip_enforcement: new Set(["warn", "block"]),
   "workspace.mode": new Set(["auto", "on", "off"]),
   "defaults.adversarial": new Set(["on", "off"]),
+  "defaults.update.mode": new Set(["auto", "notify", "off"]),
   "defaults.review_workflow": new Set(["standard", "cross", "minimal"]),
   "defaults.skill_policy": new Set(["standard", "conservative"]),
   "defaults.reporting": new Set(["standard", "quiet", "verbose"]),

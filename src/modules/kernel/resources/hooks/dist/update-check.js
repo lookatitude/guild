@@ -1,12 +1,18 @@
-#!/usr/bin/env -S npx tsx
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -24,6 +30,1105 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
+var CLAUDE_CAPABILITIES, CODEX_CAPABILITIES, NO_HOOKS, TARGET_CLI_COMMON, PI_CAPABILITIES, ANTIGRAVITY_CAPABILITIES, AGENTS_FILE_CAPABILITIES;
+var init_host_capabilities_schema = __esm({
+  "../src/modules/host-runtime/workflows/host-capabilities-schema.ts"() {
+    CLAUDE_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "claude",
+      family: "claude",
+      surface_kind: "cli",
+      package: { installable: true, installability: "verified", manifest_format: "claude-plugin" },
+      bootstrap: {
+        context_injection: "hookSpecificOutput.additionalContext",
+        skill_autoload: true,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      commands: { slash_commands: true, command_files: "markdown" },
+      skills: { native_skills: true, skill_dir: ".claude/skills" },
+      agents: { native_agents: true, agent_format: "claude-md" },
+      hooks: {
+        // All ten events are bound in the live hooks/hooks.json (verified).
+        session_start: true,
+        user_prompt_submit: true,
+        pre_tool_use: true,
+        post_tool_use: true,
+        stop: true,
+        pre_compact: true,
+        subagent_stop: true,
+        task_created: true,
+        task_completed: true,
+        teammate_idle: true
+      },
+      permissions: {
+        deny: true,
+        ask: true,
+        ask_mode: "pre_tool_use",
+        accept_edits_without_prompt: true,
+        auto_approve_tools: true,
+        bypass_prompts: true,
+        bypass_sandbox: false,
+        permission_prompt_layer: true,
+        launch_modes: {
+          read_only: ["--tools", "Read,Grep,Glob"],
+          ask: ["--permission-mode", "default"],
+          accept_edits: ["--permission-mode", "acceptEdits"],
+          auto: ["--permission-mode", "auto"],
+          bypass_all: ["--permission-mode", "bypassPermissions"]
+        }
+      },
+      dispatch: {
+        tmux_processes: true,
+        plain_processes: true,
+        independent_agents: true,
+        subagents: true,
+        inline: true
+      },
+      interaction: {
+        native_questions: true,
+        terminal_prompt: true,
+        file_bus_questions: true
+      },
+      sessions: { continue: true, resume_by_id: true, fork: true },
+      structured_output: {
+        native_json: true,
+        schema_validation: true,
+        repair_prompt: true
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "bridge",
+        web: "native",
+        mcp: "native"
+      },
+      mcp: { stdio: true, http: false },
+      models: {
+        cheap: { model: "haiku" },
+        mid: { model: "sonnet" },
+        powerful: { model: "opus" }
+      }
+    };
+    CODEX_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "codex",
+      family: "codex",
+      surface_kind: "cli",
+      // installable:false is the honest MACHINE state — the Codex renderer exists but
+      // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
+      // as installable until proven. installability:"target" records that the renderer
+      // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
+      package: { installable: false, installability: "target", manifest_format: "codex-plugin" },
+      bootstrap: {
+        // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
+        // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
+        prompt_transform: false,
+        // INFERRED
+        wrapper_injection: true
+        // The generated guild-run wrapper injects bootstrap.
+      },
+      commands: {
+        // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
+        slash_commands: false,
+        command_files: "none"
+      },
+      skills: { native_skills: false, skill_dir: null },
+      // Verified (per-host-packaging).
+      agents: { native_agents: false, agent_format: null },
+      // Verified (per-host-packaging flags agents unsupported).
+      hooks: {
+        // Verified-by-design: Codex hook taxonomy differs from Claude; no native
+        // Claude-equivalent hooks. All degrade through the HookEmitter (ADR Surface 3).
+        session_start: false,
+        user_prompt_submit: false,
+        pre_tool_use: false,
+        post_tool_use: false,
+        stop: false,
+        pre_compact: false,
+        subagent_stop: false,
+        task_created: false,
+        task_completed: false,
+        teammate_idle: false
+      },
+      permissions: {
+        // INFERRED (Codex CLI approval model). Confirm on-box at L3.
+        deny: false,
+        ask: true,
+        // Codex prompts for approval by default.
+        ask_mode: null,
+        // No pre_tool_use layer; approval is interactive.
+        accept_edits_without_prompt: false,
+        // INFERRED
+        auto_approve_tools: false,
+        // INFERRED
+        bypass_prompts: true,
+        // Codex YOLO / --dangerously-bypass exists (AC19).
+        bypass_sandbox: true,
+        // INFERRED — YOLO bypasses the sandbox.
+        permission_prompt_layer: false,
+        // INFERRED
+        launch_modes: {
+          // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
+          // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
+          // than guessed, so their absence reads as "degrade/record", not "supported".
+          bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
+          // INFERRED flag name — verify on-box (AC19).
+        }
+      },
+      dispatch: {
+        tmux_processes: true,
+        // Codex is a CLI process — tmux panes work.
+        plain_processes: true,
+        independent_agents: false,
+        // INFERRED — no native agent-team primitive.
+        subagents: false,
+        // INFERRED
+        inline: true
+      },
+      interaction: {
+        native_questions: false,
+        // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
+        terminal_prompt: true,
+        file_bus_questions: true
+        // Guild file-bus approval works on any FS host.
+      },
+      sessions: {
+        continue: true,
+        // INFERRED — Codex has session continuation.
+        resume_by_id: true,
+        // INFERRED
+        fork: false
+        // INFERRED
+      },
+      structured_output: {
+        native_json: false,
+        // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
+        schema_validation: false,
+        // Guild-side validation (validateHandoffV2) instead.
+        repair_prompt: true
+        // Bounded repair prompt is the fallback (ADR §Result contracts).
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "none",
+        // INFERRED — no native browser; record fallback (AC29).
+        web: "emulated",
+        // INFERRED
+        mcp: "native"
+        // Codex supports stdio MCP.
+      },
+      mcp: { stdio: true, http: false },
+      // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
+      models: {
+        // Codex model ids are host-specific and not pinned in this repo yet; null =
+        // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
+        cheap: { model: null },
+        mid: { model: null },
+        powerful: { model: null }
+      }
+    };
+    NO_HOOKS = {
+      session_start: false,
+      user_prompt_submit: false,
+      pre_tool_use: false,
+      post_tool_use: false,
+      stop: false,
+      pre_compact: false,
+      subagent_stop: false,
+      task_created: false,
+      task_completed: false,
+      teammate_idle: false
+    };
+    TARGET_CLI_COMMON = {
+      commands: { slash_commands: false, command_files: "none" },
+      skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
+      agents: { native_agents: false, agent_format: null },
+      hooks: NO_HOOKS,
+      dispatch: {
+        tmux_processes: true,
+        plain_processes: true,
+        independent_agents: false,
+        subagents: false,
+        inline: true
+      },
+      interaction: {
+        native_questions: false,
+        terminal_prompt: true,
+        file_bus_questions: true
+      },
+      sessions: { continue: false, resume_by_id: false, fork: false },
+      structured_output: {
+        native_json: true,
+        schema_validation: false,
+        repair_prompt: true
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "none",
+        web: "emulated",
+        mcp: "emulated"
+      },
+      mcp: { stdio: false, http: false },
+      models: {
+        cheap: { model: null },
+        mid: { model: null },
+        powerful: { model: null }
+      }
+    };
+    PI_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "pi",
+      family: "pi",
+      surface_kind: "cli",
+      package: { installable: false, installability: "target", manifest_format: "pi-manifest" },
+      bootstrap: {
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      permissions: {
+        deny: true,
+        ask: true,
+        ask_mode: null,
+        accept_edits_without_prompt: false,
+        auto_approve_tools: false,
+        bypass_prompts: false,
+        bypass_sandbox: false,
+        permission_prompt_layer: false,
+        launch_modes: {}
+      },
+      ...TARGET_CLI_COMMON
+    };
+    ANTIGRAVITY_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "antigravity",
+      family: "antigravity",
+      surface_kind: "cli",
+      package: { installable: false, installability: "target", manifest_format: "antigravity-manifest" },
+      bootstrap: {
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      permissions: {
+        deny: true,
+        ask: true,
+        ask_mode: null,
+        accept_edits_without_prompt: false,
+        auto_approve_tools: false,
+        bypass_prompts: true,
+        bypass_sandbox: true,
+        permission_prompt_layer: false,
+        launch_modes: {
+          bypass_all: ["--dangerously-skip-permissions"]
+        }
+      },
+      ...TARGET_CLI_COMMON
+    };
+    AGENTS_FILE_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "agents-file",
+      family: "agents",
+      surface_kind: "file",
+      package: { installable: false, installability: "target", manifest_format: "agents-file" },
+      bootstrap: {
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      commands: { slash_commands: false, command_files: "none" },
+      skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
+      agents: { native_agents: false, agent_format: null },
+      hooks: NO_HOOKS,
+      permissions: {
+        deny: false,
+        ask: true,
+        ask_mode: null,
+        accept_edits_without_prompt: false,
+        auto_approve_tools: false,
+        bypass_prompts: false,
+        bypass_sandbox: false,
+        permission_prompt_layer: false,
+        launch_modes: {}
+      },
+      dispatch: {
+        tmux_processes: false,
+        plain_processes: false,
+        independent_agents: false,
+        subagents: false,
+        inline: false
+      },
+      interaction: {
+        native_questions: false,
+        terminal_prompt: false,
+        file_bus_questions: true
+      },
+      sessions: { continue: false, resume_by_id: false, fork: false },
+      structured_output: {
+        native_json: false,
+        schema_validation: false,
+        repair_prompt: true
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "none",
+        web: "emulated",
+        mcp: "none"
+      },
+      mcp: { stdio: false, http: false },
+      models: {
+        cheap: { model: null },
+        mid: { model: null },
+        powerful: { model: null }
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-registry-schema.ts
+function inferredCaps(host_kind, family, surface_kind = "cli") {
+  return {
+    schema_version: "guild.host_capabilities.v1",
+    host_kind,
+    family,
+    // Must equal the registry entry's top-level surface_kind (cross-field invariant,
+    // enforced by validateHostRegistryEntry). `.agents` is a file surface, not cli.
+    surface_kind,
+    package: { installable: false, installability: "target", manifest_format: `${host_kind}-package` },
+    bootstrap: {
+      context_injection: "instruction_file",
+      skill_autoload: false,
+      prompt_transform: false,
+      wrapper_injection: true
+    },
+    commands: { slash_commands: false, command_files: "none" },
+    skills: { native_skills: false, skill_dir: null },
+    agents: { native_agents: false, agent_format: null },
+    hooks: {
+      session_start: false,
+      user_prompt_submit: false,
+      pre_tool_use: false,
+      post_tool_use: false,
+      stop: false,
+      pre_compact: false,
+      subagent_stop: false,
+      task_created: false,
+      task_completed: false,
+      teammate_idle: false
+    },
+    permissions: {
+      deny: false,
+      ask: true,
+      ask_mode: null,
+      accept_edits_without_prompt: false,
+      auto_approve_tools: false,
+      bypass_prompts: false,
+      bypass_sandbox: false,
+      permission_prompt_layer: false,
+      launch_modes: {}
+    },
+    dispatch: {
+      tmux_processes: true,
+      plain_processes: true,
+      independent_agents: false,
+      subagents: false,
+      inline: true
+    },
+    interaction: { native_questions: false, terminal_prompt: true, file_bus_questions: true },
+    sessions: { continue: false, resume_by_id: false, fork: false },
+    structured_output: { native_json: false, schema_validation: false, repair_prompt: true },
+    artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+    tools: {
+      read: "native",
+      search: "native",
+      shell: "native",
+      edit: "native",
+      write: "native",
+      browser: "none",
+      web: "emulated",
+      mcp: "none"
+    },
+    mcp: { stdio: false, http: false },
+    models: { cheap: { model: null }, mid: { model: null }, powerful: { model: null } }
+  };
+}
+var HOST_IDS, HOST_FAMILIES, AUTH_PROBES, CLAUDE_ENTRY, CODEX_ENTRY, AGENTS_FILE_ENTRY, PI_ENTRY, ANTIGRAVITY_ENTRY, CLAUDE_APP_ENTRY, CLAUDE_WEB_ENTRY, CODEX_APP_ENTRY, CLAUDE_AI_CONNECTOR_ENTRY, CURSOR_ENTRY, GITHUB_COPILOT_ENTRY, OPENCODE_ENTRY, ROVO_DEV_ENTRY, KIRO_ENTRY, QODER_ENTRY, TRAE_ENTRY, HOST_REGISTRY_ROWS, HOST_ID_SET, FAMILY_SET, AUTH_PROBE_SET;
+var init_host_registry_schema = __esm({
+  "../src/modules/host-runtime/workflows/host-registry-schema.ts"() {
+    init_host_capabilities_schema();
+    HOST_IDS = [
+      // keep CLI/file (5)
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      // keep-as-refuse (4) — RETAINED verbatim
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+      // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
+      "cursor",
+      "github-copilot",
+      "opencode",
+      "rovo-dev",
+      // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
+      // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
+      "kiro",
+      "qoder",
+      "trae"
+    ];
+    HOST_FAMILIES = [
+      "claude",
+      "codex",
+      "agents",
+      "pi",
+      "antigravity",
+      "cursor",
+      "copilot",
+      "opencode",
+      "rovo"
+    ];
+    AUTH_PROBES = [
+      "codex_stored_or_env",
+      "none",
+      "cursor_stored",
+      "gh_auth",
+      "opencode_stored_or_env",
+      "acli_stored"
+    ];
+    CLAUDE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-cli",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
+      installability: "native",
+      result_adapter: false,
+      // Claude is the reference author host, not a cross reviewer for itself.
+      dispatch_selectable: true,
+      capabilities: CLAUDE_CAPABILITIES,
+      provenance: "verified"
+    };
+    CODEX_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "codex-cli",
+      family: "codex",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
+      // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
+      installability: "target",
+      result_adapter: true,
+      // The only selectable cross reviewer today (provider-detect codex-plugin/codex-cli).
+      dispatch_selectable: true,
+      capabilities: CODEX_CAPABILITIES,
+      provenance: "verified"
+      // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
+    };
+    AGENTS_FILE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "agents-file",
+      family: "agents",
+      // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
+      // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
+      adapter_binding: "self",
+      // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
+      surface_kind: "file",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "target",
+      result_adapter: false,
+      // INFERRED — no cross-review adapter; verify at live-host availability.
+      dispatch_selectable: true,
+      // INFERRED — a host consuming AGENTS.md can run a lane.
+      capabilities: AGENTS_FILE_CAPABILITIES,
+      // file surface — matches top-level surface_kind.
+      provenance: "inferred"
+    };
+    PI_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "pi-cli",
+      family: "pi",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
+      // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
+      installability: "target",
+      // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
+      result_adapter: false,
+      // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
+      dispatch_selectable: true,
+      // VERIFIED: pi is a CLI process a lane can run on.
+      capabilities: {
+        ...inferredCaps("pi-cli", "pi"),
+        // VERIFIED on-host (pi --help, 0.79.3):
+        sessions: { continue: true, resume_by_id: true, fork: true },
+        // --continue/-c, --resume/-r + --session-id, --fork
+        structured_output: { native_json: true, schema_validation: false, repair_prompt: true }
+        // --mode json
+      },
+      provenance: "verified"
+      // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+    };
+    ANTIGRAVITY_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "antigravity-cli",
+      family: "antigravity",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
+      detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
+      installability: "target",
+      // VERIFIED-as-target: CLI present; Guild-package install unproven.
+      result_adapter: false,
+      // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
+      dispatch_selectable: true,
+      // VERIFIED: agy is a CLI process a lane can run on.
+      capabilities: {
+        ...inferredCaps("antigravity-cli", "antigravity"),
+        // VERIFIED on-host (agy --help, 1.0.8):
+        sessions: { continue: true, resume_by_id: true, fork: false },
+        // --continue/-c, --conversation <id>; no fork flag
+        permissions: {
+          ...inferredCaps("antigravity-cli", "antigravity").permissions,
+          bypass_prompts: true,
+          // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
+          launch_modes: { bypass_all: ["--dangerously-skip-permissions"] }
+        }
+      },
+      provenance: "verified"
+      // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+    };
+    CLAUDE_APP_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-app",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-code-app", "claude", "app"),
+      provenance: "inferred"
+    };
+    CLAUDE_WEB_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-web",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-code-web", "claude", "app"),
+      provenance: "inferred"
+    };
+    CODEX_APP_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "codex-app",
+      family: "codex",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("codex-app", "codex", "app"),
+      provenance: "inferred"
+    };
+    CLAUDE_AI_CONNECTOR_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-ai-connector",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
+      provenance: "inferred"
+    };
+    CURSOR_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "cursor",
+      family: "cursor",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("cursor", "cursor", "cli"),
+      provenance: "inferred"
+    };
+    GITHUB_COPILOT_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "github-copilot",
+      family: "copilot",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // capability is a subcommand of the shared `gh` bin (`gh copilot`).
+      detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("github-copilot", "copilot", "cli"),
+      provenance: "inferred"
+    };
+    OPENCODE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "opencode",
+      family: "opencode",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("opencode", "opencode", "cli"),
+      provenance: "inferred"
+    };
+    ROVO_DEV_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "rovo-dev",
+      family: "rovo",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
+      detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
+      provenance: "inferred"
+    };
+    KIRO_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "kiro",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("kiro", "agents", "file"),
+      provenance: "inferred"
+    };
+    QODER_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "qoder",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("qoder", "agents", "file"),
+      provenance: "inferred"
+    };
+    TRAE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "trae",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("trae", "agents", "file"),
+      provenance: "inferred"
+    };
+    HOST_REGISTRY_ROWS = {
+      "claude-code-cli": CLAUDE_ENTRY,
+      "codex-cli": CODEX_ENTRY,
+      "pi-cli": PI_ENTRY,
+      "antigravity-cli": ANTIGRAVITY_ENTRY,
+      "agents-file": AGENTS_FILE_ENTRY,
+      "claude-code-app": CLAUDE_APP_ENTRY,
+      "claude-code-web": CLAUDE_WEB_ENTRY,
+      "codex-app": CODEX_APP_ENTRY,
+      "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
+      cursor: CURSOR_ENTRY,
+      "github-copilot": GITHUB_COPILOT_ENTRY,
+      opencode: OPENCODE_ENTRY,
+      "rovo-dev": ROVO_DEV_ENTRY,
+      kiro: KIRO_ENTRY,
+      qoder: QODER_ENTRY,
+      trae: TRAE_ENTRY
+    };
+    HOST_ID_SET = new Set(HOST_IDS);
+    FAMILY_SET = new Set(HOST_FAMILIES);
+    AUTH_PROBE_SET = new Set(AUTH_PROBES);
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-id-namespace.ts
+function normalizeHostId(value) {
+  const s = value.trim();
+  if (HOST_ID_SET2.has(s)) return s;
+  return LEGACY_HOST_ALIASES[s] ?? null;
+}
+var HOST_ID_SET2, LEGACY_HOST_ALIASES;
+var init_host_id_namespace = __esm({
+  "../src/modules/host-runtime/workflows/host-id-namespace.ts"() {
+    init_host_registry_schema();
+    HOST_ID_SET2 = new Set(HOST_IDS);
+    LEGACY_HOST_ALIASES = {
+      claude: "claude-code-cli",
+      "claude-code-desktop": "claude-code-app",
+      codex: "codex-cli",
+      "codex-plugin": "codex-cli",
+      agents: "agents-file",
+      ".agents": "agents-file",
+      pi: "pi-cli",
+      antigravity: "antigravity-cli",
+      "antigravity-2": "antigravity-cli"
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
+var RUNGS, ADAPTER_SURFACES, RUNG_SET, SURFACE_SET;
+var init_adapter_fallback_ladders = __esm({
+  "../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts"() {
+    init_host_registry_schema();
+    RUNGS = ["native", "wrapped", "bridged", "emulated", "degraded"];
+    ADAPTER_SURFACES = ["interaction", "session", "semantic_tool", "browser"];
+    RUNG_SET = new Set(RUNGS);
+    SURFACE_SET = new Set(ADAPTER_SURFACES);
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-profiles-validate.ts
+function isPlainObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function validateHostProfiles(hp) {
+  const rejects = [];
+  for (const [hostId, entry] of Object.entries(hp)) {
+    const canonicalHostId = normalizeHostId(hostId);
+    if (!canonicalHostId) {
+      rejects.push(
+        `unknown host_profiles host_id "${hostId}" (closed key set \u2014 valid: ${[...KNOWN_HOST_IDS].join("|")})`
+      );
+      continue;
+    }
+    if (!isPlainObject(entry)) {
+      rejects.push(`host_profiles["${hostId}"] must be an object { models?, enabled? }`);
+      continue;
+    }
+    const e = entry;
+    for (const ek of Object.keys(e)) {
+      if (!VALID_HOST_PROFILE_ENTRY_KEYS.has(ek)) {
+        rejects.push(
+          `unknown host_profiles["${hostId}"] key "${ek}" (closed entry shape \u2014 only models, enabled)`
+        );
+      }
+    }
+    if (e["enabled"] !== void 0 && typeof e["enabled"] !== "boolean") {
+      rejects.push(`host_profiles["${hostId}"].enabled must be a boolean (got ${JSON.stringify(e["enabled"])})`);
+    }
+    if (e["models"] !== void 0) {
+      if (!isPlainObject(e["models"])) {
+        rejects.push(`host_profiles["${hostId}"].models must be an object { cheap?, mid?, powerful? }`);
+      } else {
+        const m = e["models"];
+        for (const mk of Object.keys(m)) {
+          if (!VALID_HOST_PROFILE_MODEL_KEYS.has(mk)) {
+            rejects.push(
+              `unknown host_profiles["${hostId}"].models key "${mk}" (closed key set \u2014 only cheap, mid, powerful)`
+            );
+          } else if (typeof m[mk] !== "string" || !m[mk].trim()) {
+            rejects.push(`host_profiles["${hostId}"].models.${mk} must be a non-empty string (got ${JSON.stringify(m[mk])})`);
+          }
+        }
+      }
+    }
+  }
+  return rejects;
+}
+function filterHostProfiles(raw) {
+  const out = {};
+  for (const [hostId, entry] of Object.entries(raw)) {
+    if (validateHostProfiles({ [hostId]: entry }).length === 0) {
+      const canonicalHostId = normalizeHostId(hostId);
+      if (canonicalHostId) out[canonicalHostId] = entry;
+    }
+  }
+  return out;
+}
+var KNOWN_HOST_IDS, VALID_HOST_PROFILE_ENTRY_KEYS, VALID_HOST_PROFILE_MODEL_KEYS;
+var init_host_profiles_validate = __esm({
+  "../src/modules/host-runtime/workflows/host-profiles-validate.ts"() {
+    init_host_registry_schema();
+    init_host_id_namespace();
+    KNOWN_HOST_IDS = new Set(HOST_IDS);
+    VALID_HOST_PROFILE_ENTRY_KEYS = /* @__PURE__ */ new Set(["models", "enabled"]);
+    VALID_HOST_PROFILE_MODEL_KEYS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-registry.ts
+function resultAdapterForFamily(family) {
+  return FAMILY_TO_ROW[family]?.result_adapter ?? false;
+}
+var FAMILY_TO_ROW;
+var init_host_registry = __esm({
+  "../src/modules/host-runtime/workflows/host-registry.ts"() {
+    init_host_registry_schema();
+    init_host_id_namespace();
+    FAMILY_TO_ROW = (() => {
+      const out = {};
+      for (const id of HOST_IDS) {
+        const row = HOST_REGISTRY_ROWS[id];
+        const existing = out[row.family];
+        if (!existing || !existing.result_adapter && row.result_adapter) {
+          out[row.family] = row;
+        }
+      }
+      return out;
+    })();
+  }
+});
+
+// ../src/modules/host-runtime/workflows/provider-detect.ts
+var PROVIDER_REGISTRY;
+var init_provider_detect = __esm({
+  "../src/modules/host-runtime/workflows/provider-detect.ts"() {
+    init_host_registry();
+    PROVIDER_REGISTRY = [
+      // The author host itself — always "detected on the host", never a cross reviewer
+      // for a same-family author (the AC-8 guard handles that).
+      { id: "claude", kind: "host", family: "claude", hasAdapter: resultAdapterForFamily("claude"), requiresAuth: false },
+      // Codex reference adapters (the only selectable cross reviewers today).
+      { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+      { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+      // Detect-only until adapters ship (OD-6) — pi/antigravity rows carry result_adapter:false.
+      // (The former `gemini-cli` provider was removed when Gemini was sunset 2026-06-14.)
+      { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
+      // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
+      { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
+    ];
+  }
+});
+
+// ../src/modules/host-runtime/index.ts
+var init_host_runtime = __esm({
+  "../src/modules/host-runtime/index.ts"() {
+    init_host_id_namespace();
+    init_adapter_fallback_ladders();
+    init_host_profiles_validate();
+    init_host_registry();
+    init_host_registry_schema();
+    init_provider_detect();
+  }
+});
+
+// ../src/modules/security/workflows/safe-object.ts
+var PROTO_POISON_KEYS;
+var init_safe_object = __esm({
+  "../src/modules/security/workflows/safe-object.ts"() {
+    PROTO_POISON_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
+  }
+});
+
+// ../src/modules/security/workflows/share-set.ts
+var init_share_set = __esm({
+  "../src/modules/security/workflows/share-set.ts"() {
+  }
+});
+
+// ../src/modules/security/index.ts
+var init_security = __esm({
+  "../src/modules/security/index.ts"() {
+    init_safe_object();
+    init_share_set();
+  }
+});
+
+// ../src/modules/config/workflows/config-defaults.ts
+var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES, DEFAULTS;
+var init_config_defaults = __esm({
+  "../src/modules/config/workflows/config-defaults.ts"() {
+    DEFAULT_ESCALATION_MARKERS = [
+      "I'm not sure",
+      "unclear",
+      "cannot determine",
+      "I don't know",
+      "ambiguous",
+      "uncertain",
+      "not enough information"
+    ];
+    NON_INHERITABLE_KEYS = /* @__PURE__ */ new Set([
+      "initiative_default",
+      // OD-1: attach-to-wrong-initiative risk
+      "workspace"
+      // workspace.mode is root-detection-only
+    ]);
+    LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+    SIDECAR_MAX_BYTES = 1024 * 1024;
+    DEFAULTS = {
+      rigor: "standard",
+      auto_approve: [],
+      review: "local",
+      host: "auto",
+      roles: { host: null, advisory: null, adversarial: null },
+      host_profiles: {},
+      initiative_default: null,
+      index: "auto",
+      record_status_runs: true,
+      codex_skip_enforcement: "warn",
+      agent_mode: "auto",
+      workspace: { mode: "auto" },
+      models: {
+        enabled: true,
+        tiers: {
+          cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
+          mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
+          powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null }
+        },
+        scoreWeights: {
+          workType: 0,
+          blastRadius: 1,
+          dependsOn: 1,
+          security: 1,
+          priorEscalation: 1
+        },
+        thresholds: { mid: 1, powerful: 3 },
+        advisorRounds: 2,
+        escalationMarkers: DEFAULT_ESCALATION_MARKERS,
+        recallBeforeRead: true,
+        recallScoreThreshold: 0.4,
+        structuredOutputRequired: true,
+        cacheTTL: { coordinator: "1h", leaf: "5m" },
+        importanceGate: 3,
+        compositeRecall: true,
+        importanceAtIngest: true,
+        ingestSimilarityGate: 0.8,
+        shortOutputThreshold: {},
+        knowledge: {
+          maxDepth: 8,
+          maxBranching: 12,
+          minTopicImportance: 0.4,
+          relMinConf: 0.5,
+          maxFiles: 3e3,
+          maxTokens: 1e6,
+          batchSize: 20
+        }
+      },
+      security: {
+        bypass_permissions_policy: "audit"
+      },
+      secrets_policy: {
+        env_allowlist: [],
+        redaction_patterns: [],
+        fail_mode_durable: "closed",
+        fail_mode_telemetry: "open"
+      },
+      mcp: {
+        tool_description_hashes: {},
+        stdio_available: true,
+        http_available: false,
+        bridge_package: null
+      },
+      statusline: false,
+      adversarial_review_provider: "auto",
+      loops: null,
+      loop_cap: 16,
+      codex_cap: 5,
+      defaults: {
+        auto_learn: false,
+        adversarial: "on",
+        team: { size: null, always_include: [] },
+        review_workflow: "standard",
+        skill_policy: "standard",
+        gates: { auto_approve: [] },
+        wiki: { share_mode: "team", autopromote: false },
+        quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
+        reporting: "standard",
+        index: {
+          enabled: true,
+          kg_node_threshold: 2e3,
+          kg_size_threshold_mb: 1,
+          links_edge_threshold: 2e3,
+          runs_threshold: 20,
+          wiki_file_threshold: 500
+        },
+        cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
+        retry: { max_attempts: 1, backoff: "exponential" },
+        resume: { enabled: true },
+        heartbeat_timeout_ms: 6e5,
+        capability_manifest_ttl_s: 3600,
+        // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
+        // the SessionStart signal; `auto` additionally stages the host apply path;
+        // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
+        update: { mode: "notify", cadence_hours: 24 },
+        allowed_tools: []
+      }
+    };
+  }
+});
+
+// ../src/modules/kernel/workflows/module-manifest.ts
+var init_module_manifest = __esm({
+  "../src/modules/kernel/workflows/module-manifest.ts"() {
+  }
+});
 
 // node_modules/js-yaml/lib/common.js
 var require_common = __commonJS({
@@ -3060,1064 +4165,7 @@ var require_js_yaml = __commonJS({
   }
 });
 
-// lib/guild-root.ts
-var fs = __toESM(require("node:fs"));
-var path = __toESM(require("node:path"));
-function resolveGuildRoot(startCwd) {
-  let current = path.resolve(startCwd);
-  for (; ; ) {
-    if (fs.existsSync(path.join(current, ".git"))) {
-      return current;
-    }
-    const guildDir = path.join(current, ".guild");
-    if (fs.existsSync(guildDir)) {
-      try {
-        if (fs.statSync(guildDir).isDirectory()) {
-          return current;
-        }
-      } catch {
-      }
-    }
-    const parent = path.dirname(current);
-    if (parent === current) {
-      return path.resolve(startCwd);
-    }
-    current = parent;
-  }
-}
-
-// lib/run-trace.ts
-var fs11 = __toESM(require("fs"));
-var path14 = __toESM(require("path"));
-
-// ../src/modules/lifecycle/workflows/run-lifecycle.ts
-var crypto3 = __toESM(require("crypto"));
-var fsNode = __toESM(require("fs"));
-var path11 = __toESM(require("path"));
-
-// ../src/modules/config/workflows/config-defaults.ts
-var DEFAULT_ESCALATION_MARKERS = [
-  "I'm not sure",
-  "unclear",
-  "cannot determine",
-  "I don't know",
-  "ambiguous",
-  "uncertain",
-  "not enough information"
-];
-var NON_INHERITABLE_KEYS = /* @__PURE__ */ new Set([
-  "initiative_default",
-  // OD-1: attach-to-wrong-initiative risk
-  "workspace"
-  // workspace.mode is root-detection-only
-]);
-var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
-var SIDECAR_MAX_BYTES = 1024 * 1024;
-var DEFAULTS = {
-  rigor: "standard",
-  auto_approve: [],
-  review: "local",
-  host: "auto",
-  roles: { host: null, advisory: null, adversarial: null },
-  host_profiles: {},
-  initiative_default: null,
-  index: "auto",
-  record_status_runs: true,
-  codex_skip_enforcement: "warn",
-  agent_mode: "auto",
-  workspace: { mode: "auto" },
-  models: {
-    enabled: true,
-    tiers: {
-      cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
-      mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
-      powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null }
-    },
-    scoreWeights: {
-      workType: 0,
-      blastRadius: 1,
-      dependsOn: 1,
-      security: 1,
-      priorEscalation: 1
-    },
-    thresholds: { mid: 1, powerful: 3 },
-    advisorRounds: 2,
-    escalationMarkers: DEFAULT_ESCALATION_MARKERS,
-    recallBeforeRead: true,
-    recallScoreThreshold: 0.4,
-    structuredOutputRequired: true,
-    cacheTTL: { coordinator: "1h", leaf: "5m" },
-    importanceGate: 3,
-    compositeRecall: true,
-    importanceAtIngest: true,
-    ingestSimilarityGate: 0.8,
-    shortOutputThreshold: {},
-    knowledge: {
-      maxDepth: 8,
-      maxBranching: 12,
-      minTopicImportance: 0.4,
-      relMinConf: 0.5,
-      maxFiles: 3e3,
-      maxTokens: 1e6,
-      batchSize: 20
-    }
-  },
-  security: {
-    bypass_permissions_policy: "audit"
-  },
-  secrets_policy: {
-    env_allowlist: [],
-    redaction_patterns: [],
-    fail_mode_durable: "closed",
-    fail_mode_telemetry: "open"
-  },
-  mcp: {
-    tool_description_hashes: {},
-    stdio_available: true,
-    http_available: false,
-    bridge_package: null
-  },
-  statusline: false,
-  adversarial_review_provider: "auto",
-  loops: null,
-  loop_cap: 16,
-  codex_cap: 5,
-  defaults: {
-    auto_learn: false,
-    adversarial: "on",
-    team: { size: null, always_include: [] },
-    review_workflow: "standard",
-    skill_policy: "standard",
-    gates: { auto_approve: [] },
-    wiki: { share_mode: "team", autopromote: false },
-    quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
-    reporting: "standard",
-    index: {
-      enabled: true,
-      kg_node_threshold: 2e3,
-      kg_size_threshold_mb: 1,
-      links_edge_threshold: 2e3,
-      runs_threshold: 20,
-      wiki_file_threshold: 500
-    },
-    cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
-    retry: { max_attempts: 1, backoff: "exponential" },
-    resume: { enabled: true },
-    heartbeat_timeout_ms: 6e5,
-    capability_manifest_ttl_s: 3600,
-    // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
-    // the SessionStart signal; `auto` additionally stages the host apply path;
-    // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
-    update: { mode: "notify", cadence_hours: 24 },
-    allowed_tools: []
-  }
-};
-
-// ../src/modules/config/workflows/settings-resolver.ts
-var path6 = __toESM(require("path"));
-var crypto = __toESM(require("crypto"));
-
-// ../src/modules/config/workflows/settings-reader.ts
-var fs3 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
-
-// ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
-var CLAUDE_CAPABILITIES = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "claude",
-  family: "claude",
-  surface_kind: "cli",
-  package: { installable: true, installability: "verified", manifest_format: "claude-plugin" },
-  bootstrap: {
-    context_injection: "hookSpecificOutput.additionalContext",
-    skill_autoload: true,
-    prompt_transform: false,
-    wrapper_injection: true
-  },
-  commands: { slash_commands: true, command_files: "markdown" },
-  skills: { native_skills: true, skill_dir: ".claude/skills" },
-  agents: { native_agents: true, agent_format: "claude-md" },
-  hooks: {
-    // All ten events are bound in the live hooks/hooks.json (verified).
-    session_start: true,
-    user_prompt_submit: true,
-    pre_tool_use: true,
-    post_tool_use: true,
-    stop: true,
-    pre_compact: true,
-    subagent_stop: true,
-    task_created: true,
-    task_completed: true,
-    teammate_idle: true
-  },
-  permissions: {
-    deny: true,
-    ask: true,
-    ask_mode: "pre_tool_use",
-    accept_edits_without_prompt: true,
-    auto_approve_tools: true,
-    bypass_prompts: true,
-    bypass_sandbox: false,
-    permission_prompt_layer: true,
-    launch_modes: {
-      read_only: ["--tools", "Read,Grep,Glob"],
-      ask: ["--permission-mode", "default"],
-      accept_edits: ["--permission-mode", "acceptEdits"],
-      auto: ["--permission-mode", "auto"],
-      bypass_all: ["--permission-mode", "bypassPermissions"]
-    }
-  },
-  dispatch: {
-    tmux_processes: true,
-    plain_processes: true,
-    independent_agents: true,
-    subagents: true,
-    inline: true
-  },
-  interaction: {
-    native_questions: true,
-    terminal_prompt: true,
-    file_bus_questions: true
-  },
-  sessions: { continue: true, resume_by_id: true, fork: true },
-  structured_output: {
-    native_json: true,
-    schema_validation: true,
-    repair_prompt: true
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "bridge",
-    web: "native",
-    mcp: "native"
-  },
-  mcp: { stdio: true, http: false },
-  models: {
-    cheap: { model: "haiku" },
-    mid: { model: "sonnet" },
-    powerful: { model: "opus" }
-  }
-};
-var CODEX_CAPABILITIES = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "codex",
-  family: "codex",
-  surface_kind: "cli",
-  // installable:false is the honest MACHINE state — the Codex renderer exists but
-  // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
-  // as installable until proven. installability:"target" records that the renderer
-  // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
-  package: { installable: false, installability: "target", manifest_format: "codex-plugin" },
-  bootstrap: {
-    // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
-    // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
-    prompt_transform: false,
-    // INFERRED
-    wrapper_injection: true
-    // The generated guild-run wrapper injects bootstrap.
-  },
-  commands: {
-    // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
-    slash_commands: false,
-    command_files: "none"
-  },
-  skills: { native_skills: false, skill_dir: null },
-  // Verified (per-host-packaging).
-  agents: { native_agents: false, agent_format: null },
-  // Verified (per-host-packaging flags agents unsupported).
-  hooks: {
-    // Verified-by-design: Codex hook taxonomy differs from Claude; no native
-    // Claude-equivalent hooks. All degrade through the HookEmitter (ADR Surface 3).
-    session_start: false,
-    user_prompt_submit: false,
-    pre_tool_use: false,
-    post_tool_use: false,
-    stop: false,
-    pre_compact: false,
-    subagent_stop: false,
-    task_created: false,
-    task_completed: false,
-    teammate_idle: false
-  },
-  permissions: {
-    // INFERRED (Codex CLI approval model). Confirm on-box at L3.
-    deny: false,
-    ask: true,
-    // Codex prompts for approval by default.
-    ask_mode: null,
-    // No pre_tool_use layer; approval is interactive.
-    accept_edits_without_prompt: false,
-    // INFERRED
-    auto_approve_tools: false,
-    // INFERRED
-    bypass_prompts: true,
-    // Codex YOLO / --dangerously-bypass exists (AC19).
-    bypass_sandbox: true,
-    // INFERRED — YOLO bypasses the sandbox.
-    permission_prompt_layer: false,
-    // INFERRED
-    launch_modes: {
-      // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
-      // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
-      // than guessed, so their absence reads as "degrade/record", not "supported".
-      bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
-      // INFERRED flag name — verify on-box (AC19).
-    }
-  },
-  dispatch: {
-    tmux_processes: true,
-    // Codex is a CLI process — tmux panes work.
-    plain_processes: true,
-    independent_agents: false,
-    // INFERRED — no native agent-team primitive.
-    subagents: false,
-    // INFERRED
-    inline: true
-  },
-  interaction: {
-    native_questions: false,
-    // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
-    terminal_prompt: true,
-    file_bus_questions: true
-    // Guild file-bus approval works on any FS host.
-  },
-  sessions: {
-    continue: true,
-    // INFERRED — Codex has session continuation.
-    resume_by_id: true,
-    // INFERRED
-    fork: false
-    // INFERRED
-  },
-  structured_output: {
-    native_json: false,
-    // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
-    schema_validation: false,
-    // Guild-side validation (validateHandoffV2) instead.
-    repair_prompt: true
-    // Bounded repair prompt is the fallback (ADR §Result contracts).
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "none",
-    // INFERRED — no native browser; record fallback (AC29).
-    web: "emulated",
-    // INFERRED
-    mcp: "native"
-    // Codex supports stdio MCP.
-  },
-  mcp: { stdio: true, http: false },
-  // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
-  models: {
-    // Codex model ids are host-specific and not pinned in this repo yet; null =
-    // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
-    cheap: { model: null },
-    mid: { model: null },
-    powerful: { model: null }
-  }
-};
-var NO_HOOKS = {
-  session_start: false,
-  user_prompt_submit: false,
-  pre_tool_use: false,
-  post_tool_use: false,
-  stop: false,
-  pre_compact: false,
-  subagent_stop: false,
-  task_created: false,
-  task_completed: false,
-  teammate_idle: false
-};
-var TARGET_CLI_COMMON = {
-  commands: { slash_commands: false, command_files: "none" },
-  skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
-  agents: { native_agents: false, agent_format: null },
-  hooks: NO_HOOKS,
-  dispatch: {
-    tmux_processes: true,
-    plain_processes: true,
-    independent_agents: false,
-    subagents: false,
-    inline: true
-  },
-  interaction: {
-    native_questions: false,
-    terminal_prompt: true,
-    file_bus_questions: true
-  },
-  sessions: { continue: false, resume_by_id: false, fork: false },
-  structured_output: {
-    native_json: true,
-    schema_validation: false,
-    repair_prompt: true
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "none",
-    web: "emulated",
-    mcp: "emulated"
-  },
-  mcp: { stdio: false, http: false },
-  models: {
-    cheap: { model: null },
-    mid: { model: null },
-    powerful: { model: null }
-  }
-};
-var PI_CAPABILITIES = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "pi",
-  family: "pi",
-  surface_kind: "cli",
-  package: { installable: false, installability: "target", manifest_format: "pi-manifest" },
-  bootstrap: {
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    prompt_transform: false,
-    wrapper_injection: true
-  },
-  permissions: {
-    deny: true,
-    ask: true,
-    ask_mode: null,
-    accept_edits_without_prompt: false,
-    auto_approve_tools: false,
-    bypass_prompts: false,
-    bypass_sandbox: false,
-    permission_prompt_layer: false,
-    launch_modes: {}
-  },
-  ...TARGET_CLI_COMMON
-};
-var ANTIGRAVITY_CAPABILITIES = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "antigravity",
-  family: "antigravity",
-  surface_kind: "cli",
-  package: { installable: false, installability: "target", manifest_format: "antigravity-manifest" },
-  bootstrap: {
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    prompt_transform: false,
-    wrapper_injection: true
-  },
-  permissions: {
-    deny: true,
-    ask: true,
-    ask_mode: null,
-    accept_edits_without_prompt: false,
-    auto_approve_tools: false,
-    bypass_prompts: true,
-    bypass_sandbox: true,
-    permission_prompt_layer: false,
-    launch_modes: {
-      bypass_all: ["--dangerously-skip-permissions"]
-    }
-  },
-  ...TARGET_CLI_COMMON
-};
-var AGENTS_FILE_CAPABILITIES = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "agents-file",
-  family: "agents",
-  surface_kind: "file",
-  package: { installable: false, installability: "target", manifest_format: "agents-file" },
-  bootstrap: {
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    prompt_transform: false,
-    wrapper_injection: true
-  },
-  commands: { slash_commands: false, command_files: "none" },
-  skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
-  agents: { native_agents: false, agent_format: null },
-  hooks: NO_HOOKS,
-  permissions: {
-    deny: false,
-    ask: true,
-    ask_mode: null,
-    accept_edits_without_prompt: false,
-    auto_approve_tools: false,
-    bypass_prompts: false,
-    bypass_sandbox: false,
-    permission_prompt_layer: false,
-    launch_modes: {}
-  },
-  dispatch: {
-    tmux_processes: false,
-    plain_processes: false,
-    independent_agents: false,
-    subagents: false,
-    inline: false
-  },
-  interaction: {
-    native_questions: false,
-    terminal_prompt: false,
-    file_bus_questions: true
-  },
-  sessions: { continue: false, resume_by_id: false, fork: false },
-  structured_output: {
-    native_json: false,
-    schema_validation: false,
-    repair_prompt: true
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "none",
-    web: "emulated",
-    mcp: "none"
-  },
-  mcp: { stdio: false, http: false },
-  models: {
-    cheap: { model: null },
-    mid: { model: null },
-    powerful: { model: null }
-  }
-};
-
-// ../src/modules/host-runtime/workflows/host-registry-schema.ts
-var HOST_IDS = [
-  // keep CLI/file (5)
-  "claude-code-cli",
-  "codex-cli",
-  "pi-cli",
-  "antigravity-cli",
-  "agents-file",
-  // keep-as-refuse (4) — RETAINED verbatim
-  "claude-code-app",
-  "claude-code-web",
-  "codex-app",
-  "claude-ai-connector",
-  // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
-  "cursor",
-  "github-copilot",
-  "opencode",
-  "rovo-dev",
-  // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
-  // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
-  "kiro",
-  "qoder",
-  "trae"
-];
-var HOST_FAMILIES = [
-  "claude",
-  "codex",
-  "agents",
-  "pi",
-  "antigravity",
-  "cursor",
-  "copilot",
-  "opencode",
-  "rovo"
-];
-var AUTH_PROBES = [
-  "codex_stored_or_env",
-  "none",
-  "cursor_stored",
-  "gh_auth",
-  "opencode_stored_or_env",
-  "acli_stored"
-];
-var CLAUDE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-code-cli",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
-  installability: "native",
-  result_adapter: false,
-  // Claude is the reference author host, not a cross reviewer for itself.
-  dispatch_selectable: true,
-  capabilities: CLAUDE_CAPABILITIES,
-  provenance: "verified"
-};
-var CODEX_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "codex-cli",
-  family: "codex",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
-  // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
-  installability: "target",
-  result_adapter: true,
-  // The only selectable cross reviewer today (provider-detect codex-plugin/codex-cli).
-  dispatch_selectable: true,
-  capabilities: CODEX_CAPABILITIES,
-  provenance: "verified"
-  // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
-};
-function inferredCaps(host_kind, family, surface_kind = "cli") {
-  return {
-    schema_version: "guild.host_capabilities.v1",
-    host_kind,
-    family,
-    // Must equal the registry entry's top-level surface_kind (cross-field invariant,
-    // enforced by validateHostRegistryEntry). `.agents` is a file surface, not cli.
-    surface_kind,
-    package: { installable: false, installability: "target", manifest_format: `${host_kind}-package` },
-    bootstrap: {
-      context_injection: "instruction_file",
-      skill_autoload: false,
-      prompt_transform: false,
-      wrapper_injection: true
-    },
-    commands: { slash_commands: false, command_files: "none" },
-    skills: { native_skills: false, skill_dir: null },
-    agents: { native_agents: false, agent_format: null },
-    hooks: {
-      session_start: false,
-      user_prompt_submit: false,
-      pre_tool_use: false,
-      post_tool_use: false,
-      stop: false,
-      pre_compact: false,
-      subagent_stop: false,
-      task_created: false,
-      task_completed: false,
-      teammate_idle: false
-    },
-    permissions: {
-      deny: false,
-      ask: true,
-      ask_mode: null,
-      accept_edits_without_prompt: false,
-      auto_approve_tools: false,
-      bypass_prompts: false,
-      bypass_sandbox: false,
-      permission_prompt_layer: false,
-      launch_modes: {}
-    },
-    dispatch: {
-      tmux_processes: true,
-      plain_processes: true,
-      independent_agents: false,
-      subagents: false,
-      inline: true
-    },
-    interaction: { native_questions: false, terminal_prompt: true, file_bus_questions: true },
-    sessions: { continue: false, resume_by_id: false, fork: false },
-    structured_output: { native_json: false, schema_validation: false, repair_prompt: true },
-    artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-    tools: {
-      read: "native",
-      search: "native",
-      shell: "native",
-      edit: "native",
-      write: "native",
-      browser: "none",
-      web: "emulated",
-      mcp: "none"
-    },
-    mcp: { stdio: false, http: false },
-    models: { cheap: { model: null }, mid: { model: null }, powerful: { model: null } }
-  };
-}
-var AGENTS_FILE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "agents-file",
-  family: "agents",
-  // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
-  // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
-  adapter_binding: "self",
-  // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
-  surface_kind: "file",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "target",
-  result_adapter: false,
-  // INFERRED — no cross-review adapter; verify at live-host availability.
-  dispatch_selectable: true,
-  // INFERRED — a host consuming AGENTS.md can run a lane.
-  capabilities: AGENTS_FILE_CAPABILITIES,
-  // file surface — matches top-level surface_kind.
-  provenance: "inferred"
-};
-var PI_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "pi-cli",
-  family: "pi",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
-  // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
-  installability: "target",
-  // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
-  result_adapter: false,
-  // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
-  dispatch_selectable: true,
-  // VERIFIED: pi is a CLI process a lane can run on.
-  capabilities: {
-    ...inferredCaps("pi-cli", "pi"),
-    // VERIFIED on-host (pi --help, 0.79.3):
-    sessions: { continue: true, resume_by_id: true, fork: true },
-    // --continue/-c, --resume/-r + --session-id, --fork
-    structured_output: { native_json: true, schema_validation: false, repair_prompt: true }
-    // --mode json
-  },
-  provenance: "verified"
-  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
-};
-var ANTIGRAVITY_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "antigravity-cli",
-  family: "antigravity",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
-  detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
-  installability: "target",
-  // VERIFIED-as-target: CLI present; Guild-package install unproven.
-  result_adapter: false,
-  // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
-  dispatch_selectable: true,
-  // VERIFIED: agy is a CLI process a lane can run on.
-  capabilities: {
-    ...inferredCaps("antigravity-cli", "antigravity"),
-    // VERIFIED on-host (agy --help, 1.0.8):
-    sessions: { continue: true, resume_by_id: true, fork: false },
-    // --continue/-c, --conversation <id>; no fork flag
-    permissions: {
-      ...inferredCaps("antigravity-cli", "antigravity").permissions,
-      bypass_prompts: true,
-      // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
-      launch_modes: { bypass_all: ["--dangerously-skip-permissions"] }
-    }
-  },
-  provenance: "verified"
-  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
-};
-var CLAUDE_APP_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-code-app",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("claude-code-app", "claude", "app"),
-  provenance: "inferred"
-};
-var CLAUDE_WEB_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-code-web",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("claude-code-web", "claude", "app"),
-  provenance: "inferred"
-};
-var CODEX_APP_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "codex-app",
-  family: "codex",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("codex-app", "codex", "app"),
-  provenance: "inferred"
-};
-var CLAUDE_AI_CONNECTOR_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-ai-connector",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
-  provenance: "inferred"
-};
-var CURSOR_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "cursor",
-  family: "cursor",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("cursor", "cursor", "cli"),
-  provenance: "inferred"
-};
-var GITHUB_COPILOT_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "github-copilot",
-  family: "copilot",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  // capability is a subcommand of the shared `gh` bin (`gh copilot`).
-  detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("github-copilot", "copilot", "cli"),
-  provenance: "inferred"
-};
-var OPENCODE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "opencode",
-  family: "opencode",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("opencode", "opencode", "cli"),
-  provenance: "inferred"
-};
-var ROVO_DEV_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "rovo-dev",
-  family: "rovo",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
-  detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
-  provenance: "inferred"
-};
-var KIRO_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "kiro",
-  family: "agents",
-  adapter_binding: "agents-file",
-  surface_kind: "file",
-  detection: {
-    bin: null,
-    requires_auth: false,
-    auth_probe: "none",
-    subcommand: null,
-    marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" }
-  },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("kiro", "agents", "file"),
-  provenance: "inferred"
-};
-var QODER_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "qoder",
-  family: "agents",
-  adapter_binding: "agents-file",
-  surface_kind: "file",
-  detection: {
-    bin: null,
-    requires_auth: false,
-    auth_probe: "none",
-    subcommand: null,
-    marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" }
-  },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("qoder", "agents", "file"),
-  provenance: "inferred"
-};
-var TRAE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "trae",
-  family: "agents",
-  adapter_binding: "agents-file",
-  surface_kind: "file",
-  detection: {
-    bin: null,
-    requires_auth: false,
-    auth_probe: "none",
-    subcommand: null,
-    marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" }
-  },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("trae", "agents", "file"),
-  provenance: "inferred"
-};
-var HOST_REGISTRY_ROWS = {
-  "claude-code-cli": CLAUDE_ENTRY,
-  "codex-cli": CODEX_ENTRY,
-  "pi-cli": PI_ENTRY,
-  "antigravity-cli": ANTIGRAVITY_ENTRY,
-  "agents-file": AGENTS_FILE_ENTRY,
-  "claude-code-app": CLAUDE_APP_ENTRY,
-  "claude-code-web": CLAUDE_WEB_ENTRY,
-  "codex-app": CODEX_APP_ENTRY,
-  "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
-  cursor: CURSOR_ENTRY,
-  "github-copilot": GITHUB_COPILOT_ENTRY,
-  opencode: OPENCODE_ENTRY,
-  "rovo-dev": ROVO_DEV_ENTRY,
-  kiro: KIRO_ENTRY,
-  qoder: QODER_ENTRY,
-  trae: TRAE_ENTRY
-};
-var HOST_ID_SET = new Set(HOST_IDS);
-var FAMILY_SET = new Set(HOST_FAMILIES);
-var AUTH_PROBE_SET = new Set(AUTH_PROBES);
-
-// ../src/modules/host-runtime/workflows/host-id-namespace.ts
-var HOST_ID_SET2 = new Set(HOST_IDS);
-var LEGACY_HOST_ALIASES = {
-  claude: "claude-code-cli",
-  "claude-code-desktop": "claude-code-app",
-  codex: "codex-cli",
-  "codex-plugin": "codex-cli",
-  agents: "agents-file",
-  ".agents": "agents-file",
-  pi: "pi-cli",
-  antigravity: "antigravity-cli",
-  "antigravity-2": "antigravity-cli"
-};
-function normalizeHostId(value) {
-  const s = value.trim();
-  if (HOST_ID_SET2.has(s)) return s;
-  return LEGACY_HOST_ALIASES[s] ?? null;
-}
-
-// ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
-var RUNGS = ["native", "wrapped", "bridged", "emulated", "degraded"];
-var ADAPTER_SURFACES = ["interaction", "session", "semantic_tool", "browser"];
-var RUNG_SET = new Set(RUNGS);
-var SURFACE_SET = new Set(ADAPTER_SURFACES);
-
-// ../src/modules/host-runtime/workflows/host-profiles-validate.ts
-var KNOWN_HOST_IDS = new Set(HOST_IDS);
-var VALID_HOST_PROFILE_ENTRY_KEYS = /* @__PURE__ */ new Set(["models", "enabled"]);
-var VALID_HOST_PROFILE_MODEL_KEYS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
-function isPlainObject(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function validateHostProfiles(hp) {
-  const rejects = [];
-  for (const [hostId, entry] of Object.entries(hp)) {
-    const canonicalHostId = normalizeHostId(hostId);
-    if (!canonicalHostId) {
-      rejects.push(
-        `unknown host_profiles host_id "${hostId}" (closed key set \u2014 valid: ${[...KNOWN_HOST_IDS].join("|")})`
-      );
-      continue;
-    }
-    if (!isPlainObject(entry)) {
-      rejects.push(`host_profiles["${hostId}"] must be an object { models?, enabled? }`);
-      continue;
-    }
-    const e = entry;
-    for (const ek of Object.keys(e)) {
-      if (!VALID_HOST_PROFILE_ENTRY_KEYS.has(ek)) {
-        rejects.push(
-          `unknown host_profiles["${hostId}"] key "${ek}" (closed entry shape \u2014 only models, enabled)`
-        );
-      }
-    }
-    if (e["enabled"] !== void 0 && typeof e["enabled"] !== "boolean") {
-      rejects.push(`host_profiles["${hostId}"].enabled must be a boolean (got ${JSON.stringify(e["enabled"])})`);
-    }
-    if (e["models"] !== void 0) {
-      if (!isPlainObject(e["models"])) {
-        rejects.push(`host_profiles["${hostId}"].models must be an object { cheap?, mid?, powerful? }`);
-      } else {
-        const m = e["models"];
-        for (const mk of Object.keys(m)) {
-          if (!VALID_HOST_PROFILE_MODEL_KEYS.has(mk)) {
-            rejects.push(
-              `unknown host_profiles["${hostId}"].models key "${mk}" (closed key set \u2014 only cheap, mid, powerful)`
-            );
-          } else if (typeof m[mk] !== "string" || !m[mk].trim()) {
-            rejects.push(`host_profiles["${hostId}"].models.${mk} must be a non-empty string (got ${JSON.stringify(m[mk])})`);
-          }
-        }
-      }
-    }
-  }
-  return rejects;
-}
-function filterHostProfiles(raw) {
-  const out = {};
-  for (const [hostId, entry] of Object.entries(raw)) {
-    if (validateHostProfiles({ [hostId]: entry }).length === 0) {
-      const canonicalHostId = normalizeHostId(hostId);
-      if (canonicalHostId) out[canonicalHostId] = entry;
-    }
-  }
-  return out;
-}
-
-// ../src/modules/host-runtime/workflows/host-registry.ts
-var FAMILY_TO_ROW = (() => {
-  const out = {};
-  for (const id of HOST_IDS) {
-    const row = HOST_REGISTRY_ROWS[id];
-    const existing = out[row.family];
-    if (!existing || !existing.result_adapter && row.result_adapter) {
-      out[row.family] = row;
-    }
-  }
-  return out;
-})();
-function resultAdapterForFamily(family) {
-  return FAMILY_TO_ROW[family]?.result_adapter ?? false;
-}
-
-// ../src/modules/host-runtime/workflows/provider-detect.ts
-var PROVIDER_REGISTRY = [
-  // The author host itself — always "detected on the host", never a cross reviewer
-  // for a same-family author (the AC-8 guard handles that).
-  { id: "claude", kind: "host", family: "claude", hasAdapter: resultAdapterForFamily("claude"), requiresAuth: false },
-  // Codex reference adapters (the only selectable cross reviewers today).
-  { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
-  { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
-  // Detect-only until adapters ship (OD-6) — pi/antigravity rows carry result_adapter:false.
-  // (The former `gemini-cli` provider was removed when Gemini was sunset 2026-06-14.)
-  { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
-  // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
-  { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
-];
-
-// ../src/modules/security/workflows/safe-object.ts
-var PROTO_POISON_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
-
 // ../src/modules/kernel/workflows/yaml-loader.ts
-var path2 = __toESM(require("node:path"));
 function pluginLocalScriptsRoots() {
   return [
     // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
@@ -4154,10 +4202,29 @@ function loadYamlApi() {
     `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
   );
 }
+var path2;
+var init_yaml_loader = __esm({
+  "../src/modules/kernel/workflows/yaml-loader.ts"() {
+    path2 = __toESM(require("node:path"));
+  }
+});
+
+// ../src/modules/kernel/workflows/identifier-tokenize.ts
+var init_identifier_tokenize = __esm({
+  "../src/modules/kernel/workflows/identifier-tokenize.ts"() {
+  }
+});
+
+// ../src/modules/kernel/index.ts
+var init_kernel = __esm({
+  "../src/modules/kernel/index.ts"() {
+    init_module_manifest();
+    init_yaml_loader();
+    init_identifier_tokenize();
+  }
+});
 
 // ../src/modules/config/workflows/workspace-manifest.ts
-var fs2 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
 function parseWorkspaceManifest(manifestPath) {
   let raw;
   try {
@@ -4195,12 +4262,15 @@ function discoverWorkspace(startDir) {
   }
   return null;
 }
+var fs2, path3;
+var init_workspace_manifest = __esm({
+  "../src/modules/config/workflows/workspace-manifest.ts"() {
+    fs2 = __toESM(require("fs"));
+    path3 = __toESM(require("path"));
+  }
+});
 
 // ../src/modules/config/workflows/settings-reader.ts
-var yaml = loadYamlApi();
-var DEFAULTS2 = DEFAULTS;
-var VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
-var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
 function sparseRoles(raw) {
   const out = {};
   for (const k of ["host", "advisory", "adversarial"]) {
@@ -4224,42 +4294,10 @@ function sparseTierHostMap(raw) {
   }
   return out;
 }
-var VALID_LOOPS = /* @__PURE__ */ new Set(["none", "spec", "plan", "implementation", "all"]);
-var VALID_RIGOR = /* @__PURE__ */ new Set(["quick", "standard", "deep"]);
-var VALID_REVIEW = /* @__PURE__ */ new Set(["local", "cross", "off"]);
-var DISPATCH_HOST_IDS = new Set(
-  HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
-);
 function normalizeDispatchHostId(value) {
   const normalized = normalizeHostId(value);
   return normalized && DISPATCH_HOST_IDS.has(normalized) ? normalized : null;
 }
-var VALID_AGENT_MODE = /* @__PURE__ */ new Set(["team", "agent", "subagent", "auto"]);
-var VALID_CACHE_TTL = /* @__PURE__ */ new Set(["1h", "5m", "off"]);
-var DEFAULTS_ALLOWED_KEYS = /* @__PURE__ */ new Set([
-  "auto_learn",
-  "adversarial",
-  "team",
-  "review_workflow",
-  "skill_policy",
-  "gates",
-  "wiki",
-  "quality",
-  "reporting",
-  "index",
-  "cross_host",
-  "retry",
-  "resume",
-  // R-016
-  "heartbeat_timeout_ms",
-  // R-017
-  "capability_manifest_ttl_s",
-  // R-018
-  "allowed_tools",
-  // R-020
-  "update"
-  // plugin-update-lifecycle AC-6
-]);
 function isPlainObject2(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -4936,20 +4974,58 @@ function resolveSettings(opts) {
   }
   return { config: assembled, sources };
 }
-
-// ../src/modules/telemetry/workflows/guild-trace-emit.ts
-var fs4 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
+var fs3, path4, yaml, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS;
+var init_settings_reader = __esm({
+  "../src/modules/config/workflows/settings-reader.ts"() {
+    fs3 = __toESM(require("fs"));
+    path4 = __toESM(require("path"));
+    init_host_runtime();
+    init_host_runtime();
+    init_host_runtime();
+    init_security();
+    init_config_defaults();
+    init_kernel();
+    init_workspace_manifest();
+    yaml = loadYamlApi();
+    DEFAULTS2 = DEFAULTS;
+    VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
+    KNOWN_HOST_IDS2 = new Set(HOST_IDS);
+    VALID_LOOPS = /* @__PURE__ */ new Set(["none", "spec", "plan", "implementation", "all"]);
+    VALID_RIGOR = /* @__PURE__ */ new Set(["quick", "standard", "deep"]);
+    VALID_REVIEW = /* @__PURE__ */ new Set(["local", "cross", "off"]);
+    DISPATCH_HOST_IDS = new Set(
+      HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
+    );
+    VALID_AGENT_MODE = /* @__PURE__ */ new Set(["team", "agent", "subagent", "auto"]);
+    VALID_CACHE_TTL = /* @__PURE__ */ new Set(["1h", "5m", "off"]);
+    DEFAULTS_ALLOWED_KEYS = /* @__PURE__ */ new Set([
+      "auto_learn",
+      "adversarial",
+      "team",
+      "review_workflow",
+      "skill_policy",
+      "gates",
+      "wiki",
+      "quality",
+      "reporting",
+      "index",
+      "cross_host",
+      "retry",
+      "resume",
+      // R-016
+      "heartbeat_timeout_ms",
+      // R-017
+      "capability_manifest_ttl_s",
+      // R-018
+      "allowed_tools",
+      // R-020
+      "update"
+      // plugin-update-lifecycle AC-6
+    ]);
+  }
+});
 
 // ../src/modules/telemetry/workflows/guild-trace-events.ts
-var GUILD_TRACE_SCHEMA_VERSIONS = [
-  "guild.trace.dispatch.v1",
-  "guild.trace.recall.v1",
-  "guild.trace.recall_decision.v1",
-  "guild.trace.config_resolution.v1",
-  "guild.trace.security_decision.v1",
-  "guild.trace.degradation.v1"
-];
 function validateBase(ev) {
   if (typeof ev !== "object" || ev === null) {
     return { ok: false, reason: "event must be a non-null object" };
@@ -4972,10 +5048,6 @@ function validateBase(ev) {
   }
   return { ok: true };
 }
-var DISPATCH_BACKENDS = ["agent", "tmux", "remote", "unknown"];
-var RECALL_BRANCHES = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
-var SECURITY_OUTCOMES = ["allow", "ask", "deny", "audit", "pass-through"];
-var DEGRADATION_SURFACES = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
 function validateDispatchEvent(ev) {
   const base = validateBase(ev);
   if (!base.ok) return base;
@@ -5030,7 +5102,6 @@ function validateRecallEvent(ev) {
   }
   return { ok: true };
 }
-var LANE_OUTCOMES = ["success", "failure", "unknown"];
 function validateRecallDecisionEvent(ev) {
   const base = validateBase(ev);
   if (!base.ok) return base;
@@ -5179,13 +5250,31 @@ function validateGuildTraceEvent(ev) {
 function makeConfigResolutionEvent(fields) {
   return { schema_version: "guild.trace.config_resolution.v1", ...fields };
 }
+var GUILD_TRACE_SCHEMA_VERSIONS, DISPATCH_BACKENDS, RECALL_BRANCHES, SECURITY_OUTCOMES, DEGRADATION_SURFACES, LANE_OUTCOMES;
+var init_guild_trace_events = __esm({
+  "../src/modules/telemetry/workflows/guild-trace-events.ts"() {
+    GUILD_TRACE_SCHEMA_VERSIONS = [
+      "guild.trace.dispatch.v1",
+      "guild.trace.recall.v1",
+      "guild.trace.recall_decision.v1",
+      "guild.trace.config_resolution.v1",
+      "guild.trace.security_decision.v1",
+      "guild.trace.degradation.v1"
+    ];
+    DISPATCH_BACKENDS = ["agent", "tmux", "remote", "unknown"];
+    RECALL_BRANCHES = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
+    SECURITY_OUTCOMES = ["allow", "ask", "deny", "audit", "pass-through"];
+    DEGRADATION_SURFACES = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
+    LANE_OUTCOMES = ["success", "failure", "unknown"];
+  }
+});
 
 // ../src/modules/telemetry/workflows/guild-trace-emit.ts
-function liveLogPath(runDir3) {
-  return path5.join(runDir3, "logs", "v1.4-events.jsonl");
+function liveLogPath(runDir) {
+  return path5.join(runDir, "logs", "v1.4-events.jsonl");
 }
-function emitTraceEvent(event, runDir3) {
-  if (!runDir3) return;
+function emitTraceEvent(event, runDir) {
+  if (!runDir) return;
   const validationResult = validateGuildTraceEvent(event);
   if (!validationResult.ok) {
     const schemaVersion = event["schema_version"];
@@ -5197,20 +5286,44 @@ function emitTraceEvent(event, runDir3) {
     return;
   }
   try {
-    const live = liveLogPath(runDir3);
+    const live = liveLogPath(runDir);
     const dir = path5.dirname(live);
     fs4.mkdirSync(dir, { recursive: true });
     const line = JSON.stringify(event) + "\n";
     fs4.appendFileSync(live, line, "utf8");
   } catch (err) {
     process.stderr.write(
-      `[guild-trace-emit] WARN: could not write trace event to ${runDir3}/logs/v1.4-events.jsonl: ${err instanceof Error ? err.message : String(err)}
+      `[guild-trace-emit] WARN: could not write trace event to ${runDir}/logs/v1.4-events.jsonl: ${err instanceof Error ? err.message : String(err)}
 `
     );
   }
 }
+var fs4, path5;
+var init_guild_trace_emit = __esm({
+  "../src/modules/telemetry/workflows/guild-trace-emit.ts"() {
+    fs4 = __toESM(require("node:fs"));
+    path5 = __toESM(require("node:path"));
+    init_guild_trace_events();
+  }
+});
+
+// ../src/modules/telemetry/index.ts
+var init_telemetry = __esm({
+  "../src/modules/telemetry/index.ts"() {
+    init_guild_trace_emit();
+    init_guild_trace_events();
+  }
+});
 
 // ../src/modules/config/workflows/settings-resolver.ts
+var settings_resolver_exports = {};
+__export(settings_resolver_exports, {
+  deepMerge: () => deepMerge,
+  initiativeIsWorkspaceScoped: () => initiativeIsWorkspaceScoped,
+  isPlainObject: () => isPlainObject2,
+  resolveSettings: () => resolveSettings2,
+  rigorProfile: () => rigorProfile
+});
 function resolveSettings2(opts) {
   const t0 = Date.now();
   const result = resolveSettings(opts);
@@ -5247,2224 +5360,360 @@ function resolveSettings2(opts) {
   }
   return result;
 }
+var path6, crypto;
+var init_settings_resolver = __esm({
+  "../src/modules/config/workflows/settings-resolver.ts"() {
+    path6 = __toESM(require("path"));
+    crypto = __toESM(require("crypto"));
+    init_settings_reader();
+    init_settings_reader();
+    init_telemetry();
+    init_telemetry();
+  }
+});
 
-// ../src/modules/state/workflows/frontmatter.ts
-var loadedYaml = null;
-function yamlApi() {
-  if (loadedYaml === null) loadedYaml = loadYamlApi();
-  return loadedYaml;
-}
-function parseYaml(text, opts = {}) {
-  try {
-    const yaml2 = yamlApi();
-    const value = yaml2.load(text, { schema: opts.schema ?? yaml2.JSON_SCHEMA });
-    return value === void 0 ? null : value;
-  } catch {
-    return null;
-  }
-}
-function topLevelKeyLineIndex(lines, key) {
-  const prefix = key + ":";
-  for (let i = 0; i < lines.length; i++) {
-    const ln = lines[i];
-    if (/^[ \t]/.test(ln)) continue;
-    if (ln.startsWith(prefix)) return i;
-  }
-  return -1;
-}
-function replaceTopLevelLine(text, key, replacementLine) {
-  const lines = text.split("\n");
-  const i = topLevelKeyLineIndex(lines, key);
-  if (i === -1) return { text, replaced: false };
-  const hadCr = lines[i].endsWith("\r");
-  lines[i] = hadCr ? replacementLine + "\r" : replacementLine;
-  return { text: lines.join("\n"), replaced: true };
-}
+// update-check.ts
+var fs5 = __toESM(require("fs"));
+var os2 = __toESM(require("os"));
+var path7 = __toESM(require("path"));
+var import_child_process2 = require("child_process");
 
-// ../src/modules/migrations/workflows/index-migrate.ts
-var import_node_child_process = require("node:child_process");
-var fs5 = __toESM(require("node:fs"));
-var path7 = __toESM(require("node:path"));
-function openDatabase(dbPath) {
-  const { DatabaseSync } = require("node:sqlite");
-  const db = new DatabaseSync(dbPath);
-  db.exec("PRAGMA busy_timeout = 5000");
-  return db;
+// ../scripts/lib/update-check.ts
+var fs = __toESM(require("fs"));
+var os = __toESM(require("os"));
+var path = __toESM(require("path"));
+var import_child_process = require("child_process");
+var SOURCE_REPO_DEFAULT = "https://github.com/lookatitude/guild.git";
+var CACHE_SCHEMA = "guild.update_check_cache.v1";
+var RECEIPT_SCHEMA = "guild.install_receipt.v1";
+var RECEIPT_BASENAME = "guild-install-receipt.json";
+function parseSemver(v) {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(v.trim());
+  if (!m) return null;
+  return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)];
 }
-var CURRENT_SCHEMA_VERSION = 3;
-function resolveGuildRoot2(cwd) {
-  try {
-    const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
-      cwd,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"]
-    }).trim();
-    const abs = path7.isAbsolute(raw) ? raw : path7.resolve(cwd, raw);
-    const root = path7.dirname(abs);
-    if (fs5.existsSync(root)) return root;
-  } catch {
-  }
-  return path7.resolve(cwd);
-}
-var MIGRATIONS = [
-  // ── v1: core tables ───────────────────────────────────────────────────────
-  {
-    version: 1,
-    tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
-    up(db) {
-      db.exec(`
-        DROP TABLE IF EXISTS kg_nodes;
-        DROP TABLE IF EXISTS kg_edges;
-        DROP TABLE IF EXISTS kl_edges;
-        DROP TABLE IF EXISTS run_provenance;
-        DROP TABLE IF EXISTS wiki_fts;
-        DROP TABLE IF EXISTS _fingerprints;
-      `);
-      db.exec(`
-        CREATE TABLE kg_nodes (
-          id         TEXT NOT NULL PRIMARY KEY,
-          type       TEXT,
-          name       TEXT,
-          source_refs TEXT,
-          confidence TEXT,
-          layer      TEXT,
-          data       TEXT
-        );
-
-        CREATE TABLE kg_edges (
-          id        INTEGER PRIMARY KEY,
-          source    TEXT NOT NULL,
-          target    TEXT NOT NULL,
-          type      TEXT,
-          direction TEXT,
-          weight    REAL,
-          data      TEXT
-        );
-
-        CREATE TABLE kl_edges (
-          id        INTEGER PRIMARY KEY,
-          from_node TEXT NOT NULL,
-          to_node   TEXT NOT NULL,
-          type      TEXT,
-          run_id    TEXT,
-          data      TEXT
-        );
-
-        CREATE TABLE run_provenance (
-          run_id TEXT NOT NULL PRIMARY KEY,
-          ts     TEXT,
-          data   TEXT
-        );
-
-        CREATE TABLE _fingerprints (
-          table_name   TEXT NOT NULL PRIMARY KEY,
-          source_path  TEXT NOT NULL,
-          sha256       TEXT NOT NULL,
-          populated_at TEXT NOT NULL
-        );
-      `);
-      try {
-        db.exec(`
-          CREATE VIRTUAL TABLE wiki_fts USING fts5(
-            path      UNINDEXED,
-            title,
-            content,
-            tokenize='porter ascii'
-          );
-        `);
-      } catch {
-        db.exec(`
-          CREATE TABLE wiki_fts (
-            path    TEXT,
-            title   TEXT,
-            content TEXT
-          );
-        `);
-      }
-    }
-  },
-  // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
-  //
-  // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
-  // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
-  // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
-  //
-  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite.
-  // ensureFederationWikiCache() NEVER writes to sub_guild_root/.guild/.
-  {
-    version: 2,
-    tables: ["federation_wiki_cache"],
-    up(db) {
-      db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
-      db.exec(`
-        CREATE TABLE federation_wiki_cache (
-          sub_guild_root TEXT NOT NULL,
-          path           TEXT NOT NULL,
-          title          TEXT,
-          snippet        TEXT,
-          PRIMARY KEY (sub_guild_root, path)
-        );
-      `);
-    }
-  },
-  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
-  //
-  // Two OPTIONAL acceleration tables projected from the canonical, file-first
-  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
-  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
-  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
-  // remains the source of truth that returns IDENTICAL answers.
-  //
-  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
-  //                    indexed on source AND target so the call-graph BFS
-  //                    (kgTrace / kgDeadCode) is fetched without parsing the
-  //                    whole JSON graph.
-  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
-  //                    node, so identifier search (`process_order` →
-  //                    `processOrder`) is an index lookup, not a full node scan.
-  //                    Tokens are PRE-SPLIT with the shared identifier-aware
-  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
-  //                    document and query side, so the FTS built-in tokenizer
-  //                    only has to whitespace-split — the camel/snake behaviour
-  //                    lives in the (deterministic, model-free) projection feed.
-  {
-    version: 3,
-    tables: ["kg_calls", "kg_symbols_fts"],
-    up(db) {
-      db.exec(`
-        DROP TABLE IF EXISTS kg_calls;
-        DROP TABLE IF EXISTS kg_symbols_fts;
-      `);
-      db.exec(`
-        CREATE TABLE kg_calls (
-          id         INTEGER PRIMARY KEY,
-          source     TEXT NOT NULL,
-          target     TEXT NOT NULL,
-          confidence TEXT
-        );
-        CREATE INDEX kg_calls_source ON kg_calls (source);
-        CREATE INDEX kg_calls_target ON kg_calls (target);
-      `);
-      try {
-        db.exec(`
-          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
-            node_id UNINDEXED,
-            name_tokens,
-            tokenize='ascii'
-          );
-        `);
-      } catch {
-        db.exec(`
-          CREATE TABLE kg_symbols_fts (
-            node_id     TEXT,
-            name_tokens TEXT
-          );
-        `);
-      }
-    }
-  }
-];
-function runMigrations(dbPath) {
-  let db;
-  let fromVersion = 0;
-  try {
-    fs5.mkdirSync(path7.dirname(dbPath), { recursive: true });
-    db = openDatabase(dbPath);
-    db.exec("PRAGMA journal_mode = WAL");
-    db.exec("PRAGMA synchronous = NORMAL");
-    fromVersion = db.prepare("PRAGMA user_version").get().user_version;
-    for (const mig of MIGRATIONS) {
-      if (mig.version <= fromVersion) continue;
-      try {
-        db.exec("BEGIN IMMEDIATE");
-        mig.up(db);
-        db.exec(`PRAGMA user_version = ${mig.version}`);
-        db.exec("COMMIT");
-        fromVersion = mig.version;
-      } catch (err) {
-        try {
-          db.exec("ROLLBACK");
-        } catch {
-        }
-        for (const tbl of mig.tables) {
-          try {
-            db.exec(`DROP TABLE IF EXISTS ${tbl}`);
-          } catch {
-          }
-        }
-        db.close();
-        return {
-          ok: false,
-          fromVersion,
-          toVersion: fromVersion,
-          dbPath,
-          message: `migration to v${mig.version} failed: ${err.message}`
-        };
-      }
-    }
-    db.close();
-    return {
-      ok: true,
-      fromVersion,
-      toVersion: CURRENT_SCHEMA_VERSION,
-      dbPath
-    };
-  } catch (err) {
-    try {
-      db?.close();
-    } catch {
-    }
-    return {
-      ok: false,
-      fromVersion,
-      toVersion: fromVersion,
-      dbPath,
-      message: `migration runner error: ${err.message}`
-    };
-  }
-}
-function runIndexMigrateCli() {
-  const argv = process.argv.slice(2);
-  let cwd = process.env["GUILD_CWD"] ?? process.cwd();
-  let dbPath;
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--cwd" && argv[i + 1]) cwd = argv[++i];
-    if (argv[i] === "--db-path" && argv[i + 1]) dbPath = argv[++i];
-  }
-  if (!dbPath) {
-    const guildRoot = resolveGuildRoot2(cwd);
-    dbPath = path7.join(guildRoot, ".guild", "index.sqlite");
-  }
-  const result = runMigrations(dbPath);
-  if (result.ok) {
-    process.stdout.write(
-      `[index-migrate] OK: schema v${result.fromVersion}\u2192v${result.toVersion} at ${result.dbPath}
-`
-    );
-  } else {
-    process.stderr.write(`[index-migrate] WARN: ${result.message}
-`);
-    process.exit(1);
-  }
-}
-if (typeof module !== "undefined" && require.main === module) {
-  runIndexMigrateCli();
-}
-
-// lib/security/scrubbed-write.ts
-var fs8 = __toESM(require("node:fs"));
-var path10 = __toESM(require("node:path"));
-var crypto2 = __toESM(require("node:crypto"));
-
-// lib/v1.4/redact-log.ts
-var TOKEN_REDACTED = "[REDACTED_TOKEN]";
-var PATH_REDACTED = "[REDACTED]";
-var KV_REDACTED = "[REDACTED]";
-var HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
-var TRUNCATION_SUFFIX = "... [TRUNCATED]";
-var FIELD_SIZE_CAP_BYTES = 4 * 1024;
-var TOKEN_SHAPE_PATTERNS = [
-  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
-  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
-  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
-  /\bghp_[A-Za-z0-9]{36}\b/g,
-  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
-  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
-  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
-];
-function redactTokenShapes(input) {
-  let out = input;
-  for (const re of TOKEN_SHAPE_PATTERNS) {
-    out = out.replace(new RegExp(re.source, re.flags), TOKEN_REDACTED);
-  }
-  return out;
-}
-var HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
-function redactHomeDirPaths(input) {
-  return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
-    return `${root}/${dir}/${PATH_REDACTED}`;
-  });
-}
-var KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bearer)(\s*[:=]\s*)(\S+)/gi;
-function redactKeyValueSecrets(input) {
-  return input.replace(
-    KV_SECRET_PATTERN,
-    (_match, key, sep3) => `${key}${sep3}${KV_REDACTED}`
-  );
-}
-function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
-  if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {
-    return true;
-  }
-  const lookBackStart = Math.max(0, matchIndex - 16);
-  const before = fullInput.slice(lookBackStart, matchIndex).toLowerCase();
-  if (/\b(commit|sha|tree|parent|head|merge|object|branch)\s*[:=]?\s*$/.test(before)) {
-    return true;
-  }
-  if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
-    return true;
+function semverLt(a, b) {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (!pa || !pb) return false;
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] !== pb[i]) return pa[i] < pb[i];
   }
   return false;
 }
-var HIGH_ENTROPY_PATTERN = /[A-Za-z0-9+/=]{20,}/g;
-function redactHighEntropy(input) {
-  return input.replace(HIGH_ENTROPY_PATTERN, (match, offset) => {
-    if (isWhitelistedHighEntropy(match, input, offset)) {
-      return match;
-    }
-    return HIGH_ENTROPY_REDACTED;
-  });
-}
-function truncateToCap(input, cap = FIELD_SIZE_CAP_BYTES) {
-  const byteLen = Buffer.byteLength(input, "utf8");
-  if (byteLen <= cap) return input;
-  const buf = Buffer.from(input, "utf8");
-  const truncated = buf.slice(0, cap).toString("utf8");
-  const cleaned = truncated.replace(/\uFFFD+$/u, "");
-  return cleaned + TRUNCATION_SUFFIX;
-}
-function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
-  if (typeof input !== "string") return input;
-  let out = redactTokenShapes(input);
-  out = redactHomeDirPaths(out);
-  out = redactKeyValueSecrets(out);
-  out = redactHighEntropy(out);
-  out = truncateToCap(out, cap);
-  return out;
-}
-
-// lib/security/secrets.ts
-function applySecretsPolicy(value, policy, opts) {
-  if (typeof value !== "string") {
-    return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
+function latestStableTag(tags) {
+  let best = null;
+  for (const t of tags) {
+    if (!parseSemver(t)) continue;
+    if (best === null || semverLt(best, t)) best = t;
   }
-  let out = redactField(value, opts?.noTruncate ? Number.POSITIVE_INFINITY : void 0);
-  const failures = [];
-  for (const pat of policy.redaction_patterns) {
-    let re;
-    try {
-      re = new RegExp(pat, "g");
-    } catch (err) {
-      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
-      continue;
-    }
-    try {
-      out = out.replace(re, "[REDACTED]");
-    } catch (err) {
-      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
+  return best;
+}
+function parseLsRemote(raw) {
+  const tags = [];
+  let next = null;
+  let main2 = null;
+  for (const line of raw.split("\n")) {
+    const m = /^([0-9a-f]{40})\s+(\S+)$/.exec(line.trim());
+    if (!m) continue;
+    const [, sha, ref] = m;
+    if (ref === "refs/heads/next") next = sha;
+    else if (ref === "refs/heads/main") main2 = sha;
+    else if (ref.startsWith("refs/tags/v") && !ref.endsWith("^{}")) {
+      tags.push(ref.slice("refs/tags/".length));
     }
   }
-  return { value: out, ok: failures.length === 0, failures };
+  return { latest_tag: latestStableTag(tags), next_head_sha: next, main_head_sha: main2 };
 }
-
-// lib/security/config.ts
-var fs6 = __toESM(require("node:fs"));
-var path8 = __toESM(require("node:path"));
-function securityDefaults() {
-  return {
-    bypass_permissions_policy: "audit",
-    secrets_policy: {
-      env_allowlist: [],
-      redaction_patterns: [],
-      fail_mode_durable: "closed",
-      fail_mode_telemetry: "open"
-    },
-    tool_description_hashes: {},
-    mcp_availability: {
-      stdio_available: true,
-      http_available: false,
-      bridge_package: null
-    },
-    allowed_tools: []
-  };
-}
-function isPlainObject3(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function isStringArray(v) {
-  return Array.isArray(v) && v.every((x) => typeof x === "string");
-}
-function parseSecurityConfig(parsed) {
-  const out = securityDefaults();
-  if (!isPlainObject3(parsed)) return out;
-  if (isPlainObject3(parsed["security"])) {
-    const bpp = parsed["security"]["bypass_permissions_policy"];
-    if (bpp === "deny" || bpp === "audit" || bpp === "allow") {
-      out.bypass_permissions_policy = bpp;
+function resolveGitDir(gitPath, fsi = fs) {
+  try {
+    const st = fsi.statSync(gitPath);
+    if (st.isDirectory()) return gitPath;
+    if (st.isFile()) {
+      const m = /^gitdir:\s*(.+)\s*$/m.exec(fsi.readFileSync(gitPath, "utf8"));
+      if (!m) return null;
+      const target = m[1].trim();
+      return path.isAbsolute(target) ? target : path.resolve(path.dirname(gitPath), target);
     }
+  } catch {
   }
-  if (isPlainObject3(parsed["secrets_policy"])) {
-    const sp = parsed["secrets_policy"];
-    if (isStringArray(sp["env_allowlist"])) out.secrets_policy.env_allowlist = sp["env_allowlist"];
-    if (isStringArray(sp["redaction_patterns"])) {
-      out.secrets_policy.redaction_patterns = sp["redaction_patterns"];
-    }
-    if (sp["fail_mode_durable"] === "closed" || sp["fail_mode_durable"] === "open") {
-      out.secrets_policy.fail_mode_durable = sp["fail_mode_durable"];
-    }
-    if (sp["fail_mode_telemetry"] === "open" || sp["fail_mode_telemetry"] === "closed") {
-      out.secrets_policy.fail_mode_telemetry = sp["fail_mode_telemetry"];
-    }
+  return null;
+}
+function readGitHead(gitDir, fsi = fs) {
+  const headPath = path.join(gitDir, "HEAD");
+  if (!fsi.existsSync(headPath)) return { branch: null, sha: null };
+  const head = fsi.readFileSync(headPath, "utf8").trim();
+  const refMatch = /^ref:\s*refs\/heads\/(\S+)$/.exec(head);
+  if (!refMatch) {
+    return { branch: null, sha: /^[0-9a-f]{40}$/.test(head) ? head : null };
   }
-  if (isPlainObject3(parsed["defaults"])) {
-    const defs = parsed["defaults"];
-    if (isStringArray(defs["allowed_tools"])) {
-      out.allowed_tools = defs["allowed_tools"];
-    }
+  const branch = refMatch[1];
+  const refRoots = [gitDir];
+  const commondirFile = path.join(gitDir, "commondir");
+  if (fsi.existsSync(commondirFile)) {
+    const common = fsi.readFileSync(commondirFile, "utf8").trim();
+    refRoots.push(path.isAbsolute(common) ? common : path.resolve(gitDir, common));
   }
-  if (isPlainObject3(parsed["mcp"])) {
-    const mcp = parsed["mcp"];
-    if (isPlainObject3(mcp["tool_description_hashes"])) {
-      const hashes = {};
-      for (const [k, v] of Object.entries(mcp["tool_description_hashes"])) {
-        if (typeof v === "string") hashes[k] = v;
+  for (const root of refRoots) {
+    const looseRef = path.join(root, "refs", "heads", branch);
+    if (fsi.existsSync(looseRef)) {
+      const sha = fsi.readFileSync(looseRef, "utf8").trim();
+      return { branch, sha: /^[0-9a-f]{40}$/.test(sha) ? sha : null };
+    }
+    const packed = path.join(root, "packed-refs");
+    if (fsi.existsSync(packed)) {
+      for (const line of fsi.readFileSync(packed, "utf8").split("\n")) {
+        const m = /^([0-9a-f]{40})\s+refs\/heads\/(\S+)$/.exec(line.trim());
+        if (m && m[2] === branch) return { branch, sha: m[1] };
       }
-      out.tool_description_hashes = hashes;
-    }
-    if (typeof mcp["stdio_available"] === "boolean") {
-      out.mcp_availability.stdio_available = mcp["stdio_available"];
-    }
-    if (typeof mcp["http_available"] === "boolean") {
-      out.mcp_availability.http_available = mcp["http_available"];
-    }
-    if (mcp["bridge_package"] === null || typeof mcp["bridge_package"] === "string") {
-      out.mcp_availability.bridge_package = mcp["bridge_package"];
     }
   }
-  return out;
+  return { branch, sha: null };
 }
-function readSecurityConfig(cwd) {
-  const settingsPath = path8.join(resolveGuildRoot(cwd), ".guild", "settings.json");
-  let raw;
-  try {
-    raw = fs6.readFileSync(settingsPath, "utf8");
-  } catch {
-    return securityDefaults();
+function branchToChannel(branch) {
+  if (branch === "next") return "beta";
+  return "stable";
+}
+function resolveInstallState(pluginRoot, opts = {}) {
+  const fsi = opts.fsi ?? fs;
+  const home = opts.homedir ?? os.homedir();
+  const real = (() => {
+    try {
+      return fsi.realpathSync(pluginRoot);
+    } catch {
+      return pluginRoot;
+    }
+  })();
+  const version = readInstalledVersion(pluginRoot, fsi);
+  const managedRoots = [
+    path.join(home, ".claude", "plugins"),
+    path.join(home, ".config", "claude", "plugins")
+  ].map((m) => {
+    try {
+      return fsi.realpathSync(m);
+    } catch {
+      return m;
+    }
+  });
+  const isManaged = managedRoots.some(
+    (m) => real === m || real.startsWith(m + path.sep)
+  );
+  const gitDir = resolveGitDir(path.join(real, ".git"), fsi);
+  if (gitDir) {
+    const { branch, sha } = readGitHead(gitDir, fsi);
+    if (!isManaged) {
+      return { channel: "dev", version, commit: sha, source: "dev-checkout" };
+    }
+    return {
+      channel: branchToChannel(branch),
+      version,
+      commit: sha,
+      source: "marketplace-clone"
+    };
   }
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return securityDefaults();
+  const receiptPath = path.join(real, RECEIPT_BASENAME);
+  if (fsi.existsSync(receiptPath)) {
+    try {
+      const r = JSON.parse(fsi.readFileSync(receiptPath, "utf8"));
+      if (r.schema_version === RECEIPT_SCHEMA) {
+        return {
+          channel: r.channel === "beta" ? "beta" : "stable",
+          version: r.version ?? version,
+          commit: r.commit ?? null,
+          source: "receipt"
+        };
+      }
+    } catch {
+    }
   }
-  return parseSecurityConfig(parsed);
+  return { channel: "stable", version, commit: null, source: "default" };
+}
+function readInstalledVersion(pluginRoot, fsi = fs) {
+  try {
+    const manifest = JSON.parse(
+      fsi.readFileSync(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8")
+    );
+    return typeof manifest.version === "string" ? manifest.version : null;
+  } catch {
+    return null;
+  }
+}
+function cachePath(homedir3 = os.homedir()) {
+  return path.join(homedir3, ".guild", "update-check.json");
+}
+function readCache(file, fsi = fs) {
+  try {
+    const c = JSON.parse(fsi.readFileSync(file, "utf8"));
+    return c.schema_version === CACHE_SCHEMA ? c : null;
+  } catch {
+    return null;
+  }
+}
+function cacheIsFresh(cache, ttlHours, now) {
+  if (!cache) return false;
+  const age = now.getTime() - Date.parse(cache.checked_at);
+  return Number.isFinite(age) && age >= 0 && age < ttlHours * 36e5;
+}
+function refreshCache(opts) {
+  const repo = opts.repo ?? SOURCE_REPO_DEFAULT;
+  const file = opts.file ?? cachePath();
+  const fsi = opts.fsi ?? fs;
+  const run = opts.runner ?? ((cmd, args) => (0, import_child_process.execFileSync)(cmd, args, { encoding: "utf8", timeout: 15e3 }));
+  try {
+    const raw = run("git", ["ls-remote", "--tags", "--heads", repo]);
+    const cache = {
+      schema_version: CACHE_SCHEMA,
+      checked_at: (opts.now ?? /* @__PURE__ */ new Date()).toISOString(),
+      source_repo: repo,
+      remote: parseLsRemote(raw)
+    };
+    fsi.mkdirSync(path.dirname(file), { recursive: true });
+    fsi.writeFileSync(file, JSON.stringify(cache, null, 2) + "\n", "utf8");
+    return cache;
+  } catch {
+    return null;
+  }
+}
+function computeSignal(opts) {
+  const { state, cache } = opts;
+  const short = (sha) => sha ? sha.slice(0, 7) : "unknown";
+  const installedLabel = state.channel === "beta" ? short(state.commit) : state.version ?? "unknown";
+  const base = {
+    channel: state.channel,
+    installed: installedLabel,
+    available: null,
+    command: null
+  };
+  if (state.channel === "dev") {
+    return { ...base, update_available: false, reason: "dev-install" };
+  }
+  if (!cache) {
+    return { ...base, update_available: false, reason: "no-cache" };
+  }
+  const command = opts.hostKind === "wrapper" ? "guild-run update" : opts.hostKind === "agents-file" ? "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update" : "claude plugin marketplace update guild && claude plugin update guild@guild";
+  if (state.channel === "beta") {
+    const remoteSha = cache.remote.next_head_sha;
+    if (remoteSha && state.commit && remoteSha !== state.commit) {
+      return {
+        ...base,
+        update_available: true,
+        available: short(remoteSha),
+        command,
+        reason: "beta-new-commit"
+      };
+    }
+    return { ...base, update_available: false, reason: "up-to-date" };
+  }
+  const latest = cache.remote.latest_tag;
+  if (latest && state.version && semverLt(state.version, latest)) {
+    return {
+      ...base,
+      update_available: true,
+      available: latest,
+      command,
+      reason: "stable-newer-tag"
+    };
+  }
+  return { ...base, update_available: false, reason: "up-to-date" };
+}
+function renderSignalLine(sig) {
+  if (!sig.update_available || !sig.available) return null;
+  const channelLabel = sig.channel === "beta" ? "beta (next)" : "stable";
+  return `Guild update available on ${channelLabel}: ${sig.installed} \u2192 ${sig.available}` + (sig.command ? ` \u2014 run: ${sig.command}` : "");
 }
 
-// lib/security/events.ts
-var fs7 = __toESM(require("node:fs"));
-var path9 = __toESM(require("node:path"));
-var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
-var KNOWN_GUILD_HOST_KINDS = [
-  "claude-code-cli",
-  "codex-cli",
-  "pi-cli",
-  "antigravity-cli",
-  "agents-file",
-  "claude-code-app",
-  "claude-code-web",
-  "codex-app",
-  "claude-ai-connector"
-];
-var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
-var LEGACY_HOST_ALIASES2 = {
-  claude: "claude-code-cli",
-  "claude-code-desktop": "claude-code-app",
-  codex: "codex-cli",
-  "codex-plugin": "codex-cli",
-  agents: "agents-file",
-  ".agents": "agents-file",
-  pi: "pi-cli",
-  antigravity: "antigravity-cli",
-  "antigravity-2": "antigravity-cli"
-};
-function normalizeSecurityHostId(value) {
-  const s = value.trim();
-  if (KNOWN_GUILD_HOST_ID_SET.has(s)) return s;
-  return LEGACY_HOST_ALIASES2[s] ?? null;
-}
-function resolveHostResolution(env) {
-  const explicit = (env["GUILD_HOST_ID"] ?? "").trim();
-  if (explicit.length > 0) return { id: explicit, degraded: false, rawUnknown: "" };
-  const rawHost = (env["GUILD_HOST"] ?? "").trim().toLowerCase();
-  if (rawHost.length === 0) return { id: "claude-code-cli", degraded: false, rawUnknown: "" };
-  const normalized = normalizeSecurityHostId(rawHost);
-  if (normalized) return { id: normalized, degraded: false, rawUnknown: "" };
-  return { id: rawHost, degraded: true, rawUnknown: rawHost };
-}
-function resolveHostId() {
-  return resolveHostResolution(process.env).id;
-}
-function buildSecurityEvent(input) {
-  const rec = {
-    schema_version: SECURITY_EVENT_SCHEMA_VERSION,
-    ts: (/* @__PURE__ */ new Date()).toISOString(),
-    run_id: input.run_id,
-    event_type: input.event_type,
-    decision: input.decision,
-    tool: input.tool,
-    detail: redactField(input.detail ?? ""),
-    host: typeof input.host === "string" && input.host.length > 0 ? input.host : resolveHostId()
-  };
-  if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
-  if (input.policy !== void 0) rec.policy = input.policy;
-  if (typeof input.permission_mode === "string" && input.permission_mode.length > 0) {
-    rec.permission_mode = input.permission_mode;
-  }
-  if (typeof input.dispatch_rung === "string" && input.dispatch_rung.length > 0) {
-    rec.dispatch_rung = input.dispatch_rung;
-  }
-  return rec;
-}
-function appendSecurityEvent(runDir3, record) {
+// update-check.ts
+function readUpdateConfig(cwd) {
+  const defaults = { mode: "notify", cadenceHours: 24 };
   try {
-    const logsDir2 = path9.join(runDir3, "logs");
-    fs7.mkdirSync(logsDir2, { recursive: true });
-    fs7.appendFileSync(path9.join(logsDir2, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
-    return true;
-  } catch (err) {
-    process.stderr.write(
-      `warn: [security-events] write failed: ${err instanceof Error ? err.message : String(err)}
-`
-    );
+    const { resolveSettings: resolveSettings3 } = (init_settings_resolver(), __toCommonJS(settings_resolver_exports));
+    const parsed = resolveSettings3({ cwd }).config;
+    const u = parsed.defaults?.update ?? {};
+    const mode = u.mode === "auto" || u.mode === "notify" || u.mode === "off" ? u.mode : defaults.mode;
+    const cadenceHours = typeof u.cadence_hours === "number" && u.cadence_hours > 0 ? u.cadence_hours : defaults.cadenceHours;
+    return { mode, cadenceHours };
+  } catch {
+    return defaults;
+  }
+}
+function stagedMarkerPath() {
+  return path7.join(os2.homedir(), ".guild", "update-staged.json");
+}
+function alreadyStaged(target) {
+  try {
+    const m = JSON.parse(fs5.readFileSync(stagedMarkerPath(), "utf8"));
+    return m.target === target;
+  } catch {
     return false;
   }
 }
-
-// lib/security/scrubbed-write.ts
-function guildRootFromRunDir(runDir3) {
-  return path10.resolve(runDir3, "../../..");
-}
-function writeScrubApprovalRequest(runDir3, runId, surface, outPath, laneId) {
+function markStaged(target) {
   try {
-    const approvalDir = path10.join(runDir3, "agent-bus", "approvals");
-    fs8.mkdirSync(approvalDir, { recursive: true });
-    const ts = (/* @__PURE__ */ new Date()).toISOString();
-    const safeTs = ts.replace(/[:.]/g, "-");
-    const fileName = `${safeTs}-scrub-blocked.json`;
-    const record = {
-      schema_version: "guild.approval_request.v1",
-      ts,
-      run_id: runId,
-      tool: "scrubbedWrite",
-      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path10.basename(outPath)}`,
-      permission_mode: "blocked",
-      surface
-    };
-    if (laneId) record["lane_id"] = laneId;
-    const rawContent = JSON.stringify(record, null, 2) + "\n";
-    let content = rawContent;
-    try {
-      const secConfig = readSecurityConfig(guildRootFromRunDir(runDir3));
-      const scrubResult = applySecretsPolicy(rawContent, secConfig.secrets_policy, { noTruncate: true });
-      content = scrubResult.value;
-    } catch {
-    }
-    fs8.writeFileSync(path10.join(approvalDir, fileName), content, "utf8");
-  } catch {
-  }
-}
-function scrubbedWrite(outPath, content, opts) {
-  const guildRoot = guildRootFromRunDir(opts.runDir);
-  let policy;
-  try {
-    const secConfig = readSecurityConfig(guildRoot);
-    policy = secConfig.secrets_policy;
-  } catch {
-    policy = {
-      env_allowlist: [],
-      redaction_patterns: [],
-      fail_mode_durable: "closed",
-      fail_mode_telemetry: "open"
-    };
-  }
-  const scrubResult = applySecretsPolicy(content, policy, { noTruncate: true });
-  const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
-  if (scrubResult.ok) {
-    try {
-      fs8.mkdirSync(path10.dirname(outPath), { recursive: true });
-      fs8.writeFileSync(outPath, scrubResult.value, "utf8");
-    } catch (err) {
-      process.stderr.write(
-        `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
-`
-      );
-      return { written: false, blocked: false };
-    }
-    const result = { written: true, blocked: false };
-    if (opts.surface === "bus") {
-      result.sha256 = crypto2.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
-    }
-    return result;
-  }
-  if (failMode === "open") {
-    process.stderr.write(
-      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path10.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
-`
-    );
-    try {
-      fs8.mkdirSync(path10.dirname(outPath), { recursive: true });
-      fs8.writeFileSync(outPath, scrubResult.value, "utf8");
-    } catch (err) {
-      process.stderr.write(
-        `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
-`
-      );
-      return { written: false, blocked: false };
-    }
-    try {
-      const evt = buildSecurityEvent({
-        run_id: opts.runId,
-        lane_id: opts.laneId,
-        event_type: "secret_scrub_blocked",
-        decision: "degraded",
-        tool: "scrubbedWrite",
-        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path10.basename(outPath)}. Built-in-redacted content written.`,
-        permission_mode: "degraded"
-      });
-      appendSecurityEvent(opts.runDir, evt);
-    } catch {
-    }
-    const result = { written: true, blocked: false };
-    if (opts.surface === "bus") {
-      result.sha256 = crypto2.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
-    }
-    return result;
-  }
-  process.stderr.write(
-    `[scrubbed-write] BLOCKED: secret scrub failed for durable surface "${opts.surface}" at ${outPath} \u2014 file NOT written. Failures: ${scrubResult.failures.join("; ")}
-`
-  );
-  try {
-    const evt = buildSecurityEvent({
-      run_id: opts.runId,
-      lane_id: opts.laneId,
-      event_type: "secret_scrub_blocked",
-      decision: "blocked",
-      tool: "scrubbedWrite",
-      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path10.basename(outPath)} \u2014 write blocked (fail-closed).`,
-      permission_mode: "blocked"
-    });
-    appendSecurityEvent(opts.runDir, evt);
-  } catch {
-  }
-  writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
-  return { written: false, blocked: true };
-}
-
-// ../src/modules/lifecycle/workflows/run-lifecycle.ts
-function runDir(root, runId) {
-  return path11.join(root, ".guild", "runs", runId);
-}
-function runYamlPath(root, runId) {
-  return path11.join(runDir(root, runId), "run.yaml");
-}
-function provenancePath(root, runId) {
-  return path11.join(runDir(root, runId), "provenance.json");
-}
-function logsDir(root, runId) {
-  return path11.join(runDir(root, runId), "logs");
-}
-function resolvedSettingsPath(root, runId) {
-  return path11.join(runDir(root, runId), "resolved-settings.json");
-}
-function sentinelPath(root) {
-  return path11.join(root, ".guild", "runs", "current-run-id");
-}
-function logRefFor(runId) {
-  return `.guild/runs/${runId}/logs/v1.4-events.jsonl`;
-}
-function utcCompact(nowIso) {
-  const d = new Date(nowIso);
-  const iso = Number.isNaN(d.getTime()) ? nowIso : d.toISOString();
-  const m = iso.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
-  if (m) return `${m[1]}${m[2]}${m[3]}-${m[4]}${m[5]}${m[6]}`;
-  const digits = iso.replace(/\D/g, "");
-  return `${digits.slice(0, 8)}-${digits.slice(8, 14)}`;
-}
-function makeRunId(initiative, nowIso) {
-  if (initiative) return `run-${initiative}-${utcCompact(nowIso)}`;
-  return `run-${crypto3.randomUUID()}`;
-}
-function yamlScalar(v) {
-  if (v === null) return "null";
-  if (typeof v === "boolean" || typeof v === "number") return String(v);
-  if (v === "") return '""';
-  if (/^[\w./:@+-]+$/.test(v) && !/^\d{4}-\d{2}/.test(v)) return v;
-  if (/^[^\s#:][^#]*$/.test(v) && !v.includes(": ") && !/[:#]$/.test(v)) return v;
-  return JSON.stringify(v);
-}
-function serializeRunYaml(rec) {
-  const lines = [];
-  const emit = (obj, indent) => {
-    const pad = "  ".repeat(indent);
-    for (const [k, val] of Object.entries(obj)) {
-      if (val === void 0) continue;
-      if (Array.isArray(val)) {
-        if (val.length === 0) {
-          lines.push(`${pad}${k}: []`);
-        } else if (val.every((x) => typeof x !== "object" || x === null)) {
-          lines.push(`${pad}${k}: [${val.map((x) => yamlScalar(x)).join(", ")}]`);
-        } else {
-          lines.push(`${pad}${k}:`);
-          for (const item of val) {
-            if (item && typeof item === "object") {
-              const entries = Object.entries(item);
-              entries.forEach(([ik, iv], i) => {
-                const prefix = i === 0 ? `${pad}  - ` : `${pad}    `;
-                lines.push(`${prefix}${ik}: ${yamlScalar(iv)}`);
-              });
-            } else {
-              lines.push(`${pad}  - ${yamlScalar(item)}`);
-            }
-          }
-        }
-      } else if (val && typeof val === "object") {
-        const entries = Object.entries(val);
-        if (entries.length === 0) {
-          lines.push(`${pad}${k}: {}`);
-        } else {
-          lines.push(`${pad}${k}:`);
-          emit(val, indent + 1);
-        }
-      } else {
-        lines.push(`${pad}${k}: ${yamlScalar(val)}`);
-      }
-    }
-  };
-  emit(rec, 0);
-  return lines.join("\n") + "\n";
-}
-function buildRunManifest(opts, runId, env) {
-  const host = env.resolveHost(opts.host_requested);
-  const runClass = opts.run_class ?? "full";
-  const workspace = {
-    is_workspace: opts.workspace.is_workspace,
-    root: opts.workspace.root
-  };
-  if (opts.workspace.sub_guilds && opts.workspace.sub_guilds.length > 0) {
-    workspace["sub_guilds"] = opts.workspace.sub_guilds;
-  }
-  const hostBlock = {
-    requested: host.requested,
-    resolved: host.resolved
-  };
-  if (host.capabilities_ref) hostBlock["capabilities_ref"] = host.capabilities_ref;
-  const phase = opts.phase ?? null;
-  const manifest = {
-    schema_version: "guild.run.v1",
-    run_id: runId,
-    command: opts.command,
-    arguments: opts.arguments,
-    cwd: opts.cwd,
-    target_kind: opts.target_kind,
-    workspace,
-    project: opts.project,
-    host: hostBlock,
-    model_tier_policy: opts.model_tier_policy,
-    started_at: env.now(),
-    ignore_policy: opts.ignore_policy,
-    scan_policy: opts.scan_policy,
-    initiative_attachment: opts.initiative,
-    // NN#5: scalar record ONLY
-    phase,
-    run_class: runClass,
-    gates: {},
-    status: "open",
-    phases_log: phase ? [{ phase, at: env.now() }] : []
-  };
-  if (opts.snapshot) {
-    manifest["settings_ref"] = {
-      path: "resolved-settings.json",
-      schema_version: opts.snapshot.schema_version,
-      effective_backend: opts.snapshot.effective.agent_mode,
-      review: opts.snapshot.effective.review,
-      recommended_provider: opts.snapshot.providers.recommended
-    };
-  }
-  return manifest;
-}
-function emptyTouched() {
-  return { tasks: [], agents: [], skills: [], decisions: [], features: [], files: [], runs: [] };
-}
-function mergeTouched(supplied) {
-  const base = emptyTouched();
-  if (!supplied) return base;
-  for (const k of Object.keys(base)) {
-    const v = supplied[k];
-    if (Array.isArray(v)) base[k] = v;
-  }
-  return base;
-}
-function readStartFacts(env, root, runId) {
-  const raw = env.fs.readFile(runYamlPath(root, runId));
-  if (raw === null) {
-    throw new Error(
-      `[run-lifecycle] closeRun("${runId}"): no run.yaml at ${runYamlPath(root, runId)} \u2014 cannot close a run that was never started.`
-    );
-  }
-  const doc = parseYaml(raw);
-  const obj = doc !== null && typeof doc === "object" && !Array.isArray(doc) ? doc : {};
-  const get = (key) => {
-    const v = obj[key];
-    return v === void 0 || v === null ? null : String(v);
-  };
-  const command = get("command") ?? "";
-  const initRaw = get("initiative_attachment");
-  const initiative = initRaw === null || initRaw === "null" || initRaw === "" ? null : initRaw;
-  const runClassRaw = get("run_class");
-  const run_class = runClassRaw === "lightweight" ? "lightweight" : "full";
-  const started_at = get("started_at") ?? "";
-  const self_build = obj["self_build"] === true;
-  return { command, initiative, run_class, started_at, self_build };
-}
-function flipRunStatus(env, root, runId, status) {
-  const p = runYamlPath(root, runId);
-  const raw = env.fs.readFile(p);
-  if (raw === null) return;
-  const next = replaceTopLevelLine(raw, "status", `status: ${status}`).text;
-  env.fs.writeFile(p, next);
-}
-var CANONICAL_PHASES = ["init", "ideate", "plan", "build", "qa", "ops"];
-function isCanonicalPhase(p) {
-  return CANONICAL_PHASES.includes(p);
-}
-function appendPhase(env, root, runId, phase) {
-  if (!isCanonicalPhase(phase)) return false;
-  const p = runYamlPath(root, runId);
-  const raw = env.fs.readFile(p);
-  if (raw === null) return false;
-  const at = env.now();
-  let next = replaceTopLevelLine(raw, "phase", `phase: ${phase}`).text;
-  next = appendToPhasesLog(next, phase, at);
-  env.fs.writeFile(p, next);
-  return true;
-}
-function appendToPhasesLog(raw, phase, at) {
-  const lines = raw.split("\n");
-  const itemLines = [`  - phase: ${phase}`, `    at: ${at}`];
-  const idx = lines.findIndex((l) => l.startsWith("phases_log:"));
-  if (idx === -1) {
-    const insertAt = lines.length > 0 && lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
-    lines.splice(insertAt, 0, "phases_log:", ...itemLines);
-    return lines.join("\n");
-  }
-  if (lines[idx].slice("phases_log:".length).trim() === "[]") {
-    lines.splice(idx, 1, "phases_log:", ...itemLines);
-    return lines.join("\n");
-  }
-  let end = idx + 1;
-  while (end < lines.length && /^\s/.test(lines[end]) && lines[end].trim() !== "") {
-    end++;
-  }
-  lines.splice(end, 0, ...itemLines);
-  return lines.join("\n");
-}
-function createRunLifecycle(env) {
-  return {
-    startRun(opts) {
-      const runId = makeRunId(opts.initiative, env.now());
-      const root = opts.root;
-      env.fs.mkdirp(logsDir(root, runId));
-      if (opts.snapshot) {
-        writeResolvedSettingsSnapshot(runId, opts.snapshot, {
-          cwd: root,
-          fs: env.fs,
-          // Use the run-id as the resolved_at_ref (deterministic, no Date.now).
-          resolvedAtRef: runId
-        });
-      }
-      const manifest = buildRunManifest(opts, runId, env);
-      env.fs.writeFile(runYamlPath(root, runId), serializeRunYaml(manifest));
-      env.fs.writeFile(sentinelPath(root), runId);
-      return runId;
-    },
-    closeRun(runId, opts) {
-      const root = resolveCloseRoot(env, runId);
-      const facts = readStartFacts(env, root, runId);
-      const runClass = facts.run_class;
-      const now = env.now();
-      const finalCheckpoint = runClass === "lightweight" ? null : opts.final_learning_checkpoint ?? null;
-      const terminalTraceEvent = {
-        event_id: `evt-${crypto3.randomUUID()}`,
-        event_name: "run_closed",
-        at: now,
-        log_ref: logRefFor(runId)
-      };
-      const provenance = {
-        schema_version: "guild.provenance.v1",
-        run_id: runId,
-        command: facts.command,
-        initiative: facts.initiative,
-        retention_class: facts.initiative ? "until-archive" : "one-off-90d",
-        started_at: facts.started_at,
-        closed_at: now,
-        status: opts.status,
-        run_class: runClass,
-        terminal_trace_event: terminalTraceEvent,
-        final_learning_checkpoint: finalCheckpoint,
-        gates: opts.gates ?? {},
-        touched: mergeTouched(opts.touched),
-        artifacts: opts.artifacts ?? {},
-        benchmark_eligible: opts.status === "closed"
-      };
-      if (opts.coverage) provenance.coverage = opts.coverage;
-      const provPath = provenancePath(root, runId);
-      const provenanceContent = JSON.stringify(provenance, null, 2) + "\n";
-      if (env.fs.scrubbedWriteDurable) {
-        const runDir3 = path11.join(root, ".guild", "runs", runId);
-        const result = env.fs.scrubbedWriteDurable(provPath, provenanceContent, "provenance", runDir3, runId);
-        if (result.blocked) {
-          process.stderr.write(
-            `[run-lifecycle] WARN: provenance.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
-`
-          );
-        }
-      } else {
-        env.fs.writeFile(provPath, provenanceContent);
-      }
-      flipRunStatus(env, root, runId, opts.status);
-    }
-  };
-}
-function resolveCloseRoot(env, runId) {
-  const hint = env.__rootHint;
-  if (hint) return hint;
-  const cwd = resolveGuildRoot(process.cwd());
-  if (env.fs.exists(runYamlPath(cwd, runId))) return cwd;
-  return cwd;
-}
-function createRealEnv(root, resolveHost) {
-  const env = {
-    now: () => (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z"),
-    fs: {
-      mkdirp(absPath) {
-        fsNode.mkdirSync(absPath, { recursive: true });
-      },
-      writeFile(absPath, contents) {
-        fsNode.mkdirSync(path11.dirname(absPath), { recursive: true });
-        fsNode.writeFileSync(absPath, contents, "utf8");
-      },
-      readFile(absPath) {
-        try {
-          return fsNode.readFileSync(absPath, "utf8");
-        } catch {
-          return null;
-        }
-      },
-      exists(absPath) {
-        return fsNode.existsSync(absPath);
-      },
-      // HK-06: real scrubbedWrite wired for provenance.json (fail-CLOSED).
-      scrubbedWriteDurable(outPath, contents, surface, runDir3, runId) {
-        return scrubbedWrite(outPath, contents, { surface, runDir: runDir3, runId });
-      }
-    },
-    resolveHost,
-    __rootHint: root
-  };
-  return env;
-}
-function validateRunId(runId) {
-  if (!runId || !runId.trim()) return false;
-  if (runId.includes("\0")) return false;
-  if (runId.startsWith("/") || runId.startsWith("\\")) return false;
-  if (runId.includes("/") || runId.includes("\\")) return false;
-  if (runId === ".") return false;
-  if (runId === ".." || runId.startsWith("..")) return false;
-  if (runId.includes("..")) return false;
-  return true;
-}
-function assertContained(target, base, label) {
-  const resolvedTarget = path11.resolve(target);
-  const resolvedBase = path11.resolve(base);
-  if (!resolvedTarget.startsWith(resolvedBase + path11.sep)) {
-    throw new Error(
-      `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" escapes runs base "${resolvedBase}"`
-    );
-  }
-}
-function realProvenanceFsSeam() {
-  return {
-    writeFile(absPath, contents) {
-      fsNode.mkdirSync(path11.dirname(absPath), { recursive: true });
-      fsNode.writeFileSync(absPath, contents, "utf8");
-    },
-    readFile(absPath) {
-      try {
-        return fsNode.readFileSync(absPath, "utf8");
-      } catch {
-        return null;
-      }
-    },
-    // HK-06: real scrubbed write wired for resolved-settings.json (fail-CLOSED).
-    scrubbedWriteDurable(outPath, contents, surface, runDir3, runId) {
-      return scrubbedWrite(outPath, contents, { surface, runDir: runDir3, runId });
-    }
-  };
-}
-function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
-  if (!validateRunId(runId)) {
-    throw new Error(
-      `[run-lifecycle] writeResolvedSettingsSnapshot: invalid runId ${JSON.stringify(runId)} \u2014 must be a non-empty single path component with no separators, no "..", not ".", not absolute`
-    );
-  }
-  const { cwd, fs: fsSeam, resolvedAtRef } = opts;
-  const fs12 = fsSeam ?? realProvenanceFsSeam();
-  const outPath = resolvedSettingsPath(cwd, runId);
-  const runsBase = path11.resolve(cwd, ".guild", "runs");
-  assertContained(outPath, runsBase, "writeResolvedSettingsSnapshot");
-  const onDisk = {
-    ...snapshot,
-    resolved_at_ref: resolvedAtRef ?? runId
-  };
-  const serialized = JSON.stringify(onDisk, null, 2) + "\n";
-  if (fs12.scrubbedWriteDurable) {
-    const runDir3 = path11.join(cwd, ".guild", "runs", runId);
-    const result = fs12.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
-    if (result.blocked) {
-      process.stderr.write(
-        `[run-lifecycle] WARN: resolved-settings.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
-`
-      );
-    }
-  } else {
-    fs12.writeFile(outPath, serialized);
-  }
-  return outPath;
-}
-function readRecordStatusRuns(root) {
-  try {
-    const { config } = resolveSettings2({ cwd: root });
-    return config.record_status_runs;
-  } catch {
-    return true;
-  }
-}
-
-// emit-learning-checkpoint.ts
-var fs9 = __toESM(require("fs"));
-var path12 = __toESM(require("path"));
-
-// ../src/modules/initiatives/workflows/classify-proposal.ts
-function classifyProposal(input) {
-  const target = input.target ?? "skill";
-  const subject = input.subject ?? "<skill>";
-  const countGate = input.distinct_subject_count >= 3 || input.distinct_subject_count >= 2 && input.same_run === true;
-  const systemic = countGate && input.same_signature === true && input.user_approved === true;
-  const perInstance = `${target}_def: proposal:${subject}`;
-  const outputs = [perInstance];
-  if (systemic) {
-    outputs.push(`${target}_template: systemic-proposal`);
-  }
-  return { verdict: systemic ? "systemic" : "specific", outputs };
-}
-function parseFlag(argv, name) {
-  const eq = `--${name}=`;
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === `--${name}` && argv[i + 1] && !argv[i + 1].startsWith("--")) return argv[i + 1];
-    if (argv[i].startsWith(eq)) return argv[i].slice(eq.length);
-  }
-  return void 0;
-}
-function hasFlag(argv, name) {
-  return argv.includes(`--${name}`);
-}
-function runClassifyProposalCli(argv = process.argv.slice(2)) {
-  const distinct = parseInt(parseFlag(argv, "distinct") ?? "0", 10);
-  const target = parseFlag(argv, "target") ?? "skill";
-  const subject = parseFlag(argv, "subject");
-  const res = classifyProposal({
-    distinct_subject_count: Number.isFinite(distinct) ? distinct : 0,
-    same_run: hasFlag(argv, "same-run"),
-    same_signature: hasFlag(argv, "same-signature"),
-    user_approved: hasFlag(argv, "user-approved"),
-    target: target === "agent" ? "agent" : "skill",
-    ...subject ? { subject } : {}
-  });
-  process.stdout.write(JSON.stringify(res, null, 2) + "\n");
-}
-if (require.main === module) runClassifyProposalCli();
-
-// ../src/modules/initiatives/workflows/initiative-activity.ts
-var ACTIVITY_EVENTS = [
-  "created",
-  "status_change",
-  "definition_updated",
-  "work_item_added",
-  "work_item_closed",
-  "run_attached",
-  "summary_updated",
-  "released",
-  "closed",
-  "archived",
-  "note"
-];
-var SET = new Set(ACTIVITY_EVENTS);
-
-// ../src/modules/initiatives/workflows/initiative-workitems.ts
-var WORK_ITEM_TYPES = [
-  "research",
-  "design",
-  "implementation",
-  "review",
-  "validation",
-  "docs",
-  "release",
-  "cleanup"
-];
-var WORK_ITEM_STATUS = [
-  "proposed",
-  "ready",
-  "in_progress",
-  "blocked",
-  "done",
-  "deferred",
-  "cancelled"
-];
-var TYPES = new Set(WORK_ITEM_TYPES);
-var STATUS = new Set(WORK_ITEM_STATUS);
-
-// ../src/modules/evolution/workflows/learning-signatures.ts
-function allLearnings(artifacts) {
-  const out = [];
-  for (const block of artifacts.handoffBlocks ?? []) {
-    for (const l of block.learnings ?? []) {
-      if (l) out.push(l);
-    }
-  }
-  return out;
-}
-function allFollowups(artifacts) {
-  const out = [];
-  for (const block of artifacts.handoffBlocks ?? []) {
-    for (const f of block.followups ?? []) {
-      if (f) out.push(f);
-    }
-  }
-  return out;
-}
-function bestRef(artifacts) {
-  const wiki = artifacts.provenanceTouched?.wiki ?? [];
-  if (wiki.length > 0) return wiki[0];
-  return artifacts.evidenceRef ?? artifacts.runId;
-}
-function filesInclude(artifacts, patterns) {
-  const files = [
-    ...artifacts.changedFiles ?? [],
-    ...artifacts.provenanceTouched?.files ?? []
-  ];
-  return files.some((f) => patterns.some((p) => p.test(f)));
-}
-function learningsReferenceSkill(artifacts) {
-  const learnings = allLearnings(artifacts);
-  const followups = allFollowups(artifacts);
-  const all = [...learnings, ...followups];
-  for (const text of all) {
-    const match = text.match(/\b(?:skill[:\s]+|guild:)([\w:-]+)/i);
-    if (match) return match[1] ?? "unknown-skill";
-    if (/skill[\s_-](?:improvement|gap|defect|change|update|refactor)/i.test(text)) {
-      return "unknown-skill";
-    }
-  }
-  return null;
-}
-function learningsReferenceAgent(artifacts) {
-  const learnings = allLearnings(artifacts);
-  const followups = allFollowups(artifacts);
-  const all = [...learnings, ...followups];
-  for (const text of all) {
-    const match = text.match(/\b(?:agent[:\s]+|guild:)([\w:-]+(?:engineer|writer|author|architect|specialist|reviewer|planner|developer|auditor))/i);
-    if (match) return match[1] ?? "unknown-agent";
-    if (/agent[\s_-](?:improvement|gap|defect|change|update|refactor)/i.test(text)) {
-      return "unknown-agent";
-    }
-  }
-  return null;
-}
-function classifyMemory(artifacts) {
-  try {
-    const decisions = artifacts.provenanceTouched?.decisions ?? [];
-    if (decisions.length > 0) {
-      const ref = decisions[0];
-      return `candidate:${ref}`;
-    }
-    return "none";
-  } catch {
-    return "none";
-  }
-}
-function classifyWiki(artifacts) {
-  try {
-    const wikiTouched = artifacts.provenanceTouched?.wiki ?? [];
-    if (wikiTouched.length > 0) {
-      return `candidate:${wikiTouched[0]}`;
-    }
-    const followups = allFollowups(artifacts);
-    if (followups.some(
-      (f) => /\b(?:wiki[\s_-]?ingest|wiki[\s_-]?page|decisions?[\s_-]?capture|guild:decisions|guild:wiki)/i.test(f)
-    )) {
-      return `candidate:${bestRef(artifacts)}`;
-    }
-    return "none";
-  } catch {
-    return "none";
-  }
-}
-function classifyKnowledgeGraph(artifacts) {
-  try {
-    const initiatives = artifacts.provenanceTouched?.initiatives ?? [];
-    if (initiatives.length > 0) {
-      return "refresh:initiative-touched";
-    }
-    if (filesInclude(artifacts, [
-      /\.guild\/wiki\//,
-      /\.guild\/raw\/sources\//,
-      /\.guild\/initiatives\//,
-      /\.guild\/reflections\//,
-      /\.guild\/evolve\//,
-      /\.guild\/indexes\/harvest-/
-    ])) {
-      return "refresh:stale";
-    }
-    return "none";
-  } catch {
-    return "none";
-  }
-}
-function classifyDomainModel(artifacts) {
-  try {
-    if (filesInclude(artifacts, [
-      /\.guild\/indexes\/domain-graph\.json/
-    ])) {
-      return "re-derive";
-    }
-    return "none";
-  } catch {
-    return "none";
-  }
-}
-function classifyAgentDef(artifacts) {
-  try {
-    const agentRef = learningsReferenceAgent(artifacts);
-    if (agentRef !== null) {
-      return `proposal:${agentRef}`;
-    }
-    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
-    for (const text of all) {
-      const match = text.match(/proposal:([a-z][\w:-]+)/i);
-      if (match && /agent/i.test(match[1] ?? "")) {
-        return `proposal:${match[1]}`;
-      }
-    }
-    return "none";
-  } catch {
-    return "none";
-  }
-}
-function classifySkillDef(artifacts) {
-  try {
-    const skillRef = learningsReferenceSkill(artifacts);
-    if (skillRef !== null) {
-      return `proposal:${skillRef}`;
-    }
-    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
-    for (const text of all) {
-      const match = text.match(/proposal:([\w:-]+)/i);
-      if (match && /skill/i.test(text)) {
-        return `proposal:${match[1]}`;
-      }
-    }
-    return "none";
-  } catch {
-    return "none";
-  }
-}
-function classifyAgentTemplate(artifacts) {
-  try {
-    const input = artifacts.classifyProposalInput;
-    if (!input) return "none";
-    const result = classifyProposal({ ...input, target: "agent" });
-    return result.verdict === "systemic" ? "systemic-proposal" : "none";
-  } catch {
-    return "none";
-  }
-}
-function classifySkillTemplate(artifacts) {
-  try {
-    const input = artifacts.classifyProposalInput;
-    if (!input) return "none";
-    const result = classifyProposal({ ...input, target: "skill" });
-    return result.verdict === "systemic" ? "systemic-proposal" : "none";
-  } catch {
-    return "none";
-  }
-}
-function classifyConfig(artifacts) {
-  try {
-    const configKeys = artifacts.provenanceTouched?.config_keys ?? [];
-    if (configKeys.length > 0) {
-      return `proposal:${configKeys[0]}`;
-    }
-    const settingsFiles = [
-      ...artifacts.changedFiles ?? [],
-      ...artifacts.provenanceTouched?.files ?? []
-    ].filter(
-      (f) => /(?:settings\.json|settings\.local\.json|\.claude-plugin\/|guild\.json|\.guild\/settings|guildstack\.pen)/i.test(f)
-    );
-    if (settingsFiles.length > 0) {
-      const f = settingsFiles[0];
-      const keyMatch = f.match(/([^/]+)\.json$/);
-      return `proposal:${keyMatch ? keyMatch[1] : "settings"}`;
-    }
-    return "none";
-  } catch {
-    return "none";
-  }
-}
-function classifyTaskTracking(artifacts) {
-  try {
-    const tasks = artifacts.provenanceTouched?.tasks ?? [];
-    if (tasks.length > 0) {
-      const anyDone = (artifacts.handoffBlocks ?? []).some(
-        (b) => b.status === "done" || b.status === "shipped"
-      );
-      if (anyDone || artifacts.handoffBlocks === void 0) {
-        return `update:${tasks[0]}`;
-      }
-    }
-    const runs = artifacts.provenanceTouched?.runs ?? [];
-    if (runs.length > 0) {
-      const anyDone = (artifacts.handoffBlocks ?? []).some(
-        (b) => b.status === "done" || b.status === "shipped"
-      );
-      if (anyDone) {
-        return `update:run:${runs[0]}`;
-      }
-    }
-    return "none";
-  } catch {
-    return "none";
-  }
-}
-function classifyWorkflowRules(artifacts) {
-  try {
-    const decisions = artifacts.provenanceTouched?.decisions ?? [];
-    for (const d of decisions) {
-      if (/^(?:workflow[\s_-]exception|gate[\s_-]skip|phase[\s_-]override|workflow[\s_-]override)/i.test(d)) {
-        return `proposal:${d}`;
-      }
-    }
-    const issues = (artifacts.handoffBlocks ?? []).flatMap((b) => b.issues ?? []);
-    for (const text of issues) {
-      if (/\b(?:gate[\s_-]skip(?:ped)?|phase[\s_-]order[\s_-]deviation|workflow[\s_-]override|force[\s_-]gate|gate[\s_-]force[d]?)\b/i.test(text)) {
-        const ruleMatch = text.match(/(?:gate[\s_-]skip|phase[\s_-]override|workflow[\s_-]override)[:\s]+([\w-]+)/i);
-        return `proposal:${ruleMatch ? ruleMatch[1] : "workflow-exception"}`;
-      }
-    }
-    return "none";
-  } catch {
-    return "none";
-  }
-}
-function classifyReviewPolicy(artifacts) {
-  try {
-    const all = [
-      ...allLearnings(artifacts),
-      ...allFollowups(artifacts),
-      ...(artifacts.handoffBlocks ?? []).flatMap((b) => b.issues ?? []),
-      ...(artifacts.handoffBlocks ?? []).map((b) => b.notes ?? ""),
-      ...(artifacts.handoffBlocks ?? []).map((b) => b.summary ?? "")
-    ];
-    for (const text of all) {
-      if (/\b(?:BLOCK|block[\s_-]override|owner[\s_-]accepted[\s_-]risk|gate[\s_-]override|releasegate|review[\s_-]gate[\s_-]fail)\b/.test(text)) {
-        const gateMatch = text.match(/(?:G[-_]?(\w+)|gate[\s:]+([\w-]+)|releasegate)/i);
-        const gate = gateMatch ? gateMatch[1] ?? gateMatch[2] ?? "releasegate" : "releasegate";
-        return `proposal:${gate}`;
-      }
-      if (/\bcap[\s_-]exceeded\b|rounds[\s_-]cap[\s_-]hit\b|codex[\s_-]cap\b/i.test(text)) {
-        return "proposal:codex-cap";
-      }
-    }
-    const decisions = artifacts.provenanceTouched?.decisions ?? [];
-    if (decisions.some((d) => /review[\s_-]?policy|gate[\s_-]?policy/i.test(d))) {
-      return `proposal:${decisions.find((d) => /review|gate/i.test(d))}`;
-    }
-    return "none";
-  } catch {
-    return "none";
-  }
-}
-function classifyPhase(artifacts) {
-  return {
-    memory: classifyMemory(artifacts),
-    wiki: classifyWiki(artifacts),
-    knowledge_graph: classifyKnowledgeGraph(artifacts),
-    domain_model: classifyDomainModel(artifacts),
-    agent_def: classifyAgentDef(artifacts),
-    skill_def: classifySkillDef(artifacts),
-    agent_template: classifyAgentTemplate(artifacts),
-    skill_template: classifySkillTemplate(artifacts),
-    config: classifyConfig(artifacts),
-    task_tracking: classifyTaskTracking(artifacts),
-    workflow_rules: classifyWorkflowRules(artifacts),
-    review_policy: classifyReviewPolicy(artifacts)
-  };
-}
-
-// emit-learning-checkpoint.ts
-var SCHEMA_VERSION = "guild.learning_checkpoint.v1";
-var VALID_PHASES = [
-  "init",
-  "ideation",
-  "planning",
-  "development",
-  "quality",
-  "operations",
-  "reflection"
-];
-var DECISION_TARGETS = [
-  "memory",
-  "wiki",
-  "knowledge_graph",
-  "domain_model",
-  "agent_def",
-  "skill_def",
-  "agent_template",
-  "skill_template",
-  "config",
-  "task_tracking",
-  "workflow_rules",
-  "review_policy"
-];
-var ALL_NONE_DECISIONS = Object.fromEntries(
-  DECISION_TARGETS.map((k) => [k, "none"])
-);
-var VALID_EDGE_TYPES = [
-  "decided_by",
-  "used_for",
-  "produced",
-  "touches",
-  "supersedes",
-  "learned_from",
-  "constrains",
-  "opens_question",
-  "resolves"
-];
-var ALLOWED_NODE_PREFIXES = [
-  "task:",
-  "run:",
-  "decision:",
-  "skill:",
-  "agent:",
-  "feature:"
-];
-var FORBIDDEN_NODE_PREFIXES = [
-  "wiki:",
-  "file:",
-  "domain:",
-  "component:"
-];
-function assertPhase(phase) {
-  if (!VALID_PHASES.includes(phase)) {
-    throw new Error(
-      `[emit-learning-checkpoint] invalid phase: "${phase}". Expected one of: ${VALID_PHASES.join(", ")}`
-    );
-  }
-}
-function assertEdgeTypes(links) {
-  for (const link of links) {
-    if (!VALID_EDGE_TYPES.includes(link.type)) {
-      throw new Error(
-        `[emit-learning-checkpoint] invalid edge type: "${link.type}". Expected one of: ${VALID_EDGE_TYPES.join(", ")}`
-      );
-    }
-  }
-}
-function assertNodePrefixes(links) {
-  for (const link of links) {
-    for (const node of [link.from, link.to]) {
-      const allowed = ALLOWED_NODE_PREFIXES.some(
-        (p) => node.startsWith(p)
-      );
-      if (!allowed) {
-        const matchedForbidden = FORBIDDEN_NODE_PREFIXES.find(
-          (p) => node.startsWith(p)
-        );
-        const detail = matchedForbidden ? `uses the cross-space prefix "${matchedForbidden}" (code/wiki/domain space)` : `uses an unknown or no-prefix node id "${node}"`;
-        throw new Error(
-          `[emit-learning-checkpoint] invalid node in edge (from: "${link.from}", to: "${link.to}") \u2014 ${detail}. Node ids must start with an allowed work/decision-space prefix: ${ALLOWED_NODE_PREFIXES.join(", ")}.`
-        );
-      }
-    }
-  }
-}
-function yamlValue(v) {
-  if (v === "none") return "none";
-  if (/: /.test(v) || // colon-space → would be a mapping
-  /:$/.test(v) || // trailing colon
-  v.trim() !== v || // leading/trailing whitespace
-  v === "" || // empty
-  /^[{[\]}&*#?|<>=!%@`'"]/.test(v)) {
-    return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-  }
-  return v;
-}
-function buildYaml(opts) {
-  const lines = [
-    `# ${SCHEMA_VERSION}`,
-    "learning_checkpoint:",
-    `  version: ${SCHEMA_VERSION}`,
-    `  phase: ${opts.phase}`,
-    `  run_id: ${opts.runId}`
-  ];
-  if (opts.observed.length === 0) {
-    lines.push("  observed: []");
-  } else {
-    lines.push("  observed:");
-    for (const fact of opts.observed) {
-      lines.push(`    - ${yamlValue(fact)}`);
-    }
-  }
-  lines.push("  decisions:");
-  for (const key of DECISION_TARGETS) {
-    lines.push(`    ${key}: ${yamlValue(opts.decisions[key] ?? "none")}`);
-  }
-  if (opts.knowledgeLinksBatch.length === 0) {
-    lines.push("  knowledge_links_batch: []");
-  } else {
-    lines.push("  knowledge_links_batch:");
-    for (const link of opts.knowledgeLinksBatch) {
-      lines.push(
-        `    - from: ${yamlValue(link.from)}`,
-        `      to: ${yamlValue(link.to)}`,
-        `      type: ${link.type}`,
-        `      run_id: ${link.run_id}`
-      );
-    }
-  }
-  lines.push(`  routed_to: ${yamlValue(opts.reflectionsPath)}`);
-  lines.push(`  evidence_ref: ${yamlValue(opts.evidenceRef)}`);
-  if (opts.backstop === true) {
-    lines.push("  backstop: true");
-  }
-  return lines.join("\n") + "\n";
-}
-function appendKnowledgeLinksIndex(guildRoot, links) {
-  if (links.length === 0) return;
-  const indexDir = path12.join(guildRoot, ".guild", "indexes");
-  const indexPath = path12.join(indexDir, "knowledge-links.json");
-  let existing = [];
-  if (fs9.existsSync(indexPath)) {
-    try {
-      const raw = fs9.readFileSync(indexPath, "utf8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed["links"])) {
-        existing = parsed["links"];
-      }
-    } catch (e) {
-      process.stderr.write(
-        `[emit-learning-checkpoint] WARN: could not parse knowledge-links.json \u2014 starting fresh: ${String(e)}
-`
-      );
-      existing = [];
-    }
-  }
-  const existingKeys = new Set(
-    existing.map((l) => `${l.from}\0${l.to}\0${l.type}`)
-  );
-  const novel = links.filter(
-    (l) => !existingKeys.has(`${l.from}\0${l.to}\0${l.type}`)
-  );
-  if (novel.length === 0) return;
-  const merged = [...existing, ...novel];
-  try {
-    fs9.mkdirSync(indexDir, { recursive: true });
-    fs9.writeFileSync(
-      indexPath,
-      JSON.stringify(
-        { schema_version: "guild.knowledge_links.v1", links: merged },
-        null,
-        2
-      ) + "\n",
+    fs5.mkdirSync(path7.dirname(stagedMarkerPath()), { recursive: true });
+    fs5.writeFileSync(
+      stagedMarkerPath(),
+      JSON.stringify({ target, staged_at: (/* @__PURE__ */ new Date()).toISOString() }) + "\n",
       "utf8"
     );
-  } catch (e) {
-    process.stderr.write(
-      `[emit-learning-checkpoint] WARN: could not write knowledge-links.json: ${String(e)}
-`
-    );
+  } catch {
   }
 }
-function appendReflections(guildRoot, runId, phase, decisions) {
-  const nonNone = DECISION_TARGETS.filter((k) => decisions[k] !== "none");
-  if (nonNone.length === 0) return;
-  const reflectionsDir = path12.join(guildRoot, ".guild", "reflections");
-  fs9.mkdirSync(reflectionsDir, { recursive: true });
-  const reflPath = path12.join(reflectionsDir, `${runId}.md`);
-  const entry = `
-## Phase: ${phase} (${runId})
-
-` + nonNone.map((k) => `- ${k}: ${decisions[k]}`).join("\n") + "\n";
-  fs9.appendFileSync(reflPath, entry, "utf8");
-}
-function writeCheckpoint(opts) {
-  assertPhase(opts.phase);
-  const links = opts.knowledgeLinksBatch ?? [];
-  assertEdgeTypes(links);
-  assertNodePrefixes(links);
-  const guildRoot = opts.guildRoot ?? process.cwd();
-  const decisions = opts.decisions ?? { ...ALL_NONE_DECISIONS };
-  const learningDir = path12.join(guildRoot, ".guild", "runs", opts.runId, "learning");
-  fs9.mkdirSync(learningDir, { recursive: true });
-  const checkpointFile = path12.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
-  const reflectionsRelPath = `.guild/reflections/${opts.runId}.md`;
-  const reflectionsAbsPath = path12.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
-  const observed = opts.observed ?? [];
-  const yaml2 = buildYaml({
-    runId: opts.runId,
-    phase: opts.phase,
-    evidenceRef: opts.evidenceRef,
-    decisions,
-    observed,
-    reflectionsPath: reflectionsRelPath,
-    knowledgeLinksBatch: links,
-    ...opts.backstop === true ? { backstop: true } : {}
-  });
-  fs9.writeFileSync(checkpointFile, yaml2, "utf8");
-  appendReflections(guildRoot, opts.runId, opts.phase, decisions);
-  appendKnowledgeLinksIndex(guildRoot, links);
-  void reflectionsAbsPath;
-  return checkpointFile;
+function spawnDetached(cmd, args) {
+  try {
+    const child = (0, import_child_process2.spawn)(cmd, args, {
+      detached: true,
+      stdio: "ignore"
+    });
+    child.unref();
+  } catch {
+  }
 }
 function main() {
-  const runId = process.env["GUILD_RUN_ID"];
-  const phase = process.env["GUILD_PHASE"];
-  const evidenceRef = process.env["GUILD_EVIDENCE_REF"] ?? "none";
-  const guildRoot = process.env["GUILD_CWD"] ?? process.cwd();
-  const verdictPath = process.env["GUILD_CHECKPOINT_VERDICT"];
-  const linksPath = process.env["GUILD_CHECKPOINT_LINKS"];
-  if (!runId) {
-    process.stderr.write("[emit-learning-checkpoint] ERROR: GUILD_RUN_ID not set\n");
-    process.exit(1);
+  if (process.argv.includes("--refresh")) {
+    refreshCache({});
+    return;
   }
-  if (!phase) {
-    process.stderr.write("[emit-learning-checkpoint] ERROR: GUILD_PHASE not set\n");
-    process.exit(1);
+  const pluginRoot = process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
+  if (!pluginRoot) return;
+  const { mode, cadenceHours } = readUpdateConfig(process.cwd());
+  if (mode === "off") return;
+  const state = resolveInstallState(pluginRoot);
+  if (state.channel === "dev") return;
+  const cacheFile = cachePath();
+  const cache = readCache(cacheFile);
+  if (!cacheIsFresh(cache, cadenceHours, /* @__PURE__ */ new Date())) {
+    spawnDetached(process.execPath, [__filename, "--refresh"]);
   }
-  const artifactsJsonPath = process.env["GUILD_CHECKPOINT_ARTIFACTS_JSON"];
-  let decisions;
-  if (verdictPath) {
-    try {
-      const raw = fs9.readFileSync(verdictPath, "utf8");
-      decisions = JSON.parse(raw);
-    } catch (e) {
-      process.stderr.write(
-        `[emit-learning-checkpoint] WARN: could not read GUILD_CHECKPOINT_VERDICT (${verdictPath}): ${String(e)}
+  const signal = computeSignal({ state, cache, hostKind: "claude" });
+  const line = renderSignalLine(signal);
+  if (!line) return;
+  if (mode === "auto") {
+    const target = signal.available ?? "";
+    if (!alreadyStaged(target)) {
+      spawnDetached("/bin/sh", [
+        "-c",
+        "claude plugin marketplace update guild && claude plugin update guild@guild"
+      ]);
+      markStaged(target);
+      process.stdout.write(
+        `${line}
+[guild-update] auto mode: update staged \u2014 it takes effect next session.
 `
       );
+      return;
     }
+    process.stdout.write(
+      `${line}
+[guild-update] auto mode: already staged \u2014 restart to apply.
+`
+    );
+    return;
   }
-  if (decisions === void 0 && artifactsJsonPath) {
-    try {
-      const rawArtifacts = fs9.readFileSync(artifactsJsonPath, "utf8");
-      const artifacts = JSON.parse(rawArtifacts);
-      if (!artifacts.runId) artifacts.runId = runId;
-      if (!artifacts.phase) artifacts.phase = phase ?? void 0;
-      if (!artifacts.evidenceRef) artifacts.evidenceRef = evidenceRef !== "none" ? evidenceRef : void 0;
-      const verdict = classifyPhase(artifacts);
-      decisions = verdict;
-      process.stderr.write(
-        `[emit-learning-checkpoint] INFO: classified artifacts \u2192 non-none: ${Object.entries(verdict).filter(([, v]) => v !== "none").map(([k]) => k).join(", ") || "none"}
-`
-      );
-    } catch (e) {
-      process.stderr.write(
-        `[emit-learning-checkpoint] WARN: could not classify GUILD_CHECKPOINT_ARTIFACTS_JSON (${artifactsJsonPath}): ${String(e)}
-`
-      );
-    }
-  }
-  let knowledgeLinksBatch = [];
-  if (linksPath) {
-    try {
-      const raw = fs9.readFileSync(linksPath, "utf8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        knowledgeLinksBatch = parsed;
-      } else {
-        process.stderr.write(
-          `[emit-learning-checkpoint] WARN: GUILD_CHECKPOINT_LINKS JSON is not an array \u2014 ignoring (${linksPath})
-`
-        );
-      }
-    } catch (e) {
-      process.stderr.write(
-        `[emit-learning-checkpoint] WARN: could not read GUILD_CHECKPOINT_LINKS (${linksPath}): ${String(e)}
-`
-      );
-    }
-  }
-  try {
-    const written = writeCheckpoint({
-      runId,
-      phase,
-      evidenceRef,
-      guildRoot,
-      decisions,
-      knowledgeLinksBatch
-      // populated from GUILD_CHECKPOINT_LINKS (was deferred [] in Wave 1)
-    });
-    process.stdout.write(written + "\n");
-  } catch (e) {
-    process.stderr.write(`[emit-learning-checkpoint] ERROR: ${String(e)}
+  process.stdout.write(`${line}
 `);
-    process.exit(1);
-  }
 }
-if (process.argv[1] !== void 0 && (process.argv[1].endsWith("emit-learning-checkpoint.ts") || process.argv[1].endsWith("emit-learning-checkpoint.js"))) {
+try {
   main();
+} catch {
 }
-
-// lib/learning-backstop.ts
-var PHASE_TOKEN_TO_CHECKPOINT = {
-  // canonical lifecycle tokens (CANONICAL_PHASES, scripts/lib/run-lifecycle.ts)
-  init: "init",
-  ideate: "ideation",
-  plan: "planning",
-  build: "development",
-  qa: "quality",
-  ops: "operations",
-  // checkpoint-native tokens (VALID_PHASES) — identity pass-through
-  ideation: "ideation",
-  planning: "planning",
-  development: "development",
-  quality: "quality",
-  operations: "operations",
-  reflection: "reflection"
-};
-
-// lib/heartbeat.ts
-var fs10 = __toESM(require("node:fs"));
-var path13 = __toESM(require("node:path"));
-var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
-var TIER_HEARTBEAT_TIMEOUTS_MS = {
-  cheap: 18e4,
-  // 3 min
-  mid: 6e5,
-  // 10 min — equals DEFAULT_HEARTBEAT_TIMEOUT_MS
-  powerful: 12e5
-  // 20 min
-};
-function isLaneTier(t) {
-  return t === "cheap" || t === "mid" || t === "powerful";
-}
-function readExplicitHeartbeatTimeoutMs(cwd) {
-  const settingsPath = path13.join(resolveGuildRoot(cwd), ".guild", "settings.json");
-  let raw;
-  try {
-    raw = fs10.readFileSync(settingsPath, "utf8");
-  } catch {
-    return null;
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return null;
-  }
-  const defaults = parsed["defaults"];
-  if (typeof defaults !== "object" || defaults === null || Array.isArray(defaults)) {
-    return null;
-  }
-  const val = defaults["heartbeat_timeout_ms"];
-  if (typeof val === "number" && Number.isFinite(val) && val > 0) {
-    return val;
-  }
-  return null;
-}
-function resolveHeartbeatTimeoutMs(cwd, tier) {
-  const explicit = readExplicitHeartbeatTimeoutMs(cwd);
-  if (explicit !== null) return explicit;
-  return TIER_HEARTBEAT_TIMEOUTS_MS[isLaneTier(tier) ? tier : "mid"];
-}
-
-// lib/handoff-v2.ts
-function extractHandoffEnvelope(content) {
-  const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/;
-  const match = pattern.exec(content);
-  if (!match || !match[1]) return null;
-  try {
-    return JSON.parse(match[1].trim());
-  } catch {
-    return null;
-  }
-}
-
-// lib/run-trace.ts
-function runDir2(root, runId) {
-  return path14.join(root, ".guild", "runs", runId);
-}
-function liveLogPath2(root, runId) {
-  return path14.join(runDir2(root, runId), "logs", "v1.4-events.jsonl");
-}
-function provenancePath2(root, runId) {
-  return path14.join(runDir2(root, runId), "provenance.json");
-}
-function skippedFilesPath(root, runId) {
-  return path14.join(runDir2(root, runId), "learn", "skipped-files.json");
-}
-function resolveRunIdForTrace(root, env) {
-  const fromEnv = env.GUILD_RUN_ID;
-  if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
-  const legacy = readSentinel(path14.join(root, ".guild", "runs", "current-run-id"));
-  if (legacy) return legacy;
-  const b2 = readSentinel(path14.join(root, ".guild", "current-run-id"));
-  if (b2) return b2;
-  return null;
-}
-function readSentinel(p) {
-  try {
-    const v = fs11.readFileSync(p, "utf8").trim();
-    return v.length > 0 ? v : null;
-  } catch {
-    return null;
-  }
-}
-var KNOWN_HOST_KINDS = [
-  "claude",
-  "codex",
-  "pi",
-  "antigravity-2",
-  "claude-code-desktop",
-  "claude-code-web",
-  "codex-app",
-  "claude-ai-connector"
-];
-function defaultResolveHost(requested) {
-  const raw = (process.env["GUILD_HOST"] ?? requested ?? "").trim().toLowerCase();
-  const resolved = KNOWN_HOST_KINDS.includes(raw) ? raw : "claude";
-  return { requested, resolved };
-}
-function appendTraceLine(file, event) {
-  fs11.mkdirSync(path14.dirname(file), { recursive: true });
-  fs11.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
-}
-function emitRunClosed(root, runId, resolveHost, opts = {}) {
-  try {
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
-    lifecycle.closeRun(runId, {
-      status: opts.status ?? "closed",
-      touched: opts.touched,
-      coverage: opts.coverage,
-      final_learning_checkpoint: opts.final_learning_checkpoint,
-      artifacts: opts.artifacts
-    });
-    const prov = JSON.parse(fs11.readFileSync(provenancePath2(root, runId), "utf8"));
-    const pointer = prov.terminal_trace_event;
-    if (!pointer || typeof pointer.event_id !== "string") {
-      process.stderr.write(
-        `[run-trace] WARN: provenance.json missing terminal_trace_event pointer for ${runId}
-`
-      );
-      return;
-    }
-    appendTraceLine(liveLogPath2(root, runId), {
-      schema_version: "guild.trace_event.v1",
-      event_id: pointer.event_id,
-      event_name: "run_closed",
-      run_id: runId,
-      at: typeof pointer.at === "string" ? pointer.at : (/* @__PURE__ */ new Date()).toISOString()
-    });
-  } catch (err) {
-    process.stderr.write(
-      `[run-trace] WARN: emitRunClosed failed: ${err instanceof Error ? err.message : String(err)}
-`
-    );
-  }
-}
-var STALE_RUN_GRACE_MULTIPLIER = 3;
-function newestRunActivityMs(root, runId) {
-  const dir = runDir2(root, runId);
-  const candidates = [
-    liveLogPath2(root, runId),
-    path14.join(dir, "events.ndjson"),
-    path14.join(dir, "run.yaml")
-  ];
-  try {
-    const inProgress = path14.join(dir, "in-progress");
-    for (const name of fs11.readdirSync(inProgress)) {
-      candidates.push(path14.join(inProgress, name));
-    }
-  } catch {
-  }
-  let newest = 0;
-  for (const p of candidates) {
-    try {
-      newest = Math.max(newest, fs11.statSync(p).mtimeMs);
-    } catch {
-    }
-  }
-  return newest;
-}
-function closeStalePriorOpenRun(root, resolveHost, now = Date.now) {
-  try {
-    const priorId = resolveRunIdForTrace(root, {});
-    if (!priorId) return;
-    let runYaml;
-    try {
-      runYaml = fs11.readFileSync(path14.join(runDir2(root, priorId), "run.yaml"), "utf8");
-    } catch {
-      return;
-    }
-    if (!/^status:\s*open\b/m.test(runYaml)) return;
-    const lastActivityMs = newestRunActivityMs(root, priorId);
-    if (lastActivityMs === 0) return;
-    const graceMs = resolveHeartbeatTimeoutMs(root, "powerful") * STALE_RUN_GRACE_MULTIPLIER;
-    if (now() - lastActivityMs <= graceMs) return;
-    emitRunClosed(root, priorId, resolveHost, { status: "closed" });
-  } catch {
-  }
-}
-function startRunOnly(root, resolveHost, opts = {}) {
-  try {
-    closeStalePriorOpenRun(root, resolveHost);
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
-    return lifecycle.startRun(buildStartRunOpts(root, opts));
-  } catch (err) {
-    process.stderr.write(
-      `[run-trace] WARN: startRunOnly failed: ${err instanceof Error ? err.message : String(err)}
-`
-    );
-    return null;
-  }
-}
-function buildStartRunOpts(root, opts) {
-  const runClass = opts.run_class ?? "full";
-  const command = opts.command ?? "/guild:learn";
-  const cwd = opts.cwd ?? root;
-  const targetKind = opts.target_kind ?? "existing_guild_project";
-  const tierPolicy = runClass === "lightweight" ? "n/a (read-only lightweight run)" : "default (full run)";
-  const scanPolicy = runClass === "lightweight" ? "n/a (no scan)" : "default";
-  const ignorePolicy = runClass === "lightweight" ? "n/a (no scan)" : "default";
-  const phase = runClass === "lightweight" ? command.replace(/^\/guild:/, "") : opts.phase && isCanonicalPhase(opts.phase) ? opts.phase : null;
-  return {
-    command,
-    arguments: {},
-    cwd,
-    root,
-    target_kind: targetKind,
-    workspace: { is_workspace: false, root },
-    project: runClass === "lightweight" ? command.replace(/^\/guild:/, "") : "project",
-    host_requested: process.env["GUILD_HOST"] ?? "auto",
-    model_tier_policy: tierPolicy,
-    ignore_policy: ignorePolicy,
-    scan_policy: scanPolicy,
-    initiative: opts.initiative ?? null,
-    // NN#5: scalar record ONLY, never a dir
-    phase,
-    run_class: runClass
-  };
-}
-function buildPhaseArtifacts(root, runId) {
-  const artifacts = { runId };
-  try {
-    const hDir = path14.join(runDir2(root, runId), "handoffs");
-    const blocks = [];
-    const texts = [];
-    for (const f of fs11.readdirSync(hDir)) {
-      if (!f.endsWith(".md")) continue;
-      const content = fs11.readFileSync(path14.join(hDir, f), "utf8");
-      texts.push(content);
-      const env = extractHandoffEnvelope(content);
-      if (env && typeof env === "object") blocks.push(env);
-    }
-    if (blocks.length) artifacts.handoffBlocks = blocks;
-    if (texts.length) artifacts.handoffTexts = texts;
-  } catch {
-  }
-  try {
-    const prov = JSON.parse(fs11.readFileSync(provenancePath2(root, runId), "utf8"));
-    if (prov && typeof prov.touched === "object") artifacts.provenanceTouched = prov.touched;
-  } catch {
-  }
-  return artifacts;
-}
-function emitPhaseCheckpoint(root, runId, phase) {
-  try {
-    const checkpointPhase = PHASE_TOKEN_TO_CHECKPOINT[phase];
-    if (checkpointPhase === void 0) return;
-    const checkpointFile = path14.join(
-      root,
-      ".guild",
-      "runs",
-      runId,
-      "learning",
-      `${checkpointPhase}-${runId}.yaml`
-    );
-    if (fs11.existsSync(checkpointFile)) return;
-    let decisions;
-    try {
-      const verdict = classifyPhase(buildPhaseArtifacts(root, runId));
-      decisions = verdict;
-    } catch {
-      decisions = void 0;
-    }
-    writeCheckpoint({
-      runId,
-      phase: checkpointPhase,
-      evidenceRef: `.guild/runs/${runId}/run.yaml#phases_log`,
-      guildRoot: root,
-      decisions
-    });
-  } catch (err) {
-    process.stderr.write(
-      `[run-trace] WARN: emitPhaseCheckpoint(${phase}) failed (fail-open): ${err instanceof Error ? err.message : String(err)}
-`
-    );
-  }
-}
-function recordPhase(root, phase, opts = {}) {
-  try {
-    const runId = opts.runId ?? resolveRunIdForTrace(root, opts.env ?? process.env);
-    if (!runId) return null;
-    const lifecycleEnv = createRealEnv(root, defaultResolveHost);
-    if (!appendPhase(lifecycleEnv, root, runId, phase)) return null;
-    emitPhaseCheckpoint(root, runId, phase);
-    return runId;
-  } catch {
-    return null;
-  }
-}
-function startAndCloseRun(root, resolveHost, opts = {}) {
-  try {
-    closeStalePriorOpenRun(root, resolveHost);
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
-    const runId = lifecycle.startRun(buildStartRunOpts(root, opts));
-    emitRunClosed(root, runId, resolveHost, { status: "closed" });
-    return runId;
-  } catch (err) {
-    process.stderr.write(
-      `[run-trace] WARN: startAndCloseRun failed: ${err instanceof Error ? err.message : String(err)}
-`
-    );
-    return null;
-  }
-}
-function recordStatusLightweight(root, resolveHost, opts = {}) {
-  if (!readRecordStatusRuns(root)) return null;
-  return startAndCloseRun(root, resolveHost, {
-    command: "/guild:status",
-    cwd: opts.cwd,
-    target_kind: opts.target_kind,
-    run_class: "lightweight"
-  });
-}
-function writeSkippedFiles(root, runId, entries) {
-  const out = skippedFilesPath(root, runId);
-  const body = {
-    schema_version: "guild.skipped_files.v1",
-    run_id: runId,
-    generated_at: (/* @__PURE__ */ new Date()).toISOString(),
-    skipped_count: entries.length,
-    skipped: entries
-  };
-  fs11.mkdirSync(path14.dirname(out), { recursive: true });
-  fs11.writeFileSync(out, JSON.stringify(body, null, 2) + "\n", "utf8");
-  return out;
-}
-
-// run-trace.ts
-function flag(argv, name) {
-  const prefix = `--${name}=`;
-  const eqMatch = argv.find((a) => a.startsWith(prefix));
-  if (eqMatch) return eqMatch.slice(prefix.length);
-  const i = argv.indexOf(`--${name}`);
-  return i !== -1 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : void 0;
-}
-async function readStdin() {
-  if (process.stdin.isTTY) return "";
-  return new Promise((resolve7) => {
-    const chunks = [];
-    process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve7(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve7(""));
-  });
-}
-var USAGE = "usage: run-trace.ts <start|status|phase|skipped> [--cwd <root>] [--run-id <id>]\n  start   --command=/guild:plan [--phase=<p>] [--run-class=full|lightweight] [--cwd <root>]\n  status  [--cwd <root>]   (alias: start --run-class=lightweight + OQ6 gate)\n  phase   --phase=<init|ideate|plan|build|qa|ops> [--run-id <id>] [--cwd <root>]\n  skipped --run-id <id>    [--cwd <root>] < entries.json\n";
-async function main2() {
-  const argv = process.argv.slice(2);
-  const sub = argv[0];
-  const cwd = flag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
-  const root = resolveGuildRoot(cwd);
-  if (sub === "start") {
-    const command = flag(argv, "command") ?? "/guild:learn";
-    const runClassRaw = flag(argv, "run-class");
-    const runClass = runClassRaw === "lightweight" ? "lightweight" : "full";
-    const initiative = flag(argv, "initiative") ?? null;
-    const phase = flag(argv, "phase") ?? null;
-    const runId = runClass === "lightweight" ? startAndCloseRun(root, defaultResolveHost, {
-      command,
-      cwd,
-      run_class: "lightweight",
-      initiative
-    }) : startRunOnly(root, defaultResolveHost, {
-      command,
-      cwd,
-      run_class: "full",
-      initiative,
-      phase
-      // T0: seed run.yaml phase: + first phases_log entry (canonical-validated downstream)
-    });
-    if (runId) process.stdout.write(runId + "\n");
-    process.exit(0);
-  }
-  if (sub === "phase") {
-    const phase = flag(argv, "phase");
-    if (!phase) {
-      process.stderr.write(
-        "[run-trace] usage: phase --phase=<init|ideate|plan|build|qa|ops> [--run-id <id>] [--cwd <root>]\n"
-      );
-      process.exit(1);
-    }
-    const runId = flag(argv, "run-id");
-    recordPhase(root, phase, runId ? { runId } : {});
-    process.exit(0);
-  }
-  if (sub === "status") {
-    const runId = recordStatusLightweight(root, defaultResolveHost, { cwd });
-    if (runId) process.stdout.write(runId + "\n");
-    process.exit(0);
-  }
-  if (sub === "skipped") {
-    const runId = flag(argv, "run-id") ?? process.env["GUILD_RUN_ID"];
-    if (!runId) {
-      process.stderr.write("[run-trace] usage: skipped --run-id <id> [--cwd <root>] < entries.json\n");
-      process.exit(1);
-    }
-    const raw = await readStdin();
-    let entries = [];
-    try {
-      const parsed = JSON.parse(raw.trim() || "[]");
-      if (Array.isArray(parsed)) entries = parsed;
-    } catch {
-      process.stderr.write("[run-trace] skipped: invalid JSON on stdin; writing empty set.\n");
-    }
-    const out = writeSkippedFiles(root, runId, entries);
-    process.stdout.write(out + "\n");
-    process.exit(0);
-  }
-  process.stderr.write("[run-trace] " + USAGE);
-  process.exit(1);
-}
-main2().catch((err) => {
-  process.stderr.write(
-    `[run-trace] FATAL: ${err instanceof Error ? err.message : String(err)}
-`
-  );
-  process.exit(1);
-});
+process.exit(0);

@@ -93,6 +93,8 @@ interface DefaultsBlock {
   capability_manifest_ttl_s: number;
   // R-020: explicit allowed-tools list (boundary-config-and-tracking Decision F)
   allowed_tools: string[];
+  // plugin-update-lifecycle AC-6: channel-aware update-check behavior
+  update: { mode: "auto" | "notify" | "off"; cadence_hours: number };
 }
 interface WorkspaceBlock {
   mode: "auto" | "on" | "off";
@@ -376,6 +378,7 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "heartbeat_timeout_ms",           // R-017
   "capability_manifest_ttl_s",      // R-018
   "allowed_tools",                  // R-020
+  "update",                         // plugin-update-lifecycle AC-6
 ]);
 const TIER1_KEYS = new Set([
   "rigor", "auto_approve", "review", "host", "roles", "host_profiles", "initiative_default",

@@ -128,6 +128,34 @@ Switch back to stable by re-adding the marketplace without the `@next` pin (or
 `--channel stable`). Beta may contain unreleased behavior; release notes only
 cover what has reached `main`.
 
+### Staying up to date
+
+Guild detects updates per channel and never phones home during session start:
+a SessionStart hook reads a machine-level cache (refreshed in the background at
+most once per `defaults.update.cadence_hours`, default 24) and prints a one-line
+signal with the exact update command when your channel has moved — new release
+tag on stable, new `next` commit on beta. `defaults.update.mode` controls it:
+`notify` (default), `auto` (stages the update headlessly; applies next
+session), or `off`. Dev checkouts are never touched.
+
+Applying updates per host:
+
+```bash
+# Claude Code (marketplace-managed):
+claude plugin marketplace update guild && claude plugin update guild@guild
+
+# Wrapper hosts (codex, pi, antigravity, cursor, copilot, opencode, rovo-dev):
+guild-run update
+
+# Everything with an install receipt, in one go (any host mix):
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
+```
+
+Each install writes a `guild.install_receipt.v1` (host, channel, ref, commit)
+under `~/.guild/receipts/` — that receipt is what `--update` and `guild-run
+update` re-render from, keeping every host on the channel it was installed
+from.
+
 Installing manually into Codex CLI uses Codex's plugin manager:
 
 ```bash

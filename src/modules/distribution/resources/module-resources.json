@@ -110,6 +110,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/self-update",
+      "source_path": "scripts/lib/self-update.ts",
+      "resource_path": "resources/scripts/lib/self-update.ts",
+      "sha256": "6a29f5234d809d85b2fe9afa9a43ad4656cf32533bfac2d4799dea285c2cadda"
+    },
+    {
+      "category": "scripts",
       "id": "lib/skill-source-transform",
       "source_path": "scripts/lib/skill-source-transform.ts",
       "resource_path": "resources/scripts/lib/skill-source-transform.ts",
@@ -121,6 +128,13 @@
       "source_path": "scripts/lib/surface-manifest.ts",
       "resource_path": "resources/scripts/lib/surface-manifest.ts",
       "sha256": "1635fe25492848cfb8d913447e6ac68ad6f758c55d73463151f275504b6654dc"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/update-check",
+      "source_path": "scripts/lib/update-check.ts",
+      "resource_path": "resources/scripts/lib/update-check.ts",
+      "sha256": "12cd087e0d407745698f0b805279a28b31f1f299248a361c92e2675158e22980"
     },
     {
       "category": "scripts",
