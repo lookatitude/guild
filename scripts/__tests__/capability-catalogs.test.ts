@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { parseFrontmatter } from "../lib/frontmatter";
 import {
   listOperationsRunbooks,
   listOperationsSkillIds,
@@ -64,13 +65,15 @@ describe("capability module catalogs", () => {
       .map((f) => f.replace(/\.md$/, ""))
       .sort();
     expect(templateFiles).toEqual(listSpecialistTemplateIds());
-    // Every template self-declares its contract stamp.
+    // Every template self-declares its contract stamp (read via the shared
+    // js-yaml-backed frontmatter parser, OD-3).
     for (const t of templateFiles) {
       const raw = fs.readFileSync(
         path.join(pluginRoot, "templates", "specialists", `${t}.md`),
         "utf8"
       );
-      expect(raw).toMatch(/^template_version: guild\.specialist_template\.v1$/m);
+      const fm = parseFrontmatter(raw);
+      expect(fm?.["template_version"]).toBe("guild.specialist_template.v1");
     }
   });
 

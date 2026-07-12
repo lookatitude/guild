@@ -470,24 +470,29 @@ export function mintFromTemplate(opts: {
 
   // The one-line provenance transform, bounded to the frontmatter block (the
   // text between the leading `---` fences) so a body occurrence can never be
-  // swapped, and verified: exactly one stamp must be replaced and none may
-  // survive — otherwise fail closed (a YAML-quoted/odd stamp that satisfied
-  // parseFrontmatter but not the raw line would silently mint with the wrong
-  // provenance key).
+  // swapped, and verified: exactly one stamp line must be replaced — otherwise
+  // fail closed (a YAML-quoted/odd stamp that satisfied parseFrontmatter but
+  // not the literal line would silently mint with the wrong provenance key).
+  // NOTE: this is NOT YAML reading (that already happened via the shared
+  // parseFrontmatter above) — it is a whole-line byte transform, done by exact
+  // string equality so the rest of the file is preserved as authored.
+  const stampLine = `template_version: ${SPECIALIST_TEMPLATE_VERSION}`;
   const fmEnd = raw.indexOf("\n---", 3);
   const fmBlock = fmEnd === -1 ? raw : raw.slice(0, fmEnd + 4);
-  const stampRe = new RegExp(`^template_version:\\s*${SPECIALIST_TEMPLATE_VERSION}\\s*$`, "gm");
-  const matches = fmBlock.match(stampRe) ?? [];
-  if (matches.length !== 1) {
+  const fmLines = fmBlock.split("\n");
+  const stampAt = fmLines.reduce<number[]>((acc, l, i) => {
+    if (l.trim() === stampLine) acc.push(i);
+    return acc;
+  }, []);
+  if (stampAt.length !== 1) {
     return {
       path: src,
       action: "refused",
-      reason: `template ${name}.md must carry exactly one literal 'template_version: ${SPECIALIST_TEMPLATE_VERSION}' frontmatter line (found ${matches.length})`,
+      reason: `template ${name}.md must carry exactly one literal '${stampLine}' frontmatter line (found ${stampAt.length})`,
     };
   }
-  const minted =
-    fmBlock.replace(stampRe, `derived_from_template: ${SPECIALIST_TEMPLATE_VERSION}`) +
-    raw.slice(fmBlock.length);
+  fmLines[stampAt[0]] = `derived_from_template: ${SPECIALIST_TEMPLATE_VERSION}`;
+  const minted = fmLines.join("\n") + raw.slice(fmBlock.length);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, minted, "utf8");
   return { path: target, action: "written" };
