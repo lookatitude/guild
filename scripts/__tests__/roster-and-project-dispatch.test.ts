@@ -423,9 +423,13 @@ describe("migrate-team-roster — shipped domain lanes → project instances (v2
 
   it("surfaces a REFUSED mint as file-level failure instead of silently leaving the lane broken", () => {
     const { projectRoot, pluginRoot } = fixtureRoots();
-    // Sabotage the frontend template's stamp so its mint refuses.
-    const tpl = path.join(pluginRoot, "templates", "specialists", "frontend.md");
-    fs.writeFileSync(tpl, fs.readFileSync(tpl, "utf8").replace("template_version:", "template_version_x:"));
+    // Symlink the WHOLE templates/specialists dir: entries still enumerate
+    // (regular files through the linked dir), but mintFromTemplate's realpath
+    // containment refuses each source — the refused-mint path.
+    const tplDir = path.join(pluginRoot, "templates", "specialists");
+    const moved = path.join(path.dirname(pluginRoot), "specialists-moved");
+    fs.renameSync(tplDir, moved);
+    fs.symlinkSync(moved, tplDir);
     writeTeamFile(
       projectRoot,
       "demo.build.yaml",
