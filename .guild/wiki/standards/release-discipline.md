@@ -1,10 +1,17 @@
 ---
-title: Release discipline — channels, branches, and the release pipeline
-category: standards
-status: active
-applies_to: [plugin]
-created: 2026-07-12
-updated: 2026-07-12
+type: standard
+owner: plugin-engineer
+confidence: high
+importance: high
+source_refs:
+  - plugin/.github/workflows/release.yml
+  - plugin/.github/workflows/branch-policy.yml
+  - plugin/.githooks/pre-push
+  - plugin/install.sh
+  - plugin/scripts/release-changelog.ts
+created_at: 2026-07-12
+updated_at: 2026-07-12
+sensitivity: internal
 ---
 
 # Release discipline
