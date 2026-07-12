@@ -1,0 +1,104 @@
+---
+type: standard
+owner: plugin-engineer
+confidence: high
+importance: high
+source_refs:
+  - plugin/.github/workflows/release.yml
+  - plugin/.github/workflows/branch-policy.yml
+  - plugin/.githooks/pre-push
+  - plugin/install.sh
+  - plugin/scripts/release-changelog.ts
+created_at: 2026-07-12
+updated_at: 2026-07-12
+sensitivity: internal
+---
+
+# Release discipline
+
+The rules that govern how Guild plugin changes reach users. Referenced by
+`.githooks/pre-push`, `.github/workflows/release.yml`, and
+`.github/workflows/branch-policy.yml` — the hooks/gates are the deterministic
+enforcement; this page is the rationale and the numbered rule list they cite.
+
+## The channel model
+
+Marketplace installs track a git ref, so **branches ARE distribution
+channels**:
+
+| Channel | Branch | Who follows it | How |
+|---|---|---|---|
+| **Stable** | `main` | default installs | `claude plugin marketplace add lookatitude/guild` (default branch) · `install.sh` (default / `--channel stable`) |
+| **Beta** | `next` | testers, early adopters | `claude plugin marketplace add lookatitude/guild@next` · `install.sh --channel beta` (`GUILD_CHANNEL=beta`) |
+
+`claude plugin marketplace update guild` re-fetches whichever ref the
+marketplace was added at — a `@next` follower keeps tracking `next`.
+
+Because every merge to a channel branch ships immediately to its followers,
+both channel branches are PR-only (rule 6) and `main` additionally accepts
+only release PRs (rule 8).
+
+## Rules
+
+1. **Versioning is semver** (`vMAJOR.MINOR.PATCH`, optional `-rcN`/`-betaN`
+   prerelease segment). `plugin.json` and `marketplace.json` carry the same
+   version and are bumped together.
+2. **Every release has release notes AND a changelog section — generated, then
+   edited.** `scripts/release-changelog.ts` collects the PRs merged since the
+   last tag, groups them (Added / Fixed / Documentation / Internal / Changed by
+   conventional-commit title prefix), and `--write` prepends the section to
+   `CHANGELOG.md` on the release branch (idempotent); `--notes` prints the same
+   content as the PR-body seed. The operator polishes the generated text — the
+   generator is the floor, not the ceiling. `release.yml` publishes the PR body
+   verbatim as the GitHub Release body.
+3. **A release is a tag on `main`.** No tag, no release. Tags are created by
+   automation (rule 7), never by hand (the v1.0/1.0.1 backfilled era is
+   grandfathered).
+4. **Nothing user-facing ships without its docs** — the docs-sync gate and the
+   D8 close-gate docs leg apply to release content like any other change
+   (`docs/v2` reconciled in the same rollout; website MDX hand-synced).
+5. **Rollback is roll-forward.** A bad stable release is corrected by a new
+   patch release (e.g. `v2.1.0` bad → cut `release/v2.1.1`; cherry-pick the
+   fix if `next` has moved on), never by rewriting `main` or deleting tags.
+6. **Branch + PR is mandatory; channel branches are never pushed directly.**
+   `main`, and `next` alike — enforced locally by `.githooks/pre-push`
+   (bypass: `GUILD_ALLOW_PUSH_MAIN=1`, emergencies only) and remotely by
+   branch protection.
+7. **Tag + GitHub Release are automated on release-PR merge.** When a PR whose
+   head branch is `release/vX.Y.Z` merges into `main`, `release.yml` creates
+   the annotated tag at the merge commit and publishes the GitHub Release with
+   the PR body as notes. Idempotent on re-runs.
+8. **The next/main channel flow.** `main` = stable, `next` = beta/integration:
+   - **All feature/fix PRs target `next`** (`gh pr create --base next`), never
+     `main`. Enforced by `branch-policy.yml`: a PR into `main` fails unless its
+     head is `release/vX.Y.Z`.
+   - `next` collects merged work; the beta channel is the testing ground. Full
+     CI runs on every PR into `next` (the gates fire on all PR bases).
+   - **Releasing:** cut `release/vX.Y.Z` **from `next`**, bump versions
+     (`plugin.json` + `marketplace.json`), update `CHANGELOG.md` and the
+     release notes, PR into `main`. Merge → rule 7 tags + publishes.
+   - **Sync-back:** immediately after the release merges, merge `main` back
+     into `next` (PR or fast-forward when clean) so the two channels share the
+     release point. `next` history never rewrites.
+   - A **hotfix** is just a patch release: cut the next patch version's
+     `release/vX.Y.Z` branch (e.g. `release/v2.1.1`) from `main`, apply the
+     fix, PR into `main`, then sync-back into `next`.
+   - A `-suffixed` version (`release/v2.1.0-rc1`) is allowed through the gate
+     but publishes as a GitHub **prerelease**, never marked latest.
+9. **Local checkouts are their own channel.** The operator's symlinked dev
+   install tracks the working tree; `install.sh` run from a checkout installs
+   that checkout regardless of `--channel` (it says so out loud).
+
+## Release checklist (the release/vX.Y.Z branch)
+
+1. `git checkout next && git pull && git checkout -b release/vX.Y.Z`
+2. Bump `version` in `.claude-plugin/plugin.json` and
+   `.claude-plugin/marketplace.json` (same value).
+3. Generate + polish the changelog: `npx tsx scripts/release-changelog.ts
+   --version vX.Y.Z --write` (prepends the grouped PR section to
+   `CHANGELOG.md`), and `--notes` to seed the PR body; edit both for tone.
+4. `npm run check:module-source-of-truth` + full test suite green locally.
+5. `gh pr create --base main` with the notes as body; CI + branch-policy must
+   pass; merge.
+6. Verify the tag + GitHub Release appeared (rule 7); then sync-back
+   `main` → `next`.

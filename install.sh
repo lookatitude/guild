@@ -34,6 +34,7 @@
 #   --hosts A,B,C   install a comma-separated set of hosts (multi-select)
 #   --yes, -y       consent to a multi-host write without an interactive prompt
 #   --project       install with --scope project (current directory) instead of user scope
+#   --channel C     stable (main, default) | beta (next) — clone-fallback ref selector
 #
 # Supported host ids (16 = 5 keep + 4 refuse + 4 new-CLI + 3 new-IDE; ADR §1.1):
 #   keep/CLI+file : claude-code-cli codex-cli pi-cli antigravity-cli agents-file
@@ -61,6 +62,12 @@ else
 fi
 
 SOURCE_REPO="${GUILD_SOURCE_REPO:-https://github.com/lookatitude/guild.git}"
+# Release channel → git ref for the clone fallback (release-discipline rule 8):
+#   stable → main (the released channel; marketplace default)
+#   beta   → next (the integration channel; features land here first)
+# GUILD_SOURCE_REF overrides both for an arbitrary ref.
+CHANNEL="${GUILD_CHANNEL:-stable}"
+SOURCE_REF="${GUILD_SOURCE_REF:-}"
 PLUGIN_SPEC="guild@guild"
 DRY_RUN=0
 ASSUME_YES=0
@@ -91,6 +98,9 @@ Options (pass after `bash -s --`):
   --hosts A,B,C   install a comma-separated set of hosts (multi-select)
   --yes, -y       consent to a multi-host write without an interactive prompt
   --project       install with --scope project (current directory)
+  --channel C     release channel for the no-checkout clone fallback:
+                  stable (main — released versions, default) or
+                  beta (next — integration builds ahead of release)
 
 Bare auto-detect installs every supported host found on PATH (+ IDE project
 markers). Writing to MORE THAN ONE host needs --yes or an interactive y/N;
@@ -104,6 +114,8 @@ Supported host ids:
 
 Environment:
   GUILD_SOURCE_REPO   override source repo for render fallback when install.sh is run without a checkout
+  GUILD_CHANNEL       stable | beta — same as --channel
+  GUILD_SOURCE_REF    exact git ref for the clone fallback (overrides the channel mapping)
 HELP
 }
 
@@ -163,6 +175,15 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
     --hosts=*) REQUESTED_HOSTS="$REQUESTED_HOSTS $(printf '%s' "${arg#--hosts=}" | tr ',' ' ')" ;;
+    --channel)
+      if [ "$#" -lt 2 ]; then
+        printf 'guild-install: --channel requires a value (stable|beta)\n' >&2
+        exit 1
+      fi
+      CHANNEL="$2"
+      shift
+      ;;
+    --channel=*) CHANNEL="${arg#--channel=}" ;;
     -h|--help) usage; exit 0 ;;
     *)
       printf 'guild-install: unknown option: %s\n' "$arg" >&2
@@ -171,6 +192,16 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+# ── Channel → source ref resolution ──────────────────────────────────────────
+case "$CHANNEL" in
+  stable) : "${SOURCE_REF:=main}" ;;
+  beta|next) CHANNEL="beta"; : "${SOURCE_REF:=next}" ;;
+  *)
+    printf 'guild-install: unknown --channel: %s (expected stable|beta)\n' "$CHANNEL" >&2
+    exit 1
+    ;;
+esac
 
 # ── Host detection (bare auto-detect mode) ───────────────────────────────────
 # PATH probe of CLI-host binaries only (ADR §3.3); IDE hosts have no bin and are
@@ -349,6 +380,11 @@ render_host_packages_once() {
   fi
 
   if [ -f "$SCRIPT_DIR/scripts/build-host-packages.ts" ]; then
+    # Running from a checkout: the working tree IS the source — the channel
+    # selector only governs the no-checkout clone fallback below.
+    if [ "$CHANNEL" != "stable" ]; then
+      say "note: --channel $CHANNEL ignored — installing from the local checkout at $SCRIPT_DIR (check out the 'next' branch there to test beta)"
+    fi
     ensure_script_runtime_deps "$SCRIPT_DIR"
     if [ "$SCRIPT_DIR" = "$(pwd)" ]; then
       run npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at "$generated_at"
@@ -361,7 +397,7 @@ render_host_packages_once() {
   fi
 
   if [ "$DRY_RUN" -eq 1 ]; then
-    say "would run: git clone --depth 1 $SOURCE_REPO <tmpdir>"
+    say "would run: git clone --depth 1 --branch $SOURCE_REF $SOURCE_REPO <tmpdir>   # channel: $CHANNEL"
     say "would run: npx tsx scripts/build-host-packages.ts --root <tmpdir> --out dist --generated-at $generated_at"
     RENDERED_DIST="dist"
     return
@@ -370,7 +406,8 @@ render_host_packages_once() {
   tmpdir="$(mktemp -d)"
   cleanup() { rm -rf "$tmpdir"; }
   trap cleanup EXIT
-  git clone --depth 1 "$SOURCE_REPO" "$tmpdir"
+  say "channel: $CHANNEL (ref: $SOURCE_REF)"
+  git clone --depth 1 --branch "$SOURCE_REF" "$SOURCE_REPO" "$tmpdir"
   ensure_script_runtime_deps "$tmpdir"
   out_dir="$(pwd)/dist"
   (cd "$tmpdir" && npx tsx scripts/build-host-packages.ts --root . --out "$out_dir" --generated-at "$generated_at")

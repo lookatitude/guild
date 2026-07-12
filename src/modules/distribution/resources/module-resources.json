@@ -131,6 +131,13 @@
     },
     {
       "category": "scripts",
+      "id": "release-changelog",
+      "source_path": "scripts/release-changelog.ts",
+      "resource_path": "resources/scripts/release-changelog.ts",
+      "sha256": "787f2fe373d8c57df5bd7ebcefb8c6c8fc4e1c578e0ca9262ffa1d96a814cb90"
+    },
+    {
+      "category": "scripts",
       "id": "sync-live-resources",
       "source_path": "scripts/sync-live-resources.ts",
       "resource_path": "resources/scripts/sync-live-resources.ts",

@@ -2233,6 +2233,11 @@
       "kind": "cli"
     },
     {
+      "id": "release-changelog",
+      "source_path": "scripts/release-changelog.ts",
+      "kind": "cli"
+    },
+    {
       "id": "resume-lanes",
       "source_path": "scripts/resume-lanes.ts",
       "kind": "cli"

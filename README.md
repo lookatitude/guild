@@ -107,6 +107,27 @@ claude plugin marketplace update guild
 claude plugin install guild@guild
 ```
 
+### Release channels — stable vs beta
+
+Branches are distribution channels: **`main` is stable** (released versions —
+what the commands above install) and **`next` is beta** — merged work still
+being tested ahead of the next release. To follow the beta channel:
+
+```bash
+# Claude Code — pin the marketplace to the next branch:
+claude plugin marketplace add lookatitude/guild@next
+# marketplace update keeps tracking the pinned next ref:
+claude plugin marketplace update guild
+claude plugin install guild@guild
+
+# install.sh (any supported host) — same selector:
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --channel beta
+```
+
+Switch back to stable by re-adding the marketplace without the `@next` pin (or
+`--channel stable`). Beta may contain unreleased behavior; release notes only
+cover what has reached `main`.
+
 Installing manually into Codex CLI uses Codex's plugin manager:
 
 ```bash

@@ -146,25 +146,43 @@ The wiki read path uses a lazy SQLite read-through cache (`index: "auto"`, defau
 disable with `index: "off"`. See `https://guildstack.dev/docs/configuration`
 (`defaults.index.*`).
 
-## Branch + PR discipline (mandatory)
+## Branch + PR discipline (mandatory) — the next/main channel model
 
-**No direct commits to `main` going forward.** Every change — fix-packs, polish rounds,
-single-line edits — lands through a feature/release branch and a pull request.
+Branches are distribution channels (marketplace installs track a git ref):
+**`main` = stable** (default installs), **`next` = beta/integration**
+(`claude plugin marketplace add lookatitude/guild@next`, `install.sh --channel beta`).
+Every merge to a channel branch ships to its followers immediately, so both are
+PR-only, and `main` only ever receives **release PRs**. Canonical ruleset:
+`.guild/wiki/standards/release-discipline.md`.
 
-Workflow:
-1. Branch from `main`: `git checkout -b release/<version>` or `feature/<short-slug>`.
+Day-to-day workflow (features, fixes, docs — everything non-release):
+1. Branch from `next`: `git checkout -b feature/<short-slug> origin/next`.
 2. Commit + push the branch.
-3. Open a PR (`gh pr create`) targeting `main`.
-4. Merge via the PR (squash or merge per case).
+3. Open a PR **targeting `next`**: `gh pr create --base next`.
+4. Merge via the PR (squash or merge per case). The work is now on the beta
+   channel for testing; it reaches stable only with the next release.
 
-**Mechanical enforcement.** A repo-checked-in `pre-push` hook at `.githooks/pre-push`
-refuses direct push to `main`. Wire it once per clone:
+Release workflow (operator-driven, when `next` is ready):
+1. Cut `release/vX.Y.Z` from `next`; bump `plugin.json` + `marketplace.json`
+   versions; generate the changelog section + notes seed with
+   `npx tsx scripts/release-changelog.ts --version vX.Y.Z --write` (then
+   `--notes` for the PR body) and polish both.
+2. PR `release/vX.Y.Z` → `main` (the ONLY PR shape `main` accepts — enforced by
+   `.github/workflows/branch-policy.yml`).
+3. Merge → `release.yml` auto-tags and publishes the GitHub Release (PR body =
+   release notes).
+4. Sync back: merge `main` into `next` so both channels share the release point.
+
+**Mechanical enforcement.** `branch-policy.yml` rejects any PR into `main` whose
+head is not `release/vX.Y.Z`; the repo-checked-in `pre-push` hook at
+`.githooks/pre-push` refuses direct pushes to `main` AND `next`. Wire it once
+per clone:
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
-Bypass for emergencies (force-push recovery from a slip): `GUILD_ALLOW_PUSH_MAIN=1 git push origin main` — logs a loud warning.
+Bypass for emergencies (channel bootstrap, force-push recovery): `GUILD_ALLOW_PUSH_MAIN=1 git push origin <branch>` — logs a loud warning.
 
 ## Continuous knowledge — discipline
 
