@@ -3114,12 +3114,22 @@ var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 var SIDECAR_MAX_BYTES = 1024 * 1024;
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
+var UPDATE_COMMANDS = {
+  marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
+  self_update: "guild-run update",
+  reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
+};
 var CLAUDE_CAPABILITIES = {
   schema_version: "guild.host_capabilities.v1",
   host_kind: "claude",
   family: "claude",
   surface_kind: "cli",
-  package: { installable: true, installability: "verified", manifest_format: "claude-plugin" },
+  package: {
+    installable: true,
+    installability: "verified",
+    manifest_format: "claude-plugin",
+    update: { check: "marketplace_clone", apply: "marketplace_cli", command: UPDATE_COMMANDS.marketplace_cli, auto_capable: true }
+  },
   bootstrap: {
     context_injection: "hookSpecificOutput.additionalContext",
     skill_autoload: true,
@@ -3204,7 +3214,12 @@ var CODEX_CAPABILITIES = {
   // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
   // as installable until proven. installability:"target" records that the renderer
   // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
-  package: { installable: false, installability: "target", manifest_format: "codex-plugin" },
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "codex-plugin",
+    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true }
+  },
   bootstrap: {
     // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
     // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
@@ -3379,7 +3394,12 @@ var PI_CAPABILITIES = {
   host_kind: "pi",
   family: "pi",
   surface_kind: "cli",
-  package: { installable: false, installability: "target", manifest_format: "pi-manifest" },
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "pi-manifest",
+    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true }
+  },
   bootstrap: {
     context_injection: "instruction_file",
     skill_autoload: false,
@@ -3404,7 +3424,12 @@ var ANTIGRAVITY_CAPABILITIES = {
   host_kind: "antigravity",
   family: "antigravity",
   surface_kind: "cli",
-  package: { installable: false, installability: "target", manifest_format: "antigravity-manifest" },
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "antigravity-manifest",
+    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true }
+  },
   bootstrap: {
     context_injection: "instruction_file",
     skill_autoload: false,
@@ -3431,7 +3456,12 @@ var AGENTS_FILE_CAPABILITIES = {
   host_kind: "agents-file",
   family: "agents",
   surface_kind: "file",
-  package: { installable: false, installability: "target", manifest_format: "agents-file" },
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "agents-file",
+    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
+  },
   bootstrap: {
     context_injection: "instruction_file",
     skill_autoload: false,
@@ -3571,7 +3601,16 @@ function inferredCaps(host_kind, family, surface_kind = "cli") {
     // Must equal the registry entry's top-level surface_kind (cross-field invariant,
     // enforced by validateHostRegistryEntry). `.agents` is a file surface, not cli.
     surface_kind,
-    package: { installable: false, installability: "target", manifest_format: `${host_kind}-package` },
+    package: {
+      installable: false,
+      installability: "target",
+      manifest_format: `${host_kind}-package`,
+      // AC-7 by surface: cli = Guild-owned wrapper packages → guild-run
+      // self-update; file = AGENTS-file packages → reinstall command (notify +
+      // one command, no daemon); app = refused install surfaces → no check, no
+      // apply (degrades to notify-only prose; the recorded loss IS this row).
+      update: surface_kind === "cli" ? { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true } : surface_kind === "file" ? { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false } : { check: "none", apply: "none", command: null, auto_capable: false }
+    },
     bootstrap: {
       context_injection: "instruction_file",
       skill_autoload: false,

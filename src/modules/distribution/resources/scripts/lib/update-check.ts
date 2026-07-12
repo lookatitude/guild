@@ -22,6 +22,11 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { execFileSync } from "child_process";
+import {
+  HOST_REGISTRY_ROWS,
+  type HostId,
+} from "../../src/modules/host-runtime/workflows/host-registry-schema";
+import type { UpdateCaps } from "../../src/modules/host-runtime/workflows/host-capabilities-schema";
 
 export const SOURCE_REPO_DEFAULT = "https://github.com/lookatitude/guild.git";
 export const CACHE_SCHEMA = "guild.update_check_cache.v1";
@@ -331,6 +336,17 @@ export function refreshCache(opts: {
 
 // ── Staleness decision ──────────────────────────────────────────────────────
 
+/**
+ * AC-7: the per-host update capability row is the SoT for how a host checks
+ * and applies updates. Unknown host ids return null (callers fall back to the
+ * coarse hostKind mapping).
+ */
+export function updateCapsForHost(hostId: string | undefined): UpdateCaps | null {
+  if (!hostId) return null;
+  const row = HOST_REGISTRY_ROWS[hostId as HostId];
+  return row ? row.capabilities.package.update : null;
+}
+
 export interface UpdateSignal {
   update_available: boolean;
   channel: Channel;
@@ -351,6 +367,8 @@ export function computeSignal(opts: {
   state: InstallState;
   cache: UpdateCache | null;
   hostKind?: "claude" | "wrapper" | "agents-file";
+  /** Registry host id — when given, the AC-7 capability row supplies the command. */
+  hostId?: string;
 }): UpdateSignal {
   const { state, cache } = opts;
   const short = (sha: string | null) => (sha ? sha.slice(0, 7) : "unknown");
@@ -371,8 +389,12 @@ export function computeSignal(opts: {
     return { ...base, update_available: false, reason: "no-cache" };
   }
 
-  const command =
-    opts.hostKind === "wrapper"
+  // Command resolution: the AC-7 capability row wins; the coarse hostKind
+  // mapping is the fallback for callers without a registry id.
+  const rowCaps = updateCapsForHost(opts.hostId);
+  const command = rowCaps
+    ? rowCaps.command
+    : opts.hostKind === "wrapper"
       ? "guild-run update"
       : opts.hostKind === "agents-file"
         ? "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"

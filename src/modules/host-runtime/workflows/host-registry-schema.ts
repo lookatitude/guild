@@ -33,7 +33,7 @@
  * L11 (adapters), Ltest (RED→GREEN).
  */
 
-import {
+import { UPDATE_COMMANDS,
   GuildHostCapabilitiesV1,
   validateHostCapabilitiesV1,
   AGENTS_FILE_CAPABILITIES,
@@ -264,7 +264,21 @@ function inferredCaps(
     // Must equal the registry entry's top-level surface_kind (cross-field invariant,
     // enforced by validateHostRegistryEntry). `.agents` is a file surface, not cli.
     surface_kind,
-    package: { installable: false, installability: "target", manifest_format: `${host_kind}-package` },
+    package: {
+      installable: false,
+      installability: "target",
+      manifest_format: `${host_kind}-package`,
+      // AC-7 by surface: cli = Guild-owned wrapper packages → guild-run
+      // self-update; file = AGENTS-file packages → reinstall command (notify +
+      // one command, no daemon); app = refused install surfaces → no check, no
+      // apply (degrades to notify-only prose; the recorded loss IS this row).
+      update:
+        surface_kind === "cli"
+          ? { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true }
+          : surface_kind === "file"
+            ? { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
+            : { check: "none", apply: "none", command: null, auto_capable: false },
+    },
     bootstrap: {
       context_injection: "instruction_file",
       skill_autoload: false,
