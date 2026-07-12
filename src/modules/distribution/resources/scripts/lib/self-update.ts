@@ -103,7 +103,11 @@ export function runSelfUpdate(opts: {
   // self_update apply path may be updated by guild-run — anything else gets
   // its REAL command instead of a wrong-mechanism swap.
   const caps = updateCapsForHost(receipt.host);
-  if (caps && caps.apply !== "self_update") {
+  if (!caps) {
+    log(`host "${receipt.host}" has no update capability row — refusing to self-update an unverifiable mechanism (AC-7).`);
+    return 1;
+  }
+  if (caps.apply !== "self_update") {
     log(`host ${receipt.host} does not use guild-run self-update (capability row: apply=${caps.apply}).`);
     log(caps.command ? `Use instead: ${caps.command}` : "This surface has no update path (notify-only).");
     return 1;

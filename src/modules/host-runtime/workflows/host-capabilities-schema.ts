@@ -78,7 +78,14 @@ export interface UpdateCaps {
   apply: "marketplace_cli" | "self_update" | "reinstall_command" | "none";
   /** The exact one-command apply string surfaced in signals (AC-3); null iff apply is "none". */
   command: string | null;
-  /** True only where an AUTOMATIC apply exists (defaults.update.mode=auto can act). */
+  /**
+   * True only where an IMPLEMENTED automatic apply exists TODAY (something
+   * actually acts on defaults.update.mode=auto — currently the Claude
+   * SessionStart hook's staged marketplace update). A mechanism that exists
+   * but is only operator-invoked (guild-run update) is NOT auto_capable —
+   * two-field honesty: capability rows never claim beyond implemented
+   * behavior. Flips per host when its auto path ships.
+   */
   auto_capable: boolean;
 }
 
@@ -368,7 +375,7 @@ export const CODEX_CAPABILITIES: GuildHostCapabilitiesV1 = {
     installable: false,
     installability: "target",
     manifest_format: "codex-plugin",
-    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true },
+    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false },
   },
   bootstrap: {
     // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
@@ -527,7 +534,7 @@ export const PI_CAPABILITIES: GuildHostCapabilitiesV1 = {
     installable: false,
     installability: "target",
     manifest_format: "pi-manifest",
-    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true },
+    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false },
   },
   bootstrap: {
     context_injection: "instruction_file",
@@ -558,7 +565,7 @@ export const ANTIGRAVITY_CAPABILITIES: GuildHostCapabilitiesV1 = {
     installable: false,
     installability: "target",
     manifest_format: "antigravity-manifest",
-    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true },
+    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false },
   },
   bootstrap: {
     context_injection: "instruction_file",
@@ -767,6 +774,31 @@ export function validateHostCapabilitiesV1(value: unknown): ValidationResult {
     }
     if (typeof (pkg as Record<string, unknown>)["installable"] !== "boolean") {
       errors.push("package.installable must be a boolean");
+    }
+    // AC-7: the update capability row is REQUIRED and internally coherent —
+    // a row that validates without it would be a claimed-but-absent capability.
+    const upd = (pkg as Record<string, unknown>)["update"];
+    if (typeof upd !== "object" || upd === null || Array.isArray(upd)) {
+      errors.push("package.update is required (AC-7 update capability row)");
+    } else {
+      const u = upd as Record<string, unknown>;
+      if (u["check"] !== "marketplace_clone" && u["check"] !== "receipt" && u["check"] !== "none") {
+        errors.push(`package.update.check must be "marketplace_clone" | "receipt" | "none"; got ${JSON.stringify(u["check"])}`);
+      }
+      const apply = u["apply"];
+      if (apply !== "marketplace_cli" && apply !== "self_update" && apply !== "reinstall_command" && apply !== "none") {
+        errors.push(`package.update.apply must be "marketplace_cli" | "self_update" | "reinstall_command" | "none"; got ${JSON.stringify(apply)}`);
+      }
+      if (apply === "none") {
+        if (u["command"] !== null) errors.push("package.update.command must be null when apply is \"none\"");
+        if (u["auto_capable"] !== false) errors.push("package.update.auto_capable must be false when apply is \"none\"");
+        if (u["check"] !== "none") errors.push("package.update.check must be \"none\" when apply is \"none\"");
+      } else if (typeof u["command"] !== "string" || (u["command"] as string).length === 0) {
+        errors.push("package.update.command must be a non-empty string when an apply path exists");
+      }
+      if (typeof u["auto_capable"] !== "boolean") {
+        errors.push("package.update.auto_capable must be a boolean");
+      }
     }
   }
 

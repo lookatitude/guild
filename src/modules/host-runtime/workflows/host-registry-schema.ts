@@ -274,7 +274,7 @@ function inferredCaps(
       // apply (degrades to notify-only prose; the recorded loss IS this row).
       update:
         surface_kind === "cli"
-          ? { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true }
+          ? { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false }
           : surface_kind === "file"
             ? { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
             : { check: "none", apply: "none", command: null, auto_capable: false },

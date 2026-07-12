@@ -3326,7 +3326,7 @@ var CODEX_CAPABILITIES = {
     installable: false,
     installability: "target",
     manifest_format: "codex-plugin",
-    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true }
+    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false }
   },
   bootstrap: {
     // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
@@ -3506,7 +3506,7 @@ var PI_CAPABILITIES = {
     installable: false,
     installability: "target",
     manifest_format: "pi-manifest",
-    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true }
+    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false }
   },
   bootstrap: {
     context_injection: "instruction_file",
@@ -3536,7 +3536,7 @@ var ANTIGRAVITY_CAPABILITIES = {
     installable: false,
     installability: "target",
     manifest_format: "antigravity-manifest",
-    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true }
+    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false }
   },
   bootstrap: {
     context_injection: "instruction_file",
@@ -3717,7 +3717,7 @@ function inferredCaps(host_kind, family, surface_kind = "cli") {
       // self-update; file = AGENTS-file packages → reinstall command (notify +
       // one command, no daemon); app = refused install surfaces → no check, no
       // apply (degrades to notify-only prose; the recorded loss IS this row).
-      update: surface_kind === "cli" ? { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: true } : surface_kind === "file" ? { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false } : { check: "none", apply: "none", command: null, auto_capable: false }
+      update: surface_kind === "cli" ? { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false } : surface_kind === "file" ? { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false } : { check: "none", apply: "none", command: null, auto_capable: false }
     },
     bootstrap: {
       context_injection: "instruction_file",

@@ -38,7 +38,7 @@ import {
   type WrapperRequest,
   type WrapperPlan,
 } from "./lib/guild-run-wrapper";
-import { runSelfUpdate } from "./lib/self-update";
+import { readReceipt, runSelfUpdate } from "./lib/self-update";
 import {
   cachePath,
   computeSignal,
@@ -308,8 +308,17 @@ function main(): number {
     const pkgRoot = path.resolve(__dirname, "..");
     const state = resolveInstallState(pkgRoot);
     if (state.channel !== "dev") {
+      // The receipt names the host so the AC-7 row supplies the right command
+      // (a file-surface package must be told install.sh --update, never
+      // guild-run update); coarse wrapper mapping only without a receipt.
+      const receiptHost = readReceipt(pkgRoot)?.host;
       const line = renderSignalLine(
-        computeSignal({ state, cache: readCache(cachePath()), hostKind: "wrapper" })
+        computeSignal({
+          state,
+          cache: readCache(cachePath()),
+          hostKind: "wrapper",
+          ...(receiptHost ? { hostId: receiptHost } : {}),
+        })
       );
       if (line) process.stderr.write(`[guild-run] ${line}\n`);
     }

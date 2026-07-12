@@ -73,6 +73,9 @@ describe("AC-7 — every host has a coherent update capability row", () => {
       expect(u.apply).toBe("self_update");
       expect(u.command).toBe(UPDATE_COMMANDS.self_update);
       expect(u.check).toBe("receipt");
+      // Two-field honesty: guild-run update EXISTS but nothing invokes it
+      // automatically yet — auto_capable stays false until an auto path ships.
+      expect(u.auto_capable).toBe(false);
     }
     for (const h of FILE_SURFACES) {
       const u = HOST_REGISTRY_ROWS[h].capabilities.package.update;
@@ -98,6 +101,47 @@ describe("runtime wiring — the row is the SoT", () => {
     });
     expect(sig.command).toBe(UPDATE_COMMANDS.reinstall_command);
     expect(updateCapsForHost("nonexistent-host")).toBeNull();
+  });
+
+  it("the schema validator rejects a row missing or violating the update shape (AC-7 fail-closed)", () => {
+    const { validateHostCapabilitiesV1 } = require("../../src/modules/host-runtime/workflows/host-capabilities-schema");
+    const good = JSON.parse(JSON.stringify(HOST_REGISTRY_ROWS["claude-code-cli"].capabilities));
+    expect(validateHostCapabilitiesV1(good).valid).toBe(true);
+    const missing = JSON.parse(JSON.stringify(good));
+    delete missing.package.update;
+    const r1 = validateHostCapabilitiesV1(missing);
+    expect(r1.valid).toBe(false);
+    expect(r1.errors.join("\n")).toContain("package.update is required");
+    const incoherent = JSON.parse(JSON.stringify(good));
+    incoherent.package.update = { check: "none", apply: "none", command: "oops", auto_capable: true };
+    const r2 = validateHostCapabilitiesV1(incoherent);
+    expect(r2.valid).toBe(false);
+    expect(r2.errors.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("guild-run self-update refuses an UNKNOWN host id before any network call (guard fail-closed)", () => {
+    const pkg = fs.mkdtempSync(path.join(os.tmpdir(), "guild-caprow-unknown-"));
+    fs.writeFileSync(
+      path.join(pkg, RECEIPT_BASENAME),
+      JSON.stringify({
+        schema_version: RECEIPT_SCHEMA,
+        host: "totally-unknown-host",
+        channel: "beta",
+        ref: "next",
+        commit: null,
+        version: "2.1.0",
+        installed_at: "2026-07-12T00:00:00Z",
+      })
+    );
+    const lines: string[] = [];
+    let network = false;
+    const rc = runSelfUpdate({
+      pkgRoot: pkg,
+      deps: { log: (l) => lines.push(l), run: () => void (network = true) },
+    });
+    expect(rc).toBe(1);
+    expect(network).toBe(false);
+    expect(lines.join("\n")).toContain("no update capability row");
   });
 
   it("guild-run self-update refuses a host whose row is not self_update, naming the real command", () => {
