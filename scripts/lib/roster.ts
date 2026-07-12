@@ -27,9 +27,11 @@
 
 import * as fs from "fs";
 import * as path from "path";
+// The ONE shared, js-yaml-backed frontmatter/YAML reader (OD-3): all reading
+// goes through it — this file only DUMPS YAML directly.
+import { parseFrontmatter, parseYaml } from "./frontmatter";
 
 const yaml = require("js-yaml") as {
-  load: (s: string) => unknown;
   dump: (o: unknown, opts?: Record<string, unknown>) => string;
 };
 
@@ -107,22 +109,8 @@ export interface RosterResolution {
 }
 
 // ── Frontmatter ────────────────────────────────────────────────────────────
-
-export function parseFrontmatter(raw: string): Record<string, unknown> | null {
-  if (!raw.startsWith("---")) return null;
-  const end = raw.indexOf("\n---", 3);
-  if (end === -1) return null;
-  const block = raw.slice(raw.indexOf("\n") + 1, end);
-  try {
-    const parsed = yaml.load(block);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
+// Parsing is delegated to the shared reader (scripts/lib/frontmatter.ts):
+// parseFrontmatter(content) → object | null (no block / empty / non-object).
 
 function asString(v: unknown): string | null {
   return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
@@ -380,20 +368,24 @@ function writable(
   // Marker must be an actual generated-header comment line, not a substring
   // buried in hand-authored content.
   if (new RegExp(`^#\\s*${GENERATED_MARKER}\\s*$`, "m").test(raw)) return { ok: true };
-  try {
-    const parsed = yaml.load(raw) as unknown;
-    if (parsed === null || parsed === undefined) return { ok: true };
-    if (typeof parsed !== "object" || Array.isArray(parsed)) {
-      return refuse("has an unexpected document shape");
-    }
+  const parsed = parseYaml(raw);
+  if (parsed === null) {
+    // Shared parseYaml is fail-soft: null covers BOTH an empty/comment-only doc
+    // (safe to write) and unparseable content (hand-authored — refuse). Split
+    // the cases on the raw text.
+    const hasContent = raw
+      .split(/\r?\n/)
+      .some((l) => l.trim() !== "" && !l.trim().startsWith("#"));
+    if (!hasContent) return { ok: true };
+  } else if (typeof parsed !== "object" || Array.isArray(parsed)) {
+    return refuse("has an unexpected document shape");
+  } else {
     const keys = Object.keys(parsed as Record<string, unknown>);
     const list = (parsed as Record<string, unknown>)[key];
     const emptyList = list === null || (Array.isArray(list) && list.length === 0);
     if (keys.every((k) => k === key) && (keys.length === 0 || emptyList)) {
       return { ok: true };
     }
-  } catch {
-    // Unparseable and not ours — treat as hand-authored.
   }
   return refuse(`has hand-authored content and no '${GENERATED_MARKER}' marker line`);
 }
