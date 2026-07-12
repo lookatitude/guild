@@ -236,8 +236,17 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
   );
 
   // F4 template-integrity rail: byte-verify the full templates/** tree in
-  // every installable package against the repo source.
-  for (const pkg of ["claude-code", "codex", "agents", "pi", "antigravity", ...NEW_CLI_HOST_IDS]) {
+  // every installable package against the repo source — including the nested
+  // codex-marketplace copy (`codex plugin marketplace add` installs from it).
+  for (const pkg of [
+    "claude-code",
+    "codex",
+    path.join("codex-marketplace", "plugins", "guild"),
+    "agents",
+    "pi",
+    "antigravity",
+    ...NEW_CLI_HOST_IDS,
+  ]) {
     verifyTemplateTree(root, distRoot, pkg, checks, errors);
   }
 
