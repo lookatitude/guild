@@ -1094,6 +1094,49 @@ describe("E2: flow_step monotone — FATAL on v2", () => {
     const result = validateGraphV2(g, { repoRoot: dir });
     expect(result.success).toBe(true);
   });
+
+  test("independent flows may each start their own monotone weight sequence", () => {
+    const g = {
+      version: "guild.knowledge_graph.v2",
+      generated_from_commit: "abc123",
+      project: { name: "test", description: "" },
+      nodes: [
+        { id: "flow:a", type: "flow", name: "Flow A", source_refs: ["src/a.ts#L1-L2"], confidence: "high" },
+        { id: "step:a", type: "step", name: "Step A", source_refs: ["src/a.ts#L1-L2"], confidence: "high" },
+        { id: "flow:b", type: "flow", name: "Flow B", source_refs: ["src/b.ts#L1-L2"], confidence: "high" },
+        { id: "step:b", type: "step", name: "Step B", source_refs: ["src/b.ts#L1-L2"], confidence: "high" },
+      ],
+      edges: [
+        { source: "flow:a", target: "step:a", type: "flow_step", direction: "out", weight: 0.8 },
+        { source: "flow:b", target: "step:b", type: "flow_step", direction: "out", weight: 0.1 },
+      ],
+      layers: [],
+      tour: [],
+    };
+    const result = validateGraphV2(g, { repoRoot: dir });
+    expect(result.success).toBe(true);
+  });
+
+  test("branched flows may rank independent steps without canonical edge order changing the rank", () => {
+    const g = {
+      version: "guild.knowledge_graph.v2",
+      generated_from_commit: "abc123",
+      project: { name: "test", description: "" },
+      nodes: [
+        { id: "flow:a", type: "flow", name: "Flow A", source_refs: ["src/a.ts#L1-L2"], confidence: "high" },
+        { id: "step:a", type: "step", name: "Step A", source_refs: ["src/a.ts#L1-L2"], confidence: "high" },
+        { id: "step:b", type: "step", name: "Step B", source_refs: ["src/b.ts#L1-L2"], confidence: "high" },
+      ],
+      edges: [
+        { source: "flow:a", target: "step:a", type: "flow_step", direction: "out", weight: 0.8 },
+        { source: "flow:a", target: "step:b", type: "flow_step", direction: "out", weight: 0.1 },
+      ],
+      layers: [],
+      tour: [],
+    };
+    const result = validateGraphV2(g, { repoRoot: dir });
+    expect(result.success).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

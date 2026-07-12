@@ -160,6 +160,12 @@ export interface RunKnowledgeOptions {
   generatedFromCommit?: string;
   /** KnowledgeConfig overrides */
   config?: Partial<KnowledgeConfig>;
+  /**
+   * Structural graph emitted by the immediately preceding deep-graph stages.
+   * Supplying it explicitly keeps K-tier finalization pure while preserving the
+   * file nodes, layer map, and dependency-BFS tour that onboarding consumes.
+   */
+  structuralGraph?: Pick<KnowledgeGraph, "nodes" | "edges" | "layers" | "tour">;
   // NOTE: no `staleness` field. Staleness is the SKILL's decision; the
   // orchestrator always runs all stages (FIX 1 — pure finalize).
 }
@@ -982,11 +988,12 @@ export async function runKnowledgeStages(
   seams: KnowledgeLLMSeams,
   opts: RunKnowledgeOptions = {}
 ): Promise<RunKnowledgeResult> {
-  // FIX 1 (codex G-lane): no staleness, no prevGraph. Pure function of inputs.
+  // FIX 1 (codex G-lane): no staleness, no implicit previous graph. The
+  // structural snapshot is an explicit input from the preceding deep-graph run.
   // ── K1→K4: assemble all nodes + edges (deterministic order) ───────────────
   const partial = await runKnowledgeStagesK1ToK4(repoRoot, filePaths, seams);
-  const allNodes = partial.nodes;
-  const allEdges = partial.edges;
+  const allNodes = [...(opts.structuralGraph?.nodes ?? []), ...partial.nodes];
+  const allEdges = [...(opts.structuralGraph?.edges ?? []), ...partial.edges];
   // DROP 1 fix: K2 suppressed entries (unclassified candidates) collected here.
   const suppressedEntries: KnowledgeSuppressedEntry[] = [...partial.k2Suppressed];
 
@@ -1021,8 +1028,8 @@ export async function runKnowledgeStages(
     project: opts.project ?? { name: "guild", description: "Guild plugin self-build" },
     nodes: allNodes,
     edges: allEdges,
-    layers: [],
-    tour: [],
+    layers: opts.structuralGraph?.layers ?? [],
+    tour: opts.structuralGraph?.tour ?? [],
   };
 
   // ── validateGraphV2 (FIX 2: throw on fatal — never write unvalidated graph) ─
@@ -1203,6 +1210,27 @@ if (require.main === module) {
       );
     } else if (phase === "finalize") {
       const seams = buildFileBackedSeams(judgmentDir);
+      const structuralGraphPath = path.join(repoRoot, ".guild", "indexes", "knowledge-graph.json");
+      let structuralGraph: RunKnowledgeOptions["structuralGraph"];
+      try {
+        const prior = JSON.parse(fs.readFileSync(structuralGraphPath, "utf8")) as Partial<KnowledgeGraph>;
+        if (
+          prior.version === "guild.knowledge_graph.v1" &&
+          Array.isArray(prior.nodes) &&
+          Array.isArray(prior.edges) &&
+          Array.isArray(prior.layers) &&
+          Array.isArray(prior.tour)
+        ) {
+          structuralGraph = {
+            nodes: prior.nodes,
+            edges: prior.edges,
+            layers: prior.layers,
+            tour: prior.tour,
+          };
+        }
+      } catch {
+        // No structural snapshot is valid for a clean or already-v2 run.
+      }
       // SC-12 provenance: derive generated_from_commit from HEAD at the CLI
       // boundary (keeps runKnowledgeStages a pure function of inputs — FIX 1).
       // headSha() returns a deterministic "unknown" when repoRoot is not a git
@@ -1213,6 +1241,7 @@ if (require.main === module) {
         runId,
         generatedAt,
         generatedFromCommit: headSha(repoRoot),
+        structuralGraph,
       });
       process.stdout.write(
         JSON.stringify(
