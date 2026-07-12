@@ -1,15 +1,18 @@
 import * as fs from "fs";
 import * as path from "path";
+import { parseFrontmatter } from "../lib/frontmatter";
 import {
   listOperationsRunbooks,
   listOperationsSkillIds,
 } from "../../src/modules/operations";
 import { listQualitySkillIds } from "../../src/modules/quality";
 import {
-  isSpecialistAgentId,
+  isMachineryAgentId,
   isSpecialistSkillId,
-  listSpecialistAgentIds,
+  isSpecialistTemplateId,
+  listMachineryAgentIds,
   listSpecialistSkillPrefixes,
+  listSpecialistTemplateIds,
 } from "../../src/modules/specialists";
 
 const pluginRoot = path.resolve(__dirname, "../..");
@@ -43,15 +46,42 @@ describe("capability module catalogs", () => {
     expect(listQualitySkillIds()).toEqual(manifest.owns?.skills);
   });
 
-  it("specialists roster matches the specialists module manifest", () => {
+  it("specialists catalog matches the specialists module manifest", () => {
     const manifest = readManifest("specialists");
-    expect(listSpecialistAgentIds()).toEqual(manifest.owns?.agents);
+    expect(listMachineryAgentIds()).toEqual(manifest.owns?.agents);
     expect(listSpecialistSkillPrefixes()).toEqual(manifest.owns?.skill_id_prefixes);
   });
 
-  it("specialists helpers recognize owned agents and skill prefixes only", () => {
-    expect(isSpecialistAgentId("qa")).toBe(true);
-    expect(isSpecialistAgentId("guild-quality")).toBe(false);
+  it("machinery agents = agents/*.md; template ids = templates/specialists/*.md (both filesystem-pinned)", () => {
+    const agentFiles = fs
+      .readdirSync(path.join(pluginRoot, "agents"))
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => f.replace(/\.md$/, ""))
+      .sort();
+    expect(agentFiles).toEqual(listMachineryAgentIds());
+    const templateFiles = fs
+      .readdirSync(path.join(pluginRoot, "templates", "specialists"))
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => f.replace(/\.md$/, ""))
+      .sort();
+    expect(templateFiles).toEqual(listSpecialistTemplateIds());
+    // Every template self-declares its contract stamp (read via the shared
+    // js-yaml-backed frontmatter parser, OD-3).
+    for (const t of templateFiles) {
+      const raw = fs.readFileSync(
+        path.join(pluginRoot, "templates", "specialists", `${t}.md`),
+        "utf8"
+      );
+      const fm = parseFrontmatter(raw);
+      expect(fm?.["template_version"]).toBe("guild.specialist_template.v1");
+    }
+  });
+
+  it("specialists helpers recognize machinery agents, template ids, and skill prefixes only", () => {
+    expect(isMachineryAgentId("advisor")).toBe(true);
+    expect(isMachineryAgentId("qa")).toBe(false);
+    expect(isSpecialistTemplateId("qa")).toBe(true);
+    expect(isSpecialistTemplateId("advisor")).toBe(false);
     expect(isSpecialistSkillId("qa-test-strategy")).toBe(true);
     expect(isSpecialistSkillId("guild-quality")).toBe(false);
   });

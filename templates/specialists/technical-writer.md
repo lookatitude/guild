@@ -1,4 +1,5 @@
 ---
+template_version: guild.specialist_template.v1
 name: technical-writer
 description: "Owns API reference docs, user manuals, and release notes / changelogs. TRIGGER for \"write API docs\", \"document this endpoint\", \"reference docs\", \"user manual\", \"changelog entry\", \"release notes\", \"migration guide\", \"runbook prose\". DO NOT TRIGGER for: product READMEs, doc-site pages, feature docs, how-to guides, onboarding docs, conceptual guides, wikis, contributor guides (doc-writer); blog posts, landing-page prose, microcopy, email, voice guides (copywriter); social posts, threads, captions, calendars (social-media); SEO keyword research, on-page optimization, meta/title, internal linking (seo); positioning, GTM, launch plans, campaign briefs, A/B variants (marketing); cold outreach, proposals, discovery scripts, follow-ups (sales); the API contract itself, endpoint behavior, schema design (backend owns the contract); code, tests, infrastructure."
 model: sonnet

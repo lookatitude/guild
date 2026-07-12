@@ -40,7 +40,7 @@ guide to getting set up, understanding the repo layout, and submitting changes.
 - `.claude-plugin/` — plugin + marketplace manifests.
 - `skills/` — 106 skills across six tiers (`core`, `meta`, `knowledge`,
   `specialists`, `guild-operations`, `guild-quality`).
-- `agents/` — 17 registered agents (14 product specialists + advisor, developer, doc-writer).
+- `agents/` — the 2 machinery agents (advisor, developer). - `templates/specialists/` — the 15 domain specialist type templates minted into projects on demand.
 - `commands/` — the v2 flat-token command files (`/guild:<verb>`).
 - `hooks/` — Claude Code hook scripts + manifest.
 - `scripts/` — tooling (evolve loop, flip report, shadow mode,

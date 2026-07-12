@@ -2,14 +2,17 @@
 /**
  * scripts/check-roster-consistency.ts
  *
- * Read-only validator for docs/specialist-roster.md ↔ agents/*.md frontmatter.
- * Compares the "Complete default-tier map" table in specialist-roster.md
- * against the actual `model:` frontmatter in every agents/*.md file.
+ * Read-only validator for docs/specialist-roster.md ↔ the shipped definition
+ * files. Compares the "Complete default-tier map" table in specialist-roster.md
+ * against the actual `model:` frontmatter in every machinery agent
+ * (agents/*.md) AND every specialist type template
+ * (templates/specialists/*.md) — the two surfaces that together carry the
+ * roster after the machinery-vs-template-library ADR.
  *
  * Reports three classes of drift:
- *   MODEL_MISMATCH  — roster `model:` differs from agent frontmatter `model:`
- *   MISSING_FILE    — roster row references an agent that has no agents/<name>.md
- *   NOT_IN_ROSTER   — agents/<name>.md exists but has no row in the tier map
+ *   MODEL_MISMATCH  — roster `model:` differs from definition frontmatter `model:`
+ *   MISSING_FILE    — roster row references a role with no definition file
+ *   NOT_IN_ROSTER   — a definition file exists but has no row in the tier map
  *
  * Usage:
  *   npx tsx scripts/check-roster-consistency.ts [--cwd <plugin-root>]
@@ -247,6 +250,7 @@ export function compareRosterToAgents(
 export function loadAndCompare(pluginRoot: string): ConsistencyResult {
   const rosterPath = path.join(pluginRoot, "docs", "specialist-roster.md");
   const agentsDir = path.join(pluginRoot, "agents");
+  const templatesDir = path.join(pluginRoot, "templates", "specialists");
 
   if (!fs.existsSync(rosterPath)) {
     process.stderr.write(`ERROR: roster file not found: ${rosterPath}\n`);
@@ -254,6 +258,10 @@ export function loadAndCompare(pluginRoot: string): ConsistencyResult {
   }
   if (!fs.existsSync(agentsDir)) {
     process.stderr.write(`ERROR: agents directory not found: ${agentsDir}\n`);
+    process.exit(1);
+  }
+  if (!fs.existsSync(templatesDir)) {
+    process.stderr.write(`ERROR: templates/specialists directory not found: ${templatesDir}\n`);
     process.exit(1);
   }
 
@@ -269,18 +277,21 @@ export function loadAndCompare(pluginRoot: string): ConsistencyResult {
     process.exit(1);
   }
 
-  // Parse agent frontmatters
-  const agentFiles = fs
-    .readdirSync(agentsDir)
-    .filter(f => f.endsWith(".md"))
-    .sort();
-
+  // Parse definition frontmatters from BOTH shipped surfaces: machinery
+  // agents (agents/*.md) and specialist type templates
+  // (templates/specialists/*.md).
   const agentEntries = new Map<string, AgentFrontmatter>();
-  for (const file of agentFiles) {
-    const content = fs.readFileSync(path.join(agentsDir, file), "utf8");
-    const fm = parseAgentFrontmatter(content, file);
-    if (fm) {
-      agentEntries.set(fm.name, fm);
+  for (const dir of [agentsDir, templatesDir]) {
+    const files = fs
+      .readdirSync(dir)
+      .filter(f => f.endsWith(".md"))
+      .sort();
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(dir, file), "utf8");
+      const fm = parseAgentFrontmatter(content, file);
+      if (fm) {
+        agentEntries.set(fm.name, fm);
+      }
     }
   }
 

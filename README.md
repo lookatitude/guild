@@ -15,11 +15,13 @@ gate.
 
 ## What v2 ships
 
-- **17 registered agents** — 14 product specialists across three groups
-  (engineering: architect, researcher, backend, frontend, devops, qa, mobile,
-  security; content & communication: copywriter, doc-writer, technical-writer,
-  social-media, seo; commercial: marketing, sales) plus three execution/tiered
-  roles (advisor, developer, doc-writer). One `agents/*.md` per agent.
+- **17 specialist roles on two surfaces** — 15 domain type templates across
+  three groups (engineering: architect, researcher, backend, frontend, devops,
+  qa, mobile, security; content & communication: copywriter, doc-writer,
+  technical-writer, social-media, seo; commercial: marketing, sales), one
+  `templates/specialists/*.md` per role, minted on demand into your project's
+  `.guild/agents/` by team composition — plus the 2 machinery agents the plugin
+  registers directly (advisor, developer; one `agents/*.md` each).
 - **109 skills** across six tiers — 1 core (`guild-principles`), meta
   (the workflow spine + decisions + reflect + evolve + create-specialist +
   rollback + audit + diagnose + v1.4 loop/review helpers), 3 knowledge (wiki ingest / query / lint),
@@ -304,7 +306,7 @@ The canonical docs live at the **Guild docs site** (`https://guildstack.dev`).
 
 - `https://guildstack.dev/docs/getting-started` — install, first run, and basic configuration.
 - `https://guildstack.dev/docs/architecture` — shipped plugin architecture, directory layout, 7-step lifecycle, hook inventory, backend options.
-- `https://guildstack.dev/docs/specialist-roster` — the 17 registered agents (14 product specialists + advisor, developer, doc-writer), their triggers, DO NOT TRIGGER boundaries, and owned skills.
+- `https://guildstack.dev/docs/specialist-roster` — the 17 specialist roles (15 domain type templates + the machinery agents advisor and developer), their triggers, DO NOT TRIGGER boundaries, and owned skills.
 - `https://guildstack.dev/docs/context-assembly` — three-layer context contract, role mapping, ambient-context caveat.
 - `https://guildstack.dev/docs/wiki-pattern` — categorized project memory, raw vs synthesized, decision capture, scale transition.
 - `https://guildstack.dev/docs/self-evolution` — the two triggers, the 10-step pipeline, promotion gate, versioning + rollback.
@@ -314,9 +316,10 @@ The canonical docs live at the **Guild docs site** (`https://guildstack.dev`).
 
 ![Guild plugin architecture](docs/diagrams/01-architecture.svg)
 
-Four layers: the orchestrator session, the installed plugin (skills, agents,
-commands, hooks, scripts, MCPs), 17 registered agents in worktree isolation,
-and project-local state under `.guild/`.
+Four layers: the orchestrator session, the installed plugin (skills, machinery
+agents, specialist templates, commands, hooks, scripts, MCPs), the composed
+specialist team in worktree isolation, and project-local state under `.guild/`
+(including the minted specialist instances).
 
 ## Lifecycle
 

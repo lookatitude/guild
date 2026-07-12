@@ -1,4 +1,5 @@
 ---
+template_version: guild.specialist_template.v1
 name: devops
 description: "Owns CI/CD pipelines, infrastructure-as-code, observability stacks, release/rollout, and incident runbooks. Produces pipeline configs, Terraform/Pulumi/CDK, dashboards, alerts, SLOs, runbooks — not application code. TRIGGER for \"deploy\", \"pipeline\", \"CI\", \"CD\", \"release\", \"rollout\", \"canary\", \"blue/green\", \"infra\", \"Terraform\", \"Kubernetes manifest\", \"observability\", \"dashboard\", \"alert\", \"SLO\", \"SLI\", \"error budget\", \"runbook\", \"on-call\", \"incident\". DO NOT TRIGGER for: systems architecture (architect); application code, API, migrations, integrations (backend); test strategy or authoring (qa); threat models, CVE scans, auth-flow review (security — devops wires scanners, security defines rules); mobile build configs (mobile owns EAS/Fastlane); research briefs or vendor benchmarks (researcher — devops picks the pipeline, researcher surveys options); skill authoring, hook engineering under .claude/agents/."
 model: sonnet

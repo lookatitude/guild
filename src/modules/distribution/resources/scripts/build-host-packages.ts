@@ -396,6 +396,18 @@ function copyClaudeHooks(root: string, dest: string, inv: GuildInventoryV1, reso
   }
 }
 
+/**
+ * Ship the read-only template feedstock (machinery-vs-template-library ADR):
+ * templates/specialists/*.md (the 15 domain specialist TYPE templates
+ * roster-resolve `mint` instantiates into a project's .guild/agents/) plus the
+ * agent/skill skeletons and product templates create-specialist/create-skill/
+ * product-template cite. Every installable host package carries the full
+ * templates/ tree — minting is host-neutral.
+ */
+function copyTemplates(root: string, dest: string): void {
+  copyDirExcludingNodeModules(path.join(root, "templates"), path.join(dest, "templates"));
+}
+
 export function writeClaudeTree(
   root: string,
   inv: GuildInventoryV1,
@@ -436,6 +448,7 @@ export function writeClaudeTree(
   copyScriptRuntime(root, dest);
   // MCP server runtime referenced by .mcp.json (so the package is self-contained).
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  copyTemplates(root, dest);
   writeLauncher(dest, "claude");
   return dest;
 }
@@ -521,6 +534,7 @@ export function writeCodexTree(
   copyModuleRuntime(root, dest);
   copyScriptRuntime(root, dest);
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  copyTemplates(root, dest);
   writeCodexHookBridge(root, dest);
   writeLauncher(dest, "codex");
   return dest;
@@ -573,6 +587,7 @@ function exposeGuildSkillTree(root: string, inv: GuildInventoryV1, dest: string,
   copyModuleRuntime(root, dest);
   copyScriptRuntime(root, dest);
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  copyTemplates(root, dest);
 }
 
 /** Emit the universal `.agents` package: AGENTS.md + skill tree + CLI + launcher. */

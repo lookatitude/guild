@@ -1,7 +1,8 @@
 # Guild — repo orientation
 
-Guild is a cross-host plugin that ships 17 registered agents (14 product specialists
-plus advisor, developer, and doc-writer) and 109 skills across a
+Guild is a cross-host plugin that ships 2 machinery agents (advisor, developer),
+15 domain specialist type templates (minted into a project's `.guild/agents/` on
+demand by team composition), and 109 skills across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
 capture, and a self-evolution loop with shadow-mode gating.
 
@@ -18,8 +19,12 @@ For full architecture and design documentation see **https://guildstack.dev/docs
 - `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/` — skill taxonomy.
   The former `fallback/` tier no longer exists — its skills were promoted into `meta/`
   (`tdd`, `systematic-debug`, `worktrees`, `finish-branch`) or folded into `guild:review`.
-- `agents/*.md` — 17 registered agents: 14 product specialists plus `advisor`, `developer`,
-  and `doc-writer` (promoted to first-class in v2.0). Populated and authored.
+- `agents/*.md` — the 2 machinery agents (`advisor`, `developer`), the only
+  host-registered agents the plugin ships. Populated and authored.
+- `templates/specialists/*.md` — the 15 domain specialist type templates
+  (`guild.specialist_template.v1`; architect … sales, incl. `doc-writer`),
+  read-only feedstock minted into a project's `.guild/agents/` by
+  `roster-resolve.ts mint` during team composition.
 - `commands/*.md` — the v2 flat-token command surface (`/guild:<verb>`; the `:` plugin
   namespace stays — Claude Code requires it — v2 only drops the redundant `guild-` prefix;
   sub-verbs are positional arguments, never separate files or namespaces).
@@ -67,7 +72,7 @@ themselves. They live in `.claude/agents/`.
 | `hooks/` (hooks.json + hook scripts) | `hook-engineer` |
 | `commands/` | `command-builder` |
 | `skills/**` (bodies + per-skill evals.json) | `skill-author` |
-| `agents/*.md` (the 17 registered agents) | `specialist-agent-writer` |
+| `agents/*.md` (machinery agents) + `templates/specialists/*.md` (type templates) | `specialist-agent-writer` |
 | `tests/` (cross-cutting evals/fixtures) | `eval-engineer` |
 | `docs/`, repo-root/plugin `CLAUDE.md` | `docs-writer` |
 | `.claude-plugin/*`, manifests, ADRs, phase-gate integration | `plugin-architect` |

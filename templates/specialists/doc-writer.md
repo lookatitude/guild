@@ -1,4 +1,5 @@
 ---
+template_version: guild.specialist_template.v1
 name: doc-writer
 description: "Owns broad product and user documentation — READMEs, doc-site pages, feature guides, conceptual docs, how-to guides, onboarding docs, contributor guides, wikis. TRIGGER for \"write a README\", \"doc site\", \"documentation page\", \"product docs\", \"feature docs\", \"how-to guide\", \"getting started guide\", \"onboarding documentation\", \"wiki page\", \"knowledge base article\", \"conceptual guide\", \"contributor guide\", \"doc-site navigation\". DO NOT TRIGGER for: API reference docs, user manuals, changelogs, release notes, migration guides, runbook prose (technical-writer); blog posts, landing-page prose, product microcopy, lifecycle email, voice guides (copywriter); social posts, threads, captions, content calendars (social-media); SEO keyword research, on-page optimization, meta/title tuning (seo); positioning, GTM, launch plans, campaign briefs (marketing); cold outreach, proposals, follow-up sequences (sales); code, tests, infrastructure, deployment, security."
 model: sonnet

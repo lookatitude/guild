@@ -1,9 +1,24 @@
-export const SPECIALIST_AGENT_IDS = [
-  "advisor",
+/**
+ * The specialists catalog (machinery-vs-template-library ADR).
+ *
+ * The plugin ships exactly TWO registered, dispatchable agents — the machinery
+ * set (`agents/*.md`): `advisor` (powerful escalation supervisor) and
+ * `developer` (generic mid-tier lane worker). Every DOMAIN specialist type is
+ * a TEMPLATE (`templates/specialists/*.md`, `guild.specialist_template.v1`):
+ * read-only feedstock that guild:team-compose mints into the consuming repo's
+ * `.guild/agents/` (roster-resolve.ts `mint`) before it can join a team.
+ *
+ * These tuples are a hand-maintained mirror of the manifest `owns` block and
+ * the two filesystem trees, kept honest by capability-catalogs.test.ts; the
+ * canonical enumeration consumers use at runtime is scripts/lib/roster.ts.
+ */
+
+export const MACHINERY_AGENT_IDS = ["advisor", "developer"] as const;
+
+export const SPECIALIST_TEMPLATE_IDS = [
   "architect",
   "backend",
   "copywriter",
-  "developer",
   "devops",
   "doc-writer",
   "frontend",
@@ -36,19 +51,28 @@ export const SPECIALIST_SKILL_PREFIXES = [
   "technical-writer-",
 ] as const;
 
-export type SpecialistAgentId = (typeof SPECIALIST_AGENT_IDS)[number];
+export type MachineryAgentId = (typeof MACHINERY_AGENT_IDS)[number];
+export type SpecialistTemplateId = (typeof SPECIALIST_TEMPLATE_IDS)[number];
 export type SpecialistSkillPrefix = (typeof SPECIALIST_SKILL_PREFIXES)[number];
 
-export function listSpecialistAgentIds(): SpecialistAgentId[] {
-  return [...SPECIALIST_AGENT_IDS];
+export function listMachineryAgentIds(): MachineryAgentId[] {
+  return [...MACHINERY_AGENT_IDS];
+}
+
+export function listSpecialistTemplateIds(): SpecialistTemplateId[] {
+  return [...SPECIALIST_TEMPLATE_IDS];
 }
 
 export function listSpecialistSkillPrefixes(): SpecialistSkillPrefix[] {
   return [...SPECIALIST_SKILL_PREFIXES];
 }
 
-export function isSpecialistAgentId(value: string): value is SpecialistAgentId {
-  return SPECIALIST_AGENT_IDS.includes(value as SpecialistAgentId);
+export function isMachineryAgentId(value: string): value is MachineryAgentId {
+  return MACHINERY_AGENT_IDS.includes(value as MachineryAgentId);
+}
+
+export function isSpecialistTemplateId(value: string): value is SpecialistTemplateId {
+  return SPECIALIST_TEMPLATE_IDS.includes(value as SpecialistTemplateId);
 }
 
 export function isSpecialistSkillId(value: string): boolean {

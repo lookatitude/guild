@@ -16,8 +16,8 @@ Two hard constraints:
 
 - **`agent-team` requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.** When the snapshot resolves the backend to `agent-team` (the ladder resolved to `team`) and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is not set, **refuse to dispatch and surface the blocker** rather than silently falling back to subagents — falling back would change execution semantics out from under the plan. Invoke `scripts/agent-team-launcher.ts` (below) — it owns the ladder resolution, the env gate, and the tmux strategy. (The tmux **enablement** prompt is not raised here at dispatch — `runStartPreflight` owns it at intake, and it fires **per-run** while tmux is available && effective `agent_mode != "team"` (`needsTmuxPrompt`); a **yes** persists `agent_mode: team` so future runs stop prompting, a **no** persists nothing and may prompt again next run. It is **not** a one-time "durable approval".)
 - **Always dispatch the lane AS its named specialist role**, resolved against `team.yaml`'s `definition:` + `definition_source:` fields (written by team-compose from the roster-resolve JSON). Two cases:
-  - **Shipped specialist** (`definition_source: shipped` — `agents/<name>.md`, or `.claude/agents/<name>.md` for self-build): the host registered the definition at session start — dispatch by name (`subagent_type: <name>` for subagents; the teammate spawned from that definition for teams). Dispatching a shipped specialist as bare `general-purpose` discards its persona, scoped skills, tool permissions, and TRIGGER/DO-NOT-TRIGGER boundaries and is a defect.
-  - **Project-local specialist** (`definition_source: project` — `.guild/agents/<name>.md`): the host has NO registered agent under this name — `subagent_type: <name>` cannot resolve, in any session. The backend dispatches it as the host-generic subagent type **with the definition carried in the lane prompt** (`composeInProcessDispatch` sets `definitionPath` + env `GUILD_AGENT_DEFINITION`; `buildPrompt` embeds the definition-adoption + project-skill-loading instruction) at the specialist's own tier. This is the correct first-class path — do NOT "fix" it back to a bare name, and do NOT strip the definition instruction (a generic dispatch **without** the definition is the defect).
+  - **Shipped agent** (`definition_source: shipped` — `agents/<name>.md`, or `.claude/agents/<name>.md` for self-build): the host registered the definition at session start — dispatch by name (`subagent_type: <name>` for subagents; the teammate spawned from that definition for teams). Dispatching a shipped agent as bare `general-purpose` discards its persona, scoped skills, tool permissions, and TRIGGER/DO-NOT-TRIGGER boundaries and is a defect. *(After the machinery-vs-template-library ADR the shipped set is the machinery pair `advisor`/`developer` — every DOMAIN specialist lane arrives as a project instance below.)*
+  - **Project specialist** (`definition_source: project` — `.guild/agents/<name>.md`, minted from a shipped template by team-compose or created via guild:create-specialist): the host has NO registered agent under this name — `subagent_type: <name>` cannot resolve, in any session. The backend dispatches it as the host-generic subagent type **with the definition carried in the lane prompt** (`composeInProcessDispatch` sets `definitionPath` + env `GUILD_AGENT_DEFINITION`; `buildPrompt` embeds the definition-adoption + project-skill-loading instruction) at the specialist's own tier. This is the correct first-class path — do NOT "fix" it back to a bare name, and do NOT strip the definition instruction (a generic dispatch **without** the definition is the defect).
 
 ### In-process dispatchPlan consumption
 
@@ -255,7 +255,7 @@ The block must appear in every brief without modification. If you find yourself 
 
 ## Self-build dev-team routing
 
-When the target repo IS the Guild plugin itself (self-build), `team.yaml` is composed from the **dev-team agents under `.claude/agents/`** — `plugin-architect, skill-author, specialist-agent-writer, command-builder, hook-engineer, tooling-engineer, docs-writer, eval-engineer` — each owning a plugin path-slice (see `CLAUDE.md §"Dev team"`). The 14 `guild:` product specialists build *user* products; they are NOT the self-build team. Route by changed path:
+When the target repo IS the Guild plugin itself (self-build), `team.yaml` is composed from the **dev-team agents under `.claude/agents/`** — `plugin-architect, skill-author, specialist-agent-writer, command-builder, hook-engineer, tooling-engineer, docs-writer, eval-engineer` — each owning a plugin path-slice (see `CLAUDE.md §"Dev team"`). The 15 domain specialist roles (minted from templates/specialists/) build *user* products; they are NOT the self-build team. Route by changed path:
 
 | Changed path | Dev-team `subagent_type` |
 |---|---|
@@ -263,7 +263,7 @@ When the target repo IS the Guild plugin itself (self-build), `team.yaml` is com
 | `hooks/` | `hook-engineer` |
 | `commands/` | `command-builder` |
 | `skills/**` | `skill-author` |
-| `agents/*.md` (the 14 specialists) | `specialist-agent-writer` |
+| `agents/*.md` (machinery agents) + `templates/specialists/*.md` (type templates) | `specialist-agent-writer` |
 | `tests/` | `eval-engineer` |
 | `docs/`, `CLAUDE.md` | `docs-writer` |
 | manifests / ADRs / phase-gate integration | `plugin-architect` |

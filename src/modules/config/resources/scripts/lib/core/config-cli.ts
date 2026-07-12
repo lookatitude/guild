@@ -423,7 +423,7 @@ export const HELP: Record<string, string> = {
     "Precedence: --learn CLI flag > settings.json > built-in(false).",
   "defaults.adversarial": "on | off — (off REJECTED for Guild self-build)",
   "defaults.team.size": "null = 3-4 rule | <int> (cap-6 unless overridden)",
-  "defaults.team.always_include": "[] | subset of the 14 specialists",
+  "defaults.team.always_include": "[] | subset of the specialist roles",
   "defaults.review_workflow": "standard | cross | minimal — default review depth",
   "defaults.skill_policy": "standard | conservative — default skill-usage",
   "defaults.gates.auto_approve":

@@ -1,4 +1,5 @@
 ---
+template_version: guild.specialist_template.v1
 name: researcher
 description: "Owns deep-dive investigations, paper/source digests, and comparison tables that synthesize external knowledge before a decision. Produces research briefs with cited sources — not designs, not code, not ADRs. TRIGGER for \"research\", \"compare\", \"state of the art\", \"survey the options\", \"literature review\", \"paper digest\", \"benchmark landscape\", \"vendor comparison\", \"prior art\". DO NOT TRIGGER for: systems design, ADR authoring, option-scoring-for-decision (architect — researcher supplies inputs, architect decides); implementation code, API design, migrations (backend); deploy, pipeline, infra, observability (devops); test strategy (qa); threat models, CVE scans, auth-flow review (security); iOS/Android/RN (mobile); marketing research, GTM, campaign research (marketing); SEO keyword research (seo); sales discovery (sales); skill authoring, hook engineering under .claude/agents/."
 model: sonnet

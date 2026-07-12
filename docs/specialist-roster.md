@@ -1,9 +1,20 @@
 # Specialist Roster
 
-17 registered agents across 3 groups plus tiered-worker roles (doc-writer promoted to
-first-class in v2.0; advisor and developer added as tiered-worker roles). See
-`https://guildstack.dev/docs/specialist-roster` for the full roster with trigger examples
-and DO NOT TRIGGER boundaries.
+17 specialist roles across 3 groups plus tiered-worker roles, shipped on two
+surfaces (machinery-vs-template-library ADR):
+
+- **2 machinery agents** (`agents/advisor.md`, `agents/developer.md`) — the only
+  registered, host-dispatchable agents the plugin ships. They serve the
+  orchestration machinery itself (escalation net, generic lane worker).
+- **15 specialist type templates** (`templates/specialists/<role>.md`,
+  `guild.specialist_template.v1`) — the domain roles (architect, backend, …,
+  sales, doc-writer). A template is read-only feedstock: `guild:team-compose`
+  mints the matched role into the consuming repo's `.guild/agents/<role>.md`
+  (`roster-resolve.ts mint <role>`) and the minted PROJECT instance is what
+  joins teams, via the definition-path dispatch rail.
+
+See `https://guildstack.dev/docs/specialist-roster` for the full roster with trigger
+examples and DO NOT TRIGGER boundaries.
 
 Every specialist inherits `guild-principles` (T1) as a mandatory first load: the
 Karpathy 4 plus Guild's evidence rule. Per-specialist T5 skills live under
@@ -18,7 +29,7 @@ the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
 
 ## Engineering group (8 specialists · 30 authored T5 skills)
 
-### architect — `agents/architect.md`
+### architect — `templates/specialists/architect.md`
 
 - **Triggers:** "design this system", "architecture review", "pick between X and Y",
   "tradeoff analysis", "write an ADR". Implied on any multi-component build.
@@ -27,7 +38,7 @@ the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
 - **Skills:** `architect-systems-design`, `architect-tradeoff-matrix`,
   `architect-adr-writer`.
 
-### researcher — `agents/researcher.md`
+### researcher — `templates/specialists/researcher.md`
 
 - **Triggers:** "research", "compare", "state of the art", "paper digest",
   "vendor comparison".
@@ -36,7 +47,7 @@ the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
 - **Skills:** `researcher-deep-dive`, `researcher-paper-digest`,
   `researcher-comparison-table`.
 
-### backend — `agents/backend.md`
+### backend — `templates/specialists/backend.md`
 
 - **Triggers:** API, endpoint, schema, DB, queue, worker, migration, integration.
 - **DO NOT trigger for:** system-design decisions (architect), infra/pipeline
@@ -44,7 +55,7 @@ the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
 - **Skills:** `backend-api-contract`, `backend-data-layer`,
   `backend-migration-writer`, `backend-service-integration`.
 
-### devops — `agents/devops.md`
+### devops — `templates/specialists/devops.md`
 
 - **Triggers:** deploy, pipeline, infra, SLO, release, IaC, observability,
   incident.
@@ -53,7 +64,7 @@ the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
 - **Skills:** `devops-ci-cd-pipeline`, `devops-infrastructure-as-code`,
   `devops-observability-setup`, `devops-incident-runbook`.
 
-### qa — `agents/qa.md`
+### qa — `templates/specialists/qa.md`
 
 - **Triggers:** tests, coverage, regression, flaky, property-based, snapshot.
   Implied whenever backend is present.
@@ -62,14 +73,14 @@ the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
 - **Skills:** `qa-test-strategy`, `qa-property-based-tests`, `qa-snapshot-tests`,
   `qa-flaky-test-hunter`.
 
-### mobile — `agents/mobile.md`
+### mobile — `templates/specialists/mobile.md`
 
 - **Triggers:** iOS, Android, RN, Expo, TestFlight, Play Store, mobile perf.
 - **DO NOT trigger for:** backend APIs (backend), release infra (devops).
 - **Skills:** `mobile-ios-swift`, `mobile-android-kotlin`, `mobile-react-native`,
   `mobile-performance-tuning`.
 
-### security — `agents/security.md`
+### security — `templates/specialists/security.md`
 
 - **Triggers:** threat, audit, OWASP, vuln, CVE, auth flow, secrets scan.
   Implied on anything touching auth, secrets, or external integrations.
@@ -78,7 +89,7 @@ the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
 - **Skills:** `security-threat-modeling`, `security-dependency-audit`,
   `security-auth-flow-review`, `security-secrets-scan`.
 
-### frontend — `agents/frontend.md`
+### frontend — `templates/specialists/frontend.md`
 
 - **Triggers:** React, Vue, Svelte, Solid, Vite config, Tailwind, a11y/accessibility,
   Lighthouse, Core Web Vitals, component authoring, state management, client-side
@@ -95,7 +106,7 @@ plus diff trace.
 
 ## Content & communication group (5 specialists · 20 skills)
 
-### copywriter — `agents/copywriter.md`
+### copywriter — `templates/specialists/copywriter.md`
 
 - **Triggers:** blog, email, microcopy, landing copy, voice-and-tone work.
 - **DO NOT trigger for:** technical docs (technical-writer), platform-native
@@ -104,7 +115,7 @@ plus diff trace.
 - **Skills:** `copywriter-long-form`, `copywriter-product-microcopy`,
   `copywriter-email-sequences`, `copywriter-voice-guide`.
 
-### doc-writer — `agents/doc-writer.md`
+### doc-writer — `templates/specialists/doc-writer.md`
 
 - **Triggers:** "write a README", doc site, documentation page, product docs,
   feature docs, how-to guide, getting-started guide (narrative), onboarding
@@ -116,7 +127,7 @@ plus diff trace.
   `doc-writer-doc-site`, `doc-writer-onboarding-doc`.
 - **Default tier:** `cheap`→`mid` (sonnet).
 
-### technical-writer — `agents/technical-writer.md`
+### technical-writer — `templates/specialists/technical-writer.md`
 
 - **Triggers:** API docs, user manual, changelog, release notes, migration guide,
   runbook prose.
@@ -126,7 +137,7 @@ plus diff trace.
 - **Skills:** `technical-writer-api-docs`, `technical-writer-user-manual`,
   `technical-writer-tutorial`, `technical-writer-release-notes`.
 
-### social-media — `agents/social-media.md`
+### social-media — `templates/specialists/social-media.md`
 
 - **Triggers:** tweet, LinkedIn post, thread, carousel, caption, content calendar,
   engagement template.
@@ -135,7 +146,7 @@ plus diff trace.
 - **Skills:** `social-media-platform-post`, `social-media-thread`,
   `social-media-engagement-templates`, `social-media-content-calendar`.
 
-### seo — `agents/seo.md`
+### seo — `templates/specialists/seo.md`
 
 - **Triggers:** keywords, meta/title, on-page optimization, crawl, structured
   data, internal linking, technical SEO audit.
@@ -151,7 +162,7 @@ outcome, data citation).
 
 ## Commercial group (2 specialists · 8 skills)
 
-### marketing — `agents/marketing.md`
+### marketing — `templates/specialists/marketing.md`
 
 - **Triggers:** positioning, GTM, launch plan, campaign brief, messaging,
   A/B copy variants.
@@ -161,7 +172,7 @@ outcome, data citation).
 - **Skills:** `marketing-positioning`, `marketing-launch-plan`,
   `marketing-campaign-brief`, `marketing-ab-copy-variants`.
 
-### sales — `agents/sales.md`
+### sales — `templates/specialists/sales.md`
 
 - **Triggers:** cold email, outreach sequence, discovery framework, proposal,
   follow-up, objection handling.
@@ -175,9 +186,9 @@ evidence = data citation (search volume, A/B result, benchmark).
 
 ## Tiered-worker roster (cost-aware-tiering-and-lean-context ADR §7)
 
-A thin **tiered-worker** layer **augments** the 14 product specialists and the
-dev-team agents (it does not replace either). Each role carries a **default
-tier**. Per the ADR's reconciliation rule, where an equivalent already ships, the
+A thin **tiered-worker** layer — the 2 machinery agents — **augments** the 15
+domain type templates and the dev-team agents (it does not replace either).
+Each role carries a **default tier**. Per the ADR's reconciliation rule, where an equivalent already ships, the
 existing specialist is **retiered** rather than duplicated; only genuinely-new
 types get a new file. Open Item **O-1 is resolved: no standalone reviewer type
 ships** — review/critic work folds into the `advisor` escalation pass plus the
@@ -185,11 +196,11 @@ existing `guild:review` / `qa` lanes.
 
 | Role | Default tier | `model:` | Placement | One-line scope |
 |---|---|---|---|---|
-| `researcher` (per-topic) | `cheap`→`mid` | `sonnet` | **retiered** `agents/researcher.md` | Gather + digest sources for one topic; read/summarize cheap, synthesize mid. Pre-decision only — does not decide. |
-| `architect` | `powerful` | `opus` | **annotated** `agents/architect.md` (already powerful) | Shape systems, compare options, author ADRs (high-judgment, low frequency). |
+| `researcher` (per-topic) | `cheap`→`mid` | `sonnet` | **retiered** `templates/specialists/researcher.md` | Gather + digest sources for one topic; read/summarize cheap, synthesize mid. Pre-decision only — does not decide. |
+| `architect` | `powerful` | `opus` | **annotated** `templates/specialists/architect.md` (already powerful) | Shape systems, compare options, author ADRs (high-judgment, low frequency). |
 | `advisor` | `powerful` | `opus` | **NEW** `agents/advisor.md` | Answer one escalated sub-question seeing draft + question only (§3); never raw context. |
 | `developer` | `mid` | `sonnet` | **NEW** `agents/developer.md` | Implement a domain-*less* task lane (draft/reason/build); escalates to advisor when above tier. |
-| `doc-writer` | `cheap`→`mid` | `sonnet` | **PROMOTED** `agents/doc-writer.md` (first-class v2.0) | READMEs, doc-site pages, feature guides, how-tos, onboarding docs, wikis; cheap for mechanical edits, mid for synthesis. |
+| `doc-writer` | `cheap`→`mid` | `sonnet` | **PROMOTED** `templates/specialists/doc-writer.md` (first-class v2.0) | READMEs, doc-site pages, feature guides, how-tos, onboarding docs, wikis; cheap for mechanical edits, mid for synthesis. |
 
 Notes:
 
@@ -204,23 +215,26 @@ Notes:
   *escalation* on a draft. The architect boundary block now defers escalated
   one-off critique to `advisor`.
 - **`doc-writer` promoted to first-class specialist (v2.0).** A standalone
-  `agents/doc-writer.md` ships — it is cleanly separated from `technical-writer`
+  `templates/specialists/doc-writer.md` ships — it is cleanly separated from `technical-writer`
   (which keeps API reference / manuals / changelogs / release notes) by the boundary
   in `doc-writer.md §Scope boundaries`. The §7 tiered-worker row is updated from
-  "reconciled onto technical-writer" to "PROMOTED `agents/doc-writer.md`".
-- **All 17 registered agents are now tiered** — every agent file carries an
+  "reconciled onto technical-writer" to "PROMOTED `templates/specialists/doc-writer.md`".
+- **All 17 roles are tiered** — every definition file (machinery agent or
+  specialist template) carries an
   explicit `model:` plus a `**Default tier:**` note, not just the §7 roster rows.
   `architect` and `security` are `powerful` (`opus`); every other engineering /
   content / commercial specialist defaults to `mid` (`sonnet`), with `researcher`
   and `technical-writer` running a `cheap` sub-pass for pure read/summarize and
   mechanical-edit work. The complete map is below.
 
-### Complete default-tier map (all 17 registered agents)
+### Complete default-tier map (all 17 roles)
 
-Every role the orchestrator can dispatch, with its default tier and frontmatter
-`model:`. The auto-scorer (ADR §2) may drop a routine single-item lane below the
-default to `cheap`, or escalate one sub-question to the `powerful` `advisor`
-(ADR §3) — neither changes the agent's printed default.
+Every role, with its default tier and frontmatter `model:` — machinery agents
+read from `agents/<role>.md`, domain roles from
+`templates/specialists/<role>.md` (a minted project instance inherits the
+template's values verbatim). The auto-scorer (ADR §2) may drop a routine
+single-item lane below the default to `cheap`, or escalate one sub-question to
+the `powerful` `advisor` (ADR §3) — neither changes the role's printed default.
 
 | Role | Group | Default tier | `model:` |
 |---|---|---|---|
@@ -242,10 +256,10 @@ default to `cheap`, or escalate one sub-question to the `powerful` `advisor`
 | `marketing` | commercial | `mid` | `sonnet` |
 | `sales` | commercial | `mid` | `sonnet` |
 
-14 product specialists + the 3 tiered-worker roles (`advisor`, `developer`, `doc-writer`)
-= 17. `powerful` is reserved for the three high-stakes / low-frequency roles
-(`architect`, `security`, `advisor`); no implementer or content/commercial role
-defaults to `powerful`.
+15 domain type templates (incl. `doc-writer`) + the 2 machinery agents
+(`advisor`, `developer`) = 17 roles. `powerful` is reserved for the three
+high-stakes / low-frequency roles (`architect`, `security`, `advisor`); no
+implementer or content/commercial role defaults to `powerful`.
 
 **No agent defaults to `cheap`.** The `cheap` tier (haiku) is still live and
 reachable two ways: (a) the auto-scorer drops a score-0 lane — a pure file read,
@@ -274,4 +288,6 @@ is `haiku`.
 
 - `https://guildstack.dev/docs/specialist-roster` — full roster rationale and trigger examples.
 - `https://guildstack.dev/docs/architecture` — where specialists sit in the layered system.
-- `agents/*.md` — the live trigger / DO-NOT-TRIGGER blocks and skill pulls.
+- `agents/*.md` — the machinery agents (advisor, developer).
+- `templates/specialists/*.md` — the domain type templates: live trigger /
+  DO-NOT-TRIGGER blocks and skill pulls, inherited verbatim by minted instances.
