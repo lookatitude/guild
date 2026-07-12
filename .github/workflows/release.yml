@@ -31,6 +31,7 @@ jobs:
   release:
     if: |
       github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.event.pull_request.head.ref, 'release/v')
     runs-on: ubuntu-latest
     steps:
@@ -57,18 +58,27 @@ jobs:
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Skip if tag already exists (idempotent re-runs)
+      - name: Check what already exists (idempotent re-runs)
         id: tag_check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.ver.outputs.tag }}
         run: |
           set -euo pipefail
+          # Tag and GitHub Release are checked SEPARATELY: a failed run may have
+          # pushed the tag but died before `gh release create` — the rerun must
+          # still create the missing Release (release-discipline rule 7).
           if gh api "repos/${{ github.repository }}/git/ref/tags/$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists — skipping create. (Idempotent re-run.)"
+            echo "Tag $TAG already exists — will not re-create it. (Idempotent re-run.)"
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — will not re-create it. (Idempotent re-run.)"
+            echo "release_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create + push annotated tag at the merge commit
@@ -85,7 +95,7 @@ jobs:
           git push origin "$TAG"
 
       - name: Create GitHub Release with PR body as notes
-        if: steps.tag_check.outputs.exists == 'false'
+        if: steps.tag_check.outputs.release_exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.ver.outputs.tag }}
@@ -99,8 +109,25 @@ jobs:
           # workflow easier to debug if the body has unusual chars.
           BODY_FILE="$(mktemp)"
           printf '%s' "$PR_BODY" > "$BODY_FILE"
+          # Belt-and-braces: if the PR body (usually seeded by
+          # scripts/release-changelog.ts --notes, which includes the link)
+          # lacks a Full Changelog compare line, append one.
+          if ! grep -q "Full Changelog" "$BODY_FILE"; then
+            PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || true)"
+            if [ -n "$PREV_TAG" ]; then
+              printf '\n\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' \
+                "${{ github.repository }}" "$PREV_TAG" "$TAG" >> "$BODY_FILE"
+            fi
+          fi
+          # A -suffixed tag (v2.1.0-rc1) is a PRERELEASE: published as such and
+          # never marked latest — stable-channel followers see only full releases.
+          if [[ "$TAG" == *-* ]]; then
+            RELEASE_FLAGS="--prerelease"
+          else
+            RELEASE_FLAGS="--latest"
+          fi
           gh release create "$TAG" \
             --title "$PR_TITLE" \
             --notes-file "$BODY_FILE" \
-            --latest
+            $RELEASE_FLAGS
           rm -f "$BODY_FILE"

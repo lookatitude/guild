@@ -1,0 +1,51 @@
+name: branch-policy
+
+# Enforces the next/main channel model (release-discipline rule 8):
+#
+#   main = STABLE channel. Marketplace installs track it (default branch), so
+#          every merge to main ships to stable users immediately. Therefore
+#          main only ever receives release PRs: head branch `release/vX.Y.Z`
+#          (a hotfix is just a patch-version release branch). release.yml then
+#          tags + publishes the GitHub Release on merge.
+#   next = BETA / integration channel. ALL feature/fix PRs target next
+#          (`gh pr create --base next`). Beta users follow it via
+#          `claude plugin marketplace add lookatitude/guild@next`.
+#
+# This gate is the deterministic backstop for that rule: a PR whose base is
+# main fails unless its head is a release/v* branch. Prose alone does not
+# enforce process — CI does.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  branch-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: PRs into main must come from a same-repo release/v* branch
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          # Same-repo only: a fork branch named release/vX.Y.Z must not satisfy
+          # the release shape (it would also arm release.yml on merge).
+          if [ "$HEAD_REPO" != "${{ github.repository }}" ]; then
+            echo "::error::PR into main from fork '$HEAD_REPO' — release PRs must come from a branch in ${{ github.repository }} (cut from next). Fork PRs target next." >&2
+            exit 1
+          fi
+          if [[ "$HEAD_REF" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "OK: release PR from '$HEAD_REF' — main may receive it."
+            exit 0
+          fi
+          echo "::error::PR into main from '$HEAD_REF' violates the channel model." >&2
+          echo "main is the STABLE release channel — it only receives release/vX.Y.Z branches (cut from next)." >&2
+          echo "Retarget this PR to the integration branch instead:" >&2
+          echo "  gh pr edit ${{ github.event.pull_request.number }} --base next" >&2
+          echo "Release flow: merge features into next → test the beta channel → cut release/vX.Y.Z from next (bump versions + notes) → PR release/vX.Y.Z into main → release.yml tags + publishes on merge → merge main back into next." >&2
+          exit 1

@@ -5,7 +5,11 @@
   "kind": "build",
   "implementation_mode": "workflow-backed",
   "description": "Owns neutral inventory, live-surface registries, host package rendering, parity contracts, and install-surface equivalence.",
-  "depends_on": ["host-runtime", "kernel", "state"],
+  "depends_on": [
+    "host-runtime",
+    "kernel",
+    "state"
+  ],
   "owns": {
     "scripts": [
       "build-host-packages",
@@ -15,11 +19,6 @@
       "check-roster-consistency",
       "codex-guild-prompt-bridge",
       "description-optimizer",
-      "registry-rollup",
-      "sync-live-resources",
-      "sync-module-resources",
-      "verify-host-packages",
-      "verify-installer",
       "lib/command-registry",
       "lib/equivalence-contract",
       "lib/installer-contract",
@@ -29,7 +28,13 @@
       "lib/per-host-packaging",
       "lib/result-contracts",
       "lib/skill-source-transform",
-      "lib/surface-manifest"
+      "lib/surface-manifest",
+      "registry-rollup",
+      "release-changelog",
+      "sync-live-resources",
+      "sync-module-resources",
+      "verify-host-packages",
+      "verify-installer"
     ]
   }
 }

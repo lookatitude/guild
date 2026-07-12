@@ -16,4 +16,5 @@
 
 ## standards
 
+- [release-discipline](standards/release-discipline.md) - 2026-07-12 - Branch-backed channels (stable=main, beta=next), next-first PR flow, release/vX.Y.Z cut from next, automated tag+Release, sync-back; the numbered ruleset cited by pre-push, release.yml, and branch-policy.yml.
 - [shell-hook-json-parsing](standards/shell-hook-json-parsing.md) - 2026-05-02 - Shell hooks must use temp-file + python3 for JSON parsing; bash variable interpolation breaks silently.
