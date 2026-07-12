@@ -64,7 +64,7 @@
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
       "resource_path": "resources/scripts/lib/core/config-cli.ts",
-      "sha256": "22e41d285bc20f235ed1b17ef50f6973ee5e83bba085849022c1a39e55cd8a37"
+      "sha256": "bab91055596cad8535eea0e70131a0f40b140d0f4bca4cbf039a67e22622f0b3"
     },
     {
       "category": "scripts",

@@ -59,7 +59,10 @@ describe("src/modules ownership manifests", () => {
     // empty fixture or a narrow sample.
     expect(inventory.commands.length).toBeGreaterThanOrEqual(20);
     expect(inventory.skills.length).toBeGreaterThanOrEqual(100);
-    expect(inventory.agents.length).toBe(17);
+    // Machinery agents only (machinery-vs-template-library ADR): advisor +
+    // developer. The 15 domain roles are templates/specialists/*.md, not
+    // inventoried agents.
+    expect(inventory.agents.length).toBe(2);
     expect(inventory.hooks.length).toBeGreaterThanOrEqual(10);
     expect(inventory.scripts.length).toBeGreaterThanOrEqual(200);
   });

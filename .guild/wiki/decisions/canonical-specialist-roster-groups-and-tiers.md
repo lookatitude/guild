@@ -19,6 +19,8 @@ sensitivity: internal
 
 ## Status
 
+**ACCEPTED — PARTIALLY SUPERSEDED (2026-07-12).** The D1 grouping, D2 default-tier table, D3 tier split, and D4 enumeration rule remain binding, but the shipped host-registered 14-specialist roster this ADR assumes was replaced by the specialist TEMPLATE library — see `machinery-agents-vs-specialist-template-library.md`: the plugin now registers only the machinery agents (advisor, developer); domain specialists ship as `templates/specialists/*.md` and are minted into a project's `.guild/agents/` at compose time.
+
 **ACCEPTED (pending codex G-lane + lead commit).** Authored 2026-06-07 for the
 `plugin-docs-code-reconciliation` Phase-2 OD-1 gate covering ledger rows **R-003** (default-tier
 source disagreement) and **R-010** (group-taxonomy disagreement). This ADR is the **binding

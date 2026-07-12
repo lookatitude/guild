@@ -145,6 +145,14 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
     "antigravity/antigravity-manifest.json",
     "antigravity/plugin.json",
     "antigravity/bin/guild-run",
+    // Template feedstock ships in EVERY installable package (machinery-vs-
+    // template-library ADR): mint (roster-resolve mint <name>) is host-neutral.
+    "claude-code/templates/specialists/architect.md",
+    "codex/templates/specialists/architect.md",
+    "agents/templates/specialists/architect.md",
+    "pi/templates/specialists/architect.md",
+    "antigravity/templates/specialists/architect.md",
+    "claude-code/templates/agents/AGENT.template.md",
   ]) {
     requireFile(distRoot, rel, checks, errors);
   }
@@ -185,6 +193,8 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
     requireFile(distRoot, `${hostId}/.agents/skills/guild/meta/using-guild/SKILL.src.md`, checks, errors);
     // The bundled guild-run CLI the launcher forwards to (the 11th concern).
     requireFile(distRoot, `${hostId}/scripts/guild-run.ts`, checks, errors);
+    // Template feedstock (machinery-vs-template-library ADR) — mint is host-neutral.
+    requireFile(distRoot, `${hostId}/templates/specialists/architect.md`, checks, errors);
     // The manifest is self-identifying from the registry row's manifest_format, and
     // honestly declares installability:"target" (renderer ≠ support, R1).
     verifyJsonField(distRoot, manifestRel, "schema_version", HOST_REGISTRY_ROWS[hostId].capabilities.package.manifest_format, checks, errors);

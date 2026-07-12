@@ -24,7 +24,10 @@ import {
   deriveAgentsRegistry,
   deriveSkillsRegistry,
   GENERATED_MARKER,
+  listSpecialistTemplates,
+  mintFromTemplate,
   resolveRoster,
+  SPECIALIST_TEMPLATE_VERSION,
   tierForModel,
 } from "../lib/roster";
 import { composeInProcessDispatch } from "../lib/host/inprocess-backend";
@@ -99,6 +102,20 @@ function fixtureRoots(): { projectRoot: string; pluginRoot: string } {
   const proposedSkill = path.join(projectRoot, ".guild", "skills", "proposed-x");
   fs.mkdirSync(proposedSkill, { recursive: true });
   fs.writeFileSync(path.join(proposedSkill, "SKILL.md"), `---\nname: x\n---\n`, "utf8");
+
+  // Shipped specialist TYPE templates (machinery-vs-template-library ADR):
+  // one stamped (a mint candidate) and one missing the stamp (skipped).
+  const tplDir = path.join(pluginRoot, "templates", "specialists");
+  writeAgent(tplDir, "frontend", {
+    template_version: SPECIALIST_TEMPLATE_VERSION,
+    description: "frontend type template",
+    model: "sonnet",
+    skills: ["guild-principles", "frontend-a11y"],
+  });
+  writeAgent(tplDir, "unstamped", {
+    description: "not a valid template",
+    model: "sonnet",
+  });
 
   return { projectRoot, pluginRoot };
 }
@@ -334,6 +351,81 @@ function launchReq(specialists: Specialist[]): TeamLaunchRequest {
     dryRun: true,
   };
 }
+
+describe("specialist type templates + deterministic mint (machinery-vs-template-library ADR)", () => {
+  it("enumerates stamped templates only; templates never join the dispatchable roster", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    const r = resolveRoster({ projectRoot, pluginRoot });
+    expect(r.templates.map((t) => t.name)).toEqual(["frontend"]);
+    expect(r.templates[0].source).toBe("template");
+    expect(r.templates[0].definition).toBe(
+      path.join("templates", "specialists", "frontend.md")
+    );
+    // The unstamped file is skipped with a warning, not silently accepted.
+    expect(r.warnings.some((w) => w.includes("unstamped"))).toBe(true);
+    // Not dispatchable: the merged roster contains no template entries.
+    expect(r.roster.find((a) => a.name === "frontend")).toBeUndefined();
+    // Direct enumeration agrees.
+    expect(listSpecialistTemplates(pluginRoot).map((t) => t.name)).toEqual(["frontend"]);
+  });
+
+  it("mints a project instance: byte-preserving copy with the provenance stamp swapped in", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    const res = mintFromTemplate({ pluginRoot, projectRoot, name: "frontend" });
+    expect(res.action).toBe("written");
+    const minted = fs.readFileSync(res.path, "utf8");
+    expect(minted).toContain(`derived_from_template: ${SPECIALIST_TEMPLATE_VERSION}`);
+    expect(minted).not.toContain("template_version:");
+    // Body + every other frontmatter line preserved byte-for-byte.
+    const original = fs.readFileSync(
+      path.join(pluginRoot, "templates", "specialists", "frontend.md"),
+      "utf8"
+    );
+    expect(minted).toBe(
+      original.replace(
+        `template_version: ${SPECIALIST_TEMPLATE_VERSION}`,
+        `derived_from_template: ${SPECIALIST_TEMPLATE_VERSION}`
+      )
+    );
+    // The minted INSTANCE is now a dispatchable project roster entry.
+    const r = resolveRoster({ projectRoot, pluginRoot });
+    const inst = r.roster.find((a) => a.name === "frontend")!;
+    expect(inst.source).toBe("project");
+    expect(inst.derived_from_template).toBe(SPECIALIST_TEMPLATE_VERSION);
+    expect(inst.definition).toBe(path.join(".guild", "agents", "frontend.md"));
+  });
+
+  it("refuses to re-mint an existing instance (reuse, never re-create) and fails closed on bad input", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    expect(mintFromTemplate({ pluginRoot, projectRoot, name: "frontend" }).action).toBe("written");
+    const again = mintFromTemplate({ pluginRoot, projectRoot, name: "frontend" });
+    expect(again.action).toBe("exists");
+    // No template → refused; unstamped template → refused; unsafe name → refused.
+    expect(mintFromTemplate({ pluginRoot, projectRoot, name: "no-such-role" }).action).toBe("refused");
+    expect(mintFromTemplate({ pluginRoot, projectRoot, name: "unstamped" }).action).toBe("refused");
+    expect(mintFromTemplate({ pluginRoot, projectRoot, name: "../escape" }).action).toBe("refused");
+  });
+
+  it("roster-resolve CLI mint writes the instance and refreshes the derived registry (exit 0 / 3)", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    const cli = path.resolve(__dirname, "../roster-resolve.ts");
+    const run = () =>
+      spawnSync("npx", ["tsx", cli, "mint", "frontend", "--cwd", projectRoot, "--plugin-root", pluginRoot], {
+        encoding: "utf8",
+      });
+    const first = run();
+    expect(first.status).toBe(0);
+    expect(fs.existsSync(path.join(projectRoot, ".guild", "agents", "frontend.md"))).toBe(true);
+    const registry = fs.readFileSync(
+      path.join(projectRoot, ".guild", "agents", "registry.yaml"),
+      "utf8"
+    );
+    expect(registry).toContain("frontend");
+    expect(registry).toContain(GENERATED_MARKER);
+    const second = run();
+    expect(second.status).toBe(3); // exists — the reuse signal, not an error
+  });
+});
 
 describe("composeInProcessDispatch — project-local specialists", () => {
   const shipped: Specialist = {

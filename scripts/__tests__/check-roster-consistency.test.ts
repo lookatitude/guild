@@ -99,6 +99,9 @@ function seedPluginRoot(
   const agentsDir = path.join(tmpDir, "agents");
   fs.mkdirSync(docsDir, { recursive: true });
   fs.mkdirSync(agentsDir, { recursive: true });
+  // The validator scans BOTH shipped surfaces (machinery-vs-template-library
+  // ADR); fixtures keep the template surface present-but-empty.
+  fs.mkdirSync(path.join(tmpDir, "templates", "specialists"), { recursive: true });
 
   fs.writeFileSync(path.join(docsDir, "specialist-roster.md"), rosterContent, "utf8");
 

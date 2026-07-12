@@ -20,7 +20,7 @@ Five fields, captured via the step-1 interview (ask until all five are captured;
 Everything this skill writes lands in the **consuming repo's `.guild/`** — **never** the read-only plugin install dir (a runtime write into plugin install state is the **v2 DH-3 defect being fixed**):
 
 - **Draft** → `.guild/agents/proposed/<role>.md` + `.guild/skills/proposed-<role>-*/`, each stamped **at draft time** with `derived_from_template: guild.agent_template.v1` / `guild.skill_template.v1` (template ids resolved via `contract-map.md §A`; pointer: `templates-and-migration.md`).
-- **Incubate** → files stay under `proposed/` until both gates pass. `guild:team-compose` reads `.guild/agents/*.md` (+ shipped `plugin/agents/*.md`), **never** `.guild/agents/proposed/*.md`.
+- **Incubate** → files stay under `proposed/` until both gates pass. `guild:team-compose` reads `.guild/agents/*.md` (+ the shipped machinery agents and the `templates/specialists/*.md` type library), **never** `.guild/agents/proposed/*.md`.
 - **Register** → a **move within `.guild/`**: `.guild/agents/proposed/<role>.md` → `.guild/agents/<role>.md`, and `.guild/skills/proposed-<role>-*/` → `.guild/skills/<role>-*/`. Register is a move, not a rewrite — the `derived_from_template` stamp is preserved unchanged. The v1 behavior (moving into `agents/<role>.md` / `skills/specialists/<role>-*/` in the plugin install dir) is the explicit **v2 DH-3 defect being fixed**.
 
 **Host-registration constraint** (normative): hosts load agent definitions from the **plugin install** at session start — a project-local `.guild/agents/<role>.md` specialist is **never host-registered** (`Agent({ subagent_type: "<new-role>" })` will not resolve it, in this session or any later one). That is by design, not a defect: project specialists dispatch through the **definition-path mechanism** instead:
@@ -37,7 +37,7 @@ Seven ordered steps, each gate passing before the next runs. Full procedure — 
 
 1. **Interview** — capture the five Input fields; do not invent a role on the user's behalf.
 2. **Draft** — write the proposed files under `.guild/` (see DH-3 mint contract).
-3. **Boundary scan** — description-similarity between the draft and all existing `plugin/agents/*.md` + `.guild/agents/*.md`; flag overlaps above threshold (cosine ≥ 0.75, or token-Jaccard ≥ 0.35 fallback) as the adjacent-specialist set.
+3. **Boundary scan** — description-similarity between the draft and all existing `templates/specialists/*.md` (the shipped type library — if a template already covers the domain, STOP: mint it via `roster-resolve.ts mint <role>` instead of creating a novel type) + machinery `agents/*.md` + `.guild/agents/*.md`; flag overlaps above threshold (cosine ≥ 0.75, or token-Jaccard ≥ 0.35 fallback) as the adjacent-specialist set.
 4. **Propose adjacent-boundary edits** — append a `DO NOT TRIGGER for: <new-domain>` clause to each adjacent specialist's `description` (`§12.1` step 4).
 5. **Gate boundary edits** — each edit runs through `guild:evolve-skill` paired evals (A = as-is, B = with the clause); a failing edit stops the workflow.
 6. **Gate new specialist** — paired evals (A = no-specialist baseline, B = proposed) + shadow-mode runs over `.guild/runs/*/`; both must pass (shadow mode is part of the gate, not advisory).
