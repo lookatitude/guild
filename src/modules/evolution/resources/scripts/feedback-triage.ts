@@ -23,9 +23,9 @@
  *       (--approve <operator> | --deny [reason]) [--cwd <dir>] [--dry-run]
  *
  * findings.json: RunLearningFinding[] (see lib/run-learning-classifier.ts).
- * The filing target repo comes from GUILD_ISSUE_REPO (default
- * lookatitude/guild); the draft's `repo: "guild/plugin"` field is the schema
- * label, not a GitHub slug.
+ * The filing target repo is PINNED to lookatitude/guild (no env override —
+ * an approved draft must not be redirectable); the draft's
+ * `repo: "guild/plugin"` field is the schema label, not a GitHub slug.
  */
 
 import * as fs from "fs";
@@ -64,7 +64,23 @@ export interface FiledRecord {
   issue_url?: string;
 }
 
+/**
+ * Path-component safety (codex G-lane MAJOR): run ids and finding ids become
+ * file names under .guild/feedback/ — anything but a plain token is rejected
+ * so `../escape` can never leave the feedback tree.
+ */
+export const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+export function assertSafeId(kind: string, value: string): void {
+  if (!SAFE_ID_RE.test(value) || value.includes("..")) {
+    throw new Error(
+      `[feedback-triage] unsafe ${kind} "${value}" — ids must match ${SAFE_ID_RE} (no path separators, no "..")`
+    );
+  }
+}
+
 export function feedbackDir(cwd: string, runId: string): string {
+  assertSafeId("run id", runId);
   return path.join(cwd, ".guild", "feedback", runId);
 }
 
@@ -81,6 +97,7 @@ export function runTriage(opts: {
   const dir = feedbackDir(opts.cwd, opts.runId);
   fsi.mkdirSync(dir, { recursive: true });
 
+  for (const f of opts.findings) assertSafeId("finding id", f.id);
   const record: TriageRecord = {
     schema_version: TRIAGE_SCHEMA,
     run_id: opts.runId,
@@ -145,6 +162,7 @@ export function runFile(opts: {
   const log = opts.log ?? ((l) => process.stderr.write(`[feedback-triage] ${l}\n`));
   const gh =
     opts.gh ?? ((args: string[]) => execFileSync("gh", args, { encoding: "utf8" }).trim());
+  assertSafeId("finding id", opts.findingId);
   const dir = feedbackDir(opts.cwd, opts.runId);
   const triagePath = path.join(dir, "triage.json");
   let record: TriageRecord;
@@ -200,9 +218,11 @@ export function runFile(opts: {
     return 0;
   }
 
-  // ready_to_file — the ONLY state that reaches gh.
+  // ready_to_file — the ONLY state that reaches gh. The target repo is PINNED
+  // (codex G-lane MAJOR: an env override could redirect an approved draft to
+  // an attacker-chosen repo); opts.repo exists for tests/explicit callers only.
   const draft = decision.draft as GitHubIssueDraft;
-  const repo = opts.repo ?? process.env["GUILD_ISSUE_REPO"] ?? DEFAULT_ISSUE_REPO;
+  const repo = opts.repo ?? DEFAULT_ISSUE_REPO;
   if (opts.dryRun) {
     log(`dry-run: would file to ${repo}: "${draft.title}" (labels: ${draft.labels.join(", ")})`);
     return 0;

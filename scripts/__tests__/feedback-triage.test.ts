@@ -144,6 +144,38 @@ describe("runFile — the consent choke-point", () => {
     });
   });
 
+  it("rejects path-traversal run ids and finding ids before touching the filesystem", () => {
+    const cwd = mkTmp();
+    expect(() =>
+      runTriage({ cwd, runId: "../escape", findings: [pluginFinding], ...silent })
+    ).toThrow(/unsafe run id/);
+    expect(() =>
+      runTriage({
+        cwd,
+        runId: "run-9",
+        findings: [{ ...pluginFinding, id: "../../evil" }],
+        ...silent,
+      })
+    ).toThrow(/unsafe finding id/);
+    expect(() =>
+      runFile({ cwd, runId: "run-9", findingId: "a/b", approve: "x", gh: () => "", ...silent })
+    ).toThrow(/unsafe finding id/);
+  });
+
+  it("an uncorroborated plugin level_hint cannot become fileable (hint hardening)", () => {
+    const cwd = mkTmp();
+    const hinted: RunLearningFinding = {
+      id: "F-3",
+      summary: "Team prefers tabs", // zero plugin signals
+      affected_artifacts: [".guild/wiki/standards/style.md"],
+      level_hint: "plugin",
+    };
+    const rec = runTriage({ cwd, runId: "run-9", findings: [hinted], ...silent });
+    expect(rec.findings[0].classification.level).toBe("ambiguous");
+    expect(rec.findings[0].classification.normal_gate).toBe("human_triage");
+    expect(rec.findings[0].draft).toBeNull();
+  });
+
   it("project-level findings are not fileable at all", () => {
     const cwd = triaged();
     const rc = runFile({

@@ -201,7 +201,7 @@ prompt.
 
 A confirmed diagnosis whose root cause lives in the **Guild plugin itself** (any category except `unknown` where the evidence points at plugin code/hooks/commands — not at project `.guild/` state or user config) should ALSO be offered upstream, whether or not a local fix was applied — a locally-patched install still leaves every other installation broken. Route it deterministically, never by hand:
 
-1. Write the diagnosis as a single `RunLearningFinding` in `.guild/feedback/<run-id-or-timestamp>/findings.json` (`summary` = root cause one-liner, `details` = the report's Diagnosis section, `evidence_refs` = the plugin paths implicated, `proposed_change` = the fix plan or applied fix).
+1. Write the diagnosis as a one-element `RunLearningFinding[]` ARRAY in `.guild/feedback/<run-id-or-timestamp>/findings.json` (the CLI rejects a bare object) (`summary` = root cause one-liner, `details` = the report's Diagnosis section, `evidence_refs` = the plugin paths implicated, `proposed_change` = the fix plan or applied fix).
 2. Run `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/feedback-triage.ts triage --run-id <id> --findings <that file>` — it classifies (code, not judgement) and writes a **sanitized** issue draft for plugin/mixed findings.
 3. **Ask the operator** whether Guild may file the draft as a GitHub issue (it contains no user-specific information — the redaction stack strips private paths, tokens, emails). Yes → `… file --finding <id> --approve "<operator>"`; no → `--deny`. Non-interactive ⇒ leave the draft pending and name it in the summary. The CLI refuses to file without the explicit approval.
 

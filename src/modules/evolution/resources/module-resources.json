@@ -50,7 +50,7 @@
       "id": "feedback-triage",
       "source_path": "scripts/feedback-triage.ts",
       "resource_path": "resources/scripts/feedback-triage.ts",
-      "sha256": "60999e06bf07b60d71e7443b22fa5b166bd93018d7330e6cae87c68e9fd7b480"
+      "sha256": "aea8fb41523b1b261ffe964bdb6967f87d5c71a19a423da134f3db4dfbbe62f8"
     },
     {
       "category": "scripts",
@@ -78,7 +78,7 @@
       "id": "lib/run-learning-classifier",
       "source_path": "scripts/lib/run-learning-classifier.ts",
       "resource_path": "resources/scripts/lib/run-learning-classifier.ts",
-      "sha256": "6defc07ce81d1d0b4d660d9cdd2c2d8bf37b05bd214ae6af701367b90d3efe0d"
+      "sha256": "2f9d7c2c671a6edb0182a36e4396b37772ae4fbc2ae6b6f75ce5f83b9615d0c5"
     },
     {
       "category": "scripts",
