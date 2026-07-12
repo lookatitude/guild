@@ -255,7 +255,7 @@ The block must appear in every brief without modification. If you find yourself 
 
 ## Self-build dev-team routing
 
-When the target repo IS the Guild plugin itself (self-build), `team.yaml` is composed from the **dev-team agents under `.claude/agents/`** — `plugin-architect, skill-author, specialist-agent-writer, command-builder, hook-engineer, tooling-engineer, docs-writer, eval-engineer` — each owning a plugin path-slice (see `CLAUDE.md §"Dev team"`). The 14 `guild:` product specialists build *user* products; they are NOT the self-build team. Route by changed path:
+When the target repo IS the Guild plugin itself (self-build), `team.yaml` is composed from the **dev-team agents under `.claude/agents/`** — `plugin-architect, skill-author, specialist-agent-writer, command-builder, hook-engineer, tooling-engineer, docs-writer, eval-engineer` — each owning a plugin path-slice (see `CLAUDE.md §"Dev team"`). The 15 domain specialist roles (minted from templates/specialists/) build *user* products; they are NOT the self-build team. Route by changed path:
 
 | Changed path | Dev-team `subagent_type` |
 |---|---|

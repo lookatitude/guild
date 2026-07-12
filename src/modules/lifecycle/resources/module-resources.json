@@ -155,14 +155,14 @@
       "id": "guild-execute-plan",
       "source_path": "skills/meta/execute-plan/SKILL.md",
       "resource_path": "resources/skills/meta/execute-plan/SKILL.md",
-      "sha256": "90a9bd16410d3c449e34e631dec7d8d4cc0ab8d9de2eb5d022581b6bcf3d3819"
+      "sha256": "7b28a8f98faf1127f8367c3ae43438b6d8f85ec56fa8d01966f8ab3fc02ac3d1"
     },
     {
       "category": "skills",
       "id": "guild-execute-plan/dispatch.md",
       "source_path": "skills/meta/execute-plan/dispatch.md",
       "resource_path": "resources/skills/meta/execute-plan/dispatch.md",
-      "sha256": "ab794b93a33d2a074ebbaa61d5d1f728f6a1652b4620e1c66d7a1b37306ed81e"
+      "sha256": "6bf85fd7c4b563a283bf81ac26c1d4dad909e0a3dac4788a72d8ea7f0cf33366"
     },
     {
       "category": "skills",

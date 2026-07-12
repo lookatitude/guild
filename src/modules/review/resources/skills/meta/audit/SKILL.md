@@ -70,7 +70,7 @@ Payload fields:
 - `script_count` — total scripts audited.
 - `network_flag_count` — scripts with non-empty `network_evidence`.
 - `write_outside_guild_count` — scripts with non-empty `writes_outside_guild`.
-- `nonresearcher_web_agents` — list of `agents/*.md` files with web access other than `researcher.md` (expected: empty list).
+- `nonresearcher_web_agents` — list of definition files across `agents/*.md` + `templates/specialists/*.md` + `.guild/agents/*.md` with web access other than the `researcher` role (expected: empty list).
 - `hashes_changed_since_last_audit` — list of `{path, old_sha256, new_sha256}` entries; empty on the first audit.
 - `prior_audit_path` — the prior audit file compared against, or `null` on the first audit.
 

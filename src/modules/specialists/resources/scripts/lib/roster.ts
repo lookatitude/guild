@@ -86,9 +86,9 @@ export interface RosterAgentEntry {
   /** true on a project entry whose name collides with a shipped type (the project instance wins in the merged roster). */
   overrides_shipped: boolean;
   /**
-   * true for the augmenting registered types (advisor/developer/doc-writer):
-   * kept in the roster for dispatch, excluded from team-compose domain
-   * matching and the cap-6 count (canonical-specialist-roster ADR).
+   * true for the machinery agents (advisor/developer): kept in the roster
+   * for dispatch, excluded from team-compose domain matching and the cap-6
+   * count (machinery-vs-template-library ADR).
    */
   augmenting: boolean;
 }
