@@ -47,6 +47,13 @@
     },
     {
       "category": "scripts",
+      "id": "feedback-triage",
+      "source_path": "scripts/feedback-triage.ts",
+      "resource_path": "resources/scripts/feedback-triage.ts",
+      "sha256": "aea8fb41523b1b261ffe964bdb6967f87d5c71a19a423da134f3db4dfbbe62f8"
+    },
+    {
+      "category": "scripts",
       "id": "lib/learning-candidate",
       "source_path": "scripts/lib/learning-candidate.ts",
       "resource_path": "resources/scripts/lib/learning-candidate.ts",
@@ -71,7 +78,7 @@
       "id": "lib/run-learning-classifier",
       "source_path": "scripts/lib/run-learning-classifier.ts",
       "resource_path": "resources/scripts/lib/run-learning-classifier.ts",
-      "sha256": "6defc07ce81d1d0b4d660d9cdd2c2d8bf37b05bd214ae6af701367b90d3efe0d"
+      "sha256": "2f9d7c2c671a6edb0182a36e4396b37772ae4fbc2ae6b6f75ce5f83b9615d0c5"
     },
     {
       "category": "scripts",
@@ -113,7 +120,7 @@
       "id": "guild-reflect",
       "source_path": "skills/meta/reflect/SKILL.md",
       "resource_path": "resources/skills/meta/reflect/SKILL.md",
-      "sha256": "497935829b8a21dd1240f53e01f2ff6299354205a00a30bec23b95880ab6a222"
+      "sha256": "b1ff2d0c5fec86554a708c10a18046bac8f4d1b3a4a7fd5602436386fcc4614c"
     },
     {
       "category": "skills",

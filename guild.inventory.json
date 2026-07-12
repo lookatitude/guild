@@ -1193,6 +1193,11 @@
       "kind": "cli"
     },
     {
+      "id": "feedback-triage",
+      "source_path": "scripts/feedback-triage.ts",
+      "kind": "cli"
+    },
+    {
       "id": "flip-report",
       "source_path": "scripts/flip-report.ts",
       "kind": "cli"
