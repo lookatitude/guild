@@ -19,11 +19,24 @@
  * mirroring lib/domain.appendKnowledgeLinks), classifies node kinds, and
  * BFS-traverses from a task-id to compute reachable kinds.
  *
+ * G2b-4 fix: load/append/write now delegate to the shared
+ * learn/lib/knowledge-links-io helper so the on-disk top-level version key
+ * stays `schema_version` (standardized across all producers) instead of this
+ * module's previous private `version` key — which `tombstoneLinks` would
+ * silently persist on rewrite even over a `schema_version`-keyed file,
+ * dropping the other key entirely. This module's own public shape
+ * (`KnowledgeLinksDoc.version`, `loadKnowledgeLinks`, `appendBatch`) is
+ * unchanged for existing callers/tests — only the on-disk key is standardized.
+ *
  * Zero runtime deps (Node builtins only).
  */
 
-import * as fs from "fs";
-import * as path from "path";
+import {
+  loadKnowledgeLinksDoc,
+  writeKnowledgeLinksDoc,
+  appendKnowledgeLinksBatch,
+  KNOWLEDGE_LINKS_SCHEMA_VERSION,
+} from "./learn/lib/knowledge-links-io";
 
 /** Closed edge-type set — continuous-knowledge-and-learning-loop.md §"CR-A #2". */
 export const CLOSED_EDGE_TYPES: ReadonlySet<string> = new Set([
@@ -79,38 +92,23 @@ export function classifyNodeKind(id: string): NodeKind {
   return "other";
 }
 
-/** Load knowledge-links.json; returns an empty v1 doc if absent/corrupt. */
+/**
+ * Load knowledge-links.json; returns an empty v1 doc if absent/corrupt.
+ * Delegates to the shared knowledge-links-io reader, which tolerates both
+ * the current `schema_version` key and the legacy `version` key on read.
+ */
 export function loadKnowledgeLinks(file: string): KnowledgeLinksDoc {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-    if (parsed && Array.isArray(parsed.links)) {
-      return { version: String(parsed.version ?? "guild.knowledge_links.v1"), links: parsed.links };
-    }
-  } catch {
-    /* absent or corrupt → empty (derived index, safe) */
-  }
-  return { version: "guild.knowledge_links.v1", links: [] };
+  const shared = loadKnowledgeLinksDoc(file);
+  return { version: shared.schema_version, links: shared.links };
 }
 
 /**
  * APPEND-ONLY batch write into knowledge-links.json. Dedupes on from|to|type
  * so re-runs are idempotent (mirrors lib/domain.appendKnowledgeLinks).
+ * Delegates to the shared helper, which always writes `schema_version`.
  */
 export function appendBatch(file: string, batch: KnowledgeLink[]): { added: number; total: number } {
-  const doc = loadKnowledgeLinks(file);
-  const existing = new Set(doc.links.map((l) => `${l.from}|${l.to}|${l.type}`));
-  let added = 0;
-  for (const link of batch) {
-    const k = `${link.from}|${link.to}|${link.type}`;
-    if (!existing.has(k)) {
-      existing.add(k);
-      doc.links.push(link);
-      added++;
-    }
-  }
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(doc, null, 2) + "\n", "utf8");
-  return { added, total: doc.links.length };
+  return appendKnowledgeLinksBatch(file, batch);
 }
 
 /** Active (non-tombstoned) links — what every recall/traversal path should use. */
@@ -144,8 +142,11 @@ export function tombstoneLinks(
     n++;
   }
   if (n > 0) {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(doc, null, 2) + "\n", "utf8");
+    // G2b-4 fix: write via the shared helper (always `schema_version`) —
+    // the previous raw fs.writeFileSync(doc) persisted THIS module's local
+    // `version` key, silently dropping `schema_version` on rewrite whenever
+    // the on-disk file had been written by a schema_version-keyed producer.
+    writeKnowledgeLinksDoc(file, { schema_version: KNOWLEDGE_LINKS_SCHEMA_VERSION, links: doc.links });
   }
   return { tombstoned: n };
 }

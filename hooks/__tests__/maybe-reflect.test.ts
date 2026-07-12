@@ -264,6 +264,86 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
   });
 });
 
+// ── PostToolUse double-logging fix — gate reads the canonical `tool_call`
+// shape (audit: capture-telemetry.ts no longer duplicates PostToolUse into
+// logs/v1.4-events.jsonl; hooks/post-tool-use.ts's `tool_call` event is now
+// the ONLY tool-invocation line in that file). Without this gateCheck() update,
+// every real /guild run's canonical log would have zero PostToolUse lines and
+// the "file edited" condition could never be satisfied from canonical data.
+describe("maybe-reflect.ts — reads the canonical `tool_call` shape (post-tool-use.ts)", () => {
+  let tmpDir: string;
+  const stopPayload = JSON.stringify({
+    hook_event_name: "Stop",
+    session_id: "test-run",
+    cwd: "",
+  });
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-reflect-toolcall-"));
+    fs.mkdirSync(path.join(tmpDir, ".git"), { recursive: true });
+  });
+
+  afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  const TOOL_CALL_WRITE = JSON.stringify({
+    ts: new Date().toISOString(),
+    event: "tool_call",
+    run_id: "test-run",
+    tool: "Write",
+    command_redacted: "",
+    status: "ok",
+    latency_ms: 42,
+    result_excerpt_redacted: "",
+  });
+
+  const TOOL_CALL_ERR = JSON.stringify({
+    ts: new Date().toISOString(),
+    event: "tool_call",
+    run_id: "test-run",
+    tool: "Bash",
+    command_redacted: "",
+    status: "err",
+    latency_ms: 12,
+    result_excerpt_redacted: "",
+  });
+
+  it("gate PASSES from canonical tool_call (Write) + SubagentStop, no PostToolUse line at all", () => {
+    const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
+    const logsDir = path.join(runDir, "logs");
+    fs.mkdirSync(logsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(logsDir, "v1.4-events.jsonl"),
+      [SPECIALIST_EVENT, TOOL_CALL_WRITE].join("\n") + "\n",
+      "utf8",
+    );
+
+    const { exitCode, stdout } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("GUILD_REFLECT");
+  });
+
+  it("gate FAILS when a tool_call carries status: err (canonical error shape)", () => {
+    const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
+    const logsDir = path.join(runDir, "logs");
+    fs.mkdirSync(logsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(logsDir, "v1.4-events.jsonl"),
+      [SPECIALIST_EVENT, TOOL_CALL_WRITE, TOOL_CALL_ERR].join("\n") + "\n",
+      "utf8",
+    );
+
+    const { exitCode, stdout } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout.trim()).toBe("");
+  });
+});
+
 // v1.3 — F12: maybe-reflect.ts widened to fire on dev-team SubagentStop
 // when all three guards hold:
 //   1. GUILD_ENABLE_DEVTEAM_REFLECT === "1"   (operator opt-in; default off)
@@ -407,8 +487,9 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
 //   2. At >= 3 the guard escalates for real: writes the .guild sentinel AND
 //      exits non-zero with a loud DISCIPLINE warning (Stop hooks can't fail a
 //      past gate, so the sentinel + non-zero exit are the honest enforcement).
-// The guard ONLY arms in self-build context (cwd has plugin/CLAUDE.md with the
-// orientation banner) so it never fires on a consuming repo's normal session.
+// The guard ONLY arms in self-build context (cwd has a plugin/AGENTS.md with
+// the orientation banner — hooks/lib/self-build.ts's detectSelfBuild()) so it
+// never fires on a consuming repo's normal session.
 describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
   let tmpDir: string;
   const stopPayload = fs
@@ -423,12 +504,13 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  // Mark tmpDir as a self-build root so the guard arms.
+  // Mark tmpDir as an umbrella-shaped self-build root so the guard arms
+  // (mirrors detectSelfBuild()'s <root>/plugin/AGENTS.md branch).
   function seedSelfBuild(cwd: string): void {
     const pluginDir = path.join(cwd, "plugin");
     fs.mkdirSync(pluginDir, { recursive: true });
     fs.writeFileSync(
-      path.join(pluginDir, "CLAUDE.md"),
+      path.join(pluginDir, "AGENTS.md"),
       "# Guild — repo orientation\n\nself-build marker\n",
       "utf8",
     );
@@ -464,7 +546,7 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     fs.writeFileSync(path.join(dir, name), body, "utf8");
   }
 
-  it("does NOT arm outside self-build context (no plugin/CLAUDE.md)", () => {
+  it("does NOT arm outside self-build context (no plugin/AGENTS.md)", () => {
     // 3 skip-marked reflections but no self-build marker → silent, exit 0.
     writeReflection(tmpDir, "r1.md", "frontmatter");
     writeReflection(tmpDir, "r2.md", "frontmatter");

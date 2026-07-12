@@ -203,6 +203,48 @@ describe("evolve-loop.ts", () => {
     });
   });
 
+  // ── G2b-3 fix: KNOWN_TIERS hardcode → dynamic skills/ enumeration ────────
+  // Dir-level skills (skills/guild-quality/, no tier nesting) and any future
+  // tier dir must resolve without a code change to the tier list.
+  describe("G2b-3 — dynamic tier enumeration (dir-level skills + future tiers)", () => {
+    it("resolves a dir-level skill (skills/<slug>/SKILL.md, no tier nesting)", () => {
+      const dir = path.join(tmpDir, "skills", "guild-quality");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.copyFileSync(path.join(FIXTURES, "skill-v1", "SKILL.md"), path.join(dir, "SKILL.md"));
+
+      const { exitCode } = runScript(["--skill", "guild-quality", "--run-id", "run-x", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      const snap = path.join(tmpDir, ".guild", "skill-versions", "guild-quality", "v1", "SKILL.md");
+      expect(fs.existsSync(snap)).toBe(true);
+    });
+
+    it("resolves a knowledge-tier slug (skills/knowledge/<slug>/SKILL.md)", () => {
+      const dir = path.join(tmpDir, "skills", "knowledge", "wiki-ingest");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.copyFileSync(path.join(FIXTURES, "skill-v1", "SKILL.md"), path.join(dir, "SKILL.md"));
+
+      const { exitCode } = runScript(["--skill", "wiki-ingest", "--run-id", "run-x", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      const snap = path.join(tmpDir, ".guild", "skill-versions", "wiki-ingest", "v1", "SKILL.md");
+      expect(fs.existsSync(snap)).toBe(true);
+    });
+
+    it("a made-up future tier dir is picked up without any code change", () => {
+      const dir = path.join(tmpDir, "skills", "future-tier", "some-skill");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.copyFileSync(path.join(FIXTURES, "skill-v1", "SKILL.md"), path.join(dir, "SKILL.md"));
+
+      const { exitCode } = runScript(["--skill", "some-skill", "--run-id", "run-x", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+    });
+
+    it("still resolves the pre-existing meta tier unchanged", () => {
+      seedLiveSkill(tmpDir, "guild-brainstorm");
+      const { exitCode } = runScript(["--skill", "guild-brainstorm", "--run-id", "run-x", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+    });
+  });
+
   describe("CLI errors", () => {
     it("exits 1 when --skill is missing", () => {
       const { exitCode, stderr } = runScript(["--cwd", tmpDir, "--run-id", "x"]);

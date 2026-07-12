@@ -516,6 +516,15 @@ import { discoverWorkspace } from "./workspace-manifest";
  * explicitly present (i.e., a sparse Partial<ResolvedConfig>). Unknown keys
  * are silently skipped. This is intentionally sparse — callers must deep-merge
  * across layers themselves rather than relying on DEFAULTS being baked in here.
+ *
+ * FIX (F3 duplicate-implementation class): this used to re-implement the
+ * ENTIRE field-by-field sparse-extraction logic verbatim (~170 lines) instead
+ * of delegating to parseSettingsFile_fromParsed after reading+parsing the
+ * file. The two copies had already started to matter only by coincidence
+ * (they stayed byte-identical purely by discipline, not by a shared
+ * implementation) — the exact "two near-identical copies" class this repo's
+ * own F3 lesson names. Now this function does ONLY the file I/O; all field
+ * extraction lives in the one shared implementation.
  */
 function parseSettingsFile(filePath: string): Partial<ResolvedConfig> {
   if (!fs.existsSync(filePath)) return {};
@@ -525,174 +534,7 @@ function parseSettingsFile(filePath: string): Partial<ResolvedConfig> {
   } catch {
     return {};
   }
-
-  const out: Partial<ResolvedConfig> = {};
-
-  if (VALID_RIGOR.has(parsed["rigor"] as string))
-    out.rigor = parsed["rigor"] as ResolvedConfig["rigor"];
-  if (Array.isArray(parsed["auto_approve"]))
-    out.auto_approve = parsed["auto_approve"] as string[];
-  if (VALID_REVIEW.has(parsed["review"] as string))
-    out.review = parsed["review"] as ResolvedConfig["review"];
-  if (parsed["host"] === "auto") out.host = "auto";
-  else if (typeof parsed["host"] === "string") {
-    const normalized = normalizeDispatchHostId(parsed["host"]);
-    if (normalized) out.host = normalized;
-  }
-  // LW1-6: roles + host_profiles (sparse — deep-merged across layers by assembleLayers).
-  if (isPlainObject(parsed["roles"]))
-    out.roles = sparseRoles(parsed["roles"] as Record<string, unknown>);
-  if (isPlainObject(parsed["host_profiles"]))
-    out.host_profiles = sparseHostProfiles(parsed["host_profiles"] as Record<string, unknown>);
-  if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
-    out.initiative_default = parsed["initiative_default"] as string | null;
-  if (parsed["index"] === "auto" || parsed["index"] === "off")
-    out.index = parsed["index"];
-  if (typeof parsed["record_status_runs"] === "boolean")
-    out.record_status_runs = parsed["record_status_runs"];
-  if (parsed["codex_skip_enforcement"] === "warn" || parsed["codex_skip_enforcement"] === "block")
-    out.codex_skip_enforcement = parsed["codex_skip_enforcement"];
-  if (VALID_AGENT_MODE.has(parsed["agent_mode"] as string))
-    out.agent_mode = parsed["agent_mode"] as ResolvedConfig["agent_mode"];
-  if (isPlainObject(parsed["workspace"])) {
-    const ws = parsed["workspace"] as Record<string, unknown>;
-    const wsMode = ws["mode"];
-    if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
-      out.workspace = { mode: wsMode };
-    }
-  }
-  if (isPlainObject(parsed["models"])) {
-    const rawModels = parsed["models"] as Record<string, unknown>;
-    // Sparse: only carry explicitly-set sub-fields so deepMerge can combine layers
-    const sparse: Partial<ModelsBlock> = {};
-    if (typeof rawModels["enabled"] === "boolean") sparse.enabled = rawModels["enabled"];
-    if (isPlainObject(rawModels["tiers"])) {
-      const rt = rawModels["tiers"] as Record<string, unknown>;
-      const sparseTiers: Partial<TiersBlock> = {};
-      for (const tier of ["cheap", "mid", "powerful"] as const) {
-        if (isPlainObject(rt[tier])) {
-          // G-lane rework: strip unknown host keys (closed set: claude|codex)
-          sparseTiers[tier] = sparseTierHostMap(rt[tier] as Record<string, unknown>);
-        }
-      }
-      sparse.tiers = sparseTiers as TiersBlock;
-    }
-    if (isPlainObject(rawModels["scoreWeights"]))
-      sparse.scoreWeights = rawModels["scoreWeights"] as Record<string, number>;
-    if (isPlainObject(rawModels["thresholds"]))
-      sparse.thresholds = rawModels["thresholds"] as ModelsBlock["thresholds"];
-    if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1)
-      sparse.advisorRounds = Math.floor(rawModels["advisorRounds"]);
-    if (Array.isArray(rawModels["escalationMarkers"]))
-      sparse.escalationMarkers = rawModels["escalationMarkers"] as string[];
-    if (typeof rawModels["recallBeforeRead"] === "boolean")
-      sparse.recallBeforeRead = rawModels["recallBeforeRead"];
-    if (typeof rawModels["recallScoreThreshold"] === "number")
-      sparse.recallScoreThreshold = rawModels["recallScoreThreshold"];
-    if (typeof rawModels["structuredOutputRequired"] === "boolean")
-      sparse.structuredOutputRequired = rawModels["structuredOutputRequired"];
-    if (isPlainObject(rawModels["cacheTTL"])) {
-      const rttl = rawModels["cacheTTL"] as Record<string, unknown>;
-      const newTTL: Partial<CacheTTLBlock> = {};
-      if (VALID_CACHE_TTL.has(rttl["coordinator"] as string)) newTTL.coordinator = rttl["coordinator"] as CacheTTLBlock["coordinator"];
-      if (VALID_CACHE_TTL.has(rttl["leaf"] as string)) newTTL.leaf = rttl["leaf"] as CacheTTLBlock["leaf"];
-      sparse.cacheTTL = newTTL as CacheTTLBlock;
-    }
-    if (typeof rawModels["importanceGate"] === "number" && rawModels["importanceGate"] >= 1 && rawModels["importanceGate"] <= 5)
-      sparse.importanceGate = Math.floor(rawModels["importanceGate"]);
-    if (typeof rawModels["compositeRecall"] === "boolean")
-      sparse.compositeRecall = rawModels["compositeRecall"];
-    if (typeof rawModels["importanceAtIngest"] === "boolean")
-      sparse.importanceAtIngest = rawModels["importanceAtIngest"];
-    if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
-      sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
-    if (isPlainObject(rawModels["shortOutputThreshold"])) {
-      const sot = rawModels["shortOutputThreshold"] as Record<string, unknown>;
-      const sotMerged: Record<string, Record<string, number>> = {};
-      for (const taskType of Object.keys(sot)) {
-        if (!isPlainObject(sot[taskType])) continue;
-        const innerRaw = sot[taskType] as Record<string, unknown>;
-        const innerMerged: Record<string, number> = {};
-        for (const tier of Object.keys(innerRaw)) {
-          if (typeof innerRaw[tier] === "number") innerMerged[tier] = innerRaw[tier] as number;
-        }
-        if (Object.keys(innerMerged).length > 0) sotMerged[taskType] = innerMerged;
-      }
-      sparse.shortOutputThreshold = sotMerged;
-    }
-    if (isPlainObject(rawModels["knowledge"])) {
-      const rawK = rawModels["knowledge"] as Record<string, unknown>;
-      const sparseK: Partial<KnowledgeConfigBlock> = {};
-      if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
-        sparseK.maxDepth = Math.floor(rawK["maxDepth"] as number);
-      if (typeof rawK["maxBranching"] === "number" && rawK["maxBranching"] >= 1)
-        sparseK.maxBranching = Math.floor(rawK["maxBranching"] as number);
-      if (typeof rawK["minTopicImportance"] === "number" && rawK["minTopicImportance"] >= 0 && rawK["minTopicImportance"] <= 1)
-        sparseK.minTopicImportance = rawK["minTopicImportance"] as number;
-      if (typeof rawK["relMinConf"] === "number" && rawK["relMinConf"] >= 0 && rawK["relMinConf"] <= 1)
-        sparseK.relMinConf = rawK["relMinConf"] as number;
-      if (typeof rawK["maxFiles"] === "number" && rawK["maxFiles"] >= 1)
-        sparseK.maxFiles = Math.floor(rawK["maxFiles"] as number);
-      if (typeof rawK["maxTokens"] === "number" && rawK["maxTokens"] >= 1)
-        sparseK.maxTokens = Math.floor(rawK["maxTokens"] as number);
-      if (typeof rawK["batchSize"] === "number" && rawK["batchSize"] >= 1)
-        sparseK.batchSize = Math.floor(rawK["batchSize"] as number);
-      sparse.knowledge = sparseK as KnowledgeConfigBlock;
-    }
-    out.models = sparse as ModelsBlock;
-  }
-  if (isPlainObject(parsed["security"])) {
-    const rawSec = parsed["security"] as Record<string, unknown>;
-    const sparseSec: Partial<SecurityBlock> = {};
-    const bpp = rawSec["bypass_permissions_policy"];
-    if (bpp === "deny" || bpp === "audit" || bpp === "allow") sparseSec.bypass_permissions_policy = bpp;
-    out.security = sparseSec as SecurityBlock;
-  }
-  if (isPlainObject(parsed["secrets_policy"])) {
-    const rawSp = parsed["secrets_policy"] as Record<string, unknown>;
-    const sparseSp: Partial<SecretsPolicyBlock> = {};
-    if (Array.isArray(rawSp["env_allowlist"])) sparseSp.env_allowlist = rawSp["env_allowlist"] as string[];
-    if (Array.isArray(rawSp["redaction_patterns"])) sparseSp.redaction_patterns = rawSp["redaction_patterns"] as string[];
-    if (rawSp["fail_mode_durable"] === "closed" || rawSp["fail_mode_durable"] === "open") sparseSp.fail_mode_durable = rawSp["fail_mode_durable"];
-    if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") sparseSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
-    out.secrets_policy = sparseSp as SecretsPolicyBlock;
-  }
-  if (isPlainObject(parsed["mcp"])) {
-    const rawMcp = parsed["mcp"] as Record<string, unknown>;
-    const sparseMcp: Partial<McpBlock> = {};
-    if (isPlainObject(rawMcp["tool_description_hashes"]))
-      sparseMcp.tool_description_hashes = rawMcp["tool_description_hashes"] as Record<string, string>;
-    // R-019: transport availability flags
-    if (typeof rawMcp["stdio_available"] === "boolean") sparseMcp.stdio_available = rawMcp["stdio_available"];
-    if (typeof rawMcp["http_available"] === "boolean")  sparseMcp.http_available  = rawMcp["http_available"];
-    if (rawMcp["bridge_package"] === null || typeof rawMcp["bridge_package"] === "string")
-      sparseMcp.bridge_package = rawMcp["bridge_package"] as string | null;
-    out.mcp = sparseMcp as McpBlock;
-  }
-  // R-009: statusline
-  if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
-  // R-008: adversarial_review_provider — open string; any non-empty string is valid
-  if (typeof parsed["adversarial_review_provider"] === "string") {
-    out.adversarial_review_provider = parsed["adversarial_review_provider"];
-  }
-  if (typeof parsed["loops"] === "string" || parsed["loops"] === null)
-    out.loops = parsed["loops"] as string | null;
-  if (typeof parsed["loop_cap"] === "number")
-    out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"] as number));
-  if (typeof parsed["codex_cap"] === "number")
-    out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"] as number));
-  if (isPlainObject(parsed["defaults"])) {
-    const rawDefaults = parsed["defaults"] as Record<string, unknown>;
-    // Sparse: only carry known keys — do NOT bake in DEFAULTS here.
-    // deepMerge across layers handles filling gaps from lower layers.
-    const sparseDefaults: Record<string, unknown> = {};
-    for (const k of Object.keys(rawDefaults)) {
-      if (DEFAULTS_ALLOWED_KEYS.has(k)) sparseDefaults[k] = rawDefaults[k];
-    }
-    out.defaults = sparseDefaults as unknown as DefaultsBlock;
-  }
-
-  return out;
+  return parseSettingsFile_fromParsed(parsed);
 }
 
 /**

@@ -29,7 +29,7 @@
       "id": "Stop:maybe-reflect.js",
       "source_path": "hooks/dist/maybe-reflect.js",
       "resource_path": "resources/hooks/dist/maybe-reflect.js",
-      "sha256": "2c80545901145bc69978d91b3e7bd93a0db94455a47371aebd052fbba8974464"
+      "sha256": "be51ec852e9333327e8ddf5323b8b7e43fb5de928a83aae3edd2c47e3895292f"
     },
     {
       "category": "scripts",
@@ -43,7 +43,7 @@
       "id": "evolve-loop",
       "source_path": "scripts/evolve-loop.ts",
       "resource_path": "resources/scripts/evolve-loop.ts",
-      "sha256": "6e897c527017df4b20b97175a7256ec4448cdac533984dee1fc3a2f186414150"
+      "sha256": "e4ef0921c251e50e288c06709a2c8e8c86ed268a3e15e0a401a7b2586c195f19"
     },
     {
       "category": "scripts",

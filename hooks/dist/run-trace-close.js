@@ -4914,7 +4914,7 @@ function createRunLifecycle(env) {
       return runId;
     },
     closeRun(runId, opts) {
-      const root = resolveCloseRoot(env, runId);
+      const root = resolveCloseRoot(env);
       const facts = readStartFacts(env, root, runId);
       const runClass = facts.run_class;
       const now = env.now();
@@ -4961,12 +4961,10 @@ function createRunLifecycle(env) {
     }
   };
 }
-function resolveCloseRoot(env, runId) {
+function resolveCloseRoot(env) {
   const hint = env.__rootHint;
   if (hint) return hint;
-  const cwd = resolveGuildRoot(process.cwd());
-  if (env.fs.exists(runYamlPath(cwd, runId))) return cwd;
-  return cwd;
+  return resolveGuildRoot(process.cwd());
 }
 function createRealEnv(root, resolveHost) {
   const env = {
@@ -5834,6 +5832,25 @@ function emitRunClosed(root, runId, resolveHost, opts = {}) {
     );
   }
 }
+function newestPostCloseActivityMs(root, runId) {
+  const dir = runDir2(root, runId);
+  const candidates = [liveLogPath(root, runId), path9.join(dir, "events.ndjson")];
+  try {
+    const inProgress = path9.join(dir, "in-progress");
+    for (const name of fs7.readdirSync(inProgress)) {
+      candidates.push(path9.join(inProgress, name));
+    }
+  } catch {
+  }
+  let newest = 0;
+  for (const p of candidates) {
+    try {
+      newest = Math.max(newest, fs7.statSync(p).mtimeMs);
+    } catch {
+    }
+  }
+  return newest;
+}
 
 // lib/guild-hook-event.ts
 async function readHookStdin() {
@@ -5853,6 +5870,7 @@ function emitClaudeHookEvent(raw) {
 }
 
 // run-trace-close.ts
+var REOPEN_TOLERANCE_MS = 2e3;
 function findTerminalCheckpoint(runDir3, runId) {
   const learningDir = path10.join(runDir3, "learning");
   if (!fs8.existsSync(learningDir)) return null;
@@ -5888,7 +5906,28 @@ async function main2() {
   if (!runId) process.exit(0);
   const runDir3 = path10.join(root, ".guild", "runs", runId);
   if (!fs8.existsSync(path10.join(runDir3, "run.yaml"))) process.exit(0);
-  if (fs8.existsSync(path10.join(runDir3, "provenance.json"))) process.exit(0);
+  const provenanceFile = path10.join(runDir3, "provenance.json");
+  if (fs8.existsSync(provenanceFile)) {
+    let terminal = true;
+    let closedAtMs = 0;
+    try {
+      const prov = JSON.parse(fs8.readFileSync(provenanceFile, "utf8"));
+      terminal = prov.status === "closed" || prov.status === "failed";
+      closedAtMs = typeof prov.closed_at === "string" ? Date.parse(prov.closed_at) : 0;
+    } catch {
+    }
+    if (terminal) {
+      const latestActivityMs = newestPostCloseActivityMs(root, runId);
+      const noNewActivity = latestActivityMs === 0 || !Number.isFinite(closedAtMs) || latestActivityMs <= closedAtMs + REOPEN_TOLERANCE_MS;
+      if (noNewActivity) {
+        process.exit(0);
+      }
+      process.stderr.write(
+        `[run-trace-close] run ${runId} received tool activity after its prior close (closed_at=${new Date(closedAtMs).toISOString()}) \u2014 re-closing with the latest state.
+`
+      );
+    }
+  }
   const finalLearningCheckpoint = findTerminalCheckpoint(runDir3, runId);
   emitRunClosed(root, runId, defaultResolveHost, {
     status: "closed",

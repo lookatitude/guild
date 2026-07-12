@@ -15,14 +15,14 @@
       "id": "PostToolUse:capture-telemetry.js",
       "source_path": "hooks/dist/capture-telemetry.js",
       "resource_path": "resources/hooks/dist/capture-telemetry.js",
-      "sha256": "a1e52a7b7173cfaa58f0b907ebfd27e6dd11468ad50ffa8b7bf531658c81f938"
+      "sha256": "54a3df6fdf25c2285e6386b51895f7d2678dfdb7bcae6fd350892ade5f378b14"
     },
     {
       "category": "hooks",
       "id": "Stop:run-trace-close.js",
       "source_path": "hooks/dist/run-trace-close.js",
       "resource_path": "resources/hooks/dist/run-trace-close.js",
-      "sha256": "71db9deb7505fa28642385408bf995d8af080412efdd7d43b61eaf7b95647920"
+      "sha256": "1488cc34d20c7b1269aa27c03eab9ec9dab4562214c016c7dff3f29d94e6a5ea"
     },
     {
       "category": "hooks",
@@ -85,7 +85,7 @@
       "id": "v1.4-log-validator",
       "source_path": "scripts/v1.4-log-validator.ts",
       "resource_path": "resources/scripts/v1.4-log-validator.ts",
-      "sha256": "d52541e81852f5198e92cfca5f9a13a20927411c2445febada58b1ae27144e74"
+      "sha256": "89150236a77cf96a9b1527a340792ab4fbb629a8b742ffb0769bb38099babc2c"
     }
   ]
 }

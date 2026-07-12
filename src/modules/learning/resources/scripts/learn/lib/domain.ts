@@ -14,9 +14,9 @@
  * (codebase-understanding.md §"5 Domain").
  */
 
-import * as fs from "fs";
-import { SCHEMA } from "./paths";
 import type { GraphEdge, GraphNode, KnowledgeGraph } from "./schema";
+import { appendKnowledgeLinksBatch, type KnowledgeLink } from "./knowledge-links-io";
+export type { KnowledgeLink } from "./knowledge-links-io";
 
 function relOf(n: GraphNode): string | null {
   const sr = n.source_refs?.[0];
@@ -94,57 +94,32 @@ export function deriveDomain(graph: KnowledgeGraph): DomainResult {
   return { nodes, edges };
 }
 
-interface KnowledgeLink {
-  from: string;
-  to: string;
-  type: string;
-  run_id: string;
-}
-interface KnowledgeLinksDoc {
-  version: string;
-  links: KnowledgeLink[];
-}
-
 /**
  * Emit the stage-5 initial knowledge-links batch APPEND-ONLY into
  * .guild/indexes/knowledge-links.json (`guild.knowledge_links.v1`).
  * Derived, rebuildable, deletable — never a new store. Dedupes on
  * from|to|type so re-runs are idempotent.
+ *
+ * G2b-4 fix: delegates to the shared knowledge-links-io helper so this
+ * producer's on-disk `schema_version` key stays consistent with the other
+ * three producers (knowledge-links-builder.ts, knowledge-links-traverse.ts,
+ * the emit-learning-checkpoint hook) instead of writing a private `version`
+ * key that the others didn't read.
  */
 export function appendKnowledgeLinks(
   knowledgeLinksPath: string,
   graph: KnowledgeGraph,
   runId: string,
 ): { added: number; total: number } {
-  let doc: KnowledgeLinksDoc = { version: SCHEMA.knowledgeLinks, links: [] };
-  if (fs.existsSync(knowledgeLinksPath)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(knowledgeLinksPath, "utf8"));
-      if (parsed && Array.isArray(parsed.links)) doc = parsed;
-    } catch {
-      /* corrupt → rebuild (derived index, safe) */
-    }
-  }
-  doc.version = SCHEMA.knowledgeLinks;
-
-  const existing = new Set(doc.links.map((l) => `${l.from}|${l.to}|${l.type}`));
-  let added = 0;
+  const batch: KnowledgeLink[] = [];
 
   // domain → covered file: `touches` (closed-set member).
   for (const n of graph.nodes) {
     if (n.type !== "file") continue;
     const dom = (n as GraphNode).domain as string | undefined;
     if (!dom) continue;
-    const link: KnowledgeLink = { from: `domain:${dom}`, to: n.id, type: "touches", run_id: runId };
-    const k = `${link.from}|${link.to}|${link.type}`;
-    if (!existing.has(k)) {
-      existing.add(k);
-      doc.links.push(link);
-      added++;
-    }
+    batch.push({ from: `domain:${dom}`, to: n.id, type: "touches", run_id: runId });
   }
 
-  fs.mkdirSync(require("path").dirname(knowledgeLinksPath), { recursive: true });
-  fs.writeFileSync(knowledgeLinksPath, JSON.stringify(doc, null, 2) + "\n", "utf8");
-  return { added, total: doc.links.length };
+  return appendKnowledgeLinksBatch(knowledgeLinksPath, batch);
 }

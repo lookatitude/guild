@@ -29,14 +29,14 @@
       "id": "knowledge-links-builder",
       "source_path": "scripts/knowledge-links-builder.ts",
       "resource_path": "resources/scripts/knowledge-links-builder.ts",
-      "sha256": "4237707639ab888dcc95bc46a28058144dba30918506aef0d729a70e13f16c33"
+      "sha256": "5b8ba984321c5743552a12276a2bfc2ddd2e39960d4f7ca1dd35b9c33dfe6d89"
     },
     {
       "category": "scripts",
       "id": "knowledge-links-traverse",
       "source_path": "scripts/knowledge-links-traverse.ts",
       "resource_path": "resources/scripts/knowledge-links-traverse.ts",
-      "sha256": "9e6eceb9a25a335fbbff0c51bac4ecad1007966977cdf94b8827bbdb298f844e"
+      "sha256": "7892bb2a45f579e80e40a59b46143f8840a00d2fb61bfb54ee9036abf51c02a0"
     },
     {
       "category": "scripts",

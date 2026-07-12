@@ -37,6 +37,7 @@ import {
   readKStageTree,
   writeKStageBaseline,
   runKStageStaleness,
+  knowledgeTierClobbered,
 } from "../learn/k-stage-staleness";
 
 import type { KStageStore, KHashDelta, KStageStaleness } from "../learn/k-stage-staleness";
@@ -709,5 +710,97 @@ describe("Section F — FS smoke", () => {
     expect(result.k5).toBe(true);
     expect(result.k6).toBe(true);
     expect(result.structuralSkip).toBe(true); // no code structural changes
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Section G — knowledge-tier clobber detection (G2b-2 fix)
+// ---------------------------------------------------------------------------
+
+describe("Section G — knowledgeTierClobbered (tier-aware staleness)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "kstage-tier-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeWikiPage(dir: string): void {
+    fs.mkdirSync(path.join(dir, ".guild", "wiki"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".guild", "wiki", "index.md"), "# Wiki\n\nSome page.\n");
+  }
+
+  function writeGraph(dir: string, nodes: Array<{ id: string; type: string }>): void {
+    fs.mkdirSync(path.join(dir, ".guild", "indexes"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, ".guild", "indexes", "knowledge-graph.json"),
+      JSON.stringify({ version: "guild.knowledge_graph.v2", nodes, edges: [], layers: [], tour: [] }),
+    );
+  }
+
+  it("G1: no .guild/wiki/ pages → not clobbered (no tier expected)", () => {
+    expect(knowledgeTierClobbered(tmpDir)).toBe(false);
+  });
+
+  it("G2: wiki pages exist but no knowledge-graph.json yet → not clobbered (never built)", () => {
+    writeWikiPage(tmpDir);
+    expect(knowledgeTierClobbered(tmpDir)).toBe(false);
+  });
+
+  it("G3: wiki pages exist + graph has a wiki_page node → not clobbered", () => {
+    writeWikiPage(tmpDir);
+    writeGraph(tmpDir, [
+      { id: "file:src/index.ts", type: "file" },
+      { id: "wiki_page:index", type: "wiki_page" },
+    ]);
+    expect(knowledgeTierClobbered(tmpDir)).toBe(false);
+  });
+
+  it("G4: wiki pages exist + graph has ONLY non-knowledge nodes → clobbered", () => {
+    writeWikiPage(tmpDir);
+    writeGraph(tmpDir, [{ id: "file:src/index.ts", type: "file" }]);
+    expect(knowledgeTierClobbered(tmpDir)).toBe(true);
+  });
+
+  it("G5: corrupt knowledge-graph.json → not clobbered (a different concern)", () => {
+    writeWikiPage(tmpDir);
+    fs.mkdirSync(path.join(tmpDir, ".guild", "indexes"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".guild", "indexes", "knowledge-graph.json"), "{not json");
+    expect(knowledgeTierClobbered(tmpDir)).toBe(false);
+  });
+
+  it("G6: runKStageStaleness folds a clobbered tier into K2/K4/K5/K6, even with a fresh no-op baseline", () => {
+    fs.writeFileSync(path.join(tmpDir, "main.ts"), "export const x = 1;");
+    writeKStageBaseline(tmpDir);
+
+    // Simulate a clobber that touches NO tracked file (code/doc/diagram) —
+    // only the derived, non-tracked knowledge-graph.json artifact changes.
+    writeWikiPage(tmpDir);
+    writeGraph(tmpDir, [{ id: "file:src/index.ts", type: "file" }]);
+
+    const result = runKStageStaleness(tmpDir);
+    expect(result.knowledgeTierClobbered).toBe(true);
+    expect(result.k2).toBe(true);
+    expect(result.k4).toBe(true);
+    expect(result.k5).toBe(true);
+    expect(result.k6).toBe(true);
+    expect(result.reason).toMatch(/clobbered tier/);
+  });
+
+  it("G7: runKStageStaleness reports NOT clobbered when the tier survives (regression control)", () => {
+    fs.writeFileSync(path.join(tmpDir, "main.ts"), "export const x = 1;");
+    writeKStageBaseline(tmpDir);
+
+    writeWikiPage(tmpDir);
+    writeGraph(tmpDir, [
+      { id: "file:src/index.ts", type: "file" },
+      { id: "wiki_page:index", type: "wiki_page" },
+    ]);
+
+    const result = runKStageStaleness(tmpDir);
+    expect(result.knowledgeTierClobbered).toBe(false);
   });
 });

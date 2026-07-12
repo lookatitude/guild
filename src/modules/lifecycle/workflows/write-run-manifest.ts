@@ -37,8 +37,8 @@
  */
 
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
+import { atomicWrite } from "../../state";
 
 // ── Schema (guild.run_manifest.v1) ───────────────────────────────────────────
 
@@ -111,13 +111,9 @@ export function writeRunManifest(cwd: string, manifest: RunManifest): string {
   manifest.waves.sort((a, b) => a.wave_index - b.wave_index);
   manifest.current_wave = computeCurrentWave(manifest.waves);
   const out = manifestPathFor(cwd, manifest.slug);
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  const tmpPath = path.join(
-    os.tmpdir(),
-    `guild-run-manifest-${Date.now()}-${process.pid}.json.tmp`
-  );
-  fs.writeFileSync(tmpPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
-  fs.renameSync(tmpPath, out);
+  // EXDEV fix: atomicWrite writes its temp file in the SAME directory as
+  // `out` (never os.tmpdir()), so the rename is always same-filesystem.
+  atomicWrite(out, JSON.stringify(manifest, null, 2) + "\n");
   return out;
 }
 

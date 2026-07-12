@@ -12,6 +12,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/atomic-write",
+      "source_path": "scripts/lib/atomic-write.ts",
+      "resource_path": "resources/scripts/lib/atomic-write.ts",
+      "sha256": "606b2fc6db4c4b7b1117b584210a5cda152d91e001387279917da62383010f19"
+    },
+    {
+      "category": "scripts",
       "id": "lib/dependency-graph-reader",
       "source_path": "scripts/lib/dependency-graph-reader.ts",
       "resource_path": "resources/scripts/lib/dependency-graph-reader.ts",

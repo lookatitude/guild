@@ -68,14 +68,42 @@ function parseArgs(argv: string[]): {
 
 // ── Skill path resolution ──────────────────────────────────────────────────
 
-const KNOWN_TIERS = [
-  "core",
-  "meta",
-  "knowledge",
-  "specialists",
-  "guild-operations",
-  "guild-quality",
-];
+/**
+ * Enumerate the tier directories directly under <root>/skills/ — dynamic
+ * replacement for a hardcoded tier list. Picks up any tier (core, meta,
+ * knowledge, specialists, guild-operations, guild-quality, or a future
+ * addition) without a code change. Returns [] when skills/ does not exist.
+ */
+function listSkillTierDirs(root: string): string[] {
+  const skillsRoot = path.join(root, "skills");
+  try {
+    return fs
+      .readdirSync(skillsRoot, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolve a live skill dir under <root>/skills/: either a dir-level skill
+ * (SKILL.md directly at skills/<slug>/, e.g. guild-quality, guild-operations)
+ * or a tier-nested skill (skills/<tier>/<slug>/), where tiers are enumerated
+ * from disk rather than a hardcoded list.
+ */
+function findSkillUnderSkillsRoot(root: string, slug: string): { tier: string; dir: string } | null {
+  const directDir = path.join(root, "skills", slug);
+  if (fs.existsSync(path.join(directDir, "SKILL.md"))) {
+    return { tier: "skills", dir: directDir };
+  }
+  for (const tier of listSkillTierDirs(root)) {
+    const dir = path.join(root, "skills", tier, slug);
+    if (fs.existsSync(path.join(dir, "SKILL.md"))) return { tier, dir };
+  }
+  return null;
+}
 
 function findLiveSkillDir(cwd: string, slug: string): { tier: string; dir: string } | null {
   // DH-3: the consuming repo's project instance wins over the plugin library —
@@ -85,21 +113,18 @@ function findLiveSkillDir(cwd: string, slug: string): { tier: string; dir: strin
   if (fs.existsSync(path.join(projectDir, "SKILL.md"))) {
     return { tier: "project", dir: projectDir };
   }
-  // Self-build layout: skills/<tier>/ under cwd (the plugin repo itself).
-  for (const tier of KNOWN_TIERS) {
-    const dir = path.join(cwd, "skills", tier, slug);
-    if (fs.existsSync(path.join(dir, "SKILL.md"))) return { tier, dir };
-  }
+  // Self-build layout: skills/<tier>/ (or dir-level skills/<slug>/) under cwd
+  // (the plugin repo itself).
+  const selfBuild = findSkillUnderSkillsRoot(cwd, slug);
+  if (selfBuild) return selfBuild;
   // Consuming repo without a project instance yet: resolve the shipped
   // baseline from the plugin install so the first evolve of a plugin skill
   // works outside the plugin repo.
   const pluginRoot =
     process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
   if (pluginRoot && path.resolve(pluginRoot) !== path.resolve(cwd)) {
-    for (const tier of KNOWN_TIERS) {
-      const dir = path.join(pluginRoot, "skills", tier, slug);
-      if (fs.existsSync(path.join(dir, "SKILL.md"))) return { tier, dir };
-    }
+    const shipped = findSkillUnderSkillsRoot(pluginRoot, slug);
+    if (shipped) return shipped;
   }
   return null;
 }

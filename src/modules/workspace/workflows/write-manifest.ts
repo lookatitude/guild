@@ -32,9 +32,9 @@
  */
 
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import { detect, type WorkspaceMode } from "./detect";
+import { atomicWrite } from "../../state";
 
 // ── Code-file extensions that indicate scannable top-level code (D-OQ2) ──────
 
@@ -121,11 +121,10 @@ export function writeManifest(root: string, modeOverride?: WorkspaceMode): strin
   fs.mkdirSync(guildDir, { recursive: true });
 
   const manifestPath = path.join(guildDir, "workspace.json");
-  const tmpPath = path.join(os.tmpdir(), `guild-ws-manifest-${Date.now()}-${process.pid}.json.tmp`);
 
-  // Atomic write: write to tmp → rename (never a partial workspace.json)
-  fs.writeFileSync(tmpPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
-  fs.renameSync(tmpPath, manifestPath);
+  // Atomic write: same-directory temp file → rename (never a partial
+  // workspace.json; never os.tmpdir(), which can throw EXDEV on rename).
+  atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 
   return manifestPath;
 }

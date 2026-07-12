@@ -46,6 +46,7 @@ import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
 import { markLaneInProgress } from "../lib/run-state.js";
 import { emitBusEvent } from "../lib/bus-emit.js";
+import { resolveRunIdForTrace } from "../lib/run-trace.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -180,10 +181,16 @@ async function main(): Promise<void> {
   // is seeded from the launch side (launcher owns the authoritative write;
   // this hook-side write is the earliest observable hook checkpoint).
   // Non-fatal: run-state is a rebuildable cache, never the system of record.
-  // Use || so an empty GUILD_RUN_ID string also falls through to the fallback
-  // (matches task-completed.ts's deriveRunId() semantics for consistency).
-  const runId = process.env["GUILD_RUN_ID"] || `run-${(payload.session_id ?? "unknown")}`;
-  const runDir = path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  // resolveRunIdForTrace (env → legacy sentinel → B2 sentinel) is the SAME
+  // resolver run-trace-close.ts/learning-backstop.ts use — a session without
+  // the agent-team launcher's GUILD_RUN_ID env (lead session creating tasks,
+  // or a pane the launcher failed to seed) still converges on the sentinel
+  // run instead of a divorced run-<session_id> directory (audit finding).
+  const guildRootForRun = resolveGuildRoot(cwd);
+  const runId =
+    resolveRunIdForTrace(guildRootForRun, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
+    `run-${payload.session_id ?? "unknown"}`;
+  const runDir = path.join(guildRootForRun, ".guild", "runs", runId);
   try {
     markLaneInProgress(runDir, { runId }, taskId);
     process.stderr.write(

@@ -1,2 +1,11 @@
 # schema_version: guild.initiatives_registry.v1
-initiatives: []
+initiatives:
+  - id: plugin-audit-remediation
+    title: "Plugin audit remediation — close the 47 confirmed findings of the 2026-07-12 full implementation audit"
+    status: in_progress
+    execution_status: in_progress
+    path: .guild/initiatives/active/plugin-audit-remediation
+    created_at: 2026-07-12
+    target_repo: plugin
+    goals_doc: .guild/initiatives/active/plugin-audit-remediation/goals.md
+    evidence: "umbrella .guild/artifacts/audits/plugin-implementation-audit-2026-07-12.md (+ .digest.txt)"

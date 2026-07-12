@@ -1,10 +1,13 @@
 ---
-title: Team composition rules
-category: context
+type: context
+owner: architect
 confidence: medium
-updated: 2026-02-28
 source_refs:
   - .guild/raw/2026-02-20-team-notes.md
+updated_at: 2026-02-28
+expires_at: null
+supersedes: null
+sensitivity: internal
 ---
 
 # Team composition rules

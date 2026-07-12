@@ -27,6 +27,11 @@
  *     --specialist <name>              (default: unknown) \
  *     --objective "<text>"             (default: "") \
  *     [--initiative-id <id>]           (default: null) \
+ *     [--phase <phase>]                (default: execute; the R-TRACE
+ *                                        dispatch-event phase — a lifecycle
+ *                                        phase token such as "execute" or
+ *                                        "review", NEVER derived from
+ *                                        --initiative-id) \
  *     [--context-bundle <path>]
  *     [--depends-on <id,id,...>]
  *     [--autonomy-policy <policy>]     (default: autonomous_after_plan_approval)
@@ -48,11 +53,11 @@
  */
 
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 // R-TRACE (Wave 6): additive dispatch trace — NEVER changes return value
 import { emitTraceEvent, makeDispatchEvent } from "../../telemetry";
 import { loadYamlApi } from "../../kernel";
+import { atomicWrite } from "../../state";
 
 // ── Canonical schema types (guild.task_run.v1) ───────────────────────────────
 
@@ -183,6 +188,14 @@ export interface TaskRunParams {
   objective?: string;
   /** Path to the context bundle for this lane. Default: "". */
   contextBundle?: string;
+  /**
+   * R-TRACE dispatch-event phase (e.g. "execute", "review"). Default: "execute".
+   * A caller-supplied lifecycle phase — never derived from initiativeId (an
+   * initiative id is an unrelated identifier, not a phase token; conflating
+   * the two silently mislabeled every dispatch trace event with the
+   * initiative slug instead of the actual phase).
+   */
+  phase?: string;
   inputs?: string[];
   expectedOutputs?: string[];
   dependsOn?: string[];
@@ -258,6 +271,7 @@ export function writeTaskRun(
     specialist = "unknown",
     objective = "",
     contextBundle = "",
+    phase = "execute",
     inputs = [],
     expectedOutputs = [],
     dependsOn = [],
@@ -317,21 +331,15 @@ export function writeTaskRun(
   const doc: TaskRunDocument = { task_run: taskRun };
 
   const outPath = taskRunPath(cwd, runId, taskId);
-  fs.mkdirSync(path.dirname(outPath), { recursive: true });
-
-  // Atomic write: write to a temp file in the system temp dir, then rename.
-  const tmpPath = path.join(
-    os.tmpdir(),
-    `guild-task-run-${process.pid}-${Date.now()}.yaml.tmp`
-  );
   const yamlStr = loadYamlApi().dump(doc, {
     indent: 2,
     lineWidth: -1, // no forced line wraps
     quotingType: '"',
     forceQuotes: false,
   });
-  fs.writeFileSync(tmpPath, yamlStr, "utf8");
-  fs.renameSync(tmpPath, outPath);
+  // EXDEV fix: atomicWrite writes its temp file in the SAME directory as
+  // `outPath` (never os.tmpdir()), so the rename is always same-filesystem.
+  atomicWrite(outPath, yamlStr);
 
   // R-TRACE emit — guild.trace.dispatch.v1 (additive, try/catch)
   // emit-point: write-task-run.ts writeTaskRun(), after task_run file written
@@ -349,7 +357,7 @@ export function writeTaskRun(
         run_id: runId,
         lane_id: taskId,
         specialist,
-        phase: (initiativeId ?? "execute").replace(/^initiative-/, ""),
+        phase,
         task_id: taskId,
         backend: _traceBackend,
         backend_rung: 0, // not yet determined at write-task-run time
@@ -380,6 +388,7 @@ function parseArgs(argv: string[]): {
   let objective = "";
   let contextBundle = "";
   let initiativeId: string | null = null;
+  let phase = "execute";
   let dependsOnRaw = "";
   let autonomyPolicy: AutonomyPolicy = "autonomous_after_plan_approval";
   let loopsApplicable: LoopsApplicable = "none";
@@ -404,6 +413,7 @@ function parseArgs(argv: string[]): {
       case "--objective":     objective = next; i++; break;
       case "--context-bundle": contextBundle = next; i++; break;
       case "--initiative-id": initiativeId = next; i++; break;
+      case "--phase":         phase = next; i++; break;
       case "--depends-on":    dependsOnRaw = next; i++; break;
       case "--autonomy-policy": autonomyPolicy = next as AutonomyPolicy; i++; break;
       case "--loops-applicable": loopsApplicable = next as LoopsApplicable; i++; break;
@@ -447,6 +457,7 @@ function parseArgs(argv: string[]): {
       specialist,
       objective,
       contextBundle,
+      phase,
       dependsOn,
       autonomyPolicy,
       loopsApplicable,

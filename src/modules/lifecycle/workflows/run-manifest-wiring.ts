@@ -25,15 +25,17 @@
  *   - Validator returns { valid, errors } — never throws on shape violations.
  *   - Default-safe: all shared-config reads fail open to documented defaults so
  *     the module stays inert when the feature is not yet wired.
- *   - File I/O goes through the injectable `FsSeam` so the module is testable
- *     with temp-dir real-fs or in-memory stubs.
+ *   - File I/O delegates directly to write-run-manifest's real-fs
+ *     read/write/upsert functions (no injectable fs seam here — a prior
+ *     `ManifestFsSeam` parameter was declared but never read by this module
+ *     and no test injected it; it was removed rather than wired to avoid
+ *     shipping a second, unused fs-injection surface. write-run-manifest.ts's
+ *     own writer is where real-path fs testability would need to land first).
  *
  * Owned by tooling-engineer. Consumers: orchestrator (wave-start write),
  * TaskCompleted (wave-complete write), /guild:resume + /guild:status (readers).
  */
 
-import * as fsNode from "fs";
-import * as os from "os";
 import * as path from "path";
 
 // ── Re-export canonical types from the writer (single source of truth) ─────────
@@ -66,31 +68,6 @@ export {
   upsertWave,
   setProgramStatus,
 };
-
-// ── Injectable fs seam (real-path testability) ────────────────────────────────
-
-/**
- * Minimal fs surface used by wireRunManifest for temp-write + atomic rename.
- * Callers pass a real-fs adapter or an in-memory stub for tests.
- */
-export interface ManifestFsSeam {
-  mkdirSync(p: string, opts: { recursive: true }): void;
-  writeFileSync(p: string, content: string, enc: "utf8"): void;
-  renameSync(oldPath: string, newPath: string): void;
-  readFileSync(p: string, enc: "utf8"): string;
-  existsSync(p: string): boolean;
-}
-
-/** Real-fs implementation used as the default. */
-function realFsSeam(): ManifestFsSeam {
-  return {
-    mkdirSync: (p, opts) => fsNode.mkdirSync(p, opts),
-    writeFileSync: (p, c, e) => fsNode.writeFileSync(p, c, e),
-    renameSync: (o, n) => fsNode.renameSync(o, n),
-    readFileSync: (p, e) => fsNode.readFileSync(p, e),
-    existsSync: (p) => fsNode.existsSync(p),
-  };
-}
 
 // ── Validation ─────────────────────────────────────────────────────────────────
 
@@ -274,12 +251,6 @@ export interface WireRunManifestOpts {
    * When absent, the program status is not changed by this call.
    */
   programStatus?: ProgramStatus;
-
-  /**
-   * Injectable fs seam. Defaults to real fs.
-   * Tests pass a temp-dir real fs (or an in-memory stub) to stay hermetic.
-   */
-  fs?: ManifestFsSeam;
 }
 
 /**
@@ -435,8 +406,6 @@ export interface MultiWaveProgramOpts {
   now: string;
   /** Optional final program status to set after all waves are upserted. */
   programStatus?: ProgramStatus;
-  /** Injectable fs seam (defaults to real fs). */
-  fs?: ManifestFsSeam;
 }
 
 /**
@@ -451,20 +420,20 @@ export interface MultiWaveProgramOpts {
  * @returns     Final manifest + manifestPath + validation.
  */
 export function buildMultiWaveProgram(opts: MultiWaveProgramOpts): WireResult {
-  const { cwd, slug, title, waves, now, programStatus, fs } = opts;
+  const { cwd, slug, title, waves, now, programStatus } = opts;
 
   let result: WireResult | null = null;
   for (const wave of waves) {
-    result = wireRunManifest({ cwd, slug, title, now, wave, fs });
+    result = wireRunManifest({ cwd, slug, title, now, wave });
   }
 
   if (programStatus !== undefined) {
-    result = wireRunManifest({ cwd, slug, now, programStatus, fs });
+    result = wireRunManifest({ cwd, slug, now, programStatus });
   }
 
   if (!result) {
     // No waves and no programStatus — just init.
-    result = wireRunManifest({ cwd, slug, title, now, fs });
+    result = wireRunManifest({ cwd, slug, title, now });
   }
 
   return result;

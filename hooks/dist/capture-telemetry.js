@@ -607,14 +607,16 @@ async function main() {
   const logsDir = path5.join(runsDir, "logs");
   const canonicalFile = path5.join(logsDir, "v1.4-events.jsonl");
   const legacyFile = path5.join(runsDir, "events.ndjson");
-  try {
-    fs5.mkdirSync(logsDir, { recursive: true });
-    fs5.appendFileSync(canonicalFile, eventLine, "utf8");
-  } catch (err) {
-    process.stderr.write(
-      `[capture-telemetry] ERROR: failed to write to canonical log (${canonicalFile}): ${err instanceof Error ? err.message : String(err)}
+  if (eventName !== "PostToolUse") {
+    try {
+      fs5.mkdirSync(logsDir, { recursive: true });
+      fs5.appendFileSync(canonicalFile, eventLine, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[capture-telemetry] ERROR: failed to write to canonical log (${canonicalFile}): ${err instanceof Error ? err.message : String(err)}
 `
-    );
+      );
+    }
   }
   try {
     fs5.mkdirSync(runsDir, { recursive: true });

@@ -397,6 +397,47 @@ function newestRunActivityMs(root: string, runId: string): number {
 }
 
 /**
+ * Newest liveness signal for a run EXCLUDING run.yaml itself (epoch ms, 0 when
+ * no signal exists). Used by run-trace-close.ts to detect "was this run
+ * touched again after being marked closed" — the reopen-on-activity guard for
+ * the hooks.json Stop-per-turn finding (hooks.json:78 audit item): Stop fires
+ * once per assistant turn, not once per lifecycle, so a multi-turn run (e.g.
+ * guild:ideate's clarify loop yielding to the user, or a full init→ops
+ * lifecycle spanning several /guild:<phase> commands under the same
+ * sentinel-resolved run-id) gets closed after the FIRST turn and every later
+ * phase's tool activity would otherwise attach to an already-"closed" run
+ * with stale provenance.
+ *
+ * run.yaml is deliberately excluded from the candidate set (unlike
+ * newestRunActivityMs, which self-heals ABANDONED runs and wants every
+ * signal): closeRun's own flipRunStatus() write bumps run.yaml's mtime as
+ * part of the very close operation being evaluated, so including it would
+ * make every close look like "activity after itself" and defeat the
+ * idempotent no-op on the very next Stop.
+ */
+export function newestPostCloseActivityMs(root: string, runId: string): number {
+  const dir = runDir(root, runId);
+  const candidates = [liveLogPath(root, runId), path.join(dir, "events.ndjson")];
+  try {
+    const inProgress = path.join(dir, "in-progress");
+    for (const name of fs.readdirSync(inProgress)) {
+      candidates.push(path.join(inProgress, name));
+    }
+  } catch {
+    /* no in-progress dir — fine */
+  }
+  let newest = 0;
+  for (const p of candidates) {
+    try {
+      newest = Math.max(newest, fs.statSync(p).mtimeMs);
+    } catch {
+      /* file absent — skip */
+    }
+  }
+  return newest;
+}
+
+/**
  * Self-heal interrupted sessions (issue #13). Before a new run claims the
  * current-run-id sentinel, finalize the IMMEDIATELY-PRIOR sentinel run IF it is
  * (a) still `status: open` AND (b) abandoned — no liveness signal (trace mtimes

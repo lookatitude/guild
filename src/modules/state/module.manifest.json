@@ -9,6 +9,7 @@
   "owns": {
     "hooks": ["PreCompact:pre-compact.js"],
     "scripts": [
+      "lib/atomic-write",
       "lib/dependency-graph-reader",
       "lib/dependency-graph-schema",
       "lib/frontmatter",

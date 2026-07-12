@@ -50,7 +50,7 @@
       "id": "description-optimizer",
       "source_path": "scripts/description-optimizer.ts",
       "resource_path": "resources/scripts/description-optimizer.ts",
-      "sha256": "eab9971aee4bc25a1fc059fedfcadc2b6893934c51d36caf2c703a2fc74bab75"
+      "sha256": "f89a3f741dd2c38b93e28e7b4f466a902793919c93dc3250d3effb0d59efbbc0"
     },
     {
       "category": "scripts",

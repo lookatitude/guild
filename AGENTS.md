@@ -55,8 +55,8 @@ never user-typed. This is the one-place wiring reference — each command's
 | `/guild:ideate` | `guild:brainstorm` (standard+deep: wrapped by `guild:loop-clarify`) | `.guild/spec/<slug>.md` |
 | `/guild:plan` | `guild:team-compose` → `guild:plan` (deep: + `guild:loop-plan-review`) | `.guild/team/<slug>.yaml`, `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` |
 | `/guild:build` | per lane: `guild:context-assemble` → `guild:execute-plan` → `guild:review` (deep: + `guild:loop-implement`) | handoff receipts, `assumptions.md`, `review.md` |
-| `/guild:qa` | `guild:quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
-| `/guild:ops` | `guild:operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
+| `/guild:qa` | `guild:guild-quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
+| `/guild:ops` | `guild:guild-operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
 | `/guild:learn` | the `learn-*` family — `guild:learn-map` / `learn-graph` / `learn-onboard` / `learn-diff` / `learn-explain` | deep knowledge-graph + onboarding / diff / explain artifacts (lazy, gated) |
 
 ## Dev team (`.claude/agents/`)

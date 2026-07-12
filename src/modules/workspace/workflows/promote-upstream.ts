@@ -37,7 +37,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
+import { atomicWrite } from "../../state";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -391,12 +391,9 @@ export function runPromoteUpstreamCli(argv: string[] = process.argv.slice(2)): v
     };
 
     const manifestPath = path.join(runsDir, "upstream-candidates.json");
-    const tmpPath = path.join(
-      os.tmpdir(),
-      `guild-upstream-candidates-${Date.now()}-${process.pid}.json.tmp`,
-    );
-    fs.writeFileSync(tmpPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
-    fs.renameSync(tmpPath, manifestPath);
+    // EXDEV fix: atomicWrite writes its temp file in the SAME directory as
+    // `manifestPath` (never os.tmpdir()), so the rename is always same-filesystem.
+    atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 
     // Human summary
     const byRepo = new Map<string, number>();

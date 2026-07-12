@@ -22,18 +22,6 @@ node_modules/
 !/evidence/desktop-app-smoke/
 !/evidence/desktop-app-smoke/**
 
-# Fixture .guild/ dirs must be tracked (they are static test fixtures, not live runtime state).
-# These exemptions are non-negotiable — preserved verbatim per share-dot-guild constraints.
-# Keep this list in sync with FIXTURE_EXEMPT_PATTERNS in plugin/scripts/dot-guild/audit.ts (FU-F).
-!benchmark/fixtures/**/.guild/
-!benchmark/fixtures/**/.guild/**
-!mcp-servers/guild-telemetry/fixtures/**/.guild/
-!mcp-servers/guild-telemetry/fixtures/**/.guild/**
-!mcp-servers/guild-telemetry/fixtures-v14/**/.guild/
-!mcp-servers/guild-telemetry/fixtures-v14/**/.guild/**
-!tests/dot-guild/fixtures/**/.guild/
-!tests/dot-guild/fixtures/**/.guild/**
-
 # Anchor to repo root: `!.guild/` (unanchored, no internal /) would re-include nested
 # dirs like hooks/.guild/ or scripts/.guild/. Leading / anchors to gitignore directory.
 # .guild/ — share-dot-guild policy (see docs/knowledge/decisions/guild-boundary-config-and-tracking.md Decision E)
@@ -94,6 +82,29 @@ node_modules/
 !.guild/runs/*/run.yaml
 !.guild/runs/*/summary.md
 !.guild/runs/*/share-payloads.flag
+
+# Fixture .guild/ dirs must be tracked (they are static test fixtures, not live runtime state).
+# These exemptions are non-negotiable — preserved verbatim per share-dot-guild constraints.
+# Keep this list in sync with FIXTURE_EXEMPT_PATTERNS in plugin/scripts/dot-guild/audit.ts (FU-F).
+# MUST come after the bare (unanchored) `.guild` blanket-ignore rule above — gitignore
+# resolves overlapping patterns by file order, so a fixture exemption declared BEFORE
+# that blanket rule is silently re-excluded by it. (Previously misplaced above the
+# blanket rule: the exemption was vacuous for any newly-added fixture file — only
+# looked correct because the existing fixture files were already tracked, and git
+# never re-applies ignore rules to already-tracked paths. Discovered while adding new
+# guild-memory/guild-telemetry MCP fixtures; see mcp-servers/**/fixtures*/.guild/**.)
+!benchmark/fixtures/**/.guild/
+!benchmark/fixtures/**/.guild/**
+!mcp-servers/guild-memory/fixtures/**/.guild/
+!mcp-servers/guild-memory/fixtures/**/.guild/**
+!mcp-servers/guild-telemetry/fixtures/**/.guild/
+!mcp-servers/guild-telemetry/fixtures/**/.guild/**
+!mcp-servers/guild-telemetry/fixtures-v14/**/.guild/
+!mcp-servers/guild-telemetry/fixtures-v14/**/.guild/**
+!mcp-servers/guild-telemetry/fixtures-alt-cwd/**/.guild/
+!mcp-servers/guild-telemetry/fixtures-alt-cwd/**/.guild/**
+!tests/dot-guild/fixtures/**/.guild/
+!tests/dot-guild/fixtures/**/.guild/**
 
 # Re-deny operator-private / local-only sub-paths (D-SHR-4 + Decision G)
 .guild/settings.local.json

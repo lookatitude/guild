@@ -267,7 +267,7 @@
       "id": "write-host-capability",
       "source_path": "scripts/write-host-capability.ts",
       "resource_path": "resources/scripts/write-host-capability.ts",
-      "sha256": "28e34c2c167fa9e6081b7929b65ebc571c67e5f6673b863694858ecb2ae012c9"
+      "sha256": "530e338fa623afb83d89d9e3040e72f82e237aa2bc1ab35c483fe064e96c2d66"
     }
   ]
 }

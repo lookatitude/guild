@@ -39,7 +39,13 @@ const FROZEN_PATHS = [".claude-plugin", "commands"]; // STRICT byte-identical
 // is `build:hosts` SC-2 normalized equivalence (generated tree ≡ committed tree, GREEN) — this guard is the
 // secondary tripwire for FUTURE *unintended* drift from the ratified v2 surface. Bump this on the next
 // deliberate surface change (or at the v2→main flip).
-const PINNED_BASELINE = "4833f69"; // RE-RATIFIED 2026-07-01 to the settled dv2-reconciliation+init/config surface (was 4e91770; operator-directed "full green" — the dv2 docs↔code reconciliation deliberately evolved commands/init.md + skills/{learn,codex-review} and the init/config guild.yaml rename settled commands/init.md; SC-2 equivalence remains the real cutover gate, GREEN)
+// RE-RATIFICATION RULE (read before bumping): the pin is the LAST commit on branch history that
+// deliberately changed the frozen surface (`.claude-plugin/**`, `commands/**`, live `skills/**`) and
+// is an ancestor of HEAD but NOT HEAD. It must leave ZERO delta to the working tree so the guard is
+// GREEN now; it then trips the instant a NEW (unreleased) surface change lands on top. On any
+// deliberate surface change, bump this pin to that change's commit. Do NOT auto-follow HEAD — a pin
+// that chased HEAD would let a committed surface mutation hide itself (the whole reason it is pinned).
+const PINNED_BASELINE = "7958ed8"; // RE-RATIFIED 2026-07-12 (plugin-audit-remediation G1b) to the settled specialist-template-library surface (was 4833f69, from 2026-07-01, which predated the v2.1.0 machinery-agents/specialist-template-library split — 7 domain agents dropped from plugin.json + skills/{audit,create-specialist,diagnose,execute-plan,reflect,team-compose} evolved — leaving the old pin stale-RED on a clean checkout). 7958ed8 is the last surface-touching commit (the template-library follow-ups) and is byte-identical to the current tree; commits after it (d79cd19, d2a4ffd, 60b7b79, merge 5cbcd0c) touch only tests/scripts. NOTE: v2.1.0 (d2867f6) is NOT a valid anchor — the surface legitimately drifted past it on `next`. SC-2 normalized equivalence remains the real cutover gate.
 const DIFF_SANITY_ANCHOR = "3ce3666"; // an OLD ancestor — used ONLY to prove `git diff` is wired (non-empty)
 
 // The v2 surface is now the baseline, so there are no permitted deltas FROM it — the surface is frozen

@@ -2,7 +2,7 @@
   "name": "guild-memory",
   "private": true,
   "version": "0.1.0",
-  "description": "Optional Guild MCP server: BM25 wiki search over .guild/wiki/ (per guild-plan.md \u00a713.3, \u00a710.5).",
+  "description": "Optional Guild MCP server: BM25 wiki search over .guild/wiki/ (per guild-plan.md §13.3, §10.5).",
   "type": "commonjs",
   "scripts": {
     "start": "npx tsx src/index.ts",
@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "js-yaml": "^4.3.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {

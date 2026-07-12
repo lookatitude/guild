@@ -4,6 +4,24 @@
 // binding schema doc `guild-benchmark/plans/v1.4-jsonl-schema.md` (12 event
 // types, schema_version: 1).
 //
+// FIX (2026-07-12 audit): the canonical `.guild/runs/<id>/logs/v1.4-events.jsonl`
+// file that a real run produces is NOT populated exclusively by the 12
+// wrapped event types below. Two other legitimate line families land in the
+// SAME file and previously failed validation outright:
+//
+//   1. Hook-name MIRROR lines — hooks/capture-telemetry.ts writes one line per
+//      Claude Code hook invocation with `event` set to the RAW hook name
+//      (PostToolUse, SubagentStop, UserPromptSubmit, ...), a flatter shape
+//      than the `hook_event` wrapper type below (which nests the hook name in
+//      a separate `hook_name` field instead). See validateHookMirrorEvent.
+//   2. guild.trace.*.v1 R-TRACE lines — src/modules/telemetry emits these with
+//      a `schema_version` field INSTEAD of `event`. Validation is delegated to
+//      that module's own validateGuildTraceEvent (single source of truth for
+//      that schema family) rather than re-implemented here.
+//
+// validateEvent() now accepts all three families so a real run's log
+// validates clean end to end.
+//
 // Usage:
 //   npx tsx scripts/v1.4-log-validator.ts <jsonl-file>
 //
@@ -18,6 +36,7 @@
 //   2 — usage error (missing/unreadable file)
 
 import { readFileSync, existsSync } from "node:fs";
+import { validateGuildTraceEvent } from "../src/modules/telemetry/workflows/guild-trace-events";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Closed enums — copied verbatim from `guild-benchmark/plans/v1.4-jsonl-schema.md`.
@@ -337,6 +356,59 @@ function validateCodexReviewRound(o: Record<string, unknown>, errs: string[]): v
     errs.push(`terminated_by_satisfied: expected boolean`);
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Hook-name MIRROR event validator (hooks/capture-telemetry.ts writer).
+//
+// This is a DIFFERENT event family from the 12 wrapped EVENT_TYPES above: the
+// canonical run log's `event` field here is the raw Claude Code hook name
+// (one of HOOK_EVENT_NAMES) rather than one of the 12 tokens, there is no
+// `run_id` field (the run is implicit from the log's directory), and the
+// shape is the flat `TelemetryEvent` capture-telemetry.ts builds — see
+// hooks/capture-telemetry.ts `interface TelemetryEvent`. Kept in sync by
+// convention (both are hand-maintained; a schema drift here would be a false
+// validator failure against a real run, which is exactly the defect this
+// fix closes).
+// ──────────────────────────────────────────────────────────────────────────
+
+function isTraceTokens(v: unknown): boolean {
+  if (typeof v !== "object" || v === null) return false;
+  const t = v as Record<string, unknown>;
+  for (const k of ["input", "output", "cached", "cost_usd"]) {
+    if (k in t && typeof t[k] !== "number") return false;
+  }
+  return true;
+}
+
+function validateHookMirrorEvent(o: Record<string, unknown>, errs: string[]): void {
+  if (!isString(o.ts) || !ISO_TS_RE.test(o.ts)) {
+    errs.push(`ts: expected ISO-8601 millisecond UTC timestamp, got ${JSON.stringify(o.ts)}`);
+  }
+  // `event` is already known to be one of HOOK_EVENT_NAMES by the caller.
+  if (!isString(o.tool)) errs.push(`tool: expected string (may be empty)`);
+  if (!isString(o.specialist)) errs.push(`specialist: expected string (may be empty)`);
+  if (!isString(o.payload_digest)) errs.push(`payload_digest: expected string`);
+  if (!isBool(o.ok)) errs.push(`ok: expected boolean`);
+  if (!isNonNegInt(o.ms)) errs.push(`ms: expected non-negative integer`);
+
+  checkOptionalString(o, "model", errs);
+  checkOptionalString(o, "prompt", errs);
+  checkOptionalString(o, "loop_layer", errs);
+  checkOptionalString(o, "loop_gate", errs);
+  checkOptionalString(o, "span_id", errs);
+  checkOptionalString(o, "parent_span_id", errs);
+  checkOptionalString(o, "tier", errs);
+  checkOptionalString(o, "payload_ref", errs);
+  if ("loop_round" in o && !isInt(o.loop_round)) {
+    errs.push(`loop_round: expected integer when present`);
+  }
+  if ("loop_terminated" in o && !isBool(o.loop_terminated)) {
+    errs.push(`loop_terminated: expected boolean when present`);
+  }
+  if ("tokens" in o && !isTraceTokens(o.tokens)) {
+    errs.push(`tokens: expected { input?, output?, cached?, cost_usd? } (all numbers) when present`);
+  }
+}
+
 const VALIDATORS: Record<
   string,
   (o: Record<string, unknown>, errs: string[]) => void
@@ -360,27 +432,62 @@ const VALIDATORS: Record<
  * `{ ok: true, errors: [] }` on success, or `{ ok: false, errors: [...] }`
  * on failure with one error string per violation.
  *
- * This validator is strict per schema doc §"Encoding rules":
- *   - `event` must be one of the 12 listed types.
- *   - All required fields per type must be present and well-typed.
- *   - Optional fields, when present, must be well-typed (no nulls).
- *   - Enums are closed; unknown values reject.
+ * The canonical `.guild/runs/<id>/logs/v1.4-events.jsonl` file carries THREE
+ * legitimate line families; this function routes to whichever applies:
+ *
+ *   1. guild.trace.*.v1 lines (`schema_version` present) — delegated to
+ *      src/modules/telemetry's own validateGuildTraceEvent (single source of
+ *      truth for that schema).
+ *   2. Hook-name mirror lines (`event` is one of HOOK_EVENT_NAMES) — the flat
+ *      shape hooks/capture-telemetry.ts writes. See validateHookMirrorEvent.
+ *   3. The 12 wrapped v1.4 EVENT_TYPES below (`event` is e.g. "tool_call",
+ *      "hook_event", "phase_start", ...) — the original schema doc's strict
+ *      per-type validators:
+ *        - All required fields per type must be present and well-typed.
+ *        - Optional fields, when present, must be well-typed (no nulls).
+ *        - Enums are closed; unknown values reject.
  */
 export function validateEvent(parsed: unknown): ValidationResult {
-  const errors: string[] = [];
   if (typeof parsed !== "object" || parsed === null) {
     return { ok: false, errors: ["event must be a JSON object"] };
   }
   const o = parsed as Record<string, unknown>;
+
+  // Family 1 — guild.trace.*.v1 (R-TRACE): carries `schema_version` instead
+  // of `event`. Delegate entirely; this validator does not re-implement that
+  // schema.
+  if (isString(o.schema_version) && o.schema_version.startsWith("guild.trace.")) {
+    const result = validateGuildTraceEvent(o);
+    if (result.ok) return { ok: true, errors: [] };
+    return { ok: false, errors: [(result as { ok: false; reason: string }).reason] };
+  }
+
   if (!isString(o.event)) {
     return { ok: false, errors: ['envelope: "event" field missing or non-string'] };
   }
+
+  const errors: string[] = [];
+
+  // Family 2 — hook-name mirror lines (hooks/capture-telemetry.ts). `event`
+  // here is a raw Claude Code hook name — a DIFFERENT vocabulary from the
+  // wrapped EVENT_TYPES below (whose `hook_event` type nests the hook name in
+  // a `hook_name` field instead of using it as the envelope's `event`).
+  if ((HOOK_EVENT_NAMES as readonly string[]).includes(o.event)) {
+    for (const [k, v] of Object.entries(o)) {
+      if (v === null) errors.push(`${k}: null is not allowed (omit the field instead)`);
+    }
+    validateHookMirrorEvent(o, errors);
+    return { ok: errors.length === 0, errors };
+  }
+
+  // Family 3 — the 12 wrapped v1.4 EVENT_TYPES.
   if (!(EVENT_TYPES as readonly string[]).includes(o.event)) {
     return {
       ok: false,
       errors: [
         `event: unknown value ${JSON.stringify(o.event)}; ` +
-          `expected one of ${JSON.stringify(EVENT_TYPES)}`,
+          `expected one of ${JSON.stringify(EVENT_TYPES)}, a guild.trace.*.v1 schema_version, ` +
+          `or one of ${JSON.stringify(HOOK_EVENT_NAMES)}`,
       ],
     };
   }

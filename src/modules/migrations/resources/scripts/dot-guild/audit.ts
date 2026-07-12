@@ -187,7 +187,8 @@ export function findPackageReceiptLeaks(repoPath: string): FileFlag[] {
 // fixture .guild/ can live directly under fixtures/ OR nested below it.
 const FIXTURE_EXEMPT_PATTERNS = [
   /\/benchmark\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
-  /\/mcp-servers\/guild-telemetry\/fixtures(?:-v14)?\/(?:[^/]+\/)*\.guild(\/|$)/,
+  /\/mcp-servers\/guild-memory\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
+  /\/mcp-servers\/guild-telemetry\/fixtures(?:-v14|-alt-cwd)?\/(?:[^/]+\/)*\.guild(\/|$)/,
   // `/plugin` is OPTIONAL: matches both the workspace layout (.../plugin/tests/...)
   // and the plugin-repo-root CI checkout (.../tests/..., no /plugin/ segment) — the
   // exemptions must hold regardless of where the plugin tree is rooted.

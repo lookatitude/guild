@@ -3,10 +3,14 @@
  *
  * TDD: written BEFORE the HK-01/HK-02 implementation change.
  *
- * Proves that capture-telemetry.ts routes ALL events to the CANONICAL
+ * Proves that capture-telemetry.ts routes events to the CANONICAL
  * logs/v1.4-events.jsonl path (the plugin↔benchmark contract boundary per
  * docs/v2/12-observability.md §"The canonical trace"), and keeps events.ndjson
- * only as a legacy mirror.
+ * as a legacy mirror for every event type — EXCEPT PostToolUse, which is
+ * deliberately skipped on the canonical side (see the "PostToolUse
+ * de-duplication" describe block below): hooks/post-tool-use.ts already
+ * writes the schema-validated `tool_call` line there for the same invocation,
+ * and having both was a ~2x double-count (audit "PostToolUse double-logging").
  *
  * DRIFT-ANALYSIS findings addressed:
  *   HK-01: SubagentStop / UserPromptSubmit land in events.ndjson, not canonical.
@@ -194,24 +198,45 @@ describe("capture-telemetry.ts — canonical log routing (HK-01/HK-02)", () => {
     });
   });
 
-  // ── PostToolUse also routes to canonical ─────────────────────────────────
+  // ── PostToolUse de-duplication (audit fix) ───────────────────────────────
+  // hooks/post-tool-use.ts ALSO fires on PostToolUse and already writes the
+  // schema-validated `tool_call` line to this SAME canonical file — this
+  // script writing its own ad-hoc `event: "PostToolUse"` line here too was a
+  // straight ~2x double-count. capture-telemetry.ts now skips the canonical
+  // write for PostToolUse specifically (every other event type it handles is
+  // unaffected); the legacy events.ndjson mirror still receives it, since
+  // post-tool-use.ts never writes there.
 
-  describe("PostToolUse routes to canonical log (regression: must not lose v1 behavior)", () => {
-    it("writes PostToolUse to canonical log", () => {
-      const payload = JSON.stringify({
-        session_id: "sess-abc",
-        cwd: tmpDir,
-        hook_event_name: "PostToolUse",
-        tool_name: "Write",
-        agent_name: "backend",
-        tool_response: { success: true },
-      });
-      run(payload, baseEnv());
-      expect(fs.existsSync(canonicalFile)).toBe(true);
+  describe("PostToolUse de-duplication — canonical write skipped, legacy mirror unchanged", () => {
+    const postToolUsePayload = JSON.stringify({
+      session_id: "sess-abc",
+      cwd: "",
+      hook_event_name: "PostToolUse",
+      tool_name: "Write",
+      agent_name: "backend",
+      tool_response: { success: true },
+    });
+
+    it("does NOT write a PostToolUse line to the canonical log", () => {
+      run(postToolUsePayload, baseEnv());
       const lines = readLines(canonicalFile);
+      const ev = lines.find((l) => l["event"] === "PostToolUse");
+      expect(ev).toBeUndefined();
+    });
+
+    it("still writes the PostToolUse line to the legacy events.ndjson mirror", () => {
+      run(postToolUsePayload, baseEnv());
+      const lines = readLines(legacyFile);
       const ev = lines.find((l) => l["event"] === "PostToolUse");
       expect(ev).toBeDefined();
       expect(ev!["tool"]).toBe("Write");
+    });
+
+    it("a SubagentStop event in the SAME run still routes to canonical (only PostToolUse is skipped)", () => {
+      run(readFixture("subagent-stop.json"), baseEnv());
+      const lines = readLines(canonicalFile);
+      const ev = lines.find((l) => l["event"] === "SubagentStop");
+      expect(ev).toBeDefined();
     });
   });
 
