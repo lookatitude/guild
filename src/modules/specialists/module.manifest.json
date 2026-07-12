@@ -7,6 +7,7 @@
   "description": "Owns registered specialist agents and their reusable specialist skill resources.",
   "depends_on": ["teams"],
   "owns": {
+    "scripts": ["roster-resolve", "lib/roster"],
     "agents": [
       "advisor",
       "architect",

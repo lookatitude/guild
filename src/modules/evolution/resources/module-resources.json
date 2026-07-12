@@ -43,7 +43,7 @@
       "id": "evolve-loop",
       "source_path": "scripts/evolve-loop.ts",
       "resource_path": "resources/scripts/evolve-loop.ts",
-      "sha256": "9da14591ef5e9b5448897c425cf287ded4d56f76c848660df0ed9b78532cee20"
+      "sha256": "6e897c527017df4b20b97175a7256ec4448cdac533984dee1fc3a2f186414150"
     },
     {
       "category": "scripts",
@@ -99,7 +99,7 @@
       "id": "guild-evolve-skill",
       "source_path": "skills/meta/evolve-skill/SKILL.md",
       "resource_path": "resources/skills/meta/evolve-skill/SKILL.md",
-      "sha256": "45f29a8558a5990cca651b7fd28d54fc6b2398eee32dac9a588e60df4ed59649"
+      "sha256": "ab3e32e25782c7b2cc4d00812763a0295be6385e4ac147e199a5a8e54c475001"
     },
     {
       "category": "skills",

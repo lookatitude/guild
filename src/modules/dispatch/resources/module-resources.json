@@ -8,21 +8,21 @@
       "id": "agent-team-launcher",
       "source_path": "scripts/agent-team-launcher.ts",
       "resource_path": "resources/scripts/agent-team-launcher.ts",
-      "sha256": "02c04a09ea55ddde47f591c467a82c2de32fca5456676b8540da562f42c8f8f9"
+      "sha256": "5d2172be0d481dae900c02ebe9487961a8e6905c12ec7badc154d1f5e1450811"
     },
     {
       "category": "scripts",
       "id": "lib/core/contracts/team-backend",
       "source_path": "scripts/lib/core/contracts/team-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/team-backend.ts",
-      "sha256": "7c8eab40fbe9011765d13cef5d402d4f06e4a158a0d6bd3241f68c4fe1ff0ab7"
+      "sha256": "3f734ad945dcc35576ff85693aea7aa3c279f9227acea87ee4ee26d6009b4ac9"
     },
     {
       "category": "scripts",
       "id": "lib/host/inprocess-backend",
       "source_path": "scripts/lib/host/inprocess-backend.ts",
       "resource_path": "resources/scripts/lib/host/inprocess-backend.ts",
-      "sha256": "a23f5ad186ea30ca226372206b3f92c26bb3a56281c951c4c5fd3b2f7c85fd62"
+      "sha256": "1f91528f57539221c2e6ffff02f57f8b590186d3fff760d8d6a4551dd7114149"
     },
     {
       "category": "scripts",

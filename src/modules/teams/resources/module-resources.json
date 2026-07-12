@@ -15,14 +15,14 @@
       "id": "guild-create-specialist",
       "source_path": "skills/meta/create-specialist/SKILL.md",
       "resource_path": "resources/skills/meta/create-specialist/SKILL.md",
-      "sha256": "131cc75178e4b2294dbbb76003739a53c9aafc16d959027ec65c1ee3d88b22ec"
+      "sha256": "08193933ac6b5f5ee2e40c45a4db4acd8d0057a9ce7a02a675eb8ca3371c2832"
     },
     {
       "category": "skills",
       "id": "guild-create-specialist/workflow.md",
       "source_path": "skills/meta/create-specialist/workflow.md",
       "resource_path": "resources/skills/meta/create-specialist/workflow.md",
-      "sha256": "54af2eb2ad1d8ae45a6fec46512bf68a7e897b6861516fe084666b0f15dd2988"
+      "sha256": "07b9c31154a6b44163c373c4e2124f83b0a8f4c592f3b978809e40452d884b1e"
     },
     {
       "category": "skills",
@@ -36,7 +36,7 @@
       "id": "guild-team-compose",
       "source_path": "skills/meta/team-compose/SKILL.md",
       "resource_path": "resources/skills/meta/team-compose/SKILL.md",
-      "sha256": "b9cc0b8e5037a3d013847a9f36a1a01b476d503c48bac132c1da174c94fa09a2"
+      "sha256": "4168565c70d3643c999d62202282a4b14cc92dba523dc2007293adae485cd13e"
     },
     {
       "category": "skills",

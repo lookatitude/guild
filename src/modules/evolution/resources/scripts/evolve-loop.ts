@@ -68,12 +68,38 @@ function parseArgs(argv: string[]): {
 
 // ── Skill path resolution ──────────────────────────────────────────────────
 
-const KNOWN_TIERS = ["core", "meta", "specialists"];
+const KNOWN_TIERS = [
+  "core",
+  "meta",
+  "knowledge",
+  "specialists",
+  "guild-operations",
+  "guild-quality",
+];
 
 function findLiveSkillDir(cwd: string, slug: string): { tier: string; dir: string } | null {
+  // DH-3: the consuming repo's project instance wins over the plugin library —
+  // an evolved/minted skill at .guild/skills/<slug>/ is the live version, so a
+  // later evolve round snapshots and edits THAT, not the shipped baseline.
+  const projectDir = path.join(cwd, ".guild", "skills", slug);
+  if (fs.existsSync(path.join(projectDir, "SKILL.md"))) {
+    return { tier: "project", dir: projectDir };
+  }
+  // Self-build layout: skills/<tier>/ under cwd (the plugin repo itself).
   for (const tier of KNOWN_TIERS) {
     const dir = path.join(cwd, "skills", tier, slug);
     if (fs.existsSync(path.join(dir, "SKILL.md"))) return { tier, dir };
+  }
+  // Consuming repo without a project instance yet: resolve the shipped
+  // baseline from the plugin install so the first evolve of a plugin skill
+  // works outside the plugin repo.
+  const pluginRoot =
+    process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
+  if (pluginRoot && path.resolve(pluginRoot) !== path.resolve(cwd)) {
+    for (const tier of KNOWN_TIERS) {
+      const dir = path.join(pluginRoot, "skills", tier, slug);
+      if (fs.existsSync(path.join(dir, "SKILL.md"))) return { tier, dir };
+    }
   }
   return null;
 }
@@ -241,7 +267,9 @@ function main(): void {
   const live = findLiveSkillDir(cwd, skill!);
   if (!live) {
     process.stderr.write(
-      `[evolve-loop] ERROR: live skill not found at ${cwd}/skills/{core,meta,specialists}/${skill}/SKILL.md\n`
+      `[evolve-loop] ERROR: live skill not found at ${cwd}/.guild/skills/${skill}/SKILL.md, ` +
+        `${cwd}/skills/<tier>/${skill}/SKILL.md, or the plugin install ` +
+        `(GUILD_PLUGIN_ROOT/CLAUDE_PLUGIN_ROOT)\n`
     );
     process.exit(1);
   }

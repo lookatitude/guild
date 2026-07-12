@@ -2058,6 +2058,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/roster",
+      "source_path": "scripts/lib/roster.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/routing-ab-contract",
       "source_path": "scripts/lib/routing-ab-contract.ts",
       "kind": "lib"
@@ -2240,6 +2245,11 @@
     {
       "id": "rollback-walker",
       "source_path": "scripts/rollback-walker.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "roster-resolve",
+      "source_path": "scripts/roster-resolve.ts",
       "kind": "cli"
     },
     {
