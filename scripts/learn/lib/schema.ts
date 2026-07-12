@@ -1152,19 +1152,61 @@ export function validateGraphV2(
   }
 
   // ── flow_step monotone invariant — FATAL on v2 (E2 must-fix) ─────────────────
-  // Monotone = weights non-decreasing in the order edges appear (after canonical sort).
-  // A graph is free to have flow_step edges across multiple independent flows;
-  // we check the global sequence as emitted (the writer must emit them in order).
+  // Monotone = weights non-decreasing in the emitted order within one linear
+  // connected flow. Independent flows may start a new sequence at a lower
+  // weight. A branched flow ranks sibling steps by weight, so canonical edge
+  // sorting is not execution order and must not compare those sibling weights.
   const flowStepEdges = validEdges.filter((e) => e.type === "flow_step");
   if (flowStepEdges.length > 1) {
-    for (let i = 1; i < flowStepEdges.length; i++) {
-      if (flowStepEdges[i].weight < flowStepEdges[i - 1].weight) {
-        const msg = `flow_step edges are not monotone: weight at position ${i} (${flowStepEdges[i].weight}) < position ${i-1} (${flowStepEdges[i-1].weight}) — v2 invariant violation`;
-        return {
-          success: false,
-          issues: [...issues, { level: "fatal", category: "non-monotone-flow-step", message: msg }],
-          fatal: msg,
-        };
+    const neighbours = new Map<string, Set<string>>();
+    for (const edge of flowStepEdges) {
+      if (!neighbours.has(edge.source)) neighbours.set(edge.source, new Set());
+      if (!neighbours.has(edge.target)) neighbours.set(edge.target, new Set());
+      neighbours.get(edge.source)!.add(edge.target);
+      neighbours.get(edge.target)!.add(edge.source);
+    }
+    const componentByNode = new Map<string, number>();
+    let component = 0;
+    for (const start of neighbours.keys()) {
+      if (componentByNode.has(start)) continue;
+      const queue = [start];
+      componentByNode.set(start, component);
+      for (let cursor = 0; cursor < queue.length; cursor++) {
+        const node = queue[cursor];
+        for (const neighbour of neighbours.get(node) ?? []) {
+          if (!componentByNode.has(neighbour)) {
+            componentByNode.set(neighbour, component);
+            queue.push(neighbour);
+          }
+        }
+      }
+      component++;
+    }
+    const componentEdges = new Map<number, Array<{ edge: GraphEdge; position: number }>>();
+    for (let i = 0; i < flowStepEdges.length; i++) {
+      const edge = flowStepEdges[i];
+      const componentId = componentByNode.get(edge.source)!;
+      const entries = componentEdges.get(componentId) ?? [];
+      entries.push({ edge, position: i });
+      componentEdges.set(componentId, entries);
+    }
+    for (const [componentId, entries] of componentEdges) {
+      const outDegree = new Map<string, number>();
+      for (const { edge } of entries) {
+        outDegree.set(edge.source, (outDegree.get(edge.source) ?? 0) + 1);
+      }
+      if ([...outDegree.values()].some((degree) => degree > 1)) continue;
+      for (let i = 1; i < entries.length; i++) {
+        const previous = entries[i - 1];
+        const current = entries[i];
+        if (current.edge.weight < previous.edge.weight) {
+          const msg = `flow_step edges are not monotone in linear flow component ${componentId}: weight at position ${current.position} (${current.edge.weight}) < position ${previous.position} (${previous.edge.weight}) — v2 invariant violation`;
+          return {
+            success: false,
+            issues: [...issues, { level: "fatal", category: "non-monotone-flow-step", message: msg }],
+            fatal: msg,
+          };
+        }
       }
     }
   }

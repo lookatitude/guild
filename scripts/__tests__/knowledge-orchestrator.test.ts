@@ -752,6 +752,47 @@ describe("D — stage ordering", () => {
     );
     expect(graph.version).toBe("guild.knowledge_graph.v2");
   }, 30000);
+
+  test("D3: preserves the structural tour and layer map supplied by the deep-graph stage", async () => {
+    const dir = mkTmpRepo();
+    scaffoldFixtureRepo(dir);
+
+    const structuralGraph: NonNullable<RunKnowledgeOptions["structuralGraph"]> = {
+      nodes: [{
+        id: "file:src/validate.ts",
+        type: "file",
+        name: "validate.ts",
+        source_refs: ["src/validate.ts"],
+        confidence: "high",
+      }],
+      edges: [],
+      layers: [{
+        id: "layer:validation",
+        name: "Validation",
+        description: "Validation implementation",
+        nodeIds: ["file:src/validate.ts"],
+      }],
+      tour: [{
+        order: 0,
+        title: "Step 1",
+        description: "",
+        nodeIds: ["file:src/validate.ts"],
+      }],
+    };
+
+    const result = await runKnowledgeStages(
+      dir,
+      { codeRelPaths: CODE_PATHS, docRelPaths: DOC_PATHS },
+      NOOP_SEAMS,
+      { structuralGraph }
+    );
+
+    expect(result.graph.layers).toEqual(structuralGraph.layers);
+    expect(result.graph.tour).toEqual(structuralGraph.tour);
+    expect(result.graph.nodes).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "file:src/validate.ts" })])
+    );
+  }, 30000);
 });
 
 // ---------------------------------------------------------------------------

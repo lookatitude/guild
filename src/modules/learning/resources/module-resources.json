@@ -127,7 +127,7 @@
       "id": "learn/knowledge-orchestrator",
       "source_path": "scripts/learn/knowledge-orchestrator.ts",
       "resource_path": "resources/scripts/learn/knowledge-orchestrator.ts",
-      "sha256": "2fb58030a5eed02b47b5ad64b66133c7bb49f34fd6a34ff6dd923c30e7f62207"
+      "sha256": "f203d557738f032818edd8d7afcea7dbf2bea0c395d278b9d59b2fc1f0a79bbc"
     },
     {
       "category": "scripts",
@@ -274,7 +274,7 @@
       "id": "learn/lib/schema",
       "source_path": "scripts/learn/lib/schema.ts",
       "resource_path": "resources/scripts/learn/lib/schema.ts",
-      "sha256": "8792e3178ba7f946498e12405ed5e44e202797402f54a5482c02f11b70a55c56"
+      "sha256": "8b37fd279a53dda4718416623ecdfab0a9307bb0957324d0a7f251ce27171365"
     },
     {
       "category": "scripts",
