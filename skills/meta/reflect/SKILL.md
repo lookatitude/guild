@@ -97,7 +97,18 @@ If you notice a pattern worth aggregating, emit the per-run evidence and stop. D
 
 ## Non-destructive rule
 
-This skill NEVER writes to `.guild/wiki/`, NEVER edits an existing skill or agent file, NEVER creates a new task under `.guild/runs/`, and NEVER mutates a handoff receipt or `verify.md`. Output is limited to `.guild/reflections/<run-id>.md`. Promotion of any proposal into durable memory is `guild:wiki-ingest`'s job (for sourced knowledge) or `guild:decisions`'s job (for team decisions). Skill/agent edits are `guild:evolve-skill` / `guild:create-specialist` in P6. If you find yourself wanting to fix a skill inline, stop — write the proposal and let evolve pick it up.
+This skill NEVER writes to `.guild/wiki/`, NEVER edits an existing skill or agent file, NEVER creates a new task under `.guild/runs/`, and NEVER mutates a handoff receipt or `verify.md`. Output is limited to `.guild/reflections/<run-id>.md` plus the feedback-routing artifacts under `.guild/feedback/<run-id>/` (findings.json + triage output — see §Feedback routing; still nothing durable, nothing external without the operator gate). Promotion of any proposal into durable memory is `guild:wiki-ingest`'s job (for sourced knowledge) or `guild:decisions`'s job (for team decisions). Skill/agent edits are `guild:evolve-skill` / `guild:create-specialist` in P6. If you find yourself wanting to fix a skill inline, stop — write the proposal and let evolve pick it up.
+
+## Feedback routing — project vs plugin (deterministic, consent-gated)
+
+After the reflection is written, route any finding that smells like a **Guild plugin defect** (broken flow, host-adapter gap, unsafe default, portability bug — vs project-local knowledge) through the deterministic feedback pipeline. Never eyeball the routing and never file anything yourself:
+
+1. Write the candidate findings as a `RunLearningFinding[]` JSON array to `.guild/feedback/<run-id>/findings.json` (fields: `id`, `summary`, `details?`, `evidence_refs?`, `affected_artifacts?`, `proposed_change?` — cite the artifact paths you actually saw; the paths drive classification).
+2. Run the classifier: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/feedback-triage.ts triage --run-id <run-id> --findings .guild/feedback/<run-id>/findings.json`. It classifies each finding (`workspace_project | plugin | mixed | ambiguous`, code not prose), and for plugin/mixed writes a **sanitized** issue draft (private paths/tokens/emails redacted by the run-export redaction stack) to `.guild/feedback/<run-id>/<finding-id>.draft.md`. Nothing leaves the machine.
+3. `workspace_project` findings → the normal project learning gate (wiki-ingest / decisions). `ambiguous` → surface to the operator as triage questions.
+4. For each plugin/mixed draft: **ASK THE OPERATOR** — show the draft path + title and ask whether Guild may file it as a GitHub issue (it contains no user-specific information; say so). On an explicit yes: `… feedback-triage.ts file --run-id <run-id> --finding <id> --approve "<operator>"`. On no: `--deny [reason]` (recorded). **Non-interactive session ⇒ never file** — leave the drafts pending and name them in the handoff.
+
+The CLI is the consent choke-point: it structurally refuses to reach `gh issue create` without the explicit `--approve`, so a missed ask cannot leak.
 
 ## Handoff
 
@@ -107,5 +118,6 @@ Emit a `handoff` block naming the reflection path so the orchestrator can hand o
 - `reflection_path` — absolute path to `.guild/reflections/<run-id>.md`.
 - `significance` — `low` / `medium` / `high`, matching the frontmatter.
 - `proposal_counts` — a `{skill_improvement: N, missing_specialist: N, context_issues: N, followup_backlog: N}` summary so `/guild:stats` can render without re-parsing.
+- `pending_plugin_feedback` — finding ids with sanitized drafts awaiting the operator's file/deny decision (empty when none; never auto-filed).
 
 For P5 this is a forward reference: `/guild:stats` and `/guild:evolve` land in P6. If neither is installed, stop after writing the reflection and return its path to the user.

@@ -217,9 +217,15 @@ proposed improvement to exactly one level:
   itself.
 
 Plugin-level findings must become an analysis artifact first. Do not file or share
-anything automatically. Ask the user for permission, then file a GitHub issue in the
-plugin repository only after approval, using the sanitized analysis and linking the
-relevant run artifacts.
+anything automatically. **The routing and filing are deterministic code, not
+judgement**: write the findings as `RunLearningFinding[]` JSON and run
+`scripts/feedback-triage.ts triage` (classifies project-vs-plugin via
+`run-learning-classifier.ts`; writes sanitized issue drafts under
+`.guild/feedback/<run-id>/`, redacting private paths/tokens/emails), then ask the
+user per draft; only `feedback-triage.ts file --approve "<operator>"` can reach
+`gh issue create` (repo `lookatitude/guild`). Denials are recorded;
+non-interactive sessions never file. `guild:reflect` §Feedback routing and
+`guild:diagnose` §Upstream escalation carry the step-by-step.
 
 ## Codex adversarial review
 

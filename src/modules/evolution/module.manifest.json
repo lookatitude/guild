@@ -5,26 +5,38 @@
   "kind": "capability",
   "implementation_mode": "workflow-backed",
   "description": "Owns reflection, learning checkpoints, shadow mode, skill evolution, rollback, and run-learning extraction.",
-  "depends_on": ["initiatives", "knowledge", "state", "security"],
+  "depends_on": [
+    "initiatives",
+    "knowledge",
+    "state",
+    "security"
+  ],
   "owns": {
-    "commands": ["evolve", "rollback"],
+    "commands": [
+      "evolve",
+      "rollback"
+    ],
     "skills": [
       "guild-evolve-skill",
       "guild-learning-checkpoint",
       "guild-reflect",
       "guild-rollback-skill"
     ],
-    "hooks": ["Stop:learning-backstop.js", "Stop:maybe-reflect.js"],
+    "hooks": [
+      "Stop:learning-backstop.js",
+      "Stop:maybe-reflect.js"
+    ],
     "scripts": [
       "analyze-runs",
       "evolve-loop",
-      "rollback-walker",
-      "shadow-mode",
-      "stamp-recall-importance",
+      "feedback-triage",
       "lib/learning-candidate",
       "lib/learning-signatures",
       "lib/reaping",
-      "lib/run-learning-classifier"
+      "lib/run-learning-classifier",
+      "rollback-walker",
+      "shadow-mode",
+      "stamp-recall-importance"
     ]
   }
 }

@@ -47,6 +47,13 @@
     },
     {
       "category": "scripts",
+      "id": "feedback-triage",
+      "source_path": "scripts/feedback-triage.ts",
+      "resource_path": "resources/scripts/feedback-triage.ts",
+      "sha256": "60999e06bf07b60d71e7443b22fa5b166bd93018d7330e6cae87c68e9fd7b480"
+    },
+    {
+      "category": "scripts",
       "id": "lib/learning-candidate",
       "source_path": "scripts/lib/learning-candidate.ts",
       "resource_path": "resources/scripts/lib/learning-candidate.ts",
@@ -113,7 +120,7 @@
       "id": "guild-reflect",
       "source_path": "skills/meta/reflect/SKILL.md",
       "resource_path": "resources/skills/meta/reflect/SKILL.md",
-      "sha256": "497935829b8a21dd1240f53e01f2ff6299354205a00a30bec23b95880ab6a222"
+      "sha256": "b1ff2d0c5fec86554a708c10a18046bac8f4d1b3a4a7fd5602436386fcc4614c"
     },
     {
       "category": "skills",
