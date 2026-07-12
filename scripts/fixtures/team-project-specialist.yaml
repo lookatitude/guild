@@ -1,0 +1,16 @@
+spec: .guild/spec/test-slug.md
+backend: agent-team
+allow_larger: false
+user_approved_agent_team: true
+specialists:
+  - name: architect
+    scope: "System boundaries and component split for the pricing service."
+    depends-on: []
+    definition: agents/architect.md
+    definition_source: shipped
+  - name: kb-viz-engineer
+    scope: "Knowledge-graph visualization lane for the dashboard."
+    depends-on: [architect]
+    definition: .guild/agents/kb-viz-engineer.md
+    definition_source: project
+    default_tier: powerful

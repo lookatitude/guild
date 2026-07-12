@@ -206,6 +206,11 @@ function parseYaml(raw: string): TeamYaml {
         // D-CAP: thread capability_scope onto the Specialist — undefined when absent
         // (no restrictions). Populated by applyMapEntry + block-list interceptor above.
         capability_scope: cur.capability_scope,
+        // Agent-definition path + source (team-compose writes them; load-bearing
+        // for project-local specialists — buildPrompt embeds the adoption
+        // instruction and in-process dispatch swaps to the generic subagent type).
+        definition: cur.definition,
+        definition_source: cur.definition_source,
       });
     }
     cur = null;
@@ -293,6 +298,19 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
   else if (key === "depends-on" || key === "depends_on" || key === "dependsOn") {
     target.dependsOn = parseFlowList(value);
   } else if (key === "backend") target.backend = stripQuotes(value);
+  // Agent-definition path (team-compose writes it): `.guild/agents/<role>.md`
+  // for project-local specialists (load-bearing), `agents/<role>.md` for
+  // shipped ones (informational).
+  // Only the explicit `definition_source` key is accepted — a generic `source:`
+  // is common provenance metadata and must never silently change dispatch
+  // semantics (codex G-lane finding).
+  else if (key === "definition") target.definition = stripQuotes(value);
+  else if (key === "definition_source") {
+    const v = stripQuotes(value).trim().toLowerCase();
+    if (v === "shipped" || v === "project") {
+      target.definition_source = v as "shipped" | "project";
+    }
+  }
   // CH-1: per-specialist `host:` brand. Only the known brands are accepted; an
   // unknown value is ignored (the pane defaults to the orchestrator host,
   // claude), keeping the parser lenient like the rest of the known schema.

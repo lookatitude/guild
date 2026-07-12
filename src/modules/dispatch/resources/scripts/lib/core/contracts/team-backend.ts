@@ -30,7 +30,25 @@ export interface Specialist extends SpecialistDispatchContract {
   };
   capability_scope?: string[];
   taskId?: string;
+  /**
+   * Agent-definition path written by guild:team-compose (project-root-relative).
+   * For a project-local specialist this is `.guild/agents/<role>.md` and is
+   * load-bearing: the host has no registered agent under this name, so dispatch
+   * must carry the definition itself. For a shipped specialist it is
+   * informational (`agents/<role>.md` in the plugin install).
+   */
+  definition?: string;
+  /** Where the definition lives: plugin-shipped roster or project .guild/agents/. */
+  definition_source?: "shipped" | "project";
 }
+
+/**
+ * Host-generic subagent type used when a specialist has no host-registered
+ * agent definition (definition_source === "project"): the lane runs as a
+ * generic agent whose prompt carries the definition, at the specialist's own
+ * tier — the former "degraded mid-tier" fallback made first-class.
+ */
+export const GENERIC_SUBAGENT_TYPE = "general-purpose";
 
 // ── PaneAdapter seam (CH-2, cross-host ADR) ──────────────────────────────────
 
@@ -90,6 +108,12 @@ export interface GuildDispatchDescriptor {
   model: string | null;
   env: Record<string, string>;
   prompt: string;
+  /**
+   * Set for project-local specialists: the `.guild/agents/<role>.md` definition
+   * the prompt instructs the lane to adopt (subagentType is then the host's
+   * generic type, not the specialist name).
+   */
+  definitionPath?: string | null;
 }
 
 export interface TeamLaunchResult {

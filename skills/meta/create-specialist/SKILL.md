@@ -23,10 +23,13 @@ Everything this skill writes lands in the **consuming repo's `.guild/`** — **n
 - **Incubate** → files stay under `proposed/` until both gates pass. `guild:team-compose` reads `.guild/agents/*.md` (+ shipped `plugin/agents/*.md`), **never** `.guild/agents/proposed/*.md`.
 - **Register** → a **move within `.guild/`**: `.guild/agents/proposed/<role>.md` → `.guild/agents/<role>.md`, and `.guild/skills/proposed-<role>-*/` → `.guild/skills/<role>-*/`. Register is a move, not a rewrite — the `derived_from_template` stamp is preserved unchanged. The v1 behavior (moving into `agents/<role>.md` / `skills/specialists/<role>-*/` in the plugin install dir) is the explicit **v2 DH-3 defect being fixed**.
 
-**Same-session constraint** (normative): Claude Code loads plugin agents once at session start; a specialist registered mid-session is **never discoverable via `Agent({ subagent_type: "<new-role>" })`** in that session.
+**Host-registration constraint** (normative): hosts load agent definitions from the **plugin install** at session start — a project-local `.guild/agents/<role>.md` specialist is **never host-registered** (`Agent({ subagent_type: "<new-role>" })` will not resolve it, in this session or any later one). That is by design, not a defect: project specialists dispatch through the **definition-path mechanism** instead:
 
-- **Default (defer to next session):** After step 7, tell the user: _"New specialist registered at `.guild/agents/<role>.md`. Restart Claude Code for the specialist to become available for team composition."_ Do not attempt same-session dispatch unless the user explicitly requests it.
-- **Degraded same-session path (opt-in only):** If the user explicitly acknowledges the constraint and requests immediate use, inject the specialist's `.guild/skills/<role>-*/` skill paths into a generic `Agent()` call with no `subagent_type`. This path **must** be logged as `degraded: true` in the step-7 handoff payload and in `.guild/evolve/<run-id>/proposed-<role>-registered.md`. Consequence: TRIGGER/DO NOT TRIGGER routing is bypassed, model tier defaults to `mid`, and the specialist is not addressable by name in subsequent lanes of the same session.
+- `guild:team-compose` enumerates it via `roster-resolve.ts` and writes `definition: .guild/agents/<role>.md` + `definition_source: project` into the team file, carrying the specialist's own `default_tier` from its frontmatter.
+- At dispatch, the in-process backend swaps `subagent_type` to the host-generic type and `buildPrompt` embeds the definition-adoption instruction (read the definition first; load its frontmatter `skills:` from `.guild/skills/<skill>/` where present). tmux/remote panes carry the same instruction in the pane prompt.
+- The lane runs at the specialist's **own tier** (from frontmatter), is tracked under its role name (`GUILD_SPECIALIST`, receipts, env `GUILD_AGENT_DEFINITION`), and is fully usable **in the same session it was minted** — the former "degraded mid-tier, opt-in only" path is retired.
+
+The only capability a project specialist lacks vs a shipped one is host-native description-based auto-routing (TRIGGER matching by the host); Guild's own composition and dispatch treat both sources identically.
 
 ## 7-step workflow (§12)
 
@@ -38,7 +41,7 @@ Seven ordered steps, each gate passing before the next runs. Full procedure — 
 4. **Propose adjacent-boundary edits** — append a `DO NOT TRIGGER for: <new-domain>` clause to each adjacent specialist's `description` (`§12.1` step 4).
 5. **Gate boundary edits** — each edit runs through `guild:evolve-skill` paired evals (A = as-is, B = with the clause); a failing edit stops the workflow.
 6. **Gate new specialist** — paired evals (A = no-specialist baseline, B = proposed) + shadow-mode runs over `.guild/runs/*/`; both must pass (shadow mode is part of the gate, not advisory).
-7. **Register** — on both gates passing, move files live within `.guild/` (see DH-3 mint contract), commit the step-5 boundary edits. The new agent file's **existence** at `.guild/agents/<role>.md` IS its registration — `guild:team-compose` enumerates the live `.guild/agents/*.md` directory automatically (ADR §4); there is no candidate list to append to.
+7. **Register** — on both gates passing, move files live within `.guild/` (see DH-3 mint contract), commit the step-5 boundary edits. The new agent file's **existence** at `.guild/agents/<role>.md` IS its registration — `guild:team-compose` enumerates the live tree via `roster-resolve.ts` (ADR §4); there is no candidate list to append to. Then refresh the derived registry projections: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/roster-resolve.ts --cwd . --write-registry --quiet` (`.guild/agents/registry.yaml` / `.guild/skills/registry.yaml` are generated indexes of the files — never hand-maintained, never the authority).
 
 ## Extraction signals (§11.2.1)
 

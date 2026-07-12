@@ -15,16 +15,16 @@ This skill is a **gatekeeper**, not a free-form editor. It refuses to mutate a l
 
 Two fields:
 
-1. **Skill slug** — the target skill to evolve, e.g. `guild:context-assemble` or `guild:brainstorm`. Must resolve to an existing `skills/<tier>/<slug>/SKILL.md` path. If the slug does not exist, stop and hand off to `skill-author` for authoring a net-new skill instead.
+1. **Skill slug** — the target skill to evolve, e.g. `guild:context-assemble` or `guild:brainstorm`. Must resolve to an existing live `SKILL.md` via `findLiveSkillDir` (`scripts/evolve-loop.ts`), which checks **project-instance first**: `.guild/skills/<slug>/` (an already-evolved or project-minted instance IS the live version), then the plugin tree `skills/<tier>/<slug>/` (all six tiers; self-build cwd or the plugin install via `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`). If the slug resolves nowhere, stop and hand off to `skill-author` for authoring a net-new skill instead.
 2. **Proposed-edit description** — optional when the automatic trigger fires (in which case this skill synthesizes the edit from the ≥3 accumulated reflections under `.guild/reflections/` whose frontmatter `proposals.skill_improvement` names the target skill); required when the explicit trigger is a user-supplied description. The edit may touch the skill body, the YAML frontmatter `description`, or both.
 
 ## Pipeline (§11.2 10 steps)
 
 Ten ordered steps. Each step's input and output is explicit so a later step can re-read the prior artifact without re-executing.
 
-1. **Snapshot current skill.** Copy the live skill directory to `.guild/skill-versions/<skill>/v<N>/`. `N` increments monotonically (walk the existing version folders, take max+1). Snapshot includes `SKILL.md`, `evals.json`, and any skill-local helpers. Input: live `skills/<tier>/<skill>/`. Output: `.guild/skill-versions/<skill>/v<N>/`.
+1. **Snapshot current skill.** Copy the live skill directory to `.guild/skill-versions/<skill>/v<N>/`. `N` increments monotonically (walk the existing version folders, take max+1). Snapshot includes `SKILL.md`, `evals.json`, and any skill-local helpers. Input: the live dir from `findLiveSkillDir` — `.guild/skills/<skill>/` when a project instance exists, else the plugin tree `skills/<tier>/<skill>/`. Output: `.guild/skill-versions/<skill>/v<N>/`.
 
-2. **Load evals.** Read `skills/<tier>/<skill>/evals.json`. If fewer than 3 positive + 3 negative cases (insufficient for paired evaluation), bootstrap 2–3 additional cases from the accumulated reflections' `proposals.skill_improvement` evidence snippets (per `§11.2` step 2). Input: `skills/<tier>/<skill>/evals.json` + `.guild/reflections/*.md`. Output: `.guild/evolve/<run-id>/evals.json` (merged working set).
+2. **Load evals.** Read `evals.json` from the step-1 live dir. If fewer than 3 positive + 3 negative cases (insufficient for paired evaluation), bootstrap 2–3 additional cases from the accumulated reflections' `proposals.skill_improvement` evidence snippets (per `§11.2` step 2). Input: `<live-dir>/evals.json` + `.guild/reflections/*.md`. Output: `.guild/evolve/<run-id>/evals.json` (merged working set).
 
 3. **Dispatch paired subagents.** Spawn two subagents in the same turn. A = current skill (from the snapshot in step 1), B = proposed edit (from Input #2). For a net-new skill (slug does not yet exist), A = no-skill baseline (skill disabled) and B = proposed. Feed each the merged eval working set from step 2. Input: snapshot + proposed edit + evals. Output: `.guild/evolve/<run-id>/runs/{A,B}/` with per-case trajectories.
 

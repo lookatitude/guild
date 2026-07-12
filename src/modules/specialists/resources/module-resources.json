@@ -123,6 +123,20 @@
       "sha256": "f6312b487205c65240cbfec9d9677d04e849db0df565360242ce9dcce691f666"
     },
     {
+      "category": "scripts",
+      "id": "lib/roster",
+      "source_path": "scripts/lib/roster.ts",
+      "resource_path": "resources/scripts/lib/roster.ts",
+      "sha256": "d44e7f5dcd4e6084fc9d35546ff52e901f0eb2bece1f92542482064473ba8e0f"
+    },
+    {
+      "category": "scripts",
+      "id": "roster-resolve",
+      "source_path": "scripts/roster-resolve.ts",
+      "resource_path": "resources/scripts/roster-resolve.ts",
+      "sha256": "1db1892062bba0f75e5e09de228537fae07dc93f0fe7f77cee02fd077f2c7cd0"
+    },
+    {
       "category": "skills",
       "id": "architect-adr-writer",
       "source_path": "skills/specialists/architect-adr-writer/SKILL.md",

@@ -15,31 +15,45 @@ import type {
   TeamLaunchRequest,
   TeamLaunchResult,
 } from "../core/contracts/team-backend";
+import { GENERIC_SUBAGENT_TYPE } from "../core/contracts/team-backend";
 import { buildPrompt, shellQuote } from "./tmux-backend";
 
 export function composeInProcessDispatch(
   req: TeamLaunchRequest
 ): GuildDispatchDescriptor[] {
-  return req.specialists.map((spec) => ({
-    name: spec.name,
-    subagentType: spec.name,
-    model: null,
-    env: {
-      GUILD_RUN_ID: req.runId,
-      GUILD_SPECIALIST: spec.name,
-      GUILD_TASK_ID: spec.taskId ?? spec.name,
-      ...(spec.capability_scope !== undefined
-        ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
-        : {}),
-    },
-    prompt: buildPrompt(
-      req.slug,
-      req.runId,
-      spec,
-      req.teamPath,
-      spec.host_kind ?? req.orchestratorHostKind ?? "claude",
-    ),
-  }));
+  return req.specialists.map((spec) => {
+    // A project-local specialist (.guild/agents/<role>.md) has no
+    // host-registered agent under its name — hosts load agent definitions from
+    // the plugin install once at session start. Dispatch it as the host's
+    // generic subagent type; buildPrompt embeds the definition-adoption
+    // instruction so the lane still runs the minted role at its own tier.
+    const isProjectLocal =
+      spec.definition_source === "project" && !!spec.definition;
+    return {
+      name: spec.name,
+      subagentType: isProjectLocal ? GENERIC_SUBAGENT_TYPE : spec.name,
+      model: null,
+      env: {
+        GUILD_RUN_ID: req.runId,
+        GUILD_SPECIALIST: spec.name,
+        GUILD_TASK_ID: spec.taskId ?? spec.name,
+        ...(spec.capability_scope !== undefined
+          ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
+          : {}),
+        ...(isProjectLocal
+          ? { GUILD_AGENT_DEFINITION: spec.definition as string }
+          : {}),
+      },
+      prompt: buildPrompt(
+        req.slug,
+        req.runId,
+        spec,
+        req.teamPath,
+        spec.host_kind ?? req.orchestratorHostKind ?? "claude",
+      ),
+      definitionPath: isProjectLocal ? (spec.definition as string) : null,
+    };
+  });
 }
 
 export class InProcessTeamBackend implements TeamBackend {
