@@ -364,6 +364,8 @@ export function mintFromTemplate(opts: {
   pluginRoot: string;
   projectRoot: string;
   name: string;
+  /** Run every check and report the would-be action WITHOUT writing anything. */
+  dryRun?: boolean;
 }): MintResult {
   const pluginRoot = path.resolve(opts.pluginRoot);
   const projectRoot = path.resolve(opts.projectRoot);
@@ -493,8 +495,10 @@ export function mintFromTemplate(opts: {
   }
   fmLines[stampAt[0]] = `derived_from_template: ${SPECIALIST_TEMPLATE_VERSION}`;
   const minted = fmLines.join("\n") + raw.slice(fmBlock.length);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target, minted, "utf8");
+  if (!opts.dryRun) {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, minted, "utf8");
+  }
   return { path: target, action: "written" };
 }
 
@@ -742,6 +746,26 @@ export function projectInstanceToHostNative(opts: {
   if (st?.isSymbolicLink() || (st && !st.isFile())) {
     return { path: target, action: "refused", reason: `${target} is not a regular file` };
   }
+  // A symlinked .claude/ (or .claude/agents/) ancestor could redirect the
+  // write outside the project — same hard rule as every other roster writer:
+  // the nearest existing ancestor's realpath must stay under the project root.
+  let ancestor = path.dirname(target);
+  while (!fs.existsSync(ancestor)) {
+    const up = path.dirname(ancestor);
+    if (up === ancestor) break;
+    ancestor = up;
+  }
+  if (fs.existsSync(ancestor)) {
+    const realDir = fs.realpathSync(ancestor);
+    const realRoot = fs.realpathSync(projectRoot);
+    if (realDir !== realRoot && !realDir.startsWith(realRoot + path.sep)) {
+      return {
+        path: target,
+        action: "refused",
+        reason: `${target} resolves outside the project root (${realDir})`,
+      };
+    }
+  }
   if (st) {
     const existing = parseFrontmatter(fs.readFileSync(target, "utf8"));
     if (asString(existing?.["generated_by"]) !== "guild.roster_resolve.v1") {
@@ -752,12 +776,18 @@ export function projectInstanceToHostNative(opts: {
       };
     }
   }
-  // Insert the marker as the first frontmatter line after the opening fence.
-  const lines = raw.split("\n");
-  const withMarker =
-    lines[0] === "---"
-      ? [lines[0], HOST_NATIVE_MARKER, ...lines.slice(1)].join("\n")
-      : raw; // unreachable given the parseFrontmatter check above
+  // Insert the marker as the first frontmatter line after the opening fence,
+  // matching the file's own line ending (the shared parser accepts CRLF
+  // fences, so a CRLF instance must not silently skip the marker).
+  const eol = raw.startsWith("---\r\n") ? "\r\n" : raw.startsWith("---\n") ? "\n" : null;
+  if (eol === null) {
+    return {
+      path: src,
+      action: "refused",
+      reason: `instance ${src} does not open with a '---' frontmatter fence`,
+    };
+  }
+  const withMarker = `---${eol}${HOST_NATIVE_MARKER}${eol}` + raw.slice(3 + eol.length);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, withMarker, "utf8");
   return { path: target, action: "written" };
@@ -773,6 +803,13 @@ export interface TeamMigrationFileResult {
   migrated: string[];
   /** Roles minted by this migration (instance was absent). */
   minted: string[];
+  /**
+   * Domain roles whose mint was REFUSED — their entries are left as
+   * `shipped` (still undispatchable). Any entry here makes the overall
+   * migration a failure (exit 2): a silent broken lane is worse than a loud
+   * one (codex G-lane finding).
+   */
+  failed: Array<{ role: string; reason: string }>;
   reason?: string;
 }
 
@@ -804,7 +841,7 @@ export function migrateTeamRoster(opts: {
   for (const f of fs.readdirSync(teamDir).filter((n) => n.endsWith(".yaml")).sort()) {
     const abs = path.join(teamDir, f);
     if (fs.lstatSync(abs).isSymbolicLink()) {
-      results.push({ path: abs, action: "refused", migrated: [], minted: [], reason: "symlink" });
+      results.push({ path: abs, action: "refused", migrated: [], minted: [], failed: [], reason: "symlink" });
       continue;
     }
     const parsed = parseYaml(fs.readFileSync(abs, "utf8"));
@@ -814,6 +851,7 @@ export function migrateTeamRoster(opts: {
         action: "refused",
         migrated: [],
         minted: [],
+        failed: [],
         reason: "unparseable team file — not migrating a document I cannot read",
       });
       continue;
@@ -821,39 +859,48 @@ export function migrateTeamRoster(opts: {
     const doc = parsed as Record<string, unknown>;
     const specialists = doc["specialists"];
     if (!Array.isArray(specialists)) {
-      results.push({ path: abs, action: "unchanged", migrated: [], minted: [] });
+      results.push({ path: abs, action: "unchanged", migrated: [], minted: [], failed: [] });
       continue;
     }
 
     const migrated: string[] = [];
     const minted: string[] = [];
+    const failed: Array<{ role: string; reason: string }> = [];
     for (const entry of specialists) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
       const e = entry as Record<string, unknown>;
       const role = asString(e["name"]);
       if (!role || asString(e["definition_source"]) !== "shipped") continue;
       if (!templateNames.has(role)) continue; // machinery/dev-team stay shipped
-      if (!opts.dryRun) {
-        const mint = mintFromTemplate({ pluginRoot, projectRoot, name: role });
-        if (mint.action === "refused") {
-          // Leave the entry untouched rather than pointing it at nothing.
-          continue;
-        }
-        if (mint.action === "written") minted.push(role);
+      // Probe/execute the mint — dry-run runs the SAME checks without writing,
+      // so a dry-run report never overstates what the real run can do.
+      const mint = mintFromTemplate({ pluginRoot, projectRoot, name: role, dryRun: opts.dryRun });
+      if (mint.action === "refused") {
+        // Leave the entry untouched, but SURFACE it: this lane stays broken.
+        failed.push({ role, reason: mint.reason ?? "mint refused" });
+        continue;
       }
+      if (mint.action === "written") minted.push(role);
       e["definition"] = path.join(".guild", "agents", `${role}.md`);
       e["definition_source"] = "project";
       migrated.push(role);
     }
 
-    if (migrated.length === 0) {
-      results.push({ path: abs, action: "unchanged", migrated: [], minted: [] });
-      continue;
-    }
-    if (!opts.dryRun) {
+    const action: TeamMigrationFileResult["action"] =
+      failed.length > 0 ? "refused" : migrated.length === 0 ? "unchanged" : "rewritten";
+    if (migrated.length > 0 && !opts.dryRun) {
       fs.writeFileSync(abs, yaml.dump(doc, { lineWidth: 100, noRefs: true }), "utf8");
     }
-    results.push({ path: abs, action: "rewritten", migrated, minted });
+    results.push({
+      path: abs,
+      action,
+      migrated,
+      minted,
+      failed,
+      ...(failed.length > 0
+        ? { reason: `mint refused for: ${failed.map((x) => `${x.role} (${x.reason})`).join("; ")}` }
+        : {}),
+    });
   }
   return results;
 }

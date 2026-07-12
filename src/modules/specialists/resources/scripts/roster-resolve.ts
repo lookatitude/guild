@@ -94,9 +94,11 @@ function main(): void {
       projectRoot: path.resolve(cwd),
       dryRun,
     });
+    // Any file-level refusal OR any per-role mint failure fails the command —
+    // a lane left broken must never look like success.
     let refused = false;
     for (const r of results) {
-      if (r.action === "refused") refused = true;
+      if (r.action === "refused" || r.failed.length > 0) refused = true;
       process.stderr.write(
         `[roster-resolve] migrate-team-roster ${r.action}${dryRun ? " (dry-run)" : ""}: ${r.path}` +
           `${r.migrated.length ? ` — migrated: ${r.migrated.join(", ")}` : ""}` +
@@ -114,6 +116,8 @@ function main(): void {
       });
       const r = deriveAgentsRegistry(resolution, { force });
       process.stderr.write(`[roster-resolve] ${r.action}: ${r.path}${r.reason ? ` — ${r.reason}` : ""}\n`);
+      // A stale registry after a real migration is a failure too.
+      if (r.action === "refused") refused = true;
     }
     process.exit(refused ? 2 : 0);
   }

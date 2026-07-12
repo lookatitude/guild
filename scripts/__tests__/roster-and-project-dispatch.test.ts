@@ -421,6 +421,27 @@ describe("migrate-team-roster — shipped domain lanes → project instances (v2
     expect(broken.action).toBe("refused");
   });
 
+  it("surfaces a REFUSED mint as file-level failure instead of silently leaving the lane broken", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    // Sabotage the frontend template's stamp so its mint refuses.
+    const tpl = path.join(pluginRoot, "templates", "specialists", "frontend.md");
+    fs.writeFileSync(tpl, fs.readFileSync(tpl, "utf8").replace("template_version:", "template_version_x:"));
+    writeTeamFile(
+      projectRoot,
+      "demo.build.yaml",
+      "specialists:\n  - name: frontend\n    definition: agents/frontend.md\n    definition_source: shipped\n"
+    );
+    const res = migrateTeamRoster({ pluginRoot, projectRoot });
+    expect(res[0].action).toBe("refused");
+    expect(res[0].failed.map((x) => x.role)).toEqual(["frontend"]);
+    // The entry stays shipped — but loudly, not silently.
+    const raw = fs.readFileSync(path.join(projectRoot, ".guild", "team", "demo.build.yaml"), "utf8");
+    expect(raw).toContain("definition_source: shipped");
+    // Dry-run reports the SAME refusal (probe runs the real checks).
+    const dry = migrateTeamRoster({ pluginRoot, projectRoot, dryRun: true });
+    expect(dry[0].failed.map((x) => x.role)).toEqual(["frontend"]);
+  });
+
   it("a domain role WITHOUT a template (novel project type) is never migrated", () => {
     const { projectRoot, pluginRoot } = fixtureRoots();
     const teamPath = writeTeamFile(
@@ -462,6 +483,28 @@ describe("projectInstanceToHostNative — opt-in .claude/agents projection", () 
     const missing = projectInstanceToHostNative({ projectRoot, name: "qa" });
     expect(missing.action).toBe("refused");
     expect(missing.reason).toContain("mint it first");
+  });
+
+  it("refuses a symlinked .claude ancestor (no write outside the project)", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    expect(mintFromTemplate({ pluginRoot, projectRoot, name: "frontend" }).action).toBe("written");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-hostnative-escape-"));
+    fs.symlinkSync(outside, path.join(projectRoot, ".claude"));
+    const res = projectInstanceToHostNative({ projectRoot, name: "frontend" });
+    expect(res.action).toBe("refused");
+    expect(res.reason).toContain("outside the project root");
+    expect(fs.readdirSync(outside)).toEqual([]);
+  });
+
+  it("stamps the marker on CRLF instances too (never a silent unmarked projection)", () => {
+    const { projectRoot, pluginRoot } = fixtureRoots();
+    expect(mintFromTemplate({ pluginRoot, projectRoot, name: "frontend" }).action).toBe("written");
+    const inst = path.join(projectRoot, ".guild", "agents", "frontend.md");
+    fs.writeFileSync(inst, fs.readFileSync(inst, "utf8").replace(/\n/g, "\r\n"));
+    const res = projectInstanceToHostNative({ projectRoot, name: "frontend" });
+    expect(res.action).toBe("written");
+    const projected = fs.readFileSync(res.path, "utf8");
+    expect(projected.startsWith(`---\r\n${HOST_NATIVE_MARKER}\r\n`)).toBe(true);
   });
 });
 
