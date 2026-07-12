@@ -8,28 +8,28 @@
       "id": "advisor",
       "source_path": "agents/advisor.md",
       "resource_path": "resources/agents/advisor.md",
-      "sha256": "e536cad8e42fb154bf017031895109d79cdcbfd642d619bb106f387e551bfa6a"
+      "sha256": "12e5fb70b1c456f0bdb04ad0a9408fc58a9994993f5f8bcbf456e476375b867c"
     },
     {
       "category": "agents",
       "id": "developer",
       "source_path": "agents/developer.md",
       "resource_path": "resources/agents/developer.md",
-      "sha256": "d20f4925dfd917aac1369142f3fae3eb674ebdeb39e160054c235a94db806562"
+      "sha256": "e8e3cac245a3ab9c28e9acca650373bdf9e5a90e5af9781c47fdbf5e3f08b236"
     },
     {
       "category": "scripts",
       "id": "lib/roster",
       "source_path": "scripts/lib/roster.ts",
       "resource_path": "resources/scripts/lib/roster.ts",
-      "sha256": "f9ccaa8f3a30b0317b11d5078bbb6a390ffb918cf99c98b488cff06c291a7bf6"
+      "sha256": "0f54f6dea51d24baec95632a918b373f3ef311c3a5904a2a3de7084f3789d6c3"
     },
     {
       "category": "scripts",
       "id": "roster-resolve",
       "source_path": "scripts/roster-resolve.ts",
       "resource_path": "resources/scripts/roster-resolve.ts",
-      "sha256": "9a7958475dca59c411486fffdefb9b912e32693c3d95058b0f246a5ab2804ffd"
+      "sha256": "efc446618f85e4b3d81ef871b10a823ed2fa70c00d72e6408fdbf142ec807f03"
     },
     {
       "category": "skills",

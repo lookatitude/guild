@@ -5,7 +5,8 @@
  *
  *   npx tsx roster-resolve.ts --cwd <projectRoot> [--plugin-root <dir>]
  *                             [--write-registry] [--check] [--force] [--quiet]
- *   npx tsx roster-resolve.ts mint <name> --cwd <projectRoot> [--plugin-root <dir>]
+ *   npx tsx roster-resolve.ts mint <name> [--host-native] --cwd <projectRoot> [--plugin-root <dir>]
+ *   npx tsx roster-resolve.ts migrate-team-roster --cwd <projectRoot> [--plugin-root <dir>] [--dry-run]
  *
  * Default: print the guild.roster.v1 resolution as JSON on stdout
  * (guild:team-compose consumes this instead of hand-globbing directories).
@@ -18,6 +19,17 @@
  *                   team-compose fast-mint; refuses if the instance exists —
  *                   reuse, never re-create) and refresh the derived agents
  *                   registry. Exit 0 written, 3 already-exists, 2 refused.
+ *   --host-native   OPT-IN: additionally project the instance into the
+ *                   project's .claude/agents/<name>.md (marker-stamped copy;
+ *                   never clobbers a hand-authored file) so a Claude host can
+ *                   auto-route to it natively. Applies on mint exit 0 AND 3.
+ * migrate-team-roster
+ *                   one-shot v2.1→v2.2 fixer: rewrite team-file entries whose
+ *                   `definition_source: shipped` names a DOMAIN role (the host
+ *                   no longer registers those agents) — mints the instance
+ *                   (idempotent) and re-points the entry at
+ *                   .guild/agents/<role>.md. Machinery agents stay shipped.
+ *                   Exit 0 clean (incl. nothing to do), 2 if any file refused.
  * --write-registry  additionally derive .guild/agents/registry.yaml and
  *                   .guild/skills/registry.yaml as generated projections of
  *                   the *.md trees (never clobbers hand-authored registries
@@ -33,7 +45,9 @@ import * as path from "path";
 import {
   deriveAgentsRegistry,
   deriveSkillsRegistry,
+  migrateTeamRoster,
   mintFromTemplate,
+  projectInstanceToHostNative,
   resolveRoster,
 } from "./lib/roster";
 
@@ -46,11 +60,17 @@ function main(): void {
   let force = false;
   let quiet = false;
   let mintName: string | null = null;
+  let hostNative = false;
+  let migrateTeams = false;
+  let dryRun = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "mint" && mintName === null && i + 1 < argv.length && !argv[i + 1].startsWith("--")) {
       mintName = argv[++i];
-    } else if (a === "--cwd" && i + 1 < argv.length) cwd = argv[++i];
+    } else if (a === "migrate-team-roster") migrateTeams = true;
+    else if (a === "--host-native") hostNative = true;
+    else if (a === "--dry-run") dryRun = true;
+    else if (a === "--cwd" && i + 1 < argv.length) cwd = argv[++i];
     else if (a === "--plugin-root" && i + 1 < argv.length) pluginRoot = argv[++i];
     else if (a === "--write-registry") writeRegistry = true;
     else if (a === "--check") check = true;
@@ -68,6 +88,36 @@ function main(): void {
     process.env["CLAUDE_PLUGIN_ROOT"] ??
     path.resolve(__dirname, "..");
 
+  if (migrateTeams) {
+    const results = migrateTeamRoster({
+      pluginRoot: resolvedPluginRoot,
+      projectRoot: path.resolve(cwd),
+      dryRun,
+    });
+    let refused = false;
+    for (const r of results) {
+      if (r.action === "refused") refused = true;
+      process.stderr.write(
+        `[roster-resolve] migrate-team-roster ${r.action}${dryRun ? " (dry-run)" : ""}: ${r.path}` +
+          `${r.migrated.length ? ` — migrated: ${r.migrated.join(", ")}` : ""}` +
+          `${r.minted.length ? `; minted: ${r.minted.join(", ")}` : ""}` +
+          `${r.reason ? ` — ${r.reason}` : ""}\n`
+      );
+    }
+    if (results.length === 0) {
+      process.stderr.write("[roster-resolve] migrate-team-roster: no team files found — nothing to do\n");
+    }
+    if (!dryRun && results.some((r) => r.minted.length > 0)) {
+      const resolution = resolveRoster({
+        projectRoot: path.resolve(cwd),
+        pluginRoot: resolvedPluginRoot,
+      });
+      const r = deriveAgentsRegistry(resolution, { force });
+      process.stderr.write(`[roster-resolve] ${r.action}: ${r.path}${r.reason ? ` — ${r.reason}` : ""}\n`);
+    }
+    process.exit(refused ? 2 : 0);
+  }
+
   if (mintName !== null) {
     const result = mintFromTemplate({
       pluginRoot: resolvedPluginRoot,
@@ -77,6 +127,15 @@ function main(): void {
     process.stderr.write(
       `[roster-resolve] mint ${mintName}: ${result.action}${result.reason ? ` — ${result.reason}` : ""} (${result.path})\n`
     );
+    if (result.action === "refused") process.exit(2);
+    // written OR exists: optionally project into .claude/agents (opt-in).
+    if (hostNative) {
+      const proj = projectInstanceToHostNative({ projectRoot: path.resolve(cwd), name: mintName });
+      process.stderr.write(
+        `[roster-resolve] host-native ${mintName}: ${proj.action}${proj.reason ? ` — ${proj.reason}` : ""} (${proj.path})\n`
+      );
+      if (proj.action === "refused") process.exit(2);
+    }
     if (result.action === "written") {
       // Keep the derived registry projection in step with the new instance.
       const resolution = resolveRoster({
@@ -88,7 +147,7 @@ function main(): void {
       process.stdout.write(`${result.path}\n`);
       process.exit(0);
     }
-    process.exit(result.action === "exists" ? 3 : 2);
+    process.exit(3);
   }
 
   const resolution = resolveRoster({

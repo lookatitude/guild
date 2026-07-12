@@ -53,6 +53,63 @@ function requireFile(root: string, rel: string, checks: string[], errors: string
   else errors.push(`missing generated package file: ${rel}`);
 }
 
+/**
+ * Byte-verify the full shipped template feedstock of one package against the
+ * repo source (machinery-vs-template-library ADR, F4 integrity rail).
+ * Presence alone is not honesty: a stale or diverged template in a package
+ * would mint the WRONG instance on that host. Every templates/** file in the
+ * source must exist in the package with identical bytes; extra template files
+ * in the package (dropped from source) are flagged too.
+ *
+ * NOTE: templates are deliberately NOT a guild.inventory.v1 category — that
+ * list is CLOSED for v1. This rail plus the capability-catalog directory pin
+ * and check-roster-consistency are the template integrity story instead.
+ */
+function verifyTemplateTree(
+  sourceRoot: string,
+  distRoot: string,
+  packageName: string,
+  checks: string[],
+  errors: string[]
+): void {
+  const walk = (dir: string, base: string): string[] => {
+    if (!fs.existsSync(dir)) return [];
+    const out: string[] = [];
+    for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const abs = path.join(dir, e.name);
+      if (e.isDirectory()) out.push(...walk(abs, base));
+      else if (e.isFile()) out.push(path.relative(base, abs).split(path.sep).join("/"));
+    }
+    return out;
+  };
+  const srcBase = path.join(sourceRoot, "templates");
+  const pkgBase = path.join(distRoot, packageName, "templates");
+  const srcFiles = walk(srcBase, srcBase);
+  if (srcFiles.length === 0) {
+    errors.push(`${packageName}: no source templates found under ${srcBase} — cannot verify`);
+    return;
+  }
+  let mismatches = 0;
+  for (const rel of srcFiles) {
+    const pkgFile = path.join(pkgBase, rel);
+    if (!existsFile(pkgFile)) {
+      errors.push(`${packageName}: templates/${rel} missing from package`);
+      mismatches++;
+      continue;
+    }
+    if (!fs.readFileSync(path.join(srcBase, rel)).equals(fs.readFileSync(pkgFile))) {
+      errors.push(`${packageName}: templates/${rel} differs from source (stale package render)`);
+      mismatches++;
+    }
+  }
+  const extras = walk(pkgBase, pkgBase).filter((rel) => !srcFiles.includes(rel));
+  for (const rel of extras) {
+    errors.push(`${packageName}: templates/${rel} present in package but absent from source`);
+    mismatches++;
+  }
+  if (mismatches === 0) checks.push(`${packageName}:templates/** (${srcFiles.length} files byte-identical)`);
+}
+
 function verifyJsonField(
   root: string,
   rel: string,
@@ -177,6 +234,12 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
     checks,
     errors
   );
+
+  // F4 template-integrity rail: byte-verify the full templates/** tree in
+  // every installable package against the repo source.
+  for (const pkg of ["claude-code", "codex", "agents", "pi", "antigravity", ...NEW_CLI_HOST_IDS]) {
+    verifyTemplateTree(root, distRoot, pkg, checks, errors);
+  }
 
   verifyWrapper(distRoot, "agents", { host: "agents-file", command: "agents-file", adapter: "agents-file" }, checks, errors);
   verifyWrapper(distRoot, "codex", { host: "codex", command: "codex", adapter: "codex-cli" }, checks, errors);

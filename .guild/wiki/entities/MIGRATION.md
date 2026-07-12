@@ -4,7 +4,7 @@ owner: architect
 confidence: high
 source_refs: ["guild-plan.md §13.1"]
 created_at: 2026-05-17
-updated_at: 2026-06-07
+updated_at: 2026-07-12
 expires_at: null
 supersedes: "guild-plan.md §13.1"
 sensitivity: public
@@ -357,6 +357,21 @@ override (`model_tier:`) > `settings.json models:` block > built-in default.
 Full specification: `plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md §10`
 (config keys) and §1–§6 (tier ladder, auto-score, advisor escalation, lean
 lead, `guild.handoff.v2` schema, §task§agent lifecycle).
+
+### Specialist roster → machinery agents + template library (v2.2)
+
+Shipped on `next` after v2.1.0 (`machinery-agents-vs-specialist-template-library.md`).
+The plugin now registers only the machinery agents (`advisor`, `developer`); the 15
+domain specialists (architect … sales, incl. doc-writer) ship as type templates under
+`templates/specialists/*.md` and are minted into the consuming repo's
+`.guild/agents/<role>.md` at team-compose time, dispatching via the definition-path
+mechanism. **Mostly additive, with one breaking edge:**
+
+| Surface | What changed | Migration action |
+|---|---|---|
+| Host agent roster | `guild:architect`, `guild:backend`, … are no longer host-registered subagent types. | None for new work — team-compose mints instances on demand. Direct `subagent_type: <domain-role>` calls must go through the definition-path dispatch instead. |
+| Existing `.guild/team/*.yaml` | Entries carrying `definition_source: shipped` for a DOMAIN role can no longer dispatch (the host has no agent under that name). | Run the one-shot fixer: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/roster-resolve.ts migrate-team-roster --cwd .` — it mints the missing instances (idempotent) and re-points each entry at `.guild/agents/<role>.md` / `definition_source: project`. Machinery agents are untouched. Or simply re-compose the phase team. |
+| Minted instances | New optional projection: `roster-resolve.ts mint <role> --host-native` also copies the instance into `.claude/agents/<role>.md` (marker-stamped, never clobbers hand-authored files) so a Claude host can auto-route natively. | Opt-in only; nothing changes without the flag. |
 
 ## 6. New in v2 (not a migration, but you'll want these)
 

@@ -696,3 +696,164 @@ function writeDerived(
   }
   return { path: target, action: "written" };
 }
+
+// ── Host-native projection (opt-in) ────────────────────────────────────────
+
+export const HOST_NATIVE_MARKER = "generated_by: guild.roster_resolve.v1";
+
+/**
+ * Opt-in projection of a minted project instance into the project's
+ * `.claude/agents/<name>.md` so a Claude host can auto-route to it natively
+ * (TRIGGER-description routing). The projection is a byte copy of the
+ * instance with one added frontmatter line (`generated_by: …`) marking it as
+ * a generated projection — the instance under `.guild/agents/` stays the
+ * source of truth. An existing target WITHOUT the marker is hand-authored and
+ * never clobbered; symlinked targets are refused outright.
+ */
+export function projectInstanceToHostNative(opts: {
+  projectRoot: string;
+  name: string;
+}): MintResult {
+  const projectRoot = path.resolve(opts.projectRoot);
+  const name = opts.name;
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+    return { path: "", action: "refused", reason: `unsafe specialist name "${name}"` };
+  }
+  const src = path.join(projectRoot, ".guild", "agents", `${name}.md`);
+  if (!fs.existsSync(src)) {
+    return {
+      path: src,
+      action: "refused",
+      reason: `no project instance at .guild/agents/${name}.md — mint it first`,
+    };
+  }
+  const raw = fs.readFileSync(src, "utf8");
+  if (!parseFrontmatter(raw)) {
+    return { path: src, action: "refused", reason: `instance ${src} has no parseable frontmatter` };
+  }
+
+  const target = path.join(projectRoot, ".claude", "agents", `${name}.md`);
+  let st: fs.Stats | null = null;
+  try {
+    st = fs.lstatSync(target);
+  } catch {
+    st = null;
+  }
+  if (st?.isSymbolicLink() || (st && !st.isFile())) {
+    return { path: target, action: "refused", reason: `${target} is not a regular file` };
+  }
+  if (st) {
+    const existing = parseFrontmatter(fs.readFileSync(target, "utf8"));
+    if (asString(existing?.["generated_by"]) !== "guild.roster_resolve.v1") {
+      return {
+        path: target,
+        action: "refused",
+        reason: `${target} exists without the '${HOST_NATIVE_MARKER}' marker — hand-authored, refusing to overwrite`,
+      };
+    }
+  }
+  // Insert the marker as the first frontmatter line after the opening fence.
+  const lines = raw.split("\n");
+  const withMarker =
+    lines[0] === "---"
+      ? [lines[0], HOST_NATIVE_MARKER, ...lines.slice(1)].join("\n")
+      : raw; // unreachable given the parseFrontmatter check above
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, withMarker, "utf8");
+  return { path: target, action: "written" };
+}
+
+// ── Team-file roster migration (shipped → template-library model) ──────────
+
+export interface TeamMigrationFileResult {
+  /** Absolute team-file path. */
+  path: string;
+  action: "rewritten" | "unchanged" | "refused";
+  /** Roles whose entries were rewritten shipped → project. */
+  migrated: string[];
+  /** Roles minted by this migration (instance was absent). */
+  minted: string[];
+  reason?: string;
+}
+
+/**
+ * Migrate pre-template-library team files: any specialist entry carrying
+ * `definition_source: shipped` for a DOMAIN role (one with a shipped
+ * template) can no longer dispatch — the host no longer registers that
+ * agent name. For each such entry: mint the project instance (idempotent —
+ * `exists` is fine) and rewrite the entry to
+ * `definition: .guild/agents/<role>.md` + `definition_source: project`.
+ * Machinery agents (advisor/developer) keep `shipped`.
+ *
+ * Team files are derived composition artifacts, so the rewrite is a canonical
+ * re-dump of the parsed document (data-preserving; comment lines are not).
+ * Files that fail the shared YAML parse are refused, never guessed at.
+ */
+export function migrateTeamRoster(opts: {
+  pluginRoot: string;
+  projectRoot: string;
+  dryRun?: boolean;
+}): TeamMigrationFileResult[] {
+  const projectRoot = path.resolve(opts.projectRoot);
+  const pluginRoot = path.resolve(opts.pluginRoot);
+  const teamDir = path.join(projectRoot, ".guild", "team");
+  if (!fs.existsSync(teamDir)) return [];
+  const templateNames = new Set(listSpecialistTemplates(pluginRoot).map((t) => t.name));
+
+  const results: TeamMigrationFileResult[] = [];
+  for (const f of fs.readdirSync(teamDir).filter((n) => n.endsWith(".yaml")).sort()) {
+    const abs = path.join(teamDir, f);
+    if (fs.lstatSync(abs).isSymbolicLink()) {
+      results.push({ path: abs, action: "refused", migrated: [], minted: [], reason: "symlink" });
+      continue;
+    }
+    const parsed = parseYaml(fs.readFileSync(abs, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      results.push({
+        path: abs,
+        action: "refused",
+        migrated: [],
+        minted: [],
+        reason: "unparseable team file — not migrating a document I cannot read",
+      });
+      continue;
+    }
+    const doc = parsed as Record<string, unknown>;
+    const specialists = doc["specialists"];
+    if (!Array.isArray(specialists)) {
+      results.push({ path: abs, action: "unchanged", migrated: [], minted: [] });
+      continue;
+    }
+
+    const migrated: string[] = [];
+    const minted: string[] = [];
+    for (const entry of specialists) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const e = entry as Record<string, unknown>;
+      const role = asString(e["name"]);
+      if (!role || asString(e["definition_source"]) !== "shipped") continue;
+      if (!templateNames.has(role)) continue; // machinery/dev-team stay shipped
+      if (!opts.dryRun) {
+        const mint = mintFromTemplate({ pluginRoot, projectRoot, name: role });
+        if (mint.action === "refused") {
+          // Leave the entry untouched rather than pointing it at nothing.
+          continue;
+        }
+        if (mint.action === "written") minted.push(role);
+      }
+      e["definition"] = path.join(".guild", "agents", `${role}.md`);
+      e["definition_source"] = "project";
+      migrated.push(role);
+    }
+
+    if (migrated.length === 0) {
+      results.push({ path: abs, action: "unchanged", migrated: [], minted: [] });
+      continue;
+    }
+    if (!opts.dryRun) {
+      fs.writeFileSync(abs, yaml.dump(doc, { lineWidth: 100, noRefs: true }), "utf8");
+    }
+    results.push({ path: abs, action: "rewritten", migrated, minted });
+  }
+  return results;
+}
