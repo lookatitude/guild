@@ -22,7 +22,7 @@
       "id": "guild-run",
       "source_path": "scripts/guild-run.ts",
       "resource_path": "resources/scripts/guild-run.ts",
-      "sha256": "a74e9ed8001cc70d20346e1297765494435c85649ced859b51e2e138c5647826"
+      "sha256": "cfde31ec8b8cdca021e76ffb19b9b3462e2d933bf712c073f17b756a11947023"
     },
     {
       "category": "scripts",

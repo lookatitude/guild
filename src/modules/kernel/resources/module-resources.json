@@ -19,6 +19,13 @@
     },
     {
       "category": "hooks",
+      "id": "SessionStart:update-check.js",
+      "source_path": "hooks/dist/update-check.js",
+      "resource_path": "resources/hooks/dist/update-check.js",
+      "sha256": "6397cbd9cde5d0c40a57fd8ead9b9eb92c04a582ecc2ca328a7aecb0d864ee91"
+    },
+    {
+      "category": "hooks",
       "id": "SessionStart:using-guild-bootstrap.js",
       "source_path": "hooks/dist/using-guild-bootstrap.js",
       "resource_path": "resources/hooks/dist/using-guild-bootstrap.js",

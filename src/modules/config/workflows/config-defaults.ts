@@ -129,6 +129,10 @@ export const DEFAULTS = {
     resume: { enabled: true },
     heartbeat_timeout_ms: 600000,
     capability_manifest_ttl_s: 3600,
+    // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
+    // the SessionStart signal; `auto` additionally stages the host apply path;
+    // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
+    update: { mode: "notify", cadence_hours: 24 },
     allowed_tools: [],
   },
 } as const;

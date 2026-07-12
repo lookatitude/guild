@@ -3205,6 +3205,10 @@ var DEFAULTS = {
     resume: { enabled: true },
     heartbeat_timeout_ms: 6e5,
     capability_manifest_ttl_s: 3600,
+    // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
+    // the SessionStart signal; `auto` additionally stages the host apply path;
+    // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
+    update: { mode: "notify", cadence_hours: 24 },
     allowed_tools: []
   }
 };
@@ -4251,8 +4255,10 @@ var DEFAULTS_ALLOWED_KEYS = /* @__PURE__ */ new Set([
   // R-017
   "capability_manifest_ttl_s",
   // R-018
-  "allowed_tools"
+  "allowed_tools",
   // R-020
+  "update"
+  // plugin-update-lifecycle AC-6
 ]);
 function isPlainObject2(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
