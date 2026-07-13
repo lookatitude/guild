@@ -544,7 +544,7 @@ describe("Claude HostAdapter concrete parity", () => {
           {
             cwd: pkg.dir,
             encoding: "utf8",
-            env: { ...process.env, npm_config_cache: "/private/tmp/guild-npm-cache" },
+            env: { ...process.env, npm_config_cache: require("node:path").join(require("node:os").tmpdir(), "guild-npm-cache") },
             maxBuffer: 10 * 1024 * 1024,
           }
         );

@@ -957,7 +957,7 @@ describe("WARN mode — non-blocking contract", () => {
 
 describe("U5b ENFORCE mode — CLI exit-code contract", () => {
   const { spawnSync } = require("child_process");
-  const CLI_CWD = "/Users/miguelp/Projects/guild/plugin/scripts";
+  const CLI_CWD = require("node:path").resolve(__dirname, "../..");
 
   function runCli(args: string[]): { status: number | null; combined: string } {
     const result = spawnSync(
