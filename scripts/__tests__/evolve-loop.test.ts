@@ -293,7 +293,10 @@ describe("evolve-loop.ts", () => {
         path.join(tmpDir, ".guild", "evolve", "run-dh3", "pipeline.md"),
         "utf8"
       );
-      expect(pipeline).toMatch(/^tier: project$/m);
+      // plain substring (not a line-anchored key regex): pipeline.md is prose+
+      // frontmatter; the comms-format policy reserves YAML-key extraction for
+      // the shared js-yaml reader, and this assertion only needs presence.
+      expect(pipeline).toContain("tier: project");
     });
 
     it("resolves the .guild instance when NO plugin tree exists (consuming repo)", () => {

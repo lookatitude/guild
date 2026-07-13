@@ -2,11 +2,11 @@ schema_version: guild.run.v1
 run_id: run-ce18ef45-cbf4-492c-ae83-d538fa21f040
 command: /guild:learn
 arguments: {}
-cwd: /Users/miguelp/Projects/guild/plugin
+cwd: [REDACTED:operator-path]
 target_kind: existing_guild_project
 workspace:
   is_workspace: false
-  root: /Users/miguelp/Projects/guild/plugin
+  root: [REDACTED:operator-path]
 project: project
 host:
   requested: auto
