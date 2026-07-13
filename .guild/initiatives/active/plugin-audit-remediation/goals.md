@@ -207,3 +207,30 @@ green-tested unreachable code with false wiring claims. Itemized in the audit di
   tests/boundary fixtures).
 - **Gate:** adding a fictional host row lights up dispatch+packaging+config with zero code edits
   (then revert); rails wired into CI from G1.
+
+---
+
+## Execution record (2026-07-13)
+
+All nine goals executed in three waves (17 dev-team lanes + 3 codex adversarial review rounds; 8 codex
+findings fixed pre-commit). Commits f5718f9/16d4ca1 (W1: G1+G2), 03ba735/c4d51e3 (W2: G3+G4),
+f252524/8322a04 + test-alignment (W3: G5–G9). PR #27 → next. Website mirrors: PRs #11 (install.sh), #12
+(gitignore hardening).
+
+**Descopes / follow-ups recorded:**
+- `/guild:evolve` `--to-template=vN` + no-arg backlog modes: removed, not implemented (G3b).
+- surface_manifest rollout: advisor + developer only; 15 specialist templates deferred (R-DECL scan
+  conversion is eval-engineer infra) (G6).
+- G-series incremental extraction lane (extract-structural --incremental via learn-diff): descoped, chip
+  filed (G5a).
+- sync-migration ship/no-ship packaging flag: real gap documented in migrations manifest (G5b).
+- host-open-detection combined fixture coverage lost with init-cluster deletion (G5b).
+- R-REACH residual advisory findings: cloud-consent-gate, cloud-task-packet, sync-migration (wire-or-retire
+  backlog; rail advisory until one clean cycle).
+- knowledge-links.json carries stale edges to deleted files (derived index; rebuilds on next learn run —
+  codex W3 MINOR, accepted).
+- Out-of-repo-scope: benchmark/ nested-guild fixture flags; umbrella docs/v2-final scrub-uncovered pages;
+  benchmark main↔release reconciliation.
+
+**Close gate status:** exec leg done; docs leg = umbrella docs/v2 reconciliation lane in flight; release
+leg = rides the operator-driven next→main release cut (branch-policy: main accepts release/vX.Y.Z PRs only).
