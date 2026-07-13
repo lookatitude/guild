@@ -29,7 +29,7 @@
       "id": "lib/guild-artifact-paths",
       "source_path": "scripts/lib/guild-artifact-paths.ts",
       "resource_path": "resources/scripts/lib/guild-artifact-paths.ts",
-      "sha256": "0231d7e739329fd48d453695cd3d32112228807aaaac104b21778101b4bf7f90"
+      "sha256": "0fd3f59adffb3f05ee48fad95111d671f77ab7613d6ac48612b37abb75139679"
     },
     {
       "category": "scripts",
