@@ -42,7 +42,12 @@ const ROWS = HOST_IDS.map((id) => HOST_REGISTRY_ROWS[id]);
 // ── SC-1 — the five-host namespace ──────────────────────────────────────────
 
 describe("P1 SC-1 — canonical host namespace (host-adapter migration)", () => {
-  it("is EXACTLY the 9 canonical ids — legacy ids renamed, Gemini dropped (D10)", () => {
+  it("is EXACTLY the 16 canonical ids — legacy ids renamed, Gemini dropped (D10), G4b's 7 new hosts added", () => {
+    // verified-multi-host expansion (G4b): 4 wrapped-CLI hosts + 3 agents-file IDE
+    // hosts joined the original 9. This test's "9 canonical ids" claim was stale —
+    // the registry already carried 16 rows before this lane started; only the
+    // dispatch surfaces reaching them (HostKind/adapter/HOST_CAPABILITY_ROWS) were
+    // the actual gap (the audit finding this lane closes).
     expect([...HOST_IDS]).toEqual([
       "claude-code-cli",
       "codex-cli",
@@ -53,6 +58,13 @@ describe("P1 SC-1 — canonical host namespace (host-adapter migration)", () => 
       "claude-code-web",
       "codex-app",
       "claude-ai-connector",
+      "cursor",
+      "github-copilot",
+      "opencode",
+      "rovo-dev",
+      "kiro",
+      "qoder",
+      "trae",
     ]);
     expect((HOST_IDS as readonly string[])).not.toContain("gemini");
     expect((HOST_IDS as readonly string[])).not.toContain("gemini-cli");
@@ -106,6 +118,19 @@ describe("P1 SC-2 — independent capability columns (replace hasAdapter)", () =
       "claude-code-web": { installability: "none", result_adapter: false, dispatch_selectable: false },
       "codex-app": { installability: "none", result_adapter: false, dispatch_selectable: false },
       "claude-ai-connector": { installability: "none", result_adapter: false, dispatch_selectable: false },
+      // G4b — the 4 wrapped-CLI hosts: a real pane surface, no cross-review adapter
+      // yet, install unproven (same posture as pi-cli/antigravity-cli at their
+      // Phase-1 introduction).
+      cursor: { installability: "target", result_adapter: false, dispatch_selectable: true },
+      "github-copilot": { installability: "target", result_adapter: false, dispatch_selectable: true },
+      opencode: { installability: "target", result_adapter: false, dispatch_selectable: true },
+      "rovo-dev": { installability: "target", result_adapter: false, dispatch_selectable: true },
+      // G4b — the 3 agents-file IDE hosts: dispatch_selectable is FALSE (fixed by
+      // this lane — an agents-file surface is a FILE the host reads, never a pane;
+      // the prior `true` was unreachable through every dispatch surface).
+      kiro: { installability: "target", result_adapter: false, dispatch_selectable: false },
+      qoder: { installability: "target", result_adapter: false, dispatch_selectable: false },
+      trae: { installability: "target", result_adapter: false, dispatch_selectable: false },
     };
     for (const id of HOST_IDS) {
       const row = HOST_REGISTRY_ROWS[id];
@@ -137,12 +162,13 @@ describe("P1 SC-2 — independent capability columns (replace hasAdapter)", () =
     expect(claude.result_adapter).toBe(false);
   });
 
-  it("provenance: the 4 CLI/file primary hosts verified; agents-file + the app/web/connector surfaces inferred", () => {
+  it("provenance: the 4 CLI/file primary hosts verified; agents-file + the app/web/connector surfaces + G4b's 7 new hosts inferred", () => {
     // Oracle refreshed to current production after commit 445f7b6 ("fix(host-registry):
     // verify pi + antigravity capability rows on-host; correct antigravity bin to agy"):
     // pi + antigravity were LIVE-VERIFIED on-host (the newer truth, not a regression),
-    // so their provenance is "verified". The agents-file target and the four app/web/
-    // connector surfaces were NOT live-verified → "inferred".
+    // so their provenance is "verified". The agents-file target, the four app/web/
+    // connector surfaces, and G4b's 7 new hosts (off-box, no live-host verification
+    // yet) were NOT live-verified → "inferred".
     for (const id of ["claude-code-cli", "codex-cli", "pi-cli", "antigravity-cli"] as HostId[]) {
       expect(HOST_REGISTRY_ROWS[id].provenance).toBe("verified");
     }
@@ -152,6 +178,13 @@ describe("P1 SC-2 — independent capability columns (replace hasAdapter)", () =
       "claude-code-web",
       "codex-app",
       "claude-ai-connector",
+      "cursor",
+      "github-copilot",
+      "opencode",
+      "rovo-dev",
+      "kiro",
+      "qoder",
+      "trae",
     ] as HostId[]) {
       expect(HOST_REGISTRY_ROWS[id].provenance).toBe("inferred");
     }

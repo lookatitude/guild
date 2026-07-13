@@ -35,7 +35,6 @@ export class MockTransport implements RemoteTransport {
   readonly kind = "mock";
   readonly connects: RemoteHostTarget[] = [];
   readonly spawns: Array<{ host: RemoteHostTarget; spec: PaneSpec; command: string }> = [];
-  readonly sends: Array<{ handle: RemotePaneHandle; payload: string }> = [];
   teardowns = 0;
   readonly probes: Array<{ host: RemoteHostTarget; binaries: string[] }> = [];
   private failConnectFor?: (host: RemoteHostTarget) => boolean;
@@ -72,11 +71,8 @@ export class MockTransport implements RemoteTransport {
       hostKind: host.hostKind,
       endpoint: host.endpoint,
       remoteId: `mock-${++this.counter}`,
+      loginShell: host.loginShell,
     };
-  }
-
-  send(handle: RemotePaneHandle, payload: string): void {
-    this.sends.push({ handle, payload });
   }
 
   teardown(): void {
@@ -126,31 +122,51 @@ export class SshRemoteTransport implements RemoteTransport {
   }
 
   spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle {
-    const wired = host.loginShell ? wrapLoginShell(command, host.loginShell) : command;
-    this.run("ssh", [host.endpoint, wired]);
+    // The session name IS the remoteId — that's what makes teardown's
+    // `tmux kill-session -t <remoteId>` an exact, guaranteed match (a bare
+    // `pkill -f <remoteId>` can never match anything: remoteId is generated
+    // client-side and never appears in the remote process's argv/cmdline).
+    // Uniqueness: a per-instance counter alone collides across transport
+    // INSTANCES (the launcher builds a fresh transport per dispatch, so every
+    // first pane for an endpoint would be `...-1` and `tmux new-session -s`
+    // refuses duplicate session names). process.pid disambiguates concurrent
+    // and successive dispatches. tmux session names may not contain '.' or
+    // ':' — sanitize the endpoint portion.
+    const sessionEndpoint = host.endpoint.replace(/[.:]/g, "-");
+    const remoteId = `ssh-${sessionEndpoint}-${process.pid}-${++this.counter}`;
+    // Wrap in a DETACHED tmux session so the pane outlives this ssh call.
+    // A bare `ssh host '<long-running command>'` blocks this spawnSync call
+    // forever (or until the lane process exits) — that can never work for a
+    // real dispatched lane, only for the short synchronous probes this
+    // transport also runs (connect/probe).
+    const tmuxCmd = `tmux new-session -d -s ${shellQuote(remoteId)} ${shellQuote(command)}`;
+    const wired = host.loginShell ? wrapLoginShell(tmuxCmd, host.loginShell) : tmuxCmd;
+    const r = this.run("ssh", [host.endpoint, wired]);
+    if (r.status !== 0) {
+      // Surface the failure — silently returning a handle would let the
+      // backend report ok:true for a pane that never existed.
+      throw new Error(
+        `remote spawn failed on ${host.endpoint} (ssh/tmux exit ${r.status ?? "null"}): ` +
+          `${(r.stderr ?? "").trim().slice(0, 400) || "no stderr"}`,
+      );
+    }
     const handle: RemotePaneHandle = {
       specialist: spec.name,
       hostId: host.hostId,
       hostKind: host.hostKind,
       endpoint: host.endpoint,
-      remoteId: `ssh-${host.endpoint}-${++this.counter}`,
+      remoteId,
+      loginShell: host.loginShell,
     };
     this.handles.push(handle);
     return handle;
   }
 
-  send(handle: RemotePaneHandle, payload: string): void {
-    const b64 = Buffer.from(payload, "utf8").toString("base64");
-    const inbox = `~/.guild/inbox/${handle.remoteId}.task`;
-    this.run("ssh", [
-      handle.endpoint,
-      `mkdir -p ~/.guild/inbox && printf %s ${b64} | base64 -d > ${inbox}`,
-    ]);
-  }
-
   teardown(): void {
     for (const h of this.handles) {
-      this.run("ssh", [h.endpoint, `pkill -f ${shellQuote(h.remoteId)} || true`]);
+      const killCmd = `tmux kill-session -t ${shellQuote(h.remoteId)} 2>/dev/null || true`;
+      const wired = h.loginShell ? wrapLoginShell(killCmd, h.loginShell) : killCmd;
+      this.run("ssh", [h.endpoint, wired]);
     }
     this.handles = [];
   }
@@ -202,7 +218,7 @@ export class RemoteTeamBackend implements TeamBackend {
     if (!this.transport) {
       throw new Error(
         "RemoteTeamBackend has no RemoteTransport — cross-host dispatch has no " +
-          "wire without one (RE-4 seam; see docs/knowledge/decisions/" +
+          "wire without one (RE-4 seam; see .guild/wiki/decisions/" +
           "v2-runtime-and-execution-model.md §RE-4)."
       );
     }
@@ -284,11 +300,36 @@ export class RemoteTeamBackend implements TeamBackend {
       }
     }
 
-    // Phase 2 — spawn each pane + hand it its task brief.
+    // Phase 2 — spawn each pane. The task brief needs no separate delivery: the
+    // full prompt is already the pane command's argv (`p.command`, built by
+    // commandFor/paneCommand), and GUILD_TASK_ASSIGNMENT is already exported
+    // into that same command's env (docs/v2 §08 `guild.task_assignment.v1`).
     const teammatePaneIds: Record<string, string> = {};
     for (const p of planned) {
-      const handle = transport.spawn(p.target, p.paneSpec, p.command);
-      transport.send(handle, p.paneSpec.prompt);
+      let handle: RemotePaneHandle;
+      try {
+        handle = transport.spawn(p.target, p.paneSpec, p.command);
+      } catch (err) {
+        // A failed spawn must not report ok:true. Tear down any panes we did
+        // spawn so a partial dispatch doesn't leak detached remote sessions.
+        try {
+          transport.teardown();
+        } catch {
+          /* best-effort cleanup */
+        }
+        return {
+          kind: this.kind,
+          ok: false,
+          plannedCommands,
+          orchestratorPaneId: null,
+          teammatePaneIds: {},
+          notes: [
+            `remote spawn failed for lane "${p.spec.name}" on ${p.target.endpoint}: ` +
+              `${err instanceof Error ? err.message : String(err)}. ` +
+              `Previously spawned pane(s) were torn down; no partial team left running.`,
+          ],
+        };
+      }
       teammatePaneIds[p.spec.name] = handle.remoteId;
     }
 

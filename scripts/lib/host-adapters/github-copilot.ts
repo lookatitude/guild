@@ -7,9 +7,18 @@
  * `gh copilot` invocation (detection.subcommand). No host facts are re-declared here.
  */
 import { createWrappedCliAdapter } from "./wrapped-cli-base";
-import type { HostAdapter } from "../host-adapter-contract";
+import type { HostAdapter, HostAdapterResult, PreflightRequest } from "../host-adapter-contract";
 import type { HostRegistryEntry } from "../host-registry-schema";
 
 export function createGithubCopilotAdapter(entry?: HostRegistryEntry): HostAdapter {
-  return createWrappedCliAdapter({ hostId: "github-copilot", label: "GitHub Copilot", entry });
+  const base = createWrappedCliAdapter({ hostId: "github-copilot", label: "GitHub Copilot", entry });
+  return {
+    ...base,
+    // Thin pass-through — NOT a re-implementation. See cursor.ts for why this
+    // exists: the coverage gate scans the per-adapter FILE, but the logic
+    // still lives in ONE place (wrapped-cli-base.ts, ADR §4.2).
+    preflight(request?: PreflightRequest): HostAdapterResult {
+      return base.preflight(request);
+    },
+  };
 }

@@ -54,7 +54,14 @@ import { redact } from "./lib/shared/scrub-redact";
 
 const GUILD_VERSION = "2.0.0";
 
-/** Map a registry host id to its guild-run wrapper host-kind key (HOST_CAPABILITY_ROWS). */
+/**
+ * Map a registry host id to its guild-run wrapper host-kind key
+ * (DERIVED_HOST_CAPABILITY_ROWS, host-registry.ts). The wrapper itself now also
+ * carries rows for the 4 wrapped-CLI hosts (cursor/github-copilot/opencode/
+ * rovo-dev — G4b), but this smoke deliberately does NOT plan-check them yet:
+ * their registry rows are installability:"target" (runtime install unproven),
+ * and widening smoke coverage is an operator-box decision, not a drive-by.
+ */
 const WRAPPER_KEY: Partial<Record<HostId, string>> = {
   "claude-code-cli": "claude",
   "codex-cli": "codex",
@@ -163,14 +170,14 @@ function probeAuth(host: HostId): { ok: boolean; evidence: string } {
   }
 }
 
-/** Try a wrapper dry-run plan for hosts wired into HOST_CAPABILITY_ROWS (claude/codex/pi/antigravity). */
+/** Try a wrapper dry-run plan for the hosts in WRAPPER_KEY (claude/codex/pi/antigravity). */
 function bootstrapPlanCheck(host: HostId): SmokeCheck {
   const key = WRAPPER_KEY[host];
   if (!key || key === "agents-file") {
     return {
       concern: "bootstrap_plan",
       state: "skipped",
-      evidence: "no HOST_CAPABILITY_ROWS wrapper row (new-CLI wrapper wiring is deferred to an operator box)",
+      evidence: "not in this smoke's WRAPPER_KEY set (wrapper rows exist via DERIVED_HOST_CAPABILITY_ROWS; new-CLI smoke plan-coverage is deferred to an operator box)",
     };
   }
   try {

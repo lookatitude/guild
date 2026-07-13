@@ -23,7 +23,8 @@
       "lib/failure-ingestion",
       "lib/guild-trace-emit",
       "lib/guild-trace-events",
-      "lib/telemetry-redirect"
+      "lib/telemetry-redirect",
+      "hooks/dist/run-trace"
     ]
   }
 }

@@ -15,21 +15,21 @@
       "id": "TaskCompleted:task-completed.js",
       "source_path": "hooks/agent-team/dist/task-completed.js",
       "resource_path": "resources/hooks/agent-team/dist/task-completed.js",
-      "sha256": "2f16cc535d9beed16dd4a51123a823ce50959699554a646f35c770033ebde4df"
+      "sha256": "e464d244919026e13823afddc766b169e1cfd113ab56d6eb3cc2aaf554d4c26a"
     },
     {
       "category": "hooks",
       "id": "TaskCreated:task-created.js",
       "source_path": "hooks/agent-team/dist/task-created.js",
       "resource_path": "resources/hooks/agent-team/dist/task-created.js",
-      "sha256": "7b4b7dbd7d12a82f1817993dfd6b917024f2bd0c57891c9a99134d1294dacdc4"
+      "sha256": "5dbbe9c3e32f9513251452da26750235ef52b17f623b48c6c90640689166a1ce"
     },
     {
       "category": "hooks",
       "id": "TeammateIdle:teammate-idle.js",
       "source_path": "hooks/agent-team/dist/teammate-idle.js",
       "resource_path": "resources/hooks/agent-team/dist/teammate-idle.js",
-      "sha256": "b9d7f428a39a4fcc59830f764fce3bcc98fcb9128042bf98094b5197c879aacd"
+      "sha256": "6716bf13a4b6538450ea9ae8705a311cca697f790f445aafffedea3c210e6f72"
     },
     {
       "category": "scripts",

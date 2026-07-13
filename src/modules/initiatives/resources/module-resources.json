@@ -8,7 +8,7 @@
       "id": "initiative",
       "source_path": "commands/initiative.md",
       "resource_path": "resources/commands/initiative.md",
-      "sha256": "4cf4137292d62ece238ce4cc5f3d8029e052de2eb184e5c52060d4ba8b1038d6"
+      "sha256": "fdd69796ad06a52fdfceb97e873c8d6a6e72bdcc71f7bf6ae4057ef81bb0269a"
     },
     {
       "category": "scripts",
@@ -23,6 +23,13 @@
       "source_path": "scripts/ideation-min-build-cli.ts",
       "resource_path": "resources/scripts/ideation-min-build-cli.ts",
       "sha256": "8ab568c3a817fd531c376e5d94aadf272452ebb79ed0e5baa2774769eec72748"
+    },
+    {
+      "category": "scripts",
+      "id": "initiative-gate",
+      "source_path": "scripts/initiative-gate.ts",
+      "resource_path": "resources/scripts/initiative-gate.ts",
+      "sha256": "7651bf44c5f92113fa47af4b1314c2d3b1120699af42077f5b48c7a7d30d53fd"
     },
     {
       "category": "scripts",
@@ -79,6 +86,13 @@
       "source_path": "skills/meta/decisions/SKILL.md",
       "resource_path": "resources/skills/meta/decisions/SKILL.md",
       "sha256": "a3105d8b3e918611df33f46b1376b26007f744c2a19a3031a32e038a7ce19da3"
+    },
+    {
+      "category": "skills",
+      "id": "guild-initiative",
+      "source_path": "skills/meta/initiative/SKILL.md",
+      "resource_path": "resources/skills/meta/initiative/SKILL.md",
+      "sha256": "fa081576932209b454032ea7345c05f1fc8aaa4fc8a944b38fe91a4100607c21"
     },
     {
       "category": "skills",

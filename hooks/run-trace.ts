@@ -25,6 +25,20 @@
  *     before invoking this for /guild:status.
  *     Prints the run-id on stdout.
  *
+ *     U3/U6 wiring (plugin-audit-remediation G3c): `start` ALWAYS runs the
+ *     run-start preflight (lib/run-trace.ts resolvePreflightSnapshot →
+ *     scripts/lib/runstart-preflight.ts runStartPreflight) before starting the
+ *     run, and threads the resulting ResolvedSettingsSnapshot into
+ *     startRunOnly/startAndCloseRun so B2's startRun writes
+ *     .guild/runs/<id>/resolved-settings.json + run.yaml's settings_ref block.
+ *     This is deterministic-code, not command prose: no command/skill needs to
+ *     call runStartPreflight itself anymore — this CLI is the sole caller.
+ *     Best-effort: a preflight failure degrades to no snapshot (logged WARN to
+ *     stderr) rather than blocking run start. Non-interactive: needsTmuxPrompt
+ *     is never acted on here (no operator to ask) — the resolved default is
+ *     recorded in the snapshot as-is; a one-line NOTE goes to stderr instead.
+ *
+
  *   status — convenience alias for `start --run-class=lightweight
  *             --command=/guild:status` WITH the OQ6 gate applied:
  *       npx tsx hooks/run-trace.ts status [--cwd <root>]
@@ -47,6 +61,7 @@ import {
   defaultResolveHost,
   recordStatusLightweight,
   recordPhase,
+  resolvePreflightSnapshot,
   startAndCloseRun,
   startRunOnly,
   writeSkippedFiles,
@@ -106,6 +121,15 @@ async function main(): Promise<void> {
     // T0: phase commands seed their phase when they START a full run.
     const phase = flag(argv, "phase") ?? null;
 
+    // U3/U6 (audit fix): compute the resolved-settings snapshot deterministically
+    // here — the CLI is the actual production caller of runStartPreflight now.
+    // Best-effort: resolvePreflightSnapshot never throws; a preflight failure
+    // degrades to `undefined` (this run starts snapshot-less) rather than
+    // blocking run start. Uses `cwd` (not `root`) — same operand
+    // runStartPreflight documents everywhere else (the settings inheritance
+    // chain resolves from the invocation cwd; `root` is only the .guild/ write base).
+    const snapshot = resolvePreflightSnapshot(cwd);
+
     // Split by run-class:
     //   full (default) — start ONLY, leave run.yaml OPEN. The Stop hook
     //     (run-trace-close) closes it at session end once work has happened.
@@ -120,6 +144,7 @@ async function main(): Promise<void> {
             cwd,
             run_class: "lightweight",
             initiative,
+            snapshot,
           })
         : startRunOnly(root, defaultResolveHost, {
             command,
@@ -127,6 +152,7 @@ async function main(): Promise<void> {
             run_class: "full",
             initiative,
             phase, // T0: seed run.yaml phase: + first phases_log entry (canonical-validated downstream)
+            snapshot,
           });
     if (runId) process.stdout.write(runId + "\n");
     process.exit(0);

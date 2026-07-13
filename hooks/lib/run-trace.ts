@@ -64,6 +64,17 @@ import {
   type RunLifecycleEnv,
   type TargetKind,
 } from "../../scripts/lib/run-lifecycle.js";
+// U3/U6 wiring (audit fix, plugin-audit-remediation G3c): the run-start
+// preflight pipeline (settings resolve + validate + tmux probe + provider
+// detect) previously had ZERO production callers — resolved-settings.json
+// never landed on disk in a real run. resolvePreflightSnapshot() below is the
+// deterministic caller; the CLI (hooks/run-trace.ts `start`) invokes it and
+// threads the result into startRunOnly/startAndCloseRun via StartAndCloseOpts.snapshot.
+import {
+  runStartPreflight,
+  type PreflightProbe,
+  type ResolvedSettingsSnapshot,
+} from "../../scripts/lib/runstart-preflight.js";
 
 import { writeCheckpoint } from "../emit-learning-checkpoint.js";
 import { PHASE_TOKEN_TO_CHECKPOINT } from "./learning-backstop.js";
@@ -334,6 +345,14 @@ export interface StartAndCloseOpts {
    * to isCanonicalPhase. Default undefined → null seed (legacy behavior).
    */
   phase?: string | null;
+  /**
+   * U6: Optional resolved-settings snapshot (from runStartPreflight, via
+   * resolvePreflightSnapshot below) to attach to this run's StartRunOpts.
+   * When present, B2's startRun writes .guild/runs/<id>/resolved-settings.json
+   * + a compact settings_ref block in run.yaml. Absent ⇒ back-compat (no file,
+   * behavior unchanged) — e.g. when the preflight computation degraded.
+   */
+  snapshot?: ResolvedSettingsSnapshot;
 }
 
 /**
@@ -552,7 +571,58 @@ function buildStartRunOpts(
     initiative: opts.initiative ?? null, // NN#5: scalar record ONLY, never a dir
     phase,
     run_class: runClass,
+    // U6: thread the resolved-settings snapshot straight through. Undefined
+    // when the caller passed none (back-compat: startRun skips the write).
+    snapshot: opts.snapshot,
   };
+}
+
+// ── U3/U6 — run-start preflight caller (audit fix) ────────────────────────────
+
+/**
+ * Compute the ResolvedSettingsSnapshot for a new run by running the U3
+ * run-start preflight (settings resolve + closed-key validate + tmux probe +
+ * provider detect). This is the single deterministic caller that makes the
+ * U3/U6 pipeline actually execute in production — before this wiring,
+ * runStartPreflight had zero callers and resolved-settings.json never landed
+ * on disk in a real run (plugin-implementation-audit-2026-07-12, high/incomplete-wiring).
+ *
+ * Best-effort; NEVER throws. On any failure (malformed settings, a probe that
+ * blows past its own safeProbe wrapper, etc.) this logs a WARN line to stderr
+ * and returns undefined so the caller starts the run WITHOUT a snapshot
+ * (degrade, don't die — a preflight failure must never block run start).
+ *
+ * Non-interactive posture: a CLI process cannot show the operator a tmux
+ * prompt. When `needsTmuxPrompt` comes back true this function does NOT act
+ * on `tmuxPrompt.persistCommand` (that would silently mutate settings without
+ * consent) — it simply leaves `snapshot.effective.agent_mode` as whatever the
+ * settings chain already resolved (the "record the resolved default instead
+ * of prompting" contract) and emits a one-line stderr note so the operator can
+ * still see that tmux team-mode was available but not auto-enabled.
+ */
+export function resolvePreflightSnapshot(
+  cwd: string,
+  probe?: PreflightProbe,
+): ResolvedSettingsSnapshot | undefined {
+  try {
+    const result = runStartPreflight({ cwd, probe });
+    if (result.needsTmuxPrompt) {
+      process.stderr.write(
+        `[run-trace] NOTE: tmux is available and agent_mode is not "team"; ` +
+          `using the resolved default "${result.resolved.config.agent_mode}" ` +
+          `(no interactive tmux prompt in a non-interactive CLI context). ` +
+          `Run \`guild:config role\` / \`config set agent_mode team\` to pin it.\n`,
+      );
+    }
+    return result.snapshot;
+  } catch (err) {
+    process.stderr.write(
+      `[run-trace] WARN: run-start preflight failed; starting the run WITHOUT ` +
+        `a resolved-settings snapshot (degraded): ` +
+        `${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return undefined;
+  }
 }
 
 /**

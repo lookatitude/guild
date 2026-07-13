@@ -43,6 +43,7 @@ import {
   validateManifest,
   type GuildPluginManifest,
   type RenderOptions,
+  type NewHostRenderSpec,
 } from "../lib/per-host-packaging";
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,9 @@ import {
 const FIXED_TS = "2026-06-13T00:00:00Z";
 
 const opts: RenderOptions = { renderedAt: FIXED_TS };
+
+/** Registry-derived facts a caller supplies to the Pi/Antigravity renderers. */
+const spec: NewHostRenderSpec = { agentsSkillRoot: ".agents/skills/guild", provenance: "verified" };
 
 /** Minimal valid manifest — only the required fields. */
 const minimalManifest: GuildPluginManifest = {
@@ -256,19 +260,19 @@ describe("renderCodexPluginJson — edge cases", () => {
 
 describe("renderPiManifest — happy path", () => {
   it("produces the correct schema_version", () => {
-    const out = renderPiManifest(minimalManifest, opts);
+    const out = renderPiManifest(minimalManifest, opts, spec);
     expect(out.schema_version).toBe("pi-manifest.v1");
   });
 
   it("copies name, version, description from the manifest", () => {
-    const out = renderPiManifest(minimalManifest, opts);
+    const out = renderPiManifest(minimalManifest, opts, spec);
     expect(out.name).toBe("guild");
     expect(out.version).toBe("2.0.0");
     expect(out.description).toBe("A team-of-specialists plugin for Claude Code.");
   });
 
   it("copies optional metadata fields when present", () => {
-    const out = renderPiManifest(fullManifest, opts);
+    const out = renderPiManifest(fullManifest, opts, spec);
     expect(out.homepage).toBe("https://guildstack.dev/");
     expect(out.repository).toBe("https://github.com/lookatitude/guild");
     expect(out.author).toEqual({ name: "Miguel Pinto", email: "guild@lookatitude.com" });
@@ -277,7 +281,7 @@ describe("renderPiManifest — happy path", () => {
   });
 
   it("renders commands as PiCommandEntry descriptors", () => {
-    const out = renderPiManifest(fullManifest, opts);
+    const out = renderPiManifest(fullManifest, opts, spec);
     expect(out.commands).toBeDefined();
     expect(out.commands).toHaveLength(4);
     const names = (out.commands ?? []).map((c) => c.name);
@@ -285,25 +289,41 @@ describe("renderPiManifest — happy path", () => {
     expect(names).toContain("init");
   });
 
-  it("each command entry carries the original source_path", () => {
-    const out = renderPiManifest(fullManifest, opts);
+  it("each command entry omits source_path — commands/*.md never ships in a Pi package (audit fix)", () => {
+    // commands/*.md is a Claude-Code-only artifact; a Pi package never copies it, so echoing the
+    // Claude-shaped path here would be a dangling pointer (plugin-implementation-audit-2026-07-12
+    // finding: "non-Claude manifests ship commands[].source_path ... that resolve to nothing").
+    const out = renderPiManifest(fullManifest, opts, spec);
     const planCmd = (out.commands ?? []).find((c) => c.name === "plan");
-    expect(planCmd?.source_path).toBe("./commands/plan.md");
+    expect(planCmd?.source_path).toBeUndefined();
   });
 
-  it("renders skills as a string array", () => {
-    const out = renderPiManifest(fullManifest, opts);
+  it("flags commands[].source_path as unsupported when commands are present", () => {
+    const out = renderPiManifest(fullManifest, opts, spec);
+    const u = out._unsupported ?? [];
+    expect(u.some((f) => f.field === "commands[].source_path")).toBe(true);
+  });
+
+  it("renders skills remapped under the package's actual skill-tree root (audit fix)", () => {
+    // The neutral manifest carries Claude-shaped `./skills/<tier>/` globs, but Pi packages expose
+    // the skill tree under agentsSkillRoot — the unmapped path resolved to nothing in every shipped
+    // package (same audit finding as the commands fix above).
+    const out = renderPiManifest(fullManifest, opts, spec);
     expect(out.skills).toBeDefined();
-    expect(out.skills).toEqual(["./skills/core/", "./skills/meta/", "./skills/specialists/"]);
+    expect(out.skills).toEqual([
+      ".agents/skills/guild/core/",
+      ".agents/skills/guild/meta/",
+      ".agents/skills/guild/specialists/",
+    ]);
   });
 
   it("uses caller-supplied _rendered_at, never calls the clock", () => {
-    const out = renderPiManifest(minimalManifest, opts);
+    const out = renderPiManifest(minimalManifest, opts, spec);
     expect(out._rendered_at).toBe(FIXED_TS);
   });
 
   it("records _source_version from the manifest version", () => {
-    const out = renderPiManifest(minimalManifest, opts);
+    const out = renderPiManifest(minimalManifest, opts, spec);
     expect(out._source_version).toBe("2.0.0");
   });
 });
@@ -315,7 +335,7 @@ describe("renderPiManifest — happy path", () => {
 describe("renderPiManifest — render-or-degrade", () => {
   it("ALWAYS flags MCP servers in _unsupported (Pi core omits MCP)", () => {
     // Pi must never silently include MCP — it ALWAYS needs a bridge shim.
-    const out = renderPiManifest(fullManifest, opts);
+    const out = renderPiManifest(fullManifest, opts, spec);
     const u = out._unsupported ?? [];
     expect(u.some((f) => f.field.includes("guild-memory"))).toBe(true);
     expect(u.some((f) => f.field.includes("guild-telemetry"))).toBe(true);
@@ -324,31 +344,32 @@ describe("renderPiManifest — render-or-degrade", () => {
   });
 
   it("flags agents in _unsupported when agents are present", () => {
-    const out = renderPiManifest(fullManifest, opts);
+    const out = renderPiManifest(fullManifest, opts, spec);
     const u = out._unsupported ?? [];
     expect(u.some((f) => f.field === "agents")).toBe(true);
   });
 
   it("flags hooks in _unsupported when hooks are present", () => {
-    const out = renderPiManifest(fullManifest, opts);
+    const out = renderPiManifest(fullManifest, opts, spec);
     const u = out._unsupported ?? [];
     expect(u.some((f) => f.field === "hooks")).toBe(true);
   });
 
   it("does NOT flag agents or hooks for a manifest without them", () => {
-    const out = renderPiManifest(minimalManifest, opts);
+    const out = renderPiManifest(minimalManifest, opts, spec);
     // minimalManifest has no mcpServers/agents/hooks so _unsupported should be absent
     expect(out._unsupported).toBeUndefined();
   });
 
   it("does not silently omit any unsupported field — all flags present together", () => {
-    const out = renderPiManifest(fullManifest, opts);
+    const out = renderPiManifest(fullManifest, opts, spec);
     const u = out._unsupported ?? [];
     const fields = u.map((f) => f.field);
-    // MCP servers, agents, AND hooks must ALL be flagged
+    // MCP servers, agents, hooks, AND the commands-source_path degrade must ALL be flagged
     expect(fields.some((f) => f.includes("guild-memory"))).toBe(true);
     expect(fields).toContain("agents");
     expect(fields).toContain("hooks");
+    expect(fields).toContain("commands[].source_path");
   });
 });
 
@@ -358,24 +379,24 @@ describe("renderPiManifest — render-or-degrade", () => {
 
 describe("renderPiManifest — edge cases", () => {
   it("does not produce an empty commands array for a manifest with no commands", () => {
-    const out = renderPiManifest(minimalManifest, opts);
+    const out = renderPiManifest(minimalManifest, opts, spec);
     expect(out.commands).toBeUndefined();
   });
 
   it("does not produce an empty skills array for a manifest with no skills", () => {
-    const out = renderPiManifest(minimalManifest, opts);
+    const out = renderPiManifest(minimalManifest, opts, spec);
     expect(out.skills).toBeUndefined();
   });
 
   it("is deterministic — same input + same opts always produces byte-identical output", () => {
-    const a = JSON.stringify(renderPiManifest(fullManifest, opts));
-    const b = JSON.stringify(renderPiManifest(fullManifest, opts));
+    const a = JSON.stringify(renderPiManifest(fullManifest, opts, spec));
+    const b = JSON.stringify(renderPiManifest(fullManifest, opts, spec));
     expect(a).toBe(b);
   });
 
   it("two different renderedAt values produce different _rendered_at in output", () => {
-    const out1 = renderPiManifest(minimalManifest, { renderedAt: "2026-01-01T00:00:00Z" });
-    const out2 = renderPiManifest(minimalManifest, { renderedAt: "2026-06-13T00:00:00Z" });
+    const out1 = renderPiManifest(minimalManifest, { renderedAt: "2026-01-01T00:00:00Z" }, spec);
+    const out2 = renderPiManifest(minimalManifest, { renderedAt: "2026-06-13T00:00:00Z" }, spec);
     expect(out1._rendered_at).not.toBe(out2._rendered_at);
   });
 });
@@ -387,12 +408,12 @@ describe("renderPiManifest — edge cases", () => {
 describe("cross-renderer contract", () => {
   it("both renderers accept the same GuildPluginManifest without throwing", () => {
     expect(() => renderCodexPluginJson(fullManifest, opts)).not.toThrow();
-    expect(() => renderPiManifest(fullManifest, opts)).not.toThrow();
+    expect(() => renderPiManifest(fullManifest, opts, spec)).not.toThrow();
   });
 
   it("both renderers preserve name, version, description from the source manifest", () => {
     const codex = renderCodexPluginJson(fullManifest, opts);
-    const pi = renderPiManifest(fullManifest, opts);
+    const pi = renderPiManifest(fullManifest, opts, spec);
 
     expect(codex.name).toBe(fullManifest.name);
     expect(codex.version).toBe(fullManifest.version);
@@ -402,7 +423,7 @@ describe("cross-renderer contract", () => {
 
   it("Codex emits live schema while Pi retains render-or-degrade diagnostics", () => {
     const codex = renderCodexPluginJson(fullManifest, opts);
-    const pi = renderPiManifest(fullManifest, opts);
+    const pi = renderPiManifest(fullManifest, opts, spec);
 
     // Codex: strict live plugin.json shape, with Guild skills as the supported surface.
     expect(codex.skills).toBe("./.agents/skills/");
@@ -413,7 +434,7 @@ describe("cross-renderer contract", () => {
 
   it("_rendered_at remains on renderers whose live formats allow provenance fields", () => {
     const codex = renderCodexPluginJson(fullManifest, opts);
-    const pi = renderPiManifest(fullManifest, opts);
+    const pi = renderPiManifest(fullManifest, opts, spec);
 
     expect("_rendered_at" in codex).toBe(false);
     expect(pi._rendered_at).toBe(FIXED_TS);

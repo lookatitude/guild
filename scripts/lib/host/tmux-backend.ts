@@ -144,6 +144,15 @@ export function composeTmuxCommands(opts: {
     });
   }
 
+  // Title the orchestrator's own pane (applies to the currently-active pane —
+  // the one just created by new-session/new-window, before any split moves
+  // "active" to a specialist pane below) so spawn() can identify it by title
+  // in the pane listing, the same way specialist panes are identified.
+  cmds.push({
+    argv: ["tmux", "select-pane", "-T", "orchestrator"],
+    display: `tmux select-pane -T orchestrator`,
+  });
+
   for (const spec of specialists) {
     const cmd = commandFor(spec);
     cmds.push({
@@ -274,17 +283,21 @@ export class TmuxTeamBackend implements TeamBackend {
       }
     }
 
-    const paneArgs =
-      plan.mode === "in-session"
-        ? ["list-panes", "-t", plan.targetName, "-F", "#{pane_index}\t#{pane_id}\t#{pane_title}"]
-        : ["list-panes", "-t", plan.targetName, "-a", "-F", "#{pane_index}\t#{pane_id}\t#{pane_title}"];
+    // Scoped to THIS session's window (no `-a`, which lists panes SERVER-WIDE
+    // across every other session too — a correctness bug, not just a broader
+    // scope: a concurrent guild-team session with a same-named specialist pane
+    // title could silently clobber this collection).
+    const paneArgs = ["list-panes", "-t", plan.targetName, "-F", "#{pane_index}\t#{pane_id}\t#{pane_title}"];
     const panesR = this.run("tmux", paneArgs);
     const teammates: Record<string, string> = {};
+    let orchestratorPaneId = "";
     if (panesR.status === 0) {
       for (const line of panesR.stdout.split("\n")) {
         const [, id, title] = line.split("\t");
         if (!id) continue;
-        if (title && title in teammates === false) {
+        if (title === "orchestrator") {
+          orchestratorPaneId = id;
+        } else if (title && title in teammates === false) {
           teammates[title] = id;
         }
       }
@@ -293,7 +306,7 @@ export class TmuxTeamBackend implements TeamBackend {
       ok: true,
       failedCommand: null,
       stderr: "",
-      orchestratorPaneId: "",
+      orchestratorPaneId,
       teammatePaneIds: teammates,
     };
   }
@@ -332,7 +345,13 @@ export class TmuxTeamBackend implements TeamBackend {
 
 export function binaryForHostKind(hostKind: HostKind): string {
   if (hostKind === "antigravity-2") return "agy";
-  if (hostKind === "codex-app") return "claude";
+  // NOTE: codex-app used to be special-cased to "claude" here — that was both
+  // wrong (a codex-app surface has no reason to launch the claude binary) and
+  // unreachable in practice (parseHostKind normalizes "codex-app" before a real
+  // dispatch ever reaches this function). Removing the special case doesn't
+  // change the resolved value: codex-app's registry row has detection.bin:null
+  // (it's a no-CLI app surface), so it still falls through to the generic
+  // "claude" default below — now honestly, via that fallback, not a fake branch.
   const id = hostKindToRegistryId(hostKind);
   const bin = id ? getRegistryEntry(id)?.detection.bin : null;
   return bin ?? "claude";

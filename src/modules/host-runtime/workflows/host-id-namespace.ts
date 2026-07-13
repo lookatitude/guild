@@ -55,23 +55,44 @@ export const HOSTKIND_TO_REGISTRY_ID: Record<HostKind, HostId | null> = {
   "codex-app": "codex-app",
   pi: "pi-cli",
   "antigravity-2": "antigravity-cli",
+  // G4b (host-reachability): identity mapping — the wrapped-CLI HostKind
+  // literals ARE their registry host_id, so no alias translation is needed.
+  cursor: "cursor",
+  "github-copilot": "github-copilot",
+  opencode: "opencode",
+  "rovo-dev": "rovo-dev",
 };
 
 /**
  * Map a legacy `HostKind` to its registry `HostId`. Returns `null` for a host with
- * no registry row (including a legacy `"gemini"` string — the sunset host). Prefix-
- * collapse (mirrors `resolveAuthorHost`) is the fallback for any future `claude-*` /
- * `codex-*` / `antigravity*` surface so a new variant maps correctly without a map
- * edit. Never throws.
+ * no registry row (including a legacy `"gemini"` string — the sunset host).
+ *
+ * Prefix-collapse fallback (G4b — the REAL implementation of the "prefix fallback"
+ * this function's docblock has long promised: it called itself "byte-aligned with
+ * provider-detect.ts resolveAuthorHost()" while only ever doing exact-set/exact-alias
+ * lookups via `normalizeHostId` — no actual `.startsWith()` matching ever ran).
+ * Deliberately scoped to THIS function, not `normalizeHostId` itself: `hostKindToRegistryId`
+ * resolves a `HostKind`-SHAPED value (a closed, non-attacker-controlled input space —
+ * team.yaml `host:`, env vars), where rescuing an unrecognized `claude-*`/`codex-*`/
+ * `antigravity*` variant onto its family's primary id is the right default. Putting the
+ * same fuzz in `normalizeHostId` regressed settings-reader.ts's CLOSED host-key-set
+ * validation (`sparseTierHostMap`) — an operator TYPO like "claudee" in
+ * `models.tiers.mid.claudee` must be STRIPPED, not silently collapsed onto
+ * "claude-code-cli" (G-lane rework's own contract) — so `normalizeHostId` stays
+ * strict (exact id or legacy alias only) and this prefix rescue lives here instead.
+ * Never throws.
  */
 export function hostKindToRegistryId(hk: HostKind | string): HostId | null {
   if (hk in HOSTKIND_TO_REGISTRY_ID) {
     return HOSTKIND_TO_REGISTRY_ID[hk as HostKind];
   }
-  // Prefix fallback - byte-aligned with provider-detect.ts resolveAuthorHost().
   const s = String(hk);
   const normalized = normalizeHostId(s);
   if (normalized) return normalized;
+  // Prefix fallback - byte-aligned with provider-detect.ts resolveAuthorHost().
+  for (const { prefix, id } of PREFIX_COLLAPSE) {
+    if (s.startsWith(prefix)) return id;
+  }
   return null; // unknown / dropped (e.g. "gemini") => no registry row (safe: forces degrade/record)
 }
 
@@ -90,7 +111,23 @@ export const LEGACY_HOST_ALIASES: Record<string, HostId> = {
 };
 
 /**
+ * Family-prefix collapse table used ONLY by `hostKindToRegistryId` (see its doc
+ * comment for why this is NOT applied inside `normalizeHostId`). Mirrors
+ * `resolveAuthorHost()` (provider-detect.ts) exactly: any string carrying one of
+ * these three prefixes collapses onto that family's primary registry id.
+ */
+const PREFIX_COLLAPSE: ReadonlyArray<{ prefix: string; id: HostId }> = [
+  { prefix: "antigravity", id: "antigravity-cli" },
+  { prefix: "claude", id: "claude-code-cli" },
+  { prefix: "codex", id: "codex-cli" },
+];
+
+/**
  * Normalize a canonical host id or legacy alias into the v2 canonical HostId.
+ * STRICT (exact id or exact legacy alias only, no prefix fuzz — see
+ * `hostKindToRegistryId`'s doc comment): this is the function settings-reader.ts's
+ * CLOSED host-key-set validation (`sparseTierHostMap`, `sparseRoles`) relies on to
+ * reject a typo'd host key, so it must never silently rescue an unrecognized string.
  * Returns null for unknown or intentionally dropped hosts such as Gemini.
  */
 export function normalizeHostId(value: string): HostId | null {
@@ -105,8 +142,11 @@ export function normalizeHostId(value: string): HostId | null {
 
 /**
  * Map a registry `HostId` to its CANONICAL legacy `HostKind` (the primary surface),
- * or `null` when the registry id has NO `HostKind` - namely `.agents`, which is a
- * universal-package emission target (family `agents`), not a dispatch `HostKind`.
+ * or `null` when the registry id has NO `HostKind` - namely `agents-file`/`kiro`/
+ * `qoder`/`trae`, which are file-surface emission targets (adapter_binding
+ * "agents-file"), not a dispatch `HostKind` — an agents-file surface is never
+ * pane-dispatched (G4b: their registry rows carry `dispatch_selectable:false`
+ * precisely because of this).
  * Note the asymmetry: `claude`/`codex` each fan out to several `HostKind` surfaces;
  * this returns the canonical one. Never throws.
  */
@@ -128,8 +168,20 @@ export function registryIdToCanonicalHostKind(id: HostId | string): HostKind | n
       return "codex-app";
     case "claude-ai-connector":
       return "claude-ai-connector";
+    // G4b — the 4 wrapped-CLI hosts: identity mapping (registry id == HostKind literal).
+    case "cursor":
+      return "cursor";
+    case "github-copilot":
+      return "github-copilot";
+    case "opencode":
+      return "opencode";
+    case "rovo-dev":
+      return "rovo-dev";
     case "agents-file":
-      return null; // emission target only - no HostKind surface
+    case "kiro":
+    case "qoder":
+    case "trae":
+      return null; // agents-file surfaces (own + the 3 IDE dereferences) - no HostKind, never a pane
     default:
       return null;
   }

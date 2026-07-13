@@ -154,10 +154,10 @@ escalates (SC-1, VC-1). The deep stages that can reach `mid`/`powerful` live in
 **Recall-before-read (ADR §4).** Before reading a file for the project
 description or any summarize step, query the knowledge base first
 (`guild-memory` BM25 over `.guild/wiki/` + `kg-query` over the recall projection
-`knowledge-recall.json`) for that task. If recall returns ≥1 chunk scoring **≥
-the `models.recallScoreThreshold`** (default `0.4`; bound by pointer to ADR
-§10 — not re-spelled), use the recalled chunk(s) + the specific file references
-and **skip the full file read**. A full read is permitted only when recall
+`knowledge-recall.json`) for that task. If recall returns ≥1 chunk AND the
+result-level `topScore` is **≥ `models.recallScoreThreshold`** (default `0.4`;
+bound by pointer to ADR §10 — not re-spelled), use the recalled chunk(s) + the
+specific file references and **skip the full file read**. A full read is permitted only when recall
 returns zero hits OR a source-of-truth verification is required. The cheap scan
 itself remains a deterministic `scan.ts` pass; recall-before-read governs the
 LLM summarize half, never the script half.
@@ -217,7 +217,7 @@ family.
   `knowledge-graph.json` / tour **absent** (correct — they are lazy).
 - Cheap-scan tier → every LLM half runs at `cheap`; **zero `powerful` calls**
   (SC-1); the deterministic `scan.ts` half spends no LLM tokens.
-- Recall returns a wiki chunk scoring ≥ `models.recallScoreThreshold` for the
+- Recall's result-level `topScore` is ≥ `models.recallScoreThreshold` for the
   summarize task → the chunk + file refs are used, the full file read is
   skipped (ADR §4).
 - `/guild:learn map` on a repo with no prior index → cheap scan runs, map

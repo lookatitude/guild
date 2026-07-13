@@ -29,7 +29,7 @@
       "id": "host-smoke",
       "source_path": "scripts/host-smoke.ts",
       "resource_path": "resources/scripts/host-smoke.ts",
-      "sha256": "0669d3b305543087563926131e740ac24766feae72afe36f44ceba06c8674ecd"
+      "sha256": "6606dde65c3e2de34caad753a7243f4b3238d97c776c85fe051efa043e0f999a"
     },
     {
       "category": "scripts",
@@ -57,7 +57,7 @@
       "id": "lib/guild-run-wrapper",
       "source_path": "scripts/lib/guild-run-wrapper.ts",
       "resource_path": "resources/scripts/lib/guild-run-wrapper.ts",
-      "sha256": "347fe57ff68b5c0c93f11e286b884087faab660770037d16be7908df6d12da32"
+      "sha256": "bfb67dc1607f7c70cdc53ecaa166502a7d6c095d16fe7645a8e7e24f2ccc4a57"
     },
     {
       "category": "scripts",
@@ -113,21 +113,21 @@
       "id": "lib/host-adapters/cursor",
       "source_path": "scripts/lib/host-adapters/cursor.ts",
       "resource_path": "resources/scripts/lib/host-adapters/cursor.ts",
-      "sha256": "af9cbf00b239faceb292b0f8420ee4ec81ef1cd39cf364cd975753266d545f93"
+      "sha256": "31f5e485fb434bbc66d110304064a5a1e927e64828ee6fe8eb7d60101053e83b"
     },
     {
       "category": "scripts",
       "id": "lib/host-adapters/github-copilot",
       "source_path": "scripts/lib/host-adapters/github-copilot.ts",
       "resource_path": "resources/scripts/lib/host-adapters/github-copilot.ts",
-      "sha256": "a978b65965cfd3780527ff709c2107bd7149c93fd2c23d208a1777089b738b43"
+      "sha256": "78f14a221407dfa736dee8ff1d4b2f7b484bfbf8a43ae4d5d5ff36dd46b6502b"
     },
     {
       "category": "scripts",
       "id": "lib/host-adapters/opencode",
       "source_path": "scripts/lib/host-adapters/opencode.ts",
       "resource_path": "resources/scripts/lib/host-adapters/opencode.ts",
-      "sha256": "ba1c98c9759b6b8515741d531173c531273ee626b749a6d928bcf21f8c0f2f63"
+      "sha256": "7ea5d4ff02de18f3e609bf9a5bbab0a9c160029c2957baf14c26f0594f2f5067"
     },
     {
       "category": "scripts",
@@ -141,7 +141,7 @@
       "id": "lib/host-adapters/rovo-dev",
       "source_path": "scripts/lib/host-adapters/rovo-dev.ts",
       "resource_path": "resources/scripts/lib/host-adapters/rovo-dev.ts",
-      "sha256": "6ece416a5101e9602960c8ab847edc72ebea86dc473b7127b7dd40769b99b3ef"
+      "sha256": "20860a1ed59c6718fbb32882db2a9f130ffd5ea8ba01d364081984654ae0815d"
     },
     {
       "category": "scripts",
@@ -225,7 +225,7 @@
       "id": "lib/pane-adapter",
       "source_path": "scripts/lib/pane-adapter.ts",
       "resource_path": "resources/scripts/lib/pane-adapter.ts",
-      "sha256": "f1f056b9c63bf76b7e560c7ad5990351236e7a1a8b68a622f44f728ccf51ca9d"
+      "sha256": "583a754c27ef7ec6b673e1ad2a3086d8cbd4f689303f801ecc8e49841f3b92d4"
     },
     {
       "category": "scripts",

@@ -245,6 +245,83 @@ describe("evolve-loop.ts", () => {
     });
   });
 
+  // ── DH-3 fix: consuming-repo project instance wins over the plugin tree ───
+  // A promoted/minted skill lives at .guild/skills/<slug>/. findLiveSkillDir
+  // must resolve THAT first, so a second evolve snapshots the live (already
+  // evolved) content — not the stale plugin-tree baseline. Consuming repos that
+  // have no plugin tree at all must still be able to snapshot from .guild.
+  describe("DH-3 — .guild/skills/<slug>/ project instance resolves first", () => {
+    function seedGuildInstance(dir: string, slug: string, marker: string): void {
+      const d = path.join(dir, ".guild", "skills", slug);
+      fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(
+        path.join(d, "SKILL.md"),
+        `---\nname: ${slug}\ndescription: ${marker}\n---\n# ${marker}\n`,
+        "utf8"
+      );
+      fs.copyFileSync(
+        path.join(FIXTURES, "skill-v1", "evals.json"),
+        path.join(d, "evals.json")
+      );
+    }
+
+    it("snapshots the .guild instance, not the plugin-tree baseline, when both exist", () => {
+      // Plugin-tree baseline (stale) + a live .guild project instance (evolved).
+      seedLiveSkill(tmpDir, "guild-brainstorm");
+      seedGuildInstance(tmpDir, "guild-brainstorm", "GUILD-INSTANCE-LIVE");
+
+      const { exitCode } = runScript([
+        "--skill",
+        "guild-brainstorm",
+        "--run-id",
+        "run-dh3",
+        "--cwd",
+        tmpDir,
+      ]);
+      expect(exitCode).toBe(0);
+
+      const snap = fs.readFileSync(
+        path.join(tmpDir, ".guild", "skill-versions", "guild-brainstorm", "v1", "SKILL.md"),
+        "utf8"
+      );
+      // The snapshot must carry the .guild-instance marker, proving the project
+      // instance won over the plugin tree.
+      expect(snap).toContain("GUILD-INSTANCE-LIVE");
+
+      // pipeline.md records the resolved tier as "project".
+      const pipeline = fs.readFileSync(
+        path.join(tmpDir, ".guild", "evolve", "run-dh3", "pipeline.md"),
+        "utf8"
+      );
+      expect(pipeline).toMatch(/^tier: project$/m);
+    });
+
+    it("resolves the .guild instance when NO plugin tree exists (consuming repo)", () => {
+      // No skills/ tree at all — only the consuming repo's .guild instance.
+      seedGuildInstance(tmpDir, "guild-brainstorm", "ONLY-GUILD-INSTANCE");
+
+      const { exitCode } = runScript([
+        "--skill",
+        "guild-brainstorm",
+        "--run-id",
+        "run-dh3b",
+        "--cwd",
+        tmpDir,
+      ]);
+      expect(exitCode).toBe(0);
+      const snap = path.join(
+        tmpDir,
+        ".guild",
+        "skill-versions",
+        "guild-brainstorm",
+        "v1",
+        "SKILL.md"
+      );
+      expect(fs.existsSync(snap)).toBe(true);
+      expect(fs.readFileSync(snap, "utf8")).toContain("ONLY-GUILD-INSTANCE");
+    });
+  });
+
   describe("CLI errors", () => {
     it("exits 1 when --skill is missing", () => {
       const { exitCode, stderr } = runScript(["--cwd", tmpDir, "--run-id", "x"]);

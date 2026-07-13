@@ -11,7 +11,9 @@ The opt-in durable-goal container. `new|status|resume|update|close` are the
 primary user-facing lifecycle sub-verbs; `list|archive|restore` are
 operational sub-verbs on the same noun.
 
-Full lifecycle: `initiatives/initiative-and-phase-workflows.md`.
+Full lifecycle: `docs/v2/06-initiatives.md` (umbrella workspace canonical
+design set — §Registry & directory, §Definition ledger, §The D8 close gate).
+Sub-verb implementation: `skills/meta/initiative/SKILL.md`.
 
 ## Sub-verbs
 
@@ -73,7 +75,11 @@ the run-recording call here. No `--initiative` flag forwarded (the
 
 ## Dispatch
 
-Parse `$ARGUMENTS`. Dispatch on the first token to the initiative-layer
-sub-verb above, applying the listed default gate. Unknown sub-verb ⇒ print
-usage help, invoke no skill, write nothing. Initiative-layer logic and all
-`.guild/initiatives/**` writes live in the initiative skill set.
+Parse `$ARGUMENTS`. Dispatch the first token (the sub-verb) to
+**`guild:initiative`** (`skills/meta/initiative`) — it implements every
+sub-verb in the table above (`new|status|list|resume|update|archive|restore|close`),
+applying the listed default gate, and owns all `.guild/initiatives/**` reads
+and writes. On `close`, the skill runs the deterministic D8 close-gate CLI
+(`scripts/initiative-gate.ts close-check`) and refuses to close on a non-zero
+exit — see `skills/meta/initiative/SKILL.md §close`. Unknown sub-verb ⇒ print
+usage help, invoke no skill, write nothing.

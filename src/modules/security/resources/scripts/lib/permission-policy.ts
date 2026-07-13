@@ -11,8 +11,11 @@
  *     evaluateSafetyRails / ALWAYS_ASK_HARD_SET.  (C2 baseline golden.)
  *   scripts/lib/guild-run-wrapper.ts (P1-L3) — resolveLaunchMode (AC20 minimum-loss
  *     host launch-flag mapping; degrade-and-record, NEVER escalate).
- *   scripts/lib/host-capabilities-schema.ts (P1-L0) — HOST_CAPABILITY_ROWS +
- *     PermissionMode + per-host `permissions.launch_modes`.
+ *   scripts/lib/host-registry.ts — DERIVED_HOST_CAPABILITY_ROWS (registry-derived,
+ *     one row per registry host id + the legacy HostKind aliases; supersedes the
+ *     hand-authored host-capabilities-schema.ts map, which had drifted for
+ *     pi/antigravity and never carried the 4 wrapped-CLI hosts) + the P1-L0
+ *     PermissionMode / per-host `permissions.launch_modes` types.
  *   .guild/spec/universal-host-p1.md §10 · .guild/plan/universal-host-p1.md P1-L10 + C2.
  *
  * WHY this is a thin tie-layer, not a re-implementation
@@ -71,10 +74,17 @@ import {
 } from "./guild-run-wrapper";
 
 import {
-  HOST_CAPABILITY_ROWS,
   type GuildHostCapabilitiesV1,
   type PermissionMode,
 } from "./host-capabilities-schema";
+
+// Registry-derived capability rows (G4b): a strict superset of the legacy
+// hand-authored map — same rows for the keys this policy historically resolved
+// (claude/codex/agents-file byte-identical; pi/antigravity permissions now match
+// the registry's on-host-verified values), plus every registry host id, so e.g.
+// "claude-code-cli" or "cursor" resolves to a real row instead of the
+// unknown-host fallback.
+import { DERIVED_HOST_CAPABILITY_ROWS as HOST_CAPABILITY_ROWS } from "./host-registry";
 
 // ---------------------------------------------------------------------------
 // Runtime config (the REAL config surface this policy is scoped over)

@@ -128,31 +128,48 @@ describe("SshRemoteTransport — ssh argv construction", () => {
     expect(r.message).toMatch(/gpu@box/);
   });
 
-  it("spawn runs `ssh <endpoint> <command>` and returns an endpoint-tagged handle", () => {
+  it("spawn wraps the command in a DETACHED tmux session (so it outlives this ssh call)", () => {
     const { run, calls } = recordingRun();
     const handle = new SshRemoteTransport({ run }).spawn(host, paneSpec, "codex exec 'p'; exec $SHELL");
-    expect(calls[0]).toEqual({ cmd: "ssh", args: ["gpu@box", "codex exec 'p'; exec $SHELL"] });
+    expect(calls[0].cmd).toBe("ssh");
+    expect(calls[0].args[0]).toBe("gpu@box");
+    // session name === remoteId — that's what makes teardown's kill-session an
+    // exact match (a bare `pkill -f <remoteId>` can never match anything real).
+    expect(calls[0].args[1]).toMatch(/^tmux new-session -d -s /);
+    expect(calls[0].args[1]).toContain(handle.remoteId);
+    expect(calls[0].args[1]).toContain("codex exec"); // original command still present, shell-quoted
     expect(handle.endpoint).toBe("gpu@box");
     expect(handle.remoteId).toMatch(/^ssh-gpu@box-/);
   });
 
-  it("send base64-encodes the payload into a remote inbox (no shell-quoting hazard)", () => {
+  it("spawn detaches — does NOT block on the pane's own long-running command (no send channel needed)", () => {
+    // The full prompt/command is already the argv passed to spawn(); there is
+    // no separate "hand it the task brief" step — GUILD_TASK_ASSIGNMENT is
+    // already exported into that same command by paneCommand/PaneAdapter.
+    const ssh = new SshRemoteTransport();
+    expect((ssh as unknown as Record<string, unknown>)["send"]).toBeUndefined();
+  });
+
+  it("teardown kills the exact tmux session by remoteId (guaranteed match, unlike pkill)", () => {
     const { run, calls } = recordingRun();
     const ssh = new SshRemoteTransport({ run });
     const handle = ssh.spawn(host, paneSpec, "cmd");
-    ssh.send(handle, 'a payload with "quotes" & $vars');
-    const sendCall = calls[calls.length - 1];
-    expect(sendCall.cmd).toBe("ssh");
-    expect(sendCall.args[0]).toBe("gpu@box");
-    expect(sendCall.args[1]).toMatch(/base64 -d > ~\/\.guild\/inbox\//);
+    ssh.teardown();
+    const teardownCall = calls[calls.length - 1];
+    expect(teardownCall.cmd).toBe("ssh");
+    expect(teardownCall.args[0]).toBe("gpu@box");
+    expect(teardownCall.args[1]).toBe(`tmux kill-session -t ${handle.remoteId} 2>/dev/null || true`);
   });
 
-  it("teardown best-effort kills each spawned pane", () => {
+  it("teardown re-applies the host's loginShell wrap (tmux may itself be off non-interactive PATH)", () => {
     const { run, calls } = recordingRun();
     const ssh = new SshRemoteTransport({ run });
-    ssh.spawn(host, paneSpec, "cmd");
+    const shellHost: RemoteHostTarget = { ...host, loginShell: "zsh" };
+    ssh.spawn(shellHost, paneSpec, "cmd");
     ssh.teardown();
-    expect(calls.some((c) => c.args.join(" ").includes("pkill"))).toBe(true);
+    const teardownCall = calls[calls.length - 1];
+    expect(teardownCall.args[1]).toMatch(/^zsh -lic /);
+    expect(teardownCall.args[1]).toContain("tmux kill-session -t");
   });
 });
 
@@ -189,14 +206,13 @@ describe("RemoteTeamBackend.launch — dry-run", () => {
 });
 
 describe("RemoteTeamBackend.launch — real (MockTransport)", () => {
-  it("connects each distinct host, spawns one pane per specialist, hands the brief", () => {
+  it("connects each distinct host, spawns one pane per specialist", () => {
     const t = new MockTransport();
     const result = backend(t).launch(req());
     expect(result.ok).toBe(true);
-    // Two specialists on two distinct hosts → two connects, two spawns, two sends.
+    // Two specialists on two distinct hosts → two connects, two spawns.
     expect(t.connects.map((h) => h.hostId).sort()).toEqual(["claude-remote", "codex-remote"]);
     expect(t.spawns).toHaveLength(2);
-    expect(t.sends).toHaveLength(2);
     // teammate pane ids map specialist → the transport handle id.
     expect(Object.keys(result.teammatePaneIds).sort()).toEqual(["backend", "security"]);
     // The orchestrator is NEVER spawned remotely (stays local, §CH-4).
@@ -216,11 +232,14 @@ describe("RemoteTeamBackend.launch — real (MockTransport)", () => {
     expect(t.spawns).toHaveLength(2);
   });
 
-  it("hands each pane its own staging prompt as the task brief", () => {
+  it("each pane's spawned command already carries its own staging prompt as the task brief", () => {
+    // No separate send() channel — the prompt is baked into the command argv
+    // that transport.spawn() receives (commandFor → paneCommand/adapter.command).
     const t = new MockTransport();
     backend(t).launch(req());
-    const securityBrief = t.sends.find((s) => s.handle.specialist === "security")!.payload;
-    expect(securityBrief).toBe(buildPrompt("demo", "run-remote-001", SPECIALISTS[1], undefined, "codex"));
+    const securitySpawn = t.spawns.find((s) => s.spec.name === "security")!;
+    const expectedPrompt = buildPrompt("demo", "run-remote-001", SPECIALISTS[1], undefined, "codex");
+    expect(securitySpawn.command).toContain(expectedPrompt);
   });
 
   it("a claude-only remote team works without an injected adapter resolver", () => {
@@ -243,7 +262,6 @@ describe("RemoteTeamBackend.launch — fail-fast on unreachable host", () => {
     expect(result.notes.join(" ")).toMatch(/connect failed: codex-remote/);
     // Nothing spawned — a remote team is never half-spawned.
     expect(t.spawns).toHaveLength(0);
-    expect(t.sends).toHaveLength(0);
     expect(t.teardowns).toBe(1);
     expect(result.teammatePaneIds).toEqual({});
   });

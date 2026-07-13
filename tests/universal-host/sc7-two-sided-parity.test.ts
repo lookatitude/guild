@@ -208,12 +208,24 @@ describe("SC-7 DISCOVERY_RULES — the impl HONORS the declared id_rule (non-cir
     for (const e of d.mcp_servers) expect(e.source_path).toBe(".mcp.json");
   });
 
-  it("scripts: source_path under scripts/**/*.ts (no *.test.ts) and id = path under scripts/ sans .ts", () => {
+  it("scripts: source_path under scripts/**/*.ts (no *.test.ts) or a command-referenced hooks/dist CLI bundle; id derives from the path", () => {
+    // Two legitimate shapes since the packaging-closure fix:
+    //  (a) scripts/**/*.ts sources — id = path under scripts/ sans .ts
+    //  (b) hooks/dist/*.js CLI bundles that shipped command bodies invoke
+    //      directly (discoverHookCliBundles) — id = path sans .js. These are
+    //      runtime-closure entries, NOT hook-event bindings (those live in the
+    //      hooks category), and are restricted to hooks/dist to stay tight.
     for (const e of d.scripts) {
+      if (/^hooks\/dist\/[^/]+\.js$/.test(e.source_path)) {
+        expect(e.id).toBe(e.source_path.replace(/\.js$/, ""));
+        continue;
+      }
       expect(e.source_path).toMatch(/^scripts\/.+\.ts$/);
       expect(e.source_path).not.toMatch(/\.test\.ts$/);
       expect(e.id).toBe(e.source_path.replace(/^scripts\//, "").replace(/\.ts$/, ""));
     }
+    // anti-vacuity: the hooks/dist class actually occurs (run-trace is shipped)
+    expect(d.scripts.some((e) => e.source_path === "hooks/dist/run-trace.js")).toBe(true);
   });
 });
 

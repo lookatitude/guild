@@ -14,7 +14,10 @@
  *     / exit / receipt paths).
  *
  * Contract authority (consumed, never redefined):
- *   scripts/lib/host-capabilities-schema.ts — HOST_CAPABILITY_ROWS + PermissionMode
+ *   scripts/lib/host-registry.ts — DERIVED_HOST_CAPABILITY_ROWS (registry-derived,
+ *     the G4b successor to host-capabilities-schema.ts's pre-registry map — see
+ *     that module's own comment for why it lives there, not in capabilities-schema)
+ *   scripts/lib/host-capabilities-schema.ts — GuildHostCapabilitiesV1 + PermissionMode types
  *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md (L0 ADR)
  *
  * PURITY: no I/O, no spawn, no clock. The spawn + capture + repair loop live in
@@ -27,11 +30,12 @@
  * Owned by tooling-engineer (L3); consumes L0; feeds L6.
  */
 
-import {
-  HOST_CAPABILITY_ROWS,
-  type GuildHostCapabilitiesV1,
-  type PermissionMode,
-} from "./host-capabilities-schema";
+import type { GuildHostCapabilitiesV1, PermissionMode } from "./host-capabilities-schema";
+// G4b: the registry-derived map (host-reachability fix) — covers every
+// dispatch_selectable host, not just the pre-registry claude/codex/pi/antigravity
+// hand-authored set. See host-registry.ts's own doc comment for why this lives
+// there instead of host-capabilities-schema.ts (avoids a circular import).
+import { DERIVED_HOST_CAPABILITY_ROWS as HOST_CAPABILITY_ROWS, getRegistryEntryForHostKind } from "./host-registry";
 // W4 D1: registry-bridge predicates replace `=== "claude"` / `=== "codex"` literals.
 // host here is a HostKind-compatible string ("claude" | "codex" | …).
 import { isAntigravityCli, isClaudeCli, isCodexCli, isPiCli } from "./capability/rank";
@@ -214,6 +218,13 @@ export const INSTRUCTION_FILENAMES: Record<string, string> = {
   pi: "AGENTS.md",
   antigravity: "AGENTS.md",
   "antigravity-2": "AGENTS.md",
+  // G4b — the 4 wrapped-CLI hosts: same `instruction_file` bootstrap posture
+  // (their inferredCaps() registry row sets bootstrap.context_injection to
+  // "instruction_file", same as codex/pi/antigravity).
+  cursor: "AGENTS.md",
+  "github-copilot": "AGENTS.md",
+  opencode: "AGENTS.md",
+  "rovo-dev": "AGENTS.md",
 };
 
 /**
@@ -282,7 +293,28 @@ export const HOST_BINARY: Record<string, string> = {
   pi: "pi",
   antigravity: "agy",
   "antigravity-2": "agy",
+  // G4b — the 4 wrapped-CLI hosts, matching their registry detection.bin exactly
+  // (host-registry-schema.ts CURSOR_ENTRY/GITHUB_COPILOT_ENTRY/OPENCODE_ENTRY/
+  // ROVO_DEV_ENTRY). github-copilot/rovo-dev share a bin with a subcommand — see
+  // `hostSubcommand()` below, not modeled here.
+  cursor: "cursor-agent",
+  "github-copilot": "gh",
+  opencode: "opencode",
+  "rovo-dev": "acli",
 };
+
+/**
+ * The registry `detection.subcommand` for a host, or null. Two of the 4 wrapped-CLI
+ * hosts share a bin with a subcommand (github-copilot -> `gh copilot`, rovo-dev ->
+ * `acli rovodev`) — derived live from the registry (not a 3rd hardcoded map) so a
+ * future subcommand-shaped host needs only a registry-row edit.
+ */
+function hostSubcommand(host: string): string | null {
+  return getRegistryEntryForHostKind(host)?.detection.subcommand ?? null;
+}
+
+/** The 4 generic wrapped-CLI hosts (G4b) — same identity set as HOST_BINARY's new rows. */
+const WRAPPED_CLI_HOSTS = new Set<string>(["cursor", "github-copilot", "opencode", "rovo-dev"]);
 
 export function planModelParamArgs(host: string, params?: WrapperModelParams): WrapperPlan["model_params"] {
   if (!params || Object.keys(params).length === 0) {
@@ -352,6 +384,11 @@ export function planWrapperInvocation(
   // W4 D1: registry bridge — exact isClaudeCli/isCodexCli replace `=== "claude"` / `=== "codex"`.
   const args: string[] = [];
   if (isCodexCli(request.host as HostKind)) args.push("exec");
+  // G4b — the 2 wrapped-CLI hosts whose capability is a subcommand of a shared bin
+  // (github-copilot -> `gh copilot`, rovo-dev -> `acli rovodev`); derived live from
+  // the registry, not a hardcoded per-host check.
+  const subcommand = hostSubcommand(request.host);
+  if (subcommand) args.push(subcommand);
   args.push(...launch.args, ...modelParams.args, ...bootstrap.args);
   if (request.resume) {
     // Claude resumes by id with --resume; codex resume shape is INFERRED.
@@ -359,7 +396,13 @@ export function planWrapperInvocation(
   }
   if (isClaudeCli(request.host as HostKind)) {
     args.push("-p", prompt);
-  } else if (isPiCli(request.host as HostKind) || isAntigravityCli(request.host as HostKind)) {
+  } else if (
+    isPiCli(request.host as HostKind) ||
+    isAntigravityCli(request.host as HostKind) ||
+    WRAPPED_CLI_HOSTS.has(request.host)
+  ) {
+    // G4b — same non-interactive print-mode convention as pi/antigravity
+    // (WrappedCliPaneAdapter's `-p '<prompt>'`), not a fresh per-host guess.
     args.push("-p", prompt);
   } else {
     args.push(prompt);

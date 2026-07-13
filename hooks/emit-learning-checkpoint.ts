@@ -327,9 +327,10 @@ function buildYaml(opts: {
  * rebuildable projection):
  *   1. `knowledge-links-builder.ts` — canonical full rebuild (authoritative)
  *   2. This module (emit-learning-checkpoint.ts) — incremental append of
- *      checkpoint edges (re-derivable by the builder, EXCEPT decided_by /
- *      supersedes / resolves which the builder does not yet emit — those edges
- *      are ephemeral until a W3 builder change lands)
+ *      checkpoint edges, ALL re-derivable by the builder. The W3 builder change
+ *      landed (NN#8 W3): `knowledge-links-builder.ts` now emits decided_by /
+ *      supersedes / resolves from decision-page frontmatter, so no checkpoint
+ *      edge type is builder-ephemeral any more.
  *   3. `domain.ts` — incremental append of domain-graph edges
  *
  * Never throws: I/O failures are logged to stderr and swallowed.

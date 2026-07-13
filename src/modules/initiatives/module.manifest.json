@@ -10,6 +10,7 @@
     "commands": ["initiative"],
     "skills": [
       "guild-decisions",
+      "guild-initiative",
       "guild-product-define",
       "guild-product-explore",
       "guild-product-template"
@@ -23,7 +24,8 @@
       "lib/init-staging-gate",
       "lib/initiative",
       "lib/initiative-activity",
-      "lib/initiative-workitems"
+      "lib/initiative-workitems",
+      "initiative-gate"
     ]
   }
 }
