@@ -116,7 +116,7 @@ describe("P1-L7 expanded host-identity unification (all 8 HostKinds)", () => {
 
   // binaryForHostKind is registry-anchored with 3 documented overrides — byte-identical
   // to the ORIGINAL literal switch for every HostKind.
-  it("binaryForHostKind is byte-identical to the pre-registry literals (all 8 kinds)", () => {
+  it("binaryForHostKind matches registry detection.bin for all 12 kinds", () => {
     const expected: Record<HostKind, string> = {
       claude: "claude",
       codex: "codex",
@@ -124,8 +124,13 @@ describe("P1-L7 expanded host-identity unification (all 8 HostKinds)", () => {
       "antigravity-2": "agy",
       "claude-code-desktop": "claude",
       "claude-code-web": "claude",
-      "codex-app": "claude", // preserved latent quirk (was default-fallthrough)
+      "codex-app": "claude", // registry bin:null (app surface) -> generic fallback
       "claude-ai-connector": "claude",
+      // G4b reachability expansion — registry detection.bin per row:
+      cursor: "cursor-agent",
+      "github-copilot": "gh",
+      opencode: "opencode",
+      "rovo-dev": "acli",
     };
     for (const hk of KINDS) expect(binaryForHostKind(hk)).toBe(expected[hk]);
   });

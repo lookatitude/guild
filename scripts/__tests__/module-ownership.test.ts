@@ -37,9 +37,12 @@ describe("src/modules ownership manifests", () => {
     expect(ids).toContain("communication");
     expect(ids).toContain("dispatch");
     expect(ids).toContain("kernel");
-    for (const id of ["dashboard", "intake", "loops", "review"]) {
+    for (const id of ["intake", "loops", "review"]) {
       expect(manifests.find((manifest) => manifest.id === id)?.implementation_mode).toBe("workflow-backed");
     }
+    // dashboard flipped to resource-only when its orphaned projector was deleted
+    // (plugin-audit-remediation G5b) — it owns resources, ships no workflow code.
+    expect(manifests.find((manifest) => manifest.id === "dashboard")?.implementation_mode).toBe("resource-only");
     expect(ids.length).toBeGreaterThanOrEqual(25);
   });
 
@@ -86,7 +89,8 @@ describe("src/modules ownership manifests", () => {
         .filter((module) => module.implementation_mode === "resource-only")
         .map((module) => module.module_id)
         .sort()
-    ).toEqual([]);
+      // dashboard: resource-only since its orphaned projector was deleted (G5b)
+    ).toEqual(["dashboard"]);
     expect(
       result.modules
         .filter((module) => module.implementation_mode === "resource-only")

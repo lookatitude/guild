@@ -157,17 +157,48 @@ function redactKeyValueSecrets(input) {
 var PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
 var PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
 var PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
+var MAX_PATH_TOKEN_LEN = 512;
+function allWordsWordish(words) {
+  let opaqueBudget = 1;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    let upper = 0;
+    let lower = 0;
+    let digits = 0;
+    for (const ch of word) {
+      if (ch >= "a" && ch <= "z") lower++;
+      else if (ch >= "A" && ch <= "Z") upper++;
+      else digits++;
+    }
+    if (lower === 0) {
+      if (word.length > 8) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+    } else if (upper > 3 || digits > 4) {
+      return false;
+    }
+  }
+  return true;
+}
 function isRelativePathToken(candidate, fullInput, matchIndex) {
   if (candidate.includes("+") || candidate.includes("=")) return false;
   let start = matchIndex;
-  while (start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
+  const startFloor = Math.max(0, matchIndex - MAX_PATH_TOKEN_LEN);
+  while (start > startFloor && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
+  if (start === startFloor && start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) {
+    return false;
+  }
   let end = matchIndex + candidate.length;
-  while (end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
+  const endCeil = Math.min(fullInput.length, end + MAX_PATH_TOKEN_LEN);
+  while (end < endCeil && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
+  if (end === endCeil && end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) {
+    return false;
+  }
   const token = fullInput.slice(start, end);
+  if (token.length > MAX_PATH_TOKEN_LEN) return false;
   if (!PATH_SHAPE.test(token)) return false;
   const slashCount = token.split("/").length - 1;
   if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
-  return token.split(/[/._-]+/).filter(Boolean).every((word) => word.length < 20);
+  return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
 }
 function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
   if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {

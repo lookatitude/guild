@@ -4,10 +4,10 @@ owner: tooling-engineer
 confidence: high
 importance: medium
 source_refs:
-  - extract-structural.ts (in scripts/learn)
-  - resolve-calls.ts (in scripts/learn)
+  - scripts/learn/extract-structural.ts
+  - scripts/learn/resolve-calls.ts
   - scripts/learn/diff-learn.ts
-  - learn-diff SKILL.md (in skills/knowledge)
+  - skills/knowledge/learn-diff/SKILL.md
 created_at: 2026-07-13
 updated_at: 2026-07-13
 expires_at: null

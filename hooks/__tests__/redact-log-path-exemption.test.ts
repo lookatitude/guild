@@ -63,6 +63,43 @@ describe("group 4 — repo-relative path exemption", () => {
     expect(out).toContain(HIGH_ENTROPY_REDACTED);
   });
 
+  it("still redacts path-shaped secrets built from short mixed-case chunks (codex bypass candidates)", () => {
+    // Each chunk is <20 chars, but random base64 material is case/digit
+    // mixed — it must fail the wordish check and stay redacted.
+    const candidates = [
+      "cache/Zm9vYmFyYmF6cXV4/MTIzNDU2Nzg5MDEy.bin",
+      "aBcDeFgHiJkLmNoPqrst/0123456789abcdefij.txt",
+      "key-abcdefghijklmnopqrs/ABCDEFGHIJKLMNOP.sig",
+      // Round 2: several short ALLCAPS / digit-only chunks must not add up
+      // to an exemption (opaque budget = 1 per token).
+      "cache/ABCDEFGH/IJKLMNOP/QRSTUVWX.bin",
+      "cache/12345678/90123456/78901234.bin",
+    ];
+    for (const c of candidates) {
+      const out = redactHighEntropy(`payload: ${c}`);
+      expect(out).toContain(HIGH_ENTROPY_REDACTED);
+    }
+  });
+
+  it("preserves PascalCase/camelCase and ALLCAPS path segments", () => {
+    const input =
+      "src/components/UserProfileCard.tsx and docs/README.md plus skills/knowledge/SKILL.md";
+    expect(redactHighEntropy(input)).toBe(input);
+  });
+
+  it("preserves version-numbered path segments (short digit words are free)", () => {
+    const input = "vendor/node-v22.1.0/lib/internal/modules.js";
+    expect(redactHighEntropy(input)).toBe(input);
+  });
+
+  it("bails to redaction on an implausibly long path-like token (DoS cap)", () => {
+    const huge = "src/" + "abcdefghijklmnopqrst-".repeat(300) + "x.ts";
+    const started = Date.now();
+    const out = redactHighEntropy(huge);
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(out).toContain(HIGH_ENTROPY_REDACTED);
+  });
+
   it("keeps absolute and home-dir paths on their existing (redacted) behavior", () => {
     // Absolute operator paths are not repo-relative provenance; the exemption
     // must not widen to them.
