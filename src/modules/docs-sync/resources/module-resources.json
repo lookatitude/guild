@@ -8,7 +8,7 @@
       "id": "docs-hygiene/scan",
       "source_path": "scripts/docs-hygiene/scan.ts",
       "resource_path": "resources/scripts/docs-hygiene/scan.ts",
-      "sha256": "3e35b6feab30293fbebac4b65dd2a541239e62715fc5e809a6b7347070019653"
+      "sha256": "c5dbcd1c29ccbfb42f5c796a8c1e457c88bd5e5e90ada9bc8209fa00fe2c2e23"
     },
     {
       "category": "scripts",

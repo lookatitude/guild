@@ -53,7 +53,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { parseFrontmatter as parseSharedFrontmatter } from "../lib/frontmatter";
-import { SECRET_PATTERNS } from "../../src/modules/security/workflows/secret-patterns";
+import { SECRET_PATTERNS } from "../lib/shared/secret-patterns";
 
 export { SECRET_PATTERNS };
 

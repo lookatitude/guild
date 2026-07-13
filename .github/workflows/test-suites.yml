@@ -56,15 +56,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # drift guards resolve pinned baseline SHAs from history
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
         with:
           node-version: "24"
 
-      - name: Install ${{ matrix.project }} dependencies
-        working-directory: ${{ matrix.project }}
-        run: npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+      - name: Install dependencies (project + cross-project sources it compiles)
+        # ts-jest suites compile across project boundaries (hooks tests import
+        # scripts/lib; tests/ imports scripts/lib; agent-team imports hooks/lib),
+        # so runtime deps like js-yaml must exist in the SOURCE project's
+        # node_modules, not just the matrix leg's own.
+        run: |
+          for dir in scripts hooks hooks/agent-team "${{ matrix.project }}"; do
+            case " $done_dirs " in *" $dir "*) continue;; esac
+            done_dirs="$done_dirs $dir"
+            if [ -f "$dir/package-lock.json" ]; then
+              (cd "$dir" && (npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline))
+            elif [ -f "$dir/package.json" ]; then
+              (cd "$dir" && npm install --prefer-offline)
+            fi
+          done
 
       - name: Run ${{ matrix.project }} Jest suite
         working-directory: ${{ matrix.project }}
