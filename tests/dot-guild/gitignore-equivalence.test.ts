@@ -104,7 +104,17 @@ function extractGuildBlock(gitignorePath: string): string {
   return blockLines.join("\n");
 }
 
-describe("gitignore-equivalence: share-dot-guild block identical across 4 repos (CQ-B)", () => {
+const SIBLINGS_PRESENT = ["umbrella", "benchmark", "website"].every((k) =>
+  fs.existsSync(path.join(REPOS[k as keyof typeof REPOS], ".gitignore"))
+);
+if (!SIBLINGS_PRESENT) {
+  // Plugin-only checkout (CI): the umbrella/benchmark/website .gitignore files
+  // do not exist, so the 4-repo equivalence contract cannot be evaluated here.
+  // It runs in the umbrella workspace (and in any full-workspace CI).
+  console.warn("[gitignore-equivalence] sibling repos absent — plugin-only checkout; skipping 4-repo block comparison");
+}
+const describeIfSiblings = SIBLINGS_PRESENT ? describe : describe.skip;
+describeIfSiblings("gitignore-equivalence: share-dot-guild block identical across 4 repos (CQ-B)", () => {
   const blocks: Record<string, string> = {};
   const extractionErrors: Record<string, string> = {};
 
