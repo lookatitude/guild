@@ -49,7 +49,7 @@
  * using js-yaml (the shared parser). No hand-rolled YAML parsing.
  *
  * CLI entry: src/modules/communication/workflows/no-accidental-write.cli.ts
- * Policy ref: docs/knowledge/decisions/communication-format-policy.md
+ * Policy ref: ADR: communication-format-policy (workspace wiki)
  * Owner: tooling-engineer.
  */
 

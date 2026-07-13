@@ -14,7 +14,7 @@
  *   if (!report.ok) { … report.unmet / report.orphans / report.release_unmet … }
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §Product loop (AC32)
+ *   ADR: universal-host-plugin-architecture (workspace wiki) §Product loop (AC32)
  *   .guild/spec/universal-host-p2-wave1.md  SC-W1-3
  *   .guild/plan/universal-host-p2-wave1.md  lane LW1-5
  *

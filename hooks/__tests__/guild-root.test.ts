@@ -18,6 +18,16 @@
  *   5. startCwd itself contains .git — no walk needed
  *   6. startCwd itself contains .guild — no walk needed
  *   7. Sanity check: plugin/scripts → plugin (mirrors real repo layout)
+ *
+ * Precedence regression matrix (nearest-.git-wins fix):
+ *   8.  A stale/nested .guild/ closer to startCwd than the real .git must
+ *       NOT win the walk — nearest .git ancestor always takes precedence,
+ *       even when a bare .guild/ sits between startCwd and that .git.
+ *   9.  No .git anywhere in the ancestry, bare .guild/ present — resolves
+ *       to the nearest .guild/ ancestor (fallback tier still works).
+ *   10. Nested repos (outer/.git + outer/inner/.git) — cwd inside inner/
+ *       resolves to inner/, i.e. the NEAREST .git ancestor, not the outer
+ *       one further up.
  */
 
 import * as fs from "fs";
@@ -155,5 +165,61 @@ describe("resolveGuildRoot — sanity check: plugin/scripts → plugin", () => {
     const runDir = path.join(result, ".guild", "runs", "my-run");
     expect(runDir).toBe(path.join(pluginDir, ".guild", "runs", "my-run"));
     expect(runDir).not.toContain("scripts");
+  });
+});
+
+describe("resolveGuildRoot — precedence: nearest .git wins over a nearer stale .guild/", () => {
+  let tmp: string;
+  beforeEach(() => { tmp = tmpRoot(); });
+  afterEach(() => { cleanup(tmp); });
+
+  it("(a) cwd deep inside <repo>/scripts with a stale <repo>/scripts/.guild AND <repo>/.git resolves to <repo>", () => {
+    // Layout mirrors the verified defect:
+    //   <tmp>/.git                       ← the real repo root
+    //   <tmp>/scripts/.guild/             ← STALE nested .guild, closer to startCwd
+    //   <tmp>/scripts/deep/               ← startCwd
+    const repoRoot = tmp;
+    fs.mkdirSync(path.join(repoRoot, ".git"), { recursive: true });
+    fs.mkdirSync(path.join(repoRoot, "scripts", ".guild"), { recursive: true });
+    const startCwd = path.join(repoRoot, "scripts", "deep");
+    fs.mkdirSync(startCwd, { recursive: true });
+
+    // Before the fix: the walk hits scripts/.guild first and stops there.
+    // After the fix: .git anywhere in the ancestry outranks a nearer .guild/.
+    expect(resolveGuildRoot(startCwd)).toBe(repoRoot);
+  });
+
+  it("(b) no .git anywhere, bare .guild/ present — resolves to the nearest .guild/ ancestor", () => {
+    const dir = path.join(tmp, "isolated");
+    fs.mkdirSync(path.join(dir, ".guild"), { recursive: true });
+    const startCwd = path.join(dir, "deep", "subdir");
+    fs.mkdirSync(startCwd, { recursive: true });
+
+    expect(resolveGuildRoot(startCwd)).toBe(dir);
+  });
+
+  it("(c) nested repos: <outer>/.git + <outer>/inner/.git, cwd in inner resolves to inner (nearest .git)", () => {
+    const outer = tmp;
+    fs.mkdirSync(path.join(outer, ".git"), { recursive: true });
+    const inner = path.join(outer, "inner");
+    fs.mkdirSync(path.join(inner, ".git"), { recursive: true });
+    const startCwd = path.join(inner, "src");
+    fs.mkdirSync(startCwd, { recursive: true });
+
+    expect(resolveGuildRoot(startCwd)).toBe(inner);
+  });
+
+  it("(d) a stale .guild/ ABOVE startCwd but BELOW the real .git ancestor is skipped in favor of .git", () => {
+    // Layout:
+    //   <tmp>/.git                     ← real repo root, 3 levels up
+    //   <tmp>/mid/.guild/               ← stale nested .guild, 2 levels up
+    //   <tmp>/mid/deep/startCwd         ← startCwd
+    const repoRoot = tmp;
+    fs.mkdirSync(path.join(repoRoot, ".git"), { recursive: true });
+    fs.mkdirSync(path.join(repoRoot, "mid", ".guild"), { recursive: true });
+    const startCwd = path.join(repoRoot, "mid", "deep");
+    fs.mkdirSync(startCwd, { recursive: true });
+
+    expect(resolveGuildRoot(startCwd)).toBe(repoRoot);
   });
 });

@@ -146,8 +146,11 @@ test("stages 4/5/6: layer partition, domain + knowledge-links, BFS tour", () => 
   const fs1 = g.edges.filter((e: any) => e.type === "flow_step");
   if (fs1.length > 1) expect(fs1[0].weight).toBeLessThanOrEqual(fs1[fs1.length - 1].weight);
   // knowledge-links append-only artifact
+  // G2b-4: the on-disk top-level version key is standardized on
+  // `schema_version` (shared learn/lib/knowledge-links-io helper) — not the
+  // legacy `version` key domain.ts used to write.
   const kl = JSON.parse(fs.readFileSync(path.join(repo, ".guild/indexes/knowledge-links.json"), "utf8"));
-  expect(kl.version).toBe("guild.knowledge_links.v1");
+  expect(kl.schema_version).toBe("guild.knowledge_links.v1");
   expect(kl.links.some((l: any) => l.type === "touches")).toBe(true);
   // tour skeleton
   expect(g.tour.length).toBeGreaterThanOrEqual(1);

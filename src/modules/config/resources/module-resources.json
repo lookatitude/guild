@@ -29,7 +29,7 @@
       "id": "lib/config-reconcile-contract",
       "source_path": "scripts/lib/config-reconcile-contract.ts",
       "resource_path": "resources/scripts/lib/config-reconcile-contract.ts",
-      "sha256": "45902750a44bf0f0d8811e0390782c2674cc360cf3132d9edf6d8838ffa4ac14"
+      "sha256": "b08d6aee46630caba75b24c7d0fa478995a0125c9917e8cafd9ab998929721ff"
     },
     {
       "category": "scripts",
@@ -79,20 +79,6 @@
       "source_path": "scripts/lib/host-open-preflight.ts",
       "resource_path": "resources/scripts/lib/host-open-preflight.ts",
       "sha256": "0799b6b18a39b26a962d3465b24236abb6980974368b6c41e3db90e9486d52c9"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/init-guild",
-      "source_path": "scripts/lib/init-guild.ts",
-      "resource_path": "resources/scripts/lib/init-guild.ts",
-      "sha256": "6d5fccf666f733c60709934ee64c95ab5c025bf77153749591d5f1b08d8fcfa5"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/init-scaffold-manifest",
-      "source_path": "scripts/lib/init-scaffold-manifest.ts",
-      "resource_path": "resources/scripts/lib/init-scaffold-manifest.ts",
-      "sha256": "de4435063fa91b6cd2751be25222580472f6b0ed8b65b7f6b5b016a6b9a198b3"
     },
     {
       "category": "scripts",

@@ -56,6 +56,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
+import { resolveRunIdForTrace } from "../lib/run-trace.js";
 import { validateHandoffV2, extractHandoffEnvelope } from "../lib/handoff-v2.js";
 import {
   assessLiveness,
@@ -99,11 +100,17 @@ interface NudgeContext {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function deriveRunId(sessionId: string): string {
+function deriveRunId(sessionId: string, guildRoot: string): string {
   // GUILD_RUN_ID honored when the agent-team launcher sets it per pane; else
-  // fallback to "run-<session_id>". Same convention as task-completed.ts,
-  // capture-telemetry.ts, maybe-reflect.ts.
-  return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
+  // resolveRunIdForTrace() (env → legacy sentinel → B2 sentinel) — the SAME
+  // shared resolver run-trace-close.ts/task-completed.ts use, so a session
+  // without the launcher's env still converges on the sentinel run instead of
+  // a divorced run-<session_id> directory (audit finding). Falls back to
+  // "run-<session_id>" only when neither env nor sentinel resolves.
+  return (
+    resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
+    `run-${sessionId}`
+  );
 }
 
 /** Per-receipt validity verdict used to build the nudge context. */
@@ -363,8 +370,9 @@ async function main(): Promise<void> {
   const teamName = (payload.team_name ?? "").trim() || "unknown";
   const cwd = payload.cwd ?? process.cwd();
 
-  const runId = deriveRunId(sessionId);
-  const runDir = path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const guildRootForRun = resolveGuildRoot(cwd);
+  const runId = deriveRunId(sessionId, guildRootForRun);
+  const runDir = path.join(guildRootForRun, ".guild", "runs", runId);
 
   // Gather context — assess receipt validity first (R4a).
   const receiptAssessments = assessReceipts(runDir, teammate);

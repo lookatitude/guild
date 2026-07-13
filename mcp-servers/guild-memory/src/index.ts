@@ -7,16 +7,30 @@
  *
  * Tools:
  *   - wiki_search { query, category?, limit? }
- *       → { results: [{ path, category, excerpt, score, confidence, source_refs }] }
+ *       → { results: [{ path, category, type, frontmatter_category, excerpt,
+ *                        score, confidence, source_refs }] }
  *   - wiki_get { path }
  *       → { frontmatter, body }
  *   - wiki_list { category?, updated_since? }
- *       → { pages: [{ path, category, updated, confidence }] }
+ *       → { pages: [{ path, category, type, frontmatter_category, title, updated, confidence }] }
  *
  * Wiki root resolution (priority):
- *   1. GUILD_MEMORY_WIKI_ROOT env var (used by tests, overrides everything)
- *   2. <cwd arg>/.guild/wiki/
+ *   1. Explicit per-tool `cwd` argument → <cwd>/.guild/wiki/ (wins — required for
+ *      federated per-child cwd fan-out over a long-lived server: a single
+ *      running server instance must be able to answer queries scoped to
+ *      different consuming repos without an env var stuck at launch time).
+ *   2. GUILD_MEMORY_WIKI_ROOT env var (used by tests when no cwd arg is given)
  *   3. process.cwd()/.guild/wiki/
+ *
+ * Frontmatter contract (§10.1.1, enforced by guild:wiki-lint / written by
+ * guild:wiki-ingest and guild:decisions): canonical pages carry `type`,
+ * `owner`, `confidence`, `source_refs` (inline flow list or block list),
+ * `created_at`, `updated_at`, `expires_at`, `supersedes`, `sensitivity`. There
+ * is no `title` field (title is derived — see deriveTitle) and `category` in
+ * decision-page frontmatter is a TOPIC taxonomy (architecture|copy|...), NOT
+ * the wiki directory — the directory segment is always the page's `category`
+ * output field; the frontmatter value (when present) is surfaced separately
+ * as `frontmatter_category`.
  *
  * Invariants:
  *   - Read-only. Source intentionally imports no fs-write APIs. Any violation
@@ -34,68 +48,106 @@ import * as path from "path";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+// Pure fence-splitting logic shared with the rest of the plugin's frontmatter
+// readers (src/modules/state/workflows/frontmatter.ts). Zero runtime deps —
+// esbuild --bundle inlines it exactly like the shared bm25 module (./bm25.ts).
+import { splitFrontmatter } from "../../../src/modules/state/workflows/frontmatter";
+// The §10.1.1 wiki-page frontmatter field vocabulary — single source of truth
+// for the `type:` enum (context|standard|product|entity|concept|decision|source).
+// Zero runtime deps (pure constants), inlined by esbuild like the imports above.
+import { WikiPageType, isWikiPageType } from "../../../src/modules/knowledge/workflows/wiki-frontmatter-contract";
 
 // ─── Wiki root resolution ────────────────────────────────────────────────
 
 function resolveWikiRoot(cwdArg?: string): string {
+  if (cwdArg) {
+    return path.join(path.resolve(cwdArg), ".guild", "wiki");
+  }
   if (process.env.GUILD_MEMORY_WIKI_ROOT) {
     return path.resolve(process.env.GUILD_MEMORY_WIKI_ROOT);
   }
-  const cwd = cwdArg ? path.resolve(cwdArg) : process.cwd();
-  return path.join(cwd, ".guild", "wiki");
+  return path.join(process.cwd(), ".guild", "wiki");
 }
 
 // ─── Frontmatter parsing ─────────────────────────────────────────────────
+//
+// The YAML itself is parsed with js-yaml directly (declared dependency of
+// this package — see package.json — statically resolved from
+// mcp-servers/guild-memory/node_modules so esbuild --bundle inlines it into
+// dist/index.js exactly like @modelcontextprotocol/sdk and zod already are).
+// This intentionally does NOT go through src/modules/kernel's loadYamlApi():
+// that loader resolves js-yaml via a runtime-computed, multi-candidate
+// require.resolve(path) keyed off __dirname depths that match the scripts/
+// and hooks/dist bundle layouts, not this package's dist/ layout — reusing it
+// here would make js-yaml resolution depend on incidental directory-depth
+// coincidences instead of a guaranteed, statically-bundled dependency.
+
+interface YamlApi {
+  JSON_SCHEMA: unknown;
+  load(text: string, opts?: { schema?: unknown }): unknown;
+}
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const yaml = require("js-yaml") as YamlApi;
 
 interface Frontmatter {
-  title?: string;
-  category?: string;
   confidence?: "high" | "medium" | "low" | string;
+  updated_at?: string;
   updated?: string;
   source_refs?: string[];
+  category?: string;
+  // Widened (not narrowed) on purpose: a real .guild/wiki/ tree may contain
+  // pages that predate or don't yet conform to the §10.1.1 contract (fixtures,
+  // in-progress migrations) — this server is read-only and must never throw
+  // or drop a page just because its `type:` is absent or non-canonical. The
+  // WikiPageType union is here for editor/reader documentation value (the
+  // canonical 7-value enum from wiki-frontmatter-contract.ts), same pattern
+  // as `confidence` above.
+  type?: WikiPageType | string;
   [key: string]: unknown;
 }
 
 function parseFrontmatter(
   content: string
 ): { frontmatter: Frontmatter; body: string } {
-  if (!content.startsWith("---\n") && !content.startsWith("---\r\n")) {
-    return { frontmatter: {}, body: content };
+  const { frontmatter: raw, body } = splitFrontmatter(content);
+  if (raw === null || raw.trim() === "") return { frontmatter: {}, body };
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(raw, { schema: yaml.JSON_SCHEMA });
+  } catch {
+    parsed = null;
   }
-  const end = content.indexOf("\n---", 4);
-  if (end === -1) return { frontmatter: {}, body: content };
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { frontmatter: {}, body };
+  }
+  return { frontmatter: parsed as Frontmatter, body };
+}
 
-  const raw = content.slice(4, end);
-  const body = content.slice(end + 4).replace(/^\r?\n/, "");
-  const frontmatter: Frontmatter = {};
-  let currentKey: string | null = null;
-  const lines = raw.split(/\r?\n/);
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    // Simple YAML: "key: value" or "  - item" for lists
-    const listMatch = line.match(/^\s+-\s+(.*)$/);
-    if (listMatch && currentKey) {
-      const val = listMatch[1].trim().replace(/^['"]|['"]$/g, "");
-      const existing = frontmatter[currentKey];
-      if (Array.isArray(existing)) existing.push(val);
-      else frontmatter[currentKey] = [val];
-      continue;
-    }
-    const kv = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (kv) {
-      const key = kv[1];
-      const rawVal = kv[2].trim();
-      currentKey = key;
-      if (rawVal === "") {
-        // expect list on following lines
-        frontmatter[key] = [];
-      } else {
-        // strip surrounding quotes
-        frontmatter[key] = rawVal.replace(/^['"]|['"]$/g, "");
-      }
-    }
+/**
+ * Derive a display title: frontmatter `title` (nonconforming pages only — the
+ * §10.1.1 contract has no such field) → first markdown H1 → filename stem.
+ * Always returns a non-empty string so both the BM25 2x title-boost and the
+ * wiki_list `title` output field are meaningful for canonical pages.
+ */
+function deriveTitle(frontmatter: Frontmatter, body: string, relPath: string): string {
+  if (typeof frontmatter.title === "string" && frontmatter.title.trim() !== "") {
+    return frontmatter.title.trim();
   }
-  return { frontmatter, body };
+  const h1 = body.match(/^#\s+(.+?)\s*$/m);
+  if (h1) return h1[1].trim();
+  const base = relPath.split("/").pop() ?? relPath;
+  return base.replace(/\.md$/, "");
+}
+
+/** updated_at with legacy `updated` fallback (both real canonical pages and old fixtures). */
+function pageUpdated(frontmatter: Frontmatter): string | undefined {
+  const v =
+    typeof frontmatter.updated_at === "string"
+      ? frontmatter.updated_at
+      : typeof frontmatter.updated === "string"
+        ? frontmatter.updated
+        : undefined;
+  return v;
 }
 
 // ─── Wiki enumeration ────────────────────────────────────────────────────
@@ -103,7 +155,12 @@ function parseFrontmatter(
 interface WikiPage {
   absPath: string;
   relPath: string;     // posix style, relative to wiki root
-  category: string;    // first path segment or "index" for root files
+  category: string;    // ALWAYS the directory segment ("index" for root files) —
+                        // never the frontmatter `category` value (see header note).
+  frontmatterCategory?: string; // raw frontmatter `category` (a topic taxonomy on
+                                 // decision pages), surfaced separately.
+  type?: WikiPageType | string; // raw frontmatter `type` (§10.1.1 base field — see wiki-frontmatter-contract.ts)
+  title: string;        // derived — see deriveTitle
   frontmatter: Frontmatter;
   body: string;
 }
@@ -138,7 +195,11 @@ function loadAllPages(wikiRoot: string): WikiPage[] {
     pages.push({
       absPath: abs,
       relPath: rel,
-      category: (frontmatter.category as string) || category,
+      category, // directory segment, always — frontmatter never overrides (see header note)
+      frontmatterCategory:
+        typeof frontmatter.category === "string" ? frontmatter.category : undefined,
+      type: typeof frontmatter.type === "string" ? frontmatter.type : undefined,
+      title: deriveTitle(frontmatter, body, rel),
       frontmatter,
       body,
     });
@@ -164,9 +225,10 @@ function rankPages(
   const qTokens = tokenize(query);
   if (qTokens.length === 0) return [];
   const docTokens = pages.map((p) => {
-    const title = (p.frontmatter.title as string) || "";
-    return { tokens: tokenize(title + "\n" + title + "\n" + p.body) };
-    // Title weighted 2x by duplication — cheap and predictable.
+    // Title weighted 2x by duplication — cheap and predictable. p.title is
+    // always derived (frontmatter title → first H1 → filename), so this is
+    // no longer inert for canonical pages (which carry no `title:` field).
+    return { tokens: tokenize(p.title + "\n" + p.title + "\n" + p.body) };
   });
   const scores = bm25Score(qTokens, docTokens);
   const ranked: Scored[] = pages
@@ -241,8 +303,9 @@ function buildServer(): McpServer {
       title: "BM25 search over the Guild wiki",
       description:
         "Run a BM25 ranked search over .guild/wiki/ pages, optionally " +
-        "filtered by category. Returns page path, category, one-line " +
-        "excerpt, BM25 score, confidence, and source_refs.",
+        "filtered by category (the wiki directory segment, e.g. 'decisions'). " +
+        "Returns page path, category, frontmatter type/frontmatter_category, " +
+        "one-line excerpt, BM25 score, confidence, and source_refs (array).",
       inputSchema: {
         query: z.string().min(1).describe("Free-text query"),
         category: z
@@ -271,10 +334,18 @@ function buildServer(): McpServer {
       const results = ranked.map((r) => ({
         path: r.page.relPath,
         category: r.page.category,
+        type: r.page.type ?? null,
+        // Whether `type` conforms to the §10.1.1 closed enum (wiki-frontmatter-
+        // contract.ts) — false for absent/legacy/non-conforming pages, which a
+        // read-only server must still surface (never filter out).
+        type_valid: isWikiPageType(r.page.type),
+        frontmatter_category: r.page.frontmatterCategory ?? null,
         score: Math.round(r.score * 10000) / 10000,
         excerpt: excerpt(r.page.body, qTokens),
         confidence: (r.page.frontmatter.confidence as string) ?? null,
-        source_refs: (r.page.frontmatter.source_refs as string[] | undefined) ?? [],
+        source_refs: Array.isArray(r.page.frontmatter.source_refs)
+          ? (r.page.frontmatter.source_refs as string[])
+          : [],
       }));
       return jsonResult({ results, total: ranked.length, wiki_root: wikiRoot });
     }
@@ -317,15 +388,16 @@ function buildServer(): McpServer {
     {
       title: "List wiki pages",
       description:
-        "List every wiki page, optionally filtered by category or by an " +
-        "`updated_since` cutoff (ISO date). Results are sorted by path for " +
-        "deterministic output.",
+        "List every wiki page, optionally filtered by category (the wiki " +
+        "directory segment) or by an `updated_since` cutoff (ISO date, read " +
+        "from `updated_at` with legacy `updated` as fallback). Results are " +
+        "sorted by path for deterministic output.",
       inputSchema: {
         category: z.string().optional().describe("Filter by category"),
         updated_since: z
           .string()
           .optional()
-          .describe("ISO date/time; keep pages with `updated` on/after this"),
+          .describe("ISO date/time; keep pages with `updated_at` (or legacy `updated`) on/after this"),
         cwd: z.string().optional().describe("Override consuming-repo root"),
       },
     },
@@ -336,7 +408,7 @@ function buildServer(): McpServer {
       const filtered = all.filter((p) => {
         if (category && p.category !== category) return false;
         if (cutoff !== null) {
-          const u = p.frontmatter.updated as string | undefined;
+          const u = pageUpdated(p.frontmatter);
           if (!u) return false;
           const t = new Date(u).getTime();
           if (Number.isNaN(t) || t < cutoff) return false;
@@ -346,9 +418,12 @@ function buildServer(): McpServer {
       const pages = filtered.map((p) => ({
         path: p.relPath,
         category: p.category,
-        title: (p.frontmatter.title as string) ?? null,
+        type: p.type ?? null,
+        type_valid: isWikiPageType(p.type),
+        frontmatter_category: p.frontmatterCategory ?? null,
+        title: p.title,
         confidence: (p.frontmatter.confidence as string) ?? null,
-        updated: (p.frontmatter.updated as string) ?? null,
+        updated: pageUpdated(p.frontmatter) ?? null,
       }));
       pages.sort((a, b) => a.path.localeCompare(b.path));
       return jsonResult({ pages, total: pages.length, wiki_root: wikiRoot });

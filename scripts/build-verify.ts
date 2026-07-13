@@ -8,7 +8,11 @@
  * existing per-step script; nothing here re-implements a builder or a verifier, and the
  * esbuild runtime bundling (hooks + MCP) is preserved verbatim (AC-BLD-3).
  *
- * The 7-step chain (ADR §8):
+ * The 8-step chain (ADR §8; step 6b added by the plugin-audit-remediation hygiene pass —
+ * build:verify previously only checked the evidence/host-smoke receipt leg and silently
+ * skipped the broader share-dot-guild `.guild/runs` gate that CI's dot-guild-policy.yml
+ * runs separately, so a local build:verify pass could still leak an operator-path/secret/
+ * nested-.guild finding that only CI would catch):
  *   1. build hooks        (hooks/ esbuild → hooks dist)                       — existing
  *   2. build MCP servers  (mcp-servers/<server> esbuild → per-server dist)    — existing
  *   3. build host packages(build:hosts / build-host-packages.ts → dist/<h>)  — existing
@@ -16,6 +20,14 @@
  *   5. verify installer   (verify:installer — install.sh dry-run, 12 hosts)   — L4b rail
  *   6. redaction/leak scan (dot-guild/audit.ts — the AC-SEC-1 package/receipt leg,
  *                          the §7.2 shared-redact scan over evidence/host-smoke)— L3 rail
+ *   6b. full share-dot-guild audit (dot-guild/audit.ts's own CLI — the SAME script CI's
+ *                          dot-guild-policy.yml runs — over the whole plugin repo: scrub.ts
+ *                          dry-run + nested-.guild + scrub-coverage-gap + receipt-leak legs.
+ *                          Runs the FULL (non---tracked-only) scan — a local build:verify
+ *                          pass is a pre-commit posture and should also catch
+ *                          untracked-but-shareable cruft, not just already-tracked paths.
+ *                          Never run in CI (confirmed: no workflow invokes build:verify),
+ *                          so there is no CI-safety concern about the fuller scan's cost.
  *   7. generate + validate the matrix (generate-support-matrix.ts — reads COMMITTED
  *                          receipts, runs the two-field AC-RUN-3 host-support gate +
  *                          AC-REG-4 registry validation; NEVER re-runs smoke, §6.5) — L5/L7
@@ -24,7 +36,7 @@
  *   build:verify --refresh-receipts
  * Runs the L5 host-smoke harness (`host-smoke.ts --all-reachable`) on THIS box FIRST to
  * re-probe reachable host binaries/editors and recapture stale/changed committed receipts,
- * THEN runs the full 7-step chain. HONESTY (ADR §5.3): an unreachable host emits no receipt
+ * THEN runs the full 8-step chain. HONESTY (ADR §5.3): an unreachable host emits no receipt
  * and stays an honest target — the harness never fabricates. FLOOR-COUPLING (ADR §5.3 (c),
  * §8): if a refresh promotes a host to a verified public state for the FIRST time, the
  * operator MUST set that host's `achieved_floor` in `scripts/lib/host-public-state.ts`
@@ -98,10 +110,11 @@ function runStep(step: Step, index: number, total: number): number {
  * that `audit.ts`'s main() runs (walk `evidence/host-smoke` → `git check-ignore` filter →
  * shared `redact`, flagging `receipt-operator-path` / `receipt-secret`), so build:verify's
  * redaction leg is byte-for-byte the CI audit's package/receipt scan — no second scanner,
- * no drift (R2). It invokes ONLY that scan function, NOT the full `audit.ts` main(), so the
- * unrelated `.guild/runs` scrub-coverage + nested-guild guards (the separate share-dot-guild
- * SC-7 gate, ADR §7.3 — possibly red for pre-existing reasons) are NOT run here. Any flag ⇒
- * non-zero (matches audit main()'s actionable-flag exit). Empty/absent tree ⇒ PASS.
+ * no drift (R2). It invokes ONLY that scan function, NOT the full `audit.ts` main() — step
+ * 6b (below) separately runs the full CLI (nested-guild + scrub-coverage-gap + scrub.ts
+ * dry-run legs included), so both the narrow evidence-only leg and the full share-dot-guild
+ * gate are covered. Any flag ⇒ non-zero (matches audit main()'s actionable-flag exit).
+ * Empty/absent tree ⇒ PASS.
  */
 function verifyEvidenceRedaction(): number {
   console.log("  L3 single-source package/receipt scan (findPackageReceiptLeaks) over ./evidence/host-smoke");
@@ -136,12 +149,23 @@ function buildChain(): Step[] {
     // 6. redaction/leak verification — the AC-SEC-1 package/receipt leg (ADR §6.4/§8 step 6):
     //    a shared-redact verify over plugin/evidence, run BEFORE the matrix step. In-process
     //    (the ADR assigns this pass to the L6 build/verify command), reusing the SAME shared
-    //    `redact` the write path + CI audit run. Scoped to evidence/host-smoke ONLY — the
-    //    broader share-dot-guild `.guild/runs` audit is a SEPARATE CI gate (dot-guild-policy.yml,
-    //    ADR §7.3), not part of build:verify.
+    //    `redact` the write path + CI audit run. Scoped to evidence/host-smoke ONLY.
     {
       name: "redaction/leak verify (shared redact over plugin/evidence — AC-SEC-1)",
       run: verifyEvidenceRedaction,
+    },
+    // 6b. FULL share-dot-guild audit (plugin-audit-remediation hygiene pass) — the SAME
+    //    dot-guild/audit.ts CLI CI's dot-guild-policy.yml runs, over the whole plugin repo
+    //    (scrub.ts dry-run + nested-.guild + scrub-coverage-gap + receipt-leak legs). This
+    //    used to be CI-only; a local build:verify pass now also catches it, and — because
+    //    build:verify never runs in CI (no workflow invokes it) — runs the FULL scan (no
+    //    --tracked-only), the more thorough local pre-commit posture (also flags
+    //    untracked-but-shareable cruft, not just already-tracked paths).
+    {
+      name: "full share-dot-guild audit (dot-guild/audit.ts CLI)",
+      cmd: "npx",
+      args: ["tsx", join(SCRIPTS_DIR, "dot-guild", "audit.ts"), `--workspace=${PLUGIN_ROOT}`],
+      cwd: SCRIPTS_DIR,
     },
     // 7. generate + validate the support matrix — reads COMMITTED receipts, runs the
     //    two-field AC-RUN-3 host-support gate + AC-REG-4 registry validation, NEVER re-runs

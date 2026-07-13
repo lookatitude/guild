@@ -49,9 +49,12 @@ import {
 } from "../../scripts/lib/advisory-record";
 
 describe("P1 SC-9 — L0 contract surfaces BEHAVE (not just exist) after L7–L11 edits", () => {
-  it("host-registry: validator accepts a real row, rejects an empty object; 9 canonical ids", () => {
-    // Host-adapter migration (R0–R13): the registry roster is the 9 canonical ids
-    // (legacy claude/codex/.agents/pi/antigravity renamed + 4 app/web/connector surfaces).
+  it("host-registry: validator accepts a real row, rejects an empty object; 16 canonical ids", () => {
+    // Host-adapter migration (R0–R13) + verified-multi-host expansion (G4b): the
+    // registry roster is the 16 canonical ids — the original 9 (legacy claude/codex/
+    // .agents/pi/antigravity renamed + 4 app/web/connector surfaces) plus the 4
+    // wrapped-CLI hosts (cursor/github-copilot/opencode/rovo-dev) and the 3
+    // agents-file IDE hosts (kiro/qoder/trae).
     expect(validateHostRegistryEntry(HOST_REGISTRY_ROWS["claude-code-cli"]).valid).toBe(true);
     expect(validateHostRegistryEntry({}).valid).toBe(false); // would pass if validator no-op'd
     expect([...HOST_IDS]).toEqual([
@@ -64,6 +67,13 @@ describe("P1 SC-9 — L0 contract surfaces BEHAVE (not just exist) after L7–L1
       "claude-code-web",
       "codex-app",
       "claude-ai-connector",
+      "cursor",
+      "github-copilot",
+      "opencode",
+      "rovo-dev",
+      "kiro",
+      "qoder",
+      "trae",
     ]);
   });
 

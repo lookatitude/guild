@@ -16,11 +16,25 @@
  *   K6 (project)          — k1 || k2 || k3
  *   structuralSkip        — true when no code file's structural (non-comment)
  *                           hash changed; callers may skip code-AST rebuild
+ *   knowledgeTierClobbered — true when a knowledge tier is EXPECTED
+ *                           (.guild/wiki/ has pages) but the on-disk
+ *                           knowledge-graph.json carries ZERO knowledge-tier
+ *                           nodes (wiki_page/topic/concept/claim/entity/
+ *                           diagram) — the signature of a clobbered/
+ *                           downgraded graph (e.g. a v1-validator overwrite
+ *                           of a v2 graph). This is an ARTIFACT-CONTENT check,
+ *                           not a file-hash check (no TRACKED file need have
+ *                           changed for a clobber to occur), so it forces
+ *                           K2/K4/K5/K6 stale independent of the hash delta —
+ *                           otherwise a clobbered tier reads as "nothing stale".
  *
  * Acceptance cases:
  *   1. code-only structural edit (comments unchanged) → k1..k6 ALL FALSE
  *   2. docs-only (.guild/wiki/ or docs/knowledge/, no mermaid)
  *      → K1/K2/K4/K5/K6 TRUE; K3 FALSE; structuralSkip=true
+ *   3. knowledge-graph.json exists with wiki pages present but zero
+ *      knowledge-tier nodes → knowledgeTierClobbered=true, K2/K4/K5/K6 TRUE
+ *      even when the hash delta alone reports nothing stale.
  *
  * No-baseline conservative default: all stages stale.
  *
@@ -290,6 +304,16 @@ export interface KStageStaleness {
    * false = at least one code file changed structurally.
    */
   structuralSkip: boolean;
+  /**
+   * true = a knowledge tier is expected (.guild/wiki/ has pages) but the
+   * on-disk knowledge-graph.json carries ZERO knowledge-tier nodes
+   * (wiki_page/topic/concept/claim/entity/diagram) — the signature of a
+   * clobbered/downgraded graph (e.g. a v1-validator overwrite of a v2 graph).
+   * The file-hash delta alone cannot see this (no TRACKED file necessarily
+   * changed), so this is a separate, artifact-content check. Folded into
+   * k2/k4/k5/k6 (forced stale) when true.
+   */
+  knowledgeTierClobbered: boolean;
   reason: string;
 }
 
@@ -402,7 +426,94 @@ export function classifyKStages(
       ? `no relevant file changes — all K-stages up to date${skipNote}`
       : `${allChanged.length} file(s) changed → stale: ${staleStages.join(", ")}${skipNote}`;
 
-  return { k1, k2, k3, k4, k5, k6, structuralSkip, reason };
+  // knowledgeTierClobbered is NOT computable here (pure hash-delta function,
+  // no repoRoot/artifact-content access) — the caller (runKStageStaleness)
+  // folds it in as a separate, artifact-content check.
+  return { k1, k2, k3, k4, k5, k6, structuralSkip, knowledgeTierClobbered: false, reason };
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge-tier clobber check (artifact-content, not file-hash)
+// ---------------------------------------------------------------------------
+
+/** The v2 knowledge-tier node types (schema.ts NODE_TYPES_V2 knowledge subset). */
+const KNOWLEDGE_TIER_NODE_TYPES: ReadonlySet<string> = new Set([
+  "topic", "concept", "claim", "entity", "wiki_page", "diagram",
+]);
+
+/**
+ * True when .guild/wiki/ contains at least one markdown page — signal that a
+ * knowledge tier (wiki_page/topic/... nodes in knowledge-graph.json) is
+ * EXPECTED. walkRepo()/readKStageTree ignore .guild/ entirely (SC-14's
+ * tracked-file set is code/doc/diagram only, per ignore.ts), so this reads
+ * the wiki tree directly rather than reusing the tracked-file walk.
+ */
+function hasWikiPages(repoRoot: string): boolean {
+  const wikiDir = path.join(repoRoot, ".guild", "wiki");
+  const stack: string[] = [wikiDir];
+  while (stack.length) {
+    const dir = stack.pop()!;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue; // absent/unreadable — no pages found via this branch
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) stack.push(full);
+      else if (e.isFile() && e.name.endsWith(".md")) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True when a knowledge tier is EXPECTED (.guild/wiki/ has pages) but the
+ * on-disk knowledge-graph.json exists and carries ZERO knowledge-tier nodes
+ * (wiki_page/topic/concept/claim/entity/diagram). This is the signature of a
+ * clobbered/downgraded graph (e.g. a v1-validator overwrite of a v2 graph —
+ * see learn/validate-graph.ts's downgrade guard). The file-hash delta alone
+ * cannot see this: no TRACKED file (code/doc/diagram) necessarily changed,
+ * yet the derived artifact silently lost its tier — "nothing stale" would be
+ * a false-clean read without this check.
+ *
+ * Returns false (not clobbered) when: no wiki pages exist (no tier expected),
+ * or knowledge-graph.json is absent (never built — a different concern), or
+ * the file is unreadable/corrupt (a different concern, not this classifier's
+ * job to flag).
+ */
+export function knowledgeTierClobbered(repoRoot: string): boolean {
+  if (!hasWikiPages(repoRoot)) return false;
+
+  const graphPath = path.join(repoRoot, ".guild", "indexes", "knowledge-graph.json");
+  let graph: { nodes?: Array<{ type?: unknown }> } | null;
+  try {
+    graph = JSON.parse(fs.readFileSync(graphPath, "utf8"));
+  } catch {
+    return false;
+  }
+
+  const nodes = graph?.nodes ?? [];
+  return !nodes.some((n) => typeof n?.type === "string" && KNOWLEDGE_TIER_NODE_TYPES.has(n.type as string));
+}
+
+/** Fold a detected knowledge-tier clobber into a staleness result (forces K2/K4/K5/K6 stale). */
+function withKnowledgeTierClobber(result: KStageStaleness, repoRoot: string): KStageStaleness {
+  if (result.knowledgeTierClobbered) return result; // already flagged (e.g. no-baseline path)
+  const clobbered = knowledgeTierClobbered(repoRoot);
+  if (!clobbered) return result;
+  return {
+    ...result,
+    k2: true,
+    k4: true,
+    k5: true,
+    k6: true,
+    knowledgeTierClobbered: true,
+    reason:
+      `${result.reason} + knowledge-graph.json lacks the knowledge tier (wiki_page/topic/concept/claim/` +
+      `entity/diagram nodes) despite .guild/wiki/ pages existing — treating K2/K4/K5/K6 as stale (clobbered tier)`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -446,6 +557,7 @@ export function runKStageStaleness(cwd: string): KStageStaleness {
     return {
       k1: true, k2: true, k3: true, k4: true, k5: true, k6: true,
       structuralSkip: false,
+      knowledgeTierClobbered: knowledgeTierClobbered(repoRoot),
       reason: "no K-stage baseline — treat all stages as stale (run --baseline after the first K-pipeline build)",
     };
   }
@@ -457,13 +569,15 @@ export function runKStageStaleness(cwd: string): KStageStaleness {
     return {
       k1: true, k2: true, k3: true, k4: true, k5: true, k6: true,
       structuralSkip: false,
+      knowledgeTierClobbered: knowledgeTierClobbered(repoRoot),
       reason: "K-stage baseline unreadable — treat all stages as stale",
     };
   }
 
   const current = readKStageTree(repoRoot);
   const delta = analyzeHashDelta(stored, current);
-  return classifyKStages(delta, stored, current);
+  const result = classifyKStages(delta, stored, current);
+  return withKnowledgeTierClobber(result, repoRoot);
 }
 
 // ---------------------------------------------------------------------------

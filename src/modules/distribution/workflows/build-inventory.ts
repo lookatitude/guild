@@ -12,7 +12,7 @@
  *   inventory-schema.ts   — guild.inventory.v1 type + validator
  *   parity-contract.ts    — DISCOVERY_RULES + checkCoverage (SC-7a)
  *   result-contracts.ts   — RESULT_CONTRACTS (curated schemas[])
- *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md (L0 ADR)
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) (L0 ADR)
  *
  * DETERMINISM (L1 success criterion): identical inputs → byte-identical output.
  *   - Every category list is SORTED by id before emission (filesystem readdir
@@ -308,6 +308,55 @@ function discoverScripts(root: string): ScriptEntry[] {
 }
 
 /**
+ * Hook-adjacent CLI bundles: hooks/dist/*.js files invoked DIRECTLY by shipped
+ * command bodies (`node .../hooks/dist/<file>.js <subcommand>`) that carry NO
+ * Claude Code hook-event binding in hooks/hooks.json. `run-trace.js` (the
+ * `start|phase|status` CLI every phase command's intake step shells out to) is
+ * the canonical example — distinct from the EVENT-bound `run-trace-start.js` /
+ * `run-trace-close.js` hook handlers, which discoverHooks already covers.
+ *
+ * These don't belong in the "hooks" category — HookEntry.event models a real
+ * (event, script) binding, and asserting a fake one would mislead any host
+ * adapter that translates the GuildHookEvent taxonomy into native hook config.
+ * They ARE modeled as `scripts` (kind "cli") so the existing per-host
+ * scripts-copy loop already present in every tree writer (writeClaudeTree,
+ * writeCodexTree, exposeGuildSkillTree) ships them for free — closing exactly
+ * the packaging gap plugin-implementation-audit-2026-07-12 flagged ("Generated
+ * packages omit hooks/dist/run-trace.js while every shipped phase command
+ * invokes it").
+ *
+ * Discovery is closed over ALL such bundles, not just run-trace.js: any
+ * `hooks/dist/*.js` referenced by a top-level `commands/*.md` body that is not
+ * already a hooks.json event binding is picked up automatically, so a future
+ * command that shells out to a new hook-adjacent CLI is covered without a
+ * follow-up edit here.
+ */
+function discoverHookCliBundles(root: string, boundBasenames: ReadonlySet<string>): ScriptEntry[] {
+  const distDir = path.join(root, "hooks", "dist");
+  if (!existsDir(distDir)) return [];
+
+  const referenced = new Set<string>();
+  for (const file of listMdFiles(path.join(root, "commands"))) {
+    const content = readFile(path.join(root, "commands", file));
+    for (const m of content.matchAll(/hooks\/dist\/([A-Za-z0-9_.-]+\.js)/g)) {
+      referenced.add(m[1]);
+    }
+  }
+
+  return [...referenced]
+    .filter((basename) => !boundBasenames.has(basename))
+    .filter((basename) => fs.existsSync(path.join(distDir, basename)))
+    .map(
+      (basename): ScriptEntry => ({
+        id: `hooks/dist/${basename.replace(/\.js$/, "")}`,
+        source_path: `hooks/dist/${basename}`,
+        kind: "cli",
+      })
+    )
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
  * Docs: the FULL docs/ tree (docs/​**​/*.md), recursive. id = repo-relative path
  * minus the .md extension (unique across the tree; basename alone would collide
  * across subdirs). Absent docs/ dir → []. Still non-enforced (no SC-7 fail-fixture)
@@ -380,7 +429,10 @@ export function discoverSurfaces(root: string = PLUGIN_ROOT): DiscoveryOutput {
   const agents = discoverAgents(root);
   const hooks = discoverHooks(root);
   const mcp_servers = discoverMcpServers(root);
-  const scripts = discoverScripts(root);
+  const boundHookBasenames = new Set(hooks.map((h) => h.source_path.split("/").pop()!));
+  const scripts = [...discoverScripts(root), ...discoverHookCliBundles(root, boundHookBasenames)].sort(
+    (a, b) => a.id.localeCompare(b.id)
+  );
   const schemas = discoverSchemas();
   const docs = discoverDocs(root);
 

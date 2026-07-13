@@ -18,9 +18,11 @@ import { HOST_REGISTRY_ROWS } from "../../host-runtime";
  * schema_version (from the registry row's manifest_format) + installability "target"
  * + the Guild skill tree + the bin/guild-run launcher (AC-BOOT-1). They are NOT
  * driven through a `guild-run` runtime dry-run like the 5 proven hosts: these rows are
- * installability:"target" (renderer exists, runtime install unproven), and the
- * wrapper's HOST_CAPABILITY_ROWS is not yet wired for them (host-runtime followup) —
- * so a runtime dry-run would (correctly) fail. R1: a package existing is not support.
+ * installability:"target" (renderer exists, runtime install unproven). The wrapper
+ * now DOES carry rows for them (G4b: DERIVED_HOST_CAPABILITY_ROWS, host-registry.ts),
+ * so a dry-run PLAN would resolve — but planning is not proving; promoting these
+ * hosts past contents-level verification is an operator-box decision. R1: a package
+ * existing is not support.
  */
 const NEW_CLI_HOST_IDS = ["cursor", "github-copilot", "opencode", "rovo-dev"] as const;
 
@@ -110,6 +112,143 @@ function verifyTemplateTree(
   if (mismatches === 0) checks.push(`${packageName}:templates/** (${srcFiles.length} files byte-identical)`);
 }
 
+// ---------------------------------------------------------------------------
+// Path-resolution gate (audit fix: presence/self-identity checks alone let
+// dangling pointers ship silently — a command's source_path, a skills glob, or
+// a prose bootstrap pointer can reference a file that plainly does not exist
+// in the rendered package tree, and none of the checks above would catch it,
+// e.g.: commands invoking hooks/dist/run-trace.js in a package that never
+// copies it; AGENTS.md pointing at a using-guild SKILL.md that only ships as
+// SKILL.src.md; Pi/Antigravity/wrapped-CLI manifests carrying Claude-shaped
+// './commands/<id>.md' / './skills/<tier>/' paths that resolve to nothing in
+// those trees. This pass resolves every such pointer against the ACTUAL
+// rendered package tree and fails closed.
+// ---------------------------------------------------------------------------
+
+/** Require that `rel` (relative to `packageRoot`) resolves to a real file or directory. */
+function requireResolvable(
+  packageRoot: string,
+  rel: string,
+  label: string,
+  checks: string[],
+  errors: string[]
+): void {
+  const abs = path.join(packageRoot, rel);
+  if (fs.existsSync(abs)) {
+    checks.push(`${label} → ${rel}`);
+  } else {
+    errors.push(`${label}: reference to "${rel}" does not resolve in the package tree (${abs})`);
+  }
+}
+
+/** Extract every distinct `hooks/dist/<file>.js` reference from free text. */
+function extractHookDistRefs(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/hooks\/dist\/[A-Za-z0-9_.-]+\.js/g)) out.add(m[0]);
+  return [...out];
+}
+
+/**
+ * Every `commands/*.md` body in the CLAUDE package that shells out to a
+ * `hooks/dist/*.js` bundle must find that bundle in the SAME package
+ * (plugin-implementation-audit-2026-07-12: run-trace.js was invoked by every
+ * phase command but never copied — see build-inventory.ts's
+ * discoverHookCliBundles for the fix that closes this).
+ */
+function verifyCommandHookReferences(
+  distRoot: string,
+  packageName: string,
+  checks: string[],
+  errors: string[]
+): void {
+  const dir = path.join(distRoot, packageName, "commands");
+  if (!fs.existsSync(dir)) return;
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".md"))) {
+    const text = fs.readFileSync(path.join(dir, file), "utf8");
+    for (const ref of extractHookDistRefs(text)) {
+      requireResolvable(path.join(distRoot, packageName), ref, `${packageName}/commands/${file}`, checks, errors);
+    }
+  }
+}
+
+/** Extract every distinct backtick-quoted `.agents/...` path reference from free text. */
+function extractBacktickedAgentsPaths(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/`(\.agents\/[^`]+)`/g)) out.add(m[1]);
+  return [...out];
+}
+
+/**
+ * The universal AGENTS.md package's bootstrap prose points at specific files
+ * under the bundled skill tree (e.g. the using-guild gateway). Every such
+ * pointer must resolve in the rendered package (plugin-implementation-audit-
+ * 2026-07-12: the bootstrap text pointed at a SKILL.md that never ships —
+ * only SKILL.src.md does).
+ */
+function verifyAgentsBootstrapReferences(
+  distRoot: string,
+  packageName: string,
+  checks: string[],
+  errors: string[]
+): void {
+  const agentsMd = path.join(distRoot, packageName, "AGENTS.md");
+  if (!fs.existsSync(agentsMd)) return;
+  const text = fs.readFileSync(agentsMd, "utf8");
+  const packageRoot = path.join(distRoot, packageName);
+  for (const ref of extractBacktickedAgentsPaths(text)) {
+    // A trailing `/**` is prose shorthand for "everything under this directory",
+    // not a literal path — resolve the directory it globs, not the glob string.
+    const resolvable = ref.endsWith("/**") ? ref.slice(0, -3) : ref;
+    if (resolvable.includes("*")) continue; // other wildcard shapes aren't literal paths — skip
+    requireResolvable(packageRoot, resolvable, `${packageName}/AGENTS.md`, checks, errors);
+  }
+}
+
+/**
+ * A rendered Pi/Antigravity/wrapped-CLI manifest's `commands[].source_path`
+ * (when present) and `skills[]` globs must resolve against the package tree
+ * they ship in — NOT the Claude-shaped paths the neutral manifest carries
+ * before per-host remapping (plugin-implementation-audit-2026-07-12: Pi and
+ * Antigravity manifests shipped './commands/<id>.md' + './skills/<tier>/'
+ * that resolved to nothing since the real content lives under
+ * .agents/skills/guild/**). A `skills` glob must resolve to a NON-EMPTY
+ * directory — an empty dir would pass a bare existsSync check while still
+ * shipping nothing useful.
+ */
+function verifyManifestPathResolution(
+  distRoot: string,
+  packageName: string,
+  manifestRel: string,
+  checks: string[],
+  errors: string[]
+): void {
+  const abs = path.join(distRoot, packageName, manifestRel);
+  if (!fs.existsSync(abs)) return;
+  let manifest: { commands?: Array<{ source_path?: string }>; skills?: string[] };
+  try {
+    manifest = readJson(abs) as typeof manifest;
+  } catch {
+    return; // invalid JSON is caught elsewhere (verifyJsonField / presence checks)
+  }
+  const packageRoot = path.join(distRoot, packageName);
+  const label = `${packageName}/${manifestRel}`;
+
+  for (const cmd of manifest.commands ?? []) {
+    if (!cmd.source_path) continue; // name-only commands are honest — nothing to resolve
+    requireResolvable(packageRoot, cmd.source_path.replace(/^\.\//, ""), `${label}#commands`, checks, errors);
+  }
+
+  for (const skillDir of manifest.skills ?? []) {
+    const rel = skillDir.replace(/^\.\//, "").replace(/\/$/, "");
+    const skillAbs = path.join(packageRoot, rel);
+    if (fs.existsSync(skillAbs) && fs.statSync(skillAbs).isDirectory() && fs.readdirSync(skillAbs).length > 0) {
+      checks.push(`${label}#skills → ${rel}`);
+    } else {
+      errors.push(`${label}: skills glob "${skillDir}" does not resolve to a non-empty directory (${skillAbs})`);
+    }
+  }
+}
+
 function verifyJsonField(
   root: string,
   rel: string,
@@ -185,6 +324,11 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
     "claude-code/.claude-plugin/plugin.json",
     "claude-code/.claude-plugin/marketplace.json",
     "claude-code/bin/guild-run",
+    // The run-trace CLI every shipped phase command's intake invokes
+    // (`node .../hooks/dist/run-trace.js start|phase|status`) — closes the
+    // plugin-implementation-audit-2026-07-12 finding that this bundle was
+    // never copied into generated packages.
+    "claude-code/hooks/dist/run-trace.js",
     "codex/.codex-plugin/plugin.json",
     "codex/hooks/codex-hooks.json",
     "codex/hooks/codex-guild-prompt-bridge.js",
@@ -254,6 +398,18 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
   verifyWrapper(distRoot, "codex", { host: "codex", command: "codex", adapter: "codex-cli" }, checks, errors);
   verifyWrapper(distRoot, "pi", { host: "pi", command: "pi", adapter: "pi-cli" }, checks, errors);
   verifyWrapper(distRoot, "antigravity", { host: "antigravity", command: "agy", adapter: "antigravity-cli" }, checks, errors);
+
+  // Path-resolution gate (audit fix — see the section comment above
+  // verifyManifestPathResolution): presence/self-identity checks miss dangling
+  // pointers, so every source_path / skills glob / bootstrap pointer inside a
+  // rendered manifest or AGENTS.md is resolved against the real package tree.
+  verifyCommandHookReferences(distRoot, "claude-code", checks, errors);
+  verifyAgentsBootstrapReferences(distRoot, "agents", checks, errors);
+  verifyManifestPathResolution(distRoot, "pi", "pi-manifest.json", checks, errors);
+  verifyManifestPathResolution(distRoot, "antigravity", "antigravity-manifest.json", checks, errors);
+  for (const hostId of NEW_CLI_HOST_IDS) {
+    verifyManifestPathResolution(distRoot, hostId, `${hostId}-manifest.json`, checks, errors);
+  }
 
   // verified-multi-host-support — contents-level coverage per new-CLI installable host.
   for (const hostId of NEW_CLI_HOST_IDS) {

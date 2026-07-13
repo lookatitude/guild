@@ -6,7 +6,7 @@
  * (ADR migration step 12 / AC31, spec SC-W1-2).
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §Product loop (AC31)
+ *   ADR: universal-host-plugin-architecture (workspace wiki) §Product loop (AC31)
  *   .guild/spec/universal-host-p2-wave1.md  SC-W1-2
  *   .guild/plan/universal-host-p2-wave1.md  lane LW1-1
  *

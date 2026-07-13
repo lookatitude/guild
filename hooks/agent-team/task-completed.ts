@@ -41,7 +41,9 @@
  * Stdout:  Silent (Claude Code may consume stdout).
  * Stderr:  Human-readable reason if blocking.
  *
- * Run ID derivation: GUILD_RUN_ID env var (set by launcher) OR "run-<session_id>".
+ * Run ID derivation: GUILD_RUN_ID env var (set by launcher) → current-run-id
+ * sentinel (legacy .guild/runs/ or B2's .guild/, via the shared
+ * resolveRunIdForTrace()) → "run-<session_id>" fallback. See deriveRunId().
  *
  * Manual usage:
  *   echo '{"hook_event_name":"TaskCompleted","task_id":"task-001","session_id":"sess-abc123",
@@ -75,6 +77,7 @@ import { scrubbedWrite, writeScrubApprovalRequest } from "../lib/security/scrubb
 import { applySecretsPolicy } from "../lib/security/secrets.js";
 import { readSecurityConfig } from "../lib/security/config.js";
 import { emitBusEvent } from "../lib/bus-emit.js";
+import { resolveRunIdForTrace } from "../lib/run-trace.js";
 import { processFanout } from "../../scripts/lib/artifact-bus";
 import {
   evaluateContextCompliance,
@@ -98,7 +101,7 @@ interface TaskCompletedPayload {
 
 // POLICY_EFFECTIVE_DATE is imported from ../lib/run-date.ts — it is the SINGLE
 // named constant for the OD-4 enforcement boundary. Canonical source:
-//   docs/knowledge/decisions/communication-format-policy.md §"policy_effective_date"
+//   ADR: communication-format-policy (workspace wiki) §"policy_effective_date"
 
 /**
  * §8.2 required fields that every handoff receipt markdown must contain.
@@ -122,10 +125,19 @@ function die(reason: string): never {
 /**
  * Derive run ID. Honors GUILD_RUN_ID env var if set (agent-team launcher
  * exports it per pane so hooks converge on the launcher's session manifest
- * path). Falls back to "run-<session_id>" otherwise.
+ * path); falls back to the current-run-id sentinel (legacy .guild/runs/ or
+ * B2's .guild/) via the SHARED resolveRunIdForTrace() — the same resolver
+ * run-trace-close.ts/learning-backstop.ts use — so a session without the
+ * launcher's env (lead session creating tasks, or a pane the launcher failed
+ * to seed) still converges on the sentinel run instead of a divorced
+ * run-<session_id> directory (audit finding). Only falls back to
+ * "run-<session_id>" when NEITHER env nor sentinel resolves anything.
  */
-function deriveRunId(sessionId: string): string {
-  return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
+function deriveRunId(sessionId: string, guildRoot: string): string {
+  return (
+    resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
+    `run-${sessionId}`
+  );
 }
 
 /**
@@ -510,7 +522,7 @@ async function main(): Promise<void> {
   const cwd = payload.cwd ?? process.cwd();
 
   const guildRoot = resolveGuildRoot(cwd);
-  const runId = deriveRunId(sessionId);
+  const runId = deriveRunId(sessionId, guildRoot);
   const runDir = path.join(guildRoot, ".guild", "runs", runId);
   const rPath = receiptPath(guildRoot, runId, specialist, taskId);
 

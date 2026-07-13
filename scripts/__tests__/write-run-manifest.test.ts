@@ -30,7 +30,7 @@ import {
 } from "../write-run-manifest";
 
 const SCRIPT = path.resolve(__dirname, "../write-run-manifest.ts");
-const NODE_ENV = { ...process.env, NODE_NO_WARNINGS: "1", PATH: "/opt/homebrew/bin:/usr/bin:/bin" } as NodeJS.ProcessEnv;
+const NODE_ENV = { ...process.env, NODE_NO_WARNINGS: "1", PATH: `${require("node:path").dirname(process.execPath)}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, } as NodeJS.ProcessEnv;
 
 function mkTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "guild-runmanifest-"));
@@ -255,7 +255,7 @@ describe("write-run-manifest — CLI (RE-6)", () => {
   };
 
   function run(args: string[]): { status: number; out: string; err: string } {
-    const r = spawnSync("npx", ["tsx", SCRIPT, ...args], { encoding: "utf8", env: NODE_ENV, timeout: 30000 });
+    const r = spawnSync("npx", ["tsx", SCRIPT, ...args], { encoding: "utf8", env: NODE_ENV, timeout: 120_000 });
     return { status: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
   }
 

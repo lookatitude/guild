@@ -1,6 +1,6 @@
 {
   "version": "guild.codebase_map.v1",
-  "generated_from_commit": "2c5372611c7881d02fb7087a869bff28d45c99ca",
+  "generated_from_commit": "c4d51e3b37c0a7196c1507dfa4e0f59da187f49a",
   "project": {
     "root": "/Users/miguelp/Projects/guild/plugin",
     "languages": [
@@ -32,14 +32,6 @@
     {
       "path": ".claude/agents/_shared/.gitkeep",
       "language": "unknown",
-      "loc": 0,
-      "complexity": 0,
-      "module": ".claude",
-      "is_entrypoint": false
-    },
-    {
-      "path": ".claude/agents/_shared/AUDIT.md",
-      "language": "markdown",
       "loc": 0,
       "complexity": 0,
       "module": ".claude",
@@ -174,6 +166,14 @@
       "is_entrypoint": false
     },
     {
+      "path": ".github/workflows/branch-policy.yml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".github",
+      "is_entrypoint": false
+    },
+    {
       "path": ".github/workflows/clra-gate.yml",
       "language": "yaml",
       "loc": 0,
@@ -227,6 +227,22 @@
       "loc": 0,
       "complexity": 0,
       "module": ".github",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".github/workflows/test-suites.yml",
+      "language": "yaml",
+      "loc": 0,
+      "complexity": 0,
+      "module": ".github",
+      "is_entrypoint": false
+    },
+    {
+      "path": ".guildignore",
+      "language": "unknown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "(root)",
       "is_entrypoint": false
     },
     {
@@ -302,127 +318,7 @@
       "is_entrypoint": false
     },
     {
-      "path": "agents/architect.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/backend.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/copywriter.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
       "path": "agents/developer.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/devops.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/doc-writer.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/frontend.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/marketing.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/mobile.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/qa.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/researcher.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/sales.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/security.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/seo.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/social-media.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "agents",
-      "is_entrypoint": false
-    },
-    {
-      "path": "agents/technical-writer.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -487,6 +383,14 @@
     },
     {
       "path": "commands/fix.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "commands",
+      "is_entrypoint": false
+    },
+    {
+      "path": "commands/goal.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -606,7 +510,15 @@
       "is_entrypoint": false
     },
     {
-      "path": "docs/knowledge/decisions/universal-host-p1-l0-foundation-contracts.md",
+      "path": "docs/contracts/universal-host-p1-l0-foundation-contracts.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "docs",
+      "is_entrypoint": false
+    },
+    {
+      "path": "docs/generated/host-support-matrix.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -622,11 +534,67 @@
       "is_entrypoint": false
     },
     {
-      "path": "generated/support-matrix.json",
+      "path": "evidence/desktop-app-smoke/claude-code-app/local-claude-desktop-native-guild.json",
       "language": "json",
       "loc": 0,
       "complexity": 0,
-      "module": "generated",
+      "module": "evidence",
+      "is_entrypoint": false
+    },
+    {
+      "path": "evidence/desktop-app-smoke/claude-code-app/local-claude-desktop-ui.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "evidence",
+      "is_entrypoint": false
+    },
+    {
+      "path": "evidence/desktop-app-smoke/codex-app/local-codex-app-computer-use.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "evidence",
+      "is_entrypoint": false
+    },
+    {
+      "path": "evidence/desktop-app-smoke/codex-app/local-codex-app-user-confirmed.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "evidence",
+      "is_entrypoint": false
+    },
+    {
+      "path": "evidence/host-smoke/antigravity-cli/operator-local-macos.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "evidence",
+      "is_entrypoint": false
+    },
+    {
+      "path": "evidence/host-smoke/claude-code-cli/operator-local-macos.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "evidence",
+      "is_entrypoint": false
+    },
+    {
+      "path": "evidence/host-smoke/codex-cli/operator-local-macos.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "evidence",
+      "is_entrypoint": false
+    },
+    {
+      "path": "evidence/host-smoke/pi-cli/operator-local-macos.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "evidence",
       "is_entrypoint": false
     },
     {
@@ -656,7 +624,7 @@
     {
       "path": "hooks/agent-team/task-completed.ts",
       "language": "typescript",
-      "loc": 683,
+      "loc": 695,
       "complexity": 0.83,
       "module": "hooks",
       "is_entrypoint": false
@@ -664,7 +632,7 @@
     {
       "path": "hooks/agent-team/task-created.ts",
       "language": "typescript",
-      "loc": 200,
+      "loc": 207,
       "complexity": 0.28,
       "module": "hooks",
       "is_entrypoint": false
@@ -672,8 +640,8 @@
     {
       "path": "hooks/agent-team/teammate-idle.ts",
       "language": "typescript",
-      "loc": 408,
-      "complexity": 0.54,
+      "loc": 416,
+      "complexity": 0.55,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -688,8 +656,8 @@
     {
       "path": "hooks/capture-telemetry.ts",
       "language": "typescript",
-      "loc": 346,
-      "complexity": 0.51,
+      "loc": 376,
+      "complexity": 0.57,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -720,7 +688,7 @@
     {
       "path": "hooks/emit-learning-checkpoint.ts",
       "language": "typescript",
-      "loc": 533,
+      "loc": 534,
       "complexity": 0.7,
       "module": "hooks",
       "is_entrypoint": false
@@ -776,8 +744,8 @@
     {
       "path": "hooks/lib/guild-root.ts",
       "language": "typescript",
-      "loc": 58,
-      "complexity": 0.09,
+      "loc": 104,
+      "complexity": 0.17,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -832,8 +800,8 @@
     {
       "path": "hooks/lib/run-trace.ts",
       "language": "typescript",
-      "loc": 680,
-      "complexity": 0.93,
+      "loc": 796,
+      "complexity": 0.97,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -856,8 +824,8 @@
     {
       "path": "hooks/lib/security/events.ts",
       "language": "typescript",
-      "loc": 244,
-      "complexity": 0.33,
+      "loc": 259,
+      "complexity": 0.35,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -890,6 +858,14 @@
       "language": "typescript",
       "loc": 86,
       "complexity": 0.13,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/lib/self-build.ts",
+      "language": "typescript",
+      "loc": 62,
+      "complexity": 0.1,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -952,8 +928,8 @@
     {
       "path": "hooks/maybe-reflect.ts",
       "language": "typescript",
-      "loc": 486,
-      "complexity": 0.73,
+      "loc": 505,
+      "complexity": 0.74,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -984,7 +960,7 @@
     {
       "path": "hooks/pre-tool-use.ts",
       "language": "typescript",
-      "loc": 755,
+      "loc": 772,
       "complexity": 1,
       "module": "hooks",
       "is_entrypoint": false
@@ -992,8 +968,8 @@
     {
       "path": "hooks/run-trace-close.ts",
       "language": "typescript",
-      "loc": 122,
-      "complexity": 0.2,
+      "loc": 194,
+      "complexity": 0.29,
       "module": "hooks",
       "is_entrypoint": false
     },
@@ -1008,7 +984,15 @@
     {
       "path": "hooks/run-trace.ts",
       "language": "typescript",
-      "loc": 175,
+      "loc": 199,
+      "complexity": 0.27,
+      "module": "hooks",
+      "is_entrypoint": false
+    },
+    {
+      "path": "hooks/update-check.ts",
+      "language": "typescript",
+      "loc": 149,
       "complexity": 0.24,
       "module": "hooks",
       "is_entrypoint": false
@@ -1016,7 +1000,7 @@
     {
       "path": "hooks/using-guild-bootstrap.ts",
       "language": "typescript",
-      "loc": 138,
+      "loc": 141,
       "complexity": 0.21,
       "module": "hooks",
       "is_entrypoint": false
@@ -1064,8 +1048,8 @@
     {
       "path": "mcp-servers/guild-memory/src/index.ts",
       "language": "typescript",
-      "loc": 346,
-      "complexity": 0.55,
+      "loc": 403,
+      "complexity": 0.61,
       "module": "mcp-servers",
       "is_entrypoint": true
     },
@@ -1088,8 +1072,8 @@
     {
       "path": "mcp-servers/guild-telemetry/src/index.ts",
       "language": "typescript",
-      "loc": 591,
-      "complexity": 0.9,
+      "loc": 608,
+      "complexity": 0.92,
       "module": "mcp-servers",
       "is_entrypoint": true
     },
@@ -1112,7 +1096,7 @@
     {
       "path": "scripts/agent-team-launcher.ts",
       "language": "typescript",
-      "loc": 1483,
+      "loc": 1602,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
@@ -1120,23 +1104,15 @@
     {
       "path": "scripts/analyze-runs.ts",
       "language": "typescript",
-      "loc": 505,
-      "complexity": 0.87,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/artifact-bus-cli.ts",
-      "language": "typescript",
-      "loc": 164,
-      "complexity": 0.24,
+      "loc": 512,
+      "complexity": 0.88,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
       "path": "scripts/build-host-packages.ts",
       "language": "typescript",
-      "loc": 746,
+      "loc": 939,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
@@ -1146,6 +1122,14 @@
       "language": "typescript",
       "loc": 12,
       "complexity": 0.01,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/build-verify.ts",
+      "language": "typescript",
+      "loc": 229,
+      "complexity": 0.32,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1168,8 +1152,8 @@
     {
       "path": "scripts/check-roster-consistency.ts",
       "language": "typescript",
-      "loc": 274,
-      "complexity": 0.42,
+      "loc": 286,
+      "complexity": 0.44,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1178,6 +1162,14 @@
       "language": "typescript",
       "loc": 10,
       "complexity": 0.01,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/codex-guild-prompt-bridge.ts",
+      "language": "typescript",
+      "loc": 107,
+      "complexity": 0.22,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1216,7 +1208,7 @@
     {
       "path": "scripts/config-cmd.ts",
       "language": "typescript",
-      "loc": 2275,
+      "loc": 2291,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
@@ -1232,39 +1224,23 @@
     {
       "path": "scripts/description-optimizer.ts",
       "language": "typescript",
-      "loc": 208,
-      "complexity": 0.36,
+      "loc": 233,
+      "complexity": 0.4,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
-      "path": "scripts/docs-hygiene/.last-scan.md",
-      "language": "markdown",
-      "loc": 0,
-      "complexity": 0,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/docs-hygiene/docs-code-audit.ts",
+      "path": "scripts/desktop-app-smoke.ts",
       "language": "typescript",
-      "loc": 1091,
-      "complexity": 1,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/docs-hygiene/memory-check.ts",
-      "language": "typescript",
-      "loc": 253,
-      "complexity": 0.39,
+      "loc": 237,
+      "complexity": 0.43,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
       "path": "scripts/docs-hygiene/scan.ts",
       "language": "typescript",
-      "loc": 908,
+      "loc": 900,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
@@ -1272,8 +1248,8 @@
     {
       "path": "scripts/dot-guild/audit.ts",
       "language": "typescript",
-      "loc": 216,
-      "complexity": 0.38,
+      "loc": 356,
+      "complexity": 0.64,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1368,8 +1344,8 @@
     {
       "path": "scripts/dot-guild/scrub.ts",
       "language": "typescript",
-      "loc": 126,
-      "complexity": 0.24,
+      "loc": 95,
+      "complexity": 0.18,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1384,8 +1360,16 @@
     {
       "path": "scripts/evolve-loop.ts",
       "language": "typescript",
-      "loc": 255,
-      "complexity": 0.35,
+      "loc": 307,
+      "complexity": 0.46,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/feedback-triage.ts",
+      "language": "typescript",
+      "loc": 297,
+      "complexity": 0.5,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1398,10 +1382,26 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/generate-support-matrix.ts",
+      "language": "typescript",
+      "loc": 50,
+      "complexity": 0.07,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/guild-run.ts",
       "language": "typescript",
-      "loc": 377,
-      "complexity": 0.73,
+      "loc": 421,
+      "complexity": 0.81,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/host-smoke.ts",
+      "language": "typescript",
+      "loc": 452,
+      "complexity": 0.74,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1422,17 +1422,25 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/initiative-gate.ts",
+      "language": "typescript",
+      "loc": 292,
+      "complexity": 0.49,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/instantiate-template.ts",
       "language": "typescript",
-      "loc": 375,
-      "complexity": 0.6,
+      "loc": 379,
+      "complexity": 0.61,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
       "path": "scripts/knowledge-links-builder.ts",
       "language": "typescript",
-      "loc": 961,
+      "loc": 963,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
@@ -1440,8 +1448,8 @@
     {
       "path": "scripts/knowledge-links-traverse.ts",
       "language": "typescript",
-      "loc": 186,
-      "complexity": 0.31,
+      "loc": 236,
+      "complexity": 0.36,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1462,14 +1470,6 @@
       "is_entrypoint": false
     },
     {
-      "path": "scripts/learn/architecture.ts",
-      "language": "typescript",
-      "loc": 161,
-      "complexity": 0.23,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
       "path": "scripts/learn/assign-layers.ts",
       "language": "typescript",
       "loc": 48,
@@ -1482,14 +1482,6 @@
       "language": "typescript",
       "loc": 34,
       "complexity": 0.04,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/learn/classify-wiki-pages.ts",
-      "language": "typescript",
-      "loc": 297,
-      "complexity": 0.42,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1544,40 +1536,16 @@
     {
       "path": "scripts/learn/extract-structural.ts",
       "language": "typescript",
-      "loc": 270,
-      "complexity": 0.37,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/learn/graph-artifact.ts",
-      "language": "typescript",
-      "loc": 406,
-      "complexity": 0.66,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/learn/graph-query.ts",
-      "language": "typescript",
-      "loc": 133,
-      "complexity": 0.2,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/learn/impact.ts",
-      "language": "typescript",
-      "loc": 190,
-      "complexity": 0.27,
+      "loc": 285,
+      "complexity": 0.39,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
       "path": "scripts/learn/k-stage-staleness.ts",
       "language": "typescript",
-      "loc": 433,
-      "complexity": 0.72,
+      "loc": 540,
+      "complexity": 0.9,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1592,16 +1560,8 @@
     {
       "path": "scripts/learn/knowledge-orchestrator.ts",
       "language": "typescript",
-      "loc": 1230,
+      "loc": 1259,
       "complexity": 1,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/learn/lib/architecture.ts",
-      "language": "typescript",
-      "loc": 503,
-      "complexity": 0.73,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1616,8 +1576,8 @@
     {
       "path": "scripts/learn/lib/domain.ts",
       "language": "typescript",
-      "loc": 136,
-      "complexity": 0.19,
+      "loc": 113,
+      "complexity": 0.16,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1642,14 +1602,6 @@
       "language": "typescript",
       "loc": 64,
       "complexity": 0.13,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/learn/lib/graph-artifact.ts",
-      "language": "typescript",
-      "loc": 524,
-      "complexity": 0.84,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1698,6 +1650,14 @@
       "language": "typescript",
       "loc": 204,
       "complexity": 0.41,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/learn/lib/knowledge-links-io.ts",
+      "language": "typescript",
+      "loc": 111,
+      "complexity": 0.16,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1760,7 +1720,7 @@
     {
       "path": "scripts/learn/lib/schema.ts",
       "language": "typescript",
-      "loc": 1140,
+      "loc": 1182,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
@@ -1800,8 +1760,8 @@
     {
       "path": "scripts/learn/resolve-calls.ts",
       "language": "typescript",
-      "loc": 208,
-      "complexity": 0.31,
+      "loc": 215,
+      "complexity": 0.32,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1832,8 +1792,8 @@
     {
       "path": "scripts/learn/validate-graph.ts",
       "language": "typescript",
-      "loc": 65,
-      "complexity": 0.09,
+      "loc": 160,
+      "complexity": 0.24,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1886,10 +1846,10 @@
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/autonomy-presets.ts",
+      "path": "scripts/lib/atomic-write.ts",
       "language": "typescript",
-      "loc": 431,
-      "complexity": 0.59,
+      "loc": 10,
+      "complexity": 0.01,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1904,8 +1864,8 @@
     {
       "path": "scripts/lib/capability/backend-factory.ts",
       "language": "typescript",
-      "loc": 14,
-      "complexity": 0.02,
+      "loc": 33,
+      "complexity": 0.04,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -1952,7 +1912,7 @@
     {
       "path": "scripts/lib/cloud-consent-gate.ts",
       "language": "typescript",
-      "loc": 229,
+      "loc": 230,
       "complexity": 0.3,
       "module": "scripts",
       "is_entrypoint": false
@@ -2008,7 +1968,7 @@
     {
       "path": "scripts/lib/config-ui-metadata.ts",
       "language": "typescript",
-      "loc": 313,
+      "loc": 315,
       "complexity": 0.33,
       "module": "scripts",
       "is_entrypoint": false
@@ -2024,7 +1984,7 @@
     {
       "path": "scripts/lib/core/config-cli.ts",
       "language": "typescript",
-      "loc": 1667,
+      "loc": 1697,
       "complexity": 1,
       "module": "scripts",
       "is_entrypoint": false
@@ -2032,8 +1992,8 @@
     {
       "path": "scripts/lib/core/contracts/team-backend.ts",
       "language": "typescript",
-      "loc": 172,
-      "complexity": 0.16,
+      "loc": 206,
+      "complexity": 0.2,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2046,34 +2006,10 @@
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/counterfactual-replay.ts",
-      "language": "typescript",
-      "loc": 429,
-      "complexity": 0.6,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/dashboard-projector.ts",
-      "language": "typescript",
-      "loc": 10,
-      "complexity": 0.01,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
       "path": "scripts/lib/define-schema.ts",
       "language": "typescript",
       "loc": 7,
       "complexity": 0.01,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/define-test-matrix.import-contract.ts",
-      "language": "typescript",
-      "loc": 55,
-      "complexity": 0.05,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2095,22 +2031,6 @@
     },
     {
       "path": "scripts/lib/degradation-trace.ts",
-      "language": "typescript",
-      "loc": 7,
-      "complexity": 0.01,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/dependency-graph-reader.ts",
-      "language": "typescript",
-      "loc": 7,
-      "complexity": 0.01,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/dependency-graph-schema.ts",
       "language": "typescript",
       "loc": 7,
       "complexity": 0.01,
@@ -2142,14 +2062,6 @@
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/failure-ingestion.ts",
-      "language": "typescript",
-      "loc": 395,
-      "complexity": 0.46,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
       "path": "scripts/lib/frontmatter.ts",
       "language": "typescript",
       "loc": 19,
@@ -2168,8 +2080,8 @@
     {
       "path": "scripts/lib/guild-artifact-paths.ts",
       "language": "typescript",
-      "loc": 71,
-      "complexity": 0.12,
+      "loc": 80,
+      "complexity": 0.13,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2192,8 +2104,8 @@
     {
       "path": "scripts/lib/guild-run-wrapper.ts",
       "language": "typescript",
-      "loc": 405,
-      "complexity": 0.57,
+      "loc": 446,
+      "complexity": 0.63,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2214,14 +2126,6 @@
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/heartbeat-write-side.ts",
-      "language": "typescript",
-      "loc": 300,
-      "complexity": 0.45,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
       "path": "scripts/lib/host-adapter-contract.ts",
       "language": "typescript",
       "loc": 7,
@@ -2232,8 +2136,8 @@
     {
       "path": "scripts/lib/host-adapter-factory.ts",
       "language": "typescript",
-      "loc": 27,
-      "complexity": 0.08,
+      "loc": 49,
+      "complexity": 0.14,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2256,8 +2160,8 @@
     {
       "path": "scripts/lib/host-adapters/app-host.ts",
       "language": "typescript",
-      "loc": 380,
-      "complexity": 0.46,
+      "loc": 433,
+      "complexity": 0.55,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2278,10 +2182,50 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/lib/host-adapters/cursor.ts",
+      "language": "typescript",
+      "loc": 24,
+      "complexity": 0.03,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/host-adapters/github-copilot.ts",
+      "language": "typescript",
+      "loc": 23,
+      "complexity": 0.03,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/host-adapters/opencode.ts",
+      "language": "typescript",
+      "loc": 22,
+      "complexity": 0.03,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/lib/host-adapters/pi-cli.ts",
       "language": "typescript",
       "loc": 291,
       "complexity": 0.35,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/host-adapters/rovo-dev.ts",
+      "language": "typescript",
+      "loc": 23,
+      "complexity": 0.03,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/host-adapters/wrapped-cli-base.ts",
+      "language": "typescript",
+      "loc": 378,
+      "complexity": 0.46,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2318,6 +2262,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/lib/host-public-state.ts",
+      "language": "typescript",
+      "loc": 530,
+      "complexity": 0.94,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/lib/host-registry-schema.ts",
       "language": "typescript",
       "loc": 7,
@@ -2342,6 +2294,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/lib/host-smoke-store.ts",
+      "language": "typescript",
+      "loc": 126,
+      "complexity": 0.21,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/lib/host-types.ts",
       "language": "typescript",
       "loc": 7,
@@ -2352,24 +2312,24 @@
     {
       "path": "scripts/lib/host/inprocess-backend.ts",
       "language": "typescript",
-      "loc": 112,
-      "complexity": 0.14,
+      "loc": 126,
+      "complexity": 0.15,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
       "path": "scripts/lib/host/remote-backend.ts",
       "language": "typescript",
-      "loc": 274,
-      "complexity": 0.37,
+      "loc": 317,
+      "complexity": 0.45,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
       "path": "scripts/lib/host/tmux-backend.ts",
       "language": "typescript",
-      "loc": 311,
-      "complexity": 0.51,
+      "loc": 328,
+      "complexity": 0.53,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2384,7 +2344,7 @@
     {
       "path": "scripts/lib/index-cache.ts",
       "language": "typescript",
-      "loc": 23,
+      "loc": 18,
       "complexity": 0.02,
       "module": "scripts",
       "is_entrypoint": false
@@ -2402,46 +2362,6 @@
       "language": "typescript",
       "loc": 306,
       "complexity": 0.47,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/init-guild.ts",
-      "language": "typescript",
-      "loc": 681,
-      "complexity": 0.95,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/init-offer-initiative.ts",
-      "language": "typescript",
-      "loc": 256,
-      "complexity": 0.36,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/init-resume-repair.ts",
-      "language": "typescript",
-      "loc": 499,
-      "complexity": 0.69,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/init-scaffold-manifest.ts",
-      "language": "typescript",
-      "loc": 10,
-      "complexity": 0.01,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/init-staging-gate.ts",
-      "language": "typescript",
-      "loc": 343,
-      "complexity": 0.45,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2470,14 +2390,6 @@
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/installer-contract.ts",
-      "language": "typescript",
-      "loc": 7,
-      "complexity": 0.01,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
       "path": "scripts/lib/inventory-schema.ts",
       "language": "typescript",
       "loc": 7,
@@ -2486,26 +2398,10 @@
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/isolation-capability-set.ts",
-      "language": "typescript",
-      "loc": 172,
-      "complexity": 0.24,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
       "path": "scripts/lib/kb-snapshot.ts",
       "language": "typescript",
-      "loc": 430,
+      "loc": 433,
       "complexity": 0.72,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/lane-reserved-field.ts",
-      "language": "typescript",
-      "loc": 210,
-      "complexity": 0.31,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2568,8 +2464,8 @@
     {
       "path": "scripts/lib/pane-adapter.ts",
       "language": "typescript",
-      "loc": 447,
-      "complexity": 0.62,
+      "loc": 584,
+      "complexity": 0.81,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2600,8 +2496,8 @@
     {
       "path": "scripts/lib/permission-policy.ts",
       "language": "typescript",
-      "loc": 391,
-      "complexity": 0.51,
+      "loc": 400,
+      "complexity": 0.52,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2710,6 +2606,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/lib/roster.ts",
+      "language": "typescript",
+      "loc": 855,
+      "complexity": 1,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/lib/routing-ab-contract.ts",
       "language": "typescript",
       "loc": 80,
@@ -2718,10 +2622,18 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/lib/run-events.ts",
+      "language": "typescript",
+      "loc": 169,
+      "complexity": 0.24,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/lib/run-learning-classifier.ts",
       "language": "typescript",
-      "loc": 286,
-      "complexity": 0.35,
+      "loc": 311,
+      "complexity": 0.38,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2750,18 +2662,18 @@
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/runtime-adapters.ts",
-      "language": "typescript",
-      "loc": 7,
-      "complexity": 0.01,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
       "path": "scripts/lib/sanitized-run-export.ts",
       "language": "typescript",
       "loc": 248,
       "complexity": 0.47,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/self-update.ts",
+      "language": "typescript",
+      "loc": 213,
+      "complexity": 0.35,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2806,6 +2718,22 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/lib/shared/scrub-redact.ts",
+      "language": "typescript",
+      "loc": 7,
+      "complexity": 0.01,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/lib/shared/secret-patterns.ts",
+      "language": "typescript",
+      "loc": 7,
+      "complexity": 0.01,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/lib/shared/share-set.ts",
       "language": "typescript",
       "loc": 7,
@@ -2816,24 +2744,16 @@
     {
       "path": "scripts/lib/skill-source-transform.ts",
       "language": "typescript",
-      "loc": 522,
-      "complexity": 0.89,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/sqlite-projections.ts",
-      "language": "typescript",
-      "loc": 620,
-      "complexity": 0.82,
+      "loc": 531,
+      "complexity": 0.91,
       "module": "scripts",
       "is_entrypoint": false
     },
     {
       "path": "scripts/lib/support-matrix.ts",
       "language": "typescript",
-      "loc": 336,
-      "complexity": 0.5,
+      "loc": 450,
+      "complexity": 0.65,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2862,14 +2782,6 @@
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/telemetry-redirect.ts",
-      "language": "typescript",
-      "loc": 296,
-      "complexity": 0.38,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
       "path": "scripts/lib/template-schema.ts",
       "language": "typescript",
       "loc": 7,
@@ -2878,10 +2790,10 @@
       "is_entrypoint": false
     },
     {
-      "path": "scripts/lib/trace-replay.ts",
+      "path": "scripts/lib/update-check.ts",
       "language": "typescript",
-      "loc": 594,
-      "complexity": 0.78,
+      "loc": 406,
+      "complexity": 0.73,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2890,22 +2802,6 @@
       "language": "typescript",
       "loc": 24,
       "complexity": 0.03,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/workspace-impact-detector.ts",
-      "language": "typescript",
-      "loc": 7,
-      "complexity": 0.01,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/lib/workspace-impact-schema.ts",
-      "language": "typescript",
-      "loc": 7,
-      "complexity": 0.01,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -2976,8 +2872,16 @@
     {
       "path": "scripts/registry-rollup.ts",
       "language": "typescript",
-      "loc": 106,
-      "complexity": 0.21,
+      "loc": 226,
+      "complexity": 0.43,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/release-changelog.ts",
+      "language": "typescript",
+      "loc": 235,
+      "complexity": 0.44,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -3006,6 +2910,14 @@
       "is_entrypoint": false
     },
     {
+      "path": "scripts/roster-resolve.ts",
+      "language": "typescript",
+      "loc": 189,
+      "complexity": 0.33,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
       "path": "scripts/score-tier.ts",
       "language": "typescript",
       "loc": 291,
@@ -3016,8 +2928,8 @@
     {
       "path": "scripts/shadow-mode.ts",
       "language": "typescript",
-      "loc": 360,
-      "complexity": 0.57,
+      "loc": 345,
+      "complexity": 0.54,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -3048,8 +2960,8 @@
     {
       "path": "scripts/sync-migration.ts",
       "language": "typescript",
-      "loc": 295,
-      "complexity": 0.46,
+      "loc": 314,
+      "complexity": 0.49,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -3064,8 +2976,8 @@
     {
       "path": "scripts/trace-summarize.ts",
       "language": "typescript",
-      "loc": 349,
-      "complexity": 0.53,
+      "loc": 332,
+      "complexity": 0.51,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -3080,16 +2992,8 @@
     {
       "path": "scripts/v1.4-log-validator.ts",
       "language": "typescript",
-      "loc": 456,
-      "complexity": 0.65,
-      "module": "scripts",
-      "is_entrypoint": false
-    },
-    {
-      "path": "scripts/v1.4-summary-md-regen.ts",
-      "language": "typescript",
-      "loc": 444,
-      "complexity": 0.79,
+      "loc": 554,
+      "complexity": 0.84,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -3098,6 +3002,14 @@
       "language": "typescript",
       "loc": 227,
       "complexity": 0.38,
+      "module": "scripts",
+      "is_entrypoint": false
+    },
+    {
+      "path": "scripts/verify-desktop-app-smoke.ts",
+      "language": "typescript",
+      "loc": 137,
+      "complexity": 0.28,
       "module": "scripts",
       "is_entrypoint": false
     },
@@ -3192,7 +3104,7 @@
     {
       "path": "scripts/write-host-capability.ts",
       "language": "typescript",
-      "loc": 245,
+      "loc": 240,
       "complexity": 0.35,
       "module": "scripts",
       "is_entrypoint": false
@@ -3254,7 +3166,23 @@
       "is_entrypoint": false
     },
     {
+      "path": "skills/guild-operations/operations-contract.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
       "path": "skills/guild-quality/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/guild-quality/quality-contract.md",
       "language": "markdown",
       "loc": 0,
       "complexity": 0,
@@ -3719,6 +3647,22 @@
     },
     {
       "path": "skills/meta/init/evals.json",
+      "language": "json",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/initiative/SKILL.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "skills",
+      "is_entrypoint": false
+    },
+    {
+      "path": "skills/meta/initiative/evals.json",
       "language": "json",
       "loc": 0,
       "complexity": 0,
@@ -5224,8 +5168,8 @@
     {
       "path": "src/modules/capability/workflows/rank.ts",
       "language": "typescript",
-      "loc": 105,
-      "complexity": 0.24,
+      "loc": 107,
+      "complexity": 0.23,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5248,8 +5192,8 @@
     {
       "path": "src/modules/capability/workflows/router.ts",
       "language": "typescript",
-      "loc": 518,
-      "complexity": 0.75,
+      "loc": 553,
+      "complexity": 0.8,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5264,8 +5208,8 @@
     {
       "path": "src/modules/capability/workflows/tier-defaults.ts",
       "language": "typescript",
-      "loc": 146,
-      "complexity": 0.3,
+      "loc": 162,
+      "complexity": 0.31,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5296,7 +5240,7 @@
     {
       "path": "src/modules/communication/workflows/comms-format-lint.ts",
       "language": "typescript",
-      "loc": 851,
+      "loc": 854,
       "complexity": 1,
       "module": "src",
       "is_entrypoint": false
@@ -5336,16 +5280,16 @@
     {
       "path": "src/modules/config/workflows/config-defaults.ts",
       "language": "typescript",
-      "loc": 129,
-      "complexity": 0.13,
+      "loc": 146,
+      "complexity": 0.15,
       "module": "src",
       "is_entrypoint": false
     },
     {
       "path": "src/modules/config/workflows/host-open-preflight.ts",
       "language": "typescript",
-      "loc": 572,
-      "complexity": 0.84,
+      "loc": 585,
+      "complexity": 0.85,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5360,15 +5304,15 @@
     {
       "path": "src/modules/config/workflows/init-scaffold-manifest.ts",
       "language": "typescript",
-      "loc": 224,
-      "complexity": 0.26,
+      "loc": 446,
+      "complexity": 0.49,
       "module": "src",
       "is_entrypoint": false
     },
     {
       "path": "src/modules/config/workflows/settings-reader.ts",
       "language": "typescript",
-      "loc": 1286,
+      "loc": 1134,
       "complexity": 1,
       "module": "src",
       "is_entrypoint": false
@@ -5448,7 +5392,7 @@
     {
       "path": "src/modules/context/workflows/recall.ts",
       "language": "typescript",
-      "loc": 1010,
+      "loc": 1061,
       "complexity": 1,
       "module": "src",
       "is_entrypoint": false
@@ -5462,26 +5406,10 @@
       "is_entrypoint": false
     },
     {
-      "path": "src/modules/dashboard/index.ts",
-      "language": "typescript",
-      "loc": 1,
-      "complexity": 0,
-      "module": "src",
-      "is_entrypoint": true
-    },
-    {
       "path": "src/modules/dashboard/module.manifest.json",
       "language": "json",
       "loc": 0,
       "complexity": 0,
-      "module": "src",
-      "is_entrypoint": false
-    },
-    {
-      "path": "src/modules/dashboard/workflows/dashboard-projector.ts",
-      "language": "typescript",
-      "loc": 755,
-      "complexity": 1,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5536,8 +5464,8 @@
     {
       "path": "src/modules/distribution/workflows/build-inventory.ts",
       "language": "typescript",
-      "loc": 523,
-      "complexity": 0.9,
+      "loc": 572,
+      "complexity": 0.97,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5558,14 +5486,6 @@
       "is_entrypoint": false
     },
     {
-      "path": "src/modules/distribution/workflows/installer-contract.ts",
-      "language": "typescript",
-      "loc": 742,
-      "complexity": 0.96,
-      "module": "src",
-      "is_entrypoint": false
-    },
-    {
       "path": "src/modules/distribution/workflows/inventory-schema.ts",
       "language": "typescript",
       "loc": 361,
@@ -5576,8 +5496,8 @@
     {
       "path": "src/modules/distribution/workflows/module-resources.ts",
       "language": "typescript",
-      "loc": 423,
-      "complexity": 0.73,
+      "loc": 453,
+      "complexity": 0.78,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5592,7 +5512,7 @@
     {
       "path": "src/modules/distribution/workflows/per-host-packaging.ts",
       "language": "typescript",
-      "loc": 805,
+      "loc": 945,
       "complexity": 0.97,
       "module": "src",
       "is_entrypoint": false
@@ -5632,16 +5552,16 @@
     {
       "path": "src/modules/distribution/workflows/verify-host-packages.ts",
       "language": "typescript",
-      "loc": 175,
-      "complexity": 0.31,
+      "loc": 434,
+      "complexity": 0.72,
       "module": "src",
       "is_entrypoint": false
     },
     {
       "path": "src/modules/distribution/workflows/verify-installer.ts",
       "language": "typescript",
-      "loc": 409,
-      "complexity": 0.69,
+      "loc": 563,
+      "complexity": 0.89,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5688,8 +5608,8 @@
     {
       "path": "src/modules/evals/index.ts",
       "language": "typescript",
-      "loc": 19,
-      "complexity": 0.02,
+      "loc": 35,
+      "complexity": 0.03,
       "module": "src",
       "is_entrypoint": true
     },
@@ -5714,6 +5634,14 @@
       "language": "typescript",
       "loc": 187,
       "complexity": 0.27,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
+      "path": "src/modules/evals/workflows/goal-task-schema.ts",
+      "language": "typescript",
+      "loc": 230,
+      "complexity": 0.36,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5768,8 +5696,8 @@
     {
       "path": "src/modules/host-runtime/workflows/adapter-fallback-ladders.ts",
       "language": "typescript",
-      "loc": 193,
-      "complexity": 0.27,
+      "loc": 243,
+      "complexity": 0.31,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5792,8 +5720,8 @@
     {
       "path": "src/modules/host-runtime/workflows/host-capabilities-schema.ts",
       "language": "typescript",
-      "loc": 676,
-      "complexity": 0.65,
+      "loc": 792,
+      "complexity": 0.7,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5808,8 +5736,8 @@
     {
       "path": "src/modules/host-runtime/workflows/host-id-namespace.ts",
       "language": "typescript",
-      "loc": 130,
-      "complexity": 0.25,
+      "loc": 187,
+      "complexity": 0.36,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5824,24 +5752,24 @@
     {
       "path": "src/modules/host-runtime/workflows/host-registry-schema.ts",
       "language": "typescript",
-      "loc": 436,
-      "complexity": 0.54,
+      "loc": 764,
+      "complexity": 0.79,
       "module": "src",
       "is_entrypoint": false
     },
     {
       "path": "src/modules/host-runtime/workflows/host-registry.ts",
       "language": "typescript",
-      "loc": 118,
-      "complexity": 0.19,
+      "loc": 165,
+      "complexity": 0.25,
       "module": "src",
       "is_entrypoint": false
     },
     {
       "path": "src/modules/host-runtime/workflows/host-types.ts",
       "language": "typescript",
-      "loc": 36,
-      "complexity": 0.04,
+      "loc": 59,
+      "complexity": 0.07,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5856,16 +5784,8 @@
     {
       "path": "src/modules/host-runtime/workflows/provider-detect.ts",
       "language": "typescript",
-      "loc": 628,
-      "complexity": 0.98,
-      "module": "src",
-      "is_entrypoint": false
-    },
-    {
-      "path": "src/modules/host-runtime/workflows/runtime-adapters.ts",
-      "language": "typescript",
-      "loc": 124,
-      "complexity": 0.17,
+      "loc": 626,
+      "complexity": 0.97,
       "module": "src",
       "is_entrypoint": false
     },
@@ -5904,15 +5824,15 @@
     {
       "path": "src/modules/initiatives/workflows/initiative-workitems.ts",
       "language": "typescript",
-      "loc": 89,
-      "complexity": 0.12,
+      "loc": 96,
+      "complexity": 0.13,
       "module": "src",
       "is_entrypoint": false
     },
     {
       "path": "src/modules/initiatives/workflows/initiative.ts",
       "language": "typescript",
-      "loc": 177,
+      "loc": 182,
       "complexity": 0.34,
       "module": "src",
       "is_entrypoint": false
@@ -5976,8 +5896,8 @@
     {
       "path": "src/modules/kernel/workflows/yaml-loader.ts",
       "language": "typescript",
-      "loc": 37,
-      "complexity": 0.05,
+      "loc": 62,
+      "complexity": 0.1,
       "module": "src",
       "is_entrypoint": false
     },
@@ -6008,7 +5928,7 @@
     {
       "path": "src/modules/knowledge/workflows/graph-scoring.ts",
       "language": "typescript",
-      "loc": 204,
+      "loc": 205,
       "complexity": 0.37,
       "module": "src",
       "is_entrypoint": false
@@ -6024,8 +5944,8 @@
     {
       "path": "src/modules/knowledge/workflows/knowledge-links-contract.ts",
       "language": "typescript",
-      "loc": 32,
-      "complexity": 0.03,
+      "loc": 46,
+      "complexity": 0.05,
       "module": "src",
       "is_entrypoint": false
     },
@@ -6112,7 +6032,7 @@
     {
       "path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
       "language": "typescript",
-      "loc": 952,
+      "loc": 959,
       "complexity": 1,
       "module": "src",
       "is_entrypoint": false
@@ -6120,8 +6040,8 @@
     {
       "path": "src/modules/lifecycle/workflows/run-manifest-wiring.ts",
       "language": "typescript",
-      "loc": 473,
-      "complexity": 0.65,
+      "loc": 446,
+      "complexity": 0.62,
       "module": "src",
       "is_entrypoint": false
     },
@@ -6136,7 +6056,7 @@
     {
       "path": "src/modules/lifecycle/workflows/write-run-manifest.ts",
       "language": "typescript",
-      "loc": 287,
+      "loc": 283,
       "complexity": 0.5,
       "module": "src",
       "is_entrypoint": false
@@ -6144,8 +6064,8 @@
     {
       "path": "src/modules/lifecycle/workflows/write-task-run.ts",
       "language": "typescript",
-      "loc": 439,
-      "complexity": 0.6,
+      "loc": 451,
+      "complexity": 0.61,
       "module": "src",
       "is_entrypoint": false
     },
@@ -6192,7 +6112,7 @@
     {
       "path": "src/modules/migrations/workflows/index-migrate.ts",
       "language": "typescript",
-      "loc": 401,
+      "loc": 405,
       "complexity": 0.53,
       "module": "src",
       "is_entrypoint": false
@@ -6240,8 +6160,8 @@
     {
       "path": "src/modules/prompting/workflows/team-prompt.ts",
       "language": "typescript",
-      "loc": 59,
-      "complexity": 0.09,
+      "loc": 79,
+      "complexity": 0.11,
       "module": "src",
       "is_entrypoint": false
     },
@@ -6326,6 +6246,22 @@
       "is_entrypoint": false
     },
     {
+      "path": "src/modules/security/workflows/scrub-redact.ts",
+      "language": "typescript",
+      "loc": 74,
+      "complexity": 0.09,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
+      "path": "src/modules/security/workflows/secret-patterns.ts",
+      "language": "typescript",
+      "loc": 31,
+      "complexity": 0.04,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
       "path": "src/modules/security/workflows/share-set.ts",
       "language": "typescript",
       "loc": 46,
@@ -6352,15 +6288,15 @@
     {
       "path": "src/modules/specialists/workflows/specialist-roster.ts",
       "language": "typescript",
-      "loc": 50,
-      "complexity": 0.06,
+      "loc": 70,
+      "complexity": 0.09,
       "module": "src",
       "is_entrypoint": false
     },
     {
       "path": "src/modules/state/index.ts",
       "language": "typescript",
-      "loc": 6,
+      "loc": 7,
       "complexity": 0.01,
       "module": "src",
       "is_entrypoint": true
@@ -6370,6 +6306,14 @@
       "language": "json",
       "loc": 0,
       "complexity": 0,
+      "module": "src",
+      "is_entrypoint": false
+    },
+    {
+      "path": "src/modules/state/workflows/atomic-write.ts",
+      "language": "typescript",
+      "loc": 72,
+      "complexity": 0.09,
       "module": "src",
       "is_entrypoint": false
     },
@@ -6416,8 +6360,8 @@
     {
       "path": "src/modules/state/workflows/index-cache.ts",
       "language": "typescript",
-      "loc": 731,
-      "complexity": 1,
+      "loc": 455,
+      "complexity": 0.79,
       "module": "src",
       "is_entrypoint": false
     },
@@ -6472,7 +6416,7 @@
     {
       "path": "src/modules/telemetry/workflows/guild-trace-events.ts",
       "language": "typescript",
-      "loc": 534,
+      "loc": 535,
       "complexity": 0.94,
       "module": "src",
       "is_entrypoint": false
@@ -6536,31 +6480,15 @@
     {
       "path": "src/modules/workspace/workflows/promote-upstream.ts",
       "language": "typescript",
-      "loc": 380,
+      "loc": 377,
       "complexity": 0.64,
-      "module": "src",
-      "is_entrypoint": false
-    },
-    {
-      "path": "src/modules/workspace/workflows/workspace-impact-detector.ts",
-      "language": "typescript",
-      "loc": 403,
-      "complexity": 0.59,
-      "module": "src",
-      "is_entrypoint": false
-    },
-    {
-      "path": "src/modules/workspace/workflows/workspace-impact-schema.ts",
-      "language": "typescript",
-      "loc": 237,
-      "complexity": 0.34,
       "module": "src",
       "is_entrypoint": false
     },
     {
       "path": "src/modules/workspace/workflows/write-manifest.ts",
       "language": "typescript",
-      "loc": 151,
+      "loc": 150,
       "complexity": 0.21,
       "module": "src",
       "is_entrypoint": false
@@ -6596,6 +6524,126 @@
       "complexity": 0,
       "module": "templates",
       "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/architect.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/backend.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/copywriter.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/devops.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/doc-writer.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/frontend.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/marketing.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/mobile.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/qa.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/researcher.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/sales.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/security.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/seo.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/social-media.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
+    },
+    {
+      "path": "templates/specialists/technical-writer.md",
+      "language": "markdown",
+      "loc": 0,
+      "complexity": 0,
+      "module": "templates",
+      "is_entrypoint": false
     }
   ],
   "import_map": [
@@ -6612,6 +6660,16 @@
     {
       "from": "hooks/lib/run-date.ts",
       "to": "scripts/lib/frontmatter.ts",
+      "kind": "static"
+    },
+    {
+      "from": "hooks/update-check.ts",
+      "to": "src/modules/config/workflows/settings-resolver.ts",
+      "kind": "static"
+    },
+    {
+      "from": "mcp-servers/guild-memory/src/index.ts",
+      "to": "src/modules/state/workflows/frontmatter.ts",
       "kind": "static"
     },
     {
@@ -6676,6 +6734,11 @@
     },
     {
       "from": "scripts/build-host-packages.ts",
+      "to": "scripts/lib/host-registry-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/build-host-packages.ts",
       "to": "scripts/lib/parity-contract.ts",
       "kind": "static"
     },
@@ -6687,6 +6750,11 @@
     {
       "from": "scripts/build-inventory.ts",
       "to": "src/modules/distribution/workflows/build-inventory.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/build-verify.ts",
+      "to": "scripts/dot-guild/audit.ts",
       "kind": "static"
     },
     {
@@ -6765,13 +6833,28 @@
       "kind": "static"
     },
     {
+      "from": "scripts/desktop-app-smoke.ts",
+      "to": "scripts/lib/shared/scrub-redact.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/docs-hygiene/scan.ts",
       "to": "scripts/lib/frontmatter.ts",
       "kind": "static"
     },
     {
+      "from": "scripts/docs-hygiene/scan.ts",
+      "to": "src/modules/security/workflows/secret-patterns.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/dot-guild/audit.ts",
       "to": "scripts/lib/shared/share-set.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/dot-guild/audit.ts",
+      "to": "scripts/lib/shared/scrub-redact.ts",
       "kind": "static"
     },
     {
@@ -6870,8 +6953,23 @@
       "kind": "static"
     },
     {
+      "from": "scripts/dot-guild/scrub.ts",
+      "to": "scripts/lib/shared/scrub-redact.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/emit-loop-event.ts",
       "to": "src/modules/lifecycle/workflows/emit-loop-event.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/generate-support-matrix.ts",
+      "to": "scripts/lib/host-smoke-store.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/guild-run.ts",
+      "to": "scripts/lib/self-update.ts",
       "kind": "static"
     },
     {
@@ -6905,8 +7003,38 @@
       "kind": "static"
     },
     {
+      "from": "scripts/host-smoke.ts",
+      "to": "scripts/lib/host-registry-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/host-smoke.ts",
+      "to": "scripts/lib/host-smoke-store.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/host-smoke.ts",
+      "to": "scripts/lib/shared/scrub-redact.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/host-smoke.ts",
+      "to": "scripts/lib/guild-run-wrapper.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/index-migrate.ts",
       "to": "src/modules/migrations/workflows/index-migrate.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/initiative-gate.ts",
+      "to": "scripts/lib/frontmatter.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/initiative-gate.ts",
+      "to": "scripts/lib/initiative-workitems.ts",
       "kind": "static"
     },
     {
@@ -6930,6 +7058,16 @@
       "kind": "static"
     },
     {
+      "from": "scripts/knowledge-links-builder.ts",
+      "to": "src/modules/knowledge/workflows/knowledge-links-contract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/knowledge-links-builder.ts",
+      "to": "scripts/learn/lib/knowledge-links-io.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/learn/analyze-structural.ts",
       "to": "scripts/learn/lib/paths.ts",
       "kind": "static"
@@ -6947,11 +7085,6 @@
     {
       "from": "scripts/learn/analyze-structural.ts",
       "to": "scripts/learn/lib/graph.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/architecture.ts",
-      "to": "scripts/learn/lib/paths.ts",
       "kind": "static"
     },
     {
@@ -6981,11 +7114,6 @@
     },
     {
       "from": "scripts/learn/build-tour.ts",
-      "to": "scripts/learn/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/classify-wiki-pages.ts",
       "to": "scripts/learn/lib/schema.ts",
       "kind": "static"
     },
@@ -7080,51 +7208,6 @@
       "kind": "static"
     },
     {
-      "from": "scripts/learn/graph-artifact.ts",
-      "to": "scripts/learn/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/graph-artifact.ts",
-      "to": "scripts/learn/lib/walk.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/graph-artifact.ts",
-      "to": "scripts/learn/lib/fingerprint.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/graph-artifact.ts",
-      "to": "scripts/learn/lib/structural.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/graph-artifact.ts",
-      "to": "scripts/learn/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/graph-query.ts",
-      "to": "scripts/learn/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/impact.ts",
-      "to": "scripts/learn/lib/paths.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/impact.ts",
-      "to": "scripts/learn/lib/git.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/impact.ts",
-      "to": "scripts/learn/lib/impact.ts",
-      "kind": "static"
-    },
-    {
       "from": "scripts/learn/k-stage-staleness.ts",
       "to": "scripts/learn/lib/paths.ts",
       "kind": "static"
@@ -7175,11 +7258,6 @@
       "kind": "static"
     },
     {
-      "from": "scripts/learn/lib/architecture.ts",
-      "to": "scripts/learn/lib/schema.ts",
-      "kind": "static"
-    },
-    {
       "from": "scripts/learn/lib/bundle-validate.ts",
       "to": "scripts/learn/lib/schema.ts",
       "kind": "static"
@@ -7191,12 +7269,12 @@
     },
     {
       "from": "scripts/learn/lib/domain.ts",
-      "to": "scripts/learn/lib/paths.ts",
+      "to": "scripts/learn/lib/schema.ts",
       "kind": "static"
     },
     {
       "from": "scripts/learn/lib/domain.ts",
-      "to": "scripts/learn/lib/schema.ts",
+      "to": "scripts/learn/lib/knowledge-links-io.ts",
       "kind": "static"
     },
     {
@@ -7207,16 +7285,6 @@
     {
       "from": "scripts/learn/lib/fingerprint.ts",
       "to": "scripts/learn/lib/extract.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/lib/graph-artifact.ts",
-      "to": "scripts/learn/lib/schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/learn/lib/graph-artifact.ts",
-      "to": "scripts/docs-hygiene/scan.ts",
       "kind": "static"
     },
     {
@@ -7470,11 +7538,6 @@
       "kind": "static"
     },
     {
-      "from": "scripts/lib/autonomy-presets.ts",
-      "to": "scripts/lib/config-schema.ts",
-      "kind": "static"
-    },
-    {
       "from": "scripts/lib/classify-intake.ts",
       "to": "src/modules/intake/workflows/classify-intake.ts",
       "kind": "static"
@@ -7565,21 +7628,6 @@
       "kind": "static"
     },
     {
-      "from": "scripts/lib/dashboard-projector.ts",
-      "to": "src/modules/dashboard/workflows/dashboard-projector.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/lib/define-test-matrix.import-contract.ts",
-      "to": "scripts/lib/define-schema.ts",
-      "kind": "static"
-    },
-    {
-      "from": "scripts/lib/define-test-matrix.import-contract.ts",
-      "to": "scripts/lib/define-test-matrix.ts",
-      "kind": "static"
-    },
-    {
       "from": "scripts/lib/define-test-matrix.ts",
       "to": "scripts/lib/define-schema.ts",
       "kind": "static"
@@ -7617,6 +7665,16 @@
     {
       "from": "scripts/lib/guild-discovery.ts",
       "to": "src/modules/state/workflows/guild-discovery.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/guild-run-wrapper.ts",
+      "to": "scripts/lib/host-capabilities-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/guild-run-wrapper.ts",
+      "to": "scripts/lib/host-registry.ts",
       "kind": "static"
     },
     {
@@ -7680,6 +7738,26 @@
       "kind": "static"
     },
     {
+      "from": "scripts/lib/host-adapter-factory.ts",
+      "to": "scripts/lib/host-adapters/cursor.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapter-factory.ts",
+      "to": "scripts/lib/host-adapters/github-copilot.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapter-factory.ts",
+      "to": "scripts/lib/host-adapters/opencode.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapter-factory.ts",
+      "to": "scripts/lib/host-adapters/rovo-dev.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/lib/host-adapters/agents-file.ts",
       "to": "scripts/lib/host-registry-schema.ts",
       "kind": "static"
@@ -7740,6 +7818,51 @@
       "kind": "static"
     },
     {
+      "from": "scripts/lib/host-adapters/cursor.ts",
+      "to": "scripts/lib/host-adapters/wrapped-cli-base.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/cursor.ts",
+      "to": "scripts/lib/host-adapter-contract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/cursor.ts",
+      "to": "scripts/lib/host-registry-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/github-copilot.ts",
+      "to": "scripts/lib/host-adapters/wrapped-cli-base.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/github-copilot.ts",
+      "to": "scripts/lib/host-adapter-contract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/github-copilot.ts",
+      "to": "scripts/lib/host-registry-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/opencode.ts",
+      "to": "scripts/lib/host-adapters/wrapped-cli-base.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/opencode.ts",
+      "to": "scripts/lib/host-adapter-contract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/opencode.ts",
+      "to": "scripts/lib/host-registry-schema.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/lib/host-adapters/pi-cli.ts",
       "to": "scripts/lib/host-registry-schema.ts",
       "kind": "static"
@@ -7762,6 +7885,46 @@
     {
       "from": "scripts/lib/host-adapters/pi-cli.ts",
       "to": "scripts/lib/review-pairing.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/rovo-dev.ts",
+      "to": "scripts/lib/host-adapters/wrapped-cli-base.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/rovo-dev.ts",
+      "to": "scripts/lib/host-adapter-contract.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/rovo-dev.ts",
+      "to": "scripts/lib/host-registry-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-adapters/wrapped-cli-base.ts",
+      "to": "scripts/lib/host-registry-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-public-state.ts",
+      "to": "scripts/lib/host-registry-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-smoke-store.ts",
+      "to": "scripts/lib/host-registry-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host-smoke-store.ts",
+      "to": "scripts/lib/shared/scrub-redact.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/host/inprocess-backend.ts",
+      "to": "scripts/lib/core/contracts/team-backend.ts",
       "kind": "static"
     },
     {
@@ -7805,11 +7968,6 @@
       "kind": "static"
     },
     {
-      "from": "scripts/lib/init-guild.ts",
-      "to": "scripts/lib/config-schema.ts",
-      "kind": "static"
-    },
-    {
       "from": "scripts/lib/memory-adapter.ts",
       "to": "src/modules/context/workflows/memory-adapter.ts",
       "kind": "static"
@@ -7817,6 +7975,21 @@
     {
       "from": "scripts/lib/owner-architect-loop.ts",
       "to": "src/modules/loops/workflows/owner-architect-loop.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/pane-adapter.ts",
+      "to": "scripts/lib/host-registry-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/pane-adapter.ts",
+      "to": "scripts/lib/host-id-namespace.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/permission-policy.ts",
+      "to": "scripts/lib/host-registry.ts",
       "kind": "static"
     },
     {
@@ -7850,6 +8023,11 @@
       "kind": "static"
     },
     {
+      "from": "scripts/lib/roster.ts",
+      "to": "scripts/lib/frontmatter.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/lib/run-learning-classifier.ts",
       "to": "scripts/lib/sanitized-run-export.ts",
       "kind": "static"
@@ -7875,11 +8053,6 @@
       "kind": "static"
     },
     {
-      "from": "scripts/lib/sqlite-projections.ts",
-      "to": "scripts/lib/frontmatter.ts",
-      "kind": "static"
-    },
-    {
       "from": "scripts/lib/support-matrix.ts",
       "to": "scripts/lib/adapter-fallback-ladders.ts",
       "kind": "static"
@@ -7892,6 +8065,11 @@
     {
       "from": "scripts/lib/support-matrix.ts",
       "to": "scripts/lib/host-registry-schema.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/lib/update-check.ts",
+      "to": "src/modules/host-runtime/workflows/host-capabilities-schema.ts",
       "kind": "static"
     },
     {
@@ -7935,6 +8113,11 @@
       "kind": "static"
     },
     {
+      "from": "scripts/shadow-mode.ts",
+      "to": "scripts/lib/run-events.ts",
+      "kind": "static"
+    },
+    {
       "from": "scripts/stamp-recall-importance.ts",
       "to": "scripts/lib/ingest-importance.ts",
       "kind": "static"
@@ -7957,6 +8140,16 @@
     {
       "from": "scripts/sync-module-resources.ts",
       "to": "src/modules/distribution/workflows/module-resources.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/trace-summarize.ts",
+      "to": "scripts/lib/run-events.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/v1.4-log-validator.ts",
+      "to": "src/modules/telemetry/workflows/guild-trace-events.ts",
       "kind": "static"
     },
     {
@@ -8007,6 +8200,11 @@
     {
       "from": "scripts/write-host-capability.ts",
       "to": "scripts/lib/team-backend.ts",
+      "kind": "static"
+    },
+    {
+      "from": "scripts/write-host-capability.ts",
+      "to": "src/modules/state/index.ts",
       "kind": "static"
     },
     {
@@ -8260,11 +8458,6 @@
       "kind": "static"
     },
     {
-      "from": "src/modules/dashboard/workflows/dashboard-projector.ts",
-      "to": "src/modules/state/index.ts",
-      "kind": "static"
-    },
-    {
       "from": "src/modules/distribution/workflows/build-inventory.ts",
       "to": "src/modules/distribution/workflows/inventory-schema.ts",
       "kind": "static"
@@ -8307,6 +8500,11 @@
     {
       "from": "src/modules/distribution/workflows/verify-host-packages.ts",
       "to": "src/modules/distribution/workflows/build-inventory.ts",
+      "kind": "static"
+    },
+    {
+      "from": "src/modules/distribution/workflows/verify-host-packages.ts",
+      "to": "src/modules/host-runtime/index.ts",
       "kind": "static"
     },
     {
@@ -8375,6 +8573,11 @@
       "kind": "static"
     },
     {
+      "from": "src/modules/host-runtime/workflows/host-registry.ts",
+      "to": "src/modules/host-runtime/workflows/host-capabilities-schema.ts",
+      "kind": "static"
+    },
+    {
       "from": "src/modules/host-runtime/workflows/mixed-host-contracts.ts",
       "to": "src/modules/host-runtime/workflows/host-types.ts",
       "kind": "static"
@@ -8382,11 +8585,6 @@
     {
       "from": "src/modules/host-runtime/workflows/provider-detect.ts",
       "to": "src/modules/host-runtime/workflows/host-registry.ts",
-      "kind": "static"
-    },
-    {
-      "from": "src/modules/host-runtime/workflows/runtime-adapters.ts",
-      "to": "src/modules/host-runtime/workflows/host-registry-schema.ts",
       "kind": "static"
     },
     {
@@ -8460,6 +8658,11 @@
       "kind": "static"
     },
     {
+      "from": "src/modules/lifecycle/workflows/write-run-manifest.ts",
+      "to": "src/modules/state/index.ts",
+      "kind": "static"
+    },
+    {
       "from": "src/modules/lifecycle/workflows/write-task-run.ts",
       "to": "src/modules/telemetry/index.ts",
       "kind": "static"
@@ -8467,6 +8670,11 @@
     {
       "from": "src/modules/lifecycle/workflows/write-task-run.ts",
       "to": "src/modules/kernel/index.ts",
+      "kind": "static"
+    },
+    {
+      "from": "src/modules/lifecycle/workflows/write-task-run.ts",
+      "to": "src/modules/state/index.ts",
       "kind": "static"
     },
     {
@@ -8482,6 +8690,16 @@
     {
       "from": "src/modules/review/workflows/review-progress.ts",
       "to": "src/modules/host-runtime/index.ts",
+      "kind": "static"
+    },
+    {
+      "from": "src/modules/security/workflows/scrub-redact.ts",
+      "to": "src/modules/security/workflows/secret-patterns.ts",
+      "kind": "static"
+    },
+    {
+      "from": "src/modules/state/workflows/atomic-write.ts",
+      "to": "scripts/lib/guild-artifact-paths.ts",
       "kind": "static"
     },
     {
@@ -8525,7 +8743,7 @@
       "kind": "static"
     },
     {
-      "from": "src/modules/workspace/workflows/workspace-impact-detector.ts",
+      "from": "src/modules/workspace/workflows/promote-upstream.ts",
       "to": "src/modules/state/index.ts",
       "kind": "static"
     },
@@ -8533,10 +8751,15 @@
       "from": "src/modules/workspace/workflows/write-manifest.ts",
       "to": "src/modules/workspace/workflows/detect.ts",
       "kind": "static"
+    },
+    {
+      "from": "src/modules/workspace/workflows/write-manifest.ts",
+      "to": "src/modules/state/index.ts",
+      "kind": "static"
     }
   ],
   "stats": {
-    "file_count": 823,
+    "file_count": 829,
     "module_count": 17
   }
 }

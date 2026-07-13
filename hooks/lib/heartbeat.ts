@@ -5,7 +5,7 @@
  * stall heuristic in `teammate-idle.ts`.
  *
  * ── BIND BY POINTER ────────────────────────────────────────────────────────
- * Canonical decision + rationale: docs/knowledge/decisions/v2-runtime-and-execution-model.md
+ * Canonical decision + rationale: ADR: v2-runtime-and-execution-model (workspace wiki)
  *   §ADR-RE-3 ("Structured heartbeat protocol"). This module realizes that
  *   decision; it does NOT re-spell the rationale.
  *

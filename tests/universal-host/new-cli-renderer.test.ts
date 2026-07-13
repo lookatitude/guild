@@ -42,6 +42,7 @@ function specFor(hostId: (typeof NEW_CLI_HOST_IDS)[number]) {
     schemaVersion: row.capabilities.package.manifest_format,
     agentsSkillRoot: ".agents/skills/guild",
     launcher: "bin/guild-run",
+    provenance: row.provenance,
   };
 }
 
@@ -54,22 +55,28 @@ describe("shared wrapped-CLI renderer base (AC-PKG-3)", () => {
     expect(pkg.schema_version).toBe(`${hostId}-package`);
     expect(pkg.host_id).toBe(hostId);
 
-    // R1 — renderer ≠ support.
+    // R1 — renderer ≠ support. Derived from the row's own provenance (audit fix:
+    // this used to be a hardcoded "inferred" literal in the renderer).
     expect(pkg.installability).toBe("target");
+    expect(pkg._provenance).toBe(HOST_REGISTRY_ROWS[hostId].provenance);
     expect(pkg._provenance).toBe("inferred");
 
     // Packaging contract (L2 adapter surface) + 11th concern.
     expect(pkg.agents_skill_root).toBe(".agents/skills/guild");
     expect(pkg.launcher).toBe("bin/guild-run");
 
-    // Extension body — commands as descriptors, skills passed through.
+    // Extension body — commands as descriptors (name-only: commands/*.md never ships
+    // in a wrapped-CLI package), skills remapped under the package's skill-tree root
+    // (audit fix — both used to be Claude-shaped paths resolving to nothing).
     expect(pkg.commands?.map((c) => c.name).sort()).toEqual(["build", "plan"]);
-    expect(pkg.skills).toEqual(["./skills/core/", "./skills/meta/"]);
+    expect(pkg.commands?.every((c) => c.source_path === undefined)).toBe(true);
+    expect(pkg.skills).toEqual([".agents/skills/guild/core/", ".agents/skills/guild/meta/"]);
 
     // render-or-degrade: native agents / hooks / MCP flagged, never silently dropped.
     const unsupportedFields = (pkg._unsupported ?? []).map((u) => u.field);
     expect(unsupportedFields).toContain("agents");
     expect(unsupportedFields).toContain("hooks");
+    expect(unsupportedFields).toContain("commands[].source_path");
     expect(unsupportedFields.some((f) => f.startsWith("mcpServers"))).toBe(true);
   });
 

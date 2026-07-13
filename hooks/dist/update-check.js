@@ -634,8 +634,17 @@ var init_host_registry_schema = __esm({
         // VERIFIED on-host (pi --help, 0.79.3):
         sessions: { continue: true, resume_by_id: true, fork: true },
         // --continue/-c, --resume/-r + --session-id, --fork
-        structured_output: { native_json: true, schema_validation: false, repair_prompt: true }
+        structured_output: { native_json: true, schema_validation: false, repair_prompt: true },
         // --mode json
+        permissions: {
+          ...inferredCaps("pi-cli", "pi").permissions,
+          // G4b: carries forward the Phase-1 hand-authored host-capabilities-schema.ts
+          // PI_CAPABILITIES.permissions.deny value (a field the inferredCaps() default
+          // left false) — pi's --tools allowlist lets an invocation deny specific tools,
+          // so `deny:true` is the correct capability. Recorded here (not just in the
+          // now-superseded PI_CAPABILITIES row) so the registry stays the single source.
+          deny: true
+        }
       },
       provenance: "verified"
       // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
@@ -663,7 +672,16 @@ var init_host_registry_schema = __esm({
           ...inferredCaps("antigravity-cli", "antigravity").permissions,
           bypass_prompts: true,
           // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
-          launch_modes: { bypass_all: ["--dangerously-skip-permissions"] }
+          launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
+          // G4b: carries forward two Phase-1 hand-authored host-capabilities-schema.ts
+          // ANTIGRAVITY_CAPABILITIES fields the inferredCaps() default did not set —
+          // `deny` (agy can refuse a tool) and `bypass_sandbox` (the same
+          // --dangerously-skip-permissions flag that sets bypass_prompts above also lifts
+          // the sandbox restriction agy's separate --sandbox toggle would otherwise apply).
+          // Recorded here so the registry — not a second hand-authored row — is the one
+          // source of truth (closes the "two diverged capability truths" audit finding).
+          deny: true,
+          bypass_sandbox: true
         }
       },
       provenance: "verified"
@@ -790,7 +808,14 @@ var init_host_registry_schema = __esm({
       },
       installability: "target",
       result_adapter: false,
-      dispatch_selectable: true,
+      // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
+      // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
+      // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
+      // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
+      // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
+      // a row per registry id, but a capability row is not a dispatch surface). The
+      // honest column for a pane-less file surface is false.
+      dispatch_selectable: false,
       capabilities: inferredCaps("kiro", "agents", "file"),
       provenance: "inferred"
     };
@@ -809,7 +834,9 @@ var init_host_registry_schema = __esm({
       },
       installability: "target",
       result_adapter: false,
-      dispatch_selectable: true,
+      // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+      // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+      dispatch_selectable: false,
       capabilities: inferredCaps("qoder", "agents", "file"),
       provenance: "inferred"
     };
@@ -828,7 +855,9 @@ var init_host_registry_schema = __esm({
       },
       installability: "target",
       result_adapter: false,
-      dispatch_selectable: true,
+      // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+      // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+      dispatch_selectable: false,
       capabilities: inferredCaps("trae", "agents", "file"),
       provenance: "inferred"
     };
@@ -963,14 +992,29 @@ var init_host_profiles_validate = __esm({
 });
 
 // ../src/modules/host-runtime/workflows/host-registry.ts
+function deriveCapabilityRow(row) {
+  return row.capabilities;
+}
 function resultAdapterForFamily(family) {
   return FAMILY_TO_ROW[family]?.result_adapter ?? false;
 }
-var FAMILY_TO_ROW;
+var DERIVED_HOST_CAPABILITY_ROWS, FAMILY_TO_ROW;
 var init_host_registry = __esm({
   "../src/modules/host-runtime/workflows/host-registry.ts"() {
     init_host_registry_schema();
     init_host_id_namespace();
+    DERIVED_HOST_CAPABILITY_ROWS = (() => {
+      const out = {};
+      for (const id of HOST_IDS) {
+        out[id] = deriveCapabilityRow(HOST_REGISTRY_ROWS[id]);
+      }
+      out["claude"] = out["claude-code-cli"];
+      out["codex"] = out["codex-cli"];
+      out["pi"] = out["pi-cli"];
+      out["antigravity"] = out["antigravity-cli"];
+      out["antigravity-2"] = out["antigravity-cli"];
+      return out;
+    })();
     FAMILY_TO_ROW = (() => {
       const out = {};
       for (const id of HOST_IDS) {
@@ -1076,10 +1120,23 @@ var init_config_defaults = __esm({
       workspace: { mode: "auto" },
       models: {
         enabled: true,
+        // G4b (host-reachability): every host in the registry's HOST_IDS gets an
+        // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
+        // own contract, stated in the module doc comment above, is to stay free of
+        // internal runtime imports so core settings code can load it before the
+        // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
+        // roster (host-registry-schema.ts) enumerated by hand; a jest test
+        // (scripts/__tests__/config-defaults-tiers-host-ids.test.ts) asserts the two
+        // stay in sync so this can never silently drift again the way it had (7 of
+        // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
+        // non-null model — every other host's registry row carries `models.<tier>.model:
+        // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
+        // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
+        // equivalent this static scaffold mirrors).
         tiers: {
-          cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
-          mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null },
-          powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null }
+          cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+          mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+          powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
         },
         scoreWeights: {
           workType: 0,
@@ -4406,163 +4463,7 @@ function parseSettingsFile(filePath) {
   } catch {
     return {};
   }
-  const out = {};
-  if (VALID_RIGOR.has(parsed["rigor"]))
-    out.rigor = parsed["rigor"];
-  if (Array.isArray(parsed["auto_approve"]))
-    out.auto_approve = parsed["auto_approve"];
-  if (VALID_REVIEW.has(parsed["review"]))
-    out.review = parsed["review"];
-  if (parsed["host"] === "auto") out.host = "auto";
-  else if (typeof parsed["host"] === "string") {
-    const normalized = normalizeDispatchHostId(parsed["host"]);
-    if (normalized) out.host = normalized;
-  }
-  if (isPlainObject2(parsed["roles"]))
-    out.roles = sparseRoles(parsed["roles"]);
-  if (isPlainObject2(parsed["host_profiles"]))
-    out.host_profiles = sparseHostProfiles(parsed["host_profiles"]);
-  if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
-    out.initiative_default = parsed["initiative_default"];
-  if (parsed["index"] === "auto" || parsed["index"] === "off")
-    out.index = parsed["index"];
-  if (typeof parsed["record_status_runs"] === "boolean")
-    out.record_status_runs = parsed["record_status_runs"];
-  if (parsed["codex_skip_enforcement"] === "warn" || parsed["codex_skip_enforcement"] === "block")
-    out.codex_skip_enforcement = parsed["codex_skip_enforcement"];
-  if (VALID_AGENT_MODE.has(parsed["agent_mode"]))
-    out.agent_mode = parsed["agent_mode"];
-  if (isPlainObject2(parsed["workspace"])) {
-    const ws = parsed["workspace"];
-    const wsMode = ws["mode"];
-    if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
-      out.workspace = { mode: wsMode };
-    }
-  }
-  if (isPlainObject2(parsed["models"])) {
-    const rawModels = parsed["models"];
-    const sparse = {};
-    if (typeof rawModels["enabled"] === "boolean") sparse.enabled = rawModels["enabled"];
-    if (isPlainObject2(rawModels["tiers"])) {
-      const rt = rawModels["tiers"];
-      const sparseTiers = {};
-      for (const tier of ["cheap", "mid", "powerful"]) {
-        if (isPlainObject2(rt[tier])) {
-          sparseTiers[tier] = sparseTierHostMap(rt[tier]);
-        }
-      }
-      sparse.tiers = sparseTiers;
-    }
-    if (isPlainObject2(rawModels["scoreWeights"]))
-      sparse.scoreWeights = rawModels["scoreWeights"];
-    if (isPlainObject2(rawModels["thresholds"]))
-      sparse.thresholds = rawModels["thresholds"];
-    if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1)
-      sparse.advisorRounds = Math.floor(rawModels["advisorRounds"]);
-    if (Array.isArray(rawModels["escalationMarkers"]))
-      sparse.escalationMarkers = rawModels["escalationMarkers"];
-    if (typeof rawModels["recallBeforeRead"] === "boolean")
-      sparse.recallBeforeRead = rawModels["recallBeforeRead"];
-    if (typeof rawModels["recallScoreThreshold"] === "number")
-      sparse.recallScoreThreshold = rawModels["recallScoreThreshold"];
-    if (typeof rawModels["structuredOutputRequired"] === "boolean")
-      sparse.structuredOutputRequired = rawModels["structuredOutputRequired"];
-    if (isPlainObject2(rawModels["cacheTTL"])) {
-      const rttl = rawModels["cacheTTL"];
-      const newTTL = {};
-      if (VALID_CACHE_TTL.has(rttl["coordinator"])) newTTL.coordinator = rttl["coordinator"];
-      if (VALID_CACHE_TTL.has(rttl["leaf"])) newTTL.leaf = rttl["leaf"];
-      sparse.cacheTTL = newTTL;
-    }
-    if (typeof rawModels["importanceGate"] === "number" && rawModels["importanceGate"] >= 1 && rawModels["importanceGate"] <= 5)
-      sparse.importanceGate = Math.floor(rawModels["importanceGate"]);
-    if (typeof rawModels["compositeRecall"] === "boolean")
-      sparse.compositeRecall = rawModels["compositeRecall"];
-    if (typeof rawModels["importanceAtIngest"] === "boolean")
-      sparse.importanceAtIngest = rawModels["importanceAtIngest"];
-    if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
-      sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
-    if (isPlainObject2(rawModels["shortOutputThreshold"])) {
-      const sot = rawModels["shortOutputThreshold"];
-      const sotMerged = {};
-      for (const taskType of Object.keys(sot)) {
-        if (!isPlainObject2(sot[taskType])) continue;
-        const innerRaw = sot[taskType];
-        const innerMerged = {};
-        for (const tier of Object.keys(innerRaw)) {
-          if (typeof innerRaw[tier] === "number") innerMerged[tier] = innerRaw[tier];
-        }
-        if (Object.keys(innerMerged).length > 0) sotMerged[taskType] = innerMerged;
-      }
-      sparse.shortOutputThreshold = sotMerged;
-    }
-    if (isPlainObject2(rawModels["knowledge"])) {
-      const rawK = rawModels["knowledge"];
-      const sparseK = {};
-      if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
-        sparseK.maxDepth = Math.floor(rawK["maxDepth"]);
-      if (typeof rawK["maxBranching"] === "number" && rawK["maxBranching"] >= 1)
-        sparseK.maxBranching = Math.floor(rawK["maxBranching"]);
-      if (typeof rawK["minTopicImportance"] === "number" && rawK["minTopicImportance"] >= 0 && rawK["minTopicImportance"] <= 1)
-        sparseK.minTopicImportance = rawK["minTopicImportance"];
-      if (typeof rawK["relMinConf"] === "number" && rawK["relMinConf"] >= 0 && rawK["relMinConf"] <= 1)
-        sparseK.relMinConf = rawK["relMinConf"];
-      if (typeof rawK["maxFiles"] === "number" && rawK["maxFiles"] >= 1)
-        sparseK.maxFiles = Math.floor(rawK["maxFiles"]);
-      if (typeof rawK["maxTokens"] === "number" && rawK["maxTokens"] >= 1)
-        sparseK.maxTokens = Math.floor(rawK["maxTokens"]);
-      if (typeof rawK["batchSize"] === "number" && rawK["batchSize"] >= 1)
-        sparseK.batchSize = Math.floor(rawK["batchSize"]);
-      sparse.knowledge = sparseK;
-    }
-    out.models = sparse;
-  }
-  if (isPlainObject2(parsed["security"])) {
-    const rawSec = parsed["security"];
-    const sparseSec = {};
-    const bpp = rawSec["bypass_permissions_policy"];
-    if (bpp === "deny" || bpp === "audit" || bpp === "allow") sparseSec.bypass_permissions_policy = bpp;
-    out.security = sparseSec;
-  }
-  if (isPlainObject2(parsed["secrets_policy"])) {
-    const rawSp = parsed["secrets_policy"];
-    const sparseSp = {};
-    if (Array.isArray(rawSp["env_allowlist"])) sparseSp.env_allowlist = rawSp["env_allowlist"];
-    if (Array.isArray(rawSp["redaction_patterns"])) sparseSp.redaction_patterns = rawSp["redaction_patterns"];
-    if (rawSp["fail_mode_durable"] === "closed" || rawSp["fail_mode_durable"] === "open") sparseSp.fail_mode_durable = rawSp["fail_mode_durable"];
-    if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") sparseSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
-    out.secrets_policy = sparseSp;
-  }
-  if (isPlainObject2(parsed["mcp"])) {
-    const rawMcp = parsed["mcp"];
-    const sparseMcp = {};
-    if (isPlainObject2(rawMcp["tool_description_hashes"]))
-      sparseMcp.tool_description_hashes = rawMcp["tool_description_hashes"];
-    if (typeof rawMcp["stdio_available"] === "boolean") sparseMcp.stdio_available = rawMcp["stdio_available"];
-    if (typeof rawMcp["http_available"] === "boolean") sparseMcp.http_available = rawMcp["http_available"];
-    if (rawMcp["bridge_package"] === null || typeof rawMcp["bridge_package"] === "string")
-      sparseMcp.bridge_package = rawMcp["bridge_package"];
-    out.mcp = sparseMcp;
-  }
-  if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
-  if (typeof parsed["adversarial_review_provider"] === "string") {
-    out.adversarial_review_provider = parsed["adversarial_review_provider"];
-  }
-  if (typeof parsed["loops"] === "string" || parsed["loops"] === null)
-    out.loops = parsed["loops"];
-  if (typeof parsed["loop_cap"] === "number")
-    out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
-  if (typeof parsed["codex_cap"] === "number")
-    out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
-  if (isPlainObject2(parsed["defaults"])) {
-    const rawDefaults = parsed["defaults"];
-    const sparseDefaults = {};
-    for (const k of Object.keys(rawDefaults)) {
-      if (DEFAULTS_ALLOWED_KEYS.has(k)) sparseDefaults[k] = rawDefaults[k];
-    }
-    out.defaults = sparseDefaults;
-  }
-  return out;
+  return parseSettingsFile_fromParsed(parsed);
 }
 function parseLocalFile(guildDir) {
   const localPath = path4.join(guildDir, "settings.local.json");

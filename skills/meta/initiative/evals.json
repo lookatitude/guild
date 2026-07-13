@@ -1,0 +1,21 @@
+{
+  "should_trigger": [
+    "Create a new durable initiative for this multi-week effort.",
+    "Show me the status of the plugin-audit-remediation initiative.",
+    "List all active initiatives.",
+    "Resume the run-tracing-evaluation initiative at the next work item.",
+    "Add a goal to the initiative's definition ledger.",
+    "Is this initiative ready to close?",
+    "Archive this initiative without shipping a release.",
+    "Restore the archived initiative back to active.",
+    "Close initiative plugin-audit-remediation — check the D8 gate first."
+  ],
+  "should_not_trigger": [
+    "Just run this one-off task, no initiative needed.",
+    "Turn this spec into a plan.",
+    "Dispatch the specialist lanes and run the code.",
+    "Capture this as a decision in the wiki.",
+    "Ingest this documentation page into the wiki.",
+    "Review the handoff receipts for this run."
+  ]
+}

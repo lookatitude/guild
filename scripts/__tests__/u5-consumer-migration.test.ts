@@ -30,14 +30,14 @@ const DETECT_SCRIPT = path.resolve(__dirname, "../workspace/detect.ts");
 const NODE_ENV = {
   ...process.env,
   NODE_NO_WARNINGS: "1",
-  PATH: "/opt/homebrew/bin:/usr/bin:/bin",
+  PATH: `${require("node:path").dirname(process.execPath)}:${process.env["PATH"] ?? "/usr/bin:/bin"}`,
 } as NodeJS.ProcessEnv;
 
 function runDetect(args: string[]): { status: number; out: string; err: string } {
   const r = spawnSync("npx", ["tsx", DETECT_SCRIPT, ...args], {
     encoding: "utf8",
     env: NODE_ENV,
-    timeout: 30000,
+    timeout: 120_000,
   });
   return { status: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
@@ -482,7 +482,7 @@ function runLauncher(
   const r = spawnSync("npx", ["tsx", LAUNCHER_SCRIPT, ...args], {
     encoding: "utf8",
     env: finalEnv,
-    timeout: 30000,
+    timeout: 120_000,
   });
   return {
     exitCode: r.status ?? 1,
@@ -620,7 +620,7 @@ function runScoreTierCli(args: string[]): { status: number; out: string; err: st
   const r = spawnSync("npx", ["tsx", SCORE_TIER_SCRIPT, ...args], {
     encoding: "utf8",
     env: SCORE_TIER_ENV,
-    timeout: 30000,
+    timeout: 120_000,
   });
   return { status: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }

@@ -33,21 +33,17 @@ Prints state (no file written).
 ## Run-start preflight (settings-control-and-tmux U3/U6)
 
 At the very top — before any filesystem scan and before the lightweight
-run-trace — run the preflight (`scripts/lib/runstart-preflight.ts`; canonical
-contract in `guild.md §Run-start preflight`):
+run-trace — the run-trace CLI runs this preflight for you; you do **not** call
+`runStartPreflight` yourself.
 
-1. Call `runStartPreflight({ cwd, flags? })` — resolves the 7-source
-   inheritance chain + validates + probes tmux + detects providers
-   (full chain: see `/guild:guild §Run-start preflight`).
-2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
-   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
-   on NO continue with the resolved backend.
-3. `status` uses the lightweight run-trace path (not `startRun`); pass
-   `result.snapshot` to the lightweight recorder if/when the lightweight path
-   supports it — otherwise this step is a no-op for `status` (the snapshot is
-   not written for lightweight runs). The preflight still fires so the tmux
-   prompt and provider detection are consistent with other commands.
-4. Proceed to the lightweight run-trace.
+Since wave 2 the run-trace CLI is the **sole caller** of `runStartPreflight`
+(`scripts/lib/runstart-preflight.ts`; canonical contract in
+`guild.md §Run-start preflight`): it resolves the 7-source inheritance chain,
+validates closed keys, probes tmux, and detects providers. `status` uses the
+lightweight run-trace path (start-and-close at once), so the resolved snapshot
+is not persisted for lightweight runs — but the tmux/provider resolution stays
+consistent with other commands. Read any resolved config for an existing run
+with `readResolvedSettingsSnapshot(runId, { cwd })`.
 
 ## Run recording
 

@@ -369,6 +369,15 @@ const PI_ENTRY: HostRegistryEntry = {
     // VERIFIED on-host (pi --help, 0.79.3):
     sessions: { continue: true, resume_by_id: true, fork: true }, // --continue/-c, --resume/-r + --session-id, --fork
     structured_output: { native_json: true, schema_validation: false, repair_prompt: true }, // --mode json
+    permissions: {
+      ...inferredCaps("pi-cli", "pi").permissions,
+      // G4b: carries forward the Phase-1 hand-authored host-capabilities-schema.ts
+      // PI_CAPABILITIES.permissions.deny value (a field the inferredCaps() default
+      // left false) — pi's --tools allowlist lets an invocation deny specific tools,
+      // so `deny:true` is the correct capability. Recorded here (not just in the
+      // now-superseded PI_CAPABILITIES row) so the registry stays the single source.
+      deny: true,
+    },
   },
   provenance: "verified", // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
 };
@@ -392,6 +401,15 @@ const ANTIGRAVITY_ENTRY: HostRegistryEntry = {
       ...inferredCaps("antigravity-cli", "antigravity").permissions,
       bypass_prompts: true, // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
       launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
+      // G4b: carries forward two Phase-1 hand-authored host-capabilities-schema.ts
+      // ANTIGRAVITY_CAPABILITIES fields the inferredCaps() default did not set —
+      // `deny` (agy can refuse a tool) and `bypass_sandbox` (the same
+      // --dangerously-skip-permissions flag that sets bypass_prompts above also lifts
+      // the sandbox restriction agy's separate --sandbox toggle would otherwise apply).
+      // Recorded here so the registry — not a second hand-authored row — is the one
+      // source of truth (closes the "two diverged capability truths" audit finding).
+      deny: true,
+      bypass_sandbox: true,
     },
   },
   provenance: "verified", // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
@@ -526,6 +544,15 @@ const ROVO_DEV_ENTRY: HostRegistryEntry = {
 // adapter/renderer and MUST NOT carry a per-host adapter (AC-REG-4 + AC-ADP-1, R2).
 // detection.bin null (excluded from install.sh PATH auto-detect, AC-INS-3); detection
 // is the project marker dir. All three read root AGENTS.md. `trae-cn` folds into `trae`.
+//
+// dispatch_selectable: FALSE (G4b host-reachability fix, was true). An agents-file
+// surface is a FILE the host reads at its own pace — there is no pane/process Guild
+// spawns and dispatches a lane into, so "a lane can be dispatched here" is false by
+// construction. The prior `true` was never backed by a HostKind member, a PaneAdapter,
+// or a legacy hand-authored HOST_CAPABILITY_ROWS row for kiro/qoder/trae — confirmed
+// unreachable through every dispatch surface (the audit finding this rollout closes).
+// (DERIVED_HOST_CAPABILITY_ROWS now carries a row for every registry id, these
+// included — but a capability row is not a dispatch surface; the conclusion stands.)
 // ---------------------------------------------------------------------------
 
 const KIRO_ENTRY: HostRegistryEntry = {
@@ -543,7 +570,14 @@ const KIRO_ENTRY: HostRegistryEntry = {
   },
   installability: "target",
   result_adapter: false,
-  dispatch_selectable: true,
+  // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
+  // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
+  // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
+  // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
+  // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
+  // a row per registry id, but a capability row is not a dispatch surface). The
+  // honest column for a pane-less file surface is false.
+  dispatch_selectable: false,
   capabilities: inferredCaps("kiro", "agents", "file"),
   provenance: "inferred",
 };
@@ -563,7 +597,9 @@ const QODER_ENTRY: HostRegistryEntry = {
   },
   installability: "target",
   result_adapter: false,
-  dispatch_selectable: true,
+  // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+  // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+  dispatch_selectable: false,
   capabilities: inferredCaps("qoder", "agents", "file"),
   provenance: "inferred",
 };
@@ -583,7 +619,9 @@ const TRAE_ENTRY: HostRegistryEntry = {
   },
   installability: "target",
   result_adapter: false,
-  dispatch_selectable: true,
+  // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+  // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+  dispatch_selectable: false,
   capabilities: inferredCaps("trae", "agents", "file"),
   provenance: "inferred",
 };

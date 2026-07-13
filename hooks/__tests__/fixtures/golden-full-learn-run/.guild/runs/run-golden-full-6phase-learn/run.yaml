@@ -1,0 +1,35 @@
+schema_version: guild.run.v1
+run_id: run-golden-full-6phase-learn
+command: /guild:learn
+arguments: {}
+cwd: /tmp/golden-full-learn
+target_kind: existing_guild_project
+workspace:
+  is_workspace: false
+  root: /tmp/golden-full-learn
+project: golden-project
+host:
+  requested: auto
+  resolved: claude
+model_tier_policy: default (full run)
+started_at: 2026-06-18T00:00:00Z
+ignore_policy: default
+scan_policy: default
+initiative_attachment: null
+phase: ops
+run_class: full
+gates: {}
+status: closed
+phases_log:
+  - phase: init
+    at: 2026-06-18T00:01:00Z
+  - phase: ideate
+    at: 2026-06-18T00:02:00Z
+  - phase: plan
+    at: 2026-06-18T00:03:00Z
+  - phase: build
+    at: 2026-06-18T00:04:00Z
+  - phase: qa
+    at: 2026-06-18T00:05:00Z
+  - phase: ops
+    at: 2026-06-18T00:06:00Z

@@ -13,11 +13,13 @@
  *   GUILD_SSH_LIVE_TARGET=miguelp@192.168.10.21 \
  *     npx jest __tests__/remote-backend-live.test.ts
  *
- * Validated 2026-06-14 against a real Linux host (claude CLI 2.1.x, tmux):
- * connect probe, remote spawn execution, base64 inbox round-trip, detached-pane
- * survival across the ssh disconnect, and teardown — all green over the wire.
- * All remote artifacts are confined to ~/Projects/tests + ~/.guild/inbox and
- * cleaned up afterwards.
+ * Validated against a real Linux host (claude CLI, tmux): connect probe, remote
+ * spawn execution (now tmux-detached — the pane's session name IS the
+ * transport-generated remoteId, so `tmux kill-session -t <remoteId>` is an exact
+ * match), survival across the ssh disconnect, and teardown — all green over the
+ * wire. There is no separate send()/inbox channel any more (deleted — it had no
+ * reader; the command argv + GUILD_TASK_ASSIGNMENT already carry the brief).
+ * All remote artifacts are confined to ~/Projects/tests and cleaned up afterwards.
  */
 
 import { execFileSync } from "child_process";
@@ -40,7 +42,13 @@ d("SshRemoteTransport — LIVE cross-host (item 41)", () => {
 
   afterAll(() => {
     try {
-      remote(`rm -f ~/Projects/tests/${nonce}.* ~/.guild/inbox/ssh-*${nonce}* 2>/dev/null; tmux kill-session -t ${nonce} 2>/dev/null || true`);
+      // Kill any tmux sessions this run created (named `ssh-<endpoint>-<n>` by
+      // the transport) plus the scratch marker files.
+      remote(
+        `rm -f ~/Projects/tests/${nonce}.* 2>/dev/null; ` +
+          `tmux ls 2>/dev/null | cut -d: -f1 | grep '^ssh-' | ` +
+          `xargs -r -n1 tmux kill-session -t 2>/dev/null || true`
+      );
     } catch { /* best-effort cleanup */ }
   });
 
@@ -49,29 +57,29 @@ d("SshRemoteTransport — LIVE cross-host (item 41)", () => {
     expect(r.ok).toBe(true);
   });
 
-  test("spawn — the constructed command actually executes on the remote", () => {
+  test("spawn — the constructed command actually executes on the remote (tmux-detached, so poll)", () => {
     const marker = `~/Projects/tests/${nonce}.spawn`;
     const handle = t.spawn(host, { name: "tester" } as PaneSpec, `mkdir -p ~/Projects/tests && echo ok-${nonce} > ${marker}`);
     expect(handle.remoteId).toContain("ssh-");
-    expect(remote(`cat ~/Projects/tests/${nonce}.spawn`)).toBe(`ok-${nonce}`);
+    // spawn() returns as soon as `tmux new-session -d` daemonizes — the inner
+    // command runs asynchronously inside that session, so give it a beat.
+    remote("sleep 1");
+    expect(remote(`cat ${marker}`)).toBe(`ok-${nonce}`);
   });
 
-  test("send — payload base64 round-trips into the remote inbox", () => {
-    const handle = t.spawn(host, { name: "briefed" } as PaneSpec, "true");
-    const payload = `task brief ${nonce} :: quotes ' \" and $pecials`;
-    t.send(handle, payload);
-    const inbox = remote(`cat ~/.guild/inbox/${handle.remoteId}.task`);
-    expect(inbox).toBe(payload);
-  });
-
-  test("detached pane survives the ssh disconnect (the spawn residual)", () => {
-    // Production pattern: a remote tmux pane must outlive the ssh call.
-    remote(`tmux kill-session -t ${nonce} 2>/dev/null; tmux new-session -d -s ${nonce} "sleep 4; echo lived > ~/Projects/tests/${nonce}.pane"`);
+  test("spawn's own tmux wrap detaches — the pane survives the ssh disconnect", () => {
+    // Production pattern (now built into SshRemoteTransport.spawn itself, not
+    // hand-rolled): a remote tmux pane must outlive the ssh call. There is no
+    // separate send()/inbox channel any more — the command argv IS the brief.
+    const marker = `~/Projects/tests/${nonce}.pane`;
+    const handle = t.spawn(host, { name: "detached" } as PaneSpec, `sleep 4; echo lived > ${marker}`);
     // ssh has returned — the session must still be alive on the remote.
-    expect(remote(`tmux ls 2>/dev/null | grep -c ${nonce} || true`)).toBe("1");
+    expect(remote(`tmux ls 2>/dev/null | grep -c ${handle.remoteId} || true`)).toBe("1");
     // and it completes its work after we're gone.
     remote("sleep 5");
-    expect(remote(`cat ~/Projects/tests/${nonce}.pane`)).toBe("lived");
+    expect(remote(`cat ${marker}`)).toBe("lived");
+    t.teardown();
+    expect(remote(`tmux ls 2>/dev/null | grep -c ${handle.remoteId} || true`)).toBe("0");
   }, 30000);
 
   test("login-shell wrap resolves an off-PATH brand (codex) where bare ssh cannot", () => {
@@ -89,6 +97,7 @@ d("SshRemoteTransport — LIVE cross-host (item 41)", () => {
     const shellHost: RemoteHostTarget = { ...host, hostKind: "codex", loginShell: "zsh" };
     const marker = `~/Projects/tests/${nonce}.codex`;
     t.spawn(shellHost, { name: "codex-agent" } as PaneSpec, `mkdir -p ~/Projects/tests && codex --version > ${marker} 2>&1`);
+    remote("sleep 1"); // tmux-detached — give the inner command a beat to finish
     expect(remote(`cat ~/Projects/tests/${nonce}.codex`)).toMatch(/codex/i);
   });
 

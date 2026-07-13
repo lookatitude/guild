@@ -192,10 +192,16 @@ describe("TmuxTeamBackend.spawn() — execution + teardown", () => {
     expect(outcome.failedCommand).toBeNull();
     expect(outcome.teammatePaneIds.architect).toBe("%1");
     expect(outcome.teammatePaneIds.qa).toBe("%3");
-    // orchestrator pane id intentionally left empty (preserves prior behavior).
-    expect(outcome.orchestratorPaneId).toBe("");
-    // The last call is the list-panes collection.
+    // The orchestrator's own pane is now captured (titled "orchestrator" by the
+    // select-pane command composeTmuxCommands emits right after session/window
+    // creation) — no longer left empty.
+    expect(outcome.orchestratorPaneId).toBe("%0");
+    // "orchestrator" is never ALSO reported as a teammate pane.
+    expect(outcome.teammatePaneIds["orchestrator"]).toBeUndefined();
+    // The last call is the list-panes collection, scoped to this session/window
+    // (no `-a`, which would list panes server-wide across other sessions too).
     expect(calls[calls.length - 1].args[0]).toBe("list-panes");
+    expect(calls[calls.length - 1].args).not.toContain("-a");
   });
 
   it("failure (new-session): tears down with kill-session and returns ok:false", () => {
@@ -375,8 +381,11 @@ describe("InProcessTeamBackend — Agent-tool dispatch plan (RE-4 / VC-RE-4)", (
     // out, just a different execution substrate (D5 selects which).
     const inProcess = new InProcessTeamBackend().launch(req());
     const tmuxPlan = new TmuxTeamBackend({ run: makeFakeRun().run }).plan(req());
+    // Exclude the orchestrator's own self-titling select-pane command (emitted
+    // once, right after session/window creation, so spawn() can later identify
+    // the orchestrator pane by title) — it isn't a specialist dispatch target.
     const tmuxSpecialistTargets = tmuxPlan.commands
-      .filter((c) => c.argv[1] === "select-pane" && c.argv[2] === "-T")
+      .filter((c) => c.argv[1] === "select-pane" && c.argv[2] === "-T" && c.argv[3] !== "orchestrator")
       .map((c) => c.argv[3]);
     expect(inProcess.dispatchPlan!.map((d) => d.name)).toEqual(tmuxSpecialistTargets);
     // ...and the in-process path uses no tmux at all.

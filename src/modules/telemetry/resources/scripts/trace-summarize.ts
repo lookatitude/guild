@@ -2,7 +2,9 @@
 /**
  * scripts/trace-summarize.ts
  *
- * Reads .guild/runs/<run-id>/events.ndjson and writes a structured summary.md.
+ * Reads a run's event log — canonical .guild/runs/<run-id>/logs/v1.4-events.jsonl
+ * first, legacy .guild/runs/<run-id>/events.ndjson fallback (see
+ * scripts/lib/run-events.ts) — and writes a structured summary.md.
  * Called by hooks/maybe-reflect.ts when a reflection is warranted.
  *
  * Usage:
@@ -11,13 +13,14 @@
  * Options:
  *   --run-id <id>   (required) The run to summarize.
  *   --cwd <path>    (optional, default ".") Repo root; events are read from
- *                   <cwd>/.guild/runs/<run-id>/events.ndjson.
+ *                   <cwd>/.guild/runs/<run-id>/logs/v1.4-events.jsonl, falling
+ *                   back to <cwd>/.guild/runs/<run-id>/events.ndjson.
  *   --out <path>    (optional, default <cwd>/.guild/runs/<run-id>/summary.md)
  *                   Where to write the summary.
  *
  * Exit codes:
  *   0  Success.
- *   1  Bad input (missing --run-id, events file not found, etc.). Error → stderr.
+ *   1  Bad input (missing --run-id, no event log found, etc.). Error → stderr.
  *
  * Invariant: never writes to the wiki directory under .guild. Only writes to
  *             the run-specific summary.md at <cwd>/.guild/runs/<run-id>/summary.md.
@@ -25,18 +28,18 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { loadRunEvents, RunEvent } from "./lib/run-events";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface TelemetryEvent {
-  ts: string;
-  event: string;
-  tool: string;
-  specialist: string;
-  payload_digest: string;
-  ok: boolean;
-  ms: number;
-}
+/**
+ * The fields this module reads, all optional (matches scripts/lib/run-events.ts's
+ * RunEvent — the canonical log interleaves hook-mirror lines with
+ * guild.trace_event.v1 lines that carry none of these fields; every access
+ * below is defensive/undefined-safe, same as before this module read events
+ * via a local unsafe `JSON.parse(...) as TelemetryEvent` cast).
+ */
+type TelemetryEvent = RunEvent;
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
@@ -60,34 +63,6 @@ function parseArgs(argv: string[]): {
   }
 
   return { runId, cwd, out };
-}
-
-// ── NDJSON parsing ─────────────────────────────────────────────────────────
-
-interface ParseResult {
-  events: TelemetryEvent[];
-  parseErrors: number;
-}
-
-function parseNdjson(filePath: string): ParseResult {
-  const content = fs.readFileSync(filePath, "utf8");
-  const events: TelemetryEvent[] = [];
-  let parseErrors = 0;
-
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      events.push(JSON.parse(trimmed) as TelemetryEvent);
-    } catch {
-      parseErrors++;
-      process.stderr.write(
-        `[trace-summarize] WARN: parse error on line: ${trimmed.slice(0, 80)}\n`
-      );
-    }
-  }
-
-  return { events, parseErrors };
 }
 
 // ── Statistics ─────────────────────────────────────────────────────────────
@@ -121,9 +96,15 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
     };
   }
 
-  const startedAt = events[0].ts;
-  const endedAt = events[events.length - 1].ts;
-  const durationMs = new Date(endedAt).getTime() - new Date(startedAt).getTime();
+  // Canonical logs interleave shapes: v1.4 lines carry `ts`, while the
+  // guild.trace_event.v1 lifecycle markers (run_started first / run_closed
+  // last) carry `at` — normalize so boundary markers still anchor the window.
+  const eventTs = (e: { ts?: string; at?: string }): string => e.ts ?? e.at ?? "";
+  const startedAt = eventTs(events[0] as { ts?: string; at?: string });
+  const endedAt = eventTs(events[events.length - 1] as { ts?: string; at?: string });
+  const durationMs = startedAt && endedAt
+    ? new Date(endedAt).getTime() - new Date(startedAt).getTime()
+    : 0;
 
   // Specialists: alphabetically sorted, non-empty values
   const specialists = Array.from(
@@ -368,20 +349,21 @@ function main(): void {
 
   // Resolve paths
   const cwd = path.resolve(cwdArg);
-  const eventsFile = path.join(cwd, ".guild", "runs", runId, "events.ndjson");
-  const defaultOut = path.join(cwd, ".guild", "runs", runId, "summary.md");
+  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const defaultOut = path.join(runDir, "summary.md");
   const outFile = outArg ? path.resolve(outArg) : defaultOut;
 
-  // Validate events file exists
-  if (!fs.existsSync(eventsFile)) {
+  // Load events: canonical logs/v1.4-events.jsonl first, legacy events.ndjson fallback.
+  const { events, source, filePath, parseErrors } = loadRunEvents(runDir);
+
+  // Validate an event log was found
+  if (source === "none") {
     process.stderr.write(
-      `[trace-summarize] ERROR: events file not found: ${eventsFile}\n`
+      `[trace-summarize] ERROR: no event log found for run ${runId} ` +
+        `(looked for ${filePath} and ${path.join(runDir, "events.ndjson")})\n`
     );
     process.exit(1);
   }
-
-  // Parse events
-  const { events, parseErrors } = parseNdjson(eventsFile);
 
   if (parseErrors > 0) {
     process.stderr.write(

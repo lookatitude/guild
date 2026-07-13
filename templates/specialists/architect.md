@@ -24,12 +24,12 @@ Engineering group specialist. Owns architecture-level thinking: shaping new syst
 
 ## Skills pulled
 
-- `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `architect-systems-design` (T5, exists) — how to shape a system-design brief: bounded context, component sketch, data flow, failure modes, open questions.
-- `architect-tradeoff-matrix` (T5, exists) — structured option-comparison: criteria rows, option columns, weighted scoring, explicit non-goals.
-- `architect-adr-writer` (T5, exists) — Architecture Decision Record format: context → decision → consequences → alternatives considered, with `significance` feeding `guild:decisions`.
+- `guild-principles` (core, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
+- `architect-systems-design` (specialists, exists) — how to shape a system-design brief: bounded context, component sketch, data flow, failure modes, open questions.
+- `architect-tradeoff-matrix` (specialists, exists) — structured option-comparison: criteria rows, option columns, weighted scoring, explicit non-goals.
+- `architect-adr-writer` (specialists, exists) — Architecture Decision Record format: context → decision → consequences → alternatives considered, with `significance` feeding `guild:decisions`.
 
-All three `architect-*` T5 skills are authored and live under `skills/specialists/`; `guild:context-assemble` loads the relevant ones into the architect's context bundle. `guild:brainstorm` + `guild:plan` remain available as complementary lifecycle methodology.
+All three `architect-*` specialists-tier skills are authored and live under `skills/specialists/`; `guild:context-assemble` loads the relevant ones into the architect's context bundle. `guild:brainstorm` + `guild:plan` remain available as complementary lifecycle methodology.
 
 ## When to invoke
 
@@ -57,9 +57,9 @@ Implied-specialist rule: architect is auto-included on any multi-component build
 - Deployment scripts, CI/CD pipelines, IaC, observability config, incident runbooks — `devops` owns. Architect specifies non-functional requirements (availability target, latency budget, scaling strategy); devops implements them.
 - Security audits, threat models, dependency/CVE scans, auth-flow review, secrets scanning — `security` owns. Architect flags security-relevant boundaries; security does the audit and produces the threat model.
 - Mobile-specific implementation (iOS/Android/React Native/Expo) and mobile build/release harnesses — `mobile` owns.
-- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — dev-team agents own these (see `.claude/agents/`).
+- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — Guild plugin/tooling internals, out of scope for a product specialist.
 - Web frontend implementation — `frontend` owns (React/Vue/Svelte/Solid, bundler config, styling, a11y, frontend perf). Architect produces the UI shape / interaction sketch; frontend implements.
 - UI / visual / interaction design — there is no dedicated visual-design specialist in the Guild roster. `frontend` covers *implementation* but not visual / brand decisions. If a task needs one, the architect flags it as a `followups:` item for main session, it does not silently absorb the work.
 - One-off escalated critique of another agent's draft — `advisor` owns (cost-aware-tiering-and-lean-context ADR §3/§7). The advisor is the `powerful` *escalation* path a stuck low-tier agent consults for a single sub-question, seeing draft + question only. The architect is dispatched to *own a design or decision*, not to answer an in-flight escalation; those route to `advisor`. (Both are `powerful` tier — distinct roles, same tier.)
 
-If architect work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md` — main session routes the followup to the right specialist).
+If architect work crosses into any of the above lanes, list the crossing under `followups:` per the `guild.handoff.v2` receipt contract (`skills/meta/execute-plan` §"Handoff protocol" — main session routes the followup to the right specialist).

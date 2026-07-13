@@ -94,25 +94,37 @@ cat <<STATUS
 │  First run on a new repo → /guild:guild proposes /guild:init    │
 │  Guild v2 keeps the ':' namespace and drops the redundant       │
 │  'guild' prefix — commands are /guild:<verb>                    │
-│  (full map: MIGRATION.md).                                      │
+│  (v1→v2 guide: https://guildstack.dev/docs/migration-v1-to-v2)  │
 │                                                                 │
 │  Optional MCP servers (pre-bundled; no install needed):         │
 │    guild-memory       BM25 wiki search                          │
 │    guild-telemetry    Trace query over .guild/runs/             │
 ├─────────────────────────────────────────────────────────────────┤
-│  Plan & architecture: guild-plan.md (start at §1 or §13.2)     │
-│  Docs: the Guild docs site · docs/specialist-roster.md          │
+│  Docs & architecture: https://guildstack.dev/docs               │
+│  Specialist roster: docs/specialist-roster.md                   │
 └─────────────────────────────────────────────────────────────────┘
 STATUS
 
 # ── FU-E: self-build context detection + codex-review enforcement banner ──
-# Self-build = working on the Guild plugin itself. Detected when the cwd has
-# a plugin/CLAUDE.md whose orientation banner matches. In self-build sessions
-# Codex adversarial review is "implicitly always-on" — but two consecutive
-# self-build reflections (docs-clean-up + share-dot-guild) named codex-review
-# skipping as a discipline gap. This panel makes the rule visible at every
-# session start so the orchestrator can't silently skip it.
-if [[ -f "${PWD}/plugin/CLAUDE.md" ]] && grep -q "Guild — repo orientation" "${PWD}/plugin/CLAUDE.md" 2>/dev/null; then
+# Self-build = working on the Guild plugin itself. Detected via the SAME
+# marker string hooks/lib/self-build.ts's detectSelfBuild() checks (single
+# shared predicate, ported to bash since this script cannot import a TS
+# module) — hooks/__tests__/self-build.test.ts pins both sides against the
+# real AGENTS.md file so they cannot silently diverge again.
+#
+# The banner used to live in plugin/CLAUDE.md; it moved to AGENTS.md on
+# 2026-06-21 (CLAUDE.md is now a thin `@AGENTS.md` shim) and this detector
+# went dead until fixed here. Checked from BOTH roots a self-build session can
+# start from: the plugin repo root itself (${PWD}/AGENTS.md) and the umbrella
+# workspace root (${PWD}/plugin/AGENTS.md).
+SELF_BUILD_MARKER="Guild — repo orientation"
+SELF_BUILD_FILE=""
+if [[ -f "${PWD}/AGENTS.md" ]] && grep -q "${SELF_BUILD_MARKER}" "${PWD}/AGENTS.md" 2>/dev/null; then
+  SELF_BUILD_FILE="${PWD}/AGENTS.md"
+elif [[ -f "${PWD}/plugin/AGENTS.md" ]] && grep -q "${SELF_BUILD_MARKER}" "${PWD}/plugin/AGENTS.md" 2>/dev/null; then
+  SELF_BUILD_FILE="${PWD}/plugin/AGENTS.md"
+fi
+if [[ -n "${SELF_BUILD_FILE}" ]]; then
   # Detect codex availability — binary on PATH AND usable auth exists.
   # Usable auth = (a) non-empty auth.json at ${CODEX_HOME:-$HOME/.codex}/auth.json,
   #               OR (b) non-empty OPENAI_API_KEY.
@@ -132,7 +144,7 @@ if [[ -f "${PWD}/plugin/CLAUDE.md" ]] && grep -q "Guild — repo orientation" "$
 │                                                                 │
 │  You are working on the Guild plugin itself. Codex adversarial  │
 │  review is IMPLICITLY ALWAYS-ON for every G-spec / G-plan /     │
-│  G-lane gate (plugin/CLAUDE.md §"Codex adversarial review").    │
+│  G-lane gate (plugin/AGENTS.md §"Codex adversarial review").    │
 │                                                                 │
 │  ✓ codex CLI + auth detected (codex login or OPENAI_API_KEY).   │
 │    Invoke at every gate via `guild:codex-review` or              │
@@ -179,7 +191,7 @@ SELFBUILD_FAIL
   # `npx tsx plugin/scripts/docs-hygiene/scan.ts` or `/guild:wiki lint`. The
   # standing display turns the scan into a continuous-feedback hook without
   # adding wall-clock cost to every session start.
-  SCAN_FILE="${PWD}/plugin/scripts/docs-hygiene/.last-scan.md"
+  SCAN_FILE="${PLUGIN_ROOT}/scripts/docs-hygiene/.last-scan.md"
   if [[ -f "${SCAN_FILE}" ]]; then
     # Extract counts from the scan output's summary markdown table.
     # Table shape: "| <Label> | <count> |". Use awk to take the 3rd pipe column
@@ -219,8 +231,8 @@ SELFBUILD_FAIL
 │  Run once to seed the standing display:                         │
 │    npx tsx plugin/scripts/docs-hygiene/scan.ts                  │
 │                                                                 │
-│  See: docs/knowledge/decisions/                                 │
-│       knowledge-base-hygiene-and-grading.md                     │
+│  ADR: knowledge-base-hygiene-and-grading (workspace wiki)       │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 NOSCAN
   fi

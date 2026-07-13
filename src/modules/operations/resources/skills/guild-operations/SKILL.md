@@ -13,8 +13,8 @@ type: core
 <!--
   DH-3 BOUNDARY (static, read-only; never runtime-written — per-run records go
   to .guild/runs/<run-id>/ops/). CONTRACT FIDELITY: every ops/incident/release
-  reference is a POINTER (contract-map.md §A rows 8/9/10 → §639–745);
-  autonomy_contract / task_run pointer-cited (§B row 1 / §A row 1); P5 boundary
+  reference is a POINTER (./operations-contract.md §"guild.ops.v1 fields");
+  autonomy_contract / task_run pointer-cited (./operations-contract.md §Posture / §"Safety rails"); P5 boundary
   cited via P1-ownership-001 (not the guard impl); zero field text reproduced.
   ROUTER: per-class playbooks live in the sibling ops-* skills; this body owns
   the cross-class taxonomy, safety rails, ExecuteRunbook, and the D8 join, and
@@ -25,7 +25,7 @@ type: core
 
 Realizes **DI-3 (full Operations skill)** (`decisions/di1-di6-contracts.md`)
 against the frozen **`guild.ops.v1`** / **`guild.incident.v1`** /
-**`guild.release.v1`** (`contract-map.md §A` rows 8/9/10 → `§639–745`). Verb
+**`guild.release.v1`** (`./operations-contract.md §"guild.ops.v1 fields"`). Verb
 **`ops`** (never `ship`); gate **`G-operations`**. **No cloud-build (GR-7).**
 The **router**: selects the class, enforces the cross-class rails, then
 **dispatches the per-class playbook** `guild:ops-<class>`.
@@ -51,15 +51,15 @@ close-gate evidence join (consume-only).
 - The wiki trust root `.guild/wiki/standards/runbooks/<name>.md` (promoted via
   `guild:decisions`; kept under `.guild/` by the **P5 boundary CONTRACT** —
   cited via `P1-ownership-001`, never the guard implementation).
-- The additive `autonomy_contract` (`contract-map.md §B` row 1 →
-  `§"autonomy_policy / autonomy_contract"`, pointer); frozen ops/incident/release
-  (`§A` rows 8/9/10 → `§639–745`); the consumed `guild.quality.v1`.
+- The additive `autonomy_contract` (`./operations-contract.md §Posture`,
+  pointer); frozen ops/incident/release
+  (`./operations-contract.md §"guild.ops.v1 fields"`); the consumed `guild.quality.v1`.
 
 # Output format
 
 The routed playbook writes `guild.ops.v1` **always**; `guild.incident.v1` when
 `class ∈ {incident, rollback}`; `guild.release.v1` when `class == release` — all
-**by pointer** to `§639–729`. Per-step evidence under
+**by pointer** to `./operations-contract.md §"guild.ops.v1 fields"`. Per-step evidence under
 `.guild/runs/<run-id>/ops/evidence/`.
 
 # Workflow steps
@@ -67,33 +67,33 @@ The routed playbook writes `guild.ops.v1` **always**; `guild.incident.v1` when
 ## taxonomy + routing
 
 The **5 classes + default autonomy posture**, EXACTLY per
-`lifecycle/lifecycle-overview.md §548–559` (cited; not re-derived), and the
+`./operations-contract.md §Posture` (cited; not re-derived), and the
 **routing target** for each. **ClassSelect** from the `[runbook]` positional
 else surfaced detection — **always confirmed** — then dispatch the matching
-`ops-*` skill; populate `guild.ops.v1` head by pointer to `§646–655`:
+`ops-*` skill; populate `guild.ops.v1` head by pointer to `./operations-contract.md §"guild.ops.v1 fields"`:
 
-| Class | Default posture (§548–559) | Routes to |
+| Class | Default posture (`§Posture`) | Routes to |
 |---|---|---|
-| `release` | per §548–559 default | `guild:ops-release` |
-| `monitoring` | per §548–559 default | `guild:ops-monitoring` |
+| `release` | per `§Posture` default | `guild:ops-release` |
+| `monitoring` | per `§Posture` default | `guild:ops-monitoring` |
 | `incident` | **INTERACTIVE always — never autonomous** | `guild:ops-incident` |
 | `rollback` | **INTERACTIVE always — never autonomous** | `guild:ops-rollback` |
-| `maintenance` | per §548–559 default | `guild:ops-maintenance` |
+| `maintenance` | per `§Posture` default | `guild:ops-maintenance` |
 
 **Split posture** rides the interactive-by-default policy + the additive
-`autonomy_contract` (by pointer to `§"autonomy_policy / autonomy_contract"`);
+`autonomy_contract` (by pointer to `./operations-contract.md §Posture`);
 runbook approval lowers **only the SOFT gate**.
 
 ## safety-rails (router-enforced, never delegated)
 
-The 4 rails (VERBATIM-BY-POINTER to `lifecycle/lifecycle-overview.md §574–590`;
-pre-flight §611–615; wiki trust root §574–607) are enforced **here**, for every
+The 4 rails (VERBATIM-BY-POINTER to `./operations-contract.md §"Safety rails"`;
+pre-flight + wiki trust root covered there) are enforced **here**, for every
 class, **before dispatch** — and decompose into the machine-checkable
-`guild.ops.v1.safety_rails` 5-boolean block (**pointer to `§667–672`**). Rail 4
+`guild.ops.v1.safety_rails` 5-boolean block (**pointer to `./operations-contract.md §"Safety rails"`**). Rail 4
 (mandatory pre-flight) yields **TWO** booleans — a dry-run-ran leg and an
 allowlist-guard leg — so 4 rails → **5 booleans, NOT 1:1**:
 
-| # | Rail leg | → `safety_rails` boolean (§667–672, by pointer) |
+| # | Rail leg | → `safety_rails` boolean (`§"Safety rails"`, by pointer) |
 |---|---|---|
 | 1 | rail1: unproven runbook not autonomous; **first run interactive** | `unproven_runbook_was_interactive` |
 | 2 | rail2: **incident + rollback never autonomous** | `incident_rollback_not_autonomous` |
@@ -101,7 +101,7 @@ allowlist-guard leg — so 4 rails → **5 booleans, NOT 1:1**:
 | 4 | rail4: pre-flight **dry-run mandatory** (dry-run-ran leg) | `preflight_dry_run_ran` |
 | 5 | rail4 **allowlist-guard leg** | `no_hard_set_in_allowlist` |
 
-Each §667–672 boolean is the RHS of **exactly one** rail leg (5→5, **0 unmapped,
+Each `§"Safety rails"` boolean is the RHS of **exactly one** rail leg (5→5, **0 unmapped,
 0 double-mapped**); **all 5 `== true` is the rails-satisfied predicate.**
 **Allowlist reject:** `op_class_allowlist` may **NEVER** contain a hard-set
 class (destructive / network / spend) — **plan-validate, exit 2** (one
@@ -110,10 +110,10 @@ validator, two callers).
 ## execute (ExecuteRunbook shell)
 
 1. **Dispatch** the confirmed class to `guild:ops-<class>`; the playbook names
-   its producer (per `lifecycle/lifecycle-overview.md §616–622`) and emits the
+   its producer (per `./operations-contract.md §Posture`) and emits the
    outputs.
 2. **G-operations review — two distinct, both-kept mechanisms**
-   (`docs/v2/09-adversarial-review.md §The gates`, §Loop control):
+   (https://guildstack.dev/docs/adversarial-review):
    - **In-phase advisory panel (unchanged).** Challengers `[security,
      architect]`, cross-model-preferred; **≤4 active**; incident/rollback never
      exceed **producer + challenger**. Same-session review; non-blocking.
@@ -127,7 +127,7 @@ validator, two callers).
      args: gate=G-operations artifact_path=<ops-record-or-runbook-path> run_id=<run-id> author_host=<run author host>
      ```
 
-     Policy-gated (`docs/v2/09 §The review broker`): fires only on `risk ≥ high`
+     Policy-gated (https://guildstack.dev/docs/adversarial-review): fires only on `risk ≥ high`
      / `review: cross` / `--review=cross` / config — else `status: "skipped"`
      and the boundary passes (self-build = always-on). On `"rework"`, resolve
      before done-criteria. The broker gate is the cross-host layer; it does
@@ -135,15 +135,15 @@ validator, two callers).
      rails or the split autonomy posture — incident/rollback stay never-autonomous.
 3. **Done-criteria.** Terminal `outcome.status`; every hard-set step
    `autonomy: prompted_inline` (rail 3); `guild.ops.v1` (+ conditional
-   incident/release) validates by pointer to `§639–729`.
+   incident/release) validates by pointer to `./operations-contract.md §"guild.ops.v1 fields"`.
 
 ## d8-join (consume-only)
 
 The **`guild.release.v1 ↔ D8` 3-leg join** — CITED by pointer to
-`target-architecture.md §736–740` (field names as the join contract, not a
+`./operations-contract.md §"D8 close-gate join"` (field names as the join contract, not a
 re-spelled body):
 
-| Leg | Reads (release.v1, §736–740 by pointer) |
+| Leg | Reads (release.v1, `§"D8 close-gate join"` by pointer) |
 |---|---|
 | Release readiness | `release.outcome.status == completed` |
 | Documentation sync | `release.doc_sync_status` (`synced` **OR** `not_required` + `doc_sync_rationale`) |
@@ -165,7 +165,7 @@ After done-criteria + the d8-join and before phase close, fire the per-phase Lea
 
 - `taxonomy+routing`: 5-class posture table (incident/rollback never autonomous)
   + the class→`ops-*` routing column.
-- `safety-rails`: the 5-row rail-leg→boolean enumeration (each §667–672 boolean
+- `safety-rails`: the 5-row rail-leg→boolean enumeration (each `§"Safety rails"` boolean
   named once) + the 4↔5 reconciliation; allowlist exit-2.
 - `execute`: dispatch to `ops-<class>`; per-step `op_class`; hard-set step
   `prompted_inline`.
@@ -183,13 +183,13 @@ After done-criteria + the d8-join and before phase close, fire the per-phase Lea
 
 # Safety constraints
 
-- All 4 rails are **pointer-cited verbatim** (`§574–590`) and **router-enforced
+- All 4 rails are **pointer-cited verbatim** (`./operations-contract.md §"Safety rails"`) and **router-enforced
   before dispatch**; none relaxed under approval — approval lowers only the SOFT
   gate, never the hard set (rail 3), unconditional even inside an approved
   autonomous runbook.
 - No frozen ops/incident/release/`autonomy_contract` field text reproduced — all
-  by pointer through `contract-map.md`. **No cloud-build task** (GR-7;
-  `guild.cloud_task_packet.v1` is `[v2-contract-only]`, `contract-map.md §E`).
+  by pointer through `./operations-contract.md`. **No cloud-build task** (GR-7;
+  `guild.cloud_task_packet.v1` is `[v2-contract-only]`, https://guildstack.dev/docs/architecture).
 
 # Eval cases
 

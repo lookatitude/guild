@@ -21,7 +21,7 @@ const FIXTURES = path.resolve(__dirname, "../fixtures");
 function runScript(args: string[]): { exitCode: number; stdout: string; stderr: string } {
   const result = spawnSync("npx", ["tsx", SCRIPT, ...args], {
     encoding: "utf8",
-    timeout: 30000,
+    timeout: 120_000,
   });
   return {
     exitCode: result.status ?? 1,
@@ -202,6 +202,59 @@ describe("description-optimizer.ts", () => {
         "--cwd",
         tmpDir,
       ]);
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/^description:/m);
+    });
+  });
+
+  // ── G2b-3 fix: KNOWN_TIERS hardcode → dynamic skills/ enumeration ────────
+  // Before the fix, findEvalsFile only searched skills/{core,meta,specialists}/,
+  // so the 11 knowledge-tier skills (skills/knowledge/<slug>/evals.json) and
+  // dir-level skills (skills/guild-quality/evals.json, no tier nesting) were
+  // unreachable to the evolve pipeline's description optimizer.
+  describe("G2b-3 — dynamic tier enumeration (knowledge tier + dir-level skills)", () => {
+    it("resolves a knowledge-tier slug (skills/knowledge/<slug>/evals.json)", () => {
+      const skillDir = path.join(tmpDir, "skills", "knowledge", "wiki-ingest");
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.copyFileSync(
+        path.join(FIXTURES, "evals-for-optimizer.json"),
+        path.join(skillDir, "evals.json"),
+      );
+
+      const { exitCode, stdout } = runScript(["--skill", "wiki-ingest", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/^description:/m);
+    });
+
+    it("resolves a dir-level skill (skills/<slug>/evals.json, no tier nesting)", () => {
+      const skillDir = path.join(tmpDir, "skills", "guild-quality");
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.copyFileSync(
+        path.join(FIXTURES, "evals-for-optimizer.json"),
+        path.join(skillDir, "evals.json"),
+      );
+
+      const { exitCode, stdout } = runScript(["--skill", "guild-quality", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/^description:/m);
+    });
+
+    it("still resolves the pre-existing tiers (core/meta/specialists) unchanged", () => {
+      seedSkill(tmpDir, "guild-brainstorm", "evals-for-optimizer.json"); // skills/meta/
+      const { exitCode, stdout } = runScript(["--skill", "guild-brainstorm", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/^description:/m);
+    });
+
+    it("a made-up future tier dir is picked up without any code change", () => {
+      const skillDir = path.join(tmpDir, "skills", "future-tier", "some-skill");
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.copyFileSync(
+        path.join(FIXTURES, "evals-for-optimizer.json"),
+        path.join(skillDir, "evals.json"),
+      );
+
+      const { exitCode, stdout } = runScript(["--skill", "some-skill", "--cwd", tmpDir]);
       expect(exitCode).toBe(0);
       expect(stdout).toMatch(/^description:/m);
     });

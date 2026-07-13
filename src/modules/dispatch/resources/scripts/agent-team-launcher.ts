@@ -58,6 +58,7 @@ import {
   TmuxTeamBackend,
   RemoteTeamBackend,
   SshRemoteTransport,
+  InProcessTeamBackend,
   probeTmuxAvailable,
   shellQuote,
   type Specialist,
@@ -385,31 +386,10 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
   }
 }
 
-function parseHostKind(value: string): HostKind | undefined {
-  const v = stripQuotes(value).trim().toLowerCase();
-  if (v === "claude" || v === "codex" || v === "pi" || v === "antigravity-2") return v; // gemini sunset 2026-06-14
-  if (v === "antigravity" || v === "antigravity-cli") return "antigravity-2";
-  if (v === "claude-code-cli" || v === "claude-code-app" || v === "claude-code-desktop") return "claude";
-  if (v === "claude-code-web" || v === "claude-ai-connector") return "claude";
-  if (v === "codex-cli" || v === "codex-app") return "codex";
-  if (v === "pi-cli") return "pi";
-  return undefined;
-}
-
-function paneHostKindForStartingHost(value: string | undefined): HostKind | null {
-  const raw = (value ?? "").trim();
-  if (!raw) return "claude";
-  const parsed = parseHostKind(raw);
-  if (parsed) return parsed;
-  const normalized = normalizeHostId(raw);
-  const registryKind = normalized ? registryIdToCanonicalHostKind(normalized) : null;
-  const lower = raw.toLowerCase();
-  if (!registryKind) {
-    if (lower.startsWith("claude")) return "claude";
-    if (lower.startsWith("codex")) return "codex";
-    if (lower.startsWith("pi")) return "pi";
-    if (lower.startsWith("antigravity")) return "antigravity-2";
-  }
+/** Collapse the app/web/desktop/connector registry HostKinds onto their bare
+ * family HostKind ("claude"/"codex") — the same collapse the old hand-typed
+ * literal table applied. Shared by both resolution paths below. */
+function collapseAppVariant(registryKind: HostKind | null): HostKind | null {
   if (!registryKind) return null;
   if (
     registryKind === "claude-code-desktop" ||
@@ -420,6 +400,56 @@ function paneHostKindForStartingHost(value: string | undefined): HostKind | null
   }
   if (registryKind === "codex-app") return "codex";
   return registryKind;
+}
+
+/**
+ * STRICT registry-bridge resolution (`normalizeHostId` + `registryIdToCanonicalHostKind`):
+ * exact registry id or exact legacy alias only, NO prefix fuzz. DERIVED from the
+ * registry instead of a private per-host literal list — G4b (host-reachability
+ * fix): a NEW registry host (cursor/github-copilot/opencode/rovo-dev) resolves
+ * through this same path with ZERO launcher edits (their canonical HostKind
+ * literal is their registry host_id; see host-id-namespace.ts
+ * HOSTKIND_TO_REGISTRY_ID). Used by `parseHostKind` (team.yaml per-specialist
+ * `host:`), which must REJECT an operator typo (e.g. "claudee") rather than
+ * silently collapsing it onto a real host — `normalizeHostId` is deliberately
+ * strict for exactly this reason (see its own doc comment).
+ */
+function resolveHostKindStrict(value: string): HostKind | null {
+  const normalized = normalizeHostId(value);
+  const registryKind = normalized ? registryIdToCanonicalHostKind(normalized) : null;
+  return collapseAppVariant(registryKind);
+}
+
+/**
+ * TOLERANT registry-bridge resolution: additionally rescues an unrecognized
+ * `claude-*`/`codex-*`/`antigravity*` variant via `hostKindToRegistryId`'s
+ * prefix-collapse (host-id-namespace.ts PREFIX_COLLAPSE, byte-aligned with
+ * provider-detect.ts resolveAuthorHost()) plus a supplemental "pi" prefix check
+ * this launcher has always applied (broader than the shared prefix table, which
+ * intentionally excludes "pi"). Used ONLY by `paneHostKindForStartingHost`
+ * (GUILD_ORCHESTRATOR_HOST/GUILD_HOST env-var resolution), which has always been
+ * more forgiving than team.yaml parsing — NOT applied to `parseHostKind`.
+ */
+function resolveHostKindTolerant(value: string): HostKind | null {
+  const strict = resolveHostKindStrict(value);
+  if (strict) return strict;
+  const registryId = hostKindToRegistryId(value);
+  const registryKind = registryId ? registryIdToCanonicalHostKind(registryId) : null;
+  const collapsed = collapseAppVariant(registryKind);
+  if (collapsed) return collapsed;
+  if (value.toLowerCase().startsWith("pi")) return "pi";
+  return null;
+}
+
+function parseHostKind(value: string): HostKind | undefined {
+  const v = stripQuotes(value).trim().toLowerCase();
+  return resolveHostKindStrict(v) ?? undefined;
+}
+
+function paneHostKindForStartingHost(value: string | undefined): HostKind | null {
+  const raw = (value ?? "").trim();
+  if (!raw) return "claude";
+  return resolveHostKindTolerant(raw);
 }
 
 function resolveOrchestratorHostKind(env: NodeJS.ProcessEnv = process.env): HostKind | null {
@@ -992,9 +1022,56 @@ async function main(): Promise<void> {
   // for backward compatibility with existing callers.
   if (args.agentMode !== null) {
     const { mode: resolvedMode, reason } = resolveAgentMode(args.agentMode, args.dryRun);
+
+    if (resolvedMode === "agent") {
+      // D5 rung 3 (in-process / independent agents, no tmux). dispatch.md
+      // §"In-process dispatchPlan consumption" + SKILL.md §"Backend + routing"
+      // both document that the launcher actually CONSTRUCTS InProcessTeamBackend
+      // and returns its declarative dispatchPlan here — this rung was previously
+      // half-built (the launcher only ever emitted {backend,reason,slug} and
+      // exited, never constructing the backend). InProcessTeamBackend.launch()
+      // is a pure, synchronous computation (no live session, no subprocess) —
+      // fully usable from this one-shot CLI process, so there is no need to
+      // fall back to hand-rolling the descriptors: construct the real backend.
+      const slug = slugFromTeamPath(args.team);
+      // Reuse the caller's run-id when supplied (--run-id) so GUILD_RUN_ID inside
+      // each dispatchPlan descriptor's env matches the run directory the caller
+      // already created (guild:execute-plan §Input 4). Only mint a fresh one
+      // (e.g. for a standalone `--dry-run` preview with no caller-supplied id).
+      const runId = args.runId ?? makeRunId();
+      const cwd = path.resolve(args.cwd);
+      const orchestratorHostKind = resolveOrchestratorHostKind(process.env) ?? undefined;
+      const inProcess = new InProcessTeamBackend();
+      const result = inProcess.launch({
+        slug,
+        runId,
+        cwd,
+        specialists: team.specialists,
+        targetName: args.sessionName ?? `guild-${slug}`,
+        mode: process.env["TMUX"] ? "in-session" : "new-session",
+        dryRun: args.dryRun,
+        orchestratorHostKind,
+        teamPath: args.team,
+      });
+      const signal = {
+        backend: resolvedMode,
+        reason,
+        slug,
+        ok: result.ok,
+        dispatchPlan: result.dispatchPlan,
+        orchestratorPaneId: result.orchestratorPaneId,
+        teammatePaneIds: result.teammatePaneIds,
+        notes: result.notes,
+      };
+      process.stdout.write(JSON.stringify(signal) + "\n");
+      process.exit(0);
+    }
+
     if (resolvedMode !== "team") {
-      // Non-team backend: emit JSON signal and exit 0. The caller reads this
-      // to dispatch via the Agent tool (agent) or inline subagent path.
+      // subagent: execute-plan constructs the Agent() call itself directly
+      // from team.yaml + the plan (SKILL.md §"Capability-scope env injection")
+      // — there is no launcher-side descriptor to compute for this rung, so the
+      // signal stays the plain {backend, reason, slug} shape.
       const signal = {
         backend: resolvedMode,
         reason,

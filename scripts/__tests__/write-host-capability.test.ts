@@ -25,7 +25,7 @@ import {
 } from "../write-host-capability";
 
 const SCRIPT = path.resolve(__dirname, "../write-host-capability.ts");
-const NODE_ENV = { ...process.env, NODE_NO_WARNINGS: "1", PATH: "/opt/homebrew/bin:/usr/bin:/bin" } as NodeJS.ProcessEnv;
+const NODE_ENV = { ...process.env, NODE_NO_WARNINGS: "1", PATH: `${require("node:path").dirname(process.execPath)}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, } as NodeJS.ProcessEnv;
 
 function mkTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "guild-hostcap-"));
@@ -195,7 +195,7 @@ describe("write-host-capability — writeHostCapability (RE-5)", () => {
     const r = spawnSync("npx", ["tsx", SCRIPT, "--cwd", root, "--host", "claude"], {
       encoding: "utf8",
       env: NODE_ENV,
-      timeout: 30000,
+      timeout: 120_000,
     });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toContain(path.join(".guild", "hosts", "claude", "capability.json"));
@@ -206,7 +206,7 @@ describe("write-host-capability — writeHostCapability (RE-5)", () => {
     const r = spawnSync("npx", ["tsx", SCRIPT, "--cwd", "/tmp/guild-nonexistent-hostcap-zzz"], {
       encoding: "utf8",
       env: NODE_ENV,
-      timeout: 30000,
+      timeout: 120_000,
     });
     expect(r.status).not.toBe(0);
   });

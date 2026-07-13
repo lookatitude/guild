@@ -1,10 +1,13 @@
 ---
-title: Naming conventions
-category: standards
+type: standard
+owner: plugin-engineer
 confidence: high
-updated: 2026-03-01
-source_refs:
-  - .guild/raw/2026-02-14-naming-decision.md
+source_refs: [".guild/raw/2026-02-14-naming-decision.md"]
+created_at: 2026-03-01
+updated_at: 2026-03-01
+expires_at: null
+supersedes: null
+sensitivity: internal
 ---
 
 # Naming conventions

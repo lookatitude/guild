@@ -3,7 +3,7 @@ type: decision
 owner: tooling-engineer
 confidence: high
 importance: medium
-source_refs: ["plugin/scripts/dot-guild/audit.ts", "<HIGH_ENTROPY_REDACTED>-redirect.ts", "<HIGH_ENTROPY_REDACTED>-root.ts", ".gitignore"]
+source_refs: ["plugin/scripts/dot-guild/audit.ts", "plugin/scripts/lib/telemetry-redirect.ts", "plugin/hooks/lib/guild-root.ts", ".gitignore"]
 created_at: 2026-06-17
 updated_at: 2026-06-17
 expires_at: null

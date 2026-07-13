@@ -120,7 +120,13 @@ function evaluateLiveSurfaceRows(rows: DiffRow[]): {
  * an ancestor of HEAD, not HEAD). Pinned (not env-derived) so the guard's diff anchor cannot be
  * moved to HEAD/worktree to hide a committed live-surface mutation.
  */
-const PINNED_BASELINE = "4833f69"; // RE-RATIFIED 2026-07-01 to the settled dv2-reconciliation+init/config surface (was 4e91770; operator-directed "full green" — deliberate dv2 surface evolution + guild.yaml init/config rename; SC-2 equivalence remains the real cutover gate, GREEN)
+// RE-RATIFICATION RULE (read before bumping): the pin is the LAST commit on branch history that
+// deliberately changed the frozen surface (`.claude-plugin/**`, `commands/**`, live `skills/**`) and
+// is an ancestor of HEAD but NOT HEAD, leaving ZERO delta to the working tree so the guard is GREEN
+// now and trips the instant a NEW (unreleased) surface change lands. Bump it to that change's commit
+// on any deliberate surface change. NEVER auto-follow HEAD (a chasing pin lets a committed surface
+// mutation hide itself — the entire reason it is pinned, not env-derived).
+const PINNED_BASELINE = "f252524"; // RE-RATIFIED 2026-07-12 (plugin-audit-remediation G1b) to the settled specialist-template-library surface (was 4833f69, from 2026-07-01, which predated the v2.1.0 machinery-agents/specialist-template-library split, leaving it stale-RED on a clean checkout). 7958ed8 is the last surface-touching commit and is byte-identical to the current tree; later commits touch only tests/scripts. v2.1.0 (d2867f6) is NOT valid — the surface legitimately drifted past it on `next`. SC-2 normalized equivalence remains the real cutover gate, GREEN.
 
 function git(args: string[]): string {
   return execFileSync("git", args, { cwd: PLUGIN_ROOT, encoding: "utf8" }).trim();

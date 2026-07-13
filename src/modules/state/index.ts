@@ -1,3 +1,4 @@
+export * from "./workflows/atomic-write";
 export * from "./workflows/dependency-graph-reader";
 export * from "./workflows/dependency-graph-schema";
 export * from "./workflows/frontmatter";

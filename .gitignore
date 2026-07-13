@@ -22,23 +22,24 @@ node_modules/
 !/evidence/desktop-app-smoke/
 !/evidence/desktop-app-smoke/**
 
-# Fixture .guild/ dirs must be tracked (they are static test fixtures, not live runtime state).
-# These exemptions are non-negotiable — preserved verbatim per share-dot-guild constraints.
-# Keep this list in sync with FIXTURE_EXEMPT_PATTERNS in plugin/scripts/dot-guild/audit.ts (FU-F).
-!benchmark/fixtures/**/.guild/
-!benchmark/fixtures/**/.guild/**
-!mcp-servers/guild-telemetry/fixtures/**/.guild/
-!mcp-servers/guild-telemetry/fixtures/**/.guild/**
-!mcp-servers/guild-telemetry/fixtures-v14/**/.guild/
-!mcp-servers/guild-telemetry/fixtures-v14/**/.guild/**
-!tests/dot-guild/fixtures/**/.guild/
-!tests/dot-guild/fixtures/**/.guild/**
-
 # Anchor to repo root: `!.guild/` (unanchored, no internal /) would re-include nested
 # dirs like hooks/.guild/ or scripts/.guild/. Leading / anchors to gitignore directory.
 # .guild/ — share-dot-guild policy (see docs/knowledge/decisions/guild-boundary-config-and-tracking.md Decision E)
 .guild
 !/.guild/
+# HIGH (share-dot-guild risk-gate remediation, Decision J): default-deny every
+# top-level entry directly inside .guild/ so an unlisted/new subtree (e.g. a
+# future .guild/<new-thing>/) is NEVER silently committable by default — mirrors
+# the /evidence/** allow-list pattern above (deny-all, then narrowly re-include).
+# Each subtree below must be explicitly re-included: directories need the
+# two-line `!.guild/<dir>/` + `!.guild/<dir>/**` shape (the first line un-ignores
+# the directory itself so git will recurse into it at all; the second re-includes
+# its contents — gitignore will not check per-file rules inside a still-ignored
+# parent directory). A file-only re-include is a single `!.guild/<file>` line.
+# Anything NOT named below stays ignored — this is the fix for the audit finding
+# that .guild/context/, .guild/diagnose/, .guild/index.sqlite, etc. were
+# committable-by-default with no re-include line at all.
+.guild/*
 !.guild/guild.yaml
 !.guild/agents/
 !.guild/agents/**
@@ -56,6 +57,8 @@ node_modules/
 !.guild/memory/**
 !.guild/initiatives/
 !.guild/initiatives/**
+!.guild/init/
+!.guild/init/**
 !.guild/spec/
 !.guild/spec/**
 !.guild/plan/
@@ -85,6 +88,11 @@ node_modules/
 # Re-deny everything inside runs/<id>/ — FU-C: tighten to named-files-only.
 # Previously un-ignoring runs/<id>/ as a dir let any file through (run-state.json,
 # ad-hoc receipts). Now only the named handoffs/+files/dirs below are shared.
+# run-state.json IS in the FU-C re-include set: scripts/lib/shared/share-set.ts
+# already declares it shareable (canonical intent) — the ONE pre-existing tracked
+# instance (.guild/runs/run-809080ff-.../run-state.json) was untracked separately
+# below because it predates scrub verification; future instances are committable
+# post-scrub via this re-include.
 .guild/runs/*/**
 !.guild/runs/*/handoffs/
 !.guild/runs/*/handoffs/**
@@ -94,10 +102,62 @@ node_modules/
 !.guild/runs/*/run.yaml
 !.guild/runs/*/summary.md
 !.guild/runs/*/share-payloads.flag
+!.guild/runs/*/run-state.json
 
-# Re-deny operator-private / local-only sub-paths (D-SHR-4 + Decision G)
+# Re-deny operator-private / local-only sub-paths (D-SHR-4 + Decision G), plus
+# derived/runtime artifacts named explicitly for the audit trail even though the
+# `.guild/*` default-deny above already covers unlisted entries.
+# `.guild/runs/current-run-id` is a bare FILE directly under runs/ — NOT covered
+# by the `!.guild/runs/*/` (directories-only, one level) re-include, so it needs
+# its own explicit deny.
 .guild/settings.local.json
 .guild/hosts/
+.guild/index.sqlite
+.guild/runs/current-run-id
+
+# Fixture .guild/ dirs must be tracked (they are static test fixtures, not live runtime state).
+# These exemptions are non-negotiable — preserved verbatim per share-dot-guild constraints.
+# Keep this list in sync with FIXTURE_EXEMPT_PATTERNS in plugin/scripts/dot-guild/audit.ts (FU-F).
+# MUST come after the bare (unanchored) `.guild` blanket-ignore rule above — gitignore
+# resolves overlapping patterns by file order, so a fixture exemption declared BEFORE
+# that blanket rule is silently re-excluded by it. (Previously misplaced above the
+# blanket rule: the exemption was vacuous for any newly-added fixture file — only
+# looked correct because the existing fixture files were already tracked, and git
+# never re-applies ignore rules to already-tracked paths. Discovered while adding new
+# guild-memory/guild-telemetry MCP fixtures; see mcp-servers/**/fixtures*/.guild/**.)
+!benchmark/fixtures/**/.guild/
+!benchmark/fixtures/**/.guild/**
+!mcp-servers/guild-memory/fixtures/**/.guild/
+!mcp-servers/guild-memory/fixtures/**/.guild/**
+!mcp-servers/guild-telemetry/fixtures/**/.guild/
+!mcp-servers/guild-telemetry/fixtures/**/.guild/**
+!mcp-servers/guild-telemetry/fixtures-v14/**/.guild/
+!mcp-servers/guild-telemetry/fixtures-v14/**/.guild/**
+!mcp-servers/guild-telemetry/fixtures-alt-cwd/**/.guild/
+!mcp-servers/guild-telemetry/fixtures-alt-cwd/**/.guild/**
+!tests/dot-guild/fixtures/**/.guild/
+!tests/dot-guild/fixtures/**/.guild/**
+# tests/wiki-lint/fixtures/**/.guild/ was declared EXEMPT in FIXTURE_EXEMPT_PATTERNS
+# (plugin/scripts/dot-guild/audit.ts) but had NO matching re-include here — a real
+# drift between the two allow-lists this audit pass found via the exemption-parity
+# test (scripts/dot-guild/__tests__/exemption-parity.test.ts). Latent/harmless only
+# because no wiki-lint fixture has ever needed a nested .guild/ yet; fixed here so
+# the exemption and the re-include stay in lockstep.
+!tests/wiki-lint/fixtures/**/.guild/
+!tests/wiki-lint/fixtures/**/.guild/**
+!hooks/__tests__/fixtures/golden-full-learn-run/.guild/
+!hooks/__tests__/fixtures/golden-full-learn-run/.guild/**
+
+# Point-in-time SC-11 remediation (Decision J risk-gate, this audit pass): these
+# plugin-specific paths were found tracked-in-error (leaked past the pre-fix
+# allow-list, before the `.guild/*` default-deny above existed). They are
+# already covered by the default-deny (unlisted subtrees) but are named here as
+# an explicit incident record. Kept BELOW the fixture-exemption block so the
+# canonical share-dot-guild block above stays byte-identical across the 4
+# workspace repos (tests/dot-guild/gitignore-equivalence.test.ts).
+.guild/context/run-host-adapter-reconcile-20260621/
+.guild/diagnose/20260626T101814Z-evolve-run-left-open.md
+
 # Re-deny the structural-cache sidecar: a LOCAL-ONLY, rebuildable, derived artifact (our deterministic extractor output) — never committed/exported/shared. This later rule wins over the !.guild/indexes/** re-include above, so even where .guild/indexes/** is tracked a tampered cache can never be committed (FIX-T4.1-r6; threat model in scripts/understand/lib/bundle-validate.ts).
 **/*.structural-cache.json
 

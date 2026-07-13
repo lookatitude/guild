@@ -4,7 +4,8 @@
  * CANONICAL, single-source KnowledgeGraph node-scoring helpers (re-arch WAVE 1,
  * M9 single-source floor). The ONE place these scorers live. Consumers:
  *   - scripts/learn/kg-query.ts  (re-exports + uses the full scoreNode path)
- *   - scripts/lib/recall.ts           (uses termMatchScore for its KG branch)
+ *   - src/modules/context/workflows/recall.ts (uses rankKgNodes for its KG branch;
+ *       driven via the scripts/lib/recall.ts CLI wrapper)
  *
  * Determinism (SC-9): every field here is deterministic-script; no LLM calls.
  * Behaviour is byte-for-byte the same as the former kg-query.ts copy — the

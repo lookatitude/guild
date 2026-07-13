@@ -68,6 +68,7 @@ npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/write-task-run.ts \
   --depends-on <id,id,...> \
   --max-tokens <scored-budget> --max-turns <scored-turns> \
   [--needs-pr] [--needs-parallel] [--needs-network] \
+  [--phase <phase>] \
   --isolation <worktree|none> --host-requested <kind>
 ```
 
@@ -75,7 +76,12 @@ It writes `.guild/runs/<run-id>/task-runs/<task-id>.yaml` (top-level
 `task_run:` wrapper, `context_bundle`, `host.capability_requirements`). Derive
 `--max-tokens`/`--max-turns` from the lane's **scored tier** (step 2 — not a flat
 default) and the `--needs-*`/`--isolation`/`--host-requested` flags from the
-lane's `team.yaml` `host:` block + scope. The written
+lane's `team.yaml` `host:` block + scope. `--phase <phase>` (default `execute`)
+sets the lifecycle phase stamped into the `guild.trace.dispatch.v1` event — it is
+a real, caller-supplied phase, not derived from `--initiative-id`. Lanes running
+mid-`/guild:build` should pass `--phase execute` explicitly (or the phase they
+are actually in, e.g. `review` for a review-loop lane) rather than relying on
+the default. The written
 `host.capability_requirements` is the **same object** the router reads as
 `LaneRequest.capabilityRequirements` in `route()` — writer→router round-trip
 identity.

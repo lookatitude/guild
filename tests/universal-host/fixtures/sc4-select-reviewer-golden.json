@@ -16,7 +16,7 @@
   },
   "cross + pin gemini-cli (no adapter) ⇒ skipped (honor-or-refuse)": {
     "provider": null,
-    "reason": "pinned provider 'gemini-cli' is detected but NOT selectable for review=cross (no usable adapter yet / auth incomplete) — refusing to silently substitute another provider",
+    "reason": "pinned provider 'gemini-cli' is unknown — not selectable for review=cross",
     "status": "skipped"
   },
   "cross + pin claude (same family as author) ⇒ skipped (no self-review)": {

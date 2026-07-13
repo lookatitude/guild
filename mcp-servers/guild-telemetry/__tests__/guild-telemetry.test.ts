@@ -19,6 +19,9 @@ const FIXTURES = path.resolve(__dirname, "../fixtures");
 // live log (logs/v1.4-events.jsonl) so the legacy-shape assertions above stay
 // independent of these.
 const FIXTURES_V14 = path.resolve(__dirname, "../fixtures-v14");
+// A third, disjoint fixture root used only to prove that an explicit
+// per-tool `cwd` argument wins over GUILD_TELEMETRY_CWD (fix).
+const FIXTURES_ALT_CWD = path.resolve(__dirname, "../fixtures-alt-cwd");
 
 async function makeClientForCwd(cwd: string): Promise<Client> {
   const transport = new StdioClientTransport({
@@ -387,6 +390,51 @@ describe("guild-telemetry MCP server", () => {
           arguments: { run_id: "nope" },
         });
         expect(res.isError).toBe(true);
+      } finally {
+        await client.close();
+      }
+    });
+  });
+
+  // ─── status "n/a" handling (fix) ─────────────────────────────────
+  describe('tool_call status "n/a"', () => {
+    it("is treated as neither ok nor error — excluded from ok_rate, not counted as an error", async () => {
+      const client = await makeClientV14();
+      try {
+        const res = await client.callTool({
+          name: "trace_summary",
+          arguments: { run_id: "run-status-na" },
+        });
+        const payload = parseJson(res);
+        // Fixture: 1 "ok", 1 "error", 2 "n/a" tool_call events.
+        // Old (broken) behavior: n/a -> ok=false, so errors=3, ok_rate=0.25.
+        // Fixed behavior: only the ok/error-defined events (2) count;
+        // errors=1, ok_rate=0.5.
+        expect(payload.summary).toMatch(/event_count:\s*4/);
+        expect(payload.summary).toMatch(/errors:\s*1/);
+        expect(payload.summary).toMatch(/ok_rate:\s*0\.5/);
+      } finally {
+        await client.close();
+      }
+    });
+  });
+
+  // ─── cwd resolution precedence (fix) ──────────────────────────────
+  describe("cwd resolution", () => {
+    it("an explicit per-tool `cwd` argument wins over GUILD_TELEMETRY_CWD", async () => {
+      // Server process env sets GUILD_TELEMETRY_CWD to the default fixtures
+      // dir (2 runs); the tool call passes an explicit cwd pointing at a
+      // disjoint fixture root with exactly 1 run. The explicit argument must
+      // win so federated per-child cwd fan-out works on a long-lived server.
+      const client = await makeClient();
+      try {
+        const res = await client.callTool({
+          name: "trace_list_runs",
+          arguments: { cwd: FIXTURES_ALT_CWD },
+        });
+        const payload = parseJson(res);
+        expect(payload.runs.length).toBe(1);
+        expect(payload.runs[0].run_id).toBe("run-only");
       } finally {
         await client.close();
       }

@@ -29,7 +29,14 @@
         "claude-code-app": null,
         "claude-code-web": null,
         "codex-app": null,
-        "claude-ai-connector": null
+        "claude-ai-connector": null,
+        "cursor": null,
+        "github-copilot": null,
+        "opencode": null,
+        "rovo-dev": null,
+        "kiro": null,
+        "qoder": null,
+        "trae": null
       },
       "mid": {
         "claude-code-cli": "sonnet",
@@ -40,7 +47,14 @@
         "claude-code-app": null,
         "claude-code-web": null,
         "codex-app": null,
-        "claude-ai-connector": null
+        "claude-ai-connector": null,
+        "cursor": null,
+        "github-copilot": null,
+        "opencode": null,
+        "rovo-dev": null,
+        "kiro": null,
+        "qoder": null,
+        "trae": null
       },
       "powerful": {
         "claude-code-cli": "opus",
@@ -51,7 +65,14 @@
         "claude-code-app": null,
         "claude-code-web": null,
         "codex-app": null,
-        "claude-ai-connector": null
+        "claude-ai-connector": null,
+        "cursor": null,
+        "github-copilot": null,
+        "opencode": null,
+        "rovo-dev": null,
+        "kiro": null,
+        "qoder": null,
+        "trae": null
       }
     },
     "scoreWeights": {

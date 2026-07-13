@@ -5,9 +5,15 @@
  * @modelcontextprotocol/sdk client. Each test covers the tool's happy path
  * plus at least one edge case per guild-plan.md §13.3.
  *
- * All fixture wiki pages live under ./fixtures/wiki/ and the server is
- * invoked with cwd argument pointing at the fixtures dir so .guild/wiki
- * resolution works without the fixture living under .guild/.
+ * All fixture wiki pages live under ./fixtures/wiki/ and are written in the
+ * REAL §10.1.1 producer shape (type/owner/confidence/source_refs/created_at/
+ * updated_at/expires_at/supersedes/sensitivity — the shape guild:wiki-ingest
+ * and guild:decisions actually write, copied from this repo's own
+ * .guild/wiki/ pages), not the server's previously-wrong assumed shape
+ * (title/category-as-directory-override/updated/block-list-only source_refs).
+ * The server is invoked with a `cwd` argument (or GUILD_MEMORY_WIKI_ROOT env
+ * var) pointing at the fixtures dir so .guild/wiki resolution works without
+ * the fixture living under a real .guild/.
  */
 
 import * as path from "path";
@@ -17,13 +23,14 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 const SERVER = path.resolve(__dirname, "../src/index.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
 
-async function makeClient(): Promise<Client> {
+async function makeClient(env: Record<string, string> = {}): Promise<Client> {
   const transport = new StdioClientTransport({
     command: "npx",
     args: ["-y", "tsx", SERVER],
     env: {
       ...(process.env as Record<string, string>),
       GUILD_MEMORY_WIKI_ROOT: path.join(FIXTURES, "wiki"),
+      ...env,
     },
   });
   const client = new Client(
@@ -87,14 +94,81 @@ describe("guild-memory MCP server", () => {
         const payload = parseJson(res);
         expect(Array.isArray(payload.results)).toBe(true);
         expect(payload.results.length).toBeGreaterThan(0);
-        // The decisions page is the exact match — should rank first.
-        expect(payload.results[0].path).toMatch(/decisions\/bm25-over-embeddings\.md$/);
-        expect(payload.results[0]).toHaveProperty("category", "decisions");
-        expect(payload.results[0]).toHaveProperty("score");
-        expect(typeof payload.results[0].score).toBe("number");
-        expect(payload.results[0]).toHaveProperty("excerpt");
-        expect(payload.results[0]).toHaveProperty("confidence");
-        expect(payload.results[0]).toHaveProperty("source_refs");
+        // The decisions page is the exact match — should rank first. Its
+        // title is derived from its H1 (canonical pages carry no `title:`
+        // frontmatter field), proving the 2x title boost is no longer inert.
+        const top = payload.results[0];
+        expect(top.path).toMatch(/decisions\/bm25-over-embeddings\.md$/);
+        expect(top).toHaveProperty("category", "decisions");
+        expect(top).toHaveProperty("score");
+        expect(typeof top.score).toBe("number");
+        expect(top).toHaveProperty("excerpt");
+        expect(top).toHaveProperty("confidence");
+        expect(top).toHaveProperty("source_refs");
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("flags type_valid true for a page whose type: is in the §10.1.1 canonical enum (wiki-frontmatter-contract.ts)", async () => {
+      const client = await makeClient();
+      try {
+        const res = await client.callTool({
+          name: "wiki_search",
+          arguments: { query: "BM25 embeddings search" },
+        });
+        const payload = parseJson(res);
+        const top = payload.results[0];
+        // Fixture declares `type: decision` — a canonical WIKI_PAGE_TYPES value.
+        expect(top.type).toBe("decision");
+        expect(top.type_valid).toBe(true);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("returns source_refs as an array, not a raw string (fix: inline flow-list parsing)", async () => {
+      const client = await makeClient();
+      try {
+        const res = await client.callTool({
+          name: "wiki_search",
+          arguments: { query: "BM25 embeddings search" },
+        });
+        const payload = parseJson(res);
+        const top = payload.results[0];
+        // Fixture declares source_refs as an inline flow list:
+        // source_refs: [".guild/raw/2026-03-20-search-benchmark.md", "docs/v2/13-mcp-servers.md"]
+        expect(Array.isArray(top.source_refs)).toBe(true);
+        expect(top.source_refs).toEqual([
+          ".guild/raw/2026-03-20-search-benchmark.md",
+          "docs/v2/13-mcp-servers.md",
+        ]);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("category filter uses the wiki directory segment, not frontmatter `category` (fix)", async () => {
+      const client = await makeClient();
+      try {
+        // The decisions fixture carries `category: architecture` in its
+        // frontmatter (a §10.3 TOPIC taxonomy value, per guild:decisions),
+        // NOT the directory name. Filtering by category:"decisions" must
+        // still find it via the directory segment.
+        const res = await client.callTool({
+          name: "wiki_search",
+          arguments: { query: "BM25 deterministic", category: "decisions" },
+        });
+        const payload = parseJson(res);
+        expect(payload.results.length).toBeGreaterThan(0);
+        const hit = payload.results.find((r: any) =>
+          r.path.endsWith("bm25-over-embeddings.md")
+        );
+        expect(hit).toBeDefined();
+        expect(hit.category).toBe("decisions");
+        // The frontmatter topic is surfaced separately, not conflated.
+        expect(hit.frontmatter_category).toBe("architecture");
+        expect(hit.type).toBe("decision");
       } finally {
         await client.close();
       }
@@ -156,10 +230,33 @@ describe("guild-memory MCP server", () => {
         });
         const payload = parseJson(res);
         expect(payload.frontmatter).toBeDefined();
-        expect(payload.frontmatter.title).toMatch(/BM25/);
+        expect(payload.frontmatter.type).toBe("decision");
+        expect(payload.frontmatter.owner).toBe("architect");
         expect(payload.frontmatter.confidence).toBe("high");
         expect(payload.frontmatter.decision_id).toBe("D-2026-03-22-01");
+        // §10.3 topic taxonomy field — distinct from the directory category.
+        expect(payload.frontmatter.category).toBe("architecture");
+        // Inline flow-list source_refs parses to a real array (fix).
+        expect(Array.isArray(payload.frontmatter.source_refs)).toBe(true);
+        expect(payload.frontmatter.source_refs).toHaveLength(2);
         expect(payload.body).toMatch(/deterministic/);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("parses a block-style (indented `- item`) source_refs list too", async () => {
+      const client = await makeClient();
+      try {
+        const res = await client.callTool({
+          name: "wiki_get",
+          arguments: { path: "standards/testing-policy.md" },
+        });
+        const payload = parseJson(res);
+        expect(Array.isArray(payload.frontmatter.source_refs)).toBe(true);
+        expect(payload.frontmatter.source_refs).toEqual([
+          ".guild/raw/2026-03-18-testing-summit.md",
+        ]);
       } finally {
         await client.close();
       }
@@ -205,11 +302,81 @@ describe("guild-memory MCP server", () => {
         expect(Array.isArray(payload.pages)).toBe(true);
         // 1 index + 2 context + 2 standards + 1 decisions = 6
         expect(payload.pages.length).toBe(6);
-        // Each entry has path, category, updated
+        // Each entry has path, category, title
         for (const p of payload.pages) {
           expect(p).toHaveProperty("path");
           expect(p).toHaveProperty("category");
+          expect(p).toHaveProperty("title");
+          expect(typeof p.title).toBe("string");
+          expect(p.title.length).toBeGreaterThan(0);
         }
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("flags type_valid per page against the §10.1.1 canonical enum, and false for index.md (no frontmatter at all)", async () => {
+      const client = await makeClient();
+      try {
+        const res = await client.callTool({
+          name: "wiki_list",
+          arguments: {},
+        });
+        const payload = parseJson(res);
+        const decision = payload.pages.find(
+          (p: any) => p.path === "decisions/bm25-over-embeddings.md"
+        );
+        expect(decision.type).toBe("decision");
+        expect(decision.type_valid).toBe(true);
+        // index.md has no frontmatter block at all — type is absent, so
+        // type_valid must be false (never throws on a non-conforming page).
+        const index = payload.pages.find((p: any) => p.path === "index.md");
+        expect(index.type).toBeNull();
+        expect(index.type_valid).toBe(false);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("derives title from the first H1 when no frontmatter `title` exists (fix)", async () => {
+      const client = await makeClient();
+      try {
+        const res = await client.callTool({
+          name: "wiki_list",
+          arguments: {},
+        });
+        const payload = parseJson(res);
+        const index = payload.pages.find((p: any) => p.path === "index.md");
+        // index.md carries NO frontmatter block at all (matches this repo's
+        // real .guild/wiki/index.md shape) — title must fall back to the H1.
+        expect(index.title).toBe("Wiki index");
+        const decision = payload.pages.find(
+          (p: any) => p.path === "decisions/bm25-over-embeddings.md"
+        );
+        expect(decision.title).toBe(
+          "BM25 chosen over embeddings for initial wiki search"
+        );
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("filters by category using the directory segment, not frontmatter `category` (fix)", async () => {
+      const client = await makeClient();
+      try {
+        const res = await client.callTool({
+          name: "wiki_list",
+          arguments: { category: "decisions" },
+        });
+        const payload = parseJson(res);
+        // The decisions fixture's frontmatter `category: architecture` (a
+        // topic value) must not exclude it from the "decisions" directory
+        // filter.
+        expect(payload.pages.length).toBe(1);
+        expect(payload.pages[0].path).toBe("decisions/bm25-over-embeddings.md");
+        expect(payload.pages[0].category).toBe("decisions");
+        expect(payload.pages[0].frontmatter_category).toBe("architecture");
+        expect(payload.pages[0].type).toBe("decision");
       } finally {
         await client.close();
       }
@@ -232,7 +399,7 @@ describe("guild-memory MCP server", () => {
       }
     });
 
-    it("filters by updated_since when supplied (edge)", async () => {
+    it("filters by updated_since reading `updated_at` (fix: was reading a key no canonical page has)", async () => {
       const client = await makeClient();
       try {
         const res = await client.callTool({
@@ -240,13 +407,37 @@ describe("guild-memory MCP server", () => {
           arguments: { updated_since: "2026-03-15" },
         });
         const payload = parseJson(res);
-        // Only bm25-decisions (2026-03-22) and testing-policy (2026-04-05) qualify
+        // bm25-over-embeddings (updated_at: 2026-03-22) and testing-policy
+        // (legacy `updated:` 2026-04-05 — no updated_at at all) both qualify.
         expect(payload.pages.length).toBe(2);
         const paths = payload.pages.map((p: any) => p.path).sort();
         expect(paths).toEqual([
           "decisions/bm25-over-embeddings.md",
           "standards/testing-policy.md",
         ]);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("surfaces `updated` in the output from updated_at, with legacy `updated` as fallback", async () => {
+      const client = await makeClient();
+      try {
+        const res = await client.callTool({
+          name: "wiki_list",
+          arguments: {},
+        });
+        const payload = parseJson(res);
+        const canonical = payload.pages.find(
+          (p: any) => p.path === "context/project-overview.md"
+        );
+        expect(canonical.updated).toBe("2026-01-15"); // from updated_at
+        const legacy = payload.pages.find(
+          (p: any) => p.path === "standards/testing-policy.md"
+        );
+        expect(legacy.updated).toBe("2026-04-05"); // from legacy `updated` fallback
+        const noDate = payload.pages.find((p: any) => p.path === "index.md");
+        expect(noDate.updated).toBeNull();
       } finally {
         await client.close();
       }
@@ -264,6 +455,32 @@ describe("guild-memory MCP server", () => {
           arguments: {},
         });
         expect(parseJson(res1)).toEqual(parseJson(res2));
+      } finally {
+        await client.close();
+      }
+    });
+  });
+
+  // ─── wiki root resolution precedence ──────────────────────────────
+  describe("wiki root resolution", () => {
+    it("an explicit per-tool `cwd` argument wins over GUILD_MEMORY_WIKI_ROOT (fix)", async () => {
+      // Server process env still sets GUILD_MEMORY_WIKI_ROOT to fixtures/wiki
+      // (6 pages); the tool call passes an explicit cwd pointing at a
+      // completely different repo root with exactly 1 page. The explicit
+      // argument must win so federated per-child cwd fan-out works on a
+      // long-lived server even when a launch-time env var is set.
+      const client = await makeClient();
+      try {
+        const res = await client.callTool({
+          name: "wiki_list",
+          arguments: { cwd: path.join(FIXTURES, "alt-repo") },
+        });
+        const payload = parseJson(res);
+        expect(payload.pages.length).toBe(1);
+        expect(payload.pages[0].path).toBe("only-page.md");
+        expect(payload.wiki_root).toBe(
+          path.join(FIXTURES, "alt-repo", ".guild", "wiki")
+        );
       } finally {
         await client.close();
       }

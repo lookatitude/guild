@@ -8,14 +8,14 @@
       "id": "migrate",
       "source_path": "commands/migrate.md",
       "resource_path": "resources/commands/migrate.md",
-      "sha256": "825435b3c051e53f10d64a35fa999fa80e029ad022cf53b342b488ddc247e7bc"
+      "sha256": "e5eeef11e67e2b9971f939422ef05f1eaabd093778c4b620ad7310723a714cf9"
     },
     {
       "category": "scripts",
       "id": "dot-guild/audit",
       "source_path": "scripts/dot-guild/audit.ts",
       "resource_path": "resources/scripts/dot-guild/audit.ts",
-      "sha256": "9ec7d8b5152976b0467f856c2b9b6d34257f349f7b1e5a236b9ccf22cdd26ee4"
+      "sha256": "3229eaa85c2bb0b9f08c387b4dce423b9b4cfe07c1a697f184b6ceb009b31bc6"
     },
     {
       "category": "scripts",
@@ -113,14 +113,7 @@
       "id": "sync-migration",
       "source_path": "scripts/sync-migration.ts",
       "resource_path": "resources/scripts/sync-migration.ts",
-      "sha256": "c167d38cf300038d46c36fcd20592f1cfae90d4e620b08a46883a5a77be0edc2"
-    },
-    {
-      "category": "scripts",
-      "id": "v1.4-summary-md-regen",
-      "source_path": "scripts/v1.4-summary-md-regen.ts",
-      "resource_path": "resources/scripts/v1.4-summary-md-regen.ts",
-      "sha256": "dd7f8c31dd8e6c603f5aebcdac1decf4cb2e314f4ecfd4df6d002818d6286a22"
+      "sha256": "8264ff9bf48ad5ccf0ef689577eaf8df7aedfa262e8ff8e44201491cf1224f00"
     }
   ]
 }

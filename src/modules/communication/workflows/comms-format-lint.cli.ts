@@ -30,7 +30,7 @@
  * Hook bundle: imports comms-format-lint.ts directly (not this file).
  *
  * Owner: tooling-engineer.
- * Policy ref: docs/knowledge/decisions/communication-format-policy.md
+ * Policy ref: ADR: communication-format-policy (workspace wiki)
  */
 
 import { lintCommsFormat, printFindings, parseArgs } from "./comms-format-lint";

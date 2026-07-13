@@ -10,34 +10,13 @@
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { classifyIntake } from "../../scripts/lib/classify-intake";
-import { detectImpact } from "../../scripts/lib/workspace-impact-detector";
 import { validateExploreV1, EXPLORE_V1_EXAMPLE } from "../../scripts/lib/explore-schema";
 import { validateDefineV1, DEFINE_V1_EXAMPLE } from "../../scripts/lib/define-schema";
-import type { DependencyGraphV1 } from "../../scripts/lib/dependency-graph-schema";
-
-const GRAPH: DependencyGraphV1 = {
-  schema_version: "guild.dependency_graph.v1",
-  nodes: [
-    { id: "plugin", path: "plugin" },
-    { id: "website", path: "website" },
-    { id: "benchmark", path: "benchmark" },
-  ],
-  edges: [
-    { from: "website", to: "plugin" },
-    { from: "benchmark", to: "website" },
-  ],
-};
 
 describe("SC-W1-9 — additive pure surfaces are deterministic (A/B)", () => {
   it("classifyIntake: same prompt ⇒ byte-identical result", () => {
     const p = "I have an idea for an app that helps neighbors share tools";
     expect(JSON.stringify(classifyIntake(p))).toBe(JSON.stringify(classifyIntake(p)));
-  });
-
-  it("detectImpact: same graph + change-set ⇒ byte-identical map", () => {
-    expect(JSON.stringify(detectImpact(GRAPH, ["plugin"]))).toBe(
-      JSON.stringify(detectImpact(GRAPH, ["plugin"]))
-    );
   });
 
   it("validators: stable verdict on the producer examples (no drift)", () => {

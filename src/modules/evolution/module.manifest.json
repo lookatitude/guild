@@ -24,7 +24,8 @@
     ],
     "hooks": [
       "Stop:learning-backstop.js",
-      "Stop:maybe-reflect.js"
+      "Stop:maybe-reflect.js",
+      "SubagentStop:maybe-reflect.js"
     ],
     "scripts": [
       "analyze-runs",

@@ -8,10 +8,8 @@ describe("index-cache compatibility shim", () => {
     expect(shim.DEFAULT_INDEX_BLOCK).toBe(moduleImpl.DEFAULT_INDEX_BLOCK);
     expect(shim.resolveMainRepoRoot).toBe(moduleImpl.resolveMainRepoRoot);
     expect(shim.ensureKgIndex).toBe(moduleImpl.ensureKgIndex);
-    expect(shim.ensureKlIndex).toBe(moduleImpl.ensureKlIndex);
-    expect(shim.ensureRunProvenanceIndex).toBe(moduleImpl.ensureRunProvenanceIndex);
+    expect(shim.ensureKgProjectionIndex).toBe(moduleImpl.ensureKgProjectionIndex);
     expect(shim.ensureWikiFtsIndex).toBe(moduleImpl.ensureWikiFtsIndex);
-    expect(shim.ensureFederationWikiCache).toBe(moduleImpl.ensureFederationWikiCache);
   });
 
   test("legacy path stays a thin public wrapper", () => {

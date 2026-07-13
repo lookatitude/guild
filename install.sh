@@ -254,9 +254,15 @@ detect_hosts() {
   command -v pi           >/dev/null 2>&1 && detected="$detected pi-cli"
   command -v agy          >/dev/null 2>&1 && detected="$detected antigravity-cli"
   command -v cursor-agent >/dev/null 2>&1 && detected="$detected cursor"
-  command -v gh           >/dev/null 2>&1 && detected="$detected github-copilot"
+  # github-copilot and rovo-dev are SUBCOMMANDS of a shared, much more common bin
+  # (`gh`/`acli`) — per the host-registry detection SoT (host-registry-schema.ts
+  # detection.subcommand), presence of the bare bin does NOT mean the extension is
+  # installed. Probe the subcommand itself, matching `gh copilot --help` /
+  # `acli rovodev --help`; a generic `gh`/`acli` install with no extension must
+  # NOT be misdetected as github-copilot/rovo-dev.
+  command -v gh   >/dev/null 2>&1 && gh copilot --help     >/dev/null 2>&1 && detected="$detected github-copilot"
   command -v opencode     >/dev/null 2>&1 && detected="$detected opencode"
-  command -v acli         >/dev/null 2>&1 && detected="$detected rovo-dev"
+  command -v acli >/dev/null 2>&1 && acli rovodev --help   >/dev/null 2>&1 && detected="$detected rovo-dev"
   # Additive IDE project-marker probe against the current project root (ADR §3.3).
   [ -d "$(pwd)/.kiro" ]  && detected="$detected kiro"
   [ -d "$(pwd)/.qoder" ] && detected="$detected qoder"

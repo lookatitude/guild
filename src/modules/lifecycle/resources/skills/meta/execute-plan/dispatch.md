@@ -21,9 +21,30 @@ Two hard constraints:
 
 ### In-process dispatchPlan consumption
 
-When the snapshot-resolved backend is `in-process` (D5 `agent` rung — §RE-4 / VC-RE-4 of the runtime and execution model ADR), the launcher (`InProcessTeamBackend.launch()`) returns `ok:true` with a declarative `dispatchPlan: GuildDispatchDescriptor[]` — one descriptor per specialist. A `TeamBackend` is a plain TypeScript class; it **cannot** call the Agent tool. `guild:execute-plan` consumes `result.dispatchPlan` and issues the Agent tool calls itself:
+When the snapshot-resolved backend is `in-process` (D5 `agent` rung — §RE-4 / VC-RE-4 of the runtime and execution model ADR), invoke the launcher the same way as the team backend (`## Agent-team launcher` below) but with `--agent-mode=agent` (or `--agent-mode=auto` when the ladder itself should decide) instead of relying on `team.yaml`'s `backend:` key — pass `--run-id <the run's own run-id>` so the descriptors' `GUILD_RUN_ID` matches the run directory `guild:execute-plan` already created (Input 4), or omit it only for a standalone `--dry-run` preview:
 
-1. **For each descriptor in `result.dispatchPlan`** (in DAG order per `## Parallelism rules`):
+```
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/agent-team-launcher.ts --team <resolved-team-path> --cwd <repo-root> --agent-mode=agent --run-id <run-id>
+```
+
+The process prints exactly one JSON line to stdout and exits 0:
+
+```json
+{
+  "backend": "agent",
+  "reason": "<D5 ladder reason string>",
+  "slug": "<team slug>",
+  "ok": true,
+  "dispatchPlan": [ { "name": "...", "subagentType": "...", "model": null, "env": { "GUILD_RUN_ID": "...", "GUILD_SPECIALIST": "...", "GUILD_TASK_ID": "..." }, "prompt": "...", "definitionPath": null } ],
+  "orchestratorPaneId": null,
+  "teammatePaneIds": {},
+  "notes": [ "..." ]
+}
+```
+
+The launcher (`InProcessTeamBackend.launch()`, constructed by the launcher's D5 ladder — it is NOT a stub the launcher merely signals about) returns this `ok:true` + declarative `dispatchPlan: GuildDispatchDescriptor[]` shape — one descriptor per specialist. A `TeamBackend` is a plain TypeScript class; it **cannot** call the Agent tool. `guild:execute-plan` reads `signal.dispatchPlan` from the parsed stdout and issues the Agent tool calls itself:
+
+1. **For each descriptor in `signal.dispatchPlan`** (in DAG order per `## Parallelism rules`):
    - Resolve tier + model via tier resolution (`model: null` from backend — tiering is orthogonal to backend choice; execute-plan scores and resolves).
    - Inject capability-scope env vars (`GUILD_CAPABILITY_SCOPE` / `GUILD_AUTONOMY_CONTRACT`) onto the descriptor's `env` map. The descriptor already carries `GUILD_RUN_ID` from the launcher; execute-plan layers the capability-scope vars on top at dispatch (same injection path as subagent — `env` param on `Agent()`).
    - Issue: `Agent({ subagent_type: descriptor.subagentType, model: <resolved>, prompt: descriptor.prompt, env: { ...descriptor.env, GUILD_CAPABILITY_SCOPE: "...", GUILD_AUTONOMY_CONTRACT: "..." } })`. Omit capability-scope keys whose source field is absent.

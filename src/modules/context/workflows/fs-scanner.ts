@@ -7,7 +7,7 @@
  * SQLite wiki_fts cache (wiki-recall.ts) — it is the last-resort reader the
  * feature-degradation contract specifies.
  *
- * Contract (BY POINTER): docs/knowledge/decisions/feature-degradation-contracts.md
+ * Contract (BY POINTER): ADR: feature-degradation-contracts (workspace wiki)
  *   FDC-13 ("If MCP is completely unavailable, the reader falls back to the
  *   filesystem scanner over .guild/wiki/ + .guild/runs/").
  *

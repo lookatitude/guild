@@ -26,6 +26,7 @@ import {
   emitRunClosed,
   recordPhase,
   recordStatusLightweight,
+  resolvePreflightSnapshot,
   startAndCloseRun,
   startRunOnly,
   writeSkippedFiles,
@@ -38,7 +39,17 @@ import {
   createRunLifecycle,
   createRealEnv,
   readRecordStatusRuns,
+  readResolvedSettingsSnapshot,
 } from "../../scripts/lib/run-lifecycle";
+
+// Imported from the ORIGINAL declaring module (not the scripts/lib/
+// runstart-preflight.ts `export *` shim) so jest.spyOn can replace the
+// function in place — spying on a re-exported star-binding hits TS's
+// getter-only __createBinding indirection and throws "Cannot redefine
+// property" under ts-jest (no babel-jest hoisting in this project's jest
+// config). hooks/lib/run-trace.ts's own `export *` chain re-reads this same
+// module's exports object on every call, so the spy is visible end-to-end.
+import * as runstartPreflightOriginal from "../../src/modules/lifecycle/workflows/runstart-preflight";
 
 // Shared js-yaml frontmatter parser (OD-3 compliant) — read run.yaml fields by
 // parsing the document instead of hand-rolled line-anchored regex assertions.
@@ -398,6 +409,63 @@ describe("run-trace lib (Lane B3)", () => {
     });
   });
 
+  // ── resolvePreflightSnapshot (U3/U6 wiring — audit fix G3c) ─────────────────
+  //
+  // Before this wiring, runStartPreflight had ZERO production callers
+  // (plugin-implementation-audit-2026-07-12, high/incomplete-wiring). This is
+  // the deterministic caller: the CLI's `start` sub-command invokes it and
+  // threads the result into startRunOnly/startAndCloseRun.
+  //
+  // runStartPreflight itself is mocked here (module boundary) so we can force
+  // a genuine throw to prove the "degrade, don't die" contract — every real
+  // probe inside runStartPreflight is already best-effort/non-throwing
+  // (settings-reader.ts swallows malformed JSON internally), so the ONLY way
+  // to observe resolvePreflightSnapshot's own try/catch firing is to inject a
+  // failure at this boundary.
+  describe("resolvePreflightSnapshot (U3/U6 wiring)", () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it("returns a well-shaped ResolvedSettingsSnapshot on a healthy preflight (real, unmocked call)", () => {
+      const snapshot = resolvePreflightSnapshot(root);
+      expect(snapshot?.schema_version).toBe("guild.resolved_settings.v1");
+      expect(snapshot?.effective).toHaveProperty("agent_mode");
+      expect(snapshot?.effective).toHaveProperty("host");
+      expect(snapshot?.providers).toHaveProperty("detected");
+      expect(snapshot?.communication_contract).toBe("review_result.v1");
+    });
+
+    it("degrades to undefined + logs a WARN to stderr when runStartPreflight throws (preflight failure must NEVER block run start)", () => {
+      jest.spyOn(runstartPreflightOriginal, "runStartPreflight").mockImplementationOnce(() => {
+        throw new Error("simulated preflight crash");
+      });
+      const errSpy = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+      const snapshot = resolvePreflightSnapshot(root);
+      expect(snapshot).toBeUndefined();
+      expect(errSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[run-trace] WARN: run-start preflight failed"),
+      );
+      errSpy.mockRestore();
+    });
+
+    it("startRunOnly still succeeds (run.yaml written, OPEN, no resolved-settings.json) when the snapshot is undefined (degraded)", () => {
+      const runId = startRunOnly(root, resolveHost, {
+        command: "/guild:build",
+        run_class: "full",
+        snapshot: undefined,
+      }) as string;
+      expect(runId).toBeTruthy();
+      const runDir = path.join(root, ".guild", "runs", runId);
+      expect(fs.existsSync(path.join(runDir, "run.yaml"))).toBe(true);
+      const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
+      expect(runYamlFields(runYaml)).toMatchObject({ status: "open" });
+      // Back-compat: no snapshot ⇒ no resolved-settings.json (unchanged from pre-wiring behavior).
+      expect(fs.existsSync(path.join(runDir, "resolved-settings.json"))).toBe(false);
+      expect(runYaml).not.toContain("settings_ref:");
+    });
+  });
+
   // ── run-trace CLI `start` sub-command ──────────────────────────────────────
   //
   // The CLI tests use a separate tmpdir with a pre-seeded .guild/ dir so that
@@ -529,6 +597,90 @@ describe("run-trace lib (Lane B3)", () => {
       const { exitCode, stdout } = runCli(["status", `--cwd=${cliRoot}`]);
       expect(exitCode).toBe(0);
       expect(stdout.trim()).toBe(""); // gate disabled → nothing printed
+    });
+
+    // ── U3/U6 wiring (audit fix G3c) ───────────────────────────────────────
+    //
+    // Before this wiring, runStartPreflight had zero production callers and
+    // resolved-settings.json never landed on disk in a real run
+    // (plugin-implementation-audit-2026-07-12, high/incomplete-wiring). These
+    // exercise the REAL CLI subprocess end-to-end (not an injected seam).
+
+    it("start writes resolved-settings.json with the U6 snapshot shape + run.yaml settings_ref (U3/U6 wiring)", () => {
+      const { exitCode, stdout } = runCli([
+        "start",
+        "--command=/guild:build",
+        `--cwd=${cliRoot}`,
+      ]);
+      expect(exitCode).toBe(0);
+      const runId = stdout.trim();
+      const runDir = path.join(cliRoot, ".guild", "runs", runId);
+
+      const snapshotPath = path.join(runDir, "resolved-settings.json");
+      expect(fs.existsSync(snapshotPath)).toBe(true);
+      const snapshot = JSON.parse(fs.readFileSync(snapshotPath, "utf8"));
+      expect(snapshot.schema_version).toBe("guild.resolved_settings.v1");
+      expect(snapshot.effective).toHaveProperty("agent_mode");
+      expect(snapshot.effective).toHaveProperty("host");
+      expect(snapshot.effective).toHaveProperty("review");
+      expect(snapshot.providers).toHaveProperty("detected");
+      expect(snapshot.communication_contract).toBe("review_result.v1");
+      // U6: resolved_at_ref is stamped to the run-id on write (never null on disk).
+      expect(snapshot.resolved_at_ref).toBe(runId);
+
+      // readResolvedSettingsSnapshot is the documented consumer contract
+      // (commands/build.md, commands/resume.md: execute-plan reads
+      // snapshot.effective.agent_mode via readResolvedSettingsSnapshot(runId, { cwd })).
+      const readBack = readResolvedSettingsSnapshot(runId, { cwd: cliRoot });
+      expect(readBack).not.toBeNull();
+      expect(readBack?.schema_version).toBe("guild.resolved_settings.v1");
+      expect(readBack?.effective.agent_mode).toBe(snapshot.effective.agent_mode);
+
+      // run.yaml gains the compact settings_ref pointer (U6).
+      const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
+      expect(runYaml).toContain("settings_ref:");
+      expect(runYaml).toContain(`effective_backend: ${snapshot.effective.agent_mode}`);
+    });
+
+    it("start --run-class=lightweight ALSO writes resolved-settings.json", () => {
+      const { exitCode, stdout } = runCli([
+        "start",
+        "--command=/guild:status",
+        "--run-class=lightweight",
+        `--cwd=${cliRoot}`,
+      ]);
+      expect(exitCode).toBe(0);
+      const runId = stdout.trim();
+      const snapshotPath = path.join(
+        cliRoot, ".guild", "runs", runId, "resolved-settings.json",
+      );
+      expect(fs.existsSync(snapshotPath)).toBe(true);
+    });
+
+    it("start with a syntactically broken .guild/settings.json still starts the run (degraded resilience end-to-end, exit 0)", () => {
+      // Not valid JSON. settings-reader.ts's parseSettingsFile already catches
+      // this internally and falls back to {} (defaults), so resolveSettings
+      // itself never throws — this proves the FULL pipeline (including the
+      // new CLI wiring) tolerates a corrupt settings.json without blocking
+      // run start, which is the outer invariant the audit fix requires.
+      fs.writeFileSync(
+        path.join(cliRoot, ".guild", "settings.json"),
+        "{ this is not : valid json !!!",
+        "utf8",
+      );
+      const { exitCode, stdout, stderr } = runCli([
+        "start",
+        "--command=/guild:build",
+        `--cwd=${cliRoot}`,
+      ]);
+      expect(exitCode).toBe(0);
+      const runId = stdout.trim();
+      expect(runId.length).toBeGreaterThan(0);
+      const runDir = path.join(cliRoot, ".guild", "runs", runId);
+      expect(fs.existsSync(path.join(runDir, "run.yaml"))).toBe(true);
+      const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
+      expect(runYamlFields(runYaml)).toMatchObject({ status: "open" });
+      expect(stderr).not.toMatch(/FATAL/);
     });
 
     it("unknown sub-command exits 1", () => {

@@ -18,7 +18,7 @@ Four sources, all materialized under `.guild/runs/<run-id>/` by the time this sk
 1. `.guild/runs/<run-id>/summary.md` — the compact run summary produced by `scripts/trace-summarize.ts` from `events.ndjson`. Contains frontmatter (`run_id`, `started_at`, `ended_at`, `duration_ms`, `event_count`, `specialists_dispatched`, `tools_used`, `files_touched_count`, `errors`, `ok_rate`) plus body sections (Timeline, Specialist activity, Notable events, Reflection hints). Reflect reads this instead of the raw event log so it stays grep-able. **P6 enrichment planned:** `capture-telemetry.ts` does not yet emit per-skill trigger counts or context-bundle sizes, so those signals come from handoff receipts (§8.2 `followups:` / `assumptions:`) and from the verify.md report — not from summary.md today. When P6 extends the telemetry schema, this skill's routing will prefer the richer summary fields.
 2. `.guild/runs/<run-id>/handoffs/*.md` — per-specialist handoff receipts per `§8.2`. Provides `changed_files`, `assumptions`, `evidence`, and `followups`. Followups are the richest signal for proposal categories below. When a receipt is consumed, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (see §"Handoff contract" of the communication format policy). Read these §8.2 fields from that one embedded envelope — a frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
 3. `.guild/runs/<run-id>/verify.md` — from `guild:verify-done`. Confirms the run actually passed (reflect never fires on a failed run, by the hook gate, but re-check the overall status line defensively) and carries the non-blocking followups that the verify step forwarded.
-4. `.guild/runs/<run-id>/learn/harvest-candidates.json` — **preferred upstream when present** (SC-C from learn-knowledge-convergence). Written by `guild:learn-harvest` when `LearningCheckpoint` detected signal. When this file exists, populate proposal categories directly from its `reflection_candidates` array rather than re-extracting from the raw handoffs — `harvest-candidates.json` already carries structured `category`, `description`, `evidence_quote`, `source_refs`, and `significance` per entry. Source 2 (raw handoffs) is used as fallback when `harvest-candidates.json` is absent or predates this contract.
+4. `.guild/runs/<run-id>/learn/harvest-candidates.json` — **preferred upstream when present** (SC-C from learn-knowledge-convergence). Written by `guild:learn-harvest` when it is explicitly invoked at a phase boundary or run close (not auto-routed by `LearningCheckpoint`, which only routes verdicts to the reflections queue). When this file exists, populate proposal categories directly from its `reflection_candidates` array rather than re-extracting from the raw handoffs — `harvest-candidates.json` already carries structured `category`, `description`, `evidence_quote`, `source_refs`, and `significance` per entry. Source 2 (raw handoffs) is used as fallback when `harvest-candidates.json` is absent or predates this contract.
 
 ## Proposal categories
 
@@ -94,6 +94,20 @@ On **non-self-build runs** (consuming repos), the field is optional — the guar
 Reflect writes exactly ONE reflection per run and never modifies prior reflections. Cross-run aggregation — "the same skill has been named in three reflections, open an evolve task" — is `/guild:evolve`'s job per `§11.1`. The automatic threshold there is >=3 reflections for a single skill; that counter is computed by walking `.guild/reflections/*.md` frontmatter `proposals.skill_improvement`, and reflect's job is to fill that frontmatter correctly so evolve can count.
 
 If you notice a pattern worth aggregating, emit the per-run evidence and stop. Do not pre-emptively collapse into a single cross-run proposal.
+
+After this reflection is written, run the deterministic cross-run aggregator so the
+§11.1 threshold is counted by tooling, not recalled in-context:
+
+```
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/analyze-runs.ts --cwd <repo-root>
+```
+
+It reads every `.guild/reflections/*.md`'s `proposals.skill_improvement` /
+`proposals.missing_specialist` frontmatter plus handoff `status: escalate`
+receipts, and writes `.guild/evolve/analyze-runs-latest.md` (PROPOSAL-ONLY —
+never mutates a skill/agent, never writes to `.guild/wiki/`). Name that path in
+the handoff so `/guild:evolve`'s threshold read has a fresh aggregate to
+consume.
 
 ## Non-destructive rule
 

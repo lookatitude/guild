@@ -8,14 +8,14 @@
       "id": "advisor",
       "source_path": "agents/advisor.md",
       "resource_path": "resources/agents/advisor.md",
-      "sha256": "12e5fb70b1c456f0bdb04ad0a9408fc58a9994993f5f8bcbf456e476375b867c"
+      "sha256": "445ae0fecf7211a5bd9e50a67ab5a3a5303a63f7eeb0b208e5c00b3ef2efcb4b"
     },
     {
       "category": "agents",
       "id": "developer",
       "source_path": "agents/developer.md",
       "resource_path": "resources/agents/developer.md",
-      "sha256": "e8e3cac245a3ab9c28e9acca650373bdf9e5a90e5af9781c47fdbf5e3f08b236"
+      "sha256": "d542ff5e4335a9c56f5032162b0762478618563ded8a98b2d77c448c96181ac0"
     },
     {
       "category": "scripts",
@@ -106,7 +106,7 @@
       "id": "copywriter-voice-guide",
       "source_path": "skills/specialists/copywriter-voice-guide/SKILL.md",
       "resource_path": "resources/skills/specialists/copywriter-voice-guide/SKILL.md",
-      "sha256": "8e7915f4757cec16ea2657a97bda71972c9dac078a115fe7b6885d35d6bee0eb"
+      "sha256": "05e24e89797edf7d0a60369bec8ab1a15a4453cf2eedaf66f37ebc2b6a593de2"
     },
     {
       "category": "skills",
@@ -302,7 +302,7 @@
       "id": "sales-cold-outreach",
       "source_path": "skills/specialists/sales-cold-outreach/SKILL.md",
       "resource_path": "resources/skills/specialists/sales-cold-outreach/SKILL.md",
-      "sha256": "67090e4413ef3b213d3d1290389989e6d8ef9432bf35d2d77f8da77e20881a18"
+      "sha256": "f8d826c50d89847b222f6bfadb2de12082cf97acead07e376dc0be79167ad569"
     },
     {
       "category": "skills",
@@ -386,14 +386,14 @@
       "id": "social-media-content-calendar",
       "source_path": "skills/specialists/social-media-content-calendar/SKILL.md",
       "resource_path": "resources/skills/specialists/social-media-content-calendar/SKILL.md",
-      "sha256": "ff96e4948628c9112d3dca9c43fdc6d5dae784dc5d7d7bcd75aee2208663addd"
+      "sha256": "61669072116ed7aede93d2e59344ed210eff7a3c6ac2a62620b6242f35db860d"
     },
     {
       "category": "skills",
       "id": "social-media-engagement-templates",
       "source_path": "skills/specialists/social-media-engagement-templates/SKILL.md",
       "resource_path": "resources/skills/specialists/social-media-engagement-templates/SKILL.md",
-      "sha256": "1ab5f176d1f60137f42a128b88ff430503208fedaf2bbb0aeef95b940dbae073"
+      "sha256": "6dc35b6a364e200e89817aae299eda2b28c226c08572be94b1d4c8e1f4d67824"
     },
     {
       "category": "skills",

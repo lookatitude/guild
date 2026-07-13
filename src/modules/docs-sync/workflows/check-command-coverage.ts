@@ -8,7 +8,7 @@
  * reference docs? It is meant to run from the UMBRELLA repo's CI, which can check out the
  * sibling plugin repo — so it can verify coverage the plugin-repo CI structurally cannot.
  *
- * Enforces Rule 2 of docs/knowledge/decisions/workspace-knowledge-flow.md as a standing
+ * Enforces Rule 2 of ADR: workspace-knowledge-flow (workspace wiki) as a standing
  * gate: every plugin command (plugin/commands/<token>.md) must be referenced somewhere
  * under root docs/knowledge/ — as the namespaced `guild:<token>` / `/guild:<token>` token
  * (word-bounded) or as a `commands/<token>.md` reference. An uncovered command means a

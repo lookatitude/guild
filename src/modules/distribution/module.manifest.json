@@ -21,7 +21,6 @@
       "description-optimizer",
       "lib/command-registry",
       "lib/equivalence-contract",
-      "lib/installer-contract",
       "lib/inventory-schema",
       "lib/module-resources",
       "lib/parity-contract",

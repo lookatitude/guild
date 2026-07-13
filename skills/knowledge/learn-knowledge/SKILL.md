@@ -231,9 +231,9 @@ sub-question, not a wholesale re-run.
 
 **Recall-before-read (ADR §4).** Before a seam reads source, query the
 knowledge base first (`guild-memory` BM25 over `.guild/wiki/` + `kg-query` over
-`knowledge-recall.json`). If recall returns ≥1 chunk scoring **≥
-`models.recallScoreThreshold`** (default `0.4`; pointer to ADR §10), use the
-recalled chunk(s) + references and skip the full read. Script halves are
+`knowledge-recall.json`). If recall returns ≥1 chunk AND the result-level
+`topScore` is **≥ `models.recallScoreThreshold`** (default `0.4`; pointer to ADR
+§10), use the recalled chunk(s) + references and skip the full read. Script halves are
 unaffected.
 
 **One-pass three-store update (candidates only).** A knowledge-tier run updates

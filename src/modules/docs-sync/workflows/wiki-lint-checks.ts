@@ -18,6 +18,14 @@
  *       docs-hygiene/scan.ts rule 7.
  *   M2  missing-importance — consumable page without `importance:` frontmatter
  *       (provenance/exploratory pages and structural files are exempt).
+ *   M3  invalid-type — a page's `type:` frontmatter is PRESENT but not one of
+ *       the §10.1.1 closed enum values (context|standard|product|entity|
+ *       concept|decision|source — see wiki-frontmatter-contract.ts, the
+ *       single source of truth this check imports rather than re-spelling
+ *       the enum). Absent `type:` is NOT flagged here (a separate,
+ *       broader-scope "missing required field" decision, not this check's
+ *       job) — only a PRESENT-but-wrong value is a mechanical, unambiguous
+ *       defect. Structural/provenance pages are exempt, same predicate as M2.
  *
  * Usage: npx tsx scripts/wiki-lint-checks.ts [--root <repo-root>] [--json]
  * Exit: 0 = clean · 2 = findings (never blocks; lint is advisory).
@@ -33,6 +41,7 @@ import {
 import { lintKnowledgeNodes } from "../../../../scripts/learn/wiki-lint-knowledge";
 import type { GraphNode } from "../../../../scripts/learn/lib/schema";
 import { loadYamlApi } from "../../kernel";
+import { WIKI_PAGE_TYPES, isWikiPageType } from "../../knowledge";
 
 const yaml = loadYamlApi();
 
@@ -41,6 +50,7 @@ interface Finding {
     | "pending-grade-review"
     | "missing-importance"
     | "invalid-category"
+    | "invalid-type"
     | "label-coverage"
     | "label-unknown";
   file: string;
@@ -167,6 +177,17 @@ export function lintWiki(root: string): Finding[] {
         // structural basenames + provenance/exploratory by path segment or
         // type:/category: frontmatter — imported, so the two can never drift.
         findings.push({ check: "missing-importance", file: rel, detail: "consumable page without importance: frontmatter" });
+      }
+      // M3 invalid-type: PRESENT-but-wrong `type:` only (see file header) —
+      // same durable/structural/provenance exemption as M2, so a legitimately
+      // free-form exploratory or structural page never trips this check.
+      const typeValue = fmValue(fmLines, "type");
+      if (durable && typeValue !== null && !isWikiPageType(typeValue)) {
+        findings.push({
+          check: "invalid-type",
+          file: rel,
+          detail: `type: "${typeValue}" is not one of ${WIKI_PAGE_TYPES.join("|")} (§10.1.1)`,
+        });
       }
       // Label coverage (item 5): durable pages only, and only when a taxonomy
       // is authored (inert otherwise → no findings on un-opted-in repos).

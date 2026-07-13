@@ -32,8 +32,9 @@ trace_summary { run_id: string, cwd?: string }
 ```
 
 Returns the stored `summary.md` for a run if it already exists, otherwise
-synthesizes one from `events.ndjson` using the same statistics and section
-layout as `scripts/trace-summarize.ts`. Source indicator:
+synthesizes one from `logs/v1.4-events.jsonl` (falling back to legacy
+`events.ndjson`) using the same statistics and section layout as
+`scripts/trace-summarize.ts`. Source indicator:
 
 - `source: "file"` — returned `summary.md` verbatim.
 - `source: "synthesized"` — rebuilt from events in memory (no write).
@@ -81,8 +82,9 @@ contributed. Omit `run_id` to roll up across all runs.
 
 ## cwd resolution
 
-1. `GUILD_TELEMETRY_CWD` env var (used in tests) overrides.
-2. Per-call `cwd` argument → `<cwd>/.guild/runs/`.
+1. Explicit per-call `cwd` argument → `<cwd>/.guild/runs/` (wins — required so
+   a long-lived server can fan out across federated child repos by cwd).
+2. `GUILD_TELEMETRY_CWD` env var (used in tests, when no `cwd` is given).
 3. Server process cwd → `<cwd>/.guild/runs/`.
 
 ## Invariants
@@ -96,7 +98,9 @@ contributed. Omit `run_id` to roll up across all runs.
 ## Wiring
 
 See `.mcp.json` at the repo root — the server is registered via
-`npx -y tsx mcp-servers/guild-telemetry/src/index.ts`, stdio transport.
+`node ${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-telemetry/dist/index.js`, stdio
+transport. `npm run build` (esbuild, bundled/self-contained) produces that
+`dist/index.js`; `npx tsx src/index.ts` is only for local development.
 
 ## Tests
 

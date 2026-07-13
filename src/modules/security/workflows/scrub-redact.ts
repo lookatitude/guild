@@ -16,14 +16,15 @@
  *   - L8         — the byte-identical no-op cleanliness assertion
  *                  (redact(committed).out === committed).
  *
- * Secret patterns are sourced (never re-spelled) from the canonical SoT in
- * docs-hygiene/scan.ts — the workflow→scripts import idiom already used by
- * wiki-lint-checks.ts / sanitized-run-export.ts.
+ * Secret patterns are sourced (never re-spelled) from the canonical SoT at the
+ * sibling `secret-patterns.ts` (moved here from docs-hygiene/scan.ts — audit
+ * remediation item 16 — so the security module no longer imports UPWARD from a
+ * self-build docs scanner; `scan.ts` now re-exports FROM here instead).
  *
  * PURITY: no I/O, no spawn, no clock. Fully unit-testable.
  */
 
-import { SECRET_PATTERNS } from "../../../../scripts/docs-hygiene/scan";
+import { SECRET_PATTERNS } from "./secret-patterns";
 
 // Operator-path patterns (Decision H.2 + Decision M relative-paths-policy).
 // Placeholders are idempotent — they won't re-match.

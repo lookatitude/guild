@@ -28,17 +28,17 @@ function safeSlug(raw: string): string {
   return slug;
 }
 
-function assertNotUnderPluginInstall(absPath: string, pluginInstallRoot: string | undefined): void {
-  const root = pluginInstallRoot
-    ?? process.env["GUILD_PLUGIN_ROOT"]
-    ?? process.env["CLAUDE_PLUGIN_ROOT"]
-    ?? process.env["CODEX_PLUGIN_ROOT"];
-  if (!root) return;
-  const rel = path.relative(path.resolve(root), path.resolve(absPath));
-  if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) {
-    throw new Error(`project-created Guild artifact would be written under plugin install dir: ${absPath}`);
-  }
-}
+/**
+ * R6 boundary check, exported standalone (no `cwd`/`discoverGuild` needed): throws
+ * iff `absPath` resolves under a plugin install root (an explicit
+ * `pluginInstallRoot`, else `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`/`CODEX_PLUGIN_ROOT`).
+ * This is the one check every write path can call cheaply — no discovery, no cwd
+ * threading — which is why `atomicWrite` (src/modules/state/workflows/atomic-write.ts)
+ * calls it on every write: R6 stops being prose-only the moment the shared write
+ * choke-point enforces it.
+ */
+import { assertNotUnderPluginInstall } from "../../src/modules/state/workflows/plugin-install-guard";
+export { assertNotUnderPluginInstall };
 
 export function resolveGuildArtifactPath(req: ArtifactPathRequest): string {
   const discovery = discoverGuild(req.cwd);

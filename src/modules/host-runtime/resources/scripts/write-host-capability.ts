@@ -4,10 +4,10 @@
  *
  * RE-5 — host-capability manifest writer.
  *
- * Contract (BY POINTER): docs/knowledge/decisions/v2-runtime-and-execution-model.md
+ * Contract (BY POINTER): ADR: v2-runtime-and-execution-model (workspace wiki)
  *   §RE-5 (host-capability manifest). Schema: guild.host_capability.v1.
  * Tier ladder (cheap/mid/powerful → model) is canonical in
- *   docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §1/§10.
+ *   ADR: cost-aware-tiering-and-lean-context (workspace wiki) §1/§10.
  *
  * Writes <cwd>/.guild/hosts/<host-id>/capability.json at session/bootstrap so
  * the cross-host router (RE-4 RemoteTeamBackend, lands a later wave) can read,
@@ -38,9 +38,9 @@
  */
 
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import { probeTmuxAvailable } from "./lib/team-backend";
+import { atomicWrite } from "../src/modules/state";
 // G-11 (SC-6): models.tiers values are a union (string | {model,effort?,verbosity?} | null);
 // resolveTierModel is the ONLY place the union is unpacked. It also tolerates the
 // legacy flat form (tiers.cheap = "model-name") this writer historically accepted.
@@ -205,13 +205,9 @@ export function writeHostCapability(opts: BuildCapabilityOpts): string {
   const hostDir = path.join(opts.cwd, ".guild", "hosts", manifest.host_id);
   fs.mkdirSync(hostDir, { recursive: true });
   const manifestPath = path.join(hostDir, "capability.json");
-  const tmpPath = path.join(
-    os.tmpdir(),
-    `guild-host-capability-${Date.now()}-${process.pid}.json.tmp`
-  );
-  // Atomic write: temp → rename (never a partial capability.json).
-  fs.writeFileSync(tmpPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
-  fs.renameSync(tmpPath, manifestPath);
+  // Atomic write: same-directory temp file → rename (never a partial
+  // capability.json; never os.tmpdir(), which can throw EXDEV on rename).
+  atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   return manifestPath;
 }
 

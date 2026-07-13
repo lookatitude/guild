@@ -8,8 +8,9 @@ This document explains the trust model and how we handle security.
 ### What Guild executes
 
 - **Hook scripts** under `hooks/` run on every Claude Code
-  `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `SubagentStop`,
-  `Stop`, `TaskCreated`, `TaskCompleted`, and `TeammateIdle` event.
+  `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`,
+  `PreCompact`, `SubagentStop`, `Stop`, `TaskCreated`, `TaskCompleted`,
+  and `TeammateIdle` event.
   See [hooks/hooks.json](hooks/hooks.json) for the full wiring and
   the Guild docs site → `https://guildstack.dev/docs/architecture` for each event's purpose.
 - **Tooling scripts** under `scripts/` run only when invoked by a skill
@@ -98,7 +99,7 @@ weakens one of them should be explicitly called out in its PR.
 
 ## Version support
 
-We support the current major release (`1.x`). Security fixes are
+We support the current major release (`2.x`). Security fixes are
 backported one minor version. Pre-release tags (`-beta<N>`) receive
 fixes only through the next pre-release; we do not backport to older
 pre-releases.

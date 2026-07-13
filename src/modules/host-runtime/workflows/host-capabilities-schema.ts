@@ -6,8 +6,8 @@
  * Phase 1 wrapper/package runtime rows.
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §Capability Matrix
- *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md (this lane's ADR)
+ *   ADR: universal-host-plugin-architecture (workspace wiki) §Capability Matrix
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) (this lane's ADR)
  *
  * WHY: "Routing uses these booleans, not assumptions" (ADR). Every host advertises
  * a normalized capability row; routing/degradation read the row, never the host
@@ -658,7 +658,32 @@ export const AGENTS_FILE_CAPABILITIES: GuildHostCapabilitiesV1 = {
   },
 };
 
-/** Convenience registry of the Phase-1 rows, keyed by host_kind. */
+/**
+ * Convenience registry of the Phase-1 rows, keyed by host_kind.
+ *
+ * SUPERSEDED for new consumers (G4b host-reachability fix): this file cannot import
+ * HOST_REGISTRY_ROWS (host-registry-schema.ts already imports FROM this file to build
+ * ITS rows — the reverse import would be circular), so PI_CAPABILITIES/
+ * ANTIGRAVITY_CAPABILITIES below are hand-authored and have drifted from the
+ * registry's own on-host-VERIFIED overrides (sessions/permissions — the "two
+ * diverged capability truths" audit finding), and this map never carries the 4
+ * wrapped-CLI hosts (cursor/github-copilot/opencode/rovo-dev) added to the registry.
+ * `host-registry.ts`'s `DERIVED_HOST_CAPABILITY_ROWS` is registry-derived, covers
+ * all 16 registry ids + these same legacy aliases, and is what guild-run-wrapper.ts
+ * and permission-policy.ts now consume. host-smoke.ts / verify-host-packages.ts
+ * never imported this map (comment references only, since reconciled) — no live
+ * consumer indexes it anymore; it remains only as the feedstock for the frozen
+ * CLAUDE/CODEX/AGENTS_FILE constants the registry rows reference.
+ *
+ * Known cosmetic divergence, deliberately NOT reconciled: the pi/antigravity rows
+ * below say `manifest_format: "pi-manifest"` / `"antigravity-manifest"`, while the
+ * registry-derived rows say `"pi-cli-package"` / `"antigravity-cli-package"`
+ * (inferredCaps `${host_kind}-package`). No consumer keys off the legacy strings —
+ * every packaging/verify path (build-host-packages, verify-host-packages,
+ * installer-contract, per-host-packaging, wrapped-cli-base) reads
+ * `HOST_REGISTRY_ROWS[*].capabilities.package.manifest_format`, i.e. the
+ * registry-derived value is the shipped truth.
+ */
 export const HOST_CAPABILITY_ROWS: Record<string, GuildHostCapabilitiesV1> = {
   claude: CLAUDE_CAPABILITIES,
   codex: CODEX_CAPABILITIES,

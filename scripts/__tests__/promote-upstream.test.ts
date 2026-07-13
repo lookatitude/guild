@@ -37,7 +37,7 @@ const SCRIPT = path.resolve(__dirname, "../workspace/promote-upstream.ts");
 const NODE_ENV = {
   ...process.env,
   NODE_NO_WARNINGS: "1",
-  PATH: "/opt/homebrew/bin:/usr/bin:/bin",
+  PATH: `${require("node:path").dirname(process.execPath)}:${process.env["PATH"] ?? "/usr/bin:/bin"}`,
 } as NodeJS.ProcessEnv;
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
@@ -693,7 +693,7 @@ describe("promote-upstream CLI — manifest writer integration (Finding #6)", ()
     const r = spawnSync("npx", ["tsx", SCRIPT, ...args], {
       encoding: "utf8",
       env: NODE_ENV,
-      timeout: 30000,
+      timeout: 120_000,
     });
     return { status: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
   }

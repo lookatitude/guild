@@ -25,13 +25,13 @@ Content & communication group specialist. Owns structured, reference-oriented do
 
 ## Skills pulled
 
-- `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `technical-writer-api-docs` (T5, exists) — reference documentation for APIs: endpoint tables, request/response shapes, auth, error codes, rate limits, code samples in target languages; consistency with the contract backend ships.
-- `technical-writer-user-manual` (T5, exists) — end-user manuals and product guides: task-oriented information architecture, progressive disclosure, screenshots/diagrams placement, glossary discipline.
-- `technical-writer-tutorial` (T5, exists) — formal Diátaxis-structured tutorials: learning-oriented, step-by-step, prerequisites stated, verification check after each phase, troubleshooting appendix. **Scope note (v2.0):** how-to guides (goal-oriented, product-documentation style) now belong to `doc-writer`; this skill covers formal tutorials only — the Diátaxis "tutorial" quadrant, not the "how-to guide" quadrant.
-- `technical-writer-release-notes` (T5, exists) — release notes and changelogs: Keep-a-Changelog categories (Added / Changed / Deprecated / Removed / Fixed / Security), migration guides, breaking-change callouts.
+- `guild-principles` (core, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
+- `technical-writer-api-docs` (specialists, exists) — reference documentation for APIs: endpoint tables, request/response shapes, auth, error codes, rate limits, code samples in target languages; consistency with the contract backend ships.
+- `technical-writer-user-manual` (specialists, exists) — end-user manuals and product guides: task-oriented information architecture, progressive disclosure, screenshots/diagrams placement, glossary discipline.
+- `technical-writer-tutorial` (specialists, exists) — formal Diátaxis-structured tutorials: learning-oriented, step-by-step, prerequisites stated, verification check after each phase, troubleshooting appendix. **Scope note (v2.0):** how-to guides (goal-oriented, product-documentation style) now belong to `doc-writer`; this skill covers formal tutorials only — the Diátaxis "tutorial" quadrant, not the "how-to guide" quadrant.
+- `technical-writer-release-notes` (specialists, exists) — release notes and changelogs: Keep-a-Changelog categories (Added / Changed / Deprecated / Removed / Fixed / Security), migration guides, breaking-change callouts.
 
-All four `technical-writer-*` T5 skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the technical-writer context bundle.
+All four `technical-writer-*` specialists-tier skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the technical-writer context bundle.
 
 ## When to invoke
 
@@ -64,6 +64,6 @@ Writing-group principle reminder: **match existing voice** before imposing a new
 - **Cold outreach and sales sequences** — cold email, multi-touch prospect outreach, discovery scripts, proposals, follow-up sequences, objection handling. `sales` owns. Technical appendices inside a sales proposal are commissioned from technical-writer; sales owns the persuasive narrative and pricing math.
 - **The API contract itself** — endpoint shape, schema design, response semantics, error-code taxonomy. `backend` owns the contract; technical-writer documents what backend ships. If reference docs reveal contract gaps, list under `followups:` for backend — do not redesign the endpoint.
 - Code, tests, infrastructure, deployment, security, data-layer, or any engineering-group work beyond documenting it.
-- Skill authoring, hook engineering, slash-command authoring, MCP server code — dev-team agents own these (see `.claude/agents/`).
+- Skill authoring, hook engineering, slash-command authoring, MCP server code — Guild plugin/tooling internals, out of scope for a product specialist.
 
-If technical-writer work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md`) — main session routes the followup to the right specialist.
+If technical-writer work crosses into any of the above lanes, list the crossing under `followups:` per the `guild.handoff.v2` receipt contract (`skills/meta/execute-plan` §"Handoff protocol") — main session routes the followup to the right specialist.

@@ -49,6 +49,41 @@ describe("wiki-lint-checks (deterministic core of /guild:wiki lint)", () => {
     expect(lintWiki(root)).toHaveLength(0);
     expect(lintWiki(path.join(root, "nope"))).toHaveLength(0);
   });
+
+  // ── M3 invalid-type (wiki-frontmatter-contract.ts §10.1.1 vocabulary) ─────
+
+  it("flags a durable page whose type: is present but not in the §10.1.1 canonical enum", () => {
+    const w = path.join(root, ".guild", "wiki");
+    page(w, "bogus-type.md", "---\nimportance: medium\ntype: guideline\n---\nbody");
+    const f = lintWiki(root);
+    expect(f).toHaveLength(1);
+    expect(f[0].check).toBe("invalid-type");
+    expect(f[0].file).toContain("bogus-type.md");
+    expect(f[0].detail).toContain("guideline");
+    expect(f[0].detail).toContain("§10.1.1");
+  });
+
+  it("does NOT flag a page whose type: is a canonical §10.1.1 value", () => {
+    const w = path.join(root, ".guild", "wiki");
+    for (const t of ["context", "standard", "product", "entity", "concept", "decision"]) {
+      page(w, `${t}.md`, `---\nimportance: medium\ntype: ${t}\n---\nbody`);
+    }
+    expect(lintWiki(root)).toHaveLength(0);
+  });
+
+  it("does NOT flag a page with no type: field at all (absence is a different check's job)", () => {
+    const w = path.join(root, ".guild", "wiki");
+    page(w, "no-type.md", "---\nimportance: medium\n---\nbody");
+    expect(lintWiki(root)).toHaveLength(0);
+  });
+
+  it("exempts provenance/exploratory pages from invalid-type via the SHARED durable predicate", () => {
+    const w = path.join(root, ".guild", "wiki");
+    // "exploratory" is itself a PROVENANCE_FM_VALUES marker (not a §10.1.1
+    // type) — exempt via the same durable predicate M2 uses, not flagged.
+    page(w, "prov.md", "---\ntype: exploratory\n---\nbody");
+    expect(lintWiki(root)).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -25,13 +25,13 @@ Content & communication group specialist. Owns persuasive and functional prose: 
 
 ## Skills pulled
 
-- `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `copywriter-long-form` (T5, exists) — long-form article structure: hook, promise, argument scaffolding, evidence placement, CTA, readability targets.
-- `copywriter-product-microcopy` (T5, exists) — in-product strings: buttons, empty states, error/success messages, onboarding prompts, tooltips; clarity-first, voice-aligned.
-- `copywriter-email-sequences` (T5, exists) — lifecycle and transactional email series: welcome / onboarding / activation / re-engagement flows; subject line, preview, body, single-CTA discipline.
-- `copywriter-voice-guide` (T5, exists) — authoring a voice-and-tone document: voice axes, do/don't examples, tone-by-context matrix, adjacent-prose matching rule.
+- `guild-principles` (core, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
+- `copywriter-long-form` (specialists, exists) — long-form article structure: hook, promise, argument scaffolding, evidence placement, CTA, readability targets.
+- `copywriter-product-microcopy` (specialists, exists) — in-product strings: buttons, empty states, error/success messages, onboarding prompts, tooltips; clarity-first, voice-aligned.
+- `copywriter-email-sequences` (specialists, exists) — lifecycle and transactional email series: welcome / onboarding / activation / re-engagement flows; subject line, preview, body, single-CTA discipline.
+- `copywriter-voice-guide` (specialists, exists) — authoring a voice-and-tone document: voice axes, do/don't examples, tone-by-context matrix, adjacent-prose matching rule.
 
-All four `copywriter-*` T5 skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the copywriter context bundle.
+All four `copywriter-*` specialists-tier skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the copywriter context bundle.
 
 ## When to invoke
 
@@ -62,6 +62,6 @@ Writing-group principle reminder: **match existing voice** before imposing a new
 - **Launch plans, positioning, GTM** — positioning statements, messaging frameworks, launch plans, campaign briefs, A/B copy-variant programs. `marketing` owns. Copywriter writes the drafts marketing commissions via a campaign brief; it doesn't set the positioning or run the campaign.
 - **Cold outreach and sales sequences** — cold email, multi-touch prospect outreach, discovery scripts, proposals, follow-up sequences, objection handling. `sales` owns. Critical boundary: **lifecycle / transactional / re-engagement email of existing users is copywriter; cold prospect outreach is sales.** Both look like email; the distinction is relationship (existing user vs. cold prospect) and intent (lifecycle nurture vs. outbound prospecting).
 - Code, tests, infrastructure, deployment, security, data-layer, or any engineering-group work.
-- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — dev-team agents own these (see `.claude/agents/`).
+- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — Guild plugin/tooling internals, out of scope for a product specialist.
 
-If copywriter work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md`) — main session routes the followup to the right specialist.
+If copywriter work crosses into any of the above lanes, list the crossing under `followups:` per the `guild.handoff.v2` receipt contract (`skills/meta/execute-plan` §"Handoff protocol") — main session routes the followup to the right specialist.

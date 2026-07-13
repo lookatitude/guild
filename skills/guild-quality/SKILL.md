@@ -15,8 +15,8 @@ type: core
   DH-3 BOUNDARY (static, read-only). NEVER written at runtime; per-run
   guild.quality.v1 artifacts go to the consuming repo's .guild/runs/<run-id>/
   (a runtime write to plugin state is a v2 defect). CONTRACT FIDELITY: every
-  guild.quality.v1 reference is a POINTER through contract-map.md §A row 7 →
-  target-architecture.md §588–637; zero schema_version / field text reproduced
+  guild.quality.v1 reference is a POINTER through ./quality-contract.md
+  §"guild.quality.v1 fields"; zero schema_version / field text reproduced
   (anti-respell guard). PROGRESSIVE DISCLOSURE: step mechanics, full pass_when,
   and the ReleaseGate truth-table live in ./quality-mechanics.md (loaded on
   demand; behaviour unchanged). Derived from SKILL.template.md (heading set kept).
@@ -25,8 +25,8 @@ type: core
 # guild:quality
 
 Realizes **DI-2 (full Quality skill)** (`decisions/di1-di6-contracts.md`)
-against the frozen **`guild.quality.v1`** (`contract-map.md §A` row 7 →
-`target-architecture.md §588–637`; predicate `§632–637`). Flow:
+against the frozen **`guild.quality.v1`** (`./quality-contract.md §"guild.quality.v1 fields"`;
+predicate `./quality-contract.md §"ReleaseGate predicate"`). Flow:
 `SignalScan → SelectMatrix → RunChecks → G-quality → ReleaseGate`. Lean playbook
 here; mechanics, full `pass_when`, and the ReleaseGate truth-table in
 **`./quality-mechanics.md`** (open per step — behaviour identical).
@@ -51,22 +51,24 @@ full disposition enum.
 
 - A **passing `.guild/runs/<run-id>/verify.md`** (the build phase's
   `guild:verify-done` output). Quality runs *after* a passing verify-done,
-  never instead (invariant 4, `lifecycle-overview.md §"Ordering"`): absent or
+  never instead (invariant 4, `./quality-contract.md §"Lifecycle ordering"`): absent or
   failing ⇒ **route-back** to Development — do not proceed silently. An
   explicit operator decision to proceed without it MUST be recorded (name +
   reason) in the quality report.
 - `task_run` permission envelope + the immutable always-ask hard set
-  (`contract-map.md §A` row 1 → `target-architecture.md §"task_run contract"`).
+  (`./quality-contract.md §"task_run envelope & always-ask hard set"`, which
+  cites `scripts/lib/permission-policy-schema.ts`).
 - Canonical budget `defaults.quality.budget` **by pointer to
-  `command-surface.md §4.4`** (numbers never restated).
-- Signal rules `lifecycle/lifecycle-overview.md §436–503`; frozen
-  `guild.quality.v1` (`contract-map.md §A` row 7 → `§588–637`, pointer only).
+  `./quality-contract.md §Budget`** (numbers never restated).
+- Signal rules `./quality-contract.md §selection`; frozen
+  `guild.quality.v1` (`./quality-contract.md §"guild.quality.v1 fields"`, pointer only).
 
 # Output format
 
 `guild.quality.v1` at `.guild/runs/<run-id>/quality/<run-id>.md` — `selection` /
 `results` / `challenger_trail` / `release_decision` blocks **by pointer** to
-`§600–606 / §607–611 / §616–623 / §624–628` (zero re-spelled fields).
+`./quality-contract.md §selection / §results / §challenger_trail / §release_decision`
+(zero re-spelled fields).
 
 # Workflow steps
 
@@ -79,25 +81,25 @@ SignalScan → SelectMatrix: deterministic, surfaced, overridable. Each class in
 signal** (no LLM guess); none silently skipped — each is selected /
 `not_applicable: <reason>` / `gap: …no harness found`. Surface matrix + budget +
 `[proceed] [edit-selection] [explain-signals]` (**no `--classes=` flag**);
-`edit-selection` records `override: user`. Populate `selection` → `§600–606`.
+`edit-selection` records `override: user`. Populate `selection` → `./quality-contract.md §selection`.
 
 ## runchecks
 
 Run **only discovered** harnesses (never author/install — `qa-*` own that)
 under the `task_run` envelope **+** the unconditional always-ask hard set.
-Budget = `defaults.quality.budget` **by pointer to `command-surface.md §4.4`**
+Budget = `defaults.quality.budget` **by pointer to `./quality-contract.md §Budget`**
 (numbers never restated); exhaustion ⇒ `inconclusive: budget exhausted`,
-**never a silent pass**. Populate `results` → `§607–611`.
+**never a silent pass**. Populate `results` → `./quality-contract.md §results`.
 
 ## g-quality
 
-Two **distinct, both-kept** review mechanisms at this boundary (`docs/v2/09-adversarial-review.md §The gates`, §Loop control):
+Two **distinct, both-kept** review mechanisms at this boundary (https://guildstack.dev/docs/adversarial-review):
 
 1. **In-phase advisory panel (unchanged).** Advisory (non-blocking). Fixed
    producer `qa-test-strategy`; fixed challengers `[security, architect]`;
    cross-model-preferred (flag recorded). Findings resolve by rerun / added
    check / named owner-accepted risk — never itself blocks. Populate
-   `challenger_trail` → `§616–623`.
+   `challenger_trail` → `./quality-contract.md §challenger_trail`.
 2. **Cross-host G-quality gate via the broker (policy-gated).** *Separate* from
    the same-session panel above: this is the **cross-host** review where a
    **different host family** critiques the quality report. After the report is
@@ -108,7 +110,7 @@ Two **distinct, both-kept** review mechanisms at this boundary (`docs/v2/09-adve
    args: gate=G-quality artifact_path=<quality-report-path> run_id=<run-id> author_host=<run author host>
    ```
 
-   The broker is policy-gated (`docs/v2/09 §The review broker`): it fires only
+   The broker is policy-gated (https://guildstack.dev/docs/adversarial-review): it fires only
    when `risk ≥ high`, `review: cross` / `--review=cross`, or config requires it
    — else it resolves `status: "skipped"` and the boundary passes with no
    cross-host reviewer (self-build runs treat it as always-on). On `"rework"`,
@@ -119,8 +121,8 @@ Two **distinct, both-kept** review mechanisms at this boundary (`docs/v2/09-adve
 ## releasegate
 
 **COMPUTED** (never asked), complete over `{pass | fail | inconclusive |
-not_applicable | gap}`, **CITED by pointer** to `§632–637` +
-`lifecycle-overview.md §472–503` (the canonical predicate) — never
+not_applicable | gap}`, **CITED by pointer** to `./quality-contract.md
+§"ReleaseGate predicate"` (the canonical predicate) — never
 re-derived/"extended" (GR-5). **BLOCK** iff any selected class is `fail`, OR
 `inconclusive` with no owner-accepted risk, OR a
 security/privacy/reliability-relevant `gap` with no owner-accepted risk;
@@ -131,7 +133,7 @@ Gate `[release] [block] [abort]`; `[release]` on a BLOCK is a
 `[spec, plan, build, qa, all]` — **no `ops`**: `qa` (and `all`) auto-passes a
 **RELEASE-READY** verdict ONLY; a **BLOCK→release override is NEVER
 auto-passed** under any token (asymmetry printed, never silent). Populate
-`release_decision` → `§624–628`.
+`release_decision` → `./quality-contract.md §release_decision`.
 *Full truth-table: quality-mechanics.md.*
 
 ## learning-checkpoint (step 7.5 — advisory, no new gate)
@@ -144,7 +146,7 @@ After `releasegate` and before phase close, fire the per-phase LearningCheckpoin
   copied schema. `runchecks`: budget a `§4.4` pointer (no literals);
   discovered-harness-only. `g-quality`: fixed pair + cross-model flag +
   advisory. `releasegate`: pointer-cited truth-table (quality-mechanics.md) +
-  zero-drift diff vs §632–637 + the printed BLOCK-override asymmetry.
+  zero-drift diff vs `./quality-contract.md §"ReleaseGate predicate"` + the printed BLOCK-override asymmetry.
 
 # Escalation rules
 
@@ -158,9 +160,9 @@ After `releasegate` and before phase close, fire the per-phase LearningCheckpoin
 
 - Always-ask hard set is **unconditional** — network/destructive prompts fire
   inline regardless of `--auto-approve` (by pointer, not re-spelled).
-- Release predicate is **single-source** (`§632–637`); cited, never
-  extended/restated (GR-5). No frozen `guild.quality.v1` field text reproduced
-  — all by pointer through `contract-map.md §A` row 7.
+- Release predicate is **single-source** (`./quality-contract.md §"ReleaseGate predicate"`);
+  cited, never extended/restated (GR-5). No frozen `guild.quality.v1` field text reproduced
+  — all by pointer through `./quality-contract.md §"guild.quality.v1 fields"`.
 
 # Eval cases
 

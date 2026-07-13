@@ -5,7 +5,7 @@
  *
  * ── BIND BY POINTER ────────────────────────────────────────────────────────
  * `guild.security_event.v1` is REGISTERED in the contract-map (§B-post) and
- * specified in docs/knowledge/decisions/v2-security-and-untrusted-content.md.
+ * specified in ADR: v2-security-and-untrusted-content (workspace wiki).
  * Those are the canonical sources of truth for the record's semantics. The
  * interface below is the hook-side runtime shape used to WRITE the record; it
  * is self-versioned via `schema_version` so the writer and the contract-map

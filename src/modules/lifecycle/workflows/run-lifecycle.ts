@@ -595,7 +595,7 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       // root, so resolve runs/<id> relative to process cwd's nearest .guild base.
       // We reconstruct root by reading the run.yaml under the same base the
       // caller's env.fs sees; the real adapter is rooted at the project root.
-      const root = resolveCloseRoot(env, runId);
+      const root = resolveCloseRoot(env);
 
       const facts = readStartFacts(env, root, runId);
       const runClass = facts.run_class;
@@ -660,20 +660,27 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
  * closeRun resolves the run's root by walking the real-fs adapter's base. For
  * the real adapter (createRealEnv) the base is fixed at construction; for the
  * in-memory test adapter the absolute run path is reconstructed from the
- * sentinel. We delegate to an env-provided root when present, else fall back to
- * scanning for the run.yaml under the cwd's .guild/runs/<id>.
+ * sentinel. We delegate to an env-provided root when present, else fall back
+ * to `resolveGuildRoot(process.cwd())` — the only candidate root available
+ * without a hint.
+ *
+ * FIX (dead conditional): this used to end with
+ * `if (env.fs.exists(runYamlPath(cwd, runId))) return cwd; return cwd;` —
+ * both branches returned the identical value, so the existence check was
+ * pure dead code. There is only one fallback candidate (there is nothing to
+ * branch to), and `readStartFacts` — called immediately after this — already
+ * throws a clear, specific error when `run.yaml` is absent at the resolved
+ * root, so no informational value was lost by dropping the check.
  *
  * The real-fs env stamps `__rootHint` so close finds the same base start used.
  */
-function resolveCloseRoot(env: RunLifecycleEnv, runId: string): string {
+function resolveCloseRoot(env: RunLifecycleEnv): string {
   const hint = (env as RunLifecycleEnv & { __rootHint?: string }).__rootHint;
   if (hint) return hint;
   // Walk up from process.cwd() to the nearest .git/.guild anchor so a
   // sub-directory cwd can never resolve to a nested .guild/ base.
   // Decision: .guild/wiki/decisions/telemetry-anchors-to-repo-root-not-cwd.md
-  const cwd = resolveGuildRoot(process.cwd());
-  if (env.fs.exists(runYamlPath(cwd, runId))) return cwd;
-  return cwd;
+  return resolveGuildRoot(process.cwd());
 }
 
 // ── Real-fs + system-clock adapter (the entrypoint default) ──────────────────

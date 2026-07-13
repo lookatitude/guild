@@ -21,6 +21,12 @@
  * non-task sessions (§15.2 risk: "Stop hook fires on non-task sessions") and
  * trivial dev-team work that doesn't deserve a reflection.
  *
+ * Wiring (hooks.json): registered on BOTH Stop and SubagentStop — the
+ * SubagentStop branch above is reachable in production. On SubagentStop,
+ * hooks.json runs capture-telemetry.js BEFORE this script so the CURRENT
+ * dispatch is already appended to the log by the time devteamSubagentGateCheck
+ * counts dispatches.
+ *
  * Design note (F12 dispatch counter):
  * ---------------------------------------------------------------------
  * The ≥ 3 dispatch threshold reads from the existing events.ndjson rather
@@ -43,10 +49,14 @@
  *        GUILD_REFLECT run_id=<run-id>
  *      The orchestrator reads this and invokes guild:reflect.
  *
- * Run-id resolution (priority order):
+ * Run-id resolution (priority order) — via lib/run-trace.resolveRunIdForTrace(),
+ * the SAME resolver run-trace-close.ts and learning-backstop.ts use:
  *   1. GUILD_RUN_ID env var
- *   2. stdin payload session_id field
- *   3. fallback: "session-<date>"
+ *   2. .guild/runs/current-run-id   (legacy sentinel)
+ *   3. .guild/current-run-id        (B2 sentinel)
+ *   4. stdin payload session_id field (only when no sentinel is resolvable —
+ *      e.g. a bare chat session with no /guild run started)
+ *   5. fallback: "session-<date>"
  *
  * Working directory resolution (priority order):
  *   1. GUILD_CWD env var
@@ -69,6 +79,8 @@ import * as path from "path";
 import { spawnSync } from "child_process";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
+import { resolveRunIdForTrace } from "./lib/run-trace.js";
+import { detectSelfBuild } from "./lib/self-build.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -87,6 +99,12 @@ interface TelemetryEvent {
   payload_digest: string;
   ok: boolean;
   ms: number;
+  // Present on the canonical v1.4 `tool_call` event (hooks/post-tool-use.ts),
+  // which is now the SOLE writer of tool-call lines to the canonical file —
+  // capture-telemetry.ts's own PostToolUse-shaped line (ok: boolean) was
+  // removed from the canonical file to fix the double-logging finding (see
+  // capture-telemetry.ts's header). gateCheck() below reads both shapes.
+  status?: "ok" | "err" | "n/a";
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -121,8 +139,15 @@ function loadEvents(eventsFile: string): TelemetryEvent[] {
 /**
  * Heuristic gate — all three conditions must hold:
  *   1. ≥ 1 specialist dispatched (SubagentStop with non-empty specialist)
- *   2. ≥ 1 file edited (PostToolUse with tool "Write" or "Edit")
- *   3. No error event (all ok: true)
+ *   2. ≥ 1 file edited (a Write/Edit tool call — either shape below)
+ *   3. No error event (no explicit ok:false / status:"err")
+ *
+ * Two event shapes are recognized for (2)/(3), since capture-telemetry.ts no
+ * longer duplicates PostToolUse into the canonical file (double-logging fix):
+ *   - legacy: `event: "PostToolUse", tool, ok: boolean`
+ *     (capture-telemetry.ts's events.ndjson mirror, or an older canonical log)
+ *   - canonical v1.4: `event: "tool_call", tool, status: "ok"|"err"|"n/a"`
+ *     (hooks/post-tool-use.ts — the sole canonical writer for tool-call lines)
  */
 function gateCheck(events: TelemetryEvent[]): boolean {
   if (events.length === 0) return false;
@@ -130,12 +155,11 @@ function gateCheck(events: TelemetryEvent[]): boolean {
   const hasSpecialist = events.some(
     (e) => e.event === "SubagentStop" && e.specialist && e.specialist.trim().length > 0
   );
-  const hasFileEdit = events.some(
-    (e) =>
-      e.event === "PostToolUse" &&
-      (e.tool === "Write" || e.tool === "Edit")
-  );
-  const hasError = events.some((e) => e.ok === false);
+  const isFileEditCall = (e: TelemetryEvent): boolean =>
+    (e.event === "PostToolUse" || e.event === "tool_call") &&
+    (e.tool === "Write" || e.tool === "Edit");
+  const hasFileEdit = events.some(isFileEditCall);
+  const hasError = events.some((e) => e.ok === false || e.status === "err");
 
   return hasSpecialist && hasFileEdit && !hasError;
 }
@@ -309,25 +333,20 @@ function reflectionRecordsCodexSkip(content: string): boolean {
  * NOT record a skip (i.e. codex review ran) breaks the streak — that is the
  * honest meaning of "consecutive skips".
  *
- * `armed` is true only in self-build context (plugin/CLAUDE.md present with the
- * orientation banner). Outside self-build the guard never fires.
+ * `armed` is true only in self-build context (hooks/lib/self-build.ts's
+ * detectSelfBuild() finds the orientation marker at <root>/AGENTS.md or
+ * <root>/plugin/AGENTS.md). Outside self-build the guard never fires.
  */
 function evaluateCodexSkipGuard(guildRoot: string): {
   armed: boolean;
   streak: number;
 } {
   try {
-    const claudeMd = path.join(guildRoot, "plugin", "CLAUDE.md");
-    if (!fs.existsSync(claudeMd)) return { armed: false, streak: 0 };
-    // Confirm it's the Guild orientation file, not some other plugin/CLAUDE.md.
-    let armed = false;
-    try {
-      armed = fs
-        .readFileSync(claudeMd, "utf8")
-        .includes("Guild — repo orientation");
-    } catch {
-      armed = false;
-    }
+    // Shared predicate (hooks/lib/self-build.ts) — checks <root>/AGENTS.md
+    // (plugin repo root) then <root>/plugin/AGENTS.md (umbrella root). The
+    // banner moved off plugin/CLAUDE.md on 2026-06-21; this is the ONE place
+    // that check lives now (bootstrap.sh mirrors the same marker in bash).
+    const { armed } = detectSelfBuild(guildRoot);
     if (!armed) return { armed: false, streak: 0 };
 
     const reflectionsDir = path.join(guildRoot, ".guild", "reflections");
@@ -469,7 +488,7 @@ async function main(): Promise<void> {
 
   const sessionId = payload.session_id;
   const runId =
-    process.env["GUILD_RUN_ID"] ??
+    resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
     (sessionId ? `run-${sessionId}` : `run-session-${new Date().toISOString().slice(0, 10)}`);
 
   // Load telemetry events — canonical logs/v1.4-events.jsonl first (HK-04);

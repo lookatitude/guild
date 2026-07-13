@@ -14,6 +14,13 @@
  * sidecar only. No model, no network, no wasm. SQLite is never consulted (JSON is
  * the source of truth), so output is identical with `index: off` and `index: on`.
  *
+ * STATUS (plugin-audit-remediation G5a, 2026-07-13): experimental / on-demand-only
+ * as a CLI — no skill invokes it (it post-processes the G1 extract-structural
+ * graph, which is itself unwired; see that header). The exported `refineCalls`
+ * is load-bearing shared fixture infrastructure for the kept G-series tests
+ * (clra-conformance, graph-query-projection, resolve-calls). Keep — do not
+ * delete as "unreferenced".
+ *
  * Usage:
  *   npx tsx resolve-calls.ts --cwd <root> [--out <path>] [--print]
  */

@@ -4,7 +4,7 @@
  * `guild.run_state.v1` — the in-flight DAG execution checkpoint (ADR-RE-1).
  *
  * ── BIND BY POINTER ────────────────────────────────────────────────────────
- * Canonical body + rationale: docs/knowledge/decisions/v2-runtime-and-execution-model.md
+ * Canonical body + rationale: ADR: v2-runtime-and-execution-model (workspace wiki)
  *   §ADR-RE-1 ("Run-state checkpoint schema + resume protocol") and the frozen
  *   `guild.run_state.v1` body in §"New contracts". Registered in the
  *   contract-map (§B-post, post-v2 sibling) by the team lead.

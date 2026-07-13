@@ -233,8 +233,12 @@ const MIGRATIONS: Migration[] = [
   // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
   // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
   //
-  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite.
-  // ensureFederationWikiCache() NEVER writes to sub_guild_root/.guild/.
+  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
+  // production code writes to sub_guild_root/.guild/. NOTE: the populate/
+  // invalidate function (ensureFederationWikiCache) was removed in
+  // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
+  // schema migration is retained (harmless empty table) since altering the
+  // migration ladder is a separate, out-of-scope decision.
   {
     version: 2,
     tables: ["federation_wiki_cache"],

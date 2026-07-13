@@ -5,12 +5,15 @@
  * L13 real-path fix (commit 4c338bc). Both re-open a previously-"fixed" defect
  * on a secondary code path that the original L13 tests did not exercise.
  *
- *   BLOCKER 1 — repoRoot not threaded to the wiki-index.ts / classify-wiki-pages.ts
- *               CLI entry points → those CLIs emit wikiDir-relative ids/anchors
- *               (`index.md#slug`) that fail to resolve at repoRoot (re-triggers the
- *               BUG-3 unresolvable-anchor drop). Both CLIs advertise `--cwd` but
- *               ignore it. The fix: parse `--cwd`, resolve repoRoot, thread it to
- *               indexWiki so ids/anchors are repoRoot-relative (`.guild/wiki/…`).
+ *   BLOCKER 1 — repoRoot not threaded to the wiki-index.ts CLI entry point → the
+ *               CLI emits wikiDir-relative ids/anchors (`index.md#slug`) that fail
+ *               to resolve at repoRoot (re-triggers the BUG-3 unresolvable-anchor
+ *               drop). The CLI advertises `--cwd` but ignores it. The fix: parse
+ *               `--cwd`, resolve repoRoot, thread it to indexWiki so ids/anchors
+ *               are repoRoot-relative (`.guild/wiki/…`).
+ *               (classify-wiki-pages.ts previously shared this blocker but was
+ *               removed as unwired dead code — plugin-audit-remediation G5a —
+ *               superseded by the file-backed k2-judgments.json seam.)
  *
  *   BLOCKER 2 — discoverFilePaths recurses into everything except a hand-rolled
  *               dir list, ADMITTING test fixtures / vendor/ / out/ / generated
@@ -61,7 +64,6 @@ function write(repo: string, rel: string, content: string): void {
 
 const TSX_BIN = path.join(__dirname, "..", "node_modules", ".bin", "tsx");
 const WIKI_INDEX_CLI = path.join(__dirname, "..", "learn", "wiki-index.ts");
-const CLASSIFY_CLI = path.join(__dirname, "..", "learn", "classify-wiki-pages.ts");
 
 // ---------------------------------------------------------------------------
 // BLOCKER 1 — CLI entry points thread repoRoot (resolve --cwd → repoRoot)
@@ -96,24 +98,6 @@ describe("BLOCKER 1 — wiki-index.ts CLI threads --cwd → repoRoot (real spawn
       expect(ref.startsWith(".guild/wiki/")).toBe(true);
       expect(resolveAnchor(repo, ref)).toBe(true);
     }
-  }, 30000);
-});
-
-describe("BLOCKER 1 — classify-wiki-pages.ts CLI threads --cwd → repoRoot (real spawn)", () => {
-  test("--cwd makes printed wiki_page ids repoRoot-relative (not wikiDir-relative)", () => {
-    const repo = mkTmpRepo("guild-cli-classify-");
-    write(repo, ".guild/wiki/index.md", "# Index\n");
-    write(repo, ".guild/wiki/topic.md", "# Topic\n");
-    const wikiDir = path.join(repo, ".guild", "wiki");
-    const stdout = execFileSync(
-      TSX_BIN,
-      [CLASSIFY_CLI, wikiDir, "--cwd", repo],
-      { encoding: "utf8" },
-    );
-    // repoRoot-relative ids contain the `.guild/wiki/` prefix …
-    expect(stdout).toMatch(/wiki_page:\.guild\/wiki\/index\.md/);
-    // … and the bare wikiDir-relative form must NOT appear.
-    expect(stdout).not.toMatch(/wiki_page:index\.md\b/);
   }, 30000);
 });
 

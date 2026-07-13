@@ -16,7 +16,7 @@
  * from `.guild/settings.json` with the SAME documented defaults so a policy
  * decision can be made cheaply and without throwing.
  *
- * Decisions (canonical: docs/knowledge/decisions/v2-security-and-untrusted-content.md):
+ * Decisions (canonical: ADR: v2-security-and-untrusted-content (workspace wiki)):
  *   D-BYPASS  → security.bypass_permissions_policy   (deny|audit|allow, default "audit")
  *   D-SECRETS → secrets_policy.{env_allowlist,redaction_patterns,fail_mode_durable,fail_mode_telemetry}
  *   D-MCP     → mcp.tool_description_hashes           (tool-name → SHA-256, PI-6 description pinning)

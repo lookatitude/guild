@@ -5,6 +5,16 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -21,33 +31,6445 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// ../src/modules/kernel/workflows/module-manifest.ts
+var init_module_manifest = __esm({
+  "../src/modules/kernel/workflows/module-manifest.ts"() {
+  }
+});
+
+// node_modules/js-yaml/lib/common.js
+var require_common = __commonJS({
+  "node_modules/js-yaml/lib/common.js"(exports2, module2) {
+    "use strict";
+    function isNothing2(subject) {
+      return typeof subject === "undefined" || subject === null;
+    }
+    function isObject2(subject) {
+      return typeof subject === "object" && subject !== null;
+    }
+    function toArray2(sequence) {
+      if (Array.isArray(sequence)) return sequence;
+      else if (isNothing2(sequence)) return [];
+      return [sequence];
+    }
+    function extend3(target, source) {
+      if (source) {
+        const sourceKeys = Object.keys(source);
+        for (let index = 0, length = sourceKeys.length; index < length; index += 1) {
+          const key = sourceKeys[index];
+          target[key] = source[key];
+        }
+      }
+      return target;
+    }
+    function repeat2(string, count) {
+      let result = "";
+      for (let cycle = 0; cycle < count; cycle += 1) {
+        result += string;
+      }
+      return result;
+    }
+    function isNegativeZero2(number) {
+      return number === 0 && Number.NEGATIVE_INFINITY === 1 / number;
+    }
+    module2.exports.isNothing = isNothing2;
+    module2.exports.isObject = isObject2;
+    module2.exports.toArray = toArray2;
+    module2.exports.repeat = repeat2;
+    module2.exports.isNegativeZero = isNegativeZero2;
+    module2.exports.extend = extend3;
+  }
+});
+
+// node_modules/js-yaml/lib/exception.js
+var require_exception = __commonJS({
+  "node_modules/js-yaml/lib/exception.js"(exports2, module2) {
+    "use strict";
+    function formatError2(exception2, compact) {
+      let where = "";
+      const message = exception2.reason || "(unknown reason)";
+      if (!exception2.mark) return message;
+      if (exception2.mark.name) {
+        where += 'in "' + exception2.mark.name + '" ';
+      }
+      where += "(" + (exception2.mark.line + 1) + ":" + (exception2.mark.column + 1) + ")";
+      if (!compact && exception2.mark.snippet) {
+        where += "\n\n" + exception2.mark.snippet;
+      }
+      return message + " " + where;
+    }
+    function YAMLException(reason, mark) {
+      Error.call(this);
+      this.name = "YAMLException";
+      this.reason = reason;
+      this.mark = mark;
+      this.message = formatError2(this, false);
+      if (Error.captureStackTrace) {
+        Error.captureStackTrace(this, this.constructor);
+      } else {
+        this.stack = new Error().stack || "";
+      }
+    }
+    YAMLException.prototype = Object.create(Error.prototype);
+    YAMLException.prototype.constructor = YAMLException;
+    YAMLException.prototype.toString = function toString2(compact) {
+      return this.name + ": " + formatError2(this, compact);
+    };
+    module2.exports = YAMLException;
+  }
+});
+
+// node_modules/js-yaml/lib/snippet.js
+var require_snippet = __commonJS({
+  "node_modules/js-yaml/lib/snippet.js"(exports2, module2) {
+    "use strict";
+    var common2 = require_common();
+    function getLine2(buffer, lineStart, lineEnd, position, maxLineLength) {
+      let head = "";
+      let tail = "";
+      const maxHalfLength = Math.floor(maxLineLength / 2) - 1;
+      if (position - lineStart > maxHalfLength) {
+        head = " ... ";
+        lineStart = position - maxHalfLength + head.length;
+      }
+      if (lineEnd - position > maxHalfLength) {
+        tail = " ...";
+        lineEnd = position + maxHalfLength - tail.length;
+      }
+      return {
+        str: head + buffer.slice(lineStart, lineEnd).replace(/\t/g, "\u2192") + tail,
+        pos: position - lineStart + head.length
+        // relative position
+      };
+    }
+    function padStart2(string, max) {
+      return common2.repeat(" ", max - string.length) + string;
+    }
+    function makeSnippet2(mark, options) {
+      options = Object.create(options || null);
+      if (!mark.buffer) return null;
+      if (!options.maxLength) options.maxLength = 79;
+      if (typeof options.indent !== "number") options.indent = 1;
+      if (typeof options.linesBefore !== "number") options.linesBefore = 3;
+      if (typeof options.linesAfter !== "number") options.linesAfter = 2;
+      const re = /\r?\n|\r|\0/g;
+      const lineStarts = [0];
+      const lineEnds = [];
+      let match;
+      let foundLineNo = -1;
+      while (match = re.exec(mark.buffer)) {
+        lineEnds.push(match.index);
+        lineStarts.push(match.index + match[0].length);
+        if (mark.position <= match.index && foundLineNo < 0) {
+          foundLineNo = lineStarts.length - 2;
+        }
+      }
+      if (foundLineNo < 0) foundLineNo = lineStarts.length - 1;
+      let result = "";
+      const lineNoLength = Math.min(mark.line + options.linesAfter, lineEnds.length).toString().length;
+      const maxLineLength = options.maxLength - (options.indent + lineNoLength + 3);
+      for (let i = 1; i <= options.linesBefore; i++) {
+        if (foundLineNo - i < 0) break;
+        const line2 = getLine2(
+          mark.buffer,
+          lineStarts[foundLineNo - i],
+          lineEnds[foundLineNo - i],
+          mark.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo - i]),
+          maxLineLength
+        );
+        result = common2.repeat(" ", options.indent) + padStart2((mark.line - i + 1).toString(), lineNoLength) + " | " + line2.str + "\n" + result;
+      }
+      const line = getLine2(mark.buffer, lineStarts[foundLineNo], lineEnds[foundLineNo], mark.position, maxLineLength);
+      result += common2.repeat(" ", options.indent) + padStart2((mark.line + 1).toString(), lineNoLength) + " | " + line.str + "\n";
+      result += common2.repeat("-", options.indent + lineNoLength + 3 + line.pos) + "^\n";
+      for (let i = 1; i <= options.linesAfter; i++) {
+        if (foundLineNo + i >= lineEnds.length) break;
+        const line2 = getLine2(
+          mark.buffer,
+          lineStarts[foundLineNo + i],
+          lineEnds[foundLineNo + i],
+          mark.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo + i]),
+          maxLineLength
+        );
+        result += common2.repeat(" ", options.indent) + padStart2((mark.line + i + 1).toString(), lineNoLength) + " | " + line2.str + "\n";
+      }
+      return result.replace(/\n$/, "");
+    }
+    module2.exports = makeSnippet2;
+  }
+});
+
+// node_modules/js-yaml/lib/type.js
+var require_type = __commonJS({
+  "node_modules/js-yaml/lib/type.js"(exports2, module2) {
+    "use strict";
+    var YAMLException = require_exception();
+    var TYPE_CONSTRUCTOR_OPTIONS2 = [
+      "kind",
+      "multi",
+      "resolve",
+      "construct",
+      "instanceOf",
+      "predicate",
+      "represent",
+      "representName",
+      "defaultStyle",
+      "styleAliases"
+    ];
+    var YAML_NODE_KINDS2 = [
+      "scalar",
+      "sequence",
+      "mapping"
+    ];
+    function compileStyleAliases2(map2) {
+      const result = {};
+      if (map2 !== null) {
+        Object.keys(map2).forEach(function(style) {
+          map2[style].forEach(function(alias) {
+            result[String(alias)] = style;
+          });
+        });
+      }
+      return result;
+    }
+    function Type(tag, options) {
+      options = options || {};
+      Object.keys(options).forEach(function(name) {
+        if (TYPE_CONSTRUCTOR_OPTIONS2.indexOf(name) === -1) {
+          throw new YAMLException('Unknown option "' + name + '" is met in definition of "' + tag + '" YAML type.');
+        }
+      });
+      this.options = options;
+      this.tag = tag;
+      this.kind = options["kind"] || null;
+      this.resolve = options["resolve"] || function() {
+        return true;
+      };
+      this.construct = options["construct"] || function(data) {
+        return data;
+      };
+      this.instanceOf = options["instanceOf"] || null;
+      this.predicate = options["predicate"] || null;
+      this.represent = options["represent"] || null;
+      this.representName = options["representName"] || null;
+      this.defaultStyle = options["defaultStyle"] || null;
+      this.multi = options["multi"] || false;
+      this.styleAliases = compileStyleAliases2(options["styleAliases"] || null);
+      if (YAML_NODE_KINDS2.indexOf(this.kind) === -1) {
+        throw new YAMLException('Unknown kind "' + this.kind + '" is specified for "' + tag + '" YAML type.');
+      }
+    }
+    module2.exports = Type;
+  }
+});
+
+// node_modules/js-yaml/lib/schema.js
+var require_schema = __commonJS({
+  "node_modules/js-yaml/lib/schema.js"(exports2, module2) {
+    "use strict";
+    var YAMLException = require_exception();
+    var Type = require_type();
+    function compileList2(schema2, name) {
+      const result = [];
+      schema2[name].forEach(function(currentType) {
+        let newIndex = result.length;
+        result.forEach(function(previousType, previousIndex) {
+          if (previousType.tag === currentType.tag && previousType.kind === currentType.kind && previousType.multi === currentType.multi) {
+            newIndex = previousIndex;
+          }
+        });
+        result[newIndex] = currentType;
+      });
+      return result;
+    }
+    function compileMap2() {
+      const result = {
+        scalar: {},
+        sequence: {},
+        mapping: {},
+        fallback: {},
+        multi: {
+          scalar: [],
+          sequence: [],
+          mapping: [],
+          fallback: []
+        }
+      };
+      function collectType(type2) {
+        if (type2.multi) {
+          result.multi[type2.kind].push(type2);
+          result.multi["fallback"].push(type2);
+        } else {
+          result[type2.kind][type2.tag] = result["fallback"][type2.tag] = type2;
+        }
+      }
+      for (let index = 0, length = arguments.length; index < length; index += 1) {
+        arguments[index].forEach(collectType);
+      }
+      return result;
+    }
+    function Schema(definition) {
+      return this.extend(definition);
+    }
+    Schema.prototype.extend = function extend3(definition) {
+      let implicit = [];
+      let explicit = [];
+      if (definition instanceof Type) {
+        explicit.push(definition);
+      } else if (Array.isArray(definition)) {
+        explicit = explicit.concat(definition);
+      } else if (definition && (Array.isArray(definition.implicit) || Array.isArray(definition.explicit))) {
+        if (definition.implicit) implicit = implicit.concat(definition.implicit);
+        if (definition.explicit) explicit = explicit.concat(definition.explicit);
+      } else {
+        throw new YAMLException("Schema.extend argument should be a Type, [ Type ], or a schema definition ({ implicit: [...], explicit: [...] })");
+      }
+      implicit.forEach(function(type2) {
+        if (!(type2 instanceof Type)) {
+          throw new YAMLException("Specified list of YAML types (or a single Type object) contains a non-Type object.");
+        }
+        if (type2.loadKind && type2.loadKind !== "scalar") {
+          throw new YAMLException("There is a non-scalar type in the implicit list of a schema. Implicit resolving of such types is not supported.");
+        }
+        if (type2.multi) {
+          throw new YAMLException("There is a multi type in the implicit list of a schema. Multi tags can only be listed as explicit.");
+        }
+      });
+      explicit.forEach(function(type2) {
+        if (!(type2 instanceof Type)) {
+          throw new YAMLException("Specified list of YAML types (or a single Type object) contains a non-Type object.");
+        }
+      });
+      const result = Object.create(Schema.prototype);
+      result.implicit = (this.implicit || []).concat(implicit);
+      result.explicit = (this.explicit || []).concat(explicit);
+      result.compiledImplicit = compileList2(result, "implicit");
+      result.compiledExplicit = compileList2(result, "explicit");
+      result.compiledTypeMap = compileMap2(result.compiledImplicit, result.compiledExplicit);
+      return result;
+    };
+    module2.exports = Schema;
+  }
+});
+
+// node_modules/js-yaml/lib/type/str.js
+var require_str = __commonJS({
+  "node_modules/js-yaml/lib/type/str.js"(exports2, module2) {
+    "use strict";
+    var Type = require_type();
+    module2.exports = new Type("tag:yaml.org,2002:str", {
+      kind: "scalar",
+      construct: function(data) {
+        return data !== null ? data : "";
+      }
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/type/seq.js
+var require_seq = __commonJS({
+  "node_modules/js-yaml/lib/type/seq.js"(exports2, module2) {
+    "use strict";
+    var Type = require_type();
+    module2.exports = new Type("tag:yaml.org,2002:seq", {
+      kind: "sequence",
+      construct: function(data) {
+        return data !== null ? data : [];
+      }
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/type/map.js
+var require_map = __commonJS({
+  "node_modules/js-yaml/lib/type/map.js"(exports2, module2) {
+    "use strict";
+    var Type = require_type();
+    module2.exports = new Type("tag:yaml.org,2002:map", {
+      kind: "mapping",
+      construct: function(data) {
+        return data !== null ? data : {};
+      }
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/schema/failsafe.js
+var require_failsafe = __commonJS({
+  "node_modules/js-yaml/lib/schema/failsafe.js"(exports2, module2) {
+    "use strict";
+    var Schema = require_schema();
+    module2.exports = new Schema({
+      explicit: [
+        require_str(),
+        require_seq(),
+        require_map()
+      ]
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/type/null.js
+var require_null = __commonJS({
+  "node_modules/js-yaml/lib/type/null.js"(exports2, module2) {
+    "use strict";
+    var Type = require_type();
+    function resolveYamlNull2(data) {
+      if (data === null) return true;
+      const max = data.length;
+      return max === 1 && data === "~" || max === 4 && (data === "null" || data === "Null" || data === "NULL");
+    }
+    function constructYamlNull2() {
+      return null;
+    }
+    function isNull2(object) {
+      return object === null;
+    }
+    module2.exports = new Type("tag:yaml.org,2002:null", {
+      kind: "scalar",
+      resolve: resolveYamlNull2,
+      construct: constructYamlNull2,
+      predicate: isNull2,
+      represent: {
+        canonical: function() {
+          return "~";
+        },
+        lowercase: function() {
+          return "null";
+        },
+        uppercase: function() {
+          return "NULL";
+        },
+        camelcase: function() {
+          return "Null";
+        },
+        empty: function() {
+          return "";
+        }
+      },
+      defaultStyle: "lowercase"
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/type/bool.js
+var require_bool = __commonJS({
+  "node_modules/js-yaml/lib/type/bool.js"(exports2, module2) {
+    "use strict";
+    var Type = require_type();
+    function resolveYamlBoolean2(data) {
+      if (data === null) return false;
+      const max = data.length;
+      return max === 4 && (data === "true" || data === "True" || data === "TRUE") || max === 5 && (data === "false" || data === "False" || data === "FALSE");
+    }
+    function constructYamlBoolean2(data) {
+      return data === "true" || data === "True" || data === "TRUE";
+    }
+    function isBoolean2(object) {
+      return Object.prototype.toString.call(object) === "[object Boolean]";
+    }
+    module2.exports = new Type("tag:yaml.org,2002:bool", {
+      kind: "scalar",
+      resolve: resolveYamlBoolean2,
+      construct: constructYamlBoolean2,
+      predicate: isBoolean2,
+      represent: {
+        lowercase: function(object) {
+          return object ? "true" : "false";
+        },
+        uppercase: function(object) {
+          return object ? "TRUE" : "FALSE";
+        },
+        camelcase: function(object) {
+          return object ? "True" : "False";
+        }
+      },
+      defaultStyle: "lowercase"
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/type/int.js
+var require_int = __commonJS({
+  "node_modules/js-yaml/lib/type/int.js"(exports2, module2) {
+    "use strict";
+    var common2 = require_common();
+    var Type = require_type();
+    function isHexCode2(c) {
+      return c >= 48 && c <= 57 || c >= 65 && c <= 70 || c >= 97 && c <= 102;
+    }
+    function isOctCode2(c) {
+      return c >= 48 && c <= 55;
+    }
+    function isDecCode2(c) {
+      return c >= 48 && c <= 57;
+    }
+    function resolveYamlInteger2(data) {
+      if (data === null) return false;
+      const max = data.length;
+      let index = 0;
+      let hasDigits = false;
+      if (!max) return false;
+      let ch = data[index];
+      if (ch === "-" || ch === "+") {
+        ch = data[++index];
+      }
+      if (ch === "0") {
+        if (index + 1 === max) return true;
+        ch = data[++index];
+        if (ch === "b") {
+          index++;
+          for (; index < max; index++) {
+            ch = data[index];
+            if (ch !== "0" && ch !== "1") return false;
+            hasDigits = true;
+          }
+          return hasDigits && isFinite(parseYamlInteger(data));
+        }
+        if (ch === "x") {
+          index++;
+          for (; index < max; index++) {
+            if (!isHexCode2(data.charCodeAt(index))) return false;
+            hasDigits = true;
+          }
+          return hasDigits && isFinite(parseYamlInteger(data));
+        }
+        if (ch === "o") {
+          index++;
+          for (; index < max; index++) {
+            if (!isOctCode2(data.charCodeAt(index))) return false;
+            hasDigits = true;
+          }
+          return hasDigits && isFinite(parseYamlInteger(data));
+        }
+      }
+      for (; index < max; index++) {
+        if (!isDecCode2(data.charCodeAt(index))) {
+          return false;
+        }
+        hasDigits = true;
+      }
+      if (!hasDigits) return false;
+      return isFinite(parseYamlInteger(data));
+    }
+    function parseYamlInteger(data) {
+      let value = data;
+      let sign = 1;
+      let ch = value[0];
+      if (ch === "-" || ch === "+") {
+        if (ch === "-") sign = -1;
+        value = value.slice(1);
+        ch = value[0];
+      }
+      if (value === "0") return 0;
+      if (ch === "0") {
+        if (value[1] === "b") return sign * parseInt(value.slice(2), 2);
+        if (value[1] === "x") return sign * parseInt(value.slice(2), 16);
+        if (value[1] === "o") return sign * parseInt(value.slice(2), 8);
+      }
+      return sign * parseInt(value, 10);
+    }
+    function constructYamlInteger2(data) {
+      return parseYamlInteger(data);
+    }
+    function isInteger2(object) {
+      return Object.prototype.toString.call(object) === "[object Number]" && (object % 1 === 0 && !common2.isNegativeZero(object));
+    }
+    module2.exports = new Type("tag:yaml.org,2002:int", {
+      kind: "scalar",
+      resolve: resolveYamlInteger2,
+      construct: constructYamlInteger2,
+      predicate: isInteger2,
+      represent: {
+        binary: function(obj) {
+          return obj >= 0 ? "0b" + obj.toString(2) : "-0b" + obj.toString(2).slice(1);
+        },
+        octal: function(obj) {
+          return obj >= 0 ? "0o" + obj.toString(8) : "-0o" + obj.toString(8).slice(1);
+        },
+        decimal: function(obj) {
+          return obj.toString(10);
+        },
+        hexadecimal: function(obj) {
+          return obj >= 0 ? "0x" + obj.toString(16).toUpperCase() : "-0x" + obj.toString(16).toUpperCase().slice(1);
+        }
+      },
+      defaultStyle: "decimal",
+      styleAliases: {
+        binary: [2, "bin"],
+        octal: [8, "oct"],
+        decimal: [10, "dec"],
+        hexadecimal: [16, "hex"]
+      }
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/type/float.js
+var require_float = __commonJS({
+  "node_modules/js-yaml/lib/type/float.js"(exports2, module2) {
+    "use strict";
+    var common2 = require_common();
+    var Type = require_type();
+    var YAML_FLOAT_PATTERN2 = new RegExp(
+      // 2.5e4, 2.5 and integers
+      "^(?:[-+]?(?:[0-9]+)(?:\\.[0-9]*)?(?:[eE][-+]?[0-9]+)?|\\.[0-9]+(?:[eE][-+]?[0-9]+)?|[-+]?\\.(?:inf|Inf|INF)|\\.(?:nan|NaN|NAN))$"
+    );
+    var YAML_FLOAT_SPECIAL_PATTERN = new RegExp(
+      "^(?:[-+]?\\.(?:inf|Inf|INF)|\\.(?:nan|NaN|NAN))$"
+    );
+    function resolveYamlFloat2(data) {
+      if (data === null) return false;
+      if (!YAML_FLOAT_PATTERN2.test(data)) {
+        return false;
+      }
+      if (isFinite(parseFloat(data, 10))) {
+        return true;
+      }
+      return YAML_FLOAT_SPECIAL_PATTERN.test(data);
+    }
+    function constructYamlFloat2(data) {
+      let value = data.toLowerCase();
+      const sign = value[0] === "-" ? -1 : 1;
+      if ("+-".indexOf(value[0]) >= 0) {
+        value = value.slice(1);
+      }
+      if (value === ".inf") {
+        return sign === 1 ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY;
+      } else if (value === ".nan") {
+        return NaN;
+      }
+      return sign * parseFloat(value, 10);
+    }
+    var SCIENTIFIC_WITHOUT_DOT2 = /^[-+]?[0-9]+e/;
+    function representYamlFloat2(object, style) {
+      if (isNaN(object)) {
+        switch (style) {
+          case "lowercase":
+            return ".nan";
+          case "uppercase":
+            return ".NAN";
+          case "camelcase":
+            return ".NaN";
+        }
+      } else if (Number.POSITIVE_INFINITY === object) {
+        switch (style) {
+          case "lowercase":
+            return ".inf";
+          case "uppercase":
+            return ".INF";
+          case "camelcase":
+            return ".Inf";
+        }
+      } else if (Number.NEGATIVE_INFINITY === object) {
+        switch (style) {
+          case "lowercase":
+            return "-.inf";
+          case "uppercase":
+            return "-.INF";
+          case "camelcase":
+            return "-.Inf";
+        }
+      } else if (common2.isNegativeZero(object)) {
+        return "-0.0";
+      }
+      const res = object.toString(10);
+      return SCIENTIFIC_WITHOUT_DOT2.test(res) ? res.replace("e", ".e") : res;
+    }
+    function isFloat2(object) {
+      return Object.prototype.toString.call(object) === "[object Number]" && (object % 1 !== 0 || common2.isNegativeZero(object));
+    }
+    module2.exports = new Type("tag:yaml.org,2002:float", {
+      kind: "scalar",
+      resolve: resolveYamlFloat2,
+      construct: constructYamlFloat2,
+      predicate: isFloat2,
+      represent: representYamlFloat2,
+      defaultStyle: "lowercase"
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/schema/json.js
+var require_json = __commonJS({
+  "node_modules/js-yaml/lib/schema/json.js"(exports2, module2) {
+    "use strict";
+    module2.exports = require_failsafe().extend({
+      implicit: [
+        require_null(),
+        require_bool(),
+        require_int(),
+        require_float()
+      ]
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/schema/core.js
+var require_core = __commonJS({
+  "node_modules/js-yaml/lib/schema/core.js"(exports2, module2) {
+    "use strict";
+    module2.exports = require_json();
+  }
+});
+
+// node_modules/js-yaml/lib/type/timestamp.js
+var require_timestamp = __commonJS({
+  "node_modules/js-yaml/lib/type/timestamp.js"(exports2, module2) {
+    "use strict";
+    var Type = require_type();
+    var YAML_DATE_REGEXP2 = new RegExp(
+      "^([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])$"
+    );
+    var YAML_TIMESTAMP_REGEXP2 = new RegExp(
+      "^([0-9][0-9][0-9][0-9])-([0-9][0-9]?)-([0-9][0-9]?)(?:[Tt]|[ \\t]+)([0-9][0-9]?):([0-9][0-9]):([0-9][0-9])(?:\\.([0-9]*))?(?:[ \\t]*(Z|([-+])([0-9][0-9]?)(?::([0-9][0-9]))?))?$"
+    );
+    function resolveYamlTimestamp2(data) {
+      if (data === null) return false;
+      if (YAML_DATE_REGEXP2.exec(data) !== null) return true;
+      if (YAML_TIMESTAMP_REGEXP2.exec(data) !== null) return true;
+      return false;
+    }
+    function constructYamlTimestamp2(data) {
+      let fraction = 0;
+      let delta = null;
+      let match = YAML_DATE_REGEXP2.exec(data);
+      if (match === null) match = YAML_TIMESTAMP_REGEXP2.exec(data);
+      if (match === null) throw new Error("Date resolve error");
+      const year = +match[1];
+      const month = +match[2] - 1;
+      const day = +match[3];
+      if (!match[4]) {
+        return new Date(Date.UTC(year, month, day));
+      }
+      const hour = +match[4];
+      const minute = +match[5];
+      const second = +match[6];
+      if (match[7]) {
+        fraction = match[7].slice(0, 3);
+        while (fraction.length < 3) {
+          fraction += "0";
+        }
+        fraction = +fraction;
+      }
+      if (match[9]) {
+        const tzHour = +match[10];
+        const tzMinute = +(match[11] || 0);
+        delta = (tzHour * 60 + tzMinute) * 6e4;
+        if (match[9] === "-") delta = -delta;
+      }
+      const date = new Date(Date.UTC(year, month, day, hour, minute, second, fraction));
+      if (delta) date.setTime(date.getTime() - delta);
+      return date;
+    }
+    function representYamlTimestamp2(object) {
+      return object.toISOString();
+    }
+    module2.exports = new Type("tag:yaml.org,2002:timestamp", {
+      kind: "scalar",
+      resolve: resolveYamlTimestamp2,
+      construct: constructYamlTimestamp2,
+      instanceOf: Date,
+      represent: representYamlTimestamp2
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/type/merge.js
+var require_merge = __commonJS({
+  "node_modules/js-yaml/lib/type/merge.js"(exports2, module2) {
+    "use strict";
+    var Type = require_type();
+    function resolveYamlMerge2(data) {
+      return data === "<<" || data === null;
+    }
+    module2.exports = new Type("tag:yaml.org,2002:merge", {
+      kind: "scalar",
+      resolve: resolveYamlMerge2
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/type/binary.js
+var require_binary = __commonJS({
+  "node_modules/js-yaml/lib/type/binary.js"(exports2, module2) {
+    "use strict";
+    var Type = require_type();
+    var BASE64_MAP2 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r";
+    function resolveYamlBinary2(data) {
+      if (data === null) return false;
+      let bitlen = 0;
+      const max = data.length;
+      const map2 = BASE64_MAP2;
+      for (let idx = 0; idx < max; idx++) {
+        const code = map2.indexOf(data.charAt(idx));
+        if (code > 64) continue;
+        if (code < 0) return false;
+        bitlen += 6;
+      }
+      return bitlen % 8 === 0;
+    }
+    function constructYamlBinary2(data) {
+      const input = data.replace(/[\r\n=]/g, "");
+      const max = input.length;
+      const map2 = BASE64_MAP2;
+      let bits = 0;
+      const result = [];
+      for (let idx = 0; idx < max; idx++) {
+        if (idx % 4 === 0 && idx) {
+          result.push(bits >> 16 & 255);
+          result.push(bits >> 8 & 255);
+          result.push(bits & 255);
+        }
+        bits = bits << 6 | map2.indexOf(input.charAt(idx));
+      }
+      const tailbits = max % 4 * 6;
+      if (tailbits === 0) {
+        result.push(bits >> 16 & 255);
+        result.push(bits >> 8 & 255);
+        result.push(bits & 255);
+      } else if (tailbits === 18) {
+        result.push(bits >> 10 & 255);
+        result.push(bits >> 2 & 255);
+      } else if (tailbits === 12) {
+        result.push(bits >> 4 & 255);
+      }
+      return new Uint8Array(result);
+    }
+    function representYamlBinary2(object) {
+      let result = "";
+      let bits = 0;
+      const max = object.length;
+      const map2 = BASE64_MAP2;
+      for (let idx = 0; idx < max; idx++) {
+        if (idx % 3 === 0 && idx) {
+          result += map2[bits >> 18 & 63];
+          result += map2[bits >> 12 & 63];
+          result += map2[bits >> 6 & 63];
+          result += map2[bits & 63];
+        }
+        bits = (bits << 8) + object[idx];
+      }
+      const tail = max % 3;
+      if (tail === 0) {
+        result += map2[bits >> 18 & 63];
+        result += map2[bits >> 12 & 63];
+        result += map2[bits >> 6 & 63];
+        result += map2[bits & 63];
+      } else if (tail === 2) {
+        result += map2[bits >> 10 & 63];
+        result += map2[bits >> 4 & 63];
+        result += map2[bits << 2 & 63];
+        result += map2[64];
+      } else if (tail === 1) {
+        result += map2[bits >> 2 & 63];
+        result += map2[bits << 4 & 63];
+        result += map2[64];
+        result += map2[64];
+      }
+      return result;
+    }
+    function isBinary2(obj) {
+      return Object.prototype.toString.call(obj) === "[object Uint8Array]";
+    }
+    module2.exports = new Type("tag:yaml.org,2002:binary", {
+      kind: "scalar",
+      resolve: resolveYamlBinary2,
+      construct: constructYamlBinary2,
+      predicate: isBinary2,
+      represent: representYamlBinary2
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/type/omap.js
+var require_omap = __commonJS({
+  "node_modules/js-yaml/lib/type/omap.js"(exports2, module2) {
+    "use strict";
+    var Type = require_type();
+    var _hasOwnProperty2 = Object.prototype.hasOwnProperty;
+    var _toString2 = Object.prototype.toString;
+    function resolveYamlOmap2(data) {
+      if (data === null) return true;
+      const objectKeys = [];
+      const object = data;
+      for (let index = 0, length = object.length; index < length; index += 1) {
+        const pair = object[index];
+        let pairHasKey = false;
+        if (_toString2.call(pair) !== "[object Object]") return false;
+        let pairKey;
+        for (pairKey in pair) {
+          if (_hasOwnProperty2.call(pair, pairKey)) {
+            if (!pairHasKey) pairHasKey = true;
+            else return false;
+          }
+        }
+        if (!pairHasKey) return false;
+        if (objectKeys.indexOf(pairKey) === -1) objectKeys.push(pairKey);
+        else return false;
+      }
+      return true;
+    }
+    function constructYamlOmap2(data) {
+      return data !== null ? data : [];
+    }
+    module2.exports = new Type("tag:yaml.org,2002:omap", {
+      kind: "sequence",
+      resolve: resolveYamlOmap2,
+      construct: constructYamlOmap2
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/type/pairs.js
+var require_pairs = __commonJS({
+  "node_modules/js-yaml/lib/type/pairs.js"(exports2, module2) {
+    "use strict";
+    var Type = require_type();
+    var _toString2 = Object.prototype.toString;
+    function resolveYamlPairs2(data) {
+      if (data === null) return true;
+      const object = data;
+      const result = new Array(object.length);
+      for (let index = 0, length = object.length; index < length; index += 1) {
+        const pair = object[index];
+        if (_toString2.call(pair) !== "[object Object]") return false;
+        const keys = Object.keys(pair);
+        if (keys.length !== 1) return false;
+        result[index] = [keys[0], pair[keys[0]]];
+      }
+      return true;
+    }
+    function constructYamlPairs2(data) {
+      if (data === null) return [];
+      const object = data;
+      const result = new Array(object.length);
+      for (let index = 0, length = object.length; index < length; index += 1) {
+        const pair = object[index];
+        const keys = Object.keys(pair);
+        result[index] = [keys[0], pair[keys[0]]];
+      }
+      return result;
+    }
+    module2.exports = new Type("tag:yaml.org,2002:pairs", {
+      kind: "sequence",
+      resolve: resolveYamlPairs2,
+      construct: constructYamlPairs2
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/type/set.js
+var require_set = __commonJS({
+  "node_modules/js-yaml/lib/type/set.js"(exports2, module2) {
+    "use strict";
+    var Type = require_type();
+    var _hasOwnProperty2 = Object.prototype.hasOwnProperty;
+    function resolveYamlSet2(data) {
+      if (data === null) return true;
+      const object = data;
+      for (const key in object) {
+        if (_hasOwnProperty2.call(object, key)) {
+          if (object[key] !== null) return false;
+        }
+      }
+      return true;
+    }
+    function constructYamlSet2(data) {
+      return data !== null ? data : {};
+    }
+    module2.exports = new Type("tag:yaml.org,2002:set", {
+      kind: "mapping",
+      resolve: resolveYamlSet2,
+      construct: constructYamlSet2
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/schema/default.js
+var require_default = __commonJS({
+  "node_modules/js-yaml/lib/schema/default.js"(exports2, module2) {
+    "use strict";
+    module2.exports = require_core().extend({
+      implicit: [
+        require_timestamp(),
+        require_merge()
+      ],
+      explicit: [
+        require_binary(),
+        require_omap(),
+        require_pairs(),
+        require_set()
+      ]
+    });
+  }
+});
+
+// node_modules/js-yaml/lib/loader.js
+var require_loader = __commonJS({
+  "node_modules/js-yaml/lib/loader.js"(exports2, module2) {
+    "use strict";
+    var common2 = require_common();
+    var YAMLException = require_exception();
+    var makeSnippet2 = require_snippet();
+    var DEFAULT_SCHEMA = require_default();
+    var _hasOwnProperty2 = Object.prototype.hasOwnProperty;
+    var CONTEXT_FLOW_IN2 = 1;
+    var CONTEXT_FLOW_OUT2 = 2;
+    var CONTEXT_BLOCK_IN2 = 3;
+    var CONTEXT_BLOCK_OUT2 = 4;
+    var CHOMPING_CLIP2 = 1;
+    var CHOMPING_STRIP2 = 2;
+    var CHOMPING_KEEP2 = 3;
+    var PATTERN_NON_PRINTABLE2 = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x84\x86-\x9F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]/;
+    var PATTERN_NON_ASCII_LINE_BREAKS2 = /[\x85\u2028\u2029]/;
+    var PATTERN_FLOW_INDICATORS2 = /[,\[\]{}]/;
+    var PATTERN_TAG_HANDLE2 = /^(?:!|!!|![0-9A-Za-z-]+!)$/;
+    var PATTERN_TAG_URI2 = /^(?:!|[^,\[\]{}])(?:%[0-9a-f]{2}|[0-9a-z\-#;/?:@&=+$,_.!~*'()\[\]])*$/i;
+    function _class2(obj) {
+      return Object.prototype.toString.call(obj);
+    }
+    function isEol(c) {
+      return c === 10 || c === 13;
+    }
+    function isWhiteSpace(c) {
+      return c === 9 || c === 32;
+    }
+    function isWsOrEol(c) {
+      return c === 9 || c === 32 || c === 10 || c === 13;
+    }
+    function isFlowIndicator(c) {
+      return c === 44 || c === 91 || c === 93 || c === 123 || c === 125;
+    }
+    function fromHexCode2(c) {
+      if (c >= 48 && c <= 57) {
+        return c - 48;
+      }
+      const lc = c | 32;
+      if (lc >= 97 && lc <= 102) {
+        return lc - 97 + 10;
+      }
+      return -1;
+    }
+    function escapedHexLen2(c) {
+      if (c === 120) {
+        return 2;
+      }
+      if (c === 117) {
+        return 4;
+      }
+      if (c === 85) {
+        return 8;
+      }
+      return 0;
+    }
+    function fromDecimalCode2(c) {
+      if (c >= 48 && c <= 57) {
+        return c - 48;
+      }
+      return -1;
+    }
+    function simpleEscapeSequence2(c) {
+      switch (c) {
+        case 48:
+          return "\0";
+        case 97:
+          return "\x07";
+        case 98:
+          return "\b";
+        case 116:
+          return "	";
+        case 9:
+          return "	";
+        case 110:
+          return "\n";
+        case 118:
+          return "\v";
+        case 102:
+          return "\f";
+        case 114:
+          return "\r";
+        case 101:
+          return "\x1B";
+        case 32:
+          return " ";
+        case 34:
+          return '"';
+        case 47:
+          return "/";
+        case 92:
+          return "\\";
+        case 78:
+          return "\x85";
+        case 95:
+          return "\xA0";
+        case 76:
+          return "\u2028";
+        case 80:
+          return "\u2029";
+        default:
+          return "";
+      }
+    }
+    function charFromCodepoint2(c) {
+      if (c <= 65535) {
+        return String.fromCharCode(c);
+      }
+      return String.fromCharCode(
+        (c - 65536 >> 10) + 55296,
+        (c - 65536 & 1023) + 56320
+      );
+    }
+    function setProperty2(object, key, value) {
+      if (key === "__proto__") {
+        Object.defineProperty(object, key, {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value
+        });
+      } else {
+        object[key] = value;
+      }
+    }
+    var simpleEscapeCheck2 = new Array(256);
+    var simpleEscapeMap2 = new Array(256);
+    for (let i = 0; i < 256; i++) {
+      simpleEscapeCheck2[i] = simpleEscapeSequence2(i) ? 1 : 0;
+      simpleEscapeMap2[i] = simpleEscapeSequence2(i);
+    }
+    function State2(input, options) {
+      this.input = input;
+      this.filename = options["filename"] || null;
+      this.schema = options["schema"] || DEFAULT_SCHEMA;
+      this.onWarning = options["onWarning"] || null;
+      this.legacy = options["legacy"] || false;
+      this.json = options["json"] || false;
+      this.listener = options["listener"] || null;
+      this.maxDepth = typeof options["maxDepth"] === "number" ? options["maxDepth"] : 100;
+      this.maxTotalMergeKeys = typeof options["maxTotalMergeKeys"] === "number" ? options["maxTotalMergeKeys"] : 1e4;
+      this.implicitTypes = this.schema.compiledImplicit;
+      this.typeMap = this.schema.compiledTypeMap;
+      this.length = input.length;
+      this.position = 0;
+      this.line = 0;
+      this.lineStart = 0;
+      this.lineIndent = 0;
+      this.depth = 0;
+      this.totalMergeKeys = 0;
+      this.firstTabInLine = -1;
+      this.documents = [];
+      this.anchorMapTransactions = [];
+    }
+    function generateError2(state, message) {
+      const mark = {
+        name: state.filename,
+        buffer: state.input.slice(0, -1),
+        // omit trailing \0
+        position: state.position,
+        line: state.line,
+        column: state.position - state.lineStart
+      };
+      mark.snippet = makeSnippet2(mark);
+      return new YAMLException(message, mark);
+    }
+    function throwError2(state, message) {
+      throw generateError2(state, message);
+    }
+    function throwWarning2(state, message) {
+      if (state.onWarning) {
+        state.onWarning.call(null, generateError2(state, message));
+      }
+    }
+    function storeAnchor(state, name, value) {
+      const transactions = state.anchorMapTransactions;
+      if (transactions.length !== 0) {
+        const transaction = transactions[transactions.length - 1];
+        if (!_hasOwnProperty2.call(transaction, name)) {
+          transaction[name] = {
+            existed: _hasOwnProperty2.call(state.anchorMap, name),
+            value: state.anchorMap[name]
+          };
+        }
+      }
+      state.anchorMap[name] = value;
+    }
+    function beginAnchorTransaction(state) {
+      state.anchorMapTransactions.push(/* @__PURE__ */ Object.create(null));
+    }
+    function commitAnchorTransaction(state) {
+      const transaction = state.anchorMapTransactions.pop();
+      const transactions = state.anchorMapTransactions;
+      if (transactions.length === 0) return;
+      const parent = transactions[transactions.length - 1];
+      const names = Object.keys(transaction);
+      for (let index = 0, length = names.length; index < length; index += 1) {
+        const name = names[index];
+        if (!_hasOwnProperty2.call(parent, name)) {
+          parent[name] = transaction[name];
+        }
+      }
+    }
+    function rollbackAnchorTransaction(state) {
+      const transaction = state.anchorMapTransactions.pop();
+      const names = Object.keys(transaction);
+      for (let index = names.length - 1; index >= 0; index -= 1) {
+        const entry = transaction[names[index]];
+        if (entry.existed) {
+          state.anchorMap[names[index]] = entry.value;
+        } else {
+          delete state.anchorMap[names[index]];
+        }
+      }
+    }
+    function snapshotState(state) {
+      return {
+        position: state.position,
+        line: state.line,
+        lineStart: state.lineStart,
+        lineIndent: state.lineIndent,
+        firstTabInLine: state.firstTabInLine,
+        tag: state.tag,
+        anchor: state.anchor,
+        kind: state.kind,
+        result: state.result
+      };
+    }
+    function restoreState(state, snapshot) {
+      state.position = snapshot.position;
+      state.line = snapshot.line;
+      state.lineStart = snapshot.lineStart;
+      state.lineIndent = snapshot.lineIndent;
+      state.firstTabInLine = snapshot.firstTabInLine;
+      state.tag = snapshot.tag;
+      state.anchor = snapshot.anchor;
+      state.kind = snapshot.kind;
+      state.result = snapshot.result;
+    }
+    var directiveHandlers2 = {
+      YAML: function handleYamlDirective2(state, name, args) {
+        if (state.version !== null) {
+          throwError2(state, "duplication of %YAML directive");
+        }
+        if (args.length !== 1) {
+          throwError2(state, "YAML directive accepts exactly one argument");
+        }
+        const match = /^([0-9]+)\.([0-9]+)$/.exec(args[0]);
+        if (match === null) {
+          throwError2(state, "ill-formed argument of the YAML directive");
+        }
+        const major = parseInt(match[1], 10);
+        const minor = parseInt(match[2], 10);
+        if (major !== 1) {
+          throwError2(state, "unacceptable YAML version of the document");
+        }
+        state.version = args[0];
+        state.checkLineBreaks = minor < 2;
+        if (minor !== 1 && minor !== 2) {
+          throwWarning2(state, "unsupported YAML version of the document");
+        }
+      },
+      TAG: function handleTagDirective2(state, name, args) {
+        let prefix;
+        if (args.length !== 2) {
+          throwError2(state, "TAG directive accepts exactly two arguments");
+        }
+        const handle = args[0];
+        prefix = args[1];
+        if (!PATTERN_TAG_HANDLE2.test(handle)) {
+          throwError2(state, "ill-formed tag handle (first argument) of the TAG directive");
+        }
+        if (_hasOwnProperty2.call(state.tagMap, handle)) {
+          throwError2(state, 'there is a previously declared suffix for "' + handle + '" tag handle');
+        }
+        if (!PATTERN_TAG_URI2.test(prefix)) {
+          throwError2(state, "ill-formed tag prefix (second argument) of the TAG directive");
+        }
+        try {
+          prefix = decodeURIComponent(prefix);
+        } catch (err) {
+          throwError2(state, "tag prefix is malformed: " + prefix);
+        }
+        state.tagMap[handle] = prefix;
+      }
+    };
+    function captureSegment2(state, start, end, checkJson) {
+      if (start < end) {
+        const _result = state.input.slice(start, end);
+        if (checkJson) {
+          for (let _position = 0, _length = _result.length; _position < _length; _position += 1) {
+            const _character = _result.charCodeAt(_position);
+            if (!(_character === 9 || _character >= 32 && _character <= 1114111)) {
+              throwError2(state, "expected valid JSON character");
+            }
+          }
+        } else if (PATTERN_NON_PRINTABLE2.test(_result)) {
+          throwError2(state, "the stream contains non-printable characters");
+        }
+        state.result += _result;
+      }
+    }
+    function mergeMappings2(state, destination, source, overridableKeys) {
+      if (!common2.isObject(source)) {
+        throwError2(state, "cannot merge mappings; the provided source object is unacceptable");
+      }
+      const sourceKeys = Object.keys(source);
+      for (let index = 0, quantity = sourceKeys.length; index < quantity; index += 1) {
+        const key = sourceKeys[index];
+        if (state.maxTotalMergeKeys !== -1 && ++state.totalMergeKeys > state.maxTotalMergeKeys) {
+          throwError2(state, "merge keys exceeded maxTotalMergeKeys (" + state.maxTotalMergeKeys + ")");
+        }
+        if (!_hasOwnProperty2.call(destination, key)) {
+          setProperty2(destination, key, source[key]);
+          overridableKeys[key] = true;
+        }
+      }
+    }
+    function storeMappingPair2(state, _result, overridableKeys, keyTag, keyNode, valueNode, startLine, startLineStart, startPos) {
+      if (Array.isArray(keyNode)) {
+        keyNode = Array.prototype.slice.call(keyNode);
+        for (let index = 0, quantity = keyNode.length; index < quantity; index += 1) {
+          if (Array.isArray(keyNode[index])) {
+            throwError2(state, "nested arrays are not supported inside keys");
+          }
+          if (typeof keyNode === "object" && _class2(keyNode[index]) === "[object Object]") {
+            keyNode[index] = "[object Object]";
+          }
+        }
+      }
+      if (typeof keyNode === "object" && _class2(keyNode) === "[object Object]") {
+        keyNode = "[object Object]";
+      }
+      keyNode = String(keyNode);
+      if (_result === null) {
+        _result = {};
+      }
+      if (keyTag === "tag:yaml.org,2002:merge") {
+        if (Array.isArray(valueNode)) {
+          for (let index = 0, quantity = valueNode.length; index < quantity; index += 1) {
+            mergeMappings2(state, _result, valueNode[index], overridableKeys);
+          }
+        } else {
+          mergeMappings2(state, _result, valueNode, overridableKeys);
+        }
+      } else {
+        if (!state.json && !_hasOwnProperty2.call(overridableKeys, keyNode) && _hasOwnProperty2.call(_result, keyNode)) {
+          state.line = startLine || state.line;
+          state.lineStart = startLineStart || state.lineStart;
+          state.position = startPos || state.position;
+          throwError2(state, "duplicated mapping key");
+        }
+        setProperty2(_result, keyNode, valueNode);
+        delete overridableKeys[keyNode];
+      }
+      return _result;
+    }
+    function readLineBreak2(state) {
+      const ch = state.input.charCodeAt(state.position);
+      if (ch === 10) {
+        state.position++;
+      } else if (ch === 13) {
+        state.position++;
+        if (state.input.charCodeAt(state.position) === 10) {
+          state.position++;
+        }
+      } else {
+        throwError2(state, "a line break is expected");
+      }
+      state.line += 1;
+      state.lineStart = state.position;
+      state.firstTabInLine = -1;
+    }
+    function skipSeparationSpace2(state, allowComments, checkIndent) {
+      let lineBreaks = 0;
+      let ch = state.input.charCodeAt(state.position);
+      while (ch !== 0) {
+        while (isWhiteSpace(ch)) {
+          if (ch === 9 && state.firstTabInLine === -1) {
+            state.firstTabInLine = state.position;
+          }
+          ch = state.input.charCodeAt(++state.position);
+        }
+        if (allowComments && ch === 35) {
+          do {
+            ch = state.input.charCodeAt(++state.position);
+          } while (ch !== 10 && ch !== 13 && ch !== 0);
+        }
+        if (isEol(ch)) {
+          readLineBreak2(state);
+          ch = state.input.charCodeAt(state.position);
+          lineBreaks++;
+          state.lineIndent = 0;
+          while (ch === 32) {
+            state.lineIndent++;
+            ch = state.input.charCodeAt(++state.position);
+          }
+        } else {
+          break;
+        }
+      }
+      if (checkIndent !== -1 && lineBreaks !== 0 && state.lineIndent < checkIndent) {
+        throwWarning2(state, "deficient indentation");
+      }
+      return lineBreaks;
+    }
+    function testDocumentSeparator2(state) {
+      let _position = state.position;
+      let ch = state.input.charCodeAt(_position);
+      if ((ch === 45 || ch === 46) && ch === state.input.charCodeAt(_position + 1) && ch === state.input.charCodeAt(_position + 2)) {
+        _position += 3;
+        ch = state.input.charCodeAt(_position);
+        if (ch === 0 || isWsOrEol(ch)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    function writeFoldedLines2(state, count) {
+      if (count === 1) {
+        state.result += " ";
+      } else if (count > 1) {
+        state.result += common2.repeat("\n", count - 1);
+      }
+    }
+    function readPlainScalar2(state, nodeIndent, withinFlowCollection) {
+      let captureStart;
+      let captureEnd;
+      let hasPendingContent;
+      let _line;
+      let _lineStart;
+      let _lineIndent;
+      const _kind = state.kind;
+      const _result = state.result;
+      let ch = state.input.charCodeAt(state.position);
+      if (isWsOrEol(ch) || isFlowIndicator(ch) || ch === 35 || ch === 38 || ch === 42 || ch === 33 || ch === 124 || ch === 62 || ch === 39 || ch === 34 || ch === 37 || ch === 64 || ch === 96) {
+        return false;
+      }
+      if (ch === 63 || ch === 45) {
+        const following = state.input.charCodeAt(state.position + 1);
+        if (isWsOrEol(following) || withinFlowCollection && isFlowIndicator(following)) {
+          return false;
+        }
+      }
+      state.kind = "scalar";
+      state.result = "";
+      captureStart = captureEnd = state.position;
+      hasPendingContent = false;
+      while (ch !== 0) {
+        if (ch === 58) {
+          const following = state.input.charCodeAt(state.position + 1);
+          if (isWsOrEol(following) || withinFlowCollection && isFlowIndicator(following)) {
+            break;
+          }
+        } else if (ch === 35) {
+          const preceding = state.input.charCodeAt(state.position - 1);
+          if (isWsOrEol(preceding)) {
+            break;
+          }
+        } else if (state.position === state.lineStart && testDocumentSeparator2(state) || withinFlowCollection && isFlowIndicator(ch)) {
+          break;
+        } else if (isEol(ch)) {
+          _line = state.line;
+          _lineStart = state.lineStart;
+          _lineIndent = state.lineIndent;
+          skipSeparationSpace2(state, false, -1);
+          if (state.lineIndent >= nodeIndent) {
+            hasPendingContent = true;
+            ch = state.input.charCodeAt(state.position);
+            continue;
+          } else {
+            state.position = captureEnd;
+            state.line = _line;
+            state.lineStart = _lineStart;
+            state.lineIndent = _lineIndent;
+            break;
+          }
+        }
+        if (hasPendingContent) {
+          captureSegment2(state, captureStart, captureEnd, false);
+          writeFoldedLines2(state, state.line - _line);
+          captureStart = captureEnd = state.position;
+          hasPendingContent = false;
+        }
+        if (!isWhiteSpace(ch)) {
+          captureEnd = state.position + 1;
+        }
+        ch = state.input.charCodeAt(++state.position);
+      }
+      captureSegment2(state, captureStart, captureEnd, false);
+      if (state.result) {
+        return true;
+      }
+      state.kind = _kind;
+      state.result = _result;
+      return false;
+    }
+    function readSingleQuotedScalar2(state, nodeIndent) {
+      let captureStart;
+      let captureEnd;
+      let ch = state.input.charCodeAt(state.position);
+      if (ch !== 39) {
+        return false;
+      }
+      state.kind = "scalar";
+      state.result = "";
+      state.position++;
+      captureStart = captureEnd = state.position;
+      while ((ch = state.input.charCodeAt(state.position)) !== 0) {
+        if (ch === 39) {
+          captureSegment2(state, captureStart, state.position, true);
+          ch = state.input.charCodeAt(++state.position);
+          if (ch === 39) {
+            captureStart = state.position;
+            state.position++;
+            captureEnd = state.position;
+          } else {
+            return true;
+          }
+        } else if (isEol(ch)) {
+          captureSegment2(state, captureStart, captureEnd, true);
+          writeFoldedLines2(state, skipSeparationSpace2(state, false, nodeIndent));
+          captureStart = captureEnd = state.position;
+        } else if (state.position === state.lineStart && testDocumentSeparator2(state)) {
+          throwError2(state, "unexpected end of the document within a single quoted scalar");
+        } else {
+          state.position++;
+          if (!isWhiteSpace(ch)) {
+            captureEnd = state.position;
+          }
+        }
+      }
+      throwError2(state, "unexpected end of the stream within a single quoted scalar");
+    }
+    function readDoubleQuotedScalar2(state, nodeIndent) {
+      let captureStart;
+      let captureEnd;
+      let tmp;
+      let ch = state.input.charCodeAt(state.position);
+      if (ch !== 34) {
+        return false;
+      }
+      state.kind = "scalar";
+      state.result = "";
+      state.position++;
+      captureStart = captureEnd = state.position;
+      while ((ch = state.input.charCodeAt(state.position)) !== 0) {
+        if (ch === 34) {
+          captureSegment2(state, captureStart, state.position, true);
+          state.position++;
+          return true;
+        } else if (ch === 92) {
+          captureSegment2(state, captureStart, state.position, true);
+          ch = state.input.charCodeAt(++state.position);
+          if (isEol(ch)) {
+            skipSeparationSpace2(state, false, nodeIndent);
+          } else if (ch < 256 && simpleEscapeCheck2[ch]) {
+            state.result += simpleEscapeMap2[ch];
+            state.position++;
+          } else if ((tmp = escapedHexLen2(ch)) > 0) {
+            let hexLength = tmp;
+            let hexResult = 0;
+            for (; hexLength > 0; hexLength--) {
+              ch = state.input.charCodeAt(++state.position);
+              if ((tmp = fromHexCode2(ch)) >= 0) {
+                hexResult = (hexResult << 4) + tmp;
+              } else {
+                throwError2(state, "expected hexadecimal character");
+              }
+            }
+            state.result += charFromCodepoint2(hexResult);
+            state.position++;
+          } else {
+            throwError2(state, "unknown escape sequence");
+          }
+          captureStart = captureEnd = state.position;
+        } else if (isEol(ch)) {
+          captureSegment2(state, captureStart, captureEnd, true);
+          writeFoldedLines2(state, skipSeparationSpace2(state, false, nodeIndent));
+          captureStart = captureEnd = state.position;
+        } else if (state.position === state.lineStart && testDocumentSeparator2(state)) {
+          throwError2(state, "unexpected end of the document within a double quoted scalar");
+        } else {
+          state.position++;
+          if (!isWhiteSpace(ch)) {
+            captureEnd = state.position;
+          }
+        }
+      }
+      throwError2(state, "unexpected end of the stream within a double quoted scalar");
+    }
+    function readFlowCollection2(state, nodeIndent) {
+      let readNext = true;
+      let _line;
+      let _lineStart;
+      let _pos;
+      const _tag = state.tag;
+      let _result;
+      const _anchor = state.anchor;
+      let terminator;
+      let isPair;
+      let isExplicitPair;
+      let isMapping;
+      const overridableKeys = /* @__PURE__ */ Object.create(null);
+      let keyNode;
+      let keyTag;
+      let valueNode;
+      let ch = state.input.charCodeAt(state.position);
+      if (ch === 91) {
+        terminator = 93;
+        isMapping = false;
+        _result = [];
+      } else if (ch === 123) {
+        terminator = 125;
+        isMapping = true;
+        _result = {};
+      } else {
+        return false;
+      }
+      if (state.anchor !== null) {
+        storeAnchor(state, state.anchor, _result);
+      }
+      ch = state.input.charCodeAt(++state.position);
+      while (ch !== 0) {
+        skipSeparationSpace2(state, true, nodeIndent);
+        ch = state.input.charCodeAt(state.position);
+        if (ch === terminator) {
+          state.position++;
+          state.tag = _tag;
+          state.anchor = _anchor;
+          state.kind = isMapping ? "mapping" : "sequence";
+          state.result = _result;
+          return true;
+        } else if (!readNext) {
+          throwError2(state, "missed comma between flow collection entries");
+        } else if (ch === 44) {
+          throwError2(state, "expected the node content, but found ','");
+        }
+        keyTag = keyNode = valueNode = null;
+        isPair = isExplicitPair = false;
+        if (ch === 63) {
+          const following = state.input.charCodeAt(state.position + 1);
+          if (isWsOrEol(following)) {
+            isPair = isExplicitPair = true;
+            state.position++;
+            skipSeparationSpace2(state, true, nodeIndent);
+          }
+        }
+        _line = state.line;
+        _lineStart = state.lineStart;
+        _pos = state.position;
+        composeNode2(state, nodeIndent, CONTEXT_FLOW_IN2, false, true);
+        keyTag = state.tag;
+        keyNode = state.result;
+        skipSeparationSpace2(state, true, nodeIndent);
+        ch = state.input.charCodeAt(state.position);
+        if ((isExplicitPair || state.line === _line) && ch === 58) {
+          isPair = true;
+          ch = state.input.charCodeAt(++state.position);
+          skipSeparationSpace2(state, true, nodeIndent);
+          composeNode2(state, nodeIndent, CONTEXT_FLOW_IN2, false, true);
+          valueNode = state.result;
+        }
+        if (isMapping) {
+          storeMappingPair2(state, _result, overridableKeys, keyTag, keyNode, valueNode, _line, _lineStart, _pos);
+        } else if (isPair) {
+          _result.push(storeMappingPair2(state, null, overridableKeys, keyTag, keyNode, valueNode, _line, _lineStart, _pos));
+        } else {
+          _result.push(keyNode);
+        }
+        skipSeparationSpace2(state, true, nodeIndent);
+        ch = state.input.charCodeAt(state.position);
+        if (ch === 44) {
+          readNext = true;
+          ch = state.input.charCodeAt(++state.position);
+        } else {
+          readNext = false;
+        }
+      }
+      throwError2(state, "unexpected end of the stream within a flow collection");
+    }
+    function readBlockScalar2(state, nodeIndent) {
+      let folding;
+      let chomping = CHOMPING_CLIP2;
+      let didReadContent = false;
+      let detectedIndent = false;
+      let textIndent = nodeIndent;
+      let emptyLines = 0;
+      let atMoreIndented = false;
+      let tmp;
+      let ch = state.input.charCodeAt(state.position);
+      if (ch === 124) {
+        folding = false;
+      } else if (ch === 62) {
+        folding = true;
+      } else {
+        return false;
+      }
+      state.kind = "scalar";
+      state.result = "";
+      while (ch !== 0) {
+        ch = state.input.charCodeAt(++state.position);
+        if (ch === 43 || ch === 45) {
+          if (CHOMPING_CLIP2 === chomping) {
+            chomping = ch === 43 ? CHOMPING_KEEP2 : CHOMPING_STRIP2;
+          } else {
+            throwError2(state, "repeat of a chomping mode identifier");
+          }
+        } else if ((tmp = fromDecimalCode2(ch)) >= 0) {
+          if (tmp === 0) {
+            throwError2(state, "bad explicit indentation width of a block scalar; it cannot be less than one");
+          } else if (!detectedIndent) {
+            textIndent = nodeIndent + tmp - 1;
+            detectedIndent = true;
+          } else {
+            throwError2(state, "repeat of an indentation width identifier");
+          }
+        } else {
+          break;
+        }
+      }
+      if (isWhiteSpace(ch)) {
+        do {
+          ch = state.input.charCodeAt(++state.position);
+        } while (isWhiteSpace(ch));
+        if (ch === 35) {
+          do {
+            ch = state.input.charCodeAt(++state.position);
+          } while (!isEol(ch) && ch !== 0);
+        }
+      }
+      while (ch !== 0) {
+        readLineBreak2(state);
+        state.lineIndent = 0;
+        ch = state.input.charCodeAt(state.position);
+        while ((!detectedIndent || state.lineIndent < textIndent) && ch === 32) {
+          state.lineIndent++;
+          ch = state.input.charCodeAt(++state.position);
+        }
+        if (!detectedIndent && state.lineIndent > textIndent) {
+          textIndent = state.lineIndent;
+        }
+        if (isEol(ch)) {
+          emptyLines++;
+          continue;
+        }
+        if (!detectedIndent && textIndent === 0) {
+          throwError2(state, "missing indentation for block scalar");
+        }
+        if (state.lineIndent < textIndent) {
+          if (chomping === CHOMPING_KEEP2) {
+            state.result += common2.repeat("\n", didReadContent ? 1 + emptyLines : emptyLines);
+          } else if (chomping === CHOMPING_CLIP2) {
+            if (didReadContent) {
+              state.result += "\n";
+            }
+          }
+          break;
+        }
+        if (folding) {
+          if (isWhiteSpace(ch)) {
+            atMoreIndented = true;
+            state.result += common2.repeat("\n", didReadContent ? 1 + emptyLines : emptyLines);
+          } else if (atMoreIndented) {
+            atMoreIndented = false;
+            state.result += common2.repeat("\n", emptyLines + 1);
+          } else if (emptyLines === 0) {
+            if (didReadContent) {
+              state.result += " ";
+            }
+          } else {
+            state.result += common2.repeat("\n", emptyLines);
+          }
+        } else {
+          state.result += common2.repeat("\n", didReadContent ? 1 + emptyLines : emptyLines);
+        }
+        didReadContent = true;
+        detectedIndent = true;
+        emptyLines = 0;
+        const captureStart = state.position;
+        while (!isEol(ch) && ch !== 0) {
+          ch = state.input.charCodeAt(++state.position);
+        }
+        captureSegment2(state, captureStart, state.position, false);
+      }
+      return true;
+    }
+    function readBlockSequence2(state, nodeIndent) {
+      const _tag = state.tag;
+      const _anchor = state.anchor;
+      const _result = [];
+      let detected = false;
+      if (state.firstTabInLine !== -1) return false;
+      if (state.anchor !== null) {
+        storeAnchor(state, state.anchor, _result);
+      }
+      let ch = state.input.charCodeAt(state.position);
+      while (ch !== 0) {
+        if (state.firstTabInLine !== -1) {
+          state.position = state.firstTabInLine;
+          throwError2(state, "tab characters must not be used in indentation");
+        }
+        if (ch !== 45) {
+          break;
+        }
+        const following = state.input.charCodeAt(state.position + 1);
+        if (!isWsOrEol(following)) {
+          break;
+        }
+        detected = true;
+        state.position++;
+        if (skipSeparationSpace2(state, true, -1)) {
+          if (state.lineIndent <= nodeIndent) {
+            _result.push(null);
+            ch = state.input.charCodeAt(state.position);
+            continue;
+          }
+        }
+        const _line = state.line;
+        composeNode2(state, nodeIndent, CONTEXT_BLOCK_IN2, false, true);
+        _result.push(state.result);
+        skipSeparationSpace2(state, true, -1);
+        ch = state.input.charCodeAt(state.position);
+        if ((state.line === _line || state.lineIndent > nodeIndent) && ch !== 0) {
+          throwError2(state, "bad indentation of a sequence entry");
+        } else if (state.lineIndent < nodeIndent) {
+          break;
+        }
+      }
+      if (detected) {
+        state.tag = _tag;
+        state.anchor = _anchor;
+        state.kind = "sequence";
+        state.result = _result;
+        return true;
+      }
+      return false;
+    }
+    function readBlockMapping2(state, nodeIndent, flowIndent) {
+      let allowCompact;
+      let _keyLine;
+      let _keyLineStart;
+      let _keyPos;
+      const _tag = state.tag;
+      const _anchor = state.anchor;
+      const _result = {};
+      const overridableKeys = /* @__PURE__ */ Object.create(null);
+      let keyTag = null;
+      let keyNode = null;
+      let valueNode = null;
+      let atExplicitKey = false;
+      let detected = false;
+      if (state.firstTabInLine !== -1) return false;
+      if (state.anchor !== null) {
+        storeAnchor(state, state.anchor, _result);
+      }
+      let ch = state.input.charCodeAt(state.position);
+      while (ch !== 0) {
+        if (!atExplicitKey && state.firstTabInLine !== -1) {
+          state.position = state.firstTabInLine;
+          throwError2(state, "tab characters must not be used in indentation");
+        }
+        const following = state.input.charCodeAt(state.position + 1);
+        const _line = state.line;
+        if ((ch === 63 || ch === 58) && isWsOrEol(following)) {
+          if (ch === 63) {
+            if (atExplicitKey) {
+              storeMappingPair2(state, _result, overridableKeys, keyTag, keyNode, null, _keyLine, _keyLineStart, _keyPos);
+              keyTag = keyNode = valueNode = null;
+            }
+            detected = true;
+            atExplicitKey = true;
+            allowCompact = true;
+          } else if (atExplicitKey) {
+            atExplicitKey = false;
+            allowCompact = true;
+          } else {
+            throwError2(state, "incomplete explicit mapping pair; a key node is missed; or followed by a non-tabulated empty line");
+          }
+          state.position += 1;
+          ch = following;
+        } else {
+          _keyLine = state.line;
+          _keyLineStart = state.lineStart;
+          _keyPos = state.position;
+          if (!composeNode2(state, flowIndent, CONTEXT_FLOW_OUT2, false, true)) {
+            break;
+          }
+          if (state.line === _line) {
+            ch = state.input.charCodeAt(state.position);
+            while (isWhiteSpace(ch)) {
+              ch = state.input.charCodeAt(++state.position);
+            }
+            if (ch === 58) {
+              ch = state.input.charCodeAt(++state.position);
+              if (!isWsOrEol(ch)) {
+                throwError2(state, "a whitespace character is expected after the key-value separator within a block mapping");
+              }
+              if (atExplicitKey) {
+                storeMappingPair2(state, _result, overridableKeys, keyTag, keyNode, null, _keyLine, _keyLineStart, _keyPos);
+                keyTag = keyNode = valueNode = null;
+              }
+              detected = true;
+              atExplicitKey = false;
+              allowCompact = false;
+              keyTag = state.tag;
+              keyNode = state.result;
+            } else if (detected) {
+              throwError2(state, "can not read an implicit mapping pair; a colon is missed");
+            } else {
+              state.tag = _tag;
+              state.anchor = _anchor;
+              return true;
+            }
+          } else if (detected) {
+            throwError2(state, "can not read a block mapping entry; a multiline key may not be an implicit key");
+          } else {
+            state.tag = _tag;
+            state.anchor = _anchor;
+            return true;
+          }
+        }
+        if (state.line === _line || state.lineIndent > nodeIndent) {
+          if (atExplicitKey) {
+            _keyLine = state.line;
+            _keyLineStart = state.lineStart;
+            _keyPos = state.position;
+          }
+          if (composeNode2(state, nodeIndent, CONTEXT_BLOCK_OUT2, true, allowCompact)) {
+            if (atExplicitKey) {
+              keyNode = state.result;
+            } else {
+              valueNode = state.result;
+            }
+          }
+          if (!atExplicitKey) {
+            storeMappingPair2(state, _result, overridableKeys, keyTag, keyNode, valueNode, _keyLine, _keyLineStart, _keyPos);
+            keyTag = keyNode = valueNode = null;
+          }
+          skipSeparationSpace2(state, true, -1);
+          ch = state.input.charCodeAt(state.position);
+        }
+        if ((state.line === _line || state.lineIndent > nodeIndent) && ch !== 0) {
+          throwError2(state, "bad indentation of a mapping entry");
+        } else if (state.lineIndent < nodeIndent) {
+          break;
+        }
+      }
+      if (atExplicitKey) {
+        storeMappingPair2(state, _result, overridableKeys, keyTag, keyNode, null, _keyLine, _keyLineStart, _keyPos);
+      }
+      if (detected) {
+        state.tag = _tag;
+        state.anchor = _anchor;
+        state.kind = "mapping";
+        state.result = _result;
+      }
+      return detected;
+    }
+    function readTagProperty2(state) {
+      let isVerbatim = false;
+      let isNamed = false;
+      let tagHandle;
+      let tagName;
+      let ch = state.input.charCodeAt(state.position);
+      if (ch !== 33) return false;
+      if (state.tag !== null) {
+        throwError2(state, "duplication of a tag property");
+      }
+      ch = state.input.charCodeAt(++state.position);
+      if (ch === 60) {
+        isVerbatim = true;
+        ch = state.input.charCodeAt(++state.position);
+      } else if (ch === 33) {
+        isNamed = true;
+        tagHandle = "!!";
+        ch = state.input.charCodeAt(++state.position);
+      } else {
+        tagHandle = "!";
+      }
+      let _position = state.position;
+      if (isVerbatim) {
+        do {
+          ch = state.input.charCodeAt(++state.position);
+        } while (ch !== 0 && ch !== 62);
+        if (state.position < state.length) {
+          tagName = state.input.slice(_position, state.position);
+          ch = state.input.charCodeAt(++state.position);
+        } else {
+          throwError2(state, "unexpected end of the stream within a verbatim tag");
+        }
+      } else {
+        while (ch !== 0 && !isWsOrEol(ch)) {
+          if (ch === 33) {
+            if (!isNamed) {
+              tagHandle = state.input.slice(_position - 1, state.position + 1);
+              if (!PATTERN_TAG_HANDLE2.test(tagHandle)) {
+                throwError2(state, "named tag handle cannot contain such characters");
+              }
+              isNamed = true;
+              _position = state.position + 1;
+            } else {
+              throwError2(state, "tag suffix cannot contain exclamation marks");
+            }
+          }
+          ch = state.input.charCodeAt(++state.position);
+        }
+        tagName = state.input.slice(_position, state.position);
+        if (PATTERN_FLOW_INDICATORS2.test(tagName)) {
+          throwError2(state, "tag suffix cannot contain flow indicator characters");
+        }
+      }
+      if (tagName && !PATTERN_TAG_URI2.test(tagName)) {
+        throwError2(state, "tag name cannot contain such characters: " + tagName);
+      }
+      try {
+        tagName = decodeURIComponent(tagName);
+      } catch (err) {
+        throwError2(state, "tag name is malformed: " + tagName);
+      }
+      if (isVerbatim) {
+        state.tag = tagName;
+      } else if (_hasOwnProperty2.call(state.tagMap, tagHandle)) {
+        state.tag = state.tagMap[tagHandle] + tagName;
+      } else if (tagHandle === "!") {
+        state.tag = "!" + tagName;
+      } else if (tagHandle === "!!") {
+        state.tag = "tag:yaml.org,2002:" + tagName;
+      } else {
+        throwError2(state, 'undeclared tag handle "' + tagHandle + '"');
+      }
+      return true;
+    }
+    function readAnchorProperty2(state) {
+      let ch = state.input.charCodeAt(state.position);
+      if (ch !== 38) return false;
+      if (state.anchor !== null) {
+        throwError2(state, "duplication of an anchor property");
+      }
+      ch = state.input.charCodeAt(++state.position);
+      const _position = state.position;
+      while (ch !== 0 && !isWsOrEol(ch) && !isFlowIndicator(ch)) {
+        ch = state.input.charCodeAt(++state.position);
+      }
+      if (state.position === _position) {
+        throwError2(state, "name of an anchor node must contain at least one character");
+      }
+      state.anchor = state.input.slice(_position, state.position);
+      return true;
+    }
+    function readAlias2(state) {
+      let ch = state.input.charCodeAt(state.position);
+      if (ch !== 42) return false;
+      ch = state.input.charCodeAt(++state.position);
+      const _position = state.position;
+      while (ch !== 0 && !isWsOrEol(ch) && !isFlowIndicator(ch)) {
+        ch = state.input.charCodeAt(++state.position);
+      }
+      if (state.position === _position) {
+        throwError2(state, "name of an alias node must contain at least one character");
+      }
+      const alias = state.input.slice(_position, state.position);
+      if (!_hasOwnProperty2.call(state.anchorMap, alias)) {
+        throwError2(state, 'unidentified alias "' + alias + '"');
+      }
+      state.result = state.anchorMap[alias];
+      skipSeparationSpace2(state, true, -1);
+      return true;
+    }
+    function tryReadBlockMappingFromProperty(state, propertyStart, nodeIndent, flowIndent) {
+      const fallbackState = snapshotState(state);
+      beginAnchorTransaction(state);
+      restoreState(state, propertyStart);
+      state.tag = null;
+      state.anchor = null;
+      state.kind = null;
+      state.result = null;
+      if (readBlockMapping2(state, nodeIndent, flowIndent) && state.kind === "mapping") {
+        commitAnchorTransaction(state);
+        return true;
+      }
+      rollbackAnchorTransaction(state);
+      restoreState(state, fallbackState);
+      return false;
+    }
+    function composeNode2(state, parentIndent, nodeContext, allowToSeek, allowCompact) {
+      let allowBlockScalars;
+      let allowBlockCollections;
+      let indentStatus = 1;
+      let atNewLine = false;
+      let hasContent = false;
+      let propertyStart = null;
+      let type2;
+      let flowIndent;
+      let blockIndent;
+      if (state.depth >= state.maxDepth) {
+        throwError2(state, "nesting exceeded maxDepth (" + state.maxDepth + ")");
+      }
+      state.depth += 1;
+      if (state.listener !== null) {
+        state.listener("open", state);
+      }
+      state.tag = null;
+      state.anchor = null;
+      state.kind = null;
+      state.result = null;
+      const allowBlockStyles = allowBlockScalars = allowBlockCollections = CONTEXT_BLOCK_OUT2 === nodeContext || CONTEXT_BLOCK_IN2 === nodeContext;
+      if (allowToSeek) {
+        if (skipSeparationSpace2(state, true, -1)) {
+          atNewLine = true;
+          if (state.lineIndent > parentIndent) {
+            indentStatus = 1;
+          } else if (state.lineIndent === parentIndent) {
+            indentStatus = 0;
+          } else if (state.lineIndent < parentIndent) {
+            indentStatus = -1;
+          }
+        }
+      }
+      if (indentStatus === 1) {
+        while (true) {
+          const ch = state.input.charCodeAt(state.position);
+          const propertyState = snapshotState(state);
+          if (atNewLine && (ch === 33 && state.tag !== null || ch === 38 && state.anchor !== null)) {
+            break;
+          }
+          if (!readTagProperty2(state) && !readAnchorProperty2(state)) {
+            break;
+          }
+          if (propertyStart === null) {
+            propertyStart = propertyState;
+          }
+          if (skipSeparationSpace2(state, true, -1)) {
+            atNewLine = true;
+            allowBlockCollections = allowBlockStyles;
+            if (state.lineIndent > parentIndent) {
+              indentStatus = 1;
+            } else if (state.lineIndent === parentIndent) {
+              indentStatus = 0;
+            } else if (state.lineIndent < parentIndent) {
+              indentStatus = -1;
+            }
+          } else {
+            allowBlockCollections = false;
+          }
+        }
+      }
+      if (allowBlockCollections) {
+        allowBlockCollections = atNewLine || allowCompact;
+      }
+      if (indentStatus === 1 || CONTEXT_BLOCK_OUT2 === nodeContext) {
+        if (CONTEXT_FLOW_IN2 === nodeContext || CONTEXT_FLOW_OUT2 === nodeContext) {
+          flowIndent = parentIndent;
+        } else {
+          flowIndent = parentIndent + 1;
+        }
+        blockIndent = state.position - state.lineStart;
+        if (indentStatus === 1) {
+          if (allowBlockCollections && (readBlockSequence2(state, blockIndent) || readBlockMapping2(state, blockIndent, flowIndent)) || readFlowCollection2(state, flowIndent)) {
+            hasContent = true;
+          } else {
+            const ch = state.input.charCodeAt(state.position);
+            if (propertyStart !== null && allowBlockStyles && !allowBlockCollections && ch !== 124 && ch !== 62 && tryReadBlockMappingFromProperty(
+              state,
+              propertyStart,
+              propertyStart.position - propertyStart.lineStart,
+              flowIndent
+            )) {
+              hasContent = true;
+            } else if (allowBlockScalars && readBlockScalar2(state, flowIndent) || readSingleQuotedScalar2(state, flowIndent) || readDoubleQuotedScalar2(state, flowIndent)) {
+              hasContent = true;
+            } else if (readAlias2(state)) {
+              hasContent = true;
+              if (state.tag !== null || state.anchor !== null) {
+                throwError2(state, "alias node should not have any properties");
+              }
+            } else if (readPlainScalar2(state, flowIndent, CONTEXT_FLOW_IN2 === nodeContext)) {
+              hasContent = true;
+              if (state.tag === null) {
+                state.tag = "?";
+              }
+            }
+            if (state.anchor !== null) {
+              storeAnchor(state, state.anchor, state.result);
+            }
+          }
+        } else if (indentStatus === 0) {
+          hasContent = allowBlockCollections && readBlockSequence2(state, blockIndent);
+        }
+      }
+      if (state.tag === null) {
+        if (state.anchor !== null) {
+          storeAnchor(state, state.anchor, state.result);
+        }
+      } else if (state.tag === "?") {
+        if (state.result !== null && state.kind !== "scalar") {
+          throwError2(state, 'unacceptable node kind for !<?> tag; it should be "scalar", not "' + state.kind + '"');
+        }
+        for (let typeIndex = 0, typeQuantity = state.implicitTypes.length; typeIndex < typeQuantity; typeIndex += 1) {
+          type2 = state.implicitTypes[typeIndex];
+          if (type2.resolve(state.result)) {
+            state.result = type2.construct(state.result);
+            state.tag = type2.tag;
+            if (state.anchor !== null) {
+              storeAnchor(state, state.anchor, state.result);
+            }
+            break;
+          }
+        }
+      } else if (state.tag !== "!") {
+        if (_hasOwnProperty2.call(state.typeMap[state.kind || "fallback"], state.tag)) {
+          type2 = state.typeMap[state.kind || "fallback"][state.tag];
+        } else {
+          type2 = null;
+          const typeList = state.typeMap.multi[state.kind || "fallback"];
+          for (let typeIndex = 0, typeQuantity = typeList.length; typeIndex < typeQuantity; typeIndex += 1) {
+            if (state.tag.slice(0, typeList[typeIndex].tag.length) === typeList[typeIndex].tag) {
+              type2 = typeList[typeIndex];
+              break;
+            }
+          }
+        }
+        if (!type2) {
+          throwError2(state, "unknown tag !<" + state.tag + ">");
+        }
+        if (state.result !== null && type2.kind !== state.kind) {
+          throwError2(state, "unacceptable node kind for !<" + state.tag + '> tag; it should be "' + type2.kind + '", not "' + state.kind + '"');
+        }
+        if (!type2.resolve(state.result, state.tag)) {
+          throwError2(state, "cannot resolve a node with !<" + state.tag + "> explicit tag");
+        } else {
+          state.result = type2.construct(state.result, state.tag);
+          if (state.anchor !== null) {
+            storeAnchor(state, state.anchor, state.result);
+          }
+        }
+      }
+      if (state.listener !== null) {
+        state.listener("close", state);
+      }
+      state.depth -= 1;
+      return state.tag !== null || state.anchor !== null || hasContent;
+    }
+    function readDocument2(state) {
+      const documentStart = state.position;
+      let hasDirectives = false;
+      let ch;
+      state.version = null;
+      state.checkLineBreaks = state.legacy;
+      state.tagMap = /* @__PURE__ */ Object.create(null);
+      state.anchorMap = /* @__PURE__ */ Object.create(null);
+      while ((ch = state.input.charCodeAt(state.position)) !== 0) {
+        skipSeparationSpace2(state, true, -1);
+        ch = state.input.charCodeAt(state.position);
+        if (state.lineIndent > 0 || ch !== 37) {
+          break;
+        }
+        hasDirectives = true;
+        ch = state.input.charCodeAt(++state.position);
+        let _position = state.position;
+        while (ch !== 0 && !isWsOrEol(ch)) {
+          ch = state.input.charCodeAt(++state.position);
+        }
+        const directiveName = state.input.slice(_position, state.position);
+        const directiveArgs = [];
+        if (directiveName.length < 1) {
+          throwError2(state, "directive name must not be less than one character in length");
+        }
+        while (ch !== 0) {
+          while (isWhiteSpace(ch)) {
+            ch = state.input.charCodeAt(++state.position);
+          }
+          if (ch === 35) {
+            do {
+              ch = state.input.charCodeAt(++state.position);
+            } while (ch !== 0 && !isEol(ch));
+            break;
+          }
+          if (isEol(ch)) break;
+          _position = state.position;
+          while (ch !== 0 && !isWsOrEol(ch)) {
+            ch = state.input.charCodeAt(++state.position);
+          }
+          directiveArgs.push(state.input.slice(_position, state.position));
+        }
+        if (ch !== 0) readLineBreak2(state);
+        if (_hasOwnProperty2.call(directiveHandlers2, directiveName)) {
+          directiveHandlers2[directiveName](state, directiveName, directiveArgs);
+        } else {
+          throwWarning2(state, 'unknown document directive "' + directiveName + '"');
+        }
+      }
+      skipSeparationSpace2(state, true, -1);
+      if (state.lineIndent === 0 && state.input.charCodeAt(state.position) === 45 && state.input.charCodeAt(state.position + 1) === 45 && state.input.charCodeAt(state.position + 2) === 45) {
+        state.position += 3;
+        skipSeparationSpace2(state, true, -1);
+      } else if (hasDirectives) {
+        throwError2(state, "directives end mark is expected");
+      }
+      composeNode2(state, state.lineIndent - 1, CONTEXT_BLOCK_OUT2, false, true);
+      skipSeparationSpace2(state, true, -1);
+      if (state.checkLineBreaks && PATTERN_NON_ASCII_LINE_BREAKS2.test(state.input.slice(documentStart, state.position))) {
+        throwWarning2(state, "non-ASCII line breaks are interpreted as content");
+      }
+      state.documents.push(state.result);
+      if (state.position === state.lineStart && testDocumentSeparator2(state)) {
+        if (state.input.charCodeAt(state.position) === 46) {
+          state.position += 3;
+          skipSeparationSpace2(state, true, -1);
+        }
+        return;
+      }
+      if (state.position < state.length - 1) {
+        throwError2(state, "end of the stream or a document separator is expected");
+      }
+    }
+    function loadDocuments2(input, options) {
+      input = String(input);
+      options = options || {};
+      if (input.length !== 0) {
+        if (input.charCodeAt(input.length - 1) !== 10 && input.charCodeAt(input.length - 1) !== 13) {
+          input += "\n";
+        }
+        if (input.charCodeAt(0) === 65279) {
+          input = input.slice(1);
+        }
+      }
+      const state = new State2(input, options);
+      const nullpos = input.indexOf("\0");
+      if (nullpos !== -1) {
+        state.position = nullpos;
+        throwError2(state, "null byte is not allowed in input");
+      }
+      state.input += "\0";
+      while (state.input.charCodeAt(state.position) === 32) {
+        state.lineIndent += 1;
+        state.position += 1;
+      }
+      while (state.position < state.length - 1) {
+        readDocument2(state);
+      }
+      return state.documents;
+    }
+    function loadAll2(input, iterator, options) {
+      if (iterator !== null && typeof iterator === "object" && typeof options === "undefined") {
+        options = iterator;
+        iterator = null;
+      }
+      const documents = loadDocuments2(input, options);
+      if (typeof iterator !== "function") {
+        return documents;
+      }
+      for (let index = 0, length = documents.length; index < length; index += 1) {
+        iterator(documents[index]);
+      }
+    }
+    function load2(input, options) {
+      const documents = loadDocuments2(input, options);
+      if (documents.length === 0) {
+        return void 0;
+      } else if (documents.length === 1) {
+        return documents[0];
+      }
+      throw new YAMLException("expected a single document in the stream, but found more");
+    }
+    module2.exports.loadAll = loadAll2;
+    module2.exports.load = load2;
+  }
+});
+
+// node_modules/js-yaml/lib/dumper.js
+var require_dumper = __commonJS({
+  "node_modules/js-yaml/lib/dumper.js"(exports2, module2) {
+    "use strict";
+    var common2 = require_common();
+    var YAMLException = require_exception();
+    var DEFAULT_SCHEMA = require_default();
+    var _toString2 = Object.prototype.toString;
+    var _hasOwnProperty2 = Object.prototype.hasOwnProperty;
+    var CHAR_BOM2 = 65279;
+    var CHAR_TAB2 = 9;
+    var CHAR_LINE_FEED2 = 10;
+    var CHAR_CARRIAGE_RETURN2 = 13;
+    var CHAR_SPACE2 = 32;
+    var CHAR_EXCLAMATION2 = 33;
+    var CHAR_DOUBLE_QUOTE2 = 34;
+    var CHAR_SHARP2 = 35;
+    var CHAR_PERCENT2 = 37;
+    var CHAR_AMPERSAND2 = 38;
+    var CHAR_SINGLE_QUOTE2 = 39;
+    var CHAR_ASTERISK2 = 42;
+    var CHAR_COMMA2 = 44;
+    var CHAR_MINUS2 = 45;
+    var CHAR_COLON2 = 58;
+    var CHAR_EQUALS2 = 61;
+    var CHAR_GREATER_THAN2 = 62;
+    var CHAR_QUESTION2 = 63;
+    var CHAR_COMMERCIAL_AT2 = 64;
+    var CHAR_LEFT_SQUARE_BRACKET2 = 91;
+    var CHAR_RIGHT_SQUARE_BRACKET2 = 93;
+    var CHAR_GRAVE_ACCENT2 = 96;
+    var CHAR_LEFT_CURLY_BRACKET2 = 123;
+    var CHAR_VERTICAL_LINE2 = 124;
+    var CHAR_RIGHT_CURLY_BRACKET2 = 125;
+    var ESCAPE_SEQUENCES2 = {};
+    ESCAPE_SEQUENCES2[0] = "\\0";
+    ESCAPE_SEQUENCES2[7] = "\\a";
+    ESCAPE_SEQUENCES2[8] = "\\b";
+    ESCAPE_SEQUENCES2[9] = "\\t";
+    ESCAPE_SEQUENCES2[10] = "\\n";
+    ESCAPE_SEQUENCES2[11] = "\\v";
+    ESCAPE_SEQUENCES2[12] = "\\f";
+    ESCAPE_SEQUENCES2[13] = "\\r";
+    ESCAPE_SEQUENCES2[27] = "\\e";
+    ESCAPE_SEQUENCES2[34] = '\\"';
+    ESCAPE_SEQUENCES2[92] = "\\\\";
+    ESCAPE_SEQUENCES2[133] = "\\N";
+    ESCAPE_SEQUENCES2[160] = "\\_";
+    ESCAPE_SEQUENCES2[8232] = "\\L";
+    ESCAPE_SEQUENCES2[8233] = "\\P";
+    var DEPRECATED_BOOLEANS_SYNTAX2 = [
+      "y",
+      "Y",
+      "yes",
+      "Yes",
+      "YES",
+      "on",
+      "On",
+      "ON",
+      "n",
+      "N",
+      "no",
+      "No",
+      "NO",
+      "off",
+      "Off",
+      "OFF"
+    ];
+    var DEPRECATED_BASE60_SYNTAX2 = /^[-+]?[0-9_]+(?::[0-9_]+)+(?:\.[0-9_]*)?$/;
+    function compileStyleMap2(schema2, map2) {
+      if (map2 === null) return {};
+      const result = {};
+      const keys = Object.keys(map2);
+      for (let index = 0, length = keys.length; index < length; index += 1) {
+        let tag = keys[index];
+        let style = String(map2[tag]);
+        if (tag.slice(0, 2) === "!!") {
+          tag = "tag:yaml.org,2002:" + tag.slice(2);
+        }
+        const type2 = schema2.compiledTypeMap["fallback"][tag];
+        if (type2 && _hasOwnProperty2.call(type2.styleAliases, style)) {
+          style = type2.styleAliases[style];
+        }
+        result[tag] = style;
+      }
+      return result;
+    }
+    function encodeHex2(character) {
+      let handle;
+      let length;
+      const string = character.toString(16).toUpperCase();
+      if (character <= 255) {
+        handle = "x";
+        length = 2;
+      } else if (character <= 65535) {
+        handle = "u";
+        length = 4;
+      } else if (character <= 4294967295) {
+        handle = "U";
+        length = 8;
+      } else {
+        throw new YAMLException("code point within a string may not be greater than 0xFFFFFFFF");
+      }
+      return "\\" + handle + common2.repeat("0", length - string.length) + string;
+    }
+    var QUOTING_TYPE_SINGLE2 = 1;
+    var QUOTING_TYPE_DOUBLE2 = 2;
+    function State2(options) {
+      this.schema = options["schema"] || DEFAULT_SCHEMA;
+      this.indent = Math.max(1, options["indent"] || 2);
+      this.noArrayIndent = options["noArrayIndent"] || false;
+      this.skipInvalid = options["skipInvalid"] || false;
+      this.flowLevel = common2.isNothing(options["flowLevel"]) ? -1 : options["flowLevel"];
+      this.styleMap = compileStyleMap2(this.schema, options["styles"] || null);
+      this.sortKeys = options["sortKeys"] || false;
+      this.lineWidth = options["lineWidth"] || 80;
+      this.noRefs = options["noRefs"] || false;
+      this.noCompatMode = options["noCompatMode"] || false;
+      this.condenseFlow = options["condenseFlow"] || false;
+      this.quotingType = options["quotingType"] === '"' ? QUOTING_TYPE_DOUBLE2 : QUOTING_TYPE_SINGLE2;
+      this.forceQuotes = options["forceQuotes"] || false;
+      this.replacer = typeof options["replacer"] === "function" ? options["replacer"] : null;
+      this.implicitTypes = this.schema.compiledImplicit;
+      this.explicitTypes = this.schema.compiledExplicit;
+      this.tag = null;
+      this.result = "";
+      this.duplicates = [];
+      this.usedDuplicates = null;
+    }
+    function indentString2(string, spaces) {
+      const ind = common2.repeat(" ", spaces);
+      let position = 0;
+      let result = "";
+      const length = string.length;
+      while (position < length) {
+        let line;
+        const next = string.indexOf("\n", position);
+        if (next === -1) {
+          line = string.slice(position);
+          position = length;
+        } else {
+          line = string.slice(position, next + 1);
+          position = next + 1;
+        }
+        if (line.length && line !== "\n") result += ind;
+        result += line;
+      }
+      return result;
+    }
+    function generateNextLine2(state, level) {
+      return "\n" + common2.repeat(" ", state.indent * level);
+    }
+    function testImplicitResolving2(state, str2) {
+      for (let index = 0, length = state.implicitTypes.length; index < length; index += 1) {
+        const type2 = state.implicitTypes[index];
+        if (type2.resolve(str2)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    function isWhitespace2(c) {
+      return c === CHAR_SPACE2 || c === CHAR_TAB2;
+    }
+    function isPrintable2(c) {
+      return c >= 32 && c <= 126 || c >= 161 && c <= 55295 && c !== 8232 && c !== 8233 || c >= 57344 && c <= 65533 && c !== CHAR_BOM2 || c >= 65536 && c <= 1114111;
+    }
+    function isNsCharOrWhitespace2(c) {
+      return isPrintable2(c) && c !== CHAR_BOM2 && // - b-char
+      c !== CHAR_CARRIAGE_RETURN2 && c !== CHAR_LINE_FEED2;
+    }
+    function isPlainSafe2(c, prev, inblock) {
+      const cIsNsCharOrWhitespace = isNsCharOrWhitespace2(c);
+      const cIsNsChar = cIsNsCharOrWhitespace && !isWhitespace2(c);
+      return (
+        // ns-plain-safe
+        (inblock ? cIsNsCharOrWhitespace : cIsNsCharOrWhitespace && // - c-flow-indicator
+        c !== CHAR_COMMA2 && c !== CHAR_LEFT_SQUARE_BRACKET2 && c !== CHAR_RIGHT_SQUARE_BRACKET2 && c !== CHAR_LEFT_CURLY_BRACKET2 && c !== CHAR_RIGHT_CURLY_BRACKET2) && // ns-plain-char
+        c !== CHAR_SHARP2 && // false on '#'
+        !(prev === CHAR_COLON2 && !cIsNsChar) || // false on ': '
+        isNsCharOrWhitespace2(prev) && !isWhitespace2(prev) && c === CHAR_SHARP2 || // change to true on '[^ ]#'
+        prev === CHAR_COLON2 && cIsNsChar
+      );
+    }
+    function isPlainSafeFirst2(c) {
+      return isPrintable2(c) && c !== CHAR_BOM2 && !isWhitespace2(c) && // - s-white
+      // - (c-indicator ::=
+      // “-” | “?” | “:” | “,” | “[” | “]” | “{” | “}”
+      c !== CHAR_MINUS2 && c !== CHAR_QUESTION2 && c !== CHAR_COLON2 && c !== CHAR_COMMA2 && c !== CHAR_LEFT_SQUARE_BRACKET2 && c !== CHAR_RIGHT_SQUARE_BRACKET2 && c !== CHAR_LEFT_CURLY_BRACKET2 && c !== CHAR_RIGHT_CURLY_BRACKET2 && // | “#” | “&” | “*” | “!” | “|” | “=” | “>” | “'” | “"”
+      c !== CHAR_SHARP2 && c !== CHAR_AMPERSAND2 && c !== CHAR_ASTERISK2 && c !== CHAR_EXCLAMATION2 && c !== CHAR_VERTICAL_LINE2 && c !== CHAR_EQUALS2 && c !== CHAR_GREATER_THAN2 && c !== CHAR_SINGLE_QUOTE2 && c !== CHAR_DOUBLE_QUOTE2 && // | “%” | “@” | “`”)
+      c !== CHAR_PERCENT2 && c !== CHAR_COMMERCIAL_AT2 && c !== CHAR_GRAVE_ACCENT2;
+    }
+    function isPlainSafeLast2(c) {
+      return !isWhitespace2(c) && c !== CHAR_COLON2;
+    }
+    function codePointAt2(string, pos) {
+      const first = string.charCodeAt(pos);
+      let second;
+      if (first >= 55296 && first <= 56319 && pos + 1 < string.length) {
+        second = string.charCodeAt(pos + 1);
+        if (second >= 56320 && second <= 57343) {
+          return (first - 55296) * 1024 + second - 56320 + 65536;
+        }
+      }
+      return first;
+    }
+    function needIndentIndicator2(string) {
+      const leadingSpaceRe = /^\n* /;
+      return leadingSpaceRe.test(string);
+    }
+    var STYLE_PLAIN2 = 1;
+    var STYLE_SINGLE2 = 2;
+    var STYLE_LITERAL2 = 3;
+    var STYLE_FOLDED2 = 4;
+    var STYLE_DOUBLE2 = 5;
+    function chooseScalarStyle2(string, singleLineOnly, indentPerLevel, lineWidth, testAmbiguousType, quotingType, forceQuotes, inblock) {
+      let i;
+      let char = 0;
+      let prevChar = null;
+      let hasLineBreak = false;
+      let hasFoldableLine = false;
+      const shouldTrackWidth = lineWidth !== -1;
+      let previousLineBreak = -1;
+      let plain = isPlainSafeFirst2(codePointAt2(string, 0)) && isPlainSafeLast2(codePointAt2(string, string.length - 1));
+      if (singleLineOnly || forceQuotes) {
+        for (i = 0; i < string.length; char >= 65536 ? i += 2 : i++) {
+          char = codePointAt2(string, i);
+          if (!isPrintable2(char)) {
+            return STYLE_DOUBLE2;
+          }
+          plain = plain && isPlainSafe2(char, prevChar, inblock);
+          prevChar = char;
+        }
+      } else {
+        for (i = 0; i < string.length; char >= 65536 ? i += 2 : i++) {
+          char = codePointAt2(string, i);
+          if (char === CHAR_LINE_FEED2) {
+            hasLineBreak = true;
+            if (shouldTrackWidth) {
+              hasFoldableLine = hasFoldableLine || // Foldable line = too long, and not more-indented.
+              i - previousLineBreak - 1 > lineWidth && string[previousLineBreak + 1] !== " ";
+              previousLineBreak = i;
+            }
+          } else if (!isPrintable2(char)) {
+            return STYLE_DOUBLE2;
+          }
+          plain = plain && isPlainSafe2(char, prevChar, inblock);
+          prevChar = char;
+        }
+        hasFoldableLine = hasFoldableLine || shouldTrackWidth && (i - previousLineBreak - 1 > lineWidth && string[previousLineBreak + 1] !== " ");
+      }
+      if (!hasLineBreak && !hasFoldableLine) {
+        if (plain && !forceQuotes && !testAmbiguousType(string)) {
+          return STYLE_PLAIN2;
+        }
+        return quotingType === QUOTING_TYPE_DOUBLE2 ? STYLE_DOUBLE2 : STYLE_SINGLE2;
+      }
+      if (indentPerLevel > 9 && needIndentIndicator2(string)) {
+        return STYLE_DOUBLE2;
+      }
+      if (!forceQuotes) {
+        return hasFoldableLine ? STYLE_FOLDED2 : STYLE_LITERAL2;
+      }
+      return quotingType === QUOTING_TYPE_DOUBLE2 ? STYLE_DOUBLE2 : STYLE_SINGLE2;
+    }
+    function writeScalar2(state, string, level, iskey, inblock) {
+      state.dump = (function() {
+        if (string.length === 0) {
+          return state.quotingType === QUOTING_TYPE_DOUBLE2 ? '""' : "''";
+        }
+        if (!state.noCompatMode) {
+          if (DEPRECATED_BOOLEANS_SYNTAX2.indexOf(string) !== -1 || DEPRECATED_BASE60_SYNTAX2.test(string)) {
+            return state.quotingType === QUOTING_TYPE_DOUBLE2 ? '"' + string + '"' : "'" + string + "'";
+          }
+        }
+        const indent = state.indent * Math.max(1, level);
+        const lineWidth = state.lineWidth === -1 ? -1 : Math.max(Math.min(state.lineWidth, 40), state.lineWidth - indent);
+        const singleLineOnly = iskey || // No block styles in flow mode.
+        state.flowLevel > -1 && level >= state.flowLevel;
+        function testAmbiguity(string2) {
+          return testImplicitResolving2(state, string2);
+        }
+        switch (chooseScalarStyle2(
+          string,
+          singleLineOnly,
+          state.indent,
+          lineWidth,
+          testAmbiguity,
+          state.quotingType,
+          state.forceQuotes && !iskey,
+          inblock
+        )) {
+          case STYLE_PLAIN2:
+            return string;
+          case STYLE_SINGLE2:
+            return "'" + string.replace(/'/g, "''") + "'";
+          case STYLE_LITERAL2:
+            return "|" + blockHeader2(string, state.indent) + dropEndingNewline2(indentString2(string, indent));
+          case STYLE_FOLDED2:
+            return ">" + blockHeader2(string, state.indent) + dropEndingNewline2(indentString2(foldString2(string, lineWidth), indent));
+          case STYLE_DOUBLE2:
+            return '"' + escapeString2(string, lineWidth) + '"';
+          default:
+            throw new YAMLException("impossible error: invalid scalar style");
+        }
+      })();
+    }
+    function blockHeader2(string, indentPerLevel) {
+      const indentIndicator = needIndentIndicator2(string) ? String(indentPerLevel) : "";
+      const clip = string[string.length - 1] === "\n";
+      const keep = clip && (string[string.length - 2] === "\n" || string === "\n");
+      const chomp = keep ? "+" : clip ? "" : "-";
+      return indentIndicator + chomp + "\n";
+    }
+    function dropEndingNewline2(string) {
+      return string[string.length - 1] === "\n" ? string.slice(0, -1) : string;
+    }
+    function foldString2(string, width) {
+      const lineRe = /(\n+)([^\n]*)/g;
+      let result = (function() {
+        let nextLF = string.indexOf("\n");
+        nextLF = nextLF !== -1 ? nextLF : string.length;
+        lineRe.lastIndex = nextLF;
+        return foldLine2(string.slice(0, nextLF), width);
+      })();
+      let prevMoreIndented = string[0] === "\n" || string[0] === " ";
+      let moreIndented;
+      let match;
+      while (match = lineRe.exec(string)) {
+        const prefix = match[1];
+        const line = match[2];
+        moreIndented = line[0] === " ";
+        result += prefix + (!prevMoreIndented && !moreIndented && line !== "" ? "\n" : "") + foldLine2(line, width);
+        prevMoreIndented = moreIndented;
+      }
+      return result;
+    }
+    function foldLine2(line, width) {
+      if (line === "" || line[0] === " ") return line;
+      const breakRe = / [^ ]/g;
+      let match;
+      let start = 0;
+      let end;
+      let curr = 0;
+      let next = 0;
+      let result = "";
+      while (match = breakRe.exec(line)) {
+        next = match.index;
+        if (next - start > width) {
+          end = curr > start ? curr : next;
+          result += "\n" + line.slice(start, end);
+          start = end + 1;
+        }
+        curr = next;
+      }
+      result += "\n";
+      if (line.length - start > width && curr > start) {
+        result += line.slice(start, curr) + "\n" + line.slice(curr + 1);
+      } else {
+        result += line.slice(start);
+      }
+      return result.slice(1);
+    }
+    function escapeString2(string) {
+      let result = "";
+      let char = 0;
+      for (let i = 0; i < string.length; char >= 65536 ? i += 2 : i++) {
+        char = codePointAt2(string, i);
+        const escapeSeq = ESCAPE_SEQUENCES2[char];
+        if (!escapeSeq && isPrintable2(char)) {
+          result += string[i];
+          if (char >= 65536) result += string[i + 1];
+        } else {
+          result += escapeSeq || encodeHex2(char);
+        }
+      }
+      return result;
+    }
+    function writeFlowSequence2(state, level, object) {
+      let _result = "";
+      const _tag = state.tag;
+      for (let index = 0, length = object.length; index < length; index += 1) {
+        let value = object[index];
+        if (state.replacer) {
+          value = state.replacer.call(object, String(index), value);
+        }
+        if (writeNode2(state, level, value, false, false) || typeof value === "undefined" && writeNode2(state, level, null, false, false)) {
+          if (_result !== "") _result += "," + (!state.condenseFlow ? " " : "");
+          _result += state.dump;
+        }
+      }
+      state.tag = _tag;
+      state.dump = "[" + _result + "]";
+    }
+    function writeBlockSequence2(state, level, object, compact) {
+      let _result = "";
+      const _tag = state.tag;
+      for (let index = 0, length = object.length; index < length; index += 1) {
+        let value = object[index];
+        if (state.replacer) {
+          value = state.replacer.call(object, String(index), value);
+        }
+        if (writeNode2(state, level + 1, value, true, true, false, true) || typeof value === "undefined" && writeNode2(state, level + 1, null, true, true, false, true)) {
+          if (!compact || _result !== "") {
+            _result += generateNextLine2(state, level);
+          }
+          if (state.dump && CHAR_LINE_FEED2 === state.dump.charCodeAt(0)) {
+            _result += "-";
+          } else {
+            _result += "- ";
+          }
+          _result += state.dump;
+        }
+      }
+      state.tag = _tag;
+      state.dump = _result || "[]";
+    }
+    function writeFlowMapping2(state, level, object) {
+      let _result = "";
+      const _tag = state.tag;
+      const objectKeyList = Object.keys(object);
+      for (let index = 0, length = objectKeyList.length; index < length; index += 1) {
+        let pairBuffer = "";
+        if (_result !== "") pairBuffer += ", ";
+        if (state.condenseFlow) pairBuffer += '"';
+        const objectKey = objectKeyList[index];
+        let objectValue = object[objectKey];
+        if (state.replacer) {
+          objectValue = state.replacer.call(object, objectKey, objectValue);
+        }
+        if (!writeNode2(state, level, objectKey, false, false)) {
+          continue;
+        }
+        if (state.dump.length > 1024) pairBuffer += "? ";
+        pairBuffer += state.dump + (state.condenseFlow ? '"' : "") + ":" + (state.condenseFlow ? "" : " ");
+        if (!writeNode2(state, level, objectValue, false, false)) {
+          continue;
+        }
+        pairBuffer += state.dump;
+        _result += pairBuffer;
+      }
+      state.tag = _tag;
+      state.dump = "{" + _result + "}";
+    }
+    function writeBlockMapping2(state, level, object, compact) {
+      let _result = "";
+      const _tag = state.tag;
+      const objectKeyList = Object.keys(object);
+      if (state.sortKeys === true) {
+        objectKeyList.sort();
+      } else if (typeof state.sortKeys === "function") {
+        objectKeyList.sort(state.sortKeys);
+      } else if (state.sortKeys) {
+        throw new YAMLException("sortKeys must be a boolean or a function");
+      }
+      for (let index = 0, length = objectKeyList.length; index < length; index += 1) {
+        let pairBuffer = "";
+        if (!compact || _result !== "") {
+          pairBuffer += generateNextLine2(state, level);
+        }
+        const objectKey = objectKeyList[index];
+        let objectValue = object[objectKey];
+        if (state.replacer) {
+          objectValue = state.replacer.call(object, objectKey, objectValue);
+        }
+        if (!writeNode2(state, level + 1, objectKey, true, true, true)) {
+          continue;
+        }
+        const explicitPair = state.tag !== null && state.tag !== "?" || state.dump && state.dump.length > 1024;
+        if (explicitPair) {
+          if (state.dump && CHAR_LINE_FEED2 === state.dump.charCodeAt(0)) {
+            pairBuffer += "?";
+          } else {
+            pairBuffer += "? ";
+          }
+        }
+        pairBuffer += state.dump;
+        if (explicitPair) {
+          pairBuffer += generateNextLine2(state, level);
+        }
+        if (!writeNode2(state, level + 1, objectValue, true, explicitPair)) {
+          continue;
+        }
+        if (state.dump && CHAR_LINE_FEED2 === state.dump.charCodeAt(0)) {
+          pairBuffer += ":";
+        } else {
+          pairBuffer += ": ";
+        }
+        pairBuffer += state.dump;
+        _result += pairBuffer;
+      }
+      state.tag = _tag;
+      state.dump = _result || "{}";
+    }
+    function detectType2(state, object, explicit) {
+      const typeList = explicit ? state.explicitTypes : state.implicitTypes;
+      for (let index = 0, length = typeList.length; index < length; index += 1) {
+        const type2 = typeList[index];
+        if ((type2.instanceOf || type2.predicate) && (!type2.instanceOf || typeof object === "object" && object instanceof type2.instanceOf) && (!type2.predicate || type2.predicate(object))) {
+          if (explicit) {
+            if (type2.multi && type2.representName) {
+              state.tag = type2.representName(object);
+            } else {
+              state.tag = type2.tag;
+            }
+          } else {
+            state.tag = "?";
+          }
+          if (type2.represent) {
+            const style = state.styleMap[type2.tag] || type2.defaultStyle;
+            let _result;
+            if (_toString2.call(type2.represent) === "[object Function]") {
+              _result = type2.represent(object, style);
+            } else if (_hasOwnProperty2.call(type2.represent, style)) {
+              _result = type2.represent[style](object, style);
+            } else {
+              throw new YAMLException("!<" + type2.tag + '> tag resolver accepts not "' + style + '" style');
+            }
+            state.dump = _result;
+          }
+          return true;
+        }
+      }
+      return false;
+    }
+    function writeNode2(state, level, object, block, compact, iskey, isblockseq) {
+      state.tag = null;
+      state.dump = object;
+      if (!detectType2(state, object, false)) {
+        detectType2(state, object, true);
+      }
+      const type2 = _toString2.call(state.dump);
+      const inblock = block;
+      if (block) {
+        block = state.flowLevel < 0 || state.flowLevel > level;
+      }
+      const objectOrArray = type2 === "[object Object]" || type2 === "[object Array]";
+      let duplicateIndex;
+      let duplicate;
+      if (objectOrArray) {
+        duplicateIndex = state.duplicates.indexOf(object);
+        duplicate = duplicateIndex !== -1;
+      }
+      if (state.tag !== null && state.tag !== "?" || duplicate || state.indent !== 2 && level > 0) {
+        compact = false;
+      }
+      if (duplicate && state.usedDuplicates[duplicateIndex]) {
+        state.dump = "*ref_" + duplicateIndex;
+      } else {
+        if (objectOrArray && duplicate && !state.usedDuplicates[duplicateIndex]) {
+          state.usedDuplicates[duplicateIndex] = true;
+        }
+        if (type2 === "[object Object]") {
+          if (block && Object.keys(state.dump).length !== 0) {
+            writeBlockMapping2(state, level, state.dump, compact);
+            if (duplicate) {
+              state.dump = "&ref_" + duplicateIndex + state.dump;
+            }
+          } else {
+            writeFlowMapping2(state, level, state.dump);
+            if (duplicate) {
+              state.dump = "&ref_" + duplicateIndex + " " + state.dump;
+            }
+          }
+        } else if (type2 === "[object Array]") {
+          if (block && state.dump.length !== 0) {
+            if (state.noArrayIndent && !isblockseq && level > 0) {
+              writeBlockSequence2(state, level - 1, state.dump, compact);
+            } else {
+              writeBlockSequence2(state, level, state.dump, compact);
+            }
+            if (duplicate) {
+              state.dump = "&ref_" + duplicateIndex + state.dump;
+            }
+          } else {
+            writeFlowSequence2(state, level, state.dump);
+            if (duplicate) {
+              state.dump = "&ref_" + duplicateIndex + " " + state.dump;
+            }
+          }
+        } else if (type2 === "[object String]") {
+          if (state.tag !== "?") {
+            writeScalar2(state, state.dump, level, iskey, inblock);
+          }
+        } else if (type2 === "[object Undefined]") {
+          return false;
+        } else {
+          if (state.skipInvalid) return false;
+          throw new YAMLException("unacceptable kind of an object to dump " + type2);
+        }
+        if (state.tag !== null && state.tag !== "?") {
+          let tagStr = encodeURI(
+            state.tag[0] === "!" ? state.tag.slice(1) : state.tag
+          ).replace(/!/g, "%21");
+          if (state.tag[0] === "!") {
+            tagStr = "!" + tagStr;
+          } else if (tagStr.slice(0, 18) === "tag:yaml.org,2002:") {
+            tagStr = "!!" + tagStr.slice(18);
+          } else {
+            tagStr = "!<" + tagStr + ">";
+          }
+          state.dump = tagStr + " " + state.dump;
+        }
+      }
+      return true;
+    }
+    function getDuplicateReferences2(object, state) {
+      const objects = [];
+      const duplicatesIndexes = [];
+      inspectNode2(object, objects, duplicatesIndexes);
+      const length = duplicatesIndexes.length;
+      for (let index = 0; index < length; index += 1) {
+        state.duplicates.push(objects[duplicatesIndexes[index]]);
+      }
+      state.usedDuplicates = new Array(length);
+    }
+    function inspectNode2(object, objects, duplicatesIndexes) {
+      if (object !== null && typeof object === "object") {
+        const index = objects.indexOf(object);
+        if (index !== -1) {
+          if (duplicatesIndexes.indexOf(index) === -1) {
+            duplicatesIndexes.push(index);
+          }
+        } else {
+          objects.push(object);
+          if (Array.isArray(object)) {
+            for (let i = 0, length = object.length; i < length; i += 1) {
+              inspectNode2(object[i], objects, duplicatesIndexes);
+            }
+          } else {
+            const objectKeyList = Object.keys(object);
+            for (let i = 0, length = objectKeyList.length; i < length; i += 1) {
+              inspectNode2(object[objectKeyList[i]], objects, duplicatesIndexes);
+            }
+          }
+        }
+      }
+    }
+    function dump2(input, options) {
+      options = options || {};
+      const state = new State2(options);
+      if (!state.noRefs) getDuplicateReferences2(input, state);
+      let value = input;
+      if (state.replacer) {
+        value = state.replacer.call({ "": value }, "", value);
+      }
+      if (writeNode2(state, 0, value, true, true)) return state.dump + "\n";
+      return "";
+    }
+    module2.exports.dump = dump2;
+  }
+});
+
+// node_modules/js-yaml/index.js
+var require_js_yaml = __commonJS({
+  "node_modules/js-yaml/index.js"(exports2, module2) {
+    "use strict";
+    var loader2 = require_loader();
+    var dumper2 = require_dumper();
+    function renamed2(from, to) {
+      return function() {
+        throw new Error("Function yaml." + from + " is removed in js-yaml 4. Use yaml." + to + " instead, which is now safe by default.");
+      };
+    }
+    module2.exports.Type = require_type();
+    module2.exports.Schema = require_schema();
+    module2.exports.FAILSAFE_SCHEMA = require_failsafe();
+    module2.exports.JSON_SCHEMA = require_json();
+    module2.exports.CORE_SCHEMA = require_core();
+    module2.exports.DEFAULT_SCHEMA = require_default();
+    module2.exports.load = loader2.load;
+    module2.exports.loadAll = loader2.loadAll;
+    module2.exports.dump = dumper2.dump;
+    module2.exports.YAMLException = require_exception();
+    module2.exports.types = {
+      binary: require_binary(),
+      float: require_float(),
+      map: require_map(),
+      null: require_null(),
+      pairs: require_pairs(),
+      set: require_set(),
+      timestamp: require_timestamp(),
+      bool: require_bool(),
+      int: require_int(),
+      merge: require_merge(),
+      omap: require_omap(),
+      seq: require_seq(),
+      str: require_str()
+    };
+    module2.exports.safeLoad = renamed2("safeLoad", "load");
+    module2.exports.safeLoadAll = renamed2("safeLoadAll", "loadAll");
+    module2.exports.safeDump = renamed2("safeDump", "dump");
+  }
+});
+
+// ../src/modules/kernel/workflows/yaml-loader.ts
+function pluginLocalScriptsRoots() {
+  return [
+    // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
+    path2.resolve(__dirname, "..", "..", "..", "..", "scripts"),
+    // Bundled hook layout: hooks/dist -> plugin/scripts.
+    path2.resolve(__dirname, "..", "..", "scripts"),
+    // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
+    path2.resolve(__dirname, "..", "..", "..", "scripts")
+  ];
+}
+function tryScriptsRoot(scriptsRoot) {
+  try {
+    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
+  } catch {
+    return null;
+  }
+}
+function loadYamlApi() {
+  const tried = [];
+  for (const scriptsRoot of pluginLocalScriptsRoots()) {
+    tried.push(scriptsRoot);
+    const api2 = tryScriptsRoot(scriptsRoot);
+    if (api2) return api2;
+  }
+  try {
+    return require_js_yaml();
+  } catch {
+  }
+  const cwdRoot = path2.resolve(process.cwd(), "scripts");
+  tried.push(cwdRoot);
+  const api = tryScriptsRoot(cwdRoot);
+  if (api) return api;
+  throw new Error(
+    `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
+  );
+}
+var path2;
+var init_yaml_loader = __esm({
+  "../src/modules/kernel/workflows/yaml-loader.ts"() {
+    path2 = __toESM(require("node:path"));
+  }
+});
+
+// ../src/modules/kernel/workflows/identifier-tokenize.ts
+var init_identifier_tokenize = __esm({
+  "../src/modules/kernel/workflows/identifier-tokenize.ts"() {
+  }
+});
+
+// ../src/modules/kernel/index.ts
+var init_kernel = __esm({
+  "../src/modules/kernel/index.ts"() {
+    init_module_manifest();
+    init_yaml_loader();
+    init_identifier_tokenize();
+  }
+});
+
+// ../src/modules/config/workflows/config-defaults.ts
+var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES, DEFAULTS;
+var init_config_defaults = __esm({
+  "../src/modules/config/workflows/config-defaults.ts"() {
+    DEFAULT_ESCALATION_MARKERS = [
+      "I'm not sure",
+      "unclear",
+      "cannot determine",
+      "I don't know",
+      "ambiguous",
+      "uncertain",
+      "not enough information"
+    ];
+    NON_INHERITABLE_KEYS = /* @__PURE__ */ new Set([
+      "initiative_default",
+      // OD-1: attach-to-wrong-initiative risk
+      "workspace"
+      // workspace.mode is root-detection-only
+    ]);
+    LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+    SIDECAR_MAX_BYTES = 1024 * 1024;
+    DEFAULTS = {
+      rigor: "standard",
+      auto_approve: [],
+      review: "local",
+      host: "auto",
+      roles: { host: null, advisory: null, adversarial: null },
+      host_profiles: {},
+      initiative_default: null,
+      index: "auto",
+      record_status_runs: true,
+      codex_skip_enforcement: "warn",
+      agent_mode: "auto",
+      workspace: { mode: "auto" },
+      models: {
+        enabled: true,
+        // G4b (host-reachability): every host in the registry's HOST_IDS gets an
+        // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
+        // own contract, stated in the module doc comment above, is to stay free of
+        // internal runtime imports so core settings code can load it before the
+        // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
+        // roster (host-registry-schema.ts) enumerated by hand; a jest test
+        // (scripts/__tests__/config-defaults-tiers-host-ids.test.ts) asserts the two
+        // stay in sync so this can never silently drift again the way it had (7 of
+        // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
+        // non-null model — every other host's registry row carries `models.<tier>.model:
+        // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
+        // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
+        // equivalent this static scaffold mirrors).
+        tiers: {
+          cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+          mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+          powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
+        },
+        scoreWeights: {
+          workType: 0,
+          blastRadius: 1,
+          dependsOn: 1,
+          security: 1,
+          priorEscalation: 1
+        },
+        thresholds: { mid: 1, powerful: 3 },
+        advisorRounds: 2,
+        escalationMarkers: DEFAULT_ESCALATION_MARKERS,
+        recallBeforeRead: true,
+        recallScoreThreshold: 0.4,
+        structuredOutputRequired: true,
+        cacheTTL: { coordinator: "1h", leaf: "5m" },
+        importanceGate: 3,
+        compositeRecall: true,
+        importanceAtIngest: true,
+        ingestSimilarityGate: 0.8,
+        shortOutputThreshold: {},
+        knowledge: {
+          maxDepth: 8,
+          maxBranching: 12,
+          minTopicImportance: 0.4,
+          relMinConf: 0.5,
+          maxFiles: 3e3,
+          maxTokens: 1e6,
+          batchSize: 20
+        }
+      },
+      security: {
+        bypass_permissions_policy: "audit"
+      },
+      secrets_policy: {
+        env_allowlist: [],
+        redaction_patterns: [],
+        fail_mode_durable: "closed",
+        fail_mode_telemetry: "open"
+      },
+      mcp: {
+        tool_description_hashes: {},
+        stdio_available: true,
+        http_available: false,
+        bridge_package: null
+      },
+      statusline: false,
+      adversarial_review_provider: "auto",
+      loops: null,
+      loop_cap: 16,
+      codex_cap: 5,
+      defaults: {
+        auto_learn: false,
+        adversarial: "on",
+        team: { size: null, always_include: [] },
+        review_workflow: "standard",
+        skill_policy: "standard",
+        gates: { auto_approve: [] },
+        wiki: { share_mode: "team", autopromote: false },
+        quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
+        reporting: "standard",
+        index: {
+          enabled: true,
+          kg_node_threshold: 2e3,
+          kg_size_threshold_mb: 1,
+          links_edge_threshold: 2e3,
+          runs_threshold: 20,
+          wiki_file_threshold: 500
+        },
+        cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
+        retry: { max_attempts: 1, backoff: "exponential" },
+        resume: { enabled: true },
+        heartbeat_timeout_ms: 6e5,
+        capability_manifest_ttl_s: 3600,
+        // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
+        // the SessionStart signal; `auto` additionally stages the host apply path;
+        // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
+        update: { mode: "notify", cadence_hours: 24 },
+        allowed_tools: []
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
+var UPDATE_COMMANDS, CLAUDE_CAPABILITIES, CODEX_CAPABILITIES, NO_HOOKS, TARGET_CLI_COMMON, PI_CAPABILITIES, ANTIGRAVITY_CAPABILITIES, AGENTS_FILE_CAPABILITIES;
+var init_host_capabilities_schema = __esm({
+  "../src/modules/host-runtime/workflows/host-capabilities-schema.ts"() {
+    UPDATE_COMMANDS = {
+      marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
+      self_update: "guild-run update",
+      reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
+    };
+    CLAUDE_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "claude",
+      family: "claude",
+      surface_kind: "cli",
+      package: {
+        installable: true,
+        installability: "verified",
+        manifest_format: "claude-plugin",
+        update: { check: "marketplace_clone", apply: "marketplace_cli", command: UPDATE_COMMANDS.marketplace_cli, auto_capable: true }
+      },
+      bootstrap: {
+        context_injection: "hookSpecificOutput.additionalContext",
+        skill_autoload: true,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      commands: { slash_commands: true, command_files: "markdown" },
+      skills: { native_skills: true, skill_dir: ".claude/skills" },
+      agents: { native_agents: true, agent_format: "claude-md" },
+      hooks: {
+        // All ten events are bound in the live hooks/hooks.json (verified).
+        session_start: true,
+        user_prompt_submit: true,
+        pre_tool_use: true,
+        post_tool_use: true,
+        stop: true,
+        pre_compact: true,
+        subagent_stop: true,
+        task_created: true,
+        task_completed: true,
+        teammate_idle: true
+      },
+      permissions: {
+        deny: true,
+        ask: true,
+        ask_mode: "pre_tool_use",
+        accept_edits_without_prompt: true,
+        auto_approve_tools: true,
+        bypass_prompts: true,
+        bypass_sandbox: false,
+        permission_prompt_layer: true,
+        launch_modes: {
+          read_only: ["--tools", "Read,Grep,Glob"],
+          ask: ["--permission-mode", "default"],
+          accept_edits: ["--permission-mode", "acceptEdits"],
+          auto: ["--permission-mode", "auto"],
+          bypass_all: ["--permission-mode", "bypassPermissions"]
+        }
+      },
+      dispatch: {
+        tmux_processes: true,
+        plain_processes: true,
+        independent_agents: true,
+        subagents: true,
+        inline: true
+      },
+      interaction: {
+        native_questions: true,
+        terminal_prompt: true,
+        file_bus_questions: true
+      },
+      sessions: { continue: true, resume_by_id: true, fork: true },
+      structured_output: {
+        native_json: true,
+        schema_validation: true,
+        repair_prompt: true
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "bridge",
+        web: "native",
+        mcp: "native"
+      },
+      mcp: { stdio: true, http: false },
+      models: {
+        cheap: { model: "haiku" },
+        mid: { model: "sonnet" },
+        powerful: { model: "opus" }
+      }
+    };
+    CODEX_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "codex",
+      family: "codex",
+      surface_kind: "cli",
+      // installable:false is the honest MACHINE state — the Codex renderer exists but
+      // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
+      // as installable until proven. installability:"target" records that the renderer
+      // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
+      package: {
+        installable: false,
+        installability: "target",
+        manifest_format: "codex-plugin",
+        update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false }
+      },
+      bootstrap: {
+        // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
+        // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
+        prompt_transform: false,
+        // INFERRED
+        wrapper_injection: true
+        // The generated guild-run wrapper injects bootstrap.
+      },
+      commands: {
+        // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
+        slash_commands: false,
+        command_files: "none"
+      },
+      skills: { native_skills: false, skill_dir: null },
+      // Verified (per-host-packaging).
+      agents: { native_agents: false, agent_format: null },
+      // Verified (per-host-packaging flags agents unsupported).
+      hooks: {
+        // Verified-by-design: Codex hook taxonomy differs from Claude; no native
+        // Claude-equivalent hooks. All degrade through the HookEmitter (ADR Surface 3).
+        session_start: false,
+        user_prompt_submit: false,
+        pre_tool_use: false,
+        post_tool_use: false,
+        stop: false,
+        pre_compact: false,
+        subagent_stop: false,
+        task_created: false,
+        task_completed: false,
+        teammate_idle: false
+      },
+      permissions: {
+        // INFERRED (Codex CLI approval model). Confirm on-box at L3.
+        deny: false,
+        ask: true,
+        // Codex prompts for approval by default.
+        ask_mode: null,
+        // No pre_tool_use layer; approval is interactive.
+        accept_edits_without_prompt: false,
+        // INFERRED
+        auto_approve_tools: false,
+        // INFERRED
+        bypass_prompts: true,
+        // Codex YOLO / --dangerously-bypass exists (AC19).
+        bypass_sandbox: true,
+        // INFERRED — YOLO bypasses the sandbox.
+        permission_prompt_layer: false,
+        // INFERRED
+        launch_modes: {
+          // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
+          // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
+          // than guessed, so their absence reads as "degrade/record", not "supported".
+          bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
+          // INFERRED flag name — verify on-box (AC19).
+        }
+      },
+      dispatch: {
+        tmux_processes: true,
+        // Codex is a CLI process — tmux panes work.
+        plain_processes: true,
+        independent_agents: false,
+        // INFERRED — no native agent-team primitive.
+        subagents: false,
+        // INFERRED
+        inline: true
+      },
+      interaction: {
+        native_questions: false,
+        // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
+        terminal_prompt: true,
+        file_bus_questions: true
+        // Guild file-bus approval works on any FS host.
+      },
+      sessions: {
+        continue: true,
+        // INFERRED — Codex has session continuation.
+        resume_by_id: true,
+        // INFERRED
+        fork: false
+        // INFERRED
+      },
+      structured_output: {
+        native_json: false,
+        // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
+        schema_validation: false,
+        // Guild-side validation (validateHandoffV2) instead.
+        repair_prompt: true
+        // Bounded repair prompt is the fallback (ADR §Result contracts).
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "none",
+        // INFERRED — no native browser; record fallback (AC29).
+        web: "emulated",
+        // INFERRED
+        mcp: "native"
+        // Codex supports stdio MCP.
+      },
+      mcp: { stdio: true, http: false },
+      // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
+      models: {
+        // Codex model ids are host-specific and not pinned in this repo yet; null =
+        // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
+        cheap: { model: null },
+        mid: { model: null },
+        powerful: { model: null }
+      }
+    };
+    NO_HOOKS = {
+      session_start: false,
+      user_prompt_submit: false,
+      pre_tool_use: false,
+      post_tool_use: false,
+      stop: false,
+      pre_compact: false,
+      subagent_stop: false,
+      task_created: false,
+      task_completed: false,
+      teammate_idle: false
+    };
+    TARGET_CLI_COMMON = {
+      commands: { slash_commands: false, command_files: "none" },
+      skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
+      agents: { native_agents: false, agent_format: null },
+      hooks: NO_HOOKS,
+      dispatch: {
+        tmux_processes: true,
+        plain_processes: true,
+        independent_agents: false,
+        subagents: false,
+        inline: true
+      },
+      interaction: {
+        native_questions: false,
+        terminal_prompt: true,
+        file_bus_questions: true
+      },
+      sessions: { continue: false, resume_by_id: false, fork: false },
+      structured_output: {
+        native_json: true,
+        schema_validation: false,
+        repair_prompt: true
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "none",
+        web: "emulated",
+        mcp: "emulated"
+      },
+      mcp: { stdio: false, http: false },
+      models: {
+        cheap: { model: null },
+        mid: { model: null },
+        powerful: { model: null }
+      }
+    };
+    PI_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "pi",
+      family: "pi",
+      surface_kind: "cli",
+      package: {
+        installable: false,
+        installability: "target",
+        manifest_format: "pi-manifest",
+        update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false }
+      },
+      bootstrap: {
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      permissions: {
+        deny: true,
+        ask: true,
+        ask_mode: null,
+        accept_edits_without_prompt: false,
+        auto_approve_tools: false,
+        bypass_prompts: false,
+        bypass_sandbox: false,
+        permission_prompt_layer: false,
+        launch_modes: {}
+      },
+      ...TARGET_CLI_COMMON
+    };
+    ANTIGRAVITY_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "antigravity",
+      family: "antigravity",
+      surface_kind: "cli",
+      package: {
+        installable: false,
+        installability: "target",
+        manifest_format: "antigravity-manifest",
+        update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false }
+      },
+      bootstrap: {
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      permissions: {
+        deny: true,
+        ask: true,
+        ask_mode: null,
+        accept_edits_without_prompt: false,
+        auto_approve_tools: false,
+        bypass_prompts: true,
+        bypass_sandbox: true,
+        permission_prompt_layer: false,
+        launch_modes: {
+          bypass_all: ["--dangerously-skip-permissions"]
+        }
+      },
+      ...TARGET_CLI_COMMON
+    };
+    AGENTS_FILE_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "agents-file",
+      family: "agents",
+      surface_kind: "file",
+      package: {
+        installable: false,
+        installability: "target",
+        manifest_format: "agents-file",
+        update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
+      },
+      bootstrap: {
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      commands: { slash_commands: false, command_files: "none" },
+      skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
+      agents: { native_agents: false, agent_format: null },
+      hooks: NO_HOOKS,
+      permissions: {
+        deny: false,
+        ask: true,
+        ask_mode: null,
+        accept_edits_without_prompt: false,
+        auto_approve_tools: false,
+        bypass_prompts: false,
+        bypass_sandbox: false,
+        permission_prompt_layer: false,
+        launch_modes: {}
+      },
+      dispatch: {
+        tmux_processes: false,
+        plain_processes: false,
+        independent_agents: false,
+        subagents: false,
+        inline: false
+      },
+      interaction: {
+        native_questions: false,
+        terminal_prompt: false,
+        file_bus_questions: true
+      },
+      sessions: { continue: false, resume_by_id: false, fork: false },
+      structured_output: {
+        native_json: false,
+        schema_validation: false,
+        repair_prompt: true
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "none",
+        web: "emulated",
+        mcp: "none"
+      },
+      mcp: { stdio: false, http: false },
+      models: {
+        cheap: { model: null },
+        mid: { model: null },
+        powerful: { model: null }
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-registry-schema.ts
+function inferredCaps(host_kind, family, surface_kind = "cli") {
+  return {
+    schema_version: "guild.host_capabilities.v1",
+    host_kind,
+    family,
+    // Must equal the registry entry's top-level surface_kind (cross-field invariant,
+    // enforced by validateHostRegistryEntry). `.agents` is a file surface, not cli.
+    surface_kind,
+    package: {
+      installable: false,
+      installability: "target",
+      manifest_format: `${host_kind}-package`,
+      // AC-7 by surface: cli = Guild-owned wrapper packages → guild-run
+      // self-update; file = AGENTS-file packages → reinstall command (notify +
+      // one command, no daemon); app = refused install surfaces → no check, no
+      // apply (degrades to notify-only prose; the recorded loss IS this row).
+      update: surface_kind === "cli" ? { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false } : surface_kind === "file" ? { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false } : { check: "none", apply: "none", command: null, auto_capable: false }
+    },
+    bootstrap: {
+      context_injection: "instruction_file",
+      skill_autoload: false,
+      prompt_transform: false,
+      wrapper_injection: true
+    },
+    commands: { slash_commands: false, command_files: "none" },
+    skills: { native_skills: false, skill_dir: null },
+    agents: { native_agents: false, agent_format: null },
+    hooks: {
+      session_start: false,
+      user_prompt_submit: false,
+      pre_tool_use: false,
+      post_tool_use: false,
+      stop: false,
+      pre_compact: false,
+      subagent_stop: false,
+      task_created: false,
+      task_completed: false,
+      teammate_idle: false
+    },
+    permissions: {
+      deny: false,
+      ask: true,
+      ask_mode: null,
+      accept_edits_without_prompt: false,
+      auto_approve_tools: false,
+      bypass_prompts: false,
+      bypass_sandbox: false,
+      permission_prompt_layer: false,
+      launch_modes: {}
+    },
+    dispatch: {
+      tmux_processes: true,
+      plain_processes: true,
+      independent_agents: false,
+      subagents: false,
+      inline: true
+    },
+    interaction: { native_questions: false, terminal_prompt: true, file_bus_questions: true },
+    sessions: { continue: false, resume_by_id: false, fork: false },
+    structured_output: { native_json: false, schema_validation: false, repair_prompt: true },
+    artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+    tools: {
+      read: "native",
+      search: "native",
+      shell: "native",
+      edit: "native",
+      write: "native",
+      browser: "none",
+      web: "emulated",
+      mcp: "none"
+    },
+    mcp: { stdio: false, http: false },
+    models: { cheap: { model: null }, mid: { model: null }, powerful: { model: null } }
+  };
+}
+var HOST_IDS, HOST_FAMILIES, AUTH_PROBES, CLAUDE_ENTRY, CODEX_ENTRY, AGENTS_FILE_ENTRY, PI_ENTRY, ANTIGRAVITY_ENTRY, CLAUDE_APP_ENTRY, CLAUDE_WEB_ENTRY, CODEX_APP_ENTRY, CLAUDE_AI_CONNECTOR_ENTRY, CURSOR_ENTRY, GITHUB_COPILOT_ENTRY, OPENCODE_ENTRY, ROVO_DEV_ENTRY, KIRO_ENTRY, QODER_ENTRY, TRAE_ENTRY, HOST_REGISTRY_ROWS, HOST_ID_SET, FAMILY_SET, AUTH_PROBE_SET;
+var init_host_registry_schema = __esm({
+  "../src/modules/host-runtime/workflows/host-registry-schema.ts"() {
+    init_host_capabilities_schema();
+    HOST_IDS = [
+      // keep CLI/file (5)
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      // keep-as-refuse (4) — RETAINED verbatim
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+      // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
+      "cursor",
+      "github-copilot",
+      "opencode",
+      "rovo-dev",
+      // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
+      // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
+      "kiro",
+      "qoder",
+      "trae"
+    ];
+    HOST_FAMILIES = [
+      "claude",
+      "codex",
+      "agents",
+      "pi",
+      "antigravity",
+      "cursor",
+      "copilot",
+      "opencode",
+      "rovo"
+    ];
+    AUTH_PROBES = [
+      "codex_stored_or_env",
+      "none",
+      "cursor_stored",
+      "gh_auth",
+      "opencode_stored_or_env",
+      "acli_stored"
+    ];
+    CLAUDE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-cli",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
+      installability: "native",
+      result_adapter: false,
+      // Claude is the reference author host, not a cross reviewer for itself.
+      dispatch_selectable: true,
+      capabilities: CLAUDE_CAPABILITIES,
+      provenance: "verified"
+    };
+    CODEX_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "codex-cli",
+      family: "codex",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
+      // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
+      installability: "target",
+      result_adapter: true,
+      // The only selectable cross reviewer today (provider-detect codex-plugin/codex-cli).
+      dispatch_selectable: true,
+      capabilities: CODEX_CAPABILITIES,
+      provenance: "verified"
+      // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
+    };
+    AGENTS_FILE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "agents-file",
+      family: "agents",
+      // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
+      // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
+      adapter_binding: "self",
+      // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
+      surface_kind: "file",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "target",
+      result_adapter: false,
+      // INFERRED — no cross-review adapter; verify at live-host availability.
+      dispatch_selectable: true,
+      // INFERRED — a host consuming AGENTS.md can run a lane.
+      capabilities: AGENTS_FILE_CAPABILITIES,
+      // file surface — matches top-level surface_kind.
+      provenance: "inferred"
+    };
+    PI_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "pi-cli",
+      family: "pi",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
+      // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
+      installability: "target",
+      // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
+      result_adapter: false,
+      // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
+      dispatch_selectable: true,
+      // VERIFIED: pi is a CLI process a lane can run on.
+      capabilities: {
+        ...inferredCaps("pi-cli", "pi"),
+        // VERIFIED on-host (pi --help, 0.79.3):
+        sessions: { continue: true, resume_by_id: true, fork: true },
+        // --continue/-c, --resume/-r + --session-id, --fork
+        structured_output: { native_json: true, schema_validation: false, repair_prompt: true },
+        // --mode json
+        permissions: {
+          ...inferredCaps("pi-cli", "pi").permissions,
+          // G4b: carries forward the Phase-1 hand-authored host-capabilities-schema.ts
+          // PI_CAPABILITIES.permissions.deny value (a field the inferredCaps() default
+          // left false) — pi's --tools allowlist lets an invocation deny specific tools,
+          // so `deny:true` is the correct capability. Recorded here (not just in the
+          // now-superseded PI_CAPABILITIES row) so the registry stays the single source.
+          deny: true
+        }
+      },
+      provenance: "verified"
+      // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+    };
+    ANTIGRAVITY_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "antigravity-cli",
+      family: "antigravity",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
+      detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
+      installability: "target",
+      // VERIFIED-as-target: CLI present; Guild-package install unproven.
+      result_adapter: false,
+      // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
+      dispatch_selectable: true,
+      // VERIFIED: agy is a CLI process a lane can run on.
+      capabilities: {
+        ...inferredCaps("antigravity-cli", "antigravity"),
+        // VERIFIED on-host (agy --help, 1.0.8):
+        sessions: { continue: true, resume_by_id: true, fork: false },
+        // --continue/-c, --conversation <id>; no fork flag
+        permissions: {
+          ...inferredCaps("antigravity-cli", "antigravity").permissions,
+          bypass_prompts: true,
+          // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
+          launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
+          // G4b: carries forward two Phase-1 hand-authored host-capabilities-schema.ts
+          // ANTIGRAVITY_CAPABILITIES fields the inferredCaps() default did not set —
+          // `deny` (agy can refuse a tool) and `bypass_sandbox` (the same
+          // --dangerously-skip-permissions flag that sets bypass_prompts above also lifts
+          // the sandbox restriction agy's separate --sandbox toggle would otherwise apply).
+          // Recorded here so the registry — not a second hand-authored row — is the one
+          // source of truth (closes the "two diverged capability truths" audit finding).
+          deny: true,
+          bypass_sandbox: true
+        }
+      },
+      provenance: "verified"
+      // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+    };
+    CLAUDE_APP_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-app",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-code-app", "claude", "app"),
+      provenance: "inferred"
+    };
+    CLAUDE_WEB_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-web",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-code-web", "claude", "app"),
+      provenance: "inferred"
+    };
+    CODEX_APP_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "codex-app",
+      family: "codex",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("codex-app", "codex", "app"),
+      provenance: "inferred"
+    };
+    CLAUDE_AI_CONNECTOR_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-ai-connector",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
+      provenance: "inferred"
+    };
+    CURSOR_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "cursor",
+      family: "cursor",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("cursor", "cursor", "cli"),
+      provenance: "inferred"
+    };
+    GITHUB_COPILOT_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "github-copilot",
+      family: "copilot",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // capability is a subcommand of the shared `gh` bin (`gh copilot`).
+      detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("github-copilot", "copilot", "cli"),
+      provenance: "inferred"
+    };
+    OPENCODE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "opencode",
+      family: "opencode",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("opencode", "opencode", "cli"),
+      provenance: "inferred"
+    };
+    ROVO_DEV_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "rovo-dev",
+      family: "rovo",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
+      detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
+      provenance: "inferred"
+    };
+    KIRO_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "kiro",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
+      // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
+      // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
+      // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
+      // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
+      // a row per registry id, but a capability row is not a dispatch surface). The
+      // honest column for a pane-less file surface is false.
+      dispatch_selectable: false,
+      capabilities: inferredCaps("kiro", "agents", "file"),
+      provenance: "inferred"
+    };
+    QODER_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "qoder",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+      // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+      dispatch_selectable: false,
+      capabilities: inferredCaps("qoder", "agents", "file"),
+      provenance: "inferred"
+    };
+    TRAE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "trae",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+      // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+      dispatch_selectable: false,
+      capabilities: inferredCaps("trae", "agents", "file"),
+      provenance: "inferred"
+    };
+    HOST_REGISTRY_ROWS = {
+      "claude-code-cli": CLAUDE_ENTRY,
+      "codex-cli": CODEX_ENTRY,
+      "pi-cli": PI_ENTRY,
+      "antigravity-cli": ANTIGRAVITY_ENTRY,
+      "agents-file": AGENTS_FILE_ENTRY,
+      "claude-code-app": CLAUDE_APP_ENTRY,
+      "claude-code-web": CLAUDE_WEB_ENTRY,
+      "codex-app": CODEX_APP_ENTRY,
+      "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
+      cursor: CURSOR_ENTRY,
+      "github-copilot": GITHUB_COPILOT_ENTRY,
+      opencode: OPENCODE_ENTRY,
+      "rovo-dev": ROVO_DEV_ENTRY,
+      kiro: KIRO_ENTRY,
+      qoder: QODER_ENTRY,
+      trae: TRAE_ENTRY
+    };
+    HOST_ID_SET = new Set(HOST_IDS);
+    FAMILY_SET = new Set(HOST_FAMILIES);
+    AUTH_PROBE_SET = new Set(AUTH_PROBES);
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-id-namespace.ts
+function normalizeHostId(value) {
+  const s = value.trim();
+  if (HOST_ID_SET2.has(s)) return s;
+  return LEGACY_HOST_ALIASES2[s] ?? null;
+}
+var HOST_ID_SET2, LEGACY_HOST_ALIASES2;
+var init_host_id_namespace = __esm({
+  "../src/modules/host-runtime/workflows/host-id-namespace.ts"() {
+    init_host_registry_schema();
+    HOST_ID_SET2 = new Set(HOST_IDS);
+    LEGACY_HOST_ALIASES2 = {
+      claude: "claude-code-cli",
+      "claude-code-desktop": "claude-code-app",
+      codex: "codex-cli",
+      "codex-plugin": "codex-cli",
+      agents: "agents-file",
+      ".agents": "agents-file",
+      pi: "pi-cli",
+      antigravity: "antigravity-cli",
+      "antigravity-2": "antigravity-cli"
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
+var RUNGS, ADAPTER_SURFACES, RUNG_SET, SURFACE_SET;
+var init_adapter_fallback_ladders = __esm({
+  "../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts"() {
+    init_host_registry_schema();
+    RUNGS = ["native", "wrapped", "bridged", "emulated", "degraded"];
+    ADAPTER_SURFACES = ["interaction", "session", "semantic_tool", "browser"];
+    RUNG_SET = new Set(RUNGS);
+    SURFACE_SET = new Set(ADAPTER_SURFACES);
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-profiles-validate.ts
+function isPlainObject2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function validateHostProfiles(hp) {
+  const rejects = [];
+  for (const [hostId, entry] of Object.entries(hp)) {
+    const canonicalHostId = normalizeHostId(hostId);
+    if (!canonicalHostId) {
+      rejects.push(
+        `unknown host_profiles host_id "${hostId}" (closed key set \u2014 valid: ${[...KNOWN_HOST_IDS].join("|")})`
+      );
+      continue;
+    }
+    if (!isPlainObject2(entry)) {
+      rejects.push(`host_profiles["${hostId}"] must be an object { models?, enabled? }`);
+      continue;
+    }
+    const e = entry;
+    for (const ek of Object.keys(e)) {
+      if (!VALID_HOST_PROFILE_ENTRY_KEYS.has(ek)) {
+        rejects.push(
+          `unknown host_profiles["${hostId}"] key "${ek}" (closed entry shape \u2014 only models, enabled)`
+        );
+      }
+    }
+    if (e["enabled"] !== void 0 && typeof e["enabled"] !== "boolean") {
+      rejects.push(`host_profiles["${hostId}"].enabled must be a boolean (got ${JSON.stringify(e["enabled"])})`);
+    }
+    if (e["models"] !== void 0) {
+      if (!isPlainObject2(e["models"])) {
+        rejects.push(`host_profiles["${hostId}"].models must be an object { cheap?, mid?, powerful? }`);
+      } else {
+        const m = e["models"];
+        for (const mk of Object.keys(m)) {
+          if (!VALID_HOST_PROFILE_MODEL_KEYS.has(mk)) {
+            rejects.push(
+              `unknown host_profiles["${hostId}"].models key "${mk}" (closed key set \u2014 only cheap, mid, powerful)`
+            );
+          } else if (typeof m[mk] !== "string" || !m[mk].trim()) {
+            rejects.push(`host_profiles["${hostId}"].models.${mk} must be a non-empty string (got ${JSON.stringify(m[mk])})`);
+          }
+        }
+      }
+    }
+  }
+  return rejects;
+}
+function filterHostProfiles(raw) {
+  const out = {};
+  for (const [hostId, entry] of Object.entries(raw)) {
+    if (validateHostProfiles({ [hostId]: entry }).length === 0) {
+      const canonicalHostId = normalizeHostId(hostId);
+      if (canonicalHostId) out[canonicalHostId] = entry;
+    }
+  }
+  return out;
+}
+var KNOWN_HOST_IDS, VALID_HOST_PROFILE_ENTRY_KEYS, VALID_HOST_PROFILE_MODEL_KEYS;
+var init_host_profiles_validate = __esm({
+  "../src/modules/host-runtime/workflows/host-profiles-validate.ts"() {
+    init_host_registry_schema();
+    init_host_id_namespace();
+    KNOWN_HOST_IDS = new Set(HOST_IDS);
+    VALID_HOST_PROFILE_ENTRY_KEYS = /* @__PURE__ */ new Set(["models", "enabled"]);
+    VALID_HOST_PROFILE_MODEL_KEYS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-registry.ts
+function deriveCapabilityRow(row) {
+  return row.capabilities;
+}
+function resultAdapterForFamily(family) {
+  return FAMILY_TO_ROW[family]?.result_adapter ?? false;
+}
+var DERIVED_HOST_CAPABILITY_ROWS, FAMILY_TO_ROW;
+var init_host_registry = __esm({
+  "../src/modules/host-runtime/workflows/host-registry.ts"() {
+    init_host_registry_schema();
+    init_host_id_namespace();
+    DERIVED_HOST_CAPABILITY_ROWS = (() => {
+      const out = {};
+      for (const id of HOST_IDS) {
+        out[id] = deriveCapabilityRow(HOST_REGISTRY_ROWS[id]);
+      }
+      out["claude"] = out["claude-code-cli"];
+      out["codex"] = out["codex-cli"];
+      out["pi"] = out["pi-cli"];
+      out["antigravity"] = out["antigravity-cli"];
+      out["antigravity-2"] = out["antigravity-cli"];
+      return out;
+    })();
+    FAMILY_TO_ROW = (() => {
+      const out = {};
+      for (const id of HOST_IDS) {
+        const row = HOST_REGISTRY_ROWS[id];
+        const existing = out[row.family];
+        if (!existing || !existing.result_adapter && row.result_adapter) {
+          out[row.family] = row;
+        }
+      }
+      return out;
+    })();
+  }
+});
+
+// ../src/modules/host-runtime/workflows/provider-detect.ts
+var PROVIDER_REGISTRY;
+var init_provider_detect = __esm({
+  "../src/modules/host-runtime/workflows/provider-detect.ts"() {
+    init_host_registry();
+    PROVIDER_REGISTRY = [
+      // The author host itself — always "detected on the host", never a cross reviewer
+      // for a same-family author (the AC-8 guard handles that).
+      { id: "claude", kind: "host", family: "claude", hasAdapter: resultAdapterForFamily("claude"), requiresAuth: false },
+      // Codex reference adapters (the only selectable cross reviewers today).
+      { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+      { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+      // Detect-only until adapters ship (OD-6) — pi/antigravity rows carry result_adapter:false.
+      // (The former `gemini-cli` provider was removed when Gemini was sunset 2026-06-14.)
+      { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
+      // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
+      { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
+    ];
+  }
+});
+
+// ../src/modules/host-runtime/index.ts
+var init_host_runtime = __esm({
+  "../src/modules/host-runtime/index.ts"() {
+    init_host_id_namespace();
+    init_adapter_fallback_ladders();
+    init_host_profiles_validate();
+    init_host_registry();
+    init_host_registry_schema();
+    init_provider_detect();
+  }
+});
+
+// ../src/modules/security/workflows/safe-object.ts
+var PROTO_POISON_KEYS;
+var init_safe_object = __esm({
+  "../src/modules/security/workflows/safe-object.ts"() {
+    PROTO_POISON_KEYS = /* @__PURE__ */ new Set(["__proto__", "prototype", "constructor"]);
+  }
+});
+
+// ../src/modules/security/workflows/share-set.ts
+var init_share_set = __esm({
+  "../src/modules/security/workflows/share-set.ts"() {
+  }
+});
+
+// ../src/modules/security/index.ts
+var init_security = __esm({
+  "../src/modules/security/index.ts"() {
+    init_safe_object();
+    init_share_set();
+  }
+});
+
+// ../src/modules/config/workflows/workspace-manifest.ts
+function parseWorkspaceManifest(manifestPath) {
+  let raw;
+  try {
+    if (!fs8.existsSync(manifestPath)) return { status: "absent" };
+    raw = fs8.readFileSync(manifestPath, "utf8");
+  } catch (e) {
+    return { status: "parse_error", error: e instanceof Error ? e.message : String(e) };
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(raw);
+  } catch (e) {
+    return { status: "parse_error", error: e instanceof Error ? e.message : String(e) };
+  }
+  if (manifest && manifest.is_workspace === true) {
+    return { status: "workspace", manifest };
+  }
+  return { status: "not_workspace" };
+}
+function discoverWorkspace(startDir) {
+  let current = path9.dirname(startDir);
+  const fsRoot = path9.parse(current).root;
+  while (current !== fsRoot) {
+    const manifestPath = path9.join(current, ".guild", "workspace.json");
+    const parsed = parseWorkspaceManifest(manifestPath);
+    if (parsed.status === "workspace") {
+      return { rootDir: current, manifest: parsed.manifest };
+    }
+    if (parsed.status === "not_workspace") {
+      return null;
+    }
+    const parent = path9.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return null;
+}
+var fs8, path9;
+var init_workspace_manifest = __esm({
+  "../src/modules/config/workflows/workspace-manifest.ts"() {
+    fs8 = __toESM(require("fs"));
+    path9 = __toESM(require("path"));
+  }
+});
+
+// ../src/modules/config/workflows/settings-reader.ts
+function sparseRoles(raw) {
+  const out = {};
+  for (const k of ["host", "advisory", "adversarial"]) {
+    const v = raw[k];
+    if (v === null) out[k] = null;
+    else if (typeof v === "string") {
+      const normalized = normalizeHostId(v);
+      if (normalized) out[k] = normalized;
+    }
+  }
+  return out;
+}
+function sparseHostProfiles(raw) {
+  return filterHostProfiles(raw);
+}
+function sparseTierHostMap(raw) {
+  const out = {};
+  for (const hk of Object.keys(raw)) {
+    const canonicalHostId = normalizeHostId(hk);
+    if (canonicalHostId) out[canonicalHostId] = raw[hk];
+  }
+  return out;
+}
+function normalizeDispatchHostId(value) {
+  const normalized = normalizeHostId(value);
+  return normalized && DISPATCH_HOST_IDS.has(normalized) ? normalized : null;
+}
+function isPlainObject3(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function deepMerge(base, overlay) {
+  const result = Object.assign(/* @__PURE__ */ Object.create(null), base);
+  for (const [k, v] of Object.entries(overlay)) {
+    if (PROTO_POISON_KEYS.has(k)) continue;
+    if (Array.isArray(v)) {
+      result[k] = v;
+    } else if (isPlainObject3(v) && isPlainObject3(result[k])) {
+      result[k] = deepMerge(
+        result[k],
+        v
+      );
+    } else {
+      result[k] = v;
+    }
+  }
+  return { ...result };
+}
+function collectKeyPaths(obj, prefix = "") {
+  const paths = /* @__PURE__ */ new Set();
+  for (const [k, v] of Object.entries(obj)) {
+    if (PROTO_POISON_KEYS.has(k)) continue;
+    const full = prefix ? `${prefix}.${k}` : k;
+    paths.add(full);
+    if (isPlainObject3(v)) {
+      for (const sub of collectKeyPaths(v, full)) {
+        paths.add(sub);
+      }
+    }
+  }
+  return paths;
+}
+function validateLocalKeysOrThrow(localObj, baseObj) {
+  const basePaths = collectKeyPaths(baseObj);
+  for (const key of Object.keys(localObj)) {
+    if (PROTO_POISON_KEYS.has(key)) {
+      throw new Error(
+        `share-dot-guild: settings.local.json key '${key}' is a dangerous prototype key \u2014 rejected.`
+      );
+    }
+    if (key.startsWith("_")) continue;
+    if (!basePaths.has(key)) {
+      throw new Error(
+        `share-dot-guild: settings.local.json key '${key}' not in settings.json schema \u2014 refusing to silently extend. Declare it in settings.json first (with the team default) or remove it from settings.local.json.`
+      );
+    }
+  }
+}
+function rigorProfile(rigor) {
+  switch (rigor) {
+    case "quick":
+      return { loops: "none", loop_cap: null, review: "off" };
+    case "deep":
+      return { loops: "all", loop_cap: 16, review: "cross" };
+    case "standard":
+    default:
+      return { loops: "spec,plan", loop_cap: 16, review: "local" };
+  }
+}
+function parseSettingsFile(filePath) {
+  if (!fs9.existsSync(filePath)) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(fs9.readFileSync(filePath, "utf8"));
+  } catch {
+    return {};
+  }
+  return parseSettingsFile_fromParsed(parsed);
+}
+function parseLocalFile(guildDir) {
+  const localPath = path10.join(guildDir, "settings.local.json");
+  if (!fs9.existsSync(localPath)) return {};
+  let localParsed;
+  try {
+    localParsed = JSON.parse(fs9.readFileSync(localPath, "utf8"));
+  } catch {
+    return {};
+  }
+  validateLocalKeysOrThrow(localParsed, DEFAULTS2);
+  return parseSettingsFile_fromParsed(localParsed);
+}
+function parseSettingsFile_fromParsed(parsed) {
+  const out = {};
+  if (VALID_RIGOR.has(parsed["rigor"]))
+    out.rigor = parsed["rigor"];
+  if (Array.isArray(parsed["auto_approve"]))
+    out.auto_approve = parsed["auto_approve"];
+  if (VALID_REVIEW.has(parsed["review"]))
+    out.review = parsed["review"];
+  if (parsed["host"] === "auto") out.host = "auto";
+  else if (typeof parsed["host"] === "string") {
+    const normalized = normalizeDispatchHostId(parsed["host"]);
+    if (normalized) out.host = normalized;
+  }
+  if (isPlainObject3(parsed["roles"]))
+    out.roles = sparseRoles(parsed["roles"]);
+  if (isPlainObject3(parsed["host_profiles"]))
+    out.host_profiles = sparseHostProfiles(parsed["host_profiles"]);
+  if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
+    out.initiative_default = parsed["initiative_default"];
+  if (parsed["index"] === "auto" || parsed["index"] === "off")
+    out.index = parsed["index"];
+  if (typeof parsed["record_status_runs"] === "boolean")
+    out.record_status_runs = parsed["record_status_runs"];
+  if (parsed["codex_skip_enforcement"] === "warn" || parsed["codex_skip_enforcement"] === "block")
+    out.codex_skip_enforcement = parsed["codex_skip_enforcement"];
+  if (VALID_AGENT_MODE.has(parsed["agent_mode"]))
+    out.agent_mode = parsed["agent_mode"];
+  if (isPlainObject3(parsed["workspace"])) {
+    const ws = parsed["workspace"];
+    const wsMode = ws["mode"];
+    if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
+      out.workspace = { mode: wsMode };
+    }
+  }
+  if (isPlainObject3(parsed["models"])) {
+    const rawModels = parsed["models"];
+    const sparse = {};
+    if (typeof rawModels["enabled"] === "boolean") sparse.enabled = rawModels["enabled"];
+    if (isPlainObject3(rawModels["tiers"])) {
+      const rt = rawModels["tiers"];
+      const sparseTiers = {};
+      for (const tier of ["cheap", "mid", "powerful"]) {
+        if (isPlainObject3(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier]);
+      }
+      sparse.tiers = sparseTiers;
+    }
+    if (isPlainObject3(rawModels["scoreWeights"])) sparse.scoreWeights = rawModels["scoreWeights"];
+    if (isPlainObject3(rawModels["thresholds"])) sparse.thresholds = rawModels["thresholds"];
+    if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1)
+      sparse.advisorRounds = Math.floor(rawModels["advisorRounds"]);
+    if (Array.isArray(rawModels["escalationMarkers"])) sparse.escalationMarkers = rawModels["escalationMarkers"];
+    if (typeof rawModels["recallBeforeRead"] === "boolean") sparse.recallBeforeRead = rawModels["recallBeforeRead"];
+    if (typeof rawModels["recallScoreThreshold"] === "number") sparse.recallScoreThreshold = rawModels["recallScoreThreshold"];
+    if (typeof rawModels["structuredOutputRequired"] === "boolean") sparse.structuredOutputRequired = rawModels["structuredOutputRequired"];
+    if (isPlainObject3(rawModels["cacheTTL"])) {
+      const rttl = rawModels["cacheTTL"];
+      const newTTL = {};
+      if (VALID_CACHE_TTL.has(rttl["coordinator"])) newTTL.coordinator = rttl["coordinator"];
+      if (VALID_CACHE_TTL.has(rttl["leaf"])) newTTL.leaf = rttl["leaf"];
+      sparse.cacheTTL = newTTL;
+    }
+    if (typeof rawModels["importanceGate"] === "number" && rawModels["importanceGate"] >= 1 && rawModels["importanceGate"] <= 5)
+      sparse.importanceGate = Math.floor(rawModels["importanceGate"]);
+    if (typeof rawModels["compositeRecall"] === "boolean")
+      sparse.compositeRecall = rawModels["compositeRecall"];
+    if (typeof rawModels["importanceAtIngest"] === "boolean")
+      sparse.importanceAtIngest = rawModels["importanceAtIngest"];
+    if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
+      sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
+    if (isPlainObject3(rawModels["shortOutputThreshold"])) {
+      const sot = rawModels["shortOutputThreshold"];
+      const sotMerged = {};
+      for (const taskType of Object.keys(sot)) {
+        if (!isPlainObject3(sot[taskType])) continue;
+        const innerRaw = sot[taskType];
+        const innerMerged = {};
+        for (const tier of Object.keys(innerRaw)) {
+          if (typeof innerRaw[tier] === "number") innerMerged[tier] = innerRaw[tier];
+        }
+        if (Object.keys(innerMerged).length > 0) sotMerged[taskType] = innerMerged;
+      }
+      sparse.shortOutputThreshold = sotMerged;
+    }
+    if (isPlainObject3(rawModels["knowledge"])) {
+      const rawK = rawModels["knowledge"];
+      const sparseK = {};
+      if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
+        sparseK.maxDepth = Math.floor(rawK["maxDepth"]);
+      if (typeof rawK["maxBranching"] === "number" && rawK["maxBranching"] >= 1)
+        sparseK.maxBranching = Math.floor(rawK["maxBranching"]);
+      if (typeof rawK["minTopicImportance"] === "number" && rawK["minTopicImportance"] >= 0 && rawK["minTopicImportance"] <= 1)
+        sparseK.minTopicImportance = rawK["minTopicImportance"];
+      if (typeof rawK["relMinConf"] === "number" && rawK["relMinConf"] >= 0 && rawK["relMinConf"] <= 1)
+        sparseK.relMinConf = rawK["relMinConf"];
+      if (typeof rawK["maxFiles"] === "number" && rawK["maxFiles"] >= 1)
+        sparseK.maxFiles = Math.floor(rawK["maxFiles"]);
+      if (typeof rawK["maxTokens"] === "number" && rawK["maxTokens"] >= 1)
+        sparseK.maxTokens = Math.floor(rawK["maxTokens"]);
+      if (typeof rawK["batchSize"] === "number" && rawK["batchSize"] >= 1)
+        sparseK.batchSize = Math.floor(rawK["batchSize"]);
+      sparse.knowledge = sparseK;
+    }
+    out.models = sparse;
+  }
+  if (isPlainObject3(parsed["security"])) {
+    const rawSec = parsed["security"];
+    const sparseSec = {};
+    const bpp = rawSec["bypass_permissions_policy"];
+    if (bpp === "deny" || bpp === "audit" || bpp === "allow") sparseSec.bypass_permissions_policy = bpp;
+    out.security = sparseSec;
+  }
+  if (isPlainObject3(parsed["secrets_policy"])) {
+    const rawSp = parsed["secrets_policy"];
+    const sparseSp = {};
+    if (Array.isArray(rawSp["env_allowlist"])) sparseSp.env_allowlist = rawSp["env_allowlist"];
+    if (Array.isArray(rawSp["redaction_patterns"])) sparseSp.redaction_patterns = rawSp["redaction_patterns"];
+    if (rawSp["fail_mode_durable"] === "closed" || rawSp["fail_mode_durable"] === "open") sparseSp.fail_mode_durable = rawSp["fail_mode_durable"];
+    if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") sparseSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
+    out.secrets_policy = sparseSp;
+  }
+  if (isPlainObject3(parsed["mcp"])) {
+    const rawMcp = parsed["mcp"];
+    const sparseMcp = {};
+    if (isPlainObject3(rawMcp["tool_description_hashes"]))
+      sparseMcp.tool_description_hashes = rawMcp["tool_description_hashes"];
+    if (typeof rawMcp["stdio_available"] === "boolean") sparseMcp.stdio_available = rawMcp["stdio_available"];
+    if (typeof rawMcp["http_available"] === "boolean") sparseMcp.http_available = rawMcp["http_available"];
+    if (rawMcp["bridge_package"] === null || typeof rawMcp["bridge_package"] === "string")
+      sparseMcp.bridge_package = rawMcp["bridge_package"];
+    out.mcp = sparseMcp;
+  }
+  if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
+  if (typeof parsed["adversarial_review_provider"] === "string") {
+    out.adversarial_review_provider = parsed["adversarial_review_provider"];
+  }
+  if (typeof parsed["loops"] === "string" || parsed["loops"] === null)
+    out.loops = parsed["loops"];
+  if (typeof parsed["loop_cap"] === "number")
+    out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
+  if (typeof parsed["codex_cap"] === "number")
+    out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
+  if (isPlainObject3(parsed["defaults"])) {
+    const rawDefaults = parsed["defaults"];
+    const sparseDefaults = {};
+    for (const k of Object.keys(rawDefaults)) {
+      if (DEFAULTS_ALLOWED_KEYS.has(k)) sparseDefaults[k] = rawDefaults[k];
+    }
+    out.defaults = sparseDefaults;
+  }
+  return out;
+}
+function assembleLayers(layers, flagsLayer) {
+  let accumulated = DEFAULTS2;
+  for (const layer of layers) {
+    if (Object.keys(layer).length === 0) continue;
+    accumulated = deepMerge(accumulated, layer);
+  }
+  if (Object.keys(flagsLayer).length > 0) {
+    accumulated = deepMerge(accumulated, flagsLayer);
+  }
+  return accumulated;
+}
+function crossHostAvailable() {
+  const v = process.env["GUILD_CROSS_HOST_AVAILABLE"];
+  if (v === void 0) return true;
+  const s = v.trim().toLowerCase();
+  return !(s === "0" || s === "false" || s === "no" || s === "off");
+}
+function isValidInitiativeId(id) {
+  if (!id || !id.trim()) return false;
+  if (id.includes("\0")) return false;
+  if (id.startsWith("/") || id.startsWith("\\")) return false;
+  if (id.includes("/") || id.includes("\\")) return false;
+  if (id === ".") return false;
+  if (id === ".." || id.startsWith("..")) return false;
+  if (id.includes("..")) return false;
+  return true;
+}
+function isContainedIn(candidatePath, baseDir) {
+  const resolved = path10.resolve(candidatePath);
+  const resolvedBase = path10.resolve(baseDir);
+  return resolved.startsWith(resolvedBase + path10.sep);
+}
+function initiativeIsWorkspaceScoped(workspaceRoot, id) {
+  try {
+    if (!isValidInitiativeId(id)) return false;
+    const registryPath = path10.join(
+      workspaceRoot,
+      ".guild",
+      "indexes",
+      "initiatives-registry.yaml"
+    );
+    if (fs9.existsSync(registryPath)) {
+      try {
+        const raw = fs9.readFileSync(registryPath, "utf8");
+        const parsed = yaml.load(raw);
+        if (isPlainObject3(parsed)) {
+          const list = parsed["initiatives"];
+          if (Array.isArray(list)) {
+            for (const entry of list) {
+              if (!isPlainObject3(entry)) continue;
+              const rec = entry;
+              if (rec["id"] === id) {
+                return rec["scope"] === "workspace";
+              }
+            }
+          }
+        }
+      } catch {
+        return false;
+      }
+    }
+    const initiativesBase = path10.join(workspaceRoot, ".guild", "initiatives");
+    const activePath = path10.join(
+      initiativesBase,
+      "active",
+      id,
+      "initiative.yaml"
+    );
+    const archivedPath = path10.join(
+      initiativesBase,
+      "archived",
+      id,
+      "initiative.yaml"
+    );
+    const activeBase = path10.join(initiativesBase, "active");
+    const archivedBase = path10.join(initiativesBase, "archived");
+    if (!isContainedIn(activePath, activeBase) && !isContainedIn(archivedPath, archivedBase)) {
+      return false;
+    }
+    let yamlPath = null;
+    if (isContainedIn(activePath, activeBase) && fs9.existsSync(activePath)) {
+      yamlPath = activePath;
+    } else if (isContainedIn(archivedPath, archivedBase) && fs9.existsSync(archivedPath)) {
+      yamlPath = archivedPath;
+    }
+    if (yamlPath !== null) {
+      try {
+        const raw = fs9.readFileSync(yamlPath, "utf8");
+        const parsed = yaml.load(raw);
+        if (isPlainObject3(parsed)) {
+          const doc = parsed["initiative"];
+          if (isPlainObject3(doc)) {
+            return doc["scope"] === "workspace";
+          }
+        }
+      } catch {
+        return false;
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+function wasExplicitlySet(key, ...layers) {
+  return layers.some((layer) => key in layer && layer[key] !== void 0);
+}
+function resolveSettings(opts) {
+  const { cwd, flags = {} } = opts;
+  const ws = discoverWorkspace(cwd);
+  const sources = {};
+  for (const key of Object.keys(DEFAULTS2)) {
+    sources[key] = "builtin";
+  }
+  sources["workspace.mode"] = "builtin";
+  let wsSettings = {};
+  let wsLocalSettings = {};
+  if (ws !== null) {
+    const wsGuildDir = path10.join(ws.rootDir, ".guild");
+    const rawWsSettings = parseSettingsFile(path10.join(wsGuildDir, "settings.json"));
+    const wsInheritable = {};
+    for (const [k, v] of Object.entries(rawWsSettings)) {
+      const key = k;
+      if (!NON_INHERITABLE_KEYS.has(key)) {
+        wsInheritable[key] = v;
+      } else if (key === "initiative_default" && typeof v === "string" && v !== null) {
+        if (initiativeIsWorkspaceScoped(ws.rootDir, v)) {
+          wsInheritable[key] = v;
+        }
+      }
+    }
+    wsSettings = wsInheritable;
+    for (const key of Object.keys(wsSettings)) {
+      if (key !== "workspace") sources[key] = "workspace";
+    }
+    try {
+      const rawWsLocal = parseLocalFile(wsGuildDir);
+      const wsLocalInheritable = {};
+      for (const [k, v] of Object.entries(rawWsLocal)) {
+        const key = k;
+        if (!NON_INHERITABLE_KEYS.has(key)) {
+          wsLocalInheritable[key] = v;
+        } else if (key === "initiative_default" && typeof v === "string" && v !== null) {
+          if (initiativeIsWorkspaceScoped(ws.rootDir, v)) {
+            wsLocalInheritable[key] = v;
+          }
+        }
+      }
+      wsLocalSettings = wsLocalInheritable;
+      for (const key of Object.keys(wsLocalSettings)) {
+        if (key !== "workspace") sources[key] = "workspace-local";
+      }
+    } catch {
+    }
+  }
+  const projectGuildDir = path10.join(cwd, ".guild");
+  const projectSettings = parseSettingsFile(path10.join(projectGuildDir, "settings.json"));
+  for (const key of Object.keys(projectSettings)) {
+    if (key === "workspace") {
+      sources["workspace.mode"] = "project";
+    } else {
+      sources[key] = "project";
+    }
+  }
+  let projectLocalSettings = {};
+  try {
+    projectLocalSettings = parseLocalFile(projectGuildDir);
+    for (const key of Object.keys(projectLocalSettings)) {
+      if (key === "workspace") {
+        sources["workspace.mode"] = "project-local";
+      } else {
+        sources[key] = "project-local";
+      }
+    }
+  } catch {
+  }
+  for (const key of Object.keys(flags)) {
+    if (flags[key] !== void 0) {
+      if (key === "workspace") {
+        sources["workspace.mode"] = "cli";
+      }
+      sources[key] = "cli";
+    }
+  }
+  const assembled = assembleLayers(
+    [wsSettings, wsLocalSettings, projectSettings, projectLocalSettings],
+    flags
+  );
+  const resolvedWorkspaceMode = {
+    ...DEFAULTS2.workspace,
+    ...projectSettings.workspace ?? {},
+    ...projectLocalSettings.workspace ?? {},
+    // FIX F2: project-local workspace now included
+    ...flags.workspace ?? {}
+  };
+  assembled.workspace = resolvedWorkspaceMode;
+  sources["workspace"] = sources["workspace.mode"];
+  const loopsExplicit = wasExplicitlySet(
+    "loops",
+    wsSettings,
+    wsLocalSettings,
+    projectSettings,
+    projectLocalSettings,
+    flags
+  ) && assembled.loops !== null;
+  const loopCapExplicit = wasExplicitlySet(
+    "loop_cap",
+    wsSettings,
+    wsLocalSettings,
+    projectSettings,
+    projectLocalSettings,
+    flags
+  );
+  const reviewExplicit = wasExplicitlySet(
+    "review",
+    wsSettings,
+    wsLocalSettings,
+    projectSettings,
+    projectLocalSettings,
+    flags
+  );
+  if (assembled.loops) {
+    for (const v of assembled.loops.split(",").map((s) => s.trim())) {
+      if (!VALID_LOOPS.has(v)) {
+        assembled.loops = null;
+        break;
+      }
+    }
+  }
+  const loopsIsExplicit = loopsExplicit && assembled.loops !== null;
+  const profile = rigorProfile(assembled.rigor);
+  const applied = [];
+  const overridden = [];
+  let derivedReview = profile.review;
+  let reviewFallback = false;
+  let fallbackNote;
+  if (assembled.rigor === "deep" && derivedReview === "cross" && !crossHostAvailable()) {
+    derivedReview = "local";
+    reviewFallback = true;
+    fallbackNote = "rigor=deep implies review=cross, but the cross-host (Codex) is unavailable \u2014 fell back to review=local with a weak-independence caveat. Not a hard failure.";
+  }
+  if (loopsIsExplicit) {
+    overridden.push("loops");
+  } else {
+    assembled.loops = profile.loops;
+    applied.push("loops");
+    if (sources.rigor !== "builtin") sources.loops = "rigor";
+  }
+  if (profile.loop_cap !== null) {
+    if (loopCapExplicit) {
+      overridden.push("loop_cap");
+    } else {
+      assembled.loop_cap = profile.loop_cap;
+      applied.push("loop_cap");
+      if (sources.rigor !== "builtin") sources.loop_cap = "rigor";
+    }
+  }
+  if (reviewExplicit) {
+    overridden.push("review");
+  } else {
+    assembled.review = derivedReview;
+    applied.push("review");
+    if (sources.rigor !== "builtin") sources.review = "rigor";
+  }
+  const rigorExpanded = {
+    rigor: assembled.rigor,
+    loops: profile.loops,
+    loop_cap: profile.loop_cap,
+    review: derivedReview,
+    applied,
+    overridden_by_explicit: overridden
+  };
+  if (assembled.rigor === "deep") rigorExpanded.review_implied = "cross";
+  if (reviewFallback) {
+    rigorExpanded.review_fallback = true;
+    rigorExpanded.note = fallbackNote;
+  }
+  assembled._rigorExpanded = rigorExpanded;
+  if (assembled.index === "off" && assembled.defaults.index.enabled !== false) {
+    assembled.defaults = {
+      ...assembled.defaults,
+      index: { ...assembled.defaults.index, enabled: false }
+    };
+  }
+  return { config: assembled, sources };
+}
+var fs9, path10, yaml, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS;
+var init_settings_reader = __esm({
+  "../src/modules/config/workflows/settings-reader.ts"() {
+    fs9 = __toESM(require("fs"));
+    path10 = __toESM(require("path"));
+    init_host_runtime();
+    init_host_runtime();
+    init_host_runtime();
+    init_security();
+    init_config_defaults();
+    init_kernel();
+    init_workspace_manifest();
+    yaml = loadYamlApi();
+    DEFAULTS2 = DEFAULTS;
+    VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
+    KNOWN_HOST_IDS2 = new Set(HOST_IDS);
+    VALID_LOOPS = /* @__PURE__ */ new Set(["none", "spec", "plan", "implementation", "all"]);
+    VALID_RIGOR = /* @__PURE__ */ new Set(["quick", "standard", "deep"]);
+    VALID_REVIEW = /* @__PURE__ */ new Set(["local", "cross", "off"]);
+    DISPATCH_HOST_IDS = new Set(
+      HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
+    );
+    VALID_AGENT_MODE = /* @__PURE__ */ new Set(["team", "agent", "subagent", "auto"]);
+    VALID_CACHE_TTL = /* @__PURE__ */ new Set(["1h", "5m", "off"]);
+    DEFAULTS_ALLOWED_KEYS = /* @__PURE__ */ new Set([
+      "auto_learn",
+      "adversarial",
+      "team",
+      "review_workflow",
+      "skill_policy",
+      "gates",
+      "wiki",
+      "quality",
+      "reporting",
+      "index",
+      "cross_host",
+      "retry",
+      "resume",
+      // R-016
+      "heartbeat_timeout_ms",
+      // R-017
+      "capability_manifest_ttl_s",
+      // R-018
+      "allowed_tools",
+      // R-020
+      "update"
+      // plugin-update-lifecycle AC-6
+    ]);
+  }
+});
+
+// ../src/modules/telemetry/workflows/guild-trace-events.ts
+function validateBase(ev) {
+  if (typeof ev !== "object" || ev === null) {
+    return { ok: false, reason: "event must be a non-null object" };
+  }
+  const e = ev;
+  if (typeof e["schema_version"] !== "string" || e["schema_version"] === "") {
+    return { ok: false, reason: "schema_version must be a non-empty string" };
+  }
+  if (!GUILD_TRACE_SCHEMA_VERSIONS.includes(e["schema_version"])) {
+    return { ok: false, reason: `unknown schema_version: ${e["schema_version"]}` };
+  }
+  if (typeof e["ts"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["ts"])) {
+    return { ok: false, reason: "ts must be an ISO-8601 timestamp string" };
+  }
+  if (typeof e["run_id"] !== "string" || e["run_id"] === "") {
+    return { ok: false, reason: "run_id must be a non-empty string" };
+  }
+  if (typeof e["lane_id"] !== "string") {
+    return { ok: false, reason: "lane_id must be a string (empty string for lead session)" };
+  }
+  return { ok: true };
+}
+function validateDispatchEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.dispatch.v1") {
+    return { ok: false, reason: `wrong schema_version for dispatch: ${e["schema_version"]}` };
+  }
+  if (typeof e["specialist"] !== "string" || e["specialist"] === "") {
+    return { ok: false, reason: "specialist must be a non-empty string" };
+  }
+  if (typeof e["phase"] !== "string" || e["phase"] === "") {
+    return { ok: false, reason: "phase must be a non-empty string" };
+  }
+  if (typeof e["task_id"] !== "string" || e["task_id"] === "") {
+    return { ok: false, reason: "task_id must be a non-empty string" };
+  }
+  if (!DISPATCH_BACKENDS.includes(e["backend"])) {
+    return { ok: false, reason: `backend must be one of: ${DISPATCH_BACKENDS.join(", ")}` };
+  }
+  if (typeof e["backend_rung"] !== "number" || e["backend_rung"] < 0 || e["backend_rung"] > 4) {
+    return { ok: false, reason: "backend_rung must be a number 0-4" };
+  }
+  if (typeof e["dispatched_at"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["dispatched_at"])) {
+    return { ok: false, reason: "dispatched_at must be an ISO-8601 timestamp string" };
+  }
+  return { ok: true };
+}
+function validateRecallEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.recall.v1") {
+    return { ok: false, reason: `wrong schema_version for recall: ${e["schema_version"]}` };
+  }
+  if (typeof e["query"] !== "string" || e["query"] === "") {
+    return { ok: false, reason: "query must be a non-empty string" };
+  }
+  if (!RECALL_BRANCHES.includes(e["branch"])) {
+    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
+  }
+  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
+    return { ok: false, reason: "chunk_count must be a non-negative number" };
+  }
+  if (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0) {
+    return { ok: false, reason: "duration_ms must be a non-negative number" };
+  }
+  if (typeof e["had_quarantine"] !== "boolean") {
+    return { ok: false, reason: "had_quarantine must be a boolean" };
+  }
+  if (typeof e["cwd_redacted"] !== "string") {
+    return { ok: false, reason: "cwd_redacted must be a string" };
+  }
+  return { ok: true };
+}
+function validateRecallDecisionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.recall_decision.v1") {
+    return { ok: false, reason: `wrong schema_version for recall_decision: ${e["schema_version"]}` };
+  }
+  if (typeof e["query_hash"] !== "string" || !/^[0-9a-f]{16}$/.test(e["query_hash"])) {
+    return { ok: false, reason: "query_hash must be exactly 16 lowercase hex chars (sha256[:16])" };
+  }
+  if (typeof e["query_preview"] !== "string") {
+    return { ok: false, reason: "query_preview must be a string (may be empty)" };
+  }
+  if (e["query_preview"].length > 60) {
+    return { ok: false, reason: "query_preview must be <= 60 chars (no raw-query leak)" };
+  }
+  if (!RECALL_BRANCHES.includes(e["branch"])) {
+    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
+  }
+  if (typeof e["top_score"] !== "number" || e["top_score"] < 0 || !isFinite(e["top_score"])) {
+    return { ok: false, reason: "top_score must be a finite number >= 0" };
+  }
+  if (typeof e["threshold"] !== "number" || e["threshold"] < 0 || !isFinite(e["threshold"])) {
+    return { ok: false, reason: "threshold must be a finite number >= 0" };
+  }
+  if (typeof e["read_skip_fired"] !== "boolean") {
+    return { ok: false, reason: "read_skip_fired must be a boolean" };
+  }
+  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
+    return { ok: false, reason: "chunk_count must be a non-negative number" };
+  }
+  if (typeof e["scored"] !== "boolean") {
+    return { ok: false, reason: "scored must be a boolean" };
+  }
+  if (!LANE_OUTCOMES.includes(e["lane_outcome"])) {
+    return { ok: false, reason: `lane_outcome must be one of: ${LANE_OUTCOMES.join(", ")}` };
+  }
+  return { ok: true };
+}
+function validateConfigResolutionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.config_resolution.v1") {
+    return { ok: false, reason: `wrong schema_version for config_resolution: ${e["schema_version"]}` };
+  }
+  if (typeof e["rigor"] !== "string" || e["rigor"] === "") {
+    return { ok: false, reason: "rigor must be a non-empty string" };
+  }
+  if (typeof e["agent_mode"] !== "string" || e["agent_mode"] === "") {
+    return { ok: false, reason: "agent_mode must be a non-empty string" };
+  }
+  if (typeof e["layers"] !== "object" || e["layers"] === null) {
+    return { ok: false, reason: "layers must be an object" };
+  }
+  const layers = e["layers"];
+  for (const boolKey of ["workspace", "workspace_local", "project", "project_local", "cli"]) {
+    if (typeof layers[boolKey] !== "boolean") {
+      return { ok: false, reason: `layers.${boolKey} must be a boolean` };
+    }
+  }
+  if (layers["rigor"] !== null && typeof layers["rigor"] !== "string") {
+    return { ok: false, reason: "layers.rigor must be a string or null" };
+  }
+  if (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0) {
+    return { ok: false, reason: "duration_ms must be a non-negative number" };
+  }
+  if (typeof e["config_fingerprint"] !== "string" || e["config_fingerprint"] === "") {
+    return { ok: false, reason: "config_fingerprint must be a non-empty string" };
+  }
+  return { ok: true };
+}
+function validateSecurityDecisionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.security_decision.v1") {
+    return { ok: false, reason: `wrong schema_version for security_decision: ${e["schema_version"]}` };
+  }
+  if (typeof e["tool_name"] !== "string" || e["tool_name"] === "") {
+    return { ok: false, reason: "tool_name must be a non-empty string" };
+  }
+  if (!SECURITY_OUTCOMES.includes(e["decision"])) {
+    return { ok: false, reason: `decision must be one of: ${SECURITY_OUTCOMES.join(", ")}` };
+  }
+  if (typeof e["bypass_mode"] !== "boolean") {
+    return { ok: false, reason: "bypass_mode must be a boolean" };
+  }
+  if (typeof e["policy_forced"] !== "boolean") {
+    return { ok: false, reason: "policy_forced must be a boolean" };
+  }
+  if (typeof e["autonomy_mode"] !== "string" || e["autonomy_mode"] === "") {
+    return { ok: false, reason: "autonomy_mode must be a non-empty string" };
+  }
+  if (!["env", "file", "none"].includes(e["scope_source"])) {
+    return { ok: false, reason: "scope_source must be 'env', 'file', or 'none'" };
+  }
+  return { ok: true };
+}
+function validateDegradationEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.degradation.v1") {
+    return { ok: false, reason: `wrong schema_version for degradation: ${e["schema_version"]}` };
+  }
+  if (!DEGRADATION_SURFACES.includes(e["surface"])) {
+    return { ok: false, reason: `surface must be one of: ${DEGRADATION_SURFACES.join(", ")}` };
+  }
+  if (typeof e["reason"] !== "string" || e["reason"] === "") {
+    return { ok: false, reason: "reason must be a non-empty string" };
+  }
+  if (typeof e["attempted"] !== "string" || e["attempted"] === "") {
+    return { ok: false, reason: "attempted must be a non-empty string" };
+  }
+  if (typeof e["fallback"] !== "string" || e["fallback"] === "") {
+    return { ok: false, reason: "fallback must be a non-empty string" };
+  }
+  if (!["warn", "error"].includes(e["severity"])) {
+    return { ok: false, reason: "severity must be 'warn' or 'error'" };
+  }
+  return { ok: true };
+}
+function validateGuildTraceEvent(ev) {
+  if (typeof ev !== "object" || ev === null) {
+    return { ok: false, reason: "event must be a non-null object" };
+  }
+  const sv = ev["schema_version"];
+  switch (sv) {
+    case "guild.trace.dispatch.v1":
+      return validateDispatchEvent(ev);
+    case "guild.trace.recall.v1":
+      return validateRecallEvent(ev);
+    case "guild.trace.recall_decision.v1":
+      return validateRecallDecisionEvent(ev);
+    case "guild.trace.config_resolution.v1":
+      return validateConfigResolutionEvent(ev);
+    case "guild.trace.security_decision.v1":
+      return validateSecurityDecisionEvent(ev);
+    case "guild.trace.degradation.v1":
+      return validateDegradationEvent(ev);
+    default:
+      return { ok: false, reason: `unknown schema_version: ${sv}` };
+  }
+}
+function makeConfigResolutionEvent(fields) {
+  return { schema_version: "guild.trace.config_resolution.v1", ...fields };
+}
+var GUILD_TRACE_SCHEMA_VERSIONS, DISPATCH_BACKENDS, RECALL_BRANCHES, SECURITY_OUTCOMES, DEGRADATION_SURFACES, LANE_OUTCOMES;
+var init_guild_trace_events = __esm({
+  "../src/modules/telemetry/workflows/guild-trace-events.ts"() {
+    GUILD_TRACE_SCHEMA_VERSIONS = [
+      "guild.trace.dispatch.v1",
+      "guild.trace.recall.v1",
+      "guild.trace.recall_decision.v1",
+      "guild.trace.config_resolution.v1",
+      "guild.trace.security_decision.v1",
+      "guild.trace.degradation.v1"
+    ];
+    DISPATCH_BACKENDS = ["agent", "tmux", "remote", "unknown"];
+    RECALL_BRANCHES = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
+    SECURITY_OUTCOMES = ["allow", "ask", "deny", "audit", "pass-through"];
+    DEGRADATION_SURFACES = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
+    LANE_OUTCOMES = ["success", "failure", "unknown"];
+  }
+});
+
+// ../src/modules/telemetry/workflows/guild-trace-emit.ts
+function liveLogPath(runDir) {
+  return path11.join(runDir, "logs", "v1.4-events.jsonl");
+}
+function emitTraceEvent(event, runDir) {
+  if (!runDir) return;
+  const validationResult = validateGuildTraceEvent(event);
+  if (!validationResult.ok) {
+    const schemaVersion = event["schema_version"];
+    const failResult = validationResult;
+    process.stderr.write(
+      `[guild-trace-emit] WARN: dropping invalid trace event (${schemaVersion}): ${failResult.reason}
+`
+    );
+    return;
+  }
+  try {
+    const live = liveLogPath(runDir);
+    const dir = path11.dirname(live);
+    fs10.mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify(event) + "\n";
+    fs10.appendFileSync(live, line, "utf8");
+  } catch (err) {
+    process.stderr.write(
+      `[guild-trace-emit] WARN: could not write trace event to ${runDir}/logs/v1.4-events.jsonl: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+  }
+}
+var fs10, path11;
+var init_guild_trace_emit = __esm({
+  "../src/modules/telemetry/workflows/guild-trace-emit.ts"() {
+    fs10 = __toESM(require("node:fs"));
+    path11 = __toESM(require("node:path"));
+    init_guild_trace_events();
+  }
+});
+
+// ../src/modules/telemetry/index.ts
+var init_telemetry = __esm({
+  "../src/modules/telemetry/index.ts"() {
+    init_guild_trace_emit();
+    init_guild_trace_events();
+  }
+});
+
+// ../src/modules/config/workflows/settings-resolver.ts
+function resolveSettings2(opts) {
+  const t0 = Date.now();
+  const result = resolveSettings(opts);
+  try {
+    const { cwd, flags = {} } = opts;
+    const assembled = result.config;
+    const _traceRunId = process.env["GUILD_RUN_ID"] ?? "";
+    const _traceRunDir = _traceRunId && cwd ? path12.join(cwd, ".guild", "runs", _traceRunId) : void 0;
+    if (_traceRunDir) {
+      const _fingerprint = crypto2.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
+      const sources = result.sources;
+      emitTraceEvent(
+        makeConfigResolutionEvent({
+          ts: (/* @__PURE__ */ new Date()).toISOString(),
+          run_id: _traceRunId,
+          lane_id: process.env["GUILD_LANE_ID"] ?? "",
+          rigor: String(assembled.rigor ?? "standard"),
+          agent_mode: String(assembled.agent_mode ?? "default"),
+          layers: {
+            workspace: Object.values(sources).some((s) => s === "workspace"),
+            workspace_local: Object.values(sources).some((s) => s === "workspace-local"),
+            project: Object.values(sources).some((s) => s === "project"),
+            project_local: Object.values(sources).some((s) => s === "project-local"),
+            rigor: assembled._rigorExpanded?.rigor ?? null,
+            cli: Object.keys(flags).length > 0
+          },
+          duration_ms: Date.now() - t0,
+          config_fingerprint: _fingerprint
+        }),
+        _traceRunDir
+      );
+    }
+  } catch {
+  }
+  return result;
+}
+var path12, crypto2;
+var init_settings_resolver = __esm({
+  "../src/modules/config/workflows/settings-resolver.ts"() {
+    path12 = __toESM(require("path"));
+    crypto2 = __toESM(require("crypto"));
+    init_settings_reader();
+    init_settings_reader();
+    init_telemetry();
+    init_telemetry();
+  }
+});
+
+// ../src/modules/config/workflows/tier-model.ts
+function normalizeTierValue(v) {
+  if (typeof v === "string") {
+    const t = v.trim();
+    return t ? { model: t } : { model: null };
+  }
+  if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+    const o = v;
+    if (typeof o["model"] === "string" && o["model"].trim()) {
+      const out = { model: o["model"].trim() };
+      if (typeof o["effort"] === "string") out.effort = o["effort"];
+      if (typeof o["reasoning"] === "string") out.reasoning = o["reasoning"];
+      if (typeof o["thinking"] === "string") out.thinking = o["thinking"];
+      if (typeof o["verbosity"] === "string") out.verbosity = o["verbosity"];
+      return out;
+    }
+  }
+  return { model: null };
+}
+function resolveTierModel(tiers, tier, host) {
+  if (typeof tiers !== "object" || tiers === null || Array.isArray(tiers)) {
+    return { model: null };
+  }
+  const entry = tiers[tier];
+  if (entry === null || entry === void 0) return { model: null };
+  if (typeof entry === "string") return normalizeTierValue(entry);
+  if (typeof entry !== "object" || Array.isArray(entry)) return { model: null };
+  const hostMap = entry;
+  const canonical = normalizeHostId(host);
+  if (canonical && canonical in hostMap) return normalizeTierValue(hostMap[canonical]);
+  return normalizeTierValue(hostMap[host]);
+}
+var init_tier_model = __esm({
+  "../src/modules/config/workflows/tier-model.ts"() {
+    init_host_runtime();
+  }
+});
+
+// ../scripts/lib/settings-resolver.ts
+var init_settings_resolver2 = __esm({
+  "../scripts/lib/settings-resolver.ts"() {
+    init_settings_resolver();
+  }
+});
+
+// ../scripts/lib/host-registry-schema.ts
+var init_host_registry_schema2 = __esm({
+  "../scripts/lib/host-registry-schema.ts"() {
+    init_host_registry_schema();
+  }
+});
+
+// ../scripts/lib/host-id-namespace.ts
+var init_host_id_namespace2 = __esm({
+  "../scripts/lib/host-id-namespace.ts"() {
+    init_host_id_namespace();
+  }
+});
+
+// ../scripts/lib/host-profiles-validate.ts
+var init_host_profiles_validate2 = __esm({
+  "../scripts/lib/host-profiles-validate.ts"() {
+    init_host_profiles_validate();
+  }
+});
+
+// ../scripts/lib/shared/safe-object.ts
+var init_safe_object2 = __esm({
+  "../scripts/lib/shared/safe-object.ts"() {
+    init_safe_object();
+  }
+});
+
+// ../scripts/lib/shared/config-defaults.ts
+var init_config_defaults2 = __esm({
+  "../scripts/lib/shared/config-defaults.ts"() {
+    init_config_defaults();
+  }
+});
+
+// ../scripts/lib/core/config-cli.ts
+var config_cli_exports = {};
+__export(config_cli_exports, {
+  DEFAULTS: () => DEFAULTS3,
+  HELP: () => HELP,
+  __main: () => main,
+  resolveTierModel: () => resolveTierModel,
+  scaffold: () => scaffold,
+  validateCrossHostBlock: () => validateCrossHostBlock,
+  validateDefaults: () => validateDefaults,
+  validateHostProfiles: () => validateHostProfiles,
+  validateMcp: () => validateMcp,
+  validateModels: () => validateModels,
+  validateRoles: () => validateRoles,
+  validateSecretsPolicy: () => validateSecretsPolicy,
+  validateSecurity: () => validateSecurity
+});
+function normalizeDispatchHostId2(value) {
+  const normalized = normalizeHostId(value);
+  return normalized && DISPATCH_HOST_IDS2.has(normalized) ? normalized : null;
+}
+function parseAutoApprove(v) {
+  if (v === "" || v === "all") return v === "all" ? ["all"] : ["all"];
+  return v.split(",").map((s) => s.trim()).filter((s) => VALID_PHASES.has(s));
+}
+function parseArgs(argv) {
+  const flags = {};
+  let cwd;
+  let mode = "resolve";
+  let selfBuild = false;
+  let modelTier;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--cwd" && argv[i + 1]) cwd = argv[++i];
+    else if (arg === "--scaffold") mode = "scaffold";
+    else if (arg === "--validate") mode = "validate";
+    else if (arg === "--self-build") selfBuild = true;
+    else if (arg.startsWith("--rigor=")) {
+      const v = arg.slice("--rigor=".length);
+      if (VALID_RIGOR2.has(v)) flags.rigor = v;
+    } else if (arg.startsWith("--review=")) {
+      const v = arg.slice("--review=".length);
+      if (VALID_REVIEW2.has(v)) flags.review = v;
+    } else if (arg.startsWith("--host=")) {
+      const v = arg.slice("--host=".length);
+      if (v === "auto") flags.host = "auto";
+      else {
+        const normalized = normalizeDispatchHostId2(v);
+        if (normalized) flags.host = normalized;
+      }
+    } else if (arg === "--auto-approve") {
+      flags.auto_approve = ["all"];
+    } else if (arg.startsWith("--auto-approve=")) {
+      flags.auto_approve = parseAutoApprove(arg.slice("--auto-approve=".length));
+    } else if (arg.startsWith("--agent-mode=")) {
+      const v = arg.slice("--agent-mode=".length);
+      if (VALID_AGENT_MODE2.has(v)) flags.agent_mode = v;
+    } else if (arg.startsWith("--model-tier=")) {
+      const v = arg.slice("--model-tier=".length);
+      if (VALID_MODEL_TIER.has(v)) modelTier = v;
+    } else if (arg.startsWith("--loops=")) {
+      flags.loops = arg.slice("--loops=".length);
+    } else if (arg.startsWith("--loop-cap=")) {
+      const n = parseInt(arg.slice("--loop-cap=".length), 10);
+      if (!isNaN(n)) flags.loop_cap = Math.min(256, Math.max(1, n));
+    } else if (arg.startsWith("--codex-cap=")) {
+      const n = parseInt(arg.slice("--codex-cap=".length), 10);
+      if (!isNaN(n)) flags.codex_cap = Math.min(10, Math.max(1, n));
+    } else if (arg === "--statusline") {
+      flags.statusline = true;
+    }
+  }
+  return { cwd, mode, selfBuild, modelTier, flags };
+}
+function collectKeyPaths2(obj, prefix = "") {
+  const paths = /* @__PURE__ */ new Set();
+  for (const [k, v] of Object.entries(obj)) {
+    const full = prefix ? `${prefix}.${k}` : k;
+    paths.add(full);
+    if (isPlainObject4(v)) {
+      for (const sub of collectKeyPaths2(v, full)) {
+        paths.add(sub);
+      }
+    }
+  }
+  return paths;
+}
+function validateLocalKeys(localObj, baseObj) {
+  const basePaths = collectKeyPaths2(baseObj);
+  for (const key of Object.keys(localObj)) {
+    if (key.startsWith("_")) continue;
+    if (!basePaths.has(key)) {
+      throw new Error(
+        `share-dot-guild: settings.local.json key '${key}' not in settings.json schema \u2014 refusing to silently extend. Declare it in settings.json first (with the team default) or remove it from settings.local.json.`
+      );
+    }
+  }
+}
+function deepMergeLocal(base, local) {
+  const result = Object.assign(/* @__PURE__ */ Object.create(null), base);
+  for (const [k, v] of Object.entries(local)) {
+    if (PROTO_POISON_KEYS.has(k)) continue;
+    if (Array.isArray(v)) {
+      result[k] = v;
+    } else if (isPlainObject4(v) && isPlainObject4(result[k])) {
+      result[k] = deepMergeLocal(
+        result[k],
+        v
+      );
+    } else {
+      result[k] = v;
+    }
+  }
+  return result;
+}
+function loadLocalOverride(cwd, fileConfig, selfBuild) {
+  const localPath = path14.join(cwd, ".guild", "settings.local.json");
+  if (!fs12.existsSync(localPath)) return fileConfig;
+  let localParsed;
+  try {
+    localParsed = JSON.parse(fs12.readFileSync(localPath, "utf8"));
+  } catch (e) {
+    process.stderr.write(
+      `[read-guild-config] WARN: could not parse .guild/settings.local.json (${e.message}) \u2014 local overrides ignored.
+`
+    );
+    return fileConfig;
+  }
+  const schemaBase = DEFAULTS3;
+  validateLocalKeys(localParsed, schemaBase);
+  const base = {
+    ...DEFAULTS3,
+    ...fileConfig
+  };
+  const merged = deepMergeLocal(base, localParsed);
+  process.stderr.write(
+    `[read-guild-config] INFO: .guild/settings.local.json loaded \u2014 ${Object.keys(localParsed).length} override key(s): [${Object.keys(localParsed).join(", ")}]
+`
+  );
+  return merged;
+}
+function isPlainObject4(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function validateModels(m) {
+  const rejects = [];
+  for (const k of Object.keys(m)) {
+    if (!VALID_MODELS_KEYS.has(k)) {
+      rejects.push(`unknown models key "${k}" (closed key set \u2014 check spelling against ADR \xA710)`);
+    }
+  }
+  if (isPlainObject4(m["tiers"])) {
+    const rt = m["tiers"];
+    const VALID_TIER_KEYS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
+    const VALID_TIER_SPEC_KEYS = /* @__PURE__ */ new Set(["model", "effort", "reasoning", "thinking", "verbosity"]);
+    for (const tk of Object.keys(rt)) {
+      if (!VALID_TIER_KEYS.has(tk)) {
+        rejects.push(`unknown models.tiers key "${tk}" (valid: cheap|mid|powerful)`);
+        continue;
+      }
+      if (!isPlainObject4(rt[tk])) continue;
+      const hostMap = rt[tk];
+      const seenCanonicalHosts = /* @__PURE__ */ new Map();
+      for (const [hk, hv] of Object.entries(hostMap)) {
+        const canonicalHostId = normalizeHostId(hk);
+        if (!canonicalHostId) {
+          rejects.push(
+            `unknown models.tiers.${tk} host key "${hk}" (closed key set \u2014 valid: ${[...VALID_TIER_HOST_KEYS2].join(", ")})`
+          );
+          continue;
+        }
+        const previousHostKey = seenCanonicalHosts.get(canonicalHostId);
+        if (previousHostKey && previousHostKey !== hk) {
+          rejects.push(
+            `duplicate models.tiers.${tk} host keys "${previousHostKey}" and "${hk}" both normalize to "${canonicalHostId}"`
+          );
+          continue;
+        }
+        seenCanonicalHosts.set(canonicalHostId, hk);
+        if (hv === null || typeof hv === "string") continue;
+        if (isPlainObject4(hv)) {
+          const spec = hv;
+          for (const sk of Object.keys(spec)) {
+            if (!VALID_TIER_SPEC_KEYS.has(sk)) {
+              rejects.push(
+                `unknown models.tiers.${tk}.${hk} key "${sk}" (object form is a closed key set \u2014 only model, effort, reasoning, thinking, verbosity)`
+              );
+            }
+          }
+          if (typeof spec["model"] !== "string" || !spec["model"].trim()) {
+            rejects.push(
+              `models.tiers.${tk}.${hk}.model is required and must be a non-empty string in the object form`
+            );
+          }
+          if (spec["effort"] !== void 0 && typeof spec["effort"] !== "string") {
+            rejects.push(`models.tiers.${tk}.${hk}.effort must be a string (got ${JSON.stringify(spec["effort"])})`);
+          }
+          if (spec["reasoning"] !== void 0 && typeof spec["reasoning"] !== "string") {
+            rejects.push(`models.tiers.${tk}.${hk}.reasoning must be a string (got ${JSON.stringify(spec["reasoning"])})`);
+          }
+          if (spec["thinking"] !== void 0 && typeof spec["thinking"] !== "string") {
+            rejects.push(`models.tiers.${tk}.${hk}.thinking must be a string (got ${JSON.stringify(spec["thinking"])})`);
+          }
+          if (spec["verbosity"] !== void 0 && typeof spec["verbosity"] !== "string") {
+            rejects.push(`models.tiers.${tk}.${hk}.verbosity must be a string (got ${JSON.stringify(spec["verbosity"])})`);
+          }
+        } else {
+          rejects.push(
+            `models.tiers.${tk}.${hk} must be a string, null, or {model, effort?, reasoning?, thinking?, verbosity?} (got ${JSON.stringify(hv)})`
+          );
+        }
+      }
+    }
+  }
+  if (isPlainObject4(m["thresholds"])) {
+    const t = m["thresholds"];
+    for (const tk of Object.keys(t)) {
+      if (tk !== "mid" && tk !== "powerful") {
+        rejects.push(`unknown models.thresholds key "${tk}" \u2014 only mid and powerful are valid`);
+      }
+    }
+  }
+  if (isPlainObject4(m["cacheTTL"])) {
+    const ttl = m["cacheTTL"];
+    for (const ck of Object.keys(ttl)) {
+      if (ck !== "coordinator" && ck !== "leaf") {
+        rejects.push(`unknown models.cacheTTL key "${ck}" \u2014 only coordinator and leaf are valid`);
+      }
+    }
+    if (ttl["coordinator"] !== void 0 && !VALID_CACHE_TTL2.has(ttl["coordinator"])) {
+      rejects.push(`models.cacheTTL.coordinator "${ttl["coordinator"]}" is invalid \u2014 valid: 1h|5m|off`);
+    }
+    if (ttl["leaf"] !== void 0 && !VALID_CACHE_TTL2.has(ttl["leaf"])) {
+      rejects.push(`models.cacheTTL.leaf "${ttl["leaf"]}" is invalid \u2014 valid: 1h|5m|off`);
+    }
+  }
+  if (m["importanceGate"] !== void 0) {
+    const ig = m["importanceGate"];
+    if (typeof ig !== "number" || ig < 1 || ig > 5 || !Number.isInteger(ig)) {
+      rejects.push(`models.importanceGate must be an integer 1\u20135 (got ${JSON.stringify(ig)})`);
+    }
+  }
+  if (m["compositeRecall"] !== void 0 && typeof m["compositeRecall"] !== "boolean") {
+    rejects.push(`models.compositeRecall must be a boolean (got ${JSON.stringify(m["compositeRecall"])})`);
+  }
+  if (m["importanceAtIngest"] !== void 0 && typeof m["importanceAtIngest"] !== "boolean") {
+    rejects.push(`models.importanceAtIngest must be a boolean (got ${JSON.stringify(m["importanceAtIngest"])})`);
+  }
+  if (m["advisorRounds"] !== void 0) {
+    const ar = m["advisorRounds"];
+    if (typeof ar !== "number" || ar < 1 || !Number.isInteger(ar)) {
+      rejects.push(`models.advisorRounds must be an integer > 0 (got ${JSON.stringify(ar)})`);
+    }
+  }
+  if (m["recallScoreThreshold"] !== void 0) {
+    const rs = m["recallScoreThreshold"];
+    if (typeof rs !== "number" || rs < 0 || rs > 1) {
+      rejects.push(`models.recallScoreThreshold must be a float 0\u20131 (got ${JSON.stringify(rs)})`);
+    }
+  }
+  if (m["ingestSimilarityGate"] !== void 0) {
+    const ig = m["ingestSimilarityGate"];
+    if (typeof ig !== "number" || ig < 0 || ig > 1) {
+      rejects.push(`models.ingestSimilarityGate must be a float 0\u20131 (got ${JSON.stringify(ig)})`);
+    }
+  }
+  return rejects;
+}
+function validateSecurity(s) {
+  const rejects = [];
+  for (const k of Object.keys(s)) {
+    if (!VALID_SECURITY_KEYS.has(k)) {
+      rejects.push(`unknown security key "${k}" (closed key set \u2014 only bypass_permissions_policy is valid)`);
+    }
+  }
+  if (s["bypass_permissions_policy"] !== void 0) {
+    const v = s["bypass_permissions_policy"];
+    if (v !== "deny" && v !== "audit" && v !== "allow") {
+      rejects.push(`security.bypass_permissions_policy "${v}" is invalid \u2014 valid: deny|audit|allow`);
+    }
+  }
+  return rejects;
+}
+function validateSecretsPolicy(sp) {
+  const rejects = [];
+  for (const k of Object.keys(sp)) {
+    if (!VALID_SECRETS_POLICY_KEYS.has(k)) {
+      rejects.push(`unknown secrets_policy key "${k}" (closed key set \u2014 check v2-security-and-untrusted-content ADR)`);
+    }
+  }
+  if (sp["fail_mode_durable"] !== void 0 && sp["fail_mode_durable"] !== "closed" && sp["fail_mode_durable"] !== "open") {
+    rejects.push(`secrets_policy.fail_mode_durable "${sp["fail_mode_durable"]}" is invalid \u2014 valid: closed|open`);
+  }
+  if (sp["fail_mode_telemetry"] !== void 0 && sp["fail_mode_telemetry"] !== "open" && sp["fail_mode_telemetry"] !== "closed") {
+    rejects.push(`secrets_policy.fail_mode_telemetry "${sp["fail_mode_telemetry"]}" is invalid \u2014 valid: open|closed`);
+  }
+  if (sp["env_allowlist"] !== void 0 && !Array.isArray(sp["env_allowlist"])) {
+    rejects.push(`secrets_policy.env_allowlist must be an array of strings`);
+  }
+  if (sp["redaction_patterns"] !== void 0 && !Array.isArray(sp["redaction_patterns"])) {
+    rejects.push(`secrets_policy.redaction_patterns must be an array of regex strings`);
+  }
+  return rejects;
+}
+function validateMcp(m) {
+  const rejects = [];
+  for (const k of Object.keys(m)) {
+    if (!VALID_MCP_KEYS.has(k)) {
+      rejects.push(`unknown mcp key "${k}" (closed key set \u2014 valid: tool_description_hashes, stdio_available, http_available, bridge_package)`);
+    }
+  }
+  if (m["tool_description_hashes"] !== void 0 && !isPlainObject4(m["tool_description_hashes"])) {
+    rejects.push(`mcp.tool_description_hashes must be an object (tool-name \u2192 SHA-256 hash)`);
+  }
+  if (m["stdio_available"] !== void 0 && typeof m["stdio_available"] !== "boolean") {
+    rejects.push(`mcp.stdio_available must be a boolean (got ${JSON.stringify(m["stdio_available"])})`);
+  }
+  if (m["http_available"] !== void 0 && typeof m["http_available"] !== "boolean") {
+    rejects.push(`mcp.http_available must be a boolean (got ${JSON.stringify(m["http_available"])})`);
+  }
+  if (m["bridge_package"] !== void 0 && m["bridge_package"] !== null && typeof m["bridge_package"] !== "string") {
+    rejects.push(`mcp.bridge_package must be a string or null (got ${JSON.stringify(m["bridge_package"])})`);
+  }
+  return rejects;
+}
+function validateRoles(r) {
+  const rejects = [];
+  for (const k of Object.keys(r)) {
+    if (!VALID_ROLES_KEYS.has(k)) {
+      rejects.push(`unknown roles key "${k}" (closed key set \u2014 only host, advisory, adversarial)`);
+      continue;
+    }
+    const v = r[k];
+    if (v !== null && !(typeof v === "string" && normalizeHostId(v) !== null)) {
+      rejects.push(
+        `roles.${k} must be null or a known registry host_id (${[...KNOWN_HOST_IDS3].join("|")}); got ${JSON.stringify(v)}`
+      );
+    }
+  }
+  return rejects;
+}
+function validateCrossHostBlock(ch) {
+  const rejects = [];
+  const ALLOWED_CH = /* @__PURE__ */ new Set(["enabled", "hosts", "fallback_to_claude"]);
+  for (const k of Object.keys(ch)) {
+    if (!ALLOWED_CH.has(k)) {
+      rejects.push(`unknown defaults.cross_host key "${k}" (closed key set \u2014 valid: enabled, hosts, fallback_to_claude)`);
+    }
+  }
+  if (ch["enabled"] !== void 0 && typeof ch["enabled"] !== "boolean") {
+    rejects.push(`defaults.cross_host.enabled must be a boolean (got ${JSON.stringify(ch["enabled"])})`);
+  }
+  if (ch["fallback_to_claude"] !== void 0 && typeof ch["fallback_to_claude"] !== "boolean") {
+    rejects.push(`defaults.cross_host.fallback_to_claude must be a boolean (got ${JSON.stringify(ch["fallback_to_claude"])})`);
+  }
+  if (ch["hosts"] !== void 0) {
+    if (!isPlainObject4(ch["hosts"])) {
+      rejects.push(`defaults.cross_host.hosts must be an object { host_id: { address, port?, user? } }`);
+    } else {
+      const hosts = ch["hosts"];
+      const ALLOWED_ENTRY = /* @__PURE__ */ new Set(["address", "port", "user", "login_shell"]);
+      for (const [hostId, entry] of Object.entries(hosts)) {
+        if (!isPlainObject4(entry)) {
+          rejects.push(`defaults.cross_host.hosts["${hostId}"] must be an object { address, port?, user? }`);
+          continue;
+        }
+        const e = entry;
+        for (const ek of Object.keys(e)) {
+          if (!ALLOWED_ENTRY.has(ek)) {
+            rejects.push(
+              `unknown defaults.cross_host.hosts["${hostId}"] key "${ek}" (closed key set \u2014 valid: address, port, user; no secrets stored here)`
+            );
+          }
+        }
+        if (!e["address"] || typeof e["address"] !== "string") {
+          rejects.push(
+            `defaults.cross_host.hosts["${hostId}"].address is required and must be a string`
+          );
+        }
+        if (e["port"] !== void 0) {
+          const p = e["port"];
+          if (typeof p !== "number" || !Number.isInteger(p) || p < 1 || p > 65535) {
+            rejects.push(
+              `defaults.cross_host.hosts["${hostId}"].port must be an integer 1\u201365535 (got ${JSON.stringify(p)})`
+            );
+          }
+        }
+        if (e["user"] !== void 0 && typeof e["user"] !== "string") {
+          rejects.push(
+            `defaults.cross_host.hosts["${hostId}"].user must be a string (got ${JSON.stringify(e["user"])})`
+          );
+        }
+        if (e["login_shell"] !== void 0 && typeof e["login_shell"] !== "string") {
+          rejects.push(
+            `defaults.cross_host.hosts["${hostId}"].login_shell must be a string (got ${JSON.stringify(e["login_shell"])})`
+          );
+        }
+      }
+    }
+  }
+  return rejects;
+}
+function validateDefaults(d, selfBuild) {
+  const rejects = [];
+  for (const k of Object.keys(d)) {
+    if (!DEFAULTS_ALLOWED_KEYS2.has(k)) rejects.push(`unknown defaults key "${k}" (closed key set \u2014 a typo must surface)`);
+  }
+  if (d["adversarial"] === "off" && selfBuild)
+    rejects.push(`defaults.adversarial: off is REJECTED for Guild self-build`);
+  if (isPlainObject4(d["wiki"]) && d["wiki"]["autopromote"] === true)
+    rejects.push(`defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)`);
+  if (isPlainObject4(d["quality"])) {
+    const q = d["quality"]["budget"];
+    if (isPlainObject4(q)) {
+      for (const bk of Object.keys(q)) {
+        if (bk !== "per_class_minutes" && bk !== "total_minutes")
+          rejects.push(`unknown defaults.quality.budget key "${bk}"`);
+      }
+    }
+  }
+  if (isPlainObject4(d["cross_host"])) {
+    rejects.push(...validateCrossHostBlock(d["cross_host"]));
+  }
+  if (isPlainObject4(d["retry"])) {
+    const retry = d["retry"];
+    const VALID_RETRY_KEYS = /* @__PURE__ */ new Set(["max_attempts", "backoff"]);
+    for (const rk of Object.keys(retry)) {
+      if (!VALID_RETRY_KEYS.has(rk)) rejects.push(`unknown defaults.retry key "${rk}" (valid: max_attempts, backoff)`);
+    }
+    if (retry["max_attempts"] !== void 0) {
+      const v = retry["max_attempts"];
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
+        rejects.push(`defaults.retry.max_attempts must be an integer \u2265 1 (got ${JSON.stringify(v)})`);
+    }
+    if (retry["backoff"] !== void 0) {
+      const v = retry["backoff"];
+      if (v !== "immediate" && v !== "linear" && v !== "exponential")
+        rejects.push(`defaults.retry.backoff must be "immediate"|"linear"|"exponential" (got ${JSON.stringify(v)})`);
+    }
+  }
+  if (isPlainObject4(d["resume"])) {
+    const res = d["resume"];
+    const VALID_RESUME_KEYS = /* @__PURE__ */ new Set(["enabled"]);
+    for (const rk of Object.keys(res)) {
+      if (!VALID_RESUME_KEYS.has(rk)) rejects.push(`unknown defaults.resume key "${rk}" (valid: enabled)`);
+    }
+    if (res["enabled"] !== void 0 && typeof res["enabled"] !== "boolean")
+      rejects.push(`defaults.resume.enabled must be a boolean (got ${JSON.stringify(res["enabled"])})`);
+  }
+  if (d["heartbeat_timeout_ms"] !== void 0) {
+    const v = d["heartbeat_timeout_ms"];
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
+      rejects.push(`defaults.heartbeat_timeout_ms must be a positive integer (ms) (got ${JSON.stringify(v)})`);
+  }
+  if (d["update"] !== void 0) {
+    const v = d["update"];
+    if (typeof v !== "object" || v === null || Array.isArray(v)) {
+      rejects.push(`defaults.update must be an object { mode, cadence_hours } (got ${JSON.stringify(v)})`);
+    } else {
+      const u = v;
+      if (u["mode"] !== void 0 && u["mode"] !== "auto" && u["mode"] !== "notify" && u["mode"] !== "off")
+        rejects.push(`defaults.update.mode must be "auto" | "notify" | "off" (got ${JSON.stringify(u["mode"])})`);
+      if (u["cadence_hours"] !== void 0 && (typeof u["cadence_hours"] !== "number" || u["cadence_hours"] <= 0))
+        rejects.push(`defaults.update.cadence_hours must be a positive number of hours (got ${JSON.stringify(u["cadence_hours"])})`);
+      for (const k of Object.keys(u)) {
+        if (k !== "mode" && k !== "cadence_hours")
+          rejects.push(`defaults.update.${k} is not a recognized key (closed shape: mode, cadence_hours)`);
+      }
+    }
+  }
+  if (d["capability_manifest_ttl_s"] !== void 0) {
+    const v = d["capability_manifest_ttl_s"];
+    if (typeof v !== "number" || v <= 0)
+      rejects.push(`defaults.capability_manifest_ttl_s must be a positive number (seconds) (got ${JSON.stringify(v)})`);
+  }
+  if (d["allowed_tools"] !== void 0 && !Array.isArray(d["allowed_tools"]))
+    rejects.push(`defaults.allowed_tools must be an array of strings`);
+  if (isPlainObject4(d["index"])) {
+    const idx = d["index"];
+    for (const ik of Object.keys(idx)) {
+      if (!VALID_INDEX_KEYS.has(ik)) {
+        rejects.push(`unknown defaults.index key "${ik}" (closed key set \u2014 see v2-persistence-and-sqlite-index ADR D-PS-1)`);
+      }
+    }
+    if (idx["enabled"] !== void 0 && typeof idx["enabled"] !== "boolean") {
+      rejects.push(`defaults.index.enabled must be a boolean (got ${JSON.stringify(idx["enabled"])})`);
+    }
+    for (const numKey of ["kg_node_threshold", "links_edge_threshold", "runs_threshold", "wiki_file_threshold"]) {
+      if (idx[numKey] !== void 0) {
+        const v = idx[numKey];
+        if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
+          rejects.push(`defaults.index.${numKey} must be a positive integer (got ${JSON.stringify(v)})`);
+        }
+      }
+    }
+    if (idx["kg_size_threshold_mb"] !== void 0) {
+      const v = idx["kg_size_threshold_mb"];
+      if (typeof v !== "number" || v <= 0) {
+        rejects.push(`defaults.index.kg_size_threshold_mb must be a positive number (got ${JSON.stringify(v)})`);
+      }
+    }
+  }
+  return rejects;
+}
+function loadFileConfig(cwd, selfBuild) {
+  const settingsPath = path14.join(cwd, ".guild", "settings.json");
+  if (fs12.existsSync(settingsPath)) {
+    let parsed;
+    try {
+      parsed = JSON.parse(fs12.readFileSync(settingsPath, "utf8"));
+    } catch (e) {
+      process.stderr.write(`[read-guild-config] WARN: could not parse .guild/settings.json (${e.message}) \u2014 using defaults
+`);
+      return { config: {}, rejects: [], source: "none" };
+    }
+    const rejects = [];
+    const TIER1 = /* @__PURE__ */ new Set([
+      "rigor",
+      "auto_approve",
+      "review",
+      "host",
+      "roles",
+      "host_profiles",
+      "initiative_default",
+      "index",
+      "record_status_runs",
+      "codex_skip_enforcement",
+      "agent_mode",
+      "workspace",
+      "models",
+      "security",
+      "secrets_policy",
+      "mcp",
+      "statusline",
+      // R-009: status-line pane enable (--statusline flag / settings key)
+      "adversarial_review_provider",
+      // R-008: cross-review provider pin
+      "loops",
+      "loop_cap",
+      "codex_cap",
+      "defaults"
+    ]);
+    for (const k of Object.keys(parsed)) {
+      if (k.startsWith("_")) continue;
+      if (!TIER1.has(k)) {
+        rejects.push(
+          `unknown top-level key "${k}" (closed key set \u2014 check spelling; known: ${[...TIER1].join(", ")})`
+        );
+        process.stderr.write(`[read-guild-config] WARN: unknown top-level key "${k}" ignored
+`);
+      }
+    }
+    const out = {};
+    if (VALID_RIGOR2.has(parsed["rigor"])) out.rigor = parsed["rigor"];
+    if (Array.isArray(parsed["auto_approve"])) out.auto_approve = parsed["auto_approve"];
+    if (VALID_REVIEW2.has(parsed["review"])) out.review = parsed["review"];
+    if (parsed["host"] === "auto") out.host = "auto";
+    else if (typeof parsed["host"] === "string") {
+      const normalized = normalizeDispatchHostId2(parsed["host"]);
+      if (normalized) out.host = normalized;
+      else {
+        rejects.push(
+          `host "${parsed["host"]}" is invalid for the top-level dispatch selector (valid: auto or dispatch-selectable host ids ${[...DISPATCH_HOST_IDS2].join("|")})`
+        );
+      }
+    }
+    if (isPlainObject4(parsed["roles"])) {
+      const rawRoles = parsed["roles"];
+      rejects.push(...validateRoles(rawRoles));
+      const mergedRoles = { ...DEFAULTS3.roles };
+      for (const rk of VALID_ROLES_KEYS) {
+        const v = rawRoles[rk];
+        if (v === null) {
+          mergedRoles[rk] = null;
+        } else if (typeof v === "string") {
+          const normalized = normalizeHostId(v);
+          if (normalized) mergedRoles[rk] = normalized;
+        }
+      }
+      out.roles = mergedRoles;
+    }
+    if (isPlainObject4(parsed["host_profiles"])) {
+      const rawHp = parsed["host_profiles"];
+      rejects.push(...validateHostProfiles(rawHp));
+      const mergedHp = {};
+      for (const [hostId, entry] of Object.entries(rawHp)) {
+        const normalized = normalizeHostId(hostId);
+        if (normalized && isPlainObject4(entry)) {
+          mergedHp[normalized] = entry;
+        }
+      }
+      out.host_profiles = mergedHp;
+    }
+    if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
+      out.initiative_default = parsed["initiative_default"];
+    if (parsed["index"] === "auto" || parsed["index"] === "off") out.index = parsed["index"];
+    if (typeof parsed["record_status_runs"] === "boolean")
+      out.record_status_runs = parsed["record_status_runs"];
+    if (parsed["codex_skip_enforcement"] === "warn" || parsed["codex_skip_enforcement"] === "block")
+      out.codex_skip_enforcement = parsed["codex_skip_enforcement"];
+    else if (parsed["codex_skip_enforcement"] !== void 0) {
+      rejects.push(
+        `codex_skip_enforcement "${parsed["codex_skip_enforcement"]}" is invalid \u2014 valid: warn|block`
+      );
+    }
+    if (VALID_AGENT_MODE2.has(parsed["agent_mode"]))
+      out.agent_mode = parsed["agent_mode"];
+    if (isPlainObject4(parsed["workspace"])) {
+      const ws = parsed["workspace"];
+      const wsMode = ws["mode"];
+      if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
+        out.workspace = { mode: wsMode };
+      } else if (ws["mode"] !== void 0) {
+        process.stderr.write(
+          `[read-guild-config] WARN: unknown workspace.mode "${wsMode}" \u2014 valid values: auto|on|off. Using auto.
+`
+        );
+      }
+      const VALID_WS_KEYS = /* @__PURE__ */ new Set(["mode"]);
+      for (const wk of Object.keys(ws)) {
+        if (!VALID_WS_KEYS.has(wk)) {
+          rejects.push(
+            `unknown workspace key "${wk}" (closed key set \u2014 no max_depth, depth is hard-fixed at 1)`
+          );
+        }
+      }
+    }
+    if (isPlainObject4(parsed["models"])) {
+      const rawModels = parsed["models"];
+      rejects.push(...validateModels(rawModels));
+      const mergedModels = { ...DEFAULTS3.models };
+      if (typeof rawModels["enabled"] === "boolean") mergedModels.enabled = rawModels["enabled"];
+      if (isPlainObject4(rawModels["tiers"])) {
+        const rt = rawModels["tiers"];
+        mergedModels.tiers = { ...DEFAULTS3.models.tiers };
+        for (const tier of ["cheap", "mid", "powerful"]) {
+          if (isPlainObject4(rt[tier])) {
+            const rawHostMap = rt[tier];
+            const knownHosts = {};
+            for (const hk of Object.keys(rawHostMap)) {
+              const canonicalHostId = normalizeHostId(hk);
+              if (canonicalHostId) {
+                knownHosts[canonicalHostId] = rawHostMap[hk];
+              }
+            }
+            mergedModels.tiers[tier] = { ...DEFAULTS3.models.tiers[tier], ...knownHosts };
+          }
+        }
+      }
+      if (isPlainObject4(rawModels["scoreWeights"])) {
+        mergedModels.scoreWeights = { ...DEFAULTS3.models.scoreWeights, ...rawModels["scoreWeights"] };
+      }
+      if (isPlainObject4(rawModels["thresholds"])) {
+        mergedModels.thresholds = { ...DEFAULTS3.models.thresholds, ...rawModels["thresholds"] };
+      }
+      if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1) {
+        mergedModels.advisorRounds = Math.floor(rawModels["advisorRounds"]);
+      }
+      if (Array.isArray(rawModels["escalationMarkers"])) {
+        mergedModels.escalationMarkers = rawModels["escalationMarkers"];
+      }
+      if (typeof rawModels["recallBeforeRead"] === "boolean") mergedModels.recallBeforeRead = rawModels["recallBeforeRead"];
+      if (typeof rawModels["compositeRecall"] === "boolean") mergedModels.compositeRecall = rawModels["compositeRecall"];
+      if (typeof rawModels["importanceAtIngest"] === "boolean") mergedModels.importanceAtIngest = rawModels["importanceAtIngest"];
+      if (typeof rawModels["recallScoreThreshold"] === "number") mergedModels.recallScoreThreshold = rawModels["recallScoreThreshold"];
+      if (typeof rawModels["structuredOutputRequired"] === "boolean") mergedModels.structuredOutputRequired = rawModels["structuredOutputRequired"];
+      if (isPlainObject4(rawModels["cacheTTL"])) {
+        const rttl = rawModels["cacheTTL"];
+        const newTTL = { ...DEFAULTS3.models.cacheTTL };
+        if (VALID_CACHE_TTL2.has(rttl["coordinator"])) newTTL.coordinator = rttl["coordinator"];
+        if (VALID_CACHE_TTL2.has(rttl["leaf"])) newTTL.leaf = rttl["leaf"];
+        mergedModels.cacheTTL = newTTL;
+      }
+      if (typeof rawModels["importanceGate"] === "number" && rawModels["importanceGate"] >= 1 && rawModels["importanceGate"] <= 5) {
+        mergedModels.importanceGate = Math.floor(rawModels["importanceGate"]);
+      }
+      if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1) {
+        mergedModels.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
+      }
+      if (isPlainObject4(rawModels["shortOutputThreshold"])) {
+        const sot = rawModels["shortOutputThreshold"];
+        const merged = {};
+        for (const taskType of Object.keys(sot)) {
+          if (!isPlainObject4(sot[taskType])) continue;
+          const innerRaw = sot[taskType];
+          const innerMerged = {};
+          for (const tier of Object.keys(innerRaw)) {
+            if (typeof innerRaw[tier] === "number") {
+              innerMerged[tier] = innerRaw[tier];
+            }
+          }
+          if (Object.keys(innerMerged).length > 0) merged[taskType] = innerMerged;
+        }
+        mergedModels.shortOutputThreshold = merged;
+      }
+      if (isPlainObject4(rawModels["knowledge"])) {
+        const rawK = rawModels["knowledge"];
+        const mergedK = { ...DEFAULTS3.models.knowledge };
+        if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
+          mergedK.maxDepth = Math.floor(rawK["maxDepth"]);
+        if (typeof rawK["maxBranching"] === "number" && rawK["maxBranching"] >= 1)
+          mergedK.maxBranching = Math.floor(rawK["maxBranching"]);
+        if (typeof rawK["minTopicImportance"] === "number" && rawK["minTopicImportance"] >= 0 && rawK["minTopicImportance"] <= 1)
+          mergedK.minTopicImportance = rawK["minTopicImportance"];
+        if (typeof rawK["relMinConf"] === "number" && rawK["relMinConf"] >= 0 && rawK["relMinConf"] <= 1)
+          mergedK.relMinConf = rawK["relMinConf"];
+        if (typeof rawK["maxFiles"] === "number" && rawK["maxFiles"] >= 1)
+          mergedK.maxFiles = Math.floor(rawK["maxFiles"]);
+        if (typeof rawK["maxTokens"] === "number" && rawK["maxTokens"] >= 1)
+          mergedK.maxTokens = Math.floor(rawK["maxTokens"]);
+        if (typeof rawK["batchSize"] === "number" && rawK["batchSize"] >= 1)
+          mergedK.batchSize = Math.floor(rawK["batchSize"]);
+        mergedModels.knowledge = mergedK;
+      }
+      out.models = mergedModels;
+    }
+    if (isPlainObject4(parsed["security"])) {
+      const rawSec = parsed["security"];
+      rejects.push(...validateSecurity(rawSec));
+      const mergedSec = { ...DEFAULTS3.security };
+      const bpp = rawSec["bypass_permissions_policy"];
+      if (bpp === "deny" || bpp === "audit" || bpp === "allow") mergedSec.bypass_permissions_policy = bpp;
+      out.security = mergedSec;
+    }
+    if (isPlainObject4(parsed["secrets_policy"])) {
+      const rawSp = parsed["secrets_policy"];
+      rejects.push(...validateSecretsPolicy(rawSp));
+      const mergedSp = { ...DEFAULTS3.secrets_policy };
+      if (Array.isArray(rawSp["env_allowlist"])) mergedSp.env_allowlist = rawSp["env_allowlist"];
+      if (Array.isArray(rawSp["redaction_patterns"])) mergedSp.redaction_patterns = rawSp["redaction_patterns"];
+      if (rawSp["fail_mode_durable"] === "closed" || rawSp["fail_mode_durable"] === "open") mergedSp.fail_mode_durable = rawSp["fail_mode_durable"];
+      if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") mergedSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
+      out.secrets_policy = mergedSp;
+    }
+    if (isPlainObject4(parsed["mcp"])) {
+      const rawMcp = parsed["mcp"];
+      rejects.push(...validateMcp(rawMcp));
+      const mergedMcp = { ...DEFAULTS3.mcp };
+      if (isPlainObject4(rawMcp["tool_description_hashes"])) {
+        mergedMcp.tool_description_hashes = rawMcp["tool_description_hashes"];
+      }
+      if (typeof rawMcp["stdio_available"] === "boolean") mergedMcp.stdio_available = rawMcp["stdio_available"];
+      if (typeof rawMcp["http_available"] === "boolean") mergedMcp.http_available = rawMcp["http_available"];
+      if (rawMcp["bridge_package"] === null || typeof rawMcp["bridge_package"] === "string") {
+        mergedMcp.bridge_package = rawMcp["bridge_package"];
+      }
+      out.mcp = mergedMcp;
+    }
+    if (typeof parsed["loops"] === "string" || parsed["loops"] === null) out.loops = parsed["loops"];
+    if (typeof parsed["loop_cap"] === "number") out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
+    if (typeof parsed["codex_cap"] === "number") out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
+    if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
+    if (typeof parsed["adversarial_review_provider"] === "string") {
+      out.adversarial_review_provider = parsed["adversarial_review_provider"];
+    }
+    if (isPlainObject4(parsed["defaults"])) {
+      rejects.push(...validateDefaults(parsed["defaults"], selfBuild));
+      const rawDefaults = parsed["defaults"];
+      const knownDefaults = {};
+      for (const k of Object.keys(rawDefaults)) {
+        if (DEFAULTS_ALLOWED_KEYS2.has(k)) knownDefaults[k] = rawDefaults[k];
+      }
+      const rawCrossHost = knownDefaults["cross_host"];
+      if (rawCrossHost && isPlainObject4(rawCrossHost)) {
+        knownDefaults["cross_host"] = { ...DEFAULTS3.defaults.cross_host, ...rawCrossHost };
+      }
+      out.defaults = { ...DEFAULTS3.defaults, ...knownDefaults };
+    }
+    if (out.index === "off" && out.defaults) {
+      out.defaults = { ...out.defaults, index: { ...out.defaults.index, enabled: false } };
+    }
+    return { config: out, rejects, source: "settings.json" };
+  }
+  return { config: {}, rejects: [], source: "none" };
+}
+function scaffold() {
+  return JSON.stringify({ ...DEFAULTS3, _help: HELP }, null, 2) + "\n";
+}
+function main() {
+  const { cwd: cwdFlag, mode, selfBuild, modelTier, flags } = parseArgs(process.argv.slice(2));
+  const cwd = cwdFlag ?? process.env["GUILD_CWD"] ?? process.cwd();
+  if (mode === "scaffold") {
+    process.stdout.write(scaffold());
+    return;
+  }
+  if (mode === "validate") {
+    const { config: fileConfigRaw, rejects, source } = loadFileConfig(cwd, selfBuild);
+    let fileConfig = fileConfigRaw;
+    if (source === "settings.json") {
+      try {
+        fileConfig = loadLocalOverride(cwd, fileConfigRaw, selfBuild);
+      } catch (e) {
+        rejects.push(e.message);
+        process.stderr.write(`[read-guild-config] ERROR: ${e.message}
+`);
+      }
+    }
+    if (source === "none") {
+      process.stdout.write("no .guild/settings.json found \u2014 built-in defaults are valid.\n");
+      return;
+    }
+    if (rejects.length === 0) {
+      process.stdout.write(`.guild/${source}: VALID (closed-key checks pass)
+`);
+      return;
+    }
+    process.stdout.write(`.guild/${source}: INVALID \u2014 ${rejects.length} violation(s):
+`);
+    for (const r of rejects) process.stdout.write(`  - ${r}
+`);
+    process.exit(1);
+    return;
+  }
+  const localPath = path14.join(cwd, ".guild", "settings.local.json");
+  let localLoadedKeys = [];
+  if (fs12.existsSync(localPath)) {
+    try {
+      const rawLocal = JSON.parse(fs12.readFileSync(localPath, "utf8"));
+      localLoadedKeys = Object.keys(rawLocal).filter((k) => !k.startsWith("_"));
+      const schemaBase = DEFAULTS3;
+      const basePaths = /* @__PURE__ */ new Set();
+      (function collectPaths(obj, prefix = "") {
+        for (const [k, v] of Object.entries(obj)) {
+          const full = prefix ? `${prefix}.${k}` : k;
+          basePaths.add(full);
+          if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+            collectPaths(v, full);
+          }
+        }
+      })(schemaBase);
+      for (const key of localLoadedKeys) {
+        if (!basePaths.has(key)) {
+          const errMsg = `share-dot-guild: settings.local.json key '${key}' not in settings.json schema \u2014 refusing to silently extend. Declare it in settings.json first (with the team default) or remove it from settings.local.json.`;
+          process.stderr.write(`[read-guild-config] ERROR: ${errMsg}
+`);
+          localLoadedKeys = [];
+          break;
+        }
+      }
+      if (localLoadedKeys.length > 0) {
+        process.stderr.write(
+          `[read-guild-config] INFO: .guild/settings.local.json loaded \u2014 ${localLoadedKeys.length} override key(s): [${localLoadedKeys.join(", ")}]
+`
+        );
+      }
+    } catch {
+    }
+  }
+  const { config: resolved } = resolveSettings2({
+    cwd,
+    flags,
+    selfBuild
+  });
+  const rigorExpanded = resolved._rigorExpanded;
+  const { _rigorExpanded: _drop, ...resolvedWithout } = resolved;
+  const output = {
+    ...resolvedWithout,
+    _rigor_expanded: rigorExpanded
+  };
+  if (modelTier !== void 0) {
+    output["_model_tier_override"] = {
+      tier: modelTier,
+      source: "--model-tier CLI flag",
+      note: "Top of tier precedence ladder: --model-tier > per-lane override > models.thresholds > built-in"
+    };
+  }
+  process.stdout.write(JSON.stringify(output, null, 2) + "\n");
+}
+var fs12, path14, DEFAULTS3, HELP, VALID_RIGOR2, VALID_REVIEW2, DISPATCH_HOST_IDS2, VALID_PHASES, VALID_AGENT_MODE2, VALID_MODEL_TIER, VALID_CACHE_TTL2, VALID_MODELS_KEYS, VALID_TIER_HOST_KEYS2, KNOWN_HOST_IDS3, VALID_ROLES_KEYS, VALID_SECURITY_KEYS, VALID_SECRETS_POLICY_KEYS, VALID_MCP_KEYS, VALID_INDEX_KEYS, DEFAULTS_ALLOWED_KEYS2;
+var init_config_cli = __esm({
+  "../scripts/lib/core/config-cli.ts"() {
+    fs12 = __toESM(require("fs"));
+    path14 = __toESM(require("path"));
+    init_settings_resolver2();
+    init_host_registry_schema2();
+    init_host_id_namespace2();
+    init_host_profiles_validate2();
+    init_safe_object2();
+    init_config_defaults2();
+    init_tier_model();
+    DEFAULTS3 = DEFAULTS;
+    HELP = {
+      rigor: "quick | standard | deep \u2014 profile knob; expands loops/caps/review depth",
+      auto_approve: "[] | [spec,plan,build,qa] | [all] \u2014 opt-in autonomy; destructive/network/spend STILL ask. qa (G-14/SC-9): auto-proceed ONLY on a computed ReleaseGate PASS \u2014 a BLOCK-override and the always-ask hard set still prompt. No ops token (rails stay interactive by design).",
+      review: "local | cross | off \u2014 cross engages the Claude<->Codex adversarial review broker",
+      host: "canonical host id | legacy alias | auto \u2014 co-equal host adapter selection",
+      roles: "per-run role pins {host,advisory,adversarial}; null = resolve via the role model (capability-matrix), or pin a canonical registry host_id. Legacy aliases normalize to canonical ids. Top-level `host` stays the dispatch-host selector; the v2 registry ids also key roles.*/host_profiles.*.",
+      host_profiles: "per-host config-render overrides keyed by host_id; {} = none (defaults render from the host-registry capability rows). CLOSED entry shape: { models?: {cheap?,mid?,powerful?}, enabled?: bool }.",
+      initiative_default: "null | <initiative-id> \u2014 attach runs to a durable initiative",
+      index: "auto | off \u2014 optional SQLite read-through cache (auto = lazy-build past measured slowness)",
+      record_status_runs: "bool (default true) \u2014 OQ6 (SC-B): /guild:status records a lightweight run (run.yaml + provenance.json, runs/-only; never wiki/decisions/indexes). false = revert to historical pure-read (no run written). Default-safe-when-absent.",
+      codex_skip_enforcement: '"warn" | "block" (default "warn") \u2014 FU-E codex-skip enforcement: warn surfaces the block sentinel (.guild/codex-skip-streak.json) at G-gates without stopping dispatch; block hard-refuses dispatch at the gate until the streak is cleared. Referenced by guild:codex-review and guild:review-broker.',
+      agent_mode: "team | agent | subagent | auto (default) \u2014 execution backend (D5 dispatch ladder). auto: $TMUX\u2192team(in-session); tmux-installed\u2192team(new-session); independent-agents-supported\u2192agent; else\u2192subagent.",
+      "workspace.mode": "auto (default) | on | off \u2014 workspace federation mode (guild.workspace.v1). auto: detect by immediate-child rule (.git/.guild). on: force workspace. off: force regular. Depth is hard-fixed at 1 \u2014 no max_depth knob. Overridden by --mode flag on workspace/detect.ts.",
+      loops: "null | none|spec|plan|implementation|all|<csv> \u2014 power-user; null = derive from rigor",
+      loop_cap: "int 1-256 \u2014 max rounds per adversarial loop",
+      codex_cap: "int 1-10 \u2014 max rounds per Codex review gate",
+      "defaults.auto_learn": "bool (default false) \u2014 when true, /guild init runs the full learn-* pipeline at bootstrap (D3). Precedence: --learn CLI flag > settings.json > built-in(false).",
+      "defaults.adversarial": "on | off \u2014 (off REJECTED for Guild self-build)",
+      "defaults.team.size": "null = 3-4 rule | <int> (cap-6 unless overridden)",
+      "defaults.team.always_include": "[] | subset of the specialist roles",
+      "defaults.review_workflow": "standard | cross | minimal \u2014 default review depth",
+      "defaults.skill_policy": "standard | conservative \u2014 default skill-usage",
+      "defaults.gates.auto_approve": "[] | [spec,plan,build,qa,all] \u2014 default approval-gate posture. qa auto-proceeds ONLY on a computed ReleaseGate PASS (BLOCK-override still prompts); never ops",
+      "defaults.wiki.share_mode": "team | private \u2014 wiki share mode (moved here from legacy project.yaml)",
+      "defaults.wiki.autopromote": "false ALWAYS (true REJECTED \u2014 agents emit candidates only)",
+      "defaults.quality.budget.per_class_minutes": "int > 0 \u2014 per-check-class wall-clock cap",
+      "defaults.quality.budget.total_minutes": "int > 0 \u2014 whole-phase wall-clock cap",
+      "defaults.reporting": "standard | quiet | verbose \u2014 default task/progress reporting",
+      // ── models: block (cost-aware-tiering-and-lean-context ADR §10)
+      "models.enabled": "bool (default true) \u2014 master toggle for cost-tiering. false = all lanes run at mid (current v2 behavior).",
+      "models.tiers": '{cheap|mid|powerful: {<canonical-host-id>: value}} \u2014 host-agnostic tier\u2192model map. Each host value is string | {model, effort?, reasoning?, thinking?, verbosity?} | null. Object form pins a model PLUS host-defined effort/reasoning/thinking/verbosity axes, e.g. powerful: {"claude-code-cli": {model: "opus", effort: "high", reasoning: "xhigh"}}. Closed sub-keys: only model/effort/reasoning/thinking/verbosity are accepted inside the object form. null host slot = no model for that tier on that host (fall through to host mapping). Defaults: cheap=haiku, mid=sonnet, powerful=opus (plain strings). Legacy host aliases normalize to canonical ids; non-Claude host slots default to null until configured. Consumers unpack the union ONLY via resolveTierModel() (read-guild-config.ts).',
+      "models.scoreWeights": "object (signal\u2192int) \u2014 auto-score rubric weights (ADR \xA72). Signals: workType, blastRadius, dependsOn, security, priorEscalation. Ship fixed; tunable per-repo.",
+      "models.thresholds": "{mid:int, powerful:int} \u2014 score-band cutoffs (ADR \xA72). Default {mid:1, powerful:3}. score<mid\u2192cheap; mid\u2264score<powerful\u2192mid; score\u2265powerful\u2192powerful.",
+      "models.advisorRounds": "int > 0 (default 2) \u2014 max advisor consults per lane before recording inconclusive (ADR \xA73).",
+      "models.escalationMarkers": `string[] \u2014 uncertainty phrases that trigger advisor escalation (ADR \xA73). Defaults: ["I'm not sure", "unclear", "cannot determine", ...].`,
+      "models.recallBeforeRead": "bool (default true) \u2014 enforce recall-before-read: query wiki before opening a file (ADR \xA74).",
+      "models.recallScoreThreshold": "float 0\u20131 (default 0.4) \u2014 min BM25 recall score to skip a full file read (ADR \xA74).",
+      "models.structuredOutputRequired": "bool (default true) \u2014 reject non-guild.handoff.v2 agent returns (ADR \xA75).",
+      "models.cacheTTL.coordinator": '"1h" | "5m" | "off" (default "1h") \u2014 coordinator prompt-cache TTL hint (ADR \xA79).',
+      "models.cacheTTL.leaf": '"1h" | "5m" | "off" (default "5m") \u2014 leaf-agent prompt-cache TTL hint (ADR \xA79).',
+      "models.importanceGate": "int 1\u20135 (default 3) \u2014 min wiki importance level for routine recall (ADR \xA76).",
+      "models.compositeRecall": "bool (default true) \u2014 composite recall scoring (docs/v2/05 \xA7Recall scoring). true = wiki recall ranks by relevance \xD7 recency \xD7 importance and filters pages scoring below models.importanceGate. Because this requires raw BM25 scores, it bypasses the SQLite FTS read-through cache and uses file-BM25 for bundle recall. false = legacy BM25-only ranking with the SQLite cache eligible above defaults.index.wiki_file_threshold.",
+      "models.importanceAtIngest": "bool (default true) \u2014 write-time importance-at-ingest scorer (docs/v2/05 \xA7Importance-at-ingest). true = the ingest/learn path stamps each wiki page with a 1\u20135 recall_importance: score so recall reads a stable stored weight. false = recall derives the weight from the page category at query time.",
+      "models.ingestSimilarityGate": "float 0\u20131 (default 0.80) \u2014 BM25 top-1 similarity threshold for the wiki ingest anomaly gate (D-INGEST-GATE). If a candidate page scores \u2265 this against existing pages, guild:wiki-ingest pauses: supersede / skip / proceed \u2014 never silently overwrites.",
+      "models.shortOutputThreshold": "object (default {}) \u2014 O-3 short-output advisor trigger buckets (D-OBS-3). Shape: { [task_type]: { [tier]: number } } where numbers are output-token floors. Empty map \u21D2 O-3 trigger is silent for all (task_type, tier) buckets. Values are proposed by benchmark/src/calibrate-o3-cli.ts after \u226530 samples per bucket; operator reviews and lands them here \u2014 nothing auto-writes this key.",
+      // ── security: block (v2-security-and-untrusted-content ADR — D-BYPASS)
+      "security.bypass_permissions_policy": '"deny" | "audit" | "allow" (default "audit") \u2014 bypassPermissions governance during Guild-managed runs (D-BYPASS). deny: hard-block + security event (forced under auto_approve / autonomous_after_plan_approval). audit: surfaces always-ask channel + security event (default for interactive mode). allow: opt-in for interactive mode only. Guild cannot govern bypass outside its own run lifecycle.',
+      // ── secrets_policy: block (v2-security-and-untrusted-content ADR — D-SECRETS)
+      "secrets_policy.env_allowlist": "string[] (default []) \u2014 env var names explicitly permitted in agent-context injection. All others are redacted before context assembly.",
+      "secrets_policy.redaction_patterns": "string[] (default []) \u2014 regex patterns applied as the first stage of the 3-stage secrets scrubber (prefix regexes \u2192 Shannon-entropy \u2192 file-path context). Run over all .guild/ artifact writes.",
+      "secrets_policy.fail_mode_durable": '"closed" | "open" (default "closed") \u2014 on scrub failure for durable shared-git artifacts (handoff, provenance, wiki, review): closed = block the write + surface always-ask; open = warn + proceed.',
+      "secrets_policy.fail_mode_telemetry": '"open" | "closed" (default "open") \u2014 on scrub failure for local gitignored telemetry writes (runs/<id>/logs/*.jsonl): open = warn + security event + proceed; closed = block.',
+      // ── mcp: block (v2-security-and-untrusted-content ADR — D-MCP)
+      "mcp.tool_description_hashes": "object (default {}) \u2014 map of MCP tool-name \u2192 SHA-256 hash of the tool description string (description only; see hooks/lib/security/mcp-hash-pin.ts hashDescription), pinned at /guild:config init time (D-MCP PI-6). PreToolUse compares the live hash per call. Drift triggers a warn+gate-on-approval. Re-pin via /guild:config update-mcp-hashes.",
+      // ── defaults.index: block (v2-persistence-and-sqlite-index ADR — D-PS-1)
+      "defaults.index.enabled": "bool (default true) \u2014 master switch for the lazy index.sqlite cache. false = always direct-parse, no index.sqlite ever written. Equivalent to the /guild:stats --no-index one-shot, made persistent.",
+      "defaults.index.kg_node_threshold": "int (default 2000) \u2014 populate kg_nodes/kg_edges tables when knowledge-graph.json has more than N nodes.",
+      "defaults.index.kg_size_threshold_mb": "number (default 1) \u2014 populate kg_nodes/kg_edges tables when knowledge-graph.json exceeds N MB.",
+      "defaults.index.links_edge_threshold": "int (default 2000) \u2014 populate kl_edges table when knowledge-links.json has more than N edges.",
+      "defaults.index.runs_threshold": "int (default 20) \u2014 populate run_provenance table when runs/*/provenance.json count exceeds N.",
+      "defaults.index.wiki_file_threshold": "int (default 500) \u2014 populate wiki_fts table when wiki/** file count exceeds N. Below threshold, guild-memory BM25 grep path is used unchanged.",
+      // ── defaults.cross_host: block (v2-cross-host-orchestration ADR — CR-1/CH-1)
+      "defaults.cross_host.enabled": "bool (default false) \u2014 THE local-vs-remote switch. false (default) \u21D2 EVERYTHING RUNS LOCALLY (single-host, byte-identical to today; no SSH, ever). true \u21D2 a specialist may run on a remote host, but ONLY when ALL of: (1) this is true, (2) the specialist is routed to a remote host (team.yaml `host:` / capability routing), (3) that host has an endpoint in defaults.cross_host.hosts, and (4) the pre-dispatch capability probe confirms the host has the brand CLI + tmux (missing \u21D2 fail-fast, nothing spawned). Otherwise the lane stays local (or falls back to Claude per fallback_to_claude). Env override: GUILD_CROSS_HOST_ENABLED=1 (env wins). SECURITY: enables SSH dispatch \u2014 ssh keys/agent only, no passwords.",
+      "defaults.cross_host.hosts": "object { <host_id>: { address: string, port?: number, user?: string } } \u2014 SSH endpoint config keyed by guild.host_capability.v1 host_id. SECURITY: address/port/user ONLY \u2014 NO secrets, NO passwords. Auth via ssh keys/agent. Non-standard ports: prefer ~/.ssh/config Host entries over the port field.",
+      // ── R-009: statusline
+      statusline: "bool (default false) \u2014 enable the Guild status-line pane (R-009). When true, the skill orchestrator sets GUILD_STATUSLINE=1 in the session env before invoking the launcher; statusline-guild.sh reads the flag to enable the tmux status pane. CLI flag: --statusline. Config: config set statusline true --scope project",
+      // ── R-019: mcp transport availability
+      "mcp.stdio_available": "bool (default true) \u2014 MCP stdio transport available (R-019, FDC-13). true for Claude Code CLI/Desktop; consumed by hooks/lib/security/config.ts McpAvailability.",
+      "mcp.http_available": "bool (default false) \u2014 MCP HTTP transport available (R-019, FDC-13). true for Claude Code Web and some enterprise setups.",
+      "mcp.bridge_package": "string|null (default null) \u2014 MCP bridge package name for restricted-transport envs (R-019, FDC-13). null = no bridge. Used by pi-adapter and antigravity connectors.",
+      // ── R-008: adversarial_review_provider
+      adversarial_review_provider: '"auto" | <provider-id> (default "auto") \u2014 pin the cross-review provider (R-008, v2-cross-host-orchestration ADR). Only honored when review=cross. "auto" \u21D2 provider-detect.ts selects the best available provider. Explicit IDs: "codex-plugin", "codex-cli". Set via: config set adversarial_review_provider codex-plugin',
+      // ── R-015: defaults.cross_host.fallback_to_claude
+      "defaults.cross_host.fallback_to_claude": "bool (default true) \u2014 CR-3 level-4 Claude-only fallback (v2-cross-host-orchestration ADR CR-3). When true, the host-router falls back to the Claude host if no non-Claude host can satisfy a lane. Consumed by host-router.ts RouteOptions.fallbackToClaude.",
+      // ── R-016: defaults.retry.* + defaults.resume.*
+      "defaults.retry.max_attempts": "int \u2265 1 (default 1) \u2014 max retry attempts per lane on transient failure (v2-runtime-and-execution-model.md \xA7retry). 1 = no retry.",
+      "defaults.retry.backoff": '"immediate" | "linear" | "exponential" (default "exponential") \u2014 backoff strategy between retries.',
+      "defaults.resume.enabled": "bool (default true) \u2014 enable lane resume from checkpoint on failure (v2-runtime-and-execution-model.md \xA7resume).",
+      // ── R-017: defaults.heartbeat_timeout_ms
+      "defaults.heartbeat_timeout_ms": "int > 0 (default 600000 ms = 10 min) \u2014 staleness threshold for the heartbeat sentinel. hooks/lib/heartbeat.ts:153 reads this via tolerant reader (fallback = DEFAULT_HEARTBEAT_TIMEOUT_MS). Adding to the closed-key set lets config validate accept it and config set write it.",
+      // ── R-018: defaults.capability_manifest_ttl_s
+      "defaults.capability_manifest_ttl_s": "number > 0 (default 3600 s = 1 hour) \u2014 host capability manifest freshness TTL (v2-cross-host-orchestration ADR CR-5). Consumed by host-router.ts RouteOptions.manifestTtlS.",
+      // ── plugin-update-lifecycle AC-6: defaults.update
+      "defaults.update": '{ mode: "auto"|"notify"|"off" (default "notify"), cadence_hours: number > 0 (default 24) } \u2014 channel-aware update-check behavior. Consumed by hooks/update-check.ts (SessionStart signal + background cache refresh) and guild-run update. Dev/symlink installs are always excluded.',
+      // ── R-020: defaults.allowed_tools
+      "defaults.allowed_tools": "string[] (default []) \u2014 explicit allowed-tools list (guild-boundary-config-and-tracking.md Decision F). Replaces, not extends, the shared tool allow-list. [] \u21D2 no restriction.",
+      _precedence: "CLI flag > --rigor profile > settings.json > built-in default. For model tier: --model-tier=cheap|mid|powerful > per-lane plan override > models.tiers/thresholds > built-in.",
+      _docs: "Canonical schema: architecture/command-surface.md \xA74.4. Regenerate with: /guild config init"
+    };
+    VALID_RIGOR2 = /* @__PURE__ */ new Set(["quick", "standard", "deep"]);
+    VALID_REVIEW2 = /* @__PURE__ */ new Set(["local", "cross", "off"]);
+    DISPATCH_HOST_IDS2 = new Set(
+      HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
+    );
+    VALID_PHASES = /* @__PURE__ */ new Set(["spec", "plan", "build", "qa", "all"]);
+    VALID_AGENT_MODE2 = /* @__PURE__ */ new Set(["team", "agent", "subagent", "auto"]);
+    VALID_MODEL_TIER = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
+    VALID_CACHE_TTL2 = /* @__PURE__ */ new Set(["1h", "5m", "off"]);
+    VALID_MODELS_KEYS = /* @__PURE__ */ new Set([
+      "enabled",
+      "tiers",
+      "scoreWeights",
+      "thresholds",
+      "advisorRounds",
+      "escalationMarkers",
+      "recallBeforeRead",
+      "recallScoreThreshold",
+      "structuredOutputRequired",
+      "cacheTTL",
+      "importanceGate",
+      "compositeRecall",
+      "importanceAtIngest",
+      "ingestSimilarityGate",
+      "shortOutputThreshold",
+      "knowledge"
+    ]);
+    VALID_TIER_HOST_KEYS2 = new Set(HOST_IDS);
+    KNOWN_HOST_IDS3 = new Set(HOST_IDS);
+    VALID_ROLES_KEYS = /* @__PURE__ */ new Set(["host", "advisory", "adversarial"]);
+    VALID_SECURITY_KEYS = /* @__PURE__ */ new Set(["bypass_permissions_policy"]);
+    VALID_SECRETS_POLICY_KEYS = /* @__PURE__ */ new Set([
+      "env_allowlist",
+      "redaction_patterns",
+      "fail_mode_durable",
+      "fail_mode_telemetry"
+    ]);
+    VALID_MCP_KEYS = /* @__PURE__ */ new Set([
+      "tool_description_hashes",
+      "stdio_available",
+      // R-019: bool — stdio transport available
+      "http_available",
+      // R-019: bool — HTTP transport available
+      "bridge_package"
+      // R-019: string|null — bridge package name
+    ]);
+    VALID_INDEX_KEYS = /* @__PURE__ */ new Set([
+      "enabled",
+      "kg_node_threshold",
+      "kg_size_threshold_mb",
+      "links_edge_threshold",
+      "runs_threshold",
+      "wiki_file_threshold"
+    ]);
+    DEFAULTS_ALLOWED_KEYS2 = /* @__PURE__ */ new Set([
+      "auto_learn",
+      // D3: bool, default false
+      "adversarial",
+      "team",
+      "review_workflow",
+      "skill_policy",
+      "gates",
+      "wiki",
+      "quality",
+      "reporting",
+      "index",
+      // D-PS-1: SQLite lazy-cache trigger thresholds
+      "cross_host",
+      // CR-1/CH-1: cross-host SSH endpoint config (R-015 adds fallback_to_claude)
+      "retry",
+      // R-016: { max_attempts: int, backoff: "immediate"|"linear"|"exponential" }
+      "resume",
+      // R-016: { enabled: bool }
+      "heartbeat_timeout_ms",
+      // R-017: int ms (hooks/lib/heartbeat.ts tolerant reader)
+      "capability_manifest_ttl_s",
+      // R-018: number s (host-router.ts CR-5 manifest freshness)
+      "update",
+      // plugin-update-lifecycle AC-6: { mode: "auto"|"notify"|"off", cadence_hours: number }
+      "allowed_tools"
+      // R-020: string[] (boundary-config-and-tracking Decision F)
+    ]);
+  }
+});
 
 // agent-team/task-completed.ts
-var fs10 = __toESM(require("fs"));
-var path10 = __toESM(require("path"));
+var fs17 = __toESM(require("fs"));
+var path19 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 function resolveGuildRoot(startCwd) {
-  let current = path.resolve(startCwd);
+  const resolvedStart = path.resolve(startCwd);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
   for (; ; ) {
     if (fs.existsSync(path.join(current, ".git"))) {
       return current;
     }
-    const guildDir = path.join(current, ".guild");
-    if (fs.existsSync(guildDir)) {
-      try {
-        if (fs.statSync(guildDir).isDirectory()) {
-          return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      if (fs.existsSync(guildDir)) {
+        try {
+          if (fs.statSync(guildDir).isDirectory()) {
+            nearestGuildDir = current;
+          }
+        } catch {
         }
-      } catch {
       }
     }
     const parent = path.dirname(current);
     if (parent === current) {
-      return path.resolve(startCwd);
+      return nearestGuildDir ?? resolvedStart;
     }
     current = parent;
   }
@@ -179,9 +6601,10 @@ function extractHandoffEnvelope(content) {
 
 // lib/run-date.ts
 var fs2 = __toESM(require("fs"));
-var path2 = __toESM(require("path"));
+var path3 = __toESM(require("path"));
 
 // ../src/modules/state/workflows/frontmatter.ts
+init_kernel();
 function readScalarField(content, key) {
   const prefix = key + ":";
   for (const ln of content.split("\n")) {
@@ -204,7 +6627,7 @@ var readScalarField2 = readScalarField;
 // lib/run-date.ts
 var POLICY_EFFECTIVE_DATE = /* @__PURE__ */ new Date("2026-06-03T00:00:00Z");
 function readRunStartedAt(runDir) {
-  const runYamlPath = path2.join(runDir, "run.yaml");
+  const runYamlPath = path3.join(runDir, "run.yaml");
   try {
     if (!fs2.existsSync(runYamlPath)) return null;
     const raw = fs2.readFileSync(runYamlPath, "utf8");
@@ -233,7 +6656,7 @@ function isRunInScope(runDir, taskId) {
 
 // lib/run-state.ts
 var fs3 = __toESM(require("node:fs"));
-var path3 = __toESM(require("node:path"));
+var path4 = __toESM(require("node:path"));
 
 // lib/v1.4/v1.4-lock.ts
 var import_node_fs = require("node:fs");
@@ -245,11 +6668,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path11 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path11), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path11)) return;
+  const path20 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path20), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path20)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path11, "wx");
+    const fd = (0, import_node_fs.openSync)(path20, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -304,7 +6727,7 @@ function withStableLock(runDir, fn, opts = {}) {
 // lib/run-state.ts
 var RUN_STATE_SCHEMA_VERSION = "guild.run_state.v1";
 function runStatePath(runDir) {
-  return path3.join(runDir, "run-state.json");
+  return path4.join(runDir, "run-state.json");
 }
 function loadRunState(runDir) {
   let raw;
@@ -468,7 +6891,7 @@ function classifyEnvelope(envelope) {
 
 // lib/security/events.ts
 var fs4 = __toESM(require("node:fs"));
-var path4 = __toESM(require("node:path"));
+var path5 = __toESM(require("node:path"));
 
 // lib/v1.4/redact-log.ts
 var TOKEN_REDACTED = "[REDACTED_TOKEN]";
@@ -505,8 +6928,54 @@ var KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bear
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep) => `${key}${sep}${KV_REDACTED}`
+    (_match, key, sep2) => `${key}${sep2}${KV_REDACTED}`
   );
+}
+var PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
+var PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+var PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
+var MAX_PATH_TOKEN_LEN = 512;
+function allWordsWordish(words) {
+  let opaqueBudget = 1;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    let upper = 0;
+    let lower = 0;
+    let digits = 0;
+    for (const ch of word) {
+      if (ch >= "a" && ch <= "z") lower++;
+      else if (ch >= "A" && ch <= "Z") upper++;
+      else digits++;
+    }
+    if (lower === 0) {
+      if (word.length > 8) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+    } else if (upper > 3 || digits > 4) {
+      return false;
+    }
+  }
+  return true;
+}
+function isRelativePathToken(candidate, fullInput, matchIndex) {
+  if (candidate.includes("+") || candidate.includes("=")) return false;
+  let start = matchIndex;
+  const startFloor = Math.max(0, matchIndex - MAX_PATH_TOKEN_LEN);
+  while (start > startFloor && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
+  if (start === startFloor && start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) {
+    return false;
+  }
+  let end = matchIndex + candidate.length;
+  const endCeil = Math.min(fullInput.length, end + MAX_PATH_TOKEN_LEN);
+  while (end < endCeil && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
+  if (end === endCeil && end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) {
+    return false;
+  }
+  const token = fullInput.slice(start, end);
+  if (token.length > MAX_PATH_TOKEN_LEN) return false;
+  if (!PATH_SHAPE.test(token)) return false;
+  const slashCount = token.split("/").length - 1;
+  if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
 }
 function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
   if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {
@@ -518,6 +6987,9 @@ function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
     return true;
   }
   if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
+    return true;
+  }
+  if (isRelativePathToken(candidate, fullInput, matchIndex)) {
     return true;
   }
   return false;
@@ -631,9 +7103,9 @@ function buildSecurityEvent(input) {
 }
 function appendSecurityEvent(runDir, record) {
   try {
-    const logsDir = path4.join(runDir, "logs");
+    const logsDir = path5.join(runDir, "logs");
     fs4.mkdirSync(logsDir, { recursive: true });
-    fs4.appendFileSync(path4.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    fs4.appendFileSync(path5.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -646,7 +7118,7 @@ function appendSecurityEvent(runDir, record) {
 
 // lib/security/scrubbed-write.ts
 var fs6 = __toESM(require("node:fs"));
-var path6 = __toESM(require("node:path"));
+var path7 = __toESM(require("node:path"));
 var crypto = __toESM(require("node:crypto"));
 
 // lib/security/secrets.ts
@@ -675,7 +7147,7 @@ function applySecretsPolicy(value, policy, opts) {
 
 // lib/security/config.ts
 var fs5 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
+var path6 = __toESM(require("node:path"));
 function securityDefaults() {
   return {
     bypass_permissions_policy: "audit",
@@ -750,7 +7222,7 @@ function parseSecurityConfig(parsed) {
   return out;
 }
 function readSecurityConfig(cwd) {
-  const settingsPath = path5.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path6.join(resolveGuildRoot(cwd), ".guild", "settings.json");
   let raw;
   try {
     raw = fs5.readFileSync(settingsPath, "utf8");
@@ -768,11 +7240,11 @@ function readSecurityConfig(cwd) {
 
 // lib/security/scrubbed-write.ts
 function guildRootFromRunDir(runDir) {
-  return path6.resolve(runDir, "../../..");
+  return path7.resolve(runDir, "../../..");
 }
 function writeScrubApprovalRequest(runDir, runId, surface, outPath, laneId) {
   try {
-    const approvalDir = path6.join(runDir, "agent-bus", "approvals");
+    const approvalDir = path7.join(runDir, "agent-bus", "approvals");
     fs6.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
@@ -782,7 +7254,7 @@ function writeScrubApprovalRequest(runDir, runId, surface, outPath, laneId) {
       ts,
       run_id: runId,
       tool: "scrubbedWrite",
-      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path6.basename(outPath)}`,
+      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path7.basename(outPath)}`,
       permission_mode: "blocked",
       surface
     };
@@ -795,7 +7267,7 @@ function writeScrubApprovalRequest(runDir, runId, surface, outPath, laneId) {
       content = scrubResult.value;
     } catch {
     }
-    fs6.writeFileSync(path6.join(approvalDir, fileName), content, "utf8");
+    fs6.writeFileSync(path7.join(approvalDir, fileName), content, "utf8");
   } catch {
   }
 }
@@ -817,7 +7289,7 @@ function scrubbedWrite(outPath, content, opts) {
   const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
   if (scrubResult.ok) {
     try {
-      fs6.mkdirSync(path6.dirname(outPath), { recursive: true });
+      fs6.mkdirSync(path7.dirname(outPath), { recursive: true });
       fs6.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
@@ -834,11 +7306,11 @@ function scrubbedWrite(outPath, content, opts) {
   }
   if (failMode === "open") {
     process.stderr.write(
-      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path6.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
+      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path7.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
 `
     );
     try {
-      fs6.mkdirSync(path6.dirname(outPath), { recursive: true });
+      fs6.mkdirSync(path7.dirname(outPath), { recursive: true });
       fs6.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
@@ -854,7 +7326,7 @@ function scrubbedWrite(outPath, content, opts) {
         event_type: "secret_scrub_blocked",
         decision: "degraded",
         tool: "scrubbedWrite",
-        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path6.basename(outPath)}. Built-in-redacted content written.`,
+        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path7.basename(outPath)}. Built-in-redacted content written.`,
         permission_mode: "degraded"
       });
       appendSecurityEvent(opts.runDir, evt);
@@ -877,7 +7349,7 @@ function scrubbedWrite(outPath, content, opts) {
       event_type: "secret_scrub_blocked",
       decision: "blocked",
       tool: "scrubbedWrite",
-      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path6.basename(outPath)} \u2014 write blocked (fail-closed).`,
+      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path7.basename(outPath)} \u2014 write blocked (fail-closed).`,
       permission_mode: "blocked"
     });
     appendSecurityEvent(opts.runDir, evt);
@@ -889,7 +7361,7 @@ function scrubbedWrite(outPath, content, opts) {
 
 // lib/bus-emit.ts
 var fs7 = __toESM(require("node:fs"));
-var path7 = __toESM(require("node:path"));
+var path8 = __toESM(require("node:path"));
 var BUS_EVENT_SCHEMA_VERSION = "guild.agent_bus_event.v1";
 function buildBusEvent(input) {
   const rec = {
@@ -908,11 +7380,11 @@ function buildBusEvent(input) {
 }
 function emitBusEvent(runDir, input) {
   try {
-    const busDir2 = path7.join(runDir, "agent-bus");
+    const busDir2 = path8.join(runDir, "agent-bus");
     fs7.mkdirSync(busDir2, { recursive: true });
     const record = buildBusEvent(input);
     fs7.appendFileSync(
-      path7.join(busDir2, "events.ndjson"),
+      path8.join(busDir2, "events.ndjson"),
       JSON.stringify(record) + "\n",
       "utf8"
     );
@@ -926,9 +7398,1105 @@ function emitBusEvent(runDir, input) {
   }
 }
 
+// lib/run-trace.ts
+var fs14 = __toESM(require("fs"));
+var path16 = __toESM(require("path"));
+
+// ../src/modules/config/index.ts
+init_config_defaults();
+init_settings_resolver();
+init_tier_model();
+
+// ../src/modules/migrations/workflows/index-migrate.ts
+var import_node_child_process = require("node:child_process");
+var fs11 = __toESM(require("node:fs"));
+var path13 = __toESM(require("node:path"));
+function openDatabase(dbPath) {
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(dbPath);
+  db.exec("PRAGMA busy_timeout = 5000");
+  return db;
+}
+var CURRENT_SCHEMA_VERSION = 3;
+function resolveGuildRoot2(cwd) {
+  try {
+    const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const abs = path13.isAbsolute(raw) ? raw : path13.resolve(cwd, raw);
+    const root = path13.dirname(abs);
+    if (fs11.existsSync(root)) return root;
+  } catch {
+  }
+  return path13.resolve(cwd);
+}
+var MIGRATIONS = [
+  // ── v1: core tables ───────────────────────────────────────────────────────
+  {
+    version: 1,
+    tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_nodes;
+        DROP TABLE IF EXISTS kg_edges;
+        DROP TABLE IF EXISTS kl_edges;
+        DROP TABLE IF EXISTS run_provenance;
+        DROP TABLE IF EXISTS wiki_fts;
+        DROP TABLE IF EXISTS _fingerprints;
+      `);
+      db.exec(`
+        CREATE TABLE kg_nodes (
+          id         TEXT NOT NULL PRIMARY KEY,
+          type       TEXT,
+          name       TEXT,
+          source_refs TEXT,
+          confidence TEXT,
+          layer      TEXT,
+          data       TEXT
+        );
+
+        CREATE TABLE kg_edges (
+          id        INTEGER PRIMARY KEY,
+          source    TEXT NOT NULL,
+          target    TEXT NOT NULL,
+          type      TEXT,
+          direction TEXT,
+          weight    REAL,
+          data      TEXT
+        );
+
+        CREATE TABLE kl_edges (
+          id        INTEGER PRIMARY KEY,
+          from_node TEXT NOT NULL,
+          to_node   TEXT NOT NULL,
+          type      TEXT,
+          run_id    TEXT,
+          data      TEXT
+        );
+
+        CREATE TABLE run_provenance (
+          run_id TEXT NOT NULL PRIMARY KEY,
+          ts     TEXT,
+          data   TEXT
+        );
+
+        CREATE TABLE _fingerprints (
+          table_name   TEXT NOT NULL PRIMARY KEY,
+          source_path  TEXT NOT NULL,
+          sha256       TEXT NOT NULL,
+          populated_at TEXT NOT NULL
+        );
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE wiki_fts USING fts5(
+            path      UNINDEXED,
+            title,
+            content,
+            tokenize='porter ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE wiki_fts (
+            path    TEXT,
+            title   TEXT,
+            content TEXT
+          );
+        `);
+      }
+    }
+  },
+  // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
+  //
+  // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
+  // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
+  // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
+  //
+  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
+  // production code writes to sub_guild_root/.guild/. NOTE: the populate/
+  // invalidate function (ensureFederationWikiCache) was removed in
+  // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
+  // schema migration is retained (harmless empty table) since altering the
+  // migration ladder is a separate, out-of-scope decision.
+  {
+    version: 2,
+    tables: ["federation_wiki_cache"],
+    up(db) {
+      db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
+      db.exec(`
+        CREATE TABLE federation_wiki_cache (
+          sub_guild_root TEXT NOT NULL,
+          path           TEXT NOT NULL,
+          title          TEXT,
+          snippet        TEXT,
+          PRIMARY KEY (sub_guild_root, path)
+        );
+      `);
+    }
+  },
+  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
+  //
+  // Two OPTIONAL acceleration tables projected from the canonical, file-first
+  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
+  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
+  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
+  // remains the source of truth that returns IDENTICAL answers.
+  //
+  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
+  //                    indexed on source AND target so the call-graph BFS
+  //                    (kgTrace / kgDeadCode) is fetched without parsing the
+  //                    whole JSON graph.
+  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
+  //                    node, so identifier search (`process_order` →
+  //                    `processOrder`) is an index lookup, not a full node scan.
+  //                    Tokens are PRE-SPLIT with the shared identifier-aware
+  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
+  //                    document and query side, so the FTS built-in tokenizer
+  //                    only has to whitespace-split — the camel/snake behaviour
+  //                    lives in the (deterministic, model-free) projection feed.
+  {
+    version: 3,
+    tables: ["kg_calls", "kg_symbols_fts"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_calls;
+        DROP TABLE IF EXISTS kg_symbols_fts;
+      `);
+      db.exec(`
+        CREATE TABLE kg_calls (
+          id         INTEGER PRIMARY KEY,
+          source     TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          confidence TEXT
+        );
+        CREATE INDEX kg_calls_source ON kg_calls (source);
+        CREATE INDEX kg_calls_target ON kg_calls (target);
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
+            node_id UNINDEXED,
+            name_tokens,
+            tokenize='ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE kg_symbols_fts (
+            node_id     TEXT,
+            name_tokens TEXT
+          );
+        `);
+      }
+    }
+  }
+];
+function runMigrations(dbPath) {
+  let db;
+  let fromVersion = 0;
+  try {
+    fs11.mkdirSync(path13.dirname(dbPath), { recursive: true });
+    db = openDatabase(dbPath);
+    db.exec("PRAGMA journal_mode = WAL");
+    db.exec("PRAGMA synchronous = NORMAL");
+    fromVersion = db.prepare("PRAGMA user_version").get().user_version;
+    for (const mig of MIGRATIONS) {
+      if (mig.version <= fromVersion) continue;
+      try {
+        db.exec("BEGIN IMMEDIATE");
+        mig.up(db);
+        db.exec(`PRAGMA user_version = ${mig.version}`);
+        db.exec("COMMIT");
+        fromVersion = mig.version;
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch {
+        }
+        for (const tbl of mig.tables) {
+          try {
+            db.exec(`DROP TABLE IF EXISTS ${tbl}`);
+          } catch {
+          }
+        }
+        db.close();
+        return {
+          ok: false,
+          fromVersion,
+          toVersion: fromVersion,
+          dbPath,
+          message: `migration to v${mig.version} failed: ${err.message}`
+        };
+      }
+    }
+    db.close();
+    return {
+      ok: true,
+      fromVersion,
+      toVersion: CURRENT_SCHEMA_VERSION,
+      dbPath
+    };
+  } catch (err) {
+    try {
+      db?.close();
+    } catch {
+    }
+    return {
+      ok: false,
+      fromVersion,
+      toVersion: fromVersion,
+      dbPath,
+      message: `migration runner error: ${err.message}`
+    };
+  }
+}
+function runIndexMigrateCli() {
+  const argv = process.argv.slice(2);
+  let cwd = process.env["GUILD_CWD"] ?? process.cwd();
+  let dbPath;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--cwd" && argv[i + 1]) cwd = argv[++i];
+    if (argv[i] === "--db-path" && argv[i + 1]) dbPath = argv[++i];
+  }
+  if (!dbPath) {
+    const guildRoot = resolveGuildRoot2(cwd);
+    dbPath = path13.join(guildRoot, ".guild", "index.sqlite");
+  }
+  const result = runMigrations(dbPath);
+  if (result.ok) {
+    process.stdout.write(
+      `[index-migrate] OK: schema v${result.fromVersion}\u2192v${result.toVersion} at ${result.dbPath}
+`
+    );
+  } else {
+    process.stderr.write(`[index-migrate] WARN: ${result.message}
+`);
+    process.exit(1);
+  }
+}
+if (typeof module !== "undefined" && require.main === module) {
+  runIndexMigrateCli();
+}
+
+// ../src/modules/state/workflows/index-cache.ts
+init_kernel();
+
+// ../src/modules/lifecycle/workflows/runstart-preflight.ts
+init_host_runtime();
+
+// ../src/modules/capability/workflows/rank.ts
+init_host_runtime();
+
+// ../src/modules/capability/workflows/tier-defaults.ts
+init_host_runtime();
+init_host_runtime();
+
+// ../src/modules/capability/workflows/role-model-schema.ts
+init_host_runtime();
+var ROLES = ["host", "advisory", "adversarial"];
+var ROLE_STRENGTHS = ["strong", "weak"];
+var ROLE_SET = new Set(ROLES);
+var STRENGTH_SET = new Set(ROLE_STRENGTHS);
+var HOST_ID_SET3 = new Set(HOST_IDS);
+
+// ../src/modules/capability/workflows/role-resolver.ts
+init_host_runtime();
+
+// ../scripts/lib/advisory-record.ts
+var ADVISORY_RECORD_SCHEMA = "guild.advisory.v1";
+var ADVISORY_BACKENDS = [
+  "tmux_team",
+  "host_subagents",
+  "single_agent"
+];
+var ADVISORY_SUBSTRATES = [
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+  // Legacy substrate labels accepted for older records.
+  "claude",
+  "codex",
+  ".agents",
+  "pi",
+  "antigravity"
+];
+var ADVISORY_CONFIDENCE = ["high", "medium", "low"];
+var BACKEND_SET = new Set(ADVISORY_BACKENDS);
+var CONFIDENCE_SET = new Set(ADVISORY_CONFIDENCE);
+var SUBSTRATE_SET = new Set(ADVISORY_SUBSTRATES);
+function makeAdvisoryRecord(input) {
+  const rec = {
+    schema_version: ADVISORY_RECORD_SCHEMA,
+    id: input.id,
+    run_id: input.run_id ?? null,
+    initiative_id: input.initiative_id ?? null,
+    phase: input.phase,
+    backend: input.backend,
+    question: input.question,
+    // Shallow-copy arrays so the caller's originals are not mutated.
+    advisors: input.advisors.map((a) => ({ ...a })),
+    recommendations: input.recommendations.map((r) => ({ ...r })),
+    synthesis: input.synthesis,
+    unresolved_questions: (input.unresolved_questions ?? []).slice(),
+    confidence: input.confidence,
+    recorded_at: input.recorded_at
+  };
+  if (input.decision_link !== void 0) {
+    rec.decision_link = input.decision_link;
+  }
+  if (input.substrate !== void 0) {
+    rec.substrate = input.substrate;
+  }
+  return rec;
+}
+if (require.main === module) {
+  const now = (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const skeleton = makeAdvisoryRecord({
+    id: `advisory-example-001`,
+    recorded_at: now,
+    phase: "ideation",
+    backend: "single_agent",
+    question: "Which architecture path should this initiative take?",
+    advisors: [
+      { role: "product", model_tier: "cheap" },
+      { role: "architecture", model_tier: "mid" }
+    ],
+    recommendations: [
+      { role: "product", recommendation: "Prefer the simpler layered approach.", confidence: "medium" },
+      { role: "architecture", recommendation: "Event-driven boundary fits better for scale.", confidence: "high" }
+    ],
+    synthesis: "Use event-driven boundaries at service edges; keep internal domain logic layered.",
+    confidence: "high",
+    unresolved_questions: []
+  });
+  process.stdout.write(JSON.stringify(skeleton, null, 2) + "\n");
+}
+
+// ../scripts/read-guild-config.ts
+init_config_cli();
+if (require.main === module) {
+  const { __main } = (init_config_cli(), __toCommonJS(config_cli_exports));
+  __main();
+}
+
+// emit-learning-checkpoint.ts
+var fs13 = __toESM(require("fs"));
+var path15 = __toESM(require("path"));
+
+// ../src/modules/initiatives/workflows/classify-proposal.ts
+function classifyProposal(input) {
+  const target = input.target ?? "skill";
+  const subject = input.subject ?? "<skill>";
+  const countGate = input.distinct_subject_count >= 3 || input.distinct_subject_count >= 2 && input.same_run === true;
+  const systemic = countGate && input.same_signature === true && input.user_approved === true;
+  const perInstance = `${target}_def: proposal:${subject}`;
+  const outputs = [perInstance];
+  if (systemic) {
+    outputs.push(`${target}_template: systemic-proposal`);
+  }
+  return { verdict: systemic ? "systemic" : "specific", outputs };
+}
+function parseFlag(argv, name) {
+  const eq = `--${name}=`;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === `--${name}` && argv[i + 1] && !argv[i + 1].startsWith("--")) return argv[i + 1];
+    if (argv[i].startsWith(eq)) return argv[i].slice(eq.length);
+  }
+  return void 0;
+}
+function hasFlag(argv, name) {
+  return argv.includes(`--${name}`);
+}
+function runClassifyProposalCli(argv = process.argv.slice(2)) {
+  const distinct = parseInt(parseFlag(argv, "distinct") ?? "0", 10);
+  const target = parseFlag(argv, "target") ?? "skill";
+  const subject = parseFlag(argv, "subject");
+  const res = classifyProposal({
+    distinct_subject_count: Number.isFinite(distinct) ? distinct : 0,
+    same_run: hasFlag(argv, "same-run"),
+    same_signature: hasFlag(argv, "same-signature"),
+    user_approved: hasFlag(argv, "user-approved"),
+    target: target === "agent" ? "agent" : "skill",
+    ...subject ? { subject } : {}
+  });
+  process.stdout.write(JSON.stringify(res, null, 2) + "\n");
+}
+if (require.main === module) runClassifyProposalCli();
+
+// ../src/modules/initiatives/workflows/initiative-activity.ts
+var ACTIVITY_EVENTS = [
+  "created",
+  "status_change",
+  "definition_updated",
+  "work_item_added",
+  "work_item_closed",
+  "run_attached",
+  "summary_updated",
+  "released",
+  "closed",
+  "archived",
+  "note"
+];
+var SET = new Set(ACTIVITY_EVENTS);
+
+// ../src/modules/initiatives/workflows/initiative-workitems.ts
+var WORK_ITEM_TYPES = [
+  "research",
+  "design",
+  "implementation",
+  "review",
+  "validation",
+  "docs",
+  "release",
+  "cleanup"
+];
+var WORK_ITEM_STATUS = [
+  "proposed",
+  "ready",
+  "in_progress",
+  "blocked",
+  "done",
+  "deferred",
+  "cancelled"
+];
+var TYPES = new Set(WORK_ITEM_TYPES);
+var STATUS = new Set(WORK_ITEM_STATUS);
+
+// ../src/modules/evolution/workflows/learning-signatures.ts
+function allLearnings(artifacts) {
+  const out = [];
+  for (const block of artifacts.handoffBlocks ?? []) {
+    for (const l of block.learnings ?? []) {
+      if (l) out.push(l);
+    }
+  }
+  return out;
+}
+function allFollowups(artifacts) {
+  const out = [];
+  for (const block of artifacts.handoffBlocks ?? []) {
+    for (const f of block.followups ?? []) {
+      if (f) out.push(f);
+    }
+  }
+  return out;
+}
+function bestRef(artifacts) {
+  const wiki = artifacts.provenanceTouched?.wiki ?? [];
+  if (wiki.length > 0) return wiki[0];
+  return artifacts.evidenceRef ?? artifacts.runId;
+}
+function filesInclude(artifacts, patterns) {
+  const files = [
+    ...artifacts.changedFiles ?? [],
+    ...artifacts.provenanceTouched?.files ?? []
+  ];
+  return files.some((f) => patterns.some((p) => p.test(f)));
+}
+function learningsReferenceSkill(artifacts) {
+  const learnings = allLearnings(artifacts);
+  const followups = allFollowups(artifacts);
+  const all = [...learnings, ...followups];
+  for (const text of all) {
+    const match = text.match(/\b(?:skill[:\s]+|guild:)([\w:-]+)/i);
+    if (match) return match[1] ?? "unknown-skill";
+    if (/skill[\s_-](?:improvement|gap|defect|change|update|refactor)/i.test(text)) {
+      return "unknown-skill";
+    }
+  }
+  return null;
+}
+function learningsReferenceAgent(artifacts) {
+  const learnings = allLearnings(artifacts);
+  const followups = allFollowups(artifacts);
+  const all = [...learnings, ...followups];
+  for (const text of all) {
+    const match = text.match(/\b(?:agent[:\s]+|guild:)([\w:-]+(?:engineer|writer|author|architect|specialist|reviewer|planner|developer|auditor))/i);
+    if (match) return match[1] ?? "unknown-agent";
+    if (/agent[\s_-](?:improvement|gap|defect|change|update|refactor)/i.test(text)) {
+      return "unknown-agent";
+    }
+  }
+  return null;
+}
+function classifyMemory(artifacts) {
+  try {
+    const decisions = artifacts.provenanceTouched?.decisions ?? [];
+    if (decisions.length > 0) {
+      const ref = decisions[0];
+      return `candidate:${ref}`;
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyWiki(artifacts) {
+  try {
+    const wikiTouched = artifacts.provenanceTouched?.wiki ?? [];
+    if (wikiTouched.length > 0) {
+      return `candidate:${wikiTouched[0]}`;
+    }
+    const followups = allFollowups(artifacts);
+    if (followups.some(
+      (f) => /\b(?:wiki[\s_-]?ingest|wiki[\s_-]?page|decisions?[\s_-]?capture|guild:decisions|guild:wiki)/i.test(f)
+    )) {
+      return `candidate:${bestRef(artifacts)}`;
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyKnowledgeGraph(artifacts) {
+  try {
+    const initiatives = artifacts.provenanceTouched?.initiatives ?? [];
+    if (initiatives.length > 0) {
+      return "refresh:initiative-touched";
+    }
+    if (filesInclude(artifacts, [
+      /\.guild\/wiki\//,
+      /\.guild\/raw\/sources\//,
+      /\.guild\/initiatives\//,
+      /\.guild\/reflections\//,
+      /\.guild\/evolve\//,
+      /\.guild\/indexes\/harvest-/
+    ])) {
+      return "refresh:stale";
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyDomainModel(artifacts) {
+  try {
+    if (filesInclude(artifacts, [
+      /\.guild\/indexes\/domain-graph\.json/
+    ])) {
+      return "re-derive";
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyAgentDef(artifacts) {
+  try {
+    const agentRef = learningsReferenceAgent(artifacts);
+    if (agentRef !== null) {
+      return `proposal:${agentRef}`;
+    }
+    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
+    for (const text of all) {
+      const match = text.match(/proposal:([a-z][\w:-]+)/i);
+      if (match && /agent/i.test(match[1] ?? "")) {
+        return `proposal:${match[1]}`;
+      }
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifySkillDef(artifacts) {
+  try {
+    const skillRef = learningsReferenceSkill(artifacts);
+    if (skillRef !== null) {
+      return `proposal:${skillRef}`;
+    }
+    const all = [...allLearnings(artifacts), ...allFollowups(artifacts)];
+    for (const text of all) {
+      const match = text.match(/proposal:([\w:-]+)/i);
+      if (match && /skill/i.test(text)) {
+        return `proposal:${match[1]}`;
+      }
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyAgentTemplate(artifacts) {
+  try {
+    const input = artifacts.classifyProposalInput;
+    if (!input) return "none";
+    const result = classifyProposal({ ...input, target: "agent" });
+    return result.verdict === "systemic" ? "systemic-proposal" : "none";
+  } catch {
+    return "none";
+  }
+}
+function classifySkillTemplate(artifacts) {
+  try {
+    const input = artifacts.classifyProposalInput;
+    if (!input) return "none";
+    const result = classifyProposal({ ...input, target: "skill" });
+    return result.verdict === "systemic" ? "systemic-proposal" : "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyConfig(artifacts) {
+  try {
+    const configKeys = artifacts.provenanceTouched?.config_keys ?? [];
+    if (configKeys.length > 0) {
+      return `proposal:${configKeys[0]}`;
+    }
+    const settingsFiles = [
+      ...artifacts.changedFiles ?? [],
+      ...artifacts.provenanceTouched?.files ?? []
+    ].filter(
+      (f) => /(?:settings\.json|settings\.local\.json|\.claude-plugin\/|guild\.json|\.guild\/settings|guildstack\.pen)/i.test(f)
+    );
+    if (settingsFiles.length > 0) {
+      const f = settingsFiles[0];
+      const keyMatch = f.match(/([^/]+)\.json$/);
+      return `proposal:${keyMatch ? keyMatch[1] : "settings"}`;
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyTaskTracking(artifacts) {
+  try {
+    const tasks = artifacts.provenanceTouched?.tasks ?? [];
+    if (tasks.length > 0) {
+      const anyDone = (artifacts.handoffBlocks ?? []).some(
+        (b) => b.status === "done" || b.status === "shipped"
+      );
+      if (anyDone || artifacts.handoffBlocks === void 0) {
+        return `update:${tasks[0]}`;
+      }
+    }
+    const runs = artifacts.provenanceTouched?.runs ?? [];
+    if (runs.length > 0) {
+      const anyDone = (artifacts.handoffBlocks ?? []).some(
+        (b) => b.status === "done" || b.status === "shipped"
+      );
+      if (anyDone) {
+        return `update:run:${runs[0]}`;
+      }
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyWorkflowRules(artifacts) {
+  try {
+    const decisions = artifacts.provenanceTouched?.decisions ?? [];
+    for (const d of decisions) {
+      if (/^(?:workflow[\s_-]exception|gate[\s_-]skip|phase[\s_-]override|workflow[\s_-]override)/i.test(d)) {
+        return `proposal:${d}`;
+      }
+    }
+    const issues = (artifacts.handoffBlocks ?? []).flatMap((b) => b.issues ?? []);
+    for (const text of issues) {
+      if (/\b(?:gate[\s_-]skip(?:ped)?|phase[\s_-]order[\s_-]deviation|workflow[\s_-]override|force[\s_-]gate|gate[\s_-]force[d]?)\b/i.test(text)) {
+        const ruleMatch = text.match(/(?:gate[\s_-]skip|phase[\s_-]override|workflow[\s_-]override)[:\s]+([\w-]+)/i);
+        return `proposal:${ruleMatch ? ruleMatch[1] : "workflow-exception"}`;
+      }
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyReviewPolicy(artifacts) {
+  try {
+    const all = [
+      ...allLearnings(artifacts),
+      ...allFollowups(artifacts),
+      ...(artifacts.handoffBlocks ?? []).flatMap((b) => b.issues ?? []),
+      ...(artifacts.handoffBlocks ?? []).map((b) => b.notes ?? ""),
+      ...(artifacts.handoffBlocks ?? []).map((b) => b.summary ?? "")
+    ];
+    for (const text of all) {
+      if (/\b(?:BLOCK|block[\s_-]override|owner[\s_-]accepted[\s_-]risk|gate[\s_-]override|releasegate|review[\s_-]gate[\s_-]fail)\b/.test(text)) {
+        const gateMatch = text.match(/(?:G[-_]?(\w+)|gate[\s:]+([\w-]+)|releasegate)/i);
+        const gate = gateMatch ? gateMatch[1] ?? gateMatch[2] ?? "releasegate" : "releasegate";
+        return `proposal:${gate}`;
+      }
+      if (/\bcap[\s_-]exceeded\b|rounds[\s_-]cap[\s_-]hit\b|codex[\s_-]cap\b/i.test(text)) {
+        return "proposal:codex-cap";
+      }
+    }
+    const decisions = artifacts.provenanceTouched?.decisions ?? [];
+    if (decisions.some((d) => /review[\s_-]?policy|gate[\s_-]?policy/i.test(d))) {
+      return `proposal:${decisions.find((d) => /review|gate/i.test(d))}`;
+    }
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+function classifyPhase(artifacts) {
+  return {
+    memory: classifyMemory(artifacts),
+    wiki: classifyWiki(artifacts),
+    knowledge_graph: classifyKnowledgeGraph(artifacts),
+    domain_model: classifyDomainModel(artifacts),
+    agent_def: classifyAgentDef(artifacts),
+    skill_def: classifySkillDef(artifacts),
+    agent_template: classifyAgentTemplate(artifacts),
+    skill_template: classifySkillTemplate(artifacts),
+    config: classifyConfig(artifacts),
+    task_tracking: classifyTaskTracking(artifacts),
+    workflow_rules: classifyWorkflowRules(artifacts),
+    review_policy: classifyReviewPolicy(artifacts)
+  };
+}
+
+// emit-learning-checkpoint.ts
+var SCHEMA_VERSION = "guild.learning_checkpoint.v1";
+var VALID_PHASES2 = [
+  "init",
+  "ideation",
+  "planning",
+  "development",
+  "quality",
+  "operations",
+  "reflection"
+];
+var DECISION_TARGETS = [
+  "memory",
+  "wiki",
+  "knowledge_graph",
+  "domain_model",
+  "agent_def",
+  "skill_def",
+  "agent_template",
+  "skill_template",
+  "config",
+  "task_tracking",
+  "workflow_rules",
+  "review_policy"
+];
+var ALL_NONE_DECISIONS = Object.fromEntries(
+  DECISION_TARGETS.map((k) => [k, "none"])
+);
+var VALID_EDGE_TYPES = [
+  "decided_by",
+  "used_for",
+  "produced",
+  "touches",
+  "supersedes",
+  "learned_from",
+  "constrains",
+  "opens_question",
+  "resolves"
+];
+var ALLOWED_NODE_PREFIXES = [
+  "task:",
+  "run:",
+  "decision:",
+  "skill:",
+  "agent:",
+  "feature:"
+];
+var FORBIDDEN_NODE_PREFIXES = [
+  "wiki:",
+  "file:",
+  "domain:",
+  "component:"
+];
+function assertPhase(phase) {
+  if (!VALID_PHASES2.includes(phase)) {
+    throw new Error(
+      `[emit-learning-checkpoint] invalid phase: "${phase}". Expected one of: ${VALID_PHASES2.join(", ")}`
+    );
+  }
+}
+function assertEdgeTypes(links) {
+  for (const link of links) {
+    if (!VALID_EDGE_TYPES.includes(link.type)) {
+      throw new Error(
+        `[emit-learning-checkpoint] invalid edge type: "${link.type}". Expected one of: ${VALID_EDGE_TYPES.join(", ")}`
+      );
+    }
+  }
+}
+function assertNodePrefixes(links) {
+  for (const link of links) {
+    for (const node of [link.from, link.to]) {
+      const allowed = ALLOWED_NODE_PREFIXES.some(
+        (p) => node.startsWith(p)
+      );
+      if (!allowed) {
+        const matchedForbidden = FORBIDDEN_NODE_PREFIXES.find(
+          (p) => node.startsWith(p)
+        );
+        const detail = matchedForbidden ? `uses the cross-space prefix "${matchedForbidden}" (code/wiki/domain space)` : `uses an unknown or no-prefix node id "${node}"`;
+        throw new Error(
+          `[emit-learning-checkpoint] invalid node in edge (from: "${link.from}", to: "${link.to}") \u2014 ${detail}. Node ids must start with an allowed work/decision-space prefix: ${ALLOWED_NODE_PREFIXES.join(", ")}.`
+        );
+      }
+    }
+  }
+}
+function yamlValue(v) {
+  if (v === "none") return "none";
+  if (/: /.test(v) || // colon-space → would be a mapping
+  /:$/.test(v) || // trailing colon
+  v.trim() !== v || // leading/trailing whitespace
+  v === "" || // empty
+  /^[{[\]}&*#?|<>=!%@`'"]/.test(v)) {
+    return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  }
+  return v;
+}
+function buildYaml(opts) {
+  const lines = [
+    `# ${SCHEMA_VERSION}`,
+    "learning_checkpoint:",
+    `  version: ${SCHEMA_VERSION}`,
+    `  phase: ${opts.phase}`,
+    `  run_id: ${opts.runId}`
+  ];
+  if (opts.observed.length === 0) {
+    lines.push("  observed: []");
+  } else {
+    lines.push("  observed:");
+    for (const fact of opts.observed) {
+      lines.push(`    - ${yamlValue(fact)}`);
+    }
+  }
+  lines.push("  decisions:");
+  for (const key of DECISION_TARGETS) {
+    lines.push(`    ${key}: ${yamlValue(opts.decisions[key] ?? "none")}`);
+  }
+  if (opts.knowledgeLinksBatch.length === 0) {
+    lines.push("  knowledge_links_batch: []");
+  } else {
+    lines.push("  knowledge_links_batch:");
+    for (const link of opts.knowledgeLinksBatch) {
+      lines.push(
+        `    - from: ${yamlValue(link.from)}`,
+        `      to: ${yamlValue(link.to)}`,
+        `      type: ${link.type}`,
+        `      run_id: ${link.run_id}`
+      );
+    }
+  }
+  lines.push(`  routed_to: ${yamlValue(opts.reflectionsPath)}`);
+  lines.push(`  evidence_ref: ${yamlValue(opts.evidenceRef)}`);
+  if (opts.backstop === true) {
+    lines.push("  backstop: true");
+  }
+  return lines.join("\n") + "\n";
+}
+function appendKnowledgeLinksIndex(guildRoot, links) {
+  if (links.length === 0) return;
+  const indexDir = path15.join(guildRoot, ".guild", "indexes");
+  const indexPath = path15.join(indexDir, "knowledge-links.json");
+  let existing = [];
+  if (fs13.existsSync(indexPath)) {
+    try {
+      const raw = fs13.readFileSync(indexPath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed["links"])) {
+        existing = parsed["links"];
+      }
+    } catch (e) {
+      process.stderr.write(
+        `[emit-learning-checkpoint] WARN: could not parse knowledge-links.json \u2014 starting fresh: ${String(e)}
+`
+      );
+      existing = [];
+    }
+  }
+  const existingKeys = new Set(
+    existing.map((l) => `${l.from}\0${l.to}\0${l.type}`)
+  );
+  const novel = links.filter(
+    (l) => !existingKeys.has(`${l.from}\0${l.to}\0${l.type}`)
+  );
+  if (novel.length === 0) return;
+  const merged = [...existing, ...novel];
+  try {
+    fs13.mkdirSync(indexDir, { recursive: true });
+    fs13.writeFileSync(
+      indexPath,
+      JSON.stringify(
+        { schema_version: "guild.knowledge_links.v1", links: merged },
+        null,
+        2
+      ) + "\n",
+      "utf8"
+    );
+  } catch (e) {
+    process.stderr.write(
+      `[emit-learning-checkpoint] WARN: could not write knowledge-links.json: ${String(e)}
+`
+    );
+  }
+}
+function appendReflections(guildRoot, runId, phase, decisions) {
+  const nonNone = DECISION_TARGETS.filter((k) => decisions[k] !== "none");
+  if (nonNone.length === 0) return;
+  const reflectionsDir = path15.join(guildRoot, ".guild", "reflections");
+  fs13.mkdirSync(reflectionsDir, { recursive: true });
+  const reflPath = path15.join(reflectionsDir, `${runId}.md`);
+  const entry = `
+## Phase: ${phase} (${runId})
+
+` + nonNone.map((k) => `- ${k}: ${decisions[k]}`).join("\n") + "\n";
+  fs13.appendFileSync(reflPath, entry, "utf8");
+}
+function writeCheckpoint(opts) {
+  assertPhase(opts.phase);
+  const links = opts.knowledgeLinksBatch ?? [];
+  assertEdgeTypes(links);
+  assertNodePrefixes(links);
+  const guildRoot = opts.guildRoot ?? process.cwd();
+  const decisions = opts.decisions ?? { ...ALL_NONE_DECISIONS };
+  const learningDir = path15.join(guildRoot, ".guild", "runs", opts.runId, "learning");
+  fs13.mkdirSync(learningDir, { recursive: true });
+  const checkpointFile = path15.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
+  const reflectionsRelPath = `.guild/reflections/${opts.runId}.md`;
+  const reflectionsAbsPath = path15.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
+  const observed = opts.observed ?? [];
+  const yaml2 = buildYaml({
+    runId: opts.runId,
+    phase: opts.phase,
+    evidenceRef: opts.evidenceRef,
+    decisions,
+    observed,
+    reflectionsPath: reflectionsRelPath,
+    knowledgeLinksBatch: links,
+    ...opts.backstop === true ? { backstop: true } : {}
+  });
+  fs13.writeFileSync(checkpointFile, yaml2, "utf8");
+  appendReflections(guildRoot, opts.runId, opts.phase, decisions);
+  appendKnowledgeLinksIndex(guildRoot, links);
+  void reflectionsAbsPath;
+  return checkpointFile;
+}
+function main2() {
+  const runId = process.env["GUILD_RUN_ID"];
+  const phase = process.env["GUILD_PHASE"];
+  const evidenceRef = process.env["GUILD_EVIDENCE_REF"] ?? "none";
+  const guildRoot = process.env["GUILD_CWD"] ?? process.cwd();
+  const verdictPath = process.env["GUILD_CHECKPOINT_VERDICT"];
+  const linksPath = process.env["GUILD_CHECKPOINT_LINKS"];
+  if (!runId) {
+    process.stderr.write("[emit-learning-checkpoint] ERROR: GUILD_RUN_ID not set\n");
+    process.exit(1);
+  }
+  if (!phase) {
+    process.stderr.write("[emit-learning-checkpoint] ERROR: GUILD_PHASE not set\n");
+    process.exit(1);
+  }
+  const artifactsJsonPath = process.env["GUILD_CHECKPOINT_ARTIFACTS_JSON"];
+  let decisions;
+  if (verdictPath) {
+    try {
+      const raw = fs13.readFileSync(verdictPath, "utf8");
+      decisions = JSON.parse(raw);
+    } catch (e) {
+      process.stderr.write(
+        `[emit-learning-checkpoint] WARN: could not read GUILD_CHECKPOINT_VERDICT (${verdictPath}): ${String(e)}
+`
+      );
+    }
+  }
+  if (decisions === void 0 && artifactsJsonPath) {
+    try {
+      const rawArtifacts = fs13.readFileSync(artifactsJsonPath, "utf8");
+      const artifacts = JSON.parse(rawArtifacts);
+      if (!artifacts.runId) artifacts.runId = runId;
+      if (!artifacts.phase) artifacts.phase = phase ?? void 0;
+      if (!artifacts.evidenceRef) artifacts.evidenceRef = evidenceRef !== "none" ? evidenceRef : void 0;
+      const verdict = classifyPhase(artifacts);
+      decisions = verdict;
+      process.stderr.write(
+        `[emit-learning-checkpoint] INFO: classified artifacts \u2192 non-none: ${Object.entries(verdict).filter(([, v]) => v !== "none").map(([k]) => k).join(", ") || "none"}
+`
+      );
+    } catch (e) {
+      process.stderr.write(
+        `[emit-learning-checkpoint] WARN: could not classify GUILD_CHECKPOINT_ARTIFACTS_JSON (${artifactsJsonPath}): ${String(e)}
+`
+      );
+    }
+  }
+  let knowledgeLinksBatch = [];
+  if (linksPath) {
+    try {
+      const raw = fs13.readFileSync(linksPath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        knowledgeLinksBatch = parsed;
+      } else {
+        process.stderr.write(
+          `[emit-learning-checkpoint] WARN: GUILD_CHECKPOINT_LINKS JSON is not an array \u2014 ignoring (${linksPath})
+`
+        );
+      }
+    } catch (e) {
+      process.stderr.write(
+        `[emit-learning-checkpoint] WARN: could not read GUILD_CHECKPOINT_LINKS (${linksPath}): ${String(e)}
+`
+      );
+    }
+  }
+  try {
+    const written = writeCheckpoint({
+      runId,
+      phase,
+      evidenceRef,
+      guildRoot,
+      decisions,
+      knowledgeLinksBatch
+      // populated from GUILD_CHECKPOINT_LINKS (was deferred [] in Wave 1)
+    });
+    process.stdout.write(written + "\n");
+  } catch (e) {
+    process.stderr.write(`[emit-learning-checkpoint] ERROR: ${String(e)}
+`);
+    process.exit(1);
+  }
+}
+if (process.argv[1] !== void 0 && (process.argv[1].endsWith("emit-learning-checkpoint.ts") || process.argv[1].endsWith("emit-learning-checkpoint.js"))) {
+  main2();
+}
+
+// lib/heartbeat.ts
+var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
+
+// lib/run-trace.ts
+function resolveRunIdForTrace(root, env) {
+  const fromEnv = env.GUILD_RUN_ID;
+  if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
+  const legacy = readSentinel(path16.join(root, ".guild", "runs", "current-run-id"));
+  if (legacy) return legacy;
+  const b2 = readSentinel(path16.join(root, ".guild", "current-run-id"));
+  if (b2) return b2;
+  return null;
+}
+function readSentinel(p) {
+  try {
+    const v = fs14.readFileSync(p, "utf8").trim();
+    return v.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 // ../scripts/lib/artifact-bus.ts
-var fs8 = __toESM(require("fs"));
-var path8 = __toESM(require("path"));
+var fs15 = __toESM(require("fs"));
+var path17 = __toESM(require("path"));
 var import_crypto = require("crypto");
 
 // ../scripts/node_modules/js-yaml/dist/js-yaml.mjs
@@ -3535,10 +11103,10 @@ var BUS_EVENT_KINDS = [
   "artifact.retracted"
 ];
 function busDir(runDir) {
-  return path8.join(runDir, "bus");
+  return path17.join(runDir, "bus");
 }
 function busLogPath(runDir) {
-  return path8.join(busDir(runDir), "log.jsonl");
+  return path17.join(busDir(runDir), "log.jsonl");
 }
 function sha256(content) {
   return (0, import_crypto.createHash)("sha256").update(content).digest("hex");
@@ -3610,14 +11178,14 @@ function validateBusSubscriberV1(obj) {
   };
 }
 function atomicWrite(target, data) {
-  fs8.mkdirSync(path8.dirname(target), { recursive: true });
+  fs15.mkdirSync(path17.dirname(target), { recursive: true });
   const tmp = `${target}.tmp-${process.pid}-${sha256(target + data).slice(0, 8)}`;
-  fs8.writeFileSync(tmp, data);
-  fs8.renameSync(tmp, target);
+  fs15.writeFileSync(tmp, data);
+  fs15.renameSync(tmp, target);
 }
 var BusLockTimeout = class extends Error {
   constructor(runDir) {
-    super(`artifact-bus: could not acquire ${path8.join(busDir(runDir), ".lock")} within timeout`);
+    super(`artifact-bus: could not acquire ${path17.join(busDir(runDir), ".lock")} within timeout`);
     this.name = "BusLockTimeout";
   }
 };
@@ -3628,14 +11196,14 @@ function sleepMs(ms) {
   }
 }
 function withLock(runDir, fn) {
-  const lock = path8.join(busDir(runDir), ".lock");
-  fs8.mkdirSync(busDir(runDir), { recursive: true });
+  const lock = path17.join(busDir(runDir), ".lock");
+  fs15.mkdirSync(busDir(runDir), { recursive: true });
   const deadline = Date.now() + 5e3;
   let fd = null;
   for (; ; ) {
     try {
-      fd = fs8.openSync(lock, "wx");
-      fs8.writeSync(fd, String(process.pid));
+      fd = fs15.openSync(lock, "wx");
+      fs15.writeSync(fd, String(process.pid));
       break;
     } catch (e) {
       if (e.code !== "EEXIST") throw e;
@@ -3647,8 +11215,8 @@ function withLock(runDir, fn) {
     return fn();
   } finally {
     try {
-      if (fd !== null) fs8.closeSync(fd);
-      fs8.unlinkSync(lock);
+      if (fd !== null) fs15.closeSync(fd);
+      fs15.unlinkSync(lock);
     } catch {
     }
   }
@@ -3656,7 +11224,7 @@ function withLock(runDir, fn) {
 function readBusLog(runDir) {
   let raw;
   try {
-    raw = fs8.readFileSync(busLogPath(runDir), "utf8");
+    raw = fs15.readFileSync(busLogPath(runDir), "utf8");
   } catch {
     return [];
   }
@@ -3672,10 +11240,10 @@ function readBusLog(runDir) {
   return out;
 }
 function readSubscribers(runDir) {
-  const dir = path8.join(busDir(runDir), "subscribers");
+  const dir = path17.join(busDir(runDir), "subscribers");
   let entries;
   try {
-    entries = fs8.readdirSync(dir);
+    entries = fs15.readdirSync(dir);
   } catch {
     return [];
   }
@@ -3683,7 +11251,7 @@ function readSubscribers(runDir) {
   for (const name of entries) {
     if (!name.endsWith(".yaml")) continue;
     try {
-      const sub = validateBusSubscriberV1(load(fs8.readFileSync(path8.join(dir, name), "utf8")));
+      const sub = validateBusSubscriberV1(load(fs15.readFileSync(path17.join(dir, name), "utf8")));
       if (sub) out.push(sub);
     } catch {
     }
@@ -3703,13 +11271,13 @@ function fanout(runDir, event) {
 var FANOUT_CURSOR = ".fanout-cursor";
 var FANOUT_LOG = "fanout.jsonl";
 function processFanout(runDir, now) {
-  if (!fs8.existsSync(busLogPath(runDir))) return { processed: 0, delivered: 0, deferred: 0 };
+  if (!fs15.existsSync(busLogPath(runDir))) return { processed: 0, delivered: 0, deferred: 0 };
   try {
     return withLock(runDir, () => {
-      const cursorPath = path8.join(busDir(runDir), FANOUT_CURSOR);
+      const cursorPath = path17.join(busDir(runDir), FANOUT_CURSOR);
       let cursor = -1;
       try {
-        cursor = Number(fs8.readFileSync(cursorPath, "utf8").trim());
+        cursor = Number(fs15.readFileSync(cursorPath, "utf8").trim());
         if (!Number.isFinite(cursor)) cursor = -1;
       } catch {
       }
@@ -3730,7 +11298,7 @@ function processFanout(runDir, now) {
           deferred += 1;
         }
       }
-      if (lines.length > 0) fs8.appendFileSync(path8.join(busDir(runDir), FANOUT_LOG), lines.join("\n") + "\n");
+      if (lines.length > 0) fs15.appendFileSync(path17.join(busDir(runDir), FANOUT_LOG), lines.join("\n") + "\n");
       if (maxSeq > cursor) atomicWrite(cursorPath, String(maxSeq));
       return { processed: fresh.length, delivered, deferred };
     });
@@ -3741,8 +11309,8 @@ function processFanout(runDir, now) {
 }
 
 // lib/context-compliance.ts
-var fs9 = __toESM(require("node:fs"));
-var path9 = __toESM(require("node:path"));
+var fs16 = __toESM(require("node:fs"));
+var path18 = __toESM(require("node:path"));
 
 // lib/v1.4/log-jsonl-schema.ts
 var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -3776,7 +11344,7 @@ var import_node_path2 = require("node:path");
 var import_node_zlib = require("node:zlib");
 
 // lib/trace-v2.ts
-var SIDECAR_MAX_BYTES = 16 * 1024;
+var SIDECAR_MAX_BYTES2 = 16 * 1024;
 function pruneUndefined(obj) {
   const out = {};
   for (const [k, v] of Object.entries(obj)) {
@@ -3786,7 +11354,7 @@ function pruneUndefined(obj) {
 }
 
 // lib/v1.4/log-jsonl-writer.ts
-function liveLogPath(runDir) {
+function liveLogPath2(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "v1.4-events.jsonl");
 }
 function archiveDir(runDir) {
@@ -3810,9 +11378,9 @@ function appendEvent(runDir, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId = opts.laneId ?? "global";
-    const path11 = laneFallbackPath(runDir, laneId);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path11), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path11, "a");
+    const path20 = laneFallbackPath(runDir, laneId);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path20), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path20, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -3820,7 +11388,7 @@ function appendEvent(runDir, event, opts = {}) {
     }
     return;
   }
-  const live = liveLogPath(runDir);
+  const live = liveLogPath2(runDir);
   (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(live), { recursive: true });
   withStableLock(runDir, () => {
     const fd = (0, import_node_fs2.openSync)(live, "a");
@@ -3846,14 +11414,14 @@ function nextRotationIndex(runDir) {
   return max + 1;
 }
 function maybeRotateLocked(runDir, thresholdBytes) {
-  const live = liveLogPath(runDir);
+  const live = liveLogPath2(runDir);
   if (!(0, import_node_fs2.existsSync)(live)) return;
   const size = (0, import_node_fs2.statSync)(live).size;
   if (size < thresholdBytes) return;
   rotateLocked(runDir);
 }
 function rotateLocked(runDir) {
-  const live = liveLogPath(runDir);
+  const live = liveLogPath2(runDir);
   const archive = archiveDir(runDir);
   (0, import_node_fs2.mkdirSync)(archive, { recursive: true });
   const n = nextRotationIndex(runDir);
@@ -3884,18 +11452,18 @@ function rotateLocked(runDir) {
 }
 
 // lib/v1.4/log-jsonl-sidecar.ts
-var SIDECAR_MAX_BYTES2 = 1024 * 1024;
+var SIDECAR_MAX_BYTES3 = 1024 * 1024;
 
 // lib/context-compliance.ts
 var CONTEXT_COMPLIANCE_SCHEMA = "guild.context_compliance.v1";
 function bundleRelPath(runId, specialist, taskId) {
-  return path9.join(".guild", "context", runId, `${specialist}-${taskId}.md`);
+  return path18.join(".guild", "context", runId, `${specialist}-${taskId}.md`);
 }
 function bundleAbsPath(guildRoot, runId, specialist, taskId) {
-  return path9.join(guildRoot, bundleRelPath(runId, specialist, taskId));
+  return path18.join(guildRoot, bundleRelPath(runId, specialist, taskId));
 }
 function dispatchTraceAbsPath(runDir) {
-  return path9.join(runDir, "dispatch-trace.md");
+  return path18.join(runDir, "dispatch-trace.md");
 }
 var FILE_TOKEN_RE = /\b[\w@~+./-]*[\w@~+-]\.[A-Za-z][A-Za-z0-9]{0,8}\b/;
 function laneTokens(specialist, taskId) {
@@ -3972,14 +11540,14 @@ function evaluateContextCompliance(opts) {
   let bundleExists = false;
   try {
     const abs = bundleAbsPath(guildRoot, runId, specialist, taskId);
-    bundleExists = fs9.existsSync(abs) && fs9.statSync(abs).size > 0;
+    bundleExists = fs16.existsSync(abs) && fs16.statSync(abs).size > 0;
   } catch {
     bundleExists = false;
   }
   let traceContent = null;
   try {
     const tracePath = dispatchTraceAbsPath(runDir);
-    if (fs9.existsSync(tracePath)) traceContent = fs9.readFileSync(tracePath, "utf8");
+    if (fs16.existsSync(tracePath)) traceContent = fs16.readFileSync(tracePath, "utf8");
   } catch {
     traceContent = null;
   }
@@ -3989,7 +11557,7 @@ function evaluateContextCompliance(opts) {
 }
 function appendComplianceLog(runDir, runId, specialist, taskId, result) {
   try {
-    fs9.mkdirSync(runDir, { recursive: true });
+    fs16.mkdirSync(runDir, { recursive: true });
     const rec = {
       schema_version: CONTEXT_COMPLIANCE_SCHEMA,
       ts: (/* @__PURE__ */ new Date()).toISOString(),
@@ -4005,8 +11573,8 @@ function appendComplianceLog(runDir, runId, specialist, taskId, result) {
       gap: result.gap,
       reason: result.reason
     };
-    fs9.appendFileSync(
-      path9.join(runDir, "context-compliance.jsonl"),
+    fs16.appendFileSync(
+      path18.join(runDir, "context-compliance.jsonl"),
       JSON.stringify(rec) + "\n",
       "utf8"
     );
@@ -4060,14 +11628,14 @@ function die(reason) {
 `);
   process.exit(1);
 }
-function deriveRunId(sessionId) {
-  return process.env["GUILD_RUN_ID"] ?? `run-${sessionId}`;
+function deriveRunId(sessionId, guildRoot) {
+  return resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ?? `run-${sessionId}`;
 }
 function receiptPath(guildRoot, runId, specialist, taskId) {
-  return path10.join(guildRoot, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
+  return path19.join(guildRoot, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
 }
 function learningsPath(guildRoot, runId, specialist, taskId) {
-  return path10.join(guildRoot, ".guild", "runs", runId, "learnings", `${specialist}-${taskId}.json`);
+  return path19.join(guildRoot, ".guild", "runs", runId, "learnings", `${specialist}-${taskId}.json`);
 }
 function missingFields(content) {
   return REQUIRED_FIELDS.filter((field) => {
@@ -4126,7 +11694,7 @@ function persistRunState(runDir, runId, specialist, taskId, status, tier, depend
   try {
     const patch = {
       status,
-      receipt_ref: path10.join("handoffs", `${specialist}-${taskId}.md`)
+      receipt_ref: path19.join("handoffs", `${specialist}-${taskId}.md`)
     };
     if (tier !== void 0) patch.tier = tier;
     if (dependsOn.length > 0) patch.depends_on = dependsOn;
@@ -4143,7 +11711,7 @@ function persistRunState(runDir, runId, specialist, taskId, status, tier, depend
   }
 }
 function runStatePathHint(runDir) {
-  return path10.join(runDir, "run-state.json");
+  return path19.join(runDir, "run-state.json");
 }
 function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialist, taskId) {
   const sec = readSecurityConfig(guildRoot);
@@ -4151,7 +11719,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
   if (scrubResult.ok) {
     let rewriteOk = false;
     try {
-      fs10.writeFileSync(rPath, scrubResult.value, "utf8");
+      fs17.writeFileSync(rPath, scrubResult.value, "utf8");
       rewriteOk = true;
     } catch (err) {
       process.stderr.write(
@@ -4166,7 +11734,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
   const quarantinePath = rPath + ".quarantined";
   let quarantineDone = false;
   try {
-    fs10.renameSync(rPath, quarantinePath);
+    fs17.renameSync(rPath, quarantinePath);
     quarantineDone = true;
   } catch (err) {
     process.stderr.write(
@@ -4177,7 +11745,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
   if (!quarantineDone) {
     let canonicalRemoved = false;
     try {
-      fs10.writeFileSync(
+      fs17.writeFileSync(
         rPath,
         "[SCRUB-BLOCKED: handoff receipt removed by Guild HK-06 secret scrub \u2014 original content quarantine failed, raw destroyed at canonical path]\n",
         "utf8"
@@ -4185,7 +11753,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
       canonicalRemoved = true;
     } catch {
       try {
-        fs10.unlinkSync(rPath);
+        fs17.unlinkSync(rPath);
         canonicalRemoved = true;
       } catch {
       }
@@ -4198,7 +11766,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
           event_type: "secret_scrub_blocked",
           decision: "blocked",
           tool: "task-completed/handoff-scrub",
-          detail: `CRITICAL: Cannot remove raw handoff receipt "${path10.basename(rPath)}" from canonical path \u2014 quarantine AND overwrite/unlink both failed. Raw secret may persist. Lane blocked. Manual remediation required.`,
+          detail: `CRITICAL: Cannot remove raw handoff receipt "${path19.basename(rPath)}" from canonical path \u2014 quarantine AND overwrite/unlink both failed. Raw secret may persist. Lane blocked. Manual remediation required.`,
           permission_mode: "blocked"
         });
         appendSecurityEvent(runDir, evt);
@@ -4209,7 +11777,7 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
       );
     }
     process.stderr.write(
-      `[task-completed] WARN: HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path10.basename(rPath)}.
+      `[task-completed] WARN: HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path19.basename(rPath)}.
 `
     );
   }
@@ -4231,8 +11799,8 @@ function scrubHandoffReceipt(rPath, content, guildRoot, runDir, runId, specialis
 }
 function persistInjectionAudit(runDir, taskId, specialist, injectionClean) {
   try {
-    const logsDir = path10.join(runDir, "logs");
-    fs10.mkdirSync(logsDir, { recursive: true });
+    const logsDir = path19.join(runDir, "logs");
+    fs17.mkdirSync(logsDir, { recursive: true });
     const record = {
       schema_version: "guild.injection_audit.v1",
       ts: (/* @__PURE__ */ new Date()).toISOString(),
@@ -4240,8 +11808,8 @@ function persistInjectionAudit(runDir, taskId, specialist, injectionClean) {
       specialist,
       injection_clean: injectionClean
     };
-    fs10.appendFileSync(
-      path10.join(logsDir, "injection-audit.jsonl"),
+    fs17.appendFileSync(
+      path19.join(logsDir, "injection-audit.jsonl"),
       JSON.stringify(record) + "\n",
       "utf8"
     );
@@ -4252,7 +11820,7 @@ function persistInjectionAudit(runDir, taskId, specialist, injectionClean) {
     );
   }
 }
-async function main() {
+async function main3() {
   const agentTeamEnabled = process.env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] === "1";
   if (!agentTeamEnabled) {
     process.exit(0);
@@ -4274,16 +11842,16 @@ async function main() {
   const specialist = (payload.teammate_name ?? "").trim() || "unknown";
   const cwd = payload.cwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
-  const runId = deriveRunId(sessionId);
-  const runDir = path10.join(guildRoot, ".guild", "runs", runId);
+  const runId = deriveRunId(sessionId, guildRoot);
+  const runDir = path19.join(guildRoot, ".guild", "runs", runId);
   const rPath = receiptPath(guildRoot, runId, specialist, taskId);
-  if (!fs10.existsSync(rPath)) {
+  if (!fs17.existsSync(rPath)) {
     die(
       `Task "${taskId}" (specialist: "${specialist}") has no handoff receipt. Expected at: ${rPath}
 Write the receipt with sections: ${REQUIRED_FIELDS.join(", ")} before marking complete.`
     );
   }
-  const content = fs10.readFileSync(rPath, "utf8");
+  const content = fs17.readFileSync(rPath, "utf8");
   const missing = missingFields(content);
   if (missing.length > 0) {
     die(
@@ -4419,7 +11987,7 @@ Add a fenced \`\`\`guild.handoff.v2 { ... } \`\`\` JSON block to the receipt bef
   );
   process.exit(0);
 }
-main().catch((err) => {
+main3().catch((err) => {
   process.stderr.write(
     `[task-completed] FATAL: ${err instanceof Error ? err.message : String(err)}
 `

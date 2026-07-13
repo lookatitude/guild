@@ -5,7 +5,16 @@
  *   cd tests && npx tsx rearch/run-all.ts --prove    # anti-vacuity self-test of every rail
  *
  * Exit code: non-zero iff a STRICT rail is RED (advisory rails never block).
- * Strict rails: R-DUP, R-DIST, R-DEP (layering floor), R-HOST, R-SEC.  Advisory rails: R-VAC.
+ *
+ * 10 rails, as of plugin-audit-remediation lane G9 (2026-07):
+ *   STRICT   — R-DUP, R-DEP (layering floor), R-DIST, R-HOST, R-SEC, R-TRACE, R-DECL.
+ *   ADVISORY — R-VAC, R-PERF, R-REACH.
+ *
+ * R-REACH ships advisory-first (see its own header for the graduation
+ * criterion — flip it to strict once one full cycle runs with zero
+ * unallowlisted findings); every other advisory rail here is advisory by
+ * permanent design (R-VAC lints test hygiene, R-PERF tracks perf budgets
+ * against a baseline that drifts with the host machine).
  */
 import { execFileSync } from "child_process";
 import * as path from "path";
@@ -19,14 +28,15 @@ import * as rsec from "./r-sec";
 import * as rperf from "./r-perf";
 import * as rtrace from "./r-trace";
 import * as rdecl from "./r-decl";
+import * as rreach from "./r-reach";
 
-const RAILS = [rdup, rdep, rvac, rdist, rhost, rsec, rperf, rtrace, rdecl];
+const RAILS = [rdup, rdep, rvac, rdist, rhost, rsec, rperf, rtrace, rdecl, rreach];
 
 if (process.argv.includes("--prove")) {
   // each rail's --prove throws on a vacuity failure; run them as child processes so one
   // broken rail does not abort the rest, and a non-zero child exit fails the suite.
   let failed = 0;
-  for (const f of ["r-dup", "r-dep", "r-vac", "r-dist", "r-host", "r-sec", "r-perf", "r-trace", "r-decl"]) {
+  for (const f of ["r-dup", "r-dep", "r-vac", "r-dist", "r-host", "r-sec", "r-perf", "r-trace", "r-decl", "r-reach"]) {
     try {
       execFileSync("npx", ["tsx", path.join(__dirname, `${f}.ts`), "--prove"], {
         stdio: "inherit",

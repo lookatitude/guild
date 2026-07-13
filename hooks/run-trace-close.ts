@@ -15,10 +15,29 @@
  * Only fires when:
  *   - a run-id is resolvable (an active /guild run), AND
  *   - run.yaml exists for it (a run B2's startRun actually opened), AND
- *   - it is not already closed (provenance.json absent ⇒ still open).
+ *   - either it is not yet closed (provenance.json absent), OR it WAS closed
+ *     but received more tool activity since (see "Reopen-on-activity" below).
  * A bare chat session, or a run whose entrypoint never called startRun, is a
  * silent no-op — we never fabricate a close for a run that was never started
  * (NN#7: every close needs a started run).
+ *
+ * Reopen-on-activity (hooks.json Stop-per-turn finding): Stop fires at the end
+ * of EVERY assistant turn, not at session end, so a multi-turn /guild
+ * lifecycle (e.g. guild:ideate's Socratic clarify loop yielding to the user,
+ * or separate /guild:<phase> commands sharing one sentinel-resolved run-id)
+ * gets its run marked `closed` after the FIRST turn — and every later turn's
+ * tool activity would otherwise attach to a run whose provenance is already
+ * frozen. Rather than guess at "is this phase terminal" (a run's phase set
+ * varies by command), this hook detects the SYMPTOM directly: if the run was
+ * previously closed but `newestPostCloseActivityMs()` shows tool/telemetry
+ * activity strictly after the recorded `closed_at`, the earlier close was
+ * premature — re-run the close path so provenance.json, the terminal learning
+ * checkpoint, and the run_closed trace line all reflect the LATEST state. A
+ * run that has genuinely gone quiet since its close is left alone (idempotent
+ * no-op, same as before). This composes with the pre-existing self-heal guard
+ * (closeStalePriorOpenRun, invoked when the NEXT run starts) for runs that
+ * never reach a later Stop at all — that guard finalizes truly-abandoned
+ * still-open runs; this one keeps a still-active run's CLOSED record current.
  *
  * Run-id resolution: GUILD_RUN_ID → .guild/runs/current-run-id (legacy) →
  *                    .guild/current-run-id (B2 sentinel). See lib/run-trace.ts.
@@ -38,7 +57,12 @@ import * as fs from "fs";
 import * as path from "path";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
-import { defaultResolveHost, emitRunClosed, resolveRunIdForTrace } from "./lib/run-trace.js";
+import {
+  defaultResolveHost,
+  emitRunClosed,
+  newestPostCloseActivityMs,
+  resolveRunIdForTrace,
+} from "./lib/run-trace.js";
 // L5a: host-neutral hook payload + Claude emitter. The local HookPayload is now
 // the shared `GuildHookEvent`; for Claude the emitter mapping is the identity, so
 // the run_closed trace behavior is preserved byte-for-byte.
@@ -47,6 +71,14 @@ import {
   readHookStdin,
   type GuildHookEvent,
 } from "./lib/guild-hook-event.js";
+
+/**
+ * Tolerance window (ms) for the reopen-on-activity check (see header). Newer
+ * activity strictly beyond this margin past `closed_at` is treated as a
+ * genuinely later turn; activity within it is attributed to the close
+ * operation's own second-precision timestamp + its own trace-line write.
+ */
+const REOPEN_TOLERANCE_MS = 2000;
 
 // ── HK-09 — terminal learning checkpoint resolution ───────────────────────
 
@@ -114,8 +146,50 @@ async function main(): Promise<void> {
   const runDir = path.join(root, ".guild", "runs", runId);
   // NN#7 guard — only close a run B2's startRun actually opened.
   if (!fs.existsSync(path.join(runDir, "run.yaml"))) process.exit(0);
-  // Already closed (provenance exists) — idempotent no-op.
-  if (fs.existsSync(path.join(runDir, "provenance.json"))) process.exit(0);
+
+  // Already closed? Check whether it's GENUINELY done or whether more tool
+  // activity landed after the earlier close (reopen-on-activity, see header).
+  const provenanceFile = path.join(runDir, "provenance.json");
+  if (fs.existsSync(provenanceFile)) {
+    let terminal = true; // conservative default: an unreadable provenance.json is never reopened
+    let closedAtMs = 0;
+    try {
+      const prov = JSON.parse(fs.readFileSync(provenanceFile, "utf8")) as {
+        status?: string;
+        closed_at?: string;
+      };
+      terminal = prov.status === "closed" || prov.status === "failed";
+      closedAtMs = typeof prov.closed_at === "string" ? Date.parse(prov.closed_at) : 0;
+    } catch {
+      /* unreadable provenance.json — terminal stays true, closedAtMs stays 0 */
+    }
+    if (terminal) {
+      const latestActivityMs = newestPostCloseActivityMs(root, runId);
+      // Tolerance absorbs two sources of same-invocation "self" lag that are
+      // NOT genuine later activity: (a) `closed_at` is second-precision
+      // (env.now() strips milliseconds — see lib/run-trace.ts), so it is
+      // always <= the real wall-clock instant it was captured at; (b)
+      // emitRunClosed's OWN run_closed trace-line append lands in
+      // logs/v1.4-events.jsonl (one of the candidate files) a few ms AFTER
+      // `closed_at` was computed, as an unavoidable side effect of the close
+      // that just happened. REOPEN_TOLERANCE_MS is generous relative to (a)+(b)
+      // (well under a second in practice) while staying far below the gap a
+      // genuinely later assistant turn would produce (seconds to minutes).
+      const noNewActivity =
+        latestActivityMs === 0 ||
+        !Number.isFinite(closedAtMs) ||
+        latestActivityMs <= closedAtMs + REOPEN_TOLERANCE_MS;
+      if (noNewActivity) {
+        process.exit(0); // genuinely done — idempotent no-op
+      }
+      process.stderr.write(
+        `[run-trace-close] run ${runId} received tool activity after its prior close ` +
+          `(closed_at=${new Date(closedAtMs).toISOString()}) — re-closing with the latest state.\n`,
+      );
+      // Fall through — recompute + re-emit the close below.
+    }
+    // terminal === false (e.g. status: "resumable") falls through unconditionally.
+  }
 
   // HK-09: populate provenance.json.final_learning_checkpoint
   const finalLearningCheckpoint = findTerminalCheckpoint(runDir, runId);

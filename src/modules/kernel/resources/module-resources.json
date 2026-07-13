@@ -8,21 +8,21 @@
       "id": "SessionStart:bootstrap.sh",
       "source_path": "hooks/bootstrap.sh",
       "resource_path": "resources/hooks/bootstrap.sh",
-      "sha256": "7ef6bde812ef554760bee9921056395c053ff185e6ce71aa558bac02b28a757e"
+      "sha256": "37798dcb5cc28c58e3f72d3ae1a0fd0200942520940757b91dab79c65f0f2e0d"
     },
     {
       "category": "hooks",
       "id": "SessionStart:detect-guild-version.js",
       "source_path": "hooks/dist/detect-guild-version.js",
       "resource_path": "resources/hooks/dist/detect-guild-version.js",
-      "sha256": "7fd89fc8ab397e776eca7feeea6f7036e577607e33f573988fa30ec22bdf40d4"
+      "sha256": "62681b8597adce32b0ce3ac4a6f247cfaff406ff6a0e7a1bf957e8ddb80c3a1b"
     },
     {
       "category": "hooks",
       "id": "SessionStart:update-check.js",
       "source_path": "hooks/dist/update-check.js",
       "resource_path": "resources/hooks/dist/update-check.js",
-      "sha256": "32cc3680f5995d35aea32c7e2c27b7dd8e2f70b36a0c9e812bb1de5f874d8b44"
+      "sha256": "fce7fc5128ed800238af61b55512b21c035d847efa191470ed762d1d2f450734"
     },
     {
       "category": "hooks",
@@ -36,7 +36,7 @@
       "id": "UserPromptSubmit:check-skill-coverage.sh",
       "source_path": "hooks/check-skill-coverage.sh",
       "resource_path": "resources/hooks/check-skill-coverage.sh",
-      "sha256": "647a7140bd844da00b43d5451b4b89d48e3ab0654462a50b0c1e3aff5cdc3daa"
+      "sha256": "5cd5278ff4be7d18cfb9313c14596a0bae1b008e75c7f5d7af1049872b586260"
     },
     {
       "category": "scripts",

@@ -3,14 +3,14 @@
  *
  * CH-2 — provider-neutral PaneAdapter implementations for mixed-host tmux teams.
  *
- * Contract (BY POINTER): docs/knowledge/decisions/v2-cross-host-orchestration.md
+ * Contract (BY POINTER): ADR: v2-cross-host-orchestration (workspace wiki)
  *   §CH-2 (PaneAdapter interface + ClaudePaneAdapter / CodexPaneAdapter),
  *   §CH-6 (fail-fast preflight). The `PaneAdapter` / `PaneSpec` / `PreflightResult`
  *   TYPES are defined in ./team-backend.ts (the lowest-level lib) so the backend
  *   can type against them without importing this file — this module imports the
  *   types + the shared pane primitives one-directionally (no cycle).
  *
- * Ships two adapters, registered in an `ADAPTERS` map keyed by `host_kind`:
+ * Ships FOUR bespoke adapters, registered in an `ADAPTERS` map keyed by `host_kind`:
  *   - ClaudePaneAdapter — emits the SAME command as the legacy `paneCommand`
  *     (byte-identical to the shipped launcher); injects the agent-team env gate
  *     + GUILD_RUN_ID; preflight `claude --version`.
@@ -18,9 +18,19 @@
  *     (NO Claude team env gate); preflight `codex --version` AND usable auth,
  *     where usable auth = a non-empty auth.json at CODEX_HOME/auth.json OR a
  *     non-empty OPENAI_API_KEY (refuses to spawn if both are absent — CH-6).
+ *   - AntigravityPaneAdapter / PiPaneAdapter — the two other LIVE-VALIDATED
+ *     (2026-06-14) CLI hosts.
  *
- * Adding a future host is one new adapter file + one ADAPTERS row —
- * no launcher-core change (CH-2 extension point).
+ * PLUS one GENERIC adapter, `WrappedCliPaneAdapter`, constructed on demand by
+ * `buildAdapters()` for every registry row (host-registry-schema.ts) that is a real
+ * `adapter_binding:"self"` CLI surface, is `dispatch_selectable:true`, and has no
+ * bespoke class above — today cursor / github-copilot / opencode / rovo-dev (G4b
+ * host-reachability fix: these 4 wrapped-CLI hosts had a `dispatch_selectable:true`
+ * registry row but NO adapter of any kind, so a lane routed to them could never
+ * actually spawn a pane). Adding a future plain wrapped-CLI host now needs ONLY a
+ * registry row — zero adapter-file edits — unless its real CLI needs a bespoke
+ * invocation shape, in which case give it its own class exactly like the four above
+ * (CH-2 extension point unchanged).
  *
  * Invariant: never writes anything. Adapters are pure command/env builders plus
  * a read-only preflight probe (injectable for tests).
@@ -36,6 +46,8 @@ import {
   type PreflightResult,
   type RunFn,
 } from "./team-backend";
+import { HOST_IDS, HOST_REGISTRY_ROWS, type HostRegistryEntry } from "./host-registry-schema";
+import { registryIdToCanonicalHostKind } from "./host-id-namespace";
 import { spawnSync } from "child_process";
 import * as nodefs from "fs";
 import * as nodepath from "path";
@@ -409,28 +421,162 @@ export class PiPaneAdapter implements PaneAdapter {
   }
 }
 
+// ── WrappedCliPaneAdapter (generic, registry-parameterized — G4b) ────────────
+
+/**
+ * Generic PaneAdapter for a "plain wrapped-CLI" registry row — ONE implementation
+ * parameterized by the host's `HostRegistryEntry` (detection.bin/subcommand,
+ * capabilities.permissions.launch_modes) instead of a bespoke per-host file.
+ * `buildAdapters()` constructs one of these for every `adapter_binding:"self"`,
+ * `surface_kind:"cli"`, `dispatch_selectable:true` registry row that has no bespoke
+ * class above (today: cursor, github-copilot, opencode, rovo-dev).
+ *
+ * Invocation shape: `<bin> [subcommand] -p '<prompt>'` — the same non-interactive
+ * print-mode convention already LIVE-VALIDATED for pi/antigravity (PiPaneAdapter /
+ * AntigravityPaneAdapter), not a fresh per-host guess. `subcommand` covers the two
+ * hosts whose capability is a subcommand of a shared bin (github-copilot → `gh
+ * copilot`, rovo-dev → `acli rovodev`); absent for cursor/opencode (their own bin).
+ *
+ * `capabilities.permissions.launch_modes` is read (not hardcoded) so a future
+ * live-verified row that fills in real launch-mode argv flows through with zero
+ * adapter-code change — every current wrapped-CLI row ships that block empty
+ * (INFERRED/off-box), so `launchModeArgs()` returns `[]` today.
+ *
+ * INFERRED posture (provenance:"inferred" on every row this adapter serves):
+ * `preflight()` only checks the binary (+ subcommand) responds to `--version` — it
+ * does NOT gate on `detection.requires_auth` (the registry's `auth_probe` is a
+ * detection-time signal for `guild-run`/team-compose availability checks, not
+ * something this adapter re-implements); a host that actually needs auth will fail
+ * at spawn time with its own error, which is no worse than the pre-fix state where
+ * the host could not be dispatched to AT ALL.
+ */
+export class WrappedCliPaneAdapter implements PaneAdapter {
+  readonly hostKind: HostKind;
+  readonly adapterVersion = ADAPTER_VERSION;
+  private run: RunFn;
+  private readonly bin: string;
+  private readonly subcommand: string | null;
+  private readonly requiresAuth: boolean;
+
+  constructor(row: HostRegistryEntry, hostKind: HostKind, opts: AdapterOpts = {}) {
+    if (!row.detection.bin) {
+      throw new Error(
+        `WrappedCliPaneAdapter: registry row "${row.host_id}" has no detection.bin — ` +
+          `a "self"-bound CLI adapter requires one (an agents-file row should never reach here).`
+      );
+    }
+    this.hostKind = hostKind;
+    this.run = opts.run ?? defaultRun;
+    this.bin = row.detection.bin;
+    this.subcommand = row.detection.subcommand ?? null;
+    this.requiresAuth = row.detection.requires_auth;
+  }
+
+  private argvPrefix(): string[] {
+    return this.subcommand ? [this.subcommand] : [];
+  }
+
+  private display(): string {
+    return this.subcommand ? `${this.bin} ${this.subcommand}` : this.bin;
+  }
+
+  preflight(): PreflightResult {
+    // Probe shape mirrors the install-detection SoT: subcommand hosts are
+    // probed as `<bin> <subcommand> --help` (a wrapper subcommand like
+    // `gh copilot` or `acli rovodev` may not implement --version), bare CLIs
+    // as `<bin> --version`.
+    const probeArgs = this.subcommand ? [this.subcommand, "--help"] : ["--version"];
+    const r = this.run(this.bin, probeArgs);
+    if (r.status !== 0) {
+      return {
+        ok: false,
+        message:
+          `\`${this.display()}\` not found or not runnable (${this.display()} ${probeArgs[probeArgs.length - 1]} failed). ` +
+          `Install it and ensure \`${this.bin}\` is on PATH.` +
+          (this.requiresAuth
+            ? ` This host also requires its own auth (registry auth_probe) — sign in before dispatching a lane here.`
+            : ""),
+      };
+    }
+    return {
+      ok: true,
+      message:
+        `${this.display()} ${probeArgs[probeArgs.length - 1]} ok` +
+        (this.requiresAuth
+          ? ` — NOTE: this host requires auth (registry auth_probe); the probe verifies the binary, not the session. An unauthenticated CLI will fail at lane spawn.`
+          : ""),
+    };
+  }
+
+  command(spec: PaneSpec): string {
+    const taskFragment = spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
+    const specialistFragment = spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
+    const scopeFragment = spec.capability_scope !== undefined
+      ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
+    const argv = [this.bin, ...this.argvPrefix(), "-p", shellQuote(spec.prompt)].join(" ");
+    return (
+      `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
+      `${argv}; ` +
+      `exec $SHELL`
+    );
+  }
+
+  env(spec: PaneSpec): Record<string, string> {
+    return {
+      GUILD_RUN_ID: spec.runId,
+      ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
+      ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
+      ...(spec.capability_scope !== undefined
+        ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}),
+      ...taskAssignmentEnv(spec),
+    };
+  }
+
+  /** No Claude hooks on any wrapped CLI → file-bus receipts + approvals only. */
+  expectedOutputs(): Array<"heartbeat" | "handoff_receipt" | "approval_request"> {
+    return ["handoff_receipt", "approval_request"];
+  }
+}
+
 // ── Adapter registry + resolver ───────────────────────────────────────────────
 
 /**
  * Build the `host_kind` → adapter map. Constructed per call so test seams (run /
- * env overrides) propagate to every adapter. A future host adds one row here.
+ * env overrides) propagate to every adapter. A future BESPOKE host adds one row
+ * here; a future PLAIN wrapped-CLI host needs no edit at all (see the generic loop
+ * below).
  *
- * Return type is `Partial<Record<HostKind, PaneAdapter>>` (HostKind has 9 hosts).
- * Wired Rung-1 (tmux CLI pane) adapters: claude + codex (reference, live-validated)
- * and antigravity-2 (the `agy` CLI) + pi ([v2-contract-only] — command construction
- * unit-tested, live validation + exact prompt-flag pending the runtime). Gemini was
- * discarded 2026-06-14 (sunset in favour of Antigravity). The remaining HostKinds
- * are NOT Rung-1 tmux panes — claude-code-desktop/web, codex-app, and the claude.ai
- * connector use different substrate/dispatch surfaces (host-adapter-contract.md
- * Surface 8 ladder). `resolveAdapter` throws on an unregistered key.
+ * Wired Rung-1 (tmux CLI pane) bespoke adapters: claude + codex (reference,
+ * live-validated) and antigravity-2 + pi (also LIVE-VALIDATED 2026-06-14 — see
+ * each class's own STATUS comment). Gemini was discarded 2026-06-14 (sunset in
+ * favour of Antigravity). claude-code-desktop/web, codex-app, and the claude.ai
+ * connector are NOT Rung-1 tmux panes — different substrate/dispatch surfaces
+ * (host-adapter-contract.md Surface 8 ladder), so they never get a PaneAdapter.
+ *
+ * G4b — the generic loop: every registry row (host-registry-schema.ts) that is
+ * `adapter_binding:"self"`, `surface_kind:"cli"`, `dispatch_selectable:true`, AND
+ * resolves to a HostKind (registryIdToCanonicalHostKind) with no bespoke adapter
+ * already registered above gets a `WrappedCliPaneAdapter`. `resolveAdapter` throws
+ * on an unregistered key.
  */
 export function buildAdapters(opts: AdapterOpts = {}): Partial<Record<HostKind, PaneAdapter>> {
-  return {
+  const adapters: Partial<Record<HostKind, PaneAdapter>> = {
     claude: new ClaudePaneAdapter(opts),
     codex: new CodexPaneAdapter(opts),
     "antigravity-2": new AntigravityPaneAdapter(opts),
     pi: new PiPaneAdapter(opts),
   };
+  for (const id of HOST_IDS) {
+    const row = HOST_REGISTRY_ROWS[id];
+    if (row.adapter_binding !== "self" || row.surface_kind !== "cli" || !row.dispatch_selectable) {
+      continue;
+    }
+    const hostKind = registryIdToCanonicalHostKind(id);
+    if (!hostKind || adapters[hostKind]) continue; // no HostKind surface, or already bespoke
+    adapters[hostKind] = new WrappedCliPaneAdapter(row, hostKind, opts);
+  }
+  return adapters;
 }
 
 /**

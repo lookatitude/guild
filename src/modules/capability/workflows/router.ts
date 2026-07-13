@@ -4,7 +4,7 @@
  * Cluster A — the capability routing function (Cluster A of the cross-host ADR).
  * Extracted from host-router.ts (W3 god-file split).
  *
- * Contract (BY POINTER): docs/knowledge/decisions/v2-cross-host-orchestration.md
+ * Contract (BY POINTER): ADR: v2-cross-host-orchestration (workspace wiki)
  *   §CR-1 (routing decision function), §CR-2 (capability pre-check),
  *   §CR-3 (ranked fallback chain — NO silent tier downgrade),
  *   §CR-4 (work-type → host affinity), §CR-5 (manifest freshness TTL),
@@ -158,7 +158,16 @@ export interface RouteOptions {
 // ── Decision ────────────────────────────────────────────────────────────────
 
 export interface ModelParams {
-  model: string;
+  /**
+   * G4b: optional, not a guaranteed string. A host with NO Guild-mapped model at
+   * this tier (e.g. codex-cli, or any dispatch_selectable registry row whose
+   * capabilities.models[tier].model is null) yields `model: undefined` — "no
+   * override, let the host use its own default" — rather than silently
+   * backfilling a Claude model name (getDefaultModelTierMap's prior behavior;
+   * see tier-defaults.ts CLAUDE_TIER_FALLBACK for the ONE remaining case that
+   * still applies it: a HostKind with no registry row at all).
+   */
+  model?: string;
   effort?: string;
   reasoning?: string;
   thinking?: string;
@@ -172,8 +181,12 @@ export interface RouteTarget {
   host: string;
   hostKind: HostKind;
   tier: Tier;
-  /** Legacy scalar retained for old receipts and docs. Mirrors modelParams.model. */
-  model: string;
+  /**
+   * Legacy scalar retained for old receipts and docs. Mirrors modelParams.model.
+   * G4b: `null` means the same thing `modelParams.model === undefined` means — no
+   * Guild-mapped model at this tier for this host; the host runs its own default.
+   */
+  model: string | null;
   /** R5 full model parameter object carried into dispatch and trace/run records. */
   modelParams: ModelParams;
 }
@@ -339,14 +352,15 @@ function toModelParams(resolved: ResolvedTierModel): ModelParams | null {
  *   settings.json models.tiers[tier][host_kind]   (operator override)
  *     → host.tier_models[tier]                     (RE-5 manifest fill, canonical)
  *     → host.tiers[tier]                           (legacy pre-TE-07 fallback)
- *     → built-in default                           (null ⇒ claude fallback)
+ *     → built-in default                           (registry-derived; null stays
+ *                                                    null — G4b, see ModelParams)
  */
 export function resolveModel(
   tier: Tier,
   host: RoutableHost,
   settingsOverride?: RouteOptions["settingsOverride"]
-): string {
-  return resolveModelParams(tier, host, settingsOverride).model;
+): string | null {
+  return resolveModelParams(tier, host, settingsOverride).model ?? null;
 }
 
 /**
@@ -364,7 +378,14 @@ export function resolveModelParams(
   // TE-07: read canonical `tier_models`; fall back to legacy `tiers` for old manifests.
   const fromManifest = host.tier_models?.[tier] ?? host.tiers?.[tier];
   if (typeof fromManifest === "string" && fromManifest.trim()) return { model: fromManifest.trim() };
-  return { model: getDefaultModelTierMap(host.host_kind)[tier] };
+  // G4b: the built-in default is now registry-derived and HONEST — a host whose
+  // registry row has no Guild-mapped model at this tier (e.g. codex-cli, or any of
+  // the new wrapped-CLI hosts) yields `model: undefined` here, NOT a silently
+  // backfilled Claude model name. `getDefaultModelTierMap` still returns
+  // CLAUDE_TIER_FALLBACK for a HostKind with no registry row at all (a dropped/
+  // unmapped kind) — that ONE case is unaffected.
+  const builtIn = getDefaultModelTierMap(host.host_kind)[tier];
+  return builtIn === null ? {} : { model: builtIn };
 }
 
 // ── route() — CR-1 ───────────────────────────────────────────────────────────
@@ -386,8 +407,17 @@ export function route(
   const requiredBackend = lane.requiredBackend ?? backendForMode(lane.mode);
 
   const rejected: RejectedHost[] = [];
+  const policyEligible: RoutableHost[] = [];
   const qualifying: RoutableHost[] = [];
 
+  // Single pass, SAME gate order/messages as before the fix (so the `rejected`
+  // trail and the qualifying path stay byte-identical to pre-fix behavior).
+  // The only addition is `policyEligible`: a host that clears the two hard
+  // POLICY gates (cross-host disabled, stale manifest) is bookmarked there —
+  // regardless of whether it goes on to fail a softer CAPABILITY gate below —
+  // so the TE-02 degrade-to-least-bad path can rank ONLY policy-eligible
+  // hosts. A policy-rejected host (an operator/trust decision, not a soft
+  // capability shortfall) must never win as "least-bad".
   for (const host of hosts) {
     const tag = (reason: string) =>
       rejected.push({ hostId: host.host_id, hostKind: host.host_kind, reason });
@@ -402,6 +432,8 @@ export function route(
       tag(`stale manifest (older than ${ttlS}s TTL)`);
       continue;
     }
+    policyEligible.push(host);
+
     // CR-1 step 1: tier support.
     if (!supportsTier(host, lane.tier)) {
       tag(`tier "${lane.tier}" not supported`);
@@ -427,14 +459,18 @@ export function route(
     qualifying.push(host);
   }
 
-  // TE-02: degrade-not-throw.
+  // TE-02: degrade-not-throw — but only among POLICY-ELIGIBLE hosts. A host
+  // excluded by a hard policy gate (cross-host disabled, stale manifest) must
+  // never win as "least-bad": that would silently violate the policy the gate
+  // exists to enforce. When no host is even policy-eligible, there is truly
+  // nothing to degrade to.
   if (qualifying.length === 0) {
-    if (hosts.length === 0) {
+    if (policyEligible.length === 0) {
       throw new RouteError(lane.taskId, rejected);
     }
 
-    // Rank all supplied hosts (same scoring + tiebreak as the normal path).
-    const leastBad = [...hosts].sort((a, b) => {
+    // Rank only policy-eligible hosts (same scoring + tiebreak as the normal path).
+    const leastBad = [...policyEligible].sort((a, b) => {
       const sa = rankScore(a, lane);
       const sb = rankScore(b, lane);
       if (sb !== sa) return sb - sa;
@@ -517,7 +553,7 @@ export function route(
     independence: "strong",
     reason:
       `primary=${primary.host}(${primary.hostKind}) tier=${primary.tier} ` +
-      `model=${primary.model}; ${fallbackChain.length} fallback(s); ` +
+      `model=${primary.model ?? "(host default — no Guild-mapped model)"}; ${fallbackChain.length} fallback(s); ` +
       `backend=${requiredBackend ?? "any"}; workType=${lane.workType ?? "none"}`,
     rejected,
     notes: [

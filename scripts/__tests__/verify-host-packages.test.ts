@@ -52,6 +52,82 @@ describe("verify generated host packages", () => {
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // Path-resolution gate CONTROL tests (audit fix item 5: prove the new pass
+  // actually catches the defects it was added for, not just that it runs).
+  // Each test mutates a freshly-built, otherwise-GREEN dist tree to reproduce
+  // exactly the shape of the fixed defect, then asserts verify fails closed
+  // with a message naming the dangling reference.
+  // ---------------------------------------------------------------------------
+
+  it("CONTROL: fails when a package omits a hooks/dist/*.js bundle its own commands invoke (item 1)", () => {
+    const distRoot = buildTempDist();
+    try {
+      fs.rmSync(path.join(distRoot, "claude-code", "hooks", "dist", "run-trace.js"), { force: true });
+      const result = verifyGeneratedHostPackages({ root: PLUGIN_ROOT, distRoot });
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes("hooks/dist/run-trace.js"))).toBe(true);
+    } finally {
+      fs.rmSync(distRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("CONTROL: fails when the AGENTS.md bootstrap points at a file the package doesn't ship (item 3)", () => {
+    const distRoot = buildTempDist();
+    try {
+      const agentsMd = path.join(distRoot, "agents", "AGENTS.md");
+      const original = fs.readFileSync(agentsMd, "utf8");
+      // Reproduce the pre-fix defect shape: point the bootstrap at SKILL.md
+      // instead of the SKILL.src.md that actually ships.
+      fs.writeFileSync(
+        agentsMd,
+        original.replace(
+          ".agents/skills/guild/meta/using-guild/SKILL.src.md",
+          ".agents/skills/guild/meta/using-guild/SKILL.md"
+        )
+      );
+      const result = verifyGeneratedHostPackages({ root: PLUGIN_ROOT, distRoot });
+      expect(result.ok).toBe(false);
+      expect(
+        result.errors.some((e) => e.includes("AGENTS.md") && e.includes("using-guild/SKILL.md"))
+      ).toBe(true);
+    } finally {
+      fs.rmSync(distRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("CONTROL: fails when a Pi manifest skills glob resolves to nothing (item 4)", () => {
+    const distRoot = buildTempDist();
+    try {
+      const manifestPath = path.join(distRoot, "pi", "pi-manifest.json");
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      // Reproduce the pre-fix defect shape: the Claude-shaped path that never
+      // existed in the Pi package tree at all.
+      manifest.skills = ["./skills/core/"];
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+      const result = verifyGeneratedHostPackages({ root: PLUGIN_ROOT, distRoot });
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes("skills glob") && e.includes("./skills/core/"))).toBe(true);
+    } finally {
+      fs.rmSync(distRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("CONTROL: fails when a Pi manifest command source_path points at a missing file (item 4)", () => {
+    const distRoot = buildTempDist();
+    try {
+      const manifestPath = path.join(distRoot, "pi", "pi-manifest.json");
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      manifest.commands = [{ name: "guild", source_path: "./commands/guild.md" }];
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+      const result = verifyGeneratedHostPackages({ root: PLUGIN_ROOT, distRoot });
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((e) => e.includes("commands/guild.md"))).toBe(true);
+    } finally {
+      fs.rmSync(distRoot, { recursive: true, force: true });
+    }
+  });
+
   it("CLI exits nonzero for a missing dist tree", () => {
     const missingDist = path.join(os.tmpdir(), `guild-missing-dist-${Date.now()}`);
     const res = spawnSync(path.join(__dirname, "..", "node_modules", ".bin", "tsx"), [

@@ -8,14 +8,14 @@
       "id": "PostToolUse:post-tool-use.js",
       "source_path": "hooks/dist/post-tool-use.js",
       "resource_path": "resources/hooks/dist/post-tool-use.js",
-      "sha256": "5c830281f8eeca3c1a74eb8f8012b7d7cb8460cd86558957e0d68b63dd1774d1"
+      "sha256": "4184057f646e2861a093993c32b60b1271891069cbfb76e54a88da9fe6038dd8"
     },
     {
       "category": "hooks",
       "id": "PreToolUse:pre-tool-use.js",
       "source_path": "hooks/dist/pre-tool-use.js",
       "resource_path": "resources/hooks/dist/pre-tool-use.js",
-      "sha256": "b54603ea810117b216de0087aeaee1fe8058d19345623d9f54bec98d912037a5"
+      "sha256": "fc107fe4b10798e5ba3cbfc586859cea4f88142fd07dcca066d55903621d65cf"
     },
     {
       "category": "scripts",
@@ -36,14 +36,14 @@
       "id": "lib/permission-policy",
       "source_path": "scripts/lib/permission-policy.ts",
       "resource_path": "resources/scripts/lib/permission-policy.ts",
-      "sha256": "acf2c3656dcff6ab5345d1746bf6b62c386bc930c3cd5c85286438ac3bbf5e47"
+      "sha256": "4728ebe3bb8ea30a74c661e50ae77542ab48dff2bc50e50cf6902f0c6664b96f"
     },
     {
       "category": "scripts",
       "id": "lib/permission-policy-schema",
       "source_path": "scripts/lib/permission-policy-schema.ts",
       "resource_path": "resources/scripts/lib/permission-policy-schema.ts",
-      "sha256": "24a78f198b91385ddbc864035f4b04c300368bb4534465ebe35855f1e61727fb"
+      "sha256": "46ca9c9fb4a4089057f2eff8b98d34ae6e4d5fdd2419dd30cd21692f92142f6b"
     },
     {
       "category": "scripts",
@@ -58,6 +58,13 @@
       "source_path": "scripts/lib/shared/scrub-redact.ts",
       "resource_path": "resources/scripts/lib/shared/scrub-redact.ts",
       "sha256": "1ff274fdf9c4249f3aa124e169bcd62f7d99d01cc8ab102faaf758c713772381"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/shared/secret-patterns",
+      "source_path": "scripts/lib/shared/secret-patterns.ts",
+      "resource_path": "resources/scripts/lib/shared/secret-patterns.ts",
+      "sha256": "688629f807cd877e8d87ff7dd49a33c6d2c09dd584a433e16dc6b66d9579792d"
     },
     {
       "category": "scripts",

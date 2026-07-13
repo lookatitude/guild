@@ -236,6 +236,10 @@ describe("Tier→model map resolution — end-to-end contract (ADR §1, VC-5)", 
     expect(status).toBe(0);
     const j = JSON.parse(out);
     const tiers = j.models.tiers;
+    // G4b (host-reachability): the registry grew from 9 to 16 host ids (4
+    // wrapped-CLI + 3 agents-file IDE hosts); config-defaults.ts's DEFAULTS.models.tiers
+    // now carries a slot for every one of them (see
+    // scripts/__tests__/config-defaults-tiers-host-ids.test.ts for the drift guard).
     const CANONICAL_HOST_KEYS = [
       "claude-code-cli",
       "codex-cli",
@@ -246,6 +250,13 @@ describe("Tier→model map resolution — end-to-end contract (ADR §1, VC-5)", 
       "claude-code-web",
       "codex-app",
       "claude-ai-connector",
+      "cursor",
+      "github-copilot",
+      "opencode",
+      "rovo-dev",
+      "kiro",
+      "qoder",
+      "trae",
     ];
     for (const tier of ["cheap", "mid", "powerful"]) {
       expect(tiers[tier]).toBeDefined();

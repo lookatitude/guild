@@ -8,7 +8,7 @@
       "id": "initiative",
       "source_path": "commands/initiative.md",
       "resource_path": "resources/commands/initiative.md",
-      "sha256": "4cf4137292d62ece238ce4cc5f3d8029e052de2eb184e5c52060d4ba8b1038d6"
+      "sha256": "f1965986d443183a3470d6c060fe24c7ab2af26f092cea3c38faaf29384bd603"
     },
     {
       "category": "scripts",
@@ -26,31 +26,17 @@
     },
     {
       "category": "scripts",
+      "id": "initiative-gate",
+      "source_path": "scripts/initiative-gate.ts",
+      "resource_path": "resources/scripts/initiative-gate.ts",
+      "sha256": "7651bf44c5f92113fa47af4b1314c2d3b1120699af42077f5b48c7a7d30d53fd"
+    },
+    {
+      "category": "scripts",
       "id": "lib/ideation-min-build",
       "source_path": "scripts/lib/ideation-min-build.ts",
       "resource_path": "resources/scripts/lib/ideation-min-build.ts",
       "sha256": "9f2bc07381dd3b12d31a35e882a4cbef15342bb6a48ee619b8e1f3ff2d552ed2"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/init-offer-initiative",
-      "source_path": "scripts/lib/init-offer-initiative.ts",
-      "resource_path": "resources/scripts/lib/init-offer-initiative.ts",
-      "sha256": "59999ff7f78397e6ab14b18e9492fa77a3596ea0097cdcb87eefba270fae7f55"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/init-resume-repair",
-      "source_path": "scripts/lib/init-resume-repair.ts",
-      "resource_path": "resources/scripts/lib/init-resume-repair.ts",
-      "sha256": "98b725d84e7232beddc73cfb14ce18cedecc2f241f8cd554306ccf2d5330d5e0"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/init-staging-gate",
-      "source_path": "scripts/lib/init-staging-gate.ts",
-      "resource_path": "resources/scripts/lib/init-staging-gate.ts",
-      "sha256": "f4753bf2359dbf1205e9c8f844cfa77aa8cc176b0ec915f077a0b7452eaacde2"
     },
     {
       "category": "scripts",
@@ -79,6 +65,13 @@
       "source_path": "skills/meta/decisions/SKILL.md",
       "resource_path": "resources/skills/meta/decisions/SKILL.md",
       "sha256": "a3105d8b3e918611df33f46b1376b26007f744c2a19a3031a32e038a7ce19da3"
+    },
+    {
+      "category": "skills",
+      "id": "guild-initiative",
+      "source_path": "skills/meta/initiative/SKILL.md",
+      "resource_path": "resources/skills/meta/initiative/SKILL.md",
+      "sha256": "d6b827bc99b7ee03f0e0f90bd557f9d1e9a05bd6640dc2067e19b9e62ec9bdff"
     },
     {
       "category": "skills",

@@ -2828,23 +2828,27 @@ var fs3 = __toESM(require("node:fs"));
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 function resolveGuildRoot(startCwd) {
-  let current = path.resolve(startCwd);
+  const resolvedStart = path.resolve(startCwd);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
   for (; ; ) {
     if (fs.existsSync(path.join(current, ".git"))) {
       return current;
     }
-    const guildDir = path.join(current, ".guild");
-    if (fs.existsSync(guildDir)) {
-      try {
-        if (fs.statSync(guildDir).isDirectory()) {
-          return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      if (fs.existsSync(guildDir)) {
+        try {
+          if (fs.statSync(guildDir).isDirectory()) {
+            nearestGuildDir = current;
+          }
+        } catch {
         }
-      } catch {
       }
     }
     const parent = path.dirname(current);
     if (parent === current) {
-      return path.resolve(startCwd);
+      return nearestGuildDir ?? resolvedStart;
     }
     current = parent;
   }

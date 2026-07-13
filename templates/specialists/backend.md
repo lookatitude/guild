@@ -25,13 +25,13 @@ Engineering group specialist. Owns the implementation layer between the architec
 
 ## Skills pulled
 
-- `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `backend-api-contract` (T5, exists) — REST/GraphQL/RPC contract shape: resource modeling, verb/status semantics, versioning, pagination, error envelope, idempotency.
-- `backend-data-layer` (T5, exists) — data-access patterns: repository boundaries, transaction scope, N+1 avoidance, read/write split, cache invalidation seams.
-- `backend-migration-writer` (T5, exists) — forward/backward-compatible schema migrations: expand-contract pattern, backfill strategy, lock/timeout hazards, rollback plan.
-- `backend-service-integration` (T5, exists) — external-service clients, queue consumers, worker jobs: timeouts, retries, idempotency keys, circuit breaking, dead-letter handling, contract tests.
+- `guild-principles` (core, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
+- `backend-api-contract` (specialists, exists) — REST/GraphQL/RPC contract shape: resource modeling, verb/status semantics, versioning, pagination, error envelope, idempotency.
+- `backend-data-layer` (specialists, exists) — data-access patterns: repository boundaries, transaction scope, N+1 avoidance, read/write split, cache invalidation seams.
+- `backend-migration-writer` (specialists, exists) — forward/backward-compatible schema migrations: expand-contract pattern, backfill strategy, lock/timeout hazards, rollback plan.
+- `backend-service-integration` (specialists, exists) — external-service clients, queue consumers, worker jobs: timeouts, retries, idempotency keys, circuit breaking, dead-letter handling, contract tests.
 
-All four `backend-*` T5 skills are authored and live under `skills/specialists/`; `guild:context-assemble` loads the relevant ones into the backend context bundle. `guild:tdd` + `guild:systematic-debug` remain available as complementary methodology.
+All four `backend-*` specialists-tier skills are authored and live under `skills/specialists/`; `guild:context-assemble` loads the relevant ones into the backend context bundle. `guild:tdd` + `guild:systematic-debug` remain available as complementary methodology.
 
 ## When to invoke
 
@@ -63,8 +63,8 @@ Implied-specialist rule: qa is auto-included whenever backend is on the team; se
 - Mobile implementation — `mobile` owns (iOS/Android/React Native/Expo).
 - Web frontend implementation — `frontend` owns (React/Vue/Svelte/Solid, bundler config, styling, a11y, frontend perf). Backend exposes the contract; frontend consumes it.
 - Content, marketing copy, API *documentation prose*, SEO — writing and commercial groups own those. Backend may supply a contract reference; `technical-writer` turns it into user-facing docs.
-- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — dev-team agents own these (see `.claude/agents/`).
+- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — Guild plugin/tooling internals, out of scope for a product specialist.
 
 **Boundary vs the generic `developer` (cost-aware-tiering-and-lean-context ADR §7):** any API / data-layer / migration / integration / queue / worker work is **backend's**, even when a lane is phrased generically ("build this", "implement that"). The generic `developer` (mid-tier) takes only domain-*less* residual lanes; if a developer lane turns out to be backend work, it hands off here. Backend does not defer its domain to `developer`.
 
-If backend work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md`) — main session routes the followup to the right specialist.
+If backend work crosses into any of the above lanes, list the crossing under `followups:` per the `guild.handoff.v2` receipt contract (`skills/meta/execute-plan` §"Handoff protocol") — main session routes the followup to the right specialist.

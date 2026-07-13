@@ -18,18 +18,11 @@
       "sha256": "2758b71d10f533dd306f9faa4e239e1d8b9821770df2f5505f068d7ddf3b4920"
     },
     {
-      "category": "scripts",
-      "id": "lib/dashboard-projector",
-      "source_path": "scripts/lib/dashboard-projector.ts",
-      "resource_path": "resources/scripts/lib/dashboard-projector.ts",
-      "sha256": "70e925d999992f3e2b92ff2ea9924853e704f0528d60c1c70c12a8a78474cfa5"
-    },
-    {
       "category": "skills",
       "id": "guild-dashboard",
       "source_path": "skills/meta/dashboard/SKILL.md",
       "resource_path": "resources/skills/meta/dashboard/SKILL.md",
-      "sha256": "c520c5d65461f80ae202f77218719fbf74aefbbb0b2d46c5928e18668b1e35dd"
+      "sha256": "1681aefc57e8d4682a8e7e1a45b009f404b6694c058d18963222c5a41c9c847e"
     }
   ]
 }
