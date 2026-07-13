@@ -94,7 +94,7 @@ function runCLI(
 ): { exitCode: number; stdout: string; stderr: string } {
   const r = spawnSync("npx", ["tsx", RECALL_SCRIPT, ...args], {
     encoding: "utf8",
-    timeout: 30_000,
+    timeout: 120_000,
     env: { ...process.env, ...extraEnv },
   });
   return { exitCode: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };

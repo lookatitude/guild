@@ -5,13 +5,13 @@
   "initiative": null,
   "retention_class": "one-off-90d",
   "started_at": "2026-07-13T02:06:09Z",
-  "closed_at": "2026-07-13T03:04:49Z",
+  "closed_at": "2026-07-13T03:11:07Z",
   "status": "closed",
   "run_class": "full",
   "terminal_trace_event": {
-    "event_id": "evt-38bbc1c8-68a8-4fca-b00a-4fe4d1fba2be",
+    "event_id": "evt-3fa716c5-4b59-44a8-a15b-47240455b7dc",
     "event_name": "run_closed",
-    "at": "2026-07-13T03:04:49Z",
+    "at": "2026-07-13T03:11:07Z",
     "log_ref": ".guild/runs/run-ce18ef45-cbf4-492c-ae83-<HIGH_ENTROPY_REDACTED>.4-events.jsonl"
   },
   "final_learning_checkpoint": null,

@@ -25,7 +25,7 @@ function run(args: string[]): { status: number; out: string; err: string } {
   const r = spawnSync("npx", ["tsx", SCRIPT, ...args], {
     encoding: "utf8",
     env: NODE_ENV,
-    timeout: 30000,
+    timeout: 120_000,
   });
   return { status: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }

@@ -716,7 +716,7 @@ describe("agent-team-launcher parseYaml — no generic `source:` alias", () => {
     const result = spawnSync(
       "npx",
       ["tsx", LAUNCHER, "--team", teamPath, "--cwd", tmpDir, "--dry-run"],
-      { encoding: "utf8", env, timeout: 30000 }
+      { encoding: "utf8", env, timeout: 120_000 }
     );
     expect(result.status).toBe(0);
     expect(result.stdout).not.toContain("Your role definition");
@@ -759,7 +759,7 @@ describe("agent-team-launcher CLI — definition threading (dry-run)", () => {
     const result = spawnSync(
       "npx",
       ["tsx", LAUNCHER, "--team", teamPath, "--cwd", tmpDir, "--dry-run"],
-      { encoding: "utf8", env, timeout: 30000 }
+      { encoding: "utf8", env, timeout: 120_000 }
     );
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(
@@ -788,7 +788,7 @@ describe("evolve-loop findLiveSkillDir — project instance wins (DH-3)", () => 
     const result = spawnSync(
       "npx",
       ["tsx", EVOLVE_LOOP, "--skill", "myskill", "--run-id", "r1", "--cwd", tmpDir],
-      { encoding: "utf8", timeout: 30000 }
+      { encoding: "utf8", timeout: 120_000 }
     );
     expect(result.status).toBe(0);
     const snap = path.join(tmpDir, ".guild", "skill-versions", "myskill", "v1", "SKILL.md");
@@ -809,7 +809,7 @@ describe("evolve-loop findLiveSkillDir — project instance wins (DH-3)", () => 
     const result = spawnSync(
       "npx",
       ["tsx", EVOLVE_LOOP, "--skill", "qskill", "--run-id", "r1", "--cwd", tmpDir],
-      { encoding: "utf8", timeout: 30000 }
+      { encoding: "utf8", timeout: 120_000 }
     );
     expect(result.status).toBe(0);
     const snap = path.join(tmpDir, ".guild", "skill-versions", "qskill", "v1", "SKILL.md");

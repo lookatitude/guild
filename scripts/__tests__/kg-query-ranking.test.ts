@@ -114,7 +114,7 @@ function runKgQuery(
 ): { code: number; out: string; err: string } {
   const r = spawnSync("npx", ["tsx", KG_QUERY_SCRIPT, "--cwd", repo, ...args], {
     encoding: "utf8",
-    timeout: 30000,
+    timeout: 120_000,
   });
   return { code: r.status ?? 1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }

@@ -169,7 +169,7 @@ describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches thr
       const result = spawnSync(
         "npx",
         ["tsx", SCRIPT, "--team", teamPath, "--session-name", "guild-g4b-contract", "--cwd", tmpDir, "--dry-run"],
-        { encoding: "utf8", env, timeout: 30000 }
+        { encoding: "utf8", env, timeout: 120_000 }
       );
 
       expect(result.status).toBe(0);

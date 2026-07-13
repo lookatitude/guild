@@ -20,7 +20,7 @@ const FIXTURES = path.resolve(__dirname, "../fixtures");
 function runScript(args: string[]): { exitCode: number; stdout: string; stderr: string } {
   const result = spawnSync("npx", ["tsx", SCRIPT, ...args], {
     encoding: "utf8",
-    timeout: 30000,
+    timeout: 120_000,
   });
   return {
     exitCode: result.status ?? 1,

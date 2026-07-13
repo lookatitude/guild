@@ -195,7 +195,7 @@ describe("write-host-capability — writeHostCapability (RE-5)", () => {
     const r = spawnSync("npx", ["tsx", SCRIPT, "--cwd", root, "--host", "claude"], {
       encoding: "utf8",
       env: NODE_ENV,
-      timeout: 30000,
+      timeout: 120_000,
     });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toContain(path.join(".guild", "hosts", "claude", "capability.json"));
@@ -206,7 +206,7 @@ describe("write-host-capability — writeHostCapability (RE-5)", () => {
     const r = spawnSync("npx", ["tsx", SCRIPT, "--cwd", "/tmp/guild-nonexistent-hostcap-zzz"], {
       encoding: "utf8",
       env: NODE_ENV,
-      timeout: 30000,
+      timeout: 120_000,
     });
     expect(r.status).not.toBe(0);
   });

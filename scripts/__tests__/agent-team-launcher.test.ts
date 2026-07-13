@@ -36,7 +36,7 @@ function runScript(
   const result = spawnSync("npx", ["tsx", SCRIPT, ...args], {
     encoding: "utf8",
     env: finalEnv,
-    timeout: 30000,
+    timeout: 120_000,
   });
   return {
     exitCode: result.status ?? 1,

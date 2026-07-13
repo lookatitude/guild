@@ -34,7 +34,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
-import { assertNotUnderPluginInstall } from "../../../../scripts/lib/guild-artifact-paths";
+import { assertNotUnderPluginInstall } from "./plugin-install-guard";
 
 /**
  * Write `content` to `targetPath` atomically: write to a hidden temp file in
