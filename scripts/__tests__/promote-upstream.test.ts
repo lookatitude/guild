@@ -37,7 +37,7 @@ const SCRIPT = path.resolve(__dirname, "../workspace/promote-upstream.ts");
 const NODE_ENV = {
   ...process.env,
   NODE_NO_WARNINGS: "1",
-  PATH: "/opt/homebrew/bin:/usr/bin:/bin",
+  PATH: `${require("node:path").dirname(process.execPath)}:${process.env["PATH"] ?? "/usr/bin:/bin"}`,
 } as NodeJS.ProcessEnv;
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────

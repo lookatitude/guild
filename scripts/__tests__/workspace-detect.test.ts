@@ -24,7 +24,7 @@ import * as os from "os";
 import * as path from "path";
 
 const SCRIPT = path.resolve(__dirname, "../workspace/detect.ts");
-const NODE_ENV = { ...process.env, NODE_NO_WARNINGS: "1", PATH: "/opt/homebrew/bin:/usr/bin:/bin" } as NodeJS.ProcessEnv;
+const NODE_ENV = { ...process.env, NODE_NO_WARNINGS: "1", PATH: `${require("node:path").dirname(process.execPath)}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, } as NodeJS.ProcessEnv;
 
 function run(args: string[]): { status: number; out: string; err: string } {
   const r = spawnSync("npx", ["tsx", SCRIPT, ...args], {

@@ -25,7 +25,7 @@ import {
 } from "../write-host-capability";
 
 const SCRIPT = path.resolve(__dirname, "../write-host-capability.ts");
-const NODE_ENV = { ...process.env, NODE_NO_WARNINGS: "1", PATH: "/opt/homebrew/bin:/usr/bin:/bin" } as NodeJS.ProcessEnv;
+const NODE_ENV = { ...process.env, NODE_NO_WARNINGS: "1", PATH: `${require("node:path").dirname(process.execPath)}:${process.env["PATH"] ?? "/usr/bin:/bin"}`, } as NodeJS.ProcessEnv;
 
 function mkTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "guild-hostcap-"));

@@ -263,9 +263,11 @@ describe("R6 .guild write locations and benchmark artifact fixture", () => {
 
   it("rejects project-created artifacts outside active .guild or under a plugin INSTALL dir (no .git)", () => {
     const cwd = repo();
-    // A true install cache has NO .git — that is the R6 rejection case.
-    const pluginInstall = path.join(cwd, "plugin-install");
-    fs.mkdirSync(pluginInstall, { recursive: true });
+    // A true install cache has NO .git — that is the R6 rejection case. It must
+    // live OUTSIDE any .git-having ancestor, or guild discovery legitimately
+    // climbs to the parent repo and the artifact lands outside the install dir.
+    const pluginInstall = mkTmp();
+    tmpDirs.push(pluginInstall);
     expect(() => assertProjectCreatedArtifactPath(path.join(cwd, "AGENTS.md"), cwd)).toThrow(/active \.guild/);
     expect(() => resolveGuildArtifactPath({ cwd: pluginInstall, kind: "agent", slug: "x", pluginInstallRoot: pluginInstall }))
       .toThrow(/plugin install dir/);
@@ -282,8 +284,8 @@ describe("R6 .guild write locations and benchmark artifact fixture", () => {
 
   it("uses plugin install env vars as a default rejection boundary", () => {
     const cwd = repo();
-    const pluginInstall = path.join(cwd, "plugin-install-env");
-    fs.mkdirSync(pluginInstall, { recursive: true }); // install cache: no .git
+    const pluginInstall = mkTmp(); // install cache: no .git, no .git ancestor
+    tmpDirs.push(pluginInstall);
     const old = process.env["GUILD_PLUGIN_ROOT"];
     process.env["GUILD_PLUGIN_ROOT"] = pluginInstall;
     try {

@@ -876,7 +876,7 @@ describe("import-safe core (FIX B)", () => {
         "const { lintCommsFormat } = require('./comms/comms-format-lint'); process.exit(0);",
       ],
       {
-        cwd: "/Users/miguelp/Projects/guild/plugin/scripts",
+        cwd: require("node:path").resolve(__dirname, "../.."),
         encoding: "utf8",
         timeout: 15000,
       }
@@ -896,7 +896,7 @@ describe("import-safe core (FIX B)", () => {
       "npx",
       ["tsx", "comms/comms-format-lint.cli.ts", "--paths", receiptPath],
       {
-        cwd: "/Users/miguelp/Projects/guild/plugin/scripts",
+        cwd: require("node:path").resolve(__dirname, "../.."),
         encoding: "utf8",
         timeout: 15000,
       }

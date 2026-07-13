@@ -187,7 +187,7 @@ describe("Claude HostAdapter concrete parity", () => {
       "createDefaultHostAdapters",
       "createAllHostAdapters",
     ];
-    const res = spawnSync("rg", ["-n", symbols.join("|"), "scripts", "-g*.ts"], {
+    const res = spawnSync("git", ["grep", "-nE", symbols.join("|"), "--", "scripts/*.ts", "scripts/**/*.ts"], {
       cwd: PLUGIN_ROOT,
       encoding: "utf8",
     });
