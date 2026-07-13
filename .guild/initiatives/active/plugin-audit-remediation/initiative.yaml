@@ -5,7 +5,7 @@ initiative:
   definition_status: drafted          # goals authored from the audit report; not yet G-spec reviewed
   execution_status: done              # all 9 goals executed 2026-07-13 (3 waves, 17 lanes); PR #27 → next
   release_status: not_released        # rides the next→main release cut (operator-driven per channel model)
-  documentation_status: update_required # plugin docs reconciled (G7); umbrella docs/v2 reconciliation lane running
+  documentation_status: updated       # G7 plugin docs + umbrella docs/v2 reconciled (umbrella 16f68b6)
   scope: plugin
   created_at: 2026-07-12
   goals_doc: goals.md                 # 9 individually-shippable goals G1–G9, each with a validation gate
