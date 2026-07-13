@@ -260,7 +260,7 @@ Bound by pointer to `contracts/learning-checkpoint.v1.md §4` / ADR §CR-C:
 3. **No verdict touches permission / sandbox / runtime policy** (the D5 carve-out
    is intact — no checkpoint verdict may alter it).
 
-## Validation (VC-K4 / VC-K7) — bound by pointer
+## Validation (VC-K2 / VC-K4 / VC-K7) — bound by pointer
 
 - **VC-K4:** every phase that ran has exactly one checkpoint whose `decisions`
   carries all 12 keys at terminal verdicts; every non-`none` verdict has a
@@ -268,6 +268,19 @@ Bound by pointer to `contracts/learning-checkpoint.v1.md §4` / ADR §CR-C:
 - **VC-K7 (G3 safety):** deleting all `learning/` dirs + `knowledge-links.json`
   changes no filesystem-reproducible answer; no checkpoint auto-promotes to wiki;
   no permission / sandbox / runtime policy is touched.
+- **VC-K2 (connectivity, advisory):** after the edge-batch append (step 2 above),
+  optionally confirm the just-completed task-id reaches all 4 required node
+  kinds (constraining decision, running skill/agent, touched feature/component,
+  describing wiki page) via one traversal:
+
+  ```
+  npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/knowledge-links-traverse.ts \
+    --cwd <repo-root> --task-id <task-id> --json
+  ```
+
+  This is advisory only — it always exits 0 and never blocks the phase; a
+  `connected: false` result (missing kinds named) is a signal the edge-batch
+  under-populated this task, worth a line in `followups:`, not a gate failure.
 
 Full anchors in `contracts/learning-checkpoint.v1.md §6`.
 

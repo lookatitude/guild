@@ -16,6 +16,7 @@
       "lib/permission-policy-schema",
       "lib/shared/safe-object",
       "lib/shared/scrub-redact",
+      "lib/shared/secret-patterns",
       "lib/shared/share-set"
     ]
   }

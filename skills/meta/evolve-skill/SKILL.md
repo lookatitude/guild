@@ -18,11 +18,25 @@ Two fields:
 1. **Skill slug** — the target skill to evolve, e.g. `guild:context-assemble` or `guild:brainstorm`. Must resolve to an existing live `SKILL.md` via `findLiveSkillDir` (`scripts/evolve-loop.ts`), which checks **project-instance first**: `.guild/skills/<slug>/` (an already-evolved or project-minted instance IS the live version), then the plugin tree `skills/<tier>/<slug>/` (all six tiers; self-build cwd or the plugin install via `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`). If the slug resolves nowhere, stop and hand off to `skill-author` for authoring a net-new skill instead.
 2. **Proposed-edit description** — optional when the automatic trigger fires (in which case this skill synthesizes the edit from the ≥3 accumulated reflections under `.guild/reflections/` whose frontmatter `proposals.skill_improvement` names the target skill); required when the explicit trigger is a user-supplied description. The edit may touch the skill body, the YAML frontmatter `description`, or both.
 
+   **Reading the ≥3 threshold (§11.1) is deterministic, not in-context recall.**
+   Before deciding whether the automatic trigger fires, read the aggregate
+   `/guild:reflect` already refreshed at `.guild/evolve/analyze-runs-latest.md`
+   (or regenerate it on demand if stale/absent):
+
+   ```
+   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/analyze-runs.ts --cwd <repo-root>
+   ```
+
+   Its `proposals[]` entries name each skill at or above `--min-runs` (default 3)
+   with the contributing run ids — use that list (not a fresh in-context count
+   over `.guild/reflections/*.md`) to confirm the threshold and to seed the
+   proposed-edit synthesis with concrete evidence.
+
 ## Pipeline (§11.2 10 steps)
 
 Ten ordered steps. Each step's input and output is explicit so a later step can re-read the prior artifact without re-executing.
 
-1. **Snapshot current skill.** Copy the live skill directory to `.guild/skill-versions/<skill>/v<N>/`. `N` increments monotonically (walk the existing version folders, take max+1). Snapshot includes `SKILL.md`, `evals.json`, and any skill-local helpers. Input: the live dir from `findLiveSkillDir` — `.guild/skills/<skill>/` when a project instance exists, else the plugin tree `skills/<tier>/<skill>/`. Output: `.guild/skill-versions/<skill>/v<N>/`.
+1. **Snapshot current skill.** Delegates to `scripts/evolve-loop.ts`: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/evolve-loop.ts --skill <skill> --run-id <run-id> --cwd <cwd> [--proposed-edit <path>]`. The CLI resolves the live dir via `findLiveSkillDir` — `.guild/skills/<skill>/` when a project instance exists, else the plugin tree `skills/<tier>/<skill>/` (self-build cwd or `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`) — copies it to `.guild/skill-versions/<skill>/v<N>/` (`N` increments monotonically; includes `SKILL.md`, `evals.json`, and any skill-local helpers), and writes `.guild/evolve/<run-id>/pipeline.md` (the 10-step run plan steps 2-10 read from). Exits non-zero if the slug resolves nowhere. Input: `--skill`/`--proposed-edit`. Output: `.guild/skill-versions/<skill>/v<N>/` + `.guild/evolve/<run-id>/pipeline.md`.
 
 2. **Load evals.** Read `evals.json` from the step-1 live dir. If fewer than 3 positive + 3 negative cases (insufficient for paired evaluation), bootstrap 2–3 additional cases from the accumulated reflections' `proposals.skill_improvement` evidence snippets (per `§11.2` step 2). Input: `<live-dir>/evals.json` + `.guild/reflections/*.md`. Output: `.guild/evolve/<run-id>/evals.json` (merged working set).
 

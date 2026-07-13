@@ -9,13 +9,10 @@
   "owns": {
     "scripts": [
       "lib/benchmark-guild-artifacts",
-      "lib/counterfactual-replay",
       "lib/define-schema",
       "lib/define-test-matrix",
-      "lib/define-test-matrix.import-contract",
       "lib/define-traceability",
       "lib/explore-schema",
-      "lib/goal-task-schema",
       "lib/routing-ab-contract"
     ]
   }

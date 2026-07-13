@@ -1,0 +1,22 @@
+# guild.learning_checkpoint.v1
+learning_checkpoint:
+  version: guild.learning_checkpoint.v1
+  phase: operations
+  run_id: run-golden-full-6phase-learn
+  observed: []
+  decisions:
+    memory: none
+    wiki: none
+    knowledge_graph: none
+    domain_model: none
+    agent_def: none
+    skill_def: none
+    agent_template: none
+    skill_template: none
+    config: none
+    task_tracking: none
+    workflow_rules: none
+    review_policy: none
+  knowledge_links_batch: []
+  routed_to: .guild/reflections/run-golden-full-6phase-learn.md
+  evidence_ref: .guild/runs/run-golden-full-6phase-learn/run.yaml#phases_log

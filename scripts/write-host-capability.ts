@@ -4,10 +4,10 @@
  *
  * RE-5 — host-capability manifest writer.
  *
- * Contract (BY POINTER): docs/knowledge/decisions/v2-runtime-and-execution-model.md
+ * Contract (BY POINTER): ADR: v2-runtime-and-execution-model (workspace wiki)
  *   §RE-5 (host-capability manifest). Schema: guild.host_capability.v1.
  * Tier ladder (cheap/mid/powerful → model) is canonical in
- *   docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §1/§10.
+ *   ADR: cost-aware-tiering-and-lean-context (workspace wiki) §1/§10.
  *
  * Writes <cwd>/.guild/hosts/<host-id>/capability.json at session/bootstrap so
  * the cross-host router (RE-4 RemoteTeamBackend, lands a later wave) can read,

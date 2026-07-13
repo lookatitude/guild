@@ -6,7 +6,7 @@
  * (Claude) command-file shape (ADR step 16, spec SC-W2-3).
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §step 16
+ *   ADR: universal-host-plugin-architecture (workspace wiki) §step 16
  *   .guild/spec/universal-host-p2-wave2.md   SC-W2-3 / SC-W2-5
  *   .guild/plan/universal-host-p2-wave2.md   lane LW2-3 (registry/renderer) / LW2-4 (sources)
  *

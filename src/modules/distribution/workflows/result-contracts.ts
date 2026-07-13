@@ -7,8 +7,8 @@
  * Phase-1 normalizers target exactly the `exists` contracts, nothing more.
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §Result contracts
- *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md (this lane's ADR)
+ *   ADR: universal-host-plugin-architecture (workspace wiki) §Result contracts
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) (this lane's ADR)
  *
  * This module is a REGISTRY, not a redefinition. It re-exports the existing
  * validators by reference; it never re-implements them. Deferred contracts have

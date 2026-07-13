@@ -15,7 +15,7 @@
       "id": "guild-create-specialist",
       "source_path": "skills/meta/create-specialist/SKILL.md",
       "resource_path": "resources/skills/meta/create-specialist/SKILL.md",
-      "sha256": "9dd20d255486ddf1b6b9db6fbbf80471b5f12c71b72f3079d8bb7fab25f03923"
+      "sha256": "e84fcfa67f421befe5ff10ad1c12c9f0dae14472a87792d9e4b52d4184b3453f"
     },
     {
       "category": "skills",
@@ -43,7 +43,7 @@
       "id": "guild-team-compose/gap-handling.md",
       "source_path": "skills/meta/team-compose/gap-handling.md",
       "resource_path": "resources/skills/meta/team-compose/gap-handling.md",
-      "sha256": "b38bd04b47a0a1660df65e8e7e0dcd42faf1e69147c69524359e8b143d712e11"
+      "sha256": "216345f4b284b2e6b6b776b93abac66db84562b4f5e99572122dcc7612c9146f"
     },
     {
       "category": "skills",

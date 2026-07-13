@@ -4,7 +4,7 @@
  * Cluster A — the capability routing function (Cluster A of the cross-host ADR).
  * Extracted from host-router.ts (W3 god-file split).
  *
- * Contract (BY POINTER): docs/knowledge/decisions/v2-cross-host-orchestration.md
+ * Contract (BY POINTER): ADR: v2-cross-host-orchestration (workspace wiki)
  *   §CR-1 (routing decision function), §CR-2 (capability pre-check),
  *   §CR-3 (ranked fallback chain — NO silent tier downgrade),
  *   §CR-4 (work-type → host affinity), §CR-5 (manifest freshness TTL),

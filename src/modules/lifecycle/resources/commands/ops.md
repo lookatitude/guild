@@ -66,19 +66,18 @@ CMD-011.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
 
-Before the operations skill is invoked — and before run-trace start — run
-the preflight (`scripts/lib/runstart-preflight.ts`; canonical contract in
-`guild.md §Run-start preflight`):
+Before the operations skill is invoked — and before run-trace start — the run-trace CLI runs this preflight for you — you do **not**
+call `runStartPreflight` yourself.
 
-1. Call `runStartPreflight({ cwd, flags? })` — resolves the 7-source
-   inheritance chain + validates + probes tmux + detects providers
-   (full chain: see `/guild:guild §Run-start preflight`).
-2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
-   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
-   on NO continue with the resolved backend.
-3. Pass `result.snapshot` to `startRun` (U6 writes the resolved-settings
-   snapshot; all later phases read it back via `readResolvedSettingsSnapshot`).
-4. Proceed to run-trace start.
+Since wave 2, `run-trace.js start` (below) is the **sole caller** of
+`runStartPreflight` (`scripts/lib/runstart-preflight.ts`; canonical contract in
+`guild.md §Run-start preflight`): on `start` the CLI resolves the 7-source
+inheritance chain, validates closed keys, probes tmux, detects providers, and
+writes `.guild/runs/<id>/resolved-settings.json` (+ a compact `settings_ref` in
+`run.yaml`) automatically before the run opens. If this command needs the
+resolved config — e.g. the dispatch backend `effective.agent_mode` — read the
+snapshot back with `readResolvedSettingsSnapshot(runId, { cwd })`; never
+re-resolve.
 
 ## Run recording
 

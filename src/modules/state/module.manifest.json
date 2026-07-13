@@ -10,18 +10,15 @@
     "hooks": ["PreCompact:pre-compact.js"],
     "scripts": [
       "lib/atomic-write",
-      "lib/dependency-graph-reader",
-      "lib/dependency-graph-schema",
       "lib/frontmatter",
       "lib/guild-artifact-paths",
       "lib/guild-discovery",
       "lib/guild-root",
-      "lib/heartbeat-write-side",
       "lib/index-cache",
       "lib/replay-rundir",
+      "lib/run-events",
       "lib/retention",
-      "lib/sanitized-run-export",
-      "lib/trace-replay"
+      "lib/sanitized-run-export"
     ]
   }
 }

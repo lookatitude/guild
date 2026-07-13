@@ -18,13 +18,6 @@
       "sha256": "2758b71d10f533dd306f9faa4e239e1d8b9821770df2f5505f068d7ddf3b4920"
     },
     {
-      "category": "scripts",
-      "id": "lib/dashboard-projector",
-      "source_path": "scripts/lib/dashboard-projector.ts",
-      "resource_path": "resources/scripts/lib/dashboard-projector.ts",
-      "sha256": "70e925d999992f3e2b92ff2ea9924853e704f0528d60c1c70c12a8a78474cfa5"
-    },
-    {
       "category": "skills",
       "id": "guild-dashboard",
       "source_path": "skills/meta/dashboard/SKILL.md",

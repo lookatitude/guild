@@ -40,6 +40,18 @@ function seedHistoricalRuns(tmpDir: string): void {
   }
 }
 
+/** Seeds a run dir's CANONICAL v1.4 event log (logs/v1.4-events.jsonl) from a
+ *  legacy-shaped fixture file, proving the canonical-first read path
+ *  (scripts/lib/run-events.ts). */
+function seedCanonicalHistoricalRun(tmpDir: string, runId: string, fixtureRel: string): void {
+  const logsDir = path.join(tmpDir, ".guild", "runs", runId, "logs");
+  fs.mkdirSync(logsDir, { recursive: true });
+  fs.copyFileSync(
+    path.join(FIXTURES, fixtureRel, "events.ndjson"),
+    path.join(logsDir, "v1.4-events.jsonl")
+  );
+}
+
 function seedProposedEdit(tmpDir: string, content: string): string {
   const p = path.join(tmpDir, "proposed.md");
   fs.writeFileSync(p, content, "utf8");
@@ -274,6 +286,72 @@ describe("shadow-mode.ts", () => {
       );
       // Both proposed triggered AND historical triggered → no divergence
       expect(readFrontmatterField(report, "total_divergences")).toBe(0);
+    });
+  });
+
+  // ── Canonical event log (logs/v1.4-events.jsonl) — item G9-1 ────────────
+  describe("canonical event log — logs/v1.4-events.jsonl", () => {
+    it("replays historical runs whose event log lives at the canonical path", () => {
+      seedCanonicalHistoricalRun(tmpDir, "shadow-run-1", "shadow-run-1");
+      seedCanonicalHistoricalRun(tmpDir, "shadow-run-2", "shadow-run-2");
+      const proposed = seedProposedEdit(
+        tmpDir,
+        "---\nname: guild-brainstorm\ndescription: TRIGGER for brainstorm requests. DO NOT TRIGGER for deploy.\n---\nBody."
+      );
+      fs.mkdirSync(path.join(tmpDir, ".guild", "evolve", "canon-shadow-run"), {
+        recursive: true,
+      });
+      const { exitCode } = runScript([
+        "--skill",
+        "guild-brainstorm",
+        "--proposed-edit",
+        proposed,
+        "--run-id",
+        "canon-shadow-run",
+        "--cwd",
+        tmpDir,
+      ]);
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "evolve", "canon-shadow-run", "shadow-report.md"),
+        "utf8"
+      );
+      expect(content).toContain("shadow-run-1");
+      expect(content).toContain("shadow-run-2");
+    });
+
+    it("prefers the canonical log over a stale legacy mirror when both exist", () => {
+      // Canonical carries the real fixture; legacy mirror is empty — canonical must win.
+      seedCanonicalHistoricalRun(tmpDir, "shadow-run-1", "shadow-run-1");
+      fs.writeFileSync(
+        path.join(tmpDir, ".guild", "runs", "shadow-run-1", "events.ndjson"),
+        "",
+        "utf8"
+      );
+      const proposed = seedProposedEdit(
+        tmpDir,
+        "---\nname: guild-brainstorm\ndescription: TRIGGER for brainstorm requests. DO NOT TRIGGER for deploy.\n---\nBody."
+      );
+      fs.mkdirSync(path.join(tmpDir, ".guild", "evolve", "precedence-run"), {
+        recursive: true,
+      });
+      runScript([
+        "--skill",
+        "guild-brainstorm",
+        "--proposed-edit",
+        proposed,
+        "--run-id",
+        "precedence-run",
+        "--cwd",
+        tmpDir,
+      ]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "evolve", "precedence-run", "shadow-report.md"),
+        "utf8"
+      );
+      // shadow-run-1's prompt ("brainstorm new features...") is present only in
+      // the canonical fixture; an empty legacy mirror would report 0 prompts.
+      expect(content).toMatch(/\| shadow-run-1 \| 1 \|/);
     });
   });
 

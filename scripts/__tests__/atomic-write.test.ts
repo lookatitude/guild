@@ -85,4 +85,21 @@ describe("atomicWrite (EXDEV fix — same-directory temp file + rename)", () => 
     expect(fs.readFileSync(path.join(root, "b.json"), "utf8")).toBe("B\n");
     expect(fs.readdirSync(root).sort()).toEqual(["a.json", "b.json"]);
   });
+
+  it("R6: refuses (throws, writes nothing) when the target resolves under a plugin install dir", () => {
+    const root = mkRoot();
+    const pluginInstall = path.join(root, "plugin-install");
+    const target = path.join(pluginInstall, ".guild", "agents", "leak.md");
+    expect(() => atomicWrite(target, "leak\n", pluginInstall)).toThrow(/plugin install dir/);
+    expect(fs.existsSync(target)).toBe(false);
+    expect(fs.existsSync(pluginInstall)).toBe(false); // never even created the dir
+  });
+
+  it("R6: a target outside the plugin install root still writes normally", () => {
+    const root = mkRoot();
+    const pluginInstall = path.join(root, "plugin-install");
+    const target = path.join(root, "project", ".guild", "agents", "qa.md");
+    atomicWrite(target, "# QA\n", pluginInstall);
+    expect(fs.readFileSync(target, "utf8")).toBe("# QA\n");
+  });
 });

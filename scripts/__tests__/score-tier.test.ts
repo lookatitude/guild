@@ -4,7 +4,7 @@
  * Unit + CLI integration tests for scripts/score-tier.ts.
  * Tests the pure `scoreTier` function and the CLI wrapper.
  *
- * ADR: docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §2
+ * ADR: cost-aware-tiering-and-lean-context (workspace wiki) §2
  */
 
 import { spawnSync } from "child_process";

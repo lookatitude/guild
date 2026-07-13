@@ -6,7 +6,13 @@
  * Exit 0 = no actionable flags; exit 1 = operator-path or secret flags found (CI fail).
  *
  * Usage:
- *   npx tsx plugin/scripts/dot-guild/audit.ts [--workspace=<path>] [--repos=<csv>] [--output=<path>]
+ *   npx tsx plugin/scripts/dot-guild/audit.ts [--workspace=<path>] [--repos=<csv>] [--output=<path>] [--tracked-only]
+ *
+ * --tracked-only restricts every scan to `git ls-files`-tracked paths (skips the
+ * untracked-file scanning legs) — a cheaper, noise-free gate for an
+ * already-checked-out CI tree; the default (no flag) additionally scans
+ * untracked-but-shareable files, which is the more thorough posture wanted for a
+ * local pre-commit / build:verify run.
  */
 
 import * as fs from "fs";
@@ -24,6 +30,15 @@ const args = process.argv.slice(2);
 const wsArg   = args.find(a => a.startsWith("--workspace="));
 const reposArg = args.find(a => a.startsWith("--repos="));
 const outArg  = args.find(a => a.startsWith("--output="));
+// --tracked-only: skip the untracked-file scanning legs (findScrubCoverageGaps'
+// disk walk, findNestedGuildLeaks' disk walk, findPackageReceiptLeaks' disk walk)
+// and restrict every scan to `git ls-files`-tracked paths only. A raw filesystem
+// walk over a local dev tree picks up untracked-but-not-yet-ignored scratch/build
+// cruft that was never going to be committed (see the plugin-audit-remediation
+// hygiene pass), which is noise for a gate that's supposed to answer "would this
+// be shared" for an ALREADY-CHECKED-OUT tree (CI) rather than "could this
+// accidentally be added" (the fuller local pre-commit posture, the default).
+const trackedOnly = args.includes("--tracked-only");
 
 // dot-guild/ → scripts/ → plugin/ → workspace = three "..".
 const WORKSPACE = wsArg ? wsArg.split("=")[1] : path.resolve(__dirname, "../../..");
@@ -46,17 +61,29 @@ export interface FileFlag { runId: string; file: string; kind: "operator-path" |
 // not false-positive as "uncovered".
 const SCRUB_COVERAGE_EXEMPT_NAMES = new Set(["share-payloads.flag", ".gitignore"]);
 
+/** `git -C repoPath ls-files -z` → the set of repo-relative paths git actually tracks. */
+function trackedFileSet(repoPath: string): Set<string> {
+  const res = spawnSync("git", ["-C", repoPath, "ls-files", "-z"], { encoding: "utf8" });
+  if (res.status !== 0) return new Set();
+  return new Set((res.stdout ?? "").split("\0").filter(Boolean));
+}
+
 // SC-7 blind-spot guard: walk each run dir; for every file that git would track
 // (NOT ignored = would be shared), flag it if scrub.ts has no coverage for it.
 // Uses `git check-ignore` against the repo's allow-list — a non-zero exit means
 // the path is NOT ignored, i.e. it WOULD be committed/shared.
-function findScrubCoverageGaps(repoPath: string): FileFlag[] {
+function findScrubCoverageGaps(repoPath: string, trackedOnlyMode = false): FileFlag[] {
   const flags: FileFlag[] = [];
   const runsDir = path.join(repoPath, ".guild", "runs");
   if (!fs.existsSync(runsDir)) return flags;
 
   let runEntries: fs.Dirent[];
   try { runEntries = fs.readdirSync(runsDir, { withFileTypes: true }); } catch { return flags; }
+
+  // --tracked-only: restrict to git ls-files output — a checked-out CI tree has
+  // no untracked files anyway, so this is just a cheaper, noise-free equivalent
+  // there; for a local dev tree it skips untracked scratch/build cruft entirely.
+  const tracked = trackedOnlyMode ? trackedFileSet(repoPath) : null;
 
   for (const runEnt of runEntries) {
     if (!runEnt.isDirectory()) continue;
@@ -76,22 +103,29 @@ function findScrubCoverageGaps(repoPath: string): FileFlag[] {
     })(runDir);
     if (files.length === 0) continue;
 
-    // Batch-query git for trackability: stdin = NUL-separated paths; stdout
-    // lists the IGNORED ones. Anything absent from stdout is git-trackable.
     const rel = (p: string) => path.relative(repoPath, p);
-    const checked = spawnSync(
-      "git", ["-C", repoPath, "check-ignore", "--stdin", "-z"],
-      { input: files.map(rel).join("\0"), encoding: "utf8" },
-    );
-    // git check-ignore exits 0 (some ignored), 1 (none ignored), or 128 (error
-    // e.g. not a git repo). On 128 we cannot determine trackability — skip
-    // (the nested-guild + dry-run checks still run; this guard is additive).
-    if (checked.status === 128) continue;
-    const ignored = new Set((checked.stdout ?? "").split("\0").filter(Boolean));
+    let shareable: (relToRepo: string) => boolean;
+    if (tracked) {
+      // tracked-only: "would be shared" ⇔ already tracked (no ignore-status guessing).
+      shareable = (relToRepo) => tracked.has(relToRepo);
+    } else {
+      // Batch-query git for trackability: stdin = NUL-separated paths; stdout
+      // lists the IGNORED ones. Anything absent from stdout is git-trackable.
+      const checked = spawnSync(
+        "git", ["-C", repoPath, "check-ignore", "--stdin", "-z"],
+        { input: files.map(rel).join("\0"), encoding: "utf8" },
+      );
+      // git check-ignore exits 0 (some ignored), 1 (none ignored), or 128 (error
+      // e.g. not a git repo). On 128 we cannot determine trackability — skip
+      // (the nested-guild + dry-run checks still run; this guard is additive).
+      if (checked.status === 128) continue;
+      const ignored = new Set((checked.stdout ?? "").split("\0").filter(Boolean));
+      shareable = (relToRepo) => !ignored.has(relToRepo);
+    }
 
     for (const abs of files) {
       const relToRepo = rel(abs);
-      if (ignored.has(relToRepo)) continue;           // ignored ⇒ not shared
+      if (!shareable(relToRepo)) continue;           // not ignored/tracked ⇒ not shared
       const base = path.basename(abs);
       if (SCRUB_COVERAGE_EXEMPT_NAMES.has(base)) continue;
       const relToRun = path.relative(runDir, abs);
@@ -127,8 +161,9 @@ const PACKAGE_RECEIPT_SCAN_ROOTS = ["evidence/host-smoke", "evidence/desktop-app
 // secret finding iff `secrets.length > 0` (round-2 minor: the two counters are
 // INDEPENDENT — never conflated; `out === content` is L8's separate no-op assertion,
 // NOT used here). On git status 128 (not a git repo) SKIP (additive, like the guard).
-export function findPackageReceiptLeaks(repoPath: string): FileFlag[] {
+export function findPackageReceiptLeaks(repoPath: string, trackedOnlyMode = false): FileFlag[] {
   const flags: FileFlag[] = [];
+  const tracked = trackedOnlyMode ? trackedFileSet(repoPath) : null;
   for (const rootRel of PACKAGE_RECEIPT_SCAN_ROOTS) {
     const scanRoot = path.join(repoPath, rootRel);
     if (!fs.existsSync(scanRoot)) continue;
@@ -146,17 +181,23 @@ export function findPackageReceiptLeaks(repoPath: string): FileFlag[] {
     if (files.length === 0) continue;
 
     const rel = (p: string) => path.relative(repoPath, p);
-    const checked = spawnSync(
-      "git", ["-C", repoPath, "check-ignore", "--stdin", "-z"],
-      { input: files.map(rel).join("\0"), encoding: "utf8" },
-    );
-    // 0 (some ignored), 1 (none ignored), 128 (error e.g. not a git repo).
-    if (checked.status === 128) continue;
-    const ignored = new Set((checked.stdout ?? "").split("\0").filter(Boolean));
+    let shareable: (relToRepo: string) => boolean;
+    if (tracked) {
+      shareable = (relToRepo) => tracked.has(relToRepo);
+    } else {
+      const checked = spawnSync(
+        "git", ["-C", repoPath, "check-ignore", "--stdin", "-z"],
+        { input: files.map(rel).join("\0"), encoding: "utf8" },
+      );
+      // 0 (some ignored), 1 (none ignored), 128 (error e.g. not a git repo).
+      if (checked.status === 128) continue;
+      const ignored = new Set((checked.stdout ?? "").split("\0").filter(Boolean));
+      shareable = (relToRepo) => !ignored.has(relToRepo);
+    }
 
     for (const abs of files) {
       const relToRepo = rel(abs);
-      if (ignored.has(relToRepo)) continue; // ignored ⇒ not shared ⇒ skip
+      if (!shareable(relToRepo)) continue; // not ignored/tracked ⇒ not shared ⇒ skip
       let content: string;
       try { content = fs.readFileSync(abs, "utf8"); } catch { continue; }
       const { opPaths, secrets } = redact(content);
@@ -185,7 +226,9 @@ export function findPackageReceiptLeaks(repoPath: string): FileFlag[] {
 // Any .guild/ under one of these glob roots is a test fixture, not a leak.
 // `(?:[^/]+/)*` matches zero or more intermediate directory segments — the
 // fixture .guild/ can live directly under fixtures/ OR nested below it.
-const FIXTURE_EXEMPT_PATTERNS = [
+// Exported so the exemption-parity test (scripts/dot-guild/__tests__/exemption-parity.test.ts)
+// can assert directly against the SAME array — no hand-copied mirror to drift.
+export const FIXTURE_EXEMPT_PATTERNS = [
   /\/benchmark\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
   /\/mcp-servers\/guild-memory\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
   /\/mcp-servers\/guild-telemetry\/fixtures(?:-v14|-alt-cwd)?\/(?:[^/]+\/)*\.guild(\/|$)/,
@@ -194,14 +237,28 @@ const FIXTURE_EXEMPT_PATTERNS = [
   // exemptions must hold regardless of where the plugin tree is rooted.
   /(?:\/plugin)?\/tests\/dot-guild\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
   /(?:\/plugin)?\/tests\/wiki-lint\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
+  // G-7 (SC-3) learning-backstop golden fixture — a single named fixture dir, not a
+  // glob of many, but the same optional-`/plugin` shape as the tests/ patterns above
+  // (workspace layout has a `/plugin` segment; the plugin-repo-root CI checkout does not).
+  /(?:\/plugin)?\/hooks\/__tests__\/fixtures\/golden-full-learn-run\/(?:[^/]+\/)*\.guild(\/|$)/,
 ];
 
 // FU-F: ONE .guild/ per project (= git repo) root. Walk the workspace, classify
 // every .guild/ directory as repo-root / fixture-exempt / leak. Surface leaks
 // to the audit report so the SC-7 risk gate (and CI) catches them.
-function findNestedGuildLeaks(repoPath: string): FileFlag[] {
+function findNestedGuildLeaks(repoPath: string, trackedOnlyMode = false): FileFlag[] {
   const flags: FileFlag[] = [];
   const skipDirs = new Set(["node_modules", ".git", "dist", "build", ".next", ".cache"]);
+  // --tracked-only: a nested .guild/ with NO tracked files inside it is untracked
+  // local cruft (e.g. a leftover ephemeral smoke-test dir) rather than a real leak
+  // into the shared tree — skip it. Computed lazily, once, only when needed.
+  let tracked: Set<string> | null = null;
+  const hasTrackedFileUnder = (relDir: string): boolean => {
+    if (!tracked) tracked = trackedFileSet(repoPath);
+    const prefix = relDir.endsWith(path.sep) ? relDir : relDir + path.sep;
+    for (const f of tracked) if (f === relDir || f.startsWith(prefix)) return true;
+    return false;
+  };
   function walk(dir: string): void {
     let entries: fs.Dirent[];
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
@@ -218,10 +275,12 @@ function findNestedGuildLeaks(repoPath: string): FileFlag[] {
         // regardless of whether the walk started from a relative or absolute path.
         const absFull = path.resolve(full);
         if (FIXTURE_EXEMPT_PATTERNS.some(p => p.test(absFull))) continue;
+        const relToRepo = path.relative(repoPath, full) || full;
+        if (trackedOnlyMode && !hasTrackedFileUnder(relToRepo)) continue; // untracked-only ⇒ not a leak
         // Leak.
         flags.push({
           runId: "(workspace)",
-          file: path.relative(repoPath, full) || full,
+          file: relToRepo,
           kind: "nested-guild",
           detail: "non-repo-root .guild/ outside declared fixtures — violates the one-.guild-per-repo invariant",
         });
@@ -294,13 +353,13 @@ function main(): void {
     process.stderr.write(`[audit] Scanning ${repo} ...\n`);
     const { flags } = auditRepo(repo);
     // FU-F: also walk for nested-.guild leaks at any depth.
-    const nestedLeaks = findNestedGuildLeaks(repo);
+    const nestedLeaks = findNestedGuildLeaks(repo, trackedOnly);
     // SC-7 blind-spot guard: flag git-trackable run files scrub doesn't cover.
-    const coverageGaps = findScrubCoverageGaps(repo);
+    const coverageGaps = findScrubCoverageGaps(repo, trackedOnly);
     // AC-SEC-1 (verified-multi-host-support §7.2): the REAL package/receipt-tree leak
     // scan — a planted operator-path/secret in a committed evidence receipt is flagged
     // non-vacuously. Path-anchored + independent of the runs share-set.
-    const receiptLeaks = findPackageReceiptLeaks(repo);
+    const receiptLeaks = findPackageReceiptLeaks(repo, trackedOnly);
     repoResults.push({ repo: path.relative(WORKSPACE, repo) || path.basename(repo), flags: [...flags, ...nestedLeaks, ...coverageGaps, ...receiptLeaks] });
   }
 

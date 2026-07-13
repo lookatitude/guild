@@ -5,7 +5,7 @@
   "kind": "operator",
   "implementation_mode": "workflow-backed",
   "description": "Checks documentation hygiene, docs/code drift, command coverage, and workspace doc-sync gates.",
-  "depends_on": ["distribution", "kernel", "state", "workspace"],
+  "depends_on": ["distribution", "kernel", "knowledge", "state", "workspace"],
   "owns": {
     "scripts": [
       "wiki-lint-checks",

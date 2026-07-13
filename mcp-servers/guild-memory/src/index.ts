@@ -52,6 +52,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 // readers (src/modules/state/workflows/frontmatter.ts). Zero runtime deps —
 // esbuild --bundle inlines it exactly like the shared bm25 module (./bm25.ts).
 import { splitFrontmatter } from "../../../src/modules/state/workflows/frontmatter";
+// The §10.1.1 wiki-page frontmatter field vocabulary — single source of truth
+// for the `type:` enum (context|standard|product|entity|concept|decision|source).
+// Zero runtime deps (pure constants), inlined by esbuild like the imports above.
+import { WikiPageType, isWikiPageType } from "../../../src/modules/knowledge/workflows/wiki-frontmatter-contract";
 
 // ─── Wiki root resolution ────────────────────────────────────────────────
 
@@ -91,7 +95,14 @@ interface Frontmatter {
   updated?: string;
   source_refs?: string[];
   category?: string;
-  type?: string;
+  // Widened (not narrowed) on purpose: a real .guild/wiki/ tree may contain
+  // pages that predate or don't yet conform to the §10.1.1 contract (fixtures,
+  // in-progress migrations) — this server is read-only and must never throw
+  // or drop a page just because its `type:` is absent or non-canonical. The
+  // WikiPageType union is here for editor/reader documentation value (the
+  // canonical 7-value enum from wiki-frontmatter-contract.ts), same pattern
+  // as `confidence` above.
+  type?: WikiPageType | string;
   [key: string]: unknown;
 }
 
@@ -148,7 +159,7 @@ interface WikiPage {
                         // never the frontmatter `category` value (see header note).
   frontmatterCategory?: string; // raw frontmatter `category` (a topic taxonomy on
                                  // decision pages), surfaced separately.
-  type?: string;        // raw frontmatter `type` (§10.1.1 base field)
+  type?: WikiPageType | string; // raw frontmatter `type` (§10.1.1 base field — see wiki-frontmatter-contract.ts)
   title: string;        // derived — see deriveTitle
   frontmatter: Frontmatter;
   body: string;
@@ -324,6 +335,10 @@ function buildServer(): McpServer {
         path: r.page.relPath,
         category: r.page.category,
         type: r.page.type ?? null,
+        // Whether `type` conforms to the §10.1.1 closed enum (wiki-frontmatter-
+        // contract.ts) — false for absent/legacy/non-conforming pages, which a
+        // read-only server must still surface (never filter out).
+        type_valid: isWikiPageType(r.page.type),
         frontmatter_category: r.page.frontmatterCategory ?? null,
         score: Math.round(r.score * 10000) / 10000,
         excerpt: excerpt(r.page.body, qTokens),
@@ -404,6 +419,7 @@ function buildServer(): McpServer {
         path: p.relPath,
         category: p.category,
         type: p.type ?? null,
+        type_valid: isWikiPageType(p.type),
         frontmatter_category: p.frontmatterCategory ?? null,
         title: p.title,
         confidence: (p.frontmatter.confidence as string) ?? null,

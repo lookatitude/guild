@@ -29,7 +29,21 @@
  * unchanged for existing callers/tests — only the on-disk key is standardized.
  *
  * Zero runtime deps (Node builtins only).
+ *
+ * CLI (plugin-audit-remediation G5a, 2026-07 — the VC-K2 connectivity check
+ * this header has always claimed, now invocable): reads
+ * `<cwd>/.guild/indexes/knowledge-links.json` and reports whether the given
+ * task-id reaches all 4 VC-K2 node kinds. ADVISORY ONLY — always exits 0;
+ * the JSON `connected` field carries the verdict. Wired as an optional
+ * post-checkpoint step in skills/meta/learning-checkpoint/SKILL.md
+ * §"Validation (VC-K2/VC-K4/VC-K7)".
+ *
+ * Usage:
+ *   npx tsx scripts/knowledge-links-traverse.ts --cwd <repo-root> --task-id <id> [--json]
  */
+
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 import {
   loadKnowledgeLinksDoc,
@@ -199,4 +213,47 @@ export function reachableKinds(doc: KnowledgeLinksDoc, start: string): Set<NodeK
 export function isFullyConnected(doc: KnowledgeLinksDoc, taskId: string): boolean {
   const kinds = reachableKinds(doc, taskId);
   return REQUIRED_KINDS.every((k) => kinds.has(k));
+}
+
+// ── CLI entry (advisory VC-K2 connectivity check; always exits 0) ──────────
+
+function parseFlag(argv: string[], flag: string): string | undefined {
+  const i = argv.indexOf(flag);
+  return i >= 0 && i + 1 < argv.length ? argv[i + 1] : undefined;
+}
+
+function main(): void {
+  const argv = process.argv.slice(2);
+  const cwd = parseFlag(argv, "--cwd") ?? process.cwd();
+  const taskId = parseFlag(argv, "--task-id");
+  const asJson = argv.includes("--json");
+
+  if (!taskId) {
+    process.stderr.write("[knowledge-links-traverse] --task-id is required\n");
+    process.stdout.write(JSON.stringify({ error: "missing --task-id" }) + "\n");
+    return; // advisory: never a hard failure exit
+  }
+
+  const klPath = path.join(cwd, ".guild", "indexes", "knowledge-links.json");
+  if (!fs.existsSync(klPath)) {
+    const result = { task_id: taskId, connected: false, reachable_kinds: [], required_kinds: REQUIRED_KINDS, missing_kinds: REQUIRED_KINDS, note: "no knowledge-links.json found" };
+    process.stdout.write(JSON.stringify(result, null, asJson ? 2 : 0) + "\n");
+    return;
+  }
+
+  const doc = loadKnowledgeLinks(klPath);
+  const kinds = reachableKinds(doc, taskId);
+  const missing = REQUIRED_KINDS.filter((k) => !kinds.has(k));
+  const result = {
+    task_id: taskId,
+    connected: missing.length === 0,
+    reachable_kinds: [...kinds].sort(),
+    required_kinds: REQUIRED_KINDS,
+    missing_kinds: missing,
+  };
+  process.stdout.write(JSON.stringify(result, null, asJson ? 2 : 0) + "\n");
+}
+
+if (require.main === module) {
+  main();
 }

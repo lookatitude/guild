@@ -26,7 +26,7 @@
  *          §8.2 fields alone are sufficient.
  *        - undeterminable (run.yaml absent or unparseable date): fail-open,
  *          treat as grandfathered + log a warning.
- *      Authority: docs/knowledge/decisions/communication-format-policy.md
+ *      Authority: ADR: communication-format-policy (workspace wiki)
  *      §"OD-4 discriminator" + §"policy_effective_date: 2026-06-03".
  *
  * A receipt satisfying these criteria is the deterministic dismissal
@@ -281,7 +281,7 @@ function envelopeShapeErrors(value: unknown): string[] {
 
 // ── OD-4 discriminator ────────────────────────────────────────────────────────
 //
-// Authority: docs/knowledge/decisions/communication-format-policy.md
+// Authority: ADR: communication-format-policy (workspace wiki)
 //   §"policy_effective_date" and §"OD-4 discriminator"
 //
 // A runtime receipt for a run whose `run.yaml.started_at` is >= this date is
@@ -435,7 +435,7 @@ export function checkReceipt(
  *     still rejected even for grandfathered runs — a malformed embedded envelope
  *     is a clear bug, not a legacy shape.
  *
- * Authority: docs/knowledge/decisions/communication-format-policy.md §"OD-4 discriminator"
+ * Authority: ADR: communication-format-policy (workspace wiki) §"OD-4 discriminator"
  */
 function isValid(r: ReceiptCheckResult, inScope: boolean = true): boolean {
   if (!r.exists || !r.hasRequiredFields) return false;

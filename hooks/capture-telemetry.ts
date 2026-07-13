@@ -118,7 +118,7 @@ import { appendSecurityEvent, buildSecurityEvent, resolveRunDir } from "./lib/se
 // ── v2 observability ADR (D-OBS-1/2/6): guild.trace_event.v2 additive fields,
 // deterministic hook-side span ids, and the redacted guild.trace_payload.v1
 // sidecar. Schema/contracts bound BY POINTER — see lib/trace-v2.ts header
-// (docs/knowledge/decisions/v2-observability-and-replay.md + contract-map §B-post).
+// (ADR: v2-observability-and-replay (workspace wiki) + contract-map §B-post).
 import {
   genSpanId,
   isLlmCallEvent,

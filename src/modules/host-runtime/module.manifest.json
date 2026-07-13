@@ -31,7 +31,6 @@
       "lib/pane-adapter",
       "lib/provider-detect",
       "lib/result-normalizer",
-      "lib/runtime-adapters",
       "lib/support-matrix",
       "host-smoke",
       "generate-support-matrix"

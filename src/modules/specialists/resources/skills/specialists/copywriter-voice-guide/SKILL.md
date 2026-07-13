@@ -18,7 +18,7 @@ Write a voice guide short enough that a new hire reads it on day one and uses it
 - Show do/don't pairs — the "don't" must be a believable mistake, not a strawman.
 - Ship a tone-by-surface matrix: marketing page vs in-product vs support vs legal. The voice doesn't change; the tone does.
 - Include sample rewrites — take an off-voice sentence and fix it. Rewrites teach, adjectives don't.
-- Place the output at `.guild/wiki/standards/writing-voice.md` if wiki is active, so other skills can read it.
+- Write the guide to the run artifact area at `.guild/runs/<run-id>/content/voice-guide-<slug>.md`. Never write a canonical wiki path directly — promotion to the canonical wiki (e.g. `.guild/wiki/standards/writing-voice.md`) happens only through the `guild:wiki-ingest` human gate.
 
 ## Output shape
 
@@ -44,4 +44,4 @@ Keep under ~400 lines. Longer guides get ignored.
 
 ## Handoff
 
-Return the voice-guide path (prefer `.guild/wiki/standards/writing-voice.md`). Downstream writing skills (`copywriter-long-form`, `copywriter-product-microcopy`, `copywriter-email-sequences`, `technical-writer-*`, `social-media-*`) read this file. If the guide surfaces brand positioning questions, chain to `marketing-positioning`. This skill does not dispatch.
+Return the run-artifact voice-guide path (`.guild/runs/<run-id>/content/voice-guide-<slug>.md`). Downstream writing skills (`copywriter-long-form`, `copywriter-product-microcopy`, `copywriter-email-sequences`, `technical-writer-*`, `social-media-*`) read this run artifact; it becomes the canonical voice standard only if the user promotes it via `guild:wiki-ingest` (the human-gated ingest path). If the guide surfaces brand positioning questions, chain to `marketing-positioning`. This skill does not dispatch.

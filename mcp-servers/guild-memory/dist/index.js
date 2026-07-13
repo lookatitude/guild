@@ -24066,6 +24066,20 @@ function splitFrontmatter(content) {
   return { frontmatter, body };
 }
 
+// ../../src/modules/knowledge/workflows/wiki-frontmatter-contract.ts
+var WIKI_PAGE_TYPES = [
+  "context",
+  "standard",
+  "product",
+  "entity",
+  "concept",
+  "decision",
+  "source"
+];
+function isWikiPageType(v) {
+  return typeof v === "string" && WIKI_PAGE_TYPES.includes(v);
+}
+
 // ../../src/modules/knowledge/workflows/bm25.ts
 function tokenize(s) {
   const out = [];
@@ -24256,6 +24270,10 @@ function buildServer() {
         path: r.page.relPath,
         category: r.page.category,
         type: r.page.type ?? null,
+        // Whether `type` conforms to the §10.1.1 closed enum (wiki-frontmatter-
+        // contract.ts) — false for absent/legacy/non-conforming pages, which a
+        // read-only server must still surface (never filter out).
+        type_valid: isWikiPageType(r.page.type),
         frontmatter_category: r.page.frontmatterCategory ?? null,
         score: Math.round(r.score * 1e4) / 1e4,
         excerpt: excerpt(r.page.body, qTokens),
@@ -24318,6 +24336,7 @@ function buildServer() {
         path: p.relPath,
         category: p.category,
         type: p.type ?? null,
+        type_valid: isWikiPageType(p.type),
         frontmatter_category: p.frontmatterCategory ?? null,
         title: p.title,
         confidence: p.frontmatter.confidence ?? null,

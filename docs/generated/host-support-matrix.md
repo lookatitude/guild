@@ -4,7 +4,7 @@ Generated: 2026-07-05T21:08:02.090Z
 
 This file is generated from host-adapter outputs and review-progress schema validation. Do not hand-edit support cells.
 
-**Support** is the human-facing roster label: `Supported` (a committed verified receipt), `Supported (beta)` (an honest installable target — full adapter chain, operator-box receipt pending), or `Unsupported` (a refuse app/connector surface). It is a PRESENTATION derivation only, decoupled from the honesty column and never an input to the gate.
+**Support** is the human-facing roster label: `Supported` (a committed verified receipt), `Supported (beta)` (an honest installable target — full adapter chain, operator-box receipt pending), `Supported (app)` (a verified-bridged app surface — e.g. a Claude Desktop thread-worktree packet over the file bus), `Supported (connector)` (a verified-bridged connector surface — e.g. the Claude.ai connector), or `Unsupported` (a refuse app/connector surface). It is a PRESENTATION derivation only, decoupled from the honesty column and never an input to the gate.
 **Public State** is the evidence-derived honesty column (native / verified_wrapped / verified_bridged / unsupported) — verified_* ONLY when a valid receipt exists.
 **Target** is aspirational; **Verification** + **Floor** are DOCS-internal diagnostics (never a public claim).
 

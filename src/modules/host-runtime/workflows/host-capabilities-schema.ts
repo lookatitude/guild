@@ -6,8 +6,8 @@
  * Phase 1 wrapper/package runtime rows.
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §Capability Matrix
- *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md (this lane's ADR)
+ *   ADR: universal-host-plugin-architecture (workspace wiki) §Capability Matrix
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) (this lane's ADR)
  *
  * WHY: "Routing uses these booleans, not assumptions" (ADR). Every host advertises
  * a normalized capability row; routing/degradation read the row, never the host

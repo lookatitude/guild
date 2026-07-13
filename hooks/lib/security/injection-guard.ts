@@ -22,7 +22,7 @@
  *
  * BINDING:
  *   docs/v2/11-security.md §D-INJECT (HK-08 cross-ref)
- *   docs/knowledge/decisions/v2-security-and-untrusted-content.md
+ *   ADR: v2-security-and-untrusted-content (workspace wiki)
  */
 
 // ── Types ──────────────────────────────────────────────────────────────────

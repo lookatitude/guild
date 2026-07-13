@@ -95,6 +95,20 @@ Reflect writes exactly ONE reflection per run and never modifies prior reflectio
 
 If you notice a pattern worth aggregating, emit the per-run evidence and stop. Do not pre-emptively collapse into a single cross-run proposal.
 
+After this reflection is written, run the deterministic cross-run aggregator so the
+§11.1 threshold is counted by tooling, not recalled in-context:
+
+```
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/analyze-runs.ts --cwd <repo-root>
+```
+
+It reads every `.guild/reflections/*.md`'s `proposals.skill_improvement` /
+`proposals.missing_specialist` frontmatter plus handoff `status: escalate`
+receipts, and writes `.guild/evolve/analyze-runs-latest.md` (PROPOSAL-ONLY —
+never mutates a skill/agent, never writes to `.guild/wiki/`). Name that path in
+the handoff so `/guild:evolve`'s threshold read has a fresh aggregate to
+consume.
+
 ## Non-destructive rule
 
 This skill NEVER writes to `.guild/wiki/`, NEVER edits an existing skill or agent file, NEVER creates a new task under `.guild/runs/`, and NEVER mutates a handoff receipt or `verify.md`. Output is limited to `.guild/reflections/<run-id>.md` plus the feedback-routing artifacts under `.guild/feedback/<run-id>/` (findings.json + triage output — see §Feedback routing; still nothing durable, nothing external without the operator gate). Promotion of any proposal into durable memory is `guild:wiki-ingest`'s job (for sourced knowledge) or `guild:decisions`'s job (for team decisions). Skill/agent edits are `guild:evolve-skill` / `guild:create-specialist` in P6. If you find yourself wanting to fix a skill inline, stop — write the proposal and let evolve pick it up.

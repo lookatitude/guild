@@ -948,8 +948,10 @@ var init_host_registry_schema = __esm({
       // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
       // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
       // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
-      // HOST_CAPABILITY_ROWS row ever backed it (confirmed unreachable through EVERY
-      // dispatch surface). The honest column for a pane-less file surface is false.
+      // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
+      // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
+      // a row per registry id, but a capability row is not a dispatch surface). The
+      // honest column for a pane-less file surface is false.
       dispatch_selectable: false,
       capabilities: inferredCaps("kiro", "agents", "file"),
       provenance: "inferred"
@@ -6447,23 +6449,27 @@ var readline = __toESM(require("readline"));
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 function resolveGuildRoot(startCwd) {
-  let current = path.resolve(startCwd);
+  const resolvedStart = path.resolve(startCwd);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
   for (; ; ) {
     if (fs.existsSync(path.join(current, ".git"))) {
       return current;
     }
-    const guildDir = path.join(current, ".guild");
-    if (fs.existsSync(guildDir)) {
-      try {
-        if (fs.statSync(guildDir).isDirectory()) {
-          return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      if (fs.existsSync(guildDir)) {
+        try {
+          if (fs.statSync(guildDir).isDirectory()) {
+            nearestGuildDir = current;
+          }
+        } catch {
         }
-      } catch {
       }
     }
     const parent = path.dirname(current);
     if (parent === current) {
-      return path.resolve(startCwd);
+      return nearestGuildDir ?? resolvedStart;
     }
     current = parent;
   }
@@ -6589,8 +6595,12 @@ var MIGRATIONS = [
   // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
   // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
   //
-  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite.
-  // ensureFederationWikiCache() NEVER writes to sub_guild_root/.guild/.
+  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
+  // production code writes to sub_guild_root/.guild/. NOTE: the populate/
+  // invalidate function (ensureFederationWikiCache) was removed in
+  // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
+  // schema migration is retained (harmless empty table) since altering the
+  // migration ladder is a separate, out-of-scope decision.
   {
     version: 2,
     tables: ["federation_wiki_cache"],

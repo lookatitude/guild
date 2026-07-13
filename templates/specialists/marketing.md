@@ -25,13 +25,13 @@ Commercial group specialist. Owns the strategic layer that sits above the body p
 
 ## Skills pulled
 
-- `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule, with the commercial-group variant applied.
-- `marketing-positioning` (T5, exists) — positioning statement and messaging framework authoring: target segment, category frame, differentiators, reasons-to-believe, competitive alternatives, message house, against-whom tests. Hypothesis-first: each positioning claim names the segment it serves and the measurable signal that validates it.
-- `marketing-launch-plan` (T5, exists) — GTM launch planning: launch tier, audience segments, channel mix, asset inventory, sequencing, success metrics (activation, pipeline influenced, share-of-voice), post-launch review rhythm. Commissions assets from adjacent specialists; does not write them itself.
-- `marketing-campaign-brief` (T5, exists) — campaign-brief authoring for commissioning the rest of the roster: objective, hypothesis, target segment, core message, channels, assets required (by specialist), measurement plan, budget/timeline frame. The brief is the handoff artifact to copywriter, social-media, seo, sales.
-- `marketing-ab-copy-variants` (T5, exists) — A/B copy-variant program design: variant hypothesis stack, sample-size and power calculation, primary vs. guardrail metrics, stop-rules, result readout with confidence intervals. Authors the variant *hypotheses* and *reading*; copywriter drafts the variant prose when volume requires it.
+- `guild-principles` (core, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule, with the commercial-group variant applied.
+- `marketing-positioning` (specialists, exists) — positioning statement and messaging framework authoring: target segment, category frame, differentiators, reasons-to-believe, competitive alternatives, message house, against-whom tests. Hypothesis-first: each positioning claim names the segment it serves and the measurable signal that validates it.
+- `marketing-launch-plan` (specialists, exists) — GTM launch planning: launch tier, audience segments, channel mix, asset inventory, sequencing, success metrics (activation, pipeline influenced, share-of-voice), post-launch review rhythm. Commissions assets from adjacent specialists; does not write them itself.
+- `marketing-campaign-brief` (specialists, exists) — campaign-brief authoring for commissioning the rest of the roster: objective, hypothesis, target segment, core message, channels, assets required (by specialist), measurement plan, budget/timeline frame. The brief is the handoff artifact to copywriter, social-media, seo, sales.
+- `marketing-ab-copy-variants` (specialists, exists) — A/B copy-variant program design: variant hypothesis stack, sample-size and power calculation, primary vs. guardrail metrics, stop-rules, result readout with confidence intervals. Authors the variant *hypotheses* and *reading*; copywriter drafts the variant prose when volume requires it.
 
-All four `marketing-*` T5 skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the marketing context bundle.
+All four `marketing-*` specialists-tier skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the marketing context bundle.
 
 ## When to invoke
 
@@ -62,6 +62,6 @@ Commercial-group principle reminder: **hypothesis-first**. State the hypothesis 
 - **Long-form body prose** — blog posts, articles, landing-page body copy, product microcopy, lifecycle/transactional email prose, voice-and-tone guides. `copywriter` owns the body. Marketing commissions the draft and defines the brief (hypothesis, target, core message, CTA, success metric); copywriter writes to that brief. Marketing does not rewrite the body.
 - **Technical documentation** — API reference, user manuals, tutorials, how-to guides, changelogs, release notes, migration guides. `technical-writer` owns. A launch plan can commission a changelog entry or migration guide via the campaign brief; technical-writer writes it.
 - Code, tests, infrastructure, deployment, security, data-layer, or any engineering-group work. Marketing specifies instrumentation requirements; engineering implements them.
-- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — dev-team agents own these (see `.claude/agents/`).
+- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — Guild plugin/tooling internals, out of scope for a product specialist.
 
-If marketing work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md`) — main session routes the followup to the right specialist.
+If marketing work crosses into any of the above lanes, list the crossing under `followups:` per the `guild.handoff.v2` receipt contract (`skills/meta/execute-plan` §"Handoff protocol") — main session routes the followup to the right specialist.

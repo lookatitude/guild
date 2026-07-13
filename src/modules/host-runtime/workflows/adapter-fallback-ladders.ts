@@ -7,7 +7,7 @@
  * Contract authority (SoT):
  *   .guild/spec/universal-host-p1.md Section 11 (runtime adapters + minimum-loss ladder)
  *   .guild/plan/universal-host-p1.md Foundation-contract specifications C3
- *   docs/knowledge/decisions/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
+ *   docs/contracts/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
  *
  * CONTRACT: pure types + the frozen rung table + a pure `resolveRung()` + a receipt
  * factory + validators. No I/O, no clock, never throws.

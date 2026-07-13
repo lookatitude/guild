@@ -41,7 +41,7 @@ import { resolveSettings } from "../../config";
 
 /**
  * Backoff strategy. SINGLE SOURCE OF TRUTH = ADR-RE-2
- * (docs/knowledge/decisions/v2-runtime-and-execution-model.md): `immediate|linear|exponential`.
+ * (ADR: v2-runtime-and-execution-model (workspace wiki)): `immediate|linear|exponential`.
  * Must stay identical to read-guild-config.ts DefaultsBlock.retry.backoff + config-cmd.ts
  * VALID_VALUES["defaults.retry.backoff"] — the accepted set and the handled set are one list.
  * `immediate` = zero delay between attempts (retry right away).

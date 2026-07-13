@@ -23,7 +23,7 @@ Produce a sequence that a rep can run on Monday. Each touch earns the next one b
 
 ## Output shape
 
-A markdown file at `.guild/runs/<run-id>/outbound/<slug>.md` with sections:
+A markdown file at `.guild/runs/<run-id>/sales/cold-outreach-<slug>.md` with sections:
 
 1. **ICP + trigger** — persona, company shape, buying signal.
 2. **Value hypothesis** — the headline claim we're betting on.

@@ -24,10 +24,10 @@
 /**
  * The 12 pane-dispatchable hosts Guild's host-adapter contract supports.
  *
- * Contract: docs/knowledge/decisions/host-adapter-contract.md
+ * Contract: ADR: host-adapter-contract (workspace wiki)
  *           (8 contract surfaces; the per-host adapter pages live at
  *            docs/knowledge/team-and-routing/<host>-adapter.md).
- *           docs/knowledge/decisions/verified-multi-host-support.md (the 16-id
+ *           ADR: verified-multi-host-support (workspace wiki) (the 16-id
  *           HOST_IDS registry — this union covers every registry row EXCEPT the
  *           3 agents-file IDE rows, which are file surfaces, not panes).
  *

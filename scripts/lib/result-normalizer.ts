@@ -11,7 +11,7 @@
  *   scripts/lib/result-contracts.ts   — PHASE1_NORMALIZER_TARGETS + CONTRACT_VALIDATORS
  *                                        (binds validateHandoffV2 + parseReviewResult)
  *   hooks/lib/handoff-v2.ts           — extractHandoffEnvelope (the real fence reader)
- *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md §Result contracts
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) §Result contracts
  *
  * TWO LOAD-BEARING L0 CORRECTIONS (enforced here, not just documented):
  *   1. The real wire string is `review_result.v1` — NO `guild.` prefix. A caller

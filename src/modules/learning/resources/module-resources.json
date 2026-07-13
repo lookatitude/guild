@@ -12,13 +12,6 @@
     },
     {
       "category": "scripts",
-      "id": "learn/architecture",
-      "source_path": "scripts/learn/architecture.ts",
-      "resource_path": "resources/scripts/learn/architecture.ts",
-      "sha256": "ca079dcbcdf38f5a840a527c4f78dae75f0804fce6849e3b34e4da18d2b3e822"
-    },
-    {
-      "category": "scripts",
       "id": "learn/assign-layers",
       "source_path": "scripts/learn/assign-layers.ts",
       "resource_path": "resources/scripts/learn/assign-layers.ts",
@@ -30,13 +23,6 @@
       "source_path": "scripts/learn/build-tour.ts",
       "resource_path": "resources/scripts/learn/build-tour.ts",
       "sha256": "9b09176b35ad3fd92dc633e7994470de771ed7be469f24af2d7586740fe7a23d"
-    },
-    {
-      "category": "scripts",
-      "id": "learn/classify-wiki-pages",
-      "source_path": "scripts/learn/classify-wiki-pages.ts",
-      "resource_path": "resources/scripts/learn/classify-wiki-pages.ts",
-      "sha256": "341039358b073ee2acb33beb1ba123a48e94165e819dbecd9b5705202a26ce13"
     },
     {
       "category": "scripts",
@@ -85,28 +71,7 @@
       "id": "learn/extract-structural",
       "source_path": "scripts/learn/extract-structural.ts",
       "resource_path": "resources/scripts/learn/extract-structural.ts",
-      "sha256": "f5e999188a9004af616706bcab6f80b425c369215537dcfa0fd461d84e607496"
-    },
-    {
-      "category": "scripts",
-      "id": "learn/graph-artifact",
-      "source_path": "scripts/learn/graph-artifact.ts",
-      "resource_path": "resources/scripts/learn/graph-artifact.ts",
-      "sha256": "a0b055fb09229422bc84210c92d6d13aa593b42d68852119fb3310536c58729b"
-    },
-    {
-      "category": "scripts",
-      "id": "learn/graph-query",
-      "source_path": "scripts/learn/graph-query.ts",
-      "resource_path": "resources/scripts/learn/graph-query.ts",
-      "sha256": "1be9b0478496b238be45f6386d6f29c43941993f52802096cbafa01cc4b5d527"
-    },
-    {
-      "category": "scripts",
-      "id": "learn/impact",
-      "source_path": "scripts/learn/impact.ts",
-      "resource_path": "resources/scripts/learn/impact.ts",
-      "sha256": "15b86c1b04ca90aabb16038597d81ff7264666bfb096968457f435466fe49215"
+      "sha256": "0cb788ba00604c767b824a81568cad4d12391e0817d78c619c8d3a7a75d46d62"
     },
     {
       "category": "scripts",
@@ -128,13 +93,6 @@
       "source_path": "scripts/learn/knowledge-orchestrator.ts",
       "resource_path": "resources/scripts/learn/knowledge-orchestrator.ts",
       "sha256": "f203d557738f032818edd8d7afcea7dbf2bea0c395d278b9d59b2fc1f0a79bbc"
-    },
-    {
-      "category": "scripts",
-      "id": "learn/lib/architecture",
-      "source_path": "scripts/learn/lib/architecture.ts",
-      "resource_path": "resources/scripts/learn/lib/architecture.ts",
-      "sha256": "2b453b43ef8782660e9ef4cb1302cd5407269ace5c486c0a993c5f83c43a8e3e"
     },
     {
       "category": "scripts",
@@ -177,13 +135,6 @@
       "source_path": "scripts/learn/lib/graph.ts",
       "resource_path": "resources/scripts/learn/lib/graph.ts",
       "sha256": "7457217cfcea2d9dc56af41cac1982626c437eea603d0c3b31549f0791c25ffa"
-    },
-    {
-      "category": "scripts",
-      "id": "learn/lib/graph-artifact",
-      "source_path": "scripts/learn/lib/graph-artifact.ts",
-      "resource_path": "resources/scripts/learn/lib/graph-artifact.ts",
-      "sha256": "c0ab22a931642adc89cd382ac205fe4fc45ff5710690f3d51dbc988f4b89ab14"
     },
     {
       "category": "scripts",
@@ -316,7 +267,7 @@
       "id": "learn/resolve-calls",
       "source_path": "scripts/learn/resolve-calls.ts",
       "resource_path": "resources/scripts/learn/resolve-calls.ts",
-      "sha256": "57be8d04607a43661bc6ba2833b9c17671a44c9934c4d57f7505289f23bf2ce8"
+      "sha256": "b459799b24bb0846db35816a4f0cd78ca692d9385cf343aceaf2df76bc6e68f0"
     },
     {
       "category": "scripts",

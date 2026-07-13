@@ -161,6 +161,51 @@ export function redactKeyValueSecrets(input: string): string {
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
+ * Repo-relative path exemption for group 4.
+ *
+ * Ordinary source paths (`scripts/learn/extract-structural.ts`) contain
+ * ≥20-char `[A-Za-z0-9/]` runs once `-`/`.` split the tail off the match,
+ * so the entropy pattern fires on the prefix and mangles the path
+ * (`<HIGH_ENTROPY_REDACTED>-structural.ts`). Repo-relative paths are the
+ * provenance vocabulary of wiki/handoff frontmatter (`source_refs:`) — they
+ * must survive the scrub.
+ *
+ * A candidate is exempt when the token around the match — expanded over the
+ * path charset `[A-Za-z0-9._/-]` — is shaped like a relative path:
+ *   - candidate itself carries no `+`/`=` (base64 markers);
+ *   - token starts with a word char (absolute `/…` and `~/…` paths keep
+ *     their existing treatment), optionally after `./` or `../`;
+ *   - token has ≥2 `/` segments, or 1 segment plus a short file extension;
+ *   - every `[/._-]`-delimited word stays under the 20-char entropy
+ *     threshold, so a genuine blob inside a path-like string is still
+ *     redacted.
+ */
+const PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
+const PATH_SHAPE =
+  /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+const PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
+
+export function isRelativePathToken(
+  candidate: string,
+  fullInput: string,
+  matchIndex: number,
+): boolean {
+  if (candidate.includes("+") || candidate.includes("=")) return false;
+  let start = matchIndex;
+  while (start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
+  let end = matchIndex + candidate.length;
+  while (end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
+  const token = fullInput.slice(start, end);
+  if (!PATH_SHAPE.test(token)) return false;
+  const slashCount = token.split("/").length - 1;
+  if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  return token
+    .split(/[/._-]+/)
+    .filter(Boolean)
+    .every((word) => word.length < 20);
+}
+
+/**
  * Whitelist predicates — return true if the candidate string should NOT
  * be redacted.
  *
@@ -193,6 +238,11 @@ export function isWhitelistedHighEntropy(
   // doc's "SHA-1/SHA-256-shaped commit hashes" carve-out for the
   // common case of bare hashes in test names / file lists.
   if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
+    return true;
+  }
+  // Repo-relative path token: ordinary source paths are provenance metadata
+  // (wiki source_refs, handoff file lists) — never secrets by shape alone.
+  if (isRelativePathToken(candidate, fullInput, matchIndex)) {
     return true;
   }
   return false;

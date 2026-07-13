@@ -12,10 +12,20 @@
  *   npx tsx plugin/scripts/sync-migration.ts          # write the root stub
  *   npx tsx plugin/scripts/sync-migration.ts --check  # drift-detect, exit 1 if stale
  *   npx tsx plugin/scripts/sync-migration.ts --cwd <repo-root>
+ *   npx tsx plugin/scripts/sync-migration.ts --canonical <rel-path> --target <rel-path>
  *
  * Options:
- *   --check   Regenerate in-memory, byte-diff vs on-disk, exit 1 on any mismatch.
- *   --cwd     Repo root (default ".").
+ *   --check       Regenerate in-memory, byte-diff vs on-disk, exit 1 on any mismatch.
+ *   --cwd         Repo root (default ".").
+ *   --canonical   Canonical source path, relative to --cwd (default:
+ *                 "plugin/.guild/wiki/entities/MIGRATION.md" — this umbrella workspace's
+ *                 own layout; override when running against a differently-shaped repo).
+ *   --target      Generated pointer-stub path, relative to --cwd (default: "MIGRATION.md").
+ *
+ * NOTE: this tool's defaults are specific to THIS umbrella workspace (it regenerates the
+ * workspace-root MIGRATION.md from plugin/.guild/wiki/entities/MIGRATION.md). It is a
+ * self-build utility, not shipped as a module resource to consuming host packages (see
+ * src/modules/migrations/module.manifest.json).
  *
  * Exit codes:
  *   0  Success (write: targets updated; check: all in-sync).
@@ -64,14 +74,23 @@ const STUB_DIGEST_END = "<!-- STUB-DIGEST:END -->";
 
 // ── CLI parsing ───────────────────────────────────────────────────────────
 
-function parseArgs(argv: string[]): { check: boolean; cwd: string } {
+function parseArgs(argv: string[]): {
+  check: boolean;
+  cwd: string;
+  canonicalRel: string;
+  targetRel: string;
+} {
   let check = false;
   let cwd = ".";
+  let canonicalRel = CANONICAL_REL;
+  let targetRel = ROOT_TARGET_REL;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--check") check = true;
     else if (argv[i] === "--cwd" && i + 1 < argv.length) cwd = argv[++i];
+    else if (argv[i] === "--canonical" && i + 1 < argv.length) canonicalRel = argv[++i];
+    else if (argv[i] === "--target" && i + 1 < argv.length) targetRel = argv[++i];
   }
-  return { check, cwd };
+  return { check, cwd, canonicalRel, targetRel };
 }
 
 // ── Pure transform functions ──────────────────────────────────────────────
@@ -272,10 +291,10 @@ export function generateRootStub(canonical: string): string {
 // ── Main ──────────────────────────────────────────────────────────────────
 
 function main(): void {
-  const { check, cwd: cwdArg } = parseArgs(process.argv.slice(2));
+  const { check, cwd: cwdArg, canonicalRel, targetRel } = parseArgs(process.argv.slice(2));
   const cwd = path.resolve(cwdArg);
 
-  const canonicalPath = path.join(cwd, CANONICAL_REL);
+  const canonicalPath = path.join(cwd, canonicalRel);
   if (!fs.existsSync(canonicalPath)) {
     process.stderr.write(
       `[sync-migration] ERROR: canonical not found at ${canonicalPath}\n`
@@ -300,7 +319,7 @@ function main(): void {
     return;
   }
 
-  const rootTarget = path.join(cwd, ROOT_TARGET_REL);
+  const rootTarget = path.join(cwd, targetRel);
 
   if (check) {
     // ── Check mode: byte-diff vs on-disk ─────────────────────────────────
@@ -317,7 +336,7 @@ function main(): void {
       }
     };
 
-    checkFile(rootTarget, rootContent, ROOT_TARGET_REL);
+    checkFile(rootTarget, rootContent, targetRel);
 
     if (stale.length > 0) {
       process.stderr.write(

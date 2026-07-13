@@ -22,7 +22,7 @@
       "id": "build-verify",
       "source_path": "scripts/build-verify.ts",
       "resource_path": "resources/scripts/build-verify.ts",
-      "sha256": "2955cee84700ff4e37feeef775726a6772487c00ea4f2a1273cb36252f821dd7"
+      "sha256": "5385e0602f0144d61c8e5d8cd2ed5a2846c2b36c63333c3a05b180603ac58fa1"
     },
     {
       "category": "scripts",
@@ -57,7 +57,7 @@
       "id": "lib/command-registry",
       "source_path": "scripts/lib/command-registry.ts",
       "resource_path": "resources/scripts/lib/command-registry.ts",
-      "sha256": "3dc6108d86d7ee18ad210d9e1bb388ccb40a40289846276dc51a8e191b771ef6"
+      "sha256": "1344f1b4d2fbbdc445943957c033dee447997481615b4f4003834f2672213ece"
     },
     {
       "category": "scripts",
@@ -65,13 +65,6 @@
       "source_path": "scripts/lib/equivalence-contract.ts",
       "resource_path": "resources/scripts/lib/equivalence-contract.ts",
       "sha256": "37108e6a952ed1eb7a702d2f3d0a01a853b08a0514194d249f1e2e06df9f912d"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/installer-contract",
-      "source_path": "scripts/lib/installer-contract.ts",
-      "resource_path": "resources/scripts/lib/installer-contract.ts",
-      "sha256": "9fafbe616ff1e3e19be1905ea6db32741bd9d2f252e2cec8105b3fbfcdb6f0ab"
     },
     {
       "category": "scripts",
@@ -120,7 +113,7 @@
       "id": "lib/skill-source-transform",
       "source_path": "scripts/lib/skill-source-transform.ts",
       "resource_path": "resources/scripts/lib/skill-source-transform.ts",
-      "sha256": "dac33c05be25426dc7e78b3c78c302a9c2fc989faa037d20a9cbcf5bd9f33ee2"
+      "sha256": "917365be01690f997e909d7be651baef771c9a6d42989254a86c163d17cd5075"
     },
     {
       "category": "scripts",

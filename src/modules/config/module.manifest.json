@@ -21,9 +21,7 @@
       "lib/settings-resolver",
       "lib/config-ui-metadata",
       "lib/config-ui-surface",
-      "lib/host-open-preflight",
-      "lib/init-guild",
-      "lib/init-scaffold-manifest"
+      "lib/host-open-preflight"
     ]
   }
 }

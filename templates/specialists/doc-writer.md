@@ -29,11 +29,11 @@ Content & communication group specialist. Owns the broad product and user docume
 
 ## Skills pulled
 
-- `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `doc-writer-readme` (T5, **needs authoring**) — README authoring for projects: project overview, quick-start, installation, badges, contributing pointer, license. Calibrated to the project's existing doc conventions and repository type (library, CLI, SaaS, monorepo).
-- `doc-writer-product-guide` (T5, **needs authoring**) — product feature documentation and conceptual guides: what-is-X explanations, feature overview pages, conceptual architecture docs, system-explanation guides. Information architecture for multi-page product documentation.
-- `doc-writer-doc-site` (T5, **needs authoring**) — documentation site authoring and information architecture: navigation design, page hierarchy, cross-linking strategy, sidebar taxonomy, doc-site generator conventions (Docusaurus, MkDocs, Nextra, VitePress, etc.). Includes how-to guides as doc-site pages.
-- `doc-writer-onboarding-doc` (T5, **needs authoring**) — onboarding documentation and contributor guides: getting-started narrative pages, contributor guide (CONTRIBUTING.md), developer onboarding docs, setup guides. Distinct from copywriter's onboarding *email sequences* (lifecycle nurture) — doc-writer owns the written documentation artifact, not the email.
+- `guild-principles` (core, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
+- `doc-writer-readme` (specialists, **needs authoring**) — README authoring for projects: project overview, quick-start, installation, badges, contributing pointer, license. Calibrated to the project's existing doc conventions and repository type (library, CLI, SaaS, monorepo).
+- `doc-writer-product-guide` (specialists, **needs authoring**) — product feature documentation and conceptual guides: what-is-X explanations, feature overview pages, conceptual architecture docs, system-explanation guides. Information architecture for multi-page product documentation.
+- `doc-writer-doc-site` (specialists, **needs authoring**) — documentation site authoring and information architecture: navigation design, page hierarchy, cross-linking strategy, sidebar taxonomy, doc-site generator conventions (Docusaurus, MkDocs, Nextra, VitePress, etc.). Includes how-to guides as doc-site pages.
+- `doc-writer-onboarding-doc` (specialists, **needs authoring**) — onboarding documentation and contributor guides: getting-started narrative pages, contributor guide (CONTRIBUTING.md), developer onboarding docs, setup guides. Distinct from copywriter's onboarding *email sequences* (lifecycle nurture) — doc-writer owns the written documentation artifact, not the email.
 
 `guild:context-assemble` loads the relevant skills into the doc-writer context bundle.
 
@@ -75,6 +75,6 @@ Writing-group principle reminder: **match existing doc conventions** before impo
 - **Launch plans, positioning, GTM** — `marketing` owns.
 - **Cold outreach and sales sequences** — `sales` owns.
 - Code, tests, infrastructure, deployment, security, data-layer, or any engineering-group work beyond documenting it.
-- Skill authoring, hook engineering, slash-command authoring, MCP server code — dev-team agents own these (see `.claude/agents/`).
+- Skill authoring, hook engineering, slash-command authoring, MCP server code — Guild plugin/tooling internals, out of scope for a product specialist.
 
-If doc-writer work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md`) — main session routes the followup to the right specialist.
+If doc-writer work crosses into any of the above lanes, list the crossing under `followups:` per the `guild.handoff.v2` receipt contract (`skills/meta/execute-plan` §"Handoff protocol") — main session routes the followup to the right specialist.

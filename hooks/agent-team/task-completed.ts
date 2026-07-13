@@ -101,7 +101,7 @@ interface TaskCompletedPayload {
 
 // POLICY_EFFECTIVE_DATE is imported from ../lib/run-date.ts — it is the SINGLE
 // named constant for the OD-4 enforcement boundary. Canonical source:
-//   docs/knowledge/decisions/communication-format-policy.md §"policy_effective_date"
+//   ADR: communication-format-policy (workspace wiki) §"policy_effective_date"
 
 /**
  * §8.2 required fields that every handoff receipt markdown must contain.

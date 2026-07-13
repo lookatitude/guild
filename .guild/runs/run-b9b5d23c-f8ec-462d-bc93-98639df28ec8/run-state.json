@@ -1,0 +1,17 @@
+{
+  "schema_version": "guild.run_state.v1",
+  "run_id": "run-b9b5d23c-f8ec-462d-bc93-98639df28ec8",
+  "plan_slug": "run-b9b5d23c-f8ec-462d-bc93-98639df28ec8",
+  "program_id": null,
+  "wave_index": 0,
+  "lanes": {
+    "9": {
+      "status": "in_progress",
+      "attempt": 1,
+      "depends_on": [],
+      "receipt_ref": null,
+      "updated_at": "2026-06-07T00:20:07.066Z"
+    }
+  },
+  "last_checkpoint_at": "2026-06-07T00:20:07.066Z"
+}

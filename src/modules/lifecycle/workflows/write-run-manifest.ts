@@ -4,7 +4,7 @@
  *
  * RE-6 — multi-wave program run-manifest writer.
  *
- * Contract (BY POINTER): docs/knowledge/decisions/v2-runtime-and-execution-model.md
+ * Contract (BY POINTER): ADR: v2-runtime-and-execution-model (workspace wiki)
  *   §RE-6 (run-manifest). Schema: guild.run_manifest.v1. Consumed by
  *   /guild:resume (skills/meta) to continue a multi-wave program across
  *   sessions — this writer NEVER reads/dispatches; it only records state.

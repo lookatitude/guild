@@ -1,5 +1,5 @@
 {
-  "version": "guild.knowledge_links.v1",
+  "schema_version": "guild.knowledge_links.v1",
   "links": [
     {
       "from": "domain:.claude-plugin",
@@ -5266,6 +5266,390 @@
     {
       "from": "domain:templates",
       "to": "file:templates/skills/SKILL.template.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.github",
+      "to": "file:.github/workflows/branch-policy.yml",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:.github",
+      "to": "file:.github/workflows/test-suites.yml",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:(root)",
+      "to": "file:.guildignore",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:commands",
+      "to": "file:commands/goal.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:docs",
+      "to": "file:docs/contracts/universal-host-p1-l0-foundation-contracts.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:docs",
+      "to": "file:docs/generated/host-support-matrix.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:evidence",
+      "to": "file:evidence/desktop-app-smoke/claude-code-app/local-claude-desktop-native-guild.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:evidence",
+      "to": "file:evidence/desktop-app-smoke/claude-code-app/local-claude-desktop-ui.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:evidence",
+      "to": "file:evidence/desktop-app-smoke/codex-app/local-codex-app-computer-use.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:evidence",
+      "to": "file:evidence/desktop-app-smoke/codex-app/local-codex-app-user-confirmed.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:evidence",
+      "to": "file:evidence/host-smoke/antigravity-cli/operator-local-macos.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:evidence",
+      "to": "file:evidence/host-smoke/claude-code-cli/operator-local-macos.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:evidence",
+      "to": "file:evidence/host-smoke/codex-cli/operator-local-macos.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:evidence",
+      "to": "file:evidence/host-smoke/pi-cli/operator-local-macos.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/lib/self-build.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:hooks",
+      "to": "file:hooks/update-check.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/build-verify.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/codex-guild-prompt-bridge.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/desktop-app-smoke.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/feedback-triage.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/generate-support-matrix.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/host-smoke.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/initiative-gate.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/learn/lib/knowledge-links-io.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/atomic-write.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapters/cursor.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapters/github-copilot.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapters/opencode.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapters/rovo-dev.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-adapters/wrapped-cli-base.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-public-state.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/host-smoke-store.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/roster.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/run-events.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/self-update.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/shared/scrub-redact.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/shared/secret-patterns.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/lib/update-check.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/release-changelog.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/roster-resolve.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:scripts",
+      "to": "file:scripts/verify-desktop-app-smoke.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/guild-operations/operations-contract.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/guild-quality/quality-contract.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/initiative/SKILL.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:skills",
+      "to": "file:skills/meta/initiative/evals.json",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/evals/workflows/goal-task-schema.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/security/workflows/scrub-redact.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/security/workflows/secret-patterns.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:src",
+      "to": "file:src/modules/state/workflows/atomic-write.ts",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/architect.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/backend.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/copywriter.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/devops.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/doc-writer.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/frontend.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/marketing.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/mobile.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/qa.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/researcher.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/sales.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/security.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/seo.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/social-media.md",
+      "type": "touches",
+      "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
+    },
+    {
+      "from": "domain:templates",
+      "to": "file:templates/specialists/technical-writer.md",
       "type": "touches",
       "run_id": "run-d74c43ae-4905-452e-be33-442ca9b1c9f4"
     }

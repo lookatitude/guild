@@ -5,7 +5,7 @@
  *
  * TDD suite for no-accidental-write.ts (U7 — AC-6 negative gate).
  *
- * Policy ref: docs/knowledge/decisions/communication-format-policy.md
+ * Policy ref: ADR: communication-format-policy (workspace wiki)
  *   §"Invariants / non-goals" — the five protected surfaces:
  *     (1) .guild/settings.json — must stay JSON (schema shape pinned)
  *     (2) .guild/workspace.json — unchanged (shape pinned)

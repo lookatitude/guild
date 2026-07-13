@@ -25,36 +25,29 @@ each phase command owns its phase; all state lives in `.guild/`.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
 
-Before run-trace start — and before any `.guild/` state inspection — run the
-preflight. This is the phase-wide intake step for every `/guild:*` lifecycle
-command (briefing §10; `scripts/lib/runstart-preflight.ts`):
+Before run-trace start — and before any `.guild/` state inspection — the
+run-trace CLI runs the preflight for you. This is the phase-wide intake step for
+every `/guild:*` lifecycle command (briefing §10;
+`scripts/lib/runstart-preflight.ts`).
 
-1. **Resolve settings** via `runStartPreflight({ cwd, flags? })` — walks the
-   full 7-source inheritance chain:
+Since wave 2, `run-trace.js start` is the **sole caller** of
+`runStartPreflight` — no command calls it itself. On `start` the CLI:
+
+1. **Resolves settings** by walking the full 7-source inheritance chain:
    `builtin < workspace < workspace-local < project < project-local < rigor < CLI`
-   (these are the exact `Source` enum values from the resolver; `rigor` is the
-   `--rigor` profile expansion step that sits between project-local and CLI).
-   Validates closed keys.
-2. **Destructure the result:**
-   ```
-   const { resolved, sources, validation, tmux, needsTmuxPrompt, tmuxPrompt,
-           providers, snapshot } = result;
-   ```
-3. **Tmux prompt (OD-3, operator-confirmed):** if `needsTmuxPrompt` is true
-   (tmux on PATH AND effective `agent_mode !== "team"`):
-   - Show the operator: `tmuxPrompt.question`
-   - On YES: run `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand>
-     --cwd <cwd>` (U2 HARD-SET path — always-asks under auto-approve).
-   - On NO: continue with the current resolved backend; record the decision.
-4. **Pass `result.snapshot`** to `startRun` (U6 writes
-   `.guild/runs/<id>/resolved-settings.json` + a compact `settings_ref` in
-   `run.yaml`; `resolved_at_ref` is stamped to the run-id at write time).
-5. **Proceed to run-trace start.** All later phases read the snapshot via
-   `readResolvedSettingsSnapshot(runId, { cwd })` rather than re-resolving.
+   (the exact `Source` enum values; `rigor` is the `--rigor` profile-expansion
+   step between project-local and CLI) and validates closed keys.
+2. **Resolves the backend deterministically** (tmux probe + provider detection);
+   the interactive tmux-persist prompt (OD-3) is handled at config time, not
+   per command — a run inherits the effective `agent_mode` without prompting.
+3. **Writes the snapshot** — `.guild/runs/<id>/resolved-settings.json` + a
+   compact `settings_ref` in `run.yaml` (`resolved_at_ref` stamped to the
+   run-id at write time) — before the run opens.
 
-In this workspace, root `agent_mode: "team"` is inherited by all child
-projects after U1 fixes inheritance; `needsTmuxPrompt` will be false on
-every child run once inheritance is in place.
+All later phases read the snapshot via `readResolvedSettingsSnapshot(runId,
+{ cwd })` rather than re-resolving. In this workspace, root `agent_mode:
+"team"` is inherited by all child projects, so tmux never needs prompting on a
+child run.
 
 ## Run recording
 
@@ -157,15 +150,28 @@ The closed-key `defaults:` config schema is in `/guild:config` and
 
 This contract wires the OQ11 non-interactive hard-fail into the bare-`/guild:guild`
 entry path (`decisions/command-clean-slate.md #7`). It introduces **no new
-gate** — it reuses the existing gate machinery's non-interactive branch.
+gate** — it reuses the existing gate machinery's non-interactive branch, and the
+predicate itself is **deterministic code**, not model prose: whenever an
+interactive gate is about to be reached in this bare-entry path, run
 
-**Trigger (all of):** an interactive gate is reached **AND** the context is
-non-interactive (CI / no TTY) **AND** no `--auto-approve=` covers that gate
-**AND** no explicit named phase verb was given (this bare `/guild:guild` NL-detect
-path).
+```
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/oq11-gate-check.ts \
+  --gate=<gate> [--interactive|--non-interactive] \
+  [--auto-approve=<gate,gate,...>|all] [--named-phase]
+```
 
-**Behaviour:** Guild **HARD-FAILS — exits non-zero — with the actionable
-message below. It NEVER implicitly grants autonomy** (never silently
+(same invocation pattern as the run-start preflight's `config-cmd.ts` call above).
+The CLI prints a `{hard_fail, exit_code, autonomy_granted}` JSON result on stdout;
+when `hard_fail` is true it also prints the actionable message below to stderr and
+exits non-zero. **Trust the CLI's verdict — never re-derive the predicate in
+prose.** Its trigger (all of: an interactive gate is reached, the context is
+non-interactive, no `--auto-approve=` covers that gate, no explicit named phase
+verb was given — this bare `/guild:guild` NL-detect path) and its
+`autonomy_granted` output are the single source of truth for whether this path may
+proceed.
+
+**Behaviour on hard-fail:** Guild **HARD-FAILS — exits non-zero — with the
+actionable message below. It NEVER implicitly grants autonomy** (never silently
 proceeds, never auto-satisfies a soft gate; the hard-fail happens *before*
 any gated action). The deterministic CI contract is the **explicit-verb
 path**, not bare-`/guild:guild` NL detection (`command-surface.md §5.1`: scripts
@@ -173,7 +179,7 @@ and CI must name the phase explicitly). The always-ask hard set
 (destructive / network / spend) is orthogonal and never relaxed by this path
 or by `--auto-approve`.
 
-Actionable message (printed, then exit non-zero):
+Actionable message (CLI-emitted, then exit non-zero):
 
 ```
 error: interactive gate '<gate>' reached in a non-interactive context

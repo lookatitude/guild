@@ -1,12 +1,14 @@
 # rearch-rails.yml — architecture enforcement rails (plugin re-architecture, W1-W7).
 #
-# Runs the 9 self-policing rails in tests/rearch/run-all.ts on every PR/push so the
+# Runs the 10 self-policing rails in tests/rearch/run-all.ts on every PR/push so the
 # re-architecture's invariants are GATED, not just checklisted:
 #   STRICT (block):  R-DUP (no duplication), R-DEP (inward layering law), R-DIST (hooks dist-sync
 #                    + import canonicality), R-HOST (add-a-host = registry row, zero core),
 #                    R-SEC (security controls are code + hostile-tested), R-TRACE (trace schemas),
 #                    R-DECL (declarative surface_manifest mirrors prose).
-#   ADVISORY (report): R-PERF (perf budgets — timing-variance-prone in CI), R-VAC (anti-vacuity backlog).
+#   ADVISORY (report): R-PERF (perf budgets — timing-variance-prone in CI), R-VAC (anti-vacuity
+#                    backlog), R-REACH (script/lib reachability — advisory until one clean cycle,
+#                    see tests/rearch/r-reach.ts's GRADUATION note).
 # A non-zero exit means a STRICT rail is RED — the architecture invariant it guards was broken.
 #
 # `--prove` first asserts every rail is non-vacuous (a rail that cannot fail is worthless), then the

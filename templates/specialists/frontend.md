@@ -27,13 +27,13 @@ The pushy DO NOT TRIGGER discipline applies here because frontend triggers (comp
 
 ## Skills pulled
 
-- `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `frontend-react` (T5, exists) — React-specific component authoring: hooks discipline, suspense boundaries, error boundaries, memoization heuristics, render-cost reasoning, JSX patterns.
-- `frontend-state-management` (T5, exists) — framework-agnostic state patterns: local vs. global state, server-state vs. client-state separation (React Query / SWR / TanStack Query), store shape (Redux / Zustand / Pinia / Svelte stores), selectors, normalisation.
-- `frontend-bundler-config` (T5, exists) — Vite / Webpack / esbuild config: dev server, code splitting, tree shaking, asset handling, environment variables, production build optimisation, bundle-size budgets.
-- `frontend-a11y` (T5, exists) — accessibility patterns: semantic HTML defaults, ARIA only when needed, keyboard navigation, focus management, screen-reader testing, Lighthouse a11y baseline.
+- `guild-principles` (core, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
+- `frontend-react` (specialists, exists) — React-specific component authoring: hooks discipline, suspense boundaries, error boundaries, memoization heuristics, render-cost reasoning, JSX patterns.
+- `frontend-state-management` (specialists, exists) — framework-agnostic state patterns: local vs. global state, server-state vs. client-state separation (React Query / SWR / TanStack Query), store shape (Redux / Zustand / Pinia / Svelte stores), selectors, normalisation.
+- `frontend-bundler-config` (specialists, exists) — Vite / Webpack / esbuild config: dev server, code splitting, tree shaking, asset handling, environment variables, production build optimisation, bundle-size budgets.
+- `frontend-a11y` (specialists, exists) — accessibility patterns: semantic HTML defaults, ARIA only when needed, keyboard navigation, focus management, screen-reader testing, Lighthouse a11y baseline.
 
-All four `frontend-*` T5 skills exist under `skills/specialists/`. When a task needs frontend methodology beyond them, the main session may also pull `guild:tdd` + `guild:systematic-debug`.
+All four `frontend-*` specialists-tier skills exist under `skills/specialists/`. When a task needs frontend methodology beyond them, the main session may also pull `guild:tdd` + `guild:systematic-debug`.
 
 ## When to invoke
 
@@ -66,8 +66,8 @@ Implied-specialist rule: qa is auto-included whenever frontend ships non-trivial
 - Visual / brand / interaction design, design-system *creation* (as opposed to implementation) — there is no dedicated UI/visual-design specialist in the Guild roster. If a task needs one, frontend flags it as a `followups:` for main session, not silently absorbed.
 - UI microcopy and product strings — `copywriter` owns. Frontend wires strings into components; final wording is copywriter's call.
 - Technical SEO audits — `seo` owns. Frontend implements the fixes seo diagnoses; frontend does not author the audit itself.
-- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — dev-team agents own these (see `.claude/agents/`).
+- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — Guild plugin/tooling internals, out of scope for a product specialist.
 
 **Boundary vs the generic `developer` (cost-aware-tiering-and-lean-context ADR §7):** any web-frontend work (components, state, routing, bundler, styling, a11y, frontend perf) is **frontend's**, even when phrased generically ("build the page", "implement this view"). The generic `developer` (mid-tier) takes only domain-*less* residual lanes and hands off frontend work here. Frontend does not defer its domain to `developer`.
 
-If frontend work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md`) — main session routes the followup to the right specialist.
+If frontend work crosses into any of the above lanes, list the crossing under `followups:` per the `guild.handoff.v2` receipt contract (`skills/meta/execute-plan` §"Handoff protocol") — main session routes the followup to the right specialist.

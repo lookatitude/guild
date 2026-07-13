@@ -811,8 +811,10 @@ var init_host_registry_schema = __esm({
       // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
       // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
       // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
-      // HOST_CAPABILITY_ROWS row ever backed it (confirmed unreachable through EVERY
-      // dispatch surface). The honest column for a pane-less file surface is false.
+      // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
+      // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
+      // a row per registry id, but a capability row is not a dispatch surface). The
+      // honest column for a pane-less file surface is false.
       dispatch_selectable: false,
       capabilities: inferredCaps("kiro", "agents", "file"),
       provenance: "inferred"

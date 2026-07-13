@@ -6,8 +6,8 @@
  * matrix (never host-name guessing).
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §Host Role Model
- *   docs/knowledge/decisions/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
+ *   ADR: universal-host-plugin-architecture (workspace wiki) §Host Role Model
+ *   docs/contracts/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
  *   .guild/plan/universal-host-p1.md P1-L8 + §Foundation-contract specifications
  *
  * WHY: the run resolves each role to the STRONGEST available substrate, driven by

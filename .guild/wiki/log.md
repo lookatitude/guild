@@ -1,5 +1,8 @@
 # Guild Wiki Log
 
+## 2026-07-13
+- decided g-series-learn-clis-on-demand-only
+
 ## 2026-06-18
 - decided v2-final-design-and-doc-artifact-boundary
 

@@ -1,0 +1,540 @@
+{
+  "schema": "guild.knowledge_suppressed.v1",
+  "generated_at": "2026-07-13T02:06:22.602Z",
+  "suppressed": [
+    {
+      "id": "wiki_page:.guild/wiki/context/v2-index.md",
+      "source_ref": ".guild/wiki/context/v2-index.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/archived-phase-gates-remain-historical.md",
+      "source_ref": ".guild/wiki/decisions/archived-phase-gates-remain-historical.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/autonomy-locking-validity.md",
+      "source_ref": ".guild/wiki/decisions/autonomy-locking-validity.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/benchmark-import-and-fixture-artifact-policy.md",
+      "source_ref": ".guild/wiki/decisions/benchmark-import-and-fixture-artifact-policy.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/c2-g6-epp-ratification.md",
+      "source_ref": ".guild/wiki/decisions/c2-g6-epp-ratification.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/canonical-specialist-roster-groups-and-tiers.md",
+      "source_ref": ".guild/wiki/decisions/canonical-specialist-roster-groups-and-tiers.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/codex-review-user-facing-opt-in.md",
+      "source_ref": ".guild/wiki/decisions/codex-review-user-facing-opt-in.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/command-clean-slate.md",
+      "source_ref": ".guild/wiki/decisions/command-clean-slate.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/concept-integration.md",
+      "source_ref": ".guild/wiki/decisions/concept-integration.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/config-surface-and-inheritance.md",
+      "source_ref": ".guild/wiki/decisions/config-surface-and-inheritance.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/config-surface-settings-json.md",
+      "source_ref": ".guild/wiki/decisions/config-surface-settings-json.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/continuous-knowledge-and-learning-loop.md",
+      "source_ref": ".guild/wiki/decisions/continuous-knowledge-and-learning-loop.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md",
+      "source_ref": ".guild/wiki/decisions/cost-aware-tiering-and-lean-context.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/current-project-implementation-plan.md",
+      "source_ref": ".guild/wiki/decisions/current-project-implementation-plan.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/di1-di6-contracts.md",
+      "source_ref": ".guild/wiki/decisions/di1-di6-contracts.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/emit-loop-event-self-contained.md",
+      "source_ref": ".guild/wiki/decisions/emit-loop-event-self-contained.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/g-series-learn-clis-on-demand-only.md",
+      "source_ref": ".guild/wiki/decisions/g-series-learn-clis-on-demand-only.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/guild-diagnose-self-fix-command.md",
+      "source_ref": ".guild/wiki/decisions/guild-diagnose-self-fix-command.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/guild-execution-shape-library-cli-first.md",
+      "source_ref": ".guild/wiki/decisions/guild-execution-shape-library-cli-first.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/guild-inventory-and-parity-contracts.md",
+      "source_ref": ".guild/wiki/decisions/guild-inventory-and-parity-contracts.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/human-agent-ux-and-orchestration.md",
+      "source_ref": ".guild/wiki/decisions/human-agent-ux-and-orchestration.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/knowledge-tier-validate-finalize-boundary.md",
+      "source_ref": ".guild/wiki/decisions/knowledge-tier-validate-finalize-boundary.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/machinery-agents-vs-specialist-template-library.md",
+      "source_ref": ".guild/wiki/decisions/machinery-agents-vs-specialist-template-library.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/new-specialist-same-session-constraint.md",
+      "source_ref": ".guild/wiki/decisions/new-specialist-same-session-constraint.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/phase-spine-reconciliation.md",
+      "source_ref": ".guild/wiki/decisions/phase-spine-reconciliation.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/prd-right-sizing.md",
+      "source_ref": ".guild/wiki/decisions/prd-right-sizing.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/provider-role-model-and-capability-routing.md",
+      "source_ref": ".guild/wiki/decisions/provider-role-model-and-capability-routing.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/quality-operations-asymmetry.md",
+      "source_ref": ".guild/wiki/decisions/quality-operations-asymmetry.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/review-independence-and-dual-review-policy.md",
+      "source_ref": ".guild/wiki/decisions/review-independence-and-dual-review-policy.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/run-lifecycle-contract.md",
+      "source_ref": ".guild/wiki/decisions/run-lifecycle-contract.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/run-scoped-telemetry-and-loop-events.md",
+      "source_ref": ".guild/wiki/decisions/run-scoped-telemetry-and-loop-events.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/telemetry-anchors-to-repo-root-not-cwd.md",
+      "source_ref": ".guild/wiki/decisions/telemetry-anchors-to-repo-root-not-cwd.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/templates-and-migration.md",
+      "source_ref": ".guild/wiki/decisions/templates-and-migration.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/two-audit-schemas.md",
+      "source_ref": ".guild/wiki/decisions/two-audit-schemas.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/universal-host-p2-p3-wave-sequencing.md",
+      "source_ref": ".guild/wiki/decisions/universal-host-p2-p3-wave-sequencing.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/v2-cross-host-orchestration.md",
+      "source_ref": ".guild/wiki/decisions/v2-cross-host-orchestration.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/v2-final-design-and-doc-artifact-boundary.md",
+      "source_ref": ".guild/wiki/decisions/v2-final-design-and-doc-artifact-boundary.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/v2-persistence-and-sqlite-index.md",
+      "source_ref": ".guild/wiki/decisions/v2-persistence-and-sqlite-index.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/v2-review-broker-and-artifact-bus.md",
+      "source_ref": ".guild/wiki/decisions/v2-review-broker-and-artifact-bus.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/v2-runtime-and-execution-model.md",
+      "source_ref": ".guild/wiki/decisions/v2-runtime-and-execution-model.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/v2-scope-and-risk-g1-g8.md",
+      "source_ref": ".guild/wiki/decisions/v2-scope-and-risk-g1-g8.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/v2-security-and-untrusted-content.md",
+      "source_ref": ".guild/wiki/decisions/v2-security-and-untrusted-content.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/v2x-command-surface-dispatch-and-internalization.md",
+      "source_ref": ".guild/wiki/decisions/v2x-command-surface-dispatch-and-internalization.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/verification-plan-and-review.md",
+      "source_ref": ".guild/wiki/decisions/verification-plan-and-review.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/wave3-producer-skill-additive.md",
+      "source_ref": ".guild/wiki/decisions/wave3-producer-skill-additive.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/decisions/workspace-aware-init-and-federation.md",
+      "source_ref": ".guild/wiki/decisions/workspace-aware-init-and-federation.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/MIGRATION.md",
+      "source_ref": ".guild/wiki/entities/MIGRATION.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/agent-and-skill-factory.md",
+      "source_ref": ".guild/wiki/entities/agent-and-skill-factory.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/agent-memory-sqlite-cache.md",
+      "source_ref": ".guild/wiki/entities/agent-memory-sqlite-cache.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/agent-memory-systems.md",
+      "source_ref": ".guild/wiki/entities/agent-memory-systems.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/antigravity-2-adapter.md",
+      "source_ref": ".guild/wiki/entities/antigravity-2-adapter.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/claude-ai-connector-adapter.md",
+      "source_ref": ".guild/wiki/entities/claude-ai-connector-adapter.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/claude-code-adapter.md",
+      "source_ref": ".guild/wiki/entities/claude-code-adapter.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/claude-code-desktop-adapter.md",
+      "source_ref": ".guild/wiki/entities/claude-code-desktop-adapter.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/claude-code-web-adapter.md",
+      "source_ref": ".guild/wiki/entities/claude-code-web-adapter.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/codebase-understanding.md",
+      "source_ref": ".guild/wiki/entities/codebase-understanding.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/codex-adapter.md",
+      "source_ref": ".guild/wiki/entities/codex-adapter.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/codex-app-adapter.md",
+      "source_ref": ".guild/wiki/entities/codex-app-adapter.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/codex-openai-adapter.md",
+      "source_ref": ".guild/wiki/entities/codex-openai-adapter.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/command-surface.md",
+      "source_ref": ".guild/wiki/entities/command-surface.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/cost-tiering-and-context-management.md",
+      "source_ref": ".guild/wiki/entities/cost-tiering-and-context-management.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/cross-host-review-and-loop-control.md",
+      "source_ref": ".guild/wiki/entities/cross-host-review-and-loop-control.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/edge-cases.md",
+      "source_ref": ".guild/wiki/entities/edge-cases.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/gemini-cli-adapter.md",
+      "source_ref": ".guild/wiki/entities/gemini-cli-adapter.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/greenfield-brownfield-flows.md",
+      "source_ref": ".guild/wiki/entities/greenfield-brownfield-flows.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/initiative-and-phase-workflows.md",
+      "source_ref": ".guild/wiki/entities/initiative-and-phase-workflows.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/knowledge-and-advisory.md",
+      "source_ref": ".guild/wiki/entities/knowledge-and-advisory.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/knowledge-classification-schema.md",
+      "source_ref": ".guild/wiki/entities/knowledge-classification-schema.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/lifecycle-overview.md",
+      "source_ref": ".guild/wiki/entities/lifecycle-overview.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/memory-and-knowledge.md",
+      "source_ref": ".guild/wiki/entities/memory-and-knowledge.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/observability-tracing-replay.md",
+      "source_ref": ".guild/wiki/entities/observability-tracing-replay.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/phase-entrypoints.md",
+      "source_ref": ".guild/wiki/entities/phase-entrypoints.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/pi-adapter.md",
+      "source_ref": ".guild/wiki/entities/pi-adapter.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/project-initialization-workflows.md",
+      "source_ref": ".guild/wiki/entities/project-initialization-workflows.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/run-replay-and-evolution-workflows.md",
+      "source_ref": ".guild/wiki/entities/run-replay-and-evolution-workflows.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/runtime-execution-model.md",
+      "source_ref": ".guild/wiki/entities/runtime-execution-model.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/skill-creator.md",
+      "source_ref": ".guild/wiki/entities/skill-creator.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/skills-and-self-evolution.md",
+      "source_ref": ".guild/wiki/entities/skills-and-self-evolution.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/team-composition.md",
+      "source_ref": ".guild/wiki/entities/team-composition.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/universal-host-build-flow.md",
+      "source_ref": ".guild/wiki/entities/universal-host-build-flow.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/entities/workflow-operating-model.md",
+      "source_ref": ".guild/wiki/entities/workflow-operating-model.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/index.md",
+      "source_ref": ".guild/wiki/index.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/log.md",
+      "source_ref": ".guild/wiki/log.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/standards/prompt-injection-defenses.md",
+      "source_ref": ".guild/wiki/standards/prompt-injection-defenses.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/standards/release-discipline.md",
+      "source_ref": ".guild/wiki/standards/release-discipline.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/standards/review-checklist.md",
+      "source_ref": ".guild/wiki/standards/review-checklist.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/standards/runtime-security-permissions.md",
+      "source_ref": ".guild/wiki/standards/runtime-security-permissions.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/standards/shell-hook-json-parsing.md",
+      "source_ref": ".guild/wiki/standards/shell-hook-json-parsing.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    },
+    {
+      "id": "wiki_page:.guild/wiki/standards/tools-and-mcp.md",
+      "source_ref": ".guild/wiki/standards/tools-and-mcp.md",
+      "reason": "classifier returned no judgment for this page id (unclassified)",
+      "stage": "wiki-index-unclassified"
+    }
+  ]
+}

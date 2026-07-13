@@ -429,9 +429,6 @@ describe("Claude HostAdapter concrete parity", () => {
         )
       ).toBe(true);
       expect(
-        fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "runtime-adapters.ts"))
-      ).toBe(true);
-      expect(
         fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "host-adapter-contract.ts"))
       ).toBe(true);
       expect(

@@ -145,7 +145,7 @@ fabricate or stub it.
 
 Implements the cost-aware-tiering ADR (§4) and the persistence/SQLite-index policy (D-PS-2). Each agent assembles its **own** task-scoped context by querying the knowledge base for **exactly its task** — not a broadcast of the whole project. This is a pull discipline layered onto the three-layer rule above; the **~3k target / 6k hard cap is unchanged** (`## Size budget` — bound by pointer, never re-spelled).
 
-The **recall-before-read rule** (`cost-techniques.md §3`, surfaced in ADR §4 + D-PS-2): before an agent reads a file, recall the task description against the wiki — through the **single config-aware recall entry-point** `scripts/lib/recall.ts`. There is **one** bundle-recall call; the CLI picks the mechanism internally and protects every chunk intrinsically.
+The **recall-before-read rule** (https://guildstack.dev/docs/architecture, surfaced in ADR §4 + D-PS-2): before an agent reads a file, recall the task description against the wiki — through the **single config-aware recall entry-point** `scripts/lib/recall.ts`. There is **one** bundle-recall call; the CLI picks the mechanism internally and protects every chunk intrinsically.
 
 ```
 npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/recall.ts --query "<task description>" --cwd <repo-root> --run-id <run-id> [--category <cat>] [--limit 10]
@@ -173,7 +173,7 @@ Recall content lands in the **task-dependent** layer and is subject to the same 
 Implements ADR §4 (SC-3). The coordinator stays lean by **dispatching by pointer** and consuming only compact `guild.handoff.v2` envelopes (canonical body at ADR §5, bound by pointer — distinct from the frozen `guild.handoff_receipt.v1`), **never** full specialist transcripts (which remain in `.guild/runs/` for audit and never enter lead context). When a receipt is consumed (here, or as an upstream `depends-on:` contract in the task-dependent layer above), the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (see §"Handoff contract" of the communication format policy). A frontmatter-only receipt with no embedded v2 block is not a valid machine receipt. The lead holds:
 
 - **Last-N envelopes in full** (default last-N = 5) + a **rolling summary** of older work.
-- **Recompute at a capacity threshold** (~70% of context capacity; `cost-techniques.md §4`).
+- **Recompute at a capacity threshold** (~70% of context capacity; https://guildstack.dev/docs/architecture).
 
 **Compaction vs summarization (load-bearing distinction).** For **technical artifacts** — file paths, error codes, identifiers, contracts — use **compaction (verbatim pruning), not summarization**: verbatim accuracy, zero hallucination, reversible. **Summarization (paraphrase) is reserved for narrative / reasoning history** where paraphrase is safe. Never paraphrase a file path, a `task-id`, or a contract field into prose — that loses the pointer the next lane needs.
 

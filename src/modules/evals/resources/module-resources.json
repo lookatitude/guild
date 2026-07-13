@@ -12,13 +12,6 @@
     },
     {
       "category": "scripts",
-      "id": "lib/counterfactual-replay",
-      "source_path": "scripts/lib/counterfactual-replay.ts",
-      "resource_path": "resources/scripts/lib/counterfactual-replay.ts",
-      "sha256": "897e6f1505e7c5756afceb4a45cb8702231f7c4304acb9bbabbbc6f51368d983"
-    },
-    {
-      "category": "scripts",
       "id": "lib/define-schema",
       "source_path": "scripts/lib/define-schema.ts",
       "resource_path": "resources/scripts/lib/define-schema.ts",
@@ -29,21 +22,14 @@
       "id": "lib/define-test-matrix",
       "source_path": "scripts/lib/define-test-matrix.ts",
       "resource_path": "resources/scripts/lib/define-test-matrix.ts",
-      "sha256": "d32ef33ac59570677a0c506573545a1ff12889ac39b952c03db6a8af5668c10a"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/define-test-matrix.import-contract",
-      "source_path": "scripts/lib/define-test-matrix.import-contract.ts",
-      "resource_path": "resources/scripts/lib/define-test-matrix.import-contract.ts",
-      "sha256": "33bd30e2b3fb7fc80fc4c23c80161e97b754f897f516b872b72f1f7cef7d3bf3"
+      "sha256": "1a9682e929ecdd6a10552976275b8440b0bf55cf352d632512e23262b2eb933c"
     },
     {
       "category": "scripts",
       "id": "lib/define-traceability",
       "source_path": "scripts/lib/define-traceability.ts",
       "resource_path": "resources/scripts/lib/define-traceability.ts",
-      "sha256": "faaed9fbcfbc02c67378490b593774583fa70e7bcf8f1db1dadc9743091ebfed"
+      "sha256": "ad88d6df47455ed9125d3a2c625ba5cc449dce7ca9e31ef3860da2a91bd835e2"
     },
     {
       "category": "scripts",
@@ -54,17 +40,10 @@
     },
     {
       "category": "scripts",
-      "id": "lib/goal-task-schema",
-      "source_path": "scripts/lib/goal-task-schema.ts",
-      "resource_path": "resources/scripts/lib/goal-task-schema.ts",
-      "sha256": "33051e2c2665a3b53e47b4fc7eba980643144c4fd17886d1d52b9a5d9326603c"
-    },
-    {
-      "category": "scripts",
       "id": "lib/routing-ab-contract",
       "source_path": "scripts/lib/routing-ab-contract.ts",
       "resource_path": "resources/scripts/lib/routing-ab-contract.ts",
-      "sha256": "2eebbbd82f613bd1b9504aa9149144b97e89a63adcb9a53d06ec7cbaa4d8a77a"
+      "sha256": "c95c111b446ddf548ee30c3d86ed83b2b48d78c4f949dc26b11171a65010c273"
     }
   ]
 }

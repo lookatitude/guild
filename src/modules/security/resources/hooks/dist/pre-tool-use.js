@@ -40,23 +40,27 @@ var path5 = __toESM(require("node:path"));
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 function resolveGuildRoot(startCwd) {
-  let current = path.resolve(startCwd);
+  const resolvedStart = path.resolve(startCwd);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
   for (; ; ) {
     if (fs.existsSync(path.join(current, ".git"))) {
       return current;
     }
-    const guildDir = path.join(current, ".guild");
-    if (fs.existsSync(guildDir)) {
-      try {
-        if (fs.statSync(guildDir).isDirectory()) {
-          return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      if (fs.existsSync(guildDir)) {
+        try {
+          if (fs.statSync(guildDir).isDirectory()) {
+            nearestGuildDir = current;
+          }
+        } catch {
         }
-      } catch {
       }
     }
     const parent = path.dirname(current);
     if (parent === current) {
-      return path.resolve(startCwd);
+      return nearestGuildDir ?? resolvedStart;
     }
     current = parent;
   }
@@ -142,6 +146,21 @@ function redactKeyValueSecrets(input) {
     (_match, key, sep2) => `${key}${sep2}${KV_REDACTED}`
   );
 }
+var PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
+var PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+var PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
+function isRelativePathToken(candidate, fullInput, matchIndex) {
+  if (candidate.includes("+") || candidate.includes("=")) return false;
+  let start = matchIndex;
+  while (start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
+  let end = matchIndex + candidate.length;
+  while (end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
+  const token = fullInput.slice(start, end);
+  if (!PATH_SHAPE.test(token)) return false;
+  const slashCount = token.split("/").length - 1;
+  if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  return token.split(/[/._-]+/).filter(Boolean).every((word) => word.length < 20);
+}
 function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
   if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {
     return true;
@@ -152,6 +171,9 @@ function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
     return true;
   }
   if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
+    return true;
+  }
+  if (isRelativePathToken(candidate, fullInput, matchIndex)) {
     return true;
   }
   return false;

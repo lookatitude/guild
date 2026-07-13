@@ -15,17 +15,18 @@ gate.
 
 ## What v2 ships
 
-- **17 specialist roles on two surfaces** — 15 domain type templates across
-  three groups (engineering: architect, researcher, backend, frontend, devops,
-  qa, mobile, security; content & communication: copywriter, doc-writer,
+- **15 specialist templates + 2 machinery agents** — 15 domain type templates
+  across three groups (engineering: architect, researcher, backend, frontend,
+  devops, qa, mobile, security; content & communication: copywriter, doc-writer,
   technical-writer, social-media, seo; commercial: marketing, sales), one
   `templates/specialists/*.md` per role, minted on demand into your project's
   `.guild/agents/` by team composition — plus the 2 machinery agents the plugin
   registers directly (advisor, developer; one `agents/*.md` each).
-- **109 skills** across six tiers — 1 core (`guild-principles`), meta
+- **111 skills** across six tiers — 1 core (`guild-principles`), 39 meta
   (the workflow spine + decisions + reflect + evolve + create-specialist +
-  rollback + audit + diagnose + v1.4 loop/review helpers), 3 knowledge (wiki ingest / query / lint),
-  and specialist skills (2–5 per specialist).
+  rollback + audit + diagnose + v1.4 loop/review helpers), 11 knowledge
+  (wiki ingest / query / lint + the `learn-*` family), 58 specialist skills
+  (2–5 per specialist), and the `guild-operations` + `guild-quality` gate skills.
 - **The v2 command surface** — `/guild:guild [brief]` plus the phase verbs
   `/guild:init|ideate|plan|build|qa|ops`, helpers `/guild:status|resume`,
   nouns `/guild:wiki|initiative`, and maintenance
@@ -217,8 +218,8 @@ To verify hooks and audit logs are firing after restart:
 Older Claude Code hosts may skip newer hook events such as `PreToolUse` and
 `PreCompact`; the handlers are designed to fall through without breaking the
 session. If the bootstrap card appears but no `.guild/runs/` files are written,
-run `/guild audit` and inspect `hooks/hooks.json` in the installed plugin.
-If a Guild run failed or telemetry looks inconsistent, run `/guild fix`
+run `/guild:audit` and inspect `hooks/hooks.json` in the installed plugin.
+If a Guild run failed or telemetry looks inconsistent, run `/guild:fix`
 with the run id or a short symptom; it reads recent `.guild/runs` evidence,
 writes a diagnosis/fix plan, and asks before applying any edits.
 
@@ -227,9 +228,8 @@ writes a diagnosis/fix plan, and asks before applying any edits.
 | Variable | Default | Meaning |
 |---|---|---|
 | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | unset | Set to `1` to allow Guild's experimental tmux agent-team backend. Subagents via `Agent` remain the default. |
-| `GUILD_LOOP_CAP` | `16` when loops are active | Per-lane cap for opt-in adversarial loops. Must be a positive integer in `[1, 256]`; CLI `--loop-cap` overrides it. |
+| `GUILD_LOOP_CAP` | unset | Display/override signal for the per-lane adversarial-loop cap. The **authoritative** cap is the `loop_cap` key in `.guild/settings.json` (default 16, clamped to `[1, 256]`); CLI `--loop-cap` overrides per run. |
 | `GUILD_ENABLE_DEVTEAM_REFLECT` | unset/off | Developer-team reflection gate for `hooks/maybe-reflect.ts`. Set to `1` only when working on Guild's own dev-team reflection workflow. |
-| `GUILD_BENCHMARK_LIVE` | unset/off | Benchmark runner safety gate. Set to `1` only after a dry run when you intentionally want the benchmark factory to spawn the real `claude` CLI. |
 
 The agent-team backend is experimental. Enable it only when teammates need to
 coordinate directly:
@@ -238,11 +238,10 @@ coordinate directly:
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 ```
 
-Benchmark live runs require the separate `guild-benchmark` repo. Set
-`GUILD_BENCHMARK_LIVE=1` only after a dry run confirms the case is
-correct; absent, the benchmark runner refuses to spawn the real `claude`
-CLI. See the `guild-benchmark` repo for setup instructions and
-`/guild:dashboard` to launch the benchmark UI against the live project.
+Benchmark live runs live in the separate `guild-benchmark` repo, which owns its
+own safety gate for spawning the real `claude` CLI (dry-run first). See that
+repo for setup, and `/guild:dashboard` to launch the benchmark UI against the
+live project.
 
 ### Optional MCP servers
 
@@ -274,7 +273,7 @@ You confirm after brainstorm, team-compose, and plan. Post-plan runs with
 minimal interruption.
 
 If you register a new specialist with `guild:create-specialist`, restart or
-reload the plugin before expecting `/guild plan` (team is composed as a plan sub-step) or future `/guild` runs to
+reload the plugin before expecting `/guild:plan` (team is composed as a plan sub-step) or future `/guild` runs to
 route to it. Claude Code snapshots plugin agent and skill manifests at session
 startup.
 
@@ -287,16 +286,33 @@ currently requires each file's frontmatter to include `final_status: satisfied` 
 
 ## Commands
 
+Every command is `/guild:<verb>` (the `:` plugin namespace is required by Claude
+Code). The bare `/guild [brief]` is the smart entry point; the phase verbs, nouns,
+and maintenance verbs are separate commands.
+
 | Command | Purpose |
 |---|---|
-| `/guild [brief]` | Full 7-step lifecycle: brainstorm → team-compose → plan → context-assemble → execute → review → verify |
-| `/guild plan` | Planning phase — team is composed as a plan sub-step; `--team-size=N` lifts the 6-specialist cap; inspect via `/guild status`, edit via the `[edit]` response at the plan/team gate |
-| `/guild evolve [<id>] [--auto] [--to-template=vN]` | Run a skill through the evolve pipeline (paired evals → flip report → shadow mode → promotion gate) |
-| `/guild wiki <ingest <path>\|query "..."\|lint>` | Wiki operations over `.guild/raw/` and `.guild/wiki/` |
-| `/guild rollback <skill> [n]` | Walk a skill back `n` versions from `.guild/skill-versions/` |
-| `/guild stats` | Usage, success rates, flip counts, top-used skills, top-requested specialists |
-| `/guild audit` | Security audit of installed scripts, hooks, permissions |
-| `/guild fix [run-id \| "symptom"] [--review=cross]` | Diagnose Guild runtime failures from telemetry and propose a gated self-fix plan |
+| `/guild [brief]` | Bare entry — smart **phase detection**: inspects `.guild/` state and proposes the next lifecycle phase (init · ideate · plan · build · qa · ops), always confirmed, never silent |
+| `/guild:init` | Initialize Guild in a repo (wiki + brownfield cheap-scan map; `--learn` runs the full learn pipeline) |
+| `/guild:ideate` | Socratic spec — brainstorm the task into `.guild/spec/<slug>.md` |
+| `/guild:plan` | Compose the team + write per-specialist lane plans; `--team-size=N` lifts the 6-specialist cap |
+| `/guild:build` | Assemble per-specialist context, dispatch the lanes, review handoffs |
+| `/guild:qa` | Quality gate over the run |
+| `/guild:ops` | Operations phase — release, monitoring, incident, rollback runbooks |
+| `/guild:learn [map\|graph\|onboard\|diff\|explain]` | Understand-everything engine — codebase map, deep knowledge graph, onboarding tour, diff/blast-radius, file/module explain |
+| `/guild:status` | Read-only: current phase, next gate, blockers, resume hint |
+| `/guild:resume` | Resume an interrupted run from its furthest phase |
+| `/guild:wiki <ingest <path>\|query "..."\|lint>` | Project knowledge over `.guild/raw/` and `.guild/wiki/` |
+| `/guild:initiative <new\|status\|list\|resume\|update\|archive\|restore\|close>` | Durable multi-run work (opt-in; a one-off `/guild` never creates one) |
+| `/guild:goal` | Create/inspect P.O.V.E.R. goals + host-portable task groups |
+| `/guild:config <init\|reconcile\|show\|set\|role\|ui\|validate\|providers>` | Manage the `.guild/settings.json` config surface |
+| `/guild:evolve [<id>] [--auto] [--to-template=vN]` | Run a skill through the evolve pipeline (paired evals → flip report → shadow mode → promotion gate) |
+| `/guild:rollback <skill> [n]` | Walk a skill back `n` versions from `.guild/skill-versions/` |
+| `/guild:stats` | Usage, success rates, flip counts, top-used skills, top-requested specialists |
+| `/guild:audit` | Security audit of installed scripts, hooks, permissions |
+| `/guild:fix [run-id \| "symptom"] [--review=cross]` | Diagnose Guild runtime failures from telemetry and propose a gated self-fix plan |
+| `/guild:migrate` | v1→v2 `.guild/` converter (dry-run by default) |
+| `/guild:dashboard` | Launch the observability / benchmark dashboard |
 
 ## Documentation
 
@@ -305,8 +321,8 @@ currently requires each file's frontmatter to include `final_status: satisfied` 
 The canonical docs live at the **Guild docs site** (`https://guildstack.dev`).
 
 - `https://guildstack.dev/docs/getting-started` — install, first run, and basic configuration.
-- `https://guildstack.dev/docs/architecture` — shipped plugin architecture, directory layout, 7-step lifecycle, hook inventory, backend options.
-- `https://guildstack.dev/docs/specialist-roster` — the 17 specialist roles (15 domain type templates + the machinery agents advisor and developer), their triggers, DO NOT TRIGGER boundaries, and owned skills.
+- `https://guildstack.dev/docs/architecture` — shipped plugin architecture, directory layout, the v2 single-verb lifecycle phases, hook inventory, backend options.
+- `https://guildstack.dev/docs/specialist-roster` — the 15 domain specialist templates + the 2 machinery agents (advisor, developer), their triggers, DO NOT TRIGGER boundaries, and owned skills.
 - `https://guildstack.dev/docs/context-assembly` — three-layer context contract, role mapping, ambient-context caveat.
 - `https://guildstack.dev/docs/wiki-pattern` — categorized project memory, raw vs synthesized, decision capture, scale transition.
 - `https://guildstack.dev/docs/self-evolution` — the two triggers, the 10-step pipeline, promotion gate, versioning + rollback.
@@ -351,18 +367,33 @@ specialist team in worktree isolation, and project-local state under `.guild/`
 
 ## Runtime state
 
+All project-created Guild state lives under the active root's `.guild/` (never
+committed by Guild itself):
+
 ```text
 .guild/
-├── raw/                 # immutable source inputs + checksums
-├── wiki/                # synthesized memory, decisions, standards
-├── spec/                # approved specs
-├── plan/                # per-task plans
-├── team/                # resolved specialist teams
-├── context/             # per-run specialist context bundles
-├── runs/                # telemetry, handoff receipts, assumptions
-├── reflections/         # proposed skill and specialist edits
-├── evolve/              # shadow-mode eval runs and reports
-└── skill-versions/      # rollback snapshots
+├── guild.yaml            # root identity: workspace or project
+├── settings.json         # project/workspace behavior (the config surface)
+├── agents/               # project-created specialists (files = source of truth)
+├── skills/               # project-created skills
+├── workflows/            # reusable workflows
+├── loops/                # custom review/build/learning loops
+├── wiki/                 # synthesized knowledge, decisions, standards
+├── knowledge/            # graph, indexes, sources, promotion candidates
+├── memory/               # summaries, lessons, recall index
+├── initiatives/          # initiative registry, active, archived
+├── teams/                # reusable team definitions
+├── artifacts/            # reports, audits, handoffs, generated outputs
+├── raw/                  # immutable source inputs + checksums
+├── indexes/              # codebase map + compatibility indexes
+├── runs/                 # run traces, handoff receipts, review, verification
+├── spec/                 # approved specs
+├── plan/                 # per-task plans
+├── team/                 # resolved specialist teams (<slug>.<phase>.yaml)
+├── context/              # per-run specialist context bundles
+├── reflections/          # proposed learnings and improvements
+├── evolve/               # shadow-mode eval runs and reports
+└── skill-versions/       # rollback snapshots
 ```
 
 ## Principles

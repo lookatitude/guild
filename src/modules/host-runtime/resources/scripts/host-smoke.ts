@@ -36,7 +36,8 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, type Dirent } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, type Dirent } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "./lib/host-registry-schema";
 import {
@@ -397,6 +398,7 @@ function parseArgs(argv: string[]): {
   capturedAt: string;
   projectRoot: string;
   ephemeralRoot: string;
+  ephemeralRootIsTemp: boolean;
   dryRun: boolean;
 } {
   const get = (flag: string): string | undefined => {
@@ -404,13 +406,20 @@ function parseArgs(argv: string[]): {
     return i >= 0 ? argv[i + 1] : undefined;
   };
   const hostArg = get("--host");
+  const ephemeralRootFlag = get("--ephemeral-root");
+  // No --ephemeral-root override → mint a real OS tmpdir (mkdtempSync) instead of a
+  // fixed `.guild-smoke-ephemeral` dir under cwd (that fixed name was leaking into
+  // the plugin repo as untracked junk whenever host-smoke ran from the repo root —
+  // see the nested-guild audit finding). Best-effort cleaned up in main() on exit.
+  const ephemeralRoot = ephemeralRootFlag ?? mkdtempSync(join(tmpdir(), "guild-smoke-"));
   return {
     hosts: hostArg ? (hostArg.split(",") as HostId[]) : [],
     allReachable: argv.includes("--all-reachable"),
     boxId: get("--box-id") ?? "operator-local-macos",
     capturedAt: get("--captured-at") ?? todayIso(),
     projectRoot: get("--project-root") ?? process.cwd(),
-    ephemeralRoot: get("--ephemeral-root") ?? join(process.cwd(), ".guild-smoke-ephemeral"),
+    ephemeralRoot,
+    ephemeralRootIsTemp: !ephemeralRootFlag,
     dryRun: argv.includes("--dry-run"),
   };
 }
@@ -458,6 +467,15 @@ function main(): void {
     }
   }
   console.log(`\nhost-smoke: ${targets.length} targets · ${wrote} committed · ${skipped} honest skips · captured_at=${args.capturedAt}`);
+  // Best-effort cleanup of the auto-minted tmpdir (never remove an operator-supplied
+  // --ephemeral-root — that path is theirs to manage).
+  if (args.ephemeralRootIsTemp) {
+    try {
+      rmSync(args.ephemeralRoot, { recursive: true, force: true });
+    } catch {
+      // best-effort only — a leftover tmpdir under the OS tmp root is not a leak.
+    }
+  }
 }
 
 if (require.main === module) main();

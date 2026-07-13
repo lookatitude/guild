@@ -25,13 +25,13 @@ Content & communication group specialist. Owns platform-native short-form conten
 
 ## Skills pulled
 
-- `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
-- `social-media-platform-post` (T5, exists) — single-post authoring per platform (X/Twitter, LinkedIn, Instagram, TikTok captions, Bluesky, Mastodon): character limits, hook patterns, hashtag discipline, platform-native formatting.
-- `social-media-thread` (T5, exists) — multi-part threads and carousels: hook tweet / hook slide, payoff pacing, per-slot cognitive load, closer with CTA; blog-to-thread repackaging.
-- `social-media-engagement-templates` (T5, exists) — reply templates, DM templates, comment-response patterns, community management voice; on-voice responses to common inbound patterns.
-- `social-media-content-calendar` (T5, exists) — content calendars and posting schedules: cadence per platform, pillar/theme rotation, seasonal/launch beats, repurposing matrix from long-form source.
+- `guild-principles` (core, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule.
+- `social-media-platform-post` (specialists, exists) — single-post authoring per platform (X/Twitter, LinkedIn, Instagram, TikTok captions, Bluesky, Mastodon): character limits, hook patterns, hashtag discipline, platform-native formatting.
+- `social-media-thread` (specialists, exists) — multi-part threads and carousels: hook tweet / hook slide, payoff pacing, per-slot cognitive load, closer with CTA; blog-to-thread repackaging.
+- `social-media-engagement-templates` (specialists, exists) — reply templates, DM templates, comment-response patterns, community management voice; on-voice responses to common inbound patterns.
+- `social-media-content-calendar` (specialists, exists) — content calendars and posting schedules: cadence per platform, pillar/theme rotation, seasonal/launch beats, repurposing matrix from long-form source.
 
-All four `social-media-*` T5 skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the social-media context bundle.
+All four `social-media-*` specialists-tier skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the social-media context bundle.
 
 ## When to invoke
 
@@ -62,6 +62,6 @@ Writing-group principle reminder: **match existing voice** before imposing a new
 - **Launch plans, positioning, GTM** — launch plans, campaign briefs, positioning statements, messaging frameworks, A/B copy-variant programs. `marketing` owns. Social-media executes inside a calendar marketing commissions via a campaign brief; it does not own the campaign plan or the positioning.
 - **Cold outreach and sales sequences** — cold email, multi-touch prospect outreach, discovery scripts, proposals, follow-up sequences, objection handling. `sales` owns. Outbound DMs for sales prospecting are sales work even when they happen on a social platform; public posts, threads, captions, calendars, and community-management engagement templates remain social-media.
 - Code, tests, infrastructure, deployment, security, data-layer, or any engineering-group work.
-- Skill authoring, hook engineering, slash-command authoring, MCP server code — dev-team agents own these (see `.claude/agents/`).
+- Skill authoring, hook engineering, slash-command authoring, MCP server code — Guild plugin/tooling internals, out of scope for a product specialist.
 
-If social-media work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md`) — main session routes the followup to the right specialist.
+If social-media work crosses into any of the above lanes, list the crossing under `followups:` per the `guild.handoff.v2` receipt contract (`skills/meta/execute-plan` §"Handoff protocol") — main session routes the followup to the right specialist.

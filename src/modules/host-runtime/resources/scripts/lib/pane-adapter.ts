@@ -3,7 +3,7 @@
  *
  * CH-2 — provider-neutral PaneAdapter implementations for mixed-host tmux teams.
  *
- * Contract (BY POINTER): docs/knowledge/decisions/v2-cross-host-orchestration.md
+ * Contract (BY POINTER): ADR: v2-cross-host-orchestration (workspace wiki)
  *   §CH-2 (PaneAdapter interface + ClaudePaneAdapter / CodexPaneAdapter),
  *   §CH-6 (fail-fast preflight). The `PaneAdapter` / `PaneSpec` / `PreflightResult`
  *   TYPES are defined in ./team-backend.ts (the lowest-level lib) so the backend

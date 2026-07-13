@@ -25,13 +25,13 @@ Commercial group specialist. Owns the outbound revenue-motion craft: cold outrea
 
 ## Skills pulled
 
-- `guild-principles` (T1, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule, with the commercial-group variant applied.
-- `sales-cold-outreach` (T5, exists) — cold outreach sequence authoring: ICP definition, trigger event, hypothesis per touch, per-touch channel and timing, subject/preview/body/CTA, reply-bait discipline, deliverability guardrails. Hypothesis-first: each sequence names the ICP, trigger, and the measurable response rate it targets.
-- `sales-discovery-framework` (T5, exists) — discovery-call scripts and qualification frameworks (MEDDIC / SPIN / BANT / custom): opening, qualifying questions, pain-quantification prompts, decision-process mapping, next-step setting. Outputs are repeatable scripts plus a scoring rubric tied to pipeline stage.
-- `sales-proposal-writer` (T5, exists) — proposal authoring: executive summary, situation/complication/resolution structure, scope, pricing options, terms, success criteria, next steps. Proposal narrative is sales; technical appendices are commissioned from technical-writer; pricing math is sales' responsibility.
-- `sales-follow-up-sequence` (T5, exists) — follow-up sequences and objection handling: per-objection response frameworks (price, timing, authority, competitor, status-quo), nudge cadence, breakup email, re-engagement triggers, stall-unblocking moves.
+- `guild-principles` (core, exists) — mandatory prelude for every specialist: Karpathy 4 + Guild evidence rule, with the commercial-group variant applied.
+- `sales-cold-outreach` (specialists, exists) — cold outreach sequence authoring: ICP definition, trigger event, hypothesis per touch, per-touch channel and timing, subject/preview/body/CTA, reply-bait discipline, deliverability guardrails. Hypothesis-first: each sequence names the ICP, trigger, and the measurable response rate it targets.
+- `sales-discovery-framework` (specialists, exists) — discovery-call scripts and qualification frameworks (MEDDIC / SPIN / BANT / custom): opening, qualifying questions, pain-quantification prompts, decision-process mapping, next-step setting. Outputs are repeatable scripts plus a scoring rubric tied to pipeline stage.
+- `sales-proposal-writer` (specialists, exists) — proposal authoring: executive summary, situation/complication/resolution structure, scope, pricing options, terms, success criteria, next steps. Proposal narrative is sales; technical appendices are commissioned from technical-writer; pricing math is sales' responsibility.
+- `sales-follow-up-sequence` (specialists, exists) — follow-up sequences and objection handling: per-objection response frameworks (price, timing, authority, competitor, status-quo), nudge cadence, breakup email, re-engagement triggers, stall-unblocking moves.
 
-All four `sales-*` T5 skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the sales context bundle.
+All four `sales-*` specialists-tier skills are authored and live under `skills/specialists/` — they plus the mandatory `guild-principles` prelude are the five this specialist pulls. `guild:context-assemble` loads the relevant ones into the sales context bundle.
 
 ## When to invoke
 
@@ -62,6 +62,6 @@ Commercial-group principle reminder: **hypothesis-first**. Every sequence, scrip
 - **SEO work** — keyword research, on-page optimization, meta/title tuning, technical audits, structured data, internal-linking strategy. `seo` owns.
 - **Long-form blog prose, landing-page body, product microcopy, lifecycle email to existing users, voice guides** — `copywriter` owns. Critical boundary: **lifecycle / transactional / re-engagement email to existing users is copywriter; cold prospect outreach is sales**. Both look like email; the distinction is relationship (existing user vs. cold prospect) and intent (lifecycle nurture vs. outbound prospecting).
 - Code, tests, infrastructure, deployment, security, data-layer, or any engineering-group work.
-- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — dev-team agents own these (see `.claude/agents/`).
+- Skill authoring, hook engineering, slash-command authoring, MCP server code, tests under `tests/` — Guild plugin/tooling internals, out of scope for a product specialist.
 
-If sales work crosses into any of the above lanes, list the crossing under `followups:` per the handoff contract (`.claude/agents/_shared/handoff-contract.md`) — main session routes the followup to the right specialist.
+If sales work crosses into any of the above lanes, list the crossing under `followups:` per the `guild.handoff.v2` receipt contract (`skills/meta/execute-plan` §"Handoff protocol") — main session routes the followup to the right specialist.

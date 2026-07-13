@@ -110,6 +110,23 @@ describe("guild-memory MCP server", () => {
       }
     });
 
+    it("flags type_valid true for a page whose type: is in the §10.1.1 canonical enum (wiki-frontmatter-contract.ts)", async () => {
+      const client = await makeClient();
+      try {
+        const res = await client.callTool({
+          name: "wiki_search",
+          arguments: { query: "BM25 embeddings search" },
+        });
+        const payload = parseJson(res);
+        const top = payload.results[0];
+        // Fixture declares `type: decision` — a canonical WIKI_PAGE_TYPES value.
+        expect(top.type).toBe("decision");
+        expect(top.type_valid).toBe(true);
+      } finally {
+        await client.close();
+      }
+    });
+
     it("returns source_refs as an array, not a raw string (fix: inline flow-list parsing)", async () => {
       const client = await makeClient();
       try {
@@ -293,6 +310,29 @@ describe("guild-memory MCP server", () => {
           expect(typeof p.title).toBe("string");
           expect(p.title.length).toBeGreaterThan(0);
         }
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("flags type_valid per page against the §10.1.1 canonical enum, and false for index.md (no frontmatter at all)", async () => {
+      const client = await makeClient();
+      try {
+        const res = await client.callTool({
+          name: "wiki_list",
+          arguments: {},
+        });
+        const payload = parseJson(res);
+        const decision = payload.pages.find(
+          (p: any) => p.path === "decisions/bm25-over-embeddings.md"
+        );
+        expect(decision.type).toBe("decision");
+        expect(decision.type_valid).toBe(true);
+        // index.md has no frontmatter block at all — type is absent, so
+        // type_valid must be false (never throws on a non-conforming page).
+        const index = payload.pages.find((p: any) => p.path === "index.md");
+        expect(index.type).toBeNull();
+        expect(index.type_valid).toBe(false);
       } finally {
         await client.close();
       }

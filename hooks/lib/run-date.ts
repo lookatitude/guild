@@ -33,7 +33,7 @@
  * ## Policy anchor
  *
  * `POLICY_EFFECTIVE_DATE` is the OD-4 enforcement boundary, canonical at:
- *   docs/knowledge/decisions/communication-format-policy.md §"policy_effective_date"
+ *   ADR: communication-format-policy (workspace wiki) §"policy_effective_date"
  * This is the SINGLE named constant for hooks/. U5 (lint) and U7 (negative
  * checks) read from the same policy doc. Changing the date means amending the
  * policy heading, never an ad-hoc edit here.
@@ -52,7 +52,7 @@ import { readScalarField } from "../../scripts/lib/frontmatter";
 /**
  * OD-4 enforcement boundary.
  *
- * Canonical source: docs/knowledge/decisions/communication-format-policy.md
+ * Canonical source: ADR: communication-format-policy (workspace wiki)
  *   §"policy_effective_date" (`policy_effective_date: 2026-06-03`)
  *
  * A runtime receipt for a run whose `run.yaml.started_at` is >= this date is

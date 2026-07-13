@@ -3,7 +3,7 @@
  * scripts/score-tier.ts
  *
  * Pure-function deterministic tier scorer implementing the ADR §2 signal-sum
- * rubric (docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §2).
+ * rubric (ADR: cost-aware-tiering-and-lean-context (workspace wiki) §2).
  *
  * No LLM. No network. Same inputs → same output every time.
  *

@@ -35,7 +35,7 @@ YAML or markdown table keyed by use-case:
   escalate_to: engineering-oncall
 ```
 
-Store at `.guild/runs/<run-id>/social/engagement-<slug>.md` or `.guild/wiki/standards/social-engagement.md`.
+Write the template library to the run artifact area at `.guild/runs/<run-id>/social/engagement-templates-<slug>.md`. Never write a canonical wiki path directly — promotion to the canonical wiki (e.g. `.guild/wiki/standards/social-engagement.md`) happens only through the `guild:wiki-ingest` human gate.
 
 ## Anti-patterns
 

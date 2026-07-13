@@ -2,7 +2,7 @@
 
 Guild is a cross-host plugin that ships 2 machinery agents (advisor, developer),
 15 domain specialist type templates (minted into a project's `.guild/agents/` on
-demand by team composition), and 109 skills across a
+demand by team composition), and 111 skills across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
 capture, and a self-evolution loop with shadow-mode gating.
 
@@ -28,11 +28,25 @@ For full architecture and design documentation see **https://guildstack.dev/docs
 - `commands/*.md` — the v2 flat-token command surface (`/guild:<verb>`; the `:` plugin
   namespace stays — Claude Code requires it — v2 only drops the redundant `guild-` prefix;
   sub-verbs are positional arguments, never separate files or namespaces).
-- `hooks/hooks.json` — native Claude Code hooks; other hosts consume equivalent
-  behavior through host adapters and graceful fallback.
+- `hooks/hooks.json` — native Claude Code hooks; the `.ts` sources compile to the
+  committed esbuild bundles under `hooks/dist/` (+ `hooks/agent-team/dist/`) the
+  host actually runs (`cd hooks && npm run build` after any hook edit — source
+  edits are a no-op until rebuilt). Other hosts consume equivalent behavior
+  through host adapters and graceful fallback.
+- `src/modules/<module>/` — the module source-of-truth layer. Each module owns its
+  `workflows/` code plus a `resources/` mirror that generated host packages copy
+  from; `scripts/lib/*` are thin re-export shims over these workflows. The
+  module-resource sync (`syncModuleResources`) + drift gates keep the live surface,
+  the `resources/` mirror, and the per-host `dist/` copies byte-identical. **Edit
+  the live source (`scripts/lib`, `src/modules/*/workflows`, `hooks/*.ts`); never
+  hand-edit a `resources/` or `dist/` mirror** — run the sync + host-package build
+  to propagate.
 - `scripts/`, `mcp-servers/` — evolve loop, telemetry, optional MCP servers.
+- `dist/` — committed per-host packages (`claude-code`, `codex`, `pi`, …) rendered
+  by `scripts/build-host-packages.ts`; regenerated, never hand-edited.
 - `tests/` — skill evals and wiki-lint fixtures.
-- `templates/{skills,agents}/` — authoring scaffolds.
+- `templates/{skills,agents,products}/` — authoring + product scaffolds
+  (`templates/specialists/` is the 15 specialist type templates, described above).
 - `docs/` — user-facing docs, diagrams, and assets.
 
 Generated project-local Guild artifacts do **not** live in the plugin install
@@ -53,7 +67,7 @@ never user-typed. This is the one-place wiring reference — each command's
 |---|---|---|
 | `/guild:init` | `guild:init` (cheap by default: wiki + brownfield cheap-scan CodebaseMap + architecture-map stub) — full `learn-*` pipeline runs ONLY under `--learn` / `defaults.auto_learn` | `.guild/init/<slug>.md`, `.guild/wiki/**`, `codebase-map.json` + `architecture-map.md` stub |
 | `/guild:ideate` | `guild:brainstorm` (standard+deep: wrapped by `guild:loop-clarify`) | `.guild/spec/<slug>.md` |
-| `/guild:plan` | `guild:team-compose` → `guild:plan` (deep: + `guild:loop-plan-review`) | `.guild/team/<slug>.yaml`, `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` |
+| `/guild:plan` | `guild:team-compose` → `guild:plan` (deep: + `guild:loop-plan-review`) | `.guild/team/<slug>.<phase>.yaml` (resolved via `resolveTeamFile`; legacy `<slug>.yaml` read-only), `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` |
 | `/guild:build` | per lane: `guild:context-assemble` → `guild:execute-plan` → `guild:review` (deep: + `guild:loop-implement`) | handoff receipts, `assumptions.md`, `review.md` |
 | `/guild:qa` | `guild:guild-quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
 | `/guild:ops` | `guild:guild-operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
@@ -68,7 +82,7 @@ themselves. They live in `.claude/agents/`.
 
 | Changed path / concern | Dev-team agent (`subagent_type`) |
 |---|---|
-| `scripts/`, `mcp-servers/`, `.mcp.json` | `tooling-engineer` |
+| `scripts/`, `src/modules/**` (module SoT + sync scripts + drift gates), `mcp-servers/`, `.mcp.json` | `tooling-engineer` |
 | `hooks/` (hooks.json + hook scripts) | `hook-engineer` |
 | `commands/` | `command-builder` |
 | `skills/**` (bodies + per-skill evals.json) | `skill-author` |

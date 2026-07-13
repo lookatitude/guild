@@ -4,12 +4,10 @@
   "title": "Workspace Federation",
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
-  "description": "Owns umbrella/subrepo detection, workspace manifests, federated query, promotion, and workspace impact checks.",
+  "description": "Owns umbrella/subrepo detection, workspace manifests, federated query, and promotion.",
   "depends_on": ["config", "knowledge", "state"],
   "owns": {
     "scripts": [
-      "lib/workspace-impact-detector",
-      "lib/workspace-impact-schema",
       "workspace/detect",
       "workspace/federated-query",
       "workspace/promote-upstream",

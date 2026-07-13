@@ -4,7 +4,7 @@
  * TDD suite for comms-format-lint.ts (U5a — warn-mode lint core).
  *
  * Policy refs:
- *   docs/knowledge/decisions/communication-format-policy.md
+ *   ADR: communication-format-policy (workspace wiki)
  *   .guild/initiatives/active/communication-format-standardization/definition-ledger.md
  *   .guild/initiatives/active/communication-format-standardization/yaml-reader-inventory.json
  *

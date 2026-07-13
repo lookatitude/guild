@@ -4,7 +4,7 @@
  * L0 FOUNDATION — the TWO-SIDED parity contract (SC-7), as shared pure predicates.
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md §Parity contract
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) §Parity contract
  *   spec .guild/spec/universal-host-p0.md SC-7
  *
  * SC-7 has two independent sides; BOTH must hold:

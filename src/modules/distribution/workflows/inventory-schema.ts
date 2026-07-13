@@ -5,9 +5,9 @@
  * `guild.inventory.v1` neutral core inventory.
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md
+ *   ADR: universal-host-plugin-architecture (workspace wiki)
  *     §Decision (1. Neutral core inventory) · §P0: Make the package surface universal
- *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md (this lane's ADR)
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) (this lane's ADR)
  *
  * WHAT THIS IS: the single, host-neutral description of every Guild surface —
  * commands, skills, agents, hooks, MCP servers, scripts, schemas, and docs —

@@ -1,26 +1,32 @@
 /**
  * tests/dot-guild/gitignore-equivalence.test.ts
  *
- * SC-9 (CQ-B): Assert the share-dot-guild block is byte-identical across all
- * 4 workspace repos (umbrella, plugin, benchmark, website) modulo the plugin's
- * pre-existing fixture exemptions.
+ * SC-9 (CQ-B): Assert the share-dot-guild block is identical across all 4
+ * workspace repos (umbrella, plugin, benchmark, website), comparing the
+ * POLICY LINES (the `.guild` ignore/re-include patterns) — comments and blank
+ * lines are documentation and may differ per repo.
  *
  * Strategy:
  *   1. Read each repo's .gitignore.
- *   2. Extract the share-dot-guild block. The block starts at:
- *      - "# .guild/ —" (preferred comment header), OR
- *      - the first line that starts with ".guild" or "!.guild" (fallback for
- *        repos where Lane B applied the block without the comment header).
- *   3. For the plugin repo: strip the leading fixture-exemption lines (the
- *      non-negotiable "!benchmark/fixtures/**" and "!mcp-servers/..." blocks
- *      preserved verbatim per spec constraints). extractGuildBlock already
- *      starts at the header so these are excluded automatically.
- *   4. Assert the 4 stripped blocks are byte-identical.
+ *   2. Extract the share-dot-guild block: starting at the first `.guild`
+ *      policy line (or the "# .guild/ —" header comment), collect every line
+ *      matching a `.guild` pattern, skipping comments/blanks, and stop at the
+ *      first non-comment line that is NOT a `.guild` pattern (e.g. the plugin's
+ *      fixture exemptions `!benchmark/fixtures/**`, or `.claude/...`). Repo-
+ *      specific `.guild` rules (like the plugin's point-in-time incident
+ *      re-denies) must therefore live BELOW such a stopper line.
+ *   3. Assert the 4 extracted policy sequences are identical, and that each
+ *      contains sentinel lines from the start, middle, and end of the
+ *      canonical block — so a silently truncated extraction can never pass
+ *      (anti-vacuity guard: the previous extractor stopped at any interior
+ *      "# " comment and compared only a fragment).
  *
  * If any repo drifts, the test fails with a diff showing which repos diverge.
  *
- * NOTE: If the equivalence test fails, file a followup for Lane B (tooling-engineer)
- * with the diff output. This test is the enforcement gate for CQ-B.
+ * NOTE: If the equivalence test fails, propagate the block change to the
+ * lagging repos (each in its own repo/commit) — see the HIGH default-deny
+ * remediation: the `.guild/*` deny line means an unlisted subtree is never
+ * committable by default, in ALL 4 repos equally.
  */
 
 import * as fs from "fs";
@@ -36,18 +42,35 @@ const REPOS = {
   website: path.join(WORKSPACE_ROOT, "website"),
 };
 
+// A share-dot-guild policy line: an ignore or re-include pattern targeting
+// .guild — `.guild`, `!/.guild/`, `.guild/*`, `!.guild/wiki/**`, the runs
+// re-deny/re-include patterns, etc. Deliberately does NOT match nested-fixture
+// exemptions like `!benchmark/fixtures/**/.guild/` (those are repo-specific
+// and act as the block's end stopper).
+const GUILD_POLICY_LINE = /^!?\/?\.guild(\/|$)/;
+
 /**
- * Extract the share-dot-guild block from a .gitignore file.
+ * Sentinel lines that MUST appear in every extracted block — start, middle,
+ * and end of the canonical sequence. If extraction truncates (or a repo lacks
+ * the default-deny hardening), these fail loudly instead of comparing
+ * fragments as equal.
+ */
+const REQUIRED_SENTINELS = [
+  ".guild", // block start
+  ".guild/*", // HIGH default-deny (Decision J remediation)
+  "!.guild/wiki/**", // middle of the re-include list
+  "!.guild/runs/*/run-state.json", // end of the runs share-set
+  ".guild/runs/current-run-id", // last line of the canonical block
+];
+
+/**
+ * Extract the share-dot-guild policy-line sequence from a .gitignore file.
  *
- * Block detection:
- *   - Preferred: starts at the line "# .guild/ —" (the canonical block header)
- *   - Fallback: starts at the first line that begins with ".guild" or "!.guild"
- *     (handles repos where Lane B applied the block without the header)
+ * Start: the "# .guild/ —" header comment if present, else the first
+ * GUILD_POLICY_LINE. From there, comments and blank lines are skipped,
+ * policy lines are collected, and the first non-comment non-blank line that
+ * is not a `.guild` pattern ends the block.
  *
- * Block end: first line that starts with "# " and is NOT "# Re-deny",
- * after the block has started. Or EOF.
- *
- * Returns the block as a trimmed string for comparison.
  * Throws if no guild block is found at all.
  */
 function extractGuildBlock(gitignorePath: string): string {
@@ -58,58 +81,27 @@ function extractGuildBlock(gitignorePath: string): string {
   const content = fs.readFileSync(gitignorePath, "utf8");
   const lines = content.split("\n");
 
-  // Try preferred header first
-  let blockStart = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith("# .guild/ —")) {
-      blockStart = i;
-      break;
-    }
-  }
-
-  // Fallback: first .guild or !.guild line
+  let blockStart = lines.findIndex((l) => l.startsWith("# .guild/ —"));
   if (blockStart === -1) {
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].startsWith(".guild") || lines[i].startsWith("!.guild")) {
-        blockStart = i;
-        break;
-      }
-    }
+    blockStart = lines.findIndex((l) => GUILD_POLICY_LINE.test(l));
   }
-
   if (blockStart === -1) {
     throw new Error(`No .guild block found in ${gitignorePath}`);
   }
 
-  // Collect block lines until a new non-guild comment section
   const blockLines: string[] = [];
   for (let i = blockStart; i < lines.length; i++) {
     const line = lines[i];
-    // Stop at a new comment section that is not "# Re-deny"
-    if (
-      i > blockStart &&
-      line.startsWith("# ") &&
-      !line.startsWith("# Re-deny")
-    ) {
-      break;
-    }
-    // Also stop at a blank line after we've already collected some block content
-    // UNLESS we haven't seen the re-deny section yet (blank line between header and block)
+    if (line.trim() === "" || line.startsWith("#")) continue; // docs, not policy
+    if (!GUILD_POLICY_LINE.test(line)) break; // stopper: end of the shared block
     blockLines.push(line);
   }
 
-  // Trim trailing empty lines
-  while (blockLines.length > 0 && blockLines[blockLines.length - 1].trim() === "") {
-    blockLines.pop();
+  if (blockLines.length === 0) {
+    throw new Error(`Empty .guild block in ${gitignorePath}`);
   }
 
-  // Normalize: strip the optional comment header so comparison focuses on
-  // the policy content, not the comment text (which may vary slightly)
-  const normalizedLines = blockLines.filter(
-    (l) => !l.startsWith("# .guild/ —") && !l.startsWith("# Re-deny")
-  );
-
-  return normalizedLines.join("\n").trim();
+  return blockLines.join("\n");
 }
 
 describe("gitignore-equivalence: share-dot-guild block identical across 4 repos (CQ-B)", () => {
@@ -139,50 +131,63 @@ describe("gitignore-equivalence: share-dot-guild block identical across 4 repos 
     }
   });
 
-  test("umbrella and plugin share-dot-guild blocks are byte-identical", () => {
-    if (extractionErrors.umbrella || extractionErrors.plugin) {
-      throw new Error(
-        `Extraction error: umbrella=${extractionErrors.umbrella ?? "ok"} plugin=${extractionErrors.plugin ?? "ok"}`
-      );
+  test("every extracted block spans the full canonical sequence (anti-vacuity)", () => {
+    for (const [name] of Object.entries(REPOS)) {
+      const blockLines = new Set(blocks[name].split("\n"));
+      for (const sentinel of REQUIRED_SENTINELS) {
+        if (!blockLines.has(sentinel)) {
+          throw new Error(
+            `${name}: extracted .guild block is missing required line ${JSON.stringify(sentinel)} — ` +
+              `either the block is truncated/drifted or the default-deny hardening is absent`
+          );
+        }
+      }
     }
-    if (blocks.umbrella !== blocks.plugin) {
-      const diff = buildDiff("umbrella", blocks.umbrella, "plugin", blocks.plugin);
-      throw new Error(
-        `umbrella vs plugin .gitignore share-dot-guild blocks differ:\n\n${diff}`
-      );
-    }
-    expect(blocks.umbrella).toBe(blocks.plugin);
   });
 
-  test("umbrella and benchmark share-dot-guild blocks are byte-identical", () => {
-    if (extractionErrors.umbrella || extractionErrors.benchmark) {
-      throw new Error(
-        `Extraction error: umbrella=${extractionErrors.umbrella ?? "ok"} benchmark=${extractionErrors.benchmark ?? "ok"}`
-      );
+  test("every repo re-denies the structural-cache sidecar AFTER the !.guild/indexes/** re-include", () => {
+    // `**/*.structural-cache.json` is a `.guild/indexes/**` security override
+    // (FIX-T4.1-r6) but is not a `.guild`-prefixed pattern, so block extraction
+    // cannot see it — assert it directly, including the file-order requirement
+    // (a later gitignore rule wins, so the deny must come after the re-include).
+    for (const [name, repoPath] of Object.entries(REPOS)) {
+      const lines = fs
+        .readFileSync(path.join(repoPath, ".gitignore"), "utf8")
+        .split("\n");
+      const reinclude = lines.indexOf("!.guild/indexes/**");
+      const deny = lines.indexOf("**/*.structural-cache.json");
+      if (reinclude === -1) {
+        throw new Error(`${name}: missing "!.guild/indexes/**" re-include`);
+      }
+      if (deny === -1) {
+        throw new Error(
+          `${name}: missing "**/*.structural-cache.json" re-deny — a tampered structural-cache sidecar is committable via !.guild/indexes/**`
+        );
+      }
+      if (deny < reinclude) {
+        throw new Error(
+          `${name}: "**/*.structural-cache.json" (line ${deny + 1}) must come AFTER "!.guild/indexes/**" (line ${reinclude + 1}) or the re-include wins`
+        );
+      }
     }
-    if (blocks.umbrella !== blocks.benchmark) {
-      const diff = buildDiff("umbrella", blocks.umbrella, "benchmark", blocks.benchmark);
-      throw new Error(
-        `umbrella vs benchmark .gitignore share-dot-guild blocks differ:\n\n${diff}`
-      );
-    }
-    expect(blocks.umbrella).toBe(blocks.benchmark);
   });
 
-  test("umbrella and website share-dot-guild blocks are byte-identical", () => {
-    if (extractionErrors.umbrella || extractionErrors.website) {
-      throw new Error(
-        `Extraction error: umbrella=${extractionErrors.umbrella ?? "ok"} website=${extractionErrors.website ?? "ok"}`
-      );
-    }
-    if (blocks.umbrella !== blocks.website) {
-      const diff = buildDiff("umbrella", blocks.umbrella, "website", blocks.website);
-      throw new Error(
-        `umbrella vs website .gitignore share-dot-guild blocks differ:\n\n${diff}`
-      );
-    }
-    expect(blocks.umbrella).toBe(blocks.website);
-  });
+  for (const other of ["plugin", "benchmark", "website"] as const) {
+    test(`umbrella and ${other} share-dot-guild policy lines are identical`, () => {
+      if (extractionErrors.umbrella || extractionErrors[other]) {
+        throw new Error(
+          `Extraction error: umbrella=${extractionErrors.umbrella ?? "ok"} ${other}=${extractionErrors[other] ?? "ok"}`
+        );
+      }
+      if (blocks.umbrella !== blocks[other]) {
+        const diff = buildDiff("umbrella", blocks.umbrella, other, blocks[other]);
+        throw new Error(
+          `umbrella vs ${other} .gitignore share-dot-guild blocks differ:\n\n${diff}`
+        );
+      }
+      expect(blocks.umbrella).toBe(blocks[other]);
+    });
+  }
 });
 
 /** Build a simple line-level diff between two strings for error messages. */

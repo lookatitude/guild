@@ -8,14 +8,14 @@
       "id": "learn",
       "source_path": "commands/learn.md",
       "resource_path": "resources/commands/learn.md",
-      "sha256": "e1cd4505cb054f7859755b02f60b99272adc8c0680865546e1e2db69952f9c2f"
+      "sha256": "9bddfafc807e0faf162111aa5f99a804bf0ecb86808325e73349c76e3f58c6d8"
     },
     {
       "category": "commands",
       "id": "wiki",
       "source_path": "commands/wiki.md",
       "resource_path": "resources/commands/wiki.md",
-      "sha256": "713704e16e1a0331c47463bf575965dc781de69ae495d0911db3ca9bbef84b80"
+      "sha256": "0ea2a8a43ddf2ab3c65068f9328273e2461842372d655e5e2b750cf53411206f"
     },
     {
       "category": "mcp_servers",
@@ -36,7 +36,7 @@
       "id": "knowledge-links-traverse",
       "source_path": "scripts/knowledge-links-traverse.ts",
       "resource_path": "resources/scripts/knowledge-links-traverse.ts",
-      "sha256": "7892bb2a45f579e80e40a59b46143f8840a00d2fb61bfb54ee9036abf51c02a0"
+      "sha256": "c420c09ca090a885f6b18e2da3be61a6e8c0e4afabf3fb034134755547e82085"
     },
     {
       "category": "scripts",
@@ -57,7 +57,7 @@
       "id": "lib/kb-snapshot",
       "source_path": "scripts/lib/kb-snapshot.ts",
       "resource_path": "resources/scripts/lib/kb-snapshot.ts",
-      "sha256": "a4ef1cc0edda6967cae64ee465114e099178a8a70adb7e18b33cfcec8b97b6cc"
+      "sha256": "1d3621fb68b2acadc7281705cd4e818c24a4735e03c907c5b19954eeef10f063"
     },
     {
       "category": "scripts",
@@ -72,13 +72,6 @@
       "source_path": "scripts/lib/shared/graph-scoring.ts",
       "resource_path": "resources/scripts/lib/shared/graph-scoring.ts",
       "sha256": "c85e4aed8c56b50e972b9043d677d09dc5e3428e001e020ceb474c594bb3913b"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/sqlite-projections",
-      "source_path": "scripts/lib/sqlite-projections.ts",
-      "resource_path": "resources/scripts/lib/sqlite-projections.ts",
-      "sha256": "8beefef6b7cfca96478441eea818909b83731cdc69a5003bf77382c8500892bb"
     },
     {
       "category": "scripts",
@@ -120,7 +113,7 @@
       "id": "guild-learn-harvest",
       "source_path": "skills/knowledge/learn-harvest/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn-harvest/SKILL.md",
-      "sha256": "196f3fdf8637346477f19ffac5cc11c46f736f0c8e24e72102d736c9b2d5cf46"
+      "sha256": "aa1de3735ad083804109c900ccb4ba906fae8a2e3dd10fe2db70b679f9800e59"
     },
     {
       "category": "skills",
@@ -134,7 +127,7 @@
       "id": "guild-learn-map",
       "source_path": "skills/knowledge/learn-map/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn-map/SKILL.md",
-      "sha256": "37e116951412701bdb5064603c0be6f0f4a9caf974ea53c5fea92683ee028688"
+      "sha256": "9c43836993942937b6748672f7c66a5e22618d5e132b62bccf01984388b10c34"
     },
     {
       "category": "skills",
@@ -148,7 +141,7 @@
       "id": "guild-wiki-ingest",
       "source_path": "skills/knowledge/wiki-ingest/SKILL.md",
       "resource_path": "resources/skills/knowledge/wiki-ingest/SKILL.md",
-      "sha256": "850ab30c7ba54657b94ab99a9a40b706e7ecc3b2645b8947a4bde647761bd178"
+      "sha256": "bdad858ce05df459f4b86590a8c541e03feed8ae27afd5cc37165426c1770e7f"
     },
     {
       "category": "skills",

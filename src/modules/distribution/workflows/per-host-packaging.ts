@@ -512,8 +512,10 @@ export function renderClaudeMarketplacePackage(
   const plugin: ClaudeMarketplaceJson["plugins"][number] = {
     name: manifest.name,
     source: "./",
-    description:
-      "Self-evolving teams of specialist agents for Claude Code. 15 specialist type templates across engineering, content, and commercial groups, minted into your project on demand; the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops); a settings.json config surface; an understand-everything engine for brownfield onboarding; a categorized wiki with decision capture; and a self-evolution loop with shadow mode, flip-gating, and versioned rollback. Built and maintained by its own dev-team of self-build agents. Optional tmux agent-team backend + BM25 wiki search + trace query MCPs.",
+    // Single-sourced from the neutral manifest description (which is the committed
+    // .claude-plugin/plugin.json description) so the marketplace plugin blurb can
+    // never drift from the plugin manifest.
+    description: manifest.description,
     version: manifest.version,
   };
   if (manifest.homepage !== undefined) plugin.homepage = manifest.homepage;

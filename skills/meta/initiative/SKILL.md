@@ -77,6 +77,24 @@ status from the four axes in prose) to print the furthest-progressed
 `initiative-gate.ts close-check` (§Close, below) even outside a close attempt
 so `status` shows exactly which leg(s) block close today.
 
+For `list`'s cross-cut rollup (which run(s) touched each initiative), delegate
+to `scripts/registry-rollup.ts` — the deterministic projection of
+`initiatives/{active,archived}/*/initiative.yaml` + `runs/**/provenance.json`
+(never hand-derive `run_ids`/`last_run_id` from a manual runs/ walk):
+
+```
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/registry-rollup.ts \
+  --guild-dir <cwd>/.guild --json
+```
+
+Read `run_ids`/`last_run_id` per initiative from its JSON `initiatives[]` output
+for the rollup column; this call is **read-only** (`--json`, no `--write`), so it
+stays inside `list`'s **R** contract — it does not persist
+`.guild/indexes/initiatives-registry.yaml` as a side effect of a status/list
+query. (An explicit `--write` run of the same CLI is available as a standalone
+maintenance step for operators who want the derived index cached to disk; that
+is not part of this sub-verb.)
+
 ## `resume`
 
 Read `work-items/` for the lowest-id item whose `status` is `ready` or

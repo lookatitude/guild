@@ -18,7 +18,7 @@
  *     the G4b successor to host-capabilities-schema.ts's pre-registry map — see
  *     that module's own comment for why it lives there, not in capabilities-schema)
  *   scripts/lib/host-capabilities-schema.ts — GuildHostCapabilitiesV1 + PermissionMode types
- *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md (L0 ADR)
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) (L0 ADR)
  *
  * PURITY: no I/O, no spawn, no clock. The spawn + capture + repair loop live in
  * scripts/guild-run.ts; this module is fully unit-testable (L6 SC-5).

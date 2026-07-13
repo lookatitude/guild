@@ -94,14 +94,14 @@ cat <<STATUS
 │  First run on a new repo → /guild:guild proposes /guild:init    │
 │  Guild v2 keeps the ':' namespace and drops the redundant       │
 │  'guild' prefix — commands are /guild:<verb>                    │
-│  (full map: MIGRATION.md).                                      │
+│  (v1→v2 guide: https://guildstack.dev/docs/migration-v1-to-v2)  │
 │                                                                 │
 │  Optional MCP servers (pre-bundled; no install needed):         │
 │    guild-memory       BM25 wiki search                          │
 │    guild-telemetry    Trace query over .guild/runs/             │
 ├─────────────────────────────────────────────────────────────────┤
-│  Plan & architecture: guild-plan.md (start at §1 or §13.2)     │
-│  Docs: the Guild docs site · docs/specialist-roster.md          │
+│  Docs & architecture: https://guildstack.dev/docs               │
+│  Specialist roster: docs/specialist-roster.md                   │
 └─────────────────────────────────────────────────────────────────┘
 STATUS
 
@@ -191,7 +191,7 @@ SELFBUILD_FAIL
   # `npx tsx plugin/scripts/docs-hygiene/scan.ts` or `/guild:wiki lint`. The
   # standing display turns the scan into a continuous-feedback hook without
   # adding wall-clock cost to every session start.
-  SCAN_FILE="${PWD}/plugin/scripts/docs-hygiene/.last-scan.md"
+  SCAN_FILE="${PLUGIN_ROOT}/scripts/docs-hygiene/.last-scan.md"
   if [[ -f "${SCAN_FILE}" ]]; then
     # Extract counts from the scan output's summary markdown table.
     # Table shape: "| <Label> | <count> |". Use awk to take the 3rd pipe column
@@ -231,8 +231,8 @@ SELFBUILD_FAIL
 │  Run once to seed the standing display:                         │
 │    npx tsx plugin/scripts/docs-hygiene/scan.ts                  │
 │                                                                 │
-│  See: docs/knowledge/decisions/                                 │
-│       knowledge-base-hygiene-and-grading.md                     │
+│  ADR: knowledge-base-hygiene-and-grading (workspace wiki)       │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 NOSCAN
   fi

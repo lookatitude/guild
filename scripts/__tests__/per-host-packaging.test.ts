@@ -3,7 +3,7 @@
  *
  * TDD suite for scripts/lib/per-host-packaging.ts
  * Surface 1 of the host-adapter contract — per-host packaging renderers.
- * Contract (BY POINTER): docs/knowledge/decisions/host-adapter-contract.md §Surface 1
+ * Contract (BY POINTER): ADR: host-adapter-contract (workspace wiki) §Surface 1
  * Distribution doc (BY POINTER): docs/v2/15-distribution.md §Per-host packaging
  *
  * Coverage:

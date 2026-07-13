@@ -12,7 +12,7 @@
  *   inventory-schema.ts   — guild.inventory.v1 type + validator
  *   parity-contract.ts    — DISCOVERY_RULES + checkCoverage (SC-7a)
  *   result-contracts.ts   — RESULT_CONTRACTS (curated schemas[])
- *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md (L0 ADR)
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) (L0 ADR)
  *
  * DETERMINISM (L1 success criterion): identical inputs → byte-identical output.
  *   - Every category list is SORTED by id before emission (filesystem readdir

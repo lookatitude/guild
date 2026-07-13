@@ -16,8 +16,8 @@ surfaces (machinery-vs-template-library ADR):
 See `https://guildstack.dev/docs/specialist-roster` for the full roster with trigger
 examples and DO NOT TRIGGER boundaries.
 
-Every specialist inherits `guild-principles` (T1) as a mandatory first load: the
-Karpathy 4 plus Guild's evidence rule. Per-specialist T5 skills live under
+Every specialist inherits `guild-principles` (core-tier) as a mandatory first load: the
+Karpathy 4 plus Guild's evidence rule. Per-specialist specialists-tier skills live under
 `skills/specialists/<specialist>-<slug>/`.
 
 **Model tiers (cost-aware-tiering-and-lean-context ADR §1/§7).** Each agent's
@@ -27,7 +27,7 @@ the lowest viable tier per lane; a `powerful` need inside a cheap/mid lane is an
 **escalation to the `advisor`** (ADR §3), never a self-promotion. See the
 **Tiered-worker roster** section below.
 
-## Engineering group (8 specialists · 30 authored T5 skills)
+## Engineering group (8 specialists · 30 authored specialists-tier skills)
 
 ### architect — `templates/specialists/architect.md`
 

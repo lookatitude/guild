@@ -5,24 +5,10 @@
   "entries": [
     {
       "category": "scripts",
-      "id": "docs-hygiene/docs-code-audit",
-      "source_path": "scripts/docs-hygiene/docs-code-audit.ts",
-      "resource_path": "resources/scripts/docs-hygiene/docs-code-audit.ts",
-      "sha256": "b050038a50b9a7b8405efb1b6da4468172d5e8b7f295e671f3ac2703004c660d"
-    },
-    {
-      "category": "scripts",
-      "id": "docs-hygiene/memory-check",
-      "source_path": "scripts/docs-hygiene/memory-check.ts",
-      "resource_path": "resources/scripts/docs-hygiene/memory-check.ts",
-      "sha256": "84846ef649e0bc910e0b49ca3fd3738b982abd4dfb9381666c14cc319c6af2d3"
-    },
-    {
-      "category": "scripts",
       "id": "docs-hygiene/scan",
       "source_path": "scripts/docs-hygiene/scan.ts",
       "resource_path": "resources/scripts/docs-hygiene/scan.ts",
-      "sha256": "a12c35c2b2d4dab4b6665282b8a641d72f4885977de1b3025c3ec9a65e5dd9fc"
+      "sha256": "3e35b6feab30293fbebac4b65dd2a541239e62715fc5e809a6b7347070019653"
     },
     {
       "category": "scripts",

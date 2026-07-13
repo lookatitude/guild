@@ -15,7 +15,7 @@
  * contract so L7 does not have to re-derive or guess it.
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-p1-l0-foundation-contracts.md Section Namespace reconciliation
+ *   docs/contracts/universal-host-p1-l0-foundation-contracts.md Section Namespace reconciliation
  *   .guild/plan/universal-host-p1.md (P1-L7 - behavior-preserving)
  *
  * BEHAVIOR-PRESERVING ALIGNMENT (load-bearing): the family collapse here is

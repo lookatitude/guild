@@ -4,10 +4,14 @@
   "title": "Telemetry",
   "kind": "operator",
   "implementation_mode": "workflow-backed",
-  "description": "Owns capture hooks, trace events, run trace, telemetry redirection, trace summaries, and guild-telemetry MCP.",
-  "depends_on": ["state"],
+  "description": "Owns capture hooks, trace events, run trace, the shared run-event reader, trace summaries, and guild-telemetry MCP.",
+  "depends_on": [
+    "state"
+  ],
   "owns": {
-    "commands": ["stats"],
+    "commands": [
+      "stats"
+    ],
     "hooks": [
       "PostToolUse:capture-telemetry.js",
       "Stop:run-trace-close.js",
@@ -15,15 +19,15 @@
       "UserPromptSubmit:capture-telemetry.js",
       "UserPromptSubmit:run-trace-start.js"
     ],
-    "mcp_servers": ["guild-telemetry"],
+    "mcp_servers": [
+      "guild-telemetry"
+    ],
     "scripts": [
       "recall-stats",
       "trace-summarize",
       "v1.4-log-validator",
-      "lib/failure-ingestion",
       "lib/guild-trace-emit",
       "lib/guild-trace-events",
-      "lib/telemetry-redirect",
       "hooks/dist/run-trace"
     ]
   }

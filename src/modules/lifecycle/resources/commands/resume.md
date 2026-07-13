@@ -32,33 +32,25 @@ Continues the active run's phase artifacts (no new artifact kind introduced).
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
 
-Before locating the next pending gate — run the preflight
-(`scripts/lib/runstart-preflight.ts`; canonical contract in `guild.md
-§Run-start preflight`):
+`resume` continues an existing run, so its resolved-settings snapshot is
+already on disk — `run-trace.js start` wrote it at the original run-start (since
+wave 2 the run-trace CLI is the **sole caller** of `runStartPreflight`;
+`scripts/lib/runstart-preflight.ts`; canonical contract in `guild.md §Run-start
+preflight`). Do **not** re-run the preflight or overwrite the snapshot for the
+resumed run: read it back with `readResolvedSettingsSnapshot(runId, { cwd })`.
 
-1. Call `runStartPreflight({ cwd, flags? })` — resolves the 7-source
-   inheritance chain + validates + probes tmux + detects providers
-   (full chain: see `/guild:guild §Run-start preflight`).
-2. If `needsTmuxPrompt`: show `tmuxPrompt.question`; on YES run
-   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts <...tmuxPrompt.persistCommand> --cwd <cwd>` (U2 HARD-SET);
-   on NO continue with the resolved backend.
-3. `resume` continues an existing run: the snapshot for the active run is
-   already on disk (written at the original run-start). Read it back with
-   `readResolvedSettingsSnapshot(runId, { cwd })` rather than overwriting it.
-   The preflight result is used only for the tmux/provider check — it does not
-   replace the locked-in snapshot for the resumed run.
-4. **Re-enter resumable dead lanes (R-016).** Before locating the next pending
-   gate, list any resumable dead lanes for the active run:
-   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/resume-lanes.ts <runDir> --json` (the
-   `--json` flag is required for the parseable bare array; without it the CLI
-   prints a human table — scans
-   `<runDir>/lanes/*/resume.json`, applies the `guild.lane_resume.v1` version
-   guard, honors `defaults.resume.enabled`). For each returned lane, re-enter it
-   via `guild:execute-plan`'s `## Resuming dead lanes (R-016)` path — a fresh
-   dispatch from the checkpoint with a fresh retry budget (prior attempts are
-   preserved in the checkpoint for audit, not subtracted). An empty list ⇒ skip
-   straight to the next step (exactly today's behavior).
-5. Proceed to gate continuation.
+**Re-enter resumable dead lanes (R-016).** Before locating the next pending
+gate, list any resumable dead lanes for the active run:
+`npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/resume-lanes.ts <runDir> --json` (the
+`--json` flag is required for the parseable bare array; without it the CLI
+prints a human table — scans
+`<runDir>/lanes/*/resume.json`, applies the `guild.lane_resume.v1` version
+guard, honors `defaults.resume.enabled`). For each returned lane, re-enter it
+via `guild:execute-plan`'s `## Resuming dead lanes (R-016)` path — a fresh
+dispatch from the checkpoint with a fresh retry budget (prior attempts are
+preserved in the checkpoint for audit, not subtracted). An empty list ⇒ skip
+straight to the next step (exactly today's behavior). Then proceed to gate
+continuation.
 
 ## Dispatch
 

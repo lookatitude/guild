@@ -3,12 +3,12 @@
   "id": "dashboard",
   "title": "Dashboard",
   "kind": "operator",
-  "implementation_mode": "workflow-backed",
-  "description": "Owns dashboard command, projection logic, launch surfaces, and operator-facing status read models.",
+  "implementation_mode": "resource-only",
+  "description": "Owns dashboard command, launch surfaces, and operator-facing status read models. dashboard-launch.ts is the live implementation and lives directly under scripts/ (no src/modules/dashboard/workflows/ counterpart) since dashboard-projector.ts — the module's only former workflows file — was deleted as orphaned (audit remediation item 12; /guild:dashboard ships different semantics than the projector implemented).",
   "depends_on": ["state", "telemetry"],
   "owns": {
     "commands": ["dashboard"],
     "skills": ["guild-dashboard"],
-    "scripts": ["dashboard-launch", "lib/dashboard-projector"]
+    "scripts": ["dashboard-launch"]
   }
 }

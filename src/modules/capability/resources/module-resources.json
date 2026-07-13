@@ -5,13 +5,6 @@
   "entries": [
     {
       "category": "scripts",
-      "id": "lib/autonomy-presets",
-      "source_path": "scripts/lib/autonomy-presets.ts",
-      "resource_path": "resources/scripts/lib/autonomy-presets.ts",
-      "sha256": "68d1d68670ce5e8932e1b518adc201cb90ce57aba9764f60a319f446b31e8265"
-    },
-    {
-      "category": "scripts",
       "id": "lib/capability/backend-factory",
       "source_path": "scripts/lib/capability/backend-factory.ts",
       "resource_path": "resources/scripts/lib/capability/backend-factory.ts",
@@ -47,20 +40,6 @@
     },
     {
       "category": "scripts",
-      "id": "lib/isolation-capability-set",
-      "source_path": "scripts/lib/isolation-capability-set.ts",
-      "resource_path": "resources/scripts/lib/isolation-capability-set.ts",
-      "sha256": "6a2b1d0f50695a1c0619f5886ec9ca2cf30358cfa43bf58139f7dd3cf36df375"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/lane-reserved-field",
-      "source_path": "scripts/lib/lane-reserved-field.ts",
-      "resource_path": "resources/scripts/lib/lane-reserved-field.ts",
-      "sha256": "73f19367f594dccc4f26e6ad890b97e0fbd1152b1004d503a9dc2a196db16002"
-    },
-    {
-      "category": "scripts",
       "id": "lib/role-model-schema",
       "source_path": "scripts/lib/role-model-schema.ts",
       "resource_path": "resources/scripts/lib/role-model-schema.ts",
@@ -78,7 +57,7 @@
       "id": "score-tier",
       "source_path": "scripts/score-tier.ts",
       "resource_path": "resources/scripts/score-tier.ts",
-      "sha256": "192b4d59b950b35bb072dc62d772f51089eebb112ad65d9c2eb5beb485c200cf"
+      "sha256": "af7cddc5cc413564da75cdacab432f4255519c0e880af176893cf1bf300fddf9"
     }
   ]
 }

@@ -893,7 +893,7 @@ describe("sessionJsonPath + listRunnableRunIds helpers", () => {
 
 // ── OD-4 discriminator — isRunInScope ─────────────────────────────────────────
 //
-// policy_effective_date: 2026-06-03 (docs/knowledge/decisions/communication-format-policy.md)
+// policy_effective_date: 2026-06-03 (ADR: communication-format-policy (workspace wiki))
 // A runtime receipt written for a run whose started_at / run-id timestamp is
 //   >= 2026-06-03  → in-scope (fail-closed on missing envelope)
 //   <  2026-06-03  → grandfathered (fail-open / lenient: §8.2 alone is enough)
