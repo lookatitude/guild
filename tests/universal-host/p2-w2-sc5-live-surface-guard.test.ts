@@ -20,8 +20,8 @@
  * are now EMPTY — the surface is frozen as-ratified, with NO permitted deltas.
  *
  * Two halves:
- *  (1) EMPTY-SET live-surface guard, anchored to the PINNED ratified-v2 baseline (4e91770).
- *      `git diff --name-status 4e91770 -- .claude-plugin commands skills` vs the WORKING
+ *  (1) EMPTY-SET live-surface guard, anchored to the PINNED ratified baseline (`PINNED_BASELINE` below).
+ *      `git diff --name-status <PINNED_BASELINE> -- .claude-plugin commands skills` vs the WORKING
  *      TREE must show ZERO entries. The baseline is HARD-PINNED — it can NEVER be
  *      HEAD/worktree (which would turn the diff into HEAD-vs-worktree and hide a COMMITTED
  *      live-surface mutation). A `GUILD_W2_BASELINE_REF` env var is REJECTED (throw) unless
@@ -47,7 +47,7 @@ const LIVE_PATHS = [".claude-plugin", "commands", "skills"];
 
 /**
  * Skill allowlists — now EMPTY (RE-RATIFIED 2026-06-27, "ship it all in v2"). The baseline anchors
- * to the ratified v2 surface (4e91770), so the prior in-flight Wave-3 additive (product-template) +
+ * to the ratified surface (`PINNED_BASELINE` below; originally 4e91770), so the prior in-flight Wave-3 additive (product-template) +
  * Wave-7 metadata-mod entries are SUBSUMED into the baseline. `.claude-plugin/**` + `commands/**`
  * stay STRICT byte-frozen, and live `skills/**` is now ZERO-delta too: with an empty allowlist, ANY
  * add/modify/delete/rename from the ratified baseline is a violation. (See the SC-W3-6 guard header
@@ -116,8 +116,8 @@ function evaluateLiveSurfaceRows(rows: DiffRow[]): {
 	}
 
 /**
- * The HARD-PINNED ratified-v2 baseline (4e91770 — the commit at which commands/ + skills/ settled;
- * an ancestor of HEAD, not HEAD). Pinned (not env-derived) so the guard's diff anchor cannot be
+ * The HARD-PINNED ratified baseline (`PINNED_BASELINE` — the commit at which the frozen surface last
+ * deliberately changed; an ancestor of HEAD, not HEAD). Pinned (not env-derived) so the guard's diff anchor cannot be
  * moved to HEAD/worktree to hide a committed live-surface mutation.
  */
 // RE-RATIFICATION RULE (read before bumping): the pin is the LAST commit on branch history that
@@ -126,7 +126,7 @@ function evaluateLiveSurfaceRows(rows: DiffRow[]): {
 // now and trips the instant a NEW (unreleased) surface change lands. Bump it to that change's commit
 // on any deliberate surface change. NEVER auto-follow HEAD (a chasing pin lets a committed surface
 // mutation hide itself — the entire reason it is pinned, not env-derived).
-const PINNED_BASELINE = "f252524"; // RE-RATIFIED 2026-07-12 (plugin-audit-remediation G1b) to the settled specialist-template-library surface (was 4833f69, from 2026-07-01, which predated the v2.1.0 machinery-agents/specialist-template-library split, leaving it stale-RED on a clean checkout). 7958ed8 is the last surface-touching commit and is byte-identical to the current tree; later commits touch only tests/scripts. v2.1.0 (d2867f6) is NOT valid — the surface legitimately drifted past it on `next`. SC-2 normalized equivalence remains the real cutover gate, GREEN.
+const PINNED_BASELINE = "d98fd40"; // RE-RATIFIED 2026-07-13 (post-merge): PR #27 was SQUASH-merged to `next`, so the prior pin f252524 (feature-branch commit) is no longer an ancestor of `next` HEAD — stale-RED on a clean checkout. d98fd40 is the squash commit: the last surface-touching commit on `next` and byte-identical to the ratified surface; later commits (93a133f) touch only `.guild/` ledger state. Squash-merge lesson: re-ratify feature-branch pins to the squash commit at merge time. SC-2 normalized equivalence remains the real cutover gate, GREEN.
 
 function git(args: string[]): string {
   return execFileSync("git", args, { cwd: PLUGIN_ROOT, encoding: "utf8" }).trim();
