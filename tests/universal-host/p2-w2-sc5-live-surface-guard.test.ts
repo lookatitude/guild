@@ -126,7 +126,7 @@ function evaluateLiveSurfaceRows(rows: DiffRow[]): {
 // now and trips the instant a NEW (unreleased) surface change lands. Bump it to that change's commit
 // on any deliberate surface change. NEVER auto-follow HEAD (a chasing pin lets a committed surface
 // mutation hide itself — the entire reason it is pinned, not env-derived).
-const PINNED_BASELINE = "d98fd40"; // RE-RATIFIED 2026-07-13 (post-merge): PR #27 was SQUASH-merged to `next`, so the prior pin f252524 (feature-branch commit) is no longer an ancestor of `next` HEAD — stale-RED on a clean checkout. d98fd40 is the squash commit: the last surface-touching commit on `next` and byte-identical to the ratified surface; later commits (93a133f) touch only `.guild/` ledger state. Squash-merge lesson: re-ratify feature-branch pins to the squash commit at merge time. SC-2 normalized equivalence remains the real cutover gate, GREEN.
+const PINNED_BASELINE = "4f56c97"; // RE-RATIFIED 2026-07-14 at the v2.2.0 v2→main flip (the guard rule: bump the pin on a deliberate surface change / at the release flip). The release version bump (2.1.0→2.2.0) legitimately changes .claude-plugin/plugin.json + marketplace.json, which this guard freezes byte-identical; 4f56c97 is the version-bump commit, so freezing against it restores zero-delta while still tripping on any UNVERSIONED surface drift on top. Prior pin d98fd40 (PR #27 squash) predated the bump. SC-2 normalized equivalence remains the real cutover gate.
 
 function git(args: string[]): string {
   return execFileSync("git", args, { cwd: PLUGIN_ROOT, encoding: "utf8" }).trim();
