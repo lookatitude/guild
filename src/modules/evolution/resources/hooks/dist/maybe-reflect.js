@@ -170,7 +170,7 @@ var init_config_defaults = __esm({
 });
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
-var UPDATE_COMMANDS, CLAUDE_CAPABILITIES, CODEX_CAPABILITIES, NO_HOOKS, TARGET_CLI_COMMON, PI_CAPABILITIES, ANTIGRAVITY_CAPABILITIES, AGENTS_FILE_CAPABILITIES;
+var UPDATE_COMMANDS, CLAUDE_CAPABILITIES, CODEX_CAPABILITIES, NO_HOOKS, AGENTS_FILE_CAPABILITIES;
 var init_host_capabilities_schema = __esm({
   "../src/modules/host-runtime/workflows/host-capabilities-schema.ts"() {
     UPDATE_COMMANDS = {
@@ -406,109 +406,6 @@ var init_host_capabilities_schema = __esm({
       task_created: false,
       task_completed: false,
       teammate_idle: false
-    };
-    TARGET_CLI_COMMON = {
-      commands: { slash_commands: false, command_files: "none" },
-      skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
-      agents: { native_agents: false, agent_format: null },
-      hooks: NO_HOOKS,
-      dispatch: {
-        tmux_processes: true,
-        plain_processes: true,
-        independent_agents: false,
-        subagents: false,
-        inline: true
-      },
-      interaction: {
-        native_questions: false,
-        terminal_prompt: true,
-        file_bus_questions: true
-      },
-      sessions: { continue: false, resume_by_id: false, fork: false },
-      structured_output: {
-        native_json: true,
-        schema_validation: false,
-        repair_prompt: true
-      },
-      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-      tools: {
-        read: "native",
-        search: "native",
-        shell: "native",
-        edit: "native",
-        write: "native",
-        browser: "none",
-        web: "emulated",
-        mcp: "emulated"
-      },
-      mcp: { stdio: false, http: false },
-      models: {
-        cheap: { model: null },
-        mid: { model: null },
-        powerful: { model: null }
-      }
-    };
-    PI_CAPABILITIES = {
-      schema_version: "guild.host_capabilities.v1",
-      host_kind: "pi",
-      family: "pi",
-      surface_kind: "cli",
-      package: {
-        installable: false,
-        installability: "target",
-        manifest_format: "pi-manifest",
-        update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false }
-      },
-      bootstrap: {
-        context_injection: "instruction_file",
-        skill_autoload: false,
-        prompt_transform: false,
-        wrapper_injection: true
-      },
-      permissions: {
-        deny: true,
-        ask: true,
-        ask_mode: null,
-        accept_edits_without_prompt: false,
-        auto_approve_tools: false,
-        bypass_prompts: false,
-        bypass_sandbox: false,
-        permission_prompt_layer: false,
-        launch_modes: {}
-      },
-      ...TARGET_CLI_COMMON
-    };
-    ANTIGRAVITY_CAPABILITIES = {
-      schema_version: "guild.host_capabilities.v1",
-      host_kind: "antigravity",
-      family: "antigravity",
-      surface_kind: "cli",
-      package: {
-        installable: false,
-        installability: "target",
-        manifest_format: "antigravity-manifest",
-        update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false }
-      },
-      bootstrap: {
-        context_injection: "instruction_file",
-        skill_autoload: false,
-        prompt_transform: false,
-        wrapper_injection: true
-      },
-      permissions: {
-        deny: true,
-        ask: true,
-        ask_mode: null,
-        accept_edits_without_prompt: false,
-        auto_approve_tools: false,
-        bypass_prompts: true,
-        bypass_sandbox: true,
-        permission_prompt_layer: false,
-        launch_modes: {
-          bypass_all: ["--dangerously-skip-permissions"]
-        }
-      },
-      ...TARGET_CLI_COMMON
     };
     AGENTS_FILE_CAPABILITIES = {
       schema_version: "guild.host_capabilities.v1",
