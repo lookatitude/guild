@@ -30,7 +30,7 @@ overwrites a user-set value, and records provenance + a `last_reconciled_at` tim
 
 ```bash
 # config init == reconcile sync (never-clobber; fills missing keys to defaults)
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts reconcile sync --cwd "$(pwd)"
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts reconcile sync --cwd "$(pwd)"
 ```
 
 Steps:
@@ -53,7 +53,7 @@ existing `_help` block and all unrelated keys (read-modify-write). Prints
 exactly what it wrote and to which file.
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts set <key> <value> --scope workspace|project|local [--cwd <p>]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts set <key> <value> --scope workspace|project|local [--cwd <p>]
 ```
 
 **Scope semantics and inheritance:**
@@ -92,9 +92,9 @@ All other keys in the closed key-set inherit normally down the chain.
 **Dotted key paths** are supported for nested settings:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts set defaults.team.size 5 --scope project --cwd /path/to/project
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts set defaults.wiki.share_mode private --scope workspace
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts set agent_mode team --scope workspace --cwd /path/to/child
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts set defaults.team.size 5 --scope project --cwd /path/to/project
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts set defaults.wiki.share_mode private --scope workspace
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts set agent_mode team --scope workspace --cwd /path/to/child
 ```
 
 The `set` command validates the key against the closed key-set before writing.
@@ -112,7 +112,7 @@ contract). The write is a read-modify-write — it **never overwrites a sibling 
 any other key.
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts role <host|advisory|adversarial> <host_id|null> --scope workspace|project|local [--cwd <p>]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts role <host|advisory|adversarial> <host_id|null> --scope workspace|project|local [--cwd <p>]
 ```
 
 | `--scope` | Target file | Provenance sidecar |
@@ -123,10 +123,10 @@ npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts role <
 
 ```bash
 # pin the host role to claude for this project; advisory + adversarial to codex (gitignored)
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts role host claude --scope project
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts role adversarial codex --scope local
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts role host claude --scope project
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts role adversarial codex --scope local
 # clear a pin
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts role advisory null --scope project
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts role advisory null --scope project
 ```
 
 **`roles.host` ≠ top-level `host`.** The role pin `roles.host` names a **registry host id**
@@ -146,7 +146,7 @@ confirmation-strength, native-component hint**, the **resolved value**, and the 
 layer** the value won from — and lets you edit any key.
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts ui <list|get|sources|set> [--host <id>] [--group <g>] [--cwd <p>]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts ui <list|get|sources|set> [--host <id>] [--group <g>] [--cwd <p>]
 ```
 
 | Sub-verb | What it does |
@@ -173,7 +173,7 @@ is masked to `‹redacted — replace-only›`; the raw value never appears in t
 ### `ui set` — edit any key through the config API (§E12)
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts ui set <key> <value> --scope workspace|project|local [--confirm <strength>] [--host <id>] [--cwd <p>]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts ui set <key> <value> --scope workspace|project|local [--confirm <strength>] [--host <id>] [--cwd <p>]
 ```
 
 The edit is **planned** by the surface (validate the key + scope, compute the required
@@ -194,9 +194,9 @@ confirmation) and then **persisted by the plugin config API** — the surface it
 
 ```bash
 # render the startup panel for the default CLI host
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts ui list --group startup --cwd "$(pwd)"
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts ui list --group startup --cwd "$(pwd)"
 # edit a dangerous key (refused without the declared confirmation)
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts ui set review off --scope project --confirm danger --cwd "$(pwd)"
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts ui set review off --scope project --confirm danger --cwd "$(pwd)"
 ```
 
 ## `show` — print the resolved config
@@ -206,7 +206,7 @@ project < project-local < rigor < CLI`) and print the merged JSON (what
 Guild will actually use this run):
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/read-guild-config.ts [--cwd <repo-root>] [flags…]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/read-guild-config.ts [--cwd <repo-root>] [flags…]
 ```
 
 ### `show --sources` — annotate each key with its inheritance layer (AC-3)
@@ -215,7 +215,7 @@ Print each effective key with its resolved value AND the layer it came from
 (builtin / workspace / workspace-local / project / project-local / rigor / cli):
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts show --sources [--cwd <p>]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts show --sources [--cwd <p>]
 ```
 
 Example output:
@@ -254,7 +254,7 @@ core. READ-ONLY — prints a per-host summary (family, surface, models, permissi
 count, role pins, `_unsupported` degrade markers, `_redactions`); writes nothing.
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts show --render [--cwd <p>]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts show --render [--cwd <p>]
 ```
 
 **Fail-closed.** The renderer is passed the resolver's per-key `sources` map: any value
@@ -275,7 +275,7 @@ key; `defaults.wiki.autopromote: true`; `defaults.adversarial: off` for
 self-build with `--self-build`). Exits non-zero on a violation.
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/read-guild-config.ts --validate [--cwd <repo-root>] [--self-build]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/read-guild-config.ts --validate [--cwd <repo-root>] [--self-build]
 ```
 
 ### `validate --effective` — validate the POST-INHERITANCE resolved config
@@ -287,7 +287,7 @@ appear after inheritance — for example, a workspace settings file that sets
 even if the child file itself is clean.
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts validate --effective [--cwd <p>] [--self-build]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts validate --effective [--cwd <p>] [--self-build]
 ```
 
 Exits 0 on a clean resolved config; exits non-zero listing all violations.
@@ -299,7 +299,7 @@ show which provider would be recommended for `review=cross`. READ-ONLY — no
 settings file is written.
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts providers detect [--cwd <p>]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts providers detect [--cwd <p>]
 ```
 
 Note: `providers detect` is a two-token form — `providers` is the subcommand
@@ -365,7 +365,7 @@ and gates on approval. Run this after a deliberate MCP server upgrade to
 accept the new descriptions.
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts update-mcp-hashes \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts update-mcp-hashes \
   --tools <json-file> --scope workspace|project|local [--cwd <p>]
 ```
 
@@ -400,7 +400,7 @@ per-key provenance + a `last_reconciled_at` timestamp. The mode is a required po
   never silently weakened to the permissive default.
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts reconcile <check|sync|repair> --cwd "$(pwd)"
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/config-cmd.ts reconcile <check|sync|repair> --cwd "$(pwd)"
 ```
 
 Exit codes: `0` success; `1` bad input / IO error; `2` bad `--cwd`.

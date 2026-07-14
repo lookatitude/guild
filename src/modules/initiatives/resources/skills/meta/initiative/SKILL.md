@@ -83,7 +83,7 @@ to `scripts/registry-rollup.ts` — the deterministic projection of
 (never hand-derive `run_ids`/`last_run_id` from a manual runs/ walk):
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/registry-rollup.ts \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/registry-rollup.ts \
   --guild-dir <cwd>/.guild --json
 ```
 
@@ -128,7 +128,7 @@ deterministic CLI and consume its verdict — the same discipline
 `guild:review-broker` applies to its 5-condition gate-pass check.
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/initiative-gate.ts close-check \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/initiative-gate.ts close-check \
   --initiative <id> \
   --root "$(pwd)" \
   --exec-verified=<true only after confirming verify.md PASS for every contributing run>
@@ -152,7 +152,7 @@ read error.**
    still owes:
 
    ```bash
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/initiative-gate.ts docs-workitems \
+   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/initiative-gate.ts docs-workitems \
      --initiative <id> --root "$(pwd)" --exec-verified=<same value as above>
    ```
 

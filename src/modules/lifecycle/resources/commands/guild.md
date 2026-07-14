@@ -54,7 +54,7 @@ child run.
 Before reading `.guild/` state, start a run (SC-B, §435):
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js start \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js start \
   --command=/guild:guild \
   --cwd "$(pwd)"
 # If --initiative=<id> was supplied by the user, add: --initiative=<id>
@@ -155,7 +155,7 @@ predicate itself is **deterministic code**, not model prose: whenever an
 interactive gate is about to be reached in this bare-entry path, run
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/oq11-gate-check.ts \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/oq11-gate-check.ts \
   --gate=<gate> [--interactive|--non-interactive] \
   [--auto-approve=<gate,gate,...>|all] [--named-phase]
 ```

@@ -24,7 +24,7 @@ Two fields:
    (or regenerate it on demand if stale/absent):
 
    ```
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/analyze-runs.ts --cwd <repo-root>
+   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/analyze-runs.ts --cwd <repo-root>
    ```
 
    Its `proposals[]` entries name each skill at or above `--min-runs` (default 3)
@@ -36,7 +36,7 @@ Two fields:
 
 Ten ordered steps. Each step's input and output is explicit so a later step can re-read the prior artifact without re-executing.
 
-1. **Snapshot current skill.** Delegates to `scripts/evolve-loop.ts`: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/evolve-loop.ts --skill <skill> --run-id <run-id> --cwd <cwd> [--proposed-edit <path>]`. The CLI resolves the live dir via `findLiveSkillDir` — `.guild/skills/<skill>/` when a project instance exists, else the plugin tree `skills/<tier>/<skill>/` (self-build cwd or `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`) — copies it to `.guild/skill-versions/<skill>/v<N>/` (`N` increments monotonically; includes `SKILL.md`, `evals.json`, and any skill-local helpers), and writes `.guild/evolve/<run-id>/pipeline.md` (the 10-step run plan steps 2-10 read from). Exits non-zero if the slug resolves nowhere. Input: `--skill`/`--proposed-edit`. Output: `.guild/skill-versions/<skill>/v<N>/` + `.guild/evolve/<run-id>/pipeline.md`.
+1. **Snapshot current skill.** Delegates to `scripts/evolve-loop.ts`: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/evolve-loop.ts --skill <skill> --run-id <run-id> --cwd <cwd> [--proposed-edit <path>]`. The CLI resolves the live dir via `findLiveSkillDir` — `.guild/skills/<skill>/` when a project instance exists, else the plugin tree `skills/<tier>/<skill>/` (self-build cwd or `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`) — copies it to `.guild/skill-versions/<skill>/v<N>/` (`N` increments monotonically; includes `SKILL.md`, `evals.json`, and any skill-local helpers), and writes `.guild/evolve/<run-id>/pipeline.md` (the 10-step run plan steps 2-10 read from). Exits non-zero if the slug resolves nowhere. Input: `--skill`/`--proposed-edit`. Output: `.guild/skill-versions/<skill>/v<N>/` + `.guild/evolve/<run-id>/pipeline.md`.
 
 2. **Load evals.** Read `evals.json` from the step-1 live dir. If fewer than 3 positive + 3 negative cases (insufficient for paired evaluation), bootstrap 2–3 additional cases from the accumulated reflections' `proposals.skill_improvement` evidence snippets (per `§11.2` step 2). Input: `<live-dir>/evals.json` + `.guild/reflections/*.md`. Output: `.guild/evolve/<run-id>/evals.json` (merged working set).
 
