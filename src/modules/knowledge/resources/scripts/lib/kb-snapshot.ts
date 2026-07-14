@@ -18,12 +18,15 @@
  * Design constraints:
  *   - Deterministic: the caller supplies any timestamp or run-id; nothing
  *     inside the exported functions calls Date.now() or Math.random().
- *   - Real fs: uses node:fs synchronously throughout — no injected seam
- *     (the module is new / dormant until wired into guild:ops-rollback).
+ *   - Real fs: uses node:fs synchronously throughout — no injected seam.
  *   - Never throws: all exported functions return a typed result; errors
  *     surface in the result, never as exceptions.
- *   - Default-off: the feature is inert until a caller invokes it. No
- *     existing hook or script path is modified.
+ *   - Opt-in: wired (plugin-audit-remediation G5a, 2026-07) as an OPTIONAL
+ *     step in skills/meta/ops-rollback/SKILL.md §"KB integrity check" — invoked
+ *     only when a rollback runbook targets `.guild/wiki/` state itself, never
+ *     for a plain deploy/release rollback. No hook or the default rollback
+ *     path calls it automatically; the CLI below (require.main===module) is
+ *     the invocation surface.
  *
  * Spec pointer: docs/v2/11-security.md §"KB snapshot & rollback (defense Layer 5)"
  * and docs/knowledge/security/prompt-injection-defenses.md §"Layer 5 —

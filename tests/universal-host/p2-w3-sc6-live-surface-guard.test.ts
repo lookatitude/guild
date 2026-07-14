@@ -12,7 +12,7 @@
  * The REAL cutover-safety gate is `build:hosts` SC-2 normalized equivalence (generated ≡ committed, GREEN);
  * this guard is the secondary tripwire for FUTURE *unintended* drift from the ratified surface.
  *
- * The guard is anchored to a HARD-PINNED baseline (`PINNED_BASELINE = 4e91770`, the ratified v2
+ * The guard is anchored to a HARD-PINNED baseline (`PINNED_BASELINE` below, the ratified
  * surface). Pinned (not env-derived) so the diff anchor cannot be moved to HEAD/worktree to hide
  * a committed live-surface mutation. A `GUILD_W3_BASELINE_REF` env var is REJECTED unless it is an
  * ancestor-or-equal of the ratified baseline and an ancestor of HEAD (never HEAD, never forward);
@@ -32,14 +32,20 @@ import * as path from "node:path";
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const FROZEN_PATHS = [".claude-plugin", "commands"]; // STRICT byte-identical
 // RE-RATIFIED 2026-06-27 (operator "ship it all in v2" directive): the cutover-surface freeze now
-// anchors to the ratified v2 surface (4e91770 — the last commit at which commands/ + skills/ settled,
-// an ancestor of HEAD), NOT the obsolete pre-Wave-3 anchor (3ce3666). Operator-directed v2 work (the
+// anchors to the ratified surface (`PINNED_BASELINE` below — the last surface-touching commit,
+// an ancestor of HEAD; originally 4e91770), NOT the obsolete pre-Wave-3 anchor (3ce3666). Operator-directed v2 work (the
 // understand→learn rename, the product loop, the ideation min-build wiring) legitimately evolved
 // commands/ + skills/ past pre-Wave-3, so freezing against it was stale. The REAL cutover-safety gate
 // is `build:hosts` SC-2 normalized equivalence (generated tree ≡ committed tree, GREEN) — this guard is the
 // secondary tripwire for FUTURE *unintended* drift from the ratified v2 surface. Bump this on the next
 // deliberate surface change (or at the v2→main flip).
-const PINNED_BASELINE = "4833f69"; // RE-RATIFIED 2026-07-01 to the settled dv2-reconciliation+init/config surface (was 4e91770; operator-directed "full green" — the dv2 docs↔code reconciliation deliberately evolved commands/init.md + skills/{learn,codex-review} and the init/config guild.yaml rename settled commands/init.md; SC-2 equivalence remains the real cutover gate, GREEN)
+// RE-RATIFICATION RULE (read before bumping): the pin is the LAST commit on branch history that
+// deliberately changed the frozen surface (`.claude-plugin/**`, `commands/**`, live `skills/**`) and
+// is an ancestor of HEAD but NOT HEAD. It must leave ZERO delta to the working tree so the guard is
+// GREEN now; it then trips the instant a NEW (unreleased) surface change lands on top. On any
+// deliberate surface change, bump this pin to that change's commit. Do NOT auto-follow HEAD — a pin
+// that chased HEAD would let a committed surface mutation hide itself (the whole reason it is pinned).
+const PINNED_BASELINE = "4f56c97"; // RE-RATIFIED 2026-07-14 at the v2.2.0 v2→main flip (the guard rule: bump the pin on a deliberate surface change / at the release flip). The release version bump (2.1.0→2.2.0) legitimately changes .claude-plugin/plugin.json + marketplace.json, which this guard freezes byte-identical; 4f56c97 is the version-bump commit, so freezing against it restores zero-delta while still tripping on any UNVERSIONED surface drift on top. Prior pin d98fd40 (PR #27 squash) predated the bump. SC-2 normalized equivalence remains the real cutover gate.
 const DIFF_SANITY_ANCHOR = "3ce3666"; // an OLD ancestor — used ONLY to prove `git diff` is wired (non-empty)
 
 // The v2 surface is now the baseline, so there are no permitted deltas FROM it — the surface is frozen

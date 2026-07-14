@@ -109,6 +109,21 @@ source"* constraint.
    contract). Surface the verdict; it is overridable.
    On a **regular** repo (the default) skip to step 1 — the scan below is
    unchanged (zero-cost).
+
+   **Workspace upstream-candidate staging (opt-in, after child harvests exist).**
+   Once one or more sub_guilds have their own `.guild/runs/<run-id>/learn/harvest-candidates.json`
+   (produced by that child's own learn-harvest run — this skill never runs it
+   for them), stage the cross-cutting ones for the workspace-knowledge-flow
+   human gate (AGENTS.md §Cross-project knowledge rules, rule 3) by running:
+   ```
+   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/workspace/promote-upstream.ts \
+     --workspace-root <root> [--child <name>] [--run-id <id>]
+   ```
+   This only STAGES a `guild.upstream_candidates.v1` manifest at
+   `<root>/.guild/runs/<run-id>/upstream-candidates.json` (by-reference, never
+   copying candidate bodies); it writes nothing under `.guild/wiki/`. Landing a
+   candidate in the umbrella wiki still requires the separate `guild:wiki-ingest`
+   human gate — this CLI never auto-promotes.
 1. **Scan.** Script: `scan.ts --cwd <root> [--gen-ignore]` →
    `codebase-map.json`. LLM: a **1–2 sentence project description** only (later
    written onto `KnowledgeGraph.project.description` by `guild:learn-graph`).
@@ -137,7 +152,7 @@ never re-spells the tier→model map or the config schema (SC-1).
 
 | Learn stage (LLM half) | Tier | Why (cited) |
 |---|---|---|
-| file read / scan (stage 1 LLM) | `cheap` | pure I/O, low ambiguity (ADR §8 `cost-techniques.md §5` Haiku-class) |
+| file read / scan (stage 1 LLM) | `cheap` | pure I/O, low ambiguity (ADR §8, https://guildstack.dev/docs/architecture, Haiku-class) |
 | chunk + per-file summarize | `cheap` | template-guided summarization (ADR §8) |
 | categorize + tag / taxonomy (stage 2 stub) | `mid` | single-doc classification (ADR §8 Sonnet-class) |
 | cross-file/topic relationship extraction | `mid` | moderate judgment, high volume (ADR §8) |
@@ -154,10 +169,10 @@ escalates (SC-1, VC-1). The deep stages that can reach `mid`/`powerful` live in
 **Recall-before-read (ADR §4).** Before reading a file for the project
 description or any summarize step, query the knowledge base first
 (`guild-memory` BM25 over `.guild/wiki/` + `kg-query` over the recall projection
-`knowledge-recall.json`) for that task. If recall returns ≥1 chunk scoring **≥
-the `models.recallScoreThreshold`** (default `0.4`; bound by pointer to ADR
-§10 — not re-spelled), use the recalled chunk(s) + the specific file references
-and **skip the full file read**. A full read is permitted only when recall
+`knowledge-recall.json`) for that task. If recall returns ≥1 chunk AND the
+result-level `topScore` is **≥ `models.recallScoreThreshold`** (default `0.4`;
+bound by pointer to ADR §10 — not re-spelled), use the recalled chunk(s) + the
+specific file references and **skip the full file read**. A full read is permitted only when recall
 returns zero hits OR a source-of-truth verification is required. The cheap scan
 itself remains a deterministic `scan.ts` pass; recall-before-read governs the
 LLM summarize half, never the script half.
@@ -217,7 +232,7 @@ family.
   `knowledge-graph.json` / tour **absent** (correct — they are lazy).
 - Cheap-scan tier → every LLM half runs at `cheap`; **zero `powerful` calls**
   (SC-1); the deterministic `scan.ts` half spends no LLM tokens.
-- Recall returns a wiki chunk scoring ≥ `models.recallScoreThreshold` for the
+- Recall's result-level `topScore` is ≥ `models.recallScoreThreshold` for the
   summarize task → the chunk + file refs are used, the full file read is
   skipped (ADR §4).
 - `/guild:learn map` on a repo with no prior index → cheap scan runs, map

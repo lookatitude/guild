@@ -9,8 +9,8 @@ type: meta
   DH-3 BOUNDARY (static, read-only). NEVER written at runtime; per-run
   guild.ops.v1 / guild.incident.v1 go to the consuming repo's
   .guild/runs/<run-id>/ops/. CONTRACT FIDELITY: every guild.ops.v1 /
-  guild.incident.v1 reference is a POINTER through contract-map.md §A rows 8/9 →
-  target-architecture.md §639–745; zero field text reproduced (anti-respell).
+  guild.incident.v1 reference is a POINTER through
+  ../../guild-operations/operations-contract.md §"guild.ops.v1 fields"; zero field text reproduced (anti-respell).
   The 4 safety rails, the 5-boolean machine-check, the allowlist exit-2, and the
   D8 join LIVE IN the guild:operations router — incident's never-autonomous
   posture (rail 2) is router-enforced and restated here as the class invariant.
@@ -44,13 +44,13 @@ execute the discovered incident runbook interactively.
 
 - The selected `incident` runbook + its wiki trust root
   `.guild/wiki/standards/runbooks/<name>.md` (router-validated).
-- Frozen `guild.ops.v1` / `guild.incident.v1` (`contract-map.md §A` rows 8/9 →
-  `target-architecture.md §639–745`, pointer only).
+- Frozen `guild.ops.v1` / `guild.incident.v1`
+  (`../../guild-operations/operations-contract.md §"guild.ops.v1 fields"`, pointer only).
 
 # Output format
 
 `guild.ops.v1` **always** + `guild.incident.v1` (class ∈ {incident, rollback}),
-populated **by pointer** to `target-architecture.md §639–729` (zero re-spelled
+populated **by pointer** to `../../guild-operations/operations-contract.md §"guild.ops.v1 fields"` (zero re-spelled
 fields); per-step evidence under `.guild/runs/<run-id>/ops/evidence/`.
 
 # Workflow steps
@@ -58,7 +58,7 @@ fields); per-step evidence under `.guild/runs/<run-id>/ops/evidence/`.
 ## producer
 
 Producer **`devops-incident-runbook`** — class→producer map per
-`lifecycle/lifecycle-overview.md §616–622` (by pointer). **Posture: INTERACTIVE
+`../../guild-operations/operations-contract.md §Posture` (by pointer). **Posture: INTERACTIVE
 always — never autonomous** (rail 2), regardless of runbook approval or
 `--auto-approve`. Active specialists **≤ producer + challenger** (never
 exceeded for incident).
@@ -67,7 +67,7 @@ exceeded for incident).
 
 Each step records `op_class`; every **hard-set step** shows
 `autonomy: prompted_inline` (rail-3 proof). Populate `guild.ops.v1` head +
-`guild.incident.v1` by pointer to `§646–655` / `§639–729`.
+`guild.incident.v1` by pointer to `../../guild-operations/operations-contract.md §"guild.ops.v1 fields"`.
 
 # Evidence requirements
 
@@ -88,7 +88,7 @@ Each step records `op_class`; every **hard-set step** shows
 - Rail 2 (never autonomous) is **absolute** for this class; approval lowers only
   the SOFT gate, never the hard set (rail 3).
 - No frozen `guild.ops.v1` / `guild.incident.v1` field text reproduced — all by
-  pointer through `contract-map.md`. **No cloud-build task** (GR-7).
+  pointer through `../../guild-operations/operations-contract.md`. **No cloud-build task** (GR-7).
 
 # Eval cases
 

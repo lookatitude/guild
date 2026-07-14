@@ -10,6 +10,36 @@ from v1.0.0 onward.
 
 _Nothing yet._
 
+## [2.2.0] — 2026-07-14
+
+Highlights: a channel-aware **update mechanism** (SessionStart update signal,
+per-host apply), **consented feedback filing** (deterministic project-vs-plugin
+triage → sanitized GitHub issue drafts, human-gated), and the **specialist
+template library** — domain specialists now mint into a project's `.guild/agents/`
+on demand rather than shipping as host-registered agents. Rounding it out: the
+plugin **audit remediation** (47 findings closed across G1–G9) and its follow-ups.
+
+### Added
+
+- update: channel-aware update mechanism — receipts, SessionStart signal, all-host apply ([#21](https://github.com/lookatitude/guild/pull/21)) — @lookatitude
+- feedback: project-vs-plugin triage + consented, sanitized GitHub issue filing ([#22](https://github.com/lookatitude/guild/pull/22)) — @lookatitude
+- update: AC-7 per-host update capability rows (multi-host honesty) ([#24](https://github.com/lookatitude/guild/pull/24)) — @lookatitude
+- specialists: machinery agents vs specialist template library — domain specialists move project-side ([#25](https://github.com/lookatitude/guild/pull/25)) — @lookatitude
+- specialists: template-library follow-ups — migrator, host-native projection, template byte rail, persona slots ([#26](https://github.com/lookatitude/guild/pull/26)) — @lookatitude
+
+### Internal
+
+- sync back v2.1.0 release into next ([#23](https://github.com/lookatitude/guild/pull/23)) — @lookatitude
+- guards: re-ratify live-surface guard pins to the PR #27 squash commit on next ([#29](https://github.com/lookatitude/guild/pull/29)) — @lookatitude
+- host-runtime: retire consumer-free legacy HOST_CAPABILITY_ROWS aggregate ([#30](https://github.com/lookatitude/guild/pull/30)) — @lookatitude
+
+### Changed
+
+- Plugin audit remediation — 47 confirmed findings closed (G1–G9) ([#27](https://github.com/lookatitude/guild/pull/27)) — @lookatitude
+- Initiative ledger: plugin-audit-remediation docs leg complete ([#28](https://github.com/lookatitude/guild/pull/28)) — @lookatitude
+
+**Full Changelog**: https://github.com/lookatitude/guild/compare/v2.1.0...v2.2.0
+
 ## [2.1.0] — 2026-07-12
 
 Project-local specialists become first-class citizens, and Guild gets a real

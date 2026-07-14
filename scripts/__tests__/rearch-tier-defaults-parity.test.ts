@@ -3,10 +3,20 @@
  *
  * W4 D2 — Parity test for `tierDefaults()` (M2/M6 single-source proof).
  *
- * Asserts: the computed tier→model map from `tierDefaults()` / `tierDefaultsForHost()`
- * equals the prior hard-typed literals for all 9 HostKinds across all 3 tiers.
+ * G4b (host-reachability, 2026-07) REVISED this file's core premise. It used to
+ * assert "every HostKind returns claudeDefaults regardless of host" — but that WAS
+ * the bug the host-reachability audit found: `resolveModelParams`'s built-in-default
+ * fallback silently handed a codex (or any non-claude) lane `model:"sonnet"` instead
+ * of respecting the registry's own `models.<tier>.model: null`. `defaultTiersMap()`
+ * (below) already got this right and was never the problem; `tierDefaults()` /
+ * `tierDefaultsForHost()` / `getDefaultModelTierMap()` had drifted from it — the
+ * "two diverged capability truths" finding. This file now asserts the CORRECT,
+ * fixed invariant: only "claude" (the reference host, non-null in the registry) and
+ * a fully-unmapped/dropped HostKind (no registry row at all, e.g. legacy "gemini")
+ * fall back to CLAUDE_TIER_FALLBACK; every OTHER HostKind that resolves to a real
+ * registry row returns that row's OWN (possibly null) models.
  *
- * The three prior literals being replaced:
+ * The three prior literals `tierDefaults()` replaced:
  *   1. rank.ts      claudeDefaults { cheap:"haiku", mid:"sonnet", powerful:"opus" } for every host
  *   2. write-host-capability.ts  DEFAULT_TIER_MODELS (same values)
  *   3. score-tier.ts DEFAULT_TIERS { cheap:{claude:"haiku",codex:null,...}, ... }
@@ -18,9 +28,10 @@
  * this control.
  *
  * Ordering + edge coverage:
- *   - all 9 HostKind values (not just claude)
+ *   - all 9 legacy HostKind values (not just claude)
  *   - all 3 tiers (cheap, mid, powerful)
  *   - null-model slots (codex in DEFAULT_TIERS) preserved as null in defaultTiersMap
+ *     AND in tierDefaultsForHost (G4b — the two are now consistent)
  *   - gemini (dropped D10, no registry row) falls back to CLAUDE_TIER_FALLBACK
  *
  * // @control: anti-vacuity-control (divergent synthetic row)
@@ -48,13 +59,31 @@ const PRIOR_DEFAULT_TIERS = {
   powerful: { claude: "opus",   codex: null },
 };
 
-// ── Parity: tierDefaultsForHost() matches prior literals ─────────────────────
+// ── Parity: tierDefaultsForHost() — claude + a dropped kind get claudeDefaults ──
 
-describe("W4 D2 parity: tierDefaultsForHost() == prior hand-typed claudeDefaults", () => {
-  const ALL_HOST_KINDS = [
-    "claude",
+describe("W4 D2 parity: tierDefaultsForHost() — claude (+ a dropped kind) == claudeDefaults", () => {
+  const CLAUDE_DEFAULT_KINDS = [
+    "claude", // the reference host — registry row IS haiku/sonnet/opus
+    "gemini", // the sunset host (2026-06-14), no registry row — falls back (nothing else to consult)
+  ] as const;
+
+  for (const hk of CLAUDE_DEFAULT_KINDS) {
+    it(`${hk}: computed == claudeDefaults for all 3 tiers`, () => {
+      const computed = tierDefaultsForHost(hk as never);
+      expect(computed.cheap).toBe(PRIOR_CLAUDE_DEFAULTS.cheap);
+      expect(computed.mid).toBe(PRIOR_CLAUDE_DEFAULTS.mid);
+      expect(computed.powerful).toBe(PRIOR_CLAUDE_DEFAULTS.powerful);
+    });
+  }
+});
+
+// ── G4b fix: every OTHER HostKind returns its OWN registry row (honest null,
+// not a silently-backfilled Claude model name — the audit's "router hands a
+// codex lane model:'sonnet'" finding) ────────────────────────────────────────
+
+describe("W4 D2 G4b fix: non-claude HostKinds return their registry row's OWN (null) models — no Claude backfill", () => {
+  const NULL_MODEL_KINDS = [
     "codex",
-    "gemini", // the sunset host (2026-06-14) — retained to verify a DROPPED kind still falls back to claudeDefaults
     "pi",
     "antigravity-2",
     "claude-code-desktop",
@@ -63,14 +92,16 @@ describe("W4 D2 parity: tierDefaultsForHost() == prior hand-typed claudeDefaults
     "claude-ai-connector",
   ] as const;
 
-  for (const hk of ALL_HOST_KINDS) {
-    it(`${hk}: computed == prior claudeDefaults for all 3 tiers`, () => {
+  for (const hk of NULL_MODEL_KINDS) {
+    it(`${hk}: computed is null for all 3 tiers (registry row exists; its models are null)`, () => {
       const computed = tierDefaultsForHost(hk as never);
-      // Every host kind (including the sunset gemini, as a dropped-kind fallback) returns
-      // claudeDefaults regardless of host. Verify the computed result matches that expectation.
-      expect(computed.cheap).toBe(PRIOR_CLAUDE_DEFAULTS.cheap);
-      expect(computed.mid).toBe(PRIOR_CLAUDE_DEFAULTS.mid);
-      expect(computed.powerful).toBe(PRIOR_CLAUDE_DEFAULTS.powerful);
+      expect(computed.cheap).toBeNull();
+      expect(computed.mid).toBeNull();
+      expect(computed.powerful).toBeNull();
+      // Non-vacuity: NONE of these may equal the Claude fallback strings.
+      expect(computed.cheap).not.toBe(PRIOR_CLAUDE_DEFAULTS.cheap);
+      expect(computed.mid).not.toBe(PRIOR_CLAUDE_DEFAULTS.mid);
+      expect(computed.powerful).not.toBe(PRIOR_CLAUDE_DEFAULTS.powerful);
     });
   }
 });

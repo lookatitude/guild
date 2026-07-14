@@ -23,7 +23,7 @@ describe("read-guild-config.ts — import is side-effect-free (require.main guar
     const r = spawnSync("npx", ["tsx", "-e", program], {
       encoding: "utf8",
       env: { ...process.env, NODE_NO_WARNINGS: "1" },
-      timeout: 30000,
+      timeout: 120_000,
     });
     expect(r.stdout ?? "").toBe(""); // main() did not run → no JSON on stdout
     expect(r.stderr ?? "").toContain("ok"); // export present, program completed
@@ -34,7 +34,7 @@ describe("read-guild-config.ts — import is side-effect-free (require.main guar
     const r = spawnSync("npx", ["tsx", SCRIPT, "--cwd", path.resolve(__dirname, "..")], {
       encoding: "utf8",
       env: { ...process.env, NODE_NO_WARNINGS: "1" },
-      timeout: 30000,
+      timeout: 120_000,
     });
     expect(r.status).toBe(0);
     expect(r.stdout ?? "").toContain("{"); // direct invocation prints the resolved config

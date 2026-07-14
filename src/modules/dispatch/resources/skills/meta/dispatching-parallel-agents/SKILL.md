@@ -21,7 +21,7 @@ in the run's resolved-settings snapshot (U6); this skill **reads**
 not re-decide it. The per-phase team file's (`<slug>.<phase>.yaml`) `backend`
 field is only a composition-time mirror for audit, never the authority. The autonomy posture is the
 `task_run.autonomy_policy` recorded at plan approval (pointer:
-`contract-map.md §A` row 1).
+`../../guild-quality/quality-contract.md §"task_run envelope & always-ask hard set"`).
 
 # When not to use it
 
@@ -46,8 +46,8 @@ for the plan — it dispatches an approved plan, it does not author one.
 
 Per-lane handoff receipts at
 `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` conforming to the
-frozen `guild.handoff_receipt.v1` contract by pointer (`contract-map.md §A`
-row 5) — never schema-copied here — plus `assumptions.md` and the changed
+frozen `guild.handoff_receipt.v1` contract by pointer
+(https://guildstack.dev/docs/architecture) — never schema-copied here — plus `assumptions.md` and the changed
 files each lane produced.
 
 # Workflow steps

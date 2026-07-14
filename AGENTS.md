@@ -1,7 +1,8 @@
 # Guild — repo orientation
 
-Guild is a cross-host plugin that ships 17 registered agents (14 product specialists
-plus advisor, developer, and doc-writer) and 109 skills across a
+Guild is a cross-host plugin that ships 2 machinery agents (advisor, developer),
+15 domain specialist type templates (minted into a project's `.guild/agents/` on
+demand by team composition), and 111 skills across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
 capture, and a self-evolution loop with shadow-mode gating.
 
@@ -18,16 +19,34 @@ For full architecture and design documentation see **https://guildstack.dev/docs
 - `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/` — skill taxonomy.
   The former `fallback/` tier no longer exists — its skills were promoted into `meta/`
   (`tdd`, `systematic-debug`, `worktrees`, `finish-branch`) or folded into `guild:review`.
-- `agents/*.md` — 17 registered agents: 14 product specialists plus `advisor`, `developer`,
-  and `doc-writer` (promoted to first-class in v2.0). Populated and authored.
+- `agents/*.md` — the 2 machinery agents (`advisor`, `developer`), the only
+  host-registered agents the plugin ships. Populated and authored.
+- `templates/specialists/*.md` — the 15 domain specialist type templates
+  (`guild.specialist_template.v1`; architect … sales, incl. `doc-writer`),
+  read-only feedstock minted into a project's `.guild/agents/` by
+  `roster-resolve.ts mint` during team composition.
 - `commands/*.md` — the v2 flat-token command surface (`/guild:<verb>`; the `:` plugin
   namespace stays — Claude Code requires it — v2 only drops the redundant `guild-` prefix;
   sub-verbs are positional arguments, never separate files or namespaces).
-- `hooks/hooks.json` — native Claude Code hooks; other hosts consume equivalent
-  behavior through host adapters and graceful fallback.
+- `hooks/hooks.json` — native Claude Code hooks; the `.ts` sources compile to the
+  committed esbuild bundles under `hooks/dist/` (+ `hooks/agent-team/dist/`) the
+  host actually runs (`cd hooks && npm run build` after any hook edit — source
+  edits are a no-op until rebuilt). Other hosts consume equivalent behavior
+  through host adapters and graceful fallback.
+- `src/modules/<module>/` — the module source-of-truth layer. Each module owns its
+  `workflows/` code plus a `resources/` mirror that generated host packages copy
+  from; `scripts/lib/*` are thin re-export shims over these workflows. The
+  module-resource sync (`syncModuleResources`) + drift gates keep the live surface,
+  the `resources/` mirror, and the per-host `dist/` copies byte-identical. **Edit
+  the live source (`scripts/lib`, `src/modules/*/workflows`, `hooks/*.ts`); never
+  hand-edit a `resources/` or `dist/` mirror** — run the sync + host-package build
+  to propagate.
 - `scripts/`, `mcp-servers/` — evolve loop, telemetry, optional MCP servers.
+- `dist/` — committed per-host packages (`claude-code`, `codex`, `pi`, …) rendered
+  by `scripts/build-host-packages.ts`; regenerated, never hand-edited.
 - `tests/` — skill evals and wiki-lint fixtures.
-- `templates/{skills,agents}/` — authoring scaffolds.
+- `templates/{skills,agents,products}/` — authoring + product scaffolds
+  (`templates/specialists/` is the 15 specialist type templates, described above).
 - `docs/` — user-facing docs, diagrams, and assets.
 
 Generated project-local Guild artifacts do **not** live in the plugin install
@@ -48,10 +67,10 @@ never user-typed. This is the one-place wiring reference — each command's
 |---|---|---|
 | `/guild:init` | `guild:init` (cheap by default: wiki + brownfield cheap-scan CodebaseMap + architecture-map stub) — full `learn-*` pipeline runs ONLY under `--learn` / `defaults.auto_learn` | `.guild/init/<slug>.md`, `.guild/wiki/**`, `codebase-map.json` + `architecture-map.md` stub |
 | `/guild:ideate` | `guild:brainstorm` (standard+deep: wrapped by `guild:loop-clarify`) | `.guild/spec/<slug>.md` |
-| `/guild:plan` | `guild:team-compose` → `guild:plan` (deep: + `guild:loop-plan-review`) | `.guild/team/<slug>.yaml`, `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` |
+| `/guild:plan` | `guild:team-compose` → `guild:plan` (deep: + `guild:loop-plan-review`) | `.guild/team/<slug>.<phase>.yaml` (resolved via `resolveTeamFile`; legacy `<slug>.yaml` read-only), `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` |
 | `/guild:build` | per lane: `guild:context-assemble` → `guild:execute-plan` → `guild:review` (deep: + `guild:loop-implement`) | handoff receipts, `assumptions.md`, `review.md` |
-| `/guild:qa` | `guild:quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
-| `/guild:ops` | `guild:operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
+| `/guild:qa` | `guild:guild-quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
+| `/guild:ops` | `guild:guild-operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
 | `/guild:learn` | the `learn-*` family — `guild:learn-map` / `learn-graph` / `learn-onboard` / `learn-diff` / `learn-explain` | deep knowledge-graph + onboarding / diff / explain artifacts (lazy, gated) |
 
 ## Dev team (`.claude/agents/`)
@@ -63,11 +82,11 @@ themselves. They live in `.claude/agents/`.
 
 | Changed path / concern | Dev-team agent (`subagent_type`) |
 |---|---|
-| `scripts/`, `mcp-servers/`, `.mcp.json` | `tooling-engineer` |
+| `scripts/`, `src/modules/**` (module SoT + sync scripts + drift gates), `mcp-servers/`, `.mcp.json` | `tooling-engineer` |
 | `hooks/` (hooks.json + hook scripts) | `hook-engineer` |
 | `commands/` | `command-builder` |
 | `skills/**` (bodies + per-skill evals.json) | `skill-author` |
-| `agents/*.md` (the 17 registered agents) | `specialist-agent-writer` |
+| `agents/*.md` (machinery agents) + `templates/specialists/*.md` (type templates) | `specialist-agent-writer` |
 | `tests/` (cross-cutting evals/fixtures) | `eval-engineer` |
 | `docs/`, repo-root/plugin `CLAUDE.md` | `docs-writer` |
 | `.claude-plugin/*`, manifests, ADRs, phase-gate integration | `plugin-architect` |
@@ -217,9 +236,15 @@ proposed improvement to exactly one level:
   itself.
 
 Plugin-level findings must become an analysis artifact first. Do not file or share
-anything automatically. Ask the user for permission, then file a GitHub issue in the
-plugin repository only after approval, using the sanitized analysis and linking the
-relevant run artifacts.
+anything automatically. **The routing and filing are deterministic code, not
+judgement**: write the findings as `RunLearningFinding[]` JSON and run
+`scripts/feedback-triage.ts triage` (classifies project-vs-plugin via
+`run-learning-classifier.ts`; writes sanitized issue drafts under
+`.guild/feedback/<run-id>/`, redacting private paths/tokens/emails), then ask the
+user per draft; only `feedback-triage.ts file --approve "<operator>"` can reach
+`gh issue create` (repo `lookatitude/guild`). Denials are recorded;
+non-interactive sessions never file. `guild:reflect` §Feedback routing and
+`guild:diagnose` §Upstream escalation carry the step-by-step.
 
 ## Codex adversarial review
 

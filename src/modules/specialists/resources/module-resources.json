@@ -8,133 +8,28 @@
       "id": "advisor",
       "source_path": "agents/advisor.md",
       "resource_path": "resources/agents/advisor.md",
-      "sha256": "e536cad8e42fb154bf017031895109d79cdcbfd642d619bb106f387e551bfa6a"
-    },
-    {
-      "category": "agents",
-      "id": "architect",
-      "source_path": "agents/architect.md",
-      "resource_path": "resources/agents/architect.md",
-      "sha256": "54d63c3e86a06334c718147da64102343d897a26c786ef321d6efa7badf18db6"
-    },
-    {
-      "category": "agents",
-      "id": "backend",
-      "source_path": "agents/backend.md",
-      "resource_path": "resources/agents/backend.md",
-      "sha256": "1b4538219ec04c5a6b45b2e26993e62e19e6d18cf7bdbf5fdc0a3f7f0dedd1e4"
-    },
-    {
-      "category": "agents",
-      "id": "copywriter",
-      "source_path": "agents/copywriter.md",
-      "resource_path": "resources/agents/copywriter.md",
-      "sha256": "0bb7e4281453dc0398d255182a4ab639a5d0a387e0f8e0b87302b08cb294b89a"
+      "sha256": "445ae0fecf7211a5bd9e50a67ab5a3a5303a63f7eeb0b208e5c00b3ef2efcb4b"
     },
     {
       "category": "agents",
       "id": "developer",
       "source_path": "agents/developer.md",
       "resource_path": "resources/agents/developer.md",
-      "sha256": "d20f4925dfd917aac1369142f3fae3eb674ebdeb39e160054c235a94db806562"
-    },
-    {
-      "category": "agents",
-      "id": "devops",
-      "source_path": "agents/devops.md",
-      "resource_path": "resources/agents/devops.md",
-      "sha256": "7d0af20bbe8db93eefb413b1fe036bc772a895aa7ef2b6414562d1295ccf098d"
-    },
-    {
-      "category": "agents",
-      "id": "doc-writer",
-      "source_path": "agents/doc-writer.md",
-      "resource_path": "resources/agents/doc-writer.md",
-      "sha256": "65d06e092899c6c0388efe9b83e5b3ef24c4640e9edb1fe1cc038e58e8c7239c"
-    },
-    {
-      "category": "agents",
-      "id": "frontend",
-      "source_path": "agents/frontend.md",
-      "resource_path": "resources/agents/frontend.md",
-      "sha256": "dd3bcb54a37c33152dc8b7a403c44c3c013ab7de28cd86b7a6c1aa875462b0a3"
-    },
-    {
-      "category": "agents",
-      "id": "marketing",
-      "source_path": "agents/marketing.md",
-      "resource_path": "resources/agents/marketing.md",
-      "sha256": "9f924405b5e862f8917853b6130a648dad9538be526f0878746f936978d2ae8d"
-    },
-    {
-      "category": "agents",
-      "id": "mobile",
-      "source_path": "agents/mobile.md",
-      "resource_path": "resources/agents/mobile.md",
-      "sha256": "6baee19b1976ba1a5119e643dfd3d5ff732f0726003379f06109200ff6ccc84a"
-    },
-    {
-      "category": "agents",
-      "id": "qa",
-      "source_path": "agents/qa.md",
-      "resource_path": "resources/agents/qa.md",
-      "sha256": "10c62da937249ab7f8a4c98b0ea93e352806df4e0907221aac62663bd15a572e"
-    },
-    {
-      "category": "agents",
-      "id": "researcher",
-      "source_path": "agents/researcher.md",
-      "resource_path": "resources/agents/researcher.md",
-      "sha256": "5caeeed3a1c6791d971c523b626b825b4af43cd3e2e20d95529c25b3ed344b6b"
-    },
-    {
-      "category": "agents",
-      "id": "sales",
-      "source_path": "agents/sales.md",
-      "resource_path": "resources/agents/sales.md",
-      "sha256": "b7199a99a664d558d55fd1c4eb778c592d2de3f214a22bd4288acaac35bf90c2"
-    },
-    {
-      "category": "agents",
-      "id": "security",
-      "source_path": "agents/security.md",
-      "resource_path": "resources/agents/security.md",
-      "sha256": "aac6fecddd11ec31c7a789c93e578910393f635bb37fdda3a97955f56904e172"
-    },
-    {
-      "category": "agents",
-      "id": "seo",
-      "source_path": "agents/seo.md",
-      "resource_path": "resources/agents/seo.md",
-      "sha256": "300bcca879f1b6fc141eef67a4f4efd3d7f84e5639d894aad6ad1021c88a5533"
-    },
-    {
-      "category": "agents",
-      "id": "social-media",
-      "source_path": "agents/social-media.md",
-      "resource_path": "resources/agents/social-media.md",
-      "sha256": "5250917d9b0dee6c84ae1bad3c380d8e20abdd832ab33407138edef954730d7f"
-    },
-    {
-      "category": "agents",
-      "id": "technical-writer",
-      "source_path": "agents/technical-writer.md",
-      "resource_path": "resources/agents/technical-writer.md",
-      "sha256": "f6312b487205c65240cbfec9d9677d04e849db0df565360242ce9dcce691f666"
+      "sha256": "d542ff5e4335a9c56f5032162b0762478618563ded8a98b2d77c448c96181ac0"
     },
     {
       "category": "scripts",
       "id": "lib/roster",
       "source_path": "scripts/lib/roster.ts",
       "resource_path": "resources/scripts/lib/roster.ts",
-      "sha256": "dad6e6f8fa6655e70459ba9c371145dac355df9ece8a4425d07281a33570209f"
+      "sha256": "4979d638b7bad81a0226877b782f11952f562fa0e9464d2e011d59f098d7a44d"
     },
     {
       "category": "scripts",
       "id": "roster-resolve",
       "source_path": "scripts/roster-resolve.ts",
       "resource_path": "resources/scripts/roster-resolve.ts",
-      "sha256": "1db1892062bba0f75e5e09de228537fae07dc93f0fe7f77cee02fd077f2c7cd0"
+      "sha256": "c49b2b778bcd95fc26ab370d9544e0f88611f6469890aade85ace567467f9fd1"
     },
     {
       "category": "skills",
@@ -211,7 +106,7 @@
       "id": "copywriter-voice-guide",
       "source_path": "skills/specialists/copywriter-voice-guide/SKILL.md",
       "resource_path": "resources/skills/specialists/copywriter-voice-guide/SKILL.md",
-      "sha256": "8e7915f4757cec16ea2657a97bda71972c9dac078a115fe7b6885d35d6bee0eb"
+      "sha256": "05e24e89797edf7d0a60369bec8ab1a15a4453cf2eedaf66f37ebc2b6a593de2"
     },
     {
       "category": "skills",
@@ -407,7 +302,7 @@
       "id": "sales-cold-outreach",
       "source_path": "skills/specialists/sales-cold-outreach/SKILL.md",
       "resource_path": "resources/skills/specialists/sales-cold-outreach/SKILL.md",
-      "sha256": "67090e4413ef3b213d3d1290389989e6d8ef9432bf35d2d77f8da77e20881a18"
+      "sha256": "f8d826c50d89847b222f6bfadb2de12082cf97acead07e376dc0be79167ad569"
     },
     {
       "category": "skills",
@@ -491,14 +386,14 @@
       "id": "social-media-content-calendar",
       "source_path": "skills/specialists/social-media-content-calendar/SKILL.md",
       "resource_path": "resources/skills/specialists/social-media-content-calendar/SKILL.md",
-      "sha256": "ff96e4948628c9112d3dca9c43fdc6d5dae784dc5d7d7bcd75aee2208663addd"
+      "sha256": "61669072116ed7aede93d2e59344ed210eff7a3c6ac2a62620b6242f35db860d"
     },
     {
       "category": "skills",
       "id": "social-media-engagement-templates",
       "source_path": "skills/specialists/social-media-engagement-templates/SKILL.md",
       "resource_path": "resources/skills/specialists/social-media-engagement-templates/SKILL.md",
-      "sha256": "1ab5f176d1f60137f42a128b88ff430503208fedaf2bbb0aeef95b940dbae073"
+      "sha256": "6dc35b6a364e200e89817aae299eda2b28c226c08572be94b1d4c8e1f4d67824"
     },
     {
       "category": "skills",

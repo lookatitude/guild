@@ -199,6 +199,8 @@ export interface RemotePaneHandle {
   hostKind: HostKind;
   endpoint: string;
   remoteId: string;
+  /** Carried through from RemoteHostTarget so teardown can re-apply the same wrap. */
+  loginShell?: string;
 }
 
 export interface RemoteProbeResult {
@@ -210,8 +212,17 @@ export interface RemoteTransport {
   readonly kind: string;
   connect(host: RemoteHostTarget): RemoteConnectResult;
   probe(host: RemoteHostTarget, binaries: string[]): RemoteProbeResult;
+  /**
+   * Spawn the pane's command on the remote host. Implementations MUST detach
+   * the process (e.g. wrap in `tmux new-session -d`) so it outlives this call
+   * — a bare blocking spawn can never work for a long-lived interactive lane.
+   * There is no separate "send the task brief" channel: the command already
+   * carries the full prompt as an argv, and GUILD_TASK_ASSIGNMENT (written by
+   * the launcher pre-routing, per docs/v2 §08 `guild.task_assignment.v1`) is
+   * already exported into the command's env by paneCommand/PaneAdapter — the
+   * former inbox-file `send()` had no reader and duplicated both.
+   */
   spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle;
-  send(handle: RemotePaneHandle, payload: string): void;
   teardown(): void;
 }
 

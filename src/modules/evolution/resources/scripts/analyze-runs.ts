@@ -45,10 +45,17 @@
  *   (via the §11.2.1 extraction signals) can be invoked with concrete evidence
  *   rather than relying on in-context recall.
  *
- *   Suggested invocation points:
- *     - After each reflection (called by guild:reflect as a post-step)
- *     - On demand via /guild:evolve (reads this output to check thresholds)
- *     - As a maintenance verb: /guild evolve --analyze
+ *   Invocation points (plugin-audit-remediation G5a, 2026-07 — wired, not
+ *   just suggested):
+ *     - After each reflection: skills/meta/reflect/SKILL.md §"Aggregation
+ *       rule" calls this CLI as a post-step.
+ *     - On demand via /guild:evolve: skills/meta/evolve-skill/SKILL.md
+ *       §Input reads this CLI's output to confirm the §11.1 ≥3-reflections
+ *       threshold before synthesizing the proposed edit.
+ *   Not yet wired: a standalone maintenance verb ("/guild evolve --analyze")
+ *   — the two call sites above cover the §11.1 threshold path; a dedicated
+ *   verb remains a followup if operators want to run this ad hoc outside
+ *   those two flows.
  */
 
 import * as fs from "fs";

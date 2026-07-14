@@ -37,9 +37,12 @@ describe("src/modules ownership manifests", () => {
     expect(ids).toContain("communication");
     expect(ids).toContain("dispatch");
     expect(ids).toContain("kernel");
-    for (const id of ["dashboard", "intake", "loops", "review"]) {
+    for (const id of ["intake", "loops", "review"]) {
       expect(manifests.find((manifest) => manifest.id === id)?.implementation_mode).toBe("workflow-backed");
     }
+    // dashboard flipped to resource-only when its orphaned projector was deleted
+    // (plugin-audit-remediation G5b) — it owns resources, ships no workflow code.
+    expect(manifests.find((manifest) => manifest.id === "dashboard")?.implementation_mode).toBe("resource-only");
     expect(ids.length).toBeGreaterThanOrEqual(25);
   });
 
@@ -59,7 +62,10 @@ describe("src/modules ownership manifests", () => {
     // empty fixture or a narrow sample.
     expect(inventory.commands.length).toBeGreaterThanOrEqual(20);
     expect(inventory.skills.length).toBeGreaterThanOrEqual(100);
-    expect(inventory.agents.length).toBe(17);
+    // Machinery agents only (machinery-vs-template-library ADR): advisor +
+    // developer. The 15 domain roles are templates/specialists/*.md, not
+    // inventoried agents.
+    expect(inventory.agents.length).toBe(2);
     expect(inventory.hooks.length).toBeGreaterThanOrEqual(10);
     expect(inventory.scripts.length).toBeGreaterThanOrEqual(200);
   });
@@ -83,7 +89,8 @@ describe("src/modules ownership manifests", () => {
         .filter((module) => module.implementation_mode === "resource-only")
         .map((module) => module.module_id)
         .sort()
-    ).toEqual([]);
+      // dashboard: resource-only since its orphaned projector was deleted (G5b)
+    ).toEqual(["dashboard"]);
     expect(
       result.modules
         .filter((module) => module.implementation_mode === "resource-only")

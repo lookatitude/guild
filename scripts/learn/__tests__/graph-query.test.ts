@@ -12,9 +12,7 @@
  */
 
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
-import { execFileSync } from "child_process";
 
 import { extractStructuralGraph } from "../lib/structural";
 import { refineCalls } from "../resolve-calls";
@@ -388,107 +386,13 @@ describe("[G3] seed resolution by name | id", () => {
 // from the on-disk source → the function is reported dead again.
 // ---------------------------------------------------------------------------
 
-describe("[G3] graph-query.ts CLI — dead-code reads a REAL on-disk entry surface", () => {
-  const SCRIPTS_DIR = path.resolve(__dirname, "..", "..");
-  const CLI = path.join(SCRIPTS_DIR, "learn", "graph-query.ts");
-
-  // main→run chain (heuristic entry `main`) + a free `orphan` with zero inbound
-  // calls in its OWN file src/lib.ts. The bare (non-line) ref exercises the
-  // provenance down-tiering on the real CLI path too.
-  const GRAPH = {
-    version: "guild.knowledge_graph.v1",
-    project: { name: "cli-fixture", description: "" },
-    generated_from_commit: "x",
-    nodes: [
-      { id: "function:src/a.ts:main", type: "function", name: "main", source_refs: ["src/a.ts#L1-L2"], confidence: "high" },
-      { id: "function:src/a.ts:run", type: "function", name: "run", source_refs: ["src/a.ts#L5-L9"], confidence: "high" },
-      { id: "function:src/lib.ts:orphan", type: "function", name: "orphan", source_refs: ["src/lib.ts"], confidence: "high" },
-    ],
-    edges: [
-      { source: "function:src/a.ts:main", target: "function:src/a.ts:run", type: "calls", direction: "out", weight: 1, confidence: "high" },
-    ],
-    layers: [],
-    tour: [],
-  };
-
-  /**
-   * Build a real on-disk repo: graph at .guild/indexes/knowledge-graph.json plus
-   * the optional manifest/settings/override files. Returns the repo root, which
-   * is passed as --cwd so the CLI resolves its entry sources from THIS repo (not
-   * the plugin's). The tmpdir is not a git repo, so guildPaths falls back to it.
-   */
-  function makeRepo(files: {
-    packageJson?: object;
-    settings?: object;
-    entryPointsJson?: unknown;
-  }): { repo: string; graphPath: string } {
-    const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "g3-repo-")));
-    const indexes = path.join(repo, ".guild", "indexes");
-    fs.mkdirSync(indexes, { recursive: true });
-    const graphPath = path.join(indexes, "knowledge-graph.json");
-    fs.writeFileSync(graphPath, JSON.stringify(GRAPH), "utf8");
-    if (files.packageJson) fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify(files.packageJson), "utf8");
-    if (files.settings) fs.writeFileSync(path.join(repo, ".guild", "settings.json"), JSON.stringify(files.settings), "utf8");
-    if (files.entryPointsJson !== undefined) fs.writeFileSync(path.join(indexes, "entry_points.json"), JSON.stringify(files.entryPointsJson), "utf8");
-    return { repo, graphPath };
-  }
-
-  function runCli(verb: string, args: object, repo: string, graphPath: string): unknown {
-    const out = execFileSync(
-      "npx",
-      ["tsx", CLI, verb, JSON.stringify(args), "--cwd", repo, "--graph", graphPath],
-      { cwd: SCRIPTS_DIR, encoding: "utf8" },
-    );
-    return JSON.parse(out);
-  }
-  const deadIds = (r: unknown) => new Set((r as { nodes: Array<{ id: string }> }).nodes.map((n) => n.id));
-
-  test("anti-vacuity: with NO on-disk entry for orphan, `dead-code {}` reports it (down-tiered)", () => {
-    const { repo, graphPath } = makeRepo({ packageJson: { name: "x", main: "src/a.ts" } });
-    const res = runCli("dead-code", {}, repo, graphPath) as { nodes: Array<{ id: string; tier: string; source_refs: string[] }> };
-    const orphan = res.nodes.find((n) => n.id === "function:src/lib.ts:orphan");
-    expect(orphan).toBeDefined();              // not in package.json main → still dead
-    expect(orphan!.tier).toBe("untrusted");    // bare ref → no line provenance
-    expect(orphan!.source_refs).toEqual([]);   // non-line ref filtered, never passed through
-  }, 30000);
-
-  test("package.json `main` (ON DISK) excludes orphan from `dead-code {}` — no JSON injection", () => {
-    const { repo, graphPath } = makeRepo({ packageJson: { name: "x", main: "src/lib.ts" } });
-    expect(deadIds(runCli("dead-code", {}, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
-  }, 30000);
-
-  test("package.json `bin` map and `exports` tree (ON DISK) also exclude orphan", () => {
-    const binRepo = makeRepo({ packageJson: { name: "x", bin: { "x-cli": "src/lib.ts" } } });
-    expect(deadIds(runCli("dead-code", {}, binRepo.repo, binRepo.graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
-    const expRepo = makeRepo({ packageJson: { name: "x", exports: { ".": { import: "src/lib.ts" } } } });
-    expect(deadIds(runCli("dead-code", {}, expRepo.repo, expRepo.graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
-  }, 30000);
-
-  test(".guild/settings.json `models.entryPoints` (ON DISK) excludes orphan", () => {
-    const { repo, graphPath } = makeRepo({ settings: { models: { entryPoints: ["orphan"] } } });
-    expect(deadIds(runCli("dead-code", {}, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
-  }, 30000);
-
-  test(".guild/indexes/entry_points.json override (ON DISK) excludes orphan", () => {
-    const { repo, graphPath } = makeRepo({ entryPointsJson: ["function:src/lib.ts:orphan"] });
-    expect(deadIds(runCli("dead-code", {}, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
-  }, 30000);
-
-  test("explicit JSON `entryPoints` is still unioned in (and `exported` alias works)", () => {
-    const { repo, graphPath } = makeRepo({}); // no on-disk entry sources at all
-    expect(deadIds(runCli("dead-code", {}, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(true);
-    expect(deadIds(runCli("dead-code", { entryPoints: ["orphan"] }, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
-    expect(deadIds(runCli("dead-code", { exported: ["function:src/lib.ts:orphan"] }, repo, graphPath)).has("function:src/lib.ts:orphan")).toBe(false);
-  }, 30000);
-
-  // Finding 2 on the REAL CLI: entry-points verb reflects the on-disk surface.
-  test("`entry-points {}` includes the package.json-configured entry (Finding 2, real CLI)", () => {
-    const { repo, graphPath } = makeRepo({ packageJson: { name: "x", main: "src/lib.ts" } });
-    const ids = deadIds(runCli("entry-points", {}, repo, graphPath));
-    expect(ids.has("function:src/lib.ts:orphan")).toBe(true); // configured via manifest
-    expect(ids.has("function:src/a.ts:main")).toBe(true);     // name heuristic still applies
-  }, 30000);
-});
+// NOTE (plugin-audit-remediation G5a, 2026-07): the former "graph-query.ts CLI
+// — dead-code reads a REAL on-disk entry surface" describe block real-spawned
+// scripts/learn/graph-query.ts. That CLI wrapper was deleted as unwired dead
+// code (zero skill/production consumers — analyze-structural.ts is the actual
+// skill-wired stage-2 script; kgDeadCode/kgEntryPoints/resolveEntryPointConfig
+// remain live via lib/graph-query.ts, consumed by graph-query-projection.ts →
+// index-cache.ts, and are covered directly below and in clra-conformance.test.ts).
 
 // ---------------------------------------------------------------------------
 // Gate 6 — resolveEntryPointConfig unit: REAL on-disk union + precedence.

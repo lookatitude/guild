@@ -41,7 +41,7 @@ YAML or markdown calendar:
 
 Plus a 1-paragraph summary: monthly themes, platform mix, capacity notes, open slots.
 
-Store at `.guild/runs/<run-id>/social/calendar-<range>.md` or `.guild/wiki/products/social-calendar.md`.
+Write the calendar to the run artifact area at `.guild/runs/<run-id>/social/content-calendar-<slug>.md` (use the date range as the slug, e.g. `content-calendar-2026-05.md`). Never write a canonical wiki path directly — promotion to the canonical wiki (e.g. `.guild/wiki/products/social-calendar.md`) happens only through the `guild:wiki-ingest` human gate.
 
 ## Anti-patterns
 

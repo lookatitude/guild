@@ -12,9 +12,7 @@
  */
 
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
-import { execFileSync } from "child_process";
 
 import { extractStructuralGraph } from "../lib/structural";
 import { refineCalls } from "../resolve-calls";
@@ -327,7 +325,6 @@ describe("[G9] provenance — #Lx-Ly only, untrusted otherwise", () => {
 
 describe("[G9] model-free — no SQLite, no model, no network", () => {
   const LIB_SRC = fs.readFileSync(path.join(__dirname, "..", "lib", "impact.ts"), "utf8");
-  const CLI_SRC = fs.readFileSync(path.join(__dirname, "..", "impact.ts"), "utf8");
 
   test("lib/impact.ts imports neither SQLite, network, nor in-flight modules (scope guard)", () => {
     const importLines = LIB_SRC.split("\n").filter((l) => /^\s*import\b/.test(l));
@@ -344,221 +341,14 @@ describe("[G9] model-free — no SQLite, no model, no network", () => {
     expect(joined).toMatch(/from ["']\.\/schema["']/);
   });
 
-  test("CLI imports use no network/sqlite either (import-closure, not prose)", () => {
-    const cliImports = CLI_SRC.split("\n").filter((l) => /^\s*import\b/.test(l)).join("\n");
-    expect(/sqlite|better-sqlite|index-cache/i.test(cliImports)).toBe(false);
-    expect(/\bfetch\(|node:http/i.test(CLI_SRC)).toBe(false);
-  });
-
-  test("no literal NUL bytes in the module sources", () => {
+  test("no literal NUL bytes in the module source", () => {
     expect(LIB_SRC.includes(String.fromCharCode(0))).toBe(false);
-    expect(CLI_SRC.includes(String.fromCharCode(0))).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
-// Gate 6 — the REAL CLI path (non-vacuity: rendered + invoked, not the helper).
-// ---------------------------------------------------------------------------
-
-describe("[G9] CLI impact.ts — real invocation against a written graph", () => {
-  test("`impact.ts '<json>' --graph <file>' emits the reverse-reachable result", () => {
-    const g = buildGraph();
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-"));
-    // The CLI contains --graph under .guild/indexes, so the override graph must
-    // live there (the same trusted dir as the default knowledge-graph.json).
-    const indexesDir = path.join(tmpDir, ".guild", "indexes");
-    fs.mkdirSync(indexesDir, { recursive: true });
-    const graphFile = path.join(indexesDir, "knowledge-graph.json");
-    // Persist a minimal-but-valid graph wrapper the CLI's readJson can load.
-    fs.writeFileSync(
-      graphFile,
-      JSON.stringify({ version: "guild.knowledge_graph.v1", nodes: g.nodes, edges: g.edges }, null, 2),
-      "utf8",
-    );
-
-    const cliPath = path.join(__dirname, "..", "impact.ts");
-    // `--cwd tmpDir` anchors the repo root at tmpDir; the graph file lives under
-    // tmpDir/.guild/indexes, so it is realpath-contained under the dir the CLI
-    // now enforces (.guild/indexes — not merely the repo root).
-    const out = execFileSync(
-      "npx",
-      ["tsx", cliPath, JSON.stringify({ changedFiles: ["src/b.ts"] }), "--cwd", tmpDir, "--graph", graphFile],
-      { cwd: path.join(__dirname, ".."), encoding: "utf-8", timeout: 60_000 },
-    );
-    const result = JSON.parse(out);
-
-    const reached = new Set<string>(result.nodes.map((n: { id: string }) => n.id));
-    // Same contract the in-process gate asserts — proven through the real CLI.
-    expect(reached.has("function:src/a.ts:main")).toBe(true);
-    expect(reached.has("function:py/a.py:main")).toBe(false);
-    const main = result.nodes.find((n: { id: string }) => n.id === "function:src/a.ts:main");
-    expect(["CRITICAL", "HIGH"]).toContain(main.risk);
-
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }, 90_000);
-});
-
-// ---------------------------------------------------------------------------
-// Gate 7 — CLI input validation + path containment (security, real invocation).
-// ---------------------------------------------------------------------------
-
-describe("[G9] CLI impact.ts — rejects bad input and path traversal", () => {
-  const cliPath = path.join(__dirname, "..", "impact.ts");
-
-  /** Run the real CLI and capture the failure (status + stderr), or fail loudly. */
-  function runExpectingFailure(jsonArg: string, extra: string[], cwd: string) {
-    let err: { status?: number; stderr?: Buffer | string } | undefined;
-    try {
-      execFileSync("npx", ["tsx", cliPath, jsonArg, ...extra], {
-        cwd,
-        encoding: "utf-8",
-        timeout: 60_000,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-    } catch (e) {
-      err = e as { status?: number; stderr?: Buffer | string };
-    }
-    expect(err).toBeDefined();
-    expect(err!.status).toBe(1);
-    return String(err!.stderr ?? "");
-  }
-
-  test("a non-array `changedFiles` (bare string) is rejected, not iterated per-character", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-bad-"));
-    fs.writeFileSync(
-      path.join(tmpDir, "knowledge-graph.json"),
-      JSON.stringify({ version: "guild.knowledge_graph.v1", nodes: [], edges: [] }),
-      "utf8",
-    );
-    const stderr = runExpectingFailure(
-      JSON.stringify({ changedFiles: "src/b.ts" }),
-      ["--cwd", tmpDir],
-      path.join(__dirname, ".."),
-    );
-    expect(stderr).toMatch(/changedFiles.*must be an array/i);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }, 90_000);
-
-  test("malformed `entryPoints` (array with a non-string) is rejected", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-bad-"));
-    fs.writeFileSync(
-      path.join(tmpDir, "knowledge-graph.json"),
-      JSON.stringify({ version: "guild.knowledge_graph.v1", nodes: [], edges: [] }),
-      "utf8",
-    );
-    const stderr = runExpectingFailure(
-      JSON.stringify({ entryPoints: ["ok", 7] }),
-      ["--cwd", tmpDir],
-      path.join(__dirname, ".."),
-    );
-    expect(stderr).toMatch(/entryPoints.*non-empty strings/i);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }, 90_000);
-
-  test("a `../`-escaping --graph path is refused (no arbitrary filesystem read)", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-esc-"));
-    // Plant a file OUTSIDE the enforced indexes dir (above the repo root entirely).
-    const outside = path.join(tmpDir, "outside-secret.json");
-    fs.writeFileSync(outside, JSON.stringify({ nodes: [], edges: [] }), "utf8");
-    const innerRoot = path.join(tmpDir, "root");
-    fs.mkdirSync(path.join(innerRoot, ".guild", "indexes"), { recursive: true });
-    // From <root>/.guild/indexes, `../../../outside-secret.json` climbs out of
-    // the repo to the planted secret — the containment gate must refuse it.
-    const stderr = runExpectingFailure(
-      JSON.stringify({ changedFiles: ["src/b.ts"] }),
-      ["--cwd", innerRoot, "--graph", "../../../outside-secret.json"],
-      path.join(__dirname, ".."),
-    );
-    expect(stderr).toMatch(/escapes the indexes dir/i);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }, 90_000);
-
-  test("an in-repo --graph OUTSIDE .guild/indexes is refused; one INSIDE it is accepted", () => {
-    const g = buildGraph();
-    const graphWrapper = JSON.stringify(
-      { version: "guild.knowledge_graph.v1", nodes: g.nodes, edges: g.edges },
-      null,
-      2,
-    );
-
-    // (a) REJECT: a graph at <repo>/knowledge-graph.json — in-repo, but NOT under
-    // the canonical .guild/indexes trusted dir. This is the gate the prior round
-    // left open (containment was only against repoRoot, so this was accepted).
-    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-inrepo-"));
-    const inRepoOutside = path.join(repoRoot, "knowledge-graph.json");
-    fs.writeFileSync(inRepoOutside, graphWrapper, "utf8");
-    const stderr = runExpectingFailure(
-      JSON.stringify({ changedFiles: ["src/b.ts"] }),
-      ["--cwd", repoRoot, "--graph", inRepoOutside],
-      path.join(__dirname, ".."),
-    );
-    expect(stderr).toMatch(/escapes the indexes dir/i);
-
-    // (b) ACCEPT: the SAME graph at <repo>/.guild/indexes/knowledge-graph.json —
-    // inside the trusted dir — is loaded and the reverse-reachable set is emitted.
-    const indexesDir = path.join(repoRoot, ".guild", "indexes");
-    fs.mkdirSync(indexesDir, { recursive: true });
-    const inIndexes = path.join(indexesDir, "knowledge-graph.json");
-    fs.writeFileSync(inIndexes, graphWrapper, "utf8");
-    const cliPath = path.join(__dirname, "..", "impact.ts");
-    const out = execFileSync(
-      "npx",
-      ["tsx", cliPath, JSON.stringify({ changedFiles: ["src/b.ts"] }), "--cwd", repoRoot, "--graph", inIndexes],
-      { cwd: path.join(__dirname, ".."), encoding: "utf-8", timeout: 60_000 },
-    );
-    const result = JSON.parse(out);
-    const reached = new Set<string>(result.nodes.map((n: { id: string }) => n.id));
-    expect(reached.has("function:src/a.ts:main")).toBe(true);
-
-    fs.rmSync(repoRoot, { recursive: true, force: true });
-  }, 120_000);
-
-  test("a REPO-RELATIVE --graph `.guild/indexes/...` resolves under indexes (no path doubling) and is accepted; repo-root-relative is refused", () => {
-    const g = buildGraph();
-    const graphWrapper = JSON.stringify(
-      { version: "guild.knowledge_graph.v1", nodes: g.nodes, edges: g.edges },
-      null,
-      2,
-    );
-    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "clra-impact-relpath-"));
-    const indexesDir = path.join(repoRoot, ".guild", "indexes");
-    fs.mkdirSync(indexesDir, { recursive: true });
-    fs.writeFileSync(path.join(indexesDir, "knowledge-graph.json"), graphWrapper, "utf8");
-    const cliPath = path.join(__dirname, "..", "impact.ts");
-
-    // (a) ACCEPT: a REPO-RELATIVE `.guild/indexes/knowledge-graph.json` must
-    // resolve against the repo root, NOT the indexes dir — the prior round
-    // doubled it into `.guild/indexes/.guild/indexes/...` (file-not-found).
-    const out = execFileSync(
-      "npx",
-      [
-        "tsx",
-        cliPath,
-        JSON.stringify({ changedFiles: ["src/b.ts"] }),
-        "--cwd",
-        repoRoot,
-        "--graph",
-        ".guild/indexes/knowledge-graph.json",
-      ],
-      { cwd: path.join(__dirname, ".."), encoding: "utf-8", timeout: 60_000 },
-    );
-    const result = JSON.parse(out);
-    const reached = new Set<string>(result.nodes.map((n: { id: string }) => n.id));
-    expect(reached.has("function:src/a.ts:main")).toBe(true);
-
-    // (b) REJECT: a REPO-ROOT-relative `knowledge-graph.json` resolves to
-    // <repo>/knowledge-graph.json — in-repo but OUTSIDE .guild/indexes — and is
-    // refused by the containment gate (proves the gate guards the resolved path,
-    // not just the literal arg). Plant the file so the refusal is the gate, not
-    // a missing-file error.
-    fs.writeFileSync(path.join(repoRoot, "knowledge-graph.json"), graphWrapper, "utf8");
-    const stderr = runExpectingFailure(
-      JSON.stringify({ changedFiles: ["src/b.ts"] }),
-      ["--cwd", repoRoot, "--graph", "knowledge-graph.json"],
-      path.join(__dirname, ".."),
-    );
-    expect(stderr).toMatch(/escapes the indexes dir/i);
-
-    fs.rmSync(repoRoot, { recursive: true, force: true });
-  }, 120_000);
-});
+// NOTE (plugin-audit-remediation G5a, 2026-07): the former Gate 6/7 "CLI
+// impact.ts — real invocation" / "rejects bad input and path traversal"
+// describe blocks real-spawned scripts/learn/impact.ts. That CLI wrapper was
+// deleted as unwired dead code (zero skill/production consumers — computeImpact
+// is exercised in-process above and via clra-conformance.test.ts's G9 block;
+// lib/impact.ts itself is unchanged and still the model-free source of truth).

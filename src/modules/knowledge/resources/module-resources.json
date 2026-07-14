@@ -8,14 +8,14 @@
       "id": "learn",
       "source_path": "commands/learn.md",
       "resource_path": "resources/commands/learn.md",
-      "sha256": "e1cd4505cb054f7859755b02f60b99272adc8c0680865546e1e2db69952f9c2f"
+      "sha256": "9bddfafc807e0faf162111aa5f99a804bf0ecb86808325e73349c76e3f58c6d8"
     },
     {
       "category": "commands",
       "id": "wiki",
       "source_path": "commands/wiki.md",
       "resource_path": "resources/commands/wiki.md",
-      "sha256": "713704e16e1a0331c47463bf575965dc781de69ae495d0911db3ca9bbef84b80"
+      "sha256": "0ea2a8a43ddf2ab3c65068f9328273e2461842372d655e5e2b750cf53411206f"
     },
     {
       "category": "mcp_servers",
@@ -29,14 +29,14 @@
       "id": "knowledge-links-builder",
       "source_path": "scripts/knowledge-links-builder.ts",
       "resource_path": "resources/scripts/knowledge-links-builder.ts",
-      "sha256": "4237707639ab888dcc95bc46a28058144dba30918506aef0d729a70e13f16c33"
+      "sha256": "5b8ba984321c5743552a12276a2bfc2ddd2e39960d4f7ca1dd35b9c33dfe6d89"
     },
     {
       "category": "scripts",
       "id": "knowledge-links-traverse",
       "source_path": "scripts/knowledge-links-traverse.ts",
       "resource_path": "resources/scripts/knowledge-links-traverse.ts",
-      "sha256": "9e6eceb9a25a335fbbff0c51bac4ecad1007966977cdf94b8827bbdb298f844e"
+      "sha256": "c420c09ca090a885f6b18e2da3be61a6e8c0e4afabf3fb034134755547e82085"
     },
     {
       "category": "scripts",
@@ -57,7 +57,7 @@
       "id": "lib/kb-snapshot",
       "source_path": "scripts/lib/kb-snapshot.ts",
       "resource_path": "resources/scripts/lib/kb-snapshot.ts",
-      "sha256": "a4ef1cc0edda6967cae64ee465114e099178a8a70adb7e18b33cfcec8b97b6cc"
+      "sha256": "1d3621fb68b2acadc7281705cd4e818c24a4735e03c907c5b19954eeef10f063"
     },
     {
       "category": "scripts",
@@ -72,13 +72,6 @@
       "source_path": "scripts/lib/shared/graph-scoring.ts",
       "resource_path": "resources/scripts/lib/shared/graph-scoring.ts",
       "sha256": "c85e4aed8c56b50e972b9043d677d09dc5e3428e001e020ceb474c594bb3913b"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/sqlite-projections",
-      "source_path": "scripts/lib/sqlite-projections.ts",
-      "resource_path": "resources/scripts/lib/sqlite-projections.ts",
-      "sha256": "8beefef6b7cfca96478441eea818909b83731cdc69a5003bf77382c8500892bb"
     },
     {
       "category": "scripts",
@@ -113,28 +106,28 @@
       "id": "guild-learn-graph",
       "source_path": "skills/knowledge/learn-graph/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn-graph/SKILL.md",
-      "sha256": "4f6c89a24fdebef3766c3856484804f71ac635f502c6d4135e18590e51050645"
+      "sha256": "53ccaf9d05cbf3f99b75cd4880cbc8b1e768759062ac51a5e10667d0d4ec43f7"
     },
     {
       "category": "skills",
       "id": "guild-learn-harvest",
       "source_path": "skills/knowledge/learn-harvest/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn-harvest/SKILL.md",
-      "sha256": "a220cbb5885882048e4cb028a63b5623243b2edb234e6fea7e61811789b8d021"
+      "sha256": "aa1de3735ad083804109c900ccb4ba906fae8a2e3dd10fe2db70b679f9800e59"
     },
     {
       "category": "skills",
       "id": "guild-learn-knowledge",
       "source_path": "skills/knowledge/learn-knowledge/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn-knowledge/SKILL.md",
-      "sha256": "05b780fbbdd72b62164a41930c9f45c2b3ff8e72d714ece78967df2c2fb38508"
+      "sha256": "bc6736089706bc4a6b706e62379772d2394132868ac5443786ff20818545585d"
     },
     {
       "category": "skills",
       "id": "guild-learn-map",
       "source_path": "skills/knowledge/learn-map/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn-map/SKILL.md",
-      "sha256": "548c58e4c6057d448aec40e5dba758ebcce38aac445c131782f6726a060b520f"
+      "sha256": "9c43836993942937b6748672f7c66a5e22618d5e132b62bccf01984388b10c34"
     },
     {
       "category": "skills",
@@ -148,7 +141,7 @@
       "id": "guild-wiki-ingest",
       "source_path": "skills/knowledge/wiki-ingest/SKILL.md",
       "resource_path": "resources/skills/knowledge/wiki-ingest/SKILL.md",
-      "sha256": "850ab30c7ba54657b94ab99a9a40b706e7ecc3b2645b8947a4bde647761bd178"
+      "sha256": "bdad858ce05df459f4b86590a8c541e03feed8ae27afd5cc37165426c1770e7f"
     },
     {
       "category": "skills",

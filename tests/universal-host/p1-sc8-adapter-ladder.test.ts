@@ -35,7 +35,7 @@ import { HOST_IDS, type HostId } from "../../scripts/lib/host-registry-schema";
 
 // ── Table completeness + verbatim rungs ─────────────────────────────────────
 
-describe("P1 SC-8 — ladder table is complete (4 surfaces × 9 hosts)", () => {
+describe("P1 SC-8 — ladder table is complete (4 surfaces × 16 hosts)", () => {
   it("validateLadderTableComplete passes", () => {
     const r = validateLadderTableComplete();
     expect(r.errors).toEqual([]);
@@ -50,10 +50,10 @@ describe("P1 SC-8 — ladder table is complete (4 surfaces × 9 hosts)", () => {
     }
   });
 
-  // Pin the ENTIRE gated C3 table verbatim — EVERY one of the 4×5 cells, not just
+  // Pin the ENTIRE gated C3 table verbatim — EVERY one of the 4×16 cells, not just
   // the "notable" ones, so a silent edit to ANY cell (e.g. session.codex,
   // semantic_tool.antigravity) fails (codex G-lane round-1 MINOR).
-  it("pins the verbatim gated rung table — all 4×9 cells exactly", () => {
+  it("pins the verbatim gated rung table — all 4×16 cells exactly", () => {
     // Oracle refreshed to the CURRENT production FALLBACK_LADDER_TABLE after the
     // host-adapter-migration renamed the roster to the canonical 9 host ids
     // (claude→claude-code-cli, codex→codex-cli, .agents→agents-file, pi→pi-cli,
@@ -62,30 +62,50 @@ describe("P1 SC-8 — ladder table is complete (4 surfaces × 9 hosts)", () => {
     // which degrade across every surface. The RUNG VALUES for the original five
     // hosts are byte-identical to the pre-rename pin (pure key rename); the four
     // app/connector rows are the new canonical-roster additions (all "degraded").
+    //
+    // G4b (verified-multi-host, host-reachability): the registry grew 7 more rows —
+    // 4 wrapped-CLI hosts (cursor/github-copilot/opencode/rovo-dev, INFERRED,
+    // "wrapped"/"emulated"/"bridged"/"degraded" per surface — the same conservative
+    // posture the inferred capability row implies, no live-host verification yet)
+    // and 3 agents-file IDE hosts (kiro/qoder/trae, which DEREFERENCE agents-file
+    // per adapter_binding — their rungs mirror agents-file exactly on every surface).
+    // Sanity-checked against each row's nature (not blindly goldened): every value
+    // below matches the shipped FALLBACK_LADDER_TABLE and looks internally
+    // consistent (no wrapped-CLI host claims a stronger rung than pi/antigravity did
+    // pre-verification; the 3 IDE hosts are byte-identical to agents-file, as their
+    // adapter_binding contract requires).
     const EXPECTED: Record<AdapterSurface, Record<HostId, Rung>> = {
       interaction: {
         "claude-code-cli": "native", "codex-cli": "wrapped", "agents-file": "bridged",
         "pi-cli": "wrapped", "antigravity-cli": "wrapped",
         "claude-code-app": "degraded", "claude-code-web": "degraded",
         "codex-app": "degraded", "claude-ai-connector": "degraded",
+        cursor: "wrapped", "github-copilot": "wrapped", opencode: "wrapped", "rovo-dev": "wrapped",
+        kiro: "bridged", qoder: "bridged", trae: "bridged",
       },
       session: {
         "claude-code-cli": "native", "codex-cli": "wrapped", "agents-file": "emulated",
         "pi-cli": "native", "antigravity-cli": "wrapped",
         "claude-code-app": "degraded", "claude-code-web": "degraded",
         "codex-app": "degraded", "claude-ai-connector": "degraded",
+        cursor: "emulated", "github-copilot": "emulated", opencode: "emulated", "rovo-dev": "emulated",
+        kiro: "emulated", qoder: "emulated", trae: "emulated",
       },
       semantic_tool: {
         "claude-code-cli": "native", "codex-cli": "bridged", "agents-file": "bridged",
         "pi-cli": "bridged", "antigravity-cli": "bridged",
         "claude-code-app": "degraded", "claude-code-web": "degraded",
         "codex-app": "degraded", "claude-ai-connector": "degraded",
+        cursor: "bridged", "github-copilot": "bridged", opencode: "bridged", "rovo-dev": "bridged",
+        kiro: "bridged", qoder: "bridged", trae: "bridged",
       },
       browser: {
         "claude-code-cli": "bridged", "codex-cli": "bridged", "agents-file": "degraded",
         "pi-cli": "degraded", "antigravity-cli": "native",
         "claude-code-app": "degraded", "claude-code-web": "degraded",
         "codex-app": "degraded", "claude-ai-connector": "degraded",
+        cursor: "degraded", "github-copilot": "degraded", opencode: "degraded", "rovo-dev": "degraded",
+        kiro: "degraded", qoder: "degraded", trae: "degraded",
       },
     };
     // Exact whole-table equality — catches any single-cell drift in either direction.
@@ -141,9 +161,10 @@ describe("P1 SC-8 — resolveRung produces correct receipts for known hosts", ()
     expect(resolveRung("interaction", "codex-cli").degraded).toBe(true);
   });
 
-  it("INFERRED set is the agents-file/pi/antigravity + app/connector hosts; claude-code-cli/codex-cli are concrete", () => {
+  it("INFERRED set is the agents-file/pi/antigravity + app/connector + G4b's 7 new hosts; claude-code-cli/codex-cli are concrete", () => {
     // Canonical-roster INFERRED set: agents-file, pi-cli, antigravity-cli plus the
-    // four app/connector surfaces. claude-code-cli + codex-cli are the only concrete
+    // four app/connector surfaces, plus G4b's 7 new hosts (off-box, no live-host
+    // verification yet). claude-code-cli + codex-cli are the only concrete
     // (live-verified) rows.
     expect([...INFERRED_HOSTS].sort()).toEqual([
       "agents-file",
@@ -152,7 +173,14 @@ describe("P1 SC-8 — resolveRung produces correct receipts for known hosts", ()
       "claude-code-app",
       "claude-code-web",
       "codex-app",
+      "cursor",
+      "github-copilot",
+      "kiro",
+      "opencode",
       "pi-cli",
+      "qoder",
+      "rovo-dev",
+      "trae",
     ]);
     expect(isHostInferred("claude-code-cli")).toBe(false);
     expect(isHostInferred("codex-cli")).toBe(false);

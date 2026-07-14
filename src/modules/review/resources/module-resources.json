@@ -8,14 +8,14 @@
       "id": "audit",
       "source_path": "commands/audit.md",
       "resource_path": "resources/commands/audit.md",
-      "sha256": "db530e9f171f80d154606724954ac183ecd7b0843a21e36f4ecc4c141e7647f8"
+      "sha256": "7c31370b09744ff9e7321c5c674c45fa2c337df2f5007f5a76bd29da931f6645"
     },
     {
       "category": "commands",
       "id": "fix",
       "source_path": "commands/fix.md",
       "resource_path": "resources/commands/fix.md",
-      "sha256": "2d17663a76766e63d6b8d9c7d48c822e0adf917da3ad1d46fa561303bce8c10e"
+      "sha256": "2d0a85dce4752de1f7c9b405c8c423f17ad69ff74d215e0001f8e53146d35b78"
     },
     {
       "category": "scripts",
@@ -71,7 +71,7 @@
       "id": "guild-audit",
       "source_path": "skills/meta/audit/SKILL.md",
       "resource_path": "resources/skills/meta/audit/SKILL.md",
-      "sha256": "b293607277ffd37ecdf7410090ea01685ca5ede9a9145e7a63ed295c454ef874"
+      "sha256": "0b70ec33e99c8381bf3aed6d723c78af69ea631487d6707da475314a42b4eac1"
     },
     {
       "category": "skills",
@@ -85,7 +85,7 @@
       "id": "guild-diagnose",
       "source_path": "skills/meta/diagnose/SKILL.md",
       "resource_path": "resources/skills/meta/diagnose/SKILL.md",
-      "sha256": "1e586b31df1b34486665460b7b164c338864ee1517c308695001ca581116822f"
+      "sha256": "c8e2aad532950aaeed59faefc39692f21d6fef25274ff776c9c293ffeb034a9f"
     },
     {
       "category": "skills",

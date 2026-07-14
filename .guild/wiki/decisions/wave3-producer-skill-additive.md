@@ -2,7 +2,7 @@
 type: decision
 owner: user
 confidence: high
-source_refs: [".<HIGH_ENTROPY_REDACTED>-host-p2-wave3.md", ".guild/runs/run-universal-host-plugin-architecture-20260617-<HIGH_ENTROPY_REDACTED>-6.md"]
+source_refs: [".guild/spec/universal-host-p2-wave3.md", ".guild/runs/run-universal-host-plugin-architecture-20260617-152632/questions/LW3-6.md"]
 created_at: 2026-06-17
 updated_at: 2026-06-17
 expires_at: null

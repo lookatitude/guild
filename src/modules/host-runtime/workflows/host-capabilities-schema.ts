@@ -6,8 +6,8 @@
  * Phase 1 wrapper/package runtime rows.
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §Capability Matrix
- *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md (this lane's ADR)
+ *   ADR: universal-host-plugin-architecture (workspace wiki) §Capability Matrix
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) (this lane's ADR)
  *
  * WHY: "Routing uses these booleans, not assumptions" (ADR). Every host advertises
  * a normalized capability row; routing/degradation read the row, never the host
@@ -52,7 +52,49 @@ export interface PackageCaps {
   installability: "verified" | "target";
   /** Host-native package format id (e.g. "claude-plugin", "codex-plugin"). */
   manifest_format: string;
+  /**
+   * plugin-update-lifecycle AC-7 (multi-host honesty): how an install of this
+   * host detects and applies updates. A host without an apply path carries
+   * apply:"none" and DEGRADES TO NOTIFY — the loss is this recorded row, and
+   * no host is ever claimed auto-updatable without a real mechanism.
+   */
+  update: UpdateCaps;
 }
+
+export interface UpdateCaps {
+  /**
+   * Staleness-detection source: "marketplace_clone" (the host's own plugin
+   * clone names the channel/SHA — Claude), "receipt" (guild.install_receipt.v1
+   * written by install.sh — wrapper + file surfaces), or "none" (refused
+   * app/connector surfaces; nothing installable to check).
+   */
+  check: "marketplace_clone" | "receipt" | "none";
+  /**
+   * The apply path: "marketplace_cli" (headless host plugin manager),
+   * "self_update" (Guild-owned `guild-run update` re-render + staged swap),
+   * "reinstall_command" (`install.sh --update`; notify + one command, no
+   * daemon), or "none" (degrade to notify-only prose per AC-7).
+   */
+  apply: "marketplace_cli" | "self_update" | "reinstall_command" | "none";
+  /** The exact one-command apply string surfaced in signals (AC-3); null iff apply is "none". */
+  command: string | null;
+  /**
+   * True only where an IMPLEMENTED automatic apply exists TODAY (something
+   * actually acts on defaults.update.mode=auto — currently the Claude
+   * SessionStart hook's staged marketplace update). A mechanism that exists
+   * but is only operator-invoked (guild-run update) is NOT auto_capable —
+   * two-field honesty: capability rows never claim beyond implemented
+   * behavior. Flips per host when its auto path ships.
+   */
+  auto_capable: boolean;
+}
+
+/** Canonical apply commands (AC-3: signals must name the EXACT command). */
+export const UPDATE_COMMANDS = {
+  marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
+  self_update: "guild-run update",
+  reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update",
+} as const;
 
 export interface BootstrapCaps {
   /**
@@ -233,7 +275,12 @@ export const CLAUDE_CAPABILITIES: GuildHostCapabilitiesV1 = {
   host_kind: "claude",
   family: "claude",
   surface_kind: "cli",
-  package: { installable: true, installability: "verified", manifest_format: "claude-plugin" },
+  package: {
+    installable: true,
+    installability: "verified",
+    manifest_format: "claude-plugin",
+    update: { check: "marketplace_clone", apply: "marketplace_cli", command: UPDATE_COMMANDS.marketplace_cli, auto_capable: true },
+  },
   bootstrap: {
     context_injection: "hookSpecificOutput.additionalContext",
     skill_autoload: true,
@@ -324,7 +371,12 @@ export const CODEX_CAPABILITIES: GuildHostCapabilitiesV1 = {
   // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
   // as installable until proven. installability:"target" records that the renderer
   // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
-  package: { installable: false, installability: "target", manifest_format: "codex-plugin" },
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "codex-plugin",
+    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false },
+  },
   bootstrap: {
     // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
     // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
@@ -415,7 +467,11 @@ export const CODEX_CAPABILITIES: GuildHostCapabilitiesV1 = {
 };
 
 // ---------------------------------------------------------------------------
-// PI / ANTIGRAVITY rows — target package wrapper runtime
+// Shared no-hooks constant (consumed by AGENTS_FILE_CAPABILITIES below — the
+// hand-authored PI_CAPABILITIES/ANTIGRAVITY_CAPABILITIES rows that used to
+// share this section, plus their TARGET_CLI_COMMON base, were retired: no live
+// consumer indexed them once guild-run-wrapper.ts/permission-policy.ts moved to
+// host-registry.ts's registry-derived DERIVED_HOST_CAPABILITY_ROWS)
 // ---------------------------------------------------------------------------
 
 const NO_HOOKS: HooksCaps = {
@@ -431,108 +487,17 @@ const NO_HOOKS: HooksCaps = {
   teammate_idle: false,
 };
 
-const TARGET_CLI_COMMON = {
-  commands: { slash_commands: false, command_files: "none" },
-  skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
-  agents: { native_agents: false, agent_format: null },
-  hooks: NO_HOOKS,
-  dispatch: {
-    tmux_processes: true,
-    plain_processes: true,
-    independent_agents: false,
-    subagents: false,
-    inline: true,
-  },
-  interaction: {
-    native_questions: false,
-    terminal_prompt: true,
-    file_bus_questions: true,
-  },
-  sessions: { continue: false, resume_by_id: false, fork: false },
-  structured_output: {
-    native_json: true,
-    schema_validation: false,
-    repair_prompt: true,
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "none",
-    web: "emulated",
-    mcp: "emulated",
-  },
-  mcp: { stdio: false, http: false },
-  models: {
-    cheap: { model: null },
-    mid: { model: null },
-    powerful: { model: null },
-  },
-} satisfies Partial<GuildHostCapabilitiesV1>;
-
-export const PI_CAPABILITIES: GuildHostCapabilitiesV1 = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "pi",
-  family: "pi",
-  surface_kind: "cli",
-  package: { installable: false, installability: "target", manifest_format: "pi-manifest" },
-  bootstrap: {
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    prompt_transform: false,
-    wrapper_injection: true,
-  },
-  permissions: {
-    deny: true,
-    ask: true,
-    ask_mode: null,
-    accept_edits_without_prompt: false,
-    auto_approve_tools: false,
-    bypass_prompts: false,
-    bypass_sandbox: false,
-    permission_prompt_layer: false,
-    launch_modes: {},
-  },
-  ...TARGET_CLI_COMMON,
-};
-
-export const ANTIGRAVITY_CAPABILITIES: GuildHostCapabilitiesV1 = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "antigravity",
-  family: "antigravity",
-  surface_kind: "cli",
-  package: { installable: false, installability: "target", manifest_format: "antigravity-manifest" },
-  bootstrap: {
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    prompt_transform: false,
-    wrapper_injection: true,
-  },
-  permissions: {
-    deny: true,
-    ask: true,
-    ask_mode: null,
-    accept_edits_without_prompt: false,
-    auto_approve_tools: false,
-    bypass_prompts: true,
-    bypass_sandbox: true,
-    permission_prompt_layer: false,
-    launch_modes: {
-      bypass_all: ["--dangerously-skip-permissions"],
-    },
-  },
-  ...TARGET_CLI_COMMON,
-};
-
 export const AGENTS_FILE_CAPABILITIES: GuildHostCapabilitiesV1 = {
   schema_version: "guild.host_capabilities.v1",
   host_kind: "agents-file",
   family: "agents",
   surface_kind: "file",
-  package: { installable: false, installability: "target", manifest_format: "agents-file" },
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "agents-file",
+    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false },
+  },
   bootstrap: {
     context_injection: "instruction_file",
     skill_autoload: false,
@@ -591,15 +556,18 @@ export const AGENTS_FILE_CAPABILITIES: GuildHostCapabilitiesV1 = {
   },
 };
 
-/** Convenience registry of the Phase-1 rows, keyed by host_kind. */
-export const HOST_CAPABILITY_ROWS: Record<string, GuildHostCapabilitiesV1> = {
-  claude: CLAUDE_CAPABILITIES,
-  codex: CODEX_CAPABILITIES,
-  "agents-file": AGENTS_FILE_CAPABILITIES,
-  pi: PI_CAPABILITIES,
-  antigravity: ANTIGRAVITY_CAPABILITIES,
-  "antigravity-2": ANTIGRAVITY_CAPABILITIES,
-};
+// The Phase-1 convenience registry that used to live here (`HOST_CAPABILITY_ROWS`,
+// keyed by host_kind: claude/codex/agents-file/pi/antigravity/antigravity-2) has
+// been RETIRED (G4b host-reachability fix): it never carried the 4 wrapped-CLI
+// hosts (cursor/github-copilot/opencode/rovo-dev) added to the registry, and its
+// hand-authored pi/antigravity rows had drifted from the registry's own
+// on-host-VERIFIED overrides — the "two diverged capability truths" audit
+// finding. `host-registry.ts`'s `DERIVED_HOST_CAPABILITY_ROWS` is
+// registry-derived, covers all 16 registry ids + the same legacy aliases, and
+// is what guild-run-wrapper.ts and permission-policy.ts consume today. This
+// file's `CLAUDE_CAPABILITIES`/`CODEX_CAPABILITIES`/`AGENTS_FILE_CAPABILITIES`
+// constants remain — they're the frozen feedstock host-registry-schema.ts
+// builds its own rows from.
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -707,6 +675,31 @@ export function validateHostCapabilitiesV1(value: unknown): ValidationResult {
     }
     if (typeof (pkg as Record<string, unknown>)["installable"] !== "boolean") {
       errors.push("package.installable must be a boolean");
+    }
+    // AC-7: the update capability row is REQUIRED and internally coherent —
+    // a row that validates without it would be a claimed-but-absent capability.
+    const upd = (pkg as Record<string, unknown>)["update"];
+    if (typeof upd !== "object" || upd === null || Array.isArray(upd)) {
+      errors.push("package.update is required (AC-7 update capability row)");
+    } else {
+      const u = upd as Record<string, unknown>;
+      if (u["check"] !== "marketplace_clone" && u["check"] !== "receipt" && u["check"] !== "none") {
+        errors.push(`package.update.check must be "marketplace_clone" | "receipt" | "none"; got ${JSON.stringify(u["check"])}`);
+      }
+      const apply = u["apply"];
+      if (apply !== "marketplace_cli" && apply !== "self_update" && apply !== "reinstall_command" && apply !== "none") {
+        errors.push(`package.update.apply must be "marketplace_cli" | "self_update" | "reinstall_command" | "none"; got ${JSON.stringify(apply)}`);
+      }
+      if (apply === "none") {
+        if (u["command"] !== null) errors.push("package.update.command must be null when apply is \"none\"");
+        if (u["auto_capable"] !== false) errors.push("package.update.auto_capable must be false when apply is \"none\"");
+        if (u["check"] !== "none") errors.push("package.update.check must be \"none\" when apply is \"none\"");
+      } else if (typeof u["command"] !== "string" || (u["command"] as string).length === 0) {
+        errors.push("package.update.command must be a non-empty string when an apply path exists");
+      }
+      if (typeof u["auto_capable"] !== "boolean") {
+        errors.push("package.update.auto_capable must be a boolean");
+      }
     }
   }
 

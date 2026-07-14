@@ -342,6 +342,16 @@ export function toNeutralManifest(inv: GuildInventoryV1): GuildPluginManifest {
   return m;
 }
 
+/**
+ * Where the Guild skill tree is exposed inside every non-Claude/non-Codex-plugin
+ * package (agents, Pi, Antigravity, the 4 wrapped-CLI hosts) — the SAME path
+ * `exposeGuildSkillTree` copies skills into. Single-sourced (audit fix: this used
+ * to be a literal repeated at each copy call site AND independently assumed by
+ * each renderer's Claude-shaped `./skills/<tier>/` passthrough, so the copy path
+ * and the rendered manifest path could drift without either side noticing).
+ */
+export const AGENTS_SKILL_ROOT = ".agents/skills/guild";
+
 // ---------------------------------------------------------------------------
 // LogicalPackage loader (committed plugin tree OR generated dist/claude-code)
 // ---------------------------------------------------------------------------
@@ -396,6 +406,18 @@ function copyClaudeHooks(root: string, dest: string, inv: GuildInventoryV1, reso
   }
 }
 
+/**
+ * Ship the read-only template feedstock (machinery-vs-template-library ADR):
+ * templates/specialists/*.md (the 15 domain specialist TYPE templates
+ * roster-resolve `mint` instantiates into a project's .guild/agents/) plus the
+ * agent/skill skeletons and product templates create-specialist/create-skill/
+ * product-template cite. Every installable host package carries the full
+ * templates/ tree — minting is host-neutral.
+ */
+function copyTemplates(root: string, dest: string): void {
+  copyDirExcludingNodeModules(path.join(root, "templates"), path.join(dest, "templates"));
+}
+
 export function writeClaudeTree(
   root: string,
   inv: GuildInventoryV1,
@@ -436,6 +458,7 @@ export function writeClaudeTree(
   copyScriptRuntime(root, dest);
   // MCP server runtime referenced by .mcp.json (so the package is self-contained).
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  copyTemplates(root, dest);
   writeLauncher(dest, "claude");
   return dest;
 }
@@ -511,7 +534,7 @@ export function writeCodexTree(
   // skill tree (addressed by source_path), so loaded-on-demand references resolve.
   for (const sp of resources.sourcePathsForCategory("skills")) {
     const underSkills = sp.replace(/^skills\//, "");
-    resources.copyBySourcePath("skills", sp, path.join(dest, ".agents", "skills", "guild", underSkills));
+    resources.copyBySourcePath("skills", sp, path.join(dest, AGENTS_SKILL_ROOT, underSkills));
   }
   // Bundle the guild-run CLI (scripts/) so the Codex launcher is self-contained,
   // plus the stdio MCP server runtime Codex can bundle.
@@ -521,6 +544,7 @@ export function writeCodexTree(
   copyModuleRuntime(root, dest);
   copyScriptRuntime(root, dest);
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  copyTemplates(root, dest);
   writeCodexHookBridge(root, dest);
   writeLauncher(dest, "codex");
   return dest;
@@ -565,7 +589,7 @@ function exposeGuildSkillTree(root: string, inv: GuildInventoryV1, dest: string,
   // skill tree (addressed by source_path), so loaded-on-demand references resolve.
   for (const sp of resources.sourcePathsForCategory("skills")) {
     const underSkills = sp.replace(/^skills\//, "");
-    resources.copyBySourcePath("skills", sp, path.join(dest, ".agents", "skills", "guild", underSkills));
+    resources.copyBySourcePath("skills", sp, path.join(dest, AGENTS_SKILL_ROOT, underSkills));
   }
   for (const s of inv.scripts) {
     resources.copy("scripts", s, path.join(dest, s.source_path));
@@ -573,6 +597,7 @@ function exposeGuildSkillTree(root: string, inv: GuildInventoryV1, dest: string,
   copyModuleRuntime(root, dest);
   copyScriptRuntime(root, dest);
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  copyTemplates(root, dest);
 }
 
 /** Emit the universal `.agents` package: AGENTS.md + skill tree + CLI + launcher. */
@@ -586,7 +611,7 @@ export function writeAgentsTree(
   const dest = path.join(distRoot, "agents");
   rmrf(dest);
   const resources = resourceResolver ?? loadModuleResourceResolver(root);
-  const pkg = renderAgentsPackage(toNeutralManifest(inv), { renderedAt: generatedAt });
+  const pkg = renderAgentsPackage(toNeutralManifest(inv), { renderedAt: generatedAt }, AGENTS_SKILL_ROOT);
   writeFileEnsured(path.join(dest, "AGENTS.md"), pkg.agents_md);
   exposeGuildSkillTree(root, inv, dest, resources);
   writeLauncher(dest, "agents");
@@ -604,7 +629,10 @@ export function writePiTree(
   const dest = path.join(distRoot, "pi");
   rmrf(dest);
   const resources = resourceResolver ?? loadModuleResourceResolver(root);
-  const manifest = renderPiManifest(toNeutralManifest(inv), { renderedAt: generatedAt });
+  const manifest = renderPiManifest(toNeutralManifest(inv), { renderedAt: generatedAt }, {
+    agentsSkillRoot: AGENTS_SKILL_ROOT,
+    provenance: HOST_REGISTRY_ROWS["pi-cli"].provenance,
+  });
   writeFileEnsured(path.join(dest, "pi-manifest.json"), stableJson(manifest));
   exposeGuildSkillTree(root, inv, dest, resources);
   writeLauncher(dest, "pi");
@@ -622,7 +650,10 @@ export function writeAntigravityTree(
   const dest = path.join(distRoot, "antigravity");
   rmrf(dest);
   const resources = resourceResolver ?? loadModuleResourceResolver(root);
-  const manifest = renderAntigravityManifest(toNeutralManifest(inv), { renderedAt: generatedAt });
+  const manifest = renderAntigravityManifest(toNeutralManifest(inv), { renderedAt: generatedAt }, {
+    agentsSkillRoot: AGENTS_SKILL_ROOT,
+    provenance: HOST_REGISTRY_ROWS["antigravity-cli"].provenance,
+  });
   writeFileEnsured(path.join(dest, "antigravity-manifest.json"), stableJson(manifest));
   writeFileEnsured(path.join(dest, "plugin.json"), stableJson(manifest));
   exposeGuildSkillTree(root, inv, dest, resources);
@@ -644,7 +675,6 @@ const NEW_CLI_HOST_IDS = ["cursor", "github-copilot", "opencode", "rovo-dev"] as
 type NewCliHostId = (typeof NEW_CLI_HOST_IDS)[number];
 
 /** The Guild skill-tree root inside a wrapped-CLI package (L2 packaging contract). */
-const WRAPPED_CLI_AGENTS_SKILL_ROOT = ".agents/skills/guild";
 /** The 11th-concern guild-run launcher path shipped in every package (AC-BOOT-1). */
 const GUILD_RUN_LAUNCHER = "bin/guild-run";
 
@@ -652,19 +682,23 @@ const GUILD_RUN_LAUNCHER = "bin/guild-run";
  * Build the WrappedCliRenderSpec for a new-CLI host from its L1 registry row. The
  * schema_version is the row's own capabilities.package.manifest_format (e.g.
  * "cursor-package") — the renderer stays PURE and the host fact comes from the row.
+ * `provenance` is read off the SAME row (audit fix: previously hardcoded "inferred"
+ * inside the renderer, decoupled from the registry fact it claims to reflect).
  */
 function wrappedCliSpec(hostId: NewCliHostId): {
   hostId: string;
   schemaVersion: string;
   agentsSkillRoot: string;
   launcher: string;
+  provenance: "verified" | "inferred";
 } {
   const row = HOST_REGISTRY_ROWS[hostId];
   return {
     hostId: row.host_id,
     schemaVersion: row.capabilities.package.manifest_format,
-    agentsSkillRoot: WRAPPED_CLI_AGENTS_SKILL_ROOT,
+    agentsSkillRoot: AGENTS_SKILL_ROOT,
     launcher: GUILD_RUN_LAUNCHER,
+    provenance: row.provenance,
   };
 }
 
@@ -850,9 +884,15 @@ export function buildHostPackages(opts: {
     // codexPackageRefs (codex G-lane fix) — not from raw inventory ids.
     const neutral = toNeutralManifest(inv);
     const codexJson = renderCodexPluginJson(neutral, { renderedAt: opts.generatedAt });
-    const agentsPkg = renderAgentsPackage(neutral, { renderedAt: opts.generatedAt });
-    const piManifest = renderPiManifest(neutral, { renderedAt: opts.generatedAt });
-    const antigravityManifest = renderAntigravityManifest(neutral, { renderedAt: opts.generatedAt });
+    const agentsPkg = renderAgentsPackage(neutral, { renderedAt: opts.generatedAt }, AGENTS_SKILL_ROOT);
+    const piManifest = renderPiManifest(neutral, { renderedAt: opts.generatedAt }, {
+      agentsSkillRoot: AGENTS_SKILL_ROOT,
+      provenance: HOST_REGISTRY_ROWS["pi-cli"].provenance,
+    });
+    const antigravityManifest = renderAntigravityManifest(neutral, { renderedAt: opts.generatedAt }, {
+      agentsSkillRoot: AGENTS_SKILL_ROOT,
+      provenance: HOST_REGISTRY_ROWS["antigravity-cli"].provenance,
+    });
     const subsets = [
       checkSubset(claudePackageRefs(inv), inv),
       checkSubset(codexPackageRefs(inv, codexJson), inv),

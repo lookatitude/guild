@@ -8,42 +8,49 @@
       "id": "guild-operations",
       "source_path": "skills/guild-operations/SKILL.md",
       "resource_path": "resources/skills/guild-operations/SKILL.md",
-      "sha256": "e9c73123578e6da0fdcc4bc0cad59580e78a88fa5dd69ccd4760be0c0d5c220e"
+      "sha256": "6ab46472f8bf9f5c8d84f59152ae5a64c1c69ad174fc96b8b941504d5bb5813d"
+    },
+    {
+      "category": "skills",
+      "id": "guild-operations/operations-contract.md",
+      "source_path": "skills/guild-operations/operations-contract.md",
+      "resource_path": "resources/skills/guild-operations/operations-contract.md",
+      "sha256": "feab84f4bec89150846aba4c1f20d756713f8d978d80bb289c5870f4a52275d7"
     },
     {
       "category": "skills",
       "id": "ops-incident",
       "source_path": "skills/meta/ops-incident/SKILL.md",
       "resource_path": "resources/skills/meta/ops-incident/SKILL.md",
-      "sha256": "4389a6780b3797433f925b032b49a36bf1ef5e0fdea406d295110e3ebb22fe16"
+      "sha256": "be3f0982fa3d34013fa7cf36e9a67afac084660169946e3f3ae370ea4ef2fd86"
     },
     {
       "category": "skills",
       "id": "ops-maintenance",
       "source_path": "skills/meta/ops-maintenance/SKILL.md",
       "resource_path": "resources/skills/meta/ops-maintenance/SKILL.md",
-      "sha256": "d0dcc04c8413d6e95aa90cb67e8504e4592f3986c683206e2e034a21ea57d470"
+      "sha256": "9c8be8320d9201336a6a43c21c5614713d9574ec39f375fe796759458784242b"
     },
     {
       "category": "skills",
       "id": "ops-monitoring",
       "source_path": "skills/meta/ops-monitoring/SKILL.md",
       "resource_path": "resources/skills/meta/ops-monitoring/SKILL.md",
-      "sha256": "7f66af907e7bd5929553c3f0cffebfa079aadfbaca1feca87a7ddf3c6b41b23e"
+      "sha256": "eacc9bf10b0208f4f8b23b5059ee6df167b65043b45954306e1f0a80f71c38f1"
     },
     {
       "category": "skills",
       "id": "ops-release",
       "source_path": "skills/meta/ops-release/SKILL.md",
       "resource_path": "resources/skills/meta/ops-release/SKILL.md",
-      "sha256": "295368f1ce0a85ea9d42d3ca54c2ef66c014ec0cad863c1806693997bc4e7b5e"
+      "sha256": "5253d60b6f3d38517abec3a5a0696fa5c08acd07a60ab7d52aabbca350decccd"
     },
     {
       "category": "skills",
       "id": "ops-rollback",
       "source_path": "skills/meta/ops-rollback/SKILL.md",
       "resource_path": "resources/skills/meta/ops-rollback/SKILL.md",
-      "sha256": "52773d0deb3eb92c1dc4e9b16427129fb4fdc9bd46be9f263e7f850cd4cfaaf7"
+      "sha256": "d568f30f297e2e604c5c1ae75253a9a937b22db62187a5212b41481989b4a61f"
     }
   ]
 }

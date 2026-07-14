@@ -68,6 +68,7 @@ npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/write-task-run.ts \
   --depends-on <id,id,...> \
   --max-tokens <scored-budget> --max-turns <scored-turns> \
   [--needs-pr] [--needs-parallel] [--needs-network] \
+  [--phase <phase>] \
   --isolation <worktree|none> --host-requested <kind>
 ```
 
@@ -75,7 +76,12 @@ It writes `.guild/runs/<run-id>/task-runs/<task-id>.yaml` (top-level
 `task_run:` wrapper, `context_bundle`, `host.capability_requirements`). Derive
 `--max-tokens`/`--max-turns` from the lane's **scored tier** (step 2 — not a flat
 default) and the `--needs-*`/`--isolation`/`--host-requested` flags from the
-lane's `team.yaml` `host:` block + scope. The written
+lane's `team.yaml` `host:` block + scope. `--phase <phase>` (default `execute`)
+sets the lifecycle phase stamped into the `guild.trace.dispatch.v1` event — it is
+a real, caller-supplied phase, not derived from `--initiative-id`. Lanes running
+mid-`/guild:build` should pass `--phase execute` explicitly (or the phase they
+are actually in, e.g. `review` for a review-loop lane) rather than relying on
+the default. The written
 `host.capability_requirements` is the **same object** the router reads as
 `LaneRequest.capabilityRequirements` in `route()` — writer→router round-trip
 identity.
@@ -176,7 +182,16 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
   env.GUILD_TASK_ID = lane.taskId;                        // ← without this the file backstop is unlocatable
   if (lane.capability_scope) env.GUILD_CAPABILITY_SCOPE = JSON.stringify(lane.capability_scope);
   if (autonomyRules?.length)  env.GUILD_AUTONOMY_CONTRACT = JSON.stringify(autonomyRules);
-  Agent({ subagent_type: lane.owner, model: resolvedModel, prompt, env });
+  // (3) SPAWN — subagent_type is DEFINITION-SOURCE-RESOLVED (dispatch.md hard
+  //     constraint). Domain specialists are project instances: the host has no
+  //     registered agent under their name, so they dispatch as the host-generic
+  //     type with GUILD_AGENT_DEFINITION + the adoption prompt (already set on
+  //     the descriptor by the launcher). Only a SHIPPED machinery/dev-team agent
+  //     dispatches by bare name.
+  const subagentType =
+    lane.definition_source === "project" ? GENERIC_SUBAGENT_TYPE /* + definition env/prompt from the descriptor */
+                                         : lane.owner;
+  Agent({ subagent_type: subagentType, model: resolvedModel, prompt, env });
   ```
 
   **Absent `capability_scope` ⇒ write no file AND set no `GUILD_CAPABILITY_SCOPE`** (additive no-scoping; byte-identical to current). Still set `GUILD_RUN_ID`/`GUILD_TASK_ID` (they're harmless run-context, not scope) — but with no file and no scope env, the hook's `scope === null` clean fall-through applies. Omit each scope env key / the `autonomy_contract` value whose source field is absent — never set an empty/`"undefined"` value. The scope file is keyed by the lane's **task-id**, matching the hook's read path `.guild/runs/<run-id>/scope/<task-id>.json` (`hooks/pre-tool-use.ts` — it resolves that path from `GUILD_RUN_ID` + `GUILD_TASK_ID`).
@@ -202,7 +217,7 @@ Sequence **spawn → work → extract → dismiss**:
 The backend is **not** chosen here, and it is **not** chosen at `guild:team-compose` either. It is resolved **once at command intake** by `runStartPreflight` (U3) per the D5 `agent_mode` ladder, and frozen in the run's resolved-settings snapshot (U6 writes `.guild/runs/<run-id>/resolved-settings.json`). **`execute-plan` reads that snapshot via `readResolvedSettingsSnapshot` (`scripts/lib/run-lifecycle.ts`) and acts on `snapshot.effective.agent_mode` and `snapshot.providers`** — it does NOT re-resolve settings or re-run the preflight. `team.yaml` is authoritative for the **team composition** (which specialists, their scope, dependencies, tiers, agent-definition paths), **not** for the backend selection — the backend authority is the resolved snapshot. Mid-run config edits do not silently change execution behavior because the snapshot is fixed at intake. Three invariants you enforce at dispatch — full detail (backend table, launcher invocation, self-build routing table, parallelism rules) in `dispatch.md`:
 
 - **Honor the snapshot-resolved backend; team is primary under tmux.** The backend comes from `snapshot.effective.agent_mode` (resolved at intake via the D5 ladder, ADR D5) — under tmux that is `agent-team` (one **visible pane per specialist**); for no-tmux hosts supporting independent agents, `in-process` dispatch (launcher returns `dispatchPlan: GuildDispatchDescriptor[]`; execute-plan issues one `Agent()` per descriptor — full flow in `dispatch.md §"In-process dispatchPlan consumption"`); `subagent` is the last resort. Whatever the backend, dispatch each lane AS its **named specialist role**, resolved against `team.yaml`'s `definition:` + `definition_source:` fields: a **shipped** specialist dispatches by name (`subagent_type: <name>` for subagents; the teammate spawned from that definition for teams) — bare `general-purpose` for a shipped specialist discards its persona, scoped skills, tool permissions, and TRIGGER/DO-NOT-TRIGGER boundaries (a defect); a **project-local** specialist (`definition_source: project`, `.guild/agents/<name>.md`) has no host-registered agent to name, so the backend dispatches the host-generic type with the definition-adoption instruction embedded in the lane prompt at the specialist's own tier (first-class, not degraded — full rule in `dispatch.md`). The **§task§agent lifecycle and tiering are orthogonal to the backend choice**: the named agent is spawned ephemerally per task at its resolved tier (Agent `model:` param), regardless of whether D5 selected team / agent / subagent.
-- **Self-build uses the dev-team, not the product specialists.** When the target repo IS the Guild plugin itself, `team.yaml` is composed from the dev-team agents under `.claude/agents/`, routed by changed path (full roster + path table in `dispatch.md`; see also `CLAUDE.md §"Dev team"`). The 14 `guild:` product specialists build *user* products; they are NOT the self-build team.
+- **Self-build uses the dev-team, not the product specialists.** When the target repo IS the Guild plugin itself, `team.yaml` is composed from the dev-team agents under `.claude/agents/`, routed by changed path (full roster + path table in `dispatch.md`; see also `CLAUDE.md §"Dev team"`). The 15 domain specialist roles (minted from templates/specialists/) build *user* products; they are NOT the self-build team.
 - **`agent-team` needs `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` — there is no separate dispatch-time approval gate.** The backend is simply the resolved snapshot value (`snapshot.effective.agent_mode`); the only operator prompt is the **per-run tmux-enablement preflight prompt** at intake (`runStartPreflight` → `needsTmuxPrompt`, which persists `agent_mode: team` on yes), not a blocker raised here at dispatch. At dispatch, the one hard gate is the env var: if the snapshot resolves `agent-team` and `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is absent, refuse and surface the blocker — never silently fall back to subagents (that would change execution semantics out from under the plan).
 
 Parallelism follows the DAG, not authoring order; scheduling rules and worktree isolation live in `dispatch.md`.

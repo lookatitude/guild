@@ -18,14 +18,25 @@
  *          Returns null when no wiki files match query terms → fall through.
  *     C. fsScan (fs-scanner.ts):
  *          Last-resort fallback. Always returns (may be empty array).
- *   KG (additive — always appended when knowledge-graph.json exists):
- *     D. kg-query (learn/lib/schema.ts KnowledgeGraph):
- *          2-hop node scoring over .guild/indexes/knowledge-graph.json.
+ *   KG (additive — always appended when the recall projection exists):
+ *     D. kg-query (knowledge-recall.json projection):
+ *          Ranks nodes from .guild/indexes/knowledge-recall.json — the
+ *          recall-optimised projection written by learn/write-knowledge-links.ts —
+ *          via the SHARED rankKgNodes pipeline (importance + confidence +
+ *          topic-proximity), identical to the kg-query CLI. NOT a raw 2-hop walk
+ *          over knowledge-graph.json.
  *          KG nodes are ALWAYS classified untrusted (DEFAULT-DENY; not wiki operator paths).
- *          Returns null when KG file absent or no matching nodes.
+ *          Returns null when the projection file is absent or no matching nodes.
+ *   STRUCTURAL (branch E — model-free graph routing, runs BEFORE the wiki sweep):
+ *     E. graph-query (knowledge-graph.json):
+ *          A deterministic classifier maps structural-intent queries
+ *          (callers/callees/imports/dead-code/impact) to the committed graph-query
+ *          lib over the FROZEN .guild/indexes/knowledge-graph.json. Returns null for
+ *          non-structural queries (the common case). See structuralBranch below.
  *
- * Wiki (A/B/C) + KG (D) results are combined into a single protected chunks[].
- * If both contribute: source = "combined"; if only one: source = that branch's id.
+ * Structural (E) + Wiki (A/B/C) + KG (D) results are combined into a single
+ * protected chunks[]. If >1 channel contributes: source = "combined"; if only
+ * one: source = that branch's id.
  *
  * Bundle invariant: every chunk in `chunks[]` is [QUARANTINED] /
  *   <guild:recall trust_tier="…"> / operator-unwrapped — NEVER raw.

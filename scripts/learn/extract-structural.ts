@@ -20,8 +20,23 @@
  * files, drops deleted files, and re-assembles. The global cross-file resolution
  * still runs over the whole (cached + fresh) bundle set, so the output is
  * byte-identical to a full rebuild. No watcher/daemon — invocation-driven, run on
- * demand and by learn-diff. First run (no cache) falls back to a full build and
- * seeds the cache; subsequent `--incremental` runs reuse it.
+ * demand only. First run (no cache) falls back to a full build and seeds the
+ * cache; subsequent `--incremental` runs reuse it.
+ *
+ * STATUS (plugin-audit-remediation G5a, 2026-07-13): experimental / on-demand-only.
+ * NO skill invokes this CLI — guild:learn-graph routes stage 2 through
+ * analyze-structural.ts (lib/graph partial-graph path), and guild:learn-diff must
+ * NOT call it: diff-learn.ts is read-only over knowledge-graph.json by ratified
+ * contract (learn-diff SKILL.md §"One-pass three-store update" — KG writes belong
+ * to guild:learn-graph alone), whereas this extractor WRITES the graph. Wiring the
+ * G1/G4 stack into the live pipeline additionally requires reconciling its
+ * structural tier with the lib/graph/LLM tier — base node ids deliberately MATCH
+ * lib/graph conventions, but the provenance-tagged nodes, 25-feature `sp`
+ * profiles, and wider edge/symbol coverage are unreconciled, and structural nodes
+ * get no layer assignment — a deliberate future initiative, not a header claim. Covered by __tests__/extract-structural.test.ts +
+ * __tests__/incremental.test.ts (real-CLI-spawn: determinism, path containment,
+ * perf-cost contracts); lib/structural is also load-bearing for the kept G-series
+ * test suites. Keep — do not delete as "unreferenced".
  *
  * Usage:
  *   npx tsx extract-structural.ts --cwd <root> [--out <path>] [--incremental] [--print]

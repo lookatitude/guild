@@ -31,20 +31,25 @@ describe("wrapLoginShell", () => {
 });
 
 describe("SshRemoteTransport.spawn — login-shell wiring", () => {
-  test("host WITH loginShell → command is login-shell wrapped over ssh", () => {
+  // spawn() ALWAYS wraps the command in a detached tmux session first (so the
+  // pane outlives this ssh call); loginShell, when present, wraps THAT tmux
+  // invocation (tmux itself may be off the non-interactive PATH too).
+  test("host WITH loginShell → the tmux-wrapped command is ALSO login-shell wrapped over ssh", () => {
     const { run, calls } = recordingRun();
     const t = new SshRemoteTransport({ run });
     const host: RemoteHostTarget = { hostId: "gpu", hostKind: "codex", endpoint: "miguelp@box", loginShell: "zsh" };
-    t.spawn(host, spec, "codex exec 'p'");
+    const handle = t.spawn(host, spec, "codex exec 'p'");
+    const tmuxCmd = `tmux new-session -d -s ${shellQuote(handle.remoteId)} ${shellQuote("codex exec 'p'")}`;
     expect(calls[0].cmd).toBe("ssh");
-    expect(calls[0].args).toEqual(["miguelp@box", "zsh -lic 'codex exec '\\''p'\\'''"]);
+    expect(calls[0].args).toEqual(["miguelp@box", wrapLoginShell(tmuxCmd, "zsh")]);
   });
 
-  test("host WITHOUT loginShell → bare command (claude-on-PATH, unchanged)", () => {
+  test("host WITHOUT loginShell → bare tmux-wrapped command (claude-on-PATH, unchanged)", () => {
     const { run, calls } = recordingRun();
     const t = new SshRemoteTransport({ run });
     const host: RemoteHostTarget = { hostId: "c", hostKind: "claude", endpoint: "miguelp@box" };
-    t.spawn(host, spec, "claude -p 'p'");
-    expect(calls[0].args).toEqual(["miguelp@box", "claude -p 'p'"]);
+    const handle = t.spawn(host, spec, "claude -p 'p'");
+    const tmuxCmd = `tmux new-session -d -s ${shellQuote(handle.remoteId)} ${shellQuote("claude -p 'p'")}`;
+    expect(calls[0].args).toEqual(["miguelp@box", tmuxCmd]);
   });
 });

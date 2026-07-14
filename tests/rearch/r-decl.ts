@@ -60,6 +60,7 @@ export const EXEMPLARS: string[] = [
   "skills/specialists/architect-tradeoff-matrix/SKILL.md",
   "skills/specialists/backend-service-integration/SKILL.md",
   "agents/advisor.md",
+  "agents/developer.md",
 ];
 
 /** Canonical `model:` → tier map (capability/tier-defaults.ts CLAUDE_TIER_FALLBACK, inverted). */

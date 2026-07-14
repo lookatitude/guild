@@ -22,6 +22,14 @@ on:
   push:
     branches: ["**"]
 
+env:
+  # Single source of truth for the CLRA conformance test path (scripts/-relative).
+  # Both the anti-skip guard and the jest invocation below consume this ONE
+  # value, so they can never drift apart again — the understand→learn rename
+  # left this path hardcoded in two places and the guard kept passing
+  # vacuously against a dead path (scripts/understand/...) for weeks.
+  CLRA_TEST: "learn/__tests__/clra-conformance.test.ts"
+
 jobs:
   clra-conformance:
     runs-on: ubuntu-latest
@@ -43,14 +51,15 @@ jobs:
       - name: Anti-skip meta-guard (a silently skipped gate is a dead gate)
         run: |
           cd scripts
-          if grep -nE "describe\.skip|it\.skip|test\.skip" understand/__tests__/clra-conformance.test.ts; then
-            echo "::error::clra-conformance.test.ts contains a skipped block — the gate must not be vacuous."
+          test -f "$CLRA_TEST" || { echo "::error::CLRA_TEST path 'scripts/$CLRA_TEST' does not exist — the anti-skip guard has nothing to check and must hard-fail, not pass vacuously."; exit 1; }
+          if grep -nE "describe\.skip|it\.skip|test\.skip" "$CLRA_TEST"; then
+            echo "::error::$CLRA_TEST contains a skipped block — the gate must not be vacuous."
             exit 1
           fi
 
       - name: CLRA conformance gate (oracle + parity + security invariants)
         run: |
-          cd scripts && npx jest --no-coverage --runInBand clra-conformance
+          cd scripts && npx jest --no-coverage --runInBand "$CLRA_TEST"
 
   structural-intelligence:
     runs-on: ubuntu-latest

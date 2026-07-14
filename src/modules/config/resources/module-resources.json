@@ -15,7 +15,7 @@
       "id": "config-cmd",
       "source_path": "scripts/config-cmd.ts",
       "resource_path": "resources/scripts/config-cmd.ts",
-      "sha256": "f60f75e6399817ddaa41ec7ecc26edc3366469677d4d74820c7124bf0c3bbeae"
+      "sha256": "49923862745a10b4fe9a2dfd9e99445c3a05390780468cabbb69aa0bcdc330af"
     },
     {
       "category": "scripts",
@@ -29,7 +29,7 @@
       "id": "lib/config-reconcile-contract",
       "source_path": "scripts/lib/config-reconcile-contract.ts",
       "resource_path": "resources/scripts/lib/config-reconcile-contract.ts",
-      "sha256": "45902750a44bf0f0d8811e0390782c2674cc360cf3132d9edf6d8838ffa4ac14"
+      "sha256": "b08d6aee46630caba75b24c7d0fa478995a0125c9917e8cafd9ab998929721ff"
     },
     {
       "category": "scripts",
@@ -50,7 +50,7 @@
       "id": "lib/config-ui-metadata",
       "source_path": "scripts/lib/config-ui-metadata.ts",
       "resource_path": "resources/scripts/lib/config-ui-metadata.ts",
-      "sha256": "181748380c7ec71137c547613accddc2669d8e406fe3783d6160f0bfe66e2a55"
+      "sha256": "b245dffa2bea3e97783f7d172eb592e4f31abbf33d51588afa007a44e13c21b0"
     },
     {
       "category": "scripts",
@@ -64,7 +64,7 @@
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
       "resource_path": "resources/scripts/lib/core/config-cli.ts",
-      "sha256": "c7ebf1ed385b3a27b3b2fbcba490bb44f3edb6b8971530813fe2784744012205"
+      "sha256": "bab91055596cad8535eea0e70131a0f40b140d0f4bca4cbf039a67e22622f0b3"
     },
     {
       "category": "scripts",
@@ -79,20 +79,6 @@
       "source_path": "scripts/lib/host-open-preflight.ts",
       "resource_path": "resources/scripts/lib/host-open-preflight.ts",
       "sha256": "0799b6b18a39b26a962d3465b24236abb6980974368b6c41e3db90e9486d52c9"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/init-guild",
-      "source_path": "scripts/lib/init-guild.ts",
-      "resource_path": "resources/scripts/lib/init-guild.ts",
-      "sha256": "6d5fccf666f733c60709934ee64c95ab5c025bf77153749591d5f1b08d8fcfa5"
-    },
-    {
-      "category": "scripts",
-      "id": "lib/init-scaffold-manifest",
-      "source_path": "scripts/lib/init-scaffold-manifest.ts",
-      "resource_path": "resources/scripts/lib/init-scaffold-manifest.ts",
-      "sha256": "de4435063fa91b6cd2751be25222580472f6b0ed8b65b7f6b5b016a6b9a198b3"
     },
     {
       "category": "scripts",

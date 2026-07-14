@@ -1,10 +1,13 @@
 ---
-title: Project overview
-category: context
+type: context
+owner: architect
 confidence: high
-updated: 2026-01-15
-source_refs:
-  - .guild/raw/2026-01-10-kickoff.md
+source_refs: [".guild/raw/2026-01-10-kickoff.md"]
+created_at: 2026-01-15
+updated_at: 2026-01-15
+expires_at: null
+supersedes: null
+sensitivity: internal
 ---
 
 # Project overview

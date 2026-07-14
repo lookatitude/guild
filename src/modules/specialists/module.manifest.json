@@ -4,28 +4,13 @@
   "title": "Specialists",
   "kind": "capability",
   "implementation_mode": "workflow-backed",
-  "description": "Owns registered specialist agents and their reusable specialist skill resources.",
+  "description": "Owns the machinery agents (advisor/developer), the specialist type-template library under templates/specialists/, and the reusable specialist skill resources.",
   "depends_on": ["teams"],
   "owns": {
     "scripts": ["roster-resolve", "lib/roster"],
     "agents": [
       "advisor",
-      "architect",
-      "backend",
-      "copywriter",
-      "developer",
-      "devops",
-      "doc-writer",
-      "frontend",
-      "marketing",
-      "mobile",
-      "qa",
-      "researcher",
-      "sales",
-      "security",
-      "seo",
-      "social-media",
-      "technical-writer"
+      "developer"
     ],
     "skill_id_prefixes": [
       "architect-",

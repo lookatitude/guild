@@ -15,8 +15,12 @@
  * Options:
  *   --skill <slug>  (required) Skill slug (e.g. "guild-brainstorm").
  *   --cwd <path>    (optional, default ".") Repo root.
- *                   Searches <cwd>/skills/<tier>/<slug>/evals.json across the
- *                   known tiers (core, meta, specialists).
+ *                   Searches <cwd>/skills/<tier>/<slug>/evals.json across every
+ *                   tier dir found under <cwd>/skills/ (dynamic enumeration —
+ *                   not a hardcoded tier list, so new tiers like "knowledge"
+ *                   are picked up automatically), plus dir-level skills whose
+ *                   evals.json sits directly at <cwd>/skills/<slug>/evals.json
+ *                   (e.g. guild-quality, guild-operations).
  *
  * Reads:  <cwd>/skills/<tier>/<slug>/evals.json
  * Writes: none (emits YAML on stdout; orchestrator decides whether to apply).
@@ -71,16 +75,37 @@ function parseArgs(argv: string[]): {
 
 // ── Skill path resolution ──────────────────────────────────────────────────
 
-const KNOWN_TIERS = ["core", "meta", "specialists"];
+/**
+ * Enumerate the tier directories directly under <cwd>/skills/ — dynamic
+ * replacement for a hardcoded tier list. Picks up any tier (core, meta,
+ * knowledge, specialists, guild-operations, guild-quality, or a future
+ * addition) without a code change. Returns [] when skills/ does not exist.
+ */
+function listSkillTierDirs(cwd: string): string[] {
+  const skillsRoot = path.join(cwd, "skills");
+  try {
+    return fs
+      .readdirSync(skillsRoot, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
 
 function findEvalsFile(cwd: string, slug: string): string | null {
-  for (const tier of KNOWN_TIERS) {
+  // Dir-level skill: evals.json directly at skills/<slug>/ (e.g. guild-quality,
+  // guild-operations — checked first so a slug that happens to match a tier
+  // dir name doesn't get misread as a tier).
+  const direct = path.join(cwd, "skills", slug, "evals.json");
+  if (fs.existsSync(direct)) return direct;
+
+  // Tier dirs — enumerated from disk, not a hardcoded list.
+  for (const tier of listSkillTierDirs(cwd)) {
     const p = path.join(cwd, "skills", tier, slug, "evals.json");
     if (fs.existsSync(p)) return p;
   }
-  // Fallback: check skills/<slug>/evals.json (tier-less layout)
-  const fallback = path.join(cwd, "skills", slug, "evals.json");
-  if (fs.existsSync(fallback)) return fallback;
   return null;
 }
 
@@ -200,7 +225,8 @@ function main(): void {
   const evalsPath = findEvalsFile(cwd, skill);
   if (!evalsPath) {
     process.stderr.write(
-      `[description-optimizer] ERROR: evals.json not found for skill "${skill}" under ${cwd}/skills/{core,meta,specialists}/${skill}/\n`
+      `[description-optimizer] ERROR: evals.json not found for skill "${skill}" under ${cwd}/skills/${skill}/ ` +
+        `or ${cwd}/skills/<tier>/${skill}/ for any tier under skills/\n`
     );
     process.exit(1);
   }

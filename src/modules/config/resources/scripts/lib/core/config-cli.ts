@@ -109,6 +109,13 @@ interface DefaultsBlock {
    */
   capability_manifest_ttl_s: number;
   /**
+   * plugin-update-lifecycle G1 AC-6: update-check behavior. mode `notify`
+   * (default) prints the SessionStart update signal; `auto` additionally
+   * stages the host-appropriate apply; `off` disables the check entirely.
+   * cadence_hours is the machine-level ls-remote cache TTL.
+   */
+  update: { mode: "auto" | "notify" | "off"; cadence_hours: number };
+  /**
    * R-020: Explicit allowed-tools list (guild-boundary-config-and-tracking.md Decision F).
    * Replaces, not extends, the shared tool allow-list. Default [] (no restriction).
    */
@@ -416,7 +423,7 @@ export const HELP: Record<string, string> = {
     "Precedence: --learn CLI flag > settings.json > built-in(false).",
   "defaults.adversarial": "on | off — (off REJECTED for Guild self-build)",
   "defaults.team.size": "null = 3-4 rule | <int> (cap-6 unless overridden)",
-  "defaults.team.always_include": "[] | subset of the 14 specialists",
+  "defaults.team.always_include": "[] | subset of the specialist roles",
   "defaults.review_workflow": "standard | cross | minimal — default review depth",
   "defaults.skill_policy": "standard | conservative — default skill-usage",
   "defaults.gates.auto_approve":
@@ -582,6 +589,11 @@ export const HELP: Record<string, string> = {
   "defaults.capability_manifest_ttl_s":
     "number > 0 (default 3600 s = 1 hour) — host capability manifest freshness TTL " +
     "(v2-cross-host-orchestration ADR CR-5). Consumed by host-router.ts RouteOptions.manifestTtlS.",
+  // ── plugin-update-lifecycle AC-6: defaults.update
+  "defaults.update":
+    '{ mode: "auto"|"notify"|"off" (default "notify"), cadence_hours: number > 0 (default 24) } — ' +
+    "channel-aware update-check behavior. Consumed by hooks/update-check.ts (SessionStart signal + " +
+    "background cache refresh) and guild-run update. Dev/symlink installs are always excluded.",
   // ── R-020: defaults.allowed_tools
   "defaults.allowed_tools":
     "string[] (default []) — explicit allowed-tools list (guild-boundary-config-and-tracking.md Decision F). " +
@@ -1182,6 +1194,7 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "resume",       // R-016: { enabled: bool }
   "heartbeat_timeout_ms",    // R-017: int ms (hooks/lib/heartbeat.ts tolerant reader)
   "capability_manifest_ttl_s", // R-018: number s (host-router.ts CR-5 manifest freshness)
+  "update",       // plugin-update-lifecycle AC-6: { mode: "auto"|"notify"|"off", cadence_hours: number }
   "allowed_tools",           // R-020: string[] (boundary-config-and-tracking Decision F)
 ]);
 
@@ -1241,6 +1254,23 @@ export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean)
     const v = d["heartbeat_timeout_ms"];
     if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
       rejects.push(`defaults.heartbeat_timeout_ms must be a positive integer (ms) (got ${JSON.stringify(v)})`);
+  }
+  // plugin-update-lifecycle AC-6: defaults.update — closed shape
+  if (d["update"] !== undefined) {
+    const v = d["update"];
+    if (typeof v !== "object" || v === null || Array.isArray(v)) {
+      rejects.push(`defaults.update must be an object { mode, cadence_hours } (got ${JSON.stringify(v)})`);
+    } else {
+      const u = v as Record<string, unknown>;
+      if (u["mode"] !== undefined && u["mode"] !== "auto" && u["mode"] !== "notify" && u["mode"] !== "off")
+        rejects.push(`defaults.update.mode must be "auto" | "notify" | "off" (got ${JSON.stringify(u["mode"])})`);
+      if (u["cadence_hours"] !== undefined && (typeof u["cadence_hours"] !== "number" || u["cadence_hours"] <= 0))
+        rejects.push(`defaults.update.cadence_hours must be a positive number of hours (got ${JSON.stringify(u["cadence_hours"])})`);
+      for (const k of Object.keys(u)) {
+        if (k !== "mode" && k !== "cadence_hours")
+          rejects.push(`defaults.update.${k} is not a recognized key (closed shape: mode, cadence_hours)`);
+      }
+    }
   }
   // R-018: defaults.capability_manifest_ttl_s — positive number (seconds)
   if (d["capability_manifest_ttl_s"] !== undefined) {

@@ -203,13 +203,30 @@ export interface PiManifest {
   _rendered_at: string;
   /** Source manifest version included for traceability. */
   _source_version: string;
+  /**
+   * Registry provenance for the Pi row that backed the render — "verified" or
+   * "inferred", supplied by the caller from `HOST_REGISTRY_ROWS["pi-cli"].provenance`
+   * (audit fix: Pi previously omitted this field entirely, unlike Antigravity/
+   * wrapped-CLI, so a receipt-driven provenance flip could never surface here).
+   */
+  _provenance: "verified" | "inferred";
 }
 
-/** A Pi extension command entry. */
+/**
+ * A Pi extension command entry.
+ *
+ * `source_path` is OPTIONAL: commands/*.md prompt bodies are a Claude-Code-only
+ * artifact (they are never copied into Pi/Antigravity/agents/wrapped-CLI
+ * packages — those hosts dispatch phase verbs by reading the bundled skill
+ * tree instead, see AGENTS.md). Renderers for those hosts omit it rather than
+ * echo a Claude-shaped path that resolves to nothing in the package
+ * (plugin-implementation-audit-2026-07-12 finding: "non-Claude manifests ship
+ * commands[].source_path './commands/<id>.md' ... that resolve to nothing").
+ */
 export interface PiCommandEntry {
   name: string;
   description?: string;
-  source_path: string;
+  source_path?: string;
 }
 
 /** A field that could not be rendered into the target format. */
@@ -265,6 +282,20 @@ export interface RenderOptions {
   renderedAt: string;
 }
 
+/**
+ * Registry-derived facts the Pi and Antigravity renderers need, read by the
+ * I/O caller (build-host-packages.ts) off the host's HostRegistryEntry —
+ * mirroring WrappedCliRenderSpec's discipline ("the renderer consumes the row,
+ * it never re-declares host facts") so these two bespoke renderers stay just
+ * as PURE as the shared wrapped-CLI base.
+ */
+export interface NewHostRenderSpec {
+  /** Where the Guild skill tree is exposed in the package (L2 packaging contract). */
+  agentsSkillRoot: string;
+  /** Registry provenance for the row that backed the render ("verified" | "inferred"). */
+  provenance: "verified" | "inferred";
+}
+
 // ---------------------------------------------------------------------------
 // Command path helpers
 // ---------------------------------------------------------------------------
@@ -278,6 +309,49 @@ export interface RenderOptions {
 function commandNameFromPath(commandPath: string): string {
   const base = commandPath.split("/").pop() ?? commandPath;
   return base.replace(/\.md$/i, "");
+}
+
+/**
+ * Remap Claude-shaped skill tier globs (`./skills/<tier>/`, as carried by the
+ * neutral manifest's `skills` field) to a package's ACTUAL on-disk skill-tree
+ * root. Every non-Claude/non-Codex package (agents, Pi, Antigravity, the 4
+ * wrapped-CLI hosts) exposes the skill tree under `<agentsSkillRoot>/<tier>/`
+ * (see `exposeGuildSkillTree` in build-host-packages.ts) — NOT at the
+ * Claude-shaped path, which does not exist in those trees at all
+ * (plugin-implementation-audit-2026-07-12 finding: "skills globs './skills/<tier>/'
+ * that resolve to NOTHING in their trees").
+ */
+function remapSkillDirsToPackageRoot(skillDirs: readonly string[], agentsSkillRoot: string): string[] {
+  return skillDirs.map((dir) => {
+    const tier = dir.replace(/^\.\/skills\//, "").replace(/\/$/, "");
+    return `${agentsSkillRoot}/${tier}/`;
+  });
+}
+
+/**
+ * Command names for a package that ships NO per-command prompt file (every
+ * host besides Claude Code and Codex — see PiCommandEntry doc comment). Keeps
+ * the command NAME (useful metadata: the phase verbs Guild supports) but never
+ * echoes the Claude-shaped `./commands/<id>.md` path, and records the
+ * degradation like every other unsupported field (render-or-degrade, per this
+ * file's CONTRACT).
+ */
+function degradedCommandNames(
+  manifest: GuildPluginManifest,
+  unsupported: UnsupportedField[]
+): PiCommandEntry[] {
+  const commands: PiCommandEntry[] = (manifest.commands ?? []).map((cmdPath) => ({
+    name: commandNameFromPath(cmdPath),
+  }));
+  if (commands.length > 0) {
+    unsupported.push({
+      field: "commands[].source_path",
+      reason:
+        "commands/*.md prompt bodies are a Claude-Code-only artifact and are not packaged for this " +
+        "host; Guild's phase verbs are dispatched by reading the bundled skill tree instead (see AGENTS.md).",
+    });
+  }
+  return commands;
 }
 
 // ---------------------------------------------------------------------------
@@ -438,8 +512,10 @@ export function renderClaudeMarketplacePackage(
   const plugin: ClaudeMarketplaceJson["plugins"][number] = {
     name: manifest.name,
     source: "./",
-    description:
-      "Self-evolving teams of specialist agents for Claude Code. 14 specialists across engineering, content, and commercial groups; the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops); a settings.json config surface; an understand-everything engine for brownfield onboarding; a categorized wiki with decision capture; and a self-evolution loop with shadow mode, flip-gating, and versioned rollback. Built and maintained by its own dev-team of self-build agents. Optional tmux agent-team backend + BM25 wiki search + trace query MCPs.",
+    // Single-sourced from the neutral manifest description (which is the committed
+    // .claude-plugin/plugin.json description) so the marketplace plugin blurb can
+    // never drift from the plugin manifest.
+    description: manifest.description,
     version: manifest.version,
   };
   if (manifest.homepage !== undefined) plugin.homepage = manifest.homepage;
@@ -474,22 +550,24 @@ export function renderClaudeMarketplacePackage(
  *
  * @param manifest - The neutral Guild plugin manifest.
  * @param opts - Render options (caller supplies renderedAt).
+ * @param spec - Registry-derived facts the pure renderer needs (agentsSkillRoot,
+ *   provenance) — read off the Pi row by the caller (build-host-packages.ts),
+ *   mirroring the wrapped-CLI renderer's discipline (the renderer never reads
+ *   the registry itself).
  * @returns A PiManifest object representing the pi block of a package.json.
  */
 export function renderPiManifest(
   manifest: GuildPluginManifest,
-  opts: RenderOptions
+  opts: RenderOptions,
+  spec: NewHostRenderSpec
 ): PiManifest {
   const unsupported: UnsupportedField[] = [];
 
-  // Commands → Pi extension command entries
-  const commands: PiCommandEntry[] = (manifest.commands ?? []).map((cmdPath) => ({
-    name: commandNameFromPath(cmdPath),
-    source_path: cmdPath,
-  }));
+  // Commands → Pi extension command entries (name-only; see PiCommandEntry doc).
+  const commands = degradedCommandNames(manifest, unsupported);
 
-  // Skills — passed through as directory paths
-  const skills = manifest.skills ?? [];
+  // Skills — remapped to where Pi packages actually expose them.
+  const skills = remapSkillDirsToPackageRoot(manifest.skills ?? [], spec.agentsSkillRoot);
 
   // MCP — Pi core does not support MCP; always flag
   if (manifest.mcpServers && manifest.mcpServers.length > 0) {
@@ -532,6 +610,7 @@ export function renderPiManifest(
     description: manifest.description,
     _rendered_at: opts.renderedAt,
     _source_version: manifest.version,
+    _provenance: spec.provenance,
   };
 
   if (manifest.homepage !== undefined) result.homepage = manifest.homepage;
@@ -566,8 +645,14 @@ export interface AntigravityManifest {
   _unsupported?: UnsupportedField[];
   _rendered_at: string;
   _source_version: string;
-  /** Registry provenance for the Antigravity row that backed the render. */
-  _provenance: "verified";
+  /**
+   * Registry provenance for the Antigravity row that backed the render —
+   * "verified" or "inferred", supplied by the caller from
+   * `HOST_REGISTRY_ROWS["antigravity-cli"].provenance` (audit fix: this used to
+   * be a hardcoded "verified" literal, decoupled from the registry row it
+   * claims to reflect — a future provenance downgrade could never surface here).
+   */
+  _provenance: "verified" | "inferred";
 }
 
 /**
@@ -579,18 +664,19 @@ export interface AntigravityManifest {
  * passed through). Native agents / hooks / MCP are flagged in `_unsupported`
  * (render-or-degrade) because the CLI package path still coordinates through
  * AGENTS.md, the wrapper, and the file bus.
+ *
+ * @param spec - Registry-derived facts (agentsSkillRoot, provenance) — see
+ *   NewHostRenderSpec; read off the Antigravity row by the caller.
  */
 export function renderAntigravityManifest(
   manifest: GuildPluginManifest,
-  opts: RenderOptions
+  opts: RenderOptions,
+  spec: NewHostRenderSpec
 ): AntigravityManifest {
   const unsupported: UnsupportedField[] = [];
 
-  const commands: PiCommandEntry[] = (manifest.commands ?? []).map((cmdPath) => ({
-    name: commandNameFromPath(cmdPath),
-    source_path: cmdPath,
-  }));
-  const skills = manifest.skills ?? [];
+  const commands = degradedCommandNames(manifest, unsupported);
+  const skills = remapSkillDirsToPackageRoot(manifest.skills ?? [], spec.agentsSkillRoot);
 
   if (manifest.mcpServers && manifest.mcpServers.length > 0) {
     for (const srv of manifest.mcpServers) {
@@ -622,7 +708,7 @@ export function renderAntigravityManifest(
     description: manifest.description,
     _rendered_at: opts.renderedAt,
     _source_version: manifest.version,
-    _provenance: "verified",
+    _provenance: spec.provenance,
   };
   if (manifest.homepage !== undefined) result.homepage = manifest.homepage;
   if (manifest.repository !== undefined) result.repository = manifest.repository;
@@ -659,6 +745,7 @@ export function renderAntigravityManifest(
  *   - hostId          ← host_id                                (e.g. "cursor")
  *   - agentsSkillRoot ← the packaging contract L2's adapter surfaces (".agents/skills/guild")
  *   - launcher        ← the 11th-concern guild-run bin path    ("bin/guild-run")
+ *   - provenance      ← the row's own `provenance` field       ("verified" | "inferred")
  */
 export interface WrappedCliRenderSpec {
   /** The host's registry id, echoed for traceability (e.g. "cursor"). */
@@ -669,6 +756,12 @@ export interface WrappedCliRenderSpec {
   agentsSkillRoot: string;
   /** The bundled guild-run launcher path (AC-BOOT-1, the 11th concern). */
   launcher: string;
+  /**
+   * Registry provenance for the row that backed the render (audit fix: this used
+   * to be hardcoded "inferred" in the renderer, decoupled from the row it claims
+   * to reflect — read from `HOST_REGISTRY_ROWS[hostId].provenance` by the caller).
+   */
+  provenance: "verified" | "inferred";
 }
 
 /**
@@ -704,8 +797,14 @@ export interface WrappedCliPackage {
   _unsupported?: UnsupportedField[];
   _rendered_at: string;
   _source_version: string;
-  /** Registry provenance for the row that backed the render (INFERRED until operator-box verify). */
-  _provenance: "inferred";
+  /**
+   * Registry provenance for the row that backed the render — "verified" or
+   * "inferred" (today always "inferred" per R1: these 4 rows are
+   * installability:"target" and have no operator-box receipt yet, but the value
+   * is DERIVED from `spec.provenance`, not hardcoded, so a future receipt-driven
+   * flip surfaces here automatically).
+   */
+  _provenance: "verified" | "inferred";
 }
 
 /**
@@ -715,18 +814,18 @@ export interface WrappedCliPackage {
  * ZERO copy-pasted logic — the ONE definition of "what a wrapped-CLI package can and
  * cannot express" (AC-PKG-3).
  */
-function buildWrappedCliExtensionBody(manifest: GuildPluginManifest): {
+function buildWrappedCliExtensionBody(
+  manifest: GuildPluginManifest,
+  agentsSkillRoot: string
+): {
   commands: PiCommandEntry[];
   skills: string[];
   unsupported: UnsupportedField[];
 } {
   const unsupported: UnsupportedField[] = [];
 
-  const commands: PiCommandEntry[] = (manifest.commands ?? []).map((cmdPath) => ({
-    name: commandNameFromPath(cmdPath),
-    source_path: cmdPath,
-  }));
-  const skills = manifest.skills ?? [];
+  const commands = degradedCommandNames(manifest, unsupported);
+  const skills = remapSkillDirsToPackageRoot(manifest.skills ?? [], agentsSkillRoot);
 
   if (manifest.mcpServers && manifest.mcpServers.length > 0) {
     for (const srv of manifest.mcpServers) {
@@ -772,7 +871,7 @@ export function renderWrappedCliPackage(
   opts: RenderOptions,
   spec: WrappedCliRenderSpec
 ): WrappedCliPackage {
-  const { commands, skills, unsupported } = buildWrappedCliExtensionBody(manifest);
+  const { commands, skills, unsupported } = buildWrappedCliExtensionBody(manifest, spec.agentsSkillRoot);
 
   const result: WrappedCliPackage = {
     schema_version: spec.schemaVersion,
@@ -785,7 +884,7 @@ export function renderWrappedCliPackage(
     installability: "target",
     _rendered_at: opts.renderedAt,
     _source_version: manifest.version,
-    _provenance: "inferred",
+    _provenance: spec.provenance,
   };
   if (manifest.homepage !== undefined) result.homepage = manifest.homepage;
   if (manifest.repository !== undefined) result.repository = manifest.repository;
@@ -827,13 +926,19 @@ export interface AgentsPackage {
  * skill and points the host at the bundled Guild skill tree. Native commands / agents /
  * hooks / MCP have no AGENTS.md equivalent — they degrade to "drive Guild through the
  * skill tree", recorded in `_unsupported`.
+ *
+ * @param agentsSkillRoot - Where the Guild skill tree is exposed in the package
+ *   (L2 packaging contract, e.g. ".agents/skills/guild") — used to remap the
+ *   Claude-shaped `./skills/<tier>/` globs onto the package's actual layout and
+ *   to point the bootstrap prose at the file that actually ships.
  */
 export function renderAgentsPackage(
   manifest: GuildPluginManifest,
-  opts: RenderOptions
+  opts: RenderOptions,
+  agentsSkillRoot: string
 ): AgentsPackage {
   const unsupported: UnsupportedField[] = [];
-  const skills = manifest.skills ?? [];
+  const skills = remapSkillDirsToPackageRoot(manifest.skills ?? [], agentsSkillRoot);
   const commands = (manifest.commands ?? []).map(commandNameFromPath);
 
   if (manifest.agents && manifest.agents.length > 0) {
@@ -862,10 +967,15 @@ export function renderAgentsPackage(
     ``,
     `This repository ships **Guild** as a universal AGENTS.md package. Guild is a`,
     `self-evolving specialist-team workflow engine. Its skills are bundled under`,
-    "`.agents/skills/guild/**`.",
+    `\`${agentsSkillRoot}/**\`.`,
     ``,
     `## Start here`,
-    `Read the **using-guild** skill first (\`.agents/skills/guild/meta/using-guild/SKILL.md\`)`,
+    // Points at SKILL.src.md, NOT SKILL.md: the using-guild gateway is deliberately
+    // shipped un-rendered (it is injected via a SessionStart hook on Claude Code
+    // instead of being loaded through the native skill mechanism), so SKILL.src.md
+    // is the ONLY file this path resolves to in every shipped package (audit fix —
+    // this text used to point at a SKILL.md that never ships for this skill).
+    `Read the **using-guild** skill first (\`${agentsSkillRoot}/meta/using-guild/SKILL.src.md\`)`,
     `— it is the gateway that tells you when to reach for Guild's lifecycle`,
     `(init → ideate → plan → build → qa → ops), specialists, adversarial review, and`,
     `knowledge ingestion.`,
@@ -873,8 +983,8 @@ export function renderAgentsPackage(
     `## How to drive Guild here`,
     `This host has no native slash-command or agent surface, so invoke Guild by READING`,
     `the relevant skill from the bundled tree and following it. The lifecycle skills live`,
-    `under \`.agents/skills/guild/meta/\`; specialist skills under`,
-    "`.agents/skills/guild/specialists/`.",
+    `under \`${agentsSkillRoot}/meta/\`; specialist skills under`,
+    `\`${agentsSkillRoot}/specialists/\`.`,
     ``,
     `## Run the Guild CLI`,
     `A \`guild-run\` launcher is bundled at \`bin/guild-run\` (forwards to the bundled`,

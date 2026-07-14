@@ -44,6 +44,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { readScalarField } from "./lib/frontmatter";
 import { KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION } from "../src/modules/knowledge/workflows/knowledge-links-contract";
+import { loadKnowledgeLinksDoc, writeKnowledgeLinksDoc } from "./learn/lib/knowledge-links-io";
 
 // ── Extended node-kind type ───────────────────────────────────────────────────
 
@@ -834,18 +835,17 @@ export function buildKnowledgeLinks(opts: BuildOptions): BuildResult {
   const klPath = path.join(root, ".guild", "indexes", "knowledge-links.json");
   let existingLinks: KnowledgeLink[] = [];
   if (!dry_run && fs.existsSync(klPath)) {
-    try {
-      const existing = JSON.parse(fs.readFileSync(klPath, "utf8")) as {
-        links?: KnowledgeLink[];
-      };
-      // Keep only engine-tagged edges (stage-5 touches from derive-domain.ts)
-      // so we don't inherit stale builder edges from a prior run.
-      existingLinks = (existing.links ?? []).filter(
-        (l) => l.run_id !== BUILDER_SENTINEL_RUN_ID,
-      );
-    } catch {
-      existingLinks = [];
-    }
+    // G2b-4 fix: read via the shared knowledge-links-io helper (tolerant of
+    // both the current `schema_version` key and the legacy `version` key
+    // written by pre-fix domain.ts/knowledge-links-traverse.ts rounds) rather
+    // than a private JSON.parse — the on-disk version key is not otherwise
+    // consulted here, only `.links`, so this is a read-path consistency fix.
+    const existing = loadKnowledgeLinksDoc(klPath);
+    // Keep only engine-tagged edges (stage-5 touches from derive-domain.ts)
+    // so we don't inherit stale builder edges from a prior run.
+    existingLinks = existing.links.filter(
+      (l) => l.run_id !== BUILDER_SENTINEL_RUN_ID,
+    );
   }
 
   // ── Dedupe on from|to|type (append-only pattern, mirrors appendBatch) ─────
@@ -866,8 +866,9 @@ export function buildKnowledgeLinks(opts: BuildOptions): BuildResult {
   };
 
   if (!dry_run) {
-    fs.mkdirSync(path.dirname(klPath), { recursive: true });
-    fs.writeFileSync(klPath, JSON.stringify(doc, null, 2) + "\n", "utf8");
+    // G2b-4 fix: write via the shared helper — same on-disk shape as before
+    // (always `schema_version`), now single-sourced with the other producers.
+    writeKnowledgeLinksDoc(klPath, doc);
   }
 
   const added = allLinks.length;

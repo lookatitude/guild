@@ -147,6 +147,28 @@ export function classifyRunLearning(finding: RunLearningFinding): RunLearningCla
   ];
 
   if (finding.level_hint && finding.level_hint !== "ambiguous") {
+    // A hint may only make a finding LESS external, never more: hints are
+    // model-authored, and the lane contract says routing toward external
+    // filing is deterministic code. A plugin/mixed hint therefore needs at
+    // least one CORROBORATING deterministic plugin signal — an uncorroborated
+    // externalizing hint downgrades to human triage instead of becoming
+    // fileable (codex G-lane MAJOR).
+    const externalizing = finding.level_hint === "plugin" || finding.level_hint === "mixed";
+    if (externalizing && pluginReasons.length === 0) {
+      return {
+        schema_version: RUN_LEARNING_CLASSIFIER_SCHEMA,
+        finding_id: finding.id,
+        level: "ambiguous",
+        confidence: "low",
+        reasons: [
+          `level hint "${finding.level_hint}" has NO corroborating plugin signal — refusing to externalize on a hint alone`,
+          ...projectReasons,
+        ],
+        recommended_owner: "operator_triage",
+        normal_gate: "human_triage",
+        external_share_allowed: false,
+      };
+    }
     const gate = finding.level_hint === "plugin"
       ? "plugin_issue_approval"
       : finding.level_hint === "mixed"
@@ -162,7 +184,10 @@ export function classifyRunLearning(finding: RunLearningFinding): RunLearningCla
       finding_id: finding.id,
       level: finding.level_hint,
       confidence: "high",
-      reasons: [`explicit level hint: ${finding.level_hint}`],
+      reasons: [
+        `explicit level hint: ${finding.level_hint}`,
+        ...(externalizing ? pluginReasons : []),
+      ],
       recommended_owner: owner,
       normal_gate: gate,
       external_share_allowed: false,

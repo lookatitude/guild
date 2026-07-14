@@ -22,9 +22,16 @@ categories (`context/`, `standards/`, `products/`, `entities/`, `concepts/`,
 wiki_search { query: string, category?: string, limit?: number, cwd?: string }
 ```
 
-Runs BM25 ranking over the wiki. Returns `{ results: [{ path, category,
-score, excerpt, confidence, source_refs }] }`. Title tokens are weighted 2x.
-Default `limit` is 20, max 200.
+Runs BM25 ranking over the wiki. Returns `{ results: [{ path, category, type,
+frontmatter_category, score, excerpt, confidence, source_refs }] }`. `category`
+is always the wiki directory segment (e.g. `decisions`); a page's own
+frontmatter `category`/`type` fields (when present) are surfaced separately so
+a decision page's §10.3 topic taxonomy value never masks its directory.
+`source_refs` is a real array (both inline flow lists and block lists parse
+correctly). Title tokens are weighted 2x — title is derived from frontmatter
+`title` (nonconforming pages only), else the first markdown H1, else the
+filename, since canonical §10.1.1 pages carry no `title:` field. Default
+`limit` is 20, max 200.
 
 ### `wiki_get`
 
@@ -42,13 +49,15 @@ wiki_list { category?: string, updated_since?: string, cwd?: string }
 ```
 
 Lists every wiki page sorted by path. `updated_since` accepts any ISO-8601
-date or datetime; pages without an `updated:` frontmatter field are excluded
+date or datetime and is read from the canonical `updated_at` frontmatter field
+(with legacy `updated` as a fallback); pages with neither field are excluded
 when the filter is active.
 
 ## Wiki root resolution
 
-1. `GUILD_MEMORY_WIKI_ROOT` env var (used in tests) overrides everything.
-2. Per-call `cwd` argument → `<cwd>/.guild/wiki/`.
+1. Explicit per-call `cwd` argument → `<cwd>/.guild/wiki/` (wins — required so
+   a long-lived server can fan out across federated child repos by cwd).
+2. `GUILD_MEMORY_WIKI_ROOT` env var (used in tests, when no `cwd` is given).
 3. Server process cwd → `<cwd>/.guild/wiki/`.
 
 ## Invariants
@@ -62,7 +71,9 @@ when the filter is active.
 ## Wiring
 
 See `.mcp.json` at the repo root — the server is registered via
-`npx -y tsx mcp-servers/guild-memory/src/index.ts`, stdio transport.
+`node ${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-memory/dist/index.js`, stdio
+transport. `npm run build` (esbuild, bundled/self-contained) produces that
+`dist/index.js`; `npx tsx src/index.ts` is only for local development.
 
 ## Tests
 

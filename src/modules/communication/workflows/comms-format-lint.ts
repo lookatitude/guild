@@ -8,7 +8,7 @@
  * WARN MODE: exits 0 (non-blocking). The `enforce` flag (default false) is
  * a stub for U5b to flip; in U5a it is always wired OFF.
  *
- * Policy ref: docs/knowledge/decisions/communication-format-policy.md
+ * Policy ref: ADR: communication-format-policy (workspace wiki)
  * Init ref:   .guild/initiatives/active/communication-format-standardization/
  *
  * OD-4 discriminator — a file/receipt is in-scope iff:
@@ -50,7 +50,7 @@ const yaml = loadYamlApi();
 
 /**
  * OD-4 enforcement boundary.
- * Canonical source: docs/knowledge/decisions/communication-format-policy.md
+ * Canonical source: ADR: communication-format-policy (workspace wiki)
  * §"policy_effective_date" (policy_effective_date: 2026-06-03)
  */
 export const POLICY_EFFECTIVE_DATE = new Date("2026-06-03T00:00:00Z");

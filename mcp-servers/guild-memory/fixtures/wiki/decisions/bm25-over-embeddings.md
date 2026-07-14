@@ -1,10 +1,17 @@
 ---
-title: BM25 chosen over embeddings for initial wiki search
-category: decisions
+type: decision
+owner: architect
 confidence: high
-updated: 2026-03-22
-source_refs:
-  - .guild/raw/2026-03-20-search-benchmark.md
+source_refs: [".guild/raw/2026-03-20-search-benchmark.md", "docs/v2/13-mcp-servers.md"]
+created_at: 2026-03-22
+updated_at: 2026-03-22
+expires_at: null
+supersedes: null
+sensitivity: internal
+date: 2026-03-22
+asker: architect
+task: mcp-servers-scale-transition
+category: architecture
 decision_id: D-2026-03-22-01
 ---
 

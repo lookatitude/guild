@@ -8,42 +8,49 @@
       "id": "evolve",
       "source_path": "commands/evolve.md",
       "resource_path": "resources/commands/evolve.md",
-      "sha256": "dbc8dd5d110f48fefd18135ee0922bdb6d5d0af7485204babc72397c2d6816eb"
+      "sha256": "48287a880f5a8e2939cf1464bf47751eff6dbf46d17bdeff48df161b6c3352f0"
     },
     {
       "category": "commands",
       "id": "rollback",
       "source_path": "commands/rollback.md",
       "resource_path": "resources/commands/rollback.md",
-      "sha256": "950fe7bd1b0867cdc3bc3e2d945fb69cb883cc0fd6ca8661b4f13e471646f0e6"
+      "sha256": "5c807f15405d2bb5b88792b9cfcccbc6131f5cf8582caec5cca9be8342e0bfb7"
     },
     {
       "category": "hooks",
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "1fc97d3b3ce2a2b2faedd2cefbb55366c67992119a59809b8bf943d4d142bad7"
+      "sha256": "f45f5b417b74482c9116095333e683e378455fc3071b746b2e95039260272544"
     },
     {
       "category": "hooks",
       "id": "Stop:maybe-reflect.js",
       "source_path": "hooks/dist/maybe-reflect.js",
       "resource_path": "resources/hooks/dist/maybe-reflect.js",
-      "sha256": "2c80545901145bc69978d91b3e7bd93a0db94455a47371aebd052fbba8974464"
+      "sha256": "00cbd29cf159c73a0af165f7a59e874af2fae657c7dcfa519da91f326df126d8"
     },
     {
       "category": "scripts",
       "id": "analyze-runs",
       "source_path": "scripts/analyze-runs.ts",
       "resource_path": "resources/scripts/analyze-runs.ts",
-      "sha256": "89d78d7296fdb99c14d4b51c265fb0acdea20ec332c9d237e850814256798635"
+      "sha256": "9116cdfe19b10dbfb34c0f3831003ca53e1627fd2f5dc5bbc2bb8791bb8317d3"
     },
     {
       "category": "scripts",
       "id": "evolve-loop",
       "source_path": "scripts/evolve-loop.ts",
       "resource_path": "resources/scripts/evolve-loop.ts",
-      "sha256": "6e897c527017df4b20b97175a7256ec4448cdac533984dee1fc3a2f186414150"
+      "sha256": "e4ef0921c251e50e288c06709a2c8e8c86ed268a3e15e0a401a7b2586c195f19"
+    },
+    {
+      "category": "scripts",
+      "id": "feedback-triage",
+      "source_path": "scripts/feedback-triage.ts",
+      "resource_path": "resources/scripts/feedback-triage.ts",
+      "sha256": "aea8fb41523b1b261ffe964bdb6967f87d5c71a19a423da134f3db4dfbbe62f8"
     },
     {
       "category": "scripts",
@@ -64,14 +71,14 @@
       "id": "lib/reaping",
       "source_path": "scripts/lib/reaping.ts",
       "resource_path": "resources/scripts/lib/reaping.ts",
-      "sha256": "0b2ddae8bf6d41308274af5c4da46302d87b68208feb7a4e89d6981989af1b24"
+      "sha256": "8bdf46c5fdfdccadeddfdaf48f607a94def7bdd18daacfe63a1e0e0a3ffbf173"
     },
     {
       "category": "scripts",
       "id": "lib/run-learning-classifier",
       "source_path": "scripts/lib/run-learning-classifier.ts",
       "resource_path": "resources/scripts/lib/run-learning-classifier.ts",
-      "sha256": "6defc07ce81d1d0b4d660d9cdd2c2d8bf37b05bd214ae6af701367b90d3efe0d"
+      "sha256": "2f9d7c2c671a6edb0182a36e4396b37772ae4fbc2ae6b6f75ce5f83b9615d0c5"
     },
     {
       "category": "scripts",
@@ -85,7 +92,7 @@
       "id": "shadow-mode",
       "source_path": "scripts/shadow-mode.ts",
       "resource_path": "resources/scripts/shadow-mode.ts",
-      "sha256": "064d93c9490e7adc3ad8254bc60f23e7a04e9390ca48dd223c1864c4c8297579"
+      "sha256": "2403d439668d1dcdf91c6d2b7cb7515698ecfeaf08923928eb1ff47296bcf3ac"
     },
     {
       "category": "scripts",
@@ -99,21 +106,21 @@
       "id": "guild-evolve-skill",
       "source_path": "skills/meta/evolve-skill/SKILL.md",
       "resource_path": "resources/skills/meta/evolve-skill/SKILL.md",
-      "sha256": "ab3e32e25782c7b2cc4d00812763a0295be6385e4ac147e199a5a8e54c475001"
+      "sha256": "8069dc7323b13c37e3fde3f97f7281e920a58c48b928b8e5d8699275ec2fa372"
     },
     {
       "category": "skills",
       "id": "guild-learning-checkpoint",
       "source_path": "skills/meta/learning-checkpoint/SKILL.md",
       "resource_path": "resources/skills/meta/learning-checkpoint/SKILL.md",
-      "sha256": "2f671d8015830d7eada1e952f4caece58dfdfec501805ce6088641abeff5a90b"
+      "sha256": "d0a55ee98f059c8fe8be71c8c8ed8d6766e5bbace360bc5f305f668df65f6f0d"
     },
     {
       "category": "skills",
       "id": "guild-reflect",
       "source_path": "skills/meta/reflect/SKILL.md",
       "resource_path": "resources/skills/meta/reflect/SKILL.md",
-      "sha256": "497935829b8a21dd1240f53e01f2ff6299354205a00a30bec23b95880ab6a222"
+      "sha256": "f934e9f28414e45021ceb5d3171e93084b94553c1049af5602bad327c37d6a10"
     },
     {
       "category": "skills",

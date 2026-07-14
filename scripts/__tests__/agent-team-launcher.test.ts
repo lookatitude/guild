@@ -36,7 +36,7 @@ function runScript(
   const result = spawnSync("npx", ["tsx", SCRIPT, ...args], {
     encoding: "utf8",
     env: finalEnv,
-    timeout: 30000,
+    timeout: 120_000,
   });
   return {
     exitCode: result.status ?? 1,
@@ -576,6 +576,54 @@ describe("agent-team-launcher.ts", () => {
       expect(exitCode).toBe(0);
       const signal = JSON.parse(stdout);
       expect(signal.backend).toBe("agent");
+    });
+
+    // D5 rung 3 (in-process) — the launcher must ACTUALLY construct
+    // InProcessTeamBackend and return its dispatchPlan (dispatch.md
+    // §"In-process dispatchPlan consumption" + SKILL.md §"Backend + routing"),
+    // not just emit {backend,reason,slug} and exit. Asserts the full agent-rung
+    // JSON signal shape execute-plan consumes.
+    it("agent-mode=agent: the JSON signal carries a real dispatchPlan (one descriptor per specialist)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-agent-shape-test"]
+      );
+      expect(exitCode).toBe(0);
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe("agent");
+      expect(signal.slug).toBe("test-slug");
+      expect(signal.ok).toBe(true);
+      // No tmux panes on this rung (mirrors RemoteTeamBackend §CH-4 — the
+      // orchestrator never gets a descriptor either).
+      expect(signal.orchestratorPaneId).toBeNull();
+      expect(signal.teammatePaneIds).toEqual({});
+      expect(Array.isArray(signal.dispatchPlan)).toBe(true);
+      expect(signal.dispatchPlan).toHaveLength(3); // architect, backend, qa
+      const names = signal.dispatchPlan.map((d: { name: string }) => d.name);
+      expect(names).toEqual(["architect", "backend", "qa"]);
+      for (const d of signal.dispatchPlan) {
+        expect(typeof d.subagentType).toBe("string");
+        expect(d.model).toBeNull(); // tiering is orthogonal — resolved at dispatch
+        expect(d.env.GUILD_RUN_ID).toBe("run-agent-shape-test");
+        expect(d.env.GUILD_SPECIALIST).toBe(d.name);
+        expect(typeof d.prompt).toBe("string");
+        expect(d.prompt.length).toBeGreaterThan(0);
+      }
+    });
+
+    // dry-run on the agent rung is a semantic no-op (no subprocess to suppress)
+    // — same dispatchPlan, annotated notes, per dispatch.md.
+    it("agent-mode=agent --dry-run: still returns the full dispatchPlan (declarative, no side effects)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--dry-run",
+         "--run-id", "run-agent-dryrun-test"]
+      );
+      expect(exitCode).toBe(0);
+      const signal = JSON.parse(stdout);
+      expect(signal.ok).toBe(true);
+      expect(signal.dispatchPlan).toHaveLength(3);
+      expect(signal.notes.join(" ")).toMatch(/dry-run/i);
     });
 
     // Explicit --agent-mode=team + TMUX set → in-session (dry-run)

@@ -64,3 +64,34 @@ test("re-tombstoning is idempotent (a second call tombstones 0 and keeps the fil
   expect(tombstoneLinks(file, { from: "decision:a" }, "r", "2026-09-09T00:00:00Z").tombstoned).toBe(0);
   expect(fs.readFileSync(file, "utf8")).toBe(after1); // no rewrite, original stamp preserved
 });
+
+// ── G2b-4 regression: tombstoneLinks must standardize on `schema_version` ──
+// Before the fix, tombstoneLinks wrote this module's own local `{version}`
+// shape via a raw fs.writeFileSync, silently dropping `schema_version` on
+// rewrite whenever the on-disk file had been written by a schema_version-
+// keyed producer (knowledge-links-builder.ts / the emit-learning-checkpoint
+// hook). It now delegates to the shared knowledge-links-io writer.
+test("tombstoneLinks rewrites the file with `schema_version` even when seeded with legacy `version`", () => {
+  const file = mkFile([L("decision:a", "wiki:x", "supersedes")]); // mkFile seeds legacy `version` key
+  tombstoneLinks(file, { from: "decision:a" }, "superseded", AT);
+
+  const onDisk = JSON.parse(fs.readFileSync(file, "utf8"));
+  expect(onDisk.schema_version).toBe("guild.knowledge_links.v1");
+  expect(onDisk.version).toBeUndefined();
+  expect(onDisk.links).toHaveLength(1);
+});
+
+test("tombstoneLinks preserves `schema_version` when the on-disk file already used it", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-kl-tomb-"));
+  const file = path.join(dir, "knowledge-links.json");
+  fs.writeFileSync(
+    file,
+    JSON.stringify({ schema_version: "guild.knowledge_links.v1", links: [L("decision:a", "wiki:x", "supersedes")] }),
+  );
+
+  tombstoneLinks(file, { from: "decision:a" }, "superseded", AT);
+
+  const onDisk = JSON.parse(fs.readFileSync(file, "utf8"));
+  expect(onDisk.schema_version).toBe("guild.knowledge_links.v1");
+  expect(onDisk.version).toBeUndefined();
+});

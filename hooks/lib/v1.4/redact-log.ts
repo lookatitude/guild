@@ -161,6 +161,98 @@ export function redactKeyValueSecrets(input: string): string {
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
+ * Repo-relative path exemption for group 4.
+ *
+ * Ordinary source paths (`scripts/learn/extract-structural.ts`) contain
+ * ≥20-char `[A-Za-z0-9/]` runs once `-`/`.` split the tail off the match,
+ * so the entropy pattern fires on the prefix and mangles the path
+ * (`<HIGH_ENTROPY_REDACTED>-structural.ts`). Repo-relative paths are the
+ * provenance vocabulary of wiki/handoff frontmatter (`source_refs:`) — they
+ * must survive the scrub.
+ *
+ * A candidate is exempt when the token around the match — expanded over the
+ * path charset `[A-Za-z0-9._/-]`, capped at MAX_PATH_TOKEN_LEN per side so a
+ * crafted multi-KB token can't make every match rescan the whole document —
+ * is shaped like a relative path:
+ *   - candidate itself carries no `+`/`=` (base64 markers);
+ *   - token starts with a word char (absolute `/…` and `~/…` paths keep
+ *     their existing treatment), optionally after `./` or `../`;
+ *   - token has ≥2 `/` segments, or 1 segment plus a short file extension;
+ *   - every `[/._-]`-delimited word is "wordish": under the 20-char entropy
+ *     threshold AND human-word-shaped (lowercase-dominant, few digits, or a
+ *     short ALLCAPS word like SKILL/README). Random base64/hex chunks are
+ *     case-and-digit mixed, so a secret split into short path segments
+ *     (`cache/Zm9vYmFy…/MTIzNDU2….bin`) still fails the exemption and gets
+ *     redacted. Residual gap: an all-lowercase, digit-light random chunk can
+ *     pass — accepted, consistent with the existing bare-hex 40/64 carve-out.
+ */
+const PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
+const PATH_SHAPE =
+  /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+const PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
+/** Longest plausible real path token; longer expansions bail to "redact". */
+const MAX_PATH_TOKEN_LEN = 512;
+
+/**
+ * Human-word shape check over ALL `[/._-]`-delimited path segment words.
+ *
+ * Aggregate rule for no-lowercase words (ALLCAPS / digit-only): 1–2 chars
+ * are free (version components: `v2` splits to `2`, dates `01`), 3–8 chars
+ * are allowed AT MOST ONCE per token (README, SKILL, 2022) — so a secret
+ * chunked into several short ALLCAPS/digit segments
+ * (`cache/ABCDEFGH/IJKLMNOP/QRSTUVWX.bin`) fails and stays redacted.
+ */
+function allWordsWordish(words: string[]): boolean {
+  let opaqueBudget = 1;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    let upper = 0;
+    let lower = 0;
+    let digits = 0;
+    for (const ch of word) {
+      if (ch >= "a" && ch <= "z") lower++;
+      else if (ch >= "A" && ch <= "Z") upper++;
+      else digits++;
+    }
+    if (lower === 0) {
+      // ALLCAPS / digit-only word: short initialisms only, one per token.
+      if (word.length > 8) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+    } else if (upper > 3 || digits > 4) {
+      // Mixed-case word: tolerate PascalCase/camelCase, reject base64-ish.
+      return false;
+    }
+  }
+  return true;
+}
+
+export function isRelativePathToken(
+  candidate: string,
+  fullInput: string,
+  matchIndex: number,
+): boolean {
+  if (candidate.includes("+") || candidate.includes("=")) return false;
+  let start = matchIndex;
+  const startFloor = Math.max(0, matchIndex - MAX_PATH_TOKEN_LEN);
+  while (start > startFloor && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
+  if (start === startFloor && start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) {
+    return false; // token keeps going past the cap — not a plausible path
+  }
+  let end = matchIndex + candidate.length;
+  const endCeil = Math.min(fullInput.length, end + MAX_PATH_TOKEN_LEN);
+  while (end < endCeil && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
+  if (end === endCeil && end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) {
+    return false;
+  }
+  const token = fullInput.slice(start, end);
+  if (token.length > MAX_PATH_TOKEN_LEN) return false;
+  if (!PATH_SHAPE.test(token)) return false;
+  const slashCount = token.split("/").length - 1;
+  if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
+}
+
+/**
  * Whitelist predicates — return true if the candidate string should NOT
  * be redacted.
  *
@@ -193,6 +285,11 @@ export function isWhitelistedHighEntropy(
   // doc's "SHA-1/SHA-256-shaped commit hashes" carve-out for the
   // common case of bare hashes in test names / file lists.
   if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
+    return true;
+  }
+  // Repo-relative path token: ordinary source paths are provenance metadata
+  // (wiki source_refs, handoff file lists) — never secrets by shape alone.
+  if (isRelativePathToken(candidate, fullInput, matchIndex)) {
     return true;
   }
   return false;

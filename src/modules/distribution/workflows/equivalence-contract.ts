@@ -4,7 +4,7 @@
  * L0 FOUNDATION — the Claude FULL-TREE equivalence contract (SC-2).
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/guild-inventory-and-parity-contracts.md §Equivalence contract
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) §Equivalence contract
  *   spec .guild/spec/universal-host-p0.md SC-2
  *
  * SC-2: the GENERATED Claude artifact (dist/claude-code/**) must be functionally

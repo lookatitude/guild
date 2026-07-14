@@ -7,7 +7,7 @@
  * AC33, spec SC-W1-4; G-spec finding F-2).
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §Workspace impact (AC33)
+ *   ADR: universal-host-plugin-architecture (workspace wiki) §Workspace impact (AC33)
  *   .guild/spec/universal-host-p2-wave1.md  SC-W1-4 + "Design clarifications" (F-2)
  *   .guild/plan/universal-host-p2-wave1.md  lane LW1-1 (shape) / LW1-4 (consumer)
  *

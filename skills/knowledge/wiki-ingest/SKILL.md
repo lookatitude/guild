@@ -97,6 +97,26 @@ When `guild:context-assemble` later pulls this page via recall, the `trust_tier`
 
 `§10.2` categories: `context | standard | product | entity | concept | source` (directory `sources/`); `source/` is the default landing pad for reference material. **If the category is not obvious and the user did not specify, ask before writing — never silently guess.** One-line definitions in **`ingest-reference.md`**. Decisions live in `decisions/`, owned by `guild:decisions` — this skill must not write there; redirect Q&A captures to `guild:decisions`.
 
+## Write-time importance stamping
+
+After the wiki page is written, stamp it (and any other unstamped page) with its
+`recall_importance:` frontmatter score — **deterministic, computed by tooling, not
+by the model** (docs/v2/05 §"Importance-at-ingest"). Call the CLI; do not
+compute the 1–5 grade yourself:
+
+```
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/stamp-recall-importance.ts \
+  --cwd <repo-root>
+```
+
+It scans `.guild/wiki/**.md`, stamps each page missing `recall_importance:` with
+a category-derived score, and is idempotent (write-once; a page already stamped
+or marked `recall_importance_pinned: true` is left untouched). Gated by
+`models.importanceAtIngest` (default `true`) — a no-op when the flag is off, so
+this call is always safe to make. It never blocks ingest and never fails the
+skill; treat a non-zero exit as a non-fatal diagnostic (log under `assumptions:`,
+continue to Handoff).
+
 ## Handoff
 
 After both files are written, update the catalog and log:

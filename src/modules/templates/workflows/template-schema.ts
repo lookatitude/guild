@@ -6,7 +6,7 @@
  * valid `guild.explore.v1` / `guild.define.v1` skeleton (ADR step 18 / AC37, spec SC-W3-1).
  *
  * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §step 18 (AC37)
+ *   ADR: universal-host-plugin-architecture (workspace wiki) §step 18 (AC37)
  *   .guild/spec/universal-host-p2-wave3.md  SC-W3-1
  *   .guild/plan/universal-host-p2-wave3.md  lane LW3-1
  *

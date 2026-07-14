@@ -169,6 +169,19 @@ describe("install.sh AC-INS contract (dry-run only)", () => {
           fs.writeFileSync(p, "#!/usr/bin/env bash\nexit 0\n");
           fs.chmodSync(p, 0o755);
         }
+        // Shadow real host CLIs that live in /usr/bin on CI runners (GitHub's
+        // runners ship `gh` WITH the copilot extension, which the registry
+        // subcommand probe legitimately detects) — the fixture must pin
+        // detection to exactly claude+codex.
+        // Only gh/acli need shadowing (present in /usr/bin on runners; their
+        // hosts require a SUBCOMMAND probe, so an exit-1 fake defeats it).
+        // Bare CLIs (pi/agy/cursor-agent/opencode) are presence-probed — a fake
+        // of any exit code would ADD hosts, and none exist in /usr/bin anyway.
+        for (const b of ["gh", "acli"]) {
+          const p = path.join(bin, b);
+          fs.writeFileSync(p, "#!/usr/bin/env bash\nexit 1\n");
+          fs.chmodSync(p, 0o755);
+        }
         // Bare auto-detect (no --host/--hosts): PATH probe finds claude + codex → 2 hosts.
         const gated = spawnSync("bash", [INSTALL_SH, "--dry-run"], {
           cwd: tmp,

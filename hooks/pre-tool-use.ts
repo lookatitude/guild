@@ -54,7 +54,7 @@ import {
 
 // ── v2 security ADR (hook-side): capability-scope enforcement, security-event
 // log, and MCP description hash-pin. Schema/settings bound BY POINTER — see
-// each lib header. (docs/knowledge/decisions/v2-security-and-untrusted-content.md)
+// each lib header. (ADR: v2-security-and-untrusted-content (workspace wiki))
 import { readSecurityConfig, resolveRunAutonomyMode } from "./lib/security/config.js";
 // HK-06: bus surface — approval_request writes go through scrubbedWrite.
 import { scrubbedWrite } from "./lib/security/scrubbed-write.js";

@@ -1,0 +1,119 @@
+# .guildignore — files/dirs excluded from the Guild understanding engine.
+# Syntax: .gitignore-compatible (globs, # comments, ! negation, trailing / for dirs).
+# Built-in defaults (always excluded unless ! negated):
+#   node_modules/ .git/ dist/ build/ obj/ *.lock *.min.js binary assets, etc.
+# Suggestions below are commented — uncomment to activate. One-time generation.
+
+
+# --- From .gitignore (uncomment to exclude) ---
+# /dist/
+# /evidence/**
+# !/evidence/host-smoke/
+# !/evidence/host-smoke/**
+# !/evidence/desktop-app-smoke/
+# !/evidence/desktop-app-smoke/**
+# !/.guild/
+# .guild/*
+# !.guild/guild.yaml
+# !.guild/agents/
+# !.guild/agents/**
+# !.guild/skills/
+# !.guild/skills/**
+# !.guild/workflows/
+# !.guild/workflows/**
+# !.guild/loops/
+# !.guild/loops/**
+# !.guild/wiki/
+# !.guild/wiki/**
+# !.guild/knowledge/
+# !.guild/knowledge/**
+# !.guild/memory/
+# !.guild/memory/**
+# !.guild/initiatives/
+# !.guild/initiatives/**
+# !.guild/init/
+# !.guild/init/**
+# !.guild/spec/
+# !.guild/spec/**
+# !.guild/plan/
+# !.guild/plan/**
+# !.guild/prd/
+# !.guild/prd/**
+# !.guild/team/
+# !.guild/team/**
+# !.guild/teams/
+# !.guild/teams/**
+# !.guild/artifacts/
+# !.guild/artifacts/**
+# !.guild/reflections/
+# !.guild/reflections/**
+# !.guild/evolve/
+# !.guild/evolve/**
+# !.guild/indexes/
+# !.guild/indexes/**
+# !.guild/workspace/
+# !.guild/workspace/**
+# !.guild/workspace-knowledge/
+# !.guild/workspace-knowledge/**
+# !.guild/workspace.json
+# !.guild/settings.json
+# !.guild/runs/
+# !.guild/runs/*/
+# .guild/runs/*/**
+# !.guild/runs/*/handoffs/
+# !.guild/runs/*/handoffs/**
+# !.guild/runs/*/verify.md
+# !.guild/runs/*/review.md
+# !.guild/runs/*/provenance.json
+# !.guild/runs/*/run.yaml
+# !.guild/runs/*/summary.md
+# !.guild/runs/*/share-payloads.flag
+# !.guild/runs/*/run-state.json
+# .guild/settings.local.json
+# .guild/hosts/
+# .guild/index.sqlite
+# .guild/runs/current-run-id
+# !benchmark/fixtures/**/.guild/
+# !benchmark/fixtures/**/.guild/**
+# !mcp-servers/guild-memory/fixtures/**/.guild/
+# !mcp-servers/guild-memory/fixtures/**/.guild/**
+# !mcp-servers/guild-telemetry/fixtures/**/.guild/
+# !mcp-servers/guild-telemetry/fixtures/**/.guild/**
+# !mcp-servers/guild-telemetry/fixtures-v14/**/.guild/
+# !mcp-servers/guild-telemetry/fixtures-v14/**/.guild/**
+# !mcp-servers/guild-telemetry/fixtures-alt-cwd/**/.guild/
+# !mcp-servers/guild-telemetry/fixtures-alt-cwd/**/.guild/**
+# !tests/dot-guild/fixtures/**/.guild/
+# !tests/dot-guild/fixtures/**/.guild/**
+# !tests/wiki-lint/fixtures/**/.guild/
+# !tests/wiki-lint/fixtures/**/.guild/**
+# !hooks/__tests__/fixtures/golden-full-learn-run/.guild/
+# !hooks/__tests__/fixtures/golden-full-learn-run/.guild/**
+# .guild/context/run-host-adapter-reconcile-20260621/
+# .guild/diagnose/20260626T101814Z-evolve-run-left-open.md
+# **/*.structural-cache.json
+# .claude/settings.local.json
+# .codex/skills/
+# .gemini/skills/
+# .claude/skills/
+# .DS_Store
+# /package-lock.json
+# benchmark/runs/
+# benchmark/reports/internal/
+# benchmark/node_modules/
+# benchmark/coverage/
+# benchmark/ui/node_modules/
+# benchmark/ui/dist/
+# benchmark/ui/coverage/
+# *.tsbuildinfo
+# scripts/docs-hygiene/.last-scan.md
+
+# --- Detected directories (uncomment to exclude) ---
+# tests/
+# docs/
+# scripts/
+
+# --- Test file patterns (uncomment to exclude) ---
+# *.test.*
+# *.spec.*
+# *.snap

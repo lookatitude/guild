@@ -18,8 +18,7 @@
       "comms/comms-format-lint.cli",
       "comms/no-accidental-write",
       "comms/no-accidental-write.cli",
-      "lib/artifact-bus",
-      "artifact-bus-cli"
+      "lib/artifact-bus"
     ]
   }
 }

@@ -42,6 +42,7 @@ import {
   HOSTKIND_TO_REGISTRY_ID,
 } from "./host-id-namespace";
 import type { HostKind } from "./host-types";
+import type { GuildHostCapabilitiesV1 } from "./host-capabilities-schema";
 
 // Re-export the L0 reconciliation so consumers import the registry as one entry point.
 export {
@@ -52,6 +53,55 @@ export {
 };
 export { HOST_REGISTRY_ROWS, HOST_IDS };
 export type { HostId, HostFamilyId, HostRegistryEntry, Installability };
+
+// ---------------------------------------------------------------------------
+// Capability-row derivation (G4b — closes the "two diverged capability truths"
+// audit finding: host-capabilities-schema.ts's hand-authored HOST_CAPABILITY_ROWS
+// cannot import HOST_REGISTRY_ROWS itself — host-registry-schema.ts already
+// imports FROM host-capabilities-schema.ts (CLAUDE_CAPABILITIES/CODEX_CAPABILITIES/
+// AGENTS_FILE_CAPABILITIES) to build its own rows, so the reverse import would be
+// circular. This module sits DOWNSTREAM of both (it already depends on
+// host-registry-schema.ts; host-capabilities-schema.ts depends on neither), so it
+// is the correct, cycle-free place to unify them.
+// ---------------------------------------------------------------------------
+
+/**
+ * deriveCapabilityRow — the small derivation seam. A registry row's `capabilities`
+ * block already IS its `guild.host_capabilities.v1` row (registry-schema.ts builds
+ * it at authoring time via `inferredCaps()` + the frozen CLAUDE/CODEX/AGENTS_FILE
+ * constants). Naming the seam explicitly means a caller that needs to keep a field
+ * the registry does not yet carry can override it right here
+ * (`{ ...deriveCapabilityRow(row), someField: ... }`) instead of hand-typing an
+ * entire parallel row that silently drifts from the registry over time.
+ */
+export function deriveCapabilityRow(row: HostRegistryEntry): GuildHostCapabilitiesV1 {
+  return row.capabilities;
+}
+
+/**
+ * The FULL capability-row map, DERIVED from `HOST_REGISTRY_ROWS` — one entry per
+ * registry host id, plus the legacy short `HostKind`-shaped aliases
+ * (`claude`/`codex`/`pi`/`antigravity`/`antigravity-2`) pre-registry consumers
+ * (guild-run-wrapper.ts) still index by. Supersedes host-capabilities-schema.ts's
+ * hand-authored `HOST_CAPABILITY_ROWS` for any NEW consumer: that file's
+ * PI_CAPABILITIES/ANTIGRAVITY_CAPABILITIES had silently drifted from the
+ * registry's on-host-VERIFIED overrides (sessions/permissions — the "two
+ * diverged capability truths" audit finding), and it never carried the 4
+ * wrapped-CLI hosts (cursor/github-copilot/opencode/rovo-dev) at all.
+ */
+export const DERIVED_HOST_CAPABILITY_ROWS: Record<string, GuildHostCapabilitiesV1> = (() => {
+  const out: Record<string, GuildHostCapabilitiesV1> = {};
+  for (const id of HOST_IDS) {
+    out[id] = deriveCapabilityRow(HOST_REGISTRY_ROWS[id]);
+  }
+  // Legacy short-alias keys (pre-registry HostKind-shaped consumers).
+  out["claude"] = out["claude-code-cli"];
+  out["codex"] = out["codex-cli"];
+  out["pi"] = out["pi-cli"];
+  out["antigravity"] = out["antigravity-cli"];
+  out["antigravity-2"] = out["antigravity-cli"];
+  return out;
+})();
 
 // ---------------------------------------------------------------------------
 // Row accessors (by registry id)

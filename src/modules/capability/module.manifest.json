@@ -9,9 +9,6 @@
   "owns": {
     "scripts": [
       "score-tier",
-      "lib/autonomy-presets",
-      "lib/isolation-capability-set",
-      "lib/lane-reserved-field",
       "lib/role-model-schema",
       "lib/role-resolver"
     ],

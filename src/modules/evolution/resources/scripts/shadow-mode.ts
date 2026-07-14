@@ -3,11 +3,13 @@
  * scripts/shadow-mode.ts
  *
  * Implements guild-plan.md §11.2 step 7 — shadow mode.
- * Runs the proposed skill against historical run traces under
- * .guild/runs/&lt;id&gt;/events.ndjson WITHOUT changing live routing. For each
- * historical trace, replays the proposed skill's TRIGGER check against the
- * prompts recorded and records whether the proposed description would have
- * triggered differently than current behavior implied by the trace.
+ * Runs the proposed skill against historical run traces under each run's
+ * event log — canonical logs/v1.4-events.jsonl first, legacy events.ndjson
+ * fallback (see scripts/lib/run-events.ts) — WITHOUT changing live routing.
+ * For each historical trace, replays the proposed skill's TRIGGER check
+ * against the prompts recorded and records whether the proposed description
+ * would have triggered differently than current behavior implied by the
+ * trace.
  *
  * Usage:
  *   scripts/shadow-mode.ts --skill <slug> --proposed-edit <path> \
@@ -22,9 +24,11 @@
  *                          .guild/evolve/<run-id>/shadow-report.md.
  *   --cwd <path>           (optional, default ".") Repo root.
  *
- * Reads:
- *   <cwd>/.guild/runs/&lt;id&gt;/events.ndjson  — historical traces.
- *   <proposed-edit>                    — proposed skill file.
+ * Reads (per historical run, canonical-first / legacy-fallback — see
+ * scripts/lib/run-events.ts):
+ *   <cwd>/.guild/runs/&lt;id&gt;/logs/v1.4-events.jsonl  — canonical trace log.
+ *   <cwd>/.guild/runs/&lt;id&gt;/events.ndjson            — legacy mirror fallback.
+ *   <proposed-edit>                                — proposed skill file.
  * Writes:
  *   <cwd>/.guild/evolve/<run-id>/shadow-report.md
  *
@@ -42,18 +46,13 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { loadRunEvents, RunEvent } from "./lib/run-events";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface TraceEvent {
-  ts?: string;
-  event?: string;
-  tool?: string;
-  specialist?: string;
-  prompt?: string;
-  ok?: boolean;
-  ms?: number;
-}
+/** Alias kept for local readability; see scripts/lib/run-events.ts for the
+ *  full (superset, all-optional) event shape this module reads defensively. */
+type TraceEvent = RunEvent;
 
 interface ShadowOutcome {
   runId: string;
@@ -181,21 +180,6 @@ function listHistoricalRuns(cwd: string): string[] {
     .filter((d) => d.isDirectory())
     .map((d) => d.name)
     .sort();
-}
-
-function parseNdjson(filePath: string): TraceEvent[] {
-  if (!fs.existsSync(filePath)) return [];
-  const out: TraceEvent[] = [];
-  for (const line of fs.readFileSync(filePath, "utf8").split("\n")) {
-    const t = line.trim();
-    if (!t) continue;
-    try {
-      out.push(JSON.parse(t) as TraceEvent);
-    } catch {
-      // ignore malformed lines
-    }
-  }
-  return out;
 }
 
 // ── Replay logic ───────────────────────────────────────────────────────────
@@ -373,8 +357,8 @@ function main(): void {
   const runs = listHistoricalRuns(cwd);
   const outcomes: ShadowOutcome[] = [];
   for (const r of runs) {
-    const eventsFile = path.join(cwd, ".guild", "runs", r, "events.ndjson");
-    const events = parseNdjson(eventsFile);
+    const runDir = path.join(cwd, ".guild", "runs", r);
+    const { events } = loadRunEvents(runDir);
     if (events.length === 0) continue;
     outcomes.push(evaluateRun(r, events, spec, skill!));
   }

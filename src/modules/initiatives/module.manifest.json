@@ -10,6 +10,7 @@
     "commands": ["initiative"],
     "skills": [
       "guild-decisions",
+      "guild-initiative",
       "guild-product-define",
       "guild-product-explore",
       "guild-product-template"
@@ -18,12 +19,10 @@
       "classify-proposal",
       "lib/ideation-min-build",
       "ideation-min-build-cli",
-      "lib/init-offer-initiative",
-      "lib/init-resume-repair",
-      "lib/init-staging-gate",
       "lib/initiative",
       "lib/initiative-activity",
-      "lib/initiative-workitems"
+      "lib/initiative-workitems",
+      "initiative-gate"
     ]
   }
 }

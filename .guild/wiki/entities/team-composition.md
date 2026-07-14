@@ -5,7 +5,7 @@ confidence: high
 importance: critical
 source_refs: []  # consolidated from plugin/docs/v2/ (711f227); supersedes: field below preserves the lineage
 created_at: 2026-05-16
-updated_at: 2026-05-17
+updated_at: 2026-07-12
 expires_at: null
 supersedes: "plugin/docs/v2/team-composition.md"
 sensitivity: public
@@ -21,16 +21,21 @@ Guild v2 composes a new team at every phase entrypoint. The team is saved in a p
 
 ## Current Specialist Roster
 
-Guild v2 ships exactly **14 shipping specialists**. `frontend` is a graduated,
-present member of the roster (not a proposed/incubating role):
+Guild ships **15 domain specialist type templates** (`templates/specialists/*.md`,
+`guild.specialist_template.v1`) plus the **2 machinery agents** (`agents/advisor.md`,
+`agents/developer.md` — the only host-registered agents). A domain role joins a team
+as a **project instance**: team-compose mints the matched template into the consuming
+repo's `.guild/agents/<role>.md` (`roster-resolve.ts mint <role>`, deterministic, no
+gates) and dispatch uses the definition-path mechanism. Canonical decision:
+[`machinery-agents-vs-specialist-template-library.md`](../decisions/machinery-agents-vs-specialist-template-library.md).
 
-The grouping below is the canonical **3-group** taxonomy the agent files
+The grouping below is the canonical **3-group** taxonomy the definition files
 self-declare, set by
 [`canonical-specialist-roster-groups-and-tiers.md`](../decisions/canonical-specialist-roster-groups-and-tiers.md)
 (D1). Groups are presentation-only — the dynamic composer enumerates capability
-per agent and never buckets by group.
+per role and never buckets by group.
 
-| # | Specialist | Group |
+| # | Specialist (template) | Group |
 |---|---|---|
 | 1 | `architect` | engineering (`§6.1`) |
 | 2 | `researcher` | engineering (`§6.1`) |
@@ -41,17 +46,17 @@ per agent and never buckets by group.
 | 7 | `mobile` | engineering (`§6.1`) |
 | 8 | `security` | engineering (`§6.1`) |
 | 9 | `copywriter` | content & communication (`§6.2`) |
-| 10 | `technical-writer` | content & communication (`§6.2`) |
-| 11 | `social-media` | content & communication (`§6.2`) |
-| 12 | `seo` | content & communication (`§6.2`) |
-| 13 | `marketing` | commercial (`§6.3`) |
-| 14 | `sales` | commercial (`§6.3`) |
+| 10 | `doc-writer` | content & communication (`§6.2`) |
+| 11 | `technical-writer` | content & communication (`§6.2`) |
+| 12 | `social-media` | content & communication (`§6.2`) |
+| 13 | `seo` | content & communication (`§6.2`) |
+| 14 | `marketing` | commercial (`§6.3`) |
+| 15 | `sales` | commercial (`§6.3`) |
 
-Per the roster ADR (D1) the canonical taxonomy is **three groups**: `devops`/`qa`/`security` are **engineering**; `copywriter`/`technical-writer`/`social-media`/`seo` are **content & communication**; `marketing`/`sales` are **commercial**. This supersedes the earlier four-group split — the agent files self-identify with these three groups only. Canonical default tiers per specialist live in the same ADR (D2).
+Per the roster ADR (D1) the canonical taxonomy is **three groups**: `devops`/`qa`/`security` are **engineering**; `copywriter`/`doc-writer`/`technical-writer`/`social-media`/`seo` are **content & communication**; `marketing`/`sales` are **commercial**. This supersedes the earlier four-group split — the definition files self-identify with these three groups only. Canonical default tiers per specialist live in the same ADR (D2); machinery agents are `augmenting` (excluded from domain matching and cap-6).
 
 `guild-plan.md` is the **frozen v1 record** (it states 13 specialists in
-places); it is superseded by this v2 doc set. v2 treats `agents/frontend.md`
-as graduated and present, bringing the roster to 14.
+places); it is superseded by this v2 doc set.
 
 ### No new analysis specialist
 

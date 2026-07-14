@@ -9,19 +9,34 @@
  *
  * Prior to Wave-1, HostKind was duplicated in write-host-capability.ts
  * and team-backend.ts as "claude" | "codex" with a structural-assignability
- * hack between them. This module canonicalizes the union and widens it to
- * the 9-host set documented in docs/knowledge/decisions/host-adapter-contract.md.
+ * hack between them. This module canonicalizes the union.
+ *
+ * G4b (verified-multi-host host-reachability, 2026-07): widened from 8 to 12
+ * members — the "9-host set" this docblock previously claimed was already
+ * stale before this edit (8 members shipped; `gemini` was purged 2026-06-14
+ * without a comment update). Added the 4 wrapped-CLI hosts whose registry rows
+ * (host-registry-schema.ts HOST_REGISTRY_ROWS) carry `dispatch_selectable:true`
+ * but had NO HostKind member — the root cause of their pane-dispatch
+ * unreachability. `kiro`/`qoder`/`trae` are `adapter_binding:"agents-file"`
+ * (file surface, not a pane) and correctly have NO HostKind member.
  */
 
 /**
- * The 9 hosts Guild's host-adapter contract supports.
+ * The 12 pane-dispatchable hosts Guild's host-adapter contract supports.
  *
- * Contract: docs/knowledge/decisions/host-adapter-contract.md
+ * Contract: ADR: host-adapter-contract (workspace wiki)
  *           (8 contract surfaces; the per-host adapter pages live at
  *            docs/knowledge/team-and-routing/<host>-adapter.md).
+ *           ADR: verified-multi-host-support (workspace wiki) (the 16-id
+ *           HOST_IDS registry — this union covers every registry row EXCEPT the
+ *           3 agents-file IDE rows, which are file surfaces, not panes).
  *
- * Adding a new host means: (a) extend this union, (b) add the per-host
- * adapter page, (c) extend the default model-tier registry in host-router.ts.
+ * Adding a new PANE-dispatchable host means: (a) extend this union, (b) add a
+ * row to HOST_REGISTRY_ROWS (host-registry-schema.ts), (c) either a bespoke
+ * PaneAdapter or let the generic WrappedCliPaneAdapter cover it
+ * (pane-adapter.ts), (d) a HOST_CAPABILITY_ROWS entry (host-capabilities-schema.ts).
+ * A host whose `adapter_binding` is `"agents-file"` (a file surface) does NOT
+ * get a HostKind member — it is never pane-dispatched.
  */
 // PHASE-1-DISPATCH-WAVE-1: canonical HostKind owner; replaces the prior
 // duplication between write-host-capability.ts and team-backend.ts.
@@ -35,4 +50,11 @@ export type HostKind =
   | "claude-code-desktop"  // Claude Code Desktop app
   | "claude-code-web"      // Claude Code Web (cloud VM)
   | "codex-app"            // Codex desktop app
-  | "claude-ai-connector"; // claude.ai connector (remote MCP control plane)
+  | "claude-ai-connector"  // claude.ai connector (remote MCP control plane)
+  // G4b — the 4 wrapped-CLI hosts (verified-multi-host L0 ADR §2.3). Each is a
+  // dispatch_selectable:true registry row whose canonical HostKind literal IS
+  // its registry host_id (no aliasing needed — see host-id-namespace.ts).
+  | "cursor"               // Cursor CLI (cursor-agent)
+  | "github-copilot"       // GitHub Copilot CLI (`gh copilot`)
+  | "opencode"              // opencode CLI
+  | "rovo-dev";             // Atlassian Rovo Dev CLI (`acli rovodev`)

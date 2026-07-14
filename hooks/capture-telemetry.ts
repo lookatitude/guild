@@ -9,10 +9,32 @@
  *            (docs/v2/12-observability.md) and the trace source for
  *            guild-telemetry MCP queries. HK-01/HK-02 route ALL telemetry
  *            events (incl. SubagentStop, UserPromptSubmit, loop_round_start/
- *            end, codex_review_round) here with trace_event.v2 additive fields.
+ *            end, codex_review_round) here with trace_event.v2 additive fields
+ *            — EXCEPT PostToolUse, see the double-logging note below.
  *   Mirror (legacy fallback): .guild/runs/<run-id>/events.ndjson
  *            Kept for backward-compatibility with tooling that reads the legacy
- *            path. Receives identical event lines (best-effort, non-blocking).
+ *            path. Receives identical event lines for EVERY event type
+ *            (including PostToolUse) — best-effort, non-blocking.
+ *
+ * De-duplication (audit "PostToolUse double-logging"): hooks.json's PostToolUse
+ * matcher runs BOTH this script and hooks/post-tool-use.ts, and post-tool-use.ts
+ * already emits the schema-validated `tool_call` event (one of the v1.4
+ * 12-type union — see lib/v1.4/log-jsonl-schema.ts) into the SAME canonical
+ * `logs/v1.4-events.jsonl`, via the locked/validated `appendEvent()` API and
+ * with richer fields (Pre/Post pairing, latency_ms, result excerpt, orphan
+ * sweep, trace-v2 tokens). This script's own ad-hoc `event: "PostToolUse"`
+ * line is NOT a member of that schema and was being raw-appended alongside it
+ * — a straight ~2x event count inflation on every tool call, double-counted
+ * in trace_cost_rollup. Fix: this script SKIPS the canonical-file write only
+ * for `event === "PostToolUse"` (post-tool-use.ts is the sole canonical writer
+ * for tool-call lines); the legacy events.ndjson mirror is unchanged (still
+ * receives PostToolUse, for any consumer that hasn't migrated). All OTHER
+ * event types this script handles (SubagentStop, UserPromptSubmit, loop_*,
+ * codex_review_round) are untouched — post-tool-use.ts has no equivalent for
+ * those. See hooks/maybe-reflect.ts's gateCheck() for the paired update: it
+ * now recognizes canonical `tool_call` (from post-tool-use.ts) as well as the
+ * legacy `PostToolUse` shape (from events.ndjson / older logs) for its
+ * "file edited" + "no error" heuristic checks.
  *
  * Event schema:
  * {
@@ -96,7 +118,7 @@ import { appendSecurityEvent, buildSecurityEvent, resolveRunDir } from "./lib/se
 // ── v2 observability ADR (D-OBS-1/2/6): guild.trace_event.v2 additive fields,
 // deterministic hook-side span ids, and the redacted guild.trace_payload.v1
 // sidecar. Schema/contracts bound BY POINTER — see lib/trace-v2.ts header
-// (docs/knowledge/decisions/v2-observability-and-replay.md + contract-map §B-post).
+// (ADR: v2-observability-and-replay (workspace wiki) + contract-map §B-post).
 import {
   genSpanId,
   isLlmCallEvent,
@@ -334,21 +356,29 @@ async function main(): Promise<void> {
   // is `logs/v1.4-events.jsonl` (the plugin↔benchmark contract boundary).
   // `events.ndjson` becomes a LEGACY MIRROR ONLY — kept for backward compat
   // with any consumer that hasn't migrated to the canonical path.
+  //
+  // De-dup exception (see header): `PostToolUse` is the ONE event type this
+  // script does NOT also write to the canonical file — hooks/post-tool-use.ts
+  // already emits the richer, schema-validated `tool_call` line there for the
+  // exact same tool invocation. Skipping here is what fixes the ~2x inflation;
+  // the legacy mirror below is untouched (every event type still lands there).
   const eventLine = JSON.stringify(event) + "\n";
   const logsDir = path.join(runsDir, "logs");
   const canonicalFile = path.join(logsDir, "v1.4-events.jsonl");
   const legacyFile = path.join(runsDir, "events.ndjson");
 
-  try {
-    fs.mkdirSync(logsDir, { recursive: true });
-    fs.appendFileSync(canonicalFile, eventLine, "utf8");
-  } catch (err) {
-    process.stderr.write(
-      `[capture-telemetry] ERROR: failed to write to canonical log (${canonicalFile}): ${
-        err instanceof Error ? err.message : String(err)
-      }\n`,
-    );
-    // Still exit 0 — telemetry failures must not block tool execution
+  if (eventName !== "PostToolUse") {
+    try {
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.appendFileSync(canonicalFile, eventLine, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[capture-telemetry] ERROR: failed to write to canonical log (${canonicalFile}): ${
+          err instanceof Error ? err.message : String(err)
+        }\n`,
+      );
+      // Still exit 0 — telemetry failures must not block tool execution
+    }
   }
 
   // Legacy mirror — best-effort; a mirror failure is informational only.

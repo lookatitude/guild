@@ -43,7 +43,7 @@
  * binary existing (CI-safe). The real default probes (`defaultProbeEnv`) shell
  * out, but tests pass a fake `ProbeEnv`.
  *
- * Host taxonomy: docs/knowledge/decisions/host-adapter-contract.md (Decision 2,
+ * Host taxonomy: ADR: host-adapter-contract (workspace wiki) (Decision 2,
  * the `family` field). HostFamily here is the coarse family, distinct from the
  * 9-host `HostKind` in scripts/lib/host-types.ts (e.g. antigravity-2 → antigravity).
  */

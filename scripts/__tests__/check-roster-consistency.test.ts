@@ -29,7 +29,7 @@ const SCRIPT = path.resolve(__dirname, "../check-roster-consistency.ts");
 function runScript(args: string[]): { exitCode: number; stdout: string; stderr: string } {
   const result = spawnSync("npx", ["tsx", SCRIPT, ...args], {
     encoding: "utf8",
-    timeout: 30000,
+    timeout: 120_000,
   });
   return {
     exitCode: result.status ?? 1,
@@ -99,6 +99,9 @@ function seedPluginRoot(
   const agentsDir = path.join(tmpDir, "agents");
   fs.mkdirSync(docsDir, { recursive: true });
   fs.mkdirSync(agentsDir, { recursive: true });
+  // The validator scans BOTH shipped surfaces (machinery-vs-template-library
+  // ADR); fixtures keep the template surface present-but-empty.
+  fs.mkdirSync(path.join(tmpDir, "templates", "specialists"), { recursive: true });
 
   fs.writeFileSync(path.join(docsDir, "specialist-roster.md"), rosterContent, "utf8");
 

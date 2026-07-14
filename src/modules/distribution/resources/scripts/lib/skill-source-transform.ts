@@ -5,22 +5,31 @@
  * validator + a deterministic transformer that RENDERS the host-native (Claude)
  * `SKILL.md` from a STRUCTURED registry entry (ADR step 15, spec SC-W2-1).
  *
- * Contract authority (SoT):
- *   docs/knowledge/decisions/universal-host-plugin-architecture.md §step 15
- *   .guild/spec/universal-host-p2-wave2.md   SC-W2-1 / SC-W2-5
- *   .guild/plan/universal-host-p2-wave2.md   lane LW2-1 (transformer) / LW2-2 (sources)
+ * Contract authority (SoT): the umbrella `.guild/wiki/` decisions/ADR set for the
+ * universal-host plugin architecture. (This header previously cited
+ * `.guild/spec/universal-host-p2-wave2.md`, `.guild/plan/universal-host-p2-wave2.md`,
+ * and a `docs/knowledge/decisions/…` ADR path — none of those exist in the repo;
+ * do not follow them, they are dead pointers left over from the wave-2 build.)
+ *
+ * SCOPE (audit remediation item 18, plugin-audit-remediation, 2026-07): this is a
+ * PILOT, not a source of truth for the skill corpus. `skill-src/skill-registry.json`
+ * covers a hardcoded 5-of-~109-skill slice (`WAVE2_SKILL_IDS` below); the shipped
+ * install surface reads live `skills/**` via `guild.inventory.v1` — never this
+ * registry. The registry IS a real, working proof of the host-neutral-source model
+ * (JSON entry → renderer → byte-identical `SKILL.md`) and stays CI-gated at that
+ * 5-skill scope; no header in this file may claim it is authoritative, complete, or
+ * "the SOURCE OF TRUTH" for skills generally — it is not.
  *
  * WHY (and what the earlier round got wrong): the first cut authored each neutral
  * source as a VERBATIM byte-copy of the committed `SKILL.md`, which made the
  * transform an IDENTITY function — `render(src) == committed` proved nothing about
- * host-neutrality (it defeated ADR step 15). This module fixes that by modelling the
- * source EXACTLY on the (correct) command lane (`command-registry.ts` /
- * `command-src/command-registry.json`): the SOURCE OF TRUTH is a host-NEUTRAL
- * registry of STRUCTURED entries `{ name, description, when_to_use, type, body }`;
- * the renderer PROJECTS an entry back into Claude's exact `SKILL.md` shape. The
- * transform is therefore NON-trivial (a JSON entry → the YAML-frontmatter+body md),
- * and a future Codex renderer would consume the SAME entry to emit a different host
- * shape.
+ * host-neutrality. This module fixes that by modelling the source EXACTLY on the
+ * command lane (`command-registry.ts` / `command-src/command-registry.json`): each
+ * registry entry is a host-NEUTRAL STRUCTURED record `{ name, description,
+ * when_to_use, type, body }`; the renderer PROJECTS an entry back into Claude's
+ * exact `SKILL.md` shape. The transform is therefore NON-trivial (a JSON entry →
+ * the YAML-frontmatter+body md), and a future Codex renderer would consume the SAME
+ * entry to emit a different host shape.
  *
  * NEUTRAL vs HOST-NATIVE split:
  *   - Neutral (registry entry): `id` (the skill dir stem), `name`/`description`/

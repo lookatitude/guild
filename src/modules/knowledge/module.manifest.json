@@ -30,7 +30,6 @@
       "lib/kb-snapshot",
       "lib/shared/bm25",
       "lib/shared/graph-scoring",
-      "lib/sqlite-projections",
       "lib/write-back-scored-tier"
     ]
   }

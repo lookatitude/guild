@@ -3,18 +3,24 @@
 #
 # Event:   UserPromptSubmit
 # Purpose: Lightly nudges when the user prompt references a domain that has
-#          no shipped skill or specialist. Runs on every prompt — kept brief
+#          no shipped specialist TEMPLATE. Runs on every prompt — kept brief
 #          and non-blocking.
 #
-# Heuristic: grep the prompt text for keywords that map to domains without a
-#   shipped specialist. Flag at most once per session (uses a per-session
-#   lock file under /tmp to avoid chatty repeated nudges).
+# Heuristic: grep the prompt text for keywords that map to a domain, then
+#   check WHETHER that domain is covered by looking for the matching template
+#   filename under templates/specialists/*.md AT RUNTIME — never a hardcoded
+#   "as of <date>" gap snapshot, which is exactly what went stale here before
+#   (a Frontend template shipped and the nudge kept claiming "no specialist
+#   covers frontend" for every react/css/vue prompt). Flag at most once per
+#   session (uses a per-session lock file under /tmp to avoid chatty repeated
+#   nudges).
 #
-# Shipped specialists (guild-plan.md §3): Architect, Researcher, Backend,
-#   DevOps, QA, Mobile, Security, Copywriter, Technical Writer, Social Media,
-#   SEO, Marketing, Sales.
-# Gaps as of P5: no Frontend specialist, no Data/Analytics specialist,
-#   no ML/AI-engineering specialist.
+# Roster model (v2): the plugin ships 2 machinery agents (advisor, developer)
+#   plus 15 domain specialist TYPE TEMPLATES under templates/specialists/*.md
+#   (architect, backend, copywriter, devops, doc-writer, frontend, marketing,
+#   mobile, qa, researcher, sales, security, seo, social-media,
+#   technical-writer), minted into a project's .guild/agents/ on demand by
+#   guild:team-compose. See plugin/AGENTS.md.
 #
 # Stdin:   JSON — Claude Code UserPromptSubmit hook payload.
 # Stdout:  Either empty (no nudge needed) or a 1-line nudge.
@@ -22,6 +28,22 @@
 # Exit:    Always 0 — never blocks the prompt.
 
 set -uo pipefail
+
+# ── Resolve the specialist-templates dir (same plugin-root convention as
+#    bootstrap.sh) so the "is this domain covered" check reads the REAL
+#    shipped templates instead of a hardcoded snapshot. ──────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT_FALLBACK="$(cd "${SCRIPT_DIR}/.." && pwd)"
+GUILD_PLUGIN_ROOT_RESOLVED="${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT_FALLBACK}}}"
+SPECIALIST_TEMPLATES_DIR="${GUILD_PLUGIN_ROOT_RESOLVED}/templates/specialists"
+
+# domain_covered <template-basename-without-.md>
+# True (exit 0) iff templates/specialists/<name>.md exists — i.e. the domain
+# has a shipped specialist template today. A single fs check per candidate
+# domain keeps this hook fast (no directory listing / no subshells needed).
+domain_covered() {
+  [[ -f "${SPECIALIST_TEMPLATES_DIR}/$1.md" ]]
+}
 
 # Clean up stale session locks (>7 days old) — prevents /tmp accretion
 # on long-running machines where /tmp isn't cleared automatically.
@@ -66,21 +88,26 @@ fi
 # Lower-case for case-insensitive matching
 PROMPT_LOWER="$(echo "${PROMPT_TEXT}" | tr '[:upper:]' '[:lower:]')"
 
-# ── Keyword → gap mapping ─────────────────────────────────────────────────
-# Only flag domains with NO current specialist.
+# ── Keyword → domain mapping, gated on runtime template coverage ──────────
+# The keyword→domain association is inherently hand-authored (there is no way
+# to derive "react implies frontend" from a filename); what must NEVER be
+# hand-authored again is the COVERED/GAP verdict — that is now `domain_covered`
+# checking the real templates/specialists/ directory, so a shipped template
+# always silences its nudge without a script edit.
 NUDGE_DOMAIN=""
 
-if echo "${PROMPT_LOWER}" | grep -qE '\bfrontend\b|\bui component\b|\breact\b|\bvue\b|\bangular\b|\bsvelte\b|\bcss\b|\bstylesheet\b'; then
+if ! domain_covered "frontend" \
+  && echo "${PROMPT_LOWER}" | grep -qE '\bfrontend\b|\bui component\b|\breact\b|\bvue\b|\bangular\b|\bsvelte\b|\bcss\b|\bstylesheet\b'; then
   NUDGE_DOMAIN="frontend / UI engineering"
 fi
 
-if [[ -z "${NUDGE_DOMAIN}" ]]; then
+if [[ -z "${NUDGE_DOMAIN}" ]] && ! domain_covered "data-analytics"; then
   if echo "${PROMPT_LOWER}" | grep -qE '\bdata analytics\b|\bdata pipeline\b|\bdata warehouse\b|\bspark\b|\bdbt\b|\bairflow\b|\betl\b|\bdashboard analytics\b'; then
     NUDGE_DOMAIN="data / analytics engineering"
   fi
 fi
 
-if [[ -z "${NUDGE_DOMAIN}" ]]; then
+if [[ -z "${NUDGE_DOMAIN}" ]] && ! domain_covered "ml-ai-engineering"; then
   if echo "${PROMPT_LOWER}" | grep -qE '\bml engineering\b|\bmodel training\b|\bpytorch\b|\btensorflow\b|\bneural network\b|\bml pipeline\b|\bmlops\b'; then
     NUDGE_DOMAIN="ML / AI engineering"
   fi

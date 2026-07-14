@@ -4,12 +4,12 @@ owner: architect
 confidence: high
 importance: critical
 source_refs:
-  - .<HIGH_ENTROPY_REDACTED>-docs-code-<HIGH_ENTROPY_REDACTED>-ledger.md   # R-003 (tier drift), R-010 (group drift)
-  - .<HIGH_ENTROPY_REDACTED>-docs-code-<HIGH_ENTROPY_REDACTED>-team-composition.md # filesystem-enumeration rule (Decision §4) — input
+  - .guild/initiatives/active/plugin-docs-code-reconciliation/audit/reconciliation-ledger.md   # R-003 (tier drift), R-010 (group drift)
+  - .guild/initiatives/active/plugin-docs-code-reconciliation/audit/dynamic-team-composition.md # filesystem-enumeration rule (Decision §4) — input
   - plugin/agents/                                                                              # the 14 agent files — canonical per-specialist self-declaration (group + model:)
-  - plugin/.<HIGH_ENTROPY_REDACTED>-composition.md                                         # the 4-group table this ADR supersedes
-  - <HIGH_ENTROPY_REDACTED>-compose/SKILL.md                                                    # §7 default_tier table — conform-target
-  - plugin/.<HIGH_ENTROPY_REDACTED>-aware-tiering-and-lean-context.md                             # §1 tier ladder, §2 auto-score, §3 advisor, §7 (5-row augmenting table)
+  - plugin/.guild/wiki/entities/team-composition.md                                         # the 4-group table this ADR supersedes
+  - plugin/skills/meta/team-compose/SKILL.md                                                    # §7 default_tier table — conform-target
+  - plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md                             # §1 tier ladder, §2 auto-score, §3 advisor, §7 (5-row augmenting table)
 created_at: 2026-06-07
 updated_at: 2026-06-07
 sensitivity: internal
@@ -18,6 +18,8 @@ sensitivity: internal
 # ADR: Canonical specialist roster — groups, default tiers, and the enumeration rule
 
 ## Status
+
+**ACCEPTED — PARTIALLY SUPERSEDED (2026-07-12).** The D1 grouping, D2 default-tier table, D3 tier split, and D4 enumeration rule remain binding, but the shipped host-registered 14-specialist roster this ADR assumes was replaced by the specialist TEMPLATE library — see `machinery-agents-vs-specialist-template-library.md`: the plugin now registers only the machinery agents (advisor, developer); domain specialists ship as `templates/specialists/*.md` and are minted into a project's `.guild/agents/` at compose time.
 
 **ACCEPTED (pending codex G-lane + lead commit).** Authored 2026-06-07 for the
 `plugin-docs-code-reconciliation` Phase-2 OD-1 gate covering ledger rows **R-003** (default-tier
@@ -150,10 +152,10 @@ This ADR creates the following conform obligations. Each is a Wave-2 lane; this 
 | Target | Owner (lane) | Action |
 |---|---|---|
 | `plugin/agents/*.md` | specialist-agent-writer (**L-ROSTER-CONFORM**, Wave 2) | Verify each body `Default tier` + group line matches D1/D2 (they are the source — mostly already correct; tidy `seo`'s "commercial-flavored" aside so it doesn't read as a group reassignment). |
-| `plugin/.<HIGH_ENTROPY_REDACTED>-composition.md` | docs-writer / specialist-agent-writer | Replace the 4-group table with the D1 3-group table; move `social-media`/`seo` back to content & comms; drop `ops`/`writing`. |
-| `<HIGH_ENTROPY_REDACTED>-compose/SKILL.md §7` | skill-author | Per D4, **read tiers from frontmatter** rather than maintaining a table; if a table is kept it must mirror the D2 values (`security`=powerful; <HIGH_ENTROPY_REDACTED>). Remove the `cheap→mid` default notation (replace with D3's single-default + §2-floor framing). |
-| `plugin/.<HIGH_ENTROPY_REDACTED>-aware-tiering-and-lean-context.md §7` | docs-writer | Add a pointer: §7 tabulates only the 5 augmenting types; the canonical full-14 default-tier table lives in **this ADR**. |
-| `<HIGH_ENTROPY_REDACTED>-roster.md` | docs-writer | **EXISTS and is the source-of-truth for trigger examples + boundary clauses** (consumed by `distribution`'s `check-roster-consistency.ts:5`). Keep its 3-group grouping + frontmatter-derived tiers in sync with the agent files; `team-and-routing/team-composition.md` carries the same grouping/tier reflection. (Corrected 2026-06-28 — FA-9: this row previously claimed no separate roster doc existed.) |
+| `plugin/.guild/wiki/entities/team-composition.md` | docs-writer / specialist-agent-writer | Replace the 4-group table with the D1 3-group table; move `social-media`/`seo` back to content & comms; drop `ops`/`writing`. |
+| `plugin/skills/meta/team-compose/SKILL.md §7` | skill-author | Per D4, **read tiers from frontmatter** rather than maintaining a table; if a table is kept it must mirror the D2 values (`security`=powerful; content/commercial=mid). Remove the `cheap→mid` default notation (replace with D3's single-default + §2-floor framing). |
+| `plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md §7` | docs-writer | Add a pointer: §7 tabulates only the 5 augmenting types; the canonical full-14 default-tier table lives in **this ADR**. |
+| `docs/specialist-roster.md` | docs-writer | **EXISTS and is the source-of-truth for trigger examples + boundary clauses** (consumed by `distribution`'s `check-roster-consistency.ts:5`). Keep its 3-group grouping + frontmatter-derived tiers in sync with the agent files; `team-and-routing/team-composition.md` carries the same grouping/tier reflection. (Corrected 2026-06-28 — FA-9: this row previously claimed no separate roster doc existed.) |
 | Website specialist/roster pages | followup | L5-verified to already follow the agent files (3-group, frontmatter tiers) — **verify** no residual `cheap→mid`/4-group copy; likely no-op. |
 
 No diagram work: the team-composition SVGs are group-agnostic (R-011).

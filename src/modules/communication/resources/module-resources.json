@@ -15,28 +15,21 @@
       "id": "TaskCompleted:task-completed.js",
       "source_path": "hooks/agent-team/dist/task-completed.js",
       "resource_path": "resources/hooks/agent-team/dist/task-completed.js",
-      "sha256": "c33e8233c98d05367d8e47c8a354a3a2926028e8af85167e90ca5ffd886137b6"
+      "sha256": "947333b1138a1168e0c187cea01fe9bd014d9a849f2903cc6c38ee1d50b50d04"
     },
     {
       "category": "hooks",
       "id": "TaskCreated:task-created.js",
       "source_path": "hooks/agent-team/dist/task-created.js",
       "resource_path": "resources/hooks/agent-team/dist/task-created.js",
-      "sha256": "3356640f04811e31e3a8afef700dde256561ee608399738b5320229c3612931d"
+      "sha256": "3337ee3c83197a62fb064ff511c0d42b2c739b34e0997f5653f7bf79984629b2"
     },
     {
       "category": "hooks",
       "id": "TeammateIdle:teammate-idle.js",
       "source_path": "hooks/agent-team/dist/teammate-idle.js",
       "resource_path": "resources/hooks/agent-team/dist/teammate-idle.js",
-      "sha256": "c78161b759343dc5df73cc294d4211871dc61bb49fab0039abb6e544dc18e392"
-    },
-    {
-      "category": "scripts",
-      "id": "artifact-bus-cli",
-      "source_path": "scripts/artifact-bus-cli.ts",
-      "resource_path": "resources/scripts/artifact-bus-cli.ts",
-      "sha256": "96da8030629109ba2495ba2ee6208e5f24c15bc5f83554b29b7dc1fba5d7952a"
+      "sha256": "b541bf35fc85bade65a91def80c524a54ee3b7759e72d405028d9e9eed9f16b3"
     },
     {
       "category": "scripts",

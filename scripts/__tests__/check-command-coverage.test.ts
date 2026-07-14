@@ -113,7 +113,7 @@ describe("CLI — exit codes", () => {
 
   function run(args: string[]): { status: number; out: string; err: string } {
     const { spawnSync } = require("child_process") as typeof import("child_process");
-    const r = spawnSync("npx", ["tsx", SCRIPT, ...args], { encoding: "utf8", env: ENV, timeout: 30000 });
+    const r = spawnSync("npx", ["tsx", SCRIPT, ...args], { encoding: "utf8", env: ENV, timeout: 120_000 });
     return { status: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
   }
 

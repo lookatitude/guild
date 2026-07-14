@@ -21016,10 +21016,13 @@ var StdioServerTransport = class {
 
 // src/index.ts
 function resolveCwd(cwdArg) {
+  if (cwdArg) {
+    return path.resolve(cwdArg);
+  }
   if (process.env.GUILD_TELEMETRY_CWD) {
     return path.resolve(process.env.GUILD_TELEMETRY_CWD);
   }
-  return cwdArg ? path.resolve(cwdArg) : process.cwd();
+  return process.cwd();
 }
 function runsDir(cwd) {
   return path.join(cwd, ".guild", "runs");
@@ -21036,7 +21039,7 @@ function normalizeEvent(raw) {
   if (e.tool === void 0 && e.event === "hook_event" && typeof e.hook_name === "string") {
     e.tool = e.hook_name;
   }
-  if (e.ok === void 0 && typeof e.status === "string") {
+  if (e.ok === void 0 && typeof e.status === "string" && e.status !== "n/a") {
     e.ok = e.status === "ok";
   }
   if (e.ms === void 0) {
@@ -21096,8 +21099,9 @@ function computeStats(runId, events) {
   const filesTouchedCount = events.filter(
     (e) => e.tool === "Write" || e.tool === "Edit"
   ).length;
-  const errors = events.filter((e) => e.ok === false).length;
-  const okRate = events.length > 0 ? (events.length - errors) / events.length : 1;
+  const okDefined = events.filter((e) => e.ok === true || e.ok === false);
+  const errors = okDefined.filter((e) => e.ok === false).length;
+  const okRate = okDefined.length > 0 ? (okDefined.length - errors) / okDefined.length : 1;
   return {
     runId,
     startedAt,
@@ -21228,7 +21232,7 @@ function buildServer() {
     "trace_summary",
     {
       title: "Summarize a Guild run",
-      description: "Return the stored summary.md for a run if present, otherwise synthesize one from events.ndjson using the same logic as scripts/trace-summarize.ts. Does not write anything.",
+      description: "Return the stored summary.md for a run if present, otherwise synthesize one from logs/v1.4-events.jsonl (falling back to legacy events.ndjson) using the same logic as scripts/trace-summarize.ts. Does not write anything.",
       inputSchema: {
         run_id: external_exports.string().min(1).describe("The run identifier"),
         cwd: external_exports.string().optional().describe("Override consuming-repo root")
@@ -21247,7 +21251,9 @@ function buildServer() {
       }
       const events = readEvents(runDir);
       if (events.length === 0) {
-        return errorResult(`No events.ndjson found for run: ${run_id}`);
+        return errorResult(
+          `No logs/v1.4-events.jsonl or events.ndjson found for run: ${run_id}`
+        );
       }
       const summary = buildSummary(run_id, events);
       return jsonResult({ run_id, source: "synthesized", summary });

@@ -187,7 +187,7 @@ describe("Claude HostAdapter concrete parity", () => {
       "createDefaultHostAdapters",
       "createAllHostAdapters",
     ];
-    const res = spawnSync("rg", ["-n", symbols.join("|"), "scripts", "-g*.ts"], {
+    const res = spawnSync("git", ["grep", "-nE", symbols.join("|"), "--", "scripts/*.ts", "scripts/**/*.ts"], {
       cwd: PLUGIN_ROOT,
       encoding: "utf8",
     });
@@ -288,7 +288,7 @@ describe("Claude HostAdapter concrete parity", () => {
       ).toBe(true);
       expect(
         fs.existsSync(
-          path.join(dest, "src", "modules", "distribution", "workflows", "installer-contract.ts")
+          path.join(dest, "src", "modules", "distribution", "workflows", "per-host-packaging.ts")
         )
       ).toBe(true);
       expect(
@@ -429,9 +429,6 @@ describe("Claude HostAdapter concrete parity", () => {
         )
       ).toBe(true);
       expect(
-        fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "runtime-adapters.ts"))
-      ).toBe(true);
-      expect(
         fs.existsSync(path.join(dest, "src", "modules", "host-runtime", "workflows", "host-adapter-contract.ts"))
       ).toBe(true);
       expect(
@@ -547,7 +544,7 @@ describe("Claude HostAdapter concrete parity", () => {
           {
             cwd: pkg.dir,
             encoding: "utf8",
-            env: { ...process.env, npm_config_cache: "/private/tmp/guild-npm-cache" },
+            env: { ...process.env, npm_config_cache: require("node:path").join(require("node:os").tmpdir(), "guild-npm-cache") },
             maxBuffer: 10 * 1024 * 1024,
           }
         );

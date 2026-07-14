@@ -139,9 +139,9 @@ sub-answer for that sub-question only** — it is not re-run wholesale
 query the knowledge base first (`guild-memory` BM25 over `.guild/wiki/` +
 `kg-query` over the recall projection `knowledge-recall.json`) for that stage's
 task. If recall returns
-≥1 chunk scoring **≥ `models.recallScoreThreshold`** (default `0.4`; pointer to
-ADR §10), use the recalled chunk(s) + file references and **skip the full
-read** — reinforcing the existing *"trust the script, do not re-read source"*
+≥1 chunk AND the result-level `topScore` is **≥ `models.recallScoreThreshold`**
+(default `0.4`; pointer to ADR §10), use the recalled chunk(s) + file references
+and **skip the full read** — reinforcing the existing *"trust the script, do not re-read source"*
 rule. The script halves are unaffected.
 
 **One-pass three-store update (candidates only — SC-2).** A deep learn run

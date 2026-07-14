@@ -31,7 +31,7 @@ const SCRIPT = path.resolve(__dirname, "../write-task-run.ts");
 const NODE_ENV = {
   ...process.env,
   NODE_NO_WARNINGS: "1",
-  PATH: "/opt/homebrew/bin:/usr/bin:/bin",
+  PATH: `${require("node:path").dirname(process.execPath)}:${process.env["PATH"] ?? "/usr/bin:/bin"}`,
 } as NodeJS.ProcessEnv;
 
 function mkTmp(): string {
@@ -255,6 +255,117 @@ describe("write-task-run — writeTaskRun (TE-01/ARCH-1)", () => {
     const raw = fs.readFileSync(taskRunPath(root, "run-001", "backend-api-001"), "utf8");
     // YAML format: the trimmed document must START with the task_run key, not JSON `{`.
     expect(raw.trimStart().startsWith("task_run:")).toBe(true);
+  });
+});
+
+// ── R-TRACE phase field (fix: phase must NEVER be derived from initiativeId) ──
+
+function readTraceLines(root: string, runId: string): Record<string, unknown>[] {
+  const logPath = path.join(root, ".guild", "runs", runId, "logs", "v1.4-events.jsonl");
+  if (!fs.existsSync(logPath)) return [];
+  return fs
+    .readFileSync(logPath, "utf8")
+    .split("\n")
+    .filter((l) => l.trim().length > 0)
+    .map((l) => JSON.parse(l) as Record<string, unknown>);
+}
+
+describe("write-task-run — guild.trace.dispatch.v1 phase field (TE-01 fix)", () => {
+  const tmpDirs: string[] = [];
+  afterAll(() => tmpDirs.forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
+  const mkRoot = () => {
+    const d = mkTmp();
+    tmpDirs.push(d);
+    return d;
+  };
+
+  it("defaults the dispatch trace event's phase to 'execute' when no phase param is given", () => {
+    const root = mkRoot();
+    writeTaskRun(root, "run-phase-001", "backend-api-001", BASE_PARAMS);
+    const lines = readTraceLines(root, "run-phase-001");
+    const dispatchEvents = lines.filter((l) => l["schema_version"] === "guild.trace.dispatch.v1");
+    expect(dispatchEvents).toHaveLength(1);
+    expect(dispatchEvents[0]!["phase"]).toBe("execute");
+  });
+
+  it("honors an explicit phase param instead of deriving it from initiativeId", () => {
+    const root = mkRoot();
+    writeTaskRun(root, "run-phase-002", "backend-api-001", {
+      ...BASE_PARAMS,
+      initiativeId: "init-alpha",
+      phase: "review",
+    });
+    const lines = readTraceLines(root, "run-phase-002");
+    const dispatchEvents = lines.filter((l) => l["schema_version"] === "guild.trace.dispatch.v1");
+    expect(dispatchEvents).toHaveLength(1);
+    // The bug this fixes: phase used to be (initiativeId ?? "execute").replace(...),
+    // so it would have read "init-alpha" here instead of the real phase "review".
+    expect(dispatchEvents[0]!["phase"]).toBe("review");
+    expect(dispatchEvents[0]!["phase"]).not.toBe("init-alpha");
+  });
+
+  it("still defaults phase to 'execute' when initiativeId is set but phase is omitted", () => {
+    const root = mkRoot();
+    writeTaskRun(root, "run-phase-003", "backend-api-001", {
+      ...BASE_PARAMS,
+      initiativeId: "init-bravo",
+    });
+    const lines = readTraceLines(root, "run-phase-003");
+    const dispatchEvents = lines.filter((l) => l["schema_version"] === "guild.trace.dispatch.v1");
+    expect(dispatchEvents[0]!["phase"]).toBe("execute");
+    expect(dispatchEvents[0]!["phase"]).not.toBe("init-bravo");
+  });
+});
+
+describe("write-task-run — CLI --phase flag (TE-01 fix)", () => {
+  const tmpDirs: string[] = [];
+  afterAll(() => tmpDirs.forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
+  const mkRoot = () => {
+    const d = mkTmp();
+    tmpDirs.push(d);
+    return d;
+  };
+
+  it("plumbs --phase through to the dispatch trace event", () => {
+    const root = mkRoot();
+    const result = spawnSync(
+      "npx",
+      [
+        "tsx",
+        SCRIPT,
+        "--cwd", root,
+        "--run-id", "run-cli-phase-001",
+        "--task-id", "backend-001",
+        "--specialist", "backend",
+        "--phase", "review",
+      ],
+      { env: NODE_ENV, encoding: "utf8" }
+    );
+    expect(result.status).toBe(0);
+    const lines = readTraceLines(root, "run-cli-phase-001");
+    const dispatchEvents = lines.filter((l) => l["schema_version"] === "guild.trace.dispatch.v1");
+    expect(dispatchEvents).toHaveLength(1);
+    expect(dispatchEvents[0]!["phase"]).toBe("review");
+  });
+
+  it("defaults --phase to 'execute' when omitted", () => {
+    const root = mkRoot();
+    const result = spawnSync(
+      "npx",
+      [
+        "tsx",
+        SCRIPT,
+        "--cwd", root,
+        "--run-id", "run-cli-phase-002",
+        "--task-id", "backend-001",
+        "--specialist", "backend",
+      ],
+      { env: NODE_ENV, encoding: "utf8" }
+    );
+    expect(result.status).toBe(0);
+    const lines = readTraceLines(root, "run-cli-phase-002");
+    const dispatchEvents = lines.filter((l) => l["schema_version"] === "guild.trace.dispatch.v1");
+    expect(dispatchEvents[0]!["phase"]).toBe("execute");
   });
 });
 

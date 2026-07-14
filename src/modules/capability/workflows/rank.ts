@@ -109,8 +109,10 @@ export function backendForMode(mode: AgentMode): BackendCapability | null {
 // (scripts/lib/capability/tier-defaults.ts), which reads the tier→model slots from
 // the HOST_REGISTRY_ROWS at runtime. No hand-typed model names here.
 // Adding a host means editing HOST_REGISTRY_ROWS only — zero edits here.
-// Parity proof: rearch-tier-defaults-parity.test.ts asserts computed == prior literals
-// for all 9 hosts (anti-vacuous: a divergent row fails the test).
-export function getDefaultModelTierMap(host: HostKind): Record<Tier, string> {
+// G4b: the map is now HONEST — a host whose registry row has no Guild-mapped model
+// at a tier (codex-cli, the new wrapped-CLI hosts) returns `null`, not a Claude
+// model name (see tier-defaults.ts `tierDefaults()` doc comment). Only a HostKind
+// with NO registry row at all still falls back to CLAUDE_TIER_FALLBACK.
+export function getDefaultModelTierMap(host: HostKind): Record<Tier, string | null> {
   return tierDefaultsForHost(host);
 }

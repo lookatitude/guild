@@ -1,10 +1,14 @@
 ---
-title: Testing policy
-category: standards
+type: standard
+owner: plugin-engineer
 confidence: high
-updated: 2026-04-05
 source_refs:
   - .guild/raw/2026-03-18-testing-summit.md
+created_at: 2026-04-05
+updated: 2026-04-05
+expires_at: null
+supersedes: null
+sensitivity: internal
 ---
 
 # Testing policy

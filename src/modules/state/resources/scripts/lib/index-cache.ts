@@ -10,15 +10,10 @@ export {
   resolveMainRepoRoot,
   ensureKgIndex,
   ensureKgProjectionIndex,
-  ensureKlIndex,
-  ensureRunProvenanceIndex,
   ensureWikiFtsIndex,
-  ensureFederationWikiCache,
 } from "../../src/modules/state/workflows/index-cache";
 export type {
   IndexBlock,
   CacheStatus,
   CacheResult,
-  FederationWikiHit,
-  FederationWikiCacheResult,
 } from "../../src/modules/state/workflows/index-cache";

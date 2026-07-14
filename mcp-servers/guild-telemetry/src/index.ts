@@ -22,8 +22,9 @@
  * and imports no recorder code.
  *
  * CWD resolution (priority):
- *   1. GUILD_TELEMETRY_CWD env var (tests)
- *   2. per-tool `cwd` arg
+ *   1. Explicit per-tool `cwd` arg (wins — required for federated per-child
+ *      cwd fan-out over a long-lived server)
+ *   2. GUILD_TELEMETRY_CWD env var (tests, when no cwd arg is given)
  *   3. process.cwd()
  *
  * Invariants:
@@ -83,10 +84,13 @@ interface TelemetryEvent {
 // ─── CWD + runs dir ──────────────────────────────────────────────────────
 
 function resolveCwd(cwdArg?: string): string {
+  if (cwdArg) {
+    return path.resolve(cwdArg);
+  }
   if (process.env.GUILD_TELEMETRY_CWD) {
     return path.resolve(process.env.GUILD_TELEMETRY_CWD);
   }
-  return cwdArg ? path.resolve(cwdArg) : process.cwd();
+  return process.cwd();
 }
 
 function runsDir(cwd: string): string {
@@ -111,13 +115,19 @@ function eventsFilePath(runDir: string): string | null {
  * rows already carry tool/specialist/ok/ms, so this is a no-op for them; v1.4
  * rows gain `tool` (from hook_name), `ok` (from status), and `ms` (from
  * latency_ms/duration_ms) so the summary/query paths work unchanged.
+ *
+ * status "n/a" means "not applicable" — neither a success nor a failure (e.g.
+ * a tool_call whose result isn't measured pass/fail). It is intentionally
+ * left OUT of the tool/status -> ok mapping so `e.ok` stays `undefined`
+ * rather than `false`; computeStats excludes ok-undefined events from the
+ * ok_rate denominator so an "n/a" status never deflates ok_rate as an error.
  */
 function normalizeEvent(raw: Record<string, unknown>): TelemetryEvent {
   const e = { ...raw } as TelemetryEvent;
   if (e.tool === undefined && e.event === "hook_event" && typeof e.hook_name === "string") {
     e.tool = e.hook_name;
   }
-  if (e.ok === undefined && typeof e.status === "string") {
+  if (e.ok === undefined && typeof e.status === "string" && e.status !== "n/a") {
     e.ok = e.status === "ok";
   }
   if (e.ms === undefined) {
@@ -205,8 +215,12 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
   const filesTouchedCount = events.filter(
     (e) => e.tool === "Write" || e.tool === "Edit"
   ).length;
-  const errors = events.filter((e) => e.ok === false).length;
-  const okRate = events.length > 0 ? (events.length - errors) / events.length : 1;
+  // ok_rate is scoped to events with a defined ok/error verdict — status
+  // "n/a" (neither ok nor error, see normalizeEvent) leaves `ok` undefined
+  // and must not count in either the numerator or the denominator.
+  const okDefined = events.filter((e) => e.ok === true || e.ok === false);
+  const errors = okDefined.filter((e) => e.ok === false).length;
+  const okRate = okDefined.length > 0 ? (okDefined.length - errors) / okDefined.length : 1;
 
   return {
     runId,
@@ -403,8 +417,9 @@ function buildServer(): McpServer {
       title: "Summarize a Guild run",
       description:
         "Return the stored summary.md for a run if present, otherwise " +
-        "synthesize one from events.ndjson using the same logic as " +
-        "scripts/trace-summarize.ts. Does not write anything.",
+        "synthesize one from logs/v1.4-events.jsonl (falling back to legacy " +
+        "events.ndjson) using the same logic as scripts/trace-summarize.ts. " +
+        "Does not write anything.",
       inputSchema: {
         run_id: z.string().min(1).describe("The run identifier"),
         cwd: z.string().optional().describe("Override consuming-repo root"),
@@ -423,7 +438,9 @@ function buildServer(): McpServer {
       }
       const events = readEvents(runDir);
       if (events.length === 0) {
-        return errorResult(`No events.ndjson found for run: ${run_id}`);
+        return errorResult(
+          `No logs/v1.4-events.jsonl or events.ndjson found for run: ${run_id}`
+        );
       }
       const summary = buildSummary(run_id, events);
       return jsonResult({ run_id, source: "synthesized", summary });

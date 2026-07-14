@@ -18,7 +18,7 @@ Four sources, all materialized under `.guild/runs/<run-id>/` by the time this sk
 1. `.guild/runs/<run-id>/summary.md` — the compact run summary produced by `scripts/trace-summarize.ts` from `events.ndjson`. Contains frontmatter (`run_id`, `started_at`, `ended_at`, `duration_ms`, `event_count`, `specialists_dispatched`, `tools_used`, `files_touched_count`, `errors`, `ok_rate`) plus body sections (Timeline, Specialist activity, Notable events, Reflection hints). Reflect reads this instead of the raw event log so it stays grep-able. **P6 enrichment planned:** `capture-telemetry.ts` does not yet emit per-skill trigger counts or context-bundle sizes, so those signals come from handoff receipts (§8.2 `followups:` / `assumptions:`) and from the verify.md report — not from summary.md today. When P6 extends the telemetry schema, this skill's routing will prefer the richer summary fields.
 2. `.guild/runs/<run-id>/handoffs/*.md` — per-specialist handoff receipts per `§8.2`. Provides `changed_files`, `assumptions`, `evidence`, and `followups`. Followups are the richest signal for proposal categories below. When a receipt is consumed, the embedded ```` ```guild.handoff.v2 ```` JSON block is the machine truth a consumer reads; the `guild.handoff_receipt.v1` YAML frontmatter is human-review context only (see §"Handoff contract" of the communication format policy). Read these §8.2 fields from that one embedded envelope — a frontmatter-only receipt with no embedded v2 block is not a valid machine receipt.
 3. `.guild/runs/<run-id>/verify.md` — from `guild:verify-done`. Confirms the run actually passed (reflect never fires on a failed run, by the hook gate, but re-check the overall status line defensively) and carries the non-blocking followups that the verify step forwarded.
-4. `.guild/runs/<run-id>/learn/harvest-candidates.json` — **preferred upstream when present** (SC-C from learn-knowledge-convergence). Written by `guild:learn-harvest` when `LearningCheckpoint` detected signal. When this file exists, populate proposal categories directly from its `reflection_candidates` array rather than re-extracting from the raw handoffs — `harvest-candidates.json` already carries structured `category`, `description`, `evidence_quote`, `source_refs`, and `significance` per entry. Source 2 (raw handoffs) is used as fallback when `harvest-candidates.json` is absent or predates this contract.
+4. `.guild/runs/<run-id>/learn/harvest-candidates.json` — **preferred upstream when present** (SC-C from learn-knowledge-convergence). Written by `guild:learn-harvest` when it is explicitly invoked at a phase boundary or run close (not auto-routed by `LearningCheckpoint`, which only routes verdicts to the reflections queue). When this file exists, populate proposal categories directly from its `reflection_candidates` array rather than re-extracting from the raw handoffs — `harvest-candidates.json` already carries structured `category`, `description`, `evidence_quote`, `source_refs`, and `significance` per entry. Source 2 (raw handoffs) is used as fallback when `harvest-candidates.json` is absent or predates this contract.
 
 ## Proposal categories
 
@@ -95,9 +95,34 @@ Reflect writes exactly ONE reflection per run and never modifies prior reflectio
 
 If you notice a pattern worth aggregating, emit the per-run evidence and stop. Do not pre-emptively collapse into a single cross-run proposal.
 
+After this reflection is written, run the deterministic cross-run aggregator so the
+§11.1 threshold is counted by tooling, not recalled in-context:
+
+```
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/analyze-runs.ts --cwd <repo-root>
+```
+
+It reads every `.guild/reflections/*.md`'s `proposals.skill_improvement` /
+`proposals.missing_specialist` frontmatter plus handoff `status: escalate`
+receipts, and writes `.guild/evolve/analyze-runs-latest.md` (PROPOSAL-ONLY —
+never mutates a skill/agent, never writes to `.guild/wiki/`). Name that path in
+the handoff so `/guild:evolve`'s threshold read has a fresh aggregate to
+consume.
+
 ## Non-destructive rule
 
-This skill NEVER writes to `.guild/wiki/`, NEVER edits an existing skill or agent file, NEVER creates a new task under `.guild/runs/`, and NEVER mutates a handoff receipt or `verify.md`. Output is limited to `.guild/reflections/<run-id>.md`. Promotion of any proposal into durable memory is `guild:wiki-ingest`'s job (for sourced knowledge) or `guild:decisions`'s job (for team decisions). Skill/agent edits are `guild:evolve-skill` / `guild:create-specialist` in P6. If you find yourself wanting to fix a skill inline, stop — write the proposal and let evolve pick it up.
+This skill NEVER writes to `.guild/wiki/`, NEVER edits an existing skill or agent file, NEVER creates a new task under `.guild/runs/`, and NEVER mutates a handoff receipt or `verify.md`. Output is limited to `.guild/reflections/<run-id>.md` plus the feedback-routing artifacts under `.guild/feedback/<run-id>/` (findings.json + triage output — see §Feedback routing; still nothing durable, nothing external without the operator gate). Promotion of any proposal into durable memory is `guild:wiki-ingest`'s job (for sourced knowledge) or `guild:decisions`'s job (for team decisions). Skill/agent edits are `guild:evolve-skill` / `guild:create-specialist` in P6. If you find yourself wanting to fix a skill inline, stop — write the proposal and let evolve pick it up.
+
+## Feedback routing — project vs plugin (deterministic, consent-gated)
+
+After the reflection is written, route any finding that smells like a **Guild plugin defect** (broken flow, host-adapter gap, unsafe default, portability bug — vs project-local knowledge) through the deterministic feedback pipeline. Never eyeball the routing and never file anything yourself:
+
+1. Write the candidate findings as a `RunLearningFinding[]` JSON array to `.guild/feedback/<run-id>/findings.json` (fields: `id`, `summary`, `details?`, `evidence_refs?`, `affected_artifacts?`, `proposed_change?` — cite the artifact paths you actually saw; the paths drive classification).
+2. Run the classifier: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/feedback-triage.ts triage --run-id <run-id> --findings .guild/feedback/<run-id>/findings.json`. It classifies each finding (`workspace_project | plugin | mixed | ambiguous`, code not prose), and for plugin/mixed writes a **sanitized** issue draft (private paths/tokens/emails redacted by the run-export redaction stack) to `.guild/feedback/<run-id>/<finding-id>.draft.md`. Nothing leaves the machine.
+3. `workspace_project` findings → the normal project learning gate (wiki-ingest / decisions). `ambiguous` → surface to the operator as triage questions.
+4. For each plugin/mixed draft: **ASK THE OPERATOR** — show the draft path + title and ask whether Guild may file it as a GitHub issue (it contains no user-specific information; say so). On an explicit yes: `… feedback-triage.ts file --run-id <run-id> --finding <id> --approve "<operator>"`. On no: `--deny [reason]` (recorded). **Non-interactive session ⇒ never file** — leave the drafts pending and name them in the handoff.
+
+The CLI is the consent choke-point: it structurally refuses to reach `gh issue create` without the explicit `--approve`, so a missed ask cannot leak.
 
 ## Handoff
 
@@ -107,5 +132,6 @@ Emit a `handoff` block naming the reflection path so the orchestrator can hand o
 - `reflection_path` — absolute path to `.guild/reflections/<run-id>.md`.
 - `significance` — `low` / `medium` / `high`, matching the frontmatter.
 - `proposal_counts` — a `{skill_improvement: N, missing_specialist: N, context_issues: N, followup_backlog: N}` summary so `/guild:stats` can render without re-parsing.
+- `pending_plugin_feedback` — finding ids with sanitized drafts awaiting the operator's file/deny decision (empty when none; never auto-filed).
 
 For P5 this is a forward reference: `/guild:stats` and `/guild:evolve` land in P6. If neither is installed, stop after writing the reflection and return its path to the user.

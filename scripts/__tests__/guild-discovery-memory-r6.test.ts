@@ -261,19 +261,31 @@ describe("R6 .guild write locations and benchmark artifact fixture", () => {
       .toBe(path.join(cwd, ".guild", "tools", "search.json"));
   });
 
-  it("rejects project-created artifacts outside active .guild or under plugin install dir", () => {
+  it("rejects project-created artifacts outside active .guild or under a plugin INSTALL dir (no .git)", () => {
     const cwd = repo();
-    const pluginInstall = path.join(cwd, "plugin-install");
-    fs.mkdirSync(path.join(pluginInstall, ".git"), { recursive: true });
+    // A true install cache has NO .git — that is the R6 rejection case. It must
+    // live OUTSIDE any .git-having ancestor, or guild discovery legitimately
+    // climbs to the parent repo and the artifact lands outside the install dir.
+    const pluginInstall = mkTmp();
+    tmpDirs.push(pluginInstall);
     expect(() => assertProjectCreatedArtifactPath(path.join(cwd, "AGENTS.md"), cwd)).toThrow(/active \.guild/);
     expect(() => resolveGuildArtifactPath({ cwd: pluginInstall, kind: "agent", slug: "x", pluginInstallRoot: pluginInstall }))
       .toThrow(/plugin install dir/);
   });
 
+  it("ALLOWS a plugin SOURCE CHECKOUT (has .git) to write its own .guild (self-build exemption)", () => {
+    const cwd = repo();
+    const sourceCheckout = path.join(cwd, "plugin-src");
+    fs.mkdirSync(path.join(sourceCheckout, ".git"), { recursive: true });
+    // Self-build: the plugin repo is simultaneously the consuming project.
+    expect(resolveGuildArtifactPath({ cwd: sourceCheckout, kind: "agent", slug: "x", pluginInstallRoot: sourceCheckout }))
+      .toBe(path.join(sourceCheckout, ".guild", "agents", "x.md"));
+  });
+
   it("uses plugin install env vars as a default rejection boundary", () => {
     const cwd = repo();
-    const pluginInstall = path.join(cwd, "plugin-install-env");
-    fs.mkdirSync(path.join(pluginInstall, ".git"), { recursive: true });
+    const pluginInstall = mkTmp(); // install cache: no .git, no .git ancestor
+    tmpDirs.push(pluginInstall);
     const old = process.env["GUILD_PLUGIN_ROOT"];
     process.env["GUILD_PLUGIN_ROOT"] = pluginInstall;
     try {

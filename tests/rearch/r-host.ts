@@ -204,8 +204,11 @@ function prove(): void {
       ` is "${realTiers.cheap}", NOT "${SYNTHETIC_CHEAP}" — injection is load-bearing`,
   );
   proveAssert(
-    realTiers.cheap === CLAUDE_TIER_FALLBACK.cheap,
-    `without injection, real pi row (null models) falls back to CLAUDE_TIER_FALLBACK.cheap="${CLAUDE_TIER_FALLBACK.cheap}"`,
+    realTiers.cheap === undefined || realTiers.cheap === null,
+    // G4b tier-honesty: a real registry row with null models NO LONGER backfills
+    // Claude model names (that was the audited cross-host model-id leak) — the
+    // un-injected value is now empty, which still proves injection is load-bearing.
+    `without injection, real pi row (null models) yields NO model (got "${realTiers.cheap}") — Claude-name backfill removed by design`,
   );
 
   // (b) WITH injection: synthetic row yields nano/midi/maxi.

@@ -11,7 +11,7 @@
  * v1.4 structured-log channel (lib/v1.4/log-jsonl.ts appendEvent).
  *
  * ── BIND BY POINTER ──
- *   - ADR: docs/knowledge/decisions/v2-observability-and-replay.md
+ *   - ADR: ADR: v2-observability-and-replay (workspace wiki)
  *     (D-OBS-1 additive event fields · D-OBS-2 payload sidecar · D-OBS-6
  *      deterministic hook-side span ids).
  *   - Contracts registered in contract-map §B-post:

@@ -123,10 +123,14 @@ describe("resolveModel — null tier-slot fill merge precedence", () => {
     const m = resolveModel("mid", codexHost(), { mid: { codex: "gpt-4o-2026" } });
     expect(m).toBe("gpt-4o-2026");
   });
-  it("falls back to the built-in claude default when the manifest tier is empty", () => {
-    // TE-07: use canonical tier_models field
+  it("G4b: returns null (not a Claude model) when the manifest tier is empty and the registry has no model mapped for this host", () => {
+    // TE-07: use canonical tier_models field. codex-cli's registry row has
+    // models.powerful.model === null, so the built-in default is HONESTLY null —
+    // a codex lane no longer silently gets handed "opus" (the host-reachability
+    // audit's "router hands a codex lane model:'sonnet'" finding, same bug at the
+    // powerful tier). See src/modules/capability/workflows/tier-defaults.ts.
     const h = codexHost({ tier_models: { cheap: "", mid: "", powerful: "" } });
-    expect(resolveModel("powerful", h)).toBe("opus");
+    expect(resolveModel("powerful", h)).toBeNull();
   });
 });
 
@@ -140,13 +144,41 @@ describe("route — single-host (cross_host disabled, the default)", () => {
     expect(d.rejected.some((r) => r.hostKind === "codex")).toBe(true);
   });
 
-  it("TE-02: degrades (not throws) when only a cross-host-disabled codex is present", () => {
-    // codex is filtered by cross_host.enabled=false; no claude host → degrade to codex
-    const d = route(lane(), [codexHost()], baseOpts);
+  it("throws — a cross-host-disabled codex is a hard POLICY exclusion, never a least-bad degrade target", () => {
+    // codex is filtered by cross_host.enabled=false; it is policy-excluded, not
+    // merely unqualified, so there is no policy-eligible host left to degrade to.
+    expect(() => route(lane(), [codexHost()], baseOpts)).toThrow(RouteError);
+    try {
+      route(lane(), [codexHost()], baseOpts);
+      throw new Error("expected route() to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(RouteError);
+      expect((err as RouteError).rejected.some((r) => r.hostKind === "codex" && /cross-host/.test(r.reason))).toBe(
+        true
+      );
+    }
+  });
+
+  it("policy-excluded host never wins least-bad ranking, even when it would score higher", () => {
+    // claude fails a CAPABILITY gate (no "powerful" tier) but is policy-eligible;
+    // codex would outrank it via adversarial_review affinity but is policy-excluded
+    // (cross_host disabled). The fix: policy gates apply BEFORE ranking, so the
+    // degrade target must be the policy-eligible (if imperfect) claude, never codex.
+    const noPowerfulClaude = host({
+      tier_models: { cheap: "haiku", mid: "sonnet", powerful: "" },
+      supported_tiers: ["cheap", "mid"],
+    });
+    const d = route(
+      lane({ tier: "powerful", workType: "adversarial_review" }),
+      [noPowerfulClaude, codexHost()],
+      baseOpts
+    );
     expect(d.degraded).toBe(true);
     expect(d.independence).toBe("weak");
-    expect(d.hostKind).toBe("codex"); // only candidate
-    expect(d.rejected.length).toBeGreaterThan(0);
+    expect(d.hostKind).toBe("claude");
+    expect(
+      d.rejected.some((r) => r.hostKind === "codex" && /cross-host disabled/.test(r.reason))
+    ).toBe(true);
   });
 });
 
@@ -282,15 +314,21 @@ describe("route — manifest freshness (CR-5)", () => {
     expect(d2.hostKind).toBe("codex"); // fresh via detected_at fallback
   });
 
-  it("treats a missing/unparseable timestamp as stale — TE-02: degrades instead of throwing", () => {
-    // Single host with no parseable timestamp: stale → no qualifier → degrade to it.
+  it("treats a missing/unparseable timestamp as stale — a hard POLICY gate, so a single stale host throws", () => {
+    // Single host with no parseable timestamp: staleness is a hard policy gate
+    // (same category as cross-host-disabled), so with no other policy-eligible
+    // host present there is nothing to degrade to — route() throws RouteError
+    // rather than silently trusting an unverifiable manifest.
     // TE-07: use canonical advertised_at field
     const h = host({ advertised_at: "" });
-    const d = route(lane(), [h], opts);
-    expect(d.degraded).toBe(true);
-    expect(d.independence).toBe("weak");
-    expect(d.hostKind).toBe("claude");
-    expect(d.rejected.some((r) => r.reason.match(/stale/i))).toBe(true);
+    expect(() => route(lane(), [h], opts)).toThrow(RouteError);
+    try {
+      route(lane(), [h], opts);
+      throw new Error("expected route() to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(RouteError);
+      expect((err as RouteError).rejected.some((r) => r.reason.match(/stale/i))).toBe(true);
+    }
   });
 
   it("a custom TTL re-admits a manifest within the window", () => {
@@ -373,15 +411,18 @@ describe("route — TE-03: RoutingDecision.degraded + independence fields", () =
   });
 
   it("degraded path: degraded=true, independence=weak", () => {
-    const d = route(lane(), [codexHost()], baseOpts); // codex only, cross-host off
+    // policy-eligible (cross-host enabled) but capability-deficient (no agent_team)
+    // → degrades on a CAPABILITY gap, not a policy exclusion.
+    const d = route(lane({ mode: "team" }), [codexHost()], { ...baseOpts, crossHostEnabled: true });
     expect(d.degraded).toBe(true);
     expect(d.independence).toBe("weak");
   });
 
   it("onDecision receives the degradation flags (TE-03 persistence path)", () => {
     const seen: RoutingDecision[] = [];
-    const d = route(lane(), [codexHost()], {
+    const d = route(lane({ mode: "team" }), [codexHost()], {
       ...baseOpts,
+      crossHostEnabled: true,
       onDecision: (x) => seen.push(x),
     });
     expect(seen).toHaveLength(1);
@@ -391,16 +432,20 @@ describe("route — TE-03: RoutingDecision.degraded + independence fields", () =
   });
 
   it("degraded decision notes mention weak-independence signal", () => {
-    const d = route(lane(), [codexHost()], baseOpts);
+    const d = route(lane({ mode: "team" }), [codexHost()], { ...baseOpts, crossHostEnabled: true });
     expect(d.notes.join(" ")).toMatch(/weak.independen/i);
   });
 
-  it("cross-host enabled: picks the best-ranked candidate when all degrade", () => {
-    // All stale — degradation picks highest-scored (claude tiebreaks over codex)
-    // TE-07: use canonical advertised_at field
-    const staleC = host({ advertised_at: STALE });
-    const staleK = codexHost({ advertised_at: STALE });
-    const d = route(lane(), [staleK, staleC], { ...baseOpts, crossHostEnabled: true });
+  it("cross-host enabled: picks the best-ranked candidate when all degrade (capability gap, not policy)", () => {
+    // Both policy-eligible (fresh, cross-host enabled) but neither supports the
+    // "powerful" tier — a capability gap, so ranking proceeds and claude wins
+    // the tiebreak.
+    const noPowerfulClaude = host({ supported_tiers: ["cheap", "mid"] });
+    const noPowerfulCodex = codexHost({ supported_tiers: ["cheap", "mid"] });
+    const d = route(lane({ tier: "powerful" }), [noPowerfulCodex, noPowerfulClaude], {
+      ...baseOpts,
+      crossHostEnabled: true,
+    });
     expect(d.degraded).toBe(true);
     expect(d.hostKind).toBe("claude"); // claude wins tiebreak
   });
@@ -549,11 +594,12 @@ describe("planTeamRouting — ARCH-6: per-specialist tier", () => {
   });
 
   it("ARCH-6: planTeamRouting degraded path also sets degraded+independence correctly", () => {
-    // Only a codex host, cross-host off → every lane degrades
+    // Cross-host enabled but codex lacks agent_team for a team-mode lane → every
+    // lane degrades on a capability gap (policy-eligible throughout).
     const routes = planTeamRouting(
       [spec("backend", { host_kind: "claude", tier: "mid" })],
       [codexHost()],
-      { ...baseOpts, localHostId: "claude" }
+      { ...baseOpts, localHostId: "claude", crossHostEnabled: true, mode: "team" }
     );
     expect(routes[0].decision.degraded).toBe(true);
     expect(routes[0].decision.independence).toBe("weak");

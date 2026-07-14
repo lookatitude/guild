@@ -4,7 +4,7 @@
  * TDD suite for comms-format-lint.ts (U5a — warn-mode lint core).
  *
  * Policy refs:
- *   docs/knowledge/decisions/communication-format-policy.md
+ *   ADR: communication-format-policy (workspace wiki)
  *   .guild/initiatives/active/communication-format-standardization/definition-ledger.md
  *   .guild/initiatives/active/communication-format-standardization/yaml-reader-inventory.json
  *
@@ -876,7 +876,7 @@ describe("import-safe core (FIX B)", () => {
         "const { lintCommsFormat } = require('./comms/comms-format-lint'); process.exit(0);",
       ],
       {
-        cwd: "/Users/miguelp/Projects/guild/plugin/scripts",
+        cwd: require("node:path").resolve(__dirname, "../.."),
         encoding: "utf8",
         timeout: 15000,
       }
@@ -896,7 +896,7 @@ describe("import-safe core (FIX B)", () => {
       "npx",
       ["tsx", "comms/comms-format-lint.cli.ts", "--paths", receiptPath],
       {
-        cwd: "/Users/miguelp/Projects/guild/plugin/scripts",
+        cwd: require("node:path").resolve(__dirname, "../.."),
         encoding: "utf8",
         timeout: 15000,
       }
@@ -957,7 +957,7 @@ describe("WARN mode — non-blocking contract", () => {
 
 describe("U5b ENFORCE mode — CLI exit-code contract", () => {
   const { spawnSync } = require("child_process");
-  const CLI_CWD = "/Users/miguelp/Projects/guild/plugin/scripts";
+  const CLI_CWD = require("node:path").resolve(__dirname, "../..");
 
   function runCli(args: string[]): { status: number | null; combined: string } {
     const result = spawnSync(

@@ -1,0 +1,85 @@
+# test-suites.yml — run the plugin's six Jest projects on every PR/push to next & main.
+#
+# WHY THIS EXISTS (plugin-audit-remediation, 2026-07-12): the plugin ships six independent
+# Jest projects (~290 test files) but NOTHING in CI ran them — only clra-conformance
+# (clra-gate.yml, a 6-pattern subset) and the tsx rearch rails (rearch-rails.yml) were gated,
+# so the Jest suites rotted undetected on `next`. This workflow closes that gap: it runs each
+# project on its own package-lock so a red suite blocks the channel PR.
+#
+# One job per project (matrix, fail-fast: false) so every project reports independently and a
+# single red project does not mask the others. `scripts` and `tests` run with --runInBand: both
+# contain git working-tree-vs-HEAD drift guards (tests/universal-host/p2-w{2,3}-sc*-live-surface-guard,
+# p2-w1-sc9; scripts lifecycle/registry parity) that must not race a sibling worker's transient
+# filesystem writes across a shared checkout. The other four projects are hermetic and run parallel.
+#
+# Node 20 matches the other workflows (comms-*, doc-sync, dot-guild-policy, rearch-rails).
+
+name: test suites
+
+on:
+  pull_request:
+    branches: [next, main]
+  push:
+    branches: [next, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-suites-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jest:
+    name: jest (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --runInBand: these two projects carry git worktree-vs-HEAD drift guards that must
+          # not race parallel workers on a shared checkout.
+          - project: scripts
+            extra: "--runInBand"
+          - project: tests
+            extra: "--runInBand"
+          # Hermetic projects — default parallel workers are safe.
+          - project: hooks
+            extra: ""
+          - project: hooks/agent-team
+            extra: ""
+          - project: mcp-servers/guild-memory
+            extra: ""
+          - project: mcp-servers/guild-telemetry
+            extra: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # drift guards resolve pinned baseline SHAs from history
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install dependencies (project + cross-project sources it compiles)
+        # ts-jest suites compile across project boundaries (hooks tests import
+        # scripts/lib; tests/ imports scripts/lib; agent-team imports hooks/lib),
+        # so runtime deps like js-yaml must exist in the SOURCE project's
+        # node_modules, not just the matrix leg's own.
+        run: |
+          for dir in scripts hooks hooks/agent-team "${{ matrix.project }}"; do
+            case " $done_dirs " in *" $dir "*) continue;; esac
+            done_dirs="$done_dirs $dir"
+            if [ -f "$dir/package-lock.json" ]; then
+              (cd "$dir" && (npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline))
+            elif [ -f "$dir/package.json" ]; then
+              (cd "$dir" && npm install --prefer-offline)
+            fi
+          done
+
+      - name: Run ${{ matrix.project }} Jest suite
+        working-directory: ${{ matrix.project }}
+        run: npx jest --ci --silent --watchman=false ${{ matrix.extra }}

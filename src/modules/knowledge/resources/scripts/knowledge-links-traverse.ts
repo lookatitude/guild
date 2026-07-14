@@ -19,11 +19,38 @@
  * mirroring lib/domain.appendKnowledgeLinks), classifies node kinds, and
  * BFS-traverses from a task-id to compute reachable kinds.
  *
+ * G2b-4 fix: load/append/write now delegate to the shared
+ * learn/lib/knowledge-links-io helper so the on-disk top-level version key
+ * stays `schema_version` (standardized across all producers) instead of this
+ * module's previous private `version` key — which `tombstoneLinks` would
+ * silently persist on rewrite even over a `schema_version`-keyed file,
+ * dropping the other key entirely. This module's own public shape
+ * (`KnowledgeLinksDoc.version`, `loadKnowledgeLinks`, `appendBatch`) is
+ * unchanged for existing callers/tests — only the on-disk key is standardized.
+ *
  * Zero runtime deps (Node builtins only).
+ *
+ * CLI (plugin-audit-remediation G5a, 2026-07 — the VC-K2 connectivity check
+ * this header has always claimed, now invocable): reads
+ * `<cwd>/.guild/indexes/knowledge-links.json` and reports whether the given
+ * task-id reaches all 4 VC-K2 node kinds. ADVISORY ONLY — always exits 0;
+ * the JSON `connected` field carries the verdict. Wired as an optional
+ * post-checkpoint step in skills/meta/learning-checkpoint/SKILL.md
+ * §"Validation (VC-K2/VC-K4/VC-K7)".
+ *
+ * Usage:
+ *   npx tsx scripts/knowledge-links-traverse.ts --cwd <repo-root> --task-id <id> [--json]
  */
 
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+import {
+  loadKnowledgeLinksDoc,
+  writeKnowledgeLinksDoc,
+  appendKnowledgeLinksBatch,
+  KNOWLEDGE_LINKS_SCHEMA_VERSION,
+} from "./learn/lib/knowledge-links-io";
 
 /** Closed edge-type set — continuous-knowledge-and-learning-loop.md §"CR-A #2". */
 export const CLOSED_EDGE_TYPES: ReadonlySet<string> = new Set([
@@ -79,38 +106,23 @@ export function classifyNodeKind(id: string): NodeKind {
   return "other";
 }
 
-/** Load knowledge-links.json; returns an empty v1 doc if absent/corrupt. */
+/**
+ * Load knowledge-links.json; returns an empty v1 doc if absent/corrupt.
+ * Delegates to the shared knowledge-links-io reader, which tolerates both
+ * the current `schema_version` key and the legacy `version` key on read.
+ */
 export function loadKnowledgeLinks(file: string): KnowledgeLinksDoc {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-    if (parsed && Array.isArray(parsed.links)) {
-      return { version: String(parsed.version ?? "guild.knowledge_links.v1"), links: parsed.links };
-    }
-  } catch {
-    /* absent or corrupt → empty (derived index, safe) */
-  }
-  return { version: "guild.knowledge_links.v1", links: [] };
+  const shared = loadKnowledgeLinksDoc(file);
+  return { version: shared.schema_version, links: shared.links };
 }
 
 /**
  * APPEND-ONLY batch write into knowledge-links.json. Dedupes on from|to|type
  * so re-runs are idempotent (mirrors lib/domain.appendKnowledgeLinks).
+ * Delegates to the shared helper, which always writes `schema_version`.
  */
 export function appendBatch(file: string, batch: KnowledgeLink[]): { added: number; total: number } {
-  const doc = loadKnowledgeLinks(file);
-  const existing = new Set(doc.links.map((l) => `${l.from}|${l.to}|${l.type}`));
-  let added = 0;
-  for (const link of batch) {
-    const k = `${link.from}|${link.to}|${link.type}`;
-    if (!existing.has(k)) {
-      existing.add(k);
-      doc.links.push(link);
-      added++;
-    }
-  }
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(doc, null, 2) + "\n", "utf8");
-  return { added, total: doc.links.length };
+  return appendKnowledgeLinksBatch(file, batch);
 }
 
 /** Active (non-tombstoned) links — what every recall/traversal path should use. */
@@ -144,8 +156,11 @@ export function tombstoneLinks(
     n++;
   }
   if (n > 0) {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(doc, null, 2) + "\n", "utf8");
+    // G2b-4 fix: write via the shared helper (always `schema_version`) —
+    // the previous raw fs.writeFileSync(doc) persisted THIS module's local
+    // `version` key, silently dropping `schema_version` on rewrite whenever
+    // the on-disk file had been written by a schema_version-keyed producer.
+    writeKnowledgeLinksDoc(file, { schema_version: KNOWLEDGE_LINKS_SCHEMA_VERSION, links: doc.links });
   }
   return { tombstoned: n };
 }
@@ -198,4 +213,47 @@ export function reachableKinds(doc: KnowledgeLinksDoc, start: string): Set<NodeK
 export function isFullyConnected(doc: KnowledgeLinksDoc, taskId: string): boolean {
   const kinds = reachableKinds(doc, taskId);
   return REQUIRED_KINDS.every((k) => kinds.has(k));
+}
+
+// ── CLI entry (advisory VC-K2 connectivity check; always exits 0) ──────────
+
+function parseFlag(argv: string[], flag: string): string | undefined {
+  const i = argv.indexOf(flag);
+  return i >= 0 && i + 1 < argv.length ? argv[i + 1] : undefined;
+}
+
+function main(): void {
+  const argv = process.argv.slice(2);
+  const cwd = parseFlag(argv, "--cwd") ?? process.cwd();
+  const taskId = parseFlag(argv, "--task-id");
+  const asJson = argv.includes("--json");
+
+  if (!taskId) {
+    process.stderr.write("[knowledge-links-traverse] --task-id is required\n");
+    process.stdout.write(JSON.stringify({ error: "missing --task-id" }) + "\n");
+    return; // advisory: never a hard failure exit
+  }
+
+  const klPath = path.join(cwd, ".guild", "indexes", "knowledge-links.json");
+  if (!fs.existsSync(klPath)) {
+    const result = { task_id: taskId, connected: false, reachable_kinds: [], required_kinds: REQUIRED_KINDS, missing_kinds: REQUIRED_KINDS, note: "no knowledge-links.json found" };
+    process.stdout.write(JSON.stringify(result, null, asJson ? 2 : 0) + "\n");
+    return;
+  }
+
+  const doc = loadKnowledgeLinks(klPath);
+  const kinds = reachableKinds(doc, taskId);
+  const missing = REQUIRED_KINDS.filter((k) => !kinds.has(k));
+  const result = {
+    task_id: taskId,
+    connected: missing.length === 0,
+    reachable_kinds: [...kinds].sort(),
+    required_kinds: REQUIRED_KINDS,
+    missing_kinds: missing,
+  };
+  process.stdout.write(JSON.stringify(result, null, asJson ? 2 : 0) + "\n");
+}
+
+if (require.main === module) {
+  main();
 }

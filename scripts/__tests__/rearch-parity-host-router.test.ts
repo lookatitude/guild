@@ -102,8 +102,15 @@ describe("host-router shim — parity after W3 split", () => {
   });
 
   it("route() degrades (not throws) when hosts present but none qualify", () => {
-    const staleHost = makeHost({ advertised_at: "2020-01-01T00:00:00Z" });
-    const decision = route(BASIC_LANE, [staleHost], { now: NOW });
+    // Capability gap (missing tier support), NOT a policy exclusion — the host
+    // stays policy-eligible so degrade-not-throw still applies. (A staleness/
+    // cross-host POLICY exclusion is a hard filter now — see the anti-vacuity
+    // control below — and would throw instead.)
+    const limitedHost = makeHost({
+      supported_tiers: ["cheap"],
+      tier_models: { cheap: "haiku", mid: "", powerful: "" },
+    });
+    const decision = route(BASIC_LANE, [limitedHost], { now: NOW });
     expect(decision.degraded).toBe(true);
     expect(decision.independence).toBe("weak");
   });
@@ -187,16 +194,17 @@ describe("host-router shim — parity after W3 split", () => {
   // Proves the tests are not trivially passing: a STALE host produces a DIFFERENT
   // outcome (degraded decision) than the baseline fresh host. If route() were a
   // no-op, both would produce the same result.
-  it("ANTI-VACUITY CONTROL: stale host produces degraded=true (different from baseline fresh host)", () => {
+  it("ANTI-VACUITY CONTROL: stale host is hard-policy-excluded — throws, unlike the fresh baseline", () => {
     const fresh = makeHost({ advertised_at: FRESH });
     const stale = makeHost({ advertised_at: "2020-01-01T00:00:00Z" });
     const freshDecision = route(BASIC_LANE, [fresh], { now: NOW });
-    const staleDecision = route(BASIC_LANE, [stale], { now: NOW });
-    // Fresh → not degraded; stale → degraded. Different outcomes prove non-vacuity.
+    // Fresh → succeeds, not degraded.
     expect(freshDecision.degraded).toBe(false);
-    expect(staleDecision.degraded).toBe(true);
-    // The two decision objects are structurally different
     expect(freshDecision.independence).toBe("strong");
-    expect(staleDecision.independence).toBe("weak");
+    // Stale manifest is a hard POLICY gate (untrustworthy data), not a soft
+    // capability gap — no policy-eligible host remains, so route() throws
+    // rather than silently degrading to it. Different outcomes (value vs.
+    // exception) prove non-vacuity.
+    expect(() => route(BASIC_LANE, [stale], { now: NOW })).toThrow(RouteError);
   });
 });

@@ -29,9 +29,22 @@ function spec(overrides: Partial<PaneSpec> = {}): PaneSpec {
 }
 
 describe("registry — antigravity-2 + pi registered, gemini discarded", () => {
-  it("buildAdapters serves claude/codex/antigravity-2/pi (no gemini)", () => {
+  // G4b (host-reachability): buildAdapters() now ALSO constructs a generic
+  // WrappedCliPaneAdapter for every dispatch_selectable "self"-bound CLI registry
+  // row with no bespoke class — cursor/github-copilot/opencode/rovo-dev. This is
+  // the fix, not a regression: those 4 hosts previously had NO adapter at all.
+  it("buildAdapters serves claude/codex/antigravity-2/pi + the 4 generic wrapped-CLI hosts (no gemini)", () => {
     const a = buildAdapters();
-    expect(Object.keys(a).sort()).toEqual(["antigravity-2", "claude", "codex", "pi"]);
+    expect(Object.keys(a).sort()).toEqual([
+      "antigravity-2",
+      "claude",
+      "codex",
+      "cursor",
+      "github-copilot",
+      "opencode",
+      "pi",
+      "rovo-dev",
+    ]);
     // gemini was discarded (no longer a HostKind) — cast to probe the discarded key.
     expect((a as Record<string, unknown>).gemini).toBeUndefined();
   });

@@ -255,6 +255,8 @@ const EXPLICIT: Record<string, ConfigUiMeta> = {
   "defaults.resume.enabled": meta({ group: "cross_host_runtime", label: "Run resume enabled", control: "boolean", safety_class: "normal" }),
   "defaults.heartbeat_timeout_ms": meta({ group: "cross_host_runtime", label: "Heartbeat timeout (ms)", control: "number", safety_class: "advanced" }),
   "defaults.capability_manifest_ttl_s": meta({ group: "cross_host_runtime", label: "Capability manifest TTL (s)", control: "number", safety_class: "advanced" }),
+  "defaults.update.mode": meta({ group: "cross_host_runtime", label: "Update check mode (auto|notify|off)", control: "enum", safety_class: "normal" }),
+  "defaults.update.cadence_hours": meta({ group: "cross_host_runtime", label: "Update check cadence (hours)", control: "number", safety_class: "advanced" }),
 
   // ── Safety / platform ──────────────────────────────────────────────────
   "security.bypass_permissions_policy": meta({ group: "safety_platform", label: "Bypass-permissions policy", control: "enum", safety_class: "security_sensitive" }),

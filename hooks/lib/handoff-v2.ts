@@ -7,7 +7,7 @@
  * ## Handoff receipt contract (OD-2, operator-confirmed 2026-06-02)
  *
  * Canonical reference:
- *   docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"
+ *   ADR: communication-format-policy (workspace wiki) §"Handoff contract"
  *
  * The normative rule (communication-format-policy §7):
  *   `guild.handoff_receipt.v1` is the durable human-review wrapper. Its YAML
@@ -54,9 +54,9 @@ export type HandoffStatus = "done" | "blocked" | "escalate";
  *
  * This is the machine-truth schema embedded inside a `guild.handoff_receipt.v1`
  * wrapper as a fenced JSON block. Schema authority:
- *   docs/knowledge/decisions/communication-format-policy.md §"Handoff contract" (OD-2)
+ *   ADR: communication-format-policy (workspace wiki) §"Handoff contract" (OD-2)
  *
- * Field definitions: docs/knowledge/decisions/cost-aware-tiering-and-lean-context.md §5
+ * Field definitions: ADR: cost-aware-tiering-and-lean-context (workspace wiki) §5
  */
 export interface HandoffV2 {
   /** Self-versioned discriminator; always "guild.handoff.v2". */
@@ -277,7 +277,7 @@ export function isHandoffV2(value: unknown): value is HandoffV2 {
  * Extract a `guild.handoff.v2` envelope from a markdown receipt string.
  *
  * Implements the extraction step of the OD-2 rule
- * (docs/knowledge/decisions/communication-format-policy.md §"Handoff contract"):
+ * (ADR: communication-format-policy (workspace wiki) §"Handoff contract"):
  * looks ONLY for an embedded fenced JSON block tagged `guild.handoff.v2`:
  *
  * ```guild.handoff.v2

@@ -46,8 +46,11 @@ next free port when bound), `--no-import` (skip the lifecycle bulk import),
 `--dry-run` (print the full plan — resolved checkout, port, run-dir count,
 exact serve command — and execute nothing), `--stop` (managed shutdown, §2b).
 
-The launcher is deterministic: it resolves the guild-benchmark checkout in order
-(1) workspace sibling `<root>/../guild-benchmark`, (1b) cached clone `<root>/.guild/cache/benchmark`; starts
+The launcher is deterministic: it resolves the benchmark checkout in order
+(1) workspace sibling `<root>/../benchmark`, (1b) in-repo `<root>/benchmark`
+(the guild self-repo, where `benchmark/` is a subdirectory), (2) cached clone
+`<root>/.guild/cache/benchmark` (each candidate's `package.json` name must match
+`@guild/benchmark`); starts
 `npm run benchmark -- serve --port <p> --project-root <root>` detached (the
 server must outlive the launcher so the user can browse) but **managed, never
 a fire-and-forget daemon**: server stdout/stderr go to

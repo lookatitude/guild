@@ -18,7 +18,7 @@
  * Pattern mirrors comms-format-lint.cli.ts (U5) — same --paths, --diff-range,
  * --enforce flags; same path-splitting on comma.
  *
- * Policy ref: docs/knowledge/decisions/communication-format-policy.md
+ * Policy ref: ADR: communication-format-policy (workspace wiki)
  *   §"Invariants / non-goals" (the five protected surfaces)
  * Lib:        scripts/comms/no-accidental-write.ts
  * Owner:      tooling-engineer.
@@ -94,7 +94,7 @@ export function main(args: string[] = process.argv.slice(2)): void {
     console.error(
       `\n[no-accidental-write] FAIL — ${result.violations.length} violation(s) detected. ` +
         "A comms-format changeset must not alter the schema or format of protected surfaces. " +
-        "See docs/knowledge/decisions/communication-format-policy.md §\"Invariants / non-goals\"."
+        "See ADR: communication-format-policy (workspace wiki) §\"Invariants / non-goals\"."
     );
     process.exit(1);
   } else {

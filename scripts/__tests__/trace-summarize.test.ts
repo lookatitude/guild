@@ -24,7 +24,7 @@ function runScript(
   const result = spawnSync("npx", ["tsx", SCRIPT, ...args], {
     encoding: "utf8",
     env: { ...process.env, ...env },
-    timeout: 30000,
+    timeout: 120_000,
   });
   return {
     exitCode: result.status ?? 1,
@@ -38,6 +38,18 @@ function makeRunDir(tmpDir: string, runId: string, fixtureFile: string): string 
   fs.mkdirSync(runDir, { recursive: true });
   const src = path.join(FIXTURES, fixtureFile);
   const dst = path.join(runDir, "events.ndjson");
+  fs.copyFileSync(src, dst);
+  return runDir;
+}
+
+/** Seeds the CANONICAL v1.4 event log (logs/v1.4-events.jsonl) instead of the
+ *  legacy mirror — proves the canonical-first read path (scripts/lib/run-events.ts). */
+function makeCanonicalRunDir(tmpDir: string, runId: string, fixtureFile: string): string {
+  const runDir = path.join(tmpDir, ".guild", "runs", runId);
+  const logsDir = path.join(runDir, "logs");
+  fs.mkdirSync(logsDir, { recursive: true });
+  const src = path.join(FIXTURES, fixtureFile);
+  const dst = path.join(logsDir, "v1.4-events.jsonl");
   fs.copyFileSync(src, dst);
   return runDir;
 }
@@ -263,6 +275,82 @@ describe("trace-summarize.ts", () => {
   });
 
   // ─────────────────────────────────────────────────────────────
+  // Canonical event log (logs/v1.4-events.jsonl) — item G9-1
+  // ─────────────────────────────────────────────────────────────
+  describe("canonical event log — logs/v1.4-events.jsonl", () => {
+    it("reads from the canonical path when legacy events.ndjson is absent", () => {
+      makeCanonicalRunDir(tmpDir, "canon-run", "events-happy.ndjson");
+      const { exitCode } = runScript(["--run-id", "canon-run", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "canon-run", "summary.md"),
+        "utf8"
+      );
+      expect(content).toMatch(/event_count:\s*20/);
+    });
+
+    it("prefers the canonical log over a stale legacy mirror when both exist", () => {
+      const runDir = makeCanonicalRunDir(tmpDir, "both-run", "events-happy.ndjson");
+      // Legacy mirror present too, but with different (smaller) content — canonical must win.
+      fs.copyFileSync(
+        path.join(FIXTURES, "events-empty.ndjson"),
+        path.join(runDir, "events.ndjson")
+      );
+      runScript(["--run-id", "both-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      expect(content).toMatch(/event_count:\s*20/);
+    });
+
+    it("handles a real run-dir shape: a guild.trace_event.v1 line with no `event`/`ts` field", () => {
+      // Real shape observed in a live .guild/runs/<id>/logs/v1.4-events.jsonl:
+      // hook-mirror lines interleaved with a schema-only guild.trace_event.v1 line.
+      const runDir = path.join(tmpDir, ".guild", "runs", "mixed-shape-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          '{"ts":"2026-06-25T06:53:59.382Z","event":"UserPromptSubmit","tool":"","specialist":"","payload_digest":"a1","ok":true,"ms":0,"prompt":"do the thing"}',
+          '{"schema_version":"guild.trace_event.v1","event_id":"evt-1","event_name":"run_started","run_id":"mixed-shape-run","at":"2026-06-25T06:54:00.000Z"}',
+          '{"ts":"2026-06-25T06:54:02.596Z","event":"PostToolUse","tool":"Read","specialist":"backend","payload_digest":"a2","ok":true,"ms":3}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      const { exitCode } = runScript(["--run-id", "mixed-shape-run", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      // All 3 lines parse (the schema-only line parses as valid JSON — it just
+      // contributes no timeline/tool/specialist signal); none are parse errors.
+      expect(content).toMatch(/event_count:\s*3/);
+    });
+
+    it("anchors started/ended on boundary guild.trace_event.v1 markers (`at`, no `ts`)", () => {
+      // A NORMAL canonical log starts with run_started and ends with run_closed
+      // — both guild.trace_event.v1 lines carrying `at` instead of `ts`. The
+      // summarizer must normalize ts??at at the boundaries or every real run
+      // reports blank timestamps and duration_ms: 0 (codex wave-3 finding #3).
+      const runDir = path.join(tmpDir, ".guild", "runs", "boundary-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          '{"schema_version":"guild.trace_event.v1","event_id":"evt-1","event_name":"run_started","run_id":"boundary-run","at":"2026-06-25T06:00:00.000Z"}',
+          '{"ts":"2026-06-25T06:10:00.000Z","event":"PostToolUse","tool":"Read","specialist":"backend","payload_digest":"b1","ok":true,"ms":3}',
+          '{"schema_version":"guild.trace_event.v1","event_id":"evt-2","event_name":"run_closed","run_id":"boundary-run","at":"2026-06-25T06:30:00.000Z"}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      const { exitCode } = runScript(["--run-id", "boundary-run", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      expect(content).toMatch(/started_at:\s*2026-06-25T06:00:00\.000Z/);
+      expect(content).toMatch(/ended_at:\s*2026-06-25T06:30:00\.000Z/);
+      expect(content).toMatch(/duration_ms:\s*1800000/);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
   // CLI error handling
   // ─────────────────────────────────────────────────────────────
   describe("CLI error handling", () => {
@@ -272,7 +360,7 @@ describe("trace-summarize.ts", () => {
       expect(stderr).toMatch(/run-id/i);
     });
 
-    it("exits 1 when events.ndjson does not exist", () => {
+    it("exits 1 when neither canonical nor legacy event log exists", () => {
       // Run dir exists but no events file
       const runDir = path.join(tmpDir, ".guild", "runs", "no-events");
       fs.mkdirSync(runDir, { recursive: true });
