@@ -181,16 +181,30 @@ Day-to-day workflow (features, fixes, docs — everything non-release):
 4. Merge via the PR (squash or merge per case). The work is now on the beta
    channel for testing; it reaches stable only with the next release.
 
-Release workflow (operator-driven, when `next` is ready):
-1. Cut `release/vX.Y.Z` from `next`; bump `plugin.json` + `marketplace.json`
-   versions; generate the changelog section + notes seed with
-   `npx tsx scripts/release-changelog.ts --version vX.Y.Z --write` (then
-   `--notes` for the PR body) and polish both.
+Release workflow (operator-driven, when `next` is ready). A release adds only
+**two commits** on top of `next` — a version bump and a changelog — so the whole
+cut stays linear and the sync-back is a fast-forward, not a merge that loops content
+back:
+1. Cut `release/vX.Y.Z` from `next`. Add exactly two commits: (a) bump
+   `plugin.json` + `marketplace.json` (+ regenerate `guild.inventory.json` via
+   `npm run build:inventory` — deterministic, keeps the zero-epoch `generated_at`);
+   (b) the changelog section + notes seed via
+   `npx tsx scripts/release-changelog.ts --version vX.Y.Z --write` (then `--notes`
+   for the PR body); polish both. **No live-surface guard pin re-ratification is
+   needed** — the `p2-w2-sc5`/`p2-w3-sc6` guards tolerate a pure `version`-field
+   bump in the two `.claude-plugin` manifests (they only re-red on a real
+   command/skill/agent surface change). `dist/` is gitignored — do not commit it;
+   CI regenerates it from the bumped inventory.
 2. PR `release/vX.Y.Z` → `main` (the ONLY PR shape `main` accepts — enforced by
    `.github/workflows/branch-policy.yml`).
 3. Merge → `release.yml` auto-tags and publishes the GitHub Release (PR body =
    release notes).
-4. Sync back: merge `main` into `next` so both channels share the release point.
+4. Sync back by **fast-forward**, not a merge commit: `next` is a strict ancestor
+   of the release point, so advance it with `git merge --ff-only <release-tip>`.
+   Because `next` is push-protected, land it either as a sync-back PR merged with
+   *Rebase and merge* (no merge commit), or with the `GUILD_ALLOW_PUSH_MAIN=1`
+   bootstrap override for a direct `--ff-only` push. Both channels now share the
+   exact release commit with zero extra merge nodes.
 
 **Mechanical enforcement.** `branch-policy.yml` rejects any PR into `main` whose
 head is not `release/vX.Y.Z`; the repo-checked-in `pre-push` hook at

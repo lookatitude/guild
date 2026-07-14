@@ -27,6 +27,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
@@ -122,6 +123,60 @@ function classifyFrozen(rows: Row[]): Row[] {
   return rows.filter((r) => FROZEN_PATHS.some((f) => r.path === f || r.path.startsWith(f + "/")));
 }
 
+// ── Release version-bump tolerance ─────────────────────────────────────────
+// A release bumps the `version` field inside `.claude-plugin/plugin.json` +
+// `marketplace.json` — a legitimate, release-only change to files this guard otherwise
+// freezes byte-identical. Without this, every release would force a pin re-ratification
+// commit. `stripVersions()` masks EVERY `version` key (plugin.json's top-level;
+// marketplace.json's `plugins[].version`) and NOTHING else, so a PURE version bump is
+// exempted while any other manifest change — a command/skill/agent declaration, name,
+// source, description — still differs and stays a violation.
+const VERSION_EXEMPT_MANIFESTS = new Set([".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"]);
+
+function stripVersions(jsonText: string): string {
+  const walk = (o: unknown): unknown => {
+    if (Array.isArray(o)) return o.map(walk);
+    if (o && typeof o === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+        out[k] = k === "version" ? " VERSION " : walk(v);
+      }
+      return out;
+    }
+    return o;
+  };
+  return JSON.stringify(walk(JSON.parse(jsonText)));
+}
+
+// True IFF `p` is a version-bearing manifest whose ONLY diff vs `baseline` is the version
+// field. Added/deleted/unreadable/parse-fail all return false (fail-closed → stays a violation).
+function isVersionOnlyManifestChange(baseline: string, p: string): boolean {
+  if (!VERSION_EXEMPT_MANIFESTS.has(p)) return false;
+  let base: string;
+  let cur: string;
+  try {
+    base = git(["show", `${baseline}:${p}`]);
+    cur = fs.readFileSync(path.join(PLUGIN_ROOT, p), "utf8");
+  } catch {
+    return false;
+  }
+  try {
+    return stripVersions(base) === stripVersions(cur);
+  } catch {
+    return false;
+  }
+}
+
+// Real frozen-surface violations vs `baseline`, with pure version-bump manifest changes
+// removed. classifyFrozen stays pure (synthetic-row anti-vacuity below still exercises it);
+// the version filter is applied only to REAL diff rows here.
+function frozenSurfaceViolations(baseline: string): Row[] {
+  const rows = diffRows(baseline, FROZEN_PATHS).filter(
+    (r) => !(r.status === "M" && isVersionOnlyManifestChange(baseline, r.path)),
+  );
+  return classifyFrozen(rows);
+}
+
 /**
  * Pure classifier for the live `skills/**` rule (frozen as-ratified: empty allowlist ⇒ additive-only
  * degenerates to ZERO permitted deltas). Returns the non-addition rows
@@ -191,7 +246,7 @@ describe("SC-W3-6 — pinned ratified-v2 baseline is real (guard not vacuous)", 
 describe("SC-W3-6 (A) — DECISIVE: .claude-plugin/** + commands/** byte-identical (STRICT)", () => {
   it("shows ZERO added/changed/deleted files under the frozen cutover surfaces", () => {
     const baseline = resolveBaseline();
-    const violations = classifyFrozen(diffRows(baseline, FROZEN_PATHS));
+    const violations = frozenSurfaceViolations(baseline);
     if (violations.length > 0) {
       throw new Error(
         `SC-W3-6(A): cutover surface changed vs ${baseline} (allowlist is EMPTY):\n  ` +
@@ -219,6 +274,25 @@ describe("SC-W3-6 (A) — DECISIVE: .claude-plugin/** + commands/** byte-identic
     // vacuous). Uses an OLD ancestor anchor: the ratified baseline is recent, so scripts/ may be
     // unchanged since it — but the diff MACHINERY must still demonstrably produce rows.
     expect(diffRows(DIFF_SANITY_ANCHOR, ["scripts", "templates"]).length).toBeGreaterThan(0);
+  });
+
+  it("version-bump tolerance is SPECIFIC — exempts a pure bump, still flags a surface change", () => {
+    // plugin.json: top-level version. A pure bump masks equal; a bump that ALSO edits the
+    // `commands`/`skills`/`agents` surface must NOT be masked equal (stays a violation).
+    const a = JSON.stringify({ name: "guild", version: "2.1.0", commands: ["a.md", "b.md"] });
+    const bumpOnly = JSON.stringify({ name: "guild", version: "2.2.0", commands: ["a.md", "b.md"] });
+    const bumpPlusSurface = JSON.stringify({ name: "guild", version: "2.2.0", commands: ["a.md", "c.md"] });
+    expect(stripVersions(a)).toBe(stripVersions(bumpOnly));
+    expect(stripVersions(a)).not.toBe(stripVersions(bumpPlusSurface));
+    // marketplace.json: NESTED plugins[].version is masked; `source` (and all else) is not.
+    const mA = JSON.stringify({ plugins: [{ name: "guild", version: "2.1.0", source: "x" }] });
+    const mBump = JSON.stringify({ plugins: [{ name: "guild", version: "2.2.0", source: "x" }] });
+    const mSource = JSON.stringify({ plugins: [{ name: "guild", version: "2.2.0", source: "y" }] });
+    expect(stripVersions(mA)).toBe(stripVersions(mBump));
+    expect(stripVersions(mA)).not.toBe(stripVersions(mSource));
+    // Only the two .claude-plugin manifests are version-exempt PATHS — everything else is strict.
+    expect(isVersionOnlyManifestChange("HEAD", "commands/guild.md")).toBe(false);
+    expect(isVersionOnlyManifestChange("HEAD", "skills/meta/init/SKILL.md")).toBe(false);
   });
 });
 
@@ -281,8 +355,8 @@ describe("SC-W3-6 — cutover surface frozen vs the ratified v2 baseline", () =>
   it(".claude-plugin/** + commands/** are byte-identical to the ratified v2 baseline", () => {
     const base = revParse(PINNED_BASELINE);
     expect(base).toMatch(/^[0-9a-f]{40}$/);
-    const rows = diffRows(base, FROZEN_PATHS);
-    expect(rows).toEqual([]);
+    // Byte-identical EXCEPT a pure release version bump in the two .claude-plugin manifests.
+    expect(frozenSurfaceViolations(base)).toEqual([]);
   });
 
   it("skills/** has zero delta from the ratified v2 baseline (surface frozen as-ratified)", () => {

@@ -147,6 +147,50 @@ function isAncestor(a: string, b: string): boolean {
   }
 }
 
+// ── Release version-bump tolerance ─────────────────────────────────────────
+// A release bumps the `version` field inside `.claude-plugin/plugin.json` +
+// `marketplace.json` — a legitimate, release-only change to files this guard otherwise
+// freezes byte-identical. Without this, every release would force a pin re-ratification
+// commit. `stripVersions()` masks EVERY `version` key (plugin.json's top-level;
+// marketplace.json's `plugins[].version`) and NOTHING else, so a PURE version bump is
+// exempted while any other manifest change — a command/skill/agent declaration, name,
+// source, description — still differs and stays a violation.
+const VERSION_EXEMPT_MANIFESTS = new Set([".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"]);
+
+function stripVersions(jsonText: string): string {
+  const walk = (o: unknown): unknown => {
+    if (Array.isArray(o)) return o.map(walk);
+    if (o && typeof o === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+        out[k] = k === "version" ? " VERSION " : walk(v);
+      }
+      return out;
+    }
+    return o;
+  };
+  return JSON.stringify(walk(JSON.parse(jsonText)));
+}
+
+// True IFF `p` is a version-bearing manifest whose ONLY diff vs `baseline` is the version
+// field. Added/deleted/unreadable/parse-fail all return false (fail-closed → stays a violation).
+function isVersionOnlyManifestChange(baseline: string, p: string): boolean {
+  if (!VERSION_EXEMPT_MANIFESTS.has(p)) return false;
+  let base: string;
+  let cur: string;
+  try {
+    base = git(["show", `${baseline}:${p}`]);
+    cur = fs.readFileSync(path.join(PLUGIN_ROOT, p), "utf8");
+  } catch {
+    return false;
+  }
+  try {
+    return stripVersions(base) === stripVersions(cur);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolve the diff anchor. ALWAYS the pinned ratified-v2 baseline. Validates the pin
  * is real (resolves, is an ancestor of HEAD, is NOT HEAD), and REJECTS a tampered
@@ -245,7 +289,12 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned ratified-v2 basel
     // `git diff <ref> -- paths` spans <ref>..WORKING TREE, so it catches BOTH a
     // committed AND an uncommitted live-surface mutation (the committed case is the
     // env-bypass attack this guard closes).
-    const verdict = evaluateLiveSurfaceRows(parseDiffRows(git(["diff", "--name-status", baseline, "--", ...LIVE_PATHS])));
+    // Drop pure release version-bump rows (a `.claude-plugin/*.json` whose only diff is `version`)
+    // before evaluating — evaluateLiveSurfaceRows stays pure so the synthetic anti-vacuity controls
+    // below still exercise it against a fabricated plugin.json mutation.
+    const rawRows = parseDiffRows(git(["diff", "--name-status", baseline, "--", ...LIVE_PATHS]));
+    const rows = rawRows.filter((r) => !(r.status === "M" && isVersionOnlyManifestChange(baseline, r.path)));
+    const verdict = evaluateLiveSurfaceRows(rows);
     if (verdict.violations.length > 0) {
       throw new Error(
         `SC-W2-5: live surface changed vs ${baseline} beyond the ratified additive allowlist:\n  ${verdict.violations.map((v) => v.raw).join("\n  ")}`,
@@ -310,6 +359,24 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned ratified-v2 basel
     const changedElsewhere = git(["diff", "--name-status", PRIOR_RATIFIED, "--", "scripts", "skill-src", "command-src"])
       .split("\n").map((l) => l.trim()).filter(Boolean);
     expect(changedElsewhere.length).toBeGreaterThan(0);
+  });
+
+  it("version-bump tolerance is SPECIFIC — exempts a pure bump, still flags a surface change", () => {
+    // plugin.json: top-level version masked; the `commands`/`skills`/`agents` surface is not.
+    const a = JSON.stringify({ name: "guild", version: "2.1.0", commands: ["a.md", "b.md"] });
+    const bumpOnly = JSON.stringify({ name: "guild", version: "2.2.0", commands: ["a.md", "b.md"] });
+    const bumpPlusSurface = JSON.stringify({ name: "guild", version: "2.2.0", commands: ["a.md", "c.md"] });
+    expect(stripVersions(a)).toBe(stripVersions(bumpOnly));
+    expect(stripVersions(a)).not.toBe(stripVersions(bumpPlusSurface));
+    // marketplace.json: NESTED plugins[].version is masked; `source` (and all else) is not.
+    const mA = JSON.stringify({ plugins: [{ name: "guild", version: "2.1.0", source: "x" }] });
+    const mBump = JSON.stringify({ plugins: [{ name: "guild", version: "2.2.0", source: "x" }] });
+    const mSource = JSON.stringify({ plugins: [{ name: "guild", version: "2.2.0", source: "y" }] });
+    expect(stripVersions(mA)).toBe(stripVersions(mBump));
+    expect(stripVersions(mA)).not.toBe(stripVersions(mSource));
+    // Only the two .claude-plugin manifests are version-exempt PATHS — everything else is strict.
+    expect(isVersionOnlyManifestChange("HEAD", "commands/guild.md")).toBe(false);
+    expect(isVersionOnlyManifestChange("HEAD", "skills/meta/init/SKILL.md")).toBe(false);
   });
 });
 
