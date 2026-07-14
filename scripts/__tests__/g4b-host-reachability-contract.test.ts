@@ -6,7 +6,9 @@
  * The audit finding this closes: 7 registry hosts (cursor, github-copilot, opencode,
  * rovo-dev, kiro, qoder, trae) declared `dispatch_selectable:true` but were
  * unreachable through EVERY dispatch surface — no HostKind member, no PaneAdapter, no
- * HOST_CAPABILITY_ROWS row, no guild-run HOST_CAPABILITY_ROWS row.
+ * capability-row entry (the legacy hand-authored `HOST_CAPABILITY_ROWS` map in
+ * host-capabilities-schema.ts has since been retired; guild-run-wrapper.ts now
+ * consumes the registry-derived `DERIVED_HOST_CAPABILITY_ROWS` asserted below).
  *
  * This file asserts, over the REAL SHIPPED registry (not a synthetic fixture):
  *   (1) every `dispatch_selectable:true` row resolves, via the SAME registry-bridge
@@ -52,7 +54,7 @@ import type { HostKind } from "../lib/host-types";
 // this row has adapter_binding:"self", it IS the target). No real host ever routes
 // to "agents-file" as a host_kind — a concrete AGENTS.md-consuming host would carry
 // its OWN row. This is a pre-existing, documented exception (unrelated to the 7
-// hosts this lane fixes), excluded from the per-row PaneAdapter/HOST_CAPABILITY_ROWS
+// hosts this lane fixes), excluded from the per-row PaneAdapter/DERIVED_HOST_CAPABILITY_ROWS
 // assertions below on that basis — asserted explicitly, not silently skipped.
 const PANE_DISPATCHABLE_IDS = HOST_IDS.filter(
   (id) => HOST_REGISTRY_ROWS[id].dispatch_selectable && HOST_REGISTRY_ROWS[id].surface_kind === "cli"

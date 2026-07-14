@@ -9,7 +9,6 @@ describe("host-capabilities-schema compatibility shim", () => {
     expect(shim.CLAUDE_CAPABILITIES).toBe(moduleImpl.CLAUDE_CAPABILITIES);
     expect(shim.CODEX_CAPABILITIES).toBe(moduleImpl.CODEX_CAPABILITIES);
     expect(shim.AGENTS_FILE_CAPABILITIES).toBe(moduleImpl.AGENTS_FILE_CAPABILITIES);
-    expect(shim.HOST_CAPABILITY_ROWS).toBe(moduleImpl.HOST_CAPABILITY_ROWS);
     expect(shim.REQUIRED_HOOK_EVENTS).toBe(moduleImpl.REQUIRED_HOOK_EVENTS);
     expect(shim.validateHostCapabilitiesV1).toBe(moduleImpl.validateHostCapabilitiesV1);
     expect(shim.isHostCapabilitiesV1).toBe(moduleImpl.isHostCapabilitiesV1);
@@ -25,9 +24,16 @@ describe("host-capabilities-schema compatibility shim", () => {
     expect(modulePath).toMatch(/export\s+const\s+CLAUDE_CAPABILITIES/);
   });
 
+  test("the legacy HOST_CAPABILITY_ROWS aggregate is retired, not just unreferenced", () => {
+    // Consumer-free since guild-run-wrapper.ts/permission-policy.ts moved to
+    // host-registry.ts's registry-derived DERIVED_HOST_CAPABILITY_ROWS. Assert the
+    // export is actually gone (a real retirement), not merely unused in this file.
+    expect((shim as Record<string, unknown>)["HOST_CAPABILITY_ROWS"]).toBeUndefined();
+    expect((moduleImpl as Record<string, unknown>)["HOST_CAPABILITY_ROWS"]).toBeUndefined();
+  });
+
   test("agents-file has a conservative file-surface capability row", () => {
-    const row = shim.HOST_CAPABILITY_ROWS["agents-file"];
-    expect(row).toBe(shim.AGENTS_FILE_CAPABILITIES);
+    const row = shim.AGENTS_FILE_CAPABILITIES;
     expect(shim.validateHostCapabilitiesV1(row)).toEqual({ valid: true, errors: [] });
     expect(row).toMatchObject({
       host_kind: "agents-file",

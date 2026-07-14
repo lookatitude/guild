@@ -467,7 +467,11 @@ export const CODEX_CAPABILITIES: GuildHostCapabilitiesV1 = {
 };
 
 // ---------------------------------------------------------------------------
-// PI / ANTIGRAVITY rows — target package wrapper runtime
+// Shared no-hooks constant (consumed by AGENTS_FILE_CAPABILITIES below — the
+// hand-authored PI_CAPABILITIES/ANTIGRAVITY_CAPABILITIES rows that used to
+// share this section, plus their TARGET_CLI_COMMON base, were retired: no live
+// consumer indexed them once guild-run-wrapper.ts/permission-policy.ts moved to
+// host-registry.ts's registry-derived DERIVED_HOST_CAPABILITY_ROWS)
 // ---------------------------------------------------------------------------
 
 const NO_HOOKS: HooksCaps = {
@@ -481,112 +485,6 @@ const NO_HOOKS: HooksCaps = {
   task_created: false,
   task_completed: false,
   teammate_idle: false,
-};
-
-const TARGET_CLI_COMMON = {
-  commands: { slash_commands: false, command_files: "none" },
-  skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
-  agents: { native_agents: false, agent_format: null },
-  hooks: NO_HOOKS,
-  dispatch: {
-    tmux_processes: true,
-    plain_processes: true,
-    independent_agents: false,
-    subagents: false,
-    inline: true,
-  },
-  interaction: {
-    native_questions: false,
-    terminal_prompt: true,
-    file_bus_questions: true,
-  },
-  sessions: { continue: false, resume_by_id: false, fork: false },
-  structured_output: {
-    native_json: true,
-    schema_validation: false,
-    repair_prompt: true,
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "none",
-    web: "emulated",
-    mcp: "emulated",
-  },
-  mcp: { stdio: false, http: false },
-  models: {
-    cheap: { model: null },
-    mid: { model: null },
-    powerful: { model: null },
-  },
-} satisfies Partial<GuildHostCapabilitiesV1>;
-
-export const PI_CAPABILITIES: GuildHostCapabilitiesV1 = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "pi",
-  family: "pi",
-  surface_kind: "cli",
-  package: {
-    installable: false,
-    installability: "target",
-    manifest_format: "pi-manifest",
-    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false },
-  },
-  bootstrap: {
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    prompt_transform: false,
-    wrapper_injection: true,
-  },
-  permissions: {
-    deny: true,
-    ask: true,
-    ask_mode: null,
-    accept_edits_without_prompt: false,
-    auto_approve_tools: false,
-    bypass_prompts: false,
-    bypass_sandbox: false,
-    permission_prompt_layer: false,
-    launch_modes: {},
-  },
-  ...TARGET_CLI_COMMON,
-};
-
-export const ANTIGRAVITY_CAPABILITIES: GuildHostCapabilitiesV1 = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "antigravity",
-  family: "antigravity",
-  surface_kind: "cli",
-  package: {
-    installable: false,
-    installability: "target",
-    manifest_format: "antigravity-manifest",
-    update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false },
-  },
-  bootstrap: {
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    prompt_transform: false,
-    wrapper_injection: true,
-  },
-  permissions: {
-    deny: true,
-    ask: true,
-    ask_mode: null,
-    accept_edits_without_prompt: false,
-    auto_approve_tools: false,
-    bypass_prompts: true,
-    bypass_sandbox: true,
-    permission_prompt_layer: false,
-    launch_modes: {
-      bypass_all: ["--dangerously-skip-permissions"],
-    },
-  },
-  ...TARGET_CLI_COMMON,
 };
 
 export const AGENTS_FILE_CAPABILITIES: GuildHostCapabilitiesV1 = {
@@ -658,40 +556,18 @@ export const AGENTS_FILE_CAPABILITIES: GuildHostCapabilitiesV1 = {
   },
 };
 
-/**
- * Convenience registry of the Phase-1 rows, keyed by host_kind.
- *
- * SUPERSEDED for new consumers (G4b host-reachability fix): this file cannot import
- * HOST_REGISTRY_ROWS (host-registry-schema.ts already imports FROM this file to build
- * ITS rows — the reverse import would be circular), so PI_CAPABILITIES/
- * ANTIGRAVITY_CAPABILITIES below are hand-authored and have drifted from the
- * registry's own on-host-VERIFIED overrides (sessions/permissions — the "two
- * diverged capability truths" audit finding), and this map never carries the 4
- * wrapped-CLI hosts (cursor/github-copilot/opencode/rovo-dev) added to the registry.
- * `host-registry.ts`'s `DERIVED_HOST_CAPABILITY_ROWS` is registry-derived, covers
- * all 16 registry ids + these same legacy aliases, and is what guild-run-wrapper.ts
- * and permission-policy.ts now consume. host-smoke.ts / verify-host-packages.ts
- * never imported this map (comment references only, since reconciled) — no live
- * consumer indexes it anymore; it remains only as the feedstock for the frozen
- * CLAUDE/CODEX/AGENTS_FILE constants the registry rows reference.
- *
- * Known cosmetic divergence, deliberately NOT reconciled: the pi/antigravity rows
- * below say `manifest_format: "pi-manifest"` / `"antigravity-manifest"`, while the
- * registry-derived rows say `"pi-cli-package"` / `"antigravity-cli-package"`
- * (inferredCaps `${host_kind}-package`). No consumer keys off the legacy strings —
- * every packaging/verify path (build-host-packages, verify-host-packages,
- * installer-contract, per-host-packaging, wrapped-cli-base) reads
- * `HOST_REGISTRY_ROWS[*].capabilities.package.manifest_format`, i.e. the
- * registry-derived value is the shipped truth.
- */
-export const HOST_CAPABILITY_ROWS: Record<string, GuildHostCapabilitiesV1> = {
-  claude: CLAUDE_CAPABILITIES,
-  codex: CODEX_CAPABILITIES,
-  "agents-file": AGENTS_FILE_CAPABILITIES,
-  pi: PI_CAPABILITIES,
-  antigravity: ANTIGRAVITY_CAPABILITIES,
-  "antigravity-2": ANTIGRAVITY_CAPABILITIES,
-};
+// The Phase-1 convenience registry that used to live here (`HOST_CAPABILITY_ROWS`,
+// keyed by host_kind: claude/codex/agents-file/pi/antigravity/antigravity-2) has
+// been RETIRED (G4b host-reachability fix): it never carried the 4 wrapped-CLI
+// hosts (cursor/github-copilot/opencode/rovo-dev) added to the registry, and its
+// hand-authored pi/antigravity rows had drifted from the registry's own
+// on-host-VERIFIED overrides — the "two diverged capability truths" audit
+// finding. `host-registry.ts`'s `DERIVED_HOST_CAPABILITY_ROWS` is
+// registry-derived, covers all 16 registry ids + the same legacy aliases, and
+// is what guild-run-wrapper.ts and permission-policy.ts consume today. This
+// file's `CLAUDE_CAPABILITIES`/`CODEX_CAPABILITIES`/`AGENTS_FILE_CAPABILITIES`
+// constants remain — they're the frozen feedstock host-registry-schema.ts
+// builds its own rows from.
 
 // ---------------------------------------------------------------------------
 // Validation

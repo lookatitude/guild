@@ -46,7 +46,8 @@ describe("P1 SC-1 — canonical host namespace (host-adapter migration)", () => 
     // verified-multi-host expansion (G4b): 4 wrapped-CLI hosts + 3 agents-file IDE
     // hosts joined the original 9. This test's "9 canonical ids" claim was stale —
     // the registry already carried 16 rows before this lane started; only the
-    // dispatch surfaces reaching them (HostKind/adapter/HOST_CAPABILITY_ROWS) were
+    // dispatch surfaces reaching them (HostKind/adapter/DERIVED_HOST_CAPABILITY_ROWS —
+    // the legacy hand-authored HOST_CAPABILITY_ROWS map has since been retired) were
     // the actual gap (the audit finding this lane closes).
     expect([...HOST_IDS]).toEqual([
       "claude-code-cli",
