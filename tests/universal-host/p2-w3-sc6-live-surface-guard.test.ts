@@ -12,7 +12,7 @@
  * The REAL cutover-safety gate is `build:hosts` SC-2 normalized equivalence (generated ≡ committed, GREEN);
  * this guard is the secondary tripwire for FUTURE *unintended* drift from the ratified surface.
  *
- * The guard is anchored to a HARD-PINNED baseline (`PINNED_BASELINE = 4e91770`, the ratified v2
+ * The guard is anchored to a HARD-PINNED baseline (`PINNED_BASELINE` below, the ratified
  * surface). Pinned (not env-derived) so the diff anchor cannot be moved to HEAD/worktree to hide
  * a committed live-surface mutation. A `GUILD_W3_BASELINE_REF` env var is REJECTED unless it is an
  * ancestor-or-equal of the ratified baseline and an ancestor of HEAD (never HEAD, never forward);
@@ -32,8 +32,8 @@ import * as path from "node:path";
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const FROZEN_PATHS = [".claude-plugin", "commands"]; // STRICT byte-identical
 // RE-RATIFIED 2026-06-27 (operator "ship it all in v2" directive): the cutover-surface freeze now
-// anchors to the ratified v2 surface (4e91770 — the last commit at which commands/ + skills/ settled,
-// an ancestor of HEAD), NOT the obsolete pre-Wave-3 anchor (3ce3666). Operator-directed v2 work (the
+// anchors to the ratified surface (`PINNED_BASELINE` below — the last surface-touching commit,
+// an ancestor of HEAD; originally 4e91770), NOT the obsolete pre-Wave-3 anchor (3ce3666). Operator-directed v2 work (the
 // understand→learn rename, the product loop, the ideation min-build wiring) legitimately evolved
 // commands/ + skills/ past pre-Wave-3, so freezing against it was stale. The REAL cutover-safety gate
 // is `build:hosts` SC-2 normalized equivalence (generated tree ≡ committed tree, GREEN) — this guard is the
@@ -45,7 +45,7 @@ const FROZEN_PATHS = [".claude-plugin", "commands"]; // STRICT byte-identical
 // GREEN now; it then trips the instant a NEW (unreleased) surface change lands on top. On any
 // deliberate surface change, bump this pin to that change's commit. Do NOT auto-follow HEAD — a pin
 // that chased HEAD would let a committed surface mutation hide itself (the whole reason it is pinned).
-const PINNED_BASELINE = "f252524"; // RE-RATIFIED 2026-07-12 (plugin-audit-remediation G1b) to the settled specialist-template-library surface (was 4833f69, from 2026-07-01, which predated the v2.1.0 machinery-agents/specialist-template-library split — 7 domain agents dropped from plugin.json + skills/{audit,create-specialist,diagnose,execute-plan,reflect,team-compose} evolved — leaving the old pin stale-RED on a clean checkout). 7958ed8 is the last surface-touching commit (the template-library follow-ups) and is byte-identical to the current tree; commits after it (d79cd19, d2a4ffd, 60b7b79, merge 5cbcd0c) touch only tests/scripts. NOTE: v2.1.0 (d2867f6) is NOT a valid anchor — the surface legitimately drifted past it on `next`. SC-2 normalized equivalence remains the real cutover gate.
+const PINNED_BASELINE = "d98fd40"; // RE-RATIFIED 2026-07-13 (post-merge): PR #27 (plugin-audit-remediation) was SQUASH-merged to `next`, so the previous pin f252524 (a feature-branch commit) stopped being an ancestor of `next` HEAD — stale-RED on any clean `next` checkout. d98fd40 is the squash commit itself: the last surface-touching commit on `next` history and byte-identical to the ratified remediation surface (the whole G1–G9 change set, including the surface edits f252524 carried). Commits after it (93a133f) touch only `.guild/` ledger state. Squash-merge lesson: a pin ratified on a feature branch MUST be re-ratified to the squash commit at merge time. SC-2 normalized equivalence remains the real cutover gate.
 const DIFF_SANITY_ANCHOR = "3ce3666"; // an OLD ancestor — used ONLY to prove `git diff` is wired (non-empty)
 
 // The v2 surface is now the baseline, so there are no permitted deltas FROM it — the surface is frozen
