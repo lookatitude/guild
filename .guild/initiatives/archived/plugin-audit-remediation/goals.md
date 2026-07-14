@@ -1,5 +1,11 @@
 # plugin-audit-remediation — goals (G1–G9)
 
+> **CLOSED 2026-07-14.** All 9 goals executed (3 waves, 17 lanes; PR #27), docs
+> reconciled (PR #28 + umbrella `docs/v2`), and shipped in **v2.2.0** (tag `v2.2.0`;
+> release/v2.2.0 → main PR #31, synced back PR #32). D8 close gate PASS
+> (exec✓ release✓ docs✓). Six audit-followup items also landed post-merge
+> (PRs #29, #30 + umbrella #4 + website #13). Archived.
+
 Source: full-plugin implementation audit 2026-07-12 (umbrella
 `.guild/artifacts/audits/plugin-implementation-audit-2026-07-12.md` + `.digest.txt` — the digest
 carries every finding with file:line evidence and verifier verdicts). 47 confirmed serious

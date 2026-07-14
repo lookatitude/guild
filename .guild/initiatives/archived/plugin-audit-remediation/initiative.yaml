@@ -1,10 +1,11 @@
 initiative:
   id: plugin-audit-remediation
   title: "Plugin audit remediation — close the 47 confirmed findings of the 2026-07-12 full implementation audit"
-  status: in_progress
+  status: closed                      # D8 close gate PASS 2026-07-14 (exec✓ release✓ docs✓); archived
+  closed_at: 2026-07-14
   definition_status: drafted          # goals authored from the audit report; not yet G-spec reviewed
   execution_status: done              # all 9 goals executed 2026-07-13 (3 waves, 17 lanes); PR #27 → next
-  release_status: not_released        # rides the next→main release cut (operator-driven per channel model)
+  release_status: released            # shipped in v2.2.0 (tag v2.2.0, 2026-07-14); release/v2.2.0 → main PR #31, synced back to next PR #32
   documentation_status: updated       # G7 plugin docs + umbrella docs/v2 reconciled (umbrella 16f68b6)
   scope: plugin
   created_at: 2026-07-12
