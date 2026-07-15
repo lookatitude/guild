@@ -126,6 +126,8 @@ function evaluateLiveSurfaceRows(rows: DiffRow[]): {
 // now and trips the instant a NEW (unreleased) surface change lands. Bump it to that change's commit
 // on any deliberate surface change. NEVER auto-follow HEAD (a chasing pin lets a committed surface
 // mutation hide itself — the entire reason it is pinned, not env-derived).
+// Keep a later non-surface checkpoint after the pin-ratification commit so the forward-ref
+// anti-vacuity control can exercise a real descendant that is not HEAD.
 const PINNED_BASELINE = "631e1b5"; // RE-RATIFIED 2026-07-15 for the deliberate specialist-creation authority change. Commit 631e1b5 updates the live create-specialist and team-compose skill surfaces so human-requested specialists can be registered without historical evolution evidence while evolution-proposed specialists retain the evidence gate. Pinning that surface-changing commit restores zero delta and keeps the guard strict for every subsequent change.
 
 function git(args: string[]): string {

@@ -46,6 +46,8 @@ const FROZEN_PATHS = [".claude-plugin", "commands"]; // STRICT byte-identical
 // GREEN now; it then trips the instant a NEW (unreleased) surface change lands on top. On any
 // deliberate surface change, bump this pin to that change's commit. Do NOT auto-follow HEAD — a pin
 // that chased HEAD would let a committed surface mutation hide itself (the whole reason it is pinned).
+// Keep a later non-surface checkpoint after the pin-ratification commit so the forward-ref
+// anti-vacuity control can exercise a real descendant that is not HEAD.
 const PINNED_BASELINE = "631e1b5"; // RE-RATIFIED 2026-07-15 for the deliberate specialist-creation authority change. Commit 631e1b5 updates the live create-specialist and team-compose skill surfaces so human-requested specialists can be registered without historical evolution evidence while evolution-proposed specialists retain the evidence gate. Pinning that surface-changing commit restores zero delta and keeps the guard strict for every subsequent change.
 const DIFF_SANITY_ANCHOR = "3ce3666"; // an OLD ancestor — used ONLY to prove `git diff` is wired (non-empty)
 
