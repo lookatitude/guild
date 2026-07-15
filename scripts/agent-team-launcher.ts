@@ -66,13 +66,28 @@ import {
   type HostKind,
   type RemoteHostTarget,
 } from "./lib/team-backend";
-// P1-3 A2a/A2b: dismissible detection + force-reap of dead panes.
+// P1-3 A2b: force-reap of dead panes. (Receipt-based `detectDismissible` is
+// retired from the dismiss path — dismissal is acceptance-gated in G4, below.)
 import {
-  detectDismissible,
   reapDeadMembers,
   sessionJsonPath,
   listRunnableRunIds,
 } from "./lib/reaping";
+// task-cell-runtime G4: real, confirmed pane termination (replaces signal-only
+// [DISMISS]) + the acceptance gate that authorizes it.
+import { terminatePane } from "./lib/host/tmux-backend";
+import {
+  findRunAcceptances,
+  findRunTaskCells,
+  findOrphanedAttempts,
+  readAssignmentForInstance,
+  readAttemptForInstance,
+  isTerminationAuthorized,
+  sealTerminalAttempt,
+  markAttemptOrphaned,
+  type RunAcceptance,
+  type TaskCellInstanceIds,
+} from "../src/modules/dispatch/workflows/task-cell-acceptance";
 // CH-1/CH-2: mixed-host pane adapters (claude + codex) for a mixed `host:` team.
 import { resolveAdapter } from "./lib/pane-adapter";
 // CH-1: route each specialist to its backend (local tmux vs remote) via the
@@ -87,6 +102,14 @@ import {
   buildTaskAssignment,
   writeTaskAssignment,
 } from "../src/modules/dispatch/workflows/task-assignment";
+// task-cell-runtime G3: the authoritative `guild.task_assignment.v2` channel
+// (per-attempt, one immutable file per task a specialist owns; no representative-
+// first-task collapse). Replaces v1 as the PRODUCTION write; v1 is retained above
+// only as the frozen-backend pane pointer (GUILD_TASK_ASSIGNMENT — out of G3 scope).
+import {
+  buildTaskCell,
+  writeTaskCell,
+} from "../src/modules/dispatch/workflows/task-assignment-v2";
 // R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
 import { runWithRetry, loadRetryOpts } from "./retry-lane";
 // R-016 bridge: on retry exhaustion, mark each remote lane dead via the shared writer.
@@ -134,11 +157,13 @@ interface CliArgs {
    */
   runId: string | null;
   /**
-   * P1-4: dismiss lanes with a valid handoff receipt (auto-dismiss loop).
-   * When set, requires --run-id. Reads teammates from the run's session.json,
-   * calls detectDismissible, and prints a machine-readable DISMISS line per
-   * dismissible lane. Falls through to reapDeadMembers for cleanup.
-   * Always exits 0 (maintenance op).
+   * task-cell-runtime G4: acceptance-gated teardown. When set, requires --run-id.
+   * Terminates a lane ONLY when a durable `guild.handoff_acceptance.v1` record
+   * authorizes it (accepted or rejected) — a receipt on disk alone never does (D5).
+   * Kills the shared per-specialist pane only once ALL that specialist's task-cells
+   * are terminal (G4 M2), then seals `guild.task_attempt.v1` terminal records; a
+   * kill that fails to confirm parks the attempt orphaned for `--reap` to retry.
+   * Falls through to reapDeadMembers for registry hygiene. Always exits 0.
    */
   dismissCompleted: boolean;
 }
@@ -641,6 +666,99 @@ function writeTaskAssignments(
   return written;
 }
 
+/**
+ * Emit the authoritative `guild.task_assignment.v2` channel (ADR
+ * `task-cell-runtime-contract.md` D6): ONE immutable assignment file — plus its
+ * `guild.task_attempt.v1` companion — per TASK a specialist owns. Never keyed by
+ * specialist name, never collapsed to a representative first task. A specialist
+ * owning ≥2 tasks therefore lands ≥2 distinct files at distinct canonical run-tree
+ * paths, none overwritten (P0.3 / adversarial test 1); each carries its own
+ * instance id, context pointer, and handoff path.
+ *
+ * Fail-closed (D6) — a malformed assignment or an overwrite is a HARD dispatch
+ * failure, NOT log-and-continue: `writeTaskCell` throws and the throw propagates
+ * out of `main()` to a non-zero exit. This deliberately drops the v1 writer's
+ * "warn and keep going" behavior for the v2 production path.
+ */
+function emitTaskCellsV2(
+  cwd: string,
+  runId: string,
+  slug: string,
+  specialists: Specialist[],
+  ownerMap: Map<string, string[]>,
+  orchestratorHostKind: string,
+): number {
+  let written = 0;
+  // Resolved decision 2: the launcher reuses the parent orchestrator as lead, so
+  // every cell carries a `lead_binding_id` (no distinct Team Lead instance minted).
+  const leadBindingId = `lead-binding-${safeSegment(slug)}`;
+  for (const s of specialists) {
+    const taskIds = ownerMap.get(s.name);
+    const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [s.name];
+    const hostKind = s.host_kind ?? orchestratorHostKind;
+    const hostId = hostKindToRegistryId(hostKind as HostKind) || String(hostKind);
+    const tools = s.capability_scope ?? [];
+    for (const taskId of effectiveTaskIds) {
+      const logicalTaskId = safeSegment(taskId);
+      // Fresh, per-TASK context pointer — never shared across a specialist's tasks (D3).
+      const contextRef = path.join(".guild", "context", runId, `${s.name}-${taskId}.md`);
+      const cell = buildTaskCell({
+        runId,
+        logicalTaskId,
+        taskRunId: `${logicalTaskId}.tr1`,
+        attempt: 1,
+        attemptId: `${logicalTaskId}.att1`,
+        instanceId: `${logicalTaskId}.a1.i1`,
+        cellId: `cell-${logicalTaskId}`,
+        goalId: `goal-${safeSegment(slug)}`,
+        phaseId: "build",
+        stepId: logicalTaskId,
+        teamId: safeSegment(slug),
+        workerRole: s.name,
+        specialistTypeId: s.name,
+        specialistTypeVersion: "1",
+        specialistTypeHash: `sha256:type-${safeSegment(s.name)}`,
+        specialistProfileId: s.name,
+        specialistProfileHash: `sha256:profile-${safeSegment(s.name)}`,
+        contextBundleId: contextRef,
+        contextBundleHash: `sha256:ctx-${logicalTaskId}`,
+        hostId,
+        adapterId: `${hostId}@${ADAPTER_VERSION}`,
+        hostCapabilitiesHash: "sha256:caps",
+        // objective must be non-empty (D6 fail-closed); fall back for a degenerate
+        // team file rather than dropping the lane silently.
+        objective: s.scope && s.scope.length > 0 ? s.scope : `implement ${logicalTaskId}`,
+        nonGoals: [],
+        scopePaths: [],
+        outputSchema: "guild.handoff_receipt.v1",
+        acceptanceTests: [],
+        dependencies: (s.dependsOn ?? []).map((d) => ({
+          logical_task_id: d,
+          accepted_artifact_ref: null,
+        })),
+        projection: { tools, permissions: [], recorded_losses: [] },
+        autonomyPolicy: "supervised",
+        budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
+        deadline: null,
+        leadBindingId,
+        now: () => new Date().toISOString(),
+      });
+      writeTaskCell(cwd, cell);
+      written += 1;
+    }
+  }
+  return written;
+}
+
+/**
+ * Collapse anything outside the safe path-segment class ([A-Za-z0-9_.-]) so a
+ * canonical run-tree segment is never silently rejected by `taskCellPaths`. Plan
+ * task-ids and specialist names are already slug-safe; this is defensive.
+ */
+function safeSegment(s: string): string {
+  return s.replace(/[^A-Za-z0-9_.-]/g, "_");
+}
+
 // ── Cross-host routing inputs (CH-1) ─────────────────────────────────────────
 //
 // Best-effort load of the guild.host_capability.v1 manifests the CR-1 router
@@ -881,6 +999,7 @@ async function main(): Promise<void> {
     }
 
     let totalReaped = 0;
+    let totalOrphansReaped = 0;
     for (const runId of runIds) {
       const sjPath = sessionJsonPath(cwd, runId);
       if (!fs.existsSync(sjPath)) continue;
@@ -906,26 +1025,85 @@ async function main(): Promise<void> {
             `[${result.live.join(", ") || "none"}]; nothing to reap.\n`
         );
       }
+
+      // G4 M1 — reaper RETRY on parked orphans. A dismiss whose kill did not confirm
+      // parked the attempt `orphaned` (still non-terminal). Re-attempt termination
+      // now: a pane that has since died confirms gone → seal `terminated`; one still
+      // alive is re-killed. A retry that STILL fails bumps `reap_attempts` and stays
+      // parked (adversarial test 6). This is the production end-to-end retry.
+      const orphans = findOrphanedAttempts(cwd, runId);
+      if (orphans.length > 0) {
+        const paneBySpec = new Map<string, string>();
+        try {
+          const sj = JSON.parse(fs.readFileSync(sjPath, "utf8")) as {
+            teammate_panes?: Array<{ specialist?: string; pane_id?: string }>;
+          };
+          for (const p of sj.teammate_panes ?? []) {
+            if (p.specialist && p.pane_id) paneBySpec.set(p.specialist, p.pane_id);
+          }
+        } catch { /* session.json unreadable — orphans stay parked */ }
+        const nowIso = () => new Date().toISOString();
+        for (const ids of orphans) {
+          const specialist = readAssignmentForInstance(cwd, ids)?.worker_role ?? null;
+          const paneId = specialist ? paneBySpec.get(specialist) : undefined;
+          const hasRealPane = !!paneId && !paneId.startsWith("(");
+          // No live pane (pruned/gone) → the pane died; confirm the orphan terminal.
+          if (!hasRealPane) {
+            try {
+              sealTerminalAttempt({ cwd, ids, terminal_state: "terminated", reason: "reaper: pane already gone", orphaned: true, now: nowIso });
+              totalOrphansReaped++;
+              process.stdout.write(
+                `[REAPED] run "${runId}" specialist="${specialist ?? "unknown"}" ` +
+                  `logical_task="${ids.logical_task_id}" instance="${ids.instance_id}" ` +
+                  `— orphan sealed terminated (pane already gone)\n`
+              );
+            } catch { /* best-effort */ }
+            continue;
+          }
+          const outcome = terminatePane(paneId as string);
+          if (outcome.ok && outcome.confirmed) {
+            try {
+              sealTerminalAttempt({ cwd, ids, terminal_state: "terminated", reason: "reaper retry confirmed pane death", orphaned: true, now: nowIso });
+              totalOrphansReaped++;
+              process.stdout.write(
+                `[REAPED] run "${runId}" specialist="${specialist}" ` +
+                  `logical_task="${ids.logical_task_id}" instance="${ids.instance_id}" ` +
+                  `— orphan sealed terminated (mechanism="${outcome.mechanism}")\n`
+              );
+            } catch { /* best-effort */ }
+          } else if (!outcome.degraded) {
+            try { markAttemptOrphaned(cwd, ids); } catch { /* best-effort */ }
+            process.stdout.write(
+              `[ORPHAN] run "${runId}" specialist="${specialist}" ` +
+                `instance="${ids.instance_id}" — reaper retry did not confirm; still parked (reap_attempts bumped)\n`
+            );
+          }
+          // outcome.degraded (tmux unavailable) → leave parked, no bump; retried next --reap.
+        }
+      }
     }
 
     process.stdout.write(
       `[agent-team-launcher] --reap: done. ` +
-        `${totalReaped} dead pane(s) pruned across ${runIds.length} run(s).\n`
+        `${totalReaped} dead pane(s) pruned, ${totalOrphansReaped} orphan(s) sealed terminated across ${runIds.length} run(s).\n`
     );
     process.exit(0);
   }
 
-  // ── P1-4: --dismiss-completed path ────────────────────────────────────────
-  // Resolves teammates from the run's session.json, calls detectDismissible,
-  // and emits a machine-readable DISMISS line per dismissible lane. Also runs
-  // reapDeadMembers to clean up any dead panes (the "already gone" fall-through).
+  // ── --dismiss-completed path (task-cell-runtime G4: accepted-handoff shutdown) ──
+  // Resolves the run's durable `guild.handoff_acceptance.v1` records and terminates
+  // ONLY the lanes those records authorize (a receipt on disk never authorizes
+  // dismissal — D5). Kills a shared per-specialist pane only once ALL that
+  // specialist's task-cells are terminal (G4 M2), seals `guild.task_attempt.v1`
+  // terminal records, and parks any unconfirmed kill orphaned for `--reap` to retry.
+  // Falls through to reapDeadMembers for registry hygiene.
   //
-  // NOTE (spec §4 known limitation): the launcher is a one-shot process, not a
-  // daemon; it cannot push dismissals mid-run. This mode is invoked by the lead
-  // when the teammate-idle hook emits an [AUTO-DISMISS] directive — the hook fires
-  // deterministically, the lead/launcher consumes it deterministically. That
-  // removes the agent's responsibility for the second step without adding a
-  // background reaper daemon (out of scope).
+  // NOTE (known limitation): the launcher is a one-shot process, not a daemon; it
+  // cannot push dismissals mid-run. The lead invokes this mode when the
+  // teammate-idle hook signals an acceptance-authorized idle lane — the hook decides
+  // deterministically (durable acceptance record), the launcher terminates
+  // deterministically. No background reaper daemon (the periodic `--reap` sweep,
+  // which now also retries parked orphans, covers eventual cleanup).
   //
   // Usage:
   //   agent-team-launcher.ts --dismiss-completed --run-id <id> [--cwd <path>]
@@ -950,7 +1128,7 @@ async function main(): Promise<void> {
       process.exit(0);
     }
 
-    let sessionManifest: { teammate_panes?: Array<{ specialist: string }> };
+    let sessionManifest: { teammate_panes?: Array<{ specialist: string; pane_id?: string }> };
     try {
       sessionManifest = JSON.parse(fs.readFileSync(sjPath, "utf8")) as typeof sessionManifest;
     } catch {
@@ -960,32 +1138,157 @@ async function main(): Promise<void> {
       process.exit(0);
     }
 
-    const teammates = (sessionManifest.teammate_panes ?? []).map((p) => p.specialist);
-    if (teammates.length === 0) {
+    const panes = sessionManifest.teammate_panes ?? [];
+    if (panes.length === 0) {
       process.stdout.write(
         `[agent-team-launcher] --dismiss-completed: run "${runId}" has no teammates\n`
       );
       process.exit(0);
     }
 
-    const dismissibles = detectDismissible(runDir, teammates);
-    let dismissCount = 0;
-    for (const entry of dismissibles) {
-      if (entry.dismissible) {
-        dismissCount++;
+    // ── task-cell-runtime G4 (ADR D5): acceptance-GATED, REAL termination ──────
+    // The old path emitted a signal-only `[DISMISS]` on RECEIPT existence and then
+    // relied on the reaper to prune already-dead panes — it never terminated a live
+    // worker, and a receipt on disk authorized nothing (P0.4). Now: a lane is
+    // dismissed ONLY when a durable `guild.handoff_acceptance.v1` authorizes its
+    // termination; the launcher then performs the REAL kill (terminatePane) and
+    // CONFIRMS the pane is gone before sealing the terminal `guild.task_attempt.v1`.
+    // A kill that fails to confirm parks the attempt `orphaned` for the reaper
+    // (adversarial test 6); tmux being unavailable is a recorded degradation.
+    const paneBySpecialist = new Map<string, string>();
+    for (const p of panes) {
+      if (p.pane_id) paneBySpecialist.set(p.specialist, p.pane_id);
+    }
+
+    // Only acceptances that AUTHORIZE termination (accepted OR explicitly rejected).
+    const authorized: RunAcceptance[] = findRunAcceptances(cwd, runId).filter((ra) =>
+      isTerminationAuthorized(ra.acceptance)
+    );
+
+    let terminatedCount = 0;
+    let orphanedCount = 0;
+    let deferredCount = 0;
+    const now = () => new Date().toISOString();
+    const keyOf = (i: TaskCellInstanceIds) =>
+      `${i.logical_task_id}/${i.attempt}/${i.instance_id}`;
+    // Idempotency (G4 round-2): an attempt already sealed terminal on a PRIOR
+    // --dismiss-completed pass is skipped — a re-run must not re-kill or re-seal.
+    const isAttemptTerminal = (ids: TaskCellInstanceIds): boolean =>
+      readAttemptForInstance(cwd, ids)?.terminal_state != null;
+
+    // G4 M2 — a SHARED per-specialist pane may be killed ONLY when EVERY task-cell
+    // that specialist owns is terminal (accepted or rejected). Otherwise a kill
+    // triggered by one accepted task would destroy that specialist's OTHER
+    // still-running task-cells in the same pane. (Per-INSTANCE panes are the
+    // pane-per-task backend item; until then this guard keeps termination safe.)
+    const ownedBySpecialist = new Map<string, TaskCellInstanceIds[]>();
+    for (const cell of findRunTaskCells(cwd, runId)) {
+      if (!cell.worker_role) continue;
+      const arr = ownedBySpecialist.get(cell.worker_role) ?? [];
+      arr.push(cell.ids);
+      ownedBySpecialist.set(cell.worker_role, arr);
+    }
+    const authBySpecialist = new Map<string, RunAcceptance[]>();
+    for (const ra of authorized) {
+      const specialist = readAssignmentForInstance(cwd, ra.ids)?.worker_role ?? null;
+      if (!specialist) continue;
+      const arr = authBySpecialist.get(specialist) ?? [];
+      arr.push(ra);
+      authBySpecialist.set(specialist, arr);
+    }
+
+    // A rejected acceptance still authorizes teardown, but writes a rejection
+    // terminal event — never a silent kill (D5). Accepted → `terminated`.
+    const sealOne = (specialist: string, ra: RunAcceptance, mechanism: string, paneLabel: string): void => {
+      const rejected = ra.acceptance.downstream_release_at === null;
+      const terminalState = rejected ? "rejected" : "terminated";
+      const terminalReason = rejected ? "handoff rejected by acceptance authority" : null;
+      try {
+        sealTerminalAttempt({ cwd, ids: ra.ids, terminal_state: terminalState, reason: terminalReason, now });
+        terminatedCount++;
         process.stdout.write(
-          `[DISMISS] specialist="${entry.specialist}" task="${entry.taskId}" receipt="${entry.receiptPath}"\n`
+          `[TERMINATED] specialist="${specialist}" logical_task="${ra.ids.logical_task_id}" ` +
+            `instance="${ra.ids.instance_id}" pane="${paneLabel}" state=${terminalState} mechanism="${mechanism}"\n`
         );
+      } catch (err) {
+        process.stderr.write(
+          `[agent-team-launcher] --dismiss-completed: could not seal terminal record for ` +
+            `${ra.ids.logical_task_id}/${ra.ids.instance_id}: ${err instanceof Error ? err.message : String(err)}\n`
+        );
+      }
+    };
+
+    for (const [specialist, accs] of authBySpecialist) {
+      const owned = ownedBySpecialist.get(specialist) ?? accs.map((a) => a.ids);
+      const authKeys = new Set(accs.map((a) => keyOf(a.ids)));
+      // A cell counts as terminal when it is authorized THIS pass OR was already
+      // sealed on a prior pass — so a partly-processed specialist still converges.
+      const allOwnedTerminal = owned.every(
+        (ids) => authKeys.has(keyOf(ids)) || isAttemptTerminal(ids)
+      );
+      // Only acceptances whose attempt is NOT already sealed need action this pass.
+      const pendingAccs = accs.filter((ra) => !isAttemptTerminal(ra.ids));
+      if (pendingAccs.length === 0) continue; // idempotent no-op on re-run
+      const paneId = paneBySpecialist.get(specialist);
+      // A placeholder pane_id ("(dry-run…)") is not a real pane.
+      const hasRealPane = !!paneId && !paneId.startsWith("(");
+
+      // No live pane bound (already gone / not tmux): the pane holds no live work,
+      // so sealing the authorized attempts is safe regardless of siblings.
+      if (!hasRealPane) {
+        for (const ra of pendingAccs) sealOne(specialist, ra, "none (no live pane)", "(none)");
+        continue;
+      }
+
+      // Live shared pane, but the specialist still has un-accepted task-cells →
+      // DEFER: keep the pane ALIVE so its other tasks are not killed mid-flight.
+      if (!allOwnedTerminal) {
+        deferredCount += pendingAccs.length;
+        process.stdout.write(
+          `[DEFER] specialist="${specialist}" pane="${paneId}" — ${pendingAccs.length}/${owned.length} ` +
+            `owned task-cell(s) accepted; pane kept ALIVE until ALL are terminal (G4 M2)\n`
+        );
+        continue;
+      }
+
+      // All of this specialist's task-cells are terminal → kill the shared pane ONCE.
+      const outcome = terminatePane(paneId as string);
+      if (outcome.ok && outcome.confirmed) {
+        for (const ra of pendingAccs) sealOne(specialist, ra, outcome.mechanism, paneId as string);
+      } else if (outcome.degraded) {
+        process.stdout.write(
+          `[DEGRADED] specialist="${specialist}" pane="${paneId}" reason="${outcome.error ?? "tmux unavailable"}" ` +
+            `— host-unavailable, termination deferred (recorded degradation)\n`
+        );
+      } else {
+        // Kill did not confirm — park EVERY pending attempt orphaned; --reap retries.
+        for (const ra of pendingAccs) {
+          try { markAttemptOrphaned(cwd, ra.ids); } catch { /* best-effort */ }
+          orphanedCount++;
+          process.stdout.write(
+            `[ORPHAN] specialist="${specialist}" logical_task="${ra.ids.logical_task_id}" ` +
+              `instance="${ra.ids.instance_id}" pane="${paneId}" reason="${outcome.error ?? "pane survived kill"}" ` +
+              `— parked terminating for reaper retry (adversarial test 6)\n`
+          );
+        }
       }
     }
 
-    if (dismissCount === 0) {
+    if (terminatedCount === 0 && orphanedCount === 0 && deferredCount === 0) {
       process.stdout.write(
-        `[agent-team-launcher] --dismiss-completed: no dismissible lanes found for run "${runId}"\n`
+        `[agent-team-launcher] --dismiss-completed: no acceptance-authorized lanes to ` +
+          `terminate for run "${runId}" (a receipt on disk does NOT authorize dismissal — ` +
+          `D5). ${authorized.length === 0 ? "No guild.handoff_acceptance.v1 records found." : ""}\n`
+      );
+    } else {
+      process.stdout.write(
+        `[agent-team-launcher] --dismiss-completed: run "${runId}" — terminated ` +
+          `${terminatedCount} lane(s), ${orphanedCount} orphaned (reaper will retry), ` +
+          `${deferredCount} deferred (shared pane kept alive until all its task-cells are terminal — G4 M2).\n`
       );
     }
 
-    // Fall-through: reap any panes that are already dead.
+    // Fall-through: reap any panes that are already dead (registry hygiene).
     reapDeadMembers(sjPath);
 
     process.exit(0);
@@ -1215,6 +1518,31 @@ async function main(): Promise<void> {
       if (taWritten > 0) {
         process.stdout.write(
           `[agent-team-launcher] wrote ${taWritten} task assignment(s) → .guild/runs/${runId}/tasks/\n`,
+        );
+      }
+    }
+
+    // ── guild.task_assignment.v2: authoritative per-attempt production channel (ADR D6) ──
+    // Emit ONE immutable assignment + attempt companion per TASK a specialist owns,
+    // at the canonical `.guild/runs/<run-id>/task-cells/<logical_task_id>/attempts/
+    // <attempt>/instances/<instance_id>/` tree — never per specialist name, never
+    // collapsed to a representative first task. A specialist owning ≥2 tasks lands
+    // ≥2 distinct files, none overwritten (P0.3 / AT1). Fail-closed: a malformed
+    // assignment or an overwrite THROWS → non-zero exit (hard dispatch failure, D6),
+    // never the v1 path's warn-and-continue.
+    {
+      const cellsWritten = emitTaskCellsV2(
+        cwd,
+        runId,
+        slug,
+        team.specialists,
+        preRoutingOwnerMap,
+        orchestratorHostKind,
+      );
+      if (cellsWritten > 0) {
+        process.stdout.write(
+          `[agent-team-launcher] emitted ${cellsWritten} guild.task_assignment.v2 cell(s) → ` +
+            `.guild/runs/${runId}/task-cells/\n`,
         );
       }
     }

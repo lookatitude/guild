@@ -23,8 +23,12 @@
  *      `markLaneInProgress`); there is no "TaskStarted" hook event. The
  *      checkpoint is a rebuildable speed-cache (never the system of record), so
  *      a write failure here is non-fatal — the receipt remains authoritative.
- *   5. Signals §task§agent dismiss (no idle): on a clean pass the agent
- *      terminates — no idle agents persist (ADR §6 D3).
+ *   5. Records a SUBMISSION only (task-cell-runtime G4, ADR D5). It does NOT
+ *      dismiss or terminate the worker — a receipt on disk authorizes nothing.
+ *      Termination is acceptance-gated: a durable `guild.handoff_acceptance.v1`
+ *      (deterministic floor + Team Lead + any reviewer cell) authorizes it, and the
+ *      launcher's `--dismiss-completed` performs the confirmed teardown. The old
+ *      "Agent dismissed" line was the P0.4 overclaim (the hook exits, not the pane).
  *
  * Stdin:   JSON — Claude Code TaskCompleted hook payload:
  *   {
@@ -732,9 +736,20 @@ async function main(): Promise<void> {
     );
   }
 
-  // §task§agent dismiss: agent terminates cleanly here (no idle, D3 §6).
+  // task-cell-runtime G4 (ADR D5): this hook records a SUBMISSION — it does NOT
+  // dismiss or terminate the worker. The old "Agent dismissed" line was the P0.4
+  // overclaim: task-completed exits the HOOK, not the pane, and a receipt on disk
+  // authorizes nothing. Termination is acceptance-gated — a durable
+  // `guild.handoff_acceptance.v1` (deterministic floor + Team Lead + any reviewer
+  // cell) authorizes it, and the launcher's `--dismiss-completed` performs the
+  // REAL, confirmed kill (see src/modules/dispatch/workflows/task-cell-acceptance.ts
+  // and scripts/lib/host/tmux-backend.ts:terminatePane). This hook never claims a
+  // dismissal it cannot perform.
   process.stderr.write(
-    `[task-completed] OK: task "${taskId}" receipt verified at "${rPath}". Agent dismissed.\n`
+    `[task-completed] OK: task "${taskId}" receipt verified at "${rPath}" ` +
+      `(handoff_submitted). Termination is acceptance-gated — a durable ` +
+      `guild.handoff_acceptance.v1 authorizes it and the launcher performs the ` +
+      `confirmed teardown; this hook does not dismiss the pane.\n`
   );
   process.exit(0);
 }

@@ -550,11 +550,13 @@ describe("pure helpers", () => {
     expect(p).toContain("handoff receipt");
   });
 
-  it("paneCommand exports the env gate and keeps the pane alive", () => {
+  it("paneCommand exports the env gate and (G4) does NOT keep the pane alive by default", () => {
     const c = paneCommand("hello", "run-1");
     expect(c).toContain("export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1");
     expect(c).toContain("export GUILD_RUN_ID=run-1");
-    expect(c).toContain("exec $SHELL");
+    // task-cell-runtime G4 (ADR D5): a completed worker's pane must DISAPPEAR — no
+    // lingering `exec $SHELL` (the operator debug shell is opt-in, GUILD_PANE_DEBUG=1).
+    expect(c).not.toContain("exec $SHELL");
   });
 
   // D-CAP (Wave-3): GUILD_CAPABILITY_SCOPE injection into tmux pane commands

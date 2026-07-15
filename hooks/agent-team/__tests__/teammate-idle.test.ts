@@ -9,9 +9,93 @@ import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import {
+  buildTaskCell,
+  writeTaskCell,
+  type TaskCellDispatchInput,
+} from "../../../src/modules/dispatch/workflows/task-assignment-v2";
+import {
+  buildAcceptance,
+  runDeterministicFloor,
+  writeAcceptanceRecord,
+} from "../../../src/modules/dispatch/workflows/task-cell-acceptance";
 
 const SCRIPT = path.resolve(__dirname, "../teammate-idle.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
+
+const SEED_NOW = () => "2026-07-15T00:00:00.000Z";
+
+/**
+ * task-cell-runtime G4: seed a durable `guild.handoff_acceptance.v1` (+ sibling
+ * assignment binding worker_role) so the acceptance gate resolves this teammate as
+ * safe-to-dismiss. Empty scope/tests → the deterministic floor passes vacuously.
+ */
+function seedAcceptance(cwd: string, runId: string, logicalTaskId: string, workerRole: string): void {
+  const disp: TaskCellDispatchInput = {
+    runId,
+    logicalTaskId,
+    taskRunId: `${logicalTaskId}.tr1`,
+    attempt: 1,
+    attemptId: `${logicalTaskId}.att1`,
+    instanceId: `${logicalTaskId}.a1.i1`,
+    cellId: `cell-${logicalTaskId}`,
+    goalId: "goal",
+    phaseId: "build",
+    stepId: logicalTaskId,
+    teamId: "guild",
+    workerRole,
+    specialistTypeId: workerRole,
+    specialistTypeVersion: "1",
+    specialistTypeHash: "sha256:type",
+    specialistProfileId: workerRole,
+    specialistProfileHash: "sha256:profile",
+    contextBundleId: `.guild/context/${runId}/${workerRole}.md`,
+    contextBundleHash: "sha256:ctx",
+    hostId: "claude-code-cli",
+    adapterId: "claude-code-cli@1",
+    hostCapabilitiesHash: "sha256:caps",
+    objective: `implement ${logicalTaskId}`,
+    nonGoals: [],
+    scopePaths: [],
+    outputSchema: "guild.handoff_receipt.v1",
+    acceptanceTests: [],
+    dependencies: [],
+    projection: { tools: ["read", "write"], permissions: [], recorded_losses: [] },
+    autonomyPolicy: "supervised",
+    budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
+    deadline: null,
+    leadBindingId: "lead-binding",
+    now: SEED_NOW,
+  };
+  const cell = buildTaskCell(disp);
+  writeTaskCell(cwd, cell);
+  const validation = runDeterministicFloor({
+    assignment: cell.assignment,
+    submitted: {
+      receipt_id: "r1",
+      receipt_path: "handoffs/x.md",
+      schema_valid: true,
+      claimed_changed_files: [],
+      acceptance_tests_passed: [],
+      submitted_at: SEED_NOW(),
+    },
+    validationResultId: "val-1",
+    now: SEED_NOW,
+  });
+  writeAcceptanceRecord(
+    cwd,
+    buildAcceptance({
+      validation,
+      acceptancePolicyVersion: "1.0.0",
+      authoritiesRequired: ["deterministic_floor", "team_lead"],
+      authoritiesObserved: [
+        { authority: "deterministic_floor", decision: "accepted", at: SEED_NOW(), reason: null },
+        { authority: "team_lead", decision: "accepted", at: SEED_NOW(), reason: null },
+      ],
+      now: SEED_NOW,
+    })
+  );
+}
 
 function runScript(
   payload: object,
@@ -147,7 +231,7 @@ describe("teammate-idle.ts", () => {
       issues: [],
     };
 
-    it("emits [LANE-COMPLETE] / safe-to-dismiss when receipt has a valid guild.handoff.v2 envelope", () => {
+    it("emits [LANE-SUBMITTED] / awaiting-acceptance for a valid receipt with NO acceptance record (G4 D5)", () => {
       const runId = "run-sess-receipt-valid";
       const runDir = path.join(tmpDir, ".guild", "runs", runId);
       writeReceipt(runDir, "backend", "task-001", VALID_ENVELOPE);
@@ -163,9 +247,37 @@ describe("teammate-idle.ts", () => {
         { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
       );
       expect(exitCode).toBe(0); // always exits 0
-      expect(stdout).toMatch(/\[LANE-COMPLETE\]/);
-      expect(stdout).toMatch(/safe-to-dismiss/);
+      // A receipt on disk is handoff_submitted, NOT dismissible — no acceptance yet.
+      expect(stdout).toMatch(/\[LANE-SUBMITTED\]/);
+      expect(stdout).toMatch(/awaiting-acceptance/);
+      expect(stdout).not.toMatch(/\[LANE-COMPLETE\]/);
+      expect(stdout).not.toMatch(/\[LANE-ACCEPTED\]/);
+      expect(stdout).not.toMatch(/safe-to-dismiss/);
       expect(stdout).toMatch(/backend-task-001\.md/);
+    });
+
+    it("emits [LANE-ACCEPTED] / safe-to-dismiss ONLY when a durable guild.handoff_acceptance.v1 exists (G4 D5)", () => {
+      const runId = "run-sess-receipt-valid";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      writeReceipt(runDir, "backend", "task-001", VALID_ENVELOPE);
+      // Seed the durable acceptance record that authorizes termination.
+      seedAcceptance(tmpDir, runId, "lt-backend", "backend");
+
+      const { exitCode, stdout } = runScript(
+        {
+          session_id: "sess-receipt-valid",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/\[LANE-ACCEPTED\]/);
+      expect(stdout).toMatch(/safe-to-dismiss/);
+      expect(stdout).toMatch(/\[TERMINATE-AUTHORIZED\]/);
+      expect(stdout).not.toMatch(/\[AUTO-DISMISS\]/);
     });
 
     it("emits 'do not paste it in chat' nudge when no receipt exists (no plan)", () => {

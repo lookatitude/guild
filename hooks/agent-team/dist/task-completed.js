@@ -11879,7 +11879,7 @@ Add a fenced \`\`\`guild.handoff.v2 { ... } \`\`\` JSON block to the receipt bef
     );
   }
   process.stderr.write(
-    `[task-completed] OK: task "${taskId}" receipt verified at "${rPath}". Agent dismissed.
+    `[task-completed] OK: task "${taskId}" receipt verified at "${rPath}" (handoff_submitted). Termination is acceptance-gated \u2014 a durable guild.handoff_acceptance.v1 authorizes it and the launcher performs the confirmed teardown; this hook does not dismiss the pane.
 `
   );
   process.exit(0);

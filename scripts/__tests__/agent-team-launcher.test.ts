@@ -17,6 +17,21 @@ import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import {
+  buildTaskCell,
+  writeTaskCell,
+  type TaskCellDispatchInput,
+} from "../../src/modules/dispatch/workflows/task-assignment-v2";
+import {
+  buildAcceptance,
+  markAttemptOrphaned,
+  readAttemptForInstance,
+  runDeterministicFloor,
+  writeAcceptanceRecord,
+  findRunTaskCells,
+  findOrphanedAttempts,
+  type TaskCellInstanceIds,
+} from "../../src/modules/dispatch/workflows/task-cell-acceptance";
 
 const SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
@@ -270,6 +285,69 @@ describe("agent-team-launcher.ts", () => {
       ]);
       expect(stdout).toMatch(/GUILD_TASK_ASSIGNMENT=/);
       expect(stdout).toMatch(/tasks\/(architect|backend|qa)\.json/);
+    });
+
+    it("emits guild.task_assignment.v2 per TASK — a specialist owning 2 tasks → 2 cells, no overwrite (AT1)", () => {
+      // task-cell-runtime G3: the authoritative v2 channel replaces the v1
+      // representative-first-task collapse. Give `backend` TWO plan lanes so the
+      // fan-out MUST write two distinct immutable cells (P0.3 / adversarial test 1).
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const planDir = path.join(tmpDir, ".guild", "plan");
+      fs.mkdirSync(planDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(planDir, "test-slug.md"),
+        [
+          "## Lane: backend contract",
+          "- task-id: T1-backend",
+          "- owner: backend",
+          "",
+          "## Lane: backend data layer",
+          "- task-id: T2-backend",
+          "- owner: backend",
+          "",
+          "## Lane: architect boundaries",
+          "- task-id: T0-architect",
+          "- owner: architect",
+          "",
+        ].join("\n"),
+      );
+      runScript([
+        "--team",
+        teamPath,
+        "--session-name",
+        "guild-test-v2",
+        "--cwd",
+        tmpDir,
+        "--dry-run",
+      ]);
+      const sessionJson = findSessionJson(tmpDir)!;
+      const runDir = path.dirname(path.dirname(sessionJson));
+      const cellsRoot = path.join(runDir, "task-cells");
+      expect(fs.existsSync(cellsRoot)).toBe(true);
+
+      const assignmentPath = (lt: string) =>
+        path.join(cellsRoot, lt, "attempts", "1", "instances", `${lt}.a1.i1`, "assignment.json");
+
+      // backend owns two logical tasks → two distinct, non-overwritten assignment files.
+      for (const lt of ["T1-backend", "T2-backend", "T0-architect"]) {
+        expect(fs.existsSync(assignmentPath(lt))).toBe(true);
+        const a = JSON.parse(fs.readFileSync(assignmentPath(lt), "utf8"));
+        expect(a.schema_version).toBe("guild.task_assignment.v2");
+        expect(a.logical_task_id).toBe(lt);
+        // The attempt companion sits ABOVE the instances (one immutable file per attempt).
+        expect(
+          fs.existsSync(path.join(cellsRoot, lt, "attempts", "1", "attempt.json"))
+        ).toBe(true);
+      }
+
+      const c1 = JSON.parse(fs.readFileSync(assignmentPath("T1-backend"), "utf8"));
+      const c2 = JSON.parse(fs.readFileSync(assignmentPath("T2-backend"), "utf8"));
+      // Same specialist (worker_role), distinct instances + fresh contexts + handoffs.
+      expect(c1.worker_role).toBe("backend");
+      expect(c2.worker_role).toBe("backend");
+      expect(c1.instance_id).not.toBe(c2.instance_id);
+      expect(c1.context_bundle_id).not.toBe(c2.context_bundle_id);
+      expect(c1.handoff_path).not.toBe(c2.handoff_path);
     });
 
     it("prints tmux commands to stdout in dry-run mode", () => {
@@ -1015,7 +1093,77 @@ describe("agent-team-launcher.ts", () => {
       fs.writeFileSync(path.join(dir, `${specialist}-${taskId}.md`), validReceiptContent(), "utf8");
     }
 
-    it("exits 0 and prints [DISMISS] line when a lane has a valid receipt", () => {
+    const SEED_NOW = () => "2026-07-15T00:00:00.000Z";
+
+    /** Seed a durable acceptance record (+ sibling assignment) authorizing termination. */
+    function seedAcceptance(cwd: string, runId: string, logicalTaskId: string, workerRole: string): void {
+      const disp: TaskCellDispatchInput = {
+        runId,
+        logicalTaskId,
+        taskRunId: `${logicalTaskId}.tr1`,
+        attempt: 1,
+        attemptId: `${logicalTaskId}.att1`,
+        instanceId: `${logicalTaskId}.a1.i1`,
+        cellId: `cell-${logicalTaskId}`,
+        goalId: "goal",
+        phaseId: "build",
+        stepId: logicalTaskId,
+        teamId: "guild",
+        workerRole,
+        specialistTypeId: workerRole,
+        specialistTypeVersion: "1",
+        specialistTypeHash: "sha256:type",
+        specialistProfileId: workerRole,
+        specialistProfileHash: "sha256:profile",
+        contextBundleId: `.guild/context/${runId}/${workerRole}.md`,
+        contextBundleHash: "sha256:ctx",
+        hostId: "claude-code-cli",
+        adapterId: "claude-code-cli@1",
+        hostCapabilitiesHash: "sha256:caps",
+        objective: `implement ${logicalTaskId}`,
+        nonGoals: [],
+        scopePaths: [],
+        outputSchema: "guild.handoff_receipt.v1",
+        acceptanceTests: [],
+        dependencies: [],
+        projection: { tools: ["read", "write"], permissions: [], recorded_losses: [] },
+        autonomyPolicy: "supervised",
+        budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
+        deadline: null,
+        leadBindingId: "lead-binding",
+        now: SEED_NOW,
+      };
+      const cell = buildTaskCell(disp);
+      writeTaskCell(cwd, cell);
+      const validation = runDeterministicFloor({
+        assignment: cell.assignment,
+        submitted: {
+          receipt_id: "r1",
+          receipt_path: "handoffs/x.md",
+          schema_valid: true,
+          claimed_changed_files: [],
+          acceptance_tests_passed: [],
+          submitted_at: SEED_NOW(),
+        },
+        validationResultId: "val-1",
+        now: SEED_NOW,
+      });
+      writeAcceptanceRecord(
+        cwd,
+        buildAcceptance({
+          validation,
+          acceptancePolicyVersion: "1.0.0",
+          authoritiesRequired: ["deterministic_floor", "team_lead"],
+          authoritiesObserved: [
+            { authority: "deterministic_floor", decision: "accepted", at: SEED_NOW(), reason: null },
+            { authority: "team_lead", decision: "accepted", at: SEED_NOW(), reason: null },
+          ],
+          now: SEED_NOW,
+        })
+      );
+    }
+
+    it("G4 D5: a valid receipt WITHOUT an acceptance record is NOT dismissed", () => {
       const runId = "run-dismiss-test-001";
       writeSessionJson(tmpDir, runId, ["backend"]);
       writeHandoffReceipt(tmpDir, runId, "backend", "task-001");
@@ -1027,9 +1175,147 @@ describe("agent-team-launcher.ts", () => {
       ]);
 
       expect(exitCode).toBe(0);
-      expect(stdout).toMatch(/\[DISMISS\]/);
+      // A receipt on disk authorizes nothing — no dismissal claim (P0.4 fix).
+      expect(stdout).not.toMatch(/\[DISMISS\]/);
+      expect(stdout).not.toMatch(/\[TERMINATED\]/);
+      expect(stdout).toMatch(/does NOT authorize dismissal/);
+      expect(stdout).toMatch(/No guild\.handoff_acceptance\.v1 records found/);
+    });
+
+    it("G4 D5: a durable acceptance record drives a real termination + terminal record", () => {
+      const runId = "run-dismiss-accept-001";
+      writeSessionJson(tmpDir, runId, ["backend"]); // pane_id is a dry-run placeholder
+      seedAcceptance(tmpDir, runId, "lt-backend", "backend");
+
+      const { exitCode, stdout } = runScript([
+        "--dismiss-completed",
+        "--run-id", runId,
+        "--cwd", tmpDir,
+      ]);
+
+      expect(exitCode).toBe(0);
+      // Acceptance-gated termination fires (placeholder pane → seal terminal, no kill).
+      expect(stdout).toMatch(/\[TERMINATED\]/);
       expect(stdout).toMatch(/specialist="backend"/);
-      expect(stdout).toMatch(/task="task-001"/);
+      expect(stdout).toMatch(/logical_task="lt-backend"/);
+      // The terminal guild.task_attempt.v1 record was sealed.
+      const attempt = readAttemptForInstance(tmpDir, {
+        run_id: runId,
+        logical_task_id: "lt-backend",
+        attempt: 1,
+        instance_id: "lt-backend.a1.i1",
+      });
+      expect(attempt?.terminal_state).toBe("terminated");
+      expect(attempt?.immutable).toBe(true);
+    });
+
+    // ── G4 M2 + M1: multi-task-specialist guard + production reaper retry ──────
+    function makeDisp(runId: string, logicalTaskId: string, workerRole: string): TaskCellDispatchInput {
+      return {
+        runId, logicalTaskId,
+        taskRunId: `${logicalTaskId}.tr1`, attempt: 1,
+        attemptId: `${logicalTaskId}.att1`, instanceId: `${logicalTaskId}.a1.i1`,
+        cellId: `cell-${logicalTaskId}`, goalId: "goal", phaseId: "build",
+        stepId: logicalTaskId, teamId: "guild", workerRole,
+        specialistTypeId: workerRole, specialistTypeVersion: "1", specialistTypeHash: "sha256:type",
+        specialistProfileId: workerRole, specialistProfileHash: "sha256:profile",
+        contextBundleId: `.guild/context/${runId}/${logicalTaskId}.md`, contextBundleHash: "sha256:ctx",
+        hostId: "claude-code-cli", adapterId: "claude-code-cli@1", hostCapabilitiesHash: "sha256:caps",
+        objective: `implement ${logicalTaskId}`, nonGoals: [], scopePaths: [],
+        outputSchema: "guild.handoff_receipt.v1", acceptanceTests: [], dependencies: [],
+        projection: { tools: ["read", "write"], permissions: [], recorded_losses: [] },
+        autonomyPolicy: "supervised",
+        budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
+        deadline: null, leadBindingId: "lead-binding", now: SEED_NOW,
+      };
+    }
+    function seedCellOnly(cwd: string, runId: string, logicalTaskId: string, workerRole: string): void {
+      writeTaskCell(cwd, buildTaskCell(makeDisp(runId, logicalTaskId, workerRole)));
+    }
+    function writeSessionJsonRealPane(cwd: string, runId: string, specialist: string, paneId: string): void {
+      const dir = path.join(cwd, ".guild", "runs", runId, "agent-team");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "session.json"), JSON.stringify({
+        run_id: runId,
+        teammate_panes: [{ specialist, pane_id: paneId, host_kind: "claude", adapter_version: "1" }],
+      }, null, 2), "utf8");
+    }
+
+    it("G4 M2: does NOT kill a shared per-specialist pane while a sibling task-cell is unaccepted (DEFER)", () => {
+      const runId = "run-m2-defer-001";
+      writeSessionJsonRealPane(tmpDir, runId, "backend", "%77"); // real-looking pane id
+      seedAcceptance(tmpDir, runId, "lt-a", "backend"); // task A accepted
+      seedCellOnly(tmpDir, runId, "lt-b", "backend");   // task B still running, NOT accepted
+
+      const { exitCode, stdout } = runScript(["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      // The guard defers the kill — the shared pane must NOT be terminated while B runs.
+      expect(stdout).toMatch(/\[DEFER\]/);
+      expect(stdout).not.toMatch(/\[TERMINATED\]/);
+      // Task A's accepted attempt is NOT sealed terminal yet (waits for the whole pane).
+      const attemptA = readAttemptForInstance(tmpDir, { run_id: runId, logical_task_id: "lt-a", attempt: 1, instance_id: "lt-a.a1.i1" });
+      expect(attemptA?.terminal_state).toBeNull();
+    });
+
+    it("G4 M1: --reap retries a parked orphan to a sealed `terminated` record (production end-to-end)", () => {
+      const runId = "run-m1-reap-001";
+      writeSessionJson(tmpDir, runId, ["backend"]); // placeholder pane → 'already gone'
+      seedAcceptance(tmpDir, runId, "lt-x", "backend");
+      const ids: TaskCellInstanceIds = { run_id: runId, logical_task_id: "lt-x", attempt: 1, instance_id: "lt-x.a1.i1" };
+      // Simulate a prior dismiss whose kill did not confirm: park the attempt orphaned.
+      markAttemptOrphaned(tmpDir, ids);
+      expect(readAttemptForInstance(tmpDir, ids)?.orphaned).toBe(true);
+      expect(readAttemptForInstance(tmpDir, ids)?.terminal_state).toBeNull();
+
+      const { exitCode, stdout } = runScript(["--reap", "--run-id", runId, "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/\[REAPED\]/);
+      // The PRODUCTION reaper sweep sealed the orphan terminal — not a manual simulation.
+      const sealed = readAttemptForInstance(tmpDir, ids);
+      expect(sealed?.terminal_state).toBe("terminated");
+      expect(sealed?.orphaned).toBe(true); // history preserved
+    });
+
+    it("G4: findRunTaskCells enumerates every task-cell tagged by owning worker_role", () => {
+      const runId = "run-enum-001";
+      seedAcceptance(tmpDir, runId, "lt-1", "backend");
+      seedCellOnly(tmpDir, runId, "lt-2", "backend");
+      seedCellOnly(tmpDir, runId, "lt-3", "frontend");
+      const cells = findRunTaskCells(tmpDir, runId);
+      expect(cells).toHaveLength(3);
+      const backend = cells.filter((c) => c.worker_role === "backend");
+      const frontend = cells.filter((c) => c.worker_role === "frontend");
+      expect(backend).toHaveLength(2);
+      expect(frontend).toHaveLength(1);
+    });
+
+    it("G4: findOrphanedAttempts returns only parked non-terminal orphans", () => {
+      const runId = "run-orphan-enum-001";
+      seedAcceptance(tmpDir, runId, "lt-live", "backend"); // not orphaned
+      seedAcceptance(tmpDir, runId, "lt-orph", "backend");
+      const orphIds: TaskCellInstanceIds = { run_id: runId, logical_task_id: "lt-orph", attempt: 1, instance_id: "lt-orph.a1.i1" };
+      markAttemptOrphaned(tmpDir, orphIds);
+      const orphans = findOrphanedAttempts(tmpDir, runId);
+      expect(orphans).toHaveLength(1);
+      expect(orphans[0].logical_task_id).toBe("lt-orph");
+    });
+
+    it("G4 round-2: --dismiss-completed is idempotent — a second pass re-seals nothing", () => {
+      const runId = "run-idempotent-001";
+      writeSessionJson(tmpDir, runId, ["backend"]); // placeholder pane → seal directly
+      seedAcceptance(tmpDir, runId, "lt-idem", "backend");
+
+      const first = runScript(["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir]);
+      expect(first.exitCode).toBe(0);
+      expect(first.stdout).toMatch(/\[TERMINATED\]/);
+      const afterFirst = readAttemptForInstance(tmpDir, { run_id: runId, logical_task_id: "lt-idem", attempt: 1, instance_id: "lt-idem.a1.i1" });
+      expect(afterFirst?.terminal_state).toBe("terminated");
+
+      // Second pass: the attempt is already terminal → no re-seal, no [TERMINATED].
+      const second = runScript(["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir]);
+      expect(second.exitCode).toBe(0);
+      expect(second.stdout).not.toMatch(/\[TERMINATED\]/);
+      expect(second.stdout).toMatch(/no acceptance-authorized lanes to terminate/);
     });
 
     it("exits 0 with no crash when session.json does not exist", () => {
