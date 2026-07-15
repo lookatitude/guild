@@ -73,7 +73,11 @@ Do not create a skill when the need is one-off, vague, or better handled by a pl
 
 ## When to Create an Agent
 
-Create a new specialist only when all extraction signals pass:
+Specialist creation has two origins. A direct human request (including an explicit
+team-compose option-A selection) supplies `human-requested` authority and does not
+require historical runs, reflections, or prior gap records. A role proposed by
+reflection/evolution supplies `evolution-proposed` authority and requires all extraction
+signals to pass:
 
 | Signal | Required evidence |
 |---|---|
@@ -94,10 +98,15 @@ Create a new specialist only when all extraction signals pass:
 4. Scan existing agents for description overlap.
 5. Propose adjacent `DO NOT TRIGGER` clauses.
 6. Gate every adjacent-boundary edit through paired evals.
-7. Gate the new specialist through paired evals and shadow mode.
+7. Gate the new specialist through at least 3 positive and 3 negative paired evals.
+   Historical shadow replay is mandatory for evolution-proposed creation and conditional
+   on an applicable corpus for human-requested creation; no applicable corpus is
+   `not_applicable`, not a rejection.
 8. Register-live into the consuming repo's `.guild/agents/` and
    `.guild/skills/` only after gates pass — never the plugin install dir.
-9. Tell the user a Claude Code restart is required before the new specialist is routable by agent definition.
+9. Refresh the derived roster registries. Guild dispatch can use the project specialist
+   immediately through its definition path; it is not host-registered under a new native
+   subagent type and no restart changes that constraint.
 
 > **`.guild/` instance boundary (binding).** The plugin ships only the
 > canonical/base read-only library + the two templates as static plugin

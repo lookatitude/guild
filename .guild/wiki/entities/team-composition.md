@@ -150,11 +150,14 @@ When no existing specialist fits:
 
 1. Propose a role name and one-line responsibility.
 2. Present four options:
-   - `A auto-create` through the specialist factory.
+   - `A create` through the specialist factory.
    - `B skip` and flag missing coverage.
    - `C substitute` to an existing specialist with scope override.
    - `D compose from scratch`.
-3. If auto-create is selected, the proposed specialist must pass extraction signals, boundary evals, paired evals, and shadow mode before it can join a live team.
+3. If A·create is selected, that explicit selection supplies human creation authority.
+   Historical extraction signals are not prerequisites, but the role must pass its
+   interview, boundary scan, applicable boundary evals, and new-role paired evals before
+   it can join a live team. Historical replay runs when an applicable corpus exists.
 
 A newly minted specialist is instantiated from the canonical
 `plugin/templates/agents/AGENT.template.md` (`guild.agent_template.v1`) and

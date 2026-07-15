@@ -280,9 +280,11 @@ is `haiku`.
 - **Orchestrator is implicit** — the top-level session plays coordinator, not a
   separate specialist slot.
 - **Gap handling:** when team-compose surfaces a role with no matching specialist,
-  the user picks auto-create (`guild:create-specialist`), skip, substitute, or
-  compose-from-scratch. New specialists must pass the evolve gate before joining
-  the live team.
+  the user picks create (`guild:create-specialist`), skip, substitute, or
+  compose-from-scratch. Selecting create supplies human authority, so a genuinely
+  new specialist does not need prior run/reflection evidence; it still must pass
+  its boundary and routing eval gates before joining the live team. Evolution-
+  proposed roles retain the historical extraction and shadow requirements.
 
 ## See also
 
