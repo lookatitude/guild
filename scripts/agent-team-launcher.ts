@@ -1443,12 +1443,21 @@ async function main(): Promise<void> {
   // existing GUILD_STATUSLINE=1 (user-exported in shell) is never cleared.
   applyStatuslineEnv(cwd);
 
-  // Mint the unified run-id ONCE per launcher invocation and thread it through
-  // both prompts and the manifest. Exported into each pane's env so hooks
-  // inside (capture-telemetry, maybe-reflect, agent-team handlers) converge
-  // on the same `.guild/runs/<run-id>/` path. Defined here (before the cross-
-  // host block) so both remote + local tmux paths share the same run ID.
-  const runId = makeRunId();
+  // Resolve the unified run-id ONCE per launcher invocation and thread it
+  // through both prompts and the manifest. Exported into each pane's env so
+  // hooks inside (capture-telemetry, maybe-reflect, agent-team handlers)
+  // converge on the same `.guild/runs/<run-id>/` path. Defined here (before the
+  // cross-host block) so both remote + local tmux paths share the same run ID.
+  //
+  // task-cell-runtime P0.5 (G5): HONOR the caller's `--run-id` on the tmux AND
+  // remote paths, exactly as the in-process rung already does (§D5 rung 3
+  // above). guild:execute-plan creates the run directory and threads `--run-id`
+  // so caller-staged context, task-runs, assignments, traces, handoffs, and
+  // session.json all land under ONE `.guild/runs/<run_id>/` tree regardless of
+  // backend. Minting unconditionally here forked run identity by backend (the
+  // same fixture split across different run dirs). Mint a fresh id ONLY when the
+  // caller supplied none (e.g. a standalone launch or a `--dry-run` preview).
+  const runId = args.runId ?? makeRunId();
 
   // ── W2-A2: pre-routing task_run writes (single-source for capability routing) ─
   // Write ALL task_runs for ALL specialists BEFORE any routing decision. After

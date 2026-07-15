@@ -1036,6 +1036,157 @@ describe("agent-team-launcher.ts", () => {
   });
 
   // ─────────────────────────────────────────────────────────────
+  // task-cell-runtime P0.5 (G5) — unified run identity across backends
+  //
+  // A caller (guild:execute-plan) creates ONE run directory and threads its id
+  // via `--run-id`. Every backend — in-process, local tmux, AND remote — MUST
+  // honor that id and land context/task-runs/assignments/traces/handoffs/session
+  // under the SAME `.guild/runs/<run_id>/` tree. Before the G5 fix the tmux +
+  // remote paths minted a FRESH run id (splitting one fixture across different
+  // run dirs); these tests FAIL if any backend reverts to minting.
+  // ─────────────────────────────────────────────────────────────
+  describe("unified run identity — honor caller --run-id on every backend (G5)", () => {
+    // Names of run directories that actually exist under .guild/runs/. A run dir
+    // is one that carries run state (agent-team/, tasks/, or task-cells/), not a
+    // stray sibling like .guild/context.
+    function listRunDirs(cwd: string): string[] {
+      const runsRoot = path.join(cwd, ".guild", "runs");
+      if (!fs.existsSync(runsRoot)) return [];
+      return fs
+        .readdirSync(runsRoot, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name)
+        .sort();
+    }
+
+    function writeSettingsCrossHost(
+      cwd: string,
+      hosts: Record<string, { address: string; user?: string; port?: number }>
+    ): void {
+      const dir = path.join(cwd, ".guild");
+      fs.mkdirSync(dir, { recursive: true });
+      const settings = { defaults: { cross_host: { enabled: true, hosts } } };
+      fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify(settings, null, 2), "utf8");
+    }
+
+    // ── local tmux backend ────────────────────────────────────────────────
+    it("tmux: caller --run-id names the ONE run directory (session + tasks + task-cells under it)", () => {
+      const CALLER_ID = "run-g5-tmux-caller";
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      // Two plan lanes so a real task-cells tree is written under the run id.
+      const planDir = path.join(tmpDir, ".guild", "plan");
+      fs.mkdirSync(planDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(planDir, "test-slug.md"),
+        [
+          "## Lane: backend contract",
+          "- task-id: T1-backend",
+          "- owner: backend",
+          "",
+          "## Lane: architect boundaries",
+          "- task-id: T0-architect",
+          "- owner: architect",
+          "",
+        ].join("\n"),
+      );
+      const { exitCode } = runScript([
+        "--team", teamPath,
+        "--session-name", "guild-g5-tmux",
+        "--cwd", tmpDir,
+        "--run-id", CALLER_ID,
+        "--dry-run",
+      ]);
+      expect(exitCode).toBe(0);
+
+      // Exactly ONE run directory, named by the caller's id.
+      expect(listRunDirs(tmpDir)).toEqual([CALLER_ID]);
+
+      const runDir = path.join(tmpDir, ".guild", "runs", CALLER_ID);
+      // session + assignment (tasks/) + task-cell (task-cells/) all under it.
+      expect(fs.existsSync(path.join(runDir, "agent-team", "session.json"))).toBe(true);
+      expect(fs.existsSync(path.join(runDir, "tasks", "backend.json"))).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(runDir, "task-cells", "T1-backend", "attempts", "1", "instances", "T1-backend.a1.i1", "assignment.json")
+        )
+      ).toBe(true);
+
+      // The session.json findable by the generic scanner resolves to the same id.
+      const sessionJson = findSessionJson(tmpDir)!;
+      expect(path.dirname(path.dirname(sessionJson))).toBe(runDir);
+    });
+
+    // ── in-process backend ────────────────────────────────────────────────
+    it("in-process (--agent-mode=agent): caller --run-id threads into every dispatchPlan descriptor's GUILD_RUN_ID", () => {
+      const CALLER_ID = "run-g5-agent-caller";
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode, stdout } = runScript([
+        "--team", teamPath,
+        "--cwd", tmpDir,
+        "--agent-mode=agent",
+        "--run-id", CALLER_ID,
+      ]);
+      expect(exitCode).toBe(0);
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe("agent");
+      expect(signal.dispatchPlan.length).toBeGreaterThan(0);
+      // Every descriptor converges on the caller's run id — never a minted one.
+      for (const d of signal.dispatchPlan) {
+        expect(d.env.GUILD_RUN_ID).toBe(CALLER_ID);
+      }
+    });
+
+    // ── remote backend (cross-host) ───────────────────────────────────────
+    it("remote (cross-host): caller --run-id names the ONE run directory for both local + remote-routed lanes", () => {
+      const CALLER_ID = "run-g5-remote-caller";
+      // Mixed-host fixture: architect stays local (claude), security routes remote.
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeSettingsCrossHost(tmpDir, {
+        "codex-remote": { address: "gpu-box.example.com", user: "ci" },
+      });
+      const { exitCode, stdout } = runScript(
+        [
+          "--team", teamPath,
+          "--session-name", "guild-g5-remote",
+          "--cwd", tmpDir,
+          "--run-id", CALLER_ID,
+          "--dry-run",
+        ],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/dry-run.*remote dispatch/i);
+
+      // Exactly ONE run directory, named by the caller's id — remote dispatch did
+      // NOT fork a fresh run id from the local tmux path.
+      expect(listRunDirs(tmpDir)).toEqual([CALLER_ID]);
+
+      const runDir = path.join(tmpDir, ".guild", "runs", CALLER_ID);
+      // Pre-routing assignments for BOTH the local and the remote-routed lane
+      // land under the same run id.
+      expect(fs.existsSync(path.join(runDir, "tasks", "architect.json"))).toBe(true);
+      expect(fs.existsSync(path.join(runDir, "tasks", "security.json"))).toBe(true);
+    });
+
+    // ── no caller id → mint (preserve the fallback) ───────────────────────
+    it("no --run-id supplied → tmux path mints a fresh run-<...> id (fallback preserved)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode } = runScript([
+        "--team", teamPath,
+        "--session-name", "guild-g5-mint",
+        "--cwd", tmpDir,
+        "--dry-run",
+      ]);
+      expect(exitCode).toBe(0);
+      const dirs = listRunDirs(tmpDir);
+      expect(dirs).toHaveLength(1);
+      expect(dirs[0]).toMatch(/^run-/);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
   // --dismiss-completed (P1-4 auto-dismiss loop)
   // ─────────────────────────────────────────────────────────────
   describe("--dismiss-completed", () => {

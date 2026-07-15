@@ -8,7 +8,7 @@
       "id": "agent-team-launcher",
       "source_path": "scripts/agent-team-launcher.ts",
       "resource_path": "resources/scripts/agent-team-launcher.ts",
-      "sha256": "767dd56c5852d9ea1328dde50736cea03b6a67e9c83cd3b7f2aef252d33082c0"
+      "sha256": "dcb148bda6954ebbf851f703cfdd45d6f4e21d11debac02ce305ed537d5ce1c4"
     },
     {
       "category": "scripts",
