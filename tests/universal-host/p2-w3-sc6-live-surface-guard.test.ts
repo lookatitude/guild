@@ -46,7 +46,9 @@ const FROZEN_PATHS = [".claude-plugin", "commands"]; // STRICT byte-identical
 // GREEN now; it then trips the instant a NEW (unreleased) surface change lands on top. On any
 // deliberate surface change, bump this pin to that change's commit. Do NOT auto-follow HEAD — a pin
 // that chased HEAD would let a committed surface mutation hide itself (the whole reason it is pinned).
-const PINNED_BASELINE = "4f56c97"; // RE-RATIFIED 2026-07-14 at the v2.2.0 v2→main flip (the guard rule: bump the pin on a deliberate surface change / at the release flip). The release version bump (2.1.0→2.2.0) legitimately changes .claude-plugin/plugin.json + marketplace.json, which this guard freezes byte-identical; 4f56c97 is the version-bump commit, so freezing against it restores zero-delta while still tripping on any UNVERSIONED surface drift on top. Prior pin d98fd40 (PR #27 squash) predated the bump. SC-2 normalized equivalence remains the real cutover gate.
+// Keep a later non-surface checkpoint after the pin-ratification commit so the forward-ref
+// anti-vacuity control can exercise a real descendant that is not HEAD.
+const PINNED_BASELINE = "631e1b5"; // RE-RATIFIED 2026-07-15 for the deliberate specialist-creation authority change. Commit 631e1b5 updates the live create-specialist and team-compose skill surfaces so human-requested specialists can be registered without historical evolution evidence while evolution-proposed specialists retain the evidence gate. Pinning that surface-changing commit restores zero delta and keeps the guard strict for every subsequent change.
 const DIFF_SANITY_ANCHOR = "3ce3666"; // an OLD ancestor — used ONLY to prove `git diff` is wired (non-empty)
 
 // The v2 surface is now the baseline, so there are no permitted deltas FROM it — the surface is frozen

@@ -15,14 +15,14 @@
       "id": "guild-create-specialist",
       "source_path": "skills/meta/create-specialist/SKILL.md",
       "resource_path": "resources/skills/meta/create-specialist/SKILL.md",
-      "sha256": "e84fcfa67f421befe5ff10ad1c12c9f0dae14472a87792d9e4b52d4184b3453f"
+      "sha256": "d1383a6509498876b9ece251a258e374a1f0f6bc07eaaf212d1ea33ba600d20b"
     },
     {
       "category": "skills",
       "id": "guild-create-specialist/workflow.md",
       "source_path": "skills/meta/create-specialist/workflow.md",
       "resource_path": "resources/skills/meta/create-specialist/workflow.md",
-      "sha256": "5d5f0f6a99a7050334d4bb8a76846a4fea707fba5ada8cae7b833b967aa7885f"
+      "sha256": "6b8510ada364eae91708cb72a61d41c525a80747f5e67e5fdd1e27cd0ac67ee1"
     },
     {
       "category": "skills",
@@ -36,14 +36,14 @@
       "id": "guild-team-compose",
       "source_path": "skills/meta/team-compose/SKILL.md",
       "resource_path": "resources/skills/meta/team-compose/SKILL.md",
-      "sha256": "231314597295a13e06cebe1fc2f8fcc4dd4c89efd5098dbf726ad1b894075759"
+      "sha256": "bd71e188c01d6688ec9ba44e32f7dc261de2047551c76f95a90fa85b630fb17d"
     },
     {
       "category": "skills",
       "id": "guild-team-compose/gap-handling.md",
       "source_path": "skills/meta/team-compose/gap-handling.md",
       "resource_path": "resources/skills/meta/team-compose/gap-handling.md",
-      "sha256": "216345f4b284b2e6b6b776b93abac66db84562b4f5e99572122dcc7612c9146f"
+      "sha256": "165b0c45ef4ea9912cf88efc1b5896d6423313a27f058ae5f2060e731ab49526"
     },
     {
       "category": "skills",

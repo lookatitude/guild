@@ -126,7 +126,9 @@ function evaluateLiveSurfaceRows(rows: DiffRow[]): {
 // now and trips the instant a NEW (unreleased) surface change lands. Bump it to that change's commit
 // on any deliberate surface change. NEVER auto-follow HEAD (a chasing pin lets a committed surface
 // mutation hide itself — the entire reason it is pinned, not env-derived).
-const PINNED_BASELINE = "4f56c97"; // RE-RATIFIED 2026-07-14 at the v2.2.0 v2→main flip (the guard rule: bump the pin on a deliberate surface change / at the release flip). The release version bump (2.1.0→2.2.0) legitimately changes .claude-plugin/plugin.json + marketplace.json, which this guard freezes byte-identical; 4f56c97 is the version-bump commit, so freezing against it restores zero-delta while still tripping on any UNVERSIONED surface drift on top. Prior pin d98fd40 (PR #27 squash) predated the bump. SC-2 normalized equivalence remains the real cutover gate.
+// Keep a later non-surface checkpoint after the pin-ratification commit so the forward-ref
+// anti-vacuity control can exercise a real descendant that is not HEAD.
+const PINNED_BASELINE = "631e1b5"; // RE-RATIFIED 2026-07-15 for the deliberate specialist-creation authority change. Commit 631e1b5 updates the live create-specialist and team-compose skill surfaces so human-requested specialists can be registered without historical evolution evidence while evolution-proposed specialists retain the evidence gate. Pinning that surface-changing commit restores zero delta and keeps the guard strict for every subsequent change.
 
 function git(args: string[]): string {
   return execFileSync("git", args, { cwd: PLUGIN_ROOT, encoding: "utf8" }).trim();
