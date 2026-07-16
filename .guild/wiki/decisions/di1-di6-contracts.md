@@ -81,7 +81,7 @@ harnesses under the run sandbox + wall-clock budgets (the canonical
 `defaults.quality.budget` block — `per_class_minutes` / `total_minutes` — is
 defined once in [`../architecture/command-surface.md`](../entities/command-surface.md)
 §4.4 and cited here by pointer, not re-spelled; OQ-3);
-`qa-test-strategy` producer vs `security+architect` `G-quality` challenger.
+`qa-test-strategy` producer vs the composer-derived `G-quality` advisory panel (`security` baseline + `architect` gated on `multi_component`).
 Frozen contract `guild.quality.v1`, path UNCHANGED
 `.guild/runs/<run-id>/quality/<run-id>.md`. **Net new mandatory gates on the
 default path = 0** (opt-in entry, never auto-entered); release/blocker gate
@@ -97,7 +97,7 @@ frozen `--auto-approve` token set is `[spec,plan,build,all]`; there is no
 
 Promoted from reserved-notice to a full skill: 5 runbook classes
 (release / monitoring / incident / rollback / maintenance);
-`devops-*` producer vs `security+architect` `G-operations` challenger;
+`devops-*` producer vs the composer-derived `G-operations` advisory panel (`security` baseline + `architect` gated on `multi_component`);
 consumes Quality, feeds the D8 release leg. **Split autonomy posture under
 FOUR non-negotiable safety rails (shared invariant #13):** (1) no class
 autonomous for an unproven runbook; (2) first run of ANY runbook ALWAYS

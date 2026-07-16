@@ -111,6 +111,23 @@ The actual skill names should match the installed skill directories. The key rul
 | Development | task owners selected by plan, `qa`, `security`, `architect`/tech lead when boundaries change, advisory memory | Autonomous implementation, tests, security and architecture review. |
 | Quality | `qa`, relevant implementers, `devops`, `security` when needed, advisory memory | E2E, smoke, accessibility, performance, release validation. |
 | Operations | `devops`, relevant implementers, `security`, `qa`, advisory memory | Release, monitoring, incident, rollback, maintenance, runbooks. |
+| Research | `researcher`, optional `architect` (when multi-component), advisory memory | Product-explore / researcher deliverables. |
+| Definition | `architect`, `technical-writer`, optional `qa` (when a backend is present), advisory memory | Product-define / PRD nucleus (mirrors Planning minus security-by-default). |
+| Learn | `researcher`, optional `architect` (multi-component), optional `technical-writer` (public docs), advisory memory | The learn-* knowledge pipeline (analysis reuses researcher/architect per §No new analysis specialist). |
+
+> **Deterministic composer is the source of truth for this table.** These per-phase
+> defaults + the §Implied Specialist Rules below are encoded as data in
+> `plugin/src/modules/teams/workflows/station-composer.ts` (`STATION_POLICY`,
+> resolved by `composeStationTeam` → `guild.team_plan.v1`). Each phase's **advisory
+> challenger panel** is ALSO composer policy (`advisory_panel`): a `producer` + a
+> set of challengers each BASELINE (always-on) or GATED on a composition signal —
+> e.g. Quality/Operations resolve `qa-test-strategy` (qa) / class-driven (ops) as
+> producer with `security` BASELINE + `architect` GATED on `multi_component`. At
+> each phase boundary `guild:team-compose` emits the typed `guild.team_plan.v1`
+> (roster + `advisory_panel` + fired rules) as a companion to
+> `.guild/runs/<run-id>/team-plan/<phase>.json`, and `guild:execute-plan` emits
+> `guild.team_result.v1` (fresh per-lane `instance_id`s); the
+> `.guild/team/<slug>.<phase>.yaml` stays authoritative for dispatch.
 
 ## Backend Selection
 

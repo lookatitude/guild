@@ -7,8 +7,8 @@ source_refs:
   - "guild-plan.md"
   - "plugin/scripts/lib/runstart-preflight.ts"
   - "plugin/scripts/lib/run-lifecycle.ts"
-  - ".guild/initiatives/active/settings-control-and-tmux/briefing.md §8,§10,§11"
-  - ".guild/initiatives/active/settings-control-and-tmux/decisions.md OD-2..OD-6"
+  - ".<HIGH_ENTROPY_REDACTED>-control-and-tmux/briefing.md §8,§10,§11"
+  - ".<HIGH_ENTROPY_REDACTED>-control-and-tmux/decisions.md OD-2..OD-6"
 created_at: 2026-05-16
 updated_at: 2026-06-01
 expires_at: null
@@ -71,7 +71,7 @@ intake, not buried in `team-compose` or `execute-plan`):
    (re-detected every run — OD-5, never stale-pinned). Same-family reviewers
    never satisfy `review=cross` (AC-8). Unknown author host → no reviewer
    synthesized.
-5. **Build the resolved-settings snapshot** (`ResolvedSettingsSnapshot`,
+5. **Build the resolved-settings snapshot** (`<HIGH_ENTROPY_REDACTED>`,
    schema `guild.resolved_settings.v1`). Passed to `startRun()`, which writes
    it to `.guild/runs/<id>/resolved-settings.json` before any phase work.
 
@@ -104,7 +104,7 @@ intake, not buried in `team-compose` or `execute-plan`):
 A compact `settings_ref` block in `run.yaml` points at this file
 (`path: resolved-settings.json`, `schema_version`, `effective_backend`,
 `review`, `recommended_provider`). Phase skills that need the locked-in
-settings call `readResolvedSettingsSnapshot(runId, { cwd })` — mid-run config
+settings call `<HIGH_ENTROPY_REDACTED>(runId, { cwd })` — mid-run config
 edits do not change behavior for the current run (AC-10 invariant). The write
 is security-hardened: `validateRunId()` rejects traversal patterns before any
 I/O and a containment assertion verifies the path stays inside the runs base.
@@ -154,7 +154,7 @@ stateDiagram-v2
   }
   Ideation --> Planning
   state Planning {
-    [*] --> PRDSynthesis: architect+techwriter (right-sized)
+    [*] --> PRDSynthesis: <HIGH_ENTROPY_REDACTED> (right-sized)
     PRDSynthesis --> TeamCompose
     TeamCompose --> GTeam
     GTeam --> TeamCompose: edit
@@ -215,7 +215,7 @@ Every phase repeats the same control pattern:
 1. Resolve phase input and run id.
 2. Assemble phase memory from `.guild/wiki`, `.guild/raw`, prior phase
    artifacts, the connected knowledge model (the derived
-   `.guild/indexes/knowledge-links.json` work↔knowledge edges), and current
+   `.<HIGH_ENTROPY_REDACTED>-links.json` work↔knowledge edges), and current
    repository state.
 3. Compose a phase-specific team plus advisory agents.
 4. Run the producer work loop.
@@ -267,7 +267,7 @@ new user gate; the LC column records the phase tag written to
 
 | Phase (concept) | Stations (spine skills) | Command | Required upstream | Gate(s) (interactive-by-default) | LC (step 7.5) | Primary artifact |
 |---|---|---|---|---|---|---|
-| **Init** | Classify → Greenfield-Interview \| Brownfield-GraphBuild \| Resume-Repair → G-init-promote | `/guild:init` | none | G-init-classify (auto/1-Q); ask-before-deep-scan **I**; G-init-promote **I**; G-init review **A** | `init` (auto, all-`none` default) | `.guild/init/<slug>.md`, `.guild/project.yaml`, `.guild/wiki/**`, `.guild/raw/**`; brownfield: `.guild/indexes/codebase-map.json`, (lazy) `knowledge-graph.json`, `.guild/wiki/concepts/architecture-map.md` |
+| **Init** | Classify → Greenfield-Interview \| Brownfield-GraphBuild \| Resume-Repair → G-init-promote | `/guild:init` | none | G-init-classify (auto/1-Q); ask-before-deep-scan **I**; G-init-promote **I**; G-init review **A** | `init` (auto, all-`none` default) | `.guild/init/<slug>.md`, `.guild/project.yaml`, `.guild/wiki/**`, `.guild/raw/**`; brownfield: `.<HIGH_ENTROPY_REDACTED>-map.json`, (lazy) `knowledge-graph.json`, `.<HIGH_ENTROPY_REDACTED>-map.md` |
 | **Ideation** | Brainstorm → (L1 clarify opt-in) → G-knowledge-binding → G-spec | `/guild:ideate [brief]` | init wiki (preferred; min-build if absent, non-blocking) | G-spec spec-approval **I (mandatory)**; G-ideation review **A** | `ideation` (auto) | `.guild/spec/<idea-slug>.md` (+ optional `.guild/research/<idea-slug>.md`) |
 | **Planning** | PRD-synthesis (right-sized) → TeamCompose → G-team → PlanLanes → (DiffUnderstanding P2 brownfield) → (L2 opt-in) → G-plan | `/guild:plan` | idea spec | G-team **I (mandatory)**; G-plan **I (mandatory, folds PRD)**; G-planning review **A** | `planning` (auto) | `.guild/plan/<slug>.md` (+ inline `## PRD` or standalone `.guild/prd/<slug>.md`), `.guild/team/<slug>.yaml` |
 | **Development** | ContextAssemble → Dispatch → (L3/L4/security per-lane opt-in) → Review → VerifyDone → ScopeCheck (P3) | `/guild:build [lane-id]` | `approved:true` plan + team | Autonomy-contract gate (set at G-plan) **A**; destructive/network ops **I always**; exit: `guild:review` then `guild:verify-done` | `development` (auto; covers impl + code-review + security-review) | `.guild/context/<run-id>/…`, `.guild/runs/<run-id>/handoffs/*`, `assumptions.md`, `review.md`, `verify.md`, changed files, (brownfield) `diff-understanding.json` |
@@ -306,7 +306,7 @@ Process:
    structural + domain scan using the internalized engine (inventory-first,
    summarize-by-directory, ask before deep-scanning vendored/generated trees;
    skippable for greenfield). Init *done* requires only the cheap `CodebaseMap`
-   + a confidence-tagged `.guild/wiki/concepts/architecture-map.md` stub; the
+   + a confidence-tagged `.<HIGH_ENTROPY_REDACTED>-map.md` stub; the
    full semantic graph + onboarding tour are built lazily (gated,
    ask-before-deep-scan) when the first plan needing P2/P3 is created. See
    [codebase-understanding.md](codebase-understanding.md).
@@ -323,10 +323,10 @@ Outputs:
 - `.guild/project.yaml`
 - `.guild/wiki/index.md` and foundational `.guild/wiki/**` pages
 - `.guild/raw/sources/**` for copied source material
-- for existing products: `.guild/indexes/codebase-map.json`, (lazy)
-  `.guild/indexes/knowledge-graph.json`, a synthesized
-  `.guild/wiki/concepts/architecture-map.md`, and an optional
-  `.guild/indexes/onboarding-tour.md`
+- for existing products: `.<HIGH_ENTROPY_REDACTED>-map.json`, (lazy)
+  `.<HIGH_ENTROPY_REDACTED>-graph.json`, a synthesized
+  `.<HIGH_ENTROPY_REDACTED>-map.md`, and an optional
+  `.<HIGH_ENTROPY_REDACTED>-tour.md`
 
 Done criteria:
 
@@ -478,7 +478,7 @@ Done criteria:
 Goal: answer "is the *product* releasable against its goals and user
 journeys?" `guild:quality` (`/guild:qa [run-id]`) auto-selects and *executes*
 the applicable check classes (E2E, smoke, a11y, perf, integration) from
-project signals, behind a producer/challenger pair and an interactive
+project signals, behind a composer-derived producer/challenger advisory panel and an interactive
 release/blocker gate. It is a full `[v2]` skill; the command verb is `qa`.
 
 ### Verify-done boundary (four non-overlap invariants)
@@ -527,7 +527,7 @@ Process:
    is one prompt *inside an already-opted-into phase* — not gate fatigue.
 3. **RunChecks.** Execute only *discovered* harnesses (never authors or
    installs a framework — that lives in `qa-*` specialists at
-   Planning/Development). Execution inherits the run's `task_run` permission
+   <HIGH_ENTROPY_REDACTED>). Execution inherits the run's `task_run` permission
    envelope and the immutable always-ask hard set (any network egress or
    destructive setup prompts inline regardless of `--auto-approve`). A
    per-class wall-clock budget caps runaway suites; on exhaustion the class
@@ -540,9 +540,10 @@ Process:
    unchanged. This phase consumes those values by pointer and never
    re-states the numbers. Quality orchestrates discovered harnesses under
    the run sandbox; it does not become CI.
-4. **G-quality review (advisory `A`).** Producer `qa-test-strategy` (lead);
-   challenger `security` (release-risk lens) + `architect`
-   (regression/blast-radius lens), cross-model-preferred. Challenger
+4. **G-quality review (advisory `A`).** The composer-derived qa `advisory_panel`:
+   producer `qa-test-strategy` (lead); challenger `security` (release-risk lens,
+   BASELINE) + `architect` (regression/blast-radius lens, GATED on `multi_component`),
+   cross-model-preferred. Challenger
    findings are resolved by re-running, adding a check, or recording an
    explicit owner-accepted risk; G-quality does not itself block.
 5. **ReleaseGate (interactive `I`).** Default recommendation is *computed,
@@ -583,7 +584,7 @@ results, journeys, challenger trail, release decision). Per-class evidence
 lives under `.guild/runs/<run-id>/quality/evidence/`. The autonomy hard set,
 the 3-level `autonomy_policy` enum, and the additive-optional
 `autonomy_contract` shape are stated once in
-[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.<HIGH_ENTROPY_REDACTED>-architecture.md)
 (`autonomy_policy` / `task_run`); this section consumes them by pointer and
 never re-spells them.
 
@@ -640,7 +641,7 @@ and the additive-optional `autonomy_contract` (`[v2]`). The canonical
 `runbook_approved`/`approved_ref` Operations-only extension keys), the fixed
 3-level `autonomy_policy` enum, the immutable always-ask hard set, and the
 hard-set-∉-allowlist plan-validate reject rule are all stated once in
-[`../architecture/target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md)
+[`../architecture/target-architecture.md`](../../../../.<HIGH_ENTROPY_REDACTED>-architecture.md)
 (`autonomy_policy` / `task_run`). Operations is the first real consumer and
 references that text by pointer; it never re-spells the schema. Runbook
 approval lowers the **soft** gate only — it never touches the **hard** set;
@@ -651,7 +652,7 @@ this is the same two-tier model as Development, reused not reinvented.
 > 1. **No class is autonomous by default for unproven runbooks.** Autonomy is
 >    earned per-runbook: a runbook is only `approved:true` after it ran ≥1×
 >    interactively with a clean ops record AND a human marked it approved
->    (recorded in `.guild/wiki/standards/runbooks/<name>.md` via
+>    (recorded in `.<HIGH_ENTROPY_REDACTED><name>.md` via
 >    `guild:decisions`). First run of any runbook is ALWAYS interactive.
 > 2. **incident + rollback are NEVER autonomous**, regardless of approval —
 >    hard-coded in the taxonomy table. Their blast radius and uncertainty are
@@ -671,9 +672,9 @@ validator, two callers — shared with the per-lane autonomy-contract case).
 This makes the safety rails machine-checkable.
 
 **The wiki is the runbook-approval trust root.** Runbook approval lives at
-`.guild/wiki/standards/runbooks/<name>.md` and is promoted via
+`.<HIGH_ENTROPY_REDACTED><name>.md` and is promoted via
 `guild:decisions`. Wiki integrity is therefore **deliberately load-bearing**
-for autonomous monitoring/maintenance — the wiki, not run-scoped state, is the
+for autonomous <HIGH_ENTROPY_REDACTED> — the wiki, not run-scoped state, is the
 durable trust anchor for autonomous production operations. This is bounded:
 safety rail #3 above (the always-ask hard set fires on **every**
 destructive/network/spend step even inside an `approved:true` autonomous
@@ -695,12 +696,14 @@ Process:
    `technical-writer-release-notes` is a release-class advisory. Each step
    records its `op_class`; every hard-set step shows
    `autonomy: prompted_inline`.
-4. **G-operations review (advisory `A`).** Challenger `security`
-   (blast-radius + secret-exposure lens) + `architect`
-   (rollback-correctness + state-consistency lens), cross-model-preferred.
+4. **G-operations review (advisory `A`).** The composer-derived ops `advisory_panel`
+   (producer class-dependent): challenger `security` (blast-radius + secret-exposure
+   lens, BASELINE) + `architect` (rollback-correctness + state-consistency lens, GATED
+   on `multi_component`), cross-model-preferred.
    Findings resolved or owner-accepted with name + rationale.
    Team-composition rule: ≤4 active specialists (producer + the
-   security+architect challenger pair + the one release advisory);
+   composer-derived challenger panel — `security` baseline + `architect` gated on
+   `multi_component` — + the one release advisory);
    incident/rollback never exceed producer+challenger.
 
 The artifact path is unchanged (`.guild/runs/<run-id>/ops/<run-id>.md`); its
@@ -721,7 +724,7 @@ initiative close gate (exec + release + docs). Operations supplies the
 release-readiness *evidence*; `InitiativeCloseout` still owns initiative
 closure (state machine unchanged). The D8 close-gate contract is frozen
 `[v2]`; its automation is `[v2.x]`. See
-[../initiatives/initiative-lifecycle-and-release-doc-sync.md](../../../../.guild/wiki/entities/initiative-lifecycle-and-release-doc-sync.md).
+[../initiatives/initiative-lifecycle-and-release-doc-sync.md](../../../../.<HIGH_ENTROPY_REDACTED>-lifecycle-and-release-doc-sync.md).
 
 Outputs:
 
@@ -757,12 +760,12 @@ opt-in per lane. The broker is placed at the review boundary of any phase when
 
 | Loop | Where | Producer | Challenger | Trigger |
 |---|---|---|---|---|
-| **L1 clarify** | Ideation (before G-spec) | brainstorm/architect | researcher/clarifier | `--rigor=deep` (opt-in) |
+| **L1 clarify** | Ideation (before G-spec) | <HIGH_ENTROPY_REDACTED> | <HIGH_ENTROPY_REDACTED> | `--rigor=deep` (opt-in) |
 | **L2 plan-review** | Planning (before G-plan) | plan-lanes/architect | security plan-defect reviewer | `--rigor=deep` (opt-in) |
 | **L3 dev↔tester/QA** | Development (per lane) | task owner | tester then QA | `--rigor=deep` per lane (opt-in) |
-| **L4 security/architecture** | Development (per lane, every phase) | task owner | security + architect (findings or explicit `not_applicable`) | always for security/architecture signoff |
-| **G-quality** | Quality boundary (before ReleaseGate) | `qa-test-strategy` | security + architect (release-risk / regression lens) | every Quality phase (advisory `A`) |
-| **G-operations** | Operations boundary (before outcome record) | class-dependent `devops-*` | security + architect (blast-radius / rollback-correctness lens) | every Operations phase (advisory `A`) |
+| **L4 <HIGH_ENTROPY_REDACTED>** | Development (per lane, every phase) | task owner | security + architect (findings or explicit `not_applicable`) | always for <HIGH_ENTROPY_REDACTED> signoff |
+| **G-quality** | Quality boundary (before ReleaseGate) | `qa-test-strategy` | `security` baseline + `architect` gated on `multi_component` (release-risk / regression lens) | every Quality phase (advisory `A`) |
+| **G-operations** | Operations boundary (before outcome record) | class-dependent `devops-*` | `security` baseline + `architect` gated on `multi_component` (blast-radius / rollback-correctness lens) | every Operations phase (advisory `A`) |
 | **Cross-host broker** | review boundary of any phase | host A reviewer | host B reviewer (Claude↔Codex) | `--review=cross` (auto with `--rigor=deep`); policy-gated |
 | **LearningCheckpoint (step 7.5)** | the `A` review boundary of every phase | the phase's existing review producer | classification verdict (no challenger; advisory) | automatic every phase; all-`none` default; no new gate, no new prompt |
 
@@ -788,7 +791,7 @@ packets to `.guild/runs/<run-id>/review/packets/<pkt-id>.yaml` and results to
 set, the expanded profile — including the cross-host Codex review — is printed
 before the first gate; no separate explicit flag is required.
 Cross-model adversarial selection is defined in
-[adversarial-review.md](../../../../.guild/wiki/entities/adversarial-review.md).
+[adversarial-review.md](../../../../.<HIGH_ENTROPY_REDACTED>-review.md).
 
 ## Initiative Wrapper (opt-in)
 
@@ -798,13 +801,13 @@ team-compose). The default is `one_off` (no initiative dir; the run lives at
 durable-goal signal OR explicit `--initiative` OR `/guild:initiative …`; when
 signalled, `/guild` *asks* "[new / existing / one-off]" — it never silently
 auto-attaches. When attached, the run nests under
-`.guild/initiatives/active/<id>/runs/<run-id>/` and the D8 close gate (exec +
+`.<HIGH_ENTROPY_REDACTED><id>/runs/<run-id>/` and the D8 close gate (exec +
 release + docs) applies — the close-gate *contract* is frozen `[v2]`, the
 *automation* is `[v2.x]`. Status axes are never collapsed:
 `definition_status`, `execution_status`, `release_status`,
 `documentation_status`. See
 [workflow-operating-model.md](workflow-operating-model.md) and
-[../initiatives/initiative-lifecycle-and-release-doc-sync.md](../../../../.guild/wiki/entities/initiative-lifecycle-and-release-doc-sync.md).
+[../initiatives/initiative-lifecycle-and-release-doc-sync.md](../../../../.<HIGH_ENTROPY_REDACTED>-lifecycle-and-release-doc-sync.md).
 
 ## Resumption
 
@@ -828,7 +831,7 @@ run is active" with the standard resume / abort / force-takeover prompt
 `.guild/settings.json`, default 30 min) offers force-takeover. The lock
 filename, the `heartbeat-at`/`stale_after_minutes` stale predicate, the
 validity definition, and the atomic-write rule are specified once in
-[`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) (Persistence
+[`target-architecture.md`](../../../../.<HIGH_ENTROPY_REDACTED>-architecture.md) (Persistence
 discipline); this section states the lifecycle behavior.
 
 Brownfield work adds a **graph-staleness probe**:
