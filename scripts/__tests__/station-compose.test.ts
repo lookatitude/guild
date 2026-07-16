@@ -372,6 +372,7 @@ const VALID_PLAN = {
   fired_rules: [],
   plan_driven_slots: ["task-owner-implementers"],
   advisory_memory: true,
+  advisory_panel: { producer: null, challengers: [], fired_challenger_rules: [] },
   cap: 6,
   capped: false,
   dropped_roles: [],

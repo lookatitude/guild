@@ -330,6 +330,178 @@ describe("conditional roster (optionals are signal-gated, never unconditional)",
   });
 });
 
+// ── Advisory challenger panel (advisory_panel — additive, ADVISORY only) ───────
+
+describe("advisory challenger panel", () => {
+  it("every station composes a well-formed advisory_panel", () => {
+    for (const station of STATIONS) {
+      const plan = composeStationTeam(station, NO_SIGNALS, cfg());
+      expect(validateTeamPlanV1(plan)).not.toBeNull();
+      const panel = plan.advisory_panel;
+      expect(panel).toBeDefined();
+      // producer is a non-empty string or null; challengers/fired ids are arrays.
+      expect(panel.producer === null || typeof panel.producer === "string").toBe(true);
+      expect(Array.isArray(panel.challengers)).toBe(true);
+      expect(Array.isArray(panel.fired_challenger_rules)).toBe(true);
+      // Every fired-challenger id is well-formed `chal:<station>:<role>`.
+      for (const id of panel.fired_challenger_rules) {
+        expect(id).toMatch(/^chal:[a-z-]+:[A-Za-z0-9_-]+$/);
+      }
+    }
+  });
+
+  it("qa panel: producer qa-test-strategy; security baseline, architect GATED on multi_component", () => {
+    // No signals → only the baseline challenger (security); architect gated OFF.
+    const idle = composeStationTeam("qa", NO_SIGNALS, cfg());
+    expect(idle.advisory_panel.producer).toBe("qa-test-strategy");
+    expect(idle.advisory_panel.challengers).toEqual(["security"]);
+    expect(idle.advisory_panel.fired_challenger_rules).toEqual([]);
+
+    // multi_component → architect gated ON; its fired-rule recorded.
+    const fired = composeStationTeam("qa", { multi_component: true }, cfg());
+    expect(fired.advisory_panel.producer).toBe("qa-test-strategy");
+    expect(fired.advisory_panel.challengers).toEqual(["security", "architect"]);
+    expect(fired.advisory_panel.fired_challenger_rules).toEqual(["chal:qa:architect"]);
+  });
+
+  it("ops panel: producer null; same baseline/gated behavior", () => {
+    const idle = composeStationTeam("ops", NO_SIGNALS, cfg());
+    expect(idle.advisory_panel.producer).toBeNull();
+    expect(idle.advisory_panel.challengers).toEqual(["security"]);
+    expect(idle.advisory_panel.fired_challenger_rules).toEqual([]);
+
+    const fired = composeStationTeam("ops", { multi_component: true }, cfg());
+    expect(fired.advisory_panel.producer).toBeNull();
+    expect(fired.advisory_panel.challengers).toEqual(["security", "architect"]);
+    expect(fired.advisory_panel.fired_challenger_rules).toEqual(["chal:ops:architect"]);
+  });
+
+  it("a station with an empty panel (build) resolves an empty resolved panel", () => {
+    const plan = composeStationTeam("build", { multi_component: true, auth_touched: true }, cfg());
+    expect(plan.advisory_panel).toEqual({
+      producer: null,
+      challengers: [],
+      fired_challenger_rules: [],
+    });
+  });
+
+  it("advisory challengers do NOT enter the roster and do NOT count toward cap-6", () => {
+    // qa's advisory panel names security + architect, but a no-signal qa roster is
+    // just [qa] — the challengers stay out of the roster entirely.
+    const plan = composeStationTeam("qa", NO_SIGNALS, cfg());
+    expect(plan.roster.map((l) => l.role)).toEqual(["qa"]);
+    // The gated-challenger fired-rule id is NOT folded into the roster fired_rules.
+    const fired = composeStationTeam("qa", { multi_component: true }, cfg());
+    expect(fired.fired_rules).not.toContain("chal:qa:architect");
+    expect(fired.advisory_panel.fired_challenger_rules).toContain("chal:qa:architect");
+  });
+
+  it("validateTeamPlanV1 REJECTS a plan missing advisory_panel", () => {
+    const p = composeStationTeam("qa", NO_SIGNALS, cfg());
+    const { advisory_panel: _omit, ...missing } = p;
+    expect(validateTeamPlanV1(missing)).toBeNull();
+  });
+
+  it("validateTeamPlanV1 REJECTS a bad producer type", () => {
+    const p = composeStationTeam("qa", NO_SIGNALS, cfg());
+    expect(
+      validateTeamPlanV1({ ...p, advisory_panel: { ...p.advisory_panel, producer: 7 } })
+    ).toBeNull();
+  });
+
+  it("validateTeamPlanV1 REJECTS a non-string challenger", () => {
+    const p = composeStationTeam("qa", NO_SIGNALS, cfg());
+    expect(
+      validateTeamPlanV1({ ...p, advisory_panel: { ...p.advisory_panel, challengers: [1] } })
+    ).toBeNull();
+  });
+
+  it("validateTeamPlanV1 REJECTS a fired_challenger_rules entry not matching chal:<station>:<role>", () => {
+    const p = composeStationTeam("qa", { multi_component: true }, cfg());
+    expect(
+      validateTeamPlanV1({
+        ...p,
+        advisory_panel: { ...p.advisory_panel, fired_challenger_rules: ["opt:qa:architect"] },
+      })
+    ).toBeNull();
+  });
+
+  it("validateTeamPlanV1 REJECTS duplicate challengers (resolver dedup guarantee)", () => {
+    const p = composeStationTeam("qa", NO_SIGNALS, cfg());
+    expect(
+      validateTeamPlanV1({
+        ...p,
+        advisory_panel: { ...p.advisory_panel, challengers: ["security", "security"] },
+      })
+    ).toBeNull();
+  });
+
+  it("validateTeamPlanV1 REJECTS duplicate fired_challenger_rules", () => {
+    const p = composeStationTeam("qa", { multi_component: true }, cfg());
+    expect(
+      validateTeamPlanV1({
+        ...p,
+        advisory_panel: {
+          ...p.advisory_panel,
+          fired_challenger_rules: ["chal:qa:architect", "chal:qa:architect"],
+        },
+      })
+    ).toBeNull();
+  });
+
+  it("validateTeamPlanV1 REJECTS a chal: id for a DIFFERENT station", () => {
+    const p = composeStationTeam("qa", { multi_component: true }, cfg());
+    // architect IS present in qa challengers, but the id names the ops station.
+    expect(
+      validateTeamPlanV1({
+        ...p,
+        advisory_panel: { ...p.advisory_panel, fired_challenger_rules: ["chal:ops:architect"] },
+      })
+    ).toBeNull();
+  });
+
+  it("validateTeamPlanV1 REJECTS a fired rule whose role is ABSENT from challengers", () => {
+    // qa with no signals: challengers = ["security"], architect NOT present.
+    const p = composeStationTeam("qa", NO_SIGNALS, cfg());
+    expect(
+      validateTeamPlanV1({
+        ...p,
+        advisory_panel: { ...p.advisory_panel, fired_challenger_rules: ["chal:qa:architect"] },
+      })
+    ).toBeNull();
+  });
+
+  it("validateTeamPlanV1 returns null (never throws) for a Proxy advisory_panel that traps reads", () => {
+    const p = composeStationTeam("qa", NO_SIGNALS, cfg());
+    const evil = new Proxy(
+      { ...p.advisory_panel },
+      {
+        get() {
+          throw new Error("trap");
+        },
+      }
+    );
+    expect(() => validateTeamPlanV1({ ...p, advisory_panel: evil })).not.toThrow();
+    expect(validateTeamPlanV1({ ...p, advisory_panel: evil })).toBeNull();
+  });
+
+  it("validateTeamPlanV1 REJECTS a SPARSE challengers array (a hole serializes to null)", () => {
+    const p = composeStationTeam("qa", { multi_component: true }, cfg());
+    const sparse: string[] = [];
+    sparse[1] = "architect"; // index 0 is a HOLE — Array.every would skip it
+    expect(
+      validateTeamPlanV1({
+        ...p,
+        advisory_panel: {
+          ...p.advisory_panel,
+          challengers: sparse,
+          fired_challenger_rules: ["chal:qa:architect"],
+        },
+      })
+    ).toBeNull();
+  });
+});
+
 // ── Cap-6 (§Team Size Rules) ───────────────────────────────────────────────────
 
 describe("cap-6 team size rule", () => {
@@ -407,6 +579,13 @@ describe("validateTeamPlanV1 fail-closed", () => {
 
   it("rejects an unknown station", () => {
     expect(validateTeamPlanV1({ ...good(), station: "deploy" })).toBeNull();
+  });
+
+  it("rejects a SPARSE roster array (a hole would pass Array.every but serialize to null)", () => {
+    const p = good();
+    const withHole: unknown[] = [];
+    withHole[1] = p.roster[0]; // index 0 is a HOLE
+    expect(validateTeamPlanV1({ ...p, roster: withHole, cap: 6, capped: false, dropped_roles: [] })).toBeNull();
   });
 
   it("rejects a lane with a bad tier or fan-out", () => {

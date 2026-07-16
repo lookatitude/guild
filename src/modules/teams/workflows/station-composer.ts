@@ -99,6 +99,48 @@ export interface StationSignals {
   search_discoverability?: boolean;
 }
 
+// ── Advisory challenger panel (advisory_panel — additive to team_plan.v1) ─────
+
+/**
+ * The composition-signal union a GATED advisory challenger may key off. Re-derived
+ * locally as `keyof StationSignals` on purpose: `station-signals.ts` already imports
+ * FROM this module, so importing its `StationSignalKey` back would form an import
+ * cycle. `keyof StationSignals` is the same closed set, no new cross-file edge.
+ */
+export type AdvisoryChallengerSignal = keyof StationSignals;
+
+/**
+ * A challenger in a station's advisory panel. `signal` omitted ⇒ BASELINE (always
+ * on — the safety floor); present ⇒ GATED (included only when that composition
+ * signal is true).
+ */
+export interface AdvisoryChallenger {
+  role: string;
+  signal?: AdvisoryChallengerSignal;
+}
+
+/** Per-station advisory-panel POLICY (carried in `STATION_POLICY`). */
+export interface AdvisoryPanelPolicy {
+  /** Designated producer role; `null` = plan/class-driven (G6b-2b fills it). */
+  producer: string | null;
+  challengers: readonly AdvisoryChallenger[];
+}
+
+/**
+ * The RESOLVED advisory panel on a composed `team_plan`. The producer + challengers
+ * are ADVISORY — they do NOT enter the `roster`, do NOT count toward cap-6, and are
+ * independent of roster resolution (a challenger role may or may not also appear in
+ * the roster; they are different lists).
+ */
+export interface AdvisoryPanelV1 {
+  /** Copied verbatim from the policy (may be null; G6b-2b may fill a null later). */
+  producer: string | null;
+  /** Resolved challengers (baseline + fired gated), deduped, order-stable. */
+  challengers: string[];
+  /** `chal:<station>:<role>` for each GATED challenger that fired (baseline emits none). */
+  fired_challenger_rules: string[];
+}
+
 // ── Implied Specialist Rules (guild.station_policy.v1 · §Implied) ─────────────
 
 /**
@@ -201,6 +243,14 @@ export interface StationDefault {
    */
   plan_driven_slots: readonly string[];
   advisory_memory: boolean;
+  /**
+   * The advisory CHALLENGER panel POLICY for this station — the producer + the
+   * baseline/gated challengers, as DATA. Replaces the old hardcoded per-skill
+   * combos (guild-quality's `producer qa-test-strategy; challengers [security,
+   * architect]`, guild-operations, …) with composer policy. ADVISORY only — never
+   * enters the roster, never counts toward cap-6.
+   */
+  advisory_panel: AdvisoryPanelPolicy;
   /** D1 baseline fan-out for every lane at this station; G8 may raise it. */
   default_fanout: CellFanout;
   /** true when this row EXTENDS the doc (doc §Phase Team Defaults omits it). */
@@ -211,6 +261,44 @@ export interface StationDefault {
 }
 
 const DEFAULTS_ANCHOR = `${DOC}#phase-team-defaults`;
+
+/**
+ * The empty advisory panel — no producer, no challengers — for stations with no
+ * hardcoded challenger trail today (init/ideate/plan/build/research/definition/
+ * learn). Shared frozen literal so an empty panel is a no-op, no-regression value.
+ */
+const EMPTY_ADVISORY_PANEL: AdvisoryPanelPolicy = Object.freeze({
+  producer: null,
+  challengers: Object.freeze([]),
+});
+
+/**
+ * qa's advisory panel — replaces guild-quality's hardcoded `producer
+ * qa-test-strategy; challengers [security, architect]`. security is BASELINE (the
+ * always-on safety floor); architect is now GATED on `multi_component` — a
+ * deliberate semantics change from the old fixed pair. The explicit type
+ * annotation contextually types the `signal` literals as `keyof StationSignals`.
+ */
+const QA_ADVISORY_PANEL: AdvisoryPanelPolicy = Object.freeze({
+  producer: "qa-test-strategy",
+  challengers: Object.freeze([
+    Object.freeze({ role: "security" }),
+    Object.freeze({ role: "architect", signal: "multi_component" }),
+  ]),
+});
+
+/**
+ * ops' advisory panel — replaces guild-operations' hardcoded combo. producer is
+ * class/plan-driven (`null` here; G6b-2b fills it); security BASELINE; architect
+ * GATED on `multi_component`.
+ */
+const OPS_ADVISORY_PANEL: AdvisoryPanelPolicy = Object.freeze({
+  producer: null,
+  challengers: Object.freeze([
+    Object.freeze({ role: "security" }),
+    Object.freeze({ role: "architect", signal: "multi_component" }),
+  ]),
+});
 
 /**
  * `guild.station_policy.v1` — the canonical station→default-team table.
@@ -235,6 +323,7 @@ export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = Objec
     conditional_roster: Object.freeze({ architect: "multi_component" }),
     plan_driven_slots: Object.freeze([]),
     advisory_memory: true,
+    advisory_panel: EMPTY_ADVISORY_PANEL,
     default_fanout: "lead_only",
     extends_doc: false,
     doc_ref: DEFAULTS_ANCHOR,
@@ -247,6 +336,7 @@ export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = Objec
     // concrete roles; the plan/spec supplies them (G6b).
     plan_driven_slots: Object.freeze(["product", "content", "domain"]),
     advisory_memory: true,
+    advisory_panel: EMPTY_ADVISORY_PANEL,
     default_fanout: "lead_only",
     extends_doc: false,
     doc_ref: DEFAULTS_ANCHOR,
@@ -258,6 +348,7 @@ export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = Objec
     conditional_roster: Object.freeze({ security: "auth_touched" }),
     plan_driven_slots: Object.freeze([]),
     advisory_memory: true,
+    advisory_panel: EMPTY_ADVISORY_PANEL,
     default_fanout: "lead_only",
     extends_doc: false,
     doc_ref: DEFAULTS_ANCHOR,
@@ -271,6 +362,7 @@ export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = Objec
     conditional_roster: Object.freeze({ architect: "multi_component" }),
     plan_driven_slots: Object.freeze(["task-owner-implementers"]),
     advisory_memory: true,
+    advisory_panel: EMPTY_ADVISORY_PANEL,
     default_fanout: "lead_only",
     extends_doc: false,
     doc_ref: DEFAULTS_ANCHOR,
@@ -284,6 +376,7 @@ export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = Objec
     conditional_roster: Object.freeze({ security: "auth_touched" }),
     plan_driven_slots: Object.freeze(["devops", "relevant-implementers"]),
     advisory_memory: true,
+    advisory_panel: QA_ADVISORY_PANEL,
     default_fanout: "lead_only",
     extends_doc: false,
     doc_ref: DEFAULTS_ANCHOR,
@@ -295,6 +388,7 @@ export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = Objec
     // Doc: "relevant implementers" → plan-driven.
     plan_driven_slots: Object.freeze(["relevant-implementers"]),
     advisory_memory: true,
+    advisory_panel: OPS_ADVISORY_PANEL,
     default_fanout: "lead_only",
     extends_doc: false,
     doc_ref: DEFAULTS_ANCHOR,
@@ -306,6 +400,7 @@ export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = Objec
     conditional_roster: Object.freeze({ architect: "multi_component" }),
     plan_driven_slots: Object.freeze([]),
     advisory_memory: true,
+    advisory_panel: EMPTY_ADVISORY_PANEL,
     default_fanout: "lead_only",
     extends_doc: true,
     note: "EXTENDS doc: research station (product-explore / researcher deliverables); doc §Phase Team Defaults omits it — reconcile in G6b.",
@@ -317,6 +412,7 @@ export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = Objec
     conditional_roster: Object.freeze({ qa: "backend_present" }),
     plan_driven_slots: Object.freeze([]),
     advisory_memory: true,
+    advisory_panel: EMPTY_ADVISORY_PANEL,
     default_fanout: "lead_only",
     extends_doc: true,
     note: "EXTENDS doc: definition station (product-define / PRD nucleus); mirrors Planning minus security-by-default — reconcile in G6b.",
@@ -328,6 +424,7 @@ export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = Objec
     conditional_roster: Object.freeze({ architect: "multi_component", "technical-writer": "public_docs" }),
     plan_driven_slots: Object.freeze([]),
     advisory_memory: true,
+    advisory_panel: EMPTY_ADVISORY_PANEL,
     default_fanout: "lead_only",
     extends_doc: true,
     note: "EXTENDS doc: learn station (learn-* knowledge pipeline; analysis reuses researcher/architect per team-composition.md §No new analysis specialist); doc §Phase Team Defaults omits it — reconcile in G6b.",
@@ -400,6 +497,12 @@ export interface TeamPlanV1 {
   plan_driven_slots: string[];
   /** Whether an advisory-memory agent should attach (does not count toward cap-6). */
   advisory_memory: boolean;
+  /**
+   * The RESOLVED advisory challenger panel — producer + resolved challengers +
+   * fired gated-challenger rule ids. ADVISORY: independent of the roster, never
+   * counts toward cap-6. (REQUIRED field — G6b-2b consumes it.)
+   */
+  advisory_panel: AdvisoryPanelV1;
   /** The cap applied. */
   cap: number;
   /** true iff the cap-6 ceiling truncated the roster (optionals dropped first). */
@@ -630,6 +733,39 @@ export function composeStationTeam(
       return lane;
     });
 
+  // (7) — resolve the ADVISORY CHALLENGER PANEL. Independent of the roster: a
+  // challenger is a baseline (always-on) or a gated (signal-fired) reviewer, NOT a
+  // roster lane. Iterate policy order; include a challenger when its `signal` is
+  // undefined (baseline) OR the signal fired. Dedupe by role, order-stable. Each
+  // GATED challenger that fired records `chal:<station>:<role>` (baseline emits no
+  // fired-rule id); these NEVER fold into the roster `fired_rules`.
+  const advisoryPolicy = policy.advisory_panel;
+  const challengers: string[] = [];
+  const challengerSeen = new Set<string>();
+  const fired_challenger_rules: string[] = [];
+  const firedChallengerSeen = new Set<string>();
+  for (const ch of advisoryPolicy.challengers) {
+    const gated = ch.signal !== undefined;
+    const fired = gated ? signals[ch.signal as keyof StationSignals] === true : true;
+    if (!fired) continue;
+    if (!challengerSeen.has(ch.role)) {
+      challengerSeen.add(ch.role);
+      challengers.push(ch.role);
+    }
+    if (gated) {
+      const ruleId = `chal:${station}:${ch.role}`;
+      if (!firedChallengerSeen.has(ruleId)) {
+        firedChallengerSeen.add(ruleId);
+        fired_challenger_rules.push(ruleId);
+      }
+    }
+  }
+  const advisory_panel: AdvisoryPanelV1 = {
+    producer: advisoryPolicy.producer,
+    challengers,
+    fired_challenger_rules,
+  };
+
   return {
     schema_version: TEAM_PLAN_SCHEMA,
     station,
@@ -637,6 +773,7 @@ export function composeStationTeam(
     fired_rules,
     plan_driven_slots: [...policy.plan_driven_slots],
     advisory_memory: policy.advisory_memory,
+    advisory_panel,
     cap,
     capped: dropped_roles.length > 0,
     dropped_roles,
@@ -654,14 +791,62 @@ const CELL_FANOUTS: ReadonlySet<string> = new Set<string>([
 const LANE_SOURCES: ReadonlySet<string> = new Set<string>(["default", "optional", "implied"]);
 
 const isStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+
+/**
+ * `Array.prototype.every` SKIPS holes in a sparse array — a hole would then pass a
+ * naive `.every(pred)` check yet `JSON.stringify` serializes it to `null`, so a
+ * plan could validate on write but fail on re-read (write/read asymmetry). This
+ * visits EVERY index 0..length-1 (a hole reads as `undefined`, which every
+ * predicate here rejects), closing the sparse-array hole for all array fields.
+ */
+function denseEvery(arr: readonly unknown[], pred: (x: unknown) => boolean): boolean {
+  for (let i = 0; i < arr.length; i++) {
+    if (!pred(arr[i])) return false;
+  }
+  return true;
+}
+
 const isStrArr = (v: unknown): v is string[] =>
-  Array.isArray(v) && v.every((x) => typeof x === "string" && x.length > 0);
+  Array.isArray(v) && denseEvery(v, (x) => typeof x === "string" && (x as string).length > 0);
 
 /** A fired_rule id is a known IMPLIED_RULES id or a `opt:<station>:<role>` id. */
 const IMPLIED_RULE_IDS: ReadonlySet<string> = new Set<string>(IMPLIED_RULES.map((r) => r.id));
 function isKnownRuleId(id: string): boolean {
   if (IMPLIED_RULE_IDS.has(id)) return true;
   return /^opt:[a-z-]+:[A-Za-z0-9_-]+$/.test(id);
+}
+
+/**
+ * Fail-closed check of a RESOLVED `advisory_panel` for `station`, enforcing the
+ * SAME invariants `composeStationTeam` guarantees so a hand-authored plan cannot
+ * smuggle a malformed audit trail past the validator: `producer` is a non-empty
+ * string OR null; `challengers` is a DEDUPED string[] of non-empty entries; every
+ * `fired_challenger_rules` entry is `chal:<station>:<role>` for THIS plan's
+ * `station` (a `chal:` id for another station is rejected), references a role that
+ * is PRESENT in `challengers` (a gated fire always adds its role), and is itself
+ * deduped.
+ */
+function isAdvisoryPanelV1(v: unknown, station: StationId): v is AdvisoryPanelV1 {
+  if (v === null || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  if (!(o["producer"] === null || isStr(o["producer"]))) return false;
+  if (!isStrArr(o["challengers"])) return false; // isStrArr accepts [] (empty is legal)
+  const challengers = o["challengers"] as string[];
+  if (new Set(challengers).size !== challengers.length) return false; // deduped (resolver guarantee)
+  if (!Array.isArray(o["fired_challenger_rules"])) return false;
+  const challengerSet = new Set(challengers);
+  const prefix = `chal:${station}:`;
+  const firedSeen = new Set<string>();
+  for (const x of o["fired_challenger_rules"] as unknown[]) {
+    if (typeof x !== "string") return false;
+    if (!x.startsWith(prefix)) return false; // station-matched (rejects a cross-station chal: id)
+    const role = x.slice(prefix.length);
+    if (!/^[A-Za-z0-9_-]+$/.test(role)) return false;
+    if (!challengerSet.has(role)) return false; // fired rule must reference a PRESENT challenger
+    if (firedSeen.has(x)) return false; // deduped
+    firedSeen.add(x);
+  }
+  return true;
 }
 
 function isTeamPlanLane(v: unknown): v is TeamPlanLane {
@@ -692,21 +877,34 @@ function isTeamPlanLane(v: unknown): v is TeamPlanLane {
  * role, or vice versa) — the two must be consistent.
  */
 export function validateTeamPlanV1(obj: unknown): TeamPlanV1 | null {
+  // Contract: NEVER throws. An exotic input (a Proxy trap / throwing own getter on
+  // any read below) is treated as invalid and mapped to null.
+  try {
+    return validateTeamPlanV1Inner(obj);
+  } catch {
+    return null;
+  }
+}
+
+function validateTeamPlanV1Inner(obj: unknown): TeamPlanV1 | null {
   if (obj === null || typeof obj !== "object") return null;
   const o = obj as Record<string, unknown>;
   if (o["schema_version"] !== TEAM_PLAN_SCHEMA) return null;
   if (!isStation(o["station"] as string)) return null;
-  if (!Array.isArray(o["roster"]) || !o["roster"].every(isTeamPlanLane)) return null;
+  if (!Array.isArray(o["roster"]) || !denseEvery(o["roster"], (x) => isTeamPlanLane(x))) return null;
   // fired_rules: every entry must be a KNOWN rule id (implied id or `opt:<station>:<role>`),
   // so a plan cannot claim arbitrary fired rules.
-  if (!(Array.isArray(o["fired_rules"]) && (o["fired_rules"] as unknown[]).every((x) => typeof x === "string" && isKnownRuleId(x)))) {
+  if (!(Array.isArray(o["fired_rules"]) && denseEvery(o["fired_rules"], (x) => typeof x === "string" && isKnownRuleId(x as string)))) {
     return null;
   }
   if (!isStrArr(o["plan_driven_slots"])) return null; // isStrArr accepts [] (empty is legal)
-  if (!(Array.isArray(o["dropped_roles"]) && (o["dropped_roles"] as unknown[]).every((x) => typeof x === "string"))) {
+  if (!(Array.isArray(o["dropped_roles"]) && denseEvery(o["dropped_roles"], (x) => typeof x === "string"))) {
     return null;
   }
   if (typeof o["advisory_memory"] !== "boolean") return null;
+  // advisory_panel is REQUIRED and must be a well-formed resolved panel for THIS
+  // plan's station (station validated above).
+  if (!isAdvisoryPanelV1(o["advisory_panel"], o["station"] as StationId)) return null;
   if (typeof o["capped"] !== "boolean") return null;
   if (!Number.isInteger(o["cap"]) || (o["cap"] as number) < 1) return null;
   // capped ⇔ at least one dropped role.
@@ -733,12 +931,22 @@ function isTeamResultLane(v: unknown): v is TeamResultLane {
  * `lanes` array is legal (a station may compose but dispatch nothing).
  */
 export function validateTeamResultV1(obj: unknown): TeamResultV1 | null {
+  // Contract: NEVER throws (mirrors validateTeamPlanV1) — a Proxy trap / throwing
+  // getter on any read below maps to null.
+  try {
+    return validateTeamResultV1Inner(obj);
+  } catch {
+    return null;
+  }
+}
+
+function validateTeamResultV1Inner(obj: unknown): TeamResultV1 | null {
   if (obj === null || typeof obj !== "object") return null;
   const o = obj as Record<string, unknown>;
   if (o["schema_version"] !== TEAM_RESULT_SCHEMA) return null;
   if (!isStation(o["station"] as string)) return null;
   if (!isStr(o["team_plan_ref"])) return null;
-  if (!Array.isArray(o["lanes"]) || !o["lanes"].every(isTeamResultLane)) return null;
+  if (!Array.isArray(o["lanes"]) || !denseEvery(o["lanes"], (x) => isTeamResultLane(x))) return null;
   // D3 freshness — instance_ids must be DISTINCT across lanes.
   const ids = (o["lanes"] as TeamResultLane[]).map((l) => l.instance_id);
   if (new Set(ids).size !== ids.length) return null;
