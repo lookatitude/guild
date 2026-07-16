@@ -1,6 +1,6 @@
 {
   "schema_version": "guild.inventory.v1",
-  "generated_at": "1970-01-01T00:00:00.000Z",
+  "generated_at": "2026-07-16T04:18:52Z",
   "plugin_version": "2.2.0",
   "manifest": {
     "name": "guild",
@@ -2096,6 +2096,11 @@
     {
       "id": "stamp-recall-importance",
       "source_path": "scripts/stamp-recall-importance.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "station-compose",
+      "source_path": "scripts/station-compose.ts",
       "kind": "cli"
     },
     {

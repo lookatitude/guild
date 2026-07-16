@@ -11,6 +11,13 @@
       "sha256": "20f1243b91fd2693411ee6e966043bd1213b5be924ec48716857c00e9d365f97"
     },
     {
+      "category": "scripts",
+      "id": "station-compose",
+      "source_path": "scripts/station-compose.ts",
+      "resource_path": "resources/scripts/station-compose.ts",
+      "sha256": "71f960a70bd05aa2a8b03f66db6fc061ce80b7febef35c99887dd038b3eef835"
+    },
+    {
       "category": "skills",
       "id": "guild-create-specialist",
       "source_path": "skills/meta/create-specialist/SKILL.md",
