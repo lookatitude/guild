@@ -50,8 +50,12 @@ Per-class execution outcomes from `RunChecks`.
 
 The advisory G-quality panel trail (non-blocking).
 
-- Fixed producer `qa-test-strategy`; fixed challenger pair `[security,
-  architect]`; **cross-model-preferred** (the flag is recorded).
+- Sourced from the station composer's **`qa` station `advisory_panel`** (SoT:
+  `src/modules/teams/workflows/station-composer.ts` `STATION_POLICY.qa.advisory_panel`,
+  resolved by `composeStationTeam`) — not a hardcoded fixed pair. Producer
+  `qa-test-strategy` (matches the composer); challengers `security` (BASELINE — always
+  present) + `architect` (GATED on the `multi_component` signal; recorded as
+  `chal:qa:architect`); **cross-model-preferred** (the flag is recorded).
 - Each finding is resolved by **rerun**, an **added check**, or a **named
   owner-accepted risk** (the accepting owner is named). G-quality never itself
   blocks.
