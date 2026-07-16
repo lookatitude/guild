@@ -1,6 +1,6 @@
 {
   "schema_version": "guild.inventory.v1",
-  "generated_at": "2026-07-16T04:18:52Z",
+  "generated_at": "2026-07-16T07:21:10Z",
   "plugin_version": "2.2.0",
   "manifest": {
     "name": "guild",
@@ -1501,6 +1501,11 @@
     {
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/core/contracts/specialist-identity",
+      "source_path": "scripts/lib/core/contracts/specialist-identity.ts",
       "kind": "lib"
     },
     {

@@ -12,6 +12,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/core/contracts/specialist-identity",
+      "source_path": "scripts/lib/core/contracts/specialist-identity.ts",
+      "resource_path": "resources/scripts/lib/core/contracts/specialist-identity.ts",
+      "sha256": "71013a384205271bb970e1f1a67e150ca232a33db89d5e8d3a74d9c60a80e762"
+    },
+    {
+      "category": "scripts",
       "id": "lib/core/contracts/task-cell-backend",
       "source_path": "scripts/lib/core/contracts/task-cell-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/task-cell-backend.ts",
