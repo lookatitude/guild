@@ -32,6 +32,8 @@
  * and `ModelTier` are imported from G2, not re-declared.
  */
 
+import { types as nodeTypes } from "util";
+
 import {
   type CellFanout,
   type ModelTier,
@@ -98,6 +100,215 @@ export interface StationSignals {
   /** Search / discoverability surface → seo. */
   search_discoverability?: boolean;
 }
+
+// ── Decomposition signals + fan-out scoring (D1 · decision 5 · G8) ────────────
+
+/**
+ * The closed set of DECOMPOSITION signals the fan-out scorer keys off — DISTINCT
+ * from `StationSignals` (which selects SPECIALISTS). These decide how a station
+ * cell decomposes into workers. Fan-out is **signal-gated, NOT cost-gated**
+ * (resolved decision 5): a decomposition signal firing is sufficient to fan out;
+ * there is no token-cost veto.
+ *
+ *  - `independence`             genuinely independent / parallelizable branches ⇒ many.
+ *  - `adversarial_value`        an INDEPENDENT adversarial / reviewer perspective adds
+ *                               value, running parallel to the producer ⇒ many
+ *                               (D1: "…or adversarially valuable work").
+ *  - `distinct_discipline_count` how many distinct bounded specialties the work needs
+ *                               BEYOND the lead: `0` ⇒ none, `1` ⇒ `lead_plus_one`,
+ *                               `≥2` ⇒ `lead_plus_many`.
+ *
+ * `StationSignals` cannot express `independence` (it has no breadth/parallelism
+ * axis), so a caller that knows a task is parallelizable supplies it explicitly via
+ * `StationComposeConfig.decompositionSignals`; the rest can be DERIVED from
+ * `StationSignals` (see `deriveDecompositionSignals`).
+ */
+export interface DecompositionSignals {
+  independence?: boolean;
+  adversarial_value?: boolean;
+  distinct_discipline_count?: number;
+}
+
+/** The RESOLVED, fully-populated fan-out signal evidence recorded on every trace. */
+export interface FanoutSignalsFired {
+  independence: boolean;
+  adversarial_value: boolean;
+  distinct_discipline_count: number;
+}
+
+export type CostBand = "low" | "medium" | "high";
+
+/**
+ * A DETERMINISTIC ordinal cost proxy — **NOT** a token measurement. Guild has no
+ * token oracle at compose time; G11 telemetry measures real per-cell tokens
+ * post-hoc. This is stored per decision 5's auditability requirement so a reviewer
+ * can see the estimated blast radius the (disabled) cost gate WOULD have weighed.
+ * `band` derives deterministically from the mode; `worker_lanes` is the resolved
+ * roster size. Cost is RECORDED, never GATING.
+ */
+export interface CostEstimate {
+  band: CostBand;
+  worker_lanes: number;
+}
+
+/** Decision 5: the cost gate is disabled by operator decision (signal-gated, not cost-gated). */
+export const COST_GATE_POLICY = "disabled_by_operator" as const;
+
+/**
+ * The lead-binding DECISION (decision 2). `lead_only` ⇒ reuse the parent
+ * orchestrator as lead (no new lead model call, no new `guild.agent_instance.v1`
+ * for the lead — recorded as a `lead_binding_id` pointer at dispatch);
+ * `lead_plus_one` / `lead_plus_many` ⇒ a distinct Team Lead call (recorded as a
+ * `team_lead_instance_id`). The composer records the DECISION; the dispatch layer
+ * fills the concrete runtime id. Worker instances are always fresh regardless (D3).
+ */
+export type LeadBindingKind = "reuse_parent" | "distinct_lead";
+
+/**
+ * A user / operator fan-out OVERRIDE — forces the mode regardless of the scored
+ * signals, and stays fully TRACEABLE. Unlike the signal scorer (which only ever
+ * RAISES fan-out), an override may raise OR lower the scored mode.
+ */
+export interface FanoutOverride {
+  mode: CellFanout;
+  /** Why the operator forced the mode (non-empty; recorded on the trace). */
+  reason: string;
+  /** Who forced it (non-empty; recorded on the trace). */
+  by: string;
+}
+
+/** The override AS RECORDED on the trace (`null` when the mode is signal-scored). */
+export interface FanoutOverrideRecord {
+  applied: true;
+  /** What the signals scored (before the override). */
+  scored_mode: CellFanout;
+  /** What the override forced (=== the resolved `mode`). */
+  forced_mode: CellFanout;
+  reason: string;
+  by: string;
+}
+
+export const COMPOSITION_TRACE_SCHEMA = "guild.composition_trace.v1" as const;
+
+/**
+ * The per-cell COMPOSITION TRACE (decision 5 auditability requirement + D1). Stores
+ * the evidence for the resolved fan-out mode so G11 can audit *why* a (potentially
+ * high-cost) fan-out was allowed — cost never GATES the decision, but the evidence
+ * is always recorded. Emitted on every `guild.team_plan.v1`.
+ */
+export interface CompositionTraceV1 {
+  schema_version: typeof COMPOSITION_TRACE_SCHEMA;
+  /** The resolved fan-out mode for the whole station cell (every lane mirrors it). */
+  mode: CellFanout;
+  /** Which decomposition signals fired — the `fanout_signals` evidence (decision 5). */
+  fanout_signals: FanoutSignalsFired;
+  /** Ordinal cost proxy — recorded, never gating (decision 5). */
+  cost_estimate: CostEstimate;
+  /** Constant: the cost gate is disabled by operator decision (decision 5). */
+  cost_gate_policy: typeof COST_GATE_POLICY;
+  /** Lead-binding DECISION (decision 2): reuse parent (`lead_only`) vs distinct lead. */
+  lead_binding: LeadBindingKind;
+  /** Convenience mirror: `true` ⇔ `mode === "lead_only"` ⇔ `lead_binding === "reuse_parent"`. */
+  lead_reuses_parent: boolean;
+  /** The traceable operator override, or `null` when the mode is purely signal-scored. */
+  override: FanoutOverrideRecord | null;
+}
+
+/**
+ * The `StationSignals` fields that each denote a distinct discipline. Used to DERIVE
+ * `distinct_discipline_count` — the number of these that fired for a composition.
+ */
+const DISCIPLINE_SIGNALS: readonly (keyof StationSignals)[] = Object.freeze([
+  "multi_component",
+  "auth_touched",
+  "backend_present",
+  "user_facing_ui",
+  "public_docs",
+  "search_discoverability",
+]);
+
+/**
+ * Derive best-effort `DecompositionSignals` from the specialist-selection
+ * `StationSignals`, so a caller with only `StationSignals` still gets a sane mode.
+ *
+ *  - `independence` is NOT derivable (StationSignals has no breadth axis) ⇒ `false`;
+ *    a caller that knows a task is parallelizable supplies it explicitly.
+ *  - `adversarial_value` derives from `auth_touched` — security-sensitive work
+ *    genuinely benefits from an INDEPENDENT adversarial review cell.
+ *  - `distinct_discipline_count` = how many `DISCIPLINE_SIGNALS` fired.
+ *
+ * Explicit `config.decompositionSignals` are MERGED OVER this derivation per axis
+ * (see `resolveDecomposition`).
+ */
+export function deriveDecompositionSignals(signals: StationSignals): DecompositionSignals {
+  let count = 0;
+  for (const k of DISCIPLINE_SIGNALS) if (signals[k] === true) count++;
+  return {
+    independence: false,
+    adversarial_value: signals.auth_touched === true,
+    distinct_discipline_count: count,
+  };
+}
+
+/** Clamp a caller-supplied discipline count to a NON-NEGATIVE INTEGER (fail-closed:
+ * a NaN / negative / non-integer / non-number collapses to 0, never a fan-out). */
+function normalizeDisciplineCount(v: unknown): number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : 0;
+}
+
+/** Merge explicit decomposition signals OVER the derived ones, per axis, and
+ * normalize to the fully-populated `FanoutSignalsFired` evidence. */
+function resolveDecomposition(
+  derived: DecompositionSignals,
+  explicit: DecompositionSignals | undefined
+): FanoutSignalsFired {
+  const e = explicit ?? {};
+  return {
+    independence: (e.independence ?? derived.independence) === true,
+    adversarial_value: (e.adversarial_value ?? derived.adversarial_value) === true,
+    distinct_discipline_count: normalizeDisciplineCount(
+      e.distinct_discipline_count ?? derived.distinct_discipline_count
+    ),
+  };
+}
+
+/**
+ * Score the fan-out MODE from the fired decomposition signals — **signal-gated
+ * (decision 5), NO cost input**:
+ *
+ *  - `independence` OR `adversarial_value` OR `distinct_discipline_count ≥ 2`
+ *    ⇒ `lead_plus_many` (independent / parallel / adversarial / cross-discipline);
+ *  - exactly `distinct_discipline_count === 1` ⇒ `lead_plus_one` (one distinct
+ *    bounded specialty);
+ *  - otherwise ⇒ `lead_only` (small, linear — the parent orchestrator is the lead).
+ */
+export function scoreFanoutMode(fired: FanoutSignalsFired): CellFanout {
+  if (
+    fired.independence ||
+    fired.adversarial_value ||
+    fired.distinct_discipline_count >= 2
+  ) {
+    return "lead_plus_many";
+  }
+  if (fired.distinct_discipline_count === 1) return "lead_plus_one";
+  return "lead_only";
+}
+
+/** Deterministic ordinal cost band from the resolved mode (recorded, never gating). */
+function costBandForMode(mode: CellFanout): CostBand {
+  return mode === "lead_plus_many" ? "high" : mode === "lead_plus_one" ? "medium" : "low";
+}
+
+/**
+ * Total order over the three fan-out modes, so a station's `default_fanout` acts as
+ * a FLOOR the signal scorer may only RAISE (the seam's original "only ever RAISE"
+ * contract). An operator override is the sole authority that may lower the mode.
+ */
+const FANOUT_RANK: Readonly<Record<CellFanout, number>> = Object.freeze({
+  lead_only: 0,
+  lead_plus_one: 1,
+  lead_plus_many: 2,
+});
 
 // ── Advisory challenger panel (advisory_panel — additive to team_plan.v1) ─────
 
@@ -462,7 +673,12 @@ export interface TeamPlanLane {
   scope: string | null;
   /** The roster's canonical `default_tier` for the role (roster-derived, per D2/D4). */
   default_tier: ModelTier;
-  /** Per-lane fan-out. D1 baseline table value unless G8's `scoreFanout` raised it. */
+  /**
+   * The lane's fan-out mode. At this composer level every lane mirrors the cell's
+   * resolved `composition_trace.mode` (the trace is authoritative; this is a
+   * per-lane convenience mirror the validator holds consistent). G8 scores the mode
+   * from decomposition signals; before G8 it was the D1 `lead_only` table baseline.
+   */
   fanout: CellFanout;
   /** How this lane entered the team (default roster / optional / implied rule). */
   source: LaneSource;
@@ -503,6 +719,13 @@ export interface TeamPlanV1 {
    * counts toward cap-6. (REQUIRED field — G6b-2b consumes it.)
    */
   advisory_panel: AdvisoryPanelV1;
+  /**
+   * The per-cell COMPOSITION TRACE (G8): the resolved fan-out mode + the signal
+   * evidence, cost proxy, cost-gate policy, and lead-binding decision that produced
+   * it. Every `roster` lane's `fanout` mirrors `composition_trace.mode` (the trace
+   * is authoritative). REQUIRED — decision 5 mandates the evidence on every cell.
+   */
+  composition_trace: CompositionTraceV1;
   /** The cap applied. */
   cap: number;
   /** true iff the cap-6 ceiling truncated the roster (optionals dropped first). */
@@ -572,31 +795,26 @@ export function buildTierIndex(resolution: RosterResolution): Record<string, Mod
   return index;
 }
 
-// ── The G8 scoring seam ──────────────────────────────────────────────────────
-
-/**
- * The injectable fan-out scorer G8 will supply. Given a lane's role, its station,
- * and the composition signals, it returns the fan-out for that lane. G6a passes
- * NOTHING here, so every lane takes the policy table's `default_fanout` (D1
- * `lead_only`). G8 adds real signal scoring by passing this hook — WITHOUT
- * reshaping `composeStationTeam`'s signature (the whole point of the seam).
- */
-export type FanoutScorer = (input: {
-  role: string;
-  station: StationId;
-  signals: StationSignals;
-  /** The policy-table baseline, so a scorer can choose to only ever RAISE it. */
-  baseline: CellFanout;
-}) => CellFanout;
+// ── Compose config (G8 fills the fan-out seam) ───────────────────────────────
 
 export interface StationComposeConfig {
   /** role → default_tier, from `buildTierIndex(resolveRoster(...))` (D4). REQUIRED. */
   tierIndex: Record<string, ModelTier>;
   /**
-   * G8 fan-out scoring seam. Omitted in G6a ⇒ every lane uses the table baseline.
-   * When present it is called per lane; its result replaces the baseline.
+   * Explicit decomposition signals (G8), MERGED OVER the derivation from
+   * `StationSignals` (per axis, see `resolveDecomposition`). Supply the axes
+   * `StationSignals` cannot express — chiefly `independence` for parallelizable
+   * breadth (e.g. parallel-research). Omitted ⇒ the mode is scored purely from the
+   * derived signals.
    */
-  scoreFanout?: FanoutScorer;
+  decompositionSignals?: DecompositionSignals;
+  /**
+   * A traceable operator fan-out OVERRIDE (G8). When present it FORCES the resolved
+   * mode (may raise OR lower the scored mode) and is recorded verbatim on
+   * `composition_trace.override`. An override with an unknown `mode` is a
+   * programming error and throws (like an unknown station).
+   */
+  fanoutOverride?: FanoutOverride;
   /** Override the specialist cap (default `TEAM_CAP` = 6). */
   cap?: number;
   /**
@@ -612,7 +830,8 @@ export interface StationComposeConfig {
 
 /**
  * Deterministically compose the team for `station` given the composition
- * `signals` — a policy-table lookup + the §Implied Specialist Rules, NO scoring.
+ * `signals` — a policy-table lookup + the §Implied Specialist Rules for roster
+ * selection, plus G8 fan-out SCORING for the cell's decomposition mode.
  *
  * Algorithm (pure, order-stable, idempotent):
  *   1. Start from the station's `default_roster` (source: "default").
@@ -627,11 +846,17 @@ export interface StationComposeConfig {
  *   5. Apply cap-6: if the specialist count exceeds `cap`, drop from the tail
  *      (optionals are last in priority order, so they go first), recording
  *      `dropped_roles` and `capped: true`. The advisory-memory agent never counts.
- *   6. Resolve each lane's `default_tier` from `config.tierIndex` and its `fanout`
- *      from `config.scoreFanout` (if any) else the table baseline.
+ *   6. SCORE the fan-out mode (G8): derive decomposition signals from `signals`,
+ *      merge `config.decompositionSignals` over them, `scoreFanoutMode(...)` →
+ *      `lead_only | lead_plus_one | lead_plus_many` (signal-gated, NOT cost-gated).
+ *      A `config.fanoutOverride` FORCES the mode and is recorded (traceable). Build
+ *      the `composition_trace` (mode + fired signals + cost proxy + cost-gate policy
+ *      + lead-binding decision + override). Every lane's `fanout` mirrors the mode.
+ *   7. Resolve each lane's `default_tier` from `config.tierIndex`.
  *
- * Throws only on an unknown `station` (a programming error — fail loud, since a
- * bad station id must never silently compose an empty team).
+ * Throws only on an unknown `station` or an override with an unknown `mode` (both
+ * programming errors — fail loud, since a bad station id must never silently
+ * compose an empty team, and a malformed override must never be silently dropped).
  */
 export function composeStationTeam(
   station: StationId,
@@ -712,19 +937,68 @@ export function composeStationTeam(
   const dropped = prioritized.slice(cap);
   const dropped_roles = dropped.map((c) => c.role);
 
-  // (6) — resolve tier + fanout + scope per surviving lane, in original priority order.
+  // (6) — SCORE the fan-out mode (G8). Signal-gated, NOT cost-gated (decision 5).
+  // Derive decomposition signals from `signals`, merge the caller's explicit ones
+  // over them, and score the mode. The policy table's `default_fanout` is a FLOOR
+  // the signal score may only RAISE (never lower) — an operator OVERRIDE is the only
+  // authority that can lower it, and it is recorded verbatim.
+  const fired = resolveDecomposition(
+    deriveDecompositionSignals(signals),
+    config.decompositionSignals
+  );
+  const scoredMode = scoreFanoutMode(fired);
+  const flooredMode: CellFanout =
+    FANOUT_RANK[scoredMode] >= FANOUT_RANK[policy.default_fanout]
+      ? scoredMode
+      : policy.default_fanout;
+  let mode: CellFanout = flooredMode;
+  let override: FanoutOverrideRecord | null = null;
+  if (config.fanoutOverride) {
+    const ov = config.fanoutOverride;
+    if (!CELL_FANOUTS.has(ov.mode)) {
+      throw new Error(
+        `station-composer: invalid fanoutOverride.mode "${ov.mode}" — must be one of ${[...CELL_FANOUTS].join(", ")}`
+      );
+    }
+    // An override MUST be traceable: a blank reason/by would produce a plan the
+    // validator rejects, so the composer refuses to emit one (fail loud, like an
+    // unknown mode — the composer's invariant is "always emits a valid plan").
+    if (typeof ov.reason !== "string" || ov.reason.trim() === "") {
+      throw new Error("station-composer: fanoutOverride.reason must be a non-empty string (override must be traceable)");
+    }
+    if (typeof ov.by !== "string" || ov.by.trim() === "") {
+      throw new Error("station-composer: fanoutOverride.by must be a non-empty string (override must be traceable)");
+    }
+    mode = ov.mode;
+    override = {
+      applied: true,
+      scored_mode: flooredMode,
+      forced_mode: ov.mode,
+      reason: ov.reason,
+      by: ov.by,
+    };
+  }
+  const composition_trace: CompositionTraceV1 = {
+    schema_version: COMPOSITION_TRACE_SCHEMA,
+    mode,
+    fanout_signals: fired,
+    cost_estimate: { band: costBandForMode(mode), worker_lanes: kept.length },
+    cost_gate_policy: COST_GATE_POLICY,
+    lead_binding: mode === "lead_only" ? "reuse_parent" : "distinct_lead",
+    lead_reuses_parent: mode === "lead_only",
+    override,
+  };
+
+  // (7) — resolve tier + scope per surviving lane, in original priority order. Every
+  // lane's `fanout` mirrors the resolved cell mode (the trace is authoritative).
   const roster: TeamPlanLane[] = kept
     .sort((a, b) => ordered.indexOf(a) - ordered.indexOf(b))
     .map((c) => {
-      const baseline = policy.default_fanout;
-      const fanout = config.scoreFanout
-        ? config.scoreFanout({ role: c.role, station, signals, baseline })
-        : baseline;
       const lane: TeamPlanLane = {
         role: c.role,
         scope: null, // composer does not assign scope; G6b plan wiring populates it.
         default_tier: config.tierIndex[c.role] ?? fallbackTier,
-        fanout,
+        fanout: mode,
         source: c.source,
       };
       if ((c.source === "implied" || c.source === "optional") && c.fired_rule) {
@@ -733,7 +1007,7 @@ export function composeStationTeam(
       return lane;
     });
 
-  // (7) — resolve the ADVISORY CHALLENGER PANEL. Independent of the roster: a
+  // (8) — resolve the ADVISORY CHALLENGER PANEL. Independent of the roster: a
   // challenger is a baseline (always-on) or a gated (signal-fired) reviewer, NOT a
   // roster lane. Iterate policy order; include a challenger when its `signal` is
   // undefined (baseline) OR the signal fired. Dedupe by role, order-stable. Each
@@ -766,7 +1040,7 @@ export function composeStationTeam(
     fired_challenger_rules,
   };
 
-  return {
+  const plan: TeamPlanV1 = {
     schema_version: TEAM_PLAN_SCHEMA,
     station,
     roster,
@@ -774,10 +1048,22 @@ export function composeStationTeam(
     plan_driven_slots: [...policy.plan_driven_slots],
     advisory_memory: policy.advisory_memory,
     advisory_panel,
+    composition_trace,
     cap,
     capped: dropped_roles.length > 0,
     dropped_roles,
   };
+
+  // INVARIANT (the trust anchor for the composition_trace contract): the composer is
+  // the SOLE trusted producer and MUST only ever emit a plan its own fail-closed
+  // validator accepts. If this ever fails it is a composer bug, not caller input —
+  // fail loud rather than emit an internally-inconsistent plan a consumer would trust.
+  if (validateTeamPlanV1(plan) === null) {
+    throw new Error(
+      "station-composer: composed an internally-invalid team_plan (composer bug) — refusing to emit"
+    );
+  }
+  return plan;
 }
 
 // ── Validators (fail-closed; typed | null, never throw — G2 idiom) ────────────
@@ -791,6 +1077,11 @@ const CELL_FANOUTS: ReadonlySet<string> = new Set<string>([
 const LANE_SOURCES: ReadonlySet<string> = new Set<string>(["default", "optional", "implied"]);
 
 const isStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+
+/** A non-BLANK string (rejects whitespace-only) — the traceability bar the composer
+ * enforces with `trim() === ""`; the validator must match it so it never accepts an
+ * override the composer itself refuses. */
+const isNonBlankStr = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 
 /**
  * `Array.prototype.every` SKIPS holes in a sparse array — a hole would then pass a
@@ -868,13 +1159,131 @@ function isTeamPlanLane(v: unknown): v is TeamPlanLane {
   return true;
 }
 
+const COST_BANDS: ReadonlySet<string> = new Set<string>(["low", "medium", "high"]);
+const LEAD_BINDINGS: ReadonlySet<string> = new Set<string>(["reuse_parent", "distinct_lead"]);
+
+/**
+ * A sentinel returned for an ACCESSOR descriptor or an ABSENT key — it fails every
+ * subsequent type check, so a getter can never inject a value the validator trusts.
+ */
+const NOT_OWN_DATA = Symbol("not-own-data");
+
+/**
+ * Read an OWN DATA property of a plain object. Returns the raw value only for an own
+ * DATA descriptor; an accessor descriptor (getter) or an absent key yields
+ * `NOT_OWN_DATA`. This is the G6b-1/G7 fail-closed idiom: a non-throwing getter must
+ * NOT be able to feed the validator a trusted-looking value.
+ */
+function ownData(o: object, key: string): unknown {
+  const d = Object.getOwnPropertyDescriptor(o, key);
+  return d && Object.prototype.hasOwnProperty.call(d, "value") ? d.value : NOT_OWN_DATA;
+}
+
+/** A plain, non-Proxy object (rejects null, primitives, arrays, and Proxies). */
+function isPlainObject(v: unknown): v is object {
+  return (
+    v !== null &&
+    typeof v === "object" &&
+    !Array.isArray(v) &&
+    !nodeTypes.isProxy(v)
+  );
+}
+
+/**
+ * Fail-closed check of a `guild.composition_trace.v1`, enforcing the SAME
+ * invariants `composeStationTeam` guarantees so a hand-authored plan cannot smuggle
+ * a fabricated fan-out justification past the validator. Reads are OWN-DATA only
+ * (accessor getters ⇒ reject) and every nested object is rejected if it is a Proxy —
+ * so an exotic input maps to invalid, never a trusted-looking read.
+ *
+ * SCOPE: this is a STRUCTURAL, INTERNAL-CONSISTENCY validator over a standalone
+ * artifact. It guarantees `mode` is justified BY THE RECORDED `fanout_signals` (you
+ * cannot claim a fan-out the recorded evidence doesn't support). It does NOT — and
+ * a standalone validator cannot — adjudicate whether those recorded signals reflect
+ * the real run inputs; that trust is established by the COMPOSER being the sole
+ * producer (it always emits a self-consistent plan) and the emit path validating
+ * before write. Re-deriving against a trusted `guild.station_signals.v1` envelope is
+ * a separate provenance concern, not this validator's job.
+ *
+ * Invariants enforced:
+ *  - `mode` ∈ {lead_only, lead_plus_one, lead_plus_many};
+ *  - `fanout_signals` are two booleans + a non-negative integer discipline count;
+ *  - `cost_estimate.band` MATCHES the mode (deterministic) and `worker_lanes` is a
+ *    non-negative integer; `cost_gate_policy` is the disabled-by-operator constant;
+ *  - `lead_binding` / `lead_reuses_parent` agree with the mode (reuse ⇔ lead_only);
+ *  - with NO override, `mode` MUST equal the re-derived scored mode (signal-gated
+ *    integrity — a plan cannot claim a fan-out its recorded signals don't justify);
+ *  - with an override, it is a well-formed record whose `forced_mode` === `mode`,
+ *    whose `scored_mode` === the re-derived scored mode, and carries non-empty
+ *    `reason`/`by`. (An override is the ONLY way `mode` may diverge from the score.)
+ */
+function isCompositionTraceV1(v: unknown): v is CompositionTraceV1 {
+  if (!isPlainObject(v)) return false;
+  const o = v;
+  if (ownData(o, "schema_version") !== COMPOSITION_TRACE_SCHEMA) return false;
+  const modeRaw = ownData(o, "mode");
+  if (typeof modeRaw !== "string" || !CELL_FANOUTS.has(modeRaw)) return false;
+  const mode = modeRaw as CellFanout;
+
+  // fanout_signals — the recorded evidence (own-data reads on a non-Proxy object).
+  const fs = ownData(o, "fanout_signals");
+  if (!isPlainObject(fs)) return false;
+  const independence = ownData(fs, "independence");
+  const adversarial_value = ownData(fs, "adversarial_value");
+  const distinct = ownData(fs, "distinct_discipline_count");
+  if (typeof independence !== "boolean") return false;
+  if (typeof adversarial_value !== "boolean") return false;
+  if (typeof distinct !== "number" || !Number.isInteger(distinct) || distinct < 0) return false;
+  const fired: FanoutSignalsFired = { independence, adversarial_value, distinct_discipline_count: distinct };
+  const scored = scoreFanoutMode(fired);
+
+  // cost_estimate — recorded, band deterministic from the mode.
+  const ce = ownData(o, "cost_estimate");
+  if (!isPlainObject(ce)) return false;
+  const band = ownData(ce, "band");
+  const workerLanes = ownData(ce, "worker_lanes");
+  if (typeof band !== "string" || !COST_BANDS.has(band)) return false;
+  if (band !== costBandForMode(mode)) return false;
+  if (typeof workerLanes !== "number" || !Number.isInteger(workerLanes) || workerLanes < 0) return false;
+  if (ownData(o, "cost_gate_policy") !== COST_GATE_POLICY) return false;
+
+  // lead-binding decision must agree with the mode.
+  const leadBinding = ownData(o, "lead_binding");
+  if (typeof leadBinding !== "string" || !LEAD_BINDINGS.has(leadBinding)) return false;
+  if (leadBinding !== (mode === "lead_only" ? "reuse_parent" : "distinct_lead")) return false;
+  if (ownData(o, "lead_reuses_parent") !== (mode === "lead_only")) return false;
+
+  // override — null ⇒ signal-gated integrity (mode === scored); else a well-formed record.
+  const ov = ownData(o, "override");
+  if (ov === null) {
+    if (mode !== scored) return false;
+  } else {
+    if (!isPlainObject(ov)) return false;
+    if (ownData(ov, "applied") !== true) return false;
+    const scoredMode = ownData(ov, "scored_mode");
+    const forcedMode = ownData(ov, "forced_mode");
+    if (typeof scoredMode !== "string" || !CELL_FANOUTS.has(scoredMode)) return false;
+    if (typeof forcedMode !== "string" || !CELL_FANOUTS.has(forcedMode)) return false;
+    if (forcedMode !== mode) return false; // forced === resolved
+    if (scoredMode !== scored) return false; // recorded score === re-derived score
+    const reason = ownData(ov, "reason");
+    const by = ownData(ov, "by");
+    // Non-BLANK (matches the composer's trim-based traceability invariant — the
+    // validator must never accept an override the composer would refuse).
+    if (!isNonBlankStr(reason) || !isNonBlankStr(by)) return false;
+  }
+  return true;
+}
+
 /**
  * Fail-closed validation of a `guild.team_plan.v1`. Returns the typed plan or
  * NULL — never throws, never repairs. Rejects an unknown station, a malformed
  * lane, a non-boolean `advisory_memory`/`capped`, a bad `cap`, or a `fired_rules`
  * / `dropped_roles` that is not a string array. Also rejects a plan whose
  * `capped` flag disagrees with `dropped_roles` (a `capped:true` with no dropped
- * role, or vice versa) — the two must be consistent.
+ * role, or vice versa), a malformed / self-inconsistent `composition_trace` (G8),
+ * a lane whose `fanout` diverges from the trace mode, or a trace `worker_lanes`
+ * that disagrees with the roster size — the parts must be consistent.
  */
 export function validateTeamPlanV1(obj: unknown): TeamPlanV1 | null {
   // Contract: NEVER throws. An exotic input (a Proxy trap / throwing own getter on
@@ -888,6 +1297,9 @@ export function validateTeamPlanV1(obj: unknown): TeamPlanV1 | null {
 
 function validateTeamPlanV1Inner(obj: unknown): TeamPlanV1 | null {
   if (obj === null || typeof obj !== "object") return null;
+  // Reject a Proxy plan outright — its traps can lie on every read; there is no
+  // trap-by-trap fixed point in userland (G7 lesson). A genuine plan is a plain object.
+  if (nodeTypes.isProxy(obj)) return null;
   const o = obj as Record<string, unknown>;
   if (o["schema_version"] !== TEAM_PLAN_SCHEMA) return null;
   if (!isStation(o["station"] as string)) return null;
@@ -905,12 +1317,27 @@ function validateTeamPlanV1Inner(obj: unknown): TeamPlanV1 | null {
   // advisory_panel is REQUIRED and must be a well-formed resolved panel for THIS
   // plan's station (station validated above).
   if (!isAdvisoryPanelV1(o["advisory_panel"], o["station"] as StationId)) return null;
+  // composition_trace is REQUIRED (G8). Read it ONCE via an own-data descriptor so a
+  // top-level accessor getter cannot inject a valid-looking trace (the own-data
+  // hardening inside isCompositionTraceV1 is moot if this field itself is a getter).
+  const traceField = ownData(o, "composition_trace");
+  if (!isCompositionTraceV1(traceField)) return null;
+  const trace = traceField;
+  // Every roster lane's `fanout` MUST mirror the trace mode (the trace is
+  // authoritative; a lane claiming a different fan-out than the cell resolved is a
+  // fabricated plan). Dense check for the sparse-array hole.
+  if (!denseEvery(o["roster"] as unknown[], (x) => (x as TeamPlanLane).fanout === trace.mode)) return null;
   if (typeof o["capped"] !== "boolean") return null;
   if (!Number.isInteger(o["cap"]) || (o["cap"] as number) < 1) return null;
   // capped ⇔ at least one dropped role.
   if (o["capped"] !== (o["dropped_roles"] as unknown[]).length > 0) return null;
   // Roster must not exceed the declared cap.
   if ((o["roster"] as unknown[]).length > (o["cap"] as number)) return null;
+  // cost_estimate.worker_lanes MUST equal the roster size (the composer sets it so;
+  // a mismatch means a tampered trace).
+  if (trace.cost_estimate.worker_lanes !== (o["roster"] as unknown[]).length) {
+    return null;
+  }
   return o as unknown as TeamPlanV1;
 }
 

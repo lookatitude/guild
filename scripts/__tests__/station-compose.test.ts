@@ -157,6 +157,59 @@ describe("station-compose CLI", () => {
     expect(r.stderr).toMatch(/invalid guild\.station_signals\.v1/i);
   });
 
+  // ── G8 fan-out flags ──
+  test("--independence scores lead_plus_many with recorded evidence", () => {
+    const tmp = mkTmp();
+    const r = runCli(["research", "--cwd", tmp, "--independence"]);
+    expect(r.exitCode).toBe(0);
+    const plan = validateTeamPlanV1(JSON.parse(r.stdout));
+    expect(plan).not.toBeNull();
+    expect(plan!.composition_trace.mode).toBe("lead_plus_many");
+    expect(plan!.composition_trace.fanout_signals.independence).toBe(true);
+    expect(plan!.composition_trace.override).toBeNull();
+  });
+
+  test("--fanout-override forces the mode and records a traceable override", () => {
+    const tmp = mkTmp();
+    const r = runCli([
+      "build",
+      "--cwd",
+      tmp,
+      "--fanout-override",
+      "lead_plus_many",
+      "--override-by",
+      "operator",
+      "--override-reason",
+      "known parallel breadth",
+    ]);
+    expect(r.exitCode).toBe(0);
+    const plan = validateTeamPlanV1(JSON.parse(r.stdout));
+    expect(plan).not.toBeNull();
+    expect(plan!.composition_trace.mode).toBe("lead_plus_many");
+    expect(plan!.composition_trace.override).not.toBeNull();
+    expect(plan!.composition_trace.override!.scored_mode).toBe("lead_only");
+    expect(plan!.composition_trace.override!.by).toBe("operator");
+  });
+
+  test("a partial --fanout-override (missing --override-by/reason) → non-zero exit", () => {
+    const r = runCli(["build", "--fanout-override", "lead_only"]);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/all three together/i);
+  });
+
+  test("an unknown --fanout-override mode → non-zero exit", () => {
+    const r = runCli(["build", "--fanout-override", "lead_plus_five", "--override-by", "x", "--override-reason", "y"]);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/fanout-override must be one of/i);
+  });
+
+  test("a BLANK override --override-by/--override-reason → non-zero exit, never invalid JSON on stdout", () => {
+    const r = runCli(["build", "--fanout-override", "lead_plus_many", "--override-by", "", "--override-reason", ""]);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/must be non-empty/i);
+    expect(r.stdout.trim()).toBe("");
+  });
+
   test("--emit without --run-id → non-zero exit", () => {
     const r = runCli(["build", "--emit"]);
     expect(r.exitCode).not.toBe(0);
@@ -373,6 +426,16 @@ const VALID_PLAN = {
   plan_driven_slots: ["task-owner-implementers"],
   advisory_memory: true,
   advisory_panel: { producer: null, challengers: [], fired_challenger_rules: [] },
+  composition_trace: {
+    schema_version: "guild.composition_trace.v1" as const,
+    mode: "lead_only" as const,
+    fanout_signals: { independence: false, adversarial_value: false, distinct_discipline_count: 0 },
+    cost_estimate: { band: "low" as const, worker_lanes: 1 },
+    cost_gate_policy: "disabled_by_operator" as const,
+    lead_binding: "reuse_parent" as const,
+    lead_reuses_parent: true,
+    override: null,
+  },
   cap: 6,
   capped: false,
   dropped_roles: [],

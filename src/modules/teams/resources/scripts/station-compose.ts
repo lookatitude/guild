@@ -8,7 +8,14 @@
  *
  *   npx tsx scripts/station-compose.ts <station> \
  *       [--signals <file.json | ->] [--cwd .] [--plugin-root <dir>] \
- *       [--run-id <id> --emit]
+ *       [--run-id <id> --emit] \
+ *       [--independence] [--adversarial-value] [--disciplines <n>] \
+ *       [--fanout-override <mode> --override-by <who> --override-reason <why>]
+ *
+ * G8 fan-out (all optional): `--independence` / `--adversarial-value` /
+ * `--disciplines <n>` supply the decomposition signals the composer scores the cell
+ * fan-out mode from (signal-gated, not cost-gated); `--fanout-override` FORCES the
+ * mode and is recorded traceably (all three override flags travel together).
  *
  * Flow:
  *   1. Read + fail-closed validate the `guild.station_signals.v1` block from
@@ -37,6 +44,9 @@ import {
   composeStationTeam,
   isStation,
   STATIONS,
+  type CellFanout,
+  type DecompositionSignals,
+  type FanoutOverride,
   type StationSignals,
 } from "../src/modules/teams/workflows/station-composer";
 import {
@@ -74,6 +84,13 @@ function main(): void {
   let pluginRoot: string | null = null;
   let runId: string | null = null;
   let emit = false;
+  // G8 fan-out inputs (all optional; absent ⇒ mode scored purely from signals).
+  let independence = false;
+  let adversarialValue = false;
+  let disciplineCount: number | null = null;
+  let overrideMode: string | null = null;
+  let overrideBy: string | null = null;
+  let overrideReason: string | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -82,6 +99,12 @@ function main(): void {
     else if (a === "--plugin-root" && i + 1 < argv.length) pluginRoot = argv[++i];
     else if (a === "--run-id" && i + 1 < argv.length) runId = argv[++i];
     else if (a === "--emit") emit = true;
+    else if (a === "--independence") independence = true;
+    else if (a === "--adversarial-value") adversarialValue = true;
+    else if (a === "--disciplines" && i + 1 < argv.length) disciplineCount = Number(argv[++i]);
+    else if (a === "--fanout-override" && i + 1 < argv.length) overrideMode = argv[++i];
+    else if (a === "--override-by" && i + 1 < argv.length) overrideBy = argv[++i];
+    else if (a === "--override-reason" && i + 1 < argv.length) overrideReason = argv[++i];
     else if (!a.startsWith("--") && station === null) station = a;
     else fail(`unknown argument: ${a}`);
   }
@@ -94,6 +117,24 @@ function main(): void {
   }
   if (emit && runId === null) {
     fail("--emit requires --run-id <id>");
+  }
+  if (disciplineCount !== null && (!Number.isInteger(disciplineCount) || disciplineCount < 0)) {
+    fail("--disciplines must be a non-negative integer");
+  }
+  // A fan-out override is all-or-nothing: mode + who + why must travel together so
+  // the recorded override is always traceable.
+  const overrideFlags = [overrideMode, overrideBy, overrideReason].filter((x) => x !== null).length;
+  if (overrideFlags > 0 && overrideFlags < 3) {
+    fail("--fanout-override requires --override-by <who> and --override-reason <why> (all three together)");
+  }
+  const CELL_FANOUT_VALUES = ["lead_only", "lead_plus_one", "lead_plus_many"];
+  if (overrideMode !== null && !CELL_FANOUT_VALUES.includes(overrideMode)) {
+    fail(`--fanout-override must be one of: ${CELL_FANOUT_VALUES.join(", ")}`);
+  }
+  // An override must be TRACEABLE — blank by/reason would compose a plan the
+  // validator rejects, so reject it here with a clear message before composing.
+  if (overrideMode !== null && (overrideBy!.trim() === "" || overrideReason!.trim() === "")) {
+    fail("--override-by and --override-reason must be non-empty (an override must be traceable)");
   }
 
   // (1) Signals — validated fail-closed; absent ⇒ all-false envelope.
@@ -129,8 +170,29 @@ function main(): void {
   });
   const tierIndex = buildTierIndex(resolution);
 
-  // (3) Compose — deterministic; prints the team_plan JSON.
-  const plan = composeStationTeam(station, signals, { tierIndex });
+  // (3) Compose — deterministic; prints the team_plan JSON. G8 fan-out inputs are
+  // threaded through only when supplied (absent ⇒ mode scored purely from signals).
+  let decompositionSignals: DecompositionSignals | undefined;
+  if (independence || adversarialValue || disciplineCount !== null) {
+    decompositionSignals = {
+      ...(independence ? { independence: true } : {}),
+      ...(adversarialValue ? { adversarial_value: true } : {}),
+      ...(disciplineCount !== null ? { distinct_discipline_count: disciplineCount } : {}),
+    };
+  }
+  let fanoutOverride: FanoutOverride | undefined;
+  if (overrideMode !== null) {
+    fanoutOverride = {
+      mode: overrideMode as CellFanout,
+      by: overrideBy as string,
+      reason: overrideReason as string,
+    };
+  }
+  const plan = composeStationTeam(station, signals, {
+    tierIndex,
+    ...(decompositionSignals ? { decompositionSignals } : {}),
+    ...(fanoutOverride ? { fanoutOverride } : {}),
+  });
   process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
 
   // (4) Optional emission to the canonical run tree.

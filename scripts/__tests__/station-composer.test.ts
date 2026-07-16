@@ -15,15 +15,20 @@
 import * as path from "path";
 
 import {
+  COMPOSITION_TRACE_SCHEMA,
+  COST_GATE_POLICY,
   IMPLIED_RULES,
   STATIONS,
   STATION_POLICY,
   TEAM_CAP,
   buildTierIndex,
   composeStationTeam,
+  deriveDecompositionSignals,
   isStation,
+  scoreFanoutMode,
   validateTeamPlanV1,
   validateTeamResultV1,
+  type FanoutSignalsFired,
   type StationComposeConfig,
   type StationId,
   type StationSignals,
@@ -234,9 +239,12 @@ describe("implied specialist rules", () => {
     expect(plan.fired_rules).toContain("user_facing_ui");
   });
 
-  it("fanout stays the D1 baseline lead_only even when rules fire (no scoring in G6a)", () => {
+  it("G8 scores the fan-out mode from fired signals (2 disciplines + auth ⇒ lead_plus_many)", () => {
     const plan = composeStationTeam("ideate", { multi_component: true, auth_touched: true }, cfg());
-    for (const lane of plan.roster) expect(lane.fanout).toBe("lead_only");
+    // multi_component + auth_touched = 2 discipline signals, and auth_touched derives
+    // adversarial_value — either alone forces lead_plus_many.
+    expect(plan.composition_trace.mode).toBe("lead_plus_many");
+    for (const lane of plan.roster) expect(lane.fanout).toBe("lead_plus_many");
   });
 });
 
@@ -544,21 +552,336 @@ describe("cap-6 team size rule", () => {
   });
 });
 
-// ── The G8 scoring seam ────────────────────────────────────────────────────────
+// ── G8 hybrid composition engine — fan-out scoring + trace + override ───────────
 
-describe("G8 fanout scoring seam", () => {
-  it("uses the injected scoreFanout when provided, without reshaping the API", () => {
-    const plan = composeStationTeam(
-      "ops",
-      NO_SIGNALS,
-      cfg({
-        scoreFanout: ({ role, baseline }) =>
-          role === "security" ? "lead_plus_many" : baseline,
-      })
-    );
-    expect(plan.roster.find((l) => l.role === "security")!.fanout).toBe("lead_plus_many");
-    expect(plan.roster.find((l) => l.role === "devops")!.fanout).toBe("lead_only");
+describe("G8 scoreFanoutMode (signal-gated, NOT cost-gated)", () => {
+  const fired = (o: Partial<FanoutSignalsFired>): FanoutSignalsFired => ({
+    independence: false,
+    adversarial_value: false,
+    distinct_discipline_count: 0,
+    ...o,
+  });
+
+  it("no decomposition signal ⇒ lead_only", () => {
+    expect(scoreFanoutMode(fired({}))).toBe("lead_only");
+  });
+  it("exactly one distinct discipline ⇒ lead_plus_one", () => {
+    expect(scoreFanoutMode(fired({ distinct_discipline_count: 1 }))).toBe("lead_plus_one");
+  });
+  it("two or more distinct disciplines ⇒ lead_plus_many", () => {
+    expect(scoreFanoutMode(fired({ distinct_discipline_count: 2 }))).toBe("lead_plus_many");
+    expect(scoreFanoutMode(fired({ distinct_discipline_count: 5 }))).toBe("lead_plus_many");
+  });
+  it("independence ⇒ lead_plus_many (parallelizable branches)", () => {
+    expect(scoreFanoutMode(fired({ independence: true }))).toBe("lead_plus_many");
+  });
+  it("adversarial_value ⇒ lead_plus_many (D1: adversarially valuable work)", () => {
+    expect(scoreFanoutMode(fired({ adversarial_value: true }))).toBe("lead_plus_many");
+  });
+});
+
+describe("G8 deriveDecompositionSignals (from StationSignals only)", () => {
+  it("no signals ⇒ no independence, no adversarial value, zero disciplines", () => {
+    expect(deriveDecompositionSignals(NO_SIGNALS)).toEqual({
+      independence: false,
+      adversarial_value: false,
+      distinct_discipline_count: 0,
+    });
+  });
+  it("auth_touched derives adversarial_value (independent security review)", () => {
+    const d = deriveDecompositionSignals({ auth_touched: true });
+    expect(d.adversarial_value).toBe(true);
+    expect(d.distinct_discipline_count).toBe(1);
+  });
+  it("counts each fired discipline signal", () => {
+    const d = deriveDecompositionSignals({ backend_present: true, user_facing_ui: true, public_docs: true });
+    expect(d.distinct_discipline_count).toBe(3);
+    expect(d.adversarial_value).toBe(false); // no auth_touched
+  });
+  it("never derives independence (StationSignals has no breadth axis)", () => {
+    expect(deriveDecompositionSignals({ multi_component: true }).independence).toBe(false);
+  });
+});
+
+// The six required task classes (adversarial test 13). Each composes to a mode with
+// recorded, self-consistent evidence.
+describe("G8 acceptance: the six task classes score deterministic, traceable modes", () => {
+  it("small-linear task ⇒ lead_only, lead reuses parent, cost band low", () => {
+    const plan = composeStationTeam("build", NO_SIGNALS, cfg());
+    const t = plan.composition_trace;
+    expect(t.mode).toBe("lead_only");
+    expect(t.lead_reuses_parent).toBe(true);
+    expect(t.lead_binding).toBe("reuse_parent");
+    expect(t.cost_estimate.band).toBe("low");
+    expect(t.override).toBeNull();
     expect(validateTeamPlanV1(plan)).not.toBeNull();
+  });
+
+  it("parallel-research (explicit independence) ⇒ lead_plus_many", () => {
+    const plan = composeStationTeam(
+      "research",
+      NO_SIGNALS,
+      cfg({ decompositionSignals: { independence: true } })
+    );
+    const t = plan.composition_trace;
+    expect(t.mode).toBe("lead_plus_many");
+    expect(t.fanout_signals.independence).toBe(true);
+    expect(t.lead_reuses_parent).toBe(false);
+    expect(t.lead_binding).toBe("distinct_lead");
+    expect(t.cost_estimate.band).toBe("high");
+    expect(validateTeamPlanV1(plan)).not.toBeNull();
+  });
+
+  it("cross-discipline planning (≥2 disciplines) ⇒ lead_plus_many", () => {
+    const plan = composeStationTeam(
+      "plan",
+      { backend_present: true, user_facing_ui: true, multi_component: true },
+      cfg()
+    );
+    expect(plan.composition_trace.mode).toBe("lead_plus_many");
+    expect(plan.composition_trace.fanout_signals.distinct_discipline_count).toBeGreaterThanOrEqual(2);
+    expect(validateTeamPlanV1(plan)).not.toBeNull();
+  });
+
+  it("implementation with one discipline ⇒ lead_plus_one", () => {
+    const plan = composeStationTeam("build", { multi_component: true }, cfg());
+    expect(plan.composition_trace.mode).toBe("lead_plus_one");
+    expect(plan.composition_trace.fanout_signals.distinct_discipline_count).toBe(1);
+    expect(plan.composition_trace.cost_estimate.band).toBe("medium");
+    expect(validateTeamPlanV1(plan)).not.toBeNull();
+  });
+
+  it("security-sensitive task (auth_touched) ⇒ lead_plus_many (adversarial value)", () => {
+    const plan = composeStationTeam("build", { auth_touched: true }, cfg());
+    expect(plan.composition_trace.mode).toBe("lead_plus_many");
+    expect(plan.composition_trace.fanout_signals.adversarial_value).toBe(true);
+    expect(validateTeamPlanV1(plan)).not.toBeNull();
+  });
+
+  it("reviewer/adversarial task (explicit adversarial_value) ⇒ lead_plus_many", () => {
+    const plan = composeStationTeam(
+      "qa",
+      NO_SIGNALS,
+      cfg({ decompositionSignals: { adversarial_value: true } })
+    );
+    expect(plan.composition_trace.mode).toBe("lead_plus_many");
+    expect(validateTeamPlanV1(plan)).not.toBeNull();
+  });
+});
+
+describe("G8 fan-out is signal-gated, not cost-gated", () => {
+  it("records cost_estimate + cost_gate_policy=disabled_by_operator but never gates on it", () => {
+    const plan = composeStationTeam("research", NO_SIGNALS, cfg({ decompositionSignals: { independence: true } }));
+    const t = plan.composition_trace;
+    // A high-cost fan-out is allowed on the signal alone; the cost is RECORDED.
+    expect(t.mode).toBe("lead_plus_many");
+    expect(t.cost_gate_policy).toBe(COST_GATE_POLICY);
+    expect(t.cost_gate_policy).toBe("disabled_by_operator");
+    expect(t.cost_estimate.worker_lanes).toBe(plan.roster.length);
+    expect(t.schema_version).toBe(COMPOSITION_TRACE_SCHEMA);
+  });
+
+  it("default_fanout is a FLOOR the signals may only raise (never lowers below it)", () => {
+    // No signals fire ⇒ scored lead_only === the table floor.
+    const plan = composeStationTeam("ideate", NO_SIGNALS, cfg());
+    expect(plan.composition_trace.mode).toBe("lead_only");
+  });
+});
+
+describe("G8 user override — possible + traceable (adversarial test 13)", () => {
+  it("an override FORCES the mode and is recorded verbatim (can LOWER a scored fan-out)", () => {
+    // auth_touched would score lead_plus_many; operator forces lead_only.
+    const plan = composeStationTeam(
+      "build",
+      { auth_touched: true },
+      cfg({ fanoutOverride: { mode: "lead_only", by: "operator", reason: "single trusted maintainer" } })
+    );
+    const t = plan.composition_trace;
+    expect(t.mode).toBe("lead_only");
+    expect(t.lead_reuses_parent).toBe(true);
+    expect(t.override).not.toBeNull();
+    expect(t.override!.applied).toBe(true);
+    expect(t.override!.scored_mode).toBe("lead_plus_many"); // what the signals scored
+    expect(t.override!.forced_mode).toBe("lead_only"); // what the operator forced
+    expect(t.override!.by).toBe("operator");
+    expect(t.override!.reason).toBe("single trusted maintainer");
+    // Every lane mirrors the forced mode; the plan still validates.
+    for (const lane of plan.roster) expect(lane.fanout).toBe("lead_only");
+    expect(validateTeamPlanV1(plan)).not.toBeNull();
+  });
+
+  it("an override can RAISE a scored fan-out too", () => {
+    const plan = composeStationTeam(
+      "build",
+      NO_SIGNALS,
+      cfg({ fanoutOverride: { mode: "lead_plus_many", by: "lead", reason: "known parallel breadth" } })
+    );
+    expect(plan.composition_trace.mode).toBe("lead_plus_many");
+    expect(plan.composition_trace.override!.scored_mode).toBe("lead_only");
+    expect(validateTeamPlanV1(plan)).not.toBeNull();
+  });
+
+  it("throws on an override with an unknown mode (programming error, fail loud)", () => {
+    expect(() =>
+      composeStationTeam(
+        "build",
+        NO_SIGNALS,
+        // deliberately invalid mode
+        cfg({ fanoutOverride: { mode: "lead_plus_five" as never, by: "x", reason: "y" } })
+      )
+    ).toThrow(/invalid fanoutOverride/);
+  });
+
+  it("throws on a BLANK override reason or by (must stay traceable — never emit an invalid plan)", () => {
+    expect(() =>
+      composeStationTeam("build", NO_SIGNALS, cfg({ fanoutOverride: { mode: "lead_only", by: "op", reason: "  " } }))
+    ).toThrow(/reason must be a non-empty/);
+    expect(() =>
+      composeStationTeam("build", NO_SIGNALS, cfg({ fanoutOverride: { mode: "lead_only", by: "", reason: "why" } }))
+    ).toThrow(/by must be a non-empty/);
+  });
+});
+
+describe("G8 progressive disclosure / dynamic specialist discovery", () => {
+  it("names ONLY the selected roles (bounded by the cap), never the whole catalogue", () => {
+    const plan = composeStationTeam("build", { multi_component: true, auth_touched: true }, cfg());
+    expect(plan.roster.length).toBeLessThanOrEqual(plan.cap);
+    // The composer output enumerates selected roles, not the shipped template library.
+    const catalogueSize = Object.keys(realTierIndex()).length;
+    expect(plan.roster.length).toBeLessThan(catalogueSize);
+  });
+
+  it("resolves a NEWLY-DISCOVERED role via the tier index with no hardcoded catalogue", () => {
+    // Inject a role the policy would add but that only exists in a custom tier index —
+    // the composer resolves its tier through the index (dynamic discovery), not a table.
+    const idx = { ...realTierIndex(), architect: "powerful" as const };
+    const plan = composeStationTeam("build", { multi_component: true }, cfg({ tierIndex: idx }));
+    const arch = plan.roster.find((l) => l.role === "architect");
+    expect(arch).toBeDefined();
+    expect(arch!.default_tier).toBe("powerful");
+  });
+});
+
+describe("G8 composition_trace validator (fail-closed, self-consistent)", () => {
+  const good = (): TeamPlanV1 =>
+    composeStationTeam("research", NO_SIGNALS, cfg({ decompositionSignals: { independence: true } }));
+
+  it("rejects a trace whose mode is not justified by its fanout_signals (no override)", () => {
+    const p = good();
+    // Claim lead_plus_many with all-false signals + no override ⇒ signals don't justify it.
+    const tampered = {
+      ...p,
+      composition_trace: {
+        ...p.composition_trace,
+        fanout_signals: { independence: false, adversarial_value: false, distinct_discipline_count: 0 },
+        override: null,
+      },
+    };
+    expect(validateTeamPlanV1(tampered)).toBeNull();
+  });
+
+  it("rejects a lane whose fanout diverges from the trace mode", () => {
+    const p = good(); // mode lead_plus_many
+    const tampered = { ...p, roster: p.roster.map((l, i) => (i === 0 ? { ...l, fanout: "lead_only" as const } : l)) };
+    expect(validateTeamPlanV1(tampered)).toBeNull();
+  });
+
+  it("rejects a trace whose cost band disagrees with the mode", () => {
+    const p = good();
+    const tampered = {
+      ...p,
+      composition_trace: { ...p.composition_trace, cost_estimate: { ...p.composition_trace.cost_estimate, band: "low" as const } },
+    };
+    expect(validateTeamPlanV1(tampered)).toBeNull();
+  });
+
+  it("rejects a trace whose lead_binding disagrees with the mode", () => {
+    const p = good(); // distinct_lead
+    const tampered = { ...p, composition_trace: { ...p.composition_trace, lead_binding: "reuse_parent" as const } };
+    expect(validateTeamPlanV1(tampered)).toBeNull();
+  });
+
+  it("rejects a trace whose worker_lanes disagrees with the roster size", () => {
+    const p = good();
+    const tampered = {
+      ...p,
+      composition_trace: { ...p.composition_trace, cost_estimate: { ...p.composition_trace.cost_estimate, worker_lanes: 99 } },
+    };
+    expect(validateTeamPlanV1(tampered)).toBeNull();
+  });
+
+  it("rejects an absent composition_trace", () => {
+    const p = good();
+    const { composition_trace: _drop, ...withoutTrace } = p;
+    expect(validateTeamPlanV1(withoutTrace)).toBeNull();
+  });
+
+  it("rejects an override record whose forced_mode disagrees with the resolved mode", () => {
+    const p = composeStationTeam("build", NO_SIGNALS, cfg({ fanoutOverride: { mode: "lead_plus_many", by: "x", reason: "y" } }));
+    const tampered = {
+      ...p,
+      composition_trace: { ...p.composition_trace, override: { ...p.composition_trace.override!, forced_mode: "lead_plus_one" as const } },
+    };
+    expect(validateTeamPlanV1(tampered)).toBeNull();
+  });
+
+  it("never throws on an exotic trace (Proxy getter) — maps to null", () => {
+    const p = good();
+    const evil = new Proxy(
+      { ...p },
+      {
+        get(target, prop, recv) {
+          if (prop === "composition_trace") throw new Error("boom");
+          return Reflect.get(target, prop, recv);
+        },
+      }
+    );
+    expect(validateTeamPlanV1(evil)).toBeNull();
+  });
+
+  it("rejects a NON-throwing Proxy plan (traps can lie on every read)", () => {
+    const p = good();
+    const liar = new Proxy({ ...p }, { get: (t, k, r) => Reflect.get(t, k, r) });
+    expect(validateTeamPlanV1(liar)).toBeNull();
+  });
+
+  it("rejects a trace whose `mode` is an ACCESSOR getter, not own data (fail-closed)", () => {
+    const p = good(); // real mode lead_plus_many
+    const trace = { ...p.composition_trace };
+    // Replace `mode` with a getter returning a consistent-looking value.
+    Object.defineProperty(trace, "mode", { get: () => "lead_plus_many", enumerable: true, configurable: true });
+    expect(validateTeamPlanV1({ ...p, composition_trace: trace })).toBeNull();
+  });
+
+  it("rejects a trace with a getter-injected fanout_signals object (accessor descriptor)", () => {
+    const p = good();
+    const trace: Record<string, unknown> = { ...p.composition_trace };
+    Object.defineProperty(trace, "fanout_signals", {
+      get: () => ({ independence: true, adversarial_value: false, distinct_discipline_count: 0 }),
+      enumerable: true,
+      configurable: true,
+    });
+    expect(validateTeamPlanV1({ ...p, composition_trace: trace })).toBeNull();
+  });
+
+  it("rejects a plan whose TOP-LEVEL composition_trace is an accessor getter (own-data read)", () => {
+    const p = good();
+    const plan: Record<string, unknown> = { ...p };
+    const realTrace = p.composition_trace;
+    Object.defineProperty(plan, "composition_trace", {
+      get: () => realTrace, // a getter returning an otherwise-valid trace
+      enumerable: true,
+      configurable: true,
+    });
+    expect(validateTeamPlanV1(plan)).toBeNull();
+  });
+
+  it("rejects a whitespace-only override reason/by (matches the composer's traceability bar)", () => {
+    const p = composeStationTeam("build", NO_SIGNALS, cfg({ fanoutOverride: { mode: "lead_plus_many", by: "op", reason: "known" } }));
+    const blankReason = { ...p, composition_trace: { ...p.composition_trace, override: { ...p.composition_trace.override!, reason: "   " } } };
+    const blankBy = { ...p, composition_trace: { ...p.composition_trace, override: { ...p.composition_trace.override!, by: "  " } } };
+    expect(validateTeamPlanV1(blankReason)).toBeNull();
+    expect(validateTeamPlanV1(blankBy)).toBeNull();
   });
 });
 
