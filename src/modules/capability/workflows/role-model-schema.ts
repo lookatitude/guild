@@ -7,7 +7,7 @@
  *
  * Contract authority (SoT):
  *   ADR: universal-host-plugin-architecture (workspace wiki) §Host Role Model
- *   docs/contracts/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
+ *   .guild/wiki/decisions/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
  *   .guild/plan/universal-host-p1.md P1-L8 + §Foundation-contract specifications
  *
  * WHY: the run resolves each role to the STRONGEST available substrate, driven by

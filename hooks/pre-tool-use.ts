@@ -127,7 +127,7 @@ function resolveRunId(cwd: string): string | undefined {
 
 // ── HK-07: host-capability reader + approval_request writer ────────────────
 //
-// Implements docs/v2/11-security.md §enforcement degradation path:
+// Implements docs/v2/security.md §enforcement degradation path:
 //   host lacks PreToolUse ask  →  write approval_request to file bus
 //                                  + record permission_mode: degraded
 //   host supports PreToolUse ask  →  normal ask decision (unchanged behavior)
@@ -549,7 +549,7 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
 
   /**
    * Gate function — decides whether to use native ask or the degraded file-bus
-   * approval_request path, per HK-07 (docs/v2/11-security.md §enforcement).
+   * approval_request path, per HK-07 (docs/v2/security.md §enforcement).
    *
    * When `permissionDecision === "ask"` AND the host lacks `pre_tool_use_ask`,
    * the gate degrades:
@@ -626,7 +626,7 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
 
   // 1. Capability-scope (only for a declared scoped lane).
   if (scope !== null) {
-    // D-BYPASS autonomy-mode forcing (docs/v2/11-security.md §bypassPermissions
+    // D-BYPASS autonomy-mode forcing (docs/v2/security.md §bypassPermissions
     // governance): under a non-interactive autonomy mode the policy is FORCED
     // to `deny`. Resolved ONLY when the call is actually under bypassPermissions
     // (the policy is irrelevant otherwise — keeps the hot path free of extra

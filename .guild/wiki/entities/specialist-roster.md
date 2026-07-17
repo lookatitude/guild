@@ -1,3 +1,21 @@
+---
+type: reference
+owner: architect
+confidence: high
+importance: critical
+source_refs:
+  - agents/advisor.md
+  - agents/developer.md
+  - templates/specialists/
+created_at: 2026-04-24
+updated_at: 2026-07-17
+expires_at: null
+supersedes: "plugin/.guild/wiki/entities/specialist-roster.md"
+sensitivity: public
+applies_to: [plugin]
+related: [team-composition, canonical-specialist-roster-groups-and-tiers, machinery-agents-vs-specialist-template-library, cost-tiering-and-context-management]
+---
+
 # Specialist Roster
 
 17 specialist roles across 3 groups plus tiered-worker roles, shipped on two

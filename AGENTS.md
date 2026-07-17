@@ -47,7 +47,11 @@ For full architecture and design documentation see **https://guildstack.dev/docs
 - `tests/` — skill evals and wiki-lint fixtures.
 - `templates/{skills,agents,products}/` — authoring + product scaffolds
   (`templates/specialists/` is the 15 specialist type templates, described above).
-- `docs/` — user-facing docs, diagrams, and assets.
+- `docs/` — RETIRED as a docs set: holds only a static redirect page to
+  `https://guildstack.dev/docs` plus the logo asset. The public docs are generated
+  from the umbrella's `docs/v2/` + the website; reference knowledge lives in
+  `.guild/wiki/`. Apart from `README.md`, `CONTRIBUTING.md`, and `CHANGELOG.md`,
+  no documentation lives in this repo.
 
 Generated project-local Guild artifacts do **not** live in the plugin install
 tree. Any agent, skill, tool, memory page, graph, initiative, run record, or
@@ -88,7 +92,7 @@ themselves. They live in `.claude/agents/`.
 | `skills/**` (bodies + per-skill evals.json) | `skill-author` |
 | `agents/*.md` (machinery agents) + `templates/specialists/*.md` (type templates) | `specialist-agent-writer` |
 | `tests/` (cross-cutting evals/fixtures) | `eval-engineer` |
-| `docs/`, repo-root/plugin `CLAUDE.md` | `docs-writer` |
+| `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, repo-root/plugin `CLAUDE.md` | `docs-writer` |
 | `.claude-plugin/*`, manifests, ADRs, phase-gate integration | `plugin-architect` |
 | Harvest research/ideation provenance → recallable canonical pages (self-build only) | `research-digester` |
 | Pre-commit leak audits + scrub-policy review on share-policy-extension initiatives | `security-auditor` |

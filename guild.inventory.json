@@ -1,6 +1,6 @@
 {
   "schema_version": "guild.inventory.v1",
-  "generated_at": "2026-07-16T07:21:10Z",
+  "generated_at": "1970-01-01T00:00:00.000Z",
   "plugin_version": "2.2.0",
   "manifest": {
     "name": "guild",
@@ -928,7 +928,7 @@
         "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-memory/dist/index.js"
       ],
       "read_only": true,
-      "description": "D-MCP declared capability (docs/v2/11-security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
+      "description": "D-MCP declared capability (docs/v2/security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
     },
     {
       "id": "guild-telemetry",
@@ -939,7 +939,7 @@
         "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-telemetry/dist/index.js"
       ],
       "read_only": true,
-      "description": "D-MCP declared capability (docs/v2/11-security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
+      "description": "D-MCP declared capability (docs/v2/security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
     }
   ],
   "scripts": [
@@ -2252,18 +2252,5 @@
       "validator_kind": "lenient"
     }
   ],
-  "docs": [
-    {
-      "id": "docs/contracts/universal-host-p1-l0-foundation-contracts",
-      "source_path": "docs/contracts/universal-host-p1-l0-foundation-contracts.md"
-    },
-    {
-      "id": "docs/generated/host-support-matrix",
-      "source_path": "docs/generated/host-support-matrix.md"
-    },
-    {
-      "id": "docs/specialist-roster",
-      "source_path": "docs/specialist-roster.md"
-    }
-  ]
+  "docs": []
 }

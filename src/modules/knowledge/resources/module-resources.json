@@ -22,7 +22,7 @@
       "id": "guild-memory",
       "source_path": ".mcp.json",
       "resource_path": "resources/mcp_servers/.mcp.json",
-      "sha256": "60091d773900b8e0796c2af42e2e032476732c4d120f7a7159470d966231eb33"
+      "sha256": "9d6736006ffb527095dfdadec1857ed646d90ff8c8a017f3d90daa9626813a2d"
     },
     {
       "category": "scripts",
@@ -36,7 +36,7 @@
       "id": "knowledge-links-traverse",
       "source_path": "scripts/knowledge-links-traverse.ts",
       "resource_path": "resources/scripts/knowledge-links-traverse.ts",
-      "sha256": "c420c09ca090a885f6b18e2da3be61a6e8c0e4afabf3fb034134755547e82085"
+      "sha256": "4f3badbc06c05f21b1dd16e7fceb5553c3b30e07ab433f68ed8ac2a75cecf85f"
     },
     {
       "category": "scripts",
@@ -50,14 +50,14 @@
       "id": "lib/ingest-similarity",
       "source_path": "scripts/lib/ingest-similarity.ts",
       "resource_path": "resources/scripts/lib/ingest-similarity.ts",
-      "sha256": "49996d2d58e6a2399d5328edf13661cc79ee730d140f435a8c0b4edd3f5eaac8"
+      "sha256": "11fd1397341dc1d4b9d51167af70b8b61104d769cb5368e5b27bd81e485f14b9"
     },
     {
       "category": "scripts",
       "id": "lib/kb-snapshot",
       "source_path": "scripts/lib/kb-snapshot.ts",
       "resource_path": "resources/scripts/lib/kb-snapshot.ts",
-      "sha256": "1d3621fb68b2acadc7281705cd4e818c24a4735e03c907c5b19954eeef10f063"
+      "sha256": "0a024fa293c804c88d87d4e4d46d62caa30d8b6e1a1d381c8224f0dd2abeeac8"
     },
     {
       "category": "scripts",
@@ -141,7 +141,7 @@
       "id": "guild-wiki-ingest",
       "source_path": "skills/knowledge/wiki-ingest/SKILL.md",
       "resource_path": "resources/skills/knowledge/wiki-ingest/SKILL.md",
-      "sha256": "bdad858ce05df459f4b86590a8c541e03feed8ae27afd5cc37165426c1770e7f"
+      "sha256": "37d6e0ed1433a8a7bd52218804afc39ad33c9075731161aae0555772e27029b2"
     },
     {
       "category": "skills",

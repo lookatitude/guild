@@ -101,7 +101,7 @@ When `guild:context-assemble` later pulls this page via recall, the `trust_tier`
 
 After the wiki page is written, stamp it (and any other unstamped page) with its
 `recall_importance:` frontmatter score — **deterministic, computed by tooling, not
-by the model** (docs/v2/05 §"Importance-at-ingest"). Call the CLI; do not
+by the model** (docs/v2/knowledge-memory.md §"Importance-at-ingest"). Call the CLI; do not
 compute the 1–5 grade yourself:
 
 ```

@@ -3,7 +3,7 @@
  *
  * Mixed-host tmux sibling coordination contracts — ITEM 19 (`[v2-contract-only]`).
  *
- * Contract (BY POINTER): docs/v2/08-dispatch-execution.md §Mixed-host teams
+ * Contract (BY POINTER): docs/v2/dispatch-execution.md §Mixed-host teams
  *   DI-5 (decided); registered in contract-map.md §B rows 3 and 4.
  *   Canonical schema bodies: target-architecture.md §TmuxTeam / §LaneStatus.
  *
@@ -99,7 +99,7 @@ export interface TmuxTeamPane {
  * Status: `[v2-contract-only]` — no production writer in v2.0.
  *
  * References (by pointer): target-architecture.md §TmuxTeam;
- *   docs/v2/08-dispatch-execution.md §Mixed-host teams (DI-5 decision record).
+ *   docs/v2/dispatch-execution.md §Mixed-host teams (DI-5 decision record).
  */
 export interface TmuxTeam {
   /** Always "guild.tmux_team.v1". */
@@ -146,7 +146,7 @@ export interface TmuxTeam {
  * "heartbeat-only" states the pane emits between run-state transitions.
  *
  * Note: "errored" is a `guild.agent_bus_event.v1` event kind, NOT a run-state
- * status — it is not included here (08-dispatch-execution.md §6).
+ * status — it is not included here (dispatch-execution.md §6).
  */
 export const LANE_STATUS_VALUES = [
   /** Lane has been dispatched but has not yet started executing. */
@@ -183,7 +183,7 @@ export type LaneStatusValue = (typeof LANE_STATUS_VALUES)[number];
  * Status: `[v2-contract-only]` — no production writer in v2.0.
  *
  * References (by pointer): target-architecture.md §LaneStatus;
- *   docs/v2/08-dispatch-execution.md §6 (structured heartbeat + run-state checkpoint).
+ *   docs/v2/dispatch-execution.md §6 (structured heartbeat + run-state checkpoint).
  */
 export interface LaneStatus {
   /** Always "guild.lane_status.v1". */

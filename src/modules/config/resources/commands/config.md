@@ -356,7 +356,7 @@ operator-facing CLI surface to inspect provider state on demand.
 ## `update-mcp-hashes` — re-pin MCP tool-description hashes (D-MCP)
 
 The operator-facing **re-pin path** for MCP description pinning
-(`docs/v2/11-security.md §D-MCP`): compute the SHA-256 of each MCP tool's
+(`docs/v2/security.md §D-MCP`): compute the SHA-256 of each MCP tool's
 description string and write the `{tool-name → hash}` map into
 `mcp.tool_description_hashes` in the target settings file. The PreToolUse
 hook (`hooks/pre-tool-use.ts` → `hooks/lib/security/mcp-hash-pin.ts`)

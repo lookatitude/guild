@@ -3,7 +3,7 @@
  * scripts/initiative-gate.ts
  *
  * Deterministic CLI over the D8 initiative close gate
- * (docs/v2/06-initiatives.md §The D8 close gate).
+ * (docs/v2/initiatives.md §The D8 close gate).
  *
  * WHY THIS EXISTS: the 2026-07-12 plugin-implementation-audit (G3) found that
  * `/guild:initiative close` (commands/initiative.md) deferred ALL sub-verb

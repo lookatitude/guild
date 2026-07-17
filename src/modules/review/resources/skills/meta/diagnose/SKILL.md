@@ -83,12 +83,12 @@ outside the repo and `.guild/` state.
 
 ## Adversarial review — G-diagnose (broker)
 
-G-diagnose is a **skill-internal gate** (`docs/v2/09-adversarial-review.md §Gate
+G-diagnose is a **skill-internal gate** (`docs/v2/adversarial-review.md §Gate
 ownership`): it fires here inside the `fix`/`diagnose` flow at the
 diagnosis→approval boundary. Wire the **review broker** at this boundary,
 **not** `guild:codex-review` directly: the broker is the host-agnostic front
 door, and `guild:codex-review` survives only as the internal Codex adapter the
-broker dispatches to (`docs/v2/09 §The review broker`).
+broker dispatches to (`docs/v2/adversarial-review.md §The review broker`).
 
 If `--review=cross` is present, or project config resolves `codex_review: true`,
 review the diagnosis and fix plan before asking the user to approve edits.

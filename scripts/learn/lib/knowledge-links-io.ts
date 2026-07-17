@@ -39,7 +39,7 @@ export interface KnowledgeLink {
   to: string;
   type: string;
   run_id: string;
-  /** Tombstone-never-delete (docs/v2/05 §Invalidation, item 8). */
+  /** Tombstone-never-delete (docs/v2/knowledge-memory.md §Invalidation, item 8). */
   tombstoned?: boolean;
   tombstoned_at?: string;
   tombstoned_reason?: string;

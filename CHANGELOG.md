@@ -8,7 +8,31 @@ from v1.0.0 onward.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- docs: the plugin's `docs/` set is **retired**. The public docs are generated from
+  the canonical design set (the workspace's `docs/v2/`) + the website, and published
+  at [guildstack.dev/docs](https://guildstack.dev/docs); `docs/` now holds only a
+  static redirect page and the logo asset. Apart from `README.md`,
+  `CONTRIBUTING.md`, and `CHANGELOG.md`, no documentation lives in this repo. — @lookatitude
+- docs: the canonical design docs are **no longer numbered** (`docs/v2/03-lifecycle.md`
+  → `lifecycle.md`, …). Every citation in this repo is reconciled; reading order was
+  never carried by the filenames (the design set's README sequences it explicitly). — @lookatitude
+
+### Removed
+
+- docs: `docs/diagrams/**` (8 diagrams last updated 2026-04-24, depicting the v1
+  architecture/lifecycle — superseded by the docs site) and
+  `docs/generated/host-support-matrix.md`. — @lookatitude
+
+### Moved
+
+- The specialist roster moved to `.guild/wiki/entities/specialist-roster.md` — it is
+  reference knowledge backing the roster-consistency CI gate, not public docs. The
+  gate, its tests, and the workflow step follow it. — @lookatitude
+- The universal-host P1-L0 foundation contracts ADR addendum moved to
+  `.guild/wiki/decisions/` — it is cited as the source spec by six code modules,
+  all repointed. — @lookatitude
 
 ## [2.2.0] — 2026-07-14
 

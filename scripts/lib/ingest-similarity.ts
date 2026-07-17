@@ -12,7 +12,7 @@
  * threshold (models.ingestSimilarityGate, default 0.80), and returns
  * `should_pause: true` when the top score meets or exceeds the threshold.
  *
- * D-PROBE (ingest side, fail-closed — docs/v2/11-security.md §D-PROBE): the
+ * D-PROBE (ingest side, fail-closed — docs/v2/security.md §D-PROBE): the
  * same call also runs the deterministic directive-language probe
  * (hooks/lib/security/injection-guard.ts patterns) over the candidate. A probe
  * HIT forces `should_pause: true` (`probe_hit: true`, `pause_reason`) — the
@@ -79,7 +79,7 @@ export interface IngestSimilarityResult {
    * directive-language probe (hooks/lib/security/injection-guard.ts patterns)
    * matched agent-directed imperatives in the candidate content. A hit forces
    * `should_pause: true` — the write is blocked pending explicit operator
-   * confirmation (docs/v2/11-security.md §D-PROBE: probe `yes` ⇒ flag +
+   * confirmation (docs/v2/security.md §D-PROBE: probe `yes` ⇒ flag +
    * explicit user confirmation before write).
    */
   probe_hit: boolean;

@@ -9,7 +9,7 @@
  * Contract authority (SoT):
  *   .guild/spec/universal-host-p1.md SC-4
  *   .guild/plan/universal-host-p1.md §Foundation-contract specifications C4
- *   docs/contracts/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
+ *   .guild/wiki/decisions/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
  *
  * The two named decision surfaces (byte-identical pre/post-registry for Claude+Codex):
  *   - `RoutingDecision` (host-router.ts:186) from `route()`        (host-router.ts:433–595)
