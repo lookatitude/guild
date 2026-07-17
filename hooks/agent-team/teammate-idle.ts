@@ -65,6 +65,11 @@ import {
   Liveness,
 } from "../lib/heartbeat.js";
 import { emitBusEvent } from "../lib/bus-emit.js";
+import {
+  findRunAcceptances,
+  readAssignmentForInstance,
+  isTerminationAuthorized,
+} from "../../src/modules/dispatch/workflows/task-cell-acceptance.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -87,15 +92,32 @@ interface NudgeContext {
   pendingTaskIds: string[];
   /**
    * Task IDs whose receipt exists but contains no valid guild.handoff.v2 envelope.
-   * A2 (P1-2): receipt-present + envelope-valid is the deterministic dismissal signal.
-   * The launcher (P1-3) keys off [LANE-COMPLETE]/safe-to-dismiss in the nudge output.
+   * task-cell-runtime G4 (ADR D5): a valid receipt is `handoff_submitted`, NOT a
+   * dismissal signal. Safe-to-dismiss is gated on a durable
+   * `guild.handoff_acceptance.v1` record (see `acceptedLanes`), never on receipt
+   * existence — the launcher keys off `[LANE-ACCEPTED]`, not receipt presence.
    */
   invalidReceiptTaskIds: string[];
   /** Task IDs whose receipt exists and has a valid guild.handoff.v2 envelope. */
   validReceiptTaskIds: string[];
   /** Full assessments for valid receipts (carries receiptPath + envelopeStatus). */
   validReceipts: ReceiptAssessment[];
+  /**
+   * task-cell-runtime G4 (ADR D5): the DURABLE termination-authorizing
+   * `guild.handoff_acceptance.v1` records for THIS teammate's lanes. A lane is
+   * safe to dismiss ONLY when such a record exists — never on receipt existence.
+   * Empty means: even a valid receipt is only `handoff_submitted`, not accepted.
+   */
+  acceptedLanes: AcceptedLane[];
   runDir: string;
+}
+
+/** A durable acceptance record authorizing this teammate's termination (D5). */
+interface AcceptedLane {
+  logical_task_id: string;
+  instance_id: string;
+  /** Downstream is released only when the acceptance carries a release timestamp. */
+  released: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -202,6 +224,29 @@ function findAssignedTaskIds(cwd: string, teammate: string): string[] {
 }
 
 /**
+ * task-cell-runtime G4 (ADR D5): resolve the DURABLE acceptance records that
+ * authorize THIS teammate's termination. Walks `.guild/runs/<run>/task-cells/**`
+ * for `guild.handoff_acceptance.v1` records and keeps those whose sibling
+ * `guild.task_assignment.v2` binds `worker_role === teammate` AND that carry a
+ * `termination_authorized_at`. Receipt existence is deliberately NOT consulted:
+ * only the acceptance record makes a lane safe to dismiss.
+ */
+function resolveAcceptedLanes(guildRoot: string, runId: string, teammate: string): AcceptedLane[] {
+  const out: AcceptedLane[] = [];
+  for (const { ids, acceptance } of findRunAcceptances(guildRoot, runId)) {
+    if (!isTerminationAuthorized(acceptance)) continue;
+    const assignment = readAssignmentForInstance(guildRoot, ids);
+    if (!assignment || assignment.worker_role !== teammate) continue;
+    out.push({
+      logical_task_id: ids.logical_task_id,
+      instance_id: ids.instance_id,
+      released: acceptance.downstream_release_at !== null,
+    });
+  }
+  return out;
+}
+
+/**
  * Render the structured liveness verdict (ADR-RE-3) as a one-line context
  * string for the nudge. Surfaces the heartbeat phase + age, or the mtime
  * fallback, or "no heartbeat".
@@ -225,10 +270,14 @@ function renderLiveness(liveness: Liveness): string {
  *
  * R4a (P1-2) single-channel enforcement:
  *
- *   • LANE-COMPLETE / safe-to-dismiss — emitted when the teammate has a valid
- *     guild.handoff.v2 receipt for every known task and has no pending work.
- *     The launcher (P1-3) keys off the "[LANE-COMPLETE]" sentinel to dismiss
- *     the pane (A2 deterministic dismissal signal).
+ *   • LANE-ACCEPTED / safe-to-dismiss — emitted ONLY when a durable
+ *     guild.handoff_acceptance.v1 record authorizing termination exists for this
+ *     teammate (task-cell-runtime G4, ADR D5). The launcher keys off the
+ *     "[LANE-ACCEPTED]" sentinel to perform the REAL, confirmed termination.
+ *
+ *   • LANE-SUBMITTED / awaiting-acceptance — emitted when a valid receipt exists
+ *     but NO acceptance record does yet: the lane is handoff_submitted, NOT
+ *     dismissible (D5 — a receipt on disk releases nothing).
  *
  *   • Specific receipt nudge — emitted when tasks have no receipt or the
  *     receipt lacks a valid guild.handoff.v2 envelope.  Includes the EXACT
@@ -249,33 +298,58 @@ function composeNudge(ctx: NudgeContext): string {
   const hasPending = ctx.pendingTaskIds.length > 0;
   const hasInvalid = ctx.invalidReceiptTaskIds.length > 0;
   const hasValid = ctx.validReceiptTaskIds.length > 0;
+  const hasAcceptance = ctx.acceptedLanes.length > 0;
 
-  // ── A2: deterministic dismissal signal ─────────────────────────────────────
-  // Receipt present + valid envelope = safe-to-dismiss.  The launcher (P1-3)
-  // keys off the [LANE-COMPLETE] sentinel.  Always exit-0 — non-gating.
-  if (hasValid && !hasPending && !hasInvalid) {
-    const receipts = ctx.validReceipts.map((r) => r.receiptPath).join(", ");
-    const pointerLines = ctx.validReceipts
+  // ── task-cell-runtime G4 (ADR D5): acceptance-GATED dismissal signal ────────
+  // A lane is safe to dismiss ONLY when a durable `guild.handoff_acceptance.v1`
+  // authorizing termination exists — NEVER on receipt existence (the P0.4
+  // false-positive channel the old receipt-gated `[AUTO-DISMISS]` was). The
+  // launcher's `--dismiss-completed` performs the REAL, confirmed termination; this
+  // hook only surfaces the acceptance-backed `[LANE-ACCEPTED]` sentinel. Always
+  // exit-0 — non-gating.
+  if (hasAcceptance && !hasPending) {
+    const authLines = ctx.acceptedLanes
       .map(
-        (r) =>
-          `done · ${r.taskId} · status:${r.envelopeStatus ?? "done"} · receipt:${r.receiptPath}`
-      )
-      .join("\n");
-    const dismissLines = ctx.validReceipts
-      .map(
-        (r) =>
-          `[AUTO-DISMISS] teammate="${ctx.teammate}" team="${ctx.teamName}" reason=valid-receipt task=${r.taskId}`
+        (a) =>
+          `[TERMINATE-AUTHORIZED] teammate="${ctx.teammate}" team="${ctx.teamName}" ` +
+          `logical_task=${a.logical_task_id} instance=${a.instance_id} ` +
+          `downstream=${a.released ? "released" : "blocked"}`
       )
       .join("\n");
     return (
       `[TeammateIdle ${timestamp}] ` +
-      `[LANE-COMPLETE] teammate="${ctx.teammate}" team="${ctx.teamName}" ` +
+      `[LANE-ACCEPTED] teammate="${ctx.teammate}" team="${ctx.teamName}" ` +
       `status=safe-to-dismiss\n` +
       `${livenessLine}\n` +
-      `Valid guild.handoff.v2 receipt(s) confirmed: ${receipts}\n` +
+      `Durable guild.handoff_acceptance.v1 record(s) authorize termination for ` +
+      `${ctx.acceptedLanes.length} lane(s).\n` +
+      `${authLines}\n` +
+      `The launcher may safely terminate this pane (guild.handoff_acceptance.v1 exists).\n`
+    );
+  }
+
+  // ── Valid receipt but NOT yet accepted → handoff_submitted, NOT dismissible ──
+  // Closes the receipt-existence false positive: a receipt is the worker's OUTPUT,
+  // not an acceptance. Downstream stays blocked and the pane stays up until a
+  // durable acceptance record lands (D5).
+  if (hasValid && !hasPending && !hasInvalid && !hasAcceptance) {
+    const pointerLines = ctx.validReceipts
+      .map(
+        (r) =>
+          `submitted · ${r.taskId} · status:${r.envelopeStatus ?? "done"} · receipt:${r.receiptPath}`
+      )
+      .join("\n");
+    return (
+      `[TeammateIdle ${timestamp}] ` +
+      `[LANE-SUBMITTED] teammate="${ctx.teammate}" team="${ctx.teamName}" ` +
+      `status=awaiting-acceptance\n` +
+      `${livenessLine}\n` +
+      `Valid guild.handoff.v2 receipt(s) confirmed, but NO durable ` +
+      `guild.handoff_acceptance.v1 record yet — the lane is handoff_submitted, ` +
+      `NOT safe to dismiss (D5: receipts release nothing).\n` +
       `${pointerLines}\n` +
-      `${dismissLines}\n` +
-      `The launcher may safely dismiss this pane.\n`
+      `Awaiting the acceptance authority (deterministic floor + Team Lead + any ` +
+      `reviewer cell) before the launcher may terminate this pane.\n`
     );
   }
 
@@ -396,11 +470,25 @@ async function main(): Promise<void> {
   const timeoutMs = resolveHeartbeatTimeoutMs(cwd, laneTier);
   const liveness = assessLiveness(runDir, teammate, timeoutMs);
 
+  // task-cell-runtime G4 (ADR D5): the acceptance-record gate. Best-effort +
+  // non-throwing — a missing/garbled task-cell tree yields no accepted lanes, so a
+  // valid receipt without an acceptance record stays `handoff_submitted`.
+  let acceptedLanes: AcceptedLane[] = [];
+  try {
+    acceptedLanes = resolveAcceptedLanes(guildRootForRun, runId, teammate);
+  } catch (err) {
+    process.stderr.write(
+      `[teammate-idle] WARN: acceptance-gate lookup failed (non-fatal): ` +
+        `${err instanceof Error ? err.message : String(err)}\n`
+    );
+  }
+
   process.stderr.write(
     `[teammate-idle] INFO: teammate="${teammate}" assigned=[${assignedIds.join(",")}] ` +
       `validReceipts=[${validReceiptTaskIds.join(",")}] ` +
       `invalidReceipts=[${invalidReceiptTaskIds.join(",")}] ` +
       `pending=[${pendingTaskIds.join(",")}] ` +
+      `acceptedLanes=[${acceptedLanes.map((a) => a.logical_task_id).join(",")}] ` +
       `liveness=${liveness.source}/${liveness.fresh ? "fresh" : "stale"} ` +
       `ageMs=${liveness.ageMs ?? "n/a"} timeoutMs=${timeoutMs} ` +
       `tier=${laneTier ?? "unresolved(mid-fallback)"}\n`
@@ -418,6 +506,7 @@ async function main(): Promise<void> {
     invalidReceiptTaskIds,
     validReceiptTaskIds,
     validReceipts,
+    acceptedLanes,
     runDir,
   };
 

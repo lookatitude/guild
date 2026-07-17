@@ -1,0 +1,241 @@
+/**
+ * scripts/__tests__/task-assignment-v2.test.ts
+ *
+ * G3 — the `guild.task_assignment.v2` PRODUCTION channel (task-cell-runtime).
+ * Proves the two adversarial cases the migration is responsible for at the
+ * write/read boundary the launcher uses:
+ *
+ *   AT1  one specialist owning TWO ready tasks → two distinct instances,
+ *        two assignments, two fresh contexts, two handoff paths, NO overwrite.
+ *   AT3  a malformed/missing assignment is a HARD dispatch failure — the writer
+ *        throws, the reader returns null; a lane never proceeds on garbage.
+ *
+ * Plus the D5 ack primitive + the attempt companion + the reader roundtrip.
+ */
+
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+
+import {
+  acknowledgeAssignment,
+  assignmentAckPath,
+  buildTaskCell,
+  readAssignmentAck,
+  readTaskAssignmentV2,
+  writeTaskAssignmentV2,
+  writeTaskAttemptV1,
+  writeTaskCell,
+  type TaskCellDispatchInput,
+} from "../../src/modules/dispatch/workflows/task-assignment-v2";
+import {
+  assignmentId,
+  taskCellPaths,
+  validateTaskAssignmentV2,
+  validateTaskAttemptV1,
+} from "../lib/core/contracts/task-cell-backend";
+
+const FIXED_NOW = () => "2026-07-15T00:00:00.000Z";
+
+function tmpCwd(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "guild-task-assignment-v2-"));
+}
+
+/** A valid single-task dispatch descriptor; `over` tweaks the identity per task. */
+function dispatch(over: Partial<TaskCellDispatchInput> = {}): TaskCellDispatchInput {
+  const logicalTaskId = over.logicalTaskId ?? "T1-backend";
+  return {
+    runId: "run-g3",
+    logicalTaskId,
+    taskRunId: `${logicalTaskId}.tr1`,
+    attempt: 1,
+    attemptId: `${logicalTaskId}.att1`,
+    instanceId: `${logicalTaskId}.a1.i1`,
+    cellId: `cell-${logicalTaskId}`,
+    goalId: "goal-demo",
+    phaseId: "build",
+    stepId: logicalTaskId,
+    teamId: "demo",
+    workerRole: "backend",
+    specialistTypeId: "backend",
+    specialistTypeVersion: "1",
+    specialistTypeHash: "sha256:type-backend",
+    specialistProfileId: "backend",
+    specialistProfileHash: "sha256:profile-backend",
+    contextBundleId: `.guild/context/run-g3/backend-${logicalTaskId}.md`,
+    contextBundleHash: `sha256:ctx-${logicalTaskId}`,
+    hostId: "claude-code-cli",
+    adapterId: "claude-code-cli@1",
+    hostCapabilitiesHash: "sha256:caps",
+    objective: `implement ${logicalTaskId}`,
+    nonGoals: [],
+    scopePaths: [],
+    outputSchema: "guild.handoff_receipt.v1",
+    acceptanceTests: [],
+    dependencies: [],
+    projection: { tools: ["read", "write"], permissions: [], recorded_losses: [] },
+    autonomyPolicy: "supervised",
+    budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
+    deadline: null,
+    leadBindingId: "lead-binding-demo",
+    now: FIXED_NOW,
+    ...over,
+  };
+}
+
+describe("buildTaskCell", () => {
+  it("builds a self-contained, canonical, validate-clean assignment + attempt", () => {
+    const { assignment, attempt } = buildTaskCell(dispatch());
+    expect(validateTaskAssignmentV2(assignment)).not.toBeNull();
+    expect(validateTaskAttemptV1(attempt)).not.toBeNull();
+    // Channels are derived onto the canonical run-tree, keyed on the instance.
+    const paths = taskCellPaths({
+      run_id: "run-g3",
+      logical_task_id: "T1-backend",
+      attempt: 1,
+      instance_id: "T1-backend.a1.i1",
+    });
+    expect(assignment.assignment_path).toBe(paths.assignment_path);
+    expect(assignment.handoff_path).toBe(paths.handoff_path);
+    // Lead is a binding (reused parent orchestrator), never a distinct lead instance.
+    expect(assignment.lead_binding_id).toBe("lead-binding-demo");
+    expect(assignment.team_lead_instance_id ?? null).toBeNull();
+  });
+
+  it("throws on a would-be-malformed assignment (empty objective) — fail-closed (D6)", () => {
+    expect(() => buildTaskCell(dispatch({ objective: "" }))).toThrow(/malformed|fail-closed/i);
+  });
+
+  it("enforces D4 lineage — a non-first attempt needs previous_attempt_id + retry_reason", () => {
+    expect(() => buildTaskCell(dispatch({ attempt: 2 }))).toThrow(/previous_attempt_id|retry_reason/i);
+    const retry = buildTaskCell(
+      dispatch({ attempt: 2, previousAttemptId: "T1-backend.att1", retryReason: "tests failed" })
+    );
+    expect(retry.attempt.previous_attempt_id).toBe("T1-backend.att1");
+    expect(retry.attempt.retry_reason).toBe("tests failed");
+  });
+});
+
+describe("AT1 — one specialist owning two ready tasks (no overwrite)", () => {
+  it("writes two distinct assignments + attempts + contexts, none overwritten", () => {
+    const cwd = tmpCwd();
+    // SAME specialist (worker_role backend, same type/profile hash) → TWO logical tasks.
+    const cellA = buildTaskCell(dispatch({ logicalTaskId: "T1-backend" }));
+    const cellB = buildTaskCell(dispatch({ logicalTaskId: "T2-backend" }));
+
+    const a = writeTaskCell(cwd, cellA);
+    const b = writeTaskCell(cwd, cellB);
+
+    // Two files, two distinct canonical paths — the v1 per-specialist collapse is gone.
+    expect(a.assignmentPath).not.toBe(b.assignmentPath);
+    expect(fs.existsSync(a.assignmentPath)).toBe(true);
+    expect(fs.existsSync(b.assignmentPath)).toBe(true);
+    expect(a.attemptPath).not.toBe(b.attemptPath);
+
+    // Distinct instance identity + assignment id.
+    expect(cellA.assignment.instance_id).not.toBe(cellB.assignment.instance_id);
+    expect(assignmentId(cellA.assignment)).not.toBe(assignmentId(cellB.assignment));
+
+    // Fresh, per-task context — never shared across the specialist's two tasks (D3).
+    expect(cellA.assignment.context_bundle_id).not.toBe(cellB.assignment.context_bundle_id);
+    expect(cellA.assignment.context_bundle_hash).not.toBe(cellB.assignment.context_bundle_hash);
+
+    // Distinct handoff paths so two receipts never collide.
+    expect(cellA.assignment.handoff_path).not.toBe(cellB.assignment.handoff_path);
+
+    // The SPECIALIST is shared — that is the whole point of the type/profile layers.
+    expect(cellA.assignment.worker_role).toBe(cellB.assignment.worker_role);
+    expect(cellA.assignment.specialist_profile_hash).toBe(cellB.assignment.specialist_profile_hash);
+  });
+
+  it("refuses to overwrite an already-written immutable assignment (D6)", () => {
+    const cwd = tmpCwd();
+    const cell = buildTaskCell(dispatch());
+    writeTaskCell(cwd, cell);
+    // A second write to the same (task_run_id, attempt, instance_id) is the v1
+    // overwrite class — it THROWS, it never clobbers.
+    expect(() => writeTaskAssignmentV2(cwd, cell.assignment)).toThrow(/overwrite refused|immutable/i);
+  });
+
+  it("keeps the attempt companion idempotent but refuses a divergent rewrite", () => {
+    const cwd = tmpCwd();
+    const cell = buildTaskCell(dispatch());
+    const p1 = writeTaskAttemptV1(cwd, cell.attempt);
+    // Re-writing the identical record is a no-op (idempotent).
+    expect(writeTaskAttemptV1(cwd, cell.attempt)).toBe(p1);
+    // A DIFFERENT record at the same attempt path is refused (terminal-immutability, D4).
+    expect(() =>
+      writeTaskAttemptV1(cwd, { ...cell.attempt, orphaned: true })
+    ).toThrow(/overwrite refused|immutable/i);
+  });
+});
+
+describe("AT3 — a malformed/missing assignment is a hard dispatch failure", () => {
+  it("throws when the writer is handed a malformed assignment", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const malformed = { ...(assignment as object), objective: "" };
+    expect(() => writeTaskAssignmentV2(cwd, malformed as never)).toThrow(/malformed|fail-closed/i);
+    // Nothing was persisted.
+    expect(fs.existsSync(path.resolve(cwd, assignment.assignment_path))).toBe(false);
+  });
+
+  it("returns null for a MISSING assignment (reader fail-closed) — the worker never starts", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    expect(readTaskAssignmentV2(cwd, assignment.assignment_path)).toBeNull();
+  });
+
+  it("returns null for a malformed on-disk assignment (garbage / wrong schema)", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const abs = path.resolve(cwd, assignment.assignment_path);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, "{ not json");
+    expect(readTaskAssignmentV2(cwd, assignment.assignment_path)).toBeNull();
+    fs.writeFileSync(abs, JSON.stringify({ ...assignment, schema_version: "guild.task_assignment.v1" }));
+    expect(readTaskAssignmentV2(cwd, assignment.assignment_path)).toBeNull();
+  });
+});
+
+describe("reader roundtrip", () => {
+  it("writes then reads back the exact validated assignment", () => {
+    const cwd = tmpCwd();
+    const cell = buildTaskCell(dispatch());
+    writeTaskCell(cwd, cell);
+    const back = readTaskAssignmentV2(cwd, cell.assignment.assignment_path);
+    expect(back).toEqual(cell.assignment);
+  });
+});
+
+describe("D5 ack primitive", () => {
+  it("writes an ack marker beside the assignment that read-back returns", () => {
+    const cwd = tmpCwd();
+    const cell = buildTaskCell(dispatch());
+    writeTaskCell(cwd, cell);
+
+    const ids = {
+      run_id: "run-g3",
+      logical_task_id: "T1-backend",
+      attempt: 1,
+      instance_id: "T1-backend.a1.i1",
+    };
+    // No ack yet — running is not authorized.
+    expect(readAssignmentAck(cwd, ids)).toBeNull();
+
+    const ackPath = acknowledgeAssignment(cwd, cell.assignment, FIXED_NOW);
+    expect(path.resolve(cwd, assignmentAckPath(ids))).toBe(ackPath);
+    const ack = readAssignmentAck(cwd, ids);
+    expect(ack).not.toBeNull();
+    expect(ack!.assignment_id).toBe(assignmentId(cell.assignment));
+    expect(ack!.instance_id).toBe("T1-backend.a1.i1");
+    expect(ack!.acknowledged_at).toBe("2026-07-15T00:00:00.000Z");
+  });
+
+  it("refuses to acknowledge a malformed assignment (the ack gate needs a valid one — D5)", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const malformed = { ...(assignment as object), instance_id: "" };
+    expect(() => acknowledgeAssignment(cwd, malformed as never, FIXED_NOW)).toThrow(/malformed|ack gate/i);
+  });
+});

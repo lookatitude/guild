@@ -1,6 +1,6 @@
 {
   "schema_version": "guild.inventory.v1",
-  "generated_at": "1970-01-01T00:00:00.000Z",
+  "generated_at": "2026-07-16T07:21:10Z",
   "plugin_version": "2.2.0",
   "manifest": {
     "name": "guild",
@@ -1504,6 +1504,16 @@
       "kind": "lib"
     },
     {
+      "id": "lib/core/contracts/specialist-identity",
+      "source_path": "scripts/lib/core/contracts/specialist-identity.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/core/contracts/task-cell-backend",
+      "source_path": "scripts/lib/core/contracts/task-cell-backend.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/core/contracts/team-backend",
       "source_path": "scripts/lib/core/contracts/team-backend.ts",
       "kind": "lib"
@@ -2091,6 +2101,11 @@
     {
       "id": "stamp-recall-importance",
       "source_path": "scripts/stamp-recall-importance.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "station-compose",
+      "source_path": "scripts/station-compose.ts",
       "kind": "cli"
     },
     {

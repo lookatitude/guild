@@ -90,9 +90,14 @@ describe("guild.task_assignment.v1 — GUILD_TASK_ASSIGNMENT export (cross-host 
     expect(new CodexPaneAdapter().env(s).GUILD_TASK_ASSIGNMENT).toBe(rel);
   });
 
-  it("omits GUILD_TASK_ASSIGNMENT when no specialist is set", () => {
+  it("omits the GUILD_TASK_ASSIGNMENT export when no specialist is set", () => {
     const c = new CodexPaneAdapter().command(spec({ runId: "r" }));
-    expect(c).not.toContain("GUILD_TASK_ASSIGNMENT");
+    // Assert the absence of the EXPORT FRAGMENT specifically. task-cell-runtime G3
+    // added a read-ack instruction to the teammate PROMPT that names the
+    // `$GUILD_TASK_ASSIGNMENT` env var, so the bare token now legitimately appears
+    // in every teammate command; the export fragment (`GUILD_TASK_ASSIGNMENT=…`) is
+    // still correctly gated on `spec.specialist`, which is what this test guards.
+    expect(c).not.toContain("GUILD_TASK_ASSIGNMENT=");
     expect(new CodexPaneAdapter().env(spec({ runId: "r" })).GUILD_TASK_ASSIGNMENT).toBeUndefined();
   });
 });
@@ -126,11 +131,17 @@ describe("ClaudePaneAdapter", () => {
     expect(adapter.command(s)).toBe(paneCommand(s.prompt, s.runId));
   });
 
-  it("command carries the agent-team env gate + run id + keeps the pane alive", () => {
+  it("command carries the agent-team env gate + run id, and (G4) does NOT keep the pane alive by default", () => {
     const c = adapter.command(spec());
     expect(c).toContain("export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1");
     expect(c).toContain("export GUILD_RUN_ID=run-001");
-    expect(c).toContain("exec $SHELL");
+    // task-cell-runtime G4 (ADR D5): a completed worker's pane must DISAPPEAR — no
+    // lingering `exec $SHELL` (the P0.4 "pane alive != worker alive" bug). The
+    // operator debug shell is opt-in only (GUILD_PANE_DEBUG=1), verified in
+    // tmux-backend.test.ts.
+    expect(c).not.toContain("exec $SHELL");
+    // The command ends on the worker invocation (pane closes when `claude` exits).
+    expect(/\bclaude\b/.test(c)).toBe(true);
   });
 
   it("env reports the team gate + run id", () => {

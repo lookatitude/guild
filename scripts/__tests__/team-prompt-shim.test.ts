@@ -26,6 +26,11 @@ describe("team prompt module compatibility", () => {
     expect(teammate).toContain("Read your context bundle at `.guild/context/run-001/backend-<task-id>.md` —");
     expect(teammate).toContain("auto-memory (§9.1)");
     expect(teammate).toContain("§8.2 handoff receipt");
+    // task-cell-runtime D5: the read-ack gate — read + validate the assignment and
+    // acknowledge it BEFORE working; `running` is reachable only after the ack.
+    expect(teammate).toContain("$GUILD_TASK_ASSIGNMENT");
+    expect(teammate).toContain("assignment-ack.json");
+    expect(teammate).toContain("acknowledged (D5)");
   });
 
   test("only the prompting module defines buildPrompt", () => {

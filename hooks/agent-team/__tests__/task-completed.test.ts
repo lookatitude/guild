@@ -130,7 +130,12 @@ describe("task-completed.ts", () => {
         CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
       });
       expect(exitCode).toBe(0);
-      expect(stderr).toMatch(/dismissed/i);
+      // task-cell-runtime G4 (ADR D5): the hook records a SUBMISSION and must NOT
+      // claim a dismissal it cannot perform (the P0.4 "Agent dismissed" overclaim —
+      // the hook exits, not the pane). Termination is acceptance-gated.
+      expect(stderr).toMatch(/handoff_submitted/i);
+      expect(stderr).toMatch(/acceptance-gated/i);
+      expect(stderr).not.toMatch(/Agent dismissed/i);
     });
   });
 

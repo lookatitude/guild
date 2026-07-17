@@ -254,6 +254,18 @@ The receipt remains the **truth** (single-channel handoff); the bus event log is
 
 **Assumption aggregation.** Before the stop condition, aggregate every receipt's `assumptions:` list into `.guild/runs/<run-id>/assumptions.md` (one section per specialist, verbatim). If no lane reported assumptions, still create the file empty (header only) so `guild:verify-done` can tell "no assumptions" from "aggregation skipped" — it is the single handoff verify-done reads for its check #5.
 
+## Emit the companion `guild.team_result.v1` (ADDITIVE, FAIL-SOFT — G6b-2b)
+
+After all lanes are dispatched and their handoff receipts collected (`## Receipt collection`), ALSO emit a typed `guild.team_result.v1` as a **companion** to the run. This ADDS a typed artifact; it changes **nothing** in the dispatch logic above. The receipts under `handoffs/` stay the **AUTHORITATIVE** handoff truth; the team_result is the machine-typed mirror pairing the dispatched instances to the `guild.team_plan.v1` (roster + advisory panel) `guild:team-compose` emitted at compose time.
+
+Emit via `writeTeamResult` (`src/modules/teams/workflows/station-signals.ts`) to `.guild/runs/<run-id>/team-result/<station>.json`, where `<station>` is the active phase token (the same token that named the companion team_plan):
+
+- **`team_plan_ref`** → the companion team_plan path from `guild:team-compose` step 5's emit, `.guild/runs/<run-id>/team-plan/<station>.json` — forwarded through `guild:plan`'s handoff as `team_plan_path`. If NO team_plan was emitted (team-compose skipped/failed its fail-soft emit, so no `team_plan_path` was forwarded), **skip the team_result emit too** with a logged note.
+- **`lanes[]`** — ONE entry per dispatched lane: `role` (the lane owner), the **FRESH per-instance `instance_id`** (G2 D3 — DISTINCT per lane, derived from the lane's fresh runtime identity, e.g. its `task_run_id`+`attempt`, never a reused role name; `validateTeamResultV1` **REJECTS a duplicate `instance_id`**, which is exactly what proves "fresh identities + typed results"), `handoff_ref` (pointer to the lane's receipt under `handoffs/`, `null` until submitted), and `acceptance_ref` (`null` until accepted).
+- **FAIL-SOFT.** `writeTeamResult` is fail-**closed** on an invalid result (it throws rather than persist a bad artifact); wrap the call so any throw records a one-line degradation note and **CONTINUES** — the receipts are authoritative, so a missing/failed team_result never blocks `guild:review`.
+
+The fresh, distinct `instance_id`s recorded here are the typed proof that each lane ran as its own runtime identity — the team_result is the mirror `guild:review`/benchmark can read without rehydrating full transcripts. (Contract: `guild.team_result.v1` in `src/modules/teams/workflows/station-composer.ts`; writer + run-tree path in `station-signals.ts`.)
+
 ## Inline shortcut under high autonomy (`--rigor=deep --auto-approve=all`)
 
 When the run posture is `--rigor=deep --auto-approve=all` AND the operator is
@@ -478,5 +490,6 @@ Once the stop condition is met, hand off to `guild:review` with:
 - `backend` — the backend used (`subagent` or `agent-team`), read from the run's resolved-settings snapshot (`snapshot.effective.agent_mode`), not from `team.yaml`.
 - `tier_trace` — per-lane `{task-id, complexity_score, tier, model}` as dispatched (the surfaced scores).
 - `escalations` — count of advisor consults across the run + any `inconclusive: advisor budget exhausted` lanes.
+- `team_result_path` — the companion `guild.team_result.v1` emitted at `.guild/runs/<run-id>/team-result/<station>.json` (or the fail-soft skip note), the typed mirror of the dispatched instances against the composed team_plan.
 
 `guild:review` runs its 2-stage per-task review (spec-conformance then quality) against the receipts in `handoffs_dir`. Do not run review yourself — it is a separate skill with its own responsibilities.

@@ -11,6 +11,13 @@
       "sha256": "20f1243b91fd2693411ee6e966043bd1213b5be924ec48716857c00e9d365f97"
     },
     {
+      "category": "scripts",
+      "id": "station-compose",
+      "source_path": "scripts/station-compose.ts",
+      "resource_path": "resources/scripts/station-compose.ts",
+      "sha256": "89299832f7f9b4aaf8b26f5349cc5bf7b325422dfd6d2b5f73d2775820eba083"
+    },
+    {
       "category": "skills",
       "id": "guild-create-specialist",
       "source_path": "skills/meta/create-specialist/SKILL.md",
@@ -36,7 +43,7 @@
       "id": "guild-team-compose",
       "source_path": "skills/meta/team-compose/SKILL.md",
       "resource_path": "resources/skills/meta/team-compose/SKILL.md",
-      "sha256": "bd71e188c01d6688ec9ba44e32f7dc261de2047551c76f95a90fa85b630fb17d"
+      "sha256": "c7ed59ce38d12dbe133594f8ebd27506b05a6dd7bee605b19705b431348e7462"
     },
     {
       "category": "skills",

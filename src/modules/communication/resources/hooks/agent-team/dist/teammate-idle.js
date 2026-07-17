@@ -6338,8 +6338,8 @@ var init_config_cli = __esm({
 });
 
 // agent-team/teammate-idle.ts
-var fs12 = __toESM(require("fs"));
-var path14 = __toESM(require("path"));
+var fs13 = __toESM(require("fs"));
+var path16 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
 
 // lib/guild-root.ts
@@ -7794,24 +7794,175 @@ function emitBusEvent(runDir, input) {
   }
 }
 
+// ../src/modules/dispatch/workflows/task-cell-acceptance.ts
+var fs12 = __toESM(require("fs"));
+var path15 = __toESM(require("path"));
+
+// ../scripts/lib/core/contracts/task-cell-backend.ts
+var path14 = __toESM(require("path"));
+var TERMINAL_STATES = [
+  "terminated",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "rejected"
+];
+var TERMINAL_SET = new Set(TERMINAL_STATES);
+var LEGAL_TRANSITIONS = Object.freeze({
+  declared: ["instantiated", "failed", "cancelled"],
+  instantiated: ["ready", "failed", "cancelled", "timed_out"],
+  ready: ["assigned", "failed", "cancelled", "timed_out"],
+  assigned: ["assignment_acknowledged", "failed", "cancelled", "timed_out"],
+  // The ack gate: `running` has exactly ONE inbound edge.
+  assignment_acknowledged: ["running", "failed", "cancelled", "timed_out"],
+  running: ["handoff_submitted", "failed", "cancelled", "timed_out"],
+  handoff_submitted: ["handoff_validated", "rejected", "failed", "cancelled", "timed_out"],
+  handoff_validated: ["handoff_accepted", "rejected", "failed", "cancelled", "timed_out"],
+  // Only a durable acceptance record authorizes termination (D5). After
+  // acceptance the ONLY legal path is `terminating -> terminated`; there is no
+  // edge to `failed` — a post-acceptance teardown problem parks in
+  // `terminating` for the reaper, it never terminal-fails the accepted work.
+  handoff_accepted: ["terminating"],
+  // A failed teardown leaves the instance HERE, orphaned, for the reaper to
+  // retry until it reaches `terminated`. `terminating` therefore has no
+  // `failed` edge (the reaper never abandons an accepted instance to failed).
+  terminating: ["terminated"],
+  terminated: [],
+  failed: [],
+  cancelled: [],
+  timed_out: [],
+  rejected: []
+});
+var SAFE_SEGMENT = /^[A-Za-z0-9_.-]+$/;
+function assertSafeSegment(label, value) {
+  if (!SAFE_SEGMENT.test(value) || value === "." || value === "..") {
+    throw new Error(`unsafe ${label} path segment: ${JSON.stringify(value)}`);
+  }
+}
+function taskCellPaths(ids, opts = {}) {
+  assertSafeSegment("run_id", ids.run_id);
+  assertSafeSegment("logical_task_id", ids.logical_task_id);
+  assertSafeSegment("instance_id", ids.instance_id);
+  if (!Number.isInteger(ids.attempt) || ids.attempt < 1) {
+    throw new Error(`attempt must be an integer >= 1, got ${JSON.stringify(ids.attempt)}`);
+  }
+  const guildDir = opts.guildDir ?? ".guild";
+  const run_dir = path14.join(guildDir, "runs", ids.run_id);
+  const cell_dir = path14.join(run_dir, "task-cells", ids.logical_task_id);
+  const attempt_dir = path14.join(cell_dir, "attempts", String(ids.attempt));
+  const instance_dir = path14.join(attempt_dir, "instances", ids.instance_id);
+  const paths = {
+    run_dir,
+    cell_dir,
+    attempt_dir,
+    instance_dir,
+    attempt_path: path14.join(attempt_dir, "attempt.json"),
+    assignment_path: path14.join(instance_dir, "assignment.json"),
+    handoff_path: path14.join(instance_dir, "handoff.json"),
+    heartbeat_path: path14.join(instance_dir, "heartbeat.json"),
+    cancel_channel: path14.join(instance_dir, "cancel"),
+    validation_path: path14.join(instance_dir, "handoff-validation.json"),
+    acceptance_path: path14.join(instance_dir, "handoff-acceptance.json"),
+    terminal_path: path14.join(instance_dir, "terminal.json")
+  };
+  for (const [key, value] of Object.entries(paths)) {
+    if (key === "run_dir") continue;
+    assertWithinRunTree(run_dir, value, key);
+  }
+  return paths;
+}
+function assertWithinRunTree(runDir, p, label = "path") {
+  const rel = path14.relative(path14.resolve(runDir), path14.resolve(p));
+  if (rel === "" || rel.startsWith("..") || path14.isAbsolute(rel)) {
+    throw new Error(`${label} escapes the run tree ${runDir}: ${p}`);
+  }
+}
+var HANDOFF_ACCEPTANCE_SCHEMA = "guild.handoff_acceptance.v1";
+
+// ../src/modules/dispatch/workflows/task-cell-acceptance.ts
+function absUnderCwd(cwd, relPath) {
+  return path15.resolve(cwd, relPath);
+}
+function isTerminationAuthorized(a) {
+  return a.termination_authorized_at !== null;
+}
+function readAcceptanceForInstance(cwd, ids) {
+  const paths = taskCellPaths(ids);
+  try {
+    const raw = fs12.readFileSync(absUnderCwd(cwd, paths.acceptance_path), "utf8");
+    const obj = JSON.parse(raw);
+    if (obj["schema_version"] !== HANDOFF_ACCEPTANCE_SCHEMA) return null;
+    return obj;
+  } catch {
+    return null;
+  }
+}
+function readAssignmentForInstance(cwd, ids) {
+  const paths = taskCellPaths(ids);
+  try {
+    const raw = fs12.readFileSync(absUnderCwd(cwd, paths.assignment_path), "utf8");
+    const obj = JSON.parse(raw);
+    if (obj["schema_version"] !== "guild.task_assignment.v2") return null;
+    return obj;
+  } catch {
+    return null;
+  }
+}
+function findRunAcceptances(cwd, runId) {
+  const cellsRoot = path15.join(cwd, ".guild", "runs", runId, "task-cells");
+  const out = [];
+  let logicalTaskDirs;
+  try {
+    logicalTaskDirs = fs12.readdirSync(cellsRoot);
+  } catch {
+    return out;
+  }
+  for (const logical_task_id of logicalTaskDirs) {
+    const attemptsRoot = path15.join(cellsRoot, logical_task_id, "attempts");
+    let attemptDirs;
+    try {
+      attemptDirs = fs12.readdirSync(attemptsRoot);
+    } catch {
+      continue;
+    }
+    for (const attemptStr of attemptDirs) {
+      const attempt = Number.parseInt(attemptStr, 10);
+      if (!Number.isInteger(attempt) || attempt < 1) continue;
+      const instancesRoot = path15.join(attemptsRoot, attemptStr, "instances");
+      let instanceDirs;
+      try {
+        instanceDirs = fs12.readdirSync(instancesRoot);
+      } catch {
+        continue;
+      }
+      for (const instance_id of instanceDirs) {
+        const ids = { run_id: runId, logical_task_id, attempt, instance_id };
+        const acceptance = readAcceptanceForInstance(cwd, ids);
+        if (acceptance) out.push({ ids, acceptance });
+      }
+    }
+  }
+  return out;
+}
+
 // agent-team/teammate-idle.ts
 function deriveRunId(sessionId, guildRoot) {
   return resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ?? `run-${sessionId}`;
 }
 function assessReceipts(runDir, teammate) {
-  const handoffsDir = path14.join(runDir, "handoffs");
-  if (!fs12.existsSync(handoffsDir)) return [];
+  const handoffsDir = path16.join(runDir, "handoffs");
+  if (!fs13.existsSync(handoffsDir)) return [];
   const prefix = `${teammate}-`;
   const results = [];
-  const files = fs12.readdirSync(handoffsDir).filter((f) => f.startsWith(prefix) && f.endsWith(".md"));
+  const files = fs13.readdirSync(handoffsDir).filter((f) => f.startsWith(prefix) && f.endsWith(".md"));
   for (const file of files) {
     const taskId = file.slice(prefix.length, -".md".length);
-    const rPath = path14.join(handoffsDir, file);
+    const rPath = path16.join(handoffsDir, file);
     let envelopeValid = false;
     let envelopeErrors = [];
     let envelopeStatus;
     try {
-      const content = fs12.readFileSync(rPath, "utf8");
+      const content = fs13.readFileSync(rPath, "utf8");
       const rawEnvelope = extractHandoffEnvelope(content);
       if (rawEnvelope !== null) {
         const result = validateHandoffV2(rawEnvelope);
@@ -7834,12 +7985,12 @@ function assessReceipts(runDir, teammate) {
   return results;
 }
 function findAssignedTaskIds(cwd, teammate) {
-  const planDir = path14.join(resolveGuildRoot(cwd), ".guild", "plan");
-  if (!fs12.existsSync(planDir)) return [];
-  const files = fs12.readdirSync(planDir).filter((f) => f.endsWith(".md"));
+  const planDir = path16.join(resolveGuildRoot(cwd), ".guild", "plan");
+  if (!fs13.existsSync(planDir)) return [];
+  const files = fs13.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   const ids = [];
   for (const file of files) {
-    const content = fs12.readFileSync(path14.join(planDir, file), "utf8");
+    const content = fs13.readFileSync(path16.join(planDir, file), "utf8");
     const blocks = content.split(/\n(?=[-*#]|\w)/);
     for (const block of blocks) {
       const isAssigned = new RegExp(`(?:owner|assigned|teammate):\\s*${teammate}\\b`, "i").test(block);
@@ -7850,6 +8001,20 @@ function findAssignedTaskIds(cwd, teammate) {
     }
   }
   return ids;
+}
+function resolveAcceptedLanes(guildRoot, runId, teammate) {
+  const out = [];
+  for (const { ids, acceptance } of findRunAcceptances(guildRoot, runId)) {
+    if (!isTerminationAuthorized(acceptance)) continue;
+    const assignment = readAssignmentForInstance(guildRoot, ids);
+    if (!assignment || assignment.worker_role !== teammate) continue;
+    out.push({
+      logical_task_id: ids.logical_task_id,
+      instance_id: ids.instance_id,
+      released: acceptance.downstream_release_at !== null
+    });
+  }
+  return out;
 }
 function renderLiveness(liveness) {
   if (liveness.source === "none") {
@@ -7870,20 +8035,27 @@ function composeNudge(ctx) {
   const hasPending = ctx.pendingTaskIds.length > 0;
   const hasInvalid = ctx.invalidReceiptTaskIds.length > 0;
   const hasValid = ctx.validReceiptTaskIds.length > 0;
-  if (hasValid && !hasPending && !hasInvalid) {
-    const receipts = ctx.validReceipts.map((r) => r.receiptPath).join(", ");
-    const pointerLines = ctx.validReceipts.map(
-      (r) => `done \xB7 ${r.taskId} \xB7 status:${r.envelopeStatus ?? "done"} \xB7 receipt:${r.receiptPath}`
+  const hasAcceptance = ctx.acceptedLanes.length > 0;
+  if (hasAcceptance && !hasPending) {
+    const authLines = ctx.acceptedLanes.map(
+      (a) => `[TERMINATE-AUTHORIZED] teammate="${ctx.teammate}" team="${ctx.teamName}" logical_task=${a.logical_task_id} instance=${a.instance_id} downstream=${a.released ? "released" : "blocked"}`
     ).join("\n");
-    const dismissLines = ctx.validReceipts.map(
-      (r) => `[AUTO-DISMISS] teammate="${ctx.teammate}" team="${ctx.teamName}" reason=valid-receipt task=${r.taskId}`
-    ).join("\n");
-    return `[TeammateIdle ${timestamp}] [LANE-COMPLETE] teammate="${ctx.teammate}" team="${ctx.teamName}" status=safe-to-dismiss
+    return `[TeammateIdle ${timestamp}] [LANE-ACCEPTED] teammate="${ctx.teammate}" team="${ctx.teamName}" status=safe-to-dismiss
 ${livenessLine}
-Valid guild.handoff.v2 receipt(s) confirmed: ${receipts}
+Durable guild.handoff_acceptance.v1 record(s) authorize termination for ${ctx.acceptedLanes.length} lane(s).
+${authLines}
+The launcher may safely terminate this pane (guild.handoff_acceptance.v1 exists).
+`;
+  }
+  if (hasValid && !hasPending && !hasInvalid && !hasAcceptance) {
+    const pointerLines = ctx.validReceipts.map(
+      (r) => `submitted \xB7 ${r.taskId} \xB7 status:${r.envelopeStatus ?? "done"} \xB7 receipt:${r.receiptPath}`
+    ).join("\n");
+    return `[TeammateIdle ${timestamp}] [LANE-SUBMITTED] teammate="${ctx.teammate}" team="${ctx.teamName}" status=awaiting-acceptance
+${livenessLine}
+Valid guild.handoff.v2 receipt(s) confirmed, but NO durable guild.handoff_acceptance.v1 record yet \u2014 the lane is handoff_submitted, NOT safe to dismiss (D5: receipts release nothing).
 ${pointerLines}
-${dismissLines}
-The launcher may safely dismiss this pane.
+Awaiting the acceptance authority (deterministic floor + Team Lead + any reviewer cell) before the launcher may terminate this pane.
 `;
   }
   if (hasPending) {
@@ -7948,7 +8120,7 @@ async function main3() {
   const cwd = payload.cwd ?? process.cwd();
   const guildRootForRun = resolveGuildRoot(cwd);
   const runId = deriveRunId(sessionId, guildRootForRun);
-  const runDir = path14.join(guildRootForRun, ".guild", "runs", runId);
+  const runDir = path16.join(guildRootForRun, ".guild", "runs", runId);
   const receiptAssessments = assessReceipts(runDir, teammate);
   const validReceiptTaskIds = receiptAssessments.filter((r) => r.envelopeValid).map((r) => r.taskId);
   const invalidReceiptTaskIds = receiptAssessments.filter((r) => !r.envelopeValid).map((r) => r.taskId);
@@ -7959,8 +8131,17 @@ async function main3() {
   const laneTier = resolveLaneTier(runDir, teammate, assignedIds);
   const timeoutMs = resolveHeartbeatTimeoutMs(cwd, laneTier);
   const liveness = assessLiveness(runDir, teammate, timeoutMs);
+  let acceptedLanes = [];
+  try {
+    acceptedLanes = resolveAcceptedLanes(guildRootForRun, runId, teammate);
+  } catch (err) {
+    process.stderr.write(
+      `[teammate-idle] WARN: acceptance-gate lookup failed (non-fatal): ${err instanceof Error ? err.message : String(err)}
+`
+    );
+  }
   process.stderr.write(
-    `[teammate-idle] INFO: teammate="${teammate}" assigned=[${assignedIds.join(",")}] validReceipts=[${validReceiptTaskIds.join(",")}] invalidReceipts=[${invalidReceiptTaskIds.join(",")}] pending=[${pendingTaskIds.join(",")}] liveness=${liveness.source}/${liveness.fresh ? "fresh" : "stale"} ageMs=${liveness.ageMs ?? "n/a"} timeoutMs=${timeoutMs} tier=${laneTier ?? "unresolved(mid-fallback)"}
+    `[teammate-idle] INFO: teammate="${teammate}" assigned=[${assignedIds.join(",")}] validReceipts=[${validReceiptTaskIds.join(",")}] invalidReceipts=[${invalidReceiptTaskIds.join(",")}] pending=[${pendingTaskIds.join(",")}] acceptedLanes=[${acceptedLanes.map((a) => a.logical_task_id).join(",")}] liveness=${liveness.source}/${liveness.fresh ? "fresh" : "stale"} ageMs=${liveness.ageMs ?? "n/a"} timeoutMs=${timeoutMs} tier=${laneTier ?? "unresolved(mid-fallback)"}
 `
   );
   const validReceipts = receiptAssessments.filter((r) => r.envelopeValid);
@@ -7974,6 +8155,7 @@ async function main3() {
     invalidReceiptTaskIds,
     validReceiptTaskIds,
     validReceipts,
+    acceptedLanes,
     runDir
   };
   process.stdout.write(composeNudge(ctx));

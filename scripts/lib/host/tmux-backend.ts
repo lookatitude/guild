@@ -41,12 +41,40 @@ export function wrapLoginShell(command: string, loginShell: string): string {
 
 export { buildPrompt };
 
+// ── Worker-pane lifecycle (P0.4 / task-cell-runtime G4) ──────────────────────
+//
+// A completed worker's pane MUST disappear — the old tail `claude <prompt>; exec
+// $SHELL` kept the pane alive after the agent exited, so "pane exists" no longer
+// meant "worker alive" and the launcher's dismiss/reap could never tell a live
+// worker from a lingering shell (audit finding P0.4). The default is now: run the
+// worker, and let the pane close when the worker exits.
+//
+// An operator debug shell is available ONLY behind an explicit opt-in
+// (`GUILD_PANE_DEBUG=1`, default OFF). To keep a debug shell from ever being
+// confusable with a live worker (adversarial test 14), the debug tail RETITLES its
+// own pane to the `guild-debug:` sentinel before dropping into the shell, so every
+// liveness / termination check can exclude it via `isDebugShellTitle`.
+
+/** Pane-title prefix stamped on an opt-in operator debug shell — NEVER a live worker. */
+export const DEBUG_PANE_TITLE_PREFIX = "guild-debug:";
+
+/** True when `GUILD_PANE_DEBUG=1` opts a completed worker's pane into an operator debug shell. */
+export function paneDebugEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env["GUILD_PANE_DEBUG"] === "1";
+}
+
+/** A pane whose title carries the debug sentinel is an operator shell, not a live worker (AT14). */
+export function isDebugShellTitle(title: string): boolean {
+  return title.startsWith(DEBUG_PANE_TITLE_PREFIX);
+}
+
 export function paneCommand(
   prompt: string,
   runId: string,
   capabilityScope?: string[],
   taskId?: string,
   specialist?: string,
+  debug: boolean = paneDebugEnabled(),
 ): string {
   const taskFragment =
     taskId !== undefined && taskId.length > 0
@@ -68,6 +96,18 @@ export function paneCommand(
     capabilityScope !== undefined
       ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(capabilityScope))}; `
       : "";
+  // Worker teardown tail. Default (debug OFF): the pane closes when `claude` exits
+  // — no lingering shell, so "pane alive" unambiguously means "worker alive".
+  // Debug ON: retitle the pane to the `guild-debug:` sentinel FIRST (so liveness
+  // checks never mistake it for a worker), print an unmistakable notice, then drop
+  // into a shell for the operator.
+  const debugTitle = DEBUG_PANE_TITLE_PREFIX + (specialist !== undefined && specialist.length > 0 ? specialist : "orchestrator");
+  const teardownTail = debug
+    ? `claude ${shellQuote(prompt)}; ` +
+      `tmux select-pane -t "$TMUX_PANE" -T ${shellQuote(debugTitle)} 2>/dev/null || true; ` +
+      `echo ${shellQuote("[GUILD_PANE_DEBUG] worker process exited — this is an operator debug shell, NOT a live worker.")}; ` +
+      `exec $SHELL`
+    : `claude ${shellQuote(prompt)}`;
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
     `export GUILD_RUN_ID=${shellQuote(runId)}; ` +
@@ -76,8 +116,7 @@ export function paneCommand(
     assignmentFragment +
     statuslineFragment +
     scopeFragment +
-    `claude ${shellQuote(prompt)}; ` +
-    `exec $SHELL`
+    teardownTail
   );
 }
 
@@ -184,6 +223,106 @@ export function composeTmuxCommands(opts: {
 
 export function probeTmuxAvailable(run: RunFn = defaultRun): boolean {
   return run("tmux", ["-V"]).status === 0;
+}
+
+// ── Real termination primitive (task-cell-runtime G4, ADR D5) ────────────────
+//
+// The old `[DISMISS]`/`[AUTO-DISMISS]` was signal-only: it announced a dismissal
+// but never killed a live worker's pane, and the reaper only pruned ALREADY-DEAD
+// panes. `terminatePane` is the real thing: it kills the pane by id and CONFIRMS
+// the death by polling that the pane_id is gone. A kill that does not confirm is an
+// ORPHAN — the caller parks the attempt for the reaper, which simply calls this
+// again (adversarial test 6). tmux being unavailable is a recorded DEGRADATION, not
+// a silent success.
+
+/** The set of live tmux pane ids, or null when tmux is unavailable / errored. */
+export function livePaneIds(run: RunFn = defaultRun): Set<string> | null {
+  const r = run("tmux", ["list-panes", "-a", "-F", "#{pane_id}"]);
+  if (r.status !== 0) return null;
+  return new Set(
+    r.stdout
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
+/** True when `paneId` is present in the live pane listing. Fail-closed: unknown tmux state → not alive. */
+export function isPaneAlive(paneId: string, run: RunFn = defaultRun): boolean {
+  const ids = livePaneIds(run);
+  return ids !== null && ids.has(paneId);
+}
+
+export interface TerminatePaneOutcome {
+  /** True only when the pane is CONFIRMED gone after the kill. */
+  ok: boolean;
+  /** Whether the poll confirmed the pane_id is no longer live. */
+  confirmed: boolean;
+  mechanism: "tmux kill-pane";
+  paneId: string;
+  /** Number of confirmation polls performed. */
+  polls: number;
+  /** True when tmux was unavailable — a recorded degradation, NOT a silent success (D5). */
+  degraded: boolean;
+  error?: string;
+}
+
+/**
+ * Kill a worker's pane and CONFIRM its death.
+ *
+ *   1. If the pane is already gone → confirmed (idempotent reap).
+ *   2. `tmux kill-pane -t <paneId>`.
+ *   3. Poll `list-panes` up to `pollAttempts` times; confirmed the moment the
+ *      pane_id disappears.
+ *
+ * `ok: false, confirmed: false` means the pane SURVIVED the kill — an orphan the
+ * caller must park for the reaper. `degraded: true` means tmux was unavailable
+ * (host-unavailable is a recorded degradation, D5).
+ */
+export function terminatePane(
+  paneId: string,
+  opts: { run?: RunFn; pollAttempts?: number } = {},
+): TerminatePaneOutcome {
+  const run = opts.run ?? defaultRun;
+  const pollAttempts = opts.pollAttempts ?? 5;
+  const base = { mechanism: "tmux kill-pane" as const, paneId };
+
+  // Dry-run placeholder ids (e.g. "(dry-run)") can never be terminated.
+  if (!paneId || paneId.startsWith("(")) {
+    return { ...base, ok: false, confirmed: false, polls: 0, degraded: false, error: "no real pane_id (placeholder)" };
+  }
+
+  const before = livePaneIds(run);
+  if (before === null) {
+    return { ...base, ok: false, confirmed: false, polls: 0, degraded: true, error: "tmux unavailable" };
+  }
+  if (!before.has(paneId)) {
+    // Already gone — a confirmed teardown (idempotent).
+    return { ...base, ok: true, confirmed: true, polls: 0, degraded: false };
+  }
+
+  run("tmux", ["kill-pane", "-t", paneId]);
+
+  let polls = 0;
+  for (let i = 0; i < Math.max(1, pollAttempts); i++) {
+    polls++;
+    const now = livePaneIds(run);
+    if (now === null) {
+      return { ...base, ok: false, confirmed: false, polls, degraded: true, error: "tmux unavailable during confirm" };
+    }
+    if (!now.has(paneId)) {
+      return { ...base, ok: true, confirmed: true, polls, degraded: false };
+    }
+  }
+  // The pane survived every confirmation poll — an orphan for the reaper.
+  return {
+    ...base,
+    ok: false,
+    confirmed: false,
+    polls,
+    degraded: false,
+    error: `pane ${paneId} still live after ${polls} confirmation poll(s)`,
+  };
 }
 
 // ── TmuxTeamBackend ───────────────────────────────────────────────────────────

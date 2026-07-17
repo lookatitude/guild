@@ -23,3 +23,7 @@
 
 
 ## [2026-06-17] decided wave3-producer-skill-additive
+
+
+## [2026-07-14] decided task-cell-runtime-contract
+- decided task-cell-runtime-contract (freeze record for the task-cell-runtime initiative; G1/P0.1 truth reconciliation of docs/v2/08 §5)
