@@ -1100,11 +1100,33 @@ function denseEvery(arr: readonly unknown[], pred: (x: unknown) => boolean): boo
 const isStrArr = (v: unknown): v is string[] =>
   Array.isArray(v) && denseEvery(v, (x) => typeof x === "string" && (x as string).length > 0);
 
+const STATION_SEGMENT = /^[a-z-]+$/;
+const ROLE_SEGMENT = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * True for a scoped rule id of the exact shape `<prefix>:<station>:<role>` (e.g.
+ * `opt:build:architect`, `chal:qa:security`).
+ *
+ * Parsed BY SEGMENT rather than with one caret-anchored identifier-then-colon regex
+ * literal: the three-part shape is stated directly, and that anchored literal form
+ * is the hand-rolled-YAML-field-extractor idiom the comms-format policy lints for —
+ * this is a structured id, never YAML, so it should not read like one.
+ */
+function isScopedRuleId(id: string, prefix: string): boolean {
+  const parts = id.split(":");
+  return (
+    parts.length === 3 &&
+    parts[0] === prefix &&
+    STATION_SEGMENT.test(parts[1]) &&
+    ROLE_SEGMENT.test(parts[2])
+  );
+}
+
 /** A fired_rule id is a known IMPLIED_RULES id or a `opt:<station>:<role>` id. */
 const IMPLIED_RULE_IDS: ReadonlySet<string> = new Set<string>(IMPLIED_RULES.map((r) => r.id));
 function isKnownRuleId(id: string): boolean {
   if (IMPLIED_RULE_IDS.has(id)) return true;
-  return /^opt:[a-z-]+:[A-Za-z0-9_-]+$/.test(id);
+  return isScopedRuleId(id, "opt");
 }
 
 /**

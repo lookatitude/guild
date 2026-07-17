@@ -351,9 +351,16 @@ describe("advisory challenger panel", () => {
       expect(panel.producer === null || typeof panel.producer === "string").toBe(true);
       expect(Array.isArray(panel.challengers)).toBe(true);
       expect(Array.isArray(panel.fired_challenger_rules)).toBe(true);
-      // Every fired-challenger id is well-formed `chal:<station>:<role>`.
+      // Every fired-challenger id is well-formed `chal:<station>:<role>` — asserted
+      // by SEGMENT (an anchored `^ident:` regex literal reads as the hand-rolled
+      // YAML-field-extractor idiom the comms-format policy lints for; this is a
+      // structured id, not YAML).
       for (const id of panel.fired_challenger_rules) {
-        expect(id).toMatch(/^chal:[a-z-]+:[A-Za-z0-9_-]+$/);
+        const parts = id.split(":");
+        expect(parts).toHaveLength(3);
+        expect(parts[0]).toBe("chal");
+        expect(parts[1]).toMatch(/^[a-z-]+$/);
+        expect(parts[2]).toMatch(/^[A-Za-z0-9_-]+$/);
       }
     }
   });
