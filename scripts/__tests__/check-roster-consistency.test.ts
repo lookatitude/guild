@@ -95,15 +95,15 @@ function seedPluginRoot(
   rosterContent: string,
   agents: { name: string; model: string }[]
 ): void {
-  const docsDir = path.join(tmpDir, "docs");
+  const rosterDir = path.join(tmpDir, ".guild", "wiki", "entities");
   const agentsDir = path.join(tmpDir, "agents");
-  fs.mkdirSync(docsDir, { recursive: true });
+  fs.mkdirSync(rosterDir, { recursive: true });
   fs.mkdirSync(agentsDir, { recursive: true });
   // The validator scans BOTH shipped surfaces (machinery-vs-template-library
   // ADR); fixtures keep the template surface present-but-empty.
   fs.mkdirSync(path.join(tmpDir, "templates", "specialists"), { recursive: true });
 
-  fs.writeFileSync(path.join(docsDir, "specialist-roster.md"), rosterContent, "utf8");
+  fs.writeFileSync(path.join(rosterDir, "specialist-roster.md"), rosterContent, "utf8");
 
   for (const { name, model } of agents) {
     fs.writeFileSync(path.join(agentsDir, `${name}.md`), buildAgentMd(name, model), "utf8");
@@ -335,7 +335,7 @@ describe("CLI: check-roster-consistency.ts", () => {
   });
 
   describe("input errors", () => {
-    it("exits 1 when --cwd has no docs/specialist-roster.md", () => {
+    it("exits 1 when --cwd has no .guild/wiki/entities/specialist-roster.md", () => {
       // tmpDir has no docs/ folder at all
       const { exitCode, stderr } = runScript(["--cwd", tmpDir]);
       expect(exitCode).toBe(1);
@@ -343,11 +343,11 @@ describe("CLI: check-roster-consistency.ts", () => {
     });
 
     it("exits 1 when --cwd has no agents/ directory", () => {
-      // Create docs/specialist-roster.md but no agents/
+      // Create .guild/wiki/entities/specialist-roster.md but no agents/
       const rows = [{ role: "backend", group: "eng", tier: "mid", model: "sonnet" }];
-      fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+      fs.mkdirSync(path.join(tmpDir, ".guild", "wiki", "entities"), { recursive: true });
       fs.writeFileSync(
-        path.join(tmpDir, "docs", "specialist-roster.md"),
+        path.join(tmpDir, ".guild", "wiki", "entities", "specialist-roster.md"),
         buildRosterMd(rows),
         "utf8"
       );

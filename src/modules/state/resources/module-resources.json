@@ -57,14 +57,14 @@
       "id": "lib/replay-rundir",
       "source_path": "scripts/lib/replay-rundir.ts",
       "resource_path": "resources/scripts/lib/replay-rundir.ts",
-      "sha256": "25ab6ffc19c709c25e02409dff8aab6a2af0e7b70f5f73ee7c520badcc713941"
+      "sha256": "5cb7068cca233c38c43affc57e74ebb3e171f5fc8e31f5ed27743e793f6fb522"
     },
     {
       "category": "scripts",
       "id": "lib/retention",
       "source_path": "scripts/lib/retention.ts",
       "resource_path": "resources/scripts/lib/retention.ts",
-      "sha256": "a105031e18c0eeed7c158523cef72803517fcc84ceb082e808a40e8f0ffffd85"
+      "sha256": "3fa6fc94d966f9bf86e652baeb64de959a47dbc4d3f1c606a27f962b70bc0968"
     },
     {
       "category": "scripts",

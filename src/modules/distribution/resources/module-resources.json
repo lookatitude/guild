@@ -36,7 +36,7 @@
       "id": "check-roster-consistency",
       "source_path": "scripts/check-roster-consistency.ts",
       "resource_path": "resources/scripts/check-roster-consistency.ts",
-      "sha256": "667d2135b410ee935e7667907de76b50416e39f7af5d3fa757ee42c908078709"
+      "sha256": "3e2e5b66618439079791dd0ad5472053f1326d1ca8dec05488daf2e1a6197e57"
     },
     {
       "category": "scripts",

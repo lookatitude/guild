@@ -29,7 +29,7 @@
       "id": "lib/advisory-record",
       "source_path": "scripts/lib/advisory-record.ts",
       "resource_path": "resources/scripts/lib/advisory-record.ts",
-      "sha256": "12f0cac0b6d8b78499fcfbc0ada890663b8a98353d61d246c1df0fa68ba63deb"
+      "sha256": "aa5ec10663af5b3d945e0d650ec727f7d04a0d3147bf7ee7f4fb7c4edb2e1be9"
     },
     {
       "category": "scripts",
@@ -85,7 +85,7 @@
       "id": "guild-diagnose",
       "source_path": "skills/meta/diagnose/SKILL.md",
       "resource_path": "resources/skills/meta/diagnose/SKILL.md",
-      "sha256": "c8e2aad532950aaeed59faefc39692f21d6fef25274ff776c9c293ffeb034a9f"
+      "sha256": "23efdae9d4bd5f8c8138c7ff3297f1228feb454e3dfe60e53a6181069ff9c667"
     },
     {
       "category": "skills",

@@ -55,7 +55,7 @@ All five global flags + `--dry-run` apply. The `--rigor` profile expansion
 PCR-Ideation must-exist floor: `.guild/spec/<slug>.md`,
 `.guild/runs/<run-id>/assumptions.md`, `.guild/runs/<run-id>/questions.md`,
 `.guild/runs/<run-id>/review/spec/*`. Binding:
-`docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+`docs/v2/lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
 CMD-005.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)

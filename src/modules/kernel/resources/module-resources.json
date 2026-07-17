@@ -8,7 +8,7 @@
       "id": "SessionStart:bootstrap.sh",
       "source_path": "hooks/bootstrap.sh",
       "resource_path": "resources/hooks/bootstrap.sh",
-      "sha256": "37798dcb5cc28c58e3f72d3ae1a0fd0200942520940757b91dab79c65f0f2e0d"
+      "sha256": "bd0acffad2397e09ea193d36e3e0429225b6e952a125ae482f59c1abb262c884"
     },
     {
       "category": "hooks",

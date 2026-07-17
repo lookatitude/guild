@@ -3,7 +3,7 @@
  *
  * ARCH-8 — multi-wave run-manifest wiring (dormant forward-prep).
  *
- * Contract (BY POINTER): docs/v2/08-dispatch-execution.md §7 (run_manifest.v1);
+ * Contract (BY POINTER): docs/v2/dispatch-execution.md §7 (run_manifest.v1);
  *   ADR: v2-runtime-and-execution-model (workspace wiki) §ADR-RE-6.
  *
  * Wires the existing write-run-manifest writer + reader together for multi-wave

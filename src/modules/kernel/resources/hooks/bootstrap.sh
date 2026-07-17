@@ -101,7 +101,6 @@ cat <<STATUS
 │    guild-telemetry    Trace query over .guild/runs/             │
 ├─────────────────────────────────────────────────────────────────┤
 │  Docs & architecture: https://guildstack.dev/docs               │
-│  Specialist roster: docs/specialist-roster.md                   │
 └─────────────────────────────────────────────────────────────────┘
 STATUS
 

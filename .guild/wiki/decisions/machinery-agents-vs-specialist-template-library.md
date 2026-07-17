@@ -88,7 +88,7 @@ as the read-only skill library that templates (and their minted instances) refer
   instances. This is the intended boundary, not a regression.
 - The five hand-maintained mirrors changed in lockstep: `specialist-roster.ts`
   (`MACHINERY_AGENT_IDS` + `SPECIALIST_TEMPLATE_IDS`), the specialists manifest
-  `owns.agents`, `docs/specialist-roster.md`, README/AGENTS.md prose, and
+  `owns.agents`, `.guild/wiki/entities/specialist-roster.md`, README/AGENTS.md prose, and
   `capability-catalogs.test.ts` (now also filesystem-pinned to both trees).
 - `AUGMENTING_AGENT_IDS` = `{advisor, developer}`; `doc-writer` is an ordinary domain
   template.

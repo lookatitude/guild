@@ -889,7 +889,7 @@ function resolveScopeDecision(args) {
         permissionDecision: "deny",
         recordedDecision: "deny",
         eventType: "capability_scope_violation",
-        reason: policyForced === true ? `${baseReason} bypass_permissions_policy=deny (FORCED by non-interactive autonomy mode \u2014 docs/v2/11-security.md \xA7bypassPermissions governance) \u2014 hard-blocked under bypassPermissions.` : `${baseReason} bypass_permissions_policy=deny \u2014 hard-blocked under bypassPermissions.`
+        reason: policyForced === true ? `${baseReason} bypass_permissions_policy=deny (FORCED by non-interactive autonomy mode \u2014 docs/v2/security.md \xA7bypassPermissions governance) \u2014 hard-blocked under bypassPermissions.` : `${baseReason} bypass_permissions_policy=deny \u2014 hard-blocked under bypassPermissions.`
       };
     case "allow":
       return {

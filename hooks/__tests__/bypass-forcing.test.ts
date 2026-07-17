@@ -1,7 +1,7 @@
 /**
  * hooks/__tests__/bypass-forcing.test.ts
  *
- * D-BYPASS autonomy-mode forcing (docs/v2/11-security.md §bypassPermissions
+ * D-BYPASS autonomy-mode forcing (docs/v2/security.md §bypassPermissions
  * governance): under `auto_approve` / `autonomous_after_plan_approval` the
  * `bypass_permissions_policy` is FORCED to `deny` — a bypassPermissions
  * attempt on an out-of-scope call hard-blocks (abort + security event).

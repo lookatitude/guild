@@ -2,7 +2,7 @@
  * scripts/__tests__/kb-snapshot.test.ts
  *
  * KB Snapshot & Rollback — defense Layer 5
- * (docs/v2/11-security.md §"KB snapshot & rollback").
+ * (docs/v2/security.md §"KB snapshot & rollback").
  *
  * All integration tests that touch the filesystem use real temp directories
  * (no injected seams / fake-fs) per the "injected-seam tests mask real-path

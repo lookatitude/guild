@@ -129,7 +129,7 @@ overriding per-lane `model_tier:` plan entries and the `settings.json
 models:` block. Precedence: `--model-tier` > per-lane plan override >
 `models:` block > built-in default. Tiering is orthogonal to the
 `agent_mode` backend ladder — they compose, never replace each other. Full
-tier semantics: `docs/v2/13-config-surfaces.md §5`. Ref: DRIFT-ANALYSIS
+tier semantics: `docs/v2/config-surfaces.md §5`. Ref: DRIFT-ANALYSIS
 CMD-008.
 
 **Tuning flags (v1 → v2).** `--loops`, `--loop-cap`, `--codex-cap` are

@@ -8,7 +8,7 @@ source_refs:
   - plugin/.guild/wiki/decisions/v2-runtime-and-execution-model.md   # the TeamBackend seam this ADR extends (bound by pointer)
   - plugin/.guild/wiki/decisions/cost-aware-tiering-and-lean-context.md  # §task§agent lifecycle, guild.handoff.v2 (bound by pointer)
   - plugin/.guild/wiki/decisions/machinery-agents-vs-specialist-template-library.md  # type-template vs project-agent distinction this ADR sharpens
-  - docs/v2/08-dispatch-execution.md   # the design doc reconciled to shipped reality in the same rollout (G1)
+  - docs/v2/dispatch-execution.md   # the design doc reconciled to shipped reality in the same rollout (G1)
 created_at: 2026-07-14
 updated_at: 2026-07-14
 expires_at: null
@@ -343,5 +343,5 @@ binding on G6/G8:
 Per workspace Rule 2 + the D8 initiative close gate: any runtime change under this
 ADR must reconcile `docs/v2` (08, 03, generated-support-matrix), the umbrella
 wiki, and consumer-facing website docs **in the same rollout**. G1 already
-reconciles `docs/v2/08` §5 to shipped reality; subsequent work items flip those
+reconciles `docs/v2/dispatch-execution.md` §5 to shipped reality; subsequent work items flip those
 caveats to "shipped" only as the corresponding runtime lands.

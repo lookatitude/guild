@@ -73,7 +73,7 @@ describe("evaluateDocSync — command surface triggers", () => {
     const result = evaluateDocSync({
       changedFiles: [
         "plugin/commands/guild-build.md",
-        "docs/v2/03-lifecycle.md",
+        "docs/v2/lifecycle.md",
       ],
       commitMessages: ["feat: add --rigor flag; update docs"],
       userFacingSkillPaths: [],
@@ -230,7 +230,7 @@ describe("evaluateDocSync — command surface triggers", () => {
 
   test("docs/v2 change with no surface change → clean", () => {
     const result = evaluateDocSync({
-      changedFiles: ["docs/v2/03-lifecycle.md"],
+      changedFiles: ["docs/v2/lifecycle.md"],
       commitMessages: ["docs: update workspace architecture page"],
       userFacingSkillPaths: [],
     });
@@ -245,7 +245,7 @@ describe("evaluateDocSync — command surface triggers", () => {
       changedFiles: [
         "plugin/commands/guild-init.md",   // surface
         "plugin/scripts/detect.ts",        // non-surface
-        "docs/v2/03-lifecycle.md",        // root doc (makes it clean actually)
+        "docs/v2/lifecycle.md",        // root doc (makes it clean actually)
       ],
       commitMessages: ["feat: improve init"],
       userFacingSkillPaths: [],
@@ -397,11 +397,11 @@ describe("evaluateDocSync — cross-repo combined file lists (Finding #1)", () =
 
   test("plugin surface change + root docs/v2 change → CLEAN (combined lists)", () => {
     // Simulate: plugin-repo diff saw commands/guild-build.md (normalised to commands/...)
-    // Root-repo diff saw docs/v2/03-lifecycle.md
+    // Root-repo diff saw docs/v2/lifecycle.md
     const result = evaluateDocSync({
       changedFiles: [
         "commands/guild-build.md",           // from plugin repo, normalised
-        "docs/v2/03-lifecycle.md",           // from root repo
+        "docs/v2/lifecycle.md",           // from root repo
       ],
       commitMessages: ["feat: update build command and docs"],
       userFacingSkillPaths: [],
@@ -548,7 +548,7 @@ describe("gatherCrossRepoInputs — two-git-repo cross-repo scenario (Finding #6
     });
     // Add a docs/v2 file in root repo
     gitCommit(rootRepo, "docs: update build reference", {
-      "docs/v2/03-lifecycle.md": "# Lifecycle\n",
+      "docs/v2/lifecycle.md": "# Lifecycle\n",
     });
 
     // gatherCrossRepoInputs: diff each repo against its previous commit

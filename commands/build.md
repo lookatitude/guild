@@ -41,7 +41,7 @@ All five global flags + `--dry-run` apply.
     forces every lane in this run to the given model tier regardless of
     per-lane plan overrides or the `models:` settings block. Precedence:
     `--model-tier` > per-lane `model_tier:` > `settings.json models:` > built-in.
-    Ref: `docs/v2/13-config-surfaces.md §5`. DRIFT-ANALYSIS CMD-008.
+    Ref: `docs/v2/config-surfaces.md §5`. DRIFT-ANALYSIS CMD-008.
 
 ## Gates (default)
 
@@ -63,7 +63,7 @@ bundles), `.guild/runs/<run-id>/handoffs/*.md` (`guild.handoff_receipt.v1`),
 PCR-Development must-exist floor: `.guild/context/<run-id>/…`,
 `.guild/runs/<run-id>/handoffs/…`, `assumptions.md`, `review.md`,
 `agent-bus/events.ndjson`. Binding:
-`docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+`docs/v2/lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
 CMD-007.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
@@ -140,7 +140,7 @@ where `depends-on:` allows; `[lane-id]` re-runs one), invoke in order:
     `codex_cap` (default 5); on cap hit, surface force-pass / extend-cap /
     rework to the user. Trail under `.guild/runs/<run-id>/review/G-lane:<task-id>/`
     (packet-<round>.md, result-<round>.json, trail.md). Per
-    `docs/v2/09-adversarial-review.md §Gate ownership` — G-lane is the sole
+    `docs/v2/adversarial-review.md §Gate ownership` — G-lane is the sole
     command-visible gate for the Development phase; G-spec and G-plan are
     skill-internal. Ref: DRIFT-ANALYSIS CMD-001.
 3. **`guild:review`** (`skills/meta/review`) — two-stage per-lane review

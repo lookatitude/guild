@@ -57,7 +57,7 @@ All five global flags + `--dry-run` apply.
 
 PCR-Quality must-exist floor: `.guild/runs/<run-id>/quality/<run-id>.md`,
 `quality/evidence/*`, `review/quality/*`. Binding:
-`docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+`docs/v2/lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
 CMD-011.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)

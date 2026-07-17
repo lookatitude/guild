@@ -8,7 +8,7 @@
  * Contract authority (SoT):
  *   .guild/spec/universal-host-p1.md §9 (config schema + reconciler)
  *   .guild/plan/universal-host-p1.md P1-L9
- *   docs/contracts/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
+ *   .guild/wiki/decisions/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
  *
  * WHY: today's settings live behind `read-guild-config.ts` / `settings-resolver.ts`
  * DEFAULTS with no typed registry, no provenance, no reconcile semantics. P1 introduces

@@ -194,13 +194,13 @@ interface ModelsBlock {
   /** Min wiki importance level (1–5) for routine recall (ADR §6). Default 3. */
   importanceGate: number;
   /**
-   * Composite recall scoring (docs/v2/05 §Recall scoring). true (default) = wiki
+   * Composite recall scoring (docs/v2/knowledge-memory.md §Recall scoring). true (default) = wiki
    * recall ranks by relevance × recency × importance and filters pages below
    * `importanceGate`. false = legacy BM25-only ranking.
    */
   compositeRecall: boolean;
   /**
-   * Write-time importance-at-ingest scorer (docs/v2/05 §Importance-at-ingest).
+   * Write-time importance-at-ingest scorer (docs/v2/knowledge-memory.md §Importance-at-ingest).
    * true (default) = the ingest/learn path stamps each wiki page with a 1–5
    * `recall_importance:` score so recall reads a stable stored weight. false =
    * recall derives the 1–5 weight from the page category at query time.
@@ -471,13 +471,13 @@ export const HELP: Record<string, string> = {
   "models.importanceGate":
     "int 1–5 (default 3) — min wiki importance level for routine recall (ADR §6).",
   "models.compositeRecall":
-    "bool (default true) — composite recall scoring (docs/v2/05 §Recall scoring). " +
+    "bool (default true) — composite recall scoring (docs/v2/knowledge-memory.md §Recall scoring). " +
     "true = wiki recall ranks by relevance × recency × importance and filters pages scoring " +
     "below models.importanceGate. Because this requires raw BM25 scores, it bypasses the SQLite " +
     "FTS read-through cache and uses file-BM25 for bundle recall. false = legacy BM25-only " +
     "ranking with the SQLite cache eligible above defaults.index.wiki_file_threshold.",
   "models.importanceAtIngest":
-    "bool (default true) — write-time importance-at-ingest scorer (docs/v2/05 §Importance-at-ingest). " +
+    "bool (default true) — write-time importance-at-ingest scorer (docs/v2/knowledge-memory.md §Importance-at-ingest). " +
     "true = the ingest/learn path stamps each wiki page with a 1–5 recall_importance: score so recall " +
     "reads a stable stored weight. false = recall derives the weight from the page category at query time.",
   "models.ingestSimilarityGate":

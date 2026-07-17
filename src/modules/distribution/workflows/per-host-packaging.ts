@@ -6,8 +6,8 @@
  * canonical wiki (workspace-v2-compliance, 2026-06-27):
  *   .guild/wiki/decisions/host-adapter-contract.md §Decision 1 / Surface 1 (Packaging)
  *   .guild/wiki/decisions/verified-multi-host-support.md (the L0 ADR — §4.2 renderer base)
- * Distribution doc (BY POINTER): docs/v2/16-host-adapter-migration-spec.md,
- *   docs/v2/15-distribution.md §Per-host packaging
+ * Distribution doc (BY POINTER): docs/v2/host-adapter-migration-spec.md,
+ *   docs/v2/distribution.md §Per-host packaging
  *
  * Status: [v2] — wired render surfaces. These renderers are called by
  * build-host-packages.ts and the repo-hosted installer dry-runs for the CLI/file

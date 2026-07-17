@@ -26,4 +26,4 @@
 
 
 ## [2026-07-14] decided task-cell-runtime-contract
-- decided task-cell-runtime-contract (freeze record for the task-cell-runtime initiative; G1/P0.1 truth reconciliation of docs/v2/08 §5)
+- decided task-cell-runtime-contract (freeze record for the task-cell-runtime initiative; G1/P0.1 truth reconciliation of docs/v2/dispatch-execution.md §5)

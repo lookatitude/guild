@@ -1,7 +1,7 @@
 /**
  * scripts/__tests__/knowledge-links-tombstone.test.ts
  *
- * Tombstone-never-delete (docs/v2/05-knowledge-memory.md §Invalidation; deferred
+ * Tombstone-never-delete (docs/v2/knowledge-memory.md §Invalidation; deferred
  * item 8). A superseded decision / deleted artifact marks its knowledge-links
  * edge tombstoned instead of hard-deleting it: active recall skips it, the edge
  * stays in the file as history, and re-tombstoning is idempotent.

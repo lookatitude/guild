@@ -69,7 +69,7 @@ jobs:
           cd scripts && npm run verify:host-packages
 
       # Roster-vs-definitions drift gate — previously written but never wired into CI, so
-      # docs/specialist-roster.md could silently diverge from agents/*.md and
+      # .guild/wiki/entities/specialist-roster.md could silently diverge from agents/*.md and
       # templates/specialists/*.md `model:` frontmatter (MODEL_MISMATCH / MISSING_FILE /
       # NOT_IN_ROSTER) with nothing catching it. Read-only, no network, plugin-repo-local.
       - name: Roster consistency gate (specialist-roster.md vs agents/ + templates/specialists/)

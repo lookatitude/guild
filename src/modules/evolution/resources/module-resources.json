@@ -22,14 +22,14 @@
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "f45f5b417b74482c9116095333e683e378455fc3071b746b2e95039260272544"
+      "sha256": "6fbb7d0ce2270f48e7e23f1b8a30cbfb97aa742d2dcf808dd7e4cb51a6ad3629"
     },
     {
       "category": "hooks",
       "id": "Stop:maybe-reflect.js",
       "source_path": "hooks/dist/maybe-reflect.js",
       "resource_path": "resources/hooks/dist/maybe-reflect.js",
-      "sha256": "00cbd29cf159c73a0af165f7a59e874af2fae657c7dcfa519da91f326df126d8"
+      "sha256": "ebcd12b10412453bd7f70319cd53ba662c79cf76655ed9ecde67abfc3f0c7074"
     },
     {
       "category": "scripts",
@@ -99,7 +99,7 @@
       "id": "stamp-recall-importance",
       "source_path": "scripts/stamp-recall-importance.ts",
       "resource_path": "resources/scripts/stamp-recall-importance.ts",
-      "sha256": "d0321a323cb53b0b48fac7fe78ab033c18830d4cb8d064d961366ddda0529757"
+      "sha256": "ecceedff82758a5c2923e049481bc69fee915e0417d535ede68c5e9efbbd2050"
     },
     {
       "category": "skills",

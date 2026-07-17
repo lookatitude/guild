@@ -4,7 +4,7 @@
  * guild.advisory.v1 typed record — the durable outcome of an advisory panel
  * (question, advisors + tiers, per-advisor recommendation + confidence,
  * synthesis, decision link). Bound by pointer to:
- *   docs/v2/09-adversarial-review.md §Advisory vs adversarial loops
+ *   docs/v2/adversarial-review.md §Advisory vs adversarial loops
  *   docs/knowledge/lifecycle/workflow-operating-model.md §Advisory records
  *
  * Contract (frozen, [v2-contract-only] in v2.0 — no writer shipped then):
