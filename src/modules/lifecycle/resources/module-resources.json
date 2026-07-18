@@ -176,7 +176,14 @@
       "id": "guild-plan",
       "source_path": "skills/meta/plan/SKILL.md",
       "resource_path": "resources/skills/meta/plan/SKILL.md",
-      "sha256": "00fd4a26c3ddb3cd0d35f8ae83f8cdcee6f68b6b228e46488815284d38e76e7d"
+      "sha256": "7d10b1de0bde14a8cd1ea1b14b2c5c278cfc99eaa1f7223e1b0bf5f7fc42d3c3"
+    },
+    {
+      "category": "skills",
+      "id": "guild-plan/scenarios.json",
+      "source_path": "skills/meta/plan/scenarios.json",
+      "resource_path": "resources/skills/meta/plan/scenarios.json",
+      "sha256": "d4e62c659545b01e703eec3e6095d8075f8a0f7a2730b63297a458b1789eb8b1"
     },
     {
       "category": "skills",

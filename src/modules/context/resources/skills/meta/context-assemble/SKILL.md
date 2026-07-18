@@ -235,6 +235,42 @@ in the task-dependent layer, alongside the lane's autonomy level:
 > answer arrives, the gate stays **closed** — report `status: blocked` and do not pick
 > a default.
 
+**Confirmation provenance (mandatory).** "Record the orchestrator's verbatim answer"
+means the gate is satisfied only by a **quoted reply that arrived on an actual
+orchestrator reply channel after the ask** — `SendMessage`, pane injection, or another
+explicit orchestrator reply channel. Pre-dispatch material — the task description, the
+lane description, a sibling handoff, or anything else present before the question was
+asked — is **never** a reply channel, even when quoted verbatim: that is exactly the
+"dispatch prompt" / "lane description" source the block above already rules out: quoting
+it more precisely does not turn an inference into a reply.
+
+Cite the reply under the receipt's `## evidence` section (its existing home for concrete
+proof) as: the quote, plus the channel it arrived on. **This is a reviewer-diligence bar,
+not a tooling-enforced one** — same as every other `## evidence` entry (the field "must be
+concrete," per the block above's own review discipline): Guild has no durable ask/reply
+event log today (the run's agent-bus event log, `.guild/runs/<run-id>/agent-bus/events.ndjson`,
+carries only lane-lifecycle events — dispatched/completed/errored/idle — not Q&A exchanges;
+do not cite it as if it recorded this exchange, since it structurally cannot). A quoted
+reply attributed to a named channel is still a real narrowing versus a bare `CONFIRMED`
+label — it is a falsifiable, specific claim a reviewer who checks the actual
+session/transcript can catch if fabricated, not a vague assertion — but it is not
+cryptographic proof, and this rule does not claim otherwise.
+
+When no such reply exists — whether because the lane only has an inference, a paraphrase,
+or a plausible reading of pre-dispatch material — that is **not** a confirmation, no
+matter how confident the inference or how often it later proves correct. The lane records
+its own read as an explicit `## assumptions` entry, **for audit only** — this does not
+grant permission to proceed. Inside a decision the lane's own autonomy-policy already
+marked `ask`, no autonomy tier converts a missing reply into permission to proceed: the
+gate stays **closed** per the block above, full stop, regardless of tier. (An autonomy
+tier can make its OWN judgment calls without ever asking in the first place — see
+`autonomy-policy`'s "may act without asking" bullet in `guild:plan §"Per-lane field
+rules"` — but once a decision has been marked `ask`, only a real quoted reply reopens it;
+the assumption entry is the audit trail for what the lane *would* have inferred, not a
+bypass.) This closes a second failure mode on top of `run-2026-06-14`'s original fix: a
+lane writing a plausible-sounding paraphrase as if it were a real reply, rather than the
+simple no-reply-at-all case the original fix addressed.
+
 Omit this directive when the lane runs under `autonomy=all` / `--auto-approve=all` — no
 per-gate confirmation is expected there (see
 `guild:execute-plan §"Inline shortcut under high autonomy"`). This closes the observed

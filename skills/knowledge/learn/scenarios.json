@@ -1,0 +1,42 @@
+{
+  "executed_by": "manual/agent judgment only — not the trigger-fixture runner",
+  "note": "Behavioral scenarios for guild:learn (skills/knowledge/learn/). Answer keys are pre-declared here, before any paired dispatch, per the evolve-skill B-reproducibility / no-post-hoc-grading contract. Automated grading is first-line-only: it compares the exact first line of each response to answer_key and nothing else. Each scenario also carries an explanation_expectation for human spot-review during codex/operator gate reading — that field is NOT scored automatically and must never be conflated with the pass/fail verdict.",
+  "grading_rule": "First line of the response must equal answer_key exactly (case-sensitive, no trailing punctuation). This is the ONLY automated pass/fail criterion for every scenario below.",
+  "scenarios": [
+    {
+      "case_id": "S-workspace-scope",
+      "prompt": "You are running /guild:learn (no sub-verb) at a workspace root. workspace/detect.ts reports 3 immediate children each with their own .git/ and .guild/. Per the skill body, on the FIRST LINE of your answer state exactly one of: SCAN_CHILDREN_AS_ONE_MAP or REGISTER_CHILDREN_NO_SCAN. Then in one sentence say where children get recorded.",
+      "answer_key": "REGISTER_CHILDREN_NO_SCAN",
+      "explanation_expectation": "(not scored) The explanation sentence should name .guild/workspace.json as the registration target and should not claim children are scanned/merged into the root's own map or graph.",
+      "addition_covered": "Workspace-root scope contract / child-graph federation rule"
+    },
+    {
+      "case_id": "S-guild-feedstock",
+      "prompt": "You are executing the workspace-root pass's step 8 (guild:learn-graph semantic selection). codebase-map.json has zero entries under .guild/ (the learn-map scanner excludes .guild/ by design). You need .guild/wiki/, .guild/workspace/, .guild/workspace-knowledge/, .guild/initiatives/, and the root .guild/{guild.yaml,settings.json,workspace.json} files in the graph feedstock. On the FIRST LINE state exactly one of: SUPPLEMENT_WITH_DIRECT_SCAN or SKIP_GUILD_CONTENT_MAP_IS_AUTHORITATIVE. Then say in one sentence whether the underlying scanner-exclusion is something this skill run should silently code-fix.",
+      "answer_key": "SUPPLEMENT_WITH_DIRECT_SCAN",
+      "explanation_expectation": "(not scored) The explanation sentence should not claim this run should silently patch/fix the learn-map scanner itself — it should acknowledge the scanner fix is a separate, queued plugin-backlog code change.",
+      "addition_covered": "Graph-feedstock supplement contract"
+    },
+    {
+      "case_id": "S-deep-tier",
+      "prompt": "You are running the workspace-root pass of /guild:learn. The step 7 OQ1 deep-graph cost gate was approved by the user. No explicit '/guild:learn knowledge' sub-verb was invoked — this is still the plain no-arg workspace root pass. On the FIRST LINE state exactly one of: RUN_K1_K6_DEEP_TIER_NOW or DEFER_K1_K6_DEFAULT_TO_LINKS_BUILDER. Then say in one sentence what step 9 still produces regardless of your answer.",
+      "answer_key": "DEFER_K1_K6_DEFAULT_TO_LINKS_BUILDER",
+      "explanation_expectation": "(not scored) The explanation sentence should state that step 9's deterministic knowledge-links.json builder still runs.",
+      "addition_covered": "Deep-tier default at workspace-root scope"
+    },
+    {
+      "case_id": "S-project-control",
+      "prompt": "You are running /guild:learn (no sub-verb) on a REGULAR project root (target_kind: regular_project, no children detected). The step 7 OQ1 deep-graph cost gate was approved by the user. On the FIRST LINE state exactly one of: RUN_K1_K6_DEEP_TIER_NOW or DEFER_K1_K6_DEFAULT_TO_LINKS_BUILDER. Then say in one sentence whether the workspace-root deep-tier deferral rule applies here.",
+      "answer_key": "RUN_K1_K6_DEEP_TIER_NOW",
+      "explanation_expectation": "(not scored) The explanation sentence should state the workspace-root deferral does NOT apply to a regular (non-workspace) project — this is the no-change control confirming regular-project behavior is unchanged.",
+      "addition_covered": "no-change control — regular-project step 10 behavior is unaffected"
+    },
+    {
+      "case_id": "S-federation-no-merge",
+      "prompt": "You are building the umbrella root's knowledge graph at a workspace root. A wiki decision file in a child repo's .guild/wiki/ references a concept also documented at the root. On the FIRST LINE state exactly one of: MATERIALIZE_CROSS_REPO_EDGE_IN_ROOT_GRAPH or LEAVE_UNRESOLVED_QUERY_VIA_FEDERATION. Then say in one sentence how a root-side query would still reach that child content.",
+      "answer_key": "LEAVE_UNRESOLVED_QUERY_VIA_FEDERATION",
+      "explanation_expectation": "(not scored) The explanation sentence should reference the guild-memory federation recipe/query path, not a merged or copied graph/wiki page. Note (from round-1 codex review): the current (A/pre-edit) skill has no explicit 'never materialize cross-repo edges' rule, so A's free-text explanation may drift from this expectation even when its first-line token happens to match by inference — that drift is expected and is exactly why only the first-line token is scored.",
+      "addition_covered": "Child-graph federation rule — cross-repo reference handling"
+    }
+  ]
+}
