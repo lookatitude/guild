@@ -134,7 +134,14 @@
       "id": "guild-learn-onboard",
       "source_path": "skills/knowledge/learn-onboard/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn-onboard/SKILL.md",
-      "sha256": "8318afe09081d3cd024f7648bac91422d282079351413ee60415c1d144ece590"
+      "sha256": "7a6ac24490db449529b270286fdcfdb3fea374ffbba2d7cd42fed9af9aac5363"
+    },
+    {
+      "category": "skills",
+      "id": "guild-learn-onboard/scenarios.json",
+      "source_path": "skills/knowledge/learn-onboard/scenarios.json",
+      "resource_path": "resources/skills/knowledge/learn-onboard/scenarios.json",
+      "sha256": "1d08bec218ccbe87b69df77a8a7dfe2299a9ae8a318be4ceb3001bc93f9209d3"
     },
     {
       "category": "skills",
