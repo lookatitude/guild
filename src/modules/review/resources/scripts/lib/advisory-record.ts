@@ -456,7 +456,10 @@ function realFsSeam(): AppendFsSeam {
 
 // ── CLI entry point (not part of the library contract) ───────────────────────
 
-if (require.main === module) {
+// esbuild inlines this module into the hook bundles (hooks/dist/*.js), where
+// `require.main === module` is true for EVERY inlined module — gate on the exact argv basename so
+// the example skeleton never leaks into hook stdout (it looks like real data).
+if (require.main === module && /^advisory-record\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   // Minimal CLI: print a skeleton record to stdout for inspection.
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const skeleton = makeAdvisoryRecord({

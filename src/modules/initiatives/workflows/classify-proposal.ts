@@ -111,4 +111,9 @@ export function runClassifyProposalCli(argv: string[] = process.argv.slice(2)): 
   process.stdout.write(JSON.stringify(res, null, 2) + "\n");
 }
 
-if (require.main === module) runClassifyProposalCli();
+// esbuild inlines this module into the hook bundles (hooks/dist/*.js), where
+// `require.main === module` is true for EVERY inlined module — gate on the exact argv basename so
+// only a direct `classify-proposal` invocation runs the CLI, never a hook bundle.
+if (require.main === module && /^classify-proposal\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runClassifyProposalCli();
+}

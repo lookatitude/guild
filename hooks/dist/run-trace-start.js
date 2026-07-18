@@ -6650,7 +6650,7 @@ function runIndexMigrateCli() {
     process.exit(1);
   }
 }
-if (typeof module !== "undefined" && require.main === module) {
+if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   runIndexMigrateCli();
 }
 
@@ -6748,7 +6748,7 @@ function makeAdvisoryRecord(input) {
   }
   return rec;
 }
-if (require.main === module) {
+if (require.main === module && /^advisory-record\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   const now = (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
   const skeleton = makeAdvisoryRecord({
     id: `advisory-example-001`,
@@ -6773,7 +6773,7 @@ if (require.main === module) {
 
 // ../scripts/read-guild-config.ts
 init_config_cli();
-if (require.main === module) {
+if (require.main === module && /^read-guild-config\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   const { __main } = (init_config_cli(), __toCommonJS(config_cli_exports));
   __main();
 }
@@ -6820,7 +6820,9 @@ function runClassifyProposalCli(argv = process.argv.slice(2)) {
   });
   process.stdout.write(JSON.stringify(res, null, 2) + "\n");
 }
-if (require.main === module) runClassifyProposalCli();
+if (require.main === module && /^classify-proposal\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runClassifyProposalCli();
+}
 
 // ../src/modules/initiatives/workflows/initiative-activity.ts
 var ACTIVITY_EVENTS = [

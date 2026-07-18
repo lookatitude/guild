@@ -44,9 +44,10 @@ function openDatabase(dbPath: string): SqliteDb {
     DatabaseSync: new (path: string) => SqliteDb;
   };
   const db = new DatabaseSync(dbPath);
-  // Concurrent hooks contend for .guild/index.sqlite: UserPromptSubmit runs the
-  // migrator (run-trace-start) while Stop runs it again (run-trace-close +
-  // learning-backstop). Without a busy timeout the loser gets an IMMEDIATE
+  // Concurrent consumers contend for .guild/index.sqlite: since the bundled-CLI
+  // guard fix, hooks no longer run the migrator per-event — migrations now run
+  // lazily on first index open (state/index-cache.ts) — but multiple sessions or
+  // scripts can still open concurrently. Without a busy timeout the loser gets an IMMEDIATE
   // SQLITE_BUSY ("database is locked") — even the journal_mode=WAL switch below
   // needs a brief exclusive lock, which is why it never persisted. Set the busy
   // timeout as the FIRST statement so every later op waits/retries up to 5s
@@ -432,6 +433,13 @@ export function runIndexMigrateCli(): void {
   }
 }
 
-if (typeof module !== "undefined" && require.main === module) {
+// esbuild inlines this module into the hook bundles (hooks/dist/*.js), where
+// `require.main === module` is true for EVERY inlined module — gate on the exact argv basename so
+// only a direct `index-migrate` invocation runs the CLI, never a hook bundle.
+if (
+  typeof module !== "undefined" &&
+  require.main === module &&
+  /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
+) {
   runIndexMigrateCli();
 }
