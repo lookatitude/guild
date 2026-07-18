@@ -106,7 +106,14 @@
       "id": "guild-evolve-skill",
       "source_path": "skills/meta/evolve-skill/SKILL.md",
       "resource_path": "resources/skills/meta/evolve-skill/SKILL.md",
-      "sha256": "8069dc7323b13c37e3fde3f97f7281e920a58c48b928b8e5d8699275ec2fa372"
+      "sha256": "ec1a51896fcd7c5db8bfd9eb3feaf80af5b688c1ede0c6e9c5d176c9ff738858"
+    },
+    {
+      "category": "skills",
+      "id": "guild-evolve-skill/scenarios.json",
+      "source_path": "skills/meta/evolve-skill/scenarios.json",
+      "resource_path": "resources/skills/meta/evolve-skill/scenarios.json",
+      "sha256": "5c9130fb90504e2cf460a5b8aa1a103a744da092c556109d8abbb1998b7ff702"
     },
     {
       "category": "skills",
