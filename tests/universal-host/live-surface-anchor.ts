@@ -66,10 +66,18 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * retirement + docs/v2 citation sweep, guild#39). commands/*.md and
  * skills/knowledge/wiki-ingest/SKILL.md changed there ONLY because they cited
  * `docs/v2/<NN>-<name>.md` paths; no command or skill behaviour changed.
+ *
+ * Re-ratified 2026-07-18 — the three codex-gated Guild-on-Guild skill
+ * evolutions (guild#42 learn-onboard workspace-root fallback, guild#43
+ * execute-plan dispatch hardening, guild#44 evolve-skill method codification)
+ * plus their scenarios.json sidecars. DELIBERATE surface change: each shipped
+ * through the full evolve promotion gate (live paired evals, flip/shadow
+ * reports, adversarial review — gate trails on the umbrella main). commands/
+ * tree unchanged.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "1ff955f6b393387aac2c2003b38b49b9076db80b",
-  skills: "d5d0a252ebde91576cb86c8d67f5f498e8194e53",
+  skills: "f348cceeb92173a053da31e936685c02bdf6e0d1",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
