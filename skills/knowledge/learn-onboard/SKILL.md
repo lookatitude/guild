@@ -29,9 +29,13 @@ for Init — it is part of the lazy, gated deep tier.
 
 # Required inputs
 
-- `.guild/indexes/knowledge-graph.json` (`guild.knowledge_graph.v1`) with a
-  populated `tour[]` skeleton from `build-tour.ts`. If `tour[]` is empty or the
-  graph is absent, escalate — do not invent a tour from raw files.
+- `.guild/indexes/knowledge-graph.json` (`guild.knowledge_graph.v1` or
+  `guild.knowledge_graph.v2` — both carry the same `tour[]`/node contract this
+  skill consumes) with a populated `tour[]` skeleton from `build-tour.ts`. At a **project root**, if
+  `tour[]` is empty or the graph is absent, escalate — do not invent a tour
+  from raw files. At a **detected workspace root** (strict detection in
+  §"Workspace-root fallback"), an empty `tour[]` is by-design and that section
+  governs instead of this bullet.
 - The graph's `layers[]`, `nodes[]`, and persisted `domain`/`component`
   labels — narration is grounded in the graph, never re-read source.
 - `OnboardingTour` is a frozen Markdown artifact (no JSON schema); its shape is
@@ -42,7 +46,9 @@ for Init — it is part of the lazy, gated deep tier.
 
 - `.guild/indexes/onboarding-tour.md` — the `OnboardingTour`: 5–15 ordered
   steps, each with `title`, a pedagogical `description`, `nodeIds` (1–5 per
-  step, from the skeleton — order preserved), and an optional `languageLesson`
+  step — from the skeleton, order preserved, at project roots; at a detected
+  workspace root, the hand-selected graph node ids per §"Workspace-root
+  fallback", recorded explicitly per step), and an optional `languageLesson`
   (a short teaching note about a language/framework idiom the step's nodes
   exemplify).
 - A derived **onboarding guide** section (same file or a sibling synthesised
@@ -51,11 +57,15 @@ for Init — it is part of the lazy, gated deep tier.
 - Copy to `docs/ONBOARDING.md` **only on explicit user request** — never silently.
 
 The artifact is a derived index (DI-6: rebuildable from the graph, deletable
-with zero data loss). Step order mirrors the skeleton exactly.
+with zero data loss). At project roots the step order mirrors the skeleton
+exactly; at a detected workspace root the order is hand-sequenced per
+§"Workspace-root fallback".
 
 # Workflow steps
 
-1. Read `knowledge-graph.json`; assert `tour[]` is non-empty and ordered.
+1. Read `knowledge-graph.json`; assert `tour[]` is non-empty and ordered
+   (project roots — at a detected workspace root this assertion is replaced by
+   §"Workspace-root fallback"'s detection + evidence checks).
 2. For each skeleton step, write a `title` + a teaching `description`
    explaining *why these nodes matter and how they connect* — grounded only in
    the graph (nodes, edges, layers, `domain`/`component` labels). Trust the
@@ -95,10 +105,12 @@ self-promotes nothing.
 # Evidence requirements
 
 Every narrated claim traces to a graph node/edge already carrying `source_refs`
-+ `confidence`; the narration adds no claim the graph does not support. The
-step order is provably the `build-tour.ts` BFS order (no re-sequencing). The
-artifact records the graph's `generated_from_commit` so a stale tour is
-detectable.
++ `confidence`; the narration adds no claim the graph does not support. At a
+project root the step order is provably the `build-tour.ts` BFS order (no
+re-sequencing); at a detected workspace root the order is the documented
+federation → layers → children sequence with per-step `nodeIds` recorded
+(§"Workspace-root fallback"). The artifact records the graph's
+`generated_from_commit` so a stale tour is detectable.
 
 # Escalation rules
 
@@ -109,6 +121,52 @@ owns count; this skill does not pad or prune). Graph-vs-wiki contradiction
 surfaced while narrating → prefer the wiki unless the node is `confidence:high`
 with a direct `source_ref`; record it for `guild:wiki-lint`. Blockers go to the
 team-lead, never the user directly.
+
+# Workspace-root fallback
+
+At a **workspace root**, `tour[]` is **empty by design** — there is no single
+code entrypoint to BFS from at the umbrella level (that skeleton exists per
+sub-repo instead). This is not the escalation case above: the Escalation rules
+govern **project roots**, where an empty `tour[]` signals a missing or failed
+graph build. This section is the sanctioned fallback for workspace roots —
+apply it before falling through to Escalation rules.
+
+**Detection (strict — mere manifest presence is NOT sufficient).** A root is a
+workspace root **only** when at least one signal parses and affirms it:
+`.guild/guild.yaml` (`guild.root.v1`) with `kind: workspace`, OR
+`.guild/workspace.json` parsing as `guild.workspace.v1` with
+`is_workspace: true`. A `workspace.json` with `is_workspace: false` marks a
+**project root** (children legitimately carry such manifests). Malformed or
+unparseable signals, or signals that conflict with each other, are NOT a
+workspace detection — treat the root as a project root and the Escalation
+rules above apply unchanged (escalate on empty `tour[]`).
+
+**Sanctioned path.** At a detected workspace root with an empty `tour[]`,
+hand-narrate 5–15 steps grounded **only** in graph nodes of knowledge-bearing
+types — `domain`, `config`, `document`, `schema`, `source`, `claim`,
+`concept`, or `wiki_page` (the v2 graph's evidence-carrying node set) — never
+a raw speculative file read. **Evidence floor
+(enforceable, per the decision's every-step-cites-evidence requirement):**
+every step MUST record its `nodeIds` (1–5) explicitly, and each step MUST
+cite at least one node whose `source_refs` is **non-empty and resolves** on
+disk; a node with empty `source_refs` (live `domain` nodes often have none)
+may anchor a step **only** alongside a co-cited `document`/`config` node that
+carries non-empty resolvable refs. Where an `evidenced_by`/`cites` edge
+supports a step's claim, record that edge key too. If fewer than 5 steps can
+meet this floor, **escalate — insufficient graph evidence** (do not pad with
+unevidenced narration). Order the steps: federation-and-root-layer facts first
+(workspace identity, the `.guild/` shape, federation/routing) → architectural
+layers (design system, docs, wiki) → children (each sub-repo's own entrypoint,
+pointing outward without descending into it). Output shape is unchanged — the
+same `OnboardingTour` artifact and §"Output format" fields; this reuses the
+project-root narration discipline (§Workflow steps 2–3: title + teaching
+`description` + optional `languageLesson` per step) — only the source of step
+**order** differs: hand-sequenced from graph nodes instead of the BFS
+skeleton.
+
+Decision record: `.guild/wiki/decisions/workspace-root-tour-fallback.md`.
+Reference instance: `.guild/indexes/onboarding-tour.md` (11 steps, umbrella
+tour, 2026-07-18).
 
 # Safety constraints
 
@@ -127,7 +185,15 @@ artifact, not a UI.
   elsewhere (optional field honored).
 - User asks "also write ONBOARDING.md" → `docs/ONBOARDING.md` copied; without
   that request the artifact stays under `.guild/indexes/`.
-- Empty `tour[]` → escalation, no fabricated tour.
+- Empty `tour[]` at a **project root** (incl. a root whose `workspace.json`
+  says `is_workspace: false`, or carries malformed/conflicting signals) →
+  escalation, no fabricated tour.
 - Narration runs at `mid`, grounded only in the graph; no `powerful` call and no
   raw source re-read (recall-before-read at its strongest — ADR §4).
 - Request to render the tour as a web dashboard → refused, deferral doc cited.
+- Workspace root (strict detection: `guild.root.v1 kind: workspace` or
+  `guild.workspace.v1 is_workspace: true`), empty `tour[]` by design, graph
+  carries knowledge-bearing nodes meeting the evidence floor →
+  narrated tour with per-step `nodeIds` + resolvable refs (federation →
+  layers → children order), no escalation, no fabricated code-walk; fewer
+  than 5 evidence-floor steps → escalate (insufficient graph evidence).
