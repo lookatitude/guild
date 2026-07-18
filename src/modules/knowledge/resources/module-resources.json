@@ -85,7 +85,7 @@
       "id": "guild-learn",
       "source_path": "skills/knowledge/learn/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn/SKILL.md",
-      "sha256": "7cbf2ec05a60dec4d1fc10359718b5898e853552b1df20e815205eec13a1d74e"
+      "sha256": "2c9d879a24bdb4919cd08fae199e99f39b0bea943a367a2f94369bcdcf5f4b7d"
     },
     {
       "category": "skills",
@@ -142,6 +142,13 @@
       "source_path": "skills/knowledge/learn-onboard/scenarios.json",
       "resource_path": "resources/skills/knowledge/learn-onboard/scenarios.json",
       "sha256": "1d08bec218ccbe87b69df77a8a7dfe2299a9ae8a318be4ceb3001bc93f9209d3"
+    },
+    {
+      "category": "skills",
+      "id": "guild-learn/scenarios.json",
+      "source_path": "skills/knowledge/learn/scenarios.json",
+      "resource_path": "resources/skills/knowledge/learn/scenarios.json",
+      "sha256": "e4db2566a822c18be9ba58a694b088365ebf4e38d734adc6a0f29b49c7d02fc6"
     },
     {
       "category": "skills",
