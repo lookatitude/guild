@@ -1,6 +1,6 @@
 {
   "schema_version": "guild.inventory.v1",
-  "generated_at": "1970-01-01T00:00:00.000Z",
+  "generated_at": "2026-07-18T23:02:50Z",
   "plugin_version": "2.2.0",
   "manifest": {
     "name": "guild",
@@ -928,7 +928,7 @@
         "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-memory/dist/index.js"
       ],
       "read_only": true,
-      "description": "D-MCP declared capability (docs/v2/security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
+      "description": "D-MCP declared capability (docs/v2/security.html §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
     },
     {
       "id": "guild-telemetry",
@@ -939,7 +939,7 @@
         "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-telemetry/dist/index.js"
       ],
       "read_only": true,
-      "description": "D-MCP declared capability (docs/v2/security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
+      "description": "D-MCP declared capability (docs/v2/security.html §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
     }
   ],
   "scripts": [
@@ -1031,6 +1031,11 @@
     {
       "id": "desktop-app-smoke",
       "source_path": "scripts/desktop-app-smoke.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "docs-hygiene/check-symbol-citations",
+      "source_path": "scripts/docs-hygiene/check-symbol-citations.ts",
       "kind": "cli"
     },
     {

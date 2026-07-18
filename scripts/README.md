@@ -65,6 +65,29 @@ its snapshot meta. Tests should assert on structure, not timestamps.
 | `description-optimizer.ts` | evolve step 9 | Deterministic heuristic (NOT an LLM). Derives a ≤ 1024-char description from the skill's `should_trigger` / `should_not_trigger` evals. Emits `description: <...>` as YAML on stdout. |
 | `rollback-walker.ts` | rollback | Enumerates `.guild/skill-versions/<slug>/v*/` and emits a markdown version table. With `--steps <n>`, emits a `proposed_rollback` action as YAML. NEVER mutates skill-versions. |
 | `trace-summarize.ts` | telemetry | Summarizes `.guild/runs/<run-id>/events.ndjson` to `summary.md` for post-task reflection. |
+| `docs-hygiene/check-symbol-citations.ts` | docs hygiene | **Warn-only.** Flags rotted `file:line (symbol)` citations in the reference docs. See below. |
+
+### `docs-hygiene/check-symbol-citations.ts`
+
+Line-precision doc citations rot fast: across one drift window every checked
+anchor had moved while the cited **symbol** stayed put (finding F-6). This
+script makes that rot visible.
+
+```
+npx tsx scripts/docs-hygiene/check-symbol-citations.ts \
+  --docs-dir <docs tree> --repo-root <root> [--repo-root <root2> …] [--window N] [--quiet]
+```
+
+It scans **code spans only** — backticks in Markdown, `<code>` in HTML — because
+that is where citations live; scanning prose made every "`settings.json` (JSON)."
+sentence a false positive. It reports `MISSING` (symbol gone from the cited
+file), `DRIFTED` (symbol exists but >`--window` lines from the anchor, default
+25), and `OVERRUN` (line-only citation past EOF). Pass `--repo-root` once per
+root when the docs span an umbrella and its sub-repos.
+
+**It always exits 0 when it ran** (1 only for bad input). This is deliberate: the
+drift it detects is cosmetic, so wiring it as a blocking gate would red-light CI
+on every refactor that shifts a line. Run it on demand or as an advisory step.
 
 ## Testing
 
