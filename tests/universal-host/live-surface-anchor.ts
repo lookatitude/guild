@@ -74,10 +74,21 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * through the full evolve promotion gate (live paired evals, flip/shadow
  * reports, adversarial review — gate trails on the umbrella main). commands/
  * tree unchanged.
+ *
+ * Re-ratified 2026-07-18 (integration fan-out 1) — three further codex-gated
+ * skill evolutions merged on `evolve/integration-fanout-1`: guild:plan
+ * (spine-lane declaration + non-waivable checkpoint,
+ * evolve/plan-spine-declaration), guild:context-assemble (confirmation
+ * provenance for ask-gated lanes, evolve/context-assemble-ask-provenance),
+ * guild:learn (workspace-root learn contract, evolve/learn-workspace-contract)
+ * — each shipped through its own full evolve promotion gate (live paired
+ * evals, flip/shadow reports, multi-round adversarial review) on an isolated
+ * worktree/branch before this merge. commands/ tree unchanged (verified equal
+ * to the prior pin).
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "1ff955f6b393387aac2c2003b38b49b9076db80b",
-  skills: "f348cceeb92173a053da31e936685c02bdf6e0d1",
+  skills: "dcbc7358b8b4ebf3bf58fa18b38a72e08148608b",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
