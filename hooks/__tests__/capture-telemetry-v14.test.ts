@@ -5,7 +5,7 @@
  *
  * Proves that capture-telemetry.ts routes events to the CANONICAL
  * logs/v1.4-events.jsonl path (the plugin↔benchmark contract boundary per
- * docs/v2/observability.md §"The canonical trace"), and keeps events.ndjson
+ * docs/v2/observability.html §"The canonical trace"), and keeps events.ndjson
  * as a legacy mirror for every event type — EXCEPT PostToolUse, which is
  * deliberately skipped on the canonical side (see the "PostToolUse
  * de-duplication" describe block below): hooks/post-tool-use.ts already

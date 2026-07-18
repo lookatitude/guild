@@ -1,7 +1,7 @@
 /**
  * scripts/lib/kb-snapshot.ts
  *
- * KB Snapshot & Rollback — defense Layer 5 (docs/v2/security.md
+ * KB Snapshot & Rollback — defense Layer 5 (docs/v2/security.html
  * §"KB snapshot & rollback").
  *
  * Layer 5 is the *restorative* tier: given a content-hash manifest of a
@@ -28,7 +28,7 @@
  *     path calls it automatically; the CLI below (require.main===module) is
  *     the invocation surface.
  *
- * Spec pointer: docs/v2/security.md §"KB snapshot & rollback (defense Layer 5)"
+ * Spec pointer: docs/v2/security.html §"KB snapshot & rollback (defense Layer 5)"
  * and docs/knowledge/security/prompt-injection-defenses.md §"Layer 5 —
  * KB Snapshot and Rollback".
  */
@@ -347,7 +347,7 @@ export function verifyAgainstSnapshot(
  * a copy loop from a backup, or `guild:ops-rollback`).
  *
  * Ties into the `guild:ops-rollback` runbook class per
- * docs/v2/security.md §"KB snapshot & rollback (defense Layer 5)".
+ * docs/v2/security.html §"KB snapshot & rollback (defense Layer 5)".
  *
  * @param manifest The known-clean snapshot to restore toward.
  * @param wikiDir  Absolute path to the wiki root to inspect. When null, uses

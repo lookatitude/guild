@@ -2,7 +2,7 @@
  * scripts/__tests__/initiative-manifest.test.ts
  *
  * guild.initiative.v1 validator + 4-axis status derivation + definition-ledger
- * readiness (deferred items 10 & 11). docs/v2/initiatives.md;
+ * readiness (deferred items 10 & 11). docs/v2/initiatives.html;
  * docs/knowledge/observability/data-model.md §Initiative / §DefinitionItem.
  */
 

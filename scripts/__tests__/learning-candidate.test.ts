@@ -1,7 +1,7 @@
 /**
  * scripts/__tests__/learning-candidate.test.ts
  *
- * Typed learning_candidate shape (docs/v2/knowledge-memory.md §Candidate
+ * Typed learning_candidate shape (docs/v2/knowledge-memory.html §Candidate
  * queue; deferred item 9): closed 7-value type, the promotion policy
  * (destination + gate), derivation from guild.harvest_candidates.v1, validation.
  */

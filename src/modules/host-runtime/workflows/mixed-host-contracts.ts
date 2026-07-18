@@ -3,7 +3,7 @@
  *
  * Mixed-host tmux sibling coordination contracts — ITEM 19 (`[v2-contract-only]`).
  *
- * Contract (BY POINTER): docs/v2/dispatch-execution.md §Mixed-host teams
+ * Contract (BY POINTER): docs/v2/dispatch-execution.html §Mixed-host teams
  *   DI-5 (decided); registered in contract-map.md §B rows 3 and 4.
  *   Canonical schema bodies: target-architecture.md §TmuxTeam / §LaneStatus.
  *
@@ -99,7 +99,7 @@ export interface TmuxTeamPane {
  * Status: `[v2-contract-only]` — no production writer in v2.0.
  *
  * References (by pointer): target-architecture.md §TmuxTeam;
- *   docs/v2/dispatch-execution.md §Mixed-host teams (DI-5 decision record).
+ *   docs/v2/dispatch-execution.html §Mixed-host teams (DI-5 decision record).
  */
 export interface TmuxTeam {
   /** Always "guild.tmux_team.v1". */
@@ -183,7 +183,7 @@ export type LaneStatusValue = (typeof LANE_STATUS_VALUES)[number];
  * Status: `[v2-contract-only]` — no production writer in v2.0.
  *
  * References (by pointer): target-architecture.md §LaneStatus;
- *   docs/v2/dispatch-execution.md §6 (structured heartbeat + run-state checkpoint).
+ *   docs/v2/dispatch-execution.html §6 (structured heartbeat + run-state checkpoint).
  */
 export interface LaneStatus {
   /** Always "guild.lane_status.v1". */

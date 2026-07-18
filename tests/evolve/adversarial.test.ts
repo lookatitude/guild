@@ -1,8 +1,8 @@
 /**
  * tests/evolve/adversarial.test.ts
  *
- * Poisoned/adversarial eval fixtures (docs/v2/factory-evolution.md
- * §eval-corpus integrity + docs/v2/security.md §governance): the eval
+ * Poisoned/adversarial eval fixtures (docs/v2/factory-evolution.html
+ * §eval-corpus integrity + docs/v2/security.html §governance): the eval
  * corpus MUST keep adversarial fixtures, and they must FAIL-SAFE — every
  * test asserts the REAL probe/guard catches the poisoned content.
  *

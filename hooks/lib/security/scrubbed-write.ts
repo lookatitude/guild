@@ -4,7 +4,7 @@
  * HK-06 — the SINGLE durable-write choke-point (D-SECRETS).
  *
  * CONTRACT:
- *   docs/v2/security.md §D-SECRETS (L171-184)
+ *   docs/v2/security.html §D-SECRETS (L171-184)
  *   .guild/initiatives/active/drift-remediation/contracts/
  *     wave2-hk06-secrets-scrub-coverage.md
  *

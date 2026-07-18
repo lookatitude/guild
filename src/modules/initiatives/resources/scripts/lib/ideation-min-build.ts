@@ -9,7 +9,7 @@
  * `grounded_in: "init_minimal"` and surfaced to the user as a transparent
  * stopgap — it is NOT a silent substitute for real project knowledge.
  *
- * Spec pointer: docs/v2/lifecycle.md §"Phase continuity" / "A min-build spec [v2.x]"
+ * Spec pointer: docs/v2/lifecycle.html §"Phase continuity" / "A min-build spec [v2.x]"
  *
  * Design constraints:
  *   - Pure: no I/O, no Date.now(), no Math.random() in exported functions.

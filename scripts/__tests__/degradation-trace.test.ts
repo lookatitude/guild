@@ -2,7 +2,7 @@
  * scripts/__tests__/degradation-trace.test.ts
  *
  * Focused tests for scripts/lib/degradation-trace.ts — FDC degradation trace
- * rows (deferred item 17; docs/v2/dispatch-execution.md §Degradation signal
+ * rows (deferred item 17; docs/v2/dispatch-execution.html §Degradation signal
  * table).
  *
  * Coverage:

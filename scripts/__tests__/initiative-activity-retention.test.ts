@@ -2,7 +2,7 @@
  * scripts/__tests__/initiative-activity-retention.test.ts
  *
  * Initiative activity event schema (item 12) + run retention enforcement
- * (item 14). docs/v2/initiatives.md §Directory / §Per-run provenance.
+ * (item 14). docs/v2/initiatives.html §Directory / §Per-run provenance.
  */
 
 import * as fs from "fs";

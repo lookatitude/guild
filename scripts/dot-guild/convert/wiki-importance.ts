@@ -6,7 +6,7 @@
  * knowledge second-class in v2 recall ranking and coverage reporting. This row
  * scans every `.md` page under `<guildDir>/wiki/` and DRAFTS a grade by
  * deterministic heuristics (taxonomy: docs/knowledge/decisions/
- * knowledge-base-hygiene-and-grading.md §A + docs/v2/knowledge-memory.md):
+ * knowledge-base-hygiene-and-grading.md §A + docs/v2/knowledge-memory.html):
  *
  *   - standards/** and architecture-map pages          → high
  *   - decisions/** (or `type: decision` frontmatter)   → high

@@ -29,14 +29,14 @@
       "id": "initiative-gate",
       "source_path": "scripts/initiative-gate.ts",
       "resource_path": "resources/scripts/initiative-gate.ts",
-      "sha256": "3a1c4d11e31d99be1e4433bca77eaf1549b1eff685d16b258ac16e34dcd02831"
+      "sha256": "d2924ce7380080f6529e6c6a4c21ac718c3c2c1922a78220248dec497ff184b0"
     },
     {
       "category": "scripts",
       "id": "lib/ideation-min-build",
       "source_path": "scripts/lib/ideation-min-build.ts",
       "resource_path": "resources/scripts/lib/ideation-min-build.ts",
-      "sha256": "177fd13d444b09e5888f82ab05e516ab47ad564368f45dcf61f5f00325dd3620"
+      "sha256": "0ed216506ecc506e0ff25099250d85e273940e19ab298c9e9c26c2420abcc5dc"
     },
     {
       "category": "scripts",

@@ -1,6 +1,6 @@
 /**
  * lib/learning-candidate.ts — the typed `learning_candidate` shape (deferred
- * item 9; docs/v2/knowledge-memory.md §Candidate queue).
+ * item 9; docs/v2/knowledge-memory.html §Candidate queue).
  *
  * The shipped harvest queue is `guild.harvest_candidates.v1` (wiki / decision /
  * reflection / evolution buckets). This is the refined typed candidate: a closed

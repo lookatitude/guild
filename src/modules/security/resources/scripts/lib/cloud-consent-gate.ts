@@ -3,9 +3,9 @@
  *
  * Cloud-reviewer consent egress gate (ITEM 25, v2.x).
  *
- * Contract (BY POINTER): docs/v2/adversarial-review.md §"The review artifact bus"
+ * Contract (BY POINTER): docs/v2/adversarial-review.html §"The review artifact bus"
  *   §Cloud-reviewer consent (egress gate) [v2.x]
- * Dispatch diagram reference: docs/v2/dispatch-execution.md §2 (cloud_opt_in
+ * Dispatch diagram reference: docs/v2/dispatch-execution.html §2 (cloud_opt_in
  *   checkpoint in the host-adapter-router flowchart).
  *
  * This module implements the **pre-dispatch consent gate** that MUST fire before
@@ -40,7 +40,7 @@
  *   // result2.allowed === true — consent given, caller may proceed to egress.
  *
  * Owned by tooling-engineer (scripts/ scope). Security event emission for egress
- * decisions is [v2.x] — see docs/v2/security.md (guild.security_event.v1).
+ * decisions is [v2.x] — see docs/v2/security.html (guild.security_event.v1).
  */
 
 // ---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ export function cloudConsentGate(input: ConsentGateInput): ConsentGateResult {
 // ---------------------------------------------------------------------------
 
 /**
- * The always-ask fallback checkpoint (docs/v2/adversarial-review.md §"Cloud-reviewer consent"):
+ * The always-ask fallback checkpoint (docs/v2/adversarial-review.html §"Cloud-reviewer consent"):
  * when `cloud_opt_in` is absent from the resolved settings, fire this check
  * before dispatching and treat any non-explicit-true as DENY.
  *

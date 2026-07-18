@@ -8,7 +8,7 @@
       ],
       "env": {},
       "mcp_capability": {
-        "description": "D-MCP declared capability (docs/v2/security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation.",
+        "description": "D-MCP declared capability (docs/v2/security.html §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation.",
         "read_only": true,
         "read_paths": [
           ".guild/wiki/**"
@@ -25,7 +25,7 @@
       ],
       "env": {},
       "mcp_capability": {
-        "description": "D-MCP declared capability (docs/v2/security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation.",
+        "description": "D-MCP declared capability (docs/v2/security.html §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation.",
         "read_only": true,
         "read_paths": [
           ".guild/runs/**"
