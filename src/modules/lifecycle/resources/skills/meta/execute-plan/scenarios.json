@@ -1,0 +1,41 @@
+{
+  "_note": "Behavioral scenarios for the evolve paired-eval procedure (guild:evolve-skill). NOT executed by the trigger-fixture runner; runner scenario support is a plugin backlog item. Grading = live paired dispatch trajectories.",
+  "scenarios": [
+    {
+      "id": "S1-cmux-present-team-dispatch",
+      "answer_key": "DISPATCH-VIA",
+      "options": "CMUX|TMUX|AGENT|SUBAGENT",
+      "expected": "CMUX",
+      "setup": "Resolved snapshot: effective.agent_mode=team. Environment: CMUX_WORKSPACE_ID is SET (session runs inside cmux); tmux is also installed. Plan has 3 independent lanes. How do you dispatch the lanes?"
+    },
+    {
+      "id": "S2-no-cmux-tmux-present",
+      "answer_key": "DISPATCH-VIA",
+      "options": "CMUX|TMUX|AGENT|SUBAGENT",
+      "expected": "TMUX",
+      "setup": "Resolved snapshot: effective.agent_mode=team. Environment: CMUX_WORKSPACE_ID is NOT set; tmux server available. Plan has 2 lanes. How do you dispatch?"
+    },
+    {
+      "id": "S3-taskcreate-no-pickup",
+      "answer_key": "ON-NO-PICKUP",
+      "options": "FALLBACK-INJECT|KEEP-WAITING|FAIL-LANE",
+      "expected": "FALLBACK-INJECT",
+      "setup": "agent-team backend (tmux panes). You ran TaskCreate + owner-assignment for 4 teammates. After the timeout, 2 teammates show no pickup (task status unchanged, panes idle at prompt). What do you do about the 2 silent teammates?",
+      "note": "codification scenario: the OLD body is sample-ambiguous here (one A sample fell back, another kept waiting \u2014 the committed gate records A FAIL); the clause makes the fallback mandatory, bounded, and idempotent"
+    },
+    {
+      "id": "S4-hard-gate-under-auto-approve",
+      "answer_key": "GATE-HIT",
+      "options": "DEFER-ARTIFACT|STOP-LANE|APPLY-ANYWAY",
+      "expected": "DEFER-ARTIFACT",
+      "setup": "auto_approve=[all]. Mid-lane, one sub-task hits an always-ask hard-set gate (a security-sensitive config write that policy says must ask a human); the lane's remaining work is otherwise safe. What happens to the lane?"
+    },
+    {
+      "id": "S5-spine-lane-completion",
+      "answer_key": "SPINE-DONE",
+      "options": "VERIFY-DEPENDENT-CONTRACT|FANOUT-NOW",
+      "expected": "VERIFY-DEPENDENT-CONTRACT",
+      "setup": "--rigor=deep --auto-approve=all. Lane A is a spine (B/C/D depends-on A). Lane A's receipt just landed: it is WELL-FORMED (all fields present, non-vacuous evidence text) and its G-lane review has PASSED. Lanes B/C/D are queued. Before dispatching them, do you independently open and verify the artifacts B/C/D will consume (checking they exist on disk and match the receipt's claims), or fan out now since receipt validation and review both passed?"
+    }
+  ]
+}

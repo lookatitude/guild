@@ -4,13 +4,14 @@ Detail for `guild:execute-plan`'s `## Backend + routing (summary)` and paralleli
 
 ## Backend choice
 
-Guild supports three execution backends. The choice is **resolved by the `agent_mode` ladder** (ADR D5; `CLAUDE.md §"Backend default"`) **once at run-start intake** by `runStartPreflight` (U3), frozen in the run's resolved-settings snapshot (U6). `guild:execute-plan` **reads it from the snapshot** (`readResolvedSettingsSnapshot` → `snapshot.effective.agent_mode`) and honors it — it never re-picks, and it does not read the backend from `team.yaml` (whose top-level `backend` is only a mirror for audit; `team.yaml` is composition-only). **Team/agent is primary whenever tmux is present; subagent is the fallback, not the default.**
+Guild supports three execution backends. The choice is **resolved by the `agent_mode` ladder** (ADR D5; `CLAUDE.md §"Backend default"`) **once at run-start intake** by `runStartPreflight` (U3), frozen in the run's resolved-settings snapshot (U6). `guild:execute-plan` **reads it from the snapshot** (`readResolvedSettingsSnapshot` → `snapshot.effective.agent_mode`) and honors it — it never re-picks, and it does not read the backend from `team.yaml` (whose top-level `backend` is only a mirror for audit; `team.yaml` is composition-only). **Team is primary whenever tmux (or cmux) is present; subagent is the fallback, not the default.** Within `team`, a cmux surface is checked **before** a tmux pane whenever `CMUX_WORKSPACE_ID` is present in the environment — full cmux-first mechanics: `SKILL.md §"Backend + routing (summary)"`.
 
 | Backend | Selected when (`agent_mode` resolves to…) | Tradeoff |
 |---|---|---|
-| **Agent teams (tmux panes)** | `team` — `auto` + tmux available (the common case on a dev machine) **or** an explicit `team` pin. One **visible pane per specialist**. | Experimental; requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; one team per session; no nested teams; higher token cost. **PRIMARY under tmux.** |
-| **In-process / Independent agents** | `agent` — D5 rung 3: host supports independent agents, no tmux. `InProcessTeamBackend.launch()` returns `ok:true` with `dispatchPlan: GuildDispatchDescriptor[]` (one descriptor per specialist: `name / subagentType / model=null / env / prompt`); `orchestratorPaneId: null`, `teammatePaneIds: {}`. `guild:execute-plan` issues one `Agent()` call per descriptor in `result.dispatchPlan`, applying tier + model at dispatch (`model: null` from backend — tiering is orthogonal; execute-plan scores and resolves). (ADR §RE-4 / VC-RE-4.) | No tmux; fully implemented (VC-RE-4). Declarative plan from launcher → `Agent()` calls in execute-plan. Not a fallback stub. |
-| **Subagents via Agent tool** | `subagent` — the **fallback**: no tmux + no independent-agent support (CI, fresh installs), or an explicit `subagent` pin. | Lower cost, simplest cleanup; runs in the background, only the final artifact returns. The documented last resort. |
+| **cmux surfaces (rung 0 of `team`)** | `team` — `auto`/explicit `team` pin **and** `CMUX_WORKSPACE_ID` present in the environment, checked once at dispatch setup (the resolved-settings snapshot carries no cmux field until W4 lands — see `SKILL.md`). One **visible cmux surface per specialist** in the caller's workspace, checked BEFORE tmux. | Full mechanics (surface creation, per-lane watcher, reap, lead-only commits): `SKILL.md §"Backend + routing (summary)"`. |
+| **Agent teams (tmux panes)** | `team` — `auto` + tmux available (the common case on a dev machine) **or** an explicit `team` pin, **and `CMUX_WORKSPACE_ID` absent**. One **visible pane per specialist**. | Experimental; requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; one team per session; no nested teams; higher token cost. **PRIMARY under tmux when cmux is absent.** |
+| **In-process / Independent agents** | `agent` — D5 rung 3: host supports independent agents, no tmux, no cmux. `InProcessTeamBackend.launch()` returns `ok:true` with `dispatchPlan: GuildDispatchDescriptor[]` (one descriptor per specialist: `name / subagentType / model=null / env / prompt`); `orchestratorPaneId: null`, `teammatePaneIds: {}`. `guild:execute-plan` issues one `Agent()` call per descriptor in `result.dispatchPlan`, applying tier + model at dispatch (`model: null` from backend — tiering is orthogonal; execute-plan scores and resolves). (ADR §RE-4 / VC-RE-4.) | No tmux; fully implemented (VC-RE-4). Declarative plan from launcher → `Agent()` calls in execute-plan. Not a fallback stub. |
+| **Subagents via Agent tool** | `subagent` — the **fallback**: no tmux + no cmux + no independent-agent support (CI, fresh installs), or an explicit `subagent` pin. | Lower cost, simplest cleanup; runs in the background, only the final artifact returns. The documented last resort. |
 
 Two hard constraints:
 
@@ -259,6 +260,7 @@ Then inject:
 | Backend | Injection point |
 |---|---|
 | **Subagent** (`Agent()`) | Append verbatim block to the end of the `prompt` passed to `Agent()`. |
+| **cmux surface** (rung 0 of `team`) | Same injection timing as the agent-team row — include the block in the surface's initial prompt before the task brief; mechanics: `SKILL.md §"Backend + routing (summary)"`. |
 | **Agent-team** (tmux pane) | Include block in the pane's initial system prompt; the launcher injects it at pane spawn before the task brief. |
 | **In-process** (`result.dispatchPlan`) | Append to each descriptor's `prompt` in `dispatchPlan`, same as subagent. |
 
@@ -336,6 +338,7 @@ The plan's `autonomy-policy` is natural language ("may act without asking: …";
 | Backend | Injection method |
 |---|---|
 | **subagent** (Agent tool) | Pass via the Agent tool's `env` parameter: `Agent({ subagent_type: <name>, env: { GUILD_CAPABILITY_SCOPE: "...", GUILD_AUTONOMY_CONTRACT: "..." }, ... })`. Omit keys whose source field is absent. |
+| **cmux surface** (rung 0 of `team`) | Same as agent-team: set vars in the surface's environment (or its native env-injection call) before attaching Claude Code, before the task brief. |
 | **agent-team** (tmux panes) | Export vars in the pane environment before attaching Claude Code: `tmux send-keys -t <pane> 'export GUILD_CAPABILITY_SCOPE='"'"'[...]'"'"'' Enter` — the launcher script (`scripts/agent-team-launcher.ts`) is responsible for this injection. |
 | **in-process / independent agents** | Same `env` param path as subagent: execute-plan passes `GUILD_CAPABILITY_SCOPE` / `GUILD_AUTONOMY_CONTRACT` (when their source fields are present) on each `Agent()` call issued from `result.dispatchPlan`. The descriptor already carries `GUILD_RUN_ID` from the launcher; execute-plan layers the capability-scope vars on top at dispatch. Omit keys whose source field is absent. |
 
@@ -353,4 +356,4 @@ Read the DAG encoded by each lane's `depends-on:` and schedule dispatches accord
 - **Content and commercial in parallel with engineering** when the lane only depends on the spec. A copywriter lane with `depends-on: []` dispatches at run-start alongside architect; it does not wait for engineering.
 - **Worktree isolation.** When dispatching two or more lanes in parallel, run each in its own git worktree so file edits cannot collide. The specialist's subagent is responsible for worktree entry/exit; `guild:execute-plan` only needs to confirm the worktree was distinct before marking a lane dispatched. Serial lanes may share the main worktree.
 
-The schedule is a function of the DAG, not of authoring order. Lanes with empty `depends-on:` are eligible at run-start; every other lane becomes eligible the moment every task-id it lists has a completed receipt.
+The schedule is a function of the DAG, not of authoring order. Lanes with empty `depends-on:` are eligible at run-start; every other lane becomes eligible the moment every task-id it lists has a completed receipt — **except when the completed lane is a spine lane** (one or more other lanes depend on it): its dependents additionally wait on the mandatory spine-lane verify checkpoint (`SKILL.md §"Spine-lane verify checkpoint"`) before becoming eligible.
