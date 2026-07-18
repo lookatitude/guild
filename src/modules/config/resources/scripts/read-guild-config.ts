@@ -31,7 +31,10 @@ export {
 // Only run the CLI when executed directly — NOT when imported.
 // Without this guard the import would run main(), parse the importer's argv,
 // and pollute stdout. Matches the require.main===module pattern used across scripts/.
-if (require.main === module) {
+// The argv test is load-bearing: esbuild inlines this file into the hook bundles
+// (hooks/dist/*.js), where `require.main === module` is true for every inlined
+// module, so the guard alone dumped the full resolved config on every hook fire.
+if (require.main === module && /^read-guild-config\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { __main } = require("./lib/core/config-cli") as { __main: () => void };
   __main();

@@ -99,7 +99,7 @@
       "id": "read-guild-config",
       "source_path": "scripts/read-guild-config.ts",
       "resource_path": "resources/scripts/read-guild-config.ts",
-      "sha256": "8e8c769ef7be896462a9be952f103a69636abd3b70350d5e92b209529f040692"
+      "sha256": "08a2c299bd636456b54f90d59ec7124c3071717baa6b691615d3c7537a9b6b13"
     }
   ]
 }
