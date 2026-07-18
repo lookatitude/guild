@@ -1,0 +1,36 @@
+{
+  "_note": "Behavioral scenarios for the evolve paired-eval procedure (guild:evolve-skill). NOT executed by the trigger-fixture runner; runner scenario support is a plugin backlog item. Grading = live paired dispatch trajectories.",
+  "executed_by": "manual/agent judgment only — not the trigger-fixture runner",
+  "scenarios": [
+    {
+      "id": "S1-declare-spine-lane",
+      "answer_key": "SPINE-DECLARE",
+      "options": "MARK-SPINE-PLUS-CONTRACT|OMIT-SPINE-FIELD|NOTE-IN-SCOPE-TEXT-ONLY",
+      "expected": "MARK-SPINE-PLUS-CONTRACT",
+      "setup": "You are authoring `.guild/plan/<slug>.md`. The resolved team file names 3 specialists: architect (T1-architect, depends-on: []), backend (T2-backend, depends-on: [T1-architect]), frontend (T3-frontend, depends-on: [T1-architect]). T1-architect's receipt will be a system-boundaries ADR plus a component-split diagram that both T2-backend and T3-frontend need before they can implement against it. When you write T1-architect's lane block, what do you do?"
+    },
+    {
+      "id": "S2-no-spine-independent-lanes",
+      "answer_key": "SPINE-DECLARE",
+      "options": "MARK-SPINE-PLUS-CONTRACT|OMIT-SPINE-FIELD|NOTE-IN-SCOPE-TEXT-ONLY",
+      "expected": "OMIT-SPINE-FIELD",
+      "setup": "The resolved team file names 2 specialists: copywriter (T1-copywriter, depends-on: []) and seo (T2-seo, depends-on: []) — both independent, neither lists the other in depends-on. When you write T1-copywriter and T2-seo's lane blocks, what do you do about a `spine` field on either of them?",
+      "note": "fairness/no-regression control for the spine-declaration change: both A and B should give the same answer here (a spine field is never warranted when no lane has a dependent) — this case must NOT flip."
+    },
+    {
+      "id": "S3-autonomy-checkpoint-waivable",
+      "answer_key": "CHECKPOINT-WAIVABLE",
+      "options": "NOT-WAIVABLE-BY-AUTO-APPROVE|WAIVABLE-BY-AUTO-APPROVE|UNSTATED-DEFER-TO-EXECUTE-PLAN",
+      "expected": "NOT-WAIVABLE-BY-AUTO-APPROVE",
+      "setup": "This plan is being authored for a run under `--rigor=deep --auto-approve=all`, and every lane's autonomy-policy grants broad 'may act without asking' latitude. The plan includes one spine lane (T1-architect) with two dependents. Does this skill's body say anything about whether the mandatory spine-lane verify checkpoint `guild:execute-plan` runs before fan-out can be skipped because the run is under auto-approve=all?"
+    },
+    {
+      "id": "S4-fairness-approval-gate",
+      "answer_key": "HANDOFF-TIMING",
+      "options": "AFTER-EXPLICIT-APPROVAL|IMMEDIATELY-AFTER-WRITE|AFTER-G-PLAN-REVIEW-ONLY",
+      "expected": "AFTER-EXPLICIT-APPROVAL",
+      "setup": "You've just written `.guild/plan/<slug>.md` with `approved: false`, the G-plan review broker resolved `status: skipped`, and you presented the plan to the user. The user replies 'approved, go ahead.' Do you flip `approved: true` and hand off to `guild:execute-plan` now?",
+      "note": "fairness control unrelated to the spine-declaration edit — the Approval gate section is untouched by the diff, so A and B must agree here."
+    }
+  ]
+}
