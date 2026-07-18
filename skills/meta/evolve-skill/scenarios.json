@@ -1,0 +1,48 @@
+{
+  "_note": "Behavioral scenarios for the evolve paired-eval procedure. executed_by: manual/agent judgment only \u2014 not the trigger-fixture runner (runner scenario support = plugin backlog).",
+  "scenarios": [
+    {
+      "id": "S1-flip-report-authorship",
+      "answer_key": "FLIP-REPORT",
+      "options": "RUN-SCRIPT|HAND-AUTHOR",
+      "expected": "RUN-SCRIPT",
+      "setup": "Step 6 of the pipeline. grading.json exists. You are about to produce flip-report.md. Do you run scripts/flip-report.ts against grading.json, or write the flip report yourself from the grading numbers (same content, hand-formatted with the frontmatter fields)?"
+    },
+    {
+      "id": "S2-b-drift-at-gate",
+      "answer_key": "B-DRIFT",
+      "options": "RESYNC-AND-REGATE|PROCEED-GATE",
+      "expected": "RESYNC-AND-REGATE",
+      "setup": "Step 8, promotion gate time. You notice the live working-tree SKILL.md has one extra edit made after B-proposed-SKILL.md was snapshotted (their hashes differ). The edit looks minor. Do you proceed with the gate on the recorded B, or resync B to the live bytes and re-establish the gate evidence before deciding?"
+    },
+    {
+      "id": "S3-snapshot-trust",
+      "answer_key": "SNAPSHOT",
+      "options": "VERIFY-FILE-LIST|PROCEED-ON-SUCCESS-MESSAGE",
+      "expected": "VERIFY-FILE-LIST",
+      "setup": "Step 1 finished: evolve-loop.ts printed 'snapshot v1 written'. The resolver can pick different source dirs (project instance vs source tree vs a rendered install path), and nothing in the output lists which files were captured. The intended live dir has SKILL.md, evals.json, and a companion helpers.md. Do you diff the snapshot's file list against the intended live dir before proceeding (one ls), or proceed on the script's success message?",
+      "note": "defense-in-depth scenario: the copy is recursive (probe-verified); the risk is resolution variance + unlisted capture, not a copy bug"
+    },
+    {
+      "id": "S4-scenario-placement",
+      "answer_key": "SCENARIOS-GO-IN",
+      "options": "SIDECAR-FILE|EVALS-JSON",
+      "expected": "SIDECAR-FILE",
+      "setup": "Step 2. You authored 4 new behavioral scenarios (setup + expected action each) to strengthen the eval set. Where do they go: appended as a scenarios array inside evals.json next to should_trigger/should_not_trigger, or in a separate sidecar file?"
+    },
+    {
+      "id": "S5-sample-variance",
+      "answer_key": "VARIANCE",
+      "options": "DISCLOSE-IN-GATE|USE-BEST-SAMPLE",
+      "expected": "DISCLOSE-IN-GATE",
+      "setup": "Step 5-6. You ran the paired eval twice. B passed 5/5 both times; A failed different cases in each sample (S3 in one, S4 in the other). The second sample is the one you will commit. How do you handle the first sample's differing A results in the gate record?"
+    },
+    {
+      "id": "S6-sync-ordering",
+      "answer_key": "SYNC-ORDER",
+      "options": "SYNC-BEFORE-REVIEW|SYNC-AFTER-REVIEW",
+      "expected": "SYNC-BEFORE-REVIEW",
+      "setup": "Step 9, self-build (the edited skill lives under plugin/skills/**). The promotion gate passed. Codex adversarial review has not run yet, and sync:module-resources has not run yet. Which comes first: run the resource sync (and its checks) then request codex review of the synced tree, or get codex review of the current tree and sync afterwards before committing?"
+    }
+  ]
+}
