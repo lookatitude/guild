@@ -48,15 +48,31 @@ function escapeRegex(s: string): string {
 
 /**
  * Pure core. A token is "covered" iff, across the concatenated knowledge text, it appears
- * as `guild:<token>` or `/guild:<token>` (word-bounded — so `stat` does NOT match
- * `guild:status` and vice-versa) OR as a `commands/<token>.md` file reference.
+ * as `guild:<token>` or `/guild:<token>` OR as a `commands/<token>.md` file reference —
+ * in each case with nothing that could continue the token following it.
+ *
+ * The match is bounded on BOTH sides, and neither boundary is `\b`.
+ *
+ * Trailing — `(?![A-Za-z0-9-])`. Command tokens are `[a-z0-9-]`, and `\b` treats `-` as a
+ * boundary, so `guild:learn-map` — a real, documented SKILL token — satisfied the command
+ * token `learn`, and an undocumented `/guild:learn` passed the gate silently.
+ *
+ * Leading — `(?<![A-Za-z0-9-])`. With no left anchor at all, the pattern matched mid-word:
+ * `notguild:learn` and `notcommands/learn.md` both counted as coverage. `/` is not in the
+ * excluded set, so the `/guild:…` and `…/commands/….md` forms still match naturally.
+ *
+ * Both directions are FALSE PASSES — the direction this gate exists to prevent. Verified to
+ * change no full-stage verdict on the current corpus.
  */
+const TOKEN_START = "(?<![A-Za-z0-9-])";
+const TOKEN_END = "(?![A-Za-z0-9-])";
+
 export function isTokenCovered(token: string, knowledgeText: string): boolean {
   const t = escapeRegex(token);
-  // Namespaced command/skill token, optional leading slash, word boundary after the token.
-  const namespaced = new RegExp(`/?guild:${t}\\b`);
+  // Namespaced command/skill token; a leading `/` is allowed by the boundary, not required.
+  const namespaced = new RegExp(`${TOKEN_START}guild:${t}${TOKEN_END}`);
   // A direct reference to the command file.
-  const fileRef = new RegExp(`commands/${t}\\.md\\b`);
+  const fileRef = new RegExp(`${TOKEN_START}commands/${t}\\.md${TOKEN_END}`);
   return namespaced.test(knowledgeText) || fileRef.test(knowledgeText);
 }
 
@@ -90,6 +106,15 @@ export function collectCommandTokens(commandsDir: string): string[] {
 /** Reference-page extensions the walk reads. docs/v2 is an all-HTML set; .guild/wiki is .md. */
 const KNOWLEDGE_EXTENSIONS = [".md", ".html", ".htm"] as const;
 
+/**
+ * Named entities decoded by `decodeEntities`.
+ *
+ * The ASCII-punctuation names matter as much as the structural ones: a doc that writes
+ * `guild&colon;migrate` (or `commands&sol;migrate&period;md`) MEANS the token, and an
+ * undecoded name reads as an undocumented command — a false FAIL on a blocking gate.
+ * Only names whose expansion is unambiguous ASCII are listed; `&hyphen;` is U+2010, NOT
+ * `-`, so decoding it would silently rewrite the text and is deliberately omitted.
+ */
 const NAMED_ENTITIES: Record<string, string> = {
   lt: "<",
   gt: ">",
@@ -97,6 +122,37 @@ const NAMED_ENTITIES: Record<string, string> = {
   apos: "'",
   nbsp: " ",
   amp: "&",
+  colon: ":",
+  semi: ";",
+  sol: "/",
+  bsol: "\\",
+  period: ".",
+  comma: ",",
+  num: "#",
+  excl: "!",
+  quest: "?",
+  lpar: "(",
+  rpar: ")",
+  lsqb: "[",
+  rsqb: "]",
+  lcub: "{",
+  rcub: "}",
+  commat: "@",
+  ast: "*",
+  plus: "+",
+  equals: "=",
+  verbar: "|",
+  lowbar: "_",
+  grave: "`",
+  tilde: "~",
+  dollar: "$",
+  percnt: "%",
+  // HTML defines these four legacy UPPERCASE forms. They are listed explicitly because the
+  // lookup is case-SENSITIVE — see `decodeEntities`.
+  LT: "<",
+  GT: ">",
+  QUOT: '"',
+  AMP: "&",
 };
 
 /**
@@ -110,12 +166,19 @@ const NAMED_ENTITIES: Record<string, string> = {
  *
  * Numeric forms are decoded too (`&#58;` is a colon — a doc writing `guild&#58;migrate`
  * means the token, and without this the gate would report the command undocumented).
+ *
+ * Named lookup is CASE-SENSITIVE, which HTML requires and which matters here in the
+ * false-PASS direction: `&COLON;` is not an entity at all (a browser renders the eight
+ * literal characters), and `&Colon;` is U+2237 `∷`, NOT a colon. Case-folding the name
+ * turned `guild&COLON;ghost` into the token `guild:ghost` and manufactured coverage for a
+ * command that appears nowhere on the rendered page. HTML's four legacy uppercase forms
+ * are therefore listed explicitly in the table instead.
  */
 function decodeEntities(s: string): string {
   return s.replace(/&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|([a-zA-Z]+));/g, (whole, dec, hex, name) => {
     if (dec !== undefined) return safeFromCodePoint(Number(dec), whole);
     if (hex !== undefined) return safeFromCodePoint(parseInt(hex, 16), whole);
-    const named = NAMED_ENTITIES[String(name).toLowerCase()];
+    const named = NAMED_ENTITIES[String(name)];
     return named ?? whole; // unknown entity: leave it verbatim rather than guess
   });
 }
@@ -163,6 +226,19 @@ export function htmlToText(html: string): string {
     }
     out.push(html.slice(i, lt));
 
+    // A `<` that cannot open markup is LITERAL TEXT, exactly as the HTML tokenizer treats
+    // it: only a letter, `/`, `!` or `?` after `<` starts a tag, close tag, comment/
+    // declaration, or processing instruction. Treating EVERY `<` as a tag made ordinary
+    // prose — `if a < b then run /guild:migrate` — swallow the rest of the paragraph up to
+    // the next `>`, taking any command token with it. That is a false FAIL, and on a
+    // blocking gate a false FAIL on real prose is a defect too, not a safe default.
+    const next = html[lt + 1];
+    if (next === undefined || !/[a-zA-Z!/?]/.test(next)) {
+      out.push("<");
+      i = lt + 1;
+      continue;
+    }
+
     // Comment / CDATA / doctype-ish `<!…>` — drop to its terminator, or to EOF.
     if (html.startsWith("<!--", lt)) {
       const end = html.indexOf("-->", lt + 4);
@@ -177,8 +253,14 @@ export function htmlToText(html: string): string {
       continue;
     }
 
-    // Raw-text elements: everything up to the matching close tag is markup-language
-    // content, never prose. No close tag ⇒ consume to EOF (fail closed).
+    // Elements whose content a reader never sees: everything up to the matching close tag
+    // is markup-language content or non-rendered fallback, never prose. No close tag ⇒
+    // consume to EOF (fail closed).
+    //   script, style                      — markup-language content
+    //   noscript, iframe, noembed, noframes — fallback content, not rendered when scripting
+    //                                         and embedding work (the browser default)
+    // Same INERT-content rule as `<template>` below; leaving any of them on the prose path
+    // let a token that is nowhere on the rendered page satisfy the gate (a FALSE PASS).
     //
     // Tag-name matching is EXACT — no whitespace between `<`/`</` and the name — because
     // that is what HTML actually permits, and being loose here leaks in both directions:
@@ -187,12 +269,24 @@ export function htmlToText(html: string): string {
     //   - a permissive CLOSE (`</ script>`) ended the raw-text run early — a browser would
     //     still be inside the script — so the remainder leaked out as "text".
     // Both were FALSE PASSES. `<script >` / `</script >` (space AFTER the name) IS legal,
-    // and is still handled.
-    const raw = /^<(script|style)\b/i.exec(html.slice(lt, lt + 8));
+    // and is still handled — see `findRawTextClose` for what "legal" means precisely.
+    const raw = /^<(script|style|noscript|iframe|noembed|noframes)(?=[\t\n\f\r />])/i.exec(
+      html.slice(lt, lt + 10),
+    );
     if (raw) {
-      const tagEnd = scanTagEnd(html, lt);
-      const close = new RegExp(`</${raw[1]}\\s*>`, "i").exec(html.slice(tagEnd));
-      i = close ? tagEnd + close.index + close[0].length : n;
+      const close = findRawTextClose(html, scanTagEnd(html, lt), raw[1]);
+      i = close === -1 ? n : close;
+      out.push(" ");
+      continue;
+    }
+
+    // `<template>` content is INERT. The parser puts it in a detached document fragment
+    // that is never rendered, so nothing inside it is prose a reader can see — yet as an
+    // ordinary tag its whole body counted as text and MANUFACTURED coverage for a command
+    // documented nowhere (a FALSE PASS). Templates nest, so match them by depth; an
+    // unclosed one consumes to EOF (fail closed).
+    if (/^<template(?=[\t\n\f\r />])/i.test(html.slice(lt, lt + 10))) {
+      i = skipTemplate(html, lt);
       out.push(" ");
       continue;
     }
@@ -204,6 +298,32 @@ export function htmlToText(html: string): string {
   }
 
   return decodeEntities(out.join(""));
+}
+
+/**
+ * HTML's whitespace set is exactly these five ASCII characters. JavaScript's `\s` is much
+ * wider — it also matches U+00A0, U+000B, and the Unicode space separators — and using `\s`
+ * to match tag syntax leaks in BOTH directions, so the distinction is load-bearing here.
+ */
+const HTML_SPACE = "\\t\\n\\f\\r ";
+
+/**
+ * Index just past the end tag that closes a raw-text element (`script` / `style`) opened
+ * before `from`, or -1 when it is never closed (caller drops to EOF — fail closed).
+ *
+ * An end tag is `</name` followed by HTML whitespace, `/`, or `>` — NOT `</name` plus an
+ * arbitrary `>` somewhere later. Matching `</name\s*>` got both directions wrong:
+ *   - `</script >` matched, because JS `\s` covers U+00A0. HTML does not, so a browser
+ *     is STILL inside the script and everything after it leaked out as prose — a FALSE PASS.
+ *   - `</script foo>` and `</script/>` did NOT match, though HTML accepts both as end tags
+ *     (with a parse error). The run then ran to EOF and swallowed real prose — a FALSE FAIL.
+ * Once the name boundary matches, the tag ends at its own `>`, found with the quote-aware
+ * scan so a `>` inside an attribute cannot end it early.
+ */
+function findRawTextClose(html: string, from: number, name: string): number {
+  const marker = new RegExp(`</${name}(?=[${HTML_SPACE}/>])`, "i");
+  const m = marker.exec(html.slice(from));
+  return m ? scanTagEnd(html, from + m.index) : -1;
 }
 
 /**
@@ -222,6 +342,73 @@ function scanTagEnd(html: string, start: number): number {
     } else if (c === ">") {
       return j + 1;
     }
+  }
+  return html.length;
+}
+
+/**
+ * Index just past the `</template>` closing the template that opens at `start`, honouring
+ * NESTING (a `<template>` may contain another). Returns the input length when the template
+ * is never closed, so an unclosed template drops the rest of the page rather than leaking it.
+ *
+ * This WALKS the template body with the same discipline as `htmlToText` instead of scanning
+ * for `</template>` with a regex, because for an element whose body is dropped, closing too
+ * EARLY is the false-PASS direction: a bare regex matches the `</template>` inside
+ * `<div title="</template>">`, ending the run mid-attribute and leaking the rest of the
+ * page. Quoted attributes, comments, and raw-text bodies are therefore all skipped properly.
+ */
+function skipTemplate(html: string, start: number): number {
+  let depth = 1;
+  let i = scanTagEnd(html, start);
+
+  while (i < html.length) {
+    const lt = html.indexOf("<", i);
+    if (lt === -1) return html.length;
+
+    const next = html[lt + 1];
+    if (next === undefined || !/[a-zA-Z!/?]/.test(next)) {
+      i = lt + 1; // a literal `<`, not markup
+      continue;
+    }
+    if (html.startsWith("<!--", lt)) {
+      const end = html.indexOf("-->", lt + 4);
+      if (end === -1) return html.length;
+      i = end + 3;
+      continue;
+    }
+    // A `</template>` inside a raw-text or escapable-raw-text body does NOT close the
+    // template — `<textarea>x</template>y</textarea>` keeps `</template>` as literal
+    // content — so step over those bodies whole. Missing ANY of these elements closed the
+    // template early and leaked the rest of the page (a FALSE PASS; parse5 confirms the
+    // content stays inert). The list must therefore be the COMPLETE set of elements whose
+    // content is not parsed as markup, not just the common two:
+    //   script, style          — raw text
+    //   textarea, title        — escapable raw text
+    //   iframe, noembed,
+    //   noframes, noscript,
+    //   xmp                    — raw text in a conforming parser (noscript when scripting
+    //                            is enabled, which is the browser default)
+    //   plaintext              — raw text to EOF. It has NO end tag: `</plaintext>` is
+    //                            literal content, so it must NOT be routed through
+    //                            `findRawTextClose` (which would honour it, close the
+    //                            template, and leak the tail). It ends the scan outright.
+    // Unclosed ⇒ EOF, which drops the remainder (fail closed).
+    if (/^<plaintext(?=[\t\n\f\r />])/i.test(html.slice(lt, lt + 11))) return html.length;
+
+    const raw = /^<(script|style|textarea|title|iframe|noembed|noframes|noscript|xmp)(?=[\t\n\f\r />])/i.exec(
+      html.slice(lt, lt + 11),
+    );
+    if (raw) {
+      const close = findRawTextClose(html, scanTagEnd(html, lt), raw[1]);
+      if (close === -1) return html.length;
+      i = close;
+      continue;
+    }
+
+    const end = scanTagEnd(html, lt);
+    if (/^<template(?=[\t\n\f\r />])/i.test(html.slice(lt, lt + 10))) depth++;
+    else if (/^<\/template(?=[\t\n\f\r />])/i.test(html.slice(lt, lt + 11)) && --depth === 0) return end;
+    i = end;
   }
   return html.length;
 }
