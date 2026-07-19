@@ -13,8 +13,8 @@
  * consistent with the RunFn/injection pattern in scripts/lib/team-backend.ts.
  *
  * Receipt validity definition (mirrors hooks/lib/handoff-v2.ts +
- * hooks/agent-team/task-completed.ts — not re-imported to keep scripts/
- * self-contained):
+ * hooks/agent-team/task-completed.ts; the strict allowed-key set is imported
+ * from the canonical validator):
  *   1. File exists at <runDir>/handoffs/<specialist>-<task-id>.md
  *   2. Contains all five §8.2 required fields (changed_files, opens_for,
  *      assumptions, evidence, followups)
@@ -41,6 +41,10 @@
 import * as fsNode from "fs";
 import * as path from "path";
 import { spawnSync } from "child_process";
+import {
+  ALLOWED_INJECTION_CLEAN_VALUES,
+  ALLOWED_TOP_LEVEL_KEYS,
+} from "../../hooks/lib/handoff-v2";
 import type { RunFn } from "./team-backend";
 import { readRunStartedAt as _readRunStartedAt } from "./run-lifecycle";
 
@@ -126,16 +130,13 @@ function extractEnvelope(content: string): unknown | null {
 // ── guild.handoff.v2 envelope validator ──────────────────────────────────────
 //
 // Full mirror of validateHandoffV2 in hooks/lib/handoff-v2.ts.
-// scripts/ does not import hooks/ (self-contained by design), so this is a
-// deliberate, commented duplication — not a new independent implementation.
+// Validation remains local, while the strict allowed-key set is imported from
+// the canonical validator so schema additions cannot silently diverge here.
 // Canonical source of truth: hooks/lib/handoff-v2.ts:validateHandoffV2.
 // If the canonical changes, update this mirror in lockstep (AC-3 consumer parity).
 
-/** Allowed top-level keys — mirror of ALLOWED_TOP_LEVEL_KEYS in hooks/lib/handoff-v2.ts. */
-const ALLOWED_ENVELOPE_KEYS: ReadonlySet<string> = new Set([
-  "schema_version", "task_id", "tier", "status", "summary",
-  "artifacts", "issues", "escalate_reason", "learnings", "notes",
-]);
+/** Effective allowed-key set, shared with the canonical handoff-v2 validator. */
+export const ALLOWED_ENVELOPE_KEYS: ReadonlySet<string> = ALLOWED_TOP_LEVEL_KEYS;
 
 const VALID_ENVELOPE_TIERS = new Set<string>(["cheap", "mid", "powerful"]);
 const VALID_ENVELOPE_STATUSES = new Set<string>(["done", "blocked", "escalate"]);
@@ -274,6 +275,16 @@ function envelopeShapeErrors(value: unknown): string[] {
           `got ${obj["notes"].length} chars`
       );
     }
+  }
+
+  // injection_clean — HK-08 additive-optional; absent ⇒ unverified (no error)
+  if (
+    obj["injection_clean"] !== undefined &&
+    !ALLOWED_INJECTION_CLEAN_VALUES.has(obj["injection_clean"] as string)
+  ) {
+    errors.push(
+      `injection_clean must be one of clean|flagged|unverified; got ${JSON.stringify(obj["injection_clean"])}`
+    );
   }
 
   return errors;

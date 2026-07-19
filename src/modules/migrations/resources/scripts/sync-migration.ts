@@ -22,10 +22,10 @@
  *                 own layout; override when running against a differently-shaped repo).
  *   --target      Generated pointer-stub path, relative to --cwd (default: "MIGRATION.md").
  *
- * NOTE: this tool's defaults are specific to THIS umbrella workspace (it regenerates the
- * workspace-root MIGRATION.md from plugin/.guild/wiki/entities/MIGRATION.md). It is a
- * self-build utility, not shipped as a module resource to consuming host packages (see
- * src/modules/migrations/module.manifest.json).
+ * NOTE: this is operator-workspace-specific self-build tooling whose defaults assume THIS
+ * umbrella workspace (it regenerates the workspace-root MIGRATION.md from
+ * plugin/.guild/wiki/entities/MIGRATION.md). The migrations module owns it and ships it as
+ * a module resource because the packaging system has no per-resource ship/no-ship flag.
  *
  * Exit codes:
  *   0  Success (write: targets updated; check: all in-sync).

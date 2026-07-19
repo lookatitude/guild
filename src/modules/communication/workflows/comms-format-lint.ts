@@ -42,6 +42,10 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import {
+  ALLOWED_INJECTION_CLEAN_VALUES,
+  ALLOWED_TOP_LEVEL_KEYS,
+} from "../../../../hooks/lib/handoff-v2";
 import { loadYamlApi } from "../../kernel";
 
 const yaml = loadYamlApi();
@@ -186,9 +190,8 @@ function isHandoffFixtureExempt(filePath: string): boolean {
 
 // ── Handoff-v2 extraction + validation (mirrored from hooks/lib/handoff-v2.ts) ──
 //
-// Scripts cannot import hooks/lib/ (separate package, different tsconfig).
-// Mirror the extraction logic with a reference comment per the task brief.
-// Any schema change in hooks/lib/handoff-v2.ts must be reflected here.
+// Extraction remains local because this linter must find every fence to detect
+// duplicates, while the canonical helper intentionally returns only the first.
 
 /**
  * Mirror of hooks/lib/handoff-v2.ts:extractHandoffEnvelope.
@@ -215,18 +218,15 @@ function extractAllHandoffEnvelopes(content: string): unknown[] {
 // ── guild.handoff.v2 full validator (mirror of hooks/lib/handoff-v2.ts) ───
 //
 // Full mirror of validateHandoffV2 in hooks/lib/handoff-v2.ts.
-// Scripts cannot import hooks/ (self-contained by design), so this is a
-// deliberate, commented duplication — not a new independent implementation.
+// Validation remains local, while the strict allowed-key set is imported from
+// the canonical validator so schema additions cannot silently diverge here.
 // Canonical source of truth: hooks/lib/handoff-v2.ts:validateHandoffV2.
 // Also mirrors the envelopeShapeErrors function in scripts/lib/reaping.ts,
 // which was forced to full parity by the AC-3 consumer agreement requirement.
 // If the canonical changes, update both mirrors in lockstep.
 
-/** Allowed top-level keys — mirror of ALLOWED_TOP_LEVEL_KEYS in hooks/lib/handoff-v2.ts. */
-const ALLOWED_ENVELOPE_KEYS: ReadonlySet<string> = new Set([
-  "schema_version", "task_id", "tier", "status", "summary",
-  "artifacts", "issues", "escalate_reason", "learnings", "notes",
-]);
+/** Effective allowed-key set, shared with the canonical handoff-v2 validator. */
+export const ALLOWED_ENVELOPE_KEYS: ReadonlySet<string> = ALLOWED_TOP_LEVEL_KEYS;
 
 const VALID_ENVELOPE_TIERS = new Set<string>(["cheap", "mid", "powerful"]);
 const VALID_ENVELOPE_STATUSES = new Set<string>(["done", "blocked", "escalate"]);
@@ -357,6 +357,16 @@ function envelopeShapeErrors(value: unknown): string[] {
           `got ${(obj["notes"] as string).length} chars`
       );
     }
+  }
+
+  // injection_clean — HK-08 additive-optional; absent ⇒ unverified (no error)
+  if (
+    obj["injection_clean"] !== undefined &&
+    !ALLOWED_INJECTION_CLEAN_VALUES.has(obj["injection_clean"] as string)
+  ) {
+    errors.push(
+      `injection_clean must be one of clean|flagged|unverified; got ${JSON.stringify(obj["injection_clean"])}`
+    );
   }
 
   return errors;
