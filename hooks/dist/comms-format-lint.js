@@ -3412,7 +3412,7 @@ function checkNewHandRolledYaml(filePath, content, allowList) {
   for (const inventoried of allowList) {
     if (normalised.endsWith(inventoried) || normalised.includes(inventoried)) return [];
   }
-  const YAML_SURFACE_SIGNAL = /\.ya?ml\b|run\.yaml|frontmatter|\.md\b|['"`]---['"`]/i;
+  const YAML_SURFACE_SIGNAL = /\.ya?ml\b|(?:from|require\s*\(|import\s*\()\s*['"`](?:js-)?yaml['"`]|\byaml\s*\.\s*(?:load|loadAll|parse|safeLoad)\b|front[-\s]?matter|(?:['"`\/^]|\\[rn])-{3}(?:['"`\/$]|\\[rn])|\^-\{3\}\$/i;
   if (!YAML_SURFACE_SIGNAL.test(content)) return [];
   const findings = [];
   for (const { pattern, label } of HAND_ROLLED_PATTERNS) {
