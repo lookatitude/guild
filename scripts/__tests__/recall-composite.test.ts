@@ -1,7 +1,7 @@
 /**
  * scripts/__tests__/recall-composite.test.ts
  *
- * Composite recall scoring + importance gate (docs/v2/knowledge-memory.md
+ * Composite recall scoring + importance gate (docs/v2/knowledge-memory.html
  * §Recall scoring; deferred items 6 & 7). Verifies:
  *   - the pure scorers (ingestImportanceScore / recencyDecay / compositeScore),
  *   - the integration path: with `composite` set, wiki recall re-ranks by

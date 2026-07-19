@@ -43,7 +43,7 @@
  *   bypass + audit    → proceed  (no block) but log the violation  [DEFAULT]
  *   bypass + allow    → proceed, log a bypass_permission_allowed record
  *
- * AUTONOMY-MODE FORCING (docs/v2/security.md §bypassPermissions governance):
+ * AUTONOMY-MODE FORCING (docs/v2/security.html §bypassPermissions governance):
  * under the non-interactive autonomy modes (`auto_approve`,
  * `autonomous_after_plan_approval`) the policy is FORCED to `deny` via
  * `effectiveBypassPolicy()` — the configured value is overridden, the bypass
@@ -66,7 +66,7 @@ export interface EffectiveBypassPolicy {
 }
 
 /**
- * docs/v2/security.md §bypassPermissions governance: under
+ * docs/v2/security.html §bypassPermissions governance: under
  * `auto_approve` / `autonomous_after_plan_approval` the
  * `bypass_permissions_policy` is FORCED to `deny` — a bypassPermissions
  * attempt must hard-block (abort the tool call + security event), regardless
@@ -325,7 +325,7 @@ export function resolveScopeDecision(args: ResolveArgs): ScopeDecision {
         eventType: "capability_scope_violation",
         reason: policyForced === true
           ? `${baseReason} bypass_permissions_policy=deny (FORCED by non-interactive autonomy ` +
-            `mode — docs/v2/security.md §bypassPermissions governance) — hard-blocked ` +
+            `mode — docs/v2/security.html §bypassPermissions governance) — hard-blocked ` +
             `under bypassPermissions.`
           : `${baseReason} bypass_permissions_policy=deny — hard-blocked under bypassPermissions.`,
       };

@@ -1,6 +1,6 @@
 /**
  * lib/retention.ts — run-record retention enforcement (deferred item 14;
- * docs/v2/initiatives.md §Per-run provenance).
+ * docs/v2/initiatives.html §Per-run provenance).
  *
  * Each run records a `retention_class` ("one-off-90d" | "until-archive"). This
  * is the deferred cleanup job: identify one-off runs whose 90-day window has

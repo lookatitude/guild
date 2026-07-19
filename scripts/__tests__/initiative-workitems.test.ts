@@ -2,7 +2,7 @@
  * scripts/__tests__/initiative-workitems.test.ts
  *
  * WorkItem shape + auto release/docs work-item population from D8 gate state
- * (deferred item 13). docs/v2/initiatives.md §D8; data-model.md §WorkItem.
+ * (deferred item 13). docs/v2/initiatives.html §D8; data-model.md §WorkItem.
  */
 
 import { validateWorkItem, populateReleaseDocsWorkItems, type WorkItem } from "../lib/initiative-workitems";

@@ -5,9 +5,9 @@
  * consent egress gate, v2.x).
  *
  * Contract under test:
- *   docs/v2/adversarial-review.md §"The review artifact bus"
+ *   docs/v2/adversarial-review.html §"The review artifact bus"
  *     §Cloud-reviewer consent (egress gate) [v2.x]
- *   docs/v2/dispatch-execution.md §2 (cloud_opt_in checkpoint)
+ *   docs/v2/dispatch-execution.html §2 (cloud_opt_in checkpoint)
  *
  * Key invariants verified:
  *   1. Default DENY: absent / false / null cloud_opt_in → allowed: false.

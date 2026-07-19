@@ -12,7 +12,7 @@
  *   } from "./lib/owner-architect-loop";
  *
  * Loop-control state machine for the owner↔architect implementation loop
- * (docs/v2/adversarial-review.md §Loop control — [v2.x] candidate item 23).
+ * (docs/v2/adversarial-review.html §Loop control — [v2.x] candidate item 23).
  *
  * The owner↔architect loop is a **challenger loop** (adversarial shape):
  * - Owner produces an implementation artifact (code/design/handoff).

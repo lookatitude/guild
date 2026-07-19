@@ -2,7 +2,7 @@
 /**
  * scripts/stamp-recall-importance.ts
  *
- * The WRITE-TIME importance-at-ingest implementer (docs/v2/knowledge-memory.md §Importance-at-ingest).
+ * The WRITE-TIME importance-at-ingest implementer (docs/v2/knowledge-memory.html §Importance-at-ingest).
  * Scans `<guildDir>/wiki/**.md` and stamps each page with its 1–5 `recall_importance:`
  * frontmatter score (category-derived via `ingestImportanceScore`), so recall reads a
  * STABLE persisted weight instead of re-deriving it at every query.

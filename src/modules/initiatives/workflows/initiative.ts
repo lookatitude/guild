@@ -2,7 +2,7 @@
  * lib/initiative.ts — guild.initiative.v1 validator + 4-axis status derivation
  * and the definition-ledger readiness rule (deferred items 10 & 11).
  *
- * docs/v2/initiatives.md §Registry & directory / §Definition ledger; field
+ * docs/v2/initiatives.html §Registry & directory / §Definition ledger; field
  * body canonical in docs/knowledge/observability/data-model.md §Initiative /
  * §DefinitionItem. The manifest was [v2-contract-only] (frozen target, no code
  * wrote/validated it). This is the [v2.x] adoption code: the closed-enum

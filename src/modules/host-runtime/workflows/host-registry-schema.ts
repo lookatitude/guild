@@ -9,7 +9,7 @@
  * into the canonical wiki (workspace-v2-compliance, 2026-06-27):
  *   .guild/wiki/decisions/host-adapter-contract.md §Capability Matrix (FROZEN successor)
  *   .guild/wiki/decisions/verified-multi-host-support.md (the L0 ADR — registry §2, adapter_binding §3)
- *   docs/v2/host-adapter-migration-spec.md (the canonical design set)
+ *   docs/v2/host-adapter-migration-spec.html (the canonical design set)
  *
  * WHY (ADR §capability matrix): the new hosts carry **independent capability columns**,
  * NOT a single "detect-only" flag. Today the detect-only assumption is encoded as the

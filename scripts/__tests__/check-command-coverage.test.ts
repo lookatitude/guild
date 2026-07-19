@@ -23,6 +23,7 @@ import {
   evaluateCommandCoverage,
   collectCommandTokens,
   gatherKnowledgeText,
+  htmlToText,
 } from "../workspace/check-command-coverage";
 
 describe("isTokenCovered — namespaced + file-ref forms", () => {
@@ -93,6 +94,131 @@ describe("collectCommandTokens / gatherKnowledgeText — fixtures", () => {
     expect(text).toContain("guild:build");
     expect(text).toContain("guild:plan");
   });
+
+  // docs/v2 became an all-HTML set; a .md-only walk silently drops it and coverage
+  // collapses to wiki-only. These fixtures are REAL files on disk — no injected seam.
+  test("gatherKnowledgeText reads .html recursively alongside .md", () => {
+    const k = path.join(dir, "knowledge");
+    fs.mkdirSync(path.join(k, "docs-v2"), { recursive: true });
+    fs.writeFileSync(path.join(k, "index.md"), "guild:build");
+    fs.writeFileSync(
+      path.join(k, "docs-v2", "lifecycle.html"),
+      "<html><body><h2>Verbs</h2><p>Run <code>/guild:migrate</code> to convert.</p></body></html>",
+    );
+    const text = gatherKnowledgeText(k);
+    expect(text).toContain("guild:build");
+    expect(text).toContain("/guild:migrate");
+    expect(isTokenCovered("migrate", text)).toBe(true);
+  });
+
+  test("gatherKnowledgeText tag-strips HTML: a token split by markup does not leak markup", () => {
+    const k = path.join(dir, "knowledge");
+    fs.mkdirSync(k, { recursive: true });
+    fs.writeFileSync(path.join(k, "page.html"), "<p><em>guild:plan</em></p>");
+    const text = gatherKnowledgeText(k);
+    expect(text).not.toContain("<em>");
+    expect(isTokenCovered("plan", text)).toBe(true);
+  });
+
+  test("gatherKnowledgeText ignores non-reference extensions", () => {
+    const k = path.join(dir, "knowledge");
+    fs.mkdirSync(k, { recursive: true });
+    fs.writeFileSync(path.join(k, "notes.txt"), "guild:ghost");
+    fs.writeFileSync(path.join(k, "page.html"), "guild:plan");
+    const text = gatherKnowledgeText(k);
+    expect(isTokenCovered("ghost", text)).toBe(false);
+    expect(isTokenCovered("plan", text)).toBe(true);
+  });
+});
+
+describe("htmlToText — markup must neither hide nor manufacture coverage", () => {
+  test("tags become whitespace, prose survives", () => {
+    expect(htmlToText("<p>see <code>guild:qa</code> here</p>")).toMatch(/see\s+guild:qa\s+here/);
+  });
+  test("a token inside an HTML comment does NOT count as coverage", () => {
+    const text = htmlToText("<p>nothing</p><!-- TODO document guild:ghost -->");
+    expect(isTokenCovered("ghost", text)).toBe(false);
+  });
+  test("a token inside script/style bodies does NOT count as coverage", () => {
+    const text = htmlToText(
+      `<script>var x = "guild:ghost";</script><style>/* guild:phantom */</style><p>ok</p>`,
+    );
+    expect(isTokenCovered("ghost", text)).toBe(false);
+    expect(isTokenCovered("phantom", text)).toBe(false);
+  });
+  test("a token that appears only in an attribute does NOT count as coverage", () => {
+    const text = htmlToText(`<a href="/docs#guild:ghost" title="guild:ghost">link</a>`);
+    expect(isTokenCovered("ghost", text)).toBe(false);
+  });
+  // ── Adversarial-review regressions (round 1) ────────────────────────────────
+  // A regex tag-strip is not an HTML tokenizer. Both inputs below produced a FALSE
+  // PASS against the first cut — a command counted as documented when it was not.
+  // These fail against a `<[^>]*>` / `<script>…</script>` implementation.
+  test("a '>' inside a quoted attribute does NOT end the tag and leak attribute text", () => {
+    const text = htmlToText(`<a title=">guild:ghost">visible</a>`);
+    expect(isTokenCovered("ghost", text)).toBe(false);
+    expect(text).toContain("visible");
+  });
+  test("an UNCLOSED script body is dropped, not leaked", () => {
+    const text = htmlToText(`<p>ok</p><script>const x = "guild:ghost";`);
+    expect(isTokenCovered("ghost", text)).toBe(false);
+    expect(text).toContain("ok");
+  });
+  test("an unclosed style body is dropped, not leaked", () => {
+    expect(isTokenCovered("phantom", htmlToText(`<style>/* guild:phantom */`))).toBe(false);
+  });
+  test("an unterminated tag consumes to EOF rather than leaking its contents", () => {
+    expect(isTokenCovered("ghost", htmlToText(`<p>ok</p><a href="x" data-y="guild:ghost`))).toBe(
+      false,
+    );
+  });
+  test("an unterminated comment is dropped, not leaked", () => {
+    expect(isTokenCovered("ghost", htmlToText(`<p>ok</p><!-- guild:ghost`))).toBe(false);
+  });
+  test("a token inside CDATA does not count", () => {
+    expect(isTokenCovered("ghost", htmlToText(`<p>ok</p><![CDATA[ guild:ghost ]]>`))).toBe(false);
+  });
+  // Round-2 self-audit: allowing whitespace after `<` / `</` leaked in BOTH directions.
+  test("a '</ script>' pseudo-close does NOT end the raw-text run early", () => {
+    // A browser is still inside the script here, so nothing after it is prose.
+    expect(isTokenCovered("ghost", htmlToText(`<script>a</ script>guild:ghost`))).toBe(false);
+  });
+  test("legal '<script >' / '</script >' (space AFTER the name) is still handled", () => {
+    const text = htmlToText(`<script >var x = "guild:ghost";</script >ok`);
+    expect(isTokenCovered("ghost", text)).toBe(false);
+    expect(text).toContain("ok");
+  });
+  test("a '</script>' inside a JS string still terminates the script, per HTML", () => {
+    expect(isTokenCovered("ghost", htmlToText(`<script>var s="guild:ghost</script>";`))).toBe(
+      false,
+    );
+  });
+
+  test("real prose still survives all of the above (no over-stripping)", () => {
+    const text = htmlToText(
+      `<!doctype html><html><body><h1 class="t">Verbs</h1>` +
+        `<p>Run <code>/guild:migrate</code> — see <a href="#x" title="a>b">here</a>.</p>` +
+        `</body></html>`,
+    );
+    expect(isTokenCovered("migrate", text)).toBe(true);
+    expect(text).toContain("Verbs");
+    expect(text).toContain("here");
+  });
+
+  test("entities are decoded in one pass, with no ordering hazard", () => {
+    expect(htmlToText("<p>&lt;guild:plan&gt;</p>")).toContain("<guild:plan>");
+    expect(htmlToText("<p>a&nbsp;b</p>")).toMatch(/a\s+b/);
+    // Both directions of the chained-replace ordering trap:
+    expect(htmlToText("<p>&amp;lt;</p>")).toContain("&lt;"); // must NOT become '<'
+    expect(htmlToText("<p>&amp;#58;</p>")).toContain("&#58;"); // must NOT become ':'
+  });
+  test("numeric entities are decoded, so an encoded colon still counts as coverage", () => {
+    expect(isTokenCovered("migrate", htmlToText("<p>guild&#58;migrate</p>"))).toBe(true);
+    expect(isTokenCovered("migrate", htmlToText("<p>guild&#x3A;migrate</p>"))).toBe(true);
+  });
+  test("an unknown entity is left verbatim rather than guessed", () => {
+    expect(htmlToText("<p>&bogus;</p>")).toContain("&bogus;");
+  });
 });
 
 describe("CLI — exit codes", () => {
@@ -100,14 +226,18 @@ describe("CLI — exit codes", () => {
   const ENV = { ...process.env, NODE_NO_WARNINGS: "1" } as NodeJS.ProcessEnv;
   let dir: string;
 
-  function setup(commands: string[], knowledge: string): { cmds: string; know: string } {
+  function setup(
+    commands: string[],
+    knowledge: string,
+    opts: { knowledgeFile?: string } = {},
+  ): { cmds: string; know: string } {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-cmd-cov-cli-"));
     const cmds = path.join(dir, "commands");
     const know = path.join(dir, "knowledge");
     fs.mkdirSync(cmds);
     fs.mkdirSync(know);
     for (const c of commands) fs.writeFileSync(path.join(cmds, `${c}.md`), `# ${c}\n`);
-    fs.writeFileSync(path.join(know, "index.md"), knowledge);
+    fs.writeFileSync(path.join(know, opts.knowledgeFile ?? "index.md"), knowledge);
     return { cmds, know };
   }
 
@@ -139,6 +269,28 @@ describe("CLI — exit codes", () => {
     const { cmds, know } = setup(["build", "ghost"], "guild:build only");
     const r = run(["--commands-dir", cmds, "--knowledge-dir", know, "--warn"]);
     expect(r.status).toBe(0);
+    expect(r.out).toMatch(/guild:ghost/);
+  });
+
+  test("all-HTML knowledge dir (post docs/v2 conversion) → exit 0", () => {
+    const { cmds, know } = setup(
+      ["build", "migrate"],
+      "<html><body><p>Run <code>/guild:build</code> then <code>guild:migrate</code>.</p></body></html>",
+      { knowledgeFile: "lifecycle.html" },
+    );
+    const r = run(["--commands-dir", cmds, "--knowledge-dir", know]);
+    expect(r.status).toBe(0);
+    expect(r.out).toMatch(/all 2 commands covered/);
+  });
+
+  test("HTML knowledge dir missing a command → exit 1 (gate still bites)", () => {
+    const { cmds, know } = setup(
+      ["build", "ghost"],
+      "<html><body><p><code>/guild:build</code> only</p></body></html>",
+      { knowledgeFile: "lifecycle.html" },
+    );
+    const r = run(["--commands-dir", cmds, "--knowledge-dir", know]);
+    expect(r.status).toBe(1);
     expect(r.out).toMatch(/guild:ghost/);
   });
 

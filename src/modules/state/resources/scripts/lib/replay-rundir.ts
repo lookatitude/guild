@@ -11,7 +11,7 @@
  * true iff all REQUIRED replay artifacts are present.
  *
  * Contract alignment:
- *   - Canonical artifact list from docs/v2/observability.md §The run directory
+ *   - Canonical artifact list from docs/v2/observability.html §The run directory
  *     ("shipped layout + the [v2.x] replay completion").
  *   - "events" = logs/v1.4-events.jsonl (primary); events.ndjson is the legacy
  *     mirror only, listed as a secondary.
@@ -148,7 +148,7 @@ interface ArtifactDef {
 
 /**
  * Ordered catalogue of replay-relevant artifacts.
- * Derived from docs/v2/observability.md §The run directory.
+ * Derived from docs/v2/observability.html §The run directory.
  *
  * Required shipped artifacts for `isReplayComplete`:
  *   events, provenance, run-manifest

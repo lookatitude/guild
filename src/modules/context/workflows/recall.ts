@@ -166,7 +166,7 @@ export interface RecallOpts {
    */
   _kgDisabled?: boolean;
   /**
-   * Composite recall scoring + importance gate (items 6/7, docs/v2/knowledge-memory.md §Recall).
+   * Composite recall scoring + importance gate (items 6/7, docs/v2/knowledge-memory.html §Recall).
    * Absent → shipped BM25-only ranking (byte-identical default). Present →
    * wiki ranking becomes `relevance(BM25) × recency(exp-decay) × importance(1–5)`
    * and pages scoring below `importanceGate` are filtered from routine recall.
@@ -191,7 +191,7 @@ export interface RecallOpts {
 /** G10: default read-skip threshold (mirrors config-defaults models.recallScoreThreshold). */
 export const DEFAULT_RECALL_SCORE_THRESHOLD = 0.4;
 
-// ── Composite recall scoring (docs/v2/knowledge-memory.md §Recall scoring) ──
+// ── Composite recall scoring (docs/v2/knowledge-memory.html §Recall scoring) ──
 
 /** Config for the composite recall re-ranker + importance gate. */
 export interface CompositeConfig {
@@ -265,7 +265,7 @@ export function resolveRecallScoreThreshold(cwd: string): number {
 
 /**
  * DE-4: resolve `models.recallBeforeRead` from settings for a cwd. The canonical
- * contract (docs/v2/dispatch-execution.md, context-assemble/SKILL.md) is: the recall-before-read rule
+ * contract (docs/v2/dispatch-execution.html, context-assemble/SKILL.md) is: the recall-before-read rule
  * is GATED by this key (default `true`); when `false`, the consumer falls back to
  * the prior full-read assembly. Kept out of the pure recall() path (which never
  * loads the settings resolver) — the CLI reads it and short-circuits to the

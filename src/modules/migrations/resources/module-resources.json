@@ -78,7 +78,7 @@
       "id": "dot-guild/convert/wiki-importance",
       "source_path": "scripts/dot-guild/convert/wiki-importance.ts",
       "resource_path": "resources/scripts/dot-guild/convert/wiki-importance.ts",
-      "sha256": "dceece0a77783d0ba7c428e5be10a536c2496c483f057e1d365bff047dc75b5d"
+      "sha256": "c3a4288ad4c60ab2b673f4ea636cc402b1e788885e7e64a6abaf6b6447307595"
     },
     {
       "category": "scripts",

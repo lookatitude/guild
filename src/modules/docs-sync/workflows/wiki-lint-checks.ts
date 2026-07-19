@@ -57,7 +57,7 @@ interface Finding {
   detail: string;
 }
 
-// ── Wiki label taxonomy (docs/v2/knowledge-memory.md §Label Schema, item 5) ──
+// ── Wiki label taxonomy (docs/v2/knowledge-memory.html §Label Schema, item 5) ──
 //
 // The closed label sets live in `.guild/project.yaml → label_taxonomy:` (authored
 // at Init, evolvable only via the human-gated promotion path). The label-coverage

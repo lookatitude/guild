@@ -2,7 +2,7 @@
  * src/modules/host-runtime/workflows/degradation-trace.ts
  *
  * FDC degradation trace rows (deferred item 17;
- * docs/v2/dispatch-execution.md §Degradation signal table).
+ * docs/v2/dispatch-execution.html §Degradation signal table).
  *
  * Pure builders for the degradation trace rows that the dispatch-execution
  * doc identifies as `[v2.x]` emitters (no shipped emitter yet). Each

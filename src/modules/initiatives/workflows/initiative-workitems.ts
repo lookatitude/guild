@@ -1,6 +1,6 @@
 /**
  * lib/initiative-workitems.ts — WorkItem shape + auto release/docs work-item
- * population (deferred item 13; docs/v2/initiatives.md §D8 / data-model.md
+ * population (deferred item 13; docs/v2/initiatives.html §D8 / data-model.md
  * §WorkItem).
  *
  * The release/ + docs-sync/ dirs were scaffolded but populated by hand. This is

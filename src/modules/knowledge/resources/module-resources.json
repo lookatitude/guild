@@ -22,7 +22,7 @@
       "id": "guild-memory",
       "source_path": ".mcp.json",
       "resource_path": "resources/mcp_servers/.mcp.json",
-      "sha256": "9d6736006ffb527095dfdadec1857ed646d90ff8c8a017f3d90daa9626813a2d"
+      "sha256": "e010b6a05b3ad25f76623be8c4578c03420127ad665a53205190059ab70a7cfb"
     },
     {
       "category": "scripts",
@@ -36,7 +36,7 @@
       "id": "knowledge-links-traverse",
       "source_path": "scripts/knowledge-links-traverse.ts",
       "resource_path": "resources/scripts/knowledge-links-traverse.ts",
-      "sha256": "4f3badbc06c05f21b1dd16e7fceb5553c3b30e07ab433f68ed8ac2a75cecf85f"
+      "sha256": "20a64dae0a5f0a58ee4f5d472fe0a21bee5eea927c61715dfac616b41b5c71f8"
     },
     {
       "category": "scripts",
@@ -50,14 +50,14 @@
       "id": "lib/ingest-similarity",
       "source_path": "scripts/lib/ingest-similarity.ts",
       "resource_path": "resources/scripts/lib/ingest-similarity.ts",
-      "sha256": "11fd1397341dc1d4b9d51167af70b8b61104d769cb5368e5b27bd81e485f14b9"
+      "sha256": "07d75c6c68066515276a1f87d921e87c29ac441b96bdf8b3fb8ae9f665a9613c"
     },
     {
       "category": "scripts",
       "id": "lib/kb-snapshot",
       "source_path": "scripts/lib/kb-snapshot.ts",
       "resource_path": "resources/scripts/lib/kb-snapshot.ts",
-      "sha256": "0a024fa293c804c88d87d4e4d46d62caa30d8b6e1a1d381c8224f0dd2abeeac8"
+      "sha256": "4d66e4c44924a6716ce9d7e5267fc616db30de5a7520acb360d9febed601cdd7"
     },
     {
       "category": "scripts",

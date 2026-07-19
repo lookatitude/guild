@@ -209,7 +209,7 @@ export interface RoutingDecision extends RouteTarget {
   /**
    * TE-03: "strong" = reviewer on a DIFFERENT host than the producer (full
    * cross-host adversarial independence). "weak" = reviewer on the SAME host
-   * (independence lost — the observable signal defined in docs/v2/host-adversarial-adaptability.md + 08).
+   * (independence lost — the observable signal defined in docs/v2/host-adversarial-adaptability.html + 08).
    * Set to "weak" whenever degraded=true.
    */
   independence: "strong" | "weak";
