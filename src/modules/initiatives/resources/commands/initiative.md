@@ -11,7 +11,7 @@ The opt-in durable-goal container. `new|status|resume|update|close` are the
 primary user-facing lifecycle sub-verbs; `list|archive|restore` are
 operational sub-verbs on the same noun.
 
-Full lifecycle: `docs/v2/initiatives.md` (umbrella workspace canonical
+Full lifecycle: `docs/v2/initiatives.html` (umbrella workspace canonical
 design set — §Registry & directory, §Definition ledger, §The D8 close gate).
 Sub-verb implementation: `skills/meta/initiative/SKILL.md`.
 
@@ -52,7 +52,7 @@ resolved config — e.g. the dispatch backend `effective.agent_mode` — read th
 snapshot back with `readResolvedSettingsSnapshot(runId, { cwd })`; never
 re-resolve.
 
-Ref: `docs/v2/lifecycle.md §Run-start preflight` — "before any phase work,
+Ref: `docs/v2/lifecycle.html §Run-start preflight` — "before any phase work,
 every `/guild:*` command runs the preflight." DRIFT-ANALYSIS CMD-002.
 
 ## Run recording

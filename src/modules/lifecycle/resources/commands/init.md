@@ -78,7 +78,7 @@ PCR-Init must-exist floor: `.guild/guild.yaml`, `.guild/wiki/index.md`
 `.guild/wiki/architecture-map.md` stub. Workspace roots additionally include
 `.guild/workspace.json`, `.guild/workspace/**`, and
 `.guild/workspace-knowledge/**`. Binding:
-`docs/v2/lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+`docs/v2/lifecycle.html §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
 CMD-006.
 
 ### Config scaffold (`.guild/settings.json`)

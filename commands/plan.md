@@ -67,7 +67,7 @@ pointer to the promoted standalone `.guild/prd/<slug>.md` — the standalone
 file is conditional on the right-size triggers above, per the lifecycle
 PCR note), the per-lane autonomy-contract policy,
 `.guild/runs/<run-id>/review/plan/*`. Binding:
-`docs/v2/lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+`docs/v2/lifecycle.html §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
 CMD-004.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)

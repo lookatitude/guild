@@ -646,9 +646,10 @@ function guardLocal<T extends Record<string, unknown>>(
 // ---------------------------------------------------------------------------
 
 /**
- * Render the resolved config into ALL FIVE host native shapes (claude / codex / .agents /
- * pi / antigravity), keyed by host_id. Pure; never throws. The single entry point the
- * `config show --render` command (LW1-7) and the per-host render golden (LW1-8) consume.
+ * Render the resolved config into EVERY registered host native shape — all 16 `HOST_IDS`
+ * (12 CLI-native hosts plus the 4 app/connector refuse hosts), keyed by host_id. Pure;
+ * never throws. The single entry point the `config show --render` command (LW1-7) and the
+ * per-host render golden (LW1-8) consume.
  */
 export function renderAllHostConfigs(
   input: RenderConfigInput

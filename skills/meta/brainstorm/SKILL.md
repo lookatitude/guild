@@ -110,7 +110,7 @@ Red flag: do **not** auto-fill missing fields from training-data priors. A missi
 
 ## Adversarial review — G-spec (broker, when policy fires)
 
-G-spec is a **skill-internal gate** (`docs/v2/adversarial-review.md §Gate ownership`): it fires here inside `guild:brainstorm` at the spec→approval boundary, not from a command — which is why it doesn't appear in `build`'s skill row. Wire the **review broker** at this boundary, **not** `guild:codex-review` directly: the broker is the host-agnostic front door, and `guild:codex-review` survives only as the internal Codex adapter the broker dispatches to (`docs/v2/adversarial-review.md §The review broker`).
+G-spec is a **skill-internal gate** (`docs/v2/adversarial-review.html §Gate ownership`): it fires here inside `guild:brainstorm` at the spec→approval boundary, not from a command — which is why it doesn't appear in `build`'s skill row. Wire the **review broker** at this boundary, **not** `guild:codex-review` directly: the broker is the host-agnostic front door, and `guild:codex-review` survives only as the internal Codex adapter the broker dispatches to (`docs/v2/adversarial-review.html §The review broker`).
 
 After writing the spec and **before** asking the user for approval, invoke `guild:review-broker`:
 
@@ -119,7 +119,7 @@ Skill: guild-review-broker
 args: gate=G-spec artifact_path=.guild/spec/<slug>.md run_id=<run-id> author_host=<run author host>
 ```
 
-The broker is **policy-gated** (`docs/v2/adversarial-review.md §The review broker`): it fires only when `risk ≥ high`, `review: cross` / `--review=cross` is set, or project config requires it — otherwise it resolves `status: "skipped"` and the gate passes with no reviewer. Self-build runs treat cross-host review as always-on. `author_host` is the host that produced the spec (resolved from the run-start preflight snapshot; `claude` on a Claude-hosted run).
+The broker is **policy-gated** (`docs/v2/adversarial-review.html §The review broker`): it fires only when `risk ≥ high`, `review: cross` / `--review=cross` is set, or project config requires it — otherwise it resolves `status: "skipped"` and the gate passes with no reviewer. Self-build runs treat cross-host review as always-on. `author_host` is the host that produced the spec (resolved from the run-start preflight snapshot; `claude` on a Claude-hosted run).
 
 If the broker returns `status: "rework"`, loop back to the spec revision flow with the findings as context. On `"satisfied"`, `"skipped"`, or `"force_passed"`, proceed to the user-approval question normally.
 

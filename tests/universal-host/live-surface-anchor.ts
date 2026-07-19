@@ -85,10 +85,42 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * evals, flip/shadow reports, multi-round adversarial review) on an isolated
  * worktree/branch before this merge. commands/ tree unchanged (verified equal
  * to the prior pin).
+ *
+ * Re-ratified 2026-07-19 (escalations CE-9 + CE-2, one deliberate pin change) —
+ * a DOCS-ONLY surface change; NO command or skill behaviour changed.
+ *   (a) CE-9: 19 dangling `docs/v2/<page>.md` citations retargeted to `.html`
+ *       across 9 command pages + 4 skill pages. The umbrella docs set
+ *       was converted Markdown→HTML, so every cited page now exists ONLY as
+ *       `.html` — each edit is extension-only (the escalation ledger said 18;
+ *       the true count is 19 — `skills/meta/brainstorm/SKILL.md:113` carries two
+ *       occurrences on one line).
+ *   (b) CE-2: `commands/config.md` 5-host-world staleness corrected to the real
+ *       registry — 16 `HOST_IDS`, of which 12 are `CLI_NATIVE_HOSTS` and 4 are
+ *       app/connector refuse hosts (the doc claimed 5 of each, with obsolete id
+ *       spellings). Prose only. NOTE: the escalation cited only lines 132-136 +
+ *       249-254, but adversarial review found the same stale host-world in THREE
+ *       further places — the `description:` frontmatter ("5 host-native config
+ *       shapes"), the `--host` flag note ("the 9 registry hosts"), and the
+ *       app/connector paragraph, which listed only the original 5 as CLI-native
+ *       and thereby falsely marked cursor / github-copilot / opencode / rovo-dev /
+ *       kiro / qoder / trae as having no native config surface. All five sites are
+ *       corrected here; ratifying the ledger's narrower scope would have blessed
+ *       the exact claims CE-2 exists to remove. Review round 2 found a sixth site:
+ *       the `role` section called the legacy short names (`claude`, `codex`,
+ *       `.agents`, `pi`, `antigravity`) "registry host ids". They are INPUT
+ *       ALIASES that normalize to canonical ids via LEGACY_HOST_ALIASES, and they
+ *       cover only 5 of the 16 — the line both contradicted the corrected text
+ *       above it and implied the other 11 hosts could not be pinned.
+ * `command-src/command-registry.json` was re-extracted in the SAME commit so the
+ * `render(entry) === commands/<id>.md` byte-parity invariant holds (SC-W2-3 +
+ * the authored-source suite, both green). `.claude-plugin/**` is untouched, so
+ * RATIFIED_MANIFESTS and RATIFIED_CLAUDE_PLUGIN_FILES below are UNCHANGED —
+ * verified, not assumed. Both guards were observed RED against the old pin
+ * before this bump, which is the anti-vacuity evidence that the pin is live.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "1ff955f6b393387aac2c2003b38b49b9076db80b",
-  skills: "dcbc7358b8b4ebf3bf58fa18b38a72e08148608b",
+  commands: "d49cf3d93fe29992c5b85eb4f87d681d538dc188",
+  skills: "e539a219ed4c01aac2d6fdb795b898cf474988dd",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

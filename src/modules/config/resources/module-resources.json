@@ -8,7 +8,7 @@
       "id": "config",
       "source_path": "commands/config.md",
       "resource_path": "resources/commands/config.md",
-      "sha256": "4530112db6e3942ffeabd9ccae00548d79e559d0bc41a56b76de90d1960f5559"
+      "sha256": "a2bad66be2b2f5b7104cfe92b1b4a080c8d2cbbce5964eb0e140416eee15f735"
     },
     {
       "category": "scripts",
@@ -36,7 +36,7 @@
       "id": "lib/config-render",
       "source_path": "scripts/lib/config-render.ts",
       "resource_path": "resources/scripts/lib/config-render.ts",
-      "sha256": "96a9a5c6d78dc2750f08c1be366905fed449102a7f564a0da6b635344d30b84f"
+      "sha256": "2bb875a347da355bfa866854f46703eee534e7460b8b6debd206d4c6a3819a95"
     },
     {
       "category": "scripts",
