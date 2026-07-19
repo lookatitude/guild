@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { HOST_IDS } from "../lib/host-registry-schema";
 import { REVIEW_PROGRESS_STATES, validateReviewProgressEvent } from "../lib/review-progress";
 import { loadCommittedReceipts } from "../lib/host-smoke-store";
@@ -94,5 +98,202 @@ describe("R12 generated support matrix", () => {
     expect(md).toContain("# Generated Host Support Matrix");
     for (const host of HOST_IDS) expect(md).toContain(`| ${host} |`);
     expect(md).toContain("## Coverage Operations");
+    expect(md).toContain("Pi dispatch uses pi -p through tmux/plain-process substrate");
+    expect(md).toContain("Antigravity dispatch uses agy -p through tmux/plain-process substrate");
+  });
+
+  it("the real --check path ignores only the generated timestamp and rejects committed content drift", () => {
+    const scriptsDir = join(__dirname, "..");
+    const tempDir = mkdtempSync(join(tmpdir(), "guild-support-matrix-check-"));
+    const outputPath = join(tempDir, "host-support-matrix.md");
+    const tsxBin = join(scriptsDir, "node_modules", ".bin", "tsx");
+    const generatedAt = "2026-07-19T00:00:00.000Z";
+
+    try {
+      const generate = spawnSync(
+        tsxBin,
+        ["generate-support-matrix.ts", "--generated-at", generatedAt, "--out", outputPath],
+        { cwd: scriptsDir, encoding: "utf8" },
+      );
+      expect({ status: generate.status, output: `${generate.stdout}${generate.stderr}` }).toEqual(
+        expect.objectContaining({ status: 0 }),
+      );
+
+      const expected = readFileSync(outputPath, "utf8");
+      const timestampOnlyCommitted = expected.replace(/^Generated: .*$/m, "Generated: 2000-01-01T00:00:00.000Z");
+      expect(timestampOnlyCommitted).not.toBe(expected);
+      writeFileSync(outputPath, timestampOnlyCommitted);
+
+      const timestampOnly = spawnSync(
+        tsxBin,
+        ["generate-support-matrix.ts", "--check", "--generated-at", generatedAt, "--out", outputPath],
+        { cwd: scriptsDir, encoding: "utf8" },
+      );
+      expect({
+        status: timestampOnly.status,
+        output: `${timestampOnly.stdout}${timestampOnly.stderr}`,
+      }).toEqual(expect.objectContaining({ status: 0 }));
+
+      const drifted = expected.replace(
+        "| claude-code-cli | Supported |",
+        "| claude-code-cli | Unsupported |",
+      );
+      expect(drifted).not.toBe(expected);
+      writeFileSync(outputPath, drifted);
+
+      const contentDrift = spawnSync(
+        tsxBin,
+        ["generate-support-matrix.ts", "--check", "--generated-at", generatedAt, "--out", outputPath],
+        { cwd: scriptsDir, encoding: "utf8" },
+      );
+      expect(contentDrift.status).not.toBe(0);
+      expect(`${contentDrift.stdout}${contentDrift.stderr}`).toContain("drift");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["2026-07-19T00:00:00Z", "2026-07-19T00:00:00.000Z"],
+    ["2026-07-19", "2026-07-19T00:00:00.000Z"],
+  ])(
+    "canonicalizes accepted --generated-at value %s so its generated file passes --check",
+    (generatedAt, canonicalGeneratedAt) => {
+      const scriptsDir = join(__dirname, "..");
+      const tempDir = mkdtempSync(join(tmpdir(), "guild-support-matrix-canonical-"));
+      const outputPath = join(tempDir, "host-support-matrix.md");
+      const tsxBin = join(scriptsDir, "node_modules", ".bin", "tsx");
+
+      try {
+        const generate = spawnSync(
+          tsxBin,
+          ["generate-support-matrix.ts", "--generated-at", generatedAt, "--out", outputPath],
+          { cwd: scriptsDir, encoding: "utf8" },
+        );
+        expect({ status: generate.status, output: `${generate.stdout}${generate.stderr}` }).toEqual(
+          expect.objectContaining({ status: 0 }),
+        );
+        expect(readFileSync(outputPath, "utf8").match(/^Generated: .*$/m)?.[0]).toBe(
+          `Generated: ${canonicalGeneratedAt}`,
+        );
+
+        const check = spawnSync(
+          tsxBin,
+          ["generate-support-matrix.ts", "--check", "--generated-at", generatedAt, "--out", outputPath],
+          { cwd: scriptsDir, encoding: "utf8" },
+        );
+        expect({ status: check.status, output: `${check.stdout}${check.stderr}` }).toEqual(
+          expect.objectContaining({ status: 0 }),
+        );
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("rejects an unparseable --generated-at before writing output", () => {
+    const scriptsDir = join(__dirname, "..");
+    const tempDir = mkdtempSync(join(tmpdir(), "guild-support-matrix-invalid-date-"));
+    const outputPath = join(tempDir, "host-support-matrix.md");
+    const tsxBin = join(scriptsDir, "node_modules", ".bin", "tsx");
+
+    try {
+      const generate = spawnSync(
+        tsxBin,
+        ["generate-support-matrix.ts", "--generated-at", "NOT-A-DATE", "--out", outputPath],
+        { cwd: scriptsDir, encoding: "utf8" },
+      );
+      expect(generate.status).toBe(1);
+      expect(`${generate.stdout}${generate.stderr}`).toMatch(/--generated-at.*ISO-8601/i);
+      expect(() => readFileSync(outputPath, "utf8")).toThrow();
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a rollover --generated-at timestamp before writing output", () => {
+    const scriptsDir = join(__dirname, "..");
+    const tempDir = mkdtempSync(join(tmpdir(), "guild-support-matrix-rollover-"));
+    const outputPath = join(tempDir, "host-support-matrix.md");
+    const tsxBin = join(scriptsDir, "node_modules", ".bin", "tsx");
+
+    try {
+      const generate = spawnSync(
+        tsxBin,
+        ["generate-support-matrix.ts", "--generated-at", "2026-02-29T00:00:00Z", "--out", outputPath],
+        { cwd: scriptsDir, encoding: "utf8" },
+      );
+      expect(generate.status).toBe(1);
+      expect(`${generate.stdout}${generate.stderr}`).toMatch(/--generated-at.*calendar|rollover/i);
+      expect(() => readFileSync(outputPath, "utf8")).toThrow();
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("the real --check path rejects malformed Generated metadata", () => {
+    const scriptsDir = join(__dirname, "..");
+    const tempDir = mkdtempSync(join(tmpdir(), "guild-support-matrix-malformed-"));
+    const outputPath = join(tempDir, "host-support-matrix.md");
+    const tsxBin = join(scriptsDir, "node_modules", ".bin", "tsx");
+    const generatedAt = "2026-07-19T00:00:00.000Z";
+
+    try {
+      const generate = spawnSync(
+        tsxBin,
+        ["generate-support-matrix.ts", "--generated-at", generatedAt, "--out", outputPath],
+        { cwd: scriptsDir, encoding: "utf8" },
+      );
+      expect(generate.status).toBe(0);
+      const malformed = readFileSync(outputPath, "utf8").replace(
+        /^Generated: .*$/m,
+        "Generated: NOT-A-TIMESTAMP and altered metadata",
+      );
+      writeFileSync(outputPath, malformed);
+
+      const check = spawnSync(
+        tsxBin,
+        ["generate-support-matrix.ts", "--check", "--generated-at", generatedAt, "--out", outputPath],
+        { cwd: scriptsDir, encoding: "utf8" },
+      );
+      expect(check.status).toBe(1);
+      expect(`${check.stdout}${check.stderr}`).toMatch(/Generated:.*(malformed|timestamp|canonical)/i);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("the real --check path rejects a second Generated metadata line", () => {
+    const scriptsDir = join(__dirname, "..");
+    const tempDir = mkdtempSync(join(tmpdir(), "guild-support-matrix-duplicate-"));
+    const outputPath = join(tempDir, "host-support-matrix.md");
+    const tsxBin = join(scriptsDir, "node_modules", ".bin", "tsx");
+    const generatedAt = "2026-07-19T00:00:00.000Z";
+
+    try {
+      const generate = spawnSync(
+        tsxBin,
+        ["generate-support-matrix.ts", "--generated-at", generatedAt, "--out", outputPath],
+        { cwd: scriptsDir, encoding: "utf8" },
+      );
+      expect(generate.status).toBe(0);
+      const expected = readFileSync(outputPath, "utf8");
+      const duplicated = expected.replace(
+        /^(Generated: .*?)$/m,
+        "$1\nGenerated: 2000-01-01T00:00:00.000Z",
+      );
+      expect(duplicated).not.toBe(expected);
+      writeFileSync(outputPath, duplicated);
+
+      const check = spawnSync(
+        tsxBin,
+        ["generate-support-matrix.ts", "--check", "--generated-at", generatedAt, "--out", outputPath],
+        { cwd: scriptsDir, encoding: "utf8" },
+      );
+      expect(check.status).toBe(1);
+      expect(`${check.stdout}${check.stderr}`).toMatch(/Generated:.*(exactly one|duplicate|found 2)/i);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
