@@ -969,6 +969,11 @@
       "kind": "cli"
     },
     {
+      "id": "check-docs-architecture",
+      "source_path": "scripts/check-docs-architecture.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-lane-liveness",
       "source_path": "scripts/check-lane-liveness.ts",
       "kind": "cli"
@@ -2257,5 +2262,10 @@
       "validator_kind": "lenient"
     }
   ],
-  "docs": []
+  "docs": [
+    {
+      "id": "docs/generated/host-support-matrix",
+      "source_path": "docs/generated/host-support-matrix.md"
+    }
+  ]
 }

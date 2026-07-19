@@ -75,3 +75,9 @@ jobs:
       - name: Roster consistency gate (specialist-roster.md vs agents/ + templates/specialists/)
         run: |
           npx tsx scripts/check-roster-consistency.ts
+
+      # Host-support matrix drift gate — validates the committed host-smoke receipts and proves
+      # docs/generated/host-support-matrix.md matches a fresh render, preventing silent doc drift.
+      - name: Host-support matrix drift gate (generated matrix must match committed file)
+        run: |
+          cd scripts && npm run check:host-support-matrix

@@ -8,6 +8,7 @@
   "depends_on": ["distribution", "kernel", "knowledge", "state", "workspace"],
   "owns": {
     "scripts": [
+      "check-docs-architecture",
       "wiki-lint-checks",
       "workspace/check-command-coverage",
       "workspace/check-doc-sync"
