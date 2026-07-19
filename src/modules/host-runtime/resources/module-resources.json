@@ -15,7 +15,7 @@
       "id": "generate-support-matrix",
       "source_path": "scripts/generate-support-matrix.ts",
       "resource_path": "resources/scripts/generate-support-matrix.ts",
-      "sha256": "caacf88dfe6da478c6463a6b1000ef0f54c018a69602a0ea7999eb59158be1b6"
+      "sha256": "d5b088d4a7d9d38b243dbea1e9c824631afb3d930dff01ea48760c1f9fb6b507"
     },
     {
       "category": "scripts",

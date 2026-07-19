@@ -15,6 +15,30 @@ import {
   type SupportMatrix,
 } from "../lib/support-matrix";
 
+/**
+ * The matrix's `Generated: <iso>` MARKDOWN metadata line. Located and rewritten
+ * line-wise (startsWith, not an anchored `^Key:` regex literal) so this test does
+ * not resemble the hand-rolled YAML field-extractor idiom the comms-format policy
+ * prohibits (OD-3). Nothing here parses YAML.
+ */
+const GENERATED_PREFIX = "Generated: ";
+
+function generatedLineOf(markdown: string): string | undefined {
+  return markdown.split(/\r?\n/).find((line) => line.startsWith(GENERATED_PREFIX));
+}
+
+function replaceGeneratedLine(markdown: string, replacement: string): string {
+  let replaced = false;
+  return markdown
+    .split(/\r?\n/)
+    .map((line) => {
+      if (replaced || !line.startsWith(GENERATED_PREFIX)) return line;
+      replaced = true;
+      return replacement;
+    })
+    .join("\n");
+}
+
 describe("R12 generated support matrix", () => {
   // verified-multi-host-support §6.5: the matrix reads the COMMITTED smoke receipts
   // (never re-runs smoke). generatedAt on/after the receipts' capture keeps staleness
@@ -120,7 +144,7 @@ describe("R12 generated support matrix", () => {
       );
 
       const expected = readFileSync(outputPath, "utf8");
-      const timestampOnlyCommitted = expected.replace(/^Generated: .*$/m, "Generated: 2000-01-01T00:00:00.000Z");
+      const timestampOnlyCommitted = replaceGeneratedLine(expected, "Generated: 2000-01-01T00:00:00.000Z");
       expect(timestampOnlyCommitted).not.toBe(expected);
       writeFileSync(outputPath, timestampOnlyCommitted);
 
@@ -173,7 +197,7 @@ describe("R12 generated support matrix", () => {
         expect({ status: generate.status, output: `${generate.stdout}${generate.stderr}` }).toEqual(
           expect.objectContaining({ status: 0 }),
         );
-        expect(readFileSync(outputPath, "utf8").match(/^Generated: .*$/m)?.[0]).toBe(
+        expect(generatedLineOf(readFileSync(outputPath, "utf8"))).toBe(
           `Generated: ${canonicalGeneratedAt}`,
         );
 
@@ -245,8 +269,8 @@ describe("R12 generated support matrix", () => {
         { cwd: scriptsDir, encoding: "utf8" },
       );
       expect(generate.status).toBe(0);
-      const malformed = readFileSync(outputPath, "utf8").replace(
-        /^Generated: .*$/m,
+      const malformed = replaceGeneratedLine(
+        readFileSync(outputPath, "utf8"),
         "Generated: NOT-A-TIMESTAMP and altered metadata",
       );
       writeFileSync(outputPath, malformed);

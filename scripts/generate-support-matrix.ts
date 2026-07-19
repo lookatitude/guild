@@ -85,6 +85,15 @@ function parseGeneratedAt(): string {
   return parsed.toISOString();
 }
 
+/**
+ * The generated matrix's metadata line. This is a MARKDOWN line, not YAML — the
+ * prefix is matched with startsWith/slice (rather than an anchored `^Key:` regex
+ * literal) so the parse reads as what it is and does not resemble the hand-rolled
+ * YAML field-extractor idiom the comms-format policy prohibits (OD-3).
+ */
+const GENERATED_PREFIX = "Generated: ";
+const CANONICAL_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 function normalizeGeneratedAt(markdown: string, label: string): string {
   const lines = markdown.split(/\r?\n/);
   const generatedLines = lines.filter((line) => line.startsWith("Generated:"));
@@ -93,10 +102,10 @@ function normalizeGeneratedAt(markdown: string, label: string): string {
   }
 
   const generatedLine = generatedLines[0];
-  const match = generatedLine.match(
-    /^Generated: (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)$/,
-  );
-  const timestamp = match?.[1];
+  const candidate = generatedLine.startsWith(GENERATED_PREFIX)
+    ? generatedLine.slice(GENERATED_PREFIX.length)
+    : undefined;
+  const timestamp = candidate && CANONICAL_ISO.test(candidate) ? candidate : undefined;
   const parsed = timestamp ? new Date(timestamp) : undefined;
   if (!timestamp || !parsed || Number.isNaN(parsed.valueOf()) || parsed.toISOString() !== timestamp) {
     throw new Error(
