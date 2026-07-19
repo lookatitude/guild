@@ -8,7 +8,7 @@
       "id": "initiative",
       "source_path": "commands/initiative.md",
       "resource_path": "resources/commands/initiative.md",
-      "sha256": "0f71eb1636428fd879cbad8a4d9a4d487705eb918a3578f5ae97e84eb644d0b2"
+      "sha256": "a95abb42e0d72098e6fa988d68b55642c751959ba85b530dd22d65aab99616e8"
     },
     {
       "category": "scripts",
@@ -71,7 +71,7 @@
       "id": "guild-initiative",
       "source_path": "skills/meta/initiative/SKILL.md",
       "resource_path": "resources/skills/meta/initiative/SKILL.md",
-      "sha256": "68ad3580683c13a35cbd1c749ed4c836e60a49f576c7f37ded388f15fbdeafff"
+      "sha256": "d9de1c8b3c901902e84a68c670a90bca02dcb81d1e03f4c26ddb5fa80d6d1d90"
     },
     {
       "category": "skills",

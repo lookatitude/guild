@@ -1,6 +1,6 @@
 ---
 name: config
-description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki, per-run role pins). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key AND each phase-permission decision (host_mode/guild_gates/bypass) with its inheritance layer; `config show --render` renders the resolved config into each of the 5 host-native config shapes (fail-closed on local/secret leaks); `config set` performs a scoped hard-set write; `config role <host|advisory|adversarial> <host_id|null>` pins a per-run role to a registry host (scoped, provenance-stamped, never-clobber); `config ui list|get|sources|set` is the native CLI/agents-file settings render/edit surface — driven by CONFIG_UI_METADATA it lists config groups/keys/values/sources and edits any key, honoring the metadata's confirmation-strength (a danger/strongest key needs `--confirm`), routing every write through the config API; app/connector hosts report blocked; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
+description: "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki, per-run role pins). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key AND each phase-permission decision (host_mode/guild_gates/bypass) with its inheritance layer; `config show --render` renders the resolved config into each of the 16 registered host config shapes (fail-closed on local/secret leaks); `config set` performs a scoped hard-set write; `config role <host|advisory|adversarial> <host_id|null>` pins a per-run role to a registry host (scoped, provenance-stamped, never-clobber); `config ui list|get|sources|set` is the native CLI/agents-file settings render/edit surface — driven by CONFIG_UI_METADATA it lists config groups/keys/values/sources and edits any key, honoring the metadata's confirmation-strength (a danger/strongest key needs `--confirm`), routing every write through the config API; app/connector hosts report blocked; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
 argument-hint: "<init|set|role|show|validate|providers|ui|update-mcp-hashes|reconcile> [show: --sources|--render] [role: <host|advisory|adversarial> <host_id|null> --scope <s>] [ui: <list|get|sources|set> --host <id> --group <g> --confirm <strength>] [reconcile: <check|sync|repair>] [--cwd <repo-root>] [--force]"
 allowed-tools: Read, Write, Bash
 ---
@@ -103,9 +103,12 @@ a clear error message (OD-4 minimal-churn: no new keys, only known keys allowed)
 
 ## `role` — pin a per-run role to a registry host (host-native aliases)
 
-Pin one of the three **per-run role aliases** — `host`, `advisory`, `adversarial` — to a
-registry host id (`claude`, `codex`, `.agents`, `pi`, `antigravity`), or `null`/`none` to
-clear it back to auto-resolve. The pin is written to `roles.<alias>` in the correct scoped
+Pin one of the three **per-run role aliases** — `host`, `advisory`, `adversarial` — to any of
+the 16 canonical registry host ids (e.g. `claude-code-cli`, `codex-cli`, `agents-file`), or
+`null`/`none` to clear it back to auto-resolve. The legacy short names (`claude`, `codex`,
+`.agents`, `pi`, `antigravity`) are still accepted as **input aliases** and normalize to their
+canonical id — they are not themselves registry ids, and they cover only 5 of the 16 hosts.
+The pin is written to `roles.<alias>` in the correct scoped
 settings file and **stamped `user`-provenance + a UTC timestamp in the provenance sidecar**,
 so a later `reconcile sync|repair` **never clobbers** it (it reuses the P1 never-clobber
 contract). The write is a read-modify-write — it **never overwrites a sibling role pin** or
@@ -130,10 +133,11 @@ npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts role a
 ```
 
 **`roles.host` ≠ top-level `host`.** The role pin `roles.host` names a **registry host id**
-(one of the 5: `claude|codex|.agents|pi|antigravity`); the top-level `host`
-(`config set host …`) is the dispatch-host **selector** (`claude|codex|auto`). The 5 registry
-ids live only under `roles.*` / `host_profiles.*`. The host-id value is validated against the
-closed registry set — a typo (`claudee`) is rejected, not silently written.
+from the closed 16-id `HOST_IDS` set (for example, `claude-code-cli`, `codex-cli`, or
+`agents-file`); the top-level `host` (`config set host …`) is the dispatch-host **selector**
+(`claude|codex|auto`). Registry ids are used under `roles.*` / `host_profiles.*`, not as
+top-level `host` selector values. The host-id value is validated against the closed registry
+set — a typo (`claudee`) is rejected, not silently written.
 
 ## `ui` — native CLI/agents-file settings render + edit surface (§E11/§E12)
 
@@ -158,12 +162,14 @@ npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/config-cmd.ts ui <li
 
 **`--host <id>`** selects the registry host the surface renders for (default: the
 active `GUILD_HOST_ID`/`GUILD_HOST`, falling back to `claude-code-cli` only when
-no host signal is set; valid ids are the 9 registry hosts). **`--group <g>`**
+no host signal is set; valid ids are the 16 registry hosts). **`--group <g>`**
 restricts `list`/`sources` to one group.
 
-**App/connector hosts report `blocked`.** Only the CLI/agents-file native hosts
-(`claude-code-cli`, `codex-cli`, `pi-cli`, `antigravity-cli`, `agents-file`) have a native
-config surface in this build; passing an app/connector id (`claude-code-app`,
+**App/connector hosts report `blocked`.** The 12 CLI/agents-file native hosts
+(`claude-code-cli`, `codex-cli`, `pi-cli`, `antigravity-cli`, `agents-file`, plus the
+verified-multi-host CLI hosts `cursor`, `github-copilot`, `opencode`, `rovo-dev` and the
+IDE hosts `kiro`, `qoder`, `trae`) have a native config surface; passing one of the 4
+app/connector ids (`claude-code-app`,
 `claude-code-web`, `codex-app`, `claude-ai-connector`) renders a **BLOCKED** advisory (mirrors
 `hostOpenPreflight`'s `action:"blocked"` — never a false-native edit path).
 
@@ -248,8 +254,8 @@ build.release      host_mode=ask [builtin]  guild_gates=ask [project]  bypass=au
 
 ### `show --render` — render the resolved config into each host-native shape (SC-W1-8)
 
-Render the resolved config + the phase-permission block into all **5 host-native config
-shapes** (`claude` / `codex` / `.agents` / `pi` / `antigravity`) via the per-host render
+Render the resolved config + the phase-permission block into all **16 registered host config
+shapes** (`HOST_IDS`: 12 CLI-native / 4 app/connector refuse hosts) via the per-host render
 core. READ-ONLY — prints a per-host summary (family, surface, models, permission-cell
 count, role pins, `_unsupported` degrade markers, `_redactions`); writes nothing.
 
@@ -356,7 +362,7 @@ operator-facing CLI surface to inspect provider state on demand.
 ## `update-mcp-hashes` — re-pin MCP tool-description hashes (D-MCP)
 
 The operator-facing **re-pin path** for MCP description pinning
-(`docs/v2/security.md §D-MCP`): compute the SHA-256 of each MCP tool's
+(`docs/v2/security.html §D-MCP`): compute the SHA-256 of each MCP tool's
 description string and write the `{tool-name → hash}` map into
 `mcp.tool_description_hashes` in the target settings file. The PreToolUse
 hook (`hooks/pre-tool-use.ts` → `hooks/lib/security/mcp-hash-pin.ts`)

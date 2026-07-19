@@ -61,7 +61,7 @@ is a safety rail, independent of `--dry-run`.
 PCR-Operations must-exist floor: `.guild/runs/<run-id>/ops/<run-id>.md`,
 `guild.release.v1` evidence (release class), conditional `guild.incident.v1`
 evidence (incident class), `review/ops/*`. Binding:
-`docs/v2/lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+`docs/v2/lifecycle.html §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
 CMD-011.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)

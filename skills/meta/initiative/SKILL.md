@@ -13,7 +13,7 @@ are the primary user-facing lifecycle sub-verbs; `list|archive|restore` are
 operational sub-verbs on the same noun. All `.guild/initiatives/**` reads and
 writes live here — the command entrypoint is a thin dispatcher.
 
-Canonical schema + gate references: `docs/v2/initiatives.md` §Registry &
+Canonical schema + gate references: `docs/v2/initiatives.html` §Registry &
 directory, §Definition ledger, §The D8 close gate. Field-level contracts:
 `scripts/lib/initiative.ts` (`guild.initiative.v1` validator, the four status
 axes, `deriveInitiativeStatus`, the definition ledger, `d8CloseGate`),
