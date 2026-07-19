@@ -7617,6 +7617,11 @@ function assessLiveness(runDir, specialist, timeoutMs, now = Date.now()) {
 // lib/handoff-v2.ts
 var SUMMARY_MAX_CHARS = 600;
 var NOTES_MAX_CHARS = 200;
+var ALLOWED_INJECTION_CLEAN_VALUES = /* @__PURE__ */ new Set([
+  "clean",
+  "flagged",
+  "unverified"
+]);
 var VALID_TIERS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
 var VALID_STATUSES = /* @__PURE__ */ new Set(["done", "blocked", "escalate"]);
 var ALLOWED_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
@@ -7718,8 +7723,7 @@ function validateHandoffV2(value) {
     }
   }
   if (obj["injection_clean"] !== void 0) {
-    const validValues = /* @__PURE__ */ new Set(["clean", "flagged", "unverified"]);
-    if (!validValues.has(obj["injection_clean"])) {
+    if (!ALLOWED_INJECTION_CLEAN_VALUES.has(obj["injection_clean"])) {
       errors.push(
         `injection_clean must be one of clean|flagged|unverified; got ${JSON.stringify(obj["injection_clean"])}`
       );

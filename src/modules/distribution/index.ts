@@ -1,7 +1,6 @@
 export * from "./workflows/build-inventory";
 export * from "./workflows/check-module-ownership";
 export * from "./workflows/equivalence-contract";
-export * from "./workflows/installer-contract";
 export * from "./workflows/inventory-schema";
 export * from "./workflows/module-resources";
 export * from "./workflows/parity-contract";

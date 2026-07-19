@@ -28,6 +28,21 @@ function run(
   return { status: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 }
 
+test("usage and unknown-subcommand help match the parser's accepted subcommands", () => {
+  const usage = run([]);
+  const usageList = usage.out
+    .match(/Usage: config-cmd\.ts <([^>]+)>/)?.[1]
+    .split("|");
+  const unknown = run(["__unknown_subcommand__"]);
+  const errorList = unknown.out
+    .match(/expected: (.+)/)?.[1]
+    .trim()
+    .split(/,\s*/);
+
+  expect(usageList).toEqual([...CONFIG_SUBCOMMANDS]);
+  expect(errorList).toEqual([...CONFIG_SUBCOMMANDS]);
+});
+
 // ---------------------------------------------------------------------------
 // Fixture helpers
 // ---------------------------------------------------------------------------
@@ -914,7 +929,7 @@ describe("validate --effective — no-drift: uses real read-guild-config validat
  * in the Codex G-lane MAJOR fix). Tests import cmdProvidersDetect directly and
  * pass a fake ProbeEnv as the second argument.
  */
-import { cmdProvidersDetect } from "../config-cmd";
+import { CONFIG_SUBCOMMANDS, cmdProvidersDetect } from "../config-cmd";
 import type { ProbeEnv } from "../lib/provider-detect";
 
 /** Build a deterministic fake ProbeEnv — no binaries ever touched. */

@@ -1004,8 +1004,25 @@ function validateResolved(config: Record<string, unknown>, selfBuild = false): s
 // CLI argument parsing
 // ---------------------------------------------------------------------------
 
+export const CONFIG_SUBCOMMANDS = [
+  "set",
+  "role",
+  "show",
+  "validate",
+  "providers",
+  "update-mcp-hashes",
+  "reconcile",
+  "ui",
+] as const;
+
+export type ConfigSubcommand = (typeof CONFIG_SUBCOMMANDS)[number];
+
+function isConfigSubcommand(value: string): value is ConfigSubcommand {
+  return (CONFIG_SUBCOMMANDS as readonly string[]).includes(value);
+}
+
 interface ParsedArgs {
-  subcommand: "set" | "role" | "show" | "validate" | "providers" | "update-mcp-hashes" | "reconcile" | "ui";
+  subcommand: ConfigSubcommand;
   /** For subcommand=providers: the sub-verb (e.g. "detect"). */
   providersVerb?: string;
   /** For subcommand=ui: the sub-verb (list|get|sources|set). */
@@ -1038,7 +1055,7 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   if (args.length === 0) {
     return {
       error:
-        "Usage: config-cmd.ts <set|role|show|validate|providers|ui> [options...]\n" +
+        `Usage: config-cmd.ts <${CONFIG_SUBCOMMANDS.join("|")}> [options...]\n` +
         "  set <key> <value> --scope workspace|project|local [--cwd <p>]\n" +
         "  role <host|advisory|adversarial> <host_id|null> --scope workspace|project|local [--cwd <p>]\n" +
         "  show --sources [--render] [--cwd <p>]\n" +
@@ -1053,8 +1070,10 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   }
 
   const sub = args[0];
-  if (sub !== "set" && sub !== "role" && sub !== "show" && sub !== "validate" && sub !== "providers" && sub !== "update-mcp-hashes" && sub !== "reconcile" && sub !== "ui") {
-    return { error: `unknown subcommand "${sub}" — expected: set, role, show, validate, providers, ui, update-mcp-hashes, reconcile` };
+  if (!isConfigSubcommand(sub)) {
+    return {
+      error: `unknown subcommand "${sub}" — expected: ${CONFIG_SUBCOMMANDS.join(", ")}`,
+    };
   }
 
   // P1-L9: reconcile takes a required mode positional (check|sync|repair).
