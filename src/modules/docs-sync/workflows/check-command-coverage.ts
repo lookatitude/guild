@@ -48,15 +48,31 @@ function escapeRegex(s: string): string {
 
 /**
  * Pure core. A token is "covered" iff, across the concatenated knowledge text, it appears
- * as `guild:<token>` or `/guild:<token>` (word-bounded — so `stat` does NOT match
- * `guild:status` and vice-versa) OR as a `commands/<token>.md` file reference.
+ * as `guild:<token>` or `/guild:<token>` OR as a `commands/<token>.md` file reference —
+ * in each case with nothing that could continue the token following it.
+ *
+ * The match is bounded on BOTH sides, and neither boundary is `\b`.
+ *
+ * Trailing — `(?![A-Za-z0-9-])`. Command tokens are `[a-z0-9-]`, and `\b` treats `-` as a
+ * boundary, so `guild:learn-map` — a real, documented SKILL token — satisfied the command
+ * token `learn`, and an undocumented `/guild:learn` passed the gate silently.
+ *
+ * Leading — `(?<![A-Za-z0-9-])`. With no left anchor at all, the pattern matched mid-word:
+ * `notguild:learn` and `notcommands/learn.md` both counted as coverage. `/` is not in the
+ * excluded set, so the `/guild:…` and `…/commands/….md` forms still match naturally.
+ *
+ * Both directions are FALSE PASSES — the direction this gate exists to prevent. Verified to
+ * change no full-stage verdict on the current corpus.
  */
+const TOKEN_START = "(?<![A-Za-z0-9-])";
+const TOKEN_END = "(?![A-Za-z0-9-])";
+
 export function isTokenCovered(token: string, knowledgeText: string): boolean {
   const t = escapeRegex(token);
-  // Namespaced command/skill token, optional leading slash, word boundary after the token.
-  const namespaced = new RegExp(`/?guild:${t}\\b`);
+  // Namespaced command/skill token; a leading `/` is allowed by the boundary, not required.
+  const namespaced = new RegExp(`${TOKEN_START}guild:${t}${TOKEN_END}`);
   // A direct reference to the command file.
-  const fileRef = new RegExp(`commands/${t}\\.md\\b`);
+  const fileRef = new RegExp(`${TOKEN_START}commands/${t}\\.md${TOKEN_END}`);
   return namespaced.test(knowledgeText) || fileRef.test(knowledgeText);
 }
 

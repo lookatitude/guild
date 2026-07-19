@@ -51,6 +51,36 @@ describe("isTokenCovered — word-boundary false-positive guard (critical)", () 
   test("'stat' IS covered by an exact 'guild:stat'", () => {
     expect(isTokenCovered("stat", "guild:stat exactly")).toBe(true);
   });
+  // `\b` treats `-` as a boundary, so a HYPHEN-SUFFIXED skill token satisfied a shorter
+  // command token — `guild:learn-map` covered `learn`, and an undocumented `/guild:learn`
+  // passed the gate silently. Command tokens are [a-z0-9-], so the boundary must exclude
+  // `-` as well.
+  test("'learn' is NOT covered by the hyphen-suffixed skill token 'guild:learn-map'", () => {
+    expect(isTokenCovered("learn", "see guild:learn-map for the cheap scan")).toBe(false);
+    expect(isTokenCovered("learn", "run /guild:learn-graph")).toBe(false);
+    expect(isTokenCovered("learn", "run /guild:learn to do it all")).toBe(true);
+  });
+  test("the hyphen boundary applies to the commands/<token>.md form too", () => {
+    // The suffix must come AFTER `.md` to be a real test: `commands/learn-map.md` was
+    // already rejected by `commands/learn\.md\b` (the `-map` precedes the `.md`), so it
+    // proves nothing. `commands/learn.md-map` is what `\b` accepted and the new boundary
+    // rejects — measured against both.
+    expect(isTokenCovered("learn", "see commands/learn.md-map")).toBe(false);
+    expect(isTokenCovered("learn", "see commands/learn.md")).toBe(true);
+  });
+  // With no LEADING boundary the pattern matched mid-word, so any word ending in the
+  // prefix manufactured coverage.
+  test("a mid-word match does NOT count: 'notguild:learn' / 'notcommands/learn.md'", () => {
+    expect(isTokenCovered("learn", "notguild:learn")).toBe(false);
+    expect(isTokenCovered("learn", "notcommands/learn.md")).toBe(false);
+    expect(isTokenCovered("learn", "x-guild:learn")).toBe(false);
+  });
+  test("the legitimate leading forms still match", () => {
+    expect(isTokenCovered("learn", "run /guild:learn")).toBe(true);
+    expect(isTokenCovered("learn", "guild:learn at line start")).toBe(true);
+    expect(isTokenCovered("learn", "see plugin/commands/learn.md")).toBe(true);
+    expect(isTokenCovered("learn", "(guild:learn)")).toBe(true);
+  });
   test("'stats' is covered by 'guild:stats' but not by 'guild:status'", () => {
     expect(isTokenCovered("stats", "guild:stats here")).toBe(true);
     expect(isTokenCovered("stats", "only guild:status here")).toBe(false);
