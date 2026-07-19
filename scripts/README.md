@@ -65,7 +65,36 @@ its snapshot meta. Tests should assert on structure, not timestamps.
 | `description-optimizer.ts` | evolve step 9 | Deterministic heuristic (NOT an LLM). Derives a ≤ 1024-char description from the skill's `should_trigger` / `should_not_trigger` evals. Emits `description: <...>` as YAML on stdout. |
 | `rollback-walker.ts` | rollback | Enumerates `.guild/skill-versions/<slug>/v*/` and emits a markdown version table. With `--steps <n>`, emits a `proposed_rollback` action as YAML. NEVER mutates skill-versions. |
 | `trace-summarize.ts` | telemetry | Summarizes `.guild/runs/<run-id>/events.ndjson` to `summary.md` for post-task reflection. |
+| `check-docs-architecture.ts` | docs architecture | Fail-closed drift rail comparing the umbrella architecture spine with module manifests and `guild.inventory.json`. See below. |
 | `docs-hygiene/check-symbol-citations.ts` | docs hygiene | **Warn-only.** Flags rotted `file:line (symbol)` citations in the reference docs. See below. |
+
+### `check-docs-architecture.ts`
+
+The module manifests and `guild.inventory.json` are authoritative for five
+datasets published in `docs/v2/architecture/architecture-spine.html`: module
+kind counts, dependency edges, reverse dependencies (fan-in), owned inventory
+per module, and grand inventory totals. This checker derives all five and diffs
+them against the document.
+
+```
+cd scripts
+npx tsx check-docs-architecture.ts \
+  [--docs <path>] [--root <plugin-root>] [--if-present] [--print]
+```
+
+`--root` selects the plugin root used to load `src/modules/*/module.manifest.json`
+and `guild.inventory.json`. The document resolution order is `--docs`, then
+`GUILD_UMBRELLA_DOCS`, then `<GUILD_UMBRELLA_ROOT>/docs/v2/architecture/architecture-spine.html`,
+then the default `<plugin-root>/../docs/v2/architecture/architecture-spine.html`.
+The default deliberately crosses one `../`: in a normal full checkout the plugin
+repo sits at `<umbrella>/plugin`, while `docs/v2/` belongs to the umbrella.
+
+The check fails closed with exit `1` for any drift, a missing or unparseable
+expected table, or a missing document. `--if-present` is the narrow escape for a
+plugin-only checkout: it changes only the missing-document case to `SKIP` with
+exit `0`; malformed documents and real drift still fail. Use `--print` to emit
+the corrected manifest-derived HTML rows and totals for pasting into the document;
+it never edits the document.
 
 ### `docs-hygiene/check-symbol-citations.ts`
 

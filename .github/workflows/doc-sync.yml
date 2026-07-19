@@ -1,4 +1,5 @@
-# doc-sync.yml — rollout-coupling advisory (workspace-consolidation Lane D in CI)
+# doc-sync.yml — rollout-coupling + architecture-spine advisories
+# (workspace-consolidation Lane D and manifest-derived docs drift in CI)
 #
 # Enforces (advisory) Rule 2 of docs/knowledge/decisions/workspace-knowledge-flow.md:
 # when the plugin's USER-FACING SURFACE changes (commands/** or a skill whose SKILL.md
@@ -15,6 +16,10 @@
 # the umbrella rollout and/or adding `docs-sync: n/a <reason>` to a commit. Full blocking
 # enforcement needs cross-repo PR correlation (future) or a monorepo. The check itself +
 # 42 unit/integration tests live at scripts/workspace/check-doc-sync.ts.
+# This workflow also carries the non-blocking architecture-spine advisory. Its source
+# inputs live here, but the checked docs/v2 page is likewise umbrella-only, so a
+# plugin-repo CI checkout honestly reports SKIP; a full workspace checkout runs the
+# real manifest/inventory-to-document comparison.
 #
 # Owner: tooling-engineer.
 
@@ -26,6 +31,8 @@ on:
     paths:
       - "commands/**"
       - "skills/**"
+      - "src/modules/**"
+      - "guild.inventory.json"
 
 permissions:
   contents: read
@@ -89,4 +96,30 @@ jobs:
               echo ""
             fi
             echo "_If this PR changes the user-facing surface, ensure the matching root \`docs/knowledge/\` update lands in the umbrella repo (\`lookatitude/guild-workspace\`) in the **same rollout** — the website generates final user docs from it. If the change is genuinely doc-irrelevant, add \`docs-sync: n/a <reason>\` to a commit. This check is **advisory** (non-blocking); canon: \`docs/knowledge/decisions/workspace-knowledge-flow.md\` Rule 2._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Architecture-spine drift advisory (manifest-derived tables vs umbrella docs/v2)
+        run: |
+          set -uo pipefail
+          # The plugin-only CI checkout has no umbrella docs/v2 tree, so the honest
+          # expected result is SKIP. This is the same cross-repo limitation documented
+          # above; --if-present relaxes only the missing-document case.
+          set +e
+          OUT="$(cd scripts && npx tsx check-docs-architecture.ts --if-present 2>&1)"
+          CODE=$?
+          set -e
+          echo "$OUT"
+          if [ "$CODE" -ne 0 ]; then
+            echo "::warning::architecture-spine drift check reported exit $CODE — advisory only"
+          fi
+          # Render OUT as 4-space-indented lines, matching the injection-safe advisory
+          # rendering above rather than placing tool output in a backtick fence.
+          {
+            echo "## architecture-spine — drift advisory"
+            echo ""
+            printf '%s\n' "$OUT" | sed 's/^/    /'
+            echo ""
+            echo "_Expected in this plugin-only CI checkout: **SKIP**, because the umbrella \`docs/v2/\` tree is not present._"
+            echo ""
+            echo "_Run the real check from a full workspace checkout with \`cd plugin/scripts && npm run check:docs-architecture\`; add \`--print\` to emit the corrected rows to paste into the document._"
           } >> "$GITHUB_STEP_SUMMARY"

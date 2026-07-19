@@ -5,6 +5,13 @@
   "entries": [
     {
       "category": "scripts",
+      "id": "check-docs-architecture",
+      "source_path": "scripts/check-docs-architecture.ts",
+      "resource_path": "resources/scripts/check-docs-architecture.ts",
+      "sha256": "1347e42ff311d497320827127d4419a85567536400997d6088ea754ceb2c03a0"
+    },
+    {
+      "category": "scripts",
       "id": "docs-hygiene/check-symbol-citations",
       "source_path": "scripts/docs-hygiene/check-symbol-citations.ts",
       "resource_path": "resources/scripts/docs-hygiene/check-symbol-citations.ts",

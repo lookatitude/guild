@@ -1,6 +1,6 @@
 {
   "schema_version": "guild.inventory.v1",
-  "generated_at": "2026-07-18T23:02:50Z",
+  "generated_at": "1970-01-01T00:00:00.000Z",
   "plugin_version": "2.2.0",
   "manifest": {
     "name": "guild",
@@ -966,6 +966,11 @@
     {
       "id": "build-verify",
       "source_path": "scripts/build-verify.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "check-docs-architecture",
+      "source_path": "scripts/check-docs-architecture.ts",
       "kind": "cli"
     },
     {
@@ -2257,5 +2262,10 @@
       "validator_kind": "lenient"
     }
   ],
-  "docs": []
+  "docs": [
+    {
+      "id": "docs/generated/host-support-matrix",
+      "source_path": "docs/generated/host-support-matrix.md"
+    }
+  ]
 }
