@@ -397,6 +397,41 @@ function expectedSurfaces(inv: GuildInventoryV1): ExpectedSurfaces {
 // Tree writers
 // ---------------------------------------------------------------------------
 
+/** Copy `src` to `dest` or throw — for files a package render must never silently omit. */
+function copyFileRequired(srcAbs: string, destAbs: string, label: string): void {
+  if (!copyFileEnsured(srcAbs, destAbs)) {
+    throw new Error(`required file missing from source tree, cannot render package: ${label} (${srcAbs})`);
+  }
+}
+
+/**
+ * Standalone hook-adjacent CLI entrypoints (HK-03-shaped): NOT a Claude
+ * hook-event binding, but a documented CLI a skill body invokes directly via
+ * `npx tsx .../hooks/<name>.ts` (e.g. skills/meta/learning-checkpoint/SKILL.md
+ * step 7.5 → hooks/emit-learning-checkpoint.ts). Skill bodies are host-neutral
+ * and resolve `${GUILD_PLUGIN_ROOT}` against each host's OWN package root, so
+ * every host package that exposes the Guild skill tree must carry these files
+ * too, not just the Claude tree. `npx tsx` runs the .ts SOURCE (not a bundle),
+ * so the raw file is required; the compiled dist/*.js ships alongside for
+ * parity with every other hooks/dist/*.js bundle.
+ *
+ * Issue #55: hooks/emit-learning-checkpoint.ts was documented but shipped in
+ * NO host package — this list + copyStandaloneHookEntrypoints is the fix, and
+ * scripts/check-entrypoint-packaging.ts is the CI rail that keeps it from
+ * drifting again.
+ */
+const STANDALONE_HOOK_CLI_ENTRYPOINTS: ReadonlyArray<{ ts: string; js: string }> = [
+  { ts: path.join("hooks", "emit-learning-checkpoint.ts"), js: path.join("hooks", "dist", "emit-learning-checkpoint.js") },
+];
+
+/** Ship every standalone hook CLI entrypoint into a rendered package tree. Fails CLOSED. */
+function copyStandaloneHookEntrypoints(root: string, dest: string): void {
+  for (const e of STANDALONE_HOOK_CLI_ENTRYPOINTS) {
+    copyFileRequired(path.join(root, e.ts), path.join(dest, e.ts), e.ts);
+    copyFileRequired(path.join(root, e.js), path.join(dest, e.js), e.js);
+  }
+}
+
 /** Files under hooks/ to copy into the Claude tree (every existing hook script + the two equivalence surfaces). */
 function copyClaudeHooks(root: string, dest: string, inv: GuildInventoryV1, resources: ModuleResourceResolver): void {
   copyFileEnsured(path.join(root, "hooks", "hooks.json"), path.join(dest, "hooks", "hooks.json"));
@@ -404,6 +439,7 @@ function copyClaudeHooks(root: string, dest: string, inv: GuildInventoryV1, reso
   for (const h of inv.hooks) {
     resources.copy("hooks", h, path.join(dest, h.source_path));
   }
+  copyStandaloneHookEntrypoints(root, dest);
 }
 
 /**
@@ -545,6 +581,7 @@ export function writeCodexTree(
   copyScriptRuntime(root, dest);
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
   copyTemplates(root, dest);
+  copyStandaloneHookEntrypoints(root, dest);
   writeCodexHookBridge(root, dest);
   writeLauncher(dest, "codex");
   return dest;
@@ -598,6 +635,7 @@ function exposeGuildSkillTree(root: string, inv: GuildInventoryV1, dest: string,
   copyScriptRuntime(root, dest);
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
   copyTemplates(root, dest);
+  copyStandaloneHookEntrypoints(root, dest);
 }
 
 /** Emit the universal `.agents` package: AGENTS.md + skill tree + CLI + launcher. */

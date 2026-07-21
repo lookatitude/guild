@@ -81,3 +81,12 @@ jobs:
       - name: Host-support matrix drift gate (generated matrix must match committed file)
         run: |
           cd scripts && npm run check:host-support-matrix
+
+      # Entrypoint packaging gate (issue #55 defect class) — every `npx tsx`/`node` hooks/
+      # entrypoint documented in a shipped SKILL.md or hook source must actually exist on
+      # disk. Catches the exact failure mode of issue #55 (a documented CLI invocation
+      # whose target file was never shipped, surfacing as ERR_MODULE_NOT_FOUND at runtime)
+      # before it reaches a release.
+      - name: Entrypoint packaging gate (documented hooks/ CLI entrypoints must exist)
+        run: |
+          npx tsx scripts/check-entrypoint-packaging.ts
