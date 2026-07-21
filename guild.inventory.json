@@ -984,6 +984,11 @@
       "kind": "cli"
     },
     {
+      "id": "check-plugin-root-fallback",
+      "source_path": "scripts/check-plugin-root-fallback.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-roster-consistency",
       "source_path": "scripts/check-roster-consistency.ts",
       "kind": "cli"
