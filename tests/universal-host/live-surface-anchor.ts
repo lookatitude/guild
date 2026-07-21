@@ -128,10 +128,17 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * `commands/**` untouched — its pin is UNCHANGED (verified). `.claude-plugin/**`
  * untouched — RATIFIED_MANIFESTS unchanged. Both guards observed RED against the
  * old skills pin on guild#66 CI (run 29800612956) — anti-vacuity evidence.
+ *
+ * Re-ratified 2026-07-21 (issue #56 backend-degradation detector, guild#67) —
+ * DELIBERATE: `skills/meta/execute-plan/dispatch.md` additionally documents the
+ * now-enforced refuse-don't-fallback backend contract + degradation receipts.
+ * SKILL.md unchanged vs guild#66, so skill-src/skill-registry.json needed no
+ * further re-extraction (round-trip verified). commands + .claude-plugin pins
+ * unchanged. Guard observed RED on guild#67 CI (run 29805091863) — anti-vacuity.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "d49cf3d93fe29992c5b85eb4f87d681d538dc188",
-  skills: "c936421787a8a723a52211cda66d11c71038d69d",
+  skills: "9f424fd71a0fc22abc603076f72042855563aca3",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
