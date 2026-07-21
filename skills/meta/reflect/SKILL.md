@@ -99,7 +99,7 @@ After this reflection is written, run the deterministic cross-run aggregator so 
 §11.1 threshold is counted by tooling, not recalled in-context:
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/analyze-runs.ts --cwd <repo-root>
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/analyze-runs.ts --cwd <repo-root>
 ```
 
 It reads every `.guild/reflections/*.md`'s `proposals.skill_improvement` /
@@ -118,7 +118,7 @@ This skill NEVER writes to `.guild/wiki/`, NEVER edits an existing skill or agen
 After the reflection is written, route any finding that smells like a **Guild plugin defect** (broken flow, host-adapter gap, unsafe default, portability bug — vs project-local knowledge) through the deterministic feedback pipeline. Never eyeball the routing and never file anything yourself:
 
 1. Write the candidate findings as a `RunLearningFinding[]` JSON array to `.guild/feedback/<run-id>/findings.json` (fields: `id`, `summary`, `details?`, `evidence_refs?`, `affected_artifacts?`, `proposed_change?` — cite the artifact paths you actually saw; the paths drive classification).
-2. Run the classifier: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/feedback-triage.ts triage --run-id <run-id> --findings .guild/feedback/<run-id>/findings.json`. It classifies each finding (`workspace_project | plugin | mixed | ambiguous`, code not prose), and for plugin/mixed writes a **sanitized** issue draft (private paths/tokens/emails redacted by the run-export redaction stack) to `.guild/feedback/<run-id>/<finding-id>.draft.md`. Nothing leaves the machine.
+2. Run the classifier: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/feedback-triage.ts triage --run-id <run-id> --findings .guild/feedback/<run-id>/findings.json`. It classifies each finding (`workspace_project | plugin | mixed | ambiguous`, code not prose), and for plugin/mixed writes a **sanitized** issue draft (private paths/tokens/emails redacted by the run-export redaction stack) to `.guild/feedback/<run-id>/<finding-id>.draft.md`. Nothing leaves the machine.
 3. `workspace_project` findings → the normal project learning gate (wiki-ingest / decisions). `ambiguous` → surface to the operator as triage questions.
 4. For each plugin/mixed draft: **ASK THE OPERATOR** — show the draft path + title and ask whether Guild may file it as a GitHub issue (it contains no user-specific information; say so). On an explicit yes: `… feedback-triage.ts file --run-id <run-id> --finding <id> --approve "<operator>"`. On no: `--deny [reason]` (recorded). **Non-interactive session ⇒ never file** — leave the drafts pending and name them in the handoff.
 

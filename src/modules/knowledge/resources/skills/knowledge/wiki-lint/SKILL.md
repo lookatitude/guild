@@ -24,7 +24,7 @@ Lint takes no user arguments; it walks the entire wiki on every invocation.
 Run the mechanical checks via the script — never reproduce them by hand:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/wiki-lint-checks.ts --root <repo-root>
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/wiki-lint-checks.ts --root <repo-root>
 ```
 
 It owns check #9 (`pending-grade-review` — migration-drafted `importance_draft:
