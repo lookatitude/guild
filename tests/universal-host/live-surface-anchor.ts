@@ -117,10 +117,23 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * RATIFIED_MANIFESTS and RATIFIED_CLAUDE_PLUGIN_FILES below are UNCHANGED —
  * verified, not assumed. Both guards were observed RED against the old pin
  * before this bump, which is the anti-vacuity evidence that the pin is live.
+ *
+ * Re-ratified 2026-07-21 (issue #36 shell-fallback sweep, guild#61) — a
+ * DELIBERATE, purely mechanical text substitution across every command/skill
+ * resource doc: `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}` →
+ * `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}`
+ * (the two host env vars are render-time only and unset in the Bash tool's
+ * shell, so documented CLI invocations expanded to `/scripts/...`). No command
+ * or skill BEHAVIOUR changed — only the fallback tail of the documented plugin
+ * root. 270 occurrences / 111 files, mirrors + registries re-synced in the same
+ * commit (both module-resource sync directions checked clean).
+ * `.claude-plugin/**` untouched — RATIFIED_MANIFESTS unchanged. Both guards
+ * observed RED against the old pin on guild#61 CI (jest (tests) job of run
+ * 29794297180) before this bump — anti-vacuity evidence the pin is live.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "d49cf3d93fe29992c5b85eb4f87d681d538dc188",
-  skills: "e539a219ed4c01aac2d6fdb795b898cf474988dd",
+  commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
+  skills: "0bb8de67e49b7a914d8a1a5351bd4de8f57e9dea",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
