@@ -117,10 +117,28 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * RATIFIED_MANIFESTS and RATIFIED_CLAUDE_PLUGIN_FILES below are UNCHANGED —
  * verified, not assumed. Both guards were observed RED against the old pin
  * before this bump, which is the anti-vacuity evidence that the pin is live.
+ *
+ * Re-ratified 2026-07-21 (issue #58 type-erasure detectability, guild#66) —
+ * DELIBERATE skill-surface change: `skills/meta/execute-plan/{SKILL.md,dispatch.md}`
+ * now state the ENFORCED project-lane dispatch contract (GUILD_AGENT_DEFINITION
+ * line-1 marker + adoption prefix are guaranteed and hook-verified, replacing the
+ * "env not guaranteed on the subagent path" caveat). `skill-src/skill-registry.json`
+ * was re-extracted in the SAME commit so `render(entry) === skills/meta/execute-plan/
+ * SKILL.md` byte-parity holds (SC-W2-1 + skill-source-transform suites green).
+ * `commands/**` untouched — its pin is UNCHANGED (verified). `.claude-plugin/**`
+ * untouched — RATIFIED_MANIFESTS unchanged. Both guards observed RED against the
+ * old skills pin on guild#66 CI (run 29800612956) — anti-vacuity evidence.
+ *
+ * Re-ratified 2026-07-21 (issue #56 backend-degradation detector, guild#67) —
+ * DELIBERATE: `skills/meta/execute-plan/dispatch.md` additionally documents the
+ * now-enforced refuse-don't-fallback backend contract + degradation receipts.
+ * SKILL.md unchanged vs guild#66, so skill-src/skill-registry.json needed no
+ * further re-extraction (round-trip verified). commands + .claude-plugin pins
+ * unchanged. Guard observed RED on guild#67 CI (run 29805091863) — anti-vacuity.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "d49cf3d93fe29992c5b85eb4f87d681d538dc188",
-  skills: "e539a219ed4c01aac2d6fdb795b898cf474988dd",
+  skills: "9f424fd71a0fc22abc603076f72042855563aca3",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
